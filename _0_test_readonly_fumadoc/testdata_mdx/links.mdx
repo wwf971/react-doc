@@ -1,0 +1,42 @@
+---
+title: Link Test Cases
+---
+
+## Bare name, single match
+
+Normal link: [database.md](database.md) resolves anywhere in the source.
+
+With heading anchor: [object types](database.md#object-types)
+
+## Bare name, multiple matches
+
+[notes.md](notes.md) exists twice (here and under `sub/`), so clicking shows a
+dropdown of candidates.
+
+## Inline code as link
+
+Just mentioning `frontend-store.md` in inline code becomes navigable.
+
+## Obsidian style
+
+Wiki link in plain text: [[comp_text.md]] and with anchor [[database.md#delete-strategy]].
+
+## Relative and absolute internal path
+
+Relative: [notes under sub](./sub/notes.md)
+
+Partial path: [sub/notes.md](sub/notes.md)
+
+Absolute internal path: [the root doc](/example/doc.md)
+
+## Non-md doc file
+
+Links to non-md files in source also work: [sample.py](sample.py)
+
+## Broken link
+
+[missing.md](missing.md) is rendered as a broken link, not clickable.
+
+## External links unaffected
+
+[fumadocs site](https://fumadocs.dev) opens normally.

@@ -1,0 +1,47 @@
+# doc system config (example layer; local overrides go to config.0.yaml)
+
+siteTitle: React Doc Test
+# doc opened at start (internal path: /{rootId}/relative/path)
+homeDoc: /example/doc.md
+
+# ordered source rules, executed top to bottom. paths are relative to this file.
+source:
+  - action: addFolder
+    rootId: example
+    path: ../example_doc
+  - action: addFolder
+    rootId: mdx-test
+    path: ./testdata_mdx
+  - action: addFile
+    rootId: req
+    path: ./test_fumadoc_req.md
+  - action: removeByName
+    pattern: "*.pyc"
+  - action: removeByName
+    pattern: ".DS_Store"
+  - action: removeByPath
+    pattern: "**/.gitignore"
+
+sidePanel:
+  file: ./side-panel.yaml
+
+# tag name usable in docs -> component id in frontend/src/comp-doc/
+compRegistry:
+  Tabs: common/Tabs
+  Tab: common/Tab
+  Callout: common/Callout
+  Accordions: common/Accordions
+  Accordion: common/Accordion
+  Steps: common/Steps
+  Step: common/Step
+  Files: common/Files
+  File: common/File
+  Folder: common/Folder
+  StockTable: specific/StockTable
+  DemoCounter: specific/DemoCounter
+
+# display strategy for non-md files: suffix -> code block language
+fileDisplay:
+  py: python
+  sh: bash
+  yaml: yaml

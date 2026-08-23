@@ -1,0 +1,57 @@
+---
+title: MDX Feature Test
+description: exercises fumadocs default features and the component registry
+---
+
+## Callout
+
+<Callout type="info">This callout comes from the fumadocs default theme.</Callout>
+
+<Callout type="warn" title="Watch out">Callout with a title.</Callout>
+
+## Tabs
+
+<Tabs items={['pnpm', 'npm']}>
+  <Tab value="pnpm">Run `pnpm run dev` under the test folder or under `frontend/`.</Tab>
+  <Tab value="npm">npm works too, but this workspace uses pnpm.</Tab>
+</Tabs>
+
+## Code block with diff and highlight
+
+```ts title="store.ts"
+export class DocStore {
+  docCurrentPath = ''; // [!code highlight]
+  isDocLoading = false; // [!code --]
+  isDocSwitching = false; // [!code ++]
+}
+```
+
+## Steps
+
+<Steps>
+  <Step>Edit any md file under the source folders.</Step>
+  <Step>The page reloads and shows the change.</Step>
+</Steps>
+
+## File tree
+
+<Files>
+  <Folder name="testdata_mdx" defaultOpen>
+    <File name="index.mdx" />
+    <File name="links.mdx" />
+  </Folder>
+</Files>
+
+## Interactive component (state in mobx store)
+
+Click it, then switch docs and come back: <DemoCounter id="counter-home" label="clicks" />
+
+## Direct component usage in mdx
+
+<StockTable
+  title="Warehouse B (direct JSX)"
+  raw={`| Product ID | Description | Stock Status |
+| :--- | :--- | :---: |
+| #11 | Cable | In Stock |
+| #22 | Hub | Out of Stock |`}
+/>

@@ -1,0 +1,9 @@
+config.0.yaml
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+*.pyc
+__pycache__/
+fyi*
+*.zip

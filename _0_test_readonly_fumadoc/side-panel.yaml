@@ -1,0 +1,28 @@
+# side panel tree. free structure, not required to mirror the file tree.
+# node forms:
+#   - doc: /rootId/xx/a.md     page (text overrides the doc title)
+#   - text + children          folder
+#   - separator: Some Text     separator line
+
+tree:
+  - separator: Example Docs
+  - doc: /example/doc.md
+    text: Document Model
+  - doc: /example/database.md
+  - text: Frontend
+    children:
+      - doc: /example/frontend-store.md
+      - doc: /example/comp_text.md
+  - doc: /example/doc-group.md
+  - separator: MDX Tests
+  - doc: /mdx-test/index.mdx
+  - doc: /mdx-test/links.mdx
+  - doc: /mdx-test/comp-degrade.md
+  - text: Misc
+    children:
+      - doc: /mdx-test/notes.md
+      - doc: /mdx-test/sub/notes.md
+      - doc: /mdx-test/sample.py
+  - separator: Meta
+  - doc: /req/test_fumadoc_req.md
+    text: Requirement

@@ -1,0 +1,10 @@
+{
+  "name": "test-readonly-fumadoc",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "pnpm -C frontend dev",
+    "build": "pnpm -C frontend build",
+    "start": "pnpm -C frontend start"
+  }
+}

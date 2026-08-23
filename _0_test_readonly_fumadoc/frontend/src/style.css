@@ -1,0 +1,17 @@
+@import 'tailwindcss';
+/* default fumadocs theme, same imports as fumadocs.dev itself */
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+/* same fonts as fumadocs.dev (there loaded via next/font), bundled locally */
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/jetbrains-mono';
+
+@theme {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', monospace;
+}
+
+@theme inline {
+  --default-font-family: var(--font-sans);
+  --default-mono-font-family: var(--font-mono);
+}
