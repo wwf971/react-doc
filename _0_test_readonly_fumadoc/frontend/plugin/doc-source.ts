@@ -13,8 +13,14 @@ import type { Plugin } from 'vite';
 // every doc file becomes a lazy `?raw` import, so dev gets hot reload and
 // build gets one lazy chunk per doc.
 
-const MODULE_ID = 'virtual:doc-source';
-const MODULE_ID_RESOLVED = '\0virtual:doc-source';
+const MODULE_ID_DEFAULT = 'virtual:doc-source';
+
+export type DocSourcePluginOptions = {
+  configFile?: string;
+  moduleId?: string;
+  excludeSidePanelItemIds?: string[];
+  pruneSourceToSidePanel?: boolean;
+};
 
 type FileEntry = {
   rootId: string;
@@ -25,32 +31,53 @@ type FileEntry = {
   internalPath: string; // /{rootId}/relPath or /{rootId}/name for root file
 };
 
-export function docSourcePlugin(): Plugin {
+export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
   let configDir = '';
+  let configFile = '';
   let isBuild = false;
+  const moduleId = options.moduleId ?? MODULE_ID_DEFAULT;
+  const moduleIdResolved = `\0${moduleId}`;
 
   return {
-    name: 'doc-source',
+    name: `doc-source:${moduleId}`,
+
+    config(viteConfig) {
+      const viteRoot = path.resolve(process.cwd(), viteConfig.root ?? '.');
+      const configFileEarly = findConfigFile(viteRoot, options.configFile);
+      const configDirEarly = path.dirname(configFileEarly);
+      const configDoc = loadConfigDoc(configFileEarly, options);
+      return {
+        server: {
+          fs: {
+            allow: collectSourceRoots(configDoc, configDirEarly),
+          },
+        },
+      };
+    },
 
     configResolved(viteConfig) {
       isBuild = viteConfig.command === 'build';
-      configDir = findConfigDir(viteConfig.root);
+      configFile = findConfigFile(viteConfig.root, options.configFile);
+      configDir = path.dirname(configFile);
     },
 
     resolveId(id) {
-      if (id === MODULE_ID) return MODULE_ID_RESOLVED;
+      if (id === moduleId) return moduleIdResolved;
     },
 
     load(id) {
-      if (id !== MODULE_ID_RESOLVED) return;
-      const configDoc = loadConfigDoc(configDir);
-      const fileEntries = scanSource(configDoc, configDir);
+      if (id !== moduleIdResolved) return;
+      const configDoc = loadConfigDoc(configFile, options);
+      const fileEntriesAll = scanSource(configDoc, configDir);
+      const fileEntries = options.pruneSourceToSidePanel
+        ? pruneSourceToSidePanel(configDoc, fileEntriesAll)
+        : fileEntriesAll;
       return generateModuleCode(configDoc, fileEntries, isBuild);
     },
 
     configureServer(server) {
-      const configDoc = loadConfigDoc(configDir);
-      const pathsWatched = collectPathsToWatch(configDoc, configDir);
+      const configDoc = loadConfigDoc(configFile, options);
+      const pathsWatched = collectPathsToWatch(configDoc, configDir, configFile);
       for (const p of pathsWatched) server.watcher.add(p);
 
       const invalidateManifest = (filePath: string) => {
@@ -58,7 +85,7 @@ export function docSourcePlugin(): Plugin {
           (p) => filePath === p || filePath.startsWith(p + path.sep),
         );
         if (!isRelated) return;
-        const mod = server.moduleGraph.getModuleById(MODULE_ID_RESOLVED);
+        const mod = server.moduleGraph.getModuleById(moduleIdResolved);
         if (mod) server.moduleGraph.invalidateModule(mod);
         server.ws.send({ type: 'full-reload' });
       };
@@ -76,18 +103,35 @@ export function docSourcePlugin(): Plugin {
 
 // ---------- config ----------
 
-function findConfigDir(viteRoot: string): string {
+function findConfigFile(viteRoot: string, configFileOption?: string): string {
+  if (configFileOption) {
+    const configFile = path.isAbsolute(configFileOption)
+      ? configFileOption
+      : path.resolve(viteRoot, configFileOption);
+    if (!fs.existsSync(configFile)) {
+      throw new Error(`[doc-source] config file not found: ${configFile}`);
+    }
+    return configFile;
+  }
   const candidates = [viteRoot, path.resolve(viteRoot, '..')];
   for (const dir of candidates) {
-    if (fs.existsSync(path.join(dir, 'config.yaml'))) return dir;
+    const configFile = path.join(dir, 'config.yaml');
+    if (fs.existsSync(configFile)) return configFile;
   }
   throw new Error(`[doc-source] config.yaml not found near ${viteRoot}`);
 }
 
-function loadConfigDoc(configDir: string): any {
-  const configBase = readYaml(path.join(configDir, 'config.yaml')) ?? {};
-  const configLocal = readYaml(path.join(configDir, 'config.0.yaml')) ?? {};
+function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {}): any {
+  const configDir = path.dirname(configFile);
+  const extension = path.extname(configFile);
+  const configLocalFile = path.join(
+    configDir,
+    `${path.basename(configFile, extension)}.0${extension}`,
+  );
+  const configBase = readYaml(configFile) ?? {};
+  const configLocal = readYaml(configLocalFile) ?? {};
   const config = mergeDeep(configBase, configLocal);
+  config.source = loadSourceRules(config.source, configDir);
   if (!Array.isArray(config.source)) {
     throw new Error('[doc-source] config "source" must be a list of rules');
   }
@@ -96,7 +140,36 @@ function loadConfigDoc(configDir: string): any {
     const panelPath = path.resolve(configDir, config.sidePanel.file);
     config.sidePanel.tree = readYaml(panelPath)?.tree ?? null;
   }
+  const itemIdsExcluded = new Set(options.excludeSidePanelItemIds ?? []);
+  if (itemIdsExcluded.size > 0 && Array.isArray(config.sidePanel?.tree)) {
+    config.sidePanel.tree = excludeSidePanelItems(config.sidePanel.tree, itemIdsExcluded);
+  }
   return config;
+}
+
+function excludeSidePanelItems(nodes: any[], itemIdsExcluded: Set<string>): any[] {
+  return nodes
+    .filter((node) => !itemIdsExcluded.has(String(node?.id ?? '')))
+    .map((node) => Array.isArray(node?.children)
+      ? { ...node, children: excludeSidePanelItems(node.children, itemIdsExcluded) }
+      : node);
+}
+
+function loadSourceRules(source: any, configDir: string): any[] | any {
+  if (Array.isArray(source)) return source;
+  if (!source?.file) return source;
+  const sourceFile = path.resolve(configDir, source.file);
+  const sourceConfig = readYaml(sourceFile);
+  const rules = Array.isArray(sourceConfig) ? sourceConfig : sourceConfig?.rules;
+  if (!Array.isArray(rules)) {
+    throw new Error(`[doc-source] source file must contain a rule list: ${sourceFile}`);
+  }
+  const sourceDir = path.dirname(sourceFile);
+  return rules.map((rule) => {
+    if ((rule.action !== 'addFolder' && rule.action !== 'addFile') || !rule.path) return rule;
+    const pathAbsolute = path.resolve(sourceDir, rule.path);
+    return { ...rule, path: path.relative(configDir, pathAbsolute) || '.' };
+  });
 }
 
 function readYaml(filePath: string): any {
@@ -194,6 +267,42 @@ function normalizeSlash(pattern: string): string {
   return pattern.startsWith('/') ? pattern : `/${pattern}`;
 }
 
+// Optional deployment optimization: retain only files explicitly referenced by
+// the semantic side panel. Components that load raw files declare those paths
+// through sourceDependencies, keeping this build policy out of rendering code.
+function pruneSourceToSidePanel(configDoc: any, entries: FileEntry[]): FileEntry[] {
+  const references: string[] = [];
+  const visit = (nodes: any[]) => {
+    for (const node of nodes) {
+      if (node?.doc !== undefined) references.push(String(node.doc));
+      if (Array.isArray(node?.sourceDependencies)) {
+        references.push(...node.sourceDependencies.map(String));
+      }
+      if (Array.isArray(node?.children)) visit(node.children);
+    }
+  };
+  visit(Array.isArray(configDoc.sidePanel?.tree) ? configDoc.sidePanel.tree : []);
+
+  const pathsIncluded = new Set<string>();
+  for (const reference of references) {
+    for (const entry of resolveSourceReference(reference, entries)) {
+      pathsIncluded.add(entry.internalPath);
+    }
+  }
+  return entries.filter((entry) => pathsIncluded.has(entry.internalPath));
+}
+
+function resolveSourceReference(reference: string, entries: FileEntry[]): FileEntry[] {
+  if (reference.startsWith('/')) {
+    return entries.filter((entry) => entry.internalPath === reference);
+  }
+  if (reference.includes('/')) {
+    const suffix = `/${reference.replace(/^\.\//, '')}`;
+    return entries.filter((entry) => entry.internalPath.endsWith(suffix));
+  }
+  return entries.filter((entry) => entry.name === reference);
+}
+
 // ---------- module generation ----------
 
 function generateModuleCode(configDoc: any, fileEntries: FileEntry[], isBuild: boolean): string {
@@ -201,7 +310,7 @@ function generateModuleCode(configDoc: any, fileEntries: FileEntry[], isBuild: b
   lines.push(`export const configDoc = ${JSON.stringify(configDoc)};`);
   lines.push('export const fileManifest = [');
   for (const e of fileEntries) {
-    const importId = (isBuild ? e.absPath : '/@fs' + e.absPath) + '?raw';
+    const importId = (isBuild ? e.absPath : '/@fs/' + normalizeSlashPath(e.absPath)) + '?raw';
     lines.push(
       `  { rootId: ${JSON.stringify(e.rootId)}, relPath: ${JSON.stringify(e.relPath)},` +
         ` name: ${JSON.stringify(e.name)}, ext: ${JSON.stringify(e.ext)},` +
@@ -211,6 +320,20 @@ function generateModuleCode(configDoc: any, fileEntries: FileEntry[], isBuild: b
     );
   }
   lines.push('];');
+  if (!isBuild) {
+    lines.push('const listenersDocSource = import.meta.hot?.data.listenersDocSource ?? new Set();');
+    lines.push('export function subscribeDocSource(listener) { listenersDocSource.add(listener); return () => listenersDocSource.delete(listener); }');
+    lines.push('if (import.meta.hot) {');
+    lines.push('  import.meta.hot.dispose((data) => { data.listenersDocSource = listenersDocSource; });');
+    lines.push('  import.meta.hot.accept((moduleNext) => {');
+    lines.push('    if (!moduleNext) return;');
+    lines.push('    const dataNext = { configDoc: moduleNext.configDoc, fileManifest: moduleNext.fileManifest };');
+    lines.push('    for (const listener of listenersDocSource) listener(dataNext);');
+    lines.push('  });');
+    lines.push('}');
+  } else {
+    lines.push('export function subscribeDocSource() { return () => {}; }');
+  }
   return lines.join('\n');
 }
 
@@ -224,8 +347,18 @@ function extractTitle(entry: FileEntry): string {
   return entry.name;
 }
 
-function collectPathsToWatch(configDoc: any, configDir: string): string[] {
-  const result = [path.join(configDir, 'config.yaml'), path.join(configDir, 'config.0.yaml')];
+function normalizeSlashPath(filePath: string): string {
+  return filePath.split(path.sep).join('/');
+}
+
+function collectPathsToWatch(configDoc: any, configDir: string, configFile: string): string[] {
+  const extension = path.extname(configFile);
+  const result = [
+    configFile,
+    path.join(configDir, `${path.basename(configFile, extension)}.0${extension}`),
+  ];
+  const configRaw = readYaml(configFile);
+  if (configRaw?.source?.file) result.push(path.resolve(configDir, configRaw.source.file));
   if (configDoc.sidePanel?.file) result.push(path.resolve(configDir, configDoc.sidePanel.file));
   for (const rule of configDoc.source) {
     if (rule.action === 'addFolder' || rule.action === 'addFile') {
@@ -233,4 +366,16 @@ function collectPathsToWatch(configDoc: any, configDir: string): string[] {
     }
   }
   return result;
+}
+
+function collectSourceRoots(configDoc: any, configDir: string): string[] {
+  const result = new Set<string>([configDir]);
+  for (const rule of configDoc.source) {
+    if (rule.action === 'addFolder') {
+      result.add(path.resolve(configDir, rule.path));
+    } else if (rule.action === 'addFile') {
+      result.add(path.dirname(path.resolve(configDir, rule.path)));
+    }
+  }
+  return [...result];
 }

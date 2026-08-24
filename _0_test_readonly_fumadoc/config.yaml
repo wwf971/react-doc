@@ -4,23 +4,9 @@ siteTitle: React Doc Test
 # doc opened at start (internal path: /{rootId}/relative/path)
 homeDoc: /example/doc.md
 
-# ordered source rules, executed top to bottom. paths are relative to this file.
+# Ordered source rules live separately. Paths in that file are relative to it.
 source:
-  - action: addFolder
-    rootId: example
-    path: ../example_doc
-  - action: addFolder
-    rootId: mdx-test
-    path: ./testdata_mdx
-  - action: addFile
-    rootId: req
-    path: ./test_fumadoc_req.md
-  - action: removeByName
-    pattern: "*.pyc"
-  - action: removeByName
-    pattern: ".DS_Store"
-  - action: removeByPath
-    pattern: "**/.gitignore"
+  file: ./source.yaml
 
 sidePanel:
   file: ./side-panel.yaml

@@ -5,6 +5,6 @@ export const StoreContext = createContext(null);
 
 export function useDocStores() {
   const stores = useContext(StoreContext);
-  if (!stores) throw new Error('useDocStores must be used inside <DocApp/>');
+  if (!stores) throw new Error('useDocStores must be used inside <DocPageMdx/>');
   return stores;
 }

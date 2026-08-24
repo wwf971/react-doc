@@ -3,8 +3,8 @@ import { Callout } from 'fumadocs-ui/components/callout';
 import { Accordions, Accordion } from 'fumadocs-ui/components/accordion';
 import { Steps, Step } from 'fumadocs-ui/components/steps';
 import { Files, File, Folder } from 'fumadocs-ui/components/files';
-import { StockTable } from './specific/StockTable.jsx';
 import { DemoCounter } from './specific/DemoCounter.jsx';
+import { StockTable } from './specific/StockTable.jsx';
 
 // all components that docs may use. what is actually exposed to doc authors
 // (and under which tag name) is decided by compRegistry in config.yaml.
@@ -20,7 +20,6 @@ export const compById = {
   'common/Files': Files,
   'common/File': File,
   'common/Folder': Folder,
-  // relatively specific components of this project
-  'specific/StockTable': StockTable,
   'specific/DemoCounter': DemoCounter,
+  'specific/StockTable': StockTable,
 };

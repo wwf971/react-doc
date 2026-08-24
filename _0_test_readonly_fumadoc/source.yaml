@@ -1,0 +1,17 @@
+# Ordered source rules. Paths are relative to this file.
+rules:
+  - action: addFolder
+    rootId: example
+    path: ../example_doc
+  - action: addFolder
+    rootId: mdx-test
+    path: ./testdata_mdx
+  - action: addFile
+    rootId: req
+    path: ./test_fumadoc_req.md
+  - action: removeByName
+    pattern: "*.pyc"
+  - action: removeByName
+    pattern: ".DS_Store"
+  - action: removeByPath
+    pattern: "**/.gitignore"

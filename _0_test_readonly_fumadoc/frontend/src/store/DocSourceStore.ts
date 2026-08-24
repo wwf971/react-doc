@@ -18,6 +18,8 @@ export type FileEntry = {
 
 export type CompileState = {
   status: 'loading' | 'done' | 'error';
+  isContentEmpty?: boolean;
+  isSourceFile?: boolean;
   Body?: any;
   toc?: any[];
   titleFrontmatter?: string;
@@ -34,20 +36,31 @@ export type LinkTarget = {
 export class DocSourceStore {
   configDoc: any;
   fileManifest: FileEntry[];
+  compileConfig: any;
+  linkResolve: any;
   compiledByPath: Record<string, CompileState> = {};
+  rawByPath: Record<string, { status: 'loading' | 'done' | 'error'; content?: string; message?: string }> = {};
   structuredDataByPath: Record<string, any> = {};
 
-  constructor(sourceData: { configDoc: any; fileManifest: FileEntry[] }) {
+  constructor(
+    sourceData: { configDoc: any; fileManifest: FileEntry[] },
+    options?: { compile?: any; linkResolve?: any },
+  ) {
     this.configDoc = sourceData.configDoc;
     this.fileManifest = sourceData.fileManifest;
+    this.compileConfig = options?.compile ?? {};
+    this.linkResolve = options?.linkResolve;
     // compile results hold React elements (toc titles) and component functions
     // (Body); they must stay plain references. only key-level changes are
     // observable, and loadDoc always replaces the value object wholesale.
     makeAutoObservable(this, {
       compiledByPath: observable.shallow,
+      rawByPath: observable.shallow,
       structuredDataByPath: observable.shallow,
       configDoc: observable.ref,
       fileManifest: observable.ref,
+      compileConfig: false,
+      linkResolve: false,
     });
   }
 
@@ -65,6 +78,14 @@ export class DocSourceStore {
       result.set(entry.name, list);
     }
     return result;
+  }
+
+  replaceSourceData(sourceData: { configDoc: any; fileManifest: FileEntry[] }) {
+    this.configDoc = sourceData.configDoc;
+    this.fileManifest = sourceData.fileManifest;
+    this.compiledByPath = {};
+    this.rawByPath = {};
+    this.structuredDataByPath = {};
   }
 
   async loadDoc(internalPath: string): Promise<void> {
@@ -87,10 +108,21 @@ export class DocSourceStore {
     });
     try {
       const raw = await entry.load();
-      const { markdown, format } = this.toMarkdown(entry, raw);
-      const compiled = await compileDoc({ source: markdown, internalPath, format });
+      const { markdown, format, isSourceFile } = this.toMarkdown(entry, raw);
+      const compiled = await compileDoc({
+        source: markdown,
+        internalPath,
+        format,
+        config: this.compileConfig,
+      });
       runInAction(() => {
-        this.compiledByPath[internalPath] = { status: 'done', ...compiled };
+        this.compiledByPath[internalPath] = {
+          status: 'done',
+          ...compiled,
+          isContentEmpty: !isSourceFile && raw.trim() === '',
+          isSourceFile,
+          toc: Array.isArray(compiled.toc) ? compiled.toc : [],
+        };
       });
     } catch (error: any) {
       runInAction(() => {
@@ -102,14 +134,81 @@ export class DocSourceStore {
     }
   }
 
+  async loadInline(
+    itemId: string,
+    content: string,
+    format: 'md' | 'mdx' = 'mdx',
+  ): Promise<void> {
+    const stateExisting = this.compiledByPath[itemId];
+    if (stateExisting && stateExisting.status !== 'error') return;
+    runInAction(() => {
+      this.compiledByPath[itemId] = { status: 'loading' };
+    });
+    try {
+      const compiled = await compileDoc({
+        source: content,
+        internalPath: itemId,
+        format,
+        config: this.compileConfig,
+      });
+      runInAction(() => {
+        this.compiledByPath[itemId] = {
+          status: 'done',
+          ...compiled,
+          isContentEmpty: content.trim() === '',
+          isSourceFile: false,
+          toc: Array.isArray(compiled.toc) ? compiled.toc : [],
+        };
+      });
+    } catch (error: any) {
+      runInAction(() => {
+        this.compiledByPath[itemId] = {
+          status: 'error',
+          message: String(error?.message ?? error),
+        };
+      });
+    }
+  }
+
+  async loadRaw(internalPath: string): Promise<void> {
+    const stateExisting = this.rawByPath[internalPath];
+    if (stateExisting && stateExisting.status !== 'error') return;
+    const entry = this.entryByInternalPath.get(internalPath);
+    if (!entry) {
+      runInAction(() => {
+        this.rawByPath[internalPath] = {
+          status: 'error',
+          message: `source file not found: ${internalPath}`,
+        };
+      });
+      return;
+    }
+    runInAction(() => {
+      this.rawByPath[internalPath] = { status: 'loading' };
+    });
+    try {
+      const content = await entry.load();
+      runInAction(() => {
+        this.rawByPath[internalPath] = { status: 'done', content };
+      });
+    } catch (error: any) {
+      runInAction(() => {
+        this.rawByPath[internalPath] = {
+          status: 'error',
+          message: String(error?.message ?? error),
+        };
+      });
+    }
+  }
+
   // non-md files are displayed as synthesized markdown, strategy chosen by suffix
-  toMarkdown(entry: FileEntry, raw: string): { markdown: string; format: 'md' | 'mdx' } {
-    if (entry.ext === 'mdx') return { markdown: raw, format: 'mdx' };
-    if (entry.ext === 'md') return { markdown: raw, format: 'md' };
+  toMarkdown(entry: FileEntry, raw: string): { markdown: string; format: 'md' | 'mdx'; isSourceFile: boolean } {
+    if (entry.ext === 'mdx') return { markdown: raw, format: 'mdx', isSourceFile: false };
+    if (entry.ext === 'md') return { markdown: raw, format: 'md', isSourceFile: false };
     const lang = this.configDoc.fileDisplay?.[entry.ext] ?? '';
     const fence = '````';
     const markdown = `# ${entry.name}\n\n${fence}${lang} title="${entry.name}"\n${raw}\n${fence}\n`;
-    return { markdown, format: 'md' };
+    return { markdown, format: 'md', isSourceFile: true };
   }
 
   // link resolution. target forms:
@@ -118,6 +217,16 @@ export class DocSourceStore {
   //   xx/a.md          suffix match on internal path
   //   a.md             lookup by file name (may give multiple candidates)
   resolveLink(target: string, fromPath: string): { targets: LinkTarget[]; hash: string } {
+    if (this.linkResolve) {
+      const result = this.linkResolve({
+        target,
+        fromPath,
+        fileManifest: this.fileManifest,
+        entryByInternalPath: this.entryByInternalPath,
+        targetsByName: this.targetsByName,
+      });
+      if (result) return result;
+    }
     const indexHash = target.indexOf('#');
     const hash = indexHash >= 0 ? target.slice(indexHash + 1) : '';
     const filePart = indexHash >= 0 ? target.slice(0, indexHash) : target;
@@ -228,6 +337,6 @@ function resolveRelative(baseDir: string, relPath: string): string {
 }
 
 function stripFrontmatter(markdown: string): string {
-  const match = /^---\n[\s\S]*?\n---\n/.exec(markdown);
+  const match = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(markdown);
   return match ? markdown.slice(match[0].length) : markdown;
 }

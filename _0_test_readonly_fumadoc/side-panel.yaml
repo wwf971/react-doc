@@ -1,6 +1,7 @@
 # side panel tree. free structure, not required to mirror the file tree.
 # node forms:
 #   - doc: /rootId/xx/a.md     page (text overrides the doc title)
+#   - sourceRoot: rootId       generated tree for a complete source root
 #   - text + children          folder
 #   - separator: Some Text     separator line
 
@@ -15,12 +16,20 @@ tree:
       - doc: /example/comp_text.md
   - doc: /example/doc-group.md
   - separator: MDX Tests
+  - id: component-panel-demo
+    text: Component Panel
+    panel:
+      component: DemoCounter
+      data:
+        id: side-panel-counter
+        label: panel count
   - doc: /mdx-test/index.mdx
   - doc: /mdx-test/links.mdx
   - doc: /mdx-test/comp-degrade.md
   - text: Misc
     children:
-      - doc: /mdx-test/notes.md
+      - doc: notes.md
+        text: Ambiguous Name Example
       - doc: /mdx-test/sub/notes.md
       - doc: /mdx-test/sample.py
   - separator: Meta

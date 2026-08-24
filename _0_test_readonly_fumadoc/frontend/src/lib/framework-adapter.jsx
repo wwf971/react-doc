@@ -2,11 +2,11 @@ import { useSyncExternalStore } from 'react';
 import { reaction } from 'mobx';
 
 // fumadocs-ui is framework-agnostic through FrameworkProvider; here the
-// "framework" is simply the DocStore: pathname is the current internal doc
-// path, and navigation goes through docStore.navigate().
+// "framework" is simply the DocStore: pathname is the current sidebar item
+// route, and navigation goes through docStore.navigate().
 
 export function makeFramework(docStore) {
-  const subscribePath = (onChange) => reaction(() => docStore.docCurrentPath, onChange);
+  const subscribePath = (onChange) => reaction(() => docStore.routeCurrentPath, onChange);
   const paramsEmpty = {};
   const router = {
     push: (url) => docStore.navigate(fromBrowserHref(url)),
@@ -14,7 +14,7 @@ export function makeFramework(docStore) {
   };
 
   function usePathname() {
-    return useSyncExternalStore(subscribePath, () => docStore.docCurrentPath);
+    return useSyncExternalStore(subscribePath, () => docStore.routeCurrentPath);
   }
 
   function LinkAdapter({ href = '', prefetch: _prefetch, children, onClick, ...props }) {

@@ -1,13 +1,14 @@
 import { useDocStores } from '../store/context.js';
-import { compById } from './registry.js';
+import { compById as compByIdDefault } from './registry.js';
 
 // bridge for comment-marked blocks (see remark-comment-comp):
 // looks up the tag in config compRegistry, then renders the registered
 // component with the raw block text plus parsed key=value props.
 export function DocComp({ comp, raw, lang, propsJson }) {
-  const { sourceStore } = useDocStores();
+  const { compById: compByIdExtra, sourceStore } = useDocStores();
+  const compByIdMerged = { ...compByIdDefault, ...compByIdExtra };
   const compId = sourceStore.configDoc.compRegistry?.[comp];
-  const Comp = compId ? compById[compId] : undefined;
+  const Comp = compId ? compByIdMerged[compId] : undefined;
 
   if (!Comp) {
     return (

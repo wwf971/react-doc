@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../store/context.js';
+import { LinkDocRender } from './LinkDocRender.jsx';
 
 // renders one recognized doc link (from remark-doc-link).
 // resolution against the doc index happens here, at render time:
@@ -8,11 +9,23 @@ import { useDocStores } from '../store/context.js';
 //   1 candidate  -> normal link
 //   N candidates -> dropdown to pick the target
 export const DocLink = observer(function DocLink({ target, from, kind, children }) {
-  const { docStore, sourceStore } = useDocStores();
+  const { docStore, linkConfig, onEvent: onEventPage, sourceStore } = useDocStores();
   const id = useId();
   const refWrap = useRef(null);
-  const { targets, hash } = sourceStore.resolveLink(target ?? '', from ?? '');
+  const treeLink = docStore.resolveTreeLink(target ?? '');
+  const { targets, hash } = treeLink
+    ? {
+      targets: [{
+        internalPath: treeLink.target.docPath,
+        name: treeLink.target.text,
+        title: treeLink.target.text,
+        navigationTarget: treeLink.target.route,
+      }],
+      hash: treeLink.hash,
+    }
+    : sourceStore.resolveLink(target ?? '', from ?? '');
   const isDropdownOpen = docStore.linkDropdownOpenId === id;
+  const CompRender = linkConfig.CompRender ?? LinkDocRender;
 
   useEffect(() => {
     if (!isDropdownOpen) return;
@@ -25,67 +38,82 @@ export const DocLink = observer(function DocLink({ target, from, kind, children 
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, [isDropdownOpen, docStore]);
 
-  const text = children ?? target;
+  const isBroken = targets.length === 0;
+  const isMultiple = targets.length > 1;
+  const targetFirst = targets[0];
+  const isNavigationUnavailable = Boolean(targetFirst)
+    && !docStore.isDocNavigable(targetFirst.internalPath);
+  const pathFirst = targetFirst
+    ? (targetFirst.navigationTarget ?? targetFirst.internalPath) + (hash ? `#${hash}` : '')
+    : '';
+  const data = {
+    displayContent: children ?? target,
+    fromPath: from ?? '',
+    hash,
+    href: pathFirst && !isNavigationUnavailable
+      ? docStore.toBrowserHref(pathFirst)
+      : undefined,
+    kind: kind ?? 'markdown',
+    targetList: targets,
+    targetRaw: target ?? '',
+    titleText: isBroken
+      ? `doc not found in source: ${target}`
+      : isNavigationUnavailable && !isMultiple
+        ? `doc exists but is not included in the side panel: ${targetFirst.internalPath}`
+      : isMultiple
+        ? `${targets.length} candidate docs`
+        : targetFirst.internalPath,
+  };
+  const config = {
+    isBroken,
+    isClickable: !isBroken,
+    isDropdownOpen,
+    isMultiple,
+    isNavigationUnavailable,
+    Icon: linkConfig.Icon,
+  };
 
-  if (targets.length === 0) {
-    return (
-      <span
-        className="text-red-600 dark:text-red-400 underline decoration-dashed cursor-not-allowed"
-        title={`doc not found in source: ${target}`}
-      >
-        {text}
-      </span>
-    );
-  }
+  const eventHandle = async (eventType, eventData = {}) => {
+    const event = eventData.event;
+    if (
+      eventType === 'activateRequest'
+      && !isMultiple
+      && (event?.metaKey || event?.ctrlKey || event?.shiftKey || event?.altKey)
+    ) return;
+    event?.preventDefault();
+    const eventForward = {
+      ...eventData,
+      fromPath: data.fromPath,
+      hash,
+      kind: data.kind,
+      targetRaw: data.targetRaw,
+    };
+    const [resultLink, resultPage] = await Promise.all([
+      linkConfig.onEvent?.(eventType, eventForward),
+      onEventPage?.(`link:${eventType}`, eventForward),
+    ]);
+    if (resultLink?.isHandled || resultPage?.isHandled) return;
 
-  if (targets.length === 1) {
-    const pathFull = targets[0].internalPath + (hash ? `#${hash}` : '');
-    return (
-      <a
-        href={docStore.toBrowserHref(pathFull)}
-        title={targets[0].internalPath}
-        onClick={(event) => {
-          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-          event.preventDefault();
-          docStore.navigate(pathFull);
-        }}
-      >
-        {text}
-      </a>
-    );
-  }
+    if (eventType === 'activateRequest') {
+      if (isBroken) {
+        return;
+      }
+      if (isMultiple) {
+        docStore.setLinkDropdownOpen(isDropdownOpen ? '' : id);
+        return;
+      }
+      docStore.navigate(pathFirst);
+      return;
+    }
+    if (eventType === 'candidateSelectRequest' && eventData.target) {
+      docStore.setLinkDropdownOpen('');
+      docStore.navigate(eventData.target.internalPath + (hash ? `#${hash}` : ''));
+    }
+  };
 
-  // multiple docs share this name: let the reader pick
   return (
-    <span ref={refWrap} className="relative inline-block">
-      <a
-        href={docStore.toBrowserHref(targets[0].internalPath)}
-        title={`${targets.length} candidate docs`}
-        className="decoration-dotted"
-        onClick={(event) => {
-          event.preventDefault();
-          docStore.setLinkDropdownOpen(isDropdownOpen ? '' : id);
-        }}
-      >
-        {text}
-        <span className="text-fd-muted-foreground select-none"> ({targets.length})</span>
-      </a>
-      {isDropdownOpen ? (
-        <span className="absolute left-0 top-full z-50 mt-0.5 min-w-max border border-fd-border bg-fd-popover shadow-md rounded-sm p-0.5 flex flex-col">
-          {targets.map((t) => (
-            <span
-              key={t.internalPath}
-              className="px-1.5 py-0.5 text-sm cursor-pointer rounded-sm hover:bg-fd-accent whitespace-nowrap"
-              onClick={() => {
-                docStore.setLinkDropdownOpen('');
-                docStore.navigate(t.internalPath + (hash ? `#${hash}` : ''));
-              }}
-            >
-              {t.internalPath}
-            </span>
-          ))}
-        </span>
-      ) : null}
+    <span ref={refWrap} className="doc-link-controller">
+      <CompRender data={data} config={config} onEvent={eventHandle} />
     </span>
   );
 });

@@ -38,7 +38,37 @@ Source should be able to be specified from a file.
 
 ## SidePanel
 
-Custom side panel structure should be supported, not necessarily plainly reflecting the file tree structure of source. The custom side panel tree structure should be able to be specified from an index file.
+Custom side panel structure should be supported, not necessarily plainly reflecting the file tree structure of source. The custom side panel tree structure should be able to be specified from an index config file.
+
+The core design idea is that each item in the side panel tree does not necessarily correspond to a file or a folder in the tree, but can also be virtual node.
+
+A non-leaf item should suport follwoing mode:
+
+1. Be a virtual folder, under it that can be other items, such as real files.
+
+2. Represent a folder in the source(not necessarily root folder). So the subtree under it will be fully reflecting the actual file tree structure under that folder. Files will appear as descedant items and be displayed in normal way.
+
+A leaf item should support following mode:
+
+1. Repersent a file in the source. the file can be specified by its path, or only by its name. In latter case, the item declares that it holds the file inside the source with given name. In case multiple files of given name exists, the first file under a default order will be selected. there will also be a warning area prepended, listing all matched files, warning user to deal with the problem
+
+2. Have the panel to its right rendered using a component. the component is speicied by its name, as well as the data to be fed into it. the component will be resolved from the unified component registry.
+
+All items should support custom display name in the side panel, or even using custom component. the component is specified by component name, and data to be fed to it. the component will be resolved from the unified component registry.
+
+For the time being, we still assume that only leaf item can have corresponding panel to the right.
+
+It's totally possible that there exists multiple leaf item corresponding to same file in source.
+
+The link navigation system should have a layer that maintains for a file, what items are bound to it, and when navigating, which item to go to. For the time being, let us simply go to the first item according to tree order. Note that this might including item that exists as a descendant item that is bound to a folder.
+
+The link navigation system should be able to deal with failure when a link points to a valid file in source, but navigation cannot happen because no item in tne side panel has picked it up.
+
+For config file that describes that side panel's tree structure, the data format should be well designed, and keep things clean and clear.
+
+## Unified Component Registry
+
+The document page should maintain a unified component registry, supporting registering a component with given name, and fetching a component by component name. The component can be provided not only to mdx, but also used elsewhere such as side panel item that wants custom component to render themselves, and their main. 
 
 ## Link/Ref
 
@@ -52,7 +82,7 @@ Various navigation mode should be supported. One basic example is to make clicki
 
 ## Graceful degration to normal markdown
 
-It's possible that the .mdx files in source will be directly read using normal markdown. So we need some special stipulation as well as corresponding processing logic to ensure that the file look totally normal when rendered as normal markdown, without unpredicatable rendering behaviors.
+It's possible that the .mdx files in source will be directly read using normal markdown renderer. so we need some special stipulation as well as corresponding processing logic to ensure that the file look totally normal when treated as markdown, not mdx. without unpredicatable rendering behaviors.
 
 HTML comment will be used to mark specific content that needs special rendering logic, for exapmle rendering using special comment.
 

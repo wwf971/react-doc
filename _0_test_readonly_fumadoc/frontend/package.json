@@ -1,12 +1,13 @@
 {
-  "name": "test-readonly-fumadoc-frontend",
-  "private": true,
-  "version": "0.0.0",
+  "name": "@wwf971/react-doc",
+  "private": false,
+  "version": "0.1.0",
   "type": "module",
   "main": "./src/index.js",
   "exports": {
     ".": "./src/index.js",
-    "./style.css": "./src/style.css"
+    "./style.css": "./src/style.css",
+    "./vite": "./plugin/doc-source.ts"
   },
   "scripts": {
     "dev": "vite",
@@ -19,16 +20,18 @@
     "@mdx-js/mdx": "^3.1.1",
     "fumadocs-core": "^16.15.1",
     "fumadocs-ui": "^16.15.1",
-    "mobx": "^6.15.0",
-    "mobx-react-lite": "^4.1.1",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
     "remark": "^15.0.1",
     "remark-gfm": "^4.0.1",
     "shiki": "^4.4.3",
     "unist-util-visit": "^5.1.0",
     "vfile": "^6.0.3",
     "yaml": "^2.8.0"
+  },
+  "peerDependencies": {
+    "mobx": "^6.15.0",
+    "mobx-react-lite": "^4.1.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.16",
@@ -37,6 +40,10 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "mobx": "^6.15.0",
+    "mobx-react-lite": "^4.1.1",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
     "tailwindcss": "^4.1.16",
     "typescript": "~6.0.2",
     "vite": "^8.0.10"

@@ -15,3 +15,186 @@
   --default-font-family: var(--font-sans);
   --default-mono-font-family: var(--font-mono);
 }
+
+.doc-page-mdx {
+  min-width: 0;
+  height: 100%;
+  overflow: auto;
+  font-family: var(--font-sans);
+}
+
+.doc-page-mdx :is(h1, h2, h3, h4, h5, h6),
+.doc-page-mdx :is(h1, h2, h3, h4, h5, h6) > a[data-card] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.doc-page-mdx :is(h1, h2, h3, h4, h5, h6) > a[data-card] {
+  -webkit-user-drag: none;
+}
+
+/* A generated source-file page already uses the page-level vertical scroll.
+   Keep horizontal code scrolling, but do not create a nested vertical viewport. */
+.doc-page-source-file figure.shiki > [role='region'] {
+  max-height: none;
+}
+
+.doc-content-empty {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.875rem;
+  font-style: italic;
+}
+
+.doc-navigation-warning,
+.doc-source-ambiguity-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d89a32;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, #f6c453 16%, transparent);
+  font-size: 0.875rem;
+}
+
+.doc-source-missing-error {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #dc2626;
+  border-left-width: 4px;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, #dc2626 9%, transparent);
+  color: #991b1b;
+  font-size: 0.875rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .doc-source-missing-error {
+    color: #fca5a5;
+  }
+}
+
+.doc-navigation-warning button {
+  align-self: flex-start;
+  color: #8a5200;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.doc-source-ambiguity-warning ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.doc-link-controller,
+.doc-link-render-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.doc-link-render {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #1d63a8;
+  cursor: pointer;
+  font: inherit;
+  font-size: inherit;
+  line-height: 1.15;
+  vertical-align: baseline;
+}
+
+.doc-link-render > code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 0.92em;
+  line-height: inherit;
+}
+
+.doc-link-render:hover,
+.doc-link-render:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+.doc-link-render.is-active {
+  background: #dcebfa;
+  color: #0b4d8c;
+}
+
+.doc-link-render.is-broken {
+  color: #b42318;
+  cursor: not-allowed;
+  text-decoration: underline dashed;
+}
+
+.doc-link-render.is-unavailable {
+  color: #a15c00;
+  text-decoration: underline dotted;
+}
+
+.doc-link-render-count {
+  color: var(--color-fd-muted-foreground);
+  user-select: none;
+}
+
+.doc-link-render-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  align-items: center;
+  justify-content: center;
+}
+
+.doc-link-render-icon > svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+}
+
+.doc-link-render-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 50;
+  display: flex;
+  min-width: max-content;
+  flex-direction: column;
+  margin-top: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-popover);
+  box-shadow: 0 4px 10px rgb(0 0 0 / 14%);
+}
+
+.doc-link-render-option {
+  padding: 2px 6px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.doc-link-render-option:hover,
+.doc-link-render-option:focus-visible {
+  background: var(--color-fd-accent);
+  outline: none;
+}

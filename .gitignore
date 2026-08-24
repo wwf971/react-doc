@@ -1,5 +1,7 @@
 config.0.yaml
 node_modules/
+dist/
+build/
 .next/
 next-env.d.ts
 *.tsbuildinfo
@@ -7,3 +9,4 @@ next-env.d.ts
 __pycache__/
 fyi*
 *.zip
+package-lock.json
