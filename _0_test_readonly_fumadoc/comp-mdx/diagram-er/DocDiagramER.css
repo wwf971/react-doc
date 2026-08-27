@@ -1,0 +1,278 @@
+.doc-er-diagram {
+	position: relative;
+	width: 100%;
+	height: var(--doc-er-diagram-height, 620px);
+	margin: 1rem 0 1.5rem;
+	overflow: hidden;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.5rem;
+	background: var(--color-fd-background);
+}
+
+.doc-er-diagram-viewport,
+.doc-er-diagram-viewport > div,
+.doc-er-diagram-popup-content,
+.doc-er-diagram-popup-content > div {
+	width: 100%;
+	height: 100%;
+}
+
+.doc-er-diagram-toolbar {
+	position: absolute;
+	z-index: 6;
+	top: 0.5rem;
+	right: 0.5rem;
+	display: flex;
+	gap: 0.25rem;
+	padding: 0.2rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.45rem;
+	background: color-mix(in srgb, var(--color-fd-background) 92%, transparent);
+	box-shadow: 0 2px 8px rgb(15 23 42 / 12%);
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 120ms ease;
+}
+
+.doc-er-diagram:hover .doc-er-diagram-toolbar,
+.doc-er-diagram:focus-within .doc-er-diagram-toolbar {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.doc-er-diagram-toolbar button,
+.doc-er-diagram-popup-header button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.35rem;
+	border: 0;
+	border-radius: 0.35rem;
+	background: transparent;
+	color: var(--color-fd-muted-foreground);
+	cursor: pointer;
+}
+
+.doc-er-diagram-toolbar button:hover,
+.doc-er-diagram-toolbar button:focus-visible,
+.doc-er-diagram-popup-header button:hover,
+.doc-er-diagram-popup-header button:focus-visible {
+	background: var(--color-fd-accent);
+	color: var(--color-fd-accent-foreground);
+	outline: none;
+}
+
+.doc-er-diagram-flow .react-flow__node-erTable {
+	width: 410px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+}
+
+.doc-er-table {
+	width: 410px;
+	overflow: visible;
+	border: 1px solid color-mix(in srgb, var(--color-fd-foreground) 24%, var(--color-fd-border));
+	border-radius: 0.45rem;
+	background: var(--color-fd-background);
+	box-shadow: 0 4px 14px rgb(15 23 42 / 9%);
+	color: var(--color-fd-foreground);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.doc-er-table-title {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.6rem 0.75rem;
+	border-bottom: 1px solid var(--color-fd-border);
+	border-radius: 0.4rem 0.4rem 0 0;
+	background: color-mix(in srgb, #2563eb 10%, var(--color-fd-background));
+	font-size: 0.9rem;
+	font-weight: 700;
+}
+
+.doc-er-table-title > span:last-child:not(:first-child) {
+	color: var(--color-fd-muted-foreground);
+	font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+	font-size: 0.68rem;
+	font-weight: 500;
+}
+
+.doc-er-table-column-header,
+.doc-er-table-column {
+	display: grid;
+	grid-template-columns: 2.7rem minmax(7rem, 1fr) minmax(8.5rem, 1.25fr) 5.6rem;
+	align-items: center;
+}
+
+.doc-er-table-column-header {
+	border-bottom: 1px solid var(--color-fd-border);
+	background: color-mix(in srgb, var(--color-fd-muted) 62%, transparent);
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.64rem;
+	font-weight: 700;
+	text-transform: uppercase;
+}
+
+.doc-er-table-column-header > span,
+.doc-er-table-column > span {
+	min-width: 0;
+	padding: 0.35rem 0.45rem;
+	overflow-wrap: anywhere;
+}
+
+.doc-er-table-column-header > span + span,
+.doc-er-table-column > span + span {
+	border-left: 1px solid color-mix(in srgb, var(--color-fd-border) 72%, transparent);
+}
+
+.doc-er-table-column {
+	position: relative;
+	min-height: 2rem;
+	border-bottom: 1px solid color-mix(in srgb, var(--color-fd-border) 78%, transparent);
+	font-size: 0.72rem;
+	line-height: 1.3;
+	user-select: text;
+}
+
+.doc-er-table-column:last-child {
+	border-bottom: 0;
+}
+
+.doc-er-table-key {
+	color: var(--color-fd-muted-foreground);
+	font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+	font-size: 0.65rem;
+	font-weight: 700;
+	text-align: center;
+}
+
+.doc-er-table-key.is-set {
+	color: #b45309;
+}
+
+.doc-er-table-column-name {
+	font-weight: 600;
+}
+
+.doc-er-table-column-logical,
+.doc-er-table-column-type {
+	color: var(--color-fd-muted-foreground);
+	font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+	font-size: 0.66rem;
+}
+
+.doc-er-table-handle {
+	width: 9px;
+	height: 9px;
+	border: 1.5px solid #2563eb;
+	border-radius: 2px;
+	background: var(--color-fd-background);
+}
+
+.doc-er-table-handle.is-target {
+	border-color: #d97706;
+}
+
+.doc-er-diagram-flow .react-flow__edge-path {
+	stroke: color-mix(in srgb, #475569 82%, var(--color-fd-foreground));
+}
+
+.doc-er-diagram-flow .react-flow__edge-textbg {
+	fill: var(--color-fd-background);
+	stroke: var(--color-fd-border);
+	stroke-width: 1px;
+}
+
+.doc-er-diagram-flow .react-flow__edge-text {
+	fill: var(--color-fd-foreground);
+}
+
+.doc-er-diagram-flow .react-flow__controls,
+.doc-er-diagram-flow .react-flow__minimap {
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.4rem;
+	overflow: hidden;
+	background: var(--color-fd-background);
+	box-shadow: 0 2px 8px rgb(15 23 42 / 10%);
+}
+
+.doc-er-diagram-message {
+	display: flex;
+	width: 100%;
+	height: 100%;
+	align-items: center;
+	justify-content: center;
+	padding: 1rem;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.875rem;
+}
+
+.doc-er-diagram-message.is-error {
+	flex-direction: column;
+	gap: 0.35rem;
+	color: #b42318;
+}
+
+.doc-er-diagram-overlay {
+	position: fixed;
+	z-index: 210;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	padding: 2rem;
+	background: rgb(15 23 42 / 58%);
+}
+
+.doc-er-diagram-popup {
+	display: flex;
+	width: min(100rem, 100%);
+	height: calc(100vh - 4rem);
+	max-height: calc(100vh - 4rem);
+	flex-direction: column;
+	overflow: hidden;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.75rem;
+	background: var(--color-fd-background);
+	box-shadow: 0 24px 70px rgb(15 23 42 / 35%);
+}
+
+.doc-er-diagram-popup-header {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.75rem 1rem;
+	border-bottom: 1px solid var(--color-fd-border);
+}
+
+.doc-er-diagram-popup-header h2 {
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 650;
+}
+
+.doc-er-diagram-popup-content {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+
+@media (max-width: 720px) {
+	.doc-er-diagram {
+		height: max(480px, min(var(--doc-er-diagram-height, 620px), 72vh));
+	}
+
+	.doc-er-diagram-overlay {
+		padding: 0.75rem;
+	}
+
+	.doc-er-diagram-popup {
+		height: calc(100vh - 1.5rem);
+		max-height: calc(100vh - 1.5rem);
+	}
+}

@@ -126,7 +126,11 @@ export const DocPageView = observer(function DocPageView() {
       ) : null}
       {/* md files usually carry their own '# heading'; only frontmatter title gets the big page title */}
       {compiled.titleFrontmatter ? <DocsTitle>{compiled.titleFrontmatter}</DocsTitle> : null}
-      {compiled.description ? <DocsDescription>{compiled.description}</DocsDescription> : null}
+      {compiled.description ? (
+        <DocsDescription className="doc-page-description">
+          {compiled.description}
+        </DocsDescription>
+      ) : null}
       <DocsBody>
         {compiled.isContentEmpty ? (
           <p className="doc-content-empty">This Markdown file is empty. Content can be added later.</p>

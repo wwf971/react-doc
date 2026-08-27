@@ -9,4 +9,5 @@ next-env.d.ts
 __pycache__/
 fyi*
 *.zip
+*.rar
 package-lock.json
