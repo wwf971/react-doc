@@ -17,43 +17,48 @@ import { Copy, Expand, X } from 'lucide-react';
 import { DocDiagramERStore } from './DocDiagramERStore.js';
 import './DocDiagramER.css';
 
-function DocDiagramER({ height = 620, raw = '', source = '', title = 'ER Diagram' }) {
-	const sourceDiagram = source || raw;
+const DocDiagramER = observer(function DocDiagramER({ data = {}, config = {}, onEvent }) {
+	const sourceDiagram = data.source || data.raw || '';
 	const [store] = useState(() => new DocDiagramERStore(sourceDiagram));
-	const [isExpanded, setIsExpanded] = useState(false);
-	const [copyStatus, setCopyStatus] = useState('idle');
 	const titleId = useId();
-	const heightDiagram = heightGet(height);
+	const heightDiagram = heightGet(config.height);
+
+	const isExpandedSet = async (isExpanded) => {
+		const result = await onEvent?.('expandChangeRequest', { isExpanded });
+		if (!result?.isHandled) store.expandedSet(isExpanded);
+	};
 
 	useEffect(() => {
 		if (store.source !== sourceDiagram) store.sourceLoad(sourceDiagram);
 	}, [sourceDiagram, store]);
 
 	useEffect(() => {
-		if (!isExpanded) return undefined;
+		if (!store.isExpanded) return undefined;
 		const keyDownHandle = (event) => {
-			if (event.key === 'Escape') setIsExpanded(false);
+			if (event.key === 'Escape') void isExpandedSet(false);
 		};
 		window.addEventListener('keydown', keyDownHandle);
 		return () => window.removeEventListener('keydown', keyDownHandle);
-	}, [isExpanded]);
+	}, [store.isExpanded]);
 
 	async function sourceCopy() {
+		const result = await onEvent?.('copyRequest', { text: sourceDiagram });
+		if (result?.isHandled) return;
 		try {
 			await navigator.clipboard.writeText(sourceDiagram);
-			setCopyStatus('copied');
+			store.copyStatusSet('copied');
 		} catch {
-			setCopyStatus('failed');
+			store.copyStatusSet('failed');
 		}
 	}
 
-	const copyLabel = copyStatus === 'copied'
+	const copyLabel = store.copyStatus === 'copied'
 		? 'コピーしました'
-		: copyStatus === 'failed'
+		: store.copyStatus === 'failed'
 			? 'コピーできませんでした'
 			: 'ER 図の YAML をコピー';
-	const popup = isExpanded && typeof document !== 'undefined' ? createPortal(
-		<div className="doc-er-diagram-overlay" onMouseDown={() => setIsExpanded(false)}>
+	const popup = store.isExpanded && typeof document !== 'undefined' ? createPortal(
+		<div className="doc-er-diagram-overlay" onMouseDown={() => void isExpandedSet(false)}>
 			<section
 				className="doc-er-diagram-popup"
 				role="dialog"
@@ -62,8 +67,8 @@ function DocDiagramER({ height = 620, raw = '', source = '', title = 'ER Diagram
 				onMouseDown={(event) => event.stopPropagation()}
 			>
 				<header className="doc-er-diagram-popup-header">
-					<h2 id={titleId}>{title}</h2>
-					<button type="button" title="拡大表示を閉じる" aria-label="拡大表示を閉じる" onClick={() => setIsExpanded(false)}>
+					<h2 id={titleId}>{data.title ?? 'ER Diagram'}</h2>
+					<button type="button" title="拡大表示を閉じる" aria-label="拡大表示を閉じる" onClick={() => void isExpandedSet(false)}>
 						<X size={18} />
 					</button>
 				</header>
@@ -80,14 +85,14 @@ function DocDiagramER({ height = 620, raw = '', source = '', title = 'ER Diagram
 	return (
 		<figure
 			className="doc-er-diagram"
-			aria-label={title}
+			aria-label={data.title ?? 'ER Diagram'}
 			style={{ '--doc-er-diagram-height': `${heightDiagram}px` }}
 		>
 			<div className="doc-er-diagram-toolbar">
 				<button type="button" title={copyLabel} aria-label={copyLabel} onClick={sourceCopy}>
 					<Copy size={17} />
 				</button>
-				<button type="button" title="図を拡大表示" aria-label="図を拡大表示" onClick={() => setIsExpanded(true)}>
+				<button type="button" title="図を拡大表示" aria-label="図を拡大表示" onClick={() => void isExpandedSet(true)}>
 					<Expand size={17} />
 				</button>
 			</div>
@@ -99,7 +104,7 @@ function DocDiagramER({ height = 620, raw = '', source = '', title = 'ER Diagram
 			{popup}
 		</figure>
 	);
-}
+});
 
 const DocDiagramERCanvas = observer(function DocDiagramERCanvas({ store }) {
 	const { fitView } = useReactFlow();

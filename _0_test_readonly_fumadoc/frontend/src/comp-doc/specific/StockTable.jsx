@@ -1,11 +1,11 @@
 // project-specific demo component: renders a markdown table (received as raw
 // text through the comment-marked block) with stock status badges.
-export function StockTable({ raw, title }) {
-  const { headers, rows } = parseMarkdownTable(raw ?? '');
+export function StockTable({ data = {} }) {
+  const { headers, rows } = parseMarkdownTable(data.raw ?? '');
 
   return (
     <div className="not-prose my-2">
-      {title ? <p className="font-medium text-sm mb-1">{title}</p> : null}
+      {data.title ? <p className="font-medium text-sm mb-1">{data.title}</p> : null}
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="border-b border-fd-border text-left">

@@ -70,6 +70,9 @@ For config file that describes that side panel's tree structure, the data format
 
 The document page should maintain a unified component registry, supporting registering a component with given name, and fetching a component by component name. The component can be provided not only to mdx, but also used elsewhere such as side panel item that wants custom component to render themselves, and their main. 
 
+there should be a standard of the interface of custom components that can be registered, including prop shape etc.
+
+
 ## Link/Ref
 
 Custom link parsing/rendering logic and navigation behavior should be supported.

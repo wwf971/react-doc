@@ -8,6 +8,8 @@
 //   - separator: Some Text
 
 import { createElement } from 'react';
+import { RegisteredComp } from '../comp-doc/RegisteredComp.jsx';
+import { compDefinitionNormalize } from '../comp-doc/comp-registry.js';
 
 // Build both the fumadocs PageTree and the navigation indexes used by DocStore.
 // A configured leaf always gets its own route, so multiple sidebar items can
@@ -163,13 +165,16 @@ function displayName(node, textDefault, context, dataItem = {}, isDefaultEnabled
     console.warn(`[page-tree] display component not registered: ${componentName}`);
     return node.text ?? textDefault;
   }
-  return createElement(Component, {
-    data: {
+  return createElement(RegisteredComp, {
+    compId: Component.compId,
+    configRuntime: { instanceId: `side-panel-display:${node.id ?? textDefault}` },
+    input: { data: {
       ...(displayDefault?.data ?? {}),
       ...dataItem,
       ...(node.display?.data ?? {}),
-    },
-    text: node.text ?? textDefault,
+      text: node.text ?? textDefault,
+    } },
+    placement: 'sidePanelDisplay',
   });
 }
 
@@ -335,7 +340,8 @@ function resolveDocEntries(reference, context) {
 
 function resolveComponent(componentName, context) {
   const componentId = context.configDoc.compRegistry?.[componentName] ?? componentName;
-  return context.compById[componentId];
+  const definition = compDefinitionNormalize(context.compById[componentId]);
+  return definition ? { compId: componentId, definition } : undefined;
 }
 
 function itemRoute(id) {

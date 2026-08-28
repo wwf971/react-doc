@@ -47,6 +47,7 @@ export function remarkCommentComp() {
           { type: 'mdxJsxAttribute', name: 'raw', value: raw },
           { type: 'mdxJsxAttribute', name: 'lang', value: nodeMarked.lang ?? '' },
           { type: 'mdxJsxAttribute', name: 'propsJson', value: JSON.stringify(props) },
+          { type: 'mdxJsxAttribute', name: 'sourceOffset', value: String(node.position?.start?.offset ?? '') },
         ],
         children: [],
       });

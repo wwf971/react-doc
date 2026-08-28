@@ -52,6 +52,13 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
   }, [stores]);
 
   useEffect(() => {
+    stores.docStore.replaceCompById({
+      ...compByIdDefault,
+      ...(config.compById ?? {}),
+    });
+  }, [config.compById, stores]);
+
+  useEffect(() => {
     if (typeof data.subscribe !== 'function') return undefined;
     return data.subscribe((sourceDataNext) => stores.docStore.replaceSourceData(sourceDataNext));
   }, [data, stores]);

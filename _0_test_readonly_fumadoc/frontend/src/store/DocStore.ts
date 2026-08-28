@@ -12,6 +12,7 @@ export class DocStore {
   sourceStore: DocSourceStore;
   routeMode: RouteMode;
   compById: Record<string, any>;
+  compByIdVersion = 0;
 
   routeCurrentPath = '';
   itemCurrentId = '';
@@ -32,6 +33,7 @@ export class DocStore {
   }
 
   get treeModel() {
+    void this.compByIdVersion;
     return buildPageTreeModel(
       this.sourceStore.configDoc,
       this.sourceStore.fileManifest,
@@ -83,6 +85,12 @@ export class DocStore {
       ? routePrevious
       : this.routeHome;
     this.navigate(routeNext, hashPrevious, { isReplaceUrl: true, isFromHistory: true });
+  }
+
+  replaceCompById(compById: Record<string, any>) {
+    for (const key of Object.keys(this.compById)) delete this.compById[key];
+    Object.assign(this.compById, compById);
+    this.compByIdVersion += 1;
   }
 
   onPopState = () => {

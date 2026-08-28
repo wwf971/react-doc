@@ -112,6 +112,12 @@ compRegistry:
 
 Config decides what doc authors can use; code decides what exists.
 
+All registered render components use the same top-level props: `{ data, config, onEvent }`. `data` contains semantic content, `config` contains operation state and runtime context, and `onEvent(eventType, eventData)` submits interaction requests. The internal shape of `data` and `config` remains component-specific. Components with meaningful mutable operation state can use `CompStateStore` or their own MobX store; simple components can remain stateless.
+
+Registry values are component definitions created with `compDefine()`. A definition provides `CompRender`, and can also provide supported placements and an input converter. Fumadocs-native components use adapters created with `compNativeDefine()`, so their framework-specific props do not become the public contract for project components.
+
+One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, and `sidePanelPanel`.
+
 ## Side panel
 
 `sidePanel.file` points to a yaml describing the tree. Folders and separators are free-form, so the panel need not mirror the file tree. A document can be selected by exact internal path, a path suffix, or file name. Name/suffix ambiguity selects the first source-order match and prepends a warning containing every match. `sourceFolder` expands any source subtree, while `sourceRoot` remains a shorthand for a complete root. If the tree is absent, one is generated from the complete file manifest.
@@ -139,7 +145,7 @@ tree:
   - doc: /mdx-test/index.mdx
 ```
 
-`display.component` and `panel.component` use the same `compRegistry` and runtime `compById` registry as MDX. Display components receive `{ text, data }`; panel components receive `{ item, data }`.
+`display.component` and `panel.component` use the same `compRegistry` and runtime `compById` registry as MDX. They receive the unified `{ data, config, onEvent }` props. Display text and file metadata are in `data`; panel item/runtime metadata are in `config`.
 
 ## Search
 

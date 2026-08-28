@@ -5,21 +5,22 @@ import { Steps, Step } from 'fumadocs-ui/components/steps';
 import { Files, File, Folder } from 'fumadocs-ui/components/files';
 import { DemoCounter } from './specific/DemoCounter.jsx';
 import { StockTable } from './specific/StockTable.jsx';
+import { compDefine, compNativeDefine } from './comp-registry.js';
 
 // all components that docs may use. what is actually exposed to doc authors
 // (and under which tag name) is decided by compRegistry in config.yaml.
 export const compById = {
   // relatively common components, re-exported from the fumadocs default theme
-  'common/Tabs': Tabs,
-  'common/Tab': Tab,
-  'common/Callout': Callout,
-  'common/Accordions': Accordions,
-  'common/Accordion': Accordion,
-  'common/Steps': Steps,
-  'common/Step': Step,
-  'common/Files': Files,
-  'common/File': File,
-  'common/Folder': Folder,
-  'specific/DemoCounter': DemoCounter,
-  'specific/StockTable': StockTable,
+  'common/Tabs': compNativeDefine(Tabs, { placementList: ['mdx'] }),
+  'common/Tab': compNativeDefine(Tab, { placementList: ['mdx'] }),
+  'common/Callout': compNativeDefine(Callout, { placementList: ['mdx'] }),
+  'common/Accordions': compNativeDefine(Accordions, { placementList: ['mdx'] }),
+  'common/Accordion': compNativeDefine(Accordion, { placementList: ['mdx'] }),
+  'common/Steps': compNativeDefine(Steps, { placementList: ['mdx'] }),
+  'common/Step': compNativeDefine(Step, { placementList: ['mdx'] }),
+  'common/Files': compNativeDefine(Files, { placementList: ['mdx'] }),
+  'common/File': compNativeDefine(File, { placementList: ['mdx'] }),
+  'common/Folder': compNativeDefine(Folder, { placementList: ['mdx'] }),
+  'specific/DemoCounter': compDefine(DemoCounter),
+  'specific/StockTable': compDefine(StockTable),
 };

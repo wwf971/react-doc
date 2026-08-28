@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { DocsPage, DocsBody, DocsTitle, DocsDescription } from 'fumadocs-ui/layouts/docs/page';
 import { useDocStores } from './store/context.js';
 import { buildMdxComps } from './lib/mdx-comps.js';
+import { RegisteredComp } from './comp-doc/RegisteredComp.jsx';
 
 // renders the current doc: loading / error / compiled body.
 // fully driven by store state; the compile cache lives in DocSourceStore.
@@ -44,16 +45,16 @@ export const DocPageView = observer(function DocPageView() {
   if (item?.type === 'component') {
     const componentId = sourceStore.configDoc.compRegistry?.[item.panelComponent]
       ?? item.panelComponent;
-    const Component = compById[componentId];
+    const isComponentAvailable = Boolean(compById[componentId]);
     return (
       <DocsPage breadcrumb={{ includePage: true }}>
         {warningNavigation}
-        {Component ? (
-          <Component
-            data={item.panelData}
-            item={item}
-            onNavigate={(target) => docStore.navigate(target)}
-            toHref={(target) => docStore.toBrowserHref(target)}
+        {isComponentAvailable ? (
+          <RegisteredComp
+            compId={componentId}
+            configRuntime={{ instanceId: item.id, item, itemId: item.id }}
+            input={{ data: item.panelData }}
+            placement="sidePanelPanel"
           />
         ) : (
           <>

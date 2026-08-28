@@ -12,6 +12,8 @@ class DocDiagramERStore {
 	edgeList = [];
 	loadState = { status: 'idle', message: '' };
 	graphVersion = 0;
+	isExpanded = false;
+	copyStatus = 'idle';
 
 	constructor(source = '') {
 		makeAutoObservable(this, {}, { autoBind: true });
@@ -53,6 +55,14 @@ class DocDiagramERStore {
 
 	nodeListChange(changeList) {
 		this.nodeList = applyNodeChanges(changeList, toJS(this.nodeList));
+	}
+
+	expandedSet(isExpanded) {
+		this.isExpanded = isExpanded;
+	}
+
+	copyStatusSet(copyStatus) {
+		this.copyStatus = copyStatus;
 	}
 }
 
