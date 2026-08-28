@@ -1,0 +1,187 @@
+.doc-mdx-diagram-mermaid-error {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+	margin: 1rem 0;
+	padding: 0.75rem 1rem;
+	border: 1px solid #dc2626;
+	border-radius: 0.5rem;
+	color: #b42318;
+}
+
+.doc-mdx-diagram-mermaid {
+	position: relative;
+	width: 100%;
+	margin: 1rem 0 1.5rem;
+	overflow: hidden;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.5rem;
+	background: var(--color-fd-background);
+}
+
+.doc-mdx-diagram-mermaid-toolbar {
+	position: absolute;
+	z-index: 2;
+	top: 0.5rem;
+	right: 0.5rem;
+	display: flex;
+	gap: 0.25rem;
+	padding: 0.2rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.45rem;
+	background: color-mix(in srgb, var(--color-fd-background) 92%, transparent);
+	box-shadow: 0 2px 8px rgb(15 23 42 / 12%);
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 120ms ease;
+}
+
+.doc-mdx-diagram-mermaid:hover .doc-mdx-diagram-mermaid-toolbar,
+.doc-mdx-diagram-mermaid:focus-within .doc-mdx-diagram-mermaid-toolbar {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.doc-mdx-diagram-mermaid-toolbar button,
+.doc-mdx-diagram-mermaid-popup-header button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.35rem;
+	border: 0;
+	border-radius: 0.35rem;
+	background: transparent;
+	color: var(--color-fd-muted-foreground);
+	cursor: pointer;
+}
+
+.doc-mdx-diagram-mermaid-toolbar button:hover,
+.doc-mdx-diagram-mermaid-toolbar button:focus-visible,
+.doc-mdx-diagram-mermaid-popup-header button:hover,
+.doc-mdx-diagram-mermaid-popup-header button:focus-visible {
+	background: var(--color-fd-accent);
+	color: var(--color-fd-accent-foreground);
+	outline: none;
+}
+
+.doc-mdx-diagram-mermaid-viewport {
+	padding: 1rem;
+	overflow: auto;
+}
+
+.doc-mdx-diagram-mermaid-viewport[data-is-dragging='true'] {
+	cursor: grabbing;
+	user-select: none;
+}
+
+.doc-mdx-diagram-mermaid-viewport > div {
+	display: flex;
+	width: max-content;
+	min-width: min-content;
+	justify-content: center;
+	margin-inline: auto;
+}
+
+.doc-mdx-diagram-mermaid-viewport.is-fit > .doc-mdx-diagram-mermaid-content {
+	width: 100%;
+	min-width: 0;
+}
+
+.doc-mdx-diagram-mermaid-viewport svg,
+.doc-mdx-diagram-mermaid-popup-content svg {
+	display: block;
+	flex: 0 0 auto;
+	max-width: none;
+	margin: 0;
+}
+
+.doc-mdx-diagram-mermaid-lane-icon {
+	pointer-events: none;
+}
+
+.doc-mdx-diagram-mermaid-loading {
+	width: 100%;
+	margin: 0;
+	padding: 1rem;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.875rem;
+	text-align: center;
+}
+
+.doc-mdx-diagram-mermaid-overlay {
+	position: fixed;
+	z-index: 210;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	padding: 2rem;
+	background: rgb(15 23 42 / 58%);
+}
+
+.doc-mdx-diagram-mermaid-popup {
+	display: flex;
+	width: min(90rem, 100%);
+	height: calc(100vh - 4rem);
+	max-height: calc(100vh - 4rem);
+	flex-direction: column;
+	overflow: hidden;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.75rem;
+	background: var(--color-fd-background);
+	box-shadow: 0 24px 70px rgb(15 23 42 / 35%);
+}
+
+.doc-mdx-diagram-mermaid-popup-header {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.75rem 1rem;
+	border-bottom: 1px solid var(--color-fd-border);
+}
+
+.doc-mdx-diagram-mermaid-popup-header h2 {
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 650;
+}
+
+.doc-mdx-diagram-mermaid-popup-content {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.doc-mdx-diagram-mermaid-pan-viewport {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	cursor: grab;
+	touch-action: none;
+	user-select: none;
+}
+
+.doc-mdx-diagram-mermaid-pan-viewport:active {
+	cursor: grabbing;
+}
+
+.doc-mdx-diagram-mermaid-pan-content {
+	position: absolute;
+	top: 0;
+	left: 0;
+	transform-origin: 0 0;
+	will-change: transform;
+}
+
+@media (max-width: 720px) {
+	.doc-mdx-diagram-mermaid-overlay {
+		padding: 0.75rem;
+	}
+
+	.doc-mdx-diagram-mermaid-popup {
+		height: calc(100vh - 1.5rem);
+		max-height: calc(100vh - 1.5rem);
+	}
+}
