@@ -7,6 +7,12 @@ import { buildPageTreeModel } from '../lib/page-tree.js';
 // content itself is asked from the lower DocSourceStore.
 
 export type RouteMode = 'query' | 'memory';
+type NavigationHistoryMode = 'push' | 'replace' | 'skip';
+type NavigationHistoryEntry = {
+  hash: string;
+  route: string;
+  text: string;
+};
 
 export class DocStore {
   sourceStore: DocSourceStore;
@@ -19,6 +25,8 @@ export class DocStore {
   docCurrentPath = '';
   docCurrentHash = '';
   navigationError = '';
+  navigationHistoryEntryList: NavigationHistoryEntry[] = [];
+  navigationHistoryIndex = -1;
   // id of the DocLink whose candidate dropdown is open; only one at a time
   linkDropdownOpenId = '';
   searchQuery = '';
@@ -59,6 +67,27 @@ export class DocStore {
     return routeHomeDoc || this.treeModel.items[0]?.route || '';
   }
 
+  get isNavigationBackAvailable(): boolean {
+    return this.navigationHistoryIndex > 0;
+  }
+
+  get isNavigationForwardAvailable(): boolean {
+    return this.navigationHistoryIndex >= 0
+      && this.navigationHistoryIndex < this.navigationHistoryEntryList.length - 1;
+  }
+
+  get navigationBackEntry(): NavigationHistoryEntry | undefined {
+    return this.isNavigationBackAvailable
+      ? this.navigationHistoryEntryList[this.navigationHistoryIndex - 1]
+      : undefined;
+  }
+
+  get navigationForwardEntry(): NavigationHistoryEntry | undefined {
+    return this.isNavigationForwardAvailable
+      ? this.navigationHistoryEntryList[this.navigationHistoryIndex + 1]
+      : undefined;
+  }
+
   init() {
     let pathInitial = this.routeHome;
     let hashInitial = '';
@@ -84,7 +113,10 @@ export class DocStore {
     const routeNext = routePrevious && this.routeResolve(routePrevious)
       ? routePrevious
       : this.routeHome;
-    this.navigate(routeNext, hashPrevious, { isReplaceUrl: true, isFromHistory: true });
+    this.navigate(routeNext, hashPrevious, {
+      historyMode: 'replace',
+      isReplaceUrl: true,
+    });
   }
 
   replaceCompById(compById: Record<string, any>) {
@@ -93,16 +125,39 @@ export class DocStore {
     this.compByIdVersion += 1;
   }
 
-  onPopState = () => {
+  onPopState = (event: PopStateEvent) => {
     const param = new URLSearchParams(window.location.search).get('doc');
-    if (param && param !== this.routeCurrentPath) {
-      this.navigate(param, window.location.hash.slice(1), { isFromHistory: true });
+    const hash = window.location.hash.slice(1);
+    if (!param) return;
+
+    const indexHistory = event.state?.docNavigationHistoryIndex;
+    if (
+      Number.isInteger(indexHistory)
+      && indexHistory >= 0
+      && indexHistory < this.navigationHistoryEntryList.length
+      && this.navigationHistoryEntryList[indexHistory]?.route === param
+    ) {
+      this.navigationHistoryIndex = indexHistory;
+      this.navigationHistoryEntryList[indexHistory] = {
+        ...this.navigationHistoryEntryList[indexHistory],
+        hash,
+      };
+      this.navigate(param, hash, { historyMode: 'skip', isFromHistory: true });
+      return;
+    }
+
+    if (param !== this.routeCurrentPath || hash !== this.docCurrentHash) {
+      this.navigate(param, hash, { isFromHistory: true });
     }
   };
 
   // target can be a sidebar item route or '/rootId/xx/a.md'. A document path
   // resolves to the first matching sidebar item in tree order.
-  navigate(target: string, hashExtra?: string, options?: { isReplaceUrl?: boolean; isFromHistory?: boolean }) {
+  navigate(target: string, hashExtra?: string, options?: {
+    historyMode?: NavigationHistoryMode;
+    isReplaceUrl?: boolean;
+    isFromHistory?: boolean;
+  }) {
     const indexHash = target.indexOf('#');
     const path = indexHash >= 0 ? target.slice(0, indexHash) : target;
     const hash = hashExtra || (indexHash >= 0 ? target.slice(indexHash + 1) : '');
@@ -122,16 +177,43 @@ export class DocStore {
     this.navigationError = '';
     this.linkDropdownOpenId = '';
 
+    const isHistoryChanged = this.navigationHistoryApply(
+      { hash, route: item.route, text: item.text ?? item.title ?? item.route },
+      options?.historyMode ?? 'push',
+    );
+
     if (this.routeMode === 'query' && !options?.isFromHistory) {
       const url = this.toBrowserHref(item.route) + (hash ? `#${hash}` : '');
-      if (options?.isReplaceUrl) window.history.replaceState({}, '', url);
-      else window.history.pushState({}, '', url);
+      const state = {
+        ...window.history.state,
+        docNavigationHistoryIndex: this.navigationHistoryIndex,
+      };
+      if (options?.isReplaceUrl || !isHistoryChanged) window.history.replaceState(state, '', url);
+      else window.history.pushState(state, '', url);
     }
     if (item.docPath) void this.sourceStore.loadDoc(item.docPath);
     else if (item.type === 'inline') {
       void this.sourceStore.loadInline(item.route, item.inlineContent, item.inlineFormat);
     }
     return true;
+  }
+
+  navigationBack(): boolean {
+    if (!this.isNavigationBackAvailable) return false;
+    if (this.routeMode === 'query') {
+      window.history.back();
+      return true;
+    }
+    return this.navigationHistoryMove(this.navigationHistoryIndex - 1);
+  }
+
+  navigationForward(): boolean {
+    if (!this.isNavigationForwardAvailable) return false;
+    if (this.routeMode === 'query') {
+      window.history.forward();
+      return true;
+    }
+    return this.navigationHistoryMove(this.navigationHistoryIndex + 1);
   }
 
   routeForDoc(internalPath: string): string {
@@ -190,6 +272,43 @@ export class DocStore {
         this.isSearchRunning = false;
       });
     });
+  }
+
+  private navigationHistoryApply(entry: NavigationHistoryEntry, mode: NavigationHistoryMode): boolean {
+    if (mode === 'skip') return false;
+    if (mode === 'replace') {
+      if (this.navigationHistoryIndex < 0) {
+        this.navigationHistoryEntryList = [entry];
+        this.navigationHistoryIndex = 0;
+      } else {
+        this.navigationHistoryEntryList[this.navigationHistoryIndex] = entry;
+      }
+      return true;
+    }
+
+    const entryCurrent = this.navigationHistoryEntryList[this.navigationHistoryIndex];
+    if (entryCurrent?.route === entry.route && entryCurrent.hash === entry.hash) return false;
+
+    this.navigationHistoryEntryList.splice(this.navigationHistoryIndex + 1);
+    this.navigationHistoryEntryList.push(entry);
+    if (this.navigationHistoryEntryList.length > 200) {
+      this.navigationHistoryEntryList.shift();
+    }
+    this.navigationHistoryIndex = this.navigationHistoryEntryList.length - 1;
+    return true;
+  }
+
+  private navigationHistoryMove(index: number): boolean {
+    const indexPrevious = this.navigationHistoryIndex;
+    const entry = this.navigationHistoryEntryList[index];
+    if (!entry) return false;
+    this.navigationHistoryIndex = index;
+    const isNavigated = this.navigate(entry.route, entry.hash, {
+      historyMode: 'skip',
+      isFromHistory: true,
+    });
+    if (!isNavigated) this.navigationHistoryIndex = indexPrevious;
+    return isNavigated;
   }
 }
 

@@ -1,8 +1,15 @@
 import { useEffect, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
-import { DocsPage, DocsBody, DocsTitle, DocsDescription } from 'fumadocs-ui/layouts/docs/page';
+import {
+  DocsPage,
+  DocsBody,
+  DocsTitle,
+  DocsDescription,
+  PageBreadcrumb,
+} from 'fumadocs-ui/layouts/docs/page';
 import { useDocStores } from './store/context.js';
 import { buildMdxComps } from './lib/mdx-comps.js';
+import { DocPageToolbar } from './comp-doc/DocPageToolbar.jsx';
 import { RegisteredComp } from './comp-doc/RegisteredComp.jsx';
 
 // renders the current doc: loading / error / compiled body.
@@ -47,7 +54,7 @@ export const DocPageView = observer(function DocPageView() {
       ?? item.panelComponent;
     const isComponentAvailable = Boolean(compById[componentId]);
     return (
-      <DocsPage breadcrumb={{ includePage: true }}>
+      <DocsPage breadcrumb={{ includePage: true }} className="doc-page-with-toolbar" slots={docsPageSlots}>
         {warningNavigation}
         {isComponentAvailable ? (
           <RegisteredComp
@@ -70,7 +77,7 @@ export const DocPageView = observer(function DocPageView() {
 
   if (item?.type === 'missing-doc') {
     return (
-      <DocsPage breadcrumb={{ includePage: true }}>
+      <DocsPage breadcrumb={{ includePage: true }} className="doc-page-with-toolbar" slots={docsPageSlots}>
         {warningNavigation}
         <DocsTitle>Document source not found</DocsTitle>
         <div className="doc-source-missing-error" role="alert">
@@ -86,7 +93,7 @@ export const DocPageView = observer(function DocPageView() {
 
   if (compiled.status === 'loading') {
     return (
-      <DocsPage breadcrumb={{ includePage: true }}>
+      <DocsPage breadcrumb={{ includePage: true }} className="doc-page-with-toolbar" slots={docsPageSlots}>
         {warningNavigation}
         <p className="text-fd-muted-foreground text-sm">loading {pathContent} ...</p>
       </DocsPage>
@@ -95,7 +102,7 @@ export const DocPageView = observer(function DocPageView() {
 
   if (compiled.status === 'error') {
     return (
-      <DocsPage breadcrumb={{ includePage: true }}>
+      <DocsPage breadcrumb={{ includePage: true }} className="doc-page-with-toolbar" slots={docsPageSlots}>
         {warningNavigation}
         <DocsTitle>Failed to render {pathContent}</DocsTitle>
         <pre className="mt-2 p-2 text-sm whitespace-pre-wrap select-text text-red-600 dark:text-red-400 border border-fd-border">
@@ -111,7 +118,8 @@ export const DocPageView = observer(function DocPageView() {
     <DocsPage
       breadcrumb={{ includePage: true }}
       toc={compiled.toc}
-      className={compiled.isSourceFile ? 'doc-page-source-file' : undefined}
+      className={`doc-page-with-toolbar${compiled.isSourceFile ? ' doc-page-source-file' : ''}`}
+      slots={docsPageSlots}
     >
       {warningNavigation}
       {candidates.length > 1 ? (
@@ -142,3 +150,16 @@ export const DocPageView = observer(function DocPageView() {
     </DocsPage>
   );
 });
+
+const docsPageSlots = {
+  breadcrumb: DocPageBreadcrumb,
+};
+
+function DocPageBreadcrumb(props) {
+  return (
+    <>
+      <DocPageToolbar />
+      <PageBreadcrumb {...props} />
+    </>
+  );
+}

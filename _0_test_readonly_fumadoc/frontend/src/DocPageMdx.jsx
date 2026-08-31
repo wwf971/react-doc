@@ -3,12 +3,14 @@ import { observer } from 'mobx-react-lite';
 import { FrameworkProvider } from 'fumadocs-core/framework';
 import { RootProvider } from 'fumadocs-ui/provider/base';
 import { DocsLayout } from 'fumadocs-ui/layouts/docs';
+import { Container as DocsLayoutContainer } from 'fumadocs-ui/layouts/docs/slots/container';
 import { DocSourceStore } from './store/DocSourceStore.js';
 import { DocStore } from './store/DocStore.js';
 import { CompStateStore } from './store/CompStateStore.js';
 import { StoreContext, useDocStores } from './store/context.js';
 import { makeFramework } from './lib/framework-adapter.jsx';
 import { DocPageView } from './DocPageView.jsx';
+import { DocNavigationButtons } from './comp-doc/DocNavigationButtons.jsx';
 import { DocSearchDialog } from './comp-doc/DocSearchDialog.jsx';
 import { compById as compByIdDefault } from './comp-doc/registry.js';
 
@@ -82,8 +84,22 @@ const DocsShell = observer(function DocsShell() {
     <DocsLayout
       tree={docStore.treePage}
       nav={{ title: sourceStore.configDoc.siteTitle ?? 'Docs' }}
+      slots={docsLayoutSlots}
     >
       <DocPageView />
     </DocsLayout>
   );
 });
+
+const docsLayoutSlots = { container: DocPageLayoutContainer };
+
+function DocPageLayoutContainer({ children, ...props }) {
+  return (
+    <DocsLayoutContainer {...props}>
+      {children}
+      <nav className="doc-navigation-floating" aria-label="Document navigation history">
+        <DocNavigationButtons isCompact />
+      </nav>
+    </DocsLayoutContainer>
+  );
+}

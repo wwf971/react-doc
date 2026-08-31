@@ -33,6 +33,10 @@
   -webkit-user-drag: none;
 }
 
+.doc-page-with-toolbar {
+  padding-top: 1rem;
+}
+
 /* A generated source-file page already uses the page-level vertical scroll.
    Keep horizontal code scrolling, but do not create a nested vertical viewport. */
 .doc-page-source-file figure.shiki > [role='region'] {
@@ -43,6 +47,83 @@
   color: var(--color-fd-muted-foreground);
   font-size: 0.875rem;
   font-style: italic;
+}
+
+.doc-page-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  margin-bottom: 0.25rem;
+  overflow-x: auto;
+}
+
+.doc-navigation-buttons {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.doc-navigation-buttons button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.4rem;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 550;
+}
+
+.doc-navigation-buttons button:hover:not(:disabled),
+.doc-navigation-buttons button:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-fd-foreground) 32%, var(--color-fd-border));
+  background: var(--color-fd-accent);
+  outline: none;
+}
+
+.doc-navigation-buttons button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.doc-navigation-floating {
+  position: sticky;
+  z-index: 40;
+  bottom: 0.75rem;
+  display: none;
+  align-self: end;
+  justify-self: start;
+  grid-area: toc;
+  margin-bottom: 0.75rem;
+  padding: 0.3rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--color-fd-background) 94%, transparent);
+  box-shadow: 0 3px 12px rgb(15 23 42 / 12%);
+  backdrop-filter: blur(6px);
+}
+
+@media (min-width: 1280px) {
+  .doc-navigation-floating {
+    display: block;
+  }
+}
+
+.doc-navigation-floating .doc-navigation-buttons {
+  gap: 0.25rem;
+}
+
+.doc-navigation-floating .doc-navigation-buttons button {
+  width: 2rem;
+  padding: 0;
+  justify-content: center;
+  border: 0;
 }
 
 .doc-navigation-warning,

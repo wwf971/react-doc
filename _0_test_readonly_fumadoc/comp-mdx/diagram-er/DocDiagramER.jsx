@@ -6,7 +6,6 @@ import {
 	Background,
 	Controls,
 	Handle,
-	MiniMap,
 	Position,
 	ReactFlow,
 	ReactFlowProvider,
@@ -146,6 +145,7 @@ const DocDiagramERCanvas = observer(function DocDiagramERCanvas({ store }) {
 			fitViewOptions={{ padding: 0.12 }}
 			minZoom={0.15}
 			maxZoom={2.5}
+			proOptions={{ hideAttribution: true }}
 			nodesDraggable
 			nodesConnectable={false}
 			elementsSelectable={false}
@@ -153,7 +153,6 @@ const DocDiagramERCanvas = observer(function DocDiagramERCanvas({ store }) {
 			onNodesChange={store.nodeListChange}
 		>
 			<Background gap={18} size={1} />
-			<MiniMap pannable zoomable nodeStrokeWidth={2} />
 			<Controls showInteractive={false} />
 		</ReactFlow>
 	);
