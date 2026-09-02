@@ -67,6 +67,18 @@ source:
 
 Paths are relative to the config file. Internal representation of every file is `/{rootId}/relPath`, so same-name root folders never clash. `addFile` after a remove rule re-adds a single file (the "remove folder except one file" case in the requirement).
 
+### External source files
+
+Source paths may point outside the application project. Use `addFile` for one external document or `addFolder` for an external document tree:
+
+```yaml
+- action: addFile
+  rootId: external-guide
+  path: ../../shared-docs/guide.md
+```
+
+The collected file has the internal path `/external-guide/guide.md`. Add that path to the side panel when the document should be directly navigable. The Vite development server must also allow the external folder; keep the allowed scope as narrow as practical.
+
 Non-md files get a display strategy by suffix (`fileDisplay` in config, suffix → code block language). The store synthesizes markdown: file name as title + one code block. Unknown suffixes fall back to a plain code block.
 
 ## Link recognition / rendering / navigation
@@ -93,6 +105,8 @@ Resolution happens at render, not at compile — moving a file only changes the 
 
 Link behavior is separated into recognition, resolution, visual rendering, and navigation. Applications can add/replace remark recognizers, provide `config.link.resolve`, provide a `data`/`config`/`onEvent` link renderer, and intercept link events before the default store navigation. The default renderer follows the same unified event contract as other data-driven components. See `frontend/README.md` for the public interface.
 
+Fumadocs wraps heading text in hash anchors. Dragging to select a heading can still emit a click on pointer release and unexpectedly scroll that heading to the top. `DocPageMdx` tracks pointer movement and the browser selection, then cancels only the heading-anchor click produced by a selection drag; ordinary anchor clicks and the separate copy-link button remain available.
+
 ## Graceful degradation stipulation
 
 A second remark plugin (`remarkCommentComp`) scans HTML comment nodes of the form `<!--renderComp=StockTable,a=b-->`. When such a comment directly precedes a code block or a table, that node is replaced by the registered component, receiving the raw block text plus the comment's key=value props. A normal markdown renderer just ignores the comment and shows the plain block — that is the degradation path.
@@ -117,6 +131,14 @@ All registered render components use the same top-level props: `{ data, config, 
 Registry values are component definitions created with `compDefine()`. A definition provides `CompRender`, and can also provide supported placements and an input converter. Fumadocs-native components use adapters created with `compNativeDefine()`, so their framework-specific props do not become the public contract for project components.
 
 One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, and `sidePanelPanel`.
+
+### Isolate temporary rendering DOM
+
+Components and third-party libraries sometimes create temporary DOM to measure, transform, or serialize content before displaying the final result. Temporary elements must not be mounted directly under `document.body` without containment. Large intermediate content can briefly change the body dimensions, trigger a window-level scrollbar, and shift the page horizontally even when the final component is correctly clipped inside its own viewport.
+
+Keep temporary rendering DOM inside a host owned by the component that performs the rendering. The host should remain mounted for the complete asynchronous operation and be fixed or absolutely positioned, zero-sized, clipped, hidden, non-interactive, and layout-contained. Insert only the completed output into the visible component. Fix overflow at the level where it is created: reserving a gutter on a nested document scroller cannot prevent temporary elements attached to `document.body` from changing window overflow.
+
+Mermaid is one example. `mermaid.render(id, source)` appends temporary rendering elements to `document.body` when its optional container is omitted. `DocDiagramMermaid` therefore passes a dedicated contained host as the third argument to `mermaid.render()`. Mermaid measures and serializes the SVG inside that host, then the component inserts the completed SVG into the visible diagram viewport. Diagrams default to `fit` mode so all content is visible, with a temporary toolbar toggle for original-size `intrinsic` mode. The same isolation principle applies to charting, diagram, export, rich-text, and measurement libraries that create off-screen or temporary DOM.
 
 ## Side panel
 

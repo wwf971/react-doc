@@ -10,7 +10,9 @@ import {
 import { useDocStores } from './store/context.js';
 import { buildMdxComps } from './lib/mdx-comps.js';
 import { DocPageToolbar } from './comp-doc/DocPageToolbar.jsx';
+import { DocPageSkeleton } from './comp-doc/DocPageSkeleton.jsx';
 import { RegisteredComp } from './comp-doc/RegisteredComp.jsx';
+import './DocPageView.css';
 
 // renders the current doc: loading / error / compiled body.
 // fully driven by store state; the compile cache lives in DocSourceStore.
@@ -89,13 +91,13 @@ export const DocPageView = observer(function DocPageView() {
     );
   }
 
-  if (!pathContent || !compiled) return warningNavigation;
+  if (!pathContent) return warningNavigation;
 
-  if (compiled.status === 'loading') {
+  if (!compiled || compiled.status === 'loading') {
     return (
       <DocsPage breadcrumb={{ includePage: true }} className="doc-page-with-toolbar" slots={docsPageSlots}>
         {warningNavigation}
-        <p className="text-fd-muted-foreground text-sm">loading {pathContent} ...</p>
+        <DocPageSkeleton />
       </DocsPage>
     );
   }
@@ -134,7 +136,7 @@ export const DocPageView = observer(function DocPageView() {
         </div>
       ) : null}
       {/* md files usually carry their own '# heading'; only frontmatter title gets the big page title */}
-      {compiled.titleFrontmatter ? <DocsTitle>{compiled.titleFrontmatter}</DocsTitle> : null}
+      {compiled.titleFrontmatter ? <DocsTitle className="doc-page-title">{compiled.titleFrontmatter}</DocsTitle> : null}
       {compiled.description ? (
         <DocsDescription className="doc-page-description">
           {compiled.description}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
-import { Copy, Expand, X } from 'lucide-react';
+import { Copy, Expand, Scan, X } from 'lucide-react';
 import { DocDiagramMermaidStore } from './DocDiagramMermaidStore.js';
 import './DocDiagramMermaid.css';
 
@@ -82,9 +82,10 @@ function mermaidGet(mermaidLoad) {
 	return mermaidPromise;
 }
 
-function MermaidSvg({ displayMode = 'intrinsic', iconByLaneId = {}, mermaidLoad, onReady, sourceDiagram }) {
+function MermaidSvg({ displayMode = 'fill', iconByLaneId = {}, mermaidLoad, onReady, sourceDiagram }) {
 	const id = `doc-mermaid-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
 	const contentRef = useRef(null);
+	const renderHostRef = useRef(null);
 	const [state, setState] = useState({ status: 'loading', svg: '', message: '' });
 
 	useEffect(() => {
@@ -92,7 +93,7 @@ function MermaidSvg({ displayMode = 'intrinsic', iconByLaneId = {}, mermaidLoad,
 		setState({ status: 'loading', svg: '', message: '' });
 
 		void mermaidGet(mermaidLoad)
-			.then((mermaid) => mermaid.render(id, sourceDiagram))
+			.then((mermaid) => mermaid.render(id, sourceDiagram, renderHostRef.current))
 			.then(({ svg }) => {
 				if (!isCancelled) setState({ status: 'done', svg, message: '' });
 			})
@@ -145,7 +146,7 @@ function MermaidSvg({ displayMode = 'intrinsic', iconByLaneId = {}, mermaidLoad,
 		if (state.status !== 'done') return;
 		const svg = contentRef.current?.querySelector('svg');
 		if (!svg) return;
-		if (displayMode === 'fit') {
+		if (displayMode === 'contain') {
 			svg.style.width = '100%';
 			svg.style.height = 'auto';
 			svg.style.maxWidth = '100%';
@@ -158,18 +159,31 @@ function MermaidSvg({ displayMode = 'intrinsic', iconByLaneId = {}, mermaidLoad,
 
 	if (state.status === 'error') {
 		return (
-			<div className="doc-mdx-diagram-mermaid-error" role="alert">
-				<strong>Failed to render Mermaid diagram.</strong>
-				<span>{state.message}</span>
-			</div>
+			<>
+				<div ref={renderHostRef} className="doc-mdx-diagram-mermaid-render-host" aria-hidden="true" />
+				<div className="doc-mdx-diagram-mermaid-error" role="alert">
+					<strong>Failed to render Mermaid diagram.</strong>
+					<span>{state.message}</span>
+				</div>
+			</>
 		);
 	}
 
 	if (state.status === 'loading') {
-		return <div className="doc-mdx-diagram-mermaid-loading">図を読み込んでいます。</div>;
+		return (
+			<>
+				<div ref={renderHostRef} className="doc-mdx-diagram-mermaid-render-host" aria-hidden="true" />
+				<div className="doc-mdx-diagram-mermaid-loading">図を読み込んでいます。</div>
+			</>
+		);
 	}
 
-	return <div ref={contentRef} className={`doc-mdx-diagram-mermaid-content is-${displayMode}`} />;
+	return (
+		<>
+			<div ref={renderHostRef} className="doc-mdx-diagram-mermaid-render-host" aria-hidden="true" />
+			<div ref={contentRef} className={`doc-mdx-diagram-mermaid-content is-${displayMode}`} />
+		</>
+	);
 }
 
 function useHorizontalDragScroll(viewportRef) {
@@ -181,6 +195,7 @@ function useHorizontalDragScroll(viewportRef) {
 			if (event.button !== 0 || event.pointerType === 'touch' || !viewport
 				|| viewport.scrollWidth <= viewport.clientWidth) return;
 			dragRef.current = { pointerId: event.pointerId, scrollLeft: viewport.scrollLeft, x: event.clientX };
+			viewport.dataset.isDragReady = 'true';
 			viewport.setPointerCapture(event.pointerId);
 		},
 		onPointerMove(event) {
@@ -196,6 +211,7 @@ function useHorizontalDragScroll(viewportRef) {
 			const viewport = viewportRef.current;
 			if (dragRef.current?.pointerId !== event.pointerId) return;
 			dragRef.current = null;
+			delete viewport?.dataset.isDragReady;
 			delete viewport?.dataset.isDragging;
 			if (viewport?.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
 		},
@@ -323,9 +339,10 @@ function MermaidPanZoom({ iconByLaneId, mermaidLoad, sourceDiagram }) {
 }
 
 const DocDiagramMermaid = observer(function DocDiagramMermaid({ data = {}, config = {}, onEvent }) {
-	const [store] = useState(() => new DocDiagramMermaidStore());
+	const displayModeDefault = config.displayMode === 'fill' || config.displayMode === 'intrinsic' ? 'fill' : 'contain';
+	const [store] = useState(() => new DocDiagramMermaidStore(displayModeDefault));
 	const sourceDiagram = data.source || data.raw || '';
-	const displayModeResolved = config.displayMode === 'fit' ? 'fit' : 'intrinsic';
+	const displayModeResolved = store.displayMode;
 	const iconByLaneId = useMemo(
 		() => laneIconByIdParse(data.laneIcons, config.assetUrlGet),
 		[data.laneIcons, config.assetUrlGet],
@@ -337,6 +354,12 @@ const DocDiagramMermaid = observer(function DocDiagramMermaid({ data = {}, confi
 	const isExpandedSet = async (isExpanded) => {
 		const result = await onEvent?.('expandChangeRequest', { isExpanded });
 		if (!result?.isHandled) store.expandedSet(isExpanded);
+	};
+
+	const displayModeToggle = async () => {
+		const displayMode = displayModeResolved === 'contain' ? 'fill' : 'contain';
+		const result = await onEvent?.('displayModeChangeRequest', { displayMode });
+		if (!result?.isHandled) store.displayModeSet(displayMode);
 	};
 
 	useEffect(() => {
@@ -364,6 +387,9 @@ const DocDiagramMermaid = observer(function DocDiagramMermaid({ data = {}, confi
 		: store.copyStatus === 'failed'
 			? 'コピーできませんでした'
 			: 'Mermaid ソースをコピー';
+	const displayModeLabel = displayModeResolved === 'contain'
+		? 'Fill 表示に切り替え'
+		: 'Contain 表示に切り替え';
 
 	const popup = store.isExpanded && typeof document !== 'undefined' ? createPortal(
 		<div className="doc-mdx-diagram-mermaid-overlay" onMouseDown={() => void isExpandedSet(false)}>
@@ -395,6 +421,15 @@ const DocDiagramMermaid = observer(function DocDiagramMermaid({ data = {}, confi
 	return (
 		<figure className="doc-mdx-diagram-mermaid" aria-label={data.title ?? 'Diagram'}>
 			<div className="doc-mdx-diagram-mermaid-toolbar">
+				<button
+					type="button"
+					title={displayModeLabel}
+					aria-label={displayModeLabel}
+					aria-pressed={displayModeResolved === 'contain'}
+					onClick={() => void displayModeToggle()}
+				>
+					<Scan size={17} />
+				</button>
 				<button type="button" title={copyLabel} aria-label={copyLabel} onClick={sourceCopy}>
 					<Copy size={17} />
 				</button>

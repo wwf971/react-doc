@@ -1,0 +1,30 @@
+.doc-image-grid {
+	display: flex;
+	width: 100%;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: var(--doc-image-grid-gap);
+	margin: 1rem 0 1.5rem;
+}
+
+.doc-image-grid-item {
+	width: var(--doc-image-grid-item-width);
+	max-width: 100%;
+	flex: 0 1 var(--doc-image-grid-item-width);
+}
+
+.doc-image-grid-item > .doc-image {
+	height: 100%;
+	margin: 0;
+}
+
+.doc-image-grid-error {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+	margin: 1rem 0;
+	padding: 0.75rem 1rem;
+	border: 1px solid #dc2626;
+	border-radius: 0.5rem;
+	color: #b42318;
+}

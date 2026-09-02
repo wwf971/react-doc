@@ -1,0 +1,106 @@
+.doc-link-controller,
+.doc-link-render-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.doc-link-render {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #1d63a8;
+  cursor: pointer;
+  font: inherit;
+  font-size: inherit;
+  line-height: 1.15;
+  vertical-align: baseline;
+}
+
+.doc-link-render > code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 0.92em;
+  line-height: inherit;
+}
+
+.doc-link-render:hover,
+.doc-link-render:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+.doc-link-render.is-active {
+  background: #dcebfa;
+  color: #0b4d8c;
+}
+
+.doc-link-render.is-broken {
+  color: #b42318;
+  cursor: not-allowed;
+  text-decoration: underline dashed;
+}
+
+.doc-link-render.is-unavailable {
+  color: #a15c00;
+  text-decoration: underline dotted;
+}
+
+.doc-link-render-count {
+  color: var(--color-fd-muted-foreground);
+  user-select: none;
+}
+
+.doc-link-render-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  align-items: center;
+  justify-content: center;
+}
+
+.doc-link-render-icon > svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+}
+
+.doc-link-render-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 50;
+  display: flex;
+  min-width: max-content;
+  flex-direction: column;
+  margin-top: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-popover);
+  box-shadow: 0 4px 10px rgb(0 0 0 / 14%);
+}
+
+.doc-link-render-option {
+  padding: 2px 6px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.doc-link-render-option:hover,
+.doc-link-render-option:focus-visible {
+  background: var(--color-fd-accent);
+  outline: none;
+}

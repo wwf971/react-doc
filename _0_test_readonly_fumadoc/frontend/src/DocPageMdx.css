@@ -1,0 +1,50 @@
+.doc-page-mdx {
+  min-width: 0;
+  height: 100%;
+  overflow: auto;
+  font-family: var(--font-sans);
+}
+
+.doc-page-mdx :is(h1, h2, h3, h4, h5, h6),
+.doc-page-mdx :is(h1, h2, h3, h4, h5, h6) > a[data-card] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.doc-page-mdx :is(h1, h2, h3, h4, h5, h6) > a[data-card] {
+  -webkit-user-drag: none;
+}
+
+.doc-navigation-floating {
+  position: sticky;
+  z-index: 40;
+  bottom: 0.75rem;
+  display: none;
+  align-self: end;
+  justify-self: start;
+  grid-area: toc;
+  margin-bottom: 0.75rem;
+  padding: 0.3rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--color-fd-background) 94%, transparent);
+  box-shadow: 0 3px 12px rgb(15 23 42 / 12%);
+  backdrop-filter: blur(6px);
+}
+
+@media (min-width: 1280px) {
+  .doc-navigation-floating {
+    display: block;
+  }
+}
+
+.doc-navigation-floating .doc-navigation-buttons {
+  gap: 0.25rem;
+}
+
+.doc-navigation-floating .doc-navigation-buttons button {
+  width: 2rem;
+  padding: 0;
+  justify-content: center;
+  border: 0;
+}

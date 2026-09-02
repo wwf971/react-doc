@@ -13,6 +13,7 @@ import { DocPageView } from './DocPageView.jsx';
 import { DocNavigationButtons } from './comp-doc/DocNavigationButtons.jsx';
 import { DocSearchDialog } from './comp-doc/DocSearchDialog.jsx';
 import { compById as compByIdDefault } from './comp-doc/registry.js';
+import './DocPageMdx.css';
 
 // Embeddable MD/MDX document page.
 //
@@ -27,6 +28,7 @@ import { compById as compByIdDefault } from './comp-doc/registry.js';
 
 export function DocPageMdx({ data, config = {}, onEvent }) {
   const pageElementRef = useRef(null);
+  const headingPointerRef = useRef(null);
   const [stores] = useState(() => {
     const compById = { ...compByIdDefault, ...(config.compById ?? {}) };
     const sourceStore = new DocSourceStore(data, {
@@ -66,7 +68,52 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
   }, [data, stores]);
 
   return (
-    <div ref={pageElementRef} className="doc-page-mdx">
+    <div
+      ref={pageElementRef}
+      className="doc-page-mdx"
+      onClickCapture={(event) => {
+        const headingAnchor = headingAnchorGet(event.target);
+        const pointer = headingPointerRef.current;
+        const selection = typeof window === 'undefined' ? null : window.getSelection();
+        const isTextSelected = Boolean(selection && !selection.isCollapsed && selection.toString());
+        const isDragged = Boolean(
+          headingAnchor
+          && pointer?.headingAnchor === headingAnchor
+          && Math.hypot(pointer.xEnd - pointer.xStart, pointer.yEnd - pointer.yStart) > 5
+        );
+        headingPointerRef.current = null;
+        if (!headingAnchor || (!isTextSelected && !isDragged)) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onPointerDownCapture={(event) => {
+        if (event.button !== 0) return;
+        const headingAnchor = headingAnchorGet(event.target);
+        headingPointerRef.current = headingAnchor
+          ? {
+              headingAnchor,
+              pointerId: event.pointerId,
+              xEnd: event.clientX,
+              xStart: event.clientX,
+              yEnd: event.clientY,
+              yStart: event.clientY,
+            }
+          : null;
+      }}
+      onPointerMoveCapture={(event) => {
+        const pointer = headingPointerRef.current;
+        if (!pointer || pointer.pointerId !== event.pointerId) return;
+        pointer.xEnd = event.clientX;
+        pointer.yEnd = event.clientY;
+      }}
+      onPointerUpCapture={(event) => {
+        const pointer = headingPointerRef.current;
+        if (!pointer || pointer.pointerId !== event.pointerId) return;
+        pointer.xEnd = event.clientX;
+        pointer.yEnd = event.clientY;
+      }}
+      onPointerCancelCapture={() => { headingPointerRef.current = null; }}
+    >
       <StoreContext.Provider value={contextValue}>
         <FrameworkProvider {...framework}>
           <RootProvider search={{ SearchDialog: DocSearchDialog }}>
@@ -76,6 +123,13 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       </StoreContext.Provider>
     </div>
   );
+}
+
+function headingAnchorGet(target) {
+  if (!(target instanceof Element)) return null;
+  const anchor = target.closest('a[href^="#"]');
+  if (!anchor || !/^H[1-6]$/.test(anchor.parentElement?.tagName ?? '')) return null;
+  return anchor;
 }
 
 const DocsShell = observer(function DocsShell() {

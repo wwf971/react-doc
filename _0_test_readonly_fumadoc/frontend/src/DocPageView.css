@@ -1,0 +1,66 @@
+.doc-page-with-toolbar {
+  padding-top: 1rem;
+}
+
+.doc-page-title + .doc-page-description {
+  margin-top: -0.75rem;
+}
+
+/* A generated source-file page already uses the page-level vertical scroll.
+   Keep horizontal code scrolling, but do not create a nested vertical viewport. */
+.doc-page-source-file figure.shiki > [role='region'] {
+  max-height: none;
+}
+
+.doc-content-empty {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.875rem;
+  font-style: italic;
+}
+
+.doc-navigation-warning,
+.doc-source-ambiguity-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d89a32;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, #f6c453 16%, transparent);
+  font-size: 0.875rem;
+}
+
+.doc-source-missing-error {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #dc2626;
+  border-left-width: 4px;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, #dc2626 9%, transparent);
+  color: #991b1b;
+  font-size: 0.875rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .doc-source-missing-error {
+    color: #fca5a5;
+  }
+}
+
+.doc-navigation-warning button {
+  align-self: flex-start;
+  color: #8a5200;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.doc-source-ambiguity-warning ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}

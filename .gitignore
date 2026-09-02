@@ -11,3 +11,4 @@ fyi*
 *.zip
 *.rar
 package-lock.json
+third_party/shadcn/

@@ -57,6 +57,7 @@
 
 .doc-mdx-diagram-mermaid-toolbar button:hover,
 .doc-mdx-diagram-mermaid-toolbar button:focus-visible,
+.doc-mdx-diagram-mermaid-toolbar button[aria-pressed='true'],
 .doc-mdx-diagram-mermaid-popup-header button:hover,
 .doc-mdx-diagram-mermaid-popup-header button:focus-visible {
 	background: var(--color-fd-accent);
@@ -69,9 +70,13 @@
 	overflow: auto;
 }
 
+.doc-mdx-diagram-mermaid-viewport[data-is-drag-ready='true'],
+.doc-mdx-diagram-mermaid-viewport[data-is-drag-ready='true'] * {
+	user-select: none;
+}
+
 .doc-mdx-diagram-mermaid-viewport[data-is-dragging='true'] {
 	cursor: grabbing;
-	user-select: none;
 }
 
 .doc-mdx-diagram-mermaid-viewport > div {
@@ -82,7 +87,7 @@
 	margin-inline: auto;
 }
 
-.doc-mdx-diagram-mermaid-viewport.is-fit > .doc-mdx-diagram-mermaid-content {
+.doc-mdx-diagram-mermaid-viewport.is-contain > .doc-mdx-diagram-mermaid-content {
 	width: 100%;
 	min-width: 0;
 }
@@ -106,6 +111,18 @@
 	color: var(--color-fd-muted-foreground);
 	font-size: 0.875rem;
 	text-align: center;
+}
+
+.doc-mdx-diagram-mermaid-render-host {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 0;
+	height: 0;
+	overflow: hidden;
+	contain: strict;
+	visibility: hidden;
+	pointer-events: none;
 }
 
 .doc-mdx-diagram-mermaid-overlay {

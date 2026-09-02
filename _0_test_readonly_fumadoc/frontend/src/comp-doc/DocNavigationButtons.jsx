@@ -1,6 +1,7 @@
 import { observer } from 'mobx-react-lite';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { useDocStores } from '../store/context.js';
+import './DocNavigationButtons.css';
 
 export const DocNavigationButtons = observer(function DocNavigationButtons({ isCompact = false }) {
   const { docStore } = useDocStores();

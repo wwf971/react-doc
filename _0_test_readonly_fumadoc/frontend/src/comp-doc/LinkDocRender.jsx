@@ -1,4 +1,5 @@
 // Default visual renderer for recognized document links.
+import './LinkDocRender.css';
 //
 // Interface:
 //   data: accepted semantic/display data; never mutated by this component

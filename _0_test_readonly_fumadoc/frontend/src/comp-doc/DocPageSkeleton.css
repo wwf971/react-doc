@@ -1,0 +1,43 @@
+.doc-page-skeleton {
+  display: flex;
+  width: 100%;
+  min-height: min(48rem, 78vh);
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 0.25rem;
+}
+
+.doc-page-skeleton [data-slot='skeleton'] {
+  background: color-mix(in srgb, var(--color-fd-foreground) 20%, var(--color-fd-background));
+}
+
+.doc-page-skeleton-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.doc-page-skeleton-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.doc-page-skeleton-card-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .doc-page-skeleton {
+    min-height: 72vh;
+  }
+
+  .doc-page-skeleton-card-row {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,4 +1,5 @@
 import { DocNavigationButtons } from './DocNavigationButtons.jsx';
+import './DocPageToolbar.css';
 
 export function DocPageToolbar() {
   return (
