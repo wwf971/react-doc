@@ -66,9 +66,13 @@ function convertNode(node, position, context) {
     const entries = resolveDocEntries(String(node.doc), context);
     if (entries.length === 0) {
       console.warn(`[page-tree] side panel doc not in source: ${node.doc}`);
-      return [registerMissingDocItem(node, position, context)];
+      return [Array.isArray(node.children)
+        ? docMissingFolderRegister(node, position, context)
+        : registerMissingDocItem(node, position, context)];
     }
-    return [registerDocItem(node, entries, position, context)];
+    return [Array.isArray(node.children)
+      ? docFolderRegister(node, entries, position, context)
+      : registerDocItem(node, entries, position, context)];
   }
   if (node.inline !== undefined) {
     return [registerInlineItem(node, position, context)];
@@ -215,6 +219,33 @@ function convertSourceFolder(node, position, context) {
 }
 
 function registerDocItem(node, entries, position, context) {
+  return docPageCreate(node, entries, position, context).page;
+}
+
+function docFolderRegister(node, entries, position, context) {
+  return docFolderCreate(node, position, context, docPageCreate(
+    node,
+    entries,
+    position,
+    context,
+    true,
+  ));
+}
+
+function docFolderCreate(node, position, context, { item, page }) {
+  return {
+    $id: item.id,
+    type: 'folder',
+    name: page.name,
+    index: page,
+    defaultOpen: node.defaultOpen ?? true,
+    children: node.children.flatMap((child, index) => (
+      convertNode(child, [...position, index], context)
+    )),
+  };
+}
+
+function docPageCreate(node, entries, position, context, isFolderIndex = false) {
   const entry = entries[0];
   const id = uniqueId(node.id ?? `doc-${position.join('-')}`, context);
   const route = itemRoute(id);
@@ -231,11 +262,11 @@ function registerDocItem(node, entries, position, context) {
     text: node.text ?? entry.title,
   };
   registerItem(item, context);
-  return {
-    $id: id,
+  const page = {
+    $id: isFolderIndex ? uniqueId(`${id}-index`, context) : id,
     type: 'page',
     name: displayName(node, item.text, context, {
-      kind: 'file',
+      kind: isFolderIndex ? 'folder-file' : 'file',
       fileExt: entry.ext,
       fileName: entry.name,
       filePath: entry.internalPath,
@@ -243,9 +274,23 @@ function registerDocItem(node, entries, position, context) {
     }),
     url: route,
   };
+  return { item, page };
 }
 
 function registerMissingDocItem(node, position, context) {
+  return docMissingPageCreate(node, position, context).page;
+}
+
+function docMissingFolderRegister(node, position, context) {
+  return docFolderCreate(
+    node,
+    position,
+    context,
+    docMissingPageCreate(node, position, context, true),
+  );
+}
+
+function docMissingPageCreate(node, position, context, isFolderIndex = false) {
   const sourceReference = String(node.doc ?? '');
   const fileName = sourceReference.split('/').filter(Boolean).at(-1) ?? sourceReference;
   const fileExt = fileName.includes('.') ? fileName.split('.').at(-1).toLowerCase() : '';
@@ -259,11 +304,11 @@ function registerMissingDocItem(node, position, context) {
     text: node.text ?? fileName ?? sourceReference,
   };
   registerItem(item, context);
-  return {
-    $id: id,
+  const page = {
+    $id: isFolderIndex ? uniqueId(`${id}-index`, context) : id,
     type: 'page',
     name: displayName(node, item.text, context, {
-      kind: 'file',
+      kind: isFolderIndex ? 'folder-file' : 'file',
       fileExt,
       fileName,
       filePath: sourceReference,
@@ -272,6 +317,7 @@ function registerMissingDocItem(node, position, context) {
     }),
     url: route,
   };
+  return { item, page };
 }
 
 function registerPanelItem(node, position, context) {
@@ -359,12 +405,14 @@ function indexFirstDocItems(treePage, itemByRoute) {
   const visitNode = (node) => {
     if (node.type === 'page') {
       const item = itemByRoute.get(node.url);
-      const itemFirst = item?.type === 'doc' ? item : undefined;
+      const itemFirst = item?.type === 'doc' || item?.type === 'missing-doc'
+        ? item
+        : undefined;
       if (itemFirst) itemFirstDocByNodeId.set(node.$id, itemFirst);
       return itemFirst;
     }
     if (!Array.isArray(node.children)) return undefined;
-    let itemFirst;
+    let itemFirst = node.index ? visitNode(node.index) : undefined;
     for (const child of node.children) {
       const itemChildFirst = visitNode(child);
       if (!itemFirst && itemChildFirst) itemFirst = itemChildFirst;

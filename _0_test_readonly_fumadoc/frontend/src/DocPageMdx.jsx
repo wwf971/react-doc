@@ -12,6 +12,7 @@ import { makeFramework } from './lib/framework-adapter.jsx';
 import { DocPageView } from './DocPageView.jsx';
 import { DocNavigationButtons } from './comp-doc/DocNavigationButtons.jsx';
 import { DocSearchDialog } from './comp-doc/DocSearchDialog.jsx';
+import { DocSidebarFolder } from './comp-doc/DocSidebarFolder.jsx';
 import { compById as compByIdDefault } from './comp-doc/registry.js';
 import './DocPageMdx.css';
 
@@ -48,7 +49,8 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     linkConfig: config.link ?? {},
     onEvent,
     pageElementRef,
-  }), [stores, config.link, onEvent]);
+    sidePanelConfig: config.sidePanel ?? {},
+  }), [stores, config.link, config.sidePanel, onEvent]);
 
   useEffect(() => {
     stores.docStore.init();
@@ -133,11 +135,19 @@ function headingAnchorGet(target) {
 }
 
 const DocsShell = observer(function DocsShell() {
-  const { docStore, sourceStore } = useDocStores();
+  const { docStore, sidePanelConfig, sourceStore } = useDocStores();
+  const sidePanelProps = useMemo(() => ({
+    ...sidePanelConfig,
+    components: {
+      Folder: DocSidebarFolder,
+      ...(sidePanelConfig.components ?? {}),
+    },
+  }), [sidePanelConfig]);
   return (
     <DocsLayout
       tree={docStore.treePage}
       nav={{ title: sourceStore.configDoc.siteTitle ?? 'Docs' }}
+      sidebar={sidePanelProps}
       slots={docsLayoutSlots}
     >
       <DocPageView />

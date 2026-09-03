@@ -2,6 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import type { Plugin } from 'vite';
+import {
+  attachmentDataUrlGet,
+  docAttachmentFinderDefaultList,
+  docAttachmentsCollect,
+  type DocAttachmentFinder,
+  type DocAttachmentResolved,
+} from './doc-attachment.ts';
 
 // vite plugin "doc-source".
 // reads two-layer yaml config, executes source rules against the file system,
@@ -20,6 +27,7 @@ export type DocSourcePluginOptions = {
   moduleId?: string;
   excludeSidePanelItemIds?: string[];
   pruneSourceToSidePanel?: boolean;
+  attachmentFinderList?: DocAttachmentFinder[];
 };
 
 type FileEntry = {
@@ -72,7 +80,16 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       const fileEntries = options.pruneSourceToSidePanel
         ? pruneSourceToSidePanel(configDoc, fileEntriesAll)
         : fileEntriesAll;
-      return generateModuleCode(configDoc, fileEntries, isBuild);
+      const attachmentList = isBuild && configDoc.collectComponentAttachmentsOnBuild === true
+        ? docAttachmentsCollect(
+            configDoc,
+            fileEntries,
+            fileEntriesAll,
+            configDir,
+            [...docAttachmentFinderDefaultList, ...(options.attachmentFinderList ?? [])],
+          )
+        : [];
+      return generateModuleCode(configDoc, fileEntries, attachmentList, isBuild);
     },
 
     configureServer(server) {
@@ -305,9 +322,22 @@ function resolveSourceReference(reference: string, entries: FileEntry[]): FileEn
 
 // ---------- module generation ----------
 
-function generateModuleCode(configDoc: any, fileEntries: FileEntry[], isBuild: boolean): string {
+function generateModuleCode(
+  configDoc: any,
+  fileEntries: FileEntry[],
+  attachmentList: DocAttachmentResolved[],
+  isBuild: boolean,
+): string {
   const lines: string[] = [];
   lines.push(`export const configDoc = ${JSON.stringify(configDoc)};`);
+  const attachmentUrlByPath: Record<string, string> = {};
+  for (const attachment of attachmentList) {
+    const url = attachmentDataUrlGet(attachment.absPath);
+    for (const reference of attachment.referenceList) {
+      attachmentUrlByPath[reference.replace(/^\.?\//, '')] = url;
+    }
+  }
+  lines.push(`export const attachmentUrlByPath = ${JSON.stringify(attachmentUrlByPath)};`);
   lines.push('export const fileManifest = [');
   for (const e of fileEntries) {
     const importId = (isBuild ? e.absPath : '/@fs/' + normalizeSlashPath(e.absPath)) + '?raw';

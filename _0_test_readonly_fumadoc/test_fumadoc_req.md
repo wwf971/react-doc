@@ -45,6 +45,8 @@ A non-leaf item should suport follwoing mode:
 
 2. Represent a folder in the source(not necessarily root folder). So the subtree under it will be fully reflecting the actual file tree structure under that folder. Files will appear as descedant items and be displayed in normal way.
 
+3. represent a file in the source, similar to a leaf-item bound to a file. when bound to a file, navigation behavior to this non-leaf item will be revoled to navigation to the file bound to the non-leaf item itself, instead of the first item under it according to tree order. clicking an inactive non-leaf item label should only navigate to its bound file without changing its collapse/expand state; clicking the active label should toggle collapse/expand while remaining on the bound file(therefore, double clicking the label can navigate to the item and then toggle it). clicking its chevron should only toggle collapse/expand. this behavior should be highly customiable, and ui behavior listener and navigation logic should be decoupled.
+
 A leaf item should support following mode:
 
 1. Repersent a file in the source. the file can be specified by its path, or only by its name. In latter case, the item declares that it holds the file inside the source with given name. In case multiple files of given name exists, the first file under a default order will be selected. there will also be a warning area prepended, listing all matched files, warning user to deal with the problem

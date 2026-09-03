@@ -81,6 +81,26 @@ The collected file has the internal path `/external-guide/guide.md`. Add that pa
 
 Non-md files get a display strategy by suffix (`fileDisplay` in config, suffix → code block language). The store synthesizes markdown: file name as title + one code block. Unknown suffixes fall back to a plain code block.
 
+### Build-only component attachment collection
+
+Some document components refer to attachment files through authored properties rather than ordinary markdown image syntax. Those files can be removed by deployment source pruning even though the document that needs them remains. Enable the optional collection layer with a boolean in `config.yaml`:
+
+```yaml
+collectComponentAttachmentsOnBuild: true
+```
+
+The layer runs only for a Vite build. It scans every md/mdx document remaining in the collected manifest, asks registered attachment finders for component-specific references, resolves each reference against the complete source set (before side-panel pruning), and bundles the resolved file. Development mode does not run this scan and keeps its existing direct-file behavior.
+
+The default finders recognize `DocDiagramMermaid`'s `laneIcons` property, `DocImage`'s `src` property, and image `src` values in a `DocImageGrid` YAML block. Direct component properties are recognized in both degradation-compatible `<!--renderComp=...-->` comments and direct MDX tags where applicable. For example, all four PNG files in the following value are retained even if they are not otherwise present in the pruned deployment manifest:
+
+```text
+laneIcons=Mda:doc-aux/image/icon-mda.png|Data:doc-aux/image/icon-dataverse.png|Flow:doc-aux/image/icon-powerautomate.png|Agent:doc-aux/image/icon-copilot studio.png
+```
+
+Collected attachments are exported by `virtual:doc-source` as `attachmentUrlByPath`. They are represented as data URLs so a deployment that packages the JavaScript artifact but does not preserve separate Vite image outputs still contains the attachment. The consuming application's `assetUrlGet` should check this map before its development fallback.
+
+Component recognition is decoupled from the source-rule scanner. Additional component-specific finders can be passed through the Vite plugin's `attachmentFinderList` option; each finder receives the document text, document paths, and merged config, and returns attachment path strings. Missing references produce a build warning containing the source document path. The feature defaults to off when the boolean is absent or false.
+
 ## Link recognition / rendering / navigation
 
 One remark plugin (`remarkDocLink`) recognizes three patterns and rewrites each into a `DocLink` JSX node:
@@ -144,21 +164,25 @@ Mermaid is one example. `mermaid.render(id, source)` appends temporary rendering
 
 `sidePanel.file` points to a yaml describing the tree. Folders and separators are free-form, so the panel need not mirror the file tree. A document can be selected by exact internal path, a path suffix, or file name. Name/suffix ambiguity selects the first source-order match and prepends a warning containing every match. `sourceFolder` expands any source subtree, while `sourceRoot` remains a shorthand for a complete root. If the tree is absent, one is generated from the complete file manifest.
 
-Each leaf has a stable item id and its own route. The navigation index stores every item bound to each source file, allowing duplicate document items while link/search navigation consistently chooses the first item in tree order. A link to a source file omitted from the side panel reports an explicit navigation error instead of silently opening an unrepresented page.
+Each document item has a stable item id and its own route. This includes a non-leaf item that has both `doc` and `children`: it is emitted as a Fumadocs folder with its document as the native folder `index`. The navigation index stores every item bound to each source file, allowing duplicate document items while link/search navigation consistently chooses the first item in tree order. A link to a source file omitted from the side panel reports an explicit navigation error instead of silently opening an unrepresented page.
+
+An indexed folder is ordered before its descendants. Fumadocs uses the same order for the bottom previous/next cards, so the folder document's next page is its first child and the first child's previous page is the folder document. Breadcrumbs show the indexed folder as the current page when its document is open, and as a link when a descendant is open. `@first/{itemId}` resolves to the folder's own document when it has one; for a virtual folder it continues to resolve to the first descendant document.
 
 ```yaml
 tree:
-  - text: Example Docs
+  - id: section-example
+    text: Example section
+    doc: /guide/overview.md           # folder index: this item also opens a document
     display:
       component: NavLabel
       data: { badge: primary }
     children:
-      - doc: /example/doc.md          # text defaults to page title
-      - doc: database.md              # file-name lookup
-        text: Database (renamed)      # ordinary custom display name
-      - sourceFolder: /example/guides # mirror one folder subtree
-        text: Guides
-  - separator: MDX Tests
+      - doc: /guide/start.md           # text defaults to page title
+      - doc: reference.md              # file-name lookup
+        text: Reference (renamed)      # ordinary custom display name
+      - sourceFolder: /guide/topics    # mirror one folder subtree
+        text: Topics
+  - separator: Examples
   - id: status-panel
     text: Status
     panel:
@@ -168,6 +192,8 @@ tree:
 ```
 
 `display.component` and `panel.component` use the same `compRegistry` and runtime `compById` registry as MDX. They receive the unified `{ data, config, onEvent }` props. Display text and file metadata are in `data`; panel item/runtime metadata are in `config`.
+
+The indexed-folder interaction uses a small sidebar folder override around Fumadocs primitives. Selecting an inactive label navigates through the framework adapter to `DocStore.navigate()` without changing the folder's collapse/expand state. Selecting the now-active label toggles that state, so a double click naturally navigates and then toggles. Selecting the chevron toggles without navigating. UI event handling therefore stays in the sidebar and route/history changes stay in the store. Consumers can replace this gesture policy through runtime `config.sidePanel.components.Folder` (forwarded to `DocsLayout.sidebar`) without replacing source resolution or navigation history logic.
 
 ## Search
 
