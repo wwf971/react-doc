@@ -3,6 +3,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 import { Accordions, Accordion } from 'fumadocs-ui/components/accordion';
 import { Steps, Step } from 'fumadocs-ui/components/steps';
 import { Files, File, Folder } from 'fumadocs-ui/components/files';
+import { DocMultiLang } from './common/MultiLangEntry.jsx';
 import { DemoCounter } from './specific/DemoCounter.jsx';
 import { StockTable } from './specific/StockTable.jsx';
 import { compDefine, compNativeDefine } from './comp-registry.js';
@@ -21,6 +22,7 @@ export const compById = {
   'common/Files': compNativeDefine(Files, { placementList: ['mdx'] }),
   'common/File': compNativeDefine(File, { placementList: ['mdx'] }),
   'common/Folder': compNativeDefine(Folder, { placementList: ['mdx'] }),
+  'common/DocMultiLang': compDefine(DocMultiLang, { placementList: ['commentBlock'] }),
   'specific/DemoCounter': compDefine(DemoCounter),
   'specific/StockTable': compDefine(StockTable),
 };

@@ -6,12 +6,14 @@ import {
   DocsTitle,
   DocsDescription,
   PageBreadcrumb,
+  PageFooter,
 } from 'fumadocs-ui/layouts/docs/page';
 import { useDocStores } from './store/context.js';
 import { buildMdxComps } from './lib/mdx-comps.js';
 import { DocPageToolbar } from './comp-doc/DocPageToolbar.jsx';
 import { DocPageSkeleton } from './comp-doc/DocPageSkeleton.jsx';
 import { RegisteredComp } from './comp-doc/RegisteredComp.jsx';
+import { DocLanguageProvider } from './comp-doc/MultiLangContext.jsx';
 import './DocPageView.css';
 
 // renders the current doc: loading / error / compiled body.
@@ -117,45 +119,52 @@ export const DocPageView = observer(function DocPageView() {
   const Body = compiled.Body;
   const candidates = item?.docCandidates ?? [];
   return (
-    <DocsPage
-      breadcrumb={{ includePage: true }}
-      toc={compiled.toc}
-      className={`doc-page-with-toolbar${compiled.isSourceFile ? ' doc-page-source-file' : ''}`}
-      slots={docsPageSlots}
-    >
-      {warningNavigation}
-      {candidates.length > 1 ? (
-        <div className="doc-source-ambiguity-warning" role="status">
-          <strong>Multiple source files matched this side-panel item.</strong>
-          <span>Displaying the first match in source order: {path}</span>
-          <ul>
-            {candidates.map((candidate) => (
-              <li key={candidate.internalPath}>{candidate.internalPath}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {/* md files usually carry their own '# heading'; only frontmatter title gets the big page title */}
-      {compiled.titleFrontmatter ? <DocsTitle className="doc-page-title">{compiled.titleFrontmatter}</DocsTitle> : null}
-      {compiled.description ? (
-        <DocsDescription className="doc-page-description">
-          {compiled.description}
-        </DocsDescription>
-      ) : null}
-      <DocsBody>
-        {compiled.isContentEmpty ? (
-          <p className="doc-content-empty">This Markdown file is empty. Content can be added later.</p>
-        ) : (
-          <Body components={mdxComps} />
-        )}
-      </DocsBody>
-    </DocsPage>
+    <DocLanguageProvider language={docStore.languageSelected || compiled.language}>
+      <DocsPage
+        breadcrumb={{ includePage: true }}
+        toc={compiled.toc}
+        className={`doc-page-with-toolbar${compiled.isSourceFile ? ' doc-page-source-file' : ''}`}
+        slots={docsPageSlots}
+      >
+        {warningNavigation}
+        {candidates.length > 1 ? (
+          <div className="doc-source-ambiguity-warning" role="status">
+            <strong>Multiple source files matched this side-panel item.</strong>
+            <span>Displaying the first match in source order: {path}</span>
+            <ul>
+              {candidates.map((candidate) => (
+                <li key={candidate.internalPath}>{candidate.internalPath}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {/* md files usually carry their own '# heading'; only frontmatter title gets the big page title */}
+        {compiled.titleFrontmatter ? <DocsTitle className="doc-page-title">{compiled.titleFrontmatter}</DocsTitle> : null}
+        {compiled.description ? (
+          <DocsDescription className="doc-page-description">
+            {compiled.description}
+          </DocsDescription>
+        ) : null}
+        <DocsBody>
+          {compiled.isContentEmpty ? (
+            <p className="doc-content-empty">This Markdown file is empty. Content can be added later.</p>
+          ) : (
+            <Body components={mdxComps} />
+          )}
+        </DocsBody>
+      </DocsPage>
+    </DocLanguageProvider>
   );
 });
 
 const docsPageSlots = {
   breadcrumb: DocPageBreadcrumb,
+  footer: DocPageFooter,
 };
+
+function DocPageFooter({ className = '', ...props }) {
+  return <PageFooter {...props} className={`doc-page-footer ${className}`.trim()} />;
+}
 
 function DocPageBreadcrumb(props) {
   return (

@@ -32,6 +32,8 @@ mobx stores (source of truth for rendering)
 
 **`.md` vs `.mdx`.** `.mdx` compiles with format `mdx` (JSX allowed). `.md` and everything else compiles with format `md`, so plain markdown containing `<xxx>` or `{}` text never breaks. Remark plugins can inject JSX nodes in both formats, which is how links/components get special rendering even in plain md.
 
+**Multilingual content.** Language inheritance, document-wide selection, headings, paragraphs, lists, degradation behavior, and file naming are specified in [test_fumadoc_impl_multi-lang.md](./test_fumadoc_impl_multi-lang.md).
+
 **Doc collection via vite plugin.** The plugin reads the two-layer config, executes the source rules, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
 
 ## Can we keep fumadocs default components while owning link logic? (yes)
@@ -150,6 +152,8 @@ All registered render components use the same top-level props: `{ data, config, 
 
 Registry values are component definitions created with `compDefine()`. A definition provides `CompRender`, and can also provide supported placements and an input converter. Fumadocs-native components use adapters created with `compNativeDefine()`, so their framework-specific props do not become the public contract for project components.
 
+Multilingual component registration and authoring rules are specified in [test_fumadoc_impl_multi-lang.md](./test_fumadoc_impl_multi-lang.md).
+
 One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, and `sidePanelPanel`.
 
 ### Isolate temporary rendering DOM
@@ -197,7 +201,7 @@ The indexed-folder interaction uses a small sidebar folder override around Fumad
 
 ## Search
 
-The search dialog UI comes from fumadocs-ui (composable `SearchDialog` parts plugged into `RootProvider`). The engine is a small client-side matcher over per-doc structured data (headings + paragraphs, extracted with fumadocs' `remarkStructure`), computed lazily on first search and cached. No server, works embedded.
+The search dialog UI comes from fumadocs-ui (composable `SearchDialog` parts plugged into `RootProvider`). The engine is a small client-side matcher over per-doc structured data (headings + paragraphs, extracted with fumadocs' `remarkStructure`), computed lazily on first search and cached. Custom components can contribute semantic index entries through Fumadocs structured-data node metadata; multilingual extraction is specified in [test_fumadoc_impl_multi-lang.md](./test_fumadoc_impl_multi-lang.md). Search results are grouped below a contextual page row whose label and route are normalized through the configured side-panel tree. Manifest title extraction ignores heading-looking lines inside fenced code blocks. No server, works embedded.
 
 ## Layout on disk
 

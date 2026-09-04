@@ -19,6 +19,8 @@ export class DocStore {
   routeMode: RouteMode;
   compById: Record<string, any>;
   compByIdVersion = 0;
+  languagePage = '';
+  languageSelectedByContentPath: Record<string, string> = {};
 
   routeCurrentPath = '';
   itemCurrentId = '';
@@ -33,11 +35,37 @@ export class DocStore {
   searchResults: any[] = [];
   isSearchRunning = false;
 
-  constructor(sourceStore: DocSourceStore, options?: { routeMode?: RouteMode; compById?: Record<string, any> }) {
+  constructor(sourceStore: DocSourceStore, options?: {
+    routeMode?: RouteMode;
+    compById?: Record<string, any>;
+    language?: string;
+  }) {
     this.sourceStore = sourceStore;
     this.routeMode = options?.routeMode ?? 'query';
     this.compById = options?.compById ?? {};
+    this.languagePage = languageNormalize(options?.language);
     makeAutoObservable(this, { compById: false });
+  }
+
+  get contentCurrentPath(): string {
+    return this.itemCurrent?.type === 'inline' ? this.routeCurrentPath : this.docCurrentPath;
+  }
+
+  get languageListCurrent(): string[] {
+    return this.sourceStore.compiledByPath[this.contentCurrentPath]?.languageList ?? [];
+  }
+
+  get languageSelected(): string {
+    const languageList = this.languageListCurrent;
+    if (languageList.length === 0) return '';
+    const languageSaved = this.languageSelectedByContentPath[this.contentCurrentPath];
+    if (languageList.includes(languageSaved)) return languageSaved;
+    const languageDocument = languageNormalize(
+      this.sourceStore.compiledByPath[this.contentCurrentPath]?.language,
+    );
+    if (languageList.includes(languageDocument)) return languageDocument;
+    if (languageList.includes(this.languagePage)) return this.languagePage;
+    return languageList[0];
   }
 
   get treeModel() {
@@ -123,6 +151,16 @@ export class DocStore {
     for (const key of Object.keys(this.compById)) delete this.compById[key];
     Object.assign(this.compById, compById);
     this.compByIdVersion += 1;
+  }
+
+  setLanguagePage(language: unknown) {
+    this.languagePage = languageNormalize(language);
+  }
+
+  setLanguageSelected(language: string): boolean {
+    if (!this.languageListCurrent.includes(language) || !this.contentCurrentPath) return false;
+    this.languageSelectedByContentPath[this.contentCurrentPath] = language;
+    return true;
   }
 
   onPopState = (event: PopStateEvent) => {
@@ -265,12 +303,31 @@ export class DocStore {
     this.searchQuery = query;
     this.isSearchRunning = true;
     void this.sourceStore.searchDocs(query).then((results) => {
+      const resultsNormalized = this.searchResultsNormalize(results);
       runInAction(() => {
         // ignore stale results from an outdated query
         if (this.searchQuery !== query) return;
-        this.searchResults = results;
+        this.searchResults = resultsNormalized;
         this.isSearchRunning = false;
       });
+    });
+  }
+
+  private searchResultsNormalize(results: any[]): any[] {
+    const treeModel = this.treeModel;
+    return results.map((result) => {
+      const indexHash = typeof result.url === 'string' ? result.url.indexOf('#') : -1;
+      const path = indexHash >= 0 ? result.url.slice(0, indexHash) : result.url;
+      const hash = indexHash >= 0 ? result.url.slice(indexHash) : '';
+      const itemDirect = typeof path === 'string' ? treeModel.itemByRoute.get(path) : undefined;
+      const itemId = typeof path === 'string' ? treeModel.itemIdsByDocPath.get(path)?.[0] : undefined;
+      const item = itemDirect ?? (itemId ? treeModel.itemById.get(itemId) : undefined);
+      if (!item) return result;
+      return {
+        ...result,
+        url: `${item.route}${hash}`,
+        ...(result.type === 'page' ? { content: item.text ?? result.content } : {}),
+      };
     });
   }
 
@@ -317,4 +374,8 @@ function splitTarget(target: string): { path: string; hash: string } {
   return indexHash < 0
     ? { path: target, hash: '' }
     : { path: target.slice(0, indexHash), hash: target.slice(indexHash + 1) };
+}
+
+function languageNormalize(language: unknown): string {
+  return typeof language === 'string' ? language.trim() : '';
 }

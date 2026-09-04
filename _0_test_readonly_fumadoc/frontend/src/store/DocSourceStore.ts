@@ -1,6 +1,6 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { compileDoc } from '../lib/mdx-compile.js';
-import { structure } from 'fumadocs-core/mdx-plugins/remark-structure';
+import { multiLangSearchDataGet } from '../lib/MultiLangSearchData.js';
 
 // lower store layer: owns the doc source content.
 // manifest + raw text + compile cache + doc index + search data.
@@ -24,6 +24,8 @@ export type CompileState = {
   toc?: any[];
   titleFrontmatter?: string;
   description?: string;
+  language?: string;
+  languageList?: string[];
   message?: string;
 };
 
@@ -262,7 +264,7 @@ export class DocSourceStore {
       try {
         const raw = await entry.load();
         const { markdown } = this.toMarkdown(entry, raw);
-        const data = structure(stripFrontmatter(markdown));
+        const data = multiLangSearchDataGet(stripFrontmatter(markdown), this.compileConfig);
         runInAction(() => {
           this.structuredDataByPath[entry.internalPath] = data;
         });

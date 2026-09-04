@@ -6,6 +6,28 @@
   margin-top: -0.75rem;
 }
 
+.doc-page-footer > a,
+.doc-page-footer > a > div,
+.doc-page-footer > a > div > p {
+  min-width: 0;
+}
+
+.doc-page-footer > a {
+  overflow: hidden;
+}
+
+.doc-page-footer > a > div {
+  width: 100%;
+  max-width: 100%;
+}
+
+.doc-page-footer > a > div > p {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* A generated source-file page already uses the page-level vertical scroll.
    Keep horizontal code scrolling, but do not create a nested vertical viewport. */
 .doc-page-source-file figure.shiki > [role='region'] {

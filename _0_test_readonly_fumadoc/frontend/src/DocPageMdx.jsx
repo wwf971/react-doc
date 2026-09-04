@@ -13,6 +13,8 @@ import { DocPageView } from './DocPageView.jsx';
 import { DocNavigationButtons } from './comp-doc/DocNavigationButtons.jsx';
 import { DocSearchDialog } from './comp-doc/DocSearchDialog.jsx';
 import { DocSidebarFolder } from './comp-doc/DocSidebarFolder.jsx';
+import { DocLanguageProvider, useDocLanguage } from './comp-doc/MultiLangContext.jsx';
+import { MultiLangControl } from './comp-doc/MultiLangControl.jsx';
 import { compById as compByIdDefault } from './comp-doc/registry.js';
 import './DocPageMdx.css';
 
@@ -28,6 +30,8 @@ import './DocPageMdx.css';
 // config contains application/runtime policy rather than semantic document data.
 
 export function DocPageMdx({ data, config = {}, onEvent }) {
+  const languageAncestor = useDocLanguage();
+  const languagePage = config.language || languageAncestor;
   const pageElementRef = useRef(null);
   const headingPointerRef = useRef(null);
   const [stores] = useState(() => {
@@ -39,6 +43,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     const docStore = new DocStore(sourceStore, {
       routeMode: config.routeMode ?? 'memory',
       compById,
+      language: languagePage,
     });
     const compStateStore = new CompStateStore();
     return { sourceStore, docStore, compStateStore, compById };
@@ -46,11 +51,12 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
   const framework = useMemo(() => makeFramework(stores.docStore), [stores]);
   const contextValue = useMemo(() => ({
     ...stores,
+    componentConfig: config.components ?? {},
     linkConfig: config.link ?? {},
     onEvent,
     pageElementRef,
     sidePanelConfig: config.sidePanel ?? {},
-  }), [stores, config.link, config.sidePanel, onEvent]);
+  }), [stores, config.components, config.link, config.sidePanel, onEvent]);
 
   useEffect(() => {
     stores.docStore.init();
@@ -63,6 +69,10 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       ...(config.compById ?? {}),
     });
   }, [config.compById, stores]);
+
+  useEffect(() => {
+    stores.docStore.setLanguagePage(languagePage);
+  }, [languagePage, stores]);
 
   useEffect(() => {
     if (typeof data.subscribe !== 'function') return undefined;
@@ -116,13 +126,15 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       }}
       onPointerCancelCapture={() => { headingPointerRef.current = null; }}
     >
-      <StoreContext.Provider value={contextValue}>
-        <FrameworkProvider {...framework}>
-          <RootProvider search={{ SearchDialog: DocSearchDialog }}>
-            <DocsShell />
-          </RootProvider>
-        </FrameworkProvider>
-      </StoreContext.Provider>
+      <DocLanguageProvider language={languagePage}>
+        <StoreContext.Provider value={contextValue}>
+          <FrameworkProvider {...framework}>
+            <RootProvider search={{ SearchDialog: DocSearchDialog }}>
+              <DocsShell />
+            </RootProvider>
+          </FrameworkProvider>
+        </StoreContext.Provider>
+      </DocLanguageProvider>
     </div>
   );
 }
@@ -161,8 +173,9 @@ function DocPageLayoutContainer({ children, ...props }) {
   return (
     <DocsLayoutContainer {...props}>
       {children}
-      <nav className="doc-navigation-floating" aria-label="Document navigation history">
+      <nav className="doc-navigation-floating" aria-label="Document navigation and language">
         <DocNavigationButtons isCompact />
+        <MultiLangControl />
       </nav>
     </DocsLayoutContainer>
   );

@@ -14,6 +14,7 @@ createRoot(document.getElementById('root')).render(
       subscribe: docSource.subscribeDocSource,
     }}
     config={{
+      language: 'en',
       routeMode: 'query',
       compById: {
         'specific/DemoCounter': DemoCounter,

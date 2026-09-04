@@ -23,6 +23,7 @@ compRegistry:
   Files: common/Files
   File: common/File
   Folder: common/Folder
+  DocMultiLang: common/DocMultiLang
   StockTable: specific/StockTable
   DemoCounter: specific/DemoCounter
 

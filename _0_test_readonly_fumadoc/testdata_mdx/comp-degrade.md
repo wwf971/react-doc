@@ -4,6 +4,41 @@ This file is plain markdown. An html comment `renderComp=...` marks the next
 block for component rendering; a normal markdown renderer ignores the comment
 and shows the block as-is.
 
+## Multilingual paragraphs inheriting the page language
+
+<!--renderComp=DocMultiLang-->
+```yaml
+- type: p
+  en: This paragraph inherits English from the document page configuration.
+  jp: この段落はドキュメントページ設定から日本語を継承します。
+- type: p
+  en: A normal Markdown renderer shows this YAML block instead.
+  jp: 通常のMarkdownレンダラーでは、代わりにこのYAMLブロックが表示されます。
+```
+
+<!--renderComp=DocMultiLang-->
+## {jp:多言語の見出し, en:Multilingual heading}
+
+<!--renderComp=DocMultiLang-->
+```yaml
+- type: ul
+  items:
+    - en: First unordered item.
+      jp: 最初の箇条書き項目です。
+      children:
+        - type: ol
+          items:
+            - en: First nested step with `inline code`.
+              jp: `インラインコード`を含む最初のネストされた手順です。
+            - en: Second nested step.
+              jp: 2番目のネストされた手順です。
+    - en: Second unordered item.
+      jp: 2番目の箇条書き項目です。
+```
+
+<!--renderComp=DocMultiLang-->
+### {this mapping cannot be parsed
+
 ## Marked code block
 
 <!--renderComp=StockTable,title=Warehouse A-->

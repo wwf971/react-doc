@@ -370,11 +370,34 @@ function generateModuleCode(
 function extractTitle(entry: FileEntry): string {
   if (entry.ext !== 'md' && entry.ext !== 'mdx') return entry.name;
   const text = fs.readFileSync(entry.absPath, 'utf-8');
-  const matchFrontmatter = /^---\n[\s\S]*?\btitle:\s*["']?([^"'\n]+)["']?\n[\s\S]*?---/.exec(text);
+  const matchFrontmatter = /^---\r?\n[\s\S]*?\btitle:\s*["']?([^"'\r\n]+)["']?\r?\n[\s\S]*?---/.exec(text);
   if (matchFrontmatter) return matchFrontmatter[1].trim();
-  const matchHeading = /^#\s+(.+)$/m.exec(text);
-  if (matchHeading) return matchHeading[1].trim();
+  const heading = firstLevelOneHeadingGet(text);
+  if (heading) return heading;
   return entry.name;
+}
+
+function firstLevelOneHeadingGet(text: string): string {
+  let fenceCharacter = '';
+  let fenceLength = 0;
+  for (const line of text.split(/\r?\n/)) {
+    const matchFence = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    if (matchFence) {
+      const marker = matchFence[1];
+      if (!fenceCharacter) {
+        fenceCharacter = marker[0];
+        fenceLength = marker.length;
+      } else if (marker[0] === fenceCharacter && marker.length >= fenceLength) {
+        fenceCharacter = '';
+        fenceLength = 0;
+      }
+      continue;
+    }
+    if (fenceCharacter) continue;
+    const matchHeading = /^ {0,3}#\s+(.+?)\s*$/.exec(line);
+    if (matchHeading) return matchHeading[1].replace(/\s+#+\s*$/, '').trim();
+  }
+  return '';
 }
 
 function normalizeSlashPath(filePath: string): string {

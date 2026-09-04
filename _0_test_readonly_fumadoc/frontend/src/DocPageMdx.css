@@ -34,7 +34,8 @@
 
 @media (min-width: 1280px) {
   .doc-navigation-floating {
-    display: block;
+    display: flex;
+    align-items: center;
   }
 }
 
