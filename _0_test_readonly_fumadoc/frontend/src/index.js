@@ -12,6 +12,7 @@ export { DocLink } from './comp-doc/DocLink.jsx';
 export { LinkDocRender } from './comp-doc/LinkDocRender.jsx';
 export { compDefine, compNativeDefine } from './comp-doc/comp-registry.js';
 export { DocLanguageProvider, useDocLanguage } from './comp-doc/MultiLangContext.jsx';
+export { DynamicCodeBlock } from 'fumadocs-ui/components/dynamic-codeblock';
 export { DocSourceStore } from './store/DocSourceStore.js';
 export { DocStore } from './store/DocStore.js';
 export { useDocStores } from './store/context.js';

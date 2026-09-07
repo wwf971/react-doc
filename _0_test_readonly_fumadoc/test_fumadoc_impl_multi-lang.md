@@ -17,7 +17,7 @@ For filenames, all code files dedicated to the multi-language feature start with
 3. document page
 4. optional outer `DocLanguageProvider`
 
-Compilation collects language keys from multilingual headings and YAML blocks in source order. When at least one language exists, both the document toolbar and the floating bottom-right back/forward controls display the same `config.components.SegmentedControl` supplied by the consumer. The selected language is stored by `DocStore` per content path. Changing either selector updates the page language context and rerenders every multilingual basic component and both selectors without a local override.
+Compilation collects language keys from multilingual headings and YAML blocks in source order. When at least one language exists, both the document toolbar and the floating bottom-right Back/Forward/Up controls display the same `config.components.SegmentedControl` supplied by the consumer. The selected language is stored by `DocStore` per content path. Changing either selector updates the page language context and rerenders every multilingual basic component and both selectors without a local override.
 
 For any item that lacks the preferred translation, the renderer uses that item's first authored translation. The rendered paragraph, list item, or heading text receives the actual `lang` value.
 

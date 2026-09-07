@@ -45,7 +45,7 @@ The MDX `components` mapping is per-tag. We spread `defaultMdxComponents` from `
 Follows the data-driven pattern of `react-comp-misc` (`comp_design.md`) and the two-layer split of `example_doc/frontend-store.md`, adapted to a readonly local source (no websocket/lock layer needed here):
 
 - `DocSourceStore` (lower, content): `fileManifest`, `configDoc`, `rawByPath`, `compiledByPath` (status/Body/toc/error), `targetsByName` (doc index for link resolution), `structuredDataByPath` (search). API: `loadDoc(path)`, `resolveLink(target, fromPath)`, `searchDocs(query)`.
-- `DocStore` (upper, view): `docCurrentPath`, `isDocLoading`, `linkDropdownOpenId` (which link's candidate-dropdown is open; one at a time, closes on outside click), page tree (computed), route mode + url sync. API: `navigate(path, hash)`, `init()`.
+- `DocStore` (upper, view): `docCurrentPath`, `isDocLoading`, `linkDropdownOpenId` (which link's candidate-dropdown is open; one at a time, closes on outside click), page tree (computed), route mode + url sync. API: `navigate(path, hash)`, `navigationBack()`, `navigationUp()`, `navigationForward()`, `init()`.
 
 Render components observe stores via context and submit change attempts through store APIs; no component talks to the file system or compiler directly.
 
@@ -171,6 +171,20 @@ Mermaid is one example. `mermaid.render(id, source)` appends temporary rendering
 Each document item has a stable item id and its own route. This includes a non-leaf item that has both `doc` and `children`: it is emitted as a Fumadocs folder with its document as the native folder `index`. The navigation index stores every item bound to each source file, allowing duplicate document items while link/search navigation consistently chooses the first item in tree order. A link to a source file omitted from the side panel reports an explicit navigation error instead of silently opening an unrepresented page.
 
 An indexed folder is ordered before its descendants. Fumadocs uses the same order for the bottom previous/next cards, so the folder document's next page is its first child and the first child's previous page is the folder document. Breadcrumbs show the indexed folder as the current page when its document is open, and as a link when a descendant is open. `@first/{itemId}` resolves to the folder's own document when it has one; for a virtual folder it continues to resolve to the first descendant document.
+
+The shared `DocNavigationButtons` renders three navigation actions in both the document toolbar and the floating controls, ordered Back, Forward, and Up:
+
+1. **Back**
+
+  `DocStore.navigationBack()` moves to the previous history entry. Memory mode moves through the internal history list, while query mode delegates to browser history.
+
+2. **Forward**
+
+  `DocStore.navigationForward()` moves to the next history entry through the same mode-specific history mechanism. A normal navigation after moving back truncates the forward branch.
+
+3. **Up**
+
+  The page-tree model builds an `itemAboveById` index. A folder's own document is its first document. Otherwise only the first-child chain is followed recursively; if that chain has no document, the folder's first document is null and later siblings are not considered. For each document item, the index walks containing folders from nearest to root and chooses the first non-null first document whose source path differs from the current document. `DocStore.navigationUp()` submits that item's route through the ordinary `navigate()` boundary, so the move participates in the same history and URL synchronization as a link or sidebar navigation. Up is disabled when the index has no target.
 
 ```yaml
 tree:

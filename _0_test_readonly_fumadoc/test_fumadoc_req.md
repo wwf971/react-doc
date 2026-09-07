@@ -79,6 +79,22 @@ Link/Ref system consists of at least the following major logical layers:
 
 3. Navigation layer. Triggers proper navigation behavior upon user clicks a link or performs certain behavior upon components that support navigation. Navigation attempt should be submitted to a centralized navigation logic, to support recording of navigation history, required for redo/undo operations.
 
+The document controls should support three kinds of navigation. These controls appear both in the document toolbar and in the floating controls.
+
+1. **Backward navigation**
+
+  Navigate to the previous entry in navigation history. It is unavailable when the current entry is the first entry.
+
+2. **Forward navigation**
+
+  Navigate to the next entry in navigation history. It is unavailable when the current entry is the latest entry. Ordinary navigation after moving backward replaces the remaining forward branch.
+
+3. **Upward navigation**
+
+  Navigate to the document "above" the current document. Every folder has a first document. A document bound directly to the folder takes precedence. Otherwise, the folder's first document is the first child item's first document: a document child resolves to itself, while a folder child resolves by applying the same rule recursively. If the first-child chain is empty or contains no document, the folder's first document is null; later siblings are not searched.
+
+  The document above the current document is the nearest containing folder's first document that is neither null nor the current source document. If the containing folder's first document is null or is the current document, continue with its containing folder, and repeat up to the root. Upward navigation is unavailable when no such document exists. A successful upward navigation goes through the centralized navigation logic and is recorded in navigation history.
+
 The link/ref system should be able to deal with invalid link/ref and navigation attempt from it. The parse/render layer needs to render the link using a different style indicating invalid link/ref. The navigation layer to deal with failure when a link points to a valid file in source, but navigation cannot be performed because no item in the side panel has picked it up.
 
 Custom link parsing/rendering logic and navigation behavior should be supported.

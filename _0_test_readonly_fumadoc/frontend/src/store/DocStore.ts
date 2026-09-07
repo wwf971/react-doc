@@ -116,6 +116,15 @@ export class DocStore {
       : undefined;
   }
 
+  get navigationUpEntry(): NavigationHistoryEntry | undefined {
+    const item = this.treeModel.itemAboveById.get(this.itemCurrentId);
+    return item ? { hash: '', route: item.route, text: item.text ?? item.route } : undefined;
+  }
+
+  get isNavigationUpAvailable(): boolean {
+    return this.navigationUpEntry !== undefined;
+  }
+
   init() {
     let pathInitial = this.routeHome;
     let hashInitial = '';
@@ -252,6 +261,11 @@ export class DocStore {
       return true;
     }
     return this.navigationHistoryMove(this.navigationHistoryIndex + 1);
+  }
+
+  navigationUp(): boolean {
+    const entry = this.navigationUpEntry;
+    return entry ? this.navigate(entry.route) : false;
   }
 
   routeForDoc(internalPath: string): string {

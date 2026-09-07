@@ -22,11 +22,13 @@ export function buildPageTreeModel(configDoc, fileManifest, compById = {}) {
     : autoChildren(fileManifest, context);
   const treePage = { $id: 'root', name: configDoc.siteTitle ?? 'Docs', children };
   const itemFirstDocByNodeId = indexFirstDocItems(treePage, context.itemByRoute);
+  const itemAboveById = indexAboveDocItems(treePage, context.itemByRoute);
 
   return {
     treePage,
     itemById: context.itemById,
     itemByRoute: context.itemByRoute,
+    itemAboveById,
     itemFirstDocByNodeId,
     itemIdsByDocPath: context.itemIdsByDocPath,
     items: context.items,
@@ -423,4 +425,59 @@ function indexFirstDocItems(treePage, itemByRoute) {
 
   visitNode(treePage);
   return itemFirstDocByNodeId;
+}
+
+// For up navigation, a folder's first document follows only its first-item
+// chain: the folder index wins, otherwise the first child's first document is
+// used. A later sibling is intentionally not considered when that chain is
+// empty. Each document then selects the nearest ancestor folder whose first
+// document is neither empty nor the same source document.
+function indexAboveDocItems(treePage, itemByRoute) {
+  const itemFirstDocByFolderId = new Map();
+  const itemAboveById = new Map();
+
+  const firstDocGet = (node) => {
+    if (node.type === 'page') {
+      const item = itemByRoute.get(node.url);
+      return item?.type === 'doc' || item?.type === 'missing-doc' ? item : undefined;
+    }
+    if (node.index) return firstDocGet(node.index);
+    if (!Array.isArray(node.children) || node.children.length === 0) return undefined;
+    return firstDocGet(node.children[0]);
+  };
+
+  const firstDocIndex = (node) => {
+    if (!Array.isArray(node.children)) return;
+    const itemFirst = firstDocGet(node);
+    if (itemFirst) itemFirstDocByFolderId.set(node.$id, itemFirst);
+    for (const child of node.children) firstDocIndex(child);
+  };
+
+  const aboveIndex = (node, folderIdList) => {
+    if (node.type === 'page') {
+      const item = itemByRoute.get(node.url);
+      if (item?.type !== 'doc' && item?.type !== 'missing-doc') return;
+      const itemAbove = folderIdList
+        .map((folderId) => itemFirstDocByFolderId.get(folderId))
+        .find((candidate) => candidate && !isSameDocItem(candidate, item));
+      if (itemAbove) itemAboveById.set(item.id, itemAbove);
+      return;
+    }
+    if (!Array.isArray(node.children)) return;
+    const folderIdListNext = [node.$id, ...folderIdList];
+    if (node.index) aboveIndex(node.index, folderIdListNext);
+    for (const child of node.children) aboveIndex(child, folderIdListNext);
+  };
+
+  firstDocIndex(treePage);
+  aboveIndex(treePage, []);
+  return itemAboveById;
+}
+
+function isSameDocItem(itemA, itemB) {
+  if (itemA.docPath && itemB.docPath) return itemA.docPath === itemB.docPath;
+  if (itemA.sourceReference && itemB.sourceReference) {
+    return itemA.sourceReference === itemB.sourceReference;
+  }
+  return itemA.id === itemB.id;
 }
