@@ -94,7 +94,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
 
     configureServer(server) {
       const configDoc = loadConfigDoc(configFile, options);
-      const pathsWatched = collectPathsToWatch(configDoc, configDir, configFile);
+      let pathsWatched = collectPathsToWatch(configDoc, configDir, configFile);
       for (const p of pathsWatched) server.watcher.add(p);
 
       const invalidateManifest = (filePath: string) => {
@@ -102,6 +102,13 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
           (p) => filePath === p || filePath.startsWith(p + path.sep),
         );
         if (!isRelated) return;
+        try {
+          const configDocUpdated = loadConfigDoc(configFile, options);
+          pathsWatched = collectPathsToWatch(configDocUpdated, configDir, configFile);
+          for (const p of pathsWatched) server.watcher.add(p);
+        } catch {
+          // Keep the last valid watch set while an edited config is incomplete.
+        }
         const mod = server.moduleGraph.getModuleById(moduleIdResolved);
         if (mod) server.moduleGraph.invalidateModule(mod);
         server.ws.send({ type: 'full-reload' });
@@ -155,13 +162,88 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
   // inline side panel yaml, so the browser side doesn't touch the file system
   if (config.sidePanel?.file) {
     const panelPath = path.resolve(configDir, config.sidePanel.file);
-    config.sidePanel.tree = readYaml(panelPath)?.tree ?? null;
+    const sidePanelLoaded = loadSidePanelFile(panelPath);
+    config.sidePanel.tree = sidePanelLoaded.tree;
+    Object.defineProperty(config.sidePanel, 'fileListImported', {
+      enumerable: false,
+      value: sidePanelLoaded.fileList.slice(1),
+    });
   }
   const itemIdsExcluded = new Set(options.excludeSidePanelItemIds ?? []);
   if (itemIdsExcluded.size > 0 && Array.isArray(config.sidePanel?.tree)) {
     config.sidePanel.tree = excludeSidePanelItems(config.sidePanel.tree, itemIdsExcluded);
   }
   return config;
+}
+
+type SidePanelLoaded = {
+  tree: any[];
+  fileList: string[];
+};
+
+function loadSidePanelFile(filePath: string, fileChain: string[] = []): SidePanelLoaded {
+  const filePathResolved = path.resolve(filePath);
+  const cycleIndex = fileChain.indexOf(filePathResolved);
+  if (cycleIndex >= 0) {
+    const cycle = [...fileChain.slice(cycleIndex), filePathResolved].join(' -> ');
+    throw new Error(`[doc-source] side panel childrenFile cycle: ${cycle}`);
+  }
+  if (!fs.existsSync(filePathResolved)) {
+    throw new Error(`[doc-source] side panel file not found: ${filePathResolved}`);
+  }
+
+  const sidePanel = readYaml(filePathResolved);
+  if (!Array.isArray(sidePanel?.tree)) {
+    throw new Error(`[doc-source] side panel file must contain a "tree" list: ${filePathResolved}`);
+  }
+
+  const fileList = [filePathResolved];
+  const tree = loadSidePanelNodes(
+    sidePanel.tree,
+    path.dirname(filePathResolved),
+    [...fileChain, filePathResolved],
+    fileList,
+  );
+  return { tree, fileList };
+}
+
+function loadSidePanelNodes(
+  nodes: any[],
+  fileDir: string,
+  fileChain: string[],
+  fileList: string[],
+): any[] {
+  return nodes.map((node, index) => {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return node;
+
+    const { childrenFile, ...nodeResult } = node;
+    const childrenLocal = node.children;
+    if (childrenLocal !== undefined && !Array.isArray(childrenLocal)) {
+      throw new Error(
+        `[doc-source] side panel "children" must be a list at ${fileChain.at(-1)} tree[${index}]`,
+      );
+    }
+
+    let childrenImported: any[] = [];
+    if (childrenFile !== undefined) {
+      if (typeof childrenFile !== 'string' || !childrenFile.trim()) {
+        throw new Error(
+          `[doc-source] side panel "childrenFile" must be a non-empty path at ${fileChain.at(-1)} tree[${index}]`,
+        );
+      }
+      const loaded = loadSidePanelFile(path.resolve(fileDir, childrenFile), fileChain);
+      childrenImported = loaded.tree;
+      fileList.push(...loaded.fileList);
+    }
+
+    const childrenLoaded = Array.isArray(childrenLocal)
+      ? loadSidePanelNodes(childrenLocal, fileDir, fileChain, fileList)
+      : [];
+    if (childrenFile !== undefined || childrenLocal !== undefined) {
+      nodeResult.children = [...childrenImported, ...childrenLoaded];
+    }
+    return nodeResult;
+  });
 }
 
 function excludeSidePanelItems(nodes: any[], itemIdsExcluded: Set<string>): any[] {
@@ -413,6 +495,9 @@ function collectPathsToWatch(configDoc: any, configDir: string, configFile: stri
   const configRaw = readYaml(configFile);
   if (configRaw?.source?.file) result.push(path.resolve(configDir, configRaw.source.file));
   if (configDoc.sidePanel?.file) result.push(path.resolve(configDir, configDoc.sidePanel.file));
+  if (Array.isArray(configDoc.sidePanel?.fileListImported)) {
+    result.push(...configDoc.sidePanel.fileListImported);
+  }
   for (const rule of configDoc.source) {
     if (rule.action === 'addFolder' || rule.action === 'addFile') {
       result.push(path.resolve(configDir, rule.path));

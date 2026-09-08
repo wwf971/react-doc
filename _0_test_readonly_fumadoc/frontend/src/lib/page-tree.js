@@ -31,6 +31,7 @@ export function buildPageTreeModel(configDoc, fileManifest, compById = {}) {
     itemAboveById,
     itemFirstDocByNodeId,
     itemIdsByDocPath: context.itemIdsByDocPath,
+    partById: context.partById,
     items: context.items,
   };
 }
@@ -49,13 +50,15 @@ function createBuildContext(configDoc, fileManifest, compById) {
     itemById: new Map(),
     itemByRoute: new Map(),
     itemIdsByDocPath: new Map(),
+    partById: new Map(),
     items: [],
     idUsed: new Set(),
   };
 }
 
-function convertNode(node, position, context) {
+function convertNode(node, position, context, partIdParent = '') {
   if (!node || typeof node !== 'object') return [];
+  const partId = partRegister(node, context) || partIdParent;
   if (node.separator !== undefined) {
     const id = uniqueId(node.id ?? `separator-${position.join('-')}`, context);
     return [{
@@ -69,21 +72,21 @@ function convertNode(node, position, context) {
     if (entries.length === 0) {
       console.warn(`[page-tree] side panel doc not in source: ${node.doc}`);
       return [Array.isArray(node.children)
-        ? docMissingFolderRegister(node, position, context)
-        : registerMissingDocItem(node, position, context)];
+        ? docMissingFolderRegister(node, position, context, partId)
+        : registerMissingDocItem(node, position, context, partId)];
     }
     return [Array.isArray(node.children)
-      ? docFolderRegister(node, entries, position, context)
-      : registerDocItem(node, entries, position, context)];
+      ? docFolderRegister(node, entries, position, context, partId)
+      : registerDocItem(node, entries, position, context, partId)];
   }
   if (node.inline !== undefined) {
-    return [registerInlineItem(node, position, context)];
+    return [registerInlineItem(node, position, context, partId)];
   }
   if (node.panel !== undefined) {
-    return [registerPanelItem(node, position, context)];
+    return [registerPanelItem(node, position, context, partId)];
   }
   if (node.sourceRoot !== undefined || node.sourceFolder !== undefined) {
-    return convertSourceFolder(node, position, context);
+    return convertSourceFolder(node, position, context, partId);
   }
   if (Array.isArray(node.children)) {
     const id = uniqueId(node.id ?? `folder-${position.join('-')}`, context);
@@ -91,8 +94,11 @@ function convertNode(node, position, context) {
       $id: id,
       type: 'folder',
       name: displayName(node, node.text ?? '', context, { kind: 'folder' }, false),
+      collapsible: node.collapsible !== false,
       defaultOpen: node.defaultOpen ?? true,
-      children: node.children.flatMap((child, index) => convertNode(child, [...position, index], context)),
+      children: node.children.flatMap((child, index) => (
+        convertNode(child, [...position, index], context, partId)
+      )),
     }];
   }
   console.warn('[page-tree] unknown side panel node', node);
@@ -112,28 +118,29 @@ function autoChildren(fileManifest, context) {
   for (const [rootId, entries] of entriesByRootId) {
     const position = [indexRoot++];
     if (entries.length === 1 && !entries[0].relPathTree.includes('/')) {
-      result.push(registerDocItem({}, entries, position, context));
+      result.push(registerDocItem({}, entries, position, context, ''));
       continue;
     }
     result.push({
       $id: uniqueId(`root-${rootId}`, context),
       type: 'folder',
       name: rootId,
+      collapsible: true,
       defaultOpen: true,
-      children: folderChildren(entries, position, context),
+      children: folderChildren(entries, position, context, ''),
     });
   }
   return result;
 }
 
-function folderChildren(entries, position, context) {
+function folderChildren(entries, position, context, partId) {
   const entriesDirect = [];
   const entriesBySubDir = new Map();
   for (const entry of entries) {
     const pathTree = entry.relPathTree ?? entry.relPath;
     const indexSlash = pathTree.indexOf('/');
     if (indexSlash < 0) {
-      entriesDirect.push(registerDocItem({}, [entry], [...position, entriesDirect.length], context));
+      entriesDirect.push(registerDocItem({}, [entry], [...position, entriesDirect.length], context, partId));
     } else {
       const subDir = pathTree.slice(0, indexSlash);
       const list = entriesBySubDir.get(subDir) ?? [];
@@ -147,7 +154,7 @@ function folderChildren(entries, position, context) {
     type: 'folder',
     name: subDir,
     defaultOpen: true,
-    children: folderChildren(entriesSub, [...position, entriesDirect.length + index], context),
+    children: folderChildren(entriesSub, [...position, entriesDirect.length + index], context, partId),
   }));
   return [...entriesDirect, ...folders];
 }
@@ -159,6 +166,32 @@ function uniqueId(idRaw, context) {
   while (context.idUsed.has(id)) id = `${idBase}-${suffix++}`;
   context.idUsed.add(id);
   return id;
+}
+
+function partRegister(node, context) {
+  if (node.part === undefined || node.part === false) return '';
+  if (!node.id) {
+    console.warn('[page-tree] a part root requires an explicit node id');
+    return '';
+  }
+  const partConfig = node.part === true ? {} : node.part;
+  if (!partConfig || typeof partConfig !== 'object' || Array.isArray(partConfig)) {
+    console.warn(`[page-tree] invalid part config on node: ${node.id}`);
+    return '';
+  }
+  const partId = String(node.id);
+  if (!context.partById.has(partId)) {
+    context.partById.set(partId, {
+      id: partId,
+      index: partConfig.index && typeof partConfig.index === 'object'
+        ? {
+            componentId: String(partConfig.index.componentId ?? ''),
+            docId: String(partConfig.index.docId ?? ''),
+          }
+        : undefined,
+    });
+  }
+  return partId;
 }
 
 function displayName(node, textDefault, context, dataItem = {}, isDefaultEnabled = true) {
@@ -184,7 +217,7 @@ function displayName(node, textDefault, context, dataItem = {}, isDefaultEnabled
   });
 }
 
-function convertSourceFolder(node, position, context) {
+function convertSourceFolder(node, position, context, partId) {
   const pathFolder = node.sourceFolder !== undefined
     ? normalizeFolderPath(String(node.sourceFolder))
     : `/${node.sourceRoot}`;
@@ -202,7 +235,7 @@ function convertSourceFolder(node, position, context) {
     ...entry,
     relPathTree: entry.internalPath.slice(pathFolder.length).replace(/^\//, ''),
   }));
-  const children = folderChildren(entriesRelative, position, context);
+  const children = folderChildren(entriesRelative, position, context, partId);
   if (node.text === undefined && node.display === undefined) return children;
   const id = uniqueId(node.id ?? `source-folder-${position.join('-')}`, context);
   return [{
@@ -215,39 +248,42 @@ function convertSourceFolder(node, position, context) {
       { kind: 'folder', sourcePath: pathFolder },
       false,
     ),
+    collapsible: node.collapsible !== false,
     defaultOpen: node.defaultOpen ?? true,
     children,
   }];
 }
 
-function registerDocItem(node, entries, position, context) {
-  return docPageCreate(node, entries, position, context).page;
+function registerDocItem(node, entries, position, context, partId) {
+  return docPageCreate(node, entries, position, context, false, partId).page;
 }
 
-function docFolderRegister(node, entries, position, context) {
+function docFolderRegister(node, entries, position, context, partId) {
   return docFolderCreate(node, position, context, docPageCreate(
     node,
     entries,
     position,
     context,
     true,
-  ));
+    partId,
+  ), partId);
 }
 
-function docFolderCreate(node, position, context, { item, page }) {
+function docFolderCreate(node, position, context, { item, page }, partId) {
   return {
     $id: item.id,
     type: 'folder',
     name: page.name,
     index: page,
+    collapsible: node.collapsible !== false,
     defaultOpen: node.defaultOpen ?? true,
     children: node.children.flatMap((child, index) => (
-      convertNode(child, [...position, index], context)
+      convertNode(child, [...position, index], context, partId)
     )),
   };
 }
 
-function docPageCreate(node, entries, position, context, isFolderIndex = false) {
+function docPageCreate(node, entries, position, context, isFolderIndex = false, partId = '') {
   const entry = entries[0];
   const id = uniqueId(node.id ?? `doc-${position.join('-')}`, context);
   const route = itemRoute(id);
@@ -261,6 +297,7 @@ function docPageCreate(node, entries, position, context, isFolderIndex = false) 
       name: candidate.name,
       title: candidate.title,
     })),
+    partId,
     text: node.text ?? entry.title,
   };
   registerItem(item, context);
@@ -279,20 +316,21 @@ function docPageCreate(node, entries, position, context, isFolderIndex = false) 
   return { item, page };
 }
 
-function registerMissingDocItem(node, position, context) {
-  return docMissingPageCreate(node, position, context).page;
+function registerMissingDocItem(node, position, context, partId) {
+  return docMissingPageCreate(node, position, context, false, partId).page;
 }
 
-function docMissingFolderRegister(node, position, context) {
+function docMissingFolderRegister(node, position, context, partId) {
   return docFolderCreate(
     node,
     position,
     context,
-    docMissingPageCreate(node, position, context, true),
+    docMissingPageCreate(node, position, context, true, partId),
+    partId,
   );
 }
 
-function docMissingPageCreate(node, position, context, isFolderIndex = false) {
+function docMissingPageCreate(node, position, context, isFolderIndex = false, partId = '') {
   const sourceReference = String(node.doc ?? '');
   const fileName = sourceReference.split('/').filter(Boolean).at(-1) ?? sourceReference;
   const fileExt = fileName.includes('.') ? fileName.split('.').at(-1).toLowerCase() : '';
@@ -302,6 +340,7 @@ function docMissingPageCreate(node, position, context, isFolderIndex = false) {
     id,
     type: 'missing-doc',
     route,
+    partId,
     sourceReference,
     text: node.text ?? fileName ?? sourceReference,
   };
@@ -322,7 +361,7 @@ function docMissingPageCreate(node, position, context, isFolderIndex = false) {
   return { item, page };
 }
 
-function registerPanelItem(node, position, context) {
+function registerPanelItem(node, position, context, partId) {
   const panel = typeof node.panel === 'string' ? { component: node.panel } : node.panel;
   const id = uniqueId(node.id ?? `panel-${position.join('-')}`, context);
   const route = itemRoute(id);
@@ -332,6 +371,7 @@ function registerPanelItem(node, position, context) {
     route,
     panelComponent: panel?.component ?? '',
     panelData: panel?.data ?? {},
+    partId,
     text: node.text ?? panel?.component ?? id,
   };
   registerItem(item, context);
@@ -343,7 +383,7 @@ function registerPanelItem(node, position, context) {
   };
 }
 
-function registerInlineItem(node, position, context) {
+function registerInlineItem(node, position, context, partId) {
   const inline = typeof node.inline === 'string' ? { content: node.inline } : node.inline;
   const id = uniqueId(node.id ?? `inline-${position.join('-')}`, context);
   const route = itemRoute(id);
@@ -353,6 +393,7 @@ function registerInlineItem(node, position, context) {
     route,
     inlineContent: inline?.content ?? '',
     inlineFormat: inline?.format === 'md' ? 'md' : 'mdx',
+    partId,
     text: node.text ?? inline?.title ?? id,
   };
   registerItem(item, context);

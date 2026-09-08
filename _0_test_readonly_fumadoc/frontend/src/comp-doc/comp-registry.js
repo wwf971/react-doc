@@ -3,6 +3,7 @@ import { createElement } from 'react';
 export function compDefine(CompRender, options = {}) {
   return {
     CompRender,
+    componentType: options.componentType,
     dataBuild: options.dataBuild,
     placementList: options.placementList,
   };

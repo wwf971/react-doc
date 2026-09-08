@@ -11,6 +11,7 @@ import remarkGfm from 'remark-gfm';
 import { parse as parseYaml } from 'yaml';
 import { remarkDocLink } from './remark-doc-link.js';
 import { remarkCommentComp } from './remark-comment-comp.js';
+import { remarkStableHeadingAnchor } from './remark-stable-heading-anchor.js';
 import { multiLangLanguageListGet, multiLangStructuredDataGet } from './MultiLangData.js';
 import { multiLangRemarkHeading } from './MultiLangRemarkHeading.js';
 import { MultiLangHeadingText } from '../comp-doc/common/MultiLangEntry.jsx';
@@ -25,9 +26,16 @@ import { MultiLangHeadingText } from '../comp-doc/common/MultiLangEntry.jsx';
 
 export async function compileDoc({ source, internalPath, format, config = {} }) {
   const { frontmatter, content } = splitFrontmatter(source);
+  const componentList = [];
   const languageSet = new Set();
   const headingVariantsById = new Map();
-  const onCommentComponent = ({ compName, raw }) => {
+  const onCommentComponent = ({ compName, lang, props, raw, sourceOffset }) => {
+    componentList.push({
+      id: typeof props.id === 'string' ? props.id.trim() : '',
+      compName,
+      input: { lang, propsAuthored: props, raw },
+      sourceOffset,
+    });
     const languageListGet = config.languageListGetByComponent?.[compName]
       ?? (compName === 'DocMultiLang' ? multiLangLanguageListGet : undefined);
     for (const language of languageListGet?.(raw) ?? []) languageSet.add(language);
@@ -48,6 +56,9 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
         onHeading: ({ id, variantsJson }) => headingVariantsById.set(id, variantsJson),
         onLanguage: (language) => languageSet.add(language),
       }],
+      // Keep this after heading ID generation: plain `.md` compilation drops
+      // raw span markers, so this transfers their stable IDs to the headings.
+      remarkStableHeadingAnchor,
       [remarkCodeTab],
       [remarkNpm],
       ...(config.isCommentComponentEnabled === false
@@ -71,6 +82,7 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
 
   return {
     Body: mod.default,
+    componentList,
     toc: multiLangTocTransform(mod.toc ?? [], headingVariantsById),
     titleFrontmatter: frontmatter?.title ?? '',
     description: frontmatter?.description ?? '',

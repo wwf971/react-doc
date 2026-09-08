@@ -2,6 +2,7 @@
   min-width: 0;
   height: 100%;
   overflow: auto;
+  overflow-anchor: none;
   font-family: var(--font-sans);
 }
 
@@ -13,6 +14,26 @@
 
 .doc-page-mdx :is(h1, h2, h3, h4, h5, h6) > a[data-card] {
   -webkit-user-drag: none;
+}
+
+.doc-page-mdx .doc-navigation-target {
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
+  padding-right: 0.35rem;
+  padding-left: 0.35rem;
+  border-radius: 0.25rem;
+  background-color: #fff2a8;
+  box-shadow: 0 0 0 0.3rem #fff2a8;
+  color: #352b00;
+}
+
+@media (prefers-color-scheme: dark) {
+  .doc-page-mdx .doc-navigation-target {
+    background-color: #765f00;
+    box-shadow: 0 0 0 0.3rem #765f00;
+    color: #fff8cf;
+  }
 }
 
 .doc-navigation-floating {

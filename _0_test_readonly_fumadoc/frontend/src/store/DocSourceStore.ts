@@ -21,12 +21,24 @@ export type CompileState = {
   isContentEmpty?: boolean;
   isSourceFile?: boolean;
   Body?: any;
+  componentList?: ComponentSourceEntry[];
   toc?: any[];
   titleFrontmatter?: string;
   description?: string;
   language?: string;
   languageList?: string[];
   message?: string;
+};
+
+export type ComponentSourceEntry = {
+  id: string;
+  compName: string;
+  input: {
+    lang?: string;
+    propsAuthored?: Record<string, any>;
+    raw?: string;
+  };
+  sourceOffset?: number;
 };
 
 export type LinkTarget = {
@@ -201,6 +213,30 @@ export class DocSourceStore {
         };
       });
     }
+  }
+
+  componentGet(internalPath: string, componentId: string): {
+    status: 'loading' | 'done' | 'error';
+    component?: ComponentSourceEntry;
+    message?: string;
+  } {
+    const state = this.compiledByPath[internalPath];
+    if (!state || state.status === 'loading') return { status: 'loading' };
+    if (state.status === 'error') return { status: 'error', message: state.message };
+    const componentList = (state.componentList ?? []).filter((component) => component.id === componentId);
+    if (componentList.length === 0) {
+      return {
+        status: 'error',
+        message: `Component id not found in document: ${componentId}`,
+      };
+    }
+    if (componentList.length > 1) {
+      return {
+        status: 'error',
+        message: `Component id is not unique in document: ${componentId}`,
+      };
+    }
+    return { status: 'done', component: componentList[0] };
   }
 
   // non-md files are displayed as synthesized markdown, strategy chosen by suffix

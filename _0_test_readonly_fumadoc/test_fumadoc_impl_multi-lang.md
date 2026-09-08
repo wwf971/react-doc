@@ -127,6 +127,33 @@ For compatibility with data that separates structural and translated fields, a l
 
 Language detection recursively scans all list items and nested child lists.
 
+## Multilingual document indexes
+
+`DocIndex` is a reusable index entry with a two-level `type` then `layout` dispatch. The type selects the accepted semantic data, while the layout changes only its visual arrangement. The initial `title-subtopics-items` type renders a compact title, grouped subtopics, and document links. Its common data envelope keeps structural fields language-independent and uses explicit language mappings for visible text:
+
+```yaml
+type: title-subtopics-items
+layout: horizontal-wrap
+title:
+  jp: ガイド索引
+  en: Guide index
+subtopics:
+  - id: setup
+    title:
+      jp: 環境構築
+      en: Setup
+    items:
+      - id: setup-guide
+        title:
+          jp: 環境構築ガイド
+          en: Setup guide
+        target: /guide/setup.md
+```
+
+The type supports `vertical-list` and `horizontal-wrap`; omitting `layout` selects `vertical-list`. Future layouts reuse `title`, `subtopics`, and `items`, while future types can define another normalized data shape behind the same root entry. A local MobX store parses and validates the authored data before rendering. The selected language remains in the shared document language context rather than being duplicated as local state, so the index changes with the document toolbar selector. Missing translations fall back to the first authored translation and set `lang` to the language actually rendered.
+
+Index items render through `DocLink`, preserving centralized target resolution, unavailable-link behavior, navigation history, and route-mode handling. The index parser also exposes language-list and structured-search extractors. The consumer registers these callbacks under the author-facing `DocIndex` name so both translations appear in the language selector and search index.
+
 ## Search indexing
 
 Fumadocs `remarkStructure` scans ordinary Markdown nodes automatically. A rendered custom component has no ordinary text children, so its semantic content must be supplied separately. Fumadocs supports this through `node.data.structuredData.contents`; its default stringifier adds those entries to the current heading while extracting structured search data.

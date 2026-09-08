@@ -1,0 +1,94 @@
+.doc-part-index-source-control {
+  display: flex;
+  flex: 0 0 auto;
+  margin-bottom: 0.65rem;
+}
+
+.doc-part-index-source-segments {
+  width: max-content;
+  max-width: 100%;
+  min-height: 2rem;
+  background: var(--color-fd-muted);
+}
+
+.doc-part-index-source-segments .segmented-control-segment.is-unselected {
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-part-index-status {
+  padding: 0.5rem 0;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.8rem;
+}
+
+.doc-part-index-status.is-error {
+  color: #b42318;
+}
+
+.doc-part-index-panel {
+  min-width: 0;
+  overflow: visible;
+}
+
+.doc-part-index-panel:not(.is-display-floating) {
+  width: max-content;
+  min-width: 100%;
+  max-width: min(36rem, var(--doc-part-index-width-available, 100%));
+}
+
+.doc-page-toc.is-part-mode {
+  align-self: start;
+  height: auto;
+  padding-top: 0.75rem;
+  overflow: visible;
+}
+
+.doc-page-toc.is-part-mode > #toc-title,
+.doc-page-toc.is-part-mode > #toc-title + * {
+  display: none;
+}
+
+.doc-part-index-panel .doc-index-title-subtopics-items {
+  width: 100%;
+  margin: 0;
+  overflow: visible;
+}
+
+.doc-part-index-panel.is-display-floating {
+  position: fixed;
+  z-index: 2147483646;
+  top: 1rem;
+  right: 1rem;
+  width: min(36rem, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
+  overflow: visible;
+  border: 1px solid var(--color-fd-border);
+  background: var(--color-fd-background);
+  box-shadow: 0 12px 36px rgb(15 23 42 / 22%);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.doc-part-index-panel.is-display-floating:active {
+  cursor: grabbing;
+}
+
+.doc-part-index-panel.is-display-floating .doc-index-title,
+.doc-part-index-panel.is-display-floating .doc-index-subtopic-title {
+  cursor: text;
+  user-select: text;
+}
+
+.doc-part-index-panel.is-display-floating a,
+.doc-part-index-panel.is-display-floating button,
+.doc-part-index-panel.is-display-floating input,
+.doc-part-index-panel.is-display-floating select,
+.doc-part-index-panel.is-display-floating textarea {
+  user-select: auto;
+}
+
+.doc-part-index-panel.is-display-floating .doc-index-title-subtopics-items {
+  border: 0;
+}
+

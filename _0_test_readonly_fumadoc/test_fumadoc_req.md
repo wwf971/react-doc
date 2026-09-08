@@ -61,6 +61,25 @@ It's totally possible that there exists multiple leaf items that correspond to s
 
 For config file that describes that side panel's tree structure, the data format should be well designed, and keep things clean and clear.
 
+### Part index
+
+A side-panel node can be declared as the root of a semantic part. The node and all of its descendants belong to that part, except descendants under a more deeply nested part root. A part can bind an index by a pair of stable identifiers:
+
+1. the side-panel document item id that owns the index component;
+2. the component id authored inside that document.
+
+This binding must not duplicate the index data in the side-panel config. The document system should load the referenced document, query the identified component's authored data and registered component type, and render it through the ordinary component registry. The component id must be unique within the referenced document, and a part index reference is valid only when the registered component declares itself as component type `index`.
+
+When the current document belongs to a part with a valid index, the desktop local-index area should show a segmented control that switches between the ordinary **On this page** heading index and an **In this part** index. **In this part** is selected by default. The page/part selection is global document-page UI state, so it remains unchanged when navigating to another document or part. Floating display mode remains UI state owned by the MobX document store.
+
+A hosted part index can optionally switch between its normal docked location and a floating panel. The floating panel is placed at the top-right of the page by default. The docked/floating segmented control belongs at the rightmost side of the index title line. This control must not appear when the same index is rendered as an ordinary component inside an MDX/Markdown document.
+
+In hosted placement, the index title is left-aligned and wraps naturally. The docked/floating control remains on the title row only when enough width exists and otherwise wraps below the title. The index must not create its own vertical scrollbar; the document page remains the vertical scrolling surface even when the index is taller than the document content. An index link targeting the current source document is highlighted with a yellow background.
+
+An index type may allow a subtopic to replace its ordinary item list with a custom component from the unified component registry. The authored index data supplies the component name and its semantic data, while the runtime host supplies placement and instance context. The nested component uses the same `{ data, config, onEvent }` interface as every other registered component and must submit navigation through the centralized navigation layer. A subtopic must choose either an item list or one custom component, not both.
+
+The complete part-index feature must be globally configurable. It is enabled by default; floating mode is also enabled by default. Disabling the part-index feature restores the ordinary local page index without requiring changes to side-panel part declarations or document content.
+
 
 ## Unified Component Registry
 
@@ -78,6 +97,12 @@ Link/Ref system consists of at least the following major logical layers:
 2. Route layer. This layer maintains for a file in source, what items are bound to it, and when navigating to it, which item to go to(in case multiple items correspond to same file in source). For the time being, let us simply go to the first item according to tree order. Note that this might include items automatically collected as descendants of an item that bound to a folder.
 
 3. Navigation layer. Triggers proper navigation behavior upon user clicks a link or performs certain behavior upon components that support navigation. Navigation attempt should be submitted to a centralized navigation logic, to support recording of navigation history, required for redo/undo operations.
+
+A navigation target may include a document-local place indicator after `#`, for example `/root-id/guide.md#configuration`. The route layer resolves the document portion, while the navigation layer keeps the fragment as part of the destination, loads the resolved document, and scrolls to the matching element id after rendering. The destination receives a persistent yellow highlight until the next document/place navigation, so the user can distinguish the exact destination after scrolling. Plain Markdown may declare a stable heading destination by placing `<span id="configuration"></span>` immediately before the heading; compilation must preserve that destination on the rendered heading without enabling arbitrary MDX behavior in `.md` files. If a matched id nevertheless belongs to an empty authored anchor marker, the first following content element is highlighted instead.
+
+Every successful navigation request must apply its destination behavior even when its resolved document and fragment are identical to the current state. Selecting a document-only index link again resets the vertical scroll position to the document top. Selecting the same document-plus-place index link again scrolls to that place and reapplies its destination highlight. Document-plus-place navigation, including requests emitted by custom components, must go through the same centralized navigation and history logic as document-only navigation. Backward and forward navigation therefore restore both the document and the recorded place.
+
+If a document link resolves to a source file that is not represented in the side panel, activating it must show a warning tooltip anchored to that link. The warning must not be rendered at the top of the document, because detached feedback hides which link caused the failure and can be outside the reader's current viewport. The tooltip can be dismissed directly or by clicking outside it.
 
 The document controls should support three kinds of navigation. These controls appear both in the document toolbar and in the floating controls.
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useLayoutEffect, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import {
   DocsPage,
@@ -8,10 +8,15 @@ import {
   PageBreadcrumb,
   PageFooter,
 } from 'fumadocs-ui/layouts/docs/page';
+import {
+  TOCPopover,
+  TOCProvider,
+} from 'fumadocs-ui/layouts/docs/page/slots/toc';
 import { useDocStores } from './store/context.js';
 import { buildMdxComps } from './lib/mdx-comps.js';
 import { DocPageToolbar } from './comp-doc/DocPageToolbar.jsx';
 import { DocPageSkeleton } from './comp-doc/DocPageSkeleton.jsx';
+import { DocPageToc } from './comp-doc/DocPageToc.jsx';
 import { RegisteredComp } from './comp-doc/RegisteredComp.jsx';
 import { DocLanguageProvider } from './comp-doc/MultiLangContext.jsx';
 import './DocPageView.css';
@@ -25,15 +30,35 @@ export const DocPageView = observer(function DocPageView() {
   const path = docStore.docCurrentPath;
   const pathContent = item?.type === 'inline' ? item.route : path;
   const compiled = sourceStore.compiledByPath[pathContent];
+  const navigationRequestVersion = docStore.navigationRequestVersion;
   const mdxComps = useMemo(
     () => buildMdxComps(sourceStore.configDoc, compById),
     [sourceStore, compById],
   );
 
+  // Every navigation request starts from a known scroll position, including a
+  // repeated request for the current document or current fragment. Keep the
+  // request version dependency: path/hash alone cannot detect repeated index
+  // clicks. Fragment navigation aligns its destination below after mounting.
+  // Run before paint so the browser cannot preserve the previous document's
+  // scroll anchor while React replaces the body.
+  useLayoutEffect(() => {
+    if (!pathContent) return;
+    pageScrollTopReset(pageElementRef.current);
+  }, [pathContent, navigationRequestVersion, pageElementRef]);
+
   // after the body appears: jump to the heading anchor, or back to top
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (compiled?.status !== 'done') return;
-    requestAnimationFrame(() => {
+    let elementHighlighted;
+    let frameId;
+    let attemptCount = 0;
+    let imagePendingList = [];
+    const destinationAlign = () => pageScrollDestinationAlign(
+      pageElementRef.current,
+      elementHighlighted,
+    );
+    const scrollToDestination = () => {
       const pageElement = pageElementRef.current;
       const idEscaped = typeof CSS !== 'undefined' && CSS.escape
         ? CSS.escape(docStore.docCurrentHash)
@@ -41,10 +66,48 @@ export const DocPageView = observer(function DocPageView() {
       const el = docStore.docCurrentHash && pageElement
         ? pageElement.querySelector(`#${idEscaped}`)
         : null;
-      if (el) el.scrollIntoView();
-      else pageElement?.scrollTo(0, 0);
-    });
-  }, [pathContent, compiled?.status, docStore.docCurrentHash, pageElementRef]);
+      if (el) {
+        elementHighlighted = el;
+        while (
+          !elementHighlighted.textContent?.trim()
+          && elementHighlighted.children.length === 0
+          && elementHighlighted.nextElementSibling
+        ) {
+          elementHighlighted = elementHighlighted.nextElementSibling;
+        }
+        destinationAlign();
+        elementHighlighted.classList.add('doc-navigation-target');
+        imagePendingList = [...pageElement.querySelectorAll('img')].filter((image) => (
+          !image.complete
+          && Boolean(image.compareDocumentPosition(elementHighlighted) & Node.DOCUMENT_POSITION_FOLLOWING)
+        ));
+        for (const image of imagePendingList) {
+          image.addEventListener('load', destinationAlign, { once: true });
+          image.addEventListener('error', destinationAlign, { once: true });
+        }
+        // Reapply after the browser's own layout/scroll anchoring phase.
+        frameId = requestAnimationFrame(destinationAlign);
+        return;
+      }
+      if (!docStore.docCurrentHash) {
+        pageScrollTopReset(pageElement);
+        return;
+      }
+      attemptCount += 1;
+      if (attemptCount < 12) frameId = requestAnimationFrame(scrollToDestination);
+    };
+    scrollToDestination();
+    return () => {
+      cancelAnimationFrame(frameId);
+      for (const image of imagePendingList) {
+        image.removeEventListener('load', destinationAlign);
+        image.removeEventListener('error', destinationAlign);
+      }
+      elementHighlighted?.classList.remove('doc-navigation-target');
+    };
+  // Keep navigationRequestVersion here so selecting the current fragment again
+  // removes and reapplies both destination alignment and highlighting.
+  }, [pathContent, compiled?.status, docStore.docCurrentHash, navigationRequestVersion, pageElementRef]);
 
   const warningNavigation = docStore.navigationError ? (
     <div className="doc-navigation-warning" role="alert">
@@ -157,9 +220,37 @@ export const DocPageView = observer(function DocPageView() {
   );
 });
 
+function pageScrollTopReset(pageElement) {
+  if (!pageElement) return;
+  const documentElement = pageElement.ownerDocument?.documentElement;
+  let elementCurrent = pageElement.querySelector('#nd-page') ?? pageElement;
+  while (elementCurrent) {
+    elementCurrent.scrollTop = 0;
+    if (elementCurrent === documentElement) break;
+    elementCurrent = elementCurrent.parentElement;
+  }
+  const scrollingElement = pageElement.ownerDocument?.scrollingElement;
+  if (scrollingElement) scrollingElement.scrollTop = 0;
+}
+
+function pageScrollDestinationAlign(pageElement, targetElement) {
+  if (!pageElement || !targetElement) return;
+  const pageRect = pageElement.getBoundingClientRect();
+  const targetRect = targetElement.getBoundingClientRect();
+  pageElement.scrollTop = Math.max(
+    0,
+    pageElement.scrollTop + targetRect.top - pageRect.top - 8,
+  );
+}
+
 const docsPageSlots = {
   breadcrumb: DocPageBreadcrumb,
   footer: DocPageFooter,
+  toc: {
+    main: DocPageToc,
+    popover: TOCPopover,
+    provider: TOCProvider,
+  },
 };
 
 function DocPageFooter({ className = '', ...props }) {

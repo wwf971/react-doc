@@ -4,7 +4,15 @@ import { compDefinitionNormalize } from './comp-registry.js';
 
 // One runtime boundary for every component resolved through compRegistry.
 // Registered render components always receive { data, config, onEvent }.
-export function RegisteredComp({ compDefinition, compId, compName, configRuntime = {}, input = {}, placement }) {
+export function RegisteredComp({
+  compDefinition,
+  compId,
+  compName,
+  configRuntime = {},
+  input = {},
+  onEventRuntime,
+  placement,
+}) {
   const { compById, docStore, onEvent: onEventPage, sourceStore } = useDocStores();
   const idFallback = useId();
   const compIdResolved = compId ?? sourceStore.configDoc.compRegistry?.[compName] ?? compName;
@@ -105,6 +113,8 @@ export function RegisteredComp({ compDefinition, compId, compName, configRuntime
     };
     const result = await onEventPage?.(`component:${eventType}`, eventDataForward);
     if (result?.isHandled) return result;
+    const resultRuntime = await onEventRuntime?.(eventType, eventDataForward);
+    if (resultRuntime?.isHandled) return resultRuntime;
     if (eventType === 'navigateRequest' && eventData.target) {
       docStore.navigate(eventData.target);
       return { isHandled: true };

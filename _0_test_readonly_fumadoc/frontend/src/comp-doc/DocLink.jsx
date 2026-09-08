@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../store/context.js';
 import { LinkDocRender } from './LinkDocRender.jsx';
@@ -12,6 +12,7 @@ export const DocLink = observer(function DocLink({ target, from, kind, children 
   const { docStore, linkConfig, onEvent: onEventPage, sourceStore } = useDocStores();
   const id = useId();
   const refWrap = useRef(null);
+  const [warningText, setWarningText] = useState('');
   const treeLink = docStore.resolveTreeLink(target ?? '');
   const { targets, hash } = treeLink
     ? {
@@ -28,15 +29,18 @@ export const DocLink = observer(function DocLink({ target, from, kind, children 
   const CompRender = linkConfig.CompRender ?? LinkDocRender;
 
   useEffect(() => {
-    if (!isDropdownOpen) return;
+    if (!isDropdownOpen && !warningText) return;
     const onDocMouseDown = (event) => {
       if (refWrap.current && !refWrap.current.contains(event.target)) {
         docStore.setLinkDropdownOpen('');
+        setWarningText('');
       }
     };
     document.addEventListener('mousedown', onDocMouseDown);
     return () => document.removeEventListener('mousedown', onDocMouseDown);
-  }, [isDropdownOpen, docStore]);
+  }, [isDropdownOpen, warningText, docStore]);
+
+  useEffect(() => setWarningText(''), [target, from]);
 
   const isBroken = targets.length === 0;
   const isMultiple = targets.length > 1;
@@ -67,6 +71,11 @@ export const DocLink = observer(function DocLink({ target, from, kind, children 
   const config = {
     isBroken,
     isClickable: !isBroken,
+    isCurrent: !isMultiple
+      && !isNavigationUnavailable
+      && Boolean(targetFirst?.internalPath)
+      && targetFirst.internalPath === docStore.docCurrentPath
+      && (hash || '') === (docStore.docCurrentHash || ''),
     isDropdownOpen,
     isMultiple,
     isNavigationUnavailable,
@@ -98,22 +107,48 @@ export const DocLink = observer(function DocLink({ target, from, kind, children 
       if (isBroken) {
         return;
       }
+      if (isNavigationUnavailable) {
+        docStore.clearNavigationError();
+        setWarningText(data.titleText);
+        return;
+      }
       if (isMultiple) {
+        setWarningText('');
         docStore.setLinkDropdownOpen(isDropdownOpen ? '' : id);
         return;
       }
-      docStore.navigate(pathFirst);
+      const isNavigated = docStore.navigate(pathFirst);
+      if (!isNavigated) {
+        setWarningText(docStore.navigationError || data.titleText);
+        docStore.clearNavigationError();
+      } else {
+        setWarningText('');
+      }
       return;
     }
     if (eventType === 'candidateSelectRequest' && eventData.target) {
       docStore.setLinkDropdownOpen('');
-      docStore.navigate(eventData.target.internalPath + (hash ? `#${hash}` : ''));
+      const isNavigated = docStore.navigate(eventData.target.internalPath + (hash ? `#${hash}` : ''));
+      if (!isNavigated) {
+        setWarningText(docStore.navigationError || data.titleText);
+        docStore.clearNavigationError();
+      } else {
+        setWarningText('');
+      }
     }
   };
 
   return (
     <span ref={refWrap} className="doc-link-controller">
       <CompRender data={data} config={config} onEvent={eventHandle} />
+      {warningText ? (
+        <span className="doc-link-warning" role="alert">
+          <span>{warningText}</span>
+          <button type="button" onClick={() => setWarningText('')} aria-label="Dismiss">
+            ×
+          </button>
+        </span>
+      ) : null}
     </span>
   );
 });

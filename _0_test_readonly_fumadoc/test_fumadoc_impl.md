@@ -34,7 +34,7 @@ mobx stores (source of truth for rendering)
 
 **Multilingual content.** Language inheritance, document-wide selection, headings, paragraphs, lists, degradation behavior, and file naming are specified in [test_fumadoc_impl_multi-lang.md](./test_fumadoc_impl_multi-lang.md).
 
-**Doc collection via vite plugin.** The plugin reads the two-layer config, executes the source rules, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
+**Doc collection via vite plugin.** The plugin reads the two-layer config, executes the source rules, expands side-panel subtree files, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any imported side-panel yaml invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
 
 ## Can we keep fumadocs default components while owning link logic? (yes)
 
@@ -123,9 +123,17 @@ a.md  (bare name)          doc index lookup by file name
                              └─ 0 match  → rendered as broken link, not clickable
 ```
 
+Every document target form can append a fragment, for example `/rootId/xx/a.md#configuration`. `DocSourceStore.resolveLink()` separates the document path from the fragment and resolves only the path. `DocLink` then submits the resolved side-panel route and fragment to `DocStore.navigate()`. The store records `{ route, hash }` together in navigation history and synchronizes the hash in query mode. Each successful call also increments `navigationRequestVersion`. This signal is separate from path and hash because selecting an already-current index destination leaves both values unchanged; `DocPageView` observes the signal so every request reruns destination behavior. A repeated document-only request therefore resets vertical scrolling to the top, while a repeated document-plus-fragment request realigns and highlights its place again without adding a duplicate history entry.
+
+Every navigation request first resets the rendered article, each ancestor in its document content scroll chain, and the browser scrolling element to the top in a layout effect, so embedded hosts cannot preserve an earlier offset in an outer container. Browser scroll anchoring is disabled on the document viewport. For a fragment target, `DocPageView` retries briefly until the matching element is mounted, explicitly calculates its position within the document viewport, and applies `doc-navigation-target`; `DocPageMdx.css` gives that destination a full-content-width yellow line until the next document/place navigation rather than highlighting only the heading text. Alignment is applied immediately and once more after the browser layout phase. Pending images above the destination trigger another alignment when they finish loading, preventing screenshot layout shifts from moving the requested heading away from the viewport. As a compatibility fallback, if the matched id belongs to an empty anchor element, the first following content element is highlighted instead. The same target string is accepted by the default `navigateRequest` handling for registered components, so indexes and application-specific visual navigation components do not bypass centralized history.
+
+Plain `.md` documents can author a stable heading destination by placing `<span id="configuration"></span>` immediately before the heading. Raw HTML is intentionally omitted by the `format: 'md'` runtime compiler, so leaving that marker untreated would make fragment lookup fail and leave navigation at the document top. `remarkStableHeadingAnchor` recognizes only this narrow standalone marker form, transfers its id to the following heading's `hProperties.id`, and removes the marker paragraph. This keeps the stable authored fragment on the visible heading without enabling general MDX syntax in Markdown; the heading itself is therefore both the scroll destination and the highlighted element.
+
 Resolution happens at render, not at compile — moving a file only changes the index, compiled content stays valid.
 
 Link behavior is separated into recognition, resolution, visual rendering, and navigation. Applications can add/replace remark recognizers, provide `config.link.resolve`, provide a `data`/`config`/`onEvent` link renderer, and intercept link events before the default store navigation. The default renderer follows the same unified event contract as other data-driven components. See `frontend/README.md` for the public interface.
+
+When a resolved source document is not represented in the side panel, `DocLink` does not submit an already-known invalid route to `DocStore.navigate()`. Activating the link opens a dismissible warning tooltip positioned from that link's controller. Unexpected failures returned by `navigate()` are transferred from the store to the same local tooltip and the page-level error is cleared. The tooltip closes when the user dismisses it, clicks outside the link controller, changes the link target, or completes a valid navigation. Keeping this feedback local preserves the reader's scroll position and identifies the exact invalid link without showing a detached warning at the top of the document.
 
 Fumadocs wraps heading text in hash anchors. Dragging to select a heading can still emit a click on pointer release and unexpectedly scroll that heading to the top. `DocPageMdx` tracks pointer movement and the browser selection, then cancels only the heading-anchor click produced by a selection drag; ordinary anchor clicks and the separate copy-link button remain available.
 
@@ -154,7 +162,7 @@ Registry values are component definitions created with `compDefine()`. A definit
 
 Multilingual component registration and authoring rules are specified in [test_fumadoc_impl_multi-lang.md](./test_fumadoc_impl_multi-lang.md).
 
-One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, and `sidePanelPanel`.
+One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, `sidePanelPanel`, `partIndex`, and `indexSubtopic`.
 
 ### Isolate temporary rendering DOM
 
@@ -167,6 +175,98 @@ Mermaid is one example. `mermaid.render(id, source)` appends temporary rendering
 ## Side panel
 
 `sidePanel.file` points to a yaml describing the tree. Folders and separators are free-form, so the panel need not mirror the file tree. A document can be selected by exact internal path, a path suffix, or file name. Name/suffix ambiguity selects the first source-order match and prepends a warning containing every match. `sourceFolder` expands any source subtree, while `sourceRoot` remains a shorthand for a complete root. If the tree is absent, one is generated from the complete file manifest.
+
+A folder node can move its children to another yaml through `childrenFile`. The referenced path is relative to the yaml file containing that node, and the referenced file must contain a `tree` list. The Vite plugin recursively expands imported trees before page-tree conversion, so runtime code receives the same inlined `children` shape as an ordinary tree. Imported children are placed before any local `children`, allowing a node to add a few local entries after a shared subtree.
+
+```yaml
+# side-panel.yaml
+tree:
+  - id: codeapp-development
+    text: CodeApp development
+    doc: /codeapp-dev/doc/codeapp-doc.md
+    childrenFile: ./side-panel-codeapp.yaml
+```
+
+```yaml
+# side-panel-codeapp.yaml
+tree:
+  - text: Dataverse
+    doc: /codeapp-dev/doc/codeapp-dataverse.md
+  - text: Local development
+    doc: /codeapp-dev/doc/codeapp-test-local.md
+```
+
+Imported files can use `childrenFile` again. Import cycles, missing files, a non-string `childrenFile`, and files without a `tree` list are configuration errors with the relevant file path. All recursively imported files are added to the development-server watch set. When an import is added while the server is running, editing the containing yaml refreshes the watch set and reloads the generated manifest.
+
+### Semantic parts and hosted indexes
+
+A side-panel node becomes a part root when it has a `part` mapping. An explicit node `id` is required because the part identity and its index document reference must remain stable when tree order changes. Membership is inherited by every descendant, including descendants expanded from `childrenFile`; a nested part root replaces the inherited part for its own subtree.
+
+```yaml
+tree:
+  - id: guide-part
+    text: Guide
+    doc: /guide/overview.md
+    part:
+      index:
+        docId: guide-part
+        componentId: guide-main-index
+    children:
+      - doc: /guide/setup.md
+```
+
+The referenced document marks the queryable component with a stable authored id:
+
+````markdown
+<!--renderComp=DocIndex,id=guide-main-index-->
+```yaml
+type: title-subtopics-items
+layout: horizontal-wrap
+title: Guide
+subtopics: []
+```
+````
+
+`remarkCommentComp` records queryable comment-block component entries while compiling a document. Each entry contains the authored component id/name, raw block, language, props, and source offset. `DocSourceStore.componentGet(docPath, componentId)` performs document-local identity lookup and rejects missing or duplicate ids. `DocStore.componentQuery(docId, componentId)` first resolves the side-panel document id, then resolves the registered definition and returns both the component input data and its declared `componentType`. This lookup API is generic; the part-index host additionally requires `componentType: index`.
+
+The component registry definition is therefore also a semantic capability declaration:
+
+```javascript
+compDefine(ComponentExample, {
+  componentType: 'index',
+  placementList: ['mdx', 'commentBlock', 'partIndex'],
+})
+```
+
+The right-side local-index slot is wrapped by `DocPageToc`. Outside a configured part, when globally disabled, or when no segmented-control implementation is injected, it delegates directly to the native Fumadocs TOC. Inside a configured part, a segmented control switches between **On this page** and **In this part**, with **In this part** as the initial mode. Both modes retain the native Fumadocs TOC shell; part mode replaces its inner heading list rather than replacing the shell, so the layout's right-column width remains stable while switching. `DocStore.partIndexContentMode` is one global page/part selection that survives document and part navigation, while docked/floating mode can remain keyed by part id. The host loads the referenced document on demand and renders the referenced component through `RegisteredComp`, preserving component normalization, placement checks, and the common `{ data, config, onEvent }` boundary.
+
+For `partIndex` placement, the index receives host-only display-mode configuration. Its left-aligned title and display-mode control use a wrapping row, allowing the control to move below a long title. The segmented control emits a `displayModeChange` request, and the host submits that request to `DocStore`. The hosted TOC shell uses content height and visible overflow instead of an internal vertical viewport, so the document page remains the vertical scrolling surface. In `floating` mode the same component instance is rendered through a `document.body` portal, positioned at the top right, and assigned the application overlay stack maximum so it cannot pass below the side panel while being dragged. It has no internal vertical scrollbar. Ordinary `mdx` and `commentBlock` placements receive no display-mode control. `DocLink` exposes whether its resolved source path and fragment exactly match the current document and place; index-item styling therefore highlights only the item for that exact destination and clears the prior item on subsequent navigation. On the part-root document, host state instead gives the index title the yellow current marker.
+
+An index item defaults to `kind: document`. With `kind: inline-link`, its `target` is loaded as collected source and clicking the item opens the shared compact-CodeBlock source popup instead of navigating. `CodeBlockCompactPopup` owns the common panel, syntax-highlighted body, copy operation, close event, and Escape-key behavior, while each inline item owns a `CodeBlockCompactStore`. Inline-link targets do not need side-panel entries.
+
+For the `title-subtopics-items` index type, each subtopic contains exactly one of `items` or `component`. A component subtopic requires a stable subtopic `id` and has `{ name, data, config }`; `name` is resolved through the same `compRegistry` and `compById` layers as MDX components. `IndexSubtopicContent` renders it through `RegisteredComp` with placement `indexSubtopic` and a stable instance id derived from the parent index and subtopic ids. The nested component can emit `navigateRequest` with a document or document-plus-fragment target, and the ordinary registered-component fallback submits it to `DocStore.navigate()`.
+
+```yaml
+subtopics:
+  - id: visual-map
+    title: Visual map
+    component:
+      name: ComponentExample
+      data:
+        areas:
+          - label: Header
+            target: /guide/layout.md#header
+```
+
+The global semantic config is:
+
+```yaml
+partIndex:
+  isEnabled: true
+  isFloatingEnabled: true
+```
+
+Both flags default to `true`. `isEnabled: false` leaves declarations intact but restores the ordinary page TOC everywhere. `isFloatingEnabled: false` keeps the page/part switch while omitting the docked/floating control.
 
 Each document item has a stable item id and its own route. This includes a non-leaf item that has both `doc` and `children`: it is emitted as a Fumadocs folder with its document as the native folder `index`. The navigation index stores every item bound to each source file, allowing duplicate document items while link/search navigation consistently chooses the first item in tree order. A link to a source file omitted from the side panel reports an explicit navigation error instead of silently opening an unrepresented page.
 

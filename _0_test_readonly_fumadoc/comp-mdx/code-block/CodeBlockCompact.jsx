@@ -1,34 +1,14 @@
 import { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Copy, FileCode } from 'lucide-react';
-import { DynamicCodeBlock } from '../../frontend/src/comp-doc/DynamicCodeBlock.js';
+import { FileCode } from 'lucide-react';
+import { CodeBlockCompactPopup } from './CodeBlockCompactPopup.jsx';
 import { CodeBlockCompactStore } from './CodeBlockCompactStore.js';
 
 function CodeBlockCompact({ data = {}, config = {}, sourceStore, pathList = [] }) {
 	const [store] = useState(() => new CodeBlockCompactStore());
 	const Panel = config.panelComponent;
-	const pathPopup = store.pathPopup;
-	const statePopup = pathPopup ? sourceStore.rawByPath[pathPopup] : undefined;
-	const entryPopup = pathPopup ? sourceStore.entryByInternalPath.get(pathPopup) : undefined;
-	const languagePopup = sourceStore.configDoc.fileDisplay?.[entryPopup?.ext]
-		?? entryPopup?.ext
-		?? 'text';
-	const copyLabel = store.copyStatus === 'copied'
-		? 'コピーしました'
-		: store.copyStatus === 'failed'
-			? 'コピーできませんでした'
-			: 'コードをコピー';
 
 	useEffect(() => () => store.dispose(), [store]);
-
-	useEffect(() => {
-		if (!store.isPopupOpen) return undefined;
-		const keyDownHandle = (event) => {
-			if (event.key === 'Escape') store.popupClose();
-		};
-		window.addEventListener('keydown', keyDownHandle);
-		return () => window.removeEventListener('keydown', keyDownHandle);
-	}, [store, store.isPopupOpen]);
 
 	return (
 		<section className={`doc-code-block-compact-list${data.isGrid ? ' is-grid' : ''}`}>
@@ -60,38 +40,7 @@ function CodeBlockCompact({ data = {}, config = {}, sourceStore, pathList = [] }
 					</button>
 				);
 			})}
-			{Panel && store.isPopupOpen && statePopup?.status === 'done' ? (
-				<Panel
-					data={{ title: entryPopup?.name ?? pathPopup }}
-					config={{
-						isPopup: true,
-						isCloseVisible: true,
-						className: 'doc-code-block-compact-popup',
-						bodyClassName: 'doc-code-block-compact-popup-body',
-					}}
-					headerRightContent={(
-						<button
-							type="button"
-							className={`doc-code-block-compact-copy is-${store.copyStatus}`}
-							title={copyLabel}
-							aria-label={copyLabel}
-							onClick={() => store.contentCopy(statePopup.content)}
-						>
-							<Copy aria-hidden="true" width={15} height={15} />
-						</button>
-					)}
-					content={(
-						<DynamicCodeBlock
-							code={statePopup.content}
-							lang={languagePopup}
-							codeblock={{ allowCopy: false, className: 'doc-code-block-compact-popup-code' }}
-						/>
-					)}
-					onEvent={(eventType) => {
-						if (eventType === 'closeRequest') store.popupClose();
-					}}
-				/>
-			) : null}
+			<CodeBlockCompactPopup Panel={Panel} sourceStore={sourceStore} store={store} />
 		</section>
 	);
 }

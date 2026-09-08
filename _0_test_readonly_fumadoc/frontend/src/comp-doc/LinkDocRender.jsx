@@ -19,6 +19,7 @@ export function LinkDocRender({ data = {}, config = {}, onEvent }) {
   const {
     Icon = LinkArrowIcon,
     isBroken = false,
+    isCurrent = false,
     isDropdownOpen = false,
     isMultiple = false,
     isNavigationUnavailable = false,
@@ -35,7 +36,7 @@ export function LinkDocRender({ data = {}, config = {}, onEvent }) {
   return (
     <span className="doc-link-render-wrap">
       <a
-        className={`doc-link-render${isDropdownOpen ? ' is-active' : ''}${isNavigationUnavailable ? ' is-unavailable' : ''}`}
+        className={`doc-link-render${isCurrent ? ' is-current' : ''}${isDropdownOpen ? ' is-active' : ''}${isNavigationUnavailable ? ' is-unavailable' : ''}`}
         href={href}
         title={titleText}
         onClick={(event) => onEvent?.('activateRequest', { event })}

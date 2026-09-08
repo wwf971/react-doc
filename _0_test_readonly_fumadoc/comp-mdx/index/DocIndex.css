@@ -1,0 +1,273 @@
+.doc-index-title-subtopics-items {
+	display: block;
+	width: max-content;
+	max-width: 100%;
+	margin: 1rem 0 1.5rem;
+	overflow-x: auto;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0;
+	background: color-mix(in srgb, var(--color-fd-muted) 68%, var(--color-fd-background));
+	font-size: 0.875rem;
+	line-height: 1.45;
+}
+
+/* A leading page index belongs to the title/description introduction. Avoid
+   stacking the description's default bottom margin with the index top margin. */
+.doc-page-description:has(+ .prose > .doc-index-title-subtopics-items:first-child) {
+	margin-bottom: 0.5rem;
+}
+
+.doc-page-description + .prose > .doc-index-title-subtopics-items:first-child {
+	margin-top: 0;
+}
+
+.doc-index-title-subtopics-items-content {
+	min-width: max-content;
+	padding: 0.65rem 0.8rem 0.75rem;
+}
+
+.doc-index-title-line {
+	padding-bottom: 0.4rem;
+	border-bottom: 1px solid color-mix(in srgb, var(--color-fd-border) 78%, transparent);
+}
+
+.doc-index-title {
+	font-weight: 700;
+}
+
+.doc-index-title > .is-current-part-root {
+	--doc-index-current-background: color-mix(in srgb, #facc15 38%, transparent);
+	background: var(--doc-index-current-background);
+	box-shadow:
+		-0.2rem 0 0 var(--doc-index-current-background),
+		0.2rem 0 0 var(--doc-index-current-background);
+}
+
+.doc-index-display-mode-segments {
+	min-height: 1.75rem;
+	font-size: 0.75rem;
+}
+
+.doc-index-subtopic-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	padding-top: 0.5rem;
+}
+
+.doc-index-subtopic-title {
+	font-weight: 600;
+}
+
+.doc-index-item-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.08rem;
+	padding-left: 0.9rem;
+}
+
+.doc-index-subtopic-component {
+	min-width: 0;
+	max-width: 100%;
+	padding: 0.15rem 0 0.2rem;
+}
+
+.doc-index-item {
+	white-space: nowrap;
+}
+
+.doc-index-item .doc-link-controller,
+.doc-index-item .doc-link-render-wrap {
+	display: block;
+	width: max-content;
+}
+
+.doc-index-item .doc-link-render {
+	padding: 0;
+	border-radius: 0;
+	line-height: 1.45;
+}
+
+.doc-index-inline-link {
+	display: inline-flex;
+	max-width: 100%;
+	min-width: 0;
+	align-items: center;
+	gap: 2px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: #1d63a8;
+	cursor: pointer;
+	font: inherit;
+	line-height: 1.45;
+	text-align: left;
+}
+
+.doc-index-inline-link > span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.doc-index-inline-link:hover:not(:disabled),
+.doc-index-inline-link:focus-visible:not(:disabled) {
+	text-decoration: underline;
+	outline: none;
+}
+
+.doc-index-inline-link:disabled {
+	cursor: default;
+	opacity: 0.62;
+}
+
+.doc-index-inline-link-icon {
+	flex: 0 0 auto;
+	transform: rotate(-90deg);
+}
+
+.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-title-subtopics-items-content {
+	min-width: 0;
+}
+
+.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-title-line {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-title {
+	grid-column: 2;
+	text-align: center;
+}
+
+.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-display-mode-segments {
+	grid-column: 3;
+	justify-self: end;
+}
+
+.doc-index-title-subtopics-items.is-placement-part-index .doc-index-title-line {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4rem 0.5rem;
+}
+
+.doc-index-title-subtopics-items.is-placement-part-index .doc-index-title {
+	flex: 1 0 12rem;
+	min-width: 0;
+	text-align: left;
+	overflow-wrap: anywhere;
+}
+
+.doc-index-title-subtopics-items.is-placement-part-index .doc-index-display-mode-segments {
+	flex: 0 0 auto;
+	margin-left: auto;
+}
+
+.doc-index-title-subtopics-items.is-placement-part-index .doc-index-title-subtopics-items-content,
+.doc-index-title-subtopics-items.is-placement-part-index .doc-index-subtopic-list,
+.doc-index-title-subtopics-items.is-placement-part-index .doc-index-item-list,
+.doc-index-title-subtopics-items.is-placement-part-index .doc-index-subtopic-component,
+.doc-index-title-subtopics-items.is-placement-part-index .doc-index-item {
+	min-width: 0;
+	max-width: 100%;
+}
+
+.doc-index-title-subtopics-items.is-placement-part-index .doc-index-subtopic-title,
+.doc-index-title-subtopics-items.is-placement-part-index .doc-index-item,
+.doc-index-title-subtopics-items.is-placement-part-index .doc-link-render {
+	white-space: normal;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}
+
+.doc-index-title-subtopics-items.is-placement-part-index .doc-index-item .doc-link-controller,
+.doc-index-title-subtopics-items.is-placement-part-index .doc-index-item .doc-link-render-wrap {
+	width: auto;
+	max-width: 100%;
+}
+
+.doc-index-title-subtopics-items.is-placement-part-index .doc-index-item .doc-link-render {
+	max-width: 100%;
+}
+
+.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-subtopic-list {
+	gap: 0.6rem;
+}
+
+.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-subtopic-title {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+}
+
+.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-subtopic-title::before,
+.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-subtopic-title::after {
+	content: '';
+	border-top: 1px solid color-mix(in srgb, var(--color-fd-border) 82%, transparent);
+}
+
+.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-subtopic-title::before {
+	min-width: 1.5rem;
+	flex: 1 1 auto;
+}
+
+.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-subtopic-title::after {
+	min-width: 1.5rem;
+	flex: 1 1 auto;
+}
+
+.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-item-list {
+	flex-flow: row wrap;
+	column-gap: 0.9rem;
+	row-gap: 0.08rem;
+}
+
+.doc-index-title-subtopics-items.is-placement-part-index.is-layout-horizontal-wrap .doc-index-item {
+	flex: 0 0 auto;
+	width: max-content;
+	max-width: 100%;
+}
+
+.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-item .doc-link-controller,
+.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-item .doc-link-render-wrap {
+	display: inline-block;
+}
+
+.doc-index-title-subtopics-items.is-placement-part-index.is-layout-horizontal-wrap .doc-index-item .doc-link-controller,
+.doc-index-title-subtopics-items.is-placement-part-index.is-layout-horizontal-wrap .doc-index-item .doc-link-render-wrap {
+	display: block;
+	width: 100%;
+	max-width: none;
+}
+
+.doc-index-title-subtopics-items.is-placement-part-index.is-layout-horizontal-wrap .doc-index-item .doc-link-render {
+	display: flex;
+	box-sizing: border-box;
+	width: 100%;
+	max-width: none;
+}
+
+.doc-index-item .doc-link-render.is-current {
+	--doc-index-current-background: color-mix(in srgb, #facc15 38%, transparent);
+	background: var(--doc-index-current-background);
+	box-shadow:
+		-0.2rem 0 0 var(--doc-index-current-background),
+		0.2rem 0 0 var(--doc-index-current-background);
+	color: var(--color-fd-foreground);
+}
+
+.doc-index-error {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	width: fit-content;
+	max-width: 100%;
+	margin: 1rem 0;
+	padding: 0.65rem 0.8rem;
+	border: 1px solid #dc2626;
+	border-radius: 0;
+	color: #b42318;
+	font-size: 0.875rem;
+}

@@ -1,6 +1,7 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import { buildPageTreeModel } from '../lib/page-tree.js';
+import { compDefinitionNormalize } from '../comp-doc/comp-registry.js';
 
 // upper store layer: view state and navigation.
 // current doc, url sync, link dropdown state, search dialog state.
@@ -13,6 +14,11 @@ type NavigationHistoryEntry = {
   route: string;
   text: string;
 };
+type PartIndexFloatingLayout = {
+  left: number;
+  top: number;
+  width: number;
+};
 
 export class DocStore {
   sourceStore: DocSourceStore;
@@ -21,11 +27,18 @@ export class DocStore {
   compByIdVersion = 0;
   languagePage = '';
   languageSelectedByContentPath: Record<string, string> = {};
+  partIndexContentMode: 'page' | 'part' = 'part';
+  partIndexDisplayModeByPartId: Record<string, 'docked' | 'floating'> = {};
+  partIndexFloatingLayoutByPartId: Record<string, PartIndexFloatingLayout> = {};
 
   routeCurrentPath = '';
   itemCurrentId = '';
   docCurrentPath = '';
   docCurrentHash = '';
+  // Path/hash values do not change when the user selects the current index
+  // destination again. Keep a separate request signal so the view can repeat
+  // the requested top reset or fragment alignment and highlight.
+  navigationRequestVersion = 0;
   navigationError = '';
   navigationHistoryEntryList: NavigationHistoryEntry[] = [];
   navigationHistoryIndex = -1;
@@ -83,6 +96,39 @@ export class DocStore {
 
   get itemCurrent(): any {
     return this.treeModel.itemById.get(this.itemCurrentId);
+  }
+
+  get partCurrent(): any {
+    const partId = this.itemCurrent?.partId;
+    return partId ? this.treeModel.partById.get(partId) : undefined;
+  }
+
+  get isPartIndexEnabled(): boolean {
+    return this.sourceStore.configDoc.partIndex?.isEnabled !== false;
+  }
+
+  get partIndexContentModeCurrent(): 'page' | 'part' {
+    return this.partIndexContentMode;
+  }
+
+  get partIndexDisplayModeCurrent(): 'docked' | 'floating' {
+    const partId = this.partCurrent?.id;
+    return partId ? this.partIndexDisplayModeByPartId[partId] ?? 'docked' : 'docked';
+  }
+
+  get partIndexFloatingLayoutCurrent(): PartIndexFloatingLayout | undefined {
+    const partId = this.partCurrent?.id;
+    return partId ? this.partIndexFloatingLayoutByPartId[partId] : undefined;
+  }
+
+  get isPartIndexFloatingEnabled(): boolean {
+    return this.sourceStore.configDoc.partIndex?.isFloatingEnabled !== false;
+  }
+
+  get partIndexQueryCurrent(): any {
+    const indexRef = this.partCurrent?.index;
+    if (!this.isPartIndexEnabled || !indexRef?.docId || !indexRef?.componentId) return undefined;
+    return this.componentQuery(indexRef.docId, indexRef.componentId);
   }
 
   get routeHome(): string {
@@ -172,6 +218,75 @@ export class DocStore {
     return true;
   }
 
+  partIndexContentModeSet(mode: 'page' | 'part'): boolean {
+    if (mode !== 'page' && mode !== 'part') return false;
+    this.partIndexContentMode = mode;
+    return true;
+  }
+
+  partIndexDisplayModeSet(mode: 'docked' | 'floating'): boolean {
+    const partId = this.partCurrent?.id;
+    if (!partId || (mode !== 'docked' && mode !== 'floating')) return false;
+    if (mode === 'floating' && !this.isPartIndexFloatingEnabled) return false;
+    this.partIndexDisplayModeByPartId[partId] = mode;
+    return true;
+  }
+
+  partIndexFloatingLayoutSet(layout: PartIndexFloatingLayout): boolean {
+    const partId = this.partCurrent?.id;
+    if (
+      !partId
+      || !Number.isFinite(layout.left)
+      || !Number.isFinite(layout.top)
+      || !Number.isFinite(layout.width)
+      || layout.width <= 0
+    ) return false;
+    this.partIndexFloatingLayoutByPartId[partId] = {
+      left: layout.left,
+      top: layout.top,
+      width: layout.width,
+    };
+    return true;
+  }
+
+  async partIndexLoadCurrent(): Promise<void> {
+    const indexRef = this.partCurrent?.index;
+    if (!this.isPartIndexEnabled || !indexRef?.docId || !indexRef?.componentId) return;
+    await this.componentLoad(indexRef.docId);
+  }
+
+  async componentLoad(docId: string): Promise<void> {
+    const item = this.treeModel.itemById.get(docId);
+    if (item?.docPath) await this.sourceStore.loadDoc(item.docPath);
+  }
+
+  componentQuery(docId: string, componentId: string): any {
+    const item = this.treeModel.itemById.get(docId);
+    if (!item?.docPath) {
+      return { status: 'error', message: `Part index document id not found: ${docId}` };
+    }
+    const result = this.sourceStore.componentGet(item.docPath, componentId);
+    if (result.status !== 'done') return result;
+    const component = result.component;
+    const compId = this.sourceStore.configDoc.compRegistry?.[component.compName]
+      ?? component.compName;
+    const definition = compDefinitionNormalize(this.compById[compId]);
+    if (!definition) {
+      return {
+        status: 'error',
+        message: `Referenced component is not registered: ${component.compName}`,
+      };
+    }
+    return {
+      status: 'done',
+      compId,
+      component,
+      componentType: definition.componentType ?? '',
+      definition,
+      docPath: item.docPath,
+    };
+  }
+
   onPopState = (event: PopStateEvent) => {
     const param = new URLSearchParams(window.location.search).get('doc');
     const hash = window.location.hash.slice(1);
@@ -221,6 +336,7 @@ export class DocStore {
     this.itemCurrentId = item.id;
     this.docCurrentPath = item.docPath ?? '';
     this.docCurrentHash = hash;
+    this.navigationRequestVersion += 1;
     this.navigationError = '';
     this.linkDropdownOpenId = '';
 

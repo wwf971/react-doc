@@ -39,7 +39,13 @@ export function remarkCommentComp(options = {}) {
         nodeMarked.type === 'code'
           ? nodeMarked.value
           : sliceBySourcePosition(sourceText, nodeMarked);
-      options.onComponent?.({ compName, props, raw });
+      options.onComponent?.({
+        compName,
+        lang: nodeMarked.lang ?? '',
+        props,
+        raw,
+        sourceOffset: node.position?.start?.offset,
+      });
       let structuredData;
       try {
         structuredData = options.structuredDataGet?.({ compName, props, raw });
