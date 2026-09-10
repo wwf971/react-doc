@@ -93,7 +93,7 @@ collectComponentAttachmentsOnBuild: true
 
 The layer runs only for a Vite build. It scans every md/mdx document remaining in the collected manifest, asks registered attachment finders for component-specific references, resolves each reference against the complete source set (before side-panel pruning), and bundles the resolved file. Development mode does not run this scan and keeps its existing direct-file behavior.
 
-The default finders recognize `DocDiagramMermaid`'s `laneIcons` property, `DocImage`'s `src` property, and image `src` values in a `DocImageGrid` YAML block. Direct component properties are recognized in both degradation-compatible `<!--renderComp=...-->` comments and direct MDX tags where applicable. For example, all four PNG files in the following value are retained even if they are not otherwise present in the pruned deployment manifest:
+The default finders recognize `DocDiagramMermaid`'s `laneIcons` property, `DocImage`'s `src` value in its YAML block, and image `src` values in a `DocImageGrid` YAML block. Direct MDX component properties are also recognized where applicable. For example, all four PNG files in the following value are retained even if they are not otherwise present in the pruned deployment manifest:
 
 ```text
 laneIcons=Mda:doc-aux/image/icon-mda.png|Data:doc-aux/image/icon-dataverse.png|Flow:doc-aux/image/icon-powerautomate.png|Agent:doc-aux/image/icon-copilot studio.png
@@ -242,7 +242,9 @@ The right-side local-index slot is wrapped by `DocPageToc`. Outside a configured
 
 For `partIndex` placement, the index receives host-only display-mode configuration. Its left-aligned title and display-mode control use a wrapping row, allowing the control to move below a long title. The segmented control emits a `displayModeChange` request, and the host submits that request to `DocStore`. The hosted TOC shell uses content height and visible overflow instead of an internal vertical viewport, so the document page remains the vertical scrolling surface. In `floating` mode the same component instance is rendered through a `document.body` portal, positioned at the top right, and assigned the application overlay stack maximum so it cannot pass below the side panel while being dragged. It has no internal vertical scrollbar. Ordinary `mdx` and `commentBlock` placements receive no display-mode control. `DocLink` exposes whether its resolved source path and fragment exactly match the current document and place; index-item styling therefore highlights only the item for that exact destination and clears the prior item on subsequent navigation. On the part-root document, host state instead gives the index title the yellow current marker.
 
-An index item defaults to `kind: document`. With `kind: inline-link`, its `target` is loaded as collected source and clicking the item opens the shared compact-CodeBlock source popup instead of navigating. `CodeBlockCompactPopup` owns the common panel, syntax-highlighted body, copy operation, close event, and Escape-key behavior, while each inline item owns a `CodeBlockCompactStore`. Inline-link targets do not need side-panel entries.
+An index item defaults to `kind: document`. With `kind: inline-link`, it renders the reusable `SourceLink` component rather than owning source-popup behavior. `SourceLink` is independent of `DocIndex`: it accepts a collected internal source path and label through the unified `{ data, config, onEvent }` interface, loads the source through `DocSourceStore.loadRaw()`, and owns a `CodeBlockCompactStore`. `CodeBlockCompactPopup` remains the shared implementation for the panel, syntax-highlighted body, copy operation, close event, and Escape-key behavior. Source-link targets do not need side-panel entries.
+
+MDX can invoke the registered component directly. Plain Markdown uses the ordinary degradation-compatible comment-block form; the marked fenced block supplies a visible fallback and can also supply the target from its first line when an explicit `target` property is absent. Registered custom components can compose the same `SourceLink` renderer and provide the host's `panelComponent`, so source viewing does not depend on index data or placement.
 
 For the `title-subtopics-items` index type, each subtopic contains exactly one of `items` or `component`. A component subtopic requires a stable subtopic `id` and has `{ name, data, config }`; `name` is resolved through the same `compRegistry` and `compById` layers as MDX components. `IndexSubtopicContent` renders it through `RegisteredComp` with placement `indexSubtopic` and a stable instance id derived from the parent index and subtopic ids. The nested component can emit `navigateRequest` with a document or document-plus-fragment target, and the ordinary registered-component fallback submits it to `DocStore.navigate()`.
 
@@ -257,6 +259,31 @@ subtopics:
           - label: Header
             target: /guide/layout.md#header
 ```
+
+#### Hosted-index navigation subscription
+
+Navigation observation is a scoped runtime service rather than a global callback list. The hosted-index boundary creates one stable `navigation` channel for the index of `DocStore.partCurrent` and supplies it through runtime `config` to the `partIndex` component. `DocIndex` forwards the same channel to registered `indexSubtopic` components. It is not added to authored data and does not expose `DocStore` itself.
+
+The channel has this conceptual interface:
+
+```text
+navigation.getSnapshot()
+  -> { requestVersion, route, itemId, docPath, hash }
+
+navigation.subscribe(listener)
+  -> unsubscribe
+
+navigation.isTargetCurrent(target, { fragmentMode: "exact" | "ignore" })
+  -> boolean
+```
+
+`getSnapshot()` returns an immutable snapshot. `requestVersion` comes from `DocStore.navigationRequestVersion`, so selecting an already-current destination still produces a distinct snapshot. `isTargetCurrent()` delegates to the document store's route resolution and lets a visual index compare by complete document-and-fragment destination or by document only. Consumers therefore do not strip fragments or resolve side-panel aliases themselves. `subscribe()` follows ordinary external-store semantics: it returns an idempotent cleanup function, and a component can consume it through a small `useSyncExternalStore` adapter. Components that never subscribe perform no navigation-specific computation.
+
+`DocStore.navigate()` publishes only after a target has resolved and `routeCurrentPath`, `itemCurrentId`, `docCurrentPath`, `docCurrentHash`, and `navigationRequestVersion` have been updated. Back, Forward, Up, browser-history restoration, links, and component `navigateRequest` events all pass through that boundary and therefore produce the same notification. An invalid target leaves the current-location snapshot unchanged and is reported through the existing navigation-error path.
+
+The current part's hosted-index runtime remains mounted when `partIndexContentMode` changes from `part` to `page`; only its presentation is hidden. This preserves opt-in subscriptions and current-section state while **On this page** is selected. The runtime is keyed by the stable part id plus the referenced document/component ids. A change to any of those keys unmounts the old runtime, runs subscription cleanup, and creates the new current part's runtime. No runtime is created for indexes belonging to other parts, and ordinary `mdx` or `commentBlock` index placements receive no hosted navigation channel. Docked and floating presentations share the same runtime and channel.
+
+A mini-map subtopic subscribes once and stores only its derived selected-section id. On each notification it compares the current destination with the section's primary target and any subordinate targets, using document-level matching when a target fragment merely identifies the entry point. Selection precedence belongs to that mini-map: a directly matching child section is preferred over its parent, a subordinate-link match selects its containing section, and otherwise the first match in authored order wins. The generic index host knows nothing about mini-map sections; it only owns channel scope, navigation snapshots, target matching, and cleanup.
 
 The global semantic config is:
 

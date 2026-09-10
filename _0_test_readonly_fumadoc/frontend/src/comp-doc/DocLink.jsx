@@ -142,12 +142,15 @@ export const DocLink = observer(function DocLink({ target, from, kind, children 
     <span ref={refWrap} className="doc-link-controller">
       <CompRender data={data} config={config} onEvent={eventHandle} />
       {warningText ? (
-        <span className="doc-link-warning" role="alert">
-          <span>{warningText}</span>
-          <button type="button" onClick={() => setWarningText('')} aria-label="Dismiss">
-            ×
-          </button>
-        </span>
+        <>
+          <span className="doc-link-warning" role="alert">
+            <span>{warningText}</span>
+            <button type="button" onClick={() => setWarningText('')} aria-label="Dismiss">
+              ×
+            </button>
+          </span>
+          <span className="doc-link-warning-arrow" aria-hidden="true" />
+        </>
       ) : null}
     </span>
   );

@@ -30,6 +30,10 @@
   overflow: visible;
 }
 
+.doc-part-index-panel[hidden] {
+  display: none;
+}
+
 .doc-part-index-panel:not(.is-display-floating) {
   width: max-content;
   min-width: 100%;

@@ -14,6 +14,21 @@ type NavigationHistoryEntry = {
   route: string;
   text: string;
 };
+type NavigationSnapshot = {
+  requestVersion: number;
+  route: string;
+  itemId: string;
+  docPath: string;
+  hash: string;
+};
+type NavigationRuntime = {
+  getSnapshot: () => NavigationSnapshot;
+  subscribe: (listener: (snapshot: NavigationSnapshot) => void) => () => void;
+  isTargetCurrent: (
+    target: string,
+    options?: { fragmentMode?: 'exact' | 'ignore' },
+  ) => boolean;
+};
 type PartIndexFloatingLayout = {
   left: number;
   top: number;
@@ -24,6 +39,7 @@ export class DocStore {
   sourceStore: DocSourceStore;
   routeMode: RouteMode;
   compById: Record<string, any>;
+  onInvalidBrowserRoute?: (data: { routeFallback: string; routeInvalid: string }) => void;
   compByIdVersion = 0;
   languagePage = '';
   languageSelectedByContentPath: Record<string, string> = {};
@@ -39,6 +55,15 @@ export class DocStore {
   // destination again. Keep a separate request signal so the view can repeat
   // the requested top reset or fragment alignment and highlight.
   navigationRequestVersion = 0;
+  navigationListenerSet = new Set<(snapshot: NavigationSnapshot) => void>();
+  navigationSnapshotCurrent: NavigationSnapshot = Object.freeze({
+    requestVersion: 0,
+    route: '',
+    itemId: '',
+    docPath: '',
+    hash: '',
+  });
+  navigationRuntime: NavigationRuntime;
   navigationError = '';
   navigationHistoryEntryList: NavigationHistoryEntry[] = [];
   navigationHistoryIndex = -1;
@@ -52,12 +77,27 @@ export class DocStore {
     routeMode?: RouteMode;
     compById?: Record<string, any>;
     language?: string;
+    onInvalidBrowserRoute?: (data: { routeFallback: string; routeInvalid: string }) => void;
   }) {
     this.sourceStore = sourceStore;
     this.routeMode = options?.routeMode ?? 'query';
     this.compById = options?.compById ?? {};
+    this.onInvalidBrowserRoute = options?.onInvalidBrowserRoute;
     this.languagePage = languageNormalize(options?.language);
-    makeAutoObservable(this, { compById: false });
+    this.navigationRuntime = Object.freeze({
+      getSnapshot: () => this.navigationSnapshotCurrent,
+      subscribe: (listener) => this.navigationSubscribe(listener),
+      isTargetCurrent: (target, matchOptions) => (
+        this.navigationTargetIsCurrent(target, matchOptions)
+      ),
+    });
+    makeAutoObservable(this, {
+      compById: false,
+      navigationListenerSet: false,
+      navigationRuntime: false,
+      navigationSnapshotCurrent: false,
+      onInvalidBrowserRoute: false,
+    });
   }
 
   get contentCurrentPath(): string {
@@ -174,19 +214,29 @@ export class DocStore {
   init() {
     let pathInitial = this.routeHome;
     let hashInitial = '';
+    let isBrowserRouteInvalid = false;
     if (this.routeMode === 'query') {
       const param = new URLSearchParams(window.location.search).get('doc');
-      if (param && this.routeResolve(param)) {
-        pathInitial = param;
-        hashInitial = window.location.hash.slice(1);
+      if (param) {
+        if (this.routeResolve(param)) {
+          pathInitial = param;
+          hashInitial = window.location.hash.slice(1);
+        } else {
+          isBrowserRouteInvalid = true;
+          this.onInvalidBrowserRoute?.({ routeFallback: this.routeHome, routeInvalid: param });
+        }
       }
       window.addEventListener('popstate', this.onPopState);
     }
-    this.navigate(pathInitial, hashInitial, { isReplaceUrl: true });
+    this.navigate(pathInitial, hashInitial, {
+      isFromHistory: isBrowserRouteInvalid,
+      isReplaceUrl: true,
+    });
   }
 
   dispose() {
     if (this.routeMode === 'query') window.removeEventListener('popstate', this.onPopState);
+    this.navigationListenerSet.clear();
   }
 
   replaceSourceData(sourceData: { configDoc: any; fileManifest: any[] }) {
@@ -291,6 +341,11 @@ export class DocStore {
     const param = new URLSearchParams(window.location.search).get('doc');
     const hash = window.location.hash.slice(1);
     if (!param) return;
+    if (!this.routeResolve(param)) {
+      this.navigate(this.routeHome, '', { historyMode: 'replace', isFromHistory: true });
+      this.onInvalidBrowserRoute?.({ routeFallback: this.routeHome, routeInvalid: param });
+      return;
+    }
 
     const indexHistory = event.state?.docNavigationHistoryIndex;
     if (
@@ -358,7 +413,29 @@ export class DocStore {
     else if (item.type === 'inline') {
       void this.sourceStore.loadInline(item.route, item.inlineContent, item.inlineFormat);
     }
+    this.navigationPublish();
     return true;
+  }
+
+  navigationSubscribe(listener: (snapshot: NavigationSnapshot) => void): () => void {
+    this.navigationListenerSet.add(listener);
+    return () => {
+      this.navigationListenerSet.delete(listener);
+    };
+  }
+
+  navigationTargetIsCurrent(
+    target: string,
+    options?: { fragmentMode?: 'exact' | 'ignore' },
+  ): boolean {
+    const { path, hash } = splitTarget(target);
+    const item = this.routeResolve(path);
+    if (!item) return false;
+    const isDocumentCurrent = item.docPath
+      ? item.docPath === this.docCurrentPath
+      : item.route === this.routeCurrentPath;
+    if (!isDocumentCurrent || options?.fragmentMode === 'ignore') return isDocumentCurrent;
+    return hash === this.docCurrentHash;
   }
 
   navigationBack(): boolean {
@@ -422,7 +499,10 @@ export class DocStore {
     const hash = indexHash >= 0 ? internalPath.slice(indexHash) : '';
     const route = this.routeResolve(path)?.route ?? path;
     if (this.routeMode !== 'query') return route + hash;
-    return `${window.location.pathname}?doc=${encodeURIComponent(route)}${hash}`;
+    const url = new URL(window.location.href);
+    url.searchParams.set('doc', route);
+    url.hash = hash;
+    return `${url.pathname}${url.search}${url.hash}`;
   }
 
   setLinkDropdownOpen(id: string) {
@@ -483,6 +563,24 @@ export class DocStore {
     }
     this.navigationHistoryIndex = this.navigationHistoryEntryList.length - 1;
     return true;
+  }
+
+  private navigationPublish() {
+    const snapshot = Object.freeze({
+      requestVersion: this.navigationRequestVersion,
+      route: this.routeCurrentPath,
+      itemId: this.itemCurrentId,
+      docPath: this.docCurrentPath,
+      hash: this.docCurrentHash,
+    });
+    this.navigationSnapshotCurrent = snapshot;
+    for (const listener of [...this.navigationListenerSet]) {
+      try {
+        listener(snapshot);
+      } catch (error) {
+        console.error('Hosted index navigation listener failed.', error);
+      }
+    }
   }
 
   private navigationHistoryMove(index: number): boolean {

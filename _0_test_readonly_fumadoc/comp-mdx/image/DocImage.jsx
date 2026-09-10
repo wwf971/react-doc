@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
 import { Copy, Expand, Scan, X } from 'lucide-react';
+import { docImageDataParse } from './DocImageData.js';
 import { DocImageStore } from './DocImageStore.js';
 import './DocImage.css';
 
@@ -126,15 +127,28 @@ function ImagePanZoom({ alt, sourceUrl }) {
 	);
 }
 
-const DocImage = observer(function DocImage({ data = {}, config = {}, onEvent }) {
+function DocImage({ data = {}, config = {}, onEvent }) {
+	try {
+		return <DocImageRender data={docImageDataParse(data)} config={config} onEvent={onEvent} />;
+	} catch (error) {
+		return (
+			<div className="doc-image-error" role="alert">
+				Failed to render image: {String(error?.message ?? error)}
+			</div>
+		);
+	}
+}
+
+const DocImageRender = observer(function DocImageRender({ data, config, onEvent }) {
 	const source = String(data.src ?? data.source ?? '').trim();
 	const sourceUrl = config.assetUrlGet?.(source) ?? source;
 	const alt = String(data.alt ?? data.caption ?? '');
-	const displayModeDefault = config.displayMode === 'fill' ? 'fill' : 'contain';
+	const displayModeAuthored = config.displayMode ?? data.displayMode;
+	const displayModeDefault = ['fill', 'contain-auto'].includes(displayModeAuthored) ? displayModeAuthored : 'contain';
 	const [store] = useState(() => new DocImageStore(displayModeDefault));
 	const titleId = useId();
-	const width = sizeCssGet(config.width ?? data.maxWidth) ?? '100%';
-	const height = sizeCssGet(config.height) ?? 'auto';
+	const width = sizeCssGet(config.width ?? data.width ?? data.maxWidth) ?? '100%';
+	const height = sizeCssGet(config.height ?? data.height) ?? 'auto';
 
 	useEffect(() => {
 		if (!store.isExpanded) return undefined;
@@ -151,7 +165,8 @@ const DocImage = observer(function DocImage({ data = {}, config = {}, onEvent })
 	};
 
 	const displayModeToggle = async () => {
-		const displayMode = store.displayMode === 'contain' ? 'fill' : 'contain';
+		const displayModeContain = displayModeDefault === 'contain-auto' ? 'contain-auto' : 'contain';
+		const displayMode = store.displayMode === 'fill' ? displayModeContain : 'fill';
 		const result = await onEvent?.('displayModeChangeRequest', { displayMode });
 		if (!result?.isHandled) store.displayModeSet(displayMode);
 	};
@@ -184,7 +199,7 @@ const DocImage = observer(function DocImage({ data = {}, config = {}, onEvent })
 		: store.copyStatus === 'failed'
 			? 'コピーできませんでした'
 			: '画像をコピー';
-	const displayModeLabel = store.displayMode === 'contain' ? 'Fill 表示に切り替え' : 'Contain 表示に切り替え';
+	const displayModeLabel = store.displayMode === 'fill' ? 'Contain 表示に切り替え' : 'Fill 表示に切り替え';
 	const styleArea = { '--doc-image-width': width, '--doc-image-height': height };
 	const popup = store.isExpanded && typeof document !== 'undefined' ? createPortal(
 		<div className="doc-image-overlay" onMouseDown={() => void isExpandedSet(false)}>
@@ -216,7 +231,7 @@ const DocImage = observer(function DocImage({ data = {}, config = {}, onEvent })
 		>
 			<div className="doc-image-body">
 				<div className="doc-image-toolbar">
-					<button type="button" title={displayModeLabel} aria-label={displayModeLabel} aria-pressed={store.displayMode === 'contain'} onClick={() => void displayModeToggle()}>
+					<button type="button" title={displayModeLabel} aria-label={displayModeLabel} aria-pressed={store.displayMode !== 'fill'} onClick={() => void displayModeToggle()}>
 						<Scan size={17} />
 					</button>
 					<button type="button" title={copyLabel} aria-label={copyLabel} onClick={() => void imageCopy()}>

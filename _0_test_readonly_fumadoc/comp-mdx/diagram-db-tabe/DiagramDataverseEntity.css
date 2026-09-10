@@ -1,0 +1,138 @@
+.diagram-dataverse-entity {
+	display: block;
+	width: max-content;
+	max-width: 100%;
+	margin: 1rem 0 1.5rem;
+	color: var(--color-fd-foreground);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	user-select: text;
+}
+
+.diagram-dataverse-entity-viewport {
+	width: max-content;
+	max-width: 100%;
+	overflow-x: auto;
+}
+
+.diagram-dataverse-entity-table {
+	width: 410px;
+	overflow: visible;
+	border: 1px solid color-mix(in srgb, var(--color-fd-foreground) 24%, var(--color-fd-border));
+	border-radius: 0.45rem;
+	background: var(--color-fd-background);
+	box-shadow: 0 4px 14px rgb(15 23 42 / 9%);
+}
+
+.diagram-dataverse-entity-title {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.6rem 0.75rem;
+	border-bottom: 1px solid var(--color-fd-border);
+	border-radius: 0.4rem 0.4rem 0 0;
+	background: color-mix(in srgb, #2563eb 10%, var(--color-fd-background));
+	font-size: 0.9rem;
+	font-weight: 700;
+}
+
+.diagram-dataverse-entity-title-logical {
+	color: var(--color-fd-muted-foreground);
+	font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+	font-size: 0.68rem;
+	font-weight: 500;
+}
+
+.diagram-dataverse-entity-column-header,
+.diagram-dataverse-entity-column {
+	display: grid;
+	grid-template-columns: 2.7rem minmax(7rem, 1fr) minmax(8.5rem, 1.25fr) 5.6rem;
+	align-items: stretch;
+}
+
+.diagram-dataverse-entity-column-header {
+	border-bottom: 1px solid var(--color-fd-border);
+	background: color-mix(in srgb, var(--color-fd-muted) 62%, transparent);
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.64rem;
+	font-weight: 700;
+	text-transform: uppercase;
+}
+
+.diagram-dataverse-entity-column-header > span,
+.diagram-dataverse-entity-column > span {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	padding: 0.35rem 0.45rem;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	overflow-wrap: anywhere;
+}
+
+.diagram-dataverse-entity-column-header > span + span,
+.diagram-dataverse-entity-column > :nth-child(n + 2) {
+	border-left: 1px solid color-mix(in srgb, var(--color-fd-border) 72%, transparent);
+}
+
+.diagram-dataverse-entity-column {
+	position: relative;
+	min-height: 2rem;
+	border-bottom: 1px solid color-mix(in srgb, var(--color-fd-border) 78%, transparent);
+	font-size: 0.72rem;
+	line-height: 1.3;
+}
+
+.diagram-dataverse-entity-column:last-child {
+	border-bottom: 0;
+}
+
+.diagram-dataverse-entity-key {
+	justify-content: center;
+	color: var(--color-fd-muted-foreground);
+	font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+	font-size: 0.66rem;
+	font-weight: 700;
+}
+
+.diagram-dataverse-entity-key.is-set {
+	color: #b45309;
+}
+
+.diagram-dataverse-entity-column-name {
+	font-weight: 600;
+}
+
+.diagram-dataverse-entity-column-name sup {
+	margin-left: 0.15rem;
+	color: #b45309;
+}
+
+.diagram-dataverse-entity-column-logical,
+.diagram-dataverse-entity-column-type {
+	color: var(--color-fd-muted-foreground);
+	font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+	font-size: 0.66rem;
+}
+
+.diagram-dataverse-entity-message {
+	display: flex;
+	min-height: 8rem;
+	align-items: center;
+	justify-content: center;
+	margin: 1rem 0 1.5rem;
+	padding: 1rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.5rem;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.875rem;
+}
+
+.diagram-dataverse-entity-message.is-error {
+	flex-direction: column;
+	gap: 0.35rem;
+	border-color: #dc2626;
+	color: #b42318;
+}

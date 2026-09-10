@@ -44,6 +44,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       routeMode: config.routeMode ?? 'memory',
       compById,
       language: languagePage,
+      onInvalidBrowserRoute: config.onInvalidBrowserRoute,
     });
     const compStateStore = new CompStateStore();
     return { sourceStore, docStore, compStateStore, compById };

@@ -9,6 +9,7 @@ function IndexSubtopicContent({ config, docStore, languagePreferred, subtopic })
 					compName={subtopic.component.name}
 					configRuntime={{
 						instanceId: `index-subtopic:${config.instanceId ?? 'index'}:${subtopic.id}`,
+						navigation: config.navigation,
 					}}
 					input={{
 						config: subtopic.component.config,

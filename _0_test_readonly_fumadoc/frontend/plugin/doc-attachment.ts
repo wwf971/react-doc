@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { parse as yamlParse } from 'yaml';
 
 export type DocAttachmentFinderContext = {
   configDoc: any;
@@ -25,6 +26,7 @@ type SourceEntry = {
 const commentComponentPattern = /<!--\s*renderComp=([\w/]+(?:-[\w/]+)*)([\s\S]*?)-->/g;
 const mermaidMdxPattern = /<DocDiagramMermaid\b[^>]*\blaneIcons\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 const imageMdxPattern = /<DocImage\b[^>]*\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+const imageCommentBlockPattern = /<!--\s*renderComp=DocImage(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n```/g;
 const imageGridCommentPattern = /<!--\s*renderComp=DocImageGrid(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n```/g;
 
 export const docAttachmentFinderDefaultList: DocAttachmentFinder[] = [
@@ -51,6 +53,18 @@ export function attachmentMermaidLaneIconFind(context: DocAttachmentFinderContex
 
 export function attachmentImageFind(context: DocAttachmentFinderContext): string[] {
   const result: string[] = [];
+  for (const match of context.text.matchAll(imageCommentBlockPattern)) {
+    try {
+      const data = yamlParse(match[1]);
+      const src = mappingIs(data) ? data.src : undefined;
+      if (typeof src === 'string' && src.trim()) result.push(src.trim());
+    } catch (error) {
+      console.warn(
+        `[doc-source] invalid DocImage YAML in ${context.doc.internalPath}: ` +
+        `${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
   for (const match of context.text.matchAll(commentComponentPattern)) {
     if (match[1] !== 'DocImage') continue;
     const src = propsCommentParse(match[2]).src;
@@ -61,6 +75,10 @@ export function attachmentImageFind(context: DocAttachmentFinderContext): string
     if (src) result.push(src);
   }
   return result;
+}
+
+function mappingIs(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 export function attachmentImageGridFind(context: DocAttachmentFinderContext): string[] {

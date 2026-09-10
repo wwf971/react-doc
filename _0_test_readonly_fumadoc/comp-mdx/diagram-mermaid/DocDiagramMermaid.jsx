@@ -82,6 +82,12 @@ function mermaidGet(mermaidLoad) {
 	return mermaidPromise;
 }
 
+function maxHeightNormalize(value) {
+	if (value === undefined || value === null || value === '') return undefined;
+	const maxHeight = Number(value);
+	return Number.isFinite(maxHeight) && maxHeight > 0 ? `${maxHeight}px` : undefined;
+}
+
 function MermaidSvg({ displayMode = 'fill', iconByLaneId = {}, mermaidLoad, onReady, sourceDiagram }) {
 	const id = `doc-mermaid-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
 	const contentRef = useRef(null);
@@ -343,6 +349,7 @@ const DocDiagramMermaid = observer(function DocDiagramMermaid({ data = {}, confi
 	const [store] = useState(() => new DocDiagramMermaidStore(displayModeDefault));
 	const sourceDiagram = data.source || data.raw || '';
 	const displayModeResolved = store.displayMode;
+	const maxHeight = maxHeightNormalize(config.maxHeight);
 	const iconByLaneId = useMemo(
 		() => laneIconByIdParse(data.laneIcons, config.assetUrlGet),
 		[data.laneIcons, config.assetUrlGet],
@@ -440,6 +447,7 @@ const DocDiagramMermaid = observer(function DocDiagramMermaid({ data = {}, confi
 			<div
 				ref={viewportRef}
 				className={`doc-mdx-diagram-mermaid-viewport is-${displayModeResolved}`}
+				style={maxHeight ? { maxHeight } : undefined}
 				onPointerCancel={dragHandlers.onPointerEnd}
 				onPointerDown={dragHandlers.onPointerDown}
 				onPointerMove={dragHandlers.onPointerMove}

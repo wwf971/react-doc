@@ -1,0 +1,56 @@
+.doc-mdx-block-mdx {
+  margin: 1.25rem 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, #64748b 42%, var(--color-fd-border));
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, #64748b 5%, var(--color-fd-background));
+}
+
+.doc-mdx-block-mdx.is-info {
+  border-color: color-mix(in srgb, #2563eb 48%, var(--color-fd-border));
+  background: color-mix(in srgb, #2563eb 6%, var(--color-fd-background));
+}
+
+.doc-mdx-block-mdx.is-warning {
+  border-color: color-mix(in srgb, #d97706 48%, var(--color-fd-border));
+  background: color-mix(in srgb, #f59e0b 7%, var(--color-fd-background));
+}
+
+.doc-mdx-block-mdx-title {
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid color-mix(in srgb, #64748b 32%, var(--color-fd-border));
+  background: color-mix(in srgb, #64748b 8%, transparent);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.doc-mdx-block-mdx-content {
+  padding: 0.8rem 1rem;
+}
+
+.doc-mdx-block-mdx-content > :first-child {
+  margin-top: 0;
+}
+
+.doc-mdx-block-mdx-content > :last-child {
+  margin-bottom: 0;
+}
+
+.doc-mdx-block-mdx-content :is(h2, h3, h4, h5, h6) {
+  margin-top: 1rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.doc-mdx-block-mdx-content :is(ul, ol) {
+  margin-top: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.doc-mdx-block-mdx-error {
+  margin: 1rem 0;
+  color: #b42318;
+}

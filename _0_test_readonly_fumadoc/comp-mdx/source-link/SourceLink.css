@@ -1,0 +1,42 @@
+.doc-source-link {
+	display: inline-flex;
+	max-width: 100%;
+	vertical-align: baseline;
+}
+
+.doc-source-link-button {
+	display: inline-flex;
+	max-width: 100%;
+	min-width: 0;
+	align-items: center;
+	gap: 2px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: #1d63a8;
+	cursor: pointer;
+	font: inherit;
+	line-height: inherit;
+	text-align: left;
+}
+
+.doc-source-link-button > span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.doc-source-link-button:hover:not(:disabled),
+.doc-source-link-button:focus-visible:not(:disabled) {
+	text-decoration: underline;
+	outline: none;
+}
+
+.doc-source-link-button:disabled {
+	cursor: default;
+	opacity: 0.62;
+}
+
+.doc-source-link-icon {
+	flex: 0 0 auto;
+	transform: rotate(-90deg);
+}

@@ -8,6 +8,13 @@ A Mermaid block presents one diagram inside a bounded document area. It should k
 - **Fill** uses the diagram's original size. A horizontal scrollbar appears when the diagram is wider than the block.
 - The display-mode button switches the current block between these modes without changing the document source.
 
+## Maximum height
+
+- `config.maxHeight` optionally limits the normal document viewport to a positive pixel value.
+- Content taller than the limit remains available through the viewport's vertical scrollbar.
+- The limit applies to both contain and fill modes, but not to the expanded view.
+- Invalid, zero, and negative values are ignored.
+
 ## Toolbar
 
 The toolbar appears when the block is hovered or focused:

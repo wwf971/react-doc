@@ -128,17 +128,18 @@
   white-space: normal;
 }
 
-.doc-link-warning::before {
+.doc-link-warning-arrow {
   position: absolute;
-  bottom: 100%;
-  left: 0.75rem;
+  top: calc(100% + 8px);
+  left: 50%;
+  z-index: 61;
   width: 0.6rem;
   height: 0.6rem;
   border-top: 1px solid #d38a20;
   border-left: 1px solid #d38a20;
   background: #fff8e6;
-  content: '';
-  transform: translateY(50%) rotate(45deg);
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(45deg);
 }
 
 .doc-link-warning > span {

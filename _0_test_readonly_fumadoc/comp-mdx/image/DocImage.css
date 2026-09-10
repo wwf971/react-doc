@@ -39,6 +39,16 @@
 	object-fit: cover;
 }
 
+.doc-image.is-contain-auto .doc-image-body,
+.doc-image.is-contain-auto .doc-image-viewport {
+	height: auto;
+}
+
+.doc-image.is-contain-auto .doc-image-viewport img {
+	height: auto;
+	object-fit: contain;
+}
+
 .doc-image figcaption {
 	max-width: min(100%, var(--doc-image-width));
 	color: var(--color-fd-muted-foreground);

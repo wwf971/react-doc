@@ -1,0 +1,27 @@
+.doc-mdx-block-simple {
+  margin: 1.25rem 0;
+  padding: 0.8rem 1rem;
+  border: 1px solid color-mix(in srgb, #2563eb 45%, var(--color-fd-border));
+  border-left: 3px solid #2563eb;
+  background: color-mix(in srgb, #2563eb 7%, transparent);
+}
+
+.doc-mdx-block-simple.is-warning,
+.doc-mdx-block-simple.is-caution {
+  border-color: color-mix(in srgb, #d97706 45%, var(--color-fd-border));
+  border-left-color: #d97706;
+  background: color-mix(in srgb, #f59e0b 8%, transparent);
+}
+
+.doc-mdx-block-simple-content > :first-child {
+  margin-top: 0;
+}
+
+.doc-mdx-block-simple-content > :last-child {
+  margin-bottom: 0;
+}
+
+.doc-mdx-block-simple-error {
+  margin: 1rem 0;
+  color: #b42318;
+}

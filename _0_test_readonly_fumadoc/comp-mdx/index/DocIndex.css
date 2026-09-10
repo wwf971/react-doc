@@ -86,43 +86,9 @@
 	padding: 0;
 	border-radius: 0;
 	line-height: 1.45;
-}
-
-.doc-index-inline-link {
-	display: inline-flex;
-	max-width: 100%;
-	min-width: 0;
-	align-items: center;
-	gap: 2px;
-	padding: 0;
-	border: 0;
-	background: transparent;
-	color: #1d63a8;
-	cursor: pointer;
-	font: inherit;
-	line-height: 1.45;
-	text-align: left;
-}
-
-.doc-index-inline-link > span {
-	min-width: 0;
-	overflow-wrap: anywhere;
-}
-
-.doc-index-inline-link:hover:not(:disabled),
-.doc-index-inline-link:focus-visible:not(:disabled) {
-	text-decoration: underline;
-	outline: none;
-}
-
-.doc-index-inline-link:disabled {
-	cursor: default;
-	opacity: 0.62;
-}
-
-.doc-index-inline-link-icon {
-	flex: 0 0 auto;
-	transform: rotate(-90deg);
+	text-decoration-color: color-mix(in srgb, currentColor 38%, transparent);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.14em;
 }
 
 .doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-title-subtopics-items-content {

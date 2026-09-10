@@ -78,6 +78,12 @@ In hosted placement, the index title is left-aligned and wraps naturally. The do
 
 An index type may allow a subtopic to replace its ordinary item list with a custom component from the unified component registry. The authored index data supplies the component name and its semantic data, while the runtime host supplies placement and instance context. The nested component uses the same `{ data, config, onEvent }` interface as every other registered component and must submit navigation through the centralized navigation layer. A subtopic must choose either an item list or one custom component, not both.
 
+A hosted index and its nested custom components may opt in to navigation notifications through a runtime subscription supplied by the document host. A notification describes the successfully applied destination, including a monotonically increasing request version, side-panel route and item, source document path, and fragment. Repeated navigation to the same destination must still publish a new notification. Failed navigation attempts must not be published as current-location changes. The subscription must also provide route-aware target matching so a custom index does not duplicate document-path, side-panel-alias, or fragment resolution rules.
+
+Only the hosted index associated with the current document's semantic part is active and eligible to receive these notifications. It remains active when the local-index control is switched to **On this page**, even though its visual content is hidden, so it is already synchronized when **In this part** is selected again. Navigating to another part must dispose the previous hosted index's subscriptions before activating the new part's index. Indexes embedded as ordinary document content and indexes belonging to other parts must not receive hosted-index notifications merely because their source has been collected or compiled.
+
+This mechanism must be opt-in and index-agnostic. An ordinary index need not perform work for a navigation notification. A visual index such as a screen mini-map can subscribe, match the current document against the targets represented by its sections, and highlight the matching section. The document store must not contain mini-map-specific section-selection logic.
+
 The complete part-index feature must be globally configurable. It is enabled by default; floating mode is also enabled by default. Disabling the part-index feature restores the ordinary local page index without requiring changes to side-panel part declarations or document content.
 
 
@@ -125,6 +131,12 @@ The link/ref system should be able to deal with invalid link/ref and navigation 
 Custom link parsing/rendering logic and navigation behavior should be supported.
 
 For link string patterns, not only will link parsing logic be applied to typical links like `[a.md](a.md)`, but we also support applying it to `a.md`(incline code), or other patterns `[[a.md]]`(obsidian style link).
+
+### Source links
+
+A source link opens a collected source file in a compact read-only popup instead of navigating to a document page. This capability must be independent of indexes: Markdown/MDX authors and registered custom components can use the same source-link component directly, while an index item with `kind: inline-link` is only one host of that component.
+
+The target is an internal source path and does not need a side-panel item. Loading, syntax-language selection, popup rendering, copy behavior, and errors must use the shared source-store and compact-code-block implementation. The source link uses the unified component interface and must remain usable through both direct MDX authoring and the degradation-compatible comment-block form.
 
 Parse layer might require taking over the rendering of almost everything, including the most basic nodes like plain text, so link pattern matching logic can be applied, and links embedded in plain text can be rendered properly.
 

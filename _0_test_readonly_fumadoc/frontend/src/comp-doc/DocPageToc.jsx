@@ -64,14 +64,18 @@ const DocPageToc = observer(function DocPageToc(props) {
         <>
           {props.header}
           {control}
-          {isPartMode ? <PartIndexPanel labels={labels} /> : null}
+          <PartIndexPanel
+            isVisible={isPartMode}
+            key={`${part.id}:${indexRef.docId}:${indexRef.componentId}`}
+            labels={labels}
+          />
         </>
       )}
     />
   );
 });
 
-const PartIndexPanel = observer(function PartIndexPanel({ labels }) {
+const PartIndexPanel = observer(function PartIndexPanel({ isVisible, labels }) {
   const { componentConfig, docStore } = useDocStores();
   const part = docStore.partCurrent;
   const result = docStore.partIndexQueryCurrent;
@@ -82,7 +86,7 @@ const PartIndexPanel = observer(function PartIndexPanel({ labels }) {
 
   useEffect(() => {
     const panel = refPanel.current;
-    if (!panel || displayMode === 'floating') return undefined;
+    if (!isVisible || !panel || displayMode === 'floating') return undefined;
 
     const widthUpdate = () => {
       const left = panel.getBoundingClientRect().left;
@@ -99,7 +103,7 @@ const PartIndexPanel = observer(function PartIndexPanel({ labels }) {
       window.removeEventListener('resize', widthUpdate);
       observer?.disconnect();
     };
-  }, [displayMode, result?.status]);
+  }, [displayMode, isVisible, result?.status]);
 
   const floatingLayoutPrepare = () => {
     const panel = refPanel.current;
@@ -166,14 +170,14 @@ const PartIndexPanel = observer(function PartIndexPanel({ labels }) {
   };
 
   if (!result || result.status === 'loading') {
-    return <div className="doc-part-index-status">{labels.loading}</div>;
+    return <div className="doc-part-index-status" hidden={!isVisible}>{labels.loading}</div>;
   }
   if (result.status === 'error') {
-    return <div className="doc-part-index-status is-error" role="alert">{result.message}</div>;
+    return <div className="doc-part-index-status is-error" hidden={!isVisible} role="alert">{result.message}</div>;
   }
   if (result.componentType !== 'index') {
     return (
-      <div className="doc-part-index-status is-error" role="alert">
+      <div className="doc-part-index-status is-error" hidden={!isVisible} role="alert">
         {labels.notIndex}: {result.component.compName}
       </div>
     );
@@ -183,6 +187,7 @@ const PartIndexPanel = observer(function PartIndexPanel({ labels }) {
     <div
       ref={refPanel}
       className={`doc-part-index-panel is-display-${displayMode}`}
+      hidden={!isVisible}
       style={displayMode === 'floating' && floatingLayout
         ? {
           left: floatingLayout.left,
@@ -208,6 +213,7 @@ const PartIndexPanel = observer(function PartIndexPanel({ labels }) {
           instanceId: `part-index:${part.id}:${result.component.id}`,
           isDisplayModeControlEnabled: docStore.isPartIndexFloatingEnabled,
           isPartRootCurrent: docStore.itemCurrent?.id === part.id,
+          navigation: docStore.navigationRuntime,
           SegmentedControl: componentConfig.SegmentedControl,
         }}
         input={result.component.input}
@@ -235,7 +241,7 @@ function labelSetGet(language) {
       loading: 'パート索引を読み込んでいます…',
       navigationScope: 'ナビゲーション範囲',
       notIndex: '参照されたコンポーネントは索引ではありません',
-      onThisPage: 'このページ',
+      onThisPage: 'この記事',
     };
   }
   return {

@@ -66,6 +66,7 @@
 }
 
 .doc-mdx-diagram-mermaid-viewport {
+	box-sizing: border-box;
 	padding: 1rem;
 	overflow: auto;
 }
