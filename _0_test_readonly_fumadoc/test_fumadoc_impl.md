@@ -103,39 +103,13 @@ Collected attachments are exported by `virtual:doc-source` as `attachmentUrlByPa
 
 Component recognition is decoupled from the source-rule scanner. Additional component-specific finders can be passed through the Vite plugin's `attachmentFinderList` option; each finder receives the document text, document paths, and merged config, and returns attachment path strings. Missing references produce a build warning containing the source document path. The feature defaults to off when the boolean is absent or false.
 
-## Link recognition / rendering / navigation
+## Links and navigation
 
-One remark plugin (`remarkDocLink`) recognizes three patterns and rewrites each into a `DocLink` JSX node:
+`DocStore` is the navigation source of truth. Links, side-panel items, history controls, registered-component navigation requests, and hosted indexes all submit destinations through `DocStore.navigate()`. A destination combines a semantic document route with an optional heading fragment. Query mode synchronizes it with browser history; memory mode keeps it inside the embedded document page.
 
-- normal links `[text](target.md)` — external `http(s)://`, `mailto:` and pure `#hash` urls are skipped;
-- inline code whose value looks like a doc file name/path, e.g. `` `a.md` ``;
-- obsidian style `[[a.md]]` inside plain text.
+`DocLink` keeps recognition, target resolution, rendering, and navigation separate. `DocPageView` delegates fragment scrolling and highlighting to a dedicated destination controller. This allows applications to customize link presentation without bypassing route resolution or navigation history.
 
-`DocLink` resolves the target at render time against the doc index (file name → candidate list):
-
-```text
-target form                resolution
-/rootId/xx/a.md            exact internal path
-./sub/a.md, ../a.md        relative to current doc (plugin attaches source path)
-a.md  (bare name)          doc index lookup by file name
-                             ├─ 1 match  → navigate
-                             ├─ N matches → dropdown listing candidates (click outside closes)
-                             └─ 0 match  → rendered as broken link, not clickable
-```
-
-Every document target form can append a fragment, for example `/rootId/xx/a.md#configuration`. `DocSourceStore.resolveLink()` separates the document path from the fragment and resolves only the path. `DocLink` then submits the resolved side-panel route and fragment to `DocStore.navigate()`. The store records `{ route, hash }` together in navigation history and synchronizes the hash in query mode. Each successful call also increments `navigationRequestVersion`. This signal is separate from path and hash because selecting an already-current index destination leaves both values unchanged; `DocPageView` observes the signal so every request reruns destination behavior. A repeated document-only request therefore resets vertical scrolling to the top, while a repeated document-plus-fragment request realigns and highlights its place again without adding a duplicate history entry.
-
-Every navigation request first resets the rendered article, each ancestor in its document content scroll chain, and the browser scrolling element to the top in a layout effect, so embedded hosts cannot preserve an earlier offset in an outer container. Browser scroll anchoring is disabled on the document viewport. For a fragment target, `DocPageView` retries briefly until the matching element is mounted, explicitly calculates its position within the document viewport, and applies `doc-navigation-target`; `DocPageMdx.css` gives that destination a full-content-width yellow line until the next document/place navigation rather than highlighting only the heading text. Alignment is applied immediately and once more after the browser layout phase. Pending images above the destination trigger another alignment when they finish loading, preventing screenshot layout shifts from moving the requested heading away from the viewport. As a compatibility fallback, if the matched id belongs to an empty anchor element, the first following content element is highlighted instead. The same target string is accepted by the default `navigateRequest` handling for registered components, so indexes and application-specific visual navigation components do not bypass centralized history.
-
-Plain `.md` documents can author a stable heading destination by placing `<span id="configuration"></span>` immediately before the heading. Raw HTML is intentionally omitted by the `format: 'md'` runtime compiler, so leaving that marker untreated would make fragment lookup fail and leave navigation at the document top. `remarkStableHeadingAnchor` recognizes only this narrow standalone marker form, transfers its id to the following heading's `hProperties.id`, and removes the marker paragraph. This keeps the stable authored fragment on the visible heading without enabling general MDX syntax in Markdown; the heading itself is therefore both the scroll destination and the highlighted element.
-
-Resolution happens at render, not at compile — moving a file only changes the index, compiled content stays valid.
-
-Link behavior is separated into recognition, resolution, visual rendering, and navigation. Applications can add/replace remark recognizers, provide `config.link.resolve`, provide a `data`/`config`/`onEvent` link renderer, and intercept link events before the default store navigation. The default renderer follows the same unified event contract as other data-driven components. See `frontend/README.md` for the public interface.
-
-When a resolved source document is not represented in the side panel, `DocLink` does not submit an already-known invalid route to `DocStore.navigate()`. Activating the link opens a dismissible warning tooltip positioned from that link's controller. Unexpected failures returned by `navigate()` are transferred from the store to the same local tooltip and the page-level error is cleared. The tooltip closes when the user dismisses it, clicks outside the link controller, changes the link target, or completes a valid navigation. Keeping this feedback local preserves the reader's scroll position and identifies the exact invalid link without showing a detached warning at the top of the document.
-
-Fumadocs wraps heading text in hash anchors. Dragging to select a heading can still emit a click on pointer release and unexpectedly scroll that heading to the top. `DocPageMdx` tracks pointer movement and the browser selection, then cancels only the heading-anchor click produced by a selection drag; ordinary anchor clicks and the separate copy-link button remain available.
+For target formats, fragment behavior, history, Back/Forward/Up, side-panel routes, and hosted-index subscriptions, refer to [Navigation design](test_fumadoc_impl_nav.md).
 
 ## Graceful degradation stipulation
 
@@ -240,7 +214,7 @@ compDefine(ComponentExample, {
 
 The right-side local-index slot is wrapped by `DocPageToc`. Outside a configured part, when globally disabled, or when no segmented-control implementation is injected, it delegates directly to the native Fumadocs TOC. Inside a configured part, a segmented control switches between **On this page** and **In this part**, with **In this part** as the initial mode. Both modes retain the native Fumadocs TOC shell; part mode replaces its inner heading list rather than replacing the shell, so the layout's right-column width remains stable while switching. `DocStore.partIndexContentMode` is one global page/part selection that survives document and part navigation, while docked/floating mode can remain keyed by part id. The host loads the referenced document on demand and renders the referenced component through `RegisteredComp`, preserving component normalization, placement checks, and the common `{ data, config, onEvent }` boundary.
 
-For `partIndex` placement, the index receives host-only display-mode configuration. Its left-aligned title and display-mode control use a wrapping row, allowing the control to move below a long title. The segmented control emits a `displayModeChange` request, and the host submits that request to `DocStore`. The hosted TOC shell uses content height and visible overflow instead of an internal vertical viewport, so the document page remains the vertical scrolling surface. In `floating` mode the same component instance is rendered through a `document.body` portal, positioned at the top right, and assigned the application overlay stack maximum so it cannot pass below the side panel while being dragged. It has no internal vertical scrollbar. Ordinary `mdx` and `commentBlock` placements receive no display-mode control. `DocLink` exposes whether its resolved source path and fragment exactly match the current document and place; index-item styling therefore highlights only the item for that exact destination and clears the prior item on subsequent navigation. On the part-root document, host state instead gives the index title the yellow current marker.
+For `partIndex` placement, the index receives host-only display-mode configuration. Its left-aligned title and display-mode control use a wrapping row, allowing the control to move below a long title. The segmented control emits a `displayModeChange` request, and the host submits that request to `DocStore`. The hosted TOC shell uses content height and visible overflow instead of an internal vertical viewport, so the document page remains the vertical scrolling surface. In `floating` mode the same component instance is rendered through a `document.body` portal, positioned at the top right, and assigned the application overlay stack maximum so it cannot pass below the side panel while being dragged. It has no internal vertical scrollbar. Ordinary `mdx` and `commentBlock` placements receive no display-mode control. On the part-root document, host state gives the index title the yellow current marker.
 
 An index item defaults to `kind: document`. With `kind: inline-link`, it renders the reusable `SourceLink` component rather than owning source-popup behavior. `SourceLink` is independent of `DocIndex`: it accepts a collected internal source path and label through the unified `{ data, config, onEvent }` interface, loads the source through `DocSourceStore.loadRaw()`, and owns a `CodeBlockCompactStore`. `CodeBlockCompactPopup` remains the shared implementation for the panel, syntax-highlighted body, copy operation, close event, and Escape-key behavior. Source-link targets do not need side-panel entries.
 
@@ -260,30 +234,7 @@ subtopics:
             target: /guide/layout.md#header
 ```
 
-#### Hosted-index navigation subscription
-
-Navigation observation is a scoped runtime service rather than a global callback list. The hosted-index boundary creates one stable `navigation` channel for the index of `DocStore.partCurrent` and supplies it through runtime `config` to the `partIndex` component. `DocIndex` forwards the same channel to registered `indexSubtopic` components. It is not added to authored data and does not expose `DocStore` itself.
-
-The channel has this conceptual interface:
-
-```text
-navigation.getSnapshot()
-  -> { requestVersion, route, itemId, docPath, hash }
-
-navigation.subscribe(listener)
-  -> unsubscribe
-
-navigation.isTargetCurrent(target, { fragmentMode: "exact" | "ignore" })
-  -> boolean
-```
-
-`getSnapshot()` returns an immutable snapshot. `requestVersion` comes from `DocStore.navigationRequestVersion`, so selecting an already-current destination still produces a distinct snapshot. `isTargetCurrent()` delegates to the document store's route resolution and lets a visual index compare by complete document-and-fragment destination or by document only. Consumers therefore do not strip fragments or resolve side-panel aliases themselves. `subscribe()` follows ordinary external-store semantics: it returns an idempotent cleanup function, and a component can consume it through a small `useSyncExternalStore` adapter. Components that never subscribe perform no navigation-specific computation.
-
-`DocStore.navigate()` publishes only after a target has resolved and `routeCurrentPath`, `itemCurrentId`, `docCurrentPath`, `docCurrentHash`, and `navigationRequestVersion` have been updated. Back, Forward, Up, browser-history restoration, links, and component `navigateRequest` events all pass through that boundary and therefore produce the same notification. An invalid target leaves the current-location snapshot unchanged and is reported through the existing navigation-error path.
-
-The current part's hosted-index runtime remains mounted when `partIndexContentMode` changes from `part` to `page`; only its presentation is hidden. This preserves opt-in subscriptions and current-section state while **On this page** is selected. The runtime is keyed by the stable part id plus the referenced document/component ids. A change to any of those keys unmounts the old runtime, runs subscription cleanup, and creates the new current part's runtime. No runtime is created for indexes belonging to other parts, and ordinary `mdx` or `commentBlock` index placements receive no hosted navigation channel. Docked and floating presentations share the same runtime and channel.
-
-A mini-map subtopic subscribes once and stores only its derived selected-section id. On each notification it compares the current destination with the section's primary target and any subordinate targets, using document-level matching when a target fragment merely identifies the entry point. Selection precedence belongs to that mini-map: a directly matching child section is preferred over its parent, a subordinate-link match selects its containing section, and otherwise the first match in authored order wins. The generic index host knows nothing about mini-map sections; it only owns channel scope, navigation snapshots, target matching, and cleanup.
+Hosted indexes can observe navigation through a scoped runtime channel without receiving `DocStore` itself. The channel lifecycle, current-target matching, and mini-map selection behavior are described in [Navigation design](test_fumadoc_impl_nav.md#hosted-index-navigation-channel).
 
 The global semantic config is:
 
@@ -295,23 +246,7 @@ partIndex:
 
 Both flags default to `true`. `isEnabled: false` leaves declarations intact but restores the ordinary page TOC everywhere. `isFloatingEnabled: false` keeps the page/part switch while omitting the docked/floating control.
 
-Each document item has a stable item id and its own route. This includes a non-leaf item that has both `doc` and `children`: it is emitted as a Fumadocs folder with its document as the native folder `index`. The navigation index stores every item bound to each source file, allowing duplicate document items while link/search navigation consistently chooses the first item in tree order. A link to a source file omitted from the side panel reports an explicit navigation error instead of silently opening an unrepresented page.
-
-An indexed folder is ordered before its descendants. Fumadocs uses the same order for the bottom previous/next cards, so the folder document's next page is its first child and the first child's previous page is the folder document. Breadcrumbs show the indexed folder as the current page when its document is open, and as a link when a descendant is open. `@first/{itemId}` resolves to the folder's own document when it has one; for a virtual folder it continues to resolve to the first descendant document.
-
-The shared `DocNavigationButtons` renders three navigation actions in both the document toolbar and the floating controls, ordered Back, Forward, and Up:
-
-1. **Back**
-
-  `DocStore.navigationBack()` moves to the previous history entry. Memory mode moves through the internal history list, while query mode delegates to browser history.
-
-2. **Forward**
-
-  `DocStore.navigationForward()` moves to the next history entry through the same mode-specific history mechanism. A normal navigation after moving back truncates the forward branch.
-
-3. **Up**
-
-  The page-tree model builds an `itemAboveById` index. A folder's own document is its first document. Otherwise only the first-child chain is followed recursively; if that chain has no document, the folder's first document is null and later siblings are not considered. For each document item, the index walks containing folders from nearest to root and chooses the first non-null first document whose source path differs from the current document. `DocStore.navigationUp()` submits that item's route through the ordinary `navigate()` boundary, so the move participates in the same history and URL synchronization as a link or sidebar navigation. Up is disabled when the index has no target.
+Document items and indexed folders receive stable routes while the side-panel tree remains the semantic source of document order. Route selection, `@first` resolution, previous/next order, and Back/Forward/Up behavior are described in [Navigation design](test_fumadoc_impl_nav.md#side-panel-routes-and-folder-navigation).
 
 ```yaml
 tree:
@@ -338,7 +273,7 @@ tree:
 
 `display.component` and `panel.component` use the same `compRegistry` and runtime `compById` registry as MDX. They receive the unified `{ data, config, onEvent }` props. Display text and file metadata are in `data`; panel item/runtime metadata are in `config`.
 
-The indexed-folder interaction uses a small sidebar folder override around Fumadocs primitives. Selecting an inactive label navigates through the framework adapter to `DocStore.navigate()` without changing the folder's collapse/expand state. Selecting the now-active label toggles that state, so a double click naturally navigates and then toggles. Selecting the chevron toggles without navigating. UI event handling therefore stays in the sidebar and route/history changes stay in the store. Consumers can replace this gesture policy through runtime `config.sidePanel.components.Folder` (forwarded to `DocsLayout.sidebar`) without replacing source resolution or navigation history logic.
+Consumers can replace indexed-folder gestures through runtime `config.sidePanel.components.Folder` without replacing source resolution or navigation history logic. See [Navigation design](test_fumadoc_impl_nav.md#indexed-folder-interaction) for the default gesture policy.
 
 ## Search
 
