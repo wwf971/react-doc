@@ -1,4 +1,4 @@
-import { Skeleton } from '../../../../third_party/shadcn/ui/skeleton.jsx';
+import { Skeleton } from '../../UICommon.js';
 import './DocPageSkeleton.css';
 
 function DocPageSkeleton() {

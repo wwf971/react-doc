@@ -1,13 +1,15 @@
 import { useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
-import { useDocStores } from '../../frontend/src/store/context.js';
+import { useDocStores } from '#react-doc/frontend/src/store/context.js';
 import CodeBlockCompact from './CodeBlockCompact.jsx';
 import CodeBlockFull from './CodeBlockFull.jsx';
+import CodeBlockJson from './CodeBlockJson.jsx';
 import './CodeBlock.css';
 
 const componentByType = {
 	compact: CodeBlockCompact,
 	full: CodeBlockFull,
+	json: CodeBlockJson,
 };
 
 function CodeBlock({ data = {}, config = {} }) {

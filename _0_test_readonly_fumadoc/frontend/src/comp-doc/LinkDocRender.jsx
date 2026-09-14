@@ -11,12 +11,15 @@ import './LinkDocRender.css';
 //   candidateSelectRequest user chooses one ambiguous target
 export function LinkDocRender({ data = {}, config = {}, onEvent }) {
   const {
+    ariaHasPopup,
     displayContent,
     href,
     targetList = [],
     titleText = '',
   } = data;
   const {
+    activationElement = 'anchor',
+    className = '',
     Icon = LinkArrowIcon,
     isBroken = false,
     isCurrent = false,
@@ -24,10 +27,20 @@ export function LinkDocRender({ data = {}, config = {}, onEvent }) {
     isMultiple = false,
     isNavigationUnavailable = false,
   } = config;
+  const classNameLink = `doc-link-render${className ? ` ${className}` : ''}${isCurrent ? ' is-current' : ''}${isDropdownOpen ? ' is-active' : ''}${isNavigationUnavailable ? ' is-unavailable' : ''}`;
+  const contentLink = (
+    <>
+      {displayContent}
+      {isMultiple ? <span className="doc-link-render-count">({targetList.length})</span> : null}
+      <span className="doc-link-render-icon" aria-hidden="true">
+        <Icon width={13} height={13} size={13} />
+      </span>
+    </>
+  );
 
   if (isBroken) {
     return (
-      <span className="doc-link-render is-broken" title={titleText}>
+      <span className={`doc-link-render${className ? ` ${className}` : ''} is-broken`} title={titleText}>
         {displayContent}
       </span>
     );
@@ -35,18 +48,26 @@ export function LinkDocRender({ data = {}, config = {}, onEvent }) {
 
   return (
     <span className="doc-link-render-wrap">
-      <a
-        className={`doc-link-render${isCurrent ? ' is-current' : ''}${isDropdownOpen ? ' is-active' : ''}${isNavigationUnavailable ? ' is-unavailable' : ''}`}
-        href={href}
-        title={titleText}
-        onClick={(event) => onEvent?.('activateRequest', { event })}
-      >
-        {displayContent}
-        {isMultiple ? <span className="doc-link-render-count">({targetList.length})</span> : null}
-        <span className="doc-link-render-icon" aria-hidden="true">
-          <Icon width={13} height={13} size={13} />
-        </span>
-      </a>
+      {activationElement === 'button' ? (
+        <button
+          type="button"
+          className={classNameLink}
+          title={titleText}
+          aria-haspopup={ariaHasPopup}
+          onClick={(event) => onEvent?.('activateRequest', { event })}
+        >
+          {contentLink}
+        </button>
+      ) : (
+        <a
+          className={classNameLink}
+          href={href}
+          title={titleText}
+          onClick={(event) => onEvent?.('activateRequest', { event })}
+        >
+          {contentLink}
+        </a>
+      )}
       {isDropdownOpen ? (
         <span className="doc-link-render-menu">
           {targetList.map((target) => (

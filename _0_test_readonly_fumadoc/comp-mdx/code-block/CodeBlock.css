@@ -27,6 +27,50 @@
 	color: #dc2626;
 }
 
+.doc-code-block-json-entry + .doc-code-block-json-entry {
+	margin-top: 1rem;
+}
+
+.doc-code-block-json-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+}
+
+.doc-code-block-json-mode {
+	display: inline-flex;
+	height: 24px;
+	align-items: center;
+	gap: 0.25rem;
+	padding: 0 0.4rem;
+	border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+	border-radius: 0.375rem;
+	background: color-mix(in srgb, var(--color-fd-card) 88%, transparent);
+	color: var(--color-fd-muted-foreground);
+	cursor: pointer;
+	font-family: var(--font-sans);
+	font-size: 0.68rem;
+	line-height: 1;
+}
+
+.doc-code-block-json-mode:hover,
+.doc-code-block-json-mode:focus-visible {
+	border-color: color-mix(in srgb, currentColor 38%, transparent);
+	background: var(--color-fd-accent);
+	outline: none;
+}
+
+.doc-code-block-json-mode > .is-active {
+	color: var(--color-fd-foreground);
+	font-weight: 650;
+}
+
+.doc-code-block-json-error {
+	margin: 0 0 0.4rem;
+	color: #b42318;
+	font-size: 0.78rem;
+}
+
 .doc-code-block-compact-list {
 	display: grid;
 	min-width: 0;

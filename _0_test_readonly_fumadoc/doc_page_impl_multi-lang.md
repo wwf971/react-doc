@@ -1,6 +1,6 @@
-<!-- Multilingual design for the fumadocs-based readonly doc system test. Main design: ./test_fumadoc_impl.md -->
+<!-- Multilingual design for the reusable document page. Main design: doc_page_impl.md -->
 
-# Fumadocs Test Environment: Multilingual Content Design
+# Document Page: Multilingual Content Design
 
 ## Scope
 

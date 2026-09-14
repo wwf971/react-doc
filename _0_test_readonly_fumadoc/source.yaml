@@ -8,7 +8,7 @@ rules:
     path: ./testdata_mdx
   - action: addFile
     rootId: req
-    path: ./test_fumadoc_req.md
+    path: ./doc_page_req.md
   - action: removeByName
     pattern: "*.pyc"
   - action: removeByName

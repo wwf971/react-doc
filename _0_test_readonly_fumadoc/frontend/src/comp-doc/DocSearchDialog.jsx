@@ -8,7 +8,7 @@ import {
   SearchDialogInput,
   SearchDialogList,
   SearchDialogOverlay,
-} from 'fumadocs-ui/components/dialog/search';
+} from '../../UICommon.js';
 import { useDocStores } from '../store/context.js';
 
 // search dialog: fumadocs ui parts + our client-side matcher in the stores

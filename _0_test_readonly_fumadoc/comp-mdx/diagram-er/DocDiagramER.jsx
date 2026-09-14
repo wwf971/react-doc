@@ -12,7 +12,7 @@ import {
 	useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Copy, Expand, X } from 'lucide-react';
+import { Copy, Expand, X } from '../../frontend/UICommon.js';
 import { DocDiagramERStore } from './DocDiagramERStore.js';
 import './DocDiagramER.css';
 

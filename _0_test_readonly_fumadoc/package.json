@@ -2,6 +2,10 @@
   "name": "test-readonly-fumadoc",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
+  "imports": {
+    "#react-doc/*": "./*"
+  },
   "scripts": {
     "dev": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend run build",

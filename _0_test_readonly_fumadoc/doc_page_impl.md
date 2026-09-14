@@ -1,6 +1,6 @@
-<!-- Implementation design for the fumadocs-based readonly doc system test. Requirement: ./test_fumadoc_req.md -->
+<!-- Implementation design for the reusable document page. Requirement: doc_page_req.md -->
 
-# Fumadocs Test Environment: Design
+# Document Page: Design
 
 This project renders local md/mdx folders as a doc website. The whole doc page is one embeddable React component (`DocPageMdx`), built with Vite, driven by mobx stores — no Next.js, no router framework. Everything is configured by `config.yaml` (+ local override `config.0.yaml`): which folders/files form the source, how the side panel looks, and which custom components docs can use.
 
@@ -32,13 +32,15 @@ mobx stores (source of truth for rendering)
 
 **`.md` vs `.mdx`.** `.mdx` compiles with format `mdx` (JSX allowed). `.md` and everything else compiles with format `md`, so plain markdown containing `<xxx>` or `{}` text never breaks. Remark plugins can inject JSX nodes in both formats, which is how links/components get special rendering even in plain md.
 
-**Multilingual content.** Language inheritance, document-wide selection, headings, paragraphs, lists, degradation behavior, and file naming are specified in [test_fumadoc_impl_multi-lang.md](./test_fumadoc_impl_multi-lang.md).
+**Multilingual content.** Language inheritance, document-wide selection, headings, paragraphs, lists, degradation behavior, and file naming are specified in [doc_page_impl_multi-lang.md](doc_page_impl_multi-lang.md).
 
 **Doc collection via vite plugin.** The plugin reads the two-layer config, executes the source rules, expands side-panel subtree files, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any imported side-panel yaml invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
 
-## Can we keep fumadocs default components while owning link logic? (yes)
+## Can we keep fumadocs default components while owning link logic? YES
 
-The MDX `components` mapping is per-tag. We spread `defaultMdxComponents` from `fumadocs-ui/mdx` (headings with anchors, shiki code blocks, callout, cards, tables...) and only inject `DocLink` + registry components. Sidebar, TOC, breadcrumb, search dialog are layout-level (`DocsLayout`/`DocsPage`) and unaffected. Code block features — diff (`[!code ++]`/`[!code --]`), line/word highlight, focus, `title="..."` — are default shiki transformers in fumadocs' rehype-code and keep working.
+The answer is yes. The MDX `components` mapping is per-tag. We spread `defaultMdxComponents` from `fumadocs-ui/mdx` (headings with anchors, shiki code blocks, callout, cards, tables...) and only inject `DocLink` + registry components. Sidebar, TOC, breadcrumb, search dialog are layout-level (`DocsLayout`/`DocsPage`) and unaffected. Code block features — diff (`[!code ++]`/`[!code --]`), line/word highlight, focus, `title="..."` — are default shiki transformers in fumadocs' rehype-code and keep working.
+
+Ordinary fenced JSON is rendered by the default Fumadocs/Shiki pipeline. A comment block can opt into `DocCodeBlock` with `type=json` for an interactive JSON variant. `CodeBlockJson` still uses `DynamicCodeBlock` and its copy action, adds one button that toggles between `pretty` and `plain`, and reads the initial mode from `modeInitial` with `pretty` as the default. Pretty mode parses and indents JSON; plain mode preserves the authored source. Invalid JSON remains visible and receives an inline formatting error instead of replacing the source.
 
 ## Store design (two layers)
 
@@ -60,7 +62,7 @@ source:
     path: ../example_doc
   - action: addFile        # one file becomes one root
     rootId: req
-    path: ./test_fumadoc_req.md
+    path: ./doc_page_req.md
   - action: removeByName   # glob against file name
     pattern: "*.pyc"
   - action: removeByPath   # glob against internal path /{rootId}/relative/path
@@ -109,7 +111,7 @@ Component recognition is decoupled from the source-rule scanner. Additional comp
 
 `DocLink` keeps recognition, target resolution, rendering, and navigation separate. `DocPageView` delegates fragment scrolling and highlighting to a dedicated destination controller. This allows applications to customize link presentation without bypassing route resolution or navigation history.
 
-For target formats, fragment behavior, history, Back/Forward/Up, side-panel routes, and hosted-index subscriptions, refer to [Navigation design](test_fumadoc_impl_nav.md).
+For target formats, fragment behavior, history, Back/Forward/Up, side-panel routes, and hosted-index subscriptions, refer to [Navigation design](doc_page_impl_nav.md).
 
 ## Graceful degradation stipulation
 
@@ -134,7 +136,7 @@ All registered render components use the same top-level props: `{ data, config, 
 
 Registry values are component definitions created with `compDefine()`. A definition provides `CompRender`, and can also provide supported placements and an input converter. Fumadocs-native components use adapters created with `compNativeDefine()`, so their framework-specific props do not become the public contract for project components.
 
-Multilingual component registration and authoring rules are specified in [test_fumadoc_impl_multi-lang.md](./test_fumadoc_impl_multi-lang.md).
+Multilingual component registration and authoring rules are specified in [doc_page_impl_multi-lang.md](doc_page_impl_multi-lang.md).
 
 One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, `sidePanelPanel`, `partIndex`, and `indexSubtopic`.
 
@@ -212,11 +214,13 @@ compDefine(ComponentExample, {
 })
 ```
 
-The right-side local-index slot is wrapped by `DocPageToc`. Outside a configured part, when globally disabled, or when no segmented-control implementation is injected, it delegates directly to the native Fumadocs TOC. Inside a configured part, a segmented control switches between **On this page** and **In this part**, with **In this part** as the initial mode. Both modes retain the native Fumadocs TOC shell; part mode replaces its inner heading list rather than replacing the shell, so the layout's right-column width remains stable while switching. `DocStore.partIndexContentMode` is one global page/part selection that survives document and part navigation, while docked/floating mode can remain keyed by part id. The host loads the referenced document on demand and renders the referenced component through `RegisteredComp`, preserving component normalization, placement checks, and the common `{ data, config, onEvent }` boundary.
+The right-side local-index slot is wrapped by `DocPageToc`. Outside a configured part, when globally disabled, or when no segmented-control implementation is injected, it delegates directly to the native Fumadocs TOC. Inside a configured part, a segmented control switches between **On this page** and **In this part**, with **In this part** as the initial mode. Both modes retain the native Fumadocs TOC shell; part mode replaces its inner heading list rather than replacing the shell, so the layout's right-column width remains stable while switching. The part-mode class does not replace the shell's top padding, so switching modes also retains the same top inset without mode-specific size tuning. `DocStore.partIndexContentMode` is one global page/part selection that survives document and part navigation, while docked/floating mode can remain keyed by part id. The host loads the referenced document on demand and renders the referenced component through `RegisteredComp`, preserving component normalization, placement checks, and the common `{ data, config, onEvent }` boundary.
 
 For `partIndex` placement, the index receives host-only display-mode configuration. Its left-aligned title and display-mode control use a wrapping row, allowing the control to move below a long title. The segmented control emits a `displayModeChange` request, and the host submits that request to `DocStore`. The hosted TOC shell uses content height and visible overflow instead of an internal vertical viewport, so the document page remains the vertical scrolling surface. In `floating` mode the same component instance is rendered through a `document.body` portal, positioned at the top right, and assigned the application overlay stack maximum so it cannot pass below the side panel while being dragged. It has no internal vertical scrollbar. Ordinary `mdx` and `commentBlock` placements receive no display-mode control. On the part-root document, host state gives the index title the yellow current marker.
 
-An index item defaults to `kind: document`. With `kind: inline-link`, it renders the reusable `SourceLink` component rather than owning source-popup behavior. `SourceLink` is independent of `DocIndex`: it accepts a collected internal source path and label through the unified `{ data, config, onEvent }` interface, loads the source through `DocSourceStore.loadRaw()`, and owns a `CodeBlockCompactStore`. `CodeBlockCompactPopup` remains the shared implementation for the panel, syntax-highlighted body, copy operation, close event, and Escape-key behavior. Source-link targets do not need side-panel entries.
+An index item defaults to `kind: document`. With `kind: inline-link`, it renders the reusable `SourceLink` component rather than owning source-popup behavior. `SourceLink` is independent of `DocIndex`: it accepts a collected internal source path and label through the unified `{ data, config, onEvent }` interface, loads the source through `DocSourceStore.loadRaw()`, and owns a `CodeBlockCompactStore`. `CodeBlockCompactPopup` remains the shared implementation for the panel, syntax-highlighted body, copy operation, close event, and Escape-key behavior. Source-link targets do not need side-panel entries. A deployment that enables `pruneSourceToSidePanel` must instead list those raw-file targets in `sourceDependencies` on a retained side-panel item.
+
+`SourceLink` and ordinary document links share `LinkDocRender` and `LinkWarning` for unavailable-target presentation. A target absent from the collected source uses the red broken-link state and explains the problem through its hover title. A collected source that cannot be opened uses the orange unavailable state and shows the same dismissible warning beside the activated link. Loading source links retain normal link styling rather than appearing disabled.
 
 MDX can invoke the registered component directly. Plain Markdown uses the ordinary degradation-compatible comment-block form; the marked fenced block supplies a visible fallback and can also supply the target from its first line when an explicit `target` property is absent. Registered custom components can compose the same `SourceLink` renderer and provide the host's `panelComponent`, so source viewing does not depend on index data or placement.
 
@@ -234,7 +238,7 @@ subtopics:
             target: /guide/layout.md#header
 ```
 
-Hosted indexes can observe navigation through a scoped runtime channel without receiving `DocStore` itself. The channel lifecycle, current-target matching, and mini-map selection behavior are described in [Navigation design](test_fumadoc_impl_nav.md#hosted-index-navigation-channel).
+Hosted indexes can observe navigation through a scoped runtime channel without receiving `DocStore` itself. The channel lifecycle, current-target matching, and mini-map selection behavior are described in [Navigation design](doc_page_impl_nav.md#hosted-index-navigation-channel).
 
 The global semantic config is:
 
@@ -246,7 +250,7 @@ partIndex:
 
 Both flags default to `true`. `isEnabled: false` leaves declarations intact but restores the ordinary page TOC everywhere. `isFloatingEnabled: false` keeps the page/part switch while omitting the docked/floating control.
 
-Document items and indexed folders receive stable routes while the side-panel tree remains the semantic source of document order. Route selection, `@first` resolution, previous/next order, and Back/Forward/Up behavior are described in [Navigation design](test_fumadoc_impl_nav.md#side-panel-routes-and-folder-navigation).
+Document items and indexed folders receive stable routes while the side-panel tree remains the semantic source of document order. Route selection, `@first` resolution, previous/next order, and Back/Forward/Up behavior are described in [Navigation design](doc_page_impl_nav.md#side-panel-routes-and-folder-navigation).
 
 ```yaml
 tree:
@@ -273,13 +277,13 @@ tree:
 
 `display.component` and `panel.component` use the same `compRegistry` and runtime `compById` registry as MDX. They receive the unified `{ data, config, onEvent }` props. Display text and file metadata are in `data`; panel item/runtime metadata are in `config`.
 
-Consumers can replace indexed-folder gestures through runtime `config.sidePanel.components.Folder` without replacing source resolution or navigation history logic. See [Navigation design](test_fumadoc_impl_nav.md#indexed-folder-interaction) for the default gesture policy.
+Consumers can replace indexed-folder gestures through runtime `config.sidePanel.components.Folder` without replacing source resolution or navigation history logic. See [Navigation design](doc_page_impl_nav.md#indexed-folder-interaction) for the default gesture policy.
 
 ## Search
 
-The search dialog UI comes from fumadocs-ui (composable `SearchDialog` parts plugged into `RootProvider`). The engine is a small client-side matcher over per-doc structured data (headings + paragraphs, extracted with fumadocs' `remarkStructure`), computed lazily on first search and cached. Custom components can contribute semantic index entries through Fumadocs structured-data node metadata; multilingual extraction is specified in [test_fumadoc_impl_multi-lang.md](./test_fumadoc_impl_multi-lang.md). Search results are grouped below a contextual page row whose label and route are normalized through the configured side-panel tree. Manifest title extraction ignores heading-looking lines inside fenced code blocks. No server, works embedded.
+The search dialog UI comes from fumadocs-ui (composable `SearchDialog` parts plugged into `RootProvider`). The engine is a small client-side matcher over per-doc structured data (headings + paragraphs, extracted with fumadocs' `remarkStructure`), computed lazily on first search and cached. Custom components can contribute semantic index entries through Fumadocs structured-data node metadata; multilingual extraction is specified in [doc_page_impl_multi-lang.md](doc_page_impl_multi-lang.md). Search results are grouped below a contextual page row whose label and route are normalized through the configured side-panel tree. Manifest title extraction ignores heading-looking lines inside fenced code blocks. No server, works embedded.
 
-## Layout on disk
+## Project Folder Structure
 
 ```text
 _0_test_readonly_fumadoc/
@@ -290,6 +294,8 @@ _0_test_readonly_fumadoc/
 ├── package.json         # delegates dev/build to frontend/
 └── frontend/            # Vite app + embeddable component
     ├── plugin/          # vite plugin: config load, rule scan, virtual module, watch
+    ├── UICommon.js      # package-local facade for shared visual components and icons
+    ├── UICommonExternal.js # external UI-library exports used by the facade
     └── src/
         ├── DocPageMdx.jsx       # the embeddable doc page component
         ├── store/               # DocSourceStore (lower) + DocStore (upper)
@@ -302,8 +308,12 @@ Run `npm install` in `frontend/` once, then `npm run dev` from either this folde
 ## Avoid CSS Style Regression
 
 - Keep the complete CSS baseline required by Fumadocs. Tailwind Preflight is required in addition to theme and utility layers; omitting it can expose browser-default link and heading styles.
+- Disable standard and contextual font ligatures in document `pre` and `code` elements. Code samples must display punctuation sequences such as `<!--` and `-->` literally rather than replacing them with font glyphs such as arrows.
+- Keep block spacing asymmetric: the upper margin of rendered code figures, `BlockSimple`, and `BlockMdx` is half of the lower margin so a preceding heading remains visually attached to its content.
 - Import the package stylesheet once and load project-specific overrides after it. Scope overrides under the document page root instead of changing global element styles.
 - Avoid broad selectors or CSS resets in embedded components. After changing the CSS pipeline, verify headings, links, code blocks, side panels, and scrolling in both the standalone demo and the embedded page.
+
+General visual components, hooks, and icons from Fumadocs, Lucide, and the local shadcn set are imported through `frontend/UICommon.js`. `frontend/UICommonExternal.js` owns external-library exports, while `UICommon.js` adds local shared components. Specialized engines such as React Flow and build-time remark or rehype plugins remain direct imports because they are feature-specific or compiler dependencies rather than general UI primitives.
 
 ## Fumadocs features used
 

@@ -2,6 +2,8 @@
 
 `BlockSimple` は、Markdown の引用ブロックを強調表示する再利用可能な資料コンポーネントです。GitHub Markdown Alert の種別行は表示内容から除去します。
 
+単純ブロックには表示種別を大文字にしたタイトルが付きます。`title` で変更でき、`isTitleHidden=true` を明示した場合だけ非表示になります。
+
 `Block` は互換エントリです。引用ブロックでは `BlockSimple`、`markdown` または `mdx` fenced block では `BlockMdx` を自動選択します。`variant=simple` または `variant=mdx` で明示することもできます。著者は `BlockSimple` と `BlockMdx` を直接指定できます。
 
 ## 単純ブロック
@@ -18,7 +20,9 @@
 
 | 値 | 既定値 | 説明 |
 | --- | --- | --- |
-| `type` / `tone` | `info` | `info`、`warning`、`caution` などの表示種別 |
+| `type` / `tone` | `info` | `info`、`note`、`tip`、`important`、`success`、`warning`、`caution`、`error` の表示種別 |
+| `title` | 表示種別の大文字表記 | タイトルを変更 |
+| `isTitleHidden` | `false` | `true` の場合だけタイトルを非表示 |
 | `variant` | 自動判定 | `Block` 使用時に `simple` または `mdx` を明示 |
 | 引用ブロック | 空 | 表示する Markdown |
 

@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { ArrowLeft, ArrowRight, ArrowUp } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUp } from '../../UICommon.js';
 import { useDocStores } from '../store/context.js';
 import './DocNavigationButtons.css';
 

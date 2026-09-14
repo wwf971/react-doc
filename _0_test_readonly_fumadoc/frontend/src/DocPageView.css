@@ -34,6 +34,18 @@
   max-height: none;
 }
 
+/* Programming punctuation must remain literal. JetBrains Mono otherwise uses
+   contextual ligatures that can turn sequences such as "-->" into arrows. */
+[data-doc-content] :is(pre, code) {
+  font-variant-ligatures: none;
+  font-feature-settings: 'liga' 0, 'calt' 0;
+}
+
+[data-doc-content] :where(figure):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  margin-top: 1em;
+  margin-bottom: 2em;
+}
+
 .doc-content-empty {
   color: var(--color-fd-muted-foreground);
   font-size: 0.875rem;

@@ -33,5 +33,5 @@ tree:
       - doc: /mdx-test/sub/notes.md
       - doc: /mdx-test/sample.py
   - separator: Meta
-  - doc: /req/test_fumadoc_req.md
+  - doc: /req/doc_page_req.md
     text: Requirement

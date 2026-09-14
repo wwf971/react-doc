@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
-import { Copy, Expand, Scan, X } from 'lucide-react';
+import { Copy, Expand, Scan, X } from '../../frontend/UICommon.js';
 import { DocDiagramMermaidStore } from './DocDiagramMermaidStore.js';
 import './DocDiagramMermaid.css';
 

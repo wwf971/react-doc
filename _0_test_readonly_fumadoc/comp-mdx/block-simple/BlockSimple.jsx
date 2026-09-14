@@ -1,8 +1,16 @@
+import { useId } from 'react';
+import {
+  blockSimpleIsTitleHiddenGet,
+  blockSimpleTitleGet,
+  blockSimpleToneGet,
+} from './BlockSimpleState.js';
 import './BlockSimple.css';
 
-const toneSet = new Set(['info', 'note', 'warning', 'caution']);
+const alertMarkerPattern = /^\[!(?:CAUTION|WARNING|INFO|NOTE|ERROR|TIP|IMPORTANT|SUCCESS)\]$/i;
+const toneAlertSet = new Set(['warning', 'caution', 'error']);
 
 function BlockSimple({ data = {}, config = {}, onEvent }) {
+  const titleId = useId();
   const MdxRenderer = config.MdxRenderer;
   if (!MdxRenderer) {
     return <div className="doc-mdx-block-simple-error" role="alert">BlockSimple requires config.MdxRenderer.</div>;
@@ -11,14 +19,20 @@ function BlockSimple({ data = {}, config = {}, onEvent }) {
   const source = String(data.raw ?? '')
     .split('\n')
     .map((line) => line.replace(/^> ?/, ''))
-    .filter((line) => !/^\[!(?:CAUTION|WARNING|INFO|NOTE)\]$/i.test(line.trim()))
+    .filter((line) => !alertMarkerPattern.test(line.trim()))
     .join('\n')
     .trim();
-  const toneInput = String(data.type ?? data.tone ?? 'info').trim().toLowerCase();
-  const tone = toneSet.has(toneInput) ? toneInput : 'info';
+  const tone = blockSimpleToneGet(data);
+  const title = blockSimpleTitleGet(data, tone);
+  const isTitleHidden = blockSimpleIsTitleHiddenGet(data);
 
   return (
-    <aside className={`doc-mdx-block-simple is-${tone}`} role={tone === 'warning' ? 'alert' : 'note'}>
+    <aside
+      className={`doc-mdx-block-simple is-${tone}`}
+      role={toneAlertSet.has(tone) ? 'alert' : 'note'}
+      aria-labelledby={isTitleHidden ? undefined : titleId}
+    >
+      {isTitleHidden ? null : <div id={titleId} className="doc-mdx-block-simple-title">{title}</div>}
       <MdxRenderer
         data={{ source }}
         config={{

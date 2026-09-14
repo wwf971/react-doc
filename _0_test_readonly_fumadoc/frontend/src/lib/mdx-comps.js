@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import defaultMdxComponents from 'fumadocs-ui/mdx';
+import { defaultMdxComponents } from '../../UICommon.js';
 import { DocLink } from '../comp-doc/DocLink.jsx';
 import { DocComp } from '../comp-doc/DocComp.jsx';
 import { compById } from '../comp-doc/registry.js';

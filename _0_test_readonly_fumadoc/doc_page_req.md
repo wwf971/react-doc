@@ -29,7 +29,7 @@ source
 
 And the internal representation of a folder/file should always be `/{root-folder-or-file-id}/xx/yy/`. We use id for root folder/file, so that we can deal with situation when there are root items with same name.
 
-For files other than md/mdx, there should be a default display, and display strategies based on file suffices should also be supported. For example, python scripts might be treated as a markdown file with a title(being its file name) and a one single code block.
+For files other than md/mdx, there should be a default display, and display strategies based on file suffices should also be supported. For example, python scripts can be treated as a markdown file with a title(being its file name) and a one single code block.
 
 Source should be able to be specified from a config file, typically using yaml, and with file name `source.yaml`.
 

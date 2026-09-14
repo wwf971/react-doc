@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { FileCode } from 'lucide-react';
+import { FileCode } from '../../frontend/UICommon.js';
 import { CodeBlockCompactPopup } from './CodeBlockCompactPopup.jsx';
 import { CodeBlockCompactStore } from './CodeBlockCompactStore.js';
 

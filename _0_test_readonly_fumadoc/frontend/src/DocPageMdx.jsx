@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { FrameworkProvider } from 'fumadocs-core/framework';
-import { RootProvider } from 'fumadocs-ui/provider/base';
-import { DocsLayout } from 'fumadocs-ui/layouts/docs';
-import { Container as DocsLayoutContainer } from 'fumadocs-ui/layouts/docs/slots/container';
+import { DocsLayout, DocsLayoutContainer, FrameworkProvider, RootProvider } from '../UICommon.js';
 import { DocSourceStore } from './store/DocSourceStore.js';
 import { DocStore } from './store/DocStore.js';
 import { CompStateStore } from './store/CompStateStore.js';

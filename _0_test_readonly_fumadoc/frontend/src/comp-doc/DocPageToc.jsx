@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
-import { TOC as PageToc } from 'fumadocs-ui/layouts/docs/page/slots/toc';
+import { PageToc } from '../../UICommon.js';
 import { useDocStores } from '../store/context.js';
 import { RegisteredComp } from './RegisteredComp.jsx';
 import './DocPageToc.css';

@@ -1,17 +1,17 @@
 import { useRef } from 'react';
-import Link from 'fumadocs-core/link';
-import { usePathname } from 'fumadocs-core/framework';
 import {
+  ChevronDown,
+  Link,
   SidebarFolder,
   SidebarFolderContent,
   SidebarFolderTrigger,
   useAutoScroll,
   useFolder,
   useFolderDepth,
+  usePathname,
   useSidebar,
-} from 'fumadocs-ui/components/sidebar/base';
-import { useTreePath } from 'fumadocs-ui/contexts/tree';
-import { ChevronDown } from 'lucide-react';
+  useTreePath,
+} from '../../UICommon.js';
 
 const classNameItem = 'relative flex flex-row items-center gap-2 rounded-lg p-2 text-start text-fd-muted-foreground wrap-anywhere [&_svg]:size-4 [&_svg]:shrink-0 transition-colors hover:bg-fd-accent/50 hover:text-fd-accent-foreground/80 hover:transition-none';
 const classNameLink = `${classNameItem} data-[active=true]:bg-fd-primary/10 data-[active=true]:text-fd-primary data-[active=true]:hover:transition-colors`;

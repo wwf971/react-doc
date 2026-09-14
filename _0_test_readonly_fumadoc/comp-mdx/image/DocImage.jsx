@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
-import { Copy, Expand, Scan, X } from 'lucide-react';
+import { Copy, Expand, Scan, X } from '../../frontend/UICommon.js';
 import { docImageDataParse } from './DocImageData.js';
 import { DocImageStore } from './DocImageStore.js';
 import './DocImage.css';

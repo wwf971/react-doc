@@ -7,11 +7,9 @@ import {
   DocsDescription,
   PageBreadcrumb,
   PageFooter,
-} from 'fumadocs-ui/layouts/docs/page';
-import {
   TOCPopover,
   TOCProvider,
-} from 'fumadocs-ui/layouts/docs/page/slots/toc';
+} from '../UICommon.js';
 import { useDocStores } from './store/context.js';
 import { buildMdxComps } from './lib/mdx-comps.js';
 import { useDocDestinationNavigation } from './lib/use-doc-destination-navigation.js';

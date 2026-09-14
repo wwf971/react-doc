@@ -1,16 +1,46 @@
 .doc-mdx-block-simple {
-  margin: 1.25rem 0;
-  padding: 0.8rem 1rem;
-  border: 1px solid color-mix(in srgb, #2563eb 45%, var(--color-fd-border));
-  border-left: 3px solid #2563eb;
-  background: color-mix(in srgb, #2563eb 7%, transparent);
+  --doc-mdx-block-simple-color: #2563eb;
+  --doc-mdx-block-simple-background-color: #2563eb;
+  margin: 0.625rem 0 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--doc-mdx-block-simple-color) 45%, var(--color-fd-border));
+  border-left: 3px solid var(--doc-mdx-block-simple-color);
+  background: color-mix(in srgb, var(--doc-mdx-block-simple-background-color) 7%, transparent);
 }
 
 .doc-mdx-block-simple.is-warning,
 .doc-mdx-block-simple.is-caution {
-  border-color: color-mix(in srgb, #d97706 45%, var(--color-fd-border));
-  border-left-color: #d97706;
-  background: color-mix(in srgb, #f59e0b 8%, transparent);
+  --doc-mdx-block-simple-color: #d97706;
+  --doc-mdx-block-simple-background-color: #f59e0b;
+}
+
+.doc-mdx-block-simple.is-tip,
+.doc-mdx-block-simple.is-success {
+  --doc-mdx-block-simple-color: #15803d;
+  --doc-mdx-block-simple-background-color: #22c55e;
+}
+
+.doc-mdx-block-simple.is-important {
+  --doc-mdx-block-simple-color: #7e22ce;
+  --doc-mdx-block-simple-background-color: #a855f7;
+}
+
+.doc-mdx-block-simple.is-error {
+  --doc-mdx-block-simple-color: #b42318;
+  --doc-mdx-block-simple-background-color: #ef4444;
+}
+
+.doc-mdx-block-simple-title {
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--doc-mdx-block-simple-color) 32%, var(--color-fd-border));
+  color: var(--doc-mdx-block-simple-color);
+  background: color-mix(in srgb, var(--doc-mdx-block-simple-background-color) 8%, transparent);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.doc-mdx-block-simple-content {
+  padding: 0.8rem 1rem;
 }
 
 .doc-mdx-block-simple-content > :first-child {
