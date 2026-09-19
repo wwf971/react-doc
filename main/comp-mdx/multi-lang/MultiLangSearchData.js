@@ -2,7 +2,7 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import { remarkHeading } from 'fumadocs-core/mdx-plugins/remark-heading';
 import { remarkStructure } from 'fumadocs-core/mdx-plugins/remark-structure';
-import { remarkCommentComp } from './remark-comment-comp.js';
+import { remarkCommentComp } from '../../frontend/src/lib/remark-comment-comp.js';
 import { multiLangRemarkHeading } from './MultiLangRemarkHeading.js';
 import { multiLangStructuredDataGet } from './MultiLangData.js';
 

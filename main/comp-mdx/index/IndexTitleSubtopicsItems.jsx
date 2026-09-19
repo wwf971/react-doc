@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { useDocLanguage } from '../../frontend/src/comp-doc/MultiLangContext.jsx';
+import { useDocLanguage } from '../multi-lang/MultiLangContext.jsx';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { textLocalizedGet } from './DocIndexData.js';
 import { IndexTitleSubtopicsItemsHorizontalWrap } from './IndexTitleSubtopicsItemsHorizontalWrap.jsx';

@@ -7,8 +7,8 @@
     "#react-doc/*": "./*"
   },
   "scripts": {
-    "dev": "npm --prefix frontend run dev",
-    "build": "npm --prefix frontend run build",
-    "start": "npm --prefix frontend run preview"
+    "dev": "pnpm -C frontend dev",
+    "build": "pnpm -C frontend build",
+    "start": "pnpm -C frontend preview"
   }
 }

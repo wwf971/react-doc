@@ -17,7 +17,7 @@ import { DocPageToolbar } from './comp-doc/DocPageToolbar.jsx';
 import { DocPageSkeleton } from './comp-doc/DocPageSkeleton.jsx';
 import { DocPageToc } from './comp-doc/DocPageToc.jsx';
 import { RegisteredComp } from './comp-doc/RegisteredComp.jsx';
-import { DocLanguageProvider } from './comp-doc/MultiLangContext.jsx';
+import { DocLanguageProvider } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 import './DocPageView.css';
 
 // renders the current doc: loading / error / compiled body.

@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { useDocStores } from '../store/context.js';
+import { useDocStores } from '../../frontend/src/store/context.js';
 import './MultiLangControl.css';
 
 export const MultiLangControl = observer(function MultiLangControl() {

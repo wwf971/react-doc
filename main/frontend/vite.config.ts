@@ -14,8 +14,8 @@ export default defineConfig({
     port: 45173,
     strictPort: true,
     fs: {
-      // doc source folders live outside frontend/, allow serving them as ?raw modules
-      allow: ['..', '../../..'],
+      // doc source folders and gitignored third_party/shadcn live outside frontend/
+      allow: ['..', '../..', '../../..'],
     },
   },
   preview: {

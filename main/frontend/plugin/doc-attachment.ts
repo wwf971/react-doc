@@ -28,12 +28,31 @@ const mermaidMdxPattern = /<DocDiagramMermaid\b[^>]*\blaneIcons\s*=\s*(?:"([^"]*
 const imageMdxPattern = /<DocImage\b[^>]*\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 const imageCommentBlockPattern = /<!--\s*renderComp=DocImage(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n```/g;
 const imageGridCommentPattern = /<!--\s*renderComp=DocImageGrid(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n```/g;
+const fileDownloadCommentPattern = /<!--\s*renderComp=FileDownload(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n```/g;
 
 export const docAttachmentFinderDefaultList: DocAttachmentFinder[] = [
   attachmentMermaidLaneIconFind,
   attachmentImageFind,
   attachmentImageGridFind,
+  attachmentFileDownloadFind,
 ];
+
+export function attachmentFileDownloadFind(context: DocAttachmentFinderContext): string[] {
+  const result: string[] = [];
+  for (const match of context.text.matchAll(fileDownloadCommentPattern)) {
+    try {
+      const data = yamlParse(match[1]);
+      const src = mappingIs(data) ? data.src : undefined;
+      if (typeof src === 'string' && src.trim()) result.push(src.trim());
+    } catch (error) {
+      console.warn(
+        `[doc-source] invalid FileDownload YAML in ${context.doc.internalPath}: ` +
+        `${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  return result;
+}
 
 export function attachmentMermaidLaneIconFind(context: DocAttachmentFinderContext): string[] {
   const valueList: string[] = [];

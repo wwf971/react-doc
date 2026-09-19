@@ -5,7 +5,7 @@ import { DocComp } from '../comp-doc/DocComp.jsx';
 import { compById } from '../comp-doc/registry.js';
 import { compDefinitionNormalize } from '../comp-doc/comp-registry.js';
 import { RegisteredComp } from '../comp-doc/RegisteredComp.jsx';
-import { MultiLangHeadingText } from '../comp-doc/common/MultiLangEntry.jsx';
+import { MultiLangHeadingText } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
 
 // component mapping used when rendering compiled docs.
 // fumadocs defaults stay untouched (headings, code blocks, callout, ...);

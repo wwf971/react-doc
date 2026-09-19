@@ -19,7 +19,7 @@ import { visit } from 'unist-util-visit';
 // note: html comments only exist in md-format parsing. in .mdx, authors write
 // <Comp .../> directly.
 
-const REGEX_RENDER_COMP = /^<!--\s*renderComp=([\w\/-]+)((?:\s*,\s*[\w-]+=[^,]*)*)\s*-->$/;
+const REGEX_RENDER_COMP = /^<!--\s*renderComp=([\w\/-]+)([\s\S]*?)\s*-->$/;
 
 export function remarkCommentComp(options = {}) {
   return (tree, file) => {
@@ -79,7 +79,7 @@ export function remarkCommentComp(options = {}) {
 // ",a=b,c=d" -> { a: 'b', c: 'd' }
 function parseProps(text) {
   const result = {};
-  for (const part of text.split(',')) {
+  for (const part of propPartListGet(text)) {
     const partTrimmed = part.trim();
     if (partTrimmed === '') continue;
     const indexEq = partTrimmed.indexOf('=');
@@ -87,6 +87,22 @@ function parseProps(text) {
     result[partTrimmed.slice(0, indexEq).trim()] = partTrimmed.slice(indexEq + 1).trim();
   }
   return result;
+}
+
+function propPartListGet(text) {
+  const partList = [];
+  let depthSquare = 0;
+  let start = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === '[') depthSquare += 1;
+    if (text[index] === ']') depthSquare = Math.max(0, depthSquare - 1);
+    if (text[index] === ',' && depthSquare === 0) {
+      partList.push(text.slice(start, index));
+      start = index + 1;
+    }
+  }
+  partList.push(text.slice(start));
+  return partList;
 }
 
 function sliceBySourcePosition(sourceText, node) {

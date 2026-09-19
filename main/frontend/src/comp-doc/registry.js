@@ -1,5 +1,5 @@
 import { Accordion, Accordions, Callout, File, Files, Folder, Step, Steps, Tab, Tabs } from '../../UICommon.js';
-import { DocMultiLang } from './common/MultiLangEntry.jsx';
+import { DocMultiLang } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
 import { DemoCounter } from './specific/DemoCounter.jsx';
 import { StockTable } from './specific/StockTable.jsx';
 import { compDefine, compNativeDefine } from './comp-registry.js';

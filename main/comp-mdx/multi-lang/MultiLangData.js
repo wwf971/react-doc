@@ -1,4 +1,12 @@
 import { parse as parseYaml } from 'yaml';
+import {
+  multiLangParagraphsLanguageListGet,
+  multiLangParagraphsStructuredDataGet,
+} from './MultiLangParagraphData.js';
+import {
+  multiLangListLanguageListGet,
+  multiLangListStructuredDataGet,
+} from './MultiLangListData.js';
 
 const KEY_LIST_STRUCTURAL = new Set(['children', 'items', 'text', 'type']);
 
@@ -17,7 +25,11 @@ export function multiLangContentParse(raw) {
   }
 }
 
-export function multiLangLanguageListGet(raw) {
+export function multiLangLanguageListGet(raw, context = {}) {
+  if (context.props?.type === 'paragraphs') {
+    return multiLangParagraphsLanguageListGet(raw, context);
+  }
+  if (context.props?.type === 'list') return multiLangListLanguageListGet(raw, context);
   const result = multiLangContentParse(raw);
   if (result.error) return [];
   const languageSet = new Set();
@@ -25,7 +37,11 @@ export function multiLangLanguageListGet(raw) {
   return [...languageSet];
 }
 
-export function multiLangStructuredDataGet(raw) {
+export function multiLangStructuredDataGet(raw, context = {}) {
+  if (context.props?.type === 'paragraphs') {
+    return multiLangParagraphsStructuredDataGet(raw, context);
+  }
+  if (context.props?.type === 'list') return multiLangListStructuredDataGet(raw, context);
   const result = multiLangContentParse(raw);
   if (result.error) return { contents: [] };
   const contents = [];

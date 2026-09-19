@@ -10,8 +10,8 @@ import { DocPageView } from './DocPageView.jsx';
 import { DocNavigationButtons } from './comp-doc/DocNavigationButtons.jsx';
 import { DocSearchDialog } from './comp-doc/DocSearchDialog.jsx';
 import { DocSidebarFolder } from './comp-doc/DocSidebarFolder.jsx';
-import { DocLanguageProvider, useDocLanguage } from './comp-doc/MultiLangContext.jsx';
-import { MultiLangControl } from './comp-doc/MultiLangControl.jsx';
+import { DocLanguageProvider, useDocLanguage } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
+import { MultiLangControl } from '../../comp-mdx/multi-lang/MultiLangControl.jsx';
 import { compById as compByIdDefault } from './comp-doc/registry.js';
 import './DocPageMdx.css';
 

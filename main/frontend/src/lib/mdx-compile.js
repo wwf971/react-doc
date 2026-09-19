@@ -12,9 +12,9 @@ import { parse as parseYaml } from 'yaml';
 import { remarkDocLink } from './remark-doc-link.js';
 import { remarkCommentComp } from './remark-comment-comp.js';
 import { remarkStableHeadingAnchor } from './remark-stable-heading-anchor.js';
-import { multiLangLanguageListGet, multiLangStructuredDataGet } from './MultiLangData.js';
-import { multiLangRemarkHeading } from './MultiLangRemarkHeading.js';
-import { MultiLangHeadingText } from '../comp-doc/common/MultiLangEntry.jsx';
+import { multiLangLanguageListGet, multiLangStructuredDataGet } from '../../../comp-mdx/multi-lang/MultiLangData.js';
+import { multiLangRemarkHeading } from '../../../comp-mdx/multi-lang/MultiLangRemarkHeading.js';
+import { MultiLangHeadingText } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
 
 // compiles one doc in the browser.
 // mdxPreset() applies the fumadocs defaults (gfm, heading anchors + toc export,
@@ -38,7 +38,9 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
     });
     const languageListGet = config.languageListGetByComponent?.[compName]
       ?? (compName === 'DocMultiLang' ? multiLangLanguageListGet : undefined);
-    for (const language of languageListGet?.(raw) ?? []) languageSet.add(language);
+    for (const language of languageListGet?.(raw, { compName, props, lang }) ?? []) {
+      languageSet.add(language);
+    }
   };
   const structuredDataGet = ({ compName, props, raw }) => {
     const getter = config.structuredDataGetByComponent?.[compName]

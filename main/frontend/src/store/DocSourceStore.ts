@@ -1,6 +1,6 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { compileDoc } from '../lib/mdx-compile.js';
-import { multiLangSearchDataGet } from '../lib/MultiLangSearchData.js';
+import { multiLangSearchDataGet } from '../../../comp-mdx/multi-lang/MultiLangSearchData.js';
 
 // lower store layer: owns the doc source content.
 // manifest + raw text + compile cache + doc index + search data.

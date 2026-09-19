@@ -286,7 +286,7 @@ The search dialog UI comes from fumadocs-ui (composable `SearchDialog` parts plu
 ## Project Folder Structure
 
 ```text
-_0_test_readonly_fumadoc/
+main/
 ├── config.yaml          # example config (tracked), actually runnable
 ├── config.0.yaml        # local override (untracked), entries overlay config.yaml
 ├── side-panel.yaml      # side panel tree, referenced from config
@@ -303,7 +303,7 @@ _0_test_readonly_fumadoc/
         └── comp-doc/            # DocLink + registry components (common/, specific/)
 ```
 
-Run `npm install` in `frontend/` once, then `npm run dev` from either this folder or `frontend/`. `npm run build` produces one static deployable artifact (docs bundled as lazy chunks); any static file server works, no doc folders needed at runtime.
+Run `pnpm install` from the workspace root once, then `pnpm dev` from either this folder or `frontend/`. `pnpm build` produces one static deployable artifact (docs bundled as lazy chunks); any static file server works, no doc folders needed at runtime.
 
 ## Avoid CSS Style Regression
 

@@ -1,17 +1,38 @@
 import { useMemo } from 'react';
-import { DocLanguageProvider, useDocLanguage } from '../MultiLangContext.jsx';
+import { DocLanguageProvider, useDocLanguage } from './MultiLangContext.jsx';
 import {
   multiLangContentParse,
   multiLangTranslationGet,
   valueIsText,
-} from '../../lib/MultiLangData.js';
+} from './MultiLangData.js';
+import { MultiLangList } from './MultiLangList.jsx';
+import { MultiLangParagraphs } from './MultiLangParagraph.jsx';
 
 // Shared entry for degradation-compatible multilingual basic components.
 // A marked YAML block may contain paragraphs and recursively nested lists.
-export function DocMultiLang({ data = {} }) {
+export function DocMultiLang({ data = {}, config = {} }) {
+  const languageOwn = typeof data.language === 'string' ? data.language.trim() : '';
+
+  if (data.type === 'paragraphs') {
+    return (
+      <DocLanguageProvider language={languageOwn}>
+        <MultiLangParagraphs data={data} sourcePath={config.sourcePath} />
+      </DocLanguageProvider>
+    );
+  }
+  if (data.type === 'list') {
+    return (
+      <DocLanguageProvider language={languageOwn}>
+        <MultiLangList data={data} sourcePath={config.sourcePath} />
+      </DocLanguageProvider>
+    );
+  }
+  return <DocMultiLangYaml data={data} languageOwn={languageOwn} />;
+}
+
+function DocMultiLangYaml({ data, languageOwn }) {
   const languageAncestor = useDocLanguage();
   const result = useMemo(() => multiLangContentParse(data.raw ?? ''), [data.raw]);
-  const languageOwn = typeof data.language === 'string' ? data.language.trim() : '';
   const languagePreferred = languageOwn || languageAncestor;
 
   if (result.error) {
@@ -55,7 +76,7 @@ function MultiLangContentItem({ index, item, languagePreferred }) {
     return <MultiLangParagraph index={index} item={item} languagePreferred={languagePreferred} />;
   }
   if (item.type === 'ul' || item.type === 'ol') {
-    return <MultiLangList item={item} languagePreferred={languagePreferred} />;
+    return <MultiLangYamlList item={item} languagePreferred={languagePreferred} />;
   }
   return <MultiLangError message={`item ${index + 1} has unsupported type: ${String(item.type ?? '(missing)')}`} />;
 }
@@ -69,7 +90,7 @@ function MultiLangParagraph({ index, item, languagePreferred }) {
   return <p lang={languageRendered}>{inlineContentRender(String(translationByLanguage[languageRendered]))}</p>;
 }
 
-function MultiLangList({ item, languagePreferred }) {
+function MultiLangYamlList({ item, languagePreferred }) {
   const ListTag = item.type === 'ol' ? 'ol' : 'ul';
   if (!Array.isArray(item.items)) {
     return <MultiLangError message={`${item.type} must contain an items list`} />;
@@ -103,7 +124,7 @@ function MultiLangListItem({ index, item, languagePreferred }) {
       {inlineContentRender(String(translationByLanguage[languageRendered]))}
       {childList.map((child, childIndex) => (
         child?.type === 'ul' || child?.type === 'ol'
-          ? <MultiLangList key={childIndex} item={child} languagePreferred={languagePreferred} />
+          ? <MultiLangYamlList key={childIndex} item={child} languagePreferred={languagePreferred} />
           : <MultiLangError key={childIndex} message={`child ${childIndex + 1} must have type ul or ol`} />
       ))}
     </li>

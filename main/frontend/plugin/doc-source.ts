@@ -80,7 +80,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       const fileEntries = options.pruneSourceToSidePanel
         ? pruneSourceToSidePanel(configDoc, fileEntriesAll)
         : fileEntriesAll;
-      const attachmentList = isBuild && configDoc.collectComponentAttachmentsOnBuild === true
+      const attachmentList = configDoc.collectComponentAttachmentsOnBuild === true
         ? docAttachmentsCollect(
             configDoc,
             fileEntries,
@@ -414,7 +414,9 @@ function generateModuleCode(
   lines.push(`export const configDoc = ${JSON.stringify(configDoc)};`);
   const attachmentUrlByPath: Record<string, string> = {};
   for (const attachment of attachmentList) {
-    const url = attachmentDataUrlGet(attachment.absPath);
+    const url = isBuild
+      ? attachmentDataUrlGet(attachment.absPath)
+      : `/@fs/${normalizeSlashPath(attachment.absPath)}`;
     for (const reference of attachment.referenceList) {
       attachmentUrlByPath[reference.replace(/^\.?\//, '')] = url;
     }
@@ -499,8 +501,11 @@ function collectPathsToWatch(configDoc: any, configDir: string, configFile: stri
     result.push(...configDoc.sidePanel.fileListImported);
   }
   for (const rule of configDoc.source) {
-    if (rule.action === 'addFolder' || rule.action === 'addFile') {
+    if (rule.action === 'addFolder') {
       result.push(path.resolve(configDir, rule.path));
+    } else if (rule.action === 'addFile') {
+      const filePath = path.resolve(configDir, rule.path);
+      result.push(fs.existsSync(filePath) ? filePath : path.dirname(filePath));
     }
   }
   return result;
