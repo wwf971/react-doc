@@ -177,6 +177,7 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
 }
 
 type SidePanelLoaded = {
+  root?: Record<string, any>;
   tree: any[];
   fileList: string[];
 };
@@ -197,6 +198,21 @@ function loadSidePanelFile(filePath: string, fileChain: string[] = []): SidePane
     throw new Error(`[doc-source] side panel file must contain a "tree" list: ${filePathResolved}`);
   }
 
+  // optional "root" metadata: properties applied to the parent node that
+  // imports this file through childrenFile. never a visible child item.
+  const root = sidePanel.root;
+  if (root !== undefined) {
+    if (root === null || typeof root !== 'object' || Array.isArray(root)) {
+      throw new Error(`[doc-source] side panel "root" must be a mapping: ${filePathResolved}`);
+    }
+    if (root.children !== undefined || root.childrenFile !== undefined) {
+      throw new Error(
+        `[doc-source] side panel "root" must not contain "children" or "childrenFile"` +
+          ` (children belong to the top-level "tree" list): ${filePathResolved}`,
+      );
+    }
+  }
+
   const fileList = [filePathResolved];
   const tree = loadSidePanelNodes(
     sidePanel.tree,
@@ -204,7 +220,7 @@ function loadSidePanelFile(filePath: string, fileChain: string[] = []): SidePane
     [...fileChain, filePathResolved],
     fileList,
   );
-  return { tree, fileList };
+  return { root, tree, fileList };
 }
 
 function loadSidePanelNodes(
@@ -225,6 +241,7 @@ function loadSidePanelNodes(
     }
 
     let childrenImported: any[] = [];
+    let rootImported: Record<string, any> = {};
     if (childrenFile !== undefined) {
       if (typeof childrenFile !== 'string' || !childrenFile.trim()) {
         throw new Error(
@@ -233,16 +250,19 @@ function loadSidePanelNodes(
       }
       const loaded = loadSidePanelFile(path.resolve(fileDir, childrenFile), fileChain);
       childrenImported = loaded.tree;
+      rootImported = loaded.root ?? {};
       fileList.push(...loaded.fileList);
     }
 
     const childrenLoaded = Array.isArray(childrenLocal)
       ? loadSidePanelNodes(childrenLocal, fileDir, fileChain, fileList)
       : [];
+    // imported root metadata applies to this node; explicit local properties win.
+    const nodeMerged = { ...rootImported, ...nodeResult };
     if (childrenFile !== undefined || childrenLocal !== undefined) {
-      nodeResult.children = [...childrenImported, ...childrenLoaded];
+      nodeMerged.children = [...childrenImported, ...childrenLoaded];
     }
-    return nodeResult;
+    return nodeMerged;
   });
 }
 

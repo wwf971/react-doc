@@ -165,6 +165,9 @@ tree:
 
 ```yaml
 # side-panel-codeapp.yaml
+root:                    # optional: properties for the importing node itself
+  doc: /codeapp-dev/doc/codeapp-doc.md
+  defaultOpen: false
 tree:
   - text: Dataverse
     doc: /codeapp-dev/doc/codeapp-dataverse.md
@@ -172,7 +175,7 @@ tree:
     doc: /codeapp-dev/doc/codeapp-test-local.md
 ```
 
-Imported files can use `childrenFile` again. Import cycles, missing files, a non-string `childrenFile`, and files without a `tree` list are configuration errors with the relevant file path. All recursively imported files are added to the development-server watch set. When an import is added while the server is running, editing the containing yaml refreshes the watch set and reloads the generated manifest.
+An imported file may declare an optional `root` mapping alongside `tree`. Its properties (`doc`, `part`, `defaultOpen`, ...) are merged onto the node that declares `childrenFile`, so a part can own its root document and part-index configuration in its own folder while the central file only names the node. Explicit properties on the importing node win over imported `root` values. `root` never becomes a visible child, and `root.children`/`root.childrenFile` are configuration errors — child ownership stays with the imported `tree`. Because the merge happens in the loader, an imported `part` registers against the importing node's `id` exactly as inline configuration does. Imported files can use `childrenFile` again. Import cycles, missing files, a non-string `childrenFile`, and files without a `tree` list are configuration errors with the relevant file path. All recursively imported files are added to the development-server watch set. When an import is added while the server is running, editing the containing yaml refreshes the watch set and reloads the generated manifest.
 
 ### Semantic parts and hosted indexes
 
