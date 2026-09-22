@@ -36,6 +36,24 @@
   }
 }
 
+/* theme toggle floating at the bottom of the sidebar column, always visible
+   near the window's bottom edge (the sidebar footer toggle is disabled). */
+.doc-theme-floating {
+  position: sticky;
+  z-index: 40;
+  bottom: 0.75rem;
+  align-self: end;
+  justify-self: start;
+  grid-area: sidebar;
+  margin: 0 0 0.75rem 0.75rem;
+}
+
+.doc-theme-floating [data-theme-toggle] {
+  background: color-mix(in srgb, var(--color-fd-background) 94%, transparent);
+  box-shadow: 0 3px 12px rgb(15 23 42 / 12%);
+  backdrop-filter: blur(6px);
+}
+
 .doc-navigation-floating {
   position: sticky;
   z-index: 40;

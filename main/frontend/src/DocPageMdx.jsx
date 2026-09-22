@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { DocsLayout, DocsLayoutContainer, FrameworkProvider, RootProvider } from '../UICommon.js';
+import { DocsLayout, DocsLayoutContainer, FrameworkProvider, RootProvider, ThemeSwitch } from '../UICommon.js';
 import { DocSourceStore } from './store/DocSourceStore.js';
 import { DocStore } from './store/DocStore.js';
 import { CompStateStore } from './store/CompStateStore.js';
@@ -159,6 +159,7 @@ const DocsShell = observer(function DocsShell() {
       nav={{ title: sourceStore.configDoc.siteTitle ?? 'Docs' }}
       sidebar={sidePanelProps}
       slots={docsLayoutSlots}
+      themeSwitch={themeSwitchSidebarDisabled}
     >
       <DocPageView />
     </DocsLayout>
@@ -167,10 +168,17 @@ const DocsShell = observer(function DocsShell() {
 
 const docsLayoutSlots = { container: DocPageLayoutContainer };
 
+// the sidebar-footer theme toggle can end up below the window's bottom edge
+// when the side panel is tall; the floating toggle below replaces it.
+const themeSwitchSidebarDisabled = { enabled: false };
+
 function DocPageLayoutContainer({ children, ...props }) {
   return (
     <DocsLayoutContainer {...props}>
       {children}
+      <div className="doc-theme-floating">
+        <ThemeSwitch />
+      </div>
       <nav className="doc-navigation-floating" aria-label="Document navigation and language">
         <DocNavigationButtons isCompact />
         <MultiLangControl />

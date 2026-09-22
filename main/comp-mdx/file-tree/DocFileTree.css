@@ -1,0 +1,72 @@
+/* visual style mimics the fumadocs Files/Folder/File components. */
+.doc-file-tree {
+	margin: 0.5rem 0 1rem;
+	padding: 0.5rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.375rem;
+	background: var(--color-fd-card);
+	font-size: 0.875rem;
+	line-height: 1.25rem;
+}
+
+/* with maxHeight the outer box keeps this exact height and scrolls inside,
+   so folder toggling never jitters the surrounding page layout. */
+.doc-file-tree-height-fixed {
+	overflow-y: auto;
+}
+
+.doc-file-tree-row {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.375rem 0.5rem;
+	border-radius: 0.375rem;
+}
+
+.doc-file-tree-row:hover {
+	background: var(--color-fd-accent);
+	color: var(--color-fd-accent-foreground);
+}
+
+.doc-file-tree-row-folder {
+	cursor: pointer;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.doc-file-tree-icon {
+	width: 1rem;
+	height: 1rem;
+	flex-shrink: 0;
+}
+
+.doc-file-tree-children-clip {
+	display: grid;
+	grid-template-rows: 0fr;
+	transition: grid-template-rows 150ms ease;
+}
+
+.doc-file-tree-children-open {
+	grid-template-rows: 1fr;
+}
+
+.doc-file-tree-children {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow: hidden;
+	margin-inline-start: 0.5rem;
+	padding-inline-start: 0.5rem;
+	border-inline-start: 1px solid var(--color-fd-border);
+}
+
+.doc-file-tree-error {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+	margin: 0.5rem 0 1rem;
+	padding: 0.5rem 0.75rem;
+	border: 1px solid #dc2626;
+	border-radius: 0.375rem;
+	color: #b42318;
+}

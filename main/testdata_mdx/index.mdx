@@ -41,6 +41,29 @@ export class DocStore {
   </Folder>
 </Files>
 
+## File tree (DocFileTree, fumadocs-independent)
+
+With `maxHeight`, the box keeps that exact height and scrolls inside, so folder toggling never jitters the page layout.
+
+<DocFileTree
+  maxHeight="12rem"
+  tree={[
+    {
+      name: 'testdata_mdx',
+      defaultOpen: true,
+      children: [
+        { name: 'sub', children: [{ name: 'notes.md' }] },
+        { name: 'index.mdx' },
+        { name: 'links.mdx' },
+        { name: 'comp-degrade.md' },
+        { name: 'sample.py' },
+      ],
+    },
+    { name: 'side-panel.yaml' },
+    { name: 'config.yaml' },
+  ]}
+/>
+
 ## Interactive component (state in mobx store)
 
 Click it, then switch docs and come back: <DemoCounter id="counter-home" label="clicks" />

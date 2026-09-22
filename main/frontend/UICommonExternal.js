@@ -6,6 +6,9 @@ export {
   Copy,
   Expand,
   FileCode,
+  FileIcon,
+  FolderIcon,
+  FolderOpenIcon,
   LogOut,
   Scan,
   X,
@@ -14,6 +17,7 @@ export { FrameworkProvider, usePathname } from 'fumadocs-core/framework';
 export { default as Link } from 'fumadocs-core/link';
 export { RootProvider } from 'fumadocs-ui/provider/base';
 export { DocsLayout } from 'fumadocs-ui/layouts/docs';
+export { ThemeSwitch } from 'fumadocs-ui/layouts/shared/slots/theme-switch';
 export { Container as DocsLayoutContainer } from 'fumadocs-ui/layouts/docs/slots/container';
 export {
   DocsBody,
