@@ -1,5 +1,13 @@
-/* visual style mimics the fumadocs Files/Folder/File components. */
+/* visual style mimics the fumadocs Files/Folder/File components.
+   the tree is one two-column grid: name column | description column.
+   every nested wrapper re-exposes these two columns through subgrid, so
+   the description column is aligned across all nesting levels. */
 .doc-file-tree {
+	display: grid;
+	/* the description column shrinks down to its longest word; below that,
+	   the whole tree scrolls horizontally on narrow screens. */
+	grid-template-columns: max-content minmax(min-content, 1fr);
+	overflow-x: auto;
 	margin: 0.5rem 0 1rem;
 	padding: 0.5rem;
 	border: 1px solid var(--color-fd-border);
@@ -9,6 +17,15 @@
 	line-height: 1.25rem;
 }
 
+.doc-file-tree-folder,
+.doc-file-tree-row,
+.doc-file-tree-children-clip,
+.doc-file-tree-children {
+	grid-column: 1 / -1;
+	display: grid;
+	grid-template-columns: subgrid;
+}
+
 /* with maxHeight the outer box keeps this exact height and scrolls inside,
    so folder toggling never jitters the surrounding page layout. */
 .doc-file-tree-height-fixed {
@@ -16,10 +33,6 @@
 }
 
 .doc-file-tree-row {
-	display: flex;
-	align-items: center;
-	gap: 0.5rem;
-	padding: 0.375rem 0.5rem;
 	border-radius: 0.375rem;
 }
 
@@ -28,10 +41,26 @@
 	color: var(--color-fd-accent-foreground);
 }
 
-.doc-file-tree-row-folder {
+/* name cell: icon + name. as a grid cell it stretches to the complete row
+   height, so a folder toggle keeps working next to a wrapped description. */
+.doc-file-tree-main {
+	grid-column: 1;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.375rem 0.5rem;
+}
+
+.doc-file-tree-folder-toggle {
 	cursor: pointer;
 	-webkit-user-select: none;
 	user-select: none;
+}
+
+.doc-file-tree-description {
+	grid-column: 2;
+	padding: 0.375rem 0.5rem;
+	color: var(--color-fd-muted-foreground);
 }
 
 .doc-file-tree-icon {
@@ -50,9 +79,10 @@
 	grid-template-rows: 1fr;
 }
 
+/* indentation and the guide line stay on the children wrapper. subgrid
+   accounts for them as extra inline offset on the name column, so nested
+   names indent while the description column stays aligned. */
 .doc-file-tree-children {
-	display: flex;
-	flex-direction: column;
 	min-height: 0;
 	overflow: hidden;
 	margin-inline-start: 0.5rem;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { FileIcon, FolderIcon, FolderOpenIcon } from '#react-doc/frontend/UICommon.js';
+import { FileIcon, FolderIcon, FolderOpenIcon, ProjectIcon } from '#react-doc/frontend/UICommon.js';
+import { RegisteredComp } from '#react-doc/frontend/src/comp-doc/RegisteredComp.jsx';
 import { DocFileTreeStore } from './DocFileTreeStore.js';
 import './DocFileTree.css';
 
@@ -17,7 +18,7 @@ import './DocFileTree.css';
 // or the degradation-compatible comment-block form with the same shape in yaml.
 // when maxHeight is given, the component reserves exactly that height and
 // scrolls inside, so folder toggling never changes the outer page layout.
-const DocFileTree = observer(function DocFileTree({ data = {} }) {
+const DocFileTree = observer(function DocFileTree({ data = {}, config = {} }) {
 	const [store] = useState(() => new DocFileTreeStore(data));
 	const sourceKey = data.raw ?? JSON.stringify(data.tree ?? null) + String(data.maxHeight ?? '');
 
@@ -43,18 +44,26 @@ const DocFileTree = observer(function DocFileTree({ data = {} }) {
 			style={heightCss ? { height: heightCss } : undefined}
 		>
 			{store.nodeList.map((node) => (
-				<FileTreeNode key={node.key} node={node} store={store} />
+				<FileTreeNode
+					key={node.key}
+					node={node}
+					store={store}
+					instanceIdParent={config.instanceId}
+				/>
 			))}
 		</div>
 	);
 });
 
-const FileTreeNode = observer(function FileTreeNode({ node, store }) {
-	if (!node.isFolder) {
+const FileTreeNode = observer(function FileTreeNode({ node, store, instanceIdParent }) {
+	if (node.type === 'file') {
 		return (
 			<div className="doc-file-tree-row">
-				<FileIcon className="doc-file-tree-icon" />
-				<span className="doc-file-tree-name">{node.name}</span>
+				<span className="doc-file-tree-main">
+					<FileIcon className="doc-file-tree-icon" />
+					<span className="doc-file-tree-name">{node.name}</span>
+				</span>
+				<FileTreeDescription node={node} instanceIdParent={instanceIdParent} />
 			</div>
 		);
 	}
@@ -62,31 +71,75 @@ const FileTreeNode = observer(function FileTreeNode({ node, store }) {
 	const isOpen = store.folderIsOpen(node.key);
 	return (
 		<div className="doc-file-tree-folder">
-			<div
-				className="doc-file-tree-row doc-file-tree-row-folder"
-				role="button"
-				tabIndex={0}
-				aria-expanded={isOpen}
-				onClick={() => store.folderToggle(node.key)}
-				onKeyDown={(event) => {
-					if (event.key !== 'Enter' && event.key !== ' ') return;
-					event.preventDefault();
-					store.folderToggle(node.key);
-				}}
-			>
-				{isOpen
-					? <FolderOpenIcon className="doc-file-tree-icon" />
-					: <FolderIcon className="doc-file-tree-icon" />}
-				<span className="doc-file-tree-name">{node.name}</span>
+			{/* the description column stays outside the toggle button, so links
+			    and other controls inside a description never toggle the folder. */}
+			<div className="doc-file-tree-row">
+				<div
+					className="doc-file-tree-main doc-file-tree-folder-toggle"
+					role="button"
+					tabIndex={0}
+					aria-expanded={isOpen}
+					onClick={() => store.folderToggle(node.key)}
+					onKeyDown={(event) => {
+						if (event.key !== 'Enter' && event.key !== ' ') return;
+						event.preventDefault();
+						store.folderToggle(node.key);
+					}}
+				>
+					{nodeIconRender(node, isOpen)}
+					<span className="doc-file-tree-name">{node.name}</span>
+				</div>
+				<FileTreeDescription node={node} instanceIdParent={instanceIdParent} />
 			</div>
 			<div className={`doc-file-tree-children-clip${isOpen ? ' doc-file-tree-children-open' : ''}`}>
 				<div className="doc-file-tree-children">
 					{node.children.map((nodeChild) => (
-						<FileTreeNode key={nodeChild.key} node={nodeChild} store={store} />
+						<FileTreeNode
+							key={nodeChild.key}
+							node={nodeChild}
+							store={store}
+							instanceIdParent={instanceIdParent}
+						/>
 					))}
 				</div>
 			</div>
 		</div>
+	);
+});
+
+function nodeIconRender(node, isOpen) {
+	if (node.type === 'project') return <ProjectIcon className="doc-file-tree-icon" />;
+	if (isOpen) return <FolderOpenIcon className="doc-file-tree-icon" />;
+	return <FolderIcon className="doc-file-tree-icon" />;
+}
+
+// description column of one row. a plain text description renders as-is;
+// a { component, data, config } description renders through the registry
+// with placement "fileTreeDescription". DocFileTree does not interpret the
+// component's meaning; for example it never knows a description is a link.
+const FileTreeDescription = observer(function FileTreeDescription({ node, instanceIdParent }) {
+	if (!node.descriptionComponent && !node.descriptionText) return null;
+	// one descriptionIndent unit equals one tree indent level (1rem), so a
+	// shallow node's description can align with descriptions of deeper nodes.
+	const styleIndent = node.descriptionIndent > 0
+		? { paddingInlineStart: `${node.descriptionIndent}rem` }
+		: undefined;
+	return (
+		<span className="doc-file-tree-description" style={styleIndent}>
+			{node.descriptionComponent ? (
+				<RegisteredComp
+					compName={node.descriptionComponent.component}
+					configRuntime={{
+						instanceId: `${instanceIdParent ?? 'file-tree'}:description:${node.key}`,
+					}}
+					input={{
+						config: node.descriptionComponent.config,
+						data: node.descriptionComponent.data,
+					}}
+					placement="fileTreeDescription"
+				/>
+			) : node.descriptionText}
+		</span>
 	);
 });
 

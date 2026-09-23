@@ -16,6 +16,27 @@
   overflow: hidden;
 }
 
+/* When only one navigation card exists (first or last document), fumadocs
+   collapses the footer to one column and the card spans the full width.
+   Keep two equal columns instead; the other half stays empty. */
+.doc-page-footer.doc-page-footer-previous-only,
+.doc-page-footer.doc-page-footer-next-only {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Assign the lone card to its half only when the footer container is wide
+   enough for two columns. Below 32rem the fumadocs card rule
+   (@max-lg:col-span-full) keeps the single-column, full-width layout. */
+@container (width >= 32rem) {
+  .doc-page-footer-previous-only > a {
+    grid-column: 1;
+  }
+
+  .doc-page-footer-next-only > a {
+    grid-column: 2;
+  }
+}
+
 .doc-page-footer > a > div {
   width: 100%;
   max-width: 100%;

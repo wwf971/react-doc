@@ -2,6 +2,7 @@ export {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  Boxes as ProjectIcon,
   ChevronDown,
   Copy,
   Expand,
@@ -27,6 +28,7 @@ export {
   PageBreadcrumb,
   PageFooter,
 } from 'fumadocs-ui/layouts/docs/page';
+export { useFooterItems } from 'fumadocs-ui/utils/use-footer-items';
 export {
   TOC as PageToc,
   TOCPopover,

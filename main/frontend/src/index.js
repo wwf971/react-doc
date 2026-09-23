@@ -8,7 +8,7 @@
 // consumers building with vite can reuse the doc-source plugin to collect
 // sourceData from a config.yaml at build time.
 export { DocPageMdx } from './DocPageMdx.jsx';
-export { DocLink } from './comp-doc/DocLink.jsx';
+export { DocLink, DocLinkInline } from './comp-doc/DocLink.jsx';
 export { LinkDocRender } from './comp-doc/LinkDocRender.jsx';
 export { RegisteredComp } from './comp-doc/RegisteredComp.jsx';
 export { compDefine, compNativeDefine } from './comp-doc/comp-registry.js';

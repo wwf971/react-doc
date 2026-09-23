@@ -47,8 +47,12 @@ class DocFileTreeStore {
 	}
 }
 
-// a node is a folder when it declares "children" (may be an empty list);
-// otherwise it is a file. key stays stable for a given tree shape.
+// node "type" is one of file / folder / project. when absent, a node with
+// "children" defaults to folder and a node without "children" defaults to
+// file. folder and project nodes may omit "children" (an empty folder);
+// a file node cannot declare "children". key stays stable for a given tree
+// shape. a "description" is either plain text (kept in descriptionText) or
+// a { component, data, config } descriptor (kept in descriptionComponent).
 function nodeListNormalize(nodeListRaw, keyParent) {
 	return nodeListRaw.map((node, index) => {
 		if (!node || typeof node !== 'object' || Array.isArray(node)) {
@@ -59,20 +63,76 @@ function nodeListNormalize(nodeListRaw, keyParent) {
 			throw new Error(`Node ${index + 1} under "${keyParent || 'tree'}" requires a name.`);
 		}
 		const key = `${keyParent}/${index}:${name}`;
-		if (node.children === undefined) {
-			return { name, key, isFolder: false };
+		const type = nodeTypeNormalize(node, name);
+		const nodeBase = {
+			name,
+			key,
+			type,
+			...descriptionNormalize(node.description, name),
+			descriptionIndent: descriptionIndentNormalize(node.descriptionIndent, name),
+		};
+		if (type === 'file') {
+			return { ...nodeBase, isFolder: false };
 		}
-		if (!Array.isArray(node.children)) {
+		if (node.children !== undefined && !Array.isArray(node.children)) {
 			throw new Error(`"children" of "${name}" must be a list.`);
 		}
 		return {
-			name,
-			key,
+			...nodeBase,
 			isFolder: true,
 			isOpenDefault: node.defaultOpen === true,
-			children: nodeListNormalize(node.children, key),
+			children: nodeListNormalize(node.children ?? [], key),
 		};
 	});
+}
+
+function nodeTypeNormalize(node, name) {
+	const type = node.type ?? (node.children === undefined ? 'file' : 'folder');
+	if (type !== 'file' && type !== 'folder' && type !== 'project') {
+		throw new Error(`"type" of "${name}" must be file, folder or project, got: ${String(node.type)}.`);
+	}
+	if (type === 'file' && node.children !== undefined) {
+		throw new Error(`File node "${name}" cannot declare "children".`);
+	}
+	return type;
+}
+
+function descriptionNormalize(description, name) {
+	if (description === undefined || description === null) {
+		return { descriptionText: '', descriptionComponent: null };
+	}
+	if (typeof description === 'string') {
+		return { descriptionText: description, descriptionComponent: null };
+	}
+	if (typeof description !== 'object' || Array.isArray(description)) {
+		throw new Error(`"description" of "${name}" must be a string or a { component, data, config } mapping.`);
+	}
+	if (typeof description.component !== 'string' || !description.component.trim()) {
+		throw new Error(`The component description of "${name}" requires a "component" name.`);
+	}
+	for (const fieldName of ['data', 'config']) {
+		const fieldValue = description[fieldName];
+		if (fieldValue === undefined) continue;
+		if (!fieldValue || typeof fieldValue !== 'object' || Array.isArray(fieldValue)) {
+			throw new Error(`"${fieldName}" of the component description of "${name}" must be a mapping.`);
+		}
+	}
+	return {
+		descriptionText: '',
+		descriptionComponent: {
+			component: description.component.trim(),
+			data: description.data ?? {},
+			config: description.config ?? {},
+		},
+	};
+}
+
+function descriptionIndentNormalize(descriptionIndent, name) {
+	if (descriptionIndent === undefined) return 0;
+	if (!Number.isInteger(descriptionIndent) || descriptionIndent < 0) {
+		throw new Error(`"descriptionIndent" of "${name}" must be a non-negative integer.`);
+	}
+	return descriptionIndent;
 }
 
 function folderOpenDefaultCollect(nodeList, isOpenByKey) {

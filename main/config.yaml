@@ -24,6 +24,7 @@ compRegistry:
   File: common/File
   Folder: common/Folder
   DocFileTree: common/DocFileTree
+  DocLinkInline: common/DocLinkInline
   DocMultiLang: common/DocMultiLang
   StockTable: specific/StockTable
   DemoCounter: specific/DemoCounter

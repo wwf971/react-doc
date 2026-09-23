@@ -146,3 +146,18 @@ export const DocLink = observer(function DocLink({ target, from, kind, children 
     </span>
   );
 });
+
+// adapts the standard registered-component input { data, config } to DocLink,
+// so a document link can be used wherever a registered component is expected
+// (for example a DocFileTree description). Not specific to DocFileTree.
+export function DocLinkInline({ data = {}, config = {} }) {
+  return (
+    <DocLink
+      target={data.target ?? ''}
+      from={config.sourcePath}
+      kind="inline"
+    >
+      {data.text ?? data.target ?? ''}
+    </DocLink>
+  );
+}

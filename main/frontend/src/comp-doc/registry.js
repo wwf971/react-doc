@@ -1,4 +1,5 @@
 import { Accordion, Accordions, Callout, File, Files, Folder, Step, Steps, Tab, Tabs } from '../../UICommon.js';
+import { DocLinkInline } from './DocLink.jsx';
 import { DocFileTree } from '../../../comp-mdx/file-tree/DocFileTree.jsx';
 import { DocMultiLang } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
 import { DemoCounter } from './specific/DemoCounter.jsx';
@@ -20,6 +21,9 @@ export const compById = {
   'common/File': compNativeDefine(File, { placementList: ['mdx'] }),
   'common/Folder': compNativeDefine(Folder, { placementList: ['mdx'] }),
   'common/DocFileTree': compDefine(DocFileTree, { placementList: ['mdx', 'commentBlock'] }),
+  'common/DocLinkInline': compDefine(DocLinkInline, {
+    placementList: ['fileTreeDescription'],
+  }),
   'common/DocMultiLang': compDefine(DocMultiLang, { placementList: ['commentBlock'] }),
   'specific/DemoCounter': compDefine(DemoCounter),
   'specific/StockTable': compDefine(StockTable),

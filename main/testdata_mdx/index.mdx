@@ -64,6 +64,38 @@ With `maxHeight`, the box keeps that exact height and scrolls inside, so folder 
   ]}
 />
 
+## File tree node types and descriptions
+
+`type: project` gets a distinct project icon, `type: folder` allows an empty folder, and a
+`description` is either plain text or a `{ component, data, config }` descriptor resolved
+through the component registry (here `DocLinkInline` renders a document link).
+
+<DocFileTree
+  tree={[
+    {
+      name: 'react-doc/',
+      type: 'project',
+      defaultOpen: true,
+      description: {
+        component: 'DocLinkInline',
+        data: { target: '/mdx-test/links.mdx', text: 'link test document' },
+      },
+      children: [
+        {
+          name: 'frontend',
+          type: 'folder',
+          defaultOpen: true,
+          description: 'plain text description on a folder',
+          children: [
+            { name: 'config.yaml', description: 'plain text description on a file' },
+          ],
+        },
+        { name: 'empty-folder', type: 'folder' },
+      ],
+    },
+  ]}
+/>
+
 ## Interactive component (state in mobx store)
 
 Click it, then switch docs and come back: <DemoCounter id="counter-home" label="clicks" />

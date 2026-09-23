@@ -7,6 +7,8 @@ import {
   DocsDescription,
   PageBreadcrumb,
   PageFooter,
+  useFooterItems,
+  usePathname,
   TOCPopover,
   TOCProvider,
 } from '../UICommon.js';
@@ -164,7 +166,29 @@ const docsPageSlots = {
 };
 
 function DocPageFooter({ className = '', ...props }) {
-  return <PageFooter {...props} className={`doc-page-footer ${className}`.trim()} />;
+  // Mirror the previous/next lookup of the fumadocs footer, so this wrapper
+  // knows which navigation cards the footer is about to render. The fumadocs
+  // footer switches to a one-column grid when only one card exists, which
+  // would stretch that card across the full width. These classes let
+  // DocPageView.css keep two equal columns and place the lone card in the
+  // correct half: Previous on the left, Next on the right.
+  const footerList = useFooterItems();
+  const pathname = usePathname();
+  const indexCurrent = footerList.findIndex(
+    (item) => pathNormalize(item.url) === pathNormalize(pathname),
+  );
+  const itemPrevious = indexCurrent === -1 ? undefined : footerList[indexCurrent - 1];
+  const itemNext = indexCurrent === -1 ? undefined : footerList[indexCurrent + 1];
+  let classSingleCard = '';
+  if (itemPrevious && !itemNext) classSingleCard = ' doc-page-footer-previous-only';
+  if (!itemPrevious && itemNext) classSingleCard = ' doc-page-footer-next-only';
+  return <PageFooter {...props} className={`doc-page-footer${classSingleCard} ${className}`.trim()} />;
+}
+
+// same url normalization the fumadocs footer applies before comparing.
+function pathNormalize(path) {
+  if (path.length > 1 && path.endsWith('/')) return path.slice(0, -1);
+  return path;
 }
 
 function DocPageBreadcrumb(props) {
