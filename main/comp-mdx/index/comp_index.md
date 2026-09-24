@@ -99,6 +99,8 @@ Every `document` item renders through `DocLink`. This preserves centralized path
 
 A document target must still be represented in the semantic side panel to be navigable. An `inline-link` is intentionally different: it loads its collected source without navigation and opens the same source-code popup used by compact `CodeBlock`. Therefore, its target need not be present in the side panel, but it must be present in the source manifest. Inline links use the Lucide `LogOut` icon rotated counter-clockwise by 90 degrees.
 
+The same popup is also available directly inside ordinary Markdown prose through the exact link-title markers `"inline-link"`, `"inline-link:source"`, and `"inline-link:render"`, for example `[Setup script](/guide/setup.ps1 "inline-link")`. This prose form is documented beside the source-link design in `doc_page_impl.md`.
+
 Document targets can include a fragment, such as `/guide/setup.md#environment`. `DocLink` resolves the document and submits the fragment through `DocStore.navigate()`, so document loading, scrolling, browser URL synchronization where enabled, and back/forward history remain centralized.
 
 ## Custom subtopic components

@@ -10,8 +10,16 @@ import { MultiLangHeadingText } from '../../../comp-mdx/multi-lang/MultiLangEntr
 // component mapping used when rendering compiled docs.
 // fumadocs defaults stay untouched (headings, code blocks, callout, ...);
 // we only add DocLink/DocComp and the tags enabled by config compRegistry.
-export function buildMdxComps(configDoc, compByIdExtra = {}) {
+//
+// options.sourcePath: internal path of the document these components belong
+// to, when it is not the current page (e.g. a document compiled for the
+// SourceLink render popup). it scopes registered-component identity and
+// configuration to that document instead of docStore.docCurrentPath.
+export function buildMdxComps(configDoc, compByIdExtra = {}, options = {}) {
   const compByIdMerged = { ...compById, ...compByIdExtra };
+  const configRuntimeShared = options.sourcePath !== undefined
+    ? { sourcePath: options.sourcePath }
+    : {};
   const comps = {
     ...defaultMdxComponents,
     DocLink,
@@ -22,6 +30,7 @@ export function buildMdxComps(configDoc, compByIdExtra = {}) {
         ...props,
         compDefinition: compByIdMerged[compId],
         compId,
+        sourcePath: options.sourcePath,
       });
     },
   };
@@ -49,6 +58,7 @@ export function buildMdxComps(configDoc, compByIdExtra = {}) {
       return createElement(RegisteredComp, {
         compDefinition: definition,
         compId,
+        configRuntime: configRuntimeShared,
         input: { propsAuthored: props },
         placement: 'mdx',
       });

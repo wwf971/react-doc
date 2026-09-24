@@ -132,8 +132,14 @@ function tableNormalize(table, index) {
 		: { x: (index % 2) * 520, y: Math.floor(index / 2) * 440 };
 	return {
 		id,
+		// 'choice' marks a conceptual global-choice node (e.g. a Power Platform
+		// global choice shared by several Choice columns). it is rendered as a
+		// visually distinct table-shaped reference node. any omitted or
+		// unsupported value remains the normal 'table' kind.
+		kind: table.kind === 'choice' ? 'choice' : 'table',
 		name: String(table.name || id),
 		nameLogical: String(table.nameLogical || ''),
+		description: String(table.description || ''),
 		position,
 		columnList,
 	};

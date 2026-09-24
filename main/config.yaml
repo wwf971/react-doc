@@ -28,6 +28,7 @@ compRegistry:
   DocMultiLang: common/DocMultiLang
   StockTable: specific/StockTable
   DemoCounter: specific/DemoCounter
+  SourceLink: specific/SourceLink
 
 # display strategy for non-md files: suffix -> code block language
 fileDisplay:

@@ -118,8 +118,14 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       // the manifest itself must be regenerated.
       server.watcher.on('add', invalidateManifest);
       server.watcher.on('unlink', invalidateManifest);
+      // change: yaml configuration, or an exactly watched dependency such as a
+      // side-panel file imported through childrenFile with a non-yaml extension.
+      // ordinary document content under a watched source folder does not match
+      // exactly and keeps its generated raw-import HMR path.
       server.watcher.on('change', (filePath) => {
-        if (filePath.endsWith('.yaml')) invalidateManifest(filePath);
+        if (filePath.endsWith('.yaml') || pathsWatched.includes(filePath)) {
+          invalidateManifest(filePath);
+        }
       });
     },
   };

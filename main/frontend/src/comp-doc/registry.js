@@ -2,8 +2,10 @@ import { Accordion, Accordions, Callout, File, Files, Folder, Step, Steps, Tab, 
 import { DocLinkInline } from './DocLink.jsx';
 import { DocFileTree } from '../../../comp-mdx/file-tree/DocFileTree.jsx';
 import { DocMultiLang } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
+import { SourceLink } from '../../../comp-mdx/source-link/SourceLink.jsx';
 import { DemoCounter } from './specific/DemoCounter.jsx';
 import { StockTable } from './specific/StockTable.jsx';
+import { TextPanelDemo } from './specific/TextPanelDemo.jsx';
 import { compDefine, compNativeDefine } from './comp-registry.js';
 
 // all components that docs may use. what is actually exposed to doc authors
@@ -27,4 +29,20 @@ export const compById = {
   'common/DocMultiLang': compDefine(DocMultiLang, { placementList: ['commentBlock'] }),
   'specific/DemoCounter': compDefine(DemoCounter),
   'specific/StockTable': compDefine(StockTable),
+  // demo-host binding: the popup panel implementation is host configuration,
+  // so SourceLink is registered here with the demo panel rather than in common/.
+  'specific/SourceLink': compDefine(SourceLink, {
+    dataBuild: sourceLinkDataBuild,
+    placementList: ['mdx', 'commentBlock'],
+  }),
 };
+
+function sourceLinkDataBuild(input) {
+  return {
+    ...input,
+    config: {
+      ...input.config,
+      panelComponent: TextPanelDemo,
+    },
+  };
+}

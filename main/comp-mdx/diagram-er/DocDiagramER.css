@@ -101,6 +101,46 @@
 	font-weight: 500;
 }
 
+.doc-er-table-title-name {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+}
+
+/* conceptual global-choice node: table-shaped reference, visually distinct
+   from a physical table through a dashed border and its own title color. */
+.doc-er-table.is-choice {
+	border-style: dashed;
+	border-color: color-mix(in srgb, #7c3aed 48%, var(--color-fd-border));
+}
+
+.doc-er-table.is-choice .doc-er-table-title {
+	background: color-mix(in srgb, #7c3aed 10%, var(--color-fd-background));
+	color: color-mix(in srgb, #7c3aed 62%, var(--color-fd-foreground));
+}
+
+.doc-er-table-badge {
+	padding: 0.1rem 0.3rem;
+	border: 1px solid color-mix(in srgb, #7c3aed 42%, var(--color-fd-border));
+	border-radius: 0.3rem;
+	background: color-mix(in srgb, #7c3aed 14%, var(--color-fd-background));
+	color: color-mix(in srgb, #7c3aed 72%, var(--color-fd-foreground));
+	font-size: 0.6rem;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+.doc-er-table-description {
+	padding: 0.4rem 0.75rem;
+	border-bottom: 1px solid var(--color-fd-border);
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.68rem;
+	line-height: 1.45;
+	user-select: text;
+}
+
 .doc-er-table-column-header,
 .doc-er-table-column {
 	display: grid;

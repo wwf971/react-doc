@@ -5,6 +5,13 @@ import { visit } from 'unist-util-visit';
 //   `a.md`         inline code that looks like a doc file
 //   [[a.md]]       obsidian style link in plain text
 //
+// a local link whose markdown title is an exact inline-link marker becomes an
+// inline <SourceLink/> instead: it stays in the paragraph and opens the target
+// in the compact source popup without navigating.
+//   [label](/guide/setup.ps1 "inline-link")          source popup (compatible form)
+//   [label](/guide/setup.ps1 "inline-link:source")   source popup, explicit
+//   [label](/guide/details.mdx "inline-link:render") compiled-document popup
+//
 // the actual target resolution (by name / relative / exact path) happens at
 // render time inside the DocLink component, against the store's doc index.
 
@@ -18,6 +25,15 @@ export function remarkDocLink(options = {}) {
     // [text](target): any relative url is treated as a doc link
     visit(tree, 'link', (node, index, parent) => {
       if (isExternalUrl(node.url) || node.url.startsWith('#')) return;
+      const displayMode = inlineLinkDisplayModeGet(node.title);
+      if (displayMode) {
+        parent.children[index] = makeSourceLinkNode({
+          target: node.url,
+          label: textContentGet(node.children),
+          displayMode,
+        });
+        return;
+      }
       parent.children[index] = makeDocLinkNode({
         target: node.url,
         fromPath,
@@ -82,6 +98,38 @@ function makeDocLinkNode({ target, fromPath, kind, children }) {
     ],
     children,
   };
+}
+
+// the emitted tag stays inside the paragraph (mdxJsxTextElement) and resolves
+// through configDoc.compRegistry, so this transformer does not import the
+// concrete SourceLink component.
+function makeSourceLinkNode({ target, label, displayMode }) {
+  return {
+    type: 'mdxJsxTextElement',
+    name: 'SourceLink',
+    attributes: [
+      { type: 'mdxJsxAttribute', name: 'target', value: target },
+      { type: 'mdxJsxAttribute', name: 'label', value: label },
+      { type: 'mdxJsxAttribute', name: 'displayMode', value: displayMode },
+    ],
+    children: [],
+  };
+}
+
+// exact, case-sensitive markers only; any other title keeps DocLink behavior.
+function inlineLinkDisplayModeGet(title) {
+  if (title === 'inline-link' || title === 'inline-link:source') return 'source';
+  if (title === 'inline-link:render') return 'render';
+  return '';
+}
+
+// keeps the visible label when the authored link text contains nested
+// emphasis or other text-bearing inline nodes.
+function textContentGet(children = []) {
+  return children.map((child) => {
+    if (typeof child.value === 'string') return child.value;
+    return textContentGet(child.children);
+  }).join('');
 }
 
 function isInsideDocLink(parent) {

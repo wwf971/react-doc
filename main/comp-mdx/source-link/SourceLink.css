@@ -16,3 +16,14 @@
 .doc-source-link-icon {
 	transform: rotate(-90deg);
 }
+
+/* render-mode popup: the body is a scrolling document surface with document
+   padding, unlike the zero-padding source-code layout of the source popup. */
+.text-panel.is-popup .doc-source-link-render-popup-body {
+	overflow-y: auto;
+	padding: 0.9rem 1.1rem;
+}
+
+.doc-source-link-render-doc {
+	min-width: 0;
+}

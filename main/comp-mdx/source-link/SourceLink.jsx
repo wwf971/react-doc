@@ -6,6 +6,7 @@ import { LinkWarning } from '#react-doc/frontend/src/comp-doc/LinkWarning.jsx';
 import { useDocStores } from '#react-doc/frontend/src/store/context.js';
 import { CodeBlockCompactPopup } from '../code-block/CodeBlockCompactPopup.jsx';
 import { CodeBlockCompactStore } from '../code-block/CodeBlockCompactStore.js';
+import { SourceLinkRenderPopup } from './SourceLinkRenderPopup.jsx';
 import './SourceLink.css';
 
 const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEvent }) {
@@ -15,8 +16,13 @@ const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEven
 	const refWrap = useRef(null);
 	const target = targetGet(data);
 	const label = String(data.label ?? data.title ?? target);
+	// every value other than 'render' means source mode, keeping existing
+	// DocIndex inline-link and block usages (no displayMode) compatible.
+	const displayMode = data.displayMode === 'render' ? 'render' : 'source';
 	const sourceEntry = target ? sourceStore.entryByInternalPath.get(target) : undefined;
-	const sourceState = target ? sourceStore.rawByPath[target] : undefined;
+	const sourceState = target
+		? (displayMode === 'render' ? sourceStore.compiledByPath[target] : sourceStore.rawByPath[target])
+		: undefined;
 	const isReady = sourceState?.status === 'done';
 	const Panel = config.panelComponent;
 	const isBroken = !target || !sourceEntry;
@@ -24,8 +30,10 @@ const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEven
 		&& (!Panel || sourceState?.status === 'error');
 
 	useEffect(() => {
-		if (target) void sourceStore.loadRaw(target);
-	}, [sourceStore, target]);
+		if (!target) return;
+		if (displayMode === 'render') void sourceStore.loadDoc(target);
+		else void sourceStore.loadRaw(target);
+	}, [displayMode, sourceStore, target]);
 
 	useEffect(() => {
 		if (!warningText) return undefined;
@@ -50,7 +58,9 @@ const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEven
 			? 'SourceLink には config.panelComponent が必要です。'
 			: sourceState?.status === 'error'
 				? sourceState.message
-				: isReady ? `ソースを表示: ${target}` : 'ソースを読み込んでいます…';
+				: isReady
+					? (displayMode === 'render' ? `ドキュメントを表示: ${target}` : `ソースを表示: ${target}`)
+					: displayMode === 'render' ? 'ドキュメントを読み込んでいます…' : 'ソースを読み込んでいます…';
 	const eventHandle = async (eventType, eventData = {}) => {
 		if (eventType !== 'activateRequest') return;
 		eventData.event?.preventDefault();
@@ -82,7 +92,9 @@ const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEven
 				onEvent={eventHandle}
 			/>
 			<LinkWarning text={warningText} onDismiss={() => setWarningText('')} />
-			<CodeBlockCompactPopup Panel={Panel} sourceStore={sourceStore} store={store} />
+			{displayMode === 'render'
+				? <SourceLinkRenderPopup Panel={Panel} store={store} />
+				: <CodeBlockCompactPopup Panel={Panel} sourceStore={sourceStore} store={store} />}
 		</span>
 	);
 });

@@ -90,16 +90,19 @@ export function RegisteredComp({
   };
   const resultBuilt = definition.dataBuild?.(inputNormalized) ?? inputNormalized;
   const data = resultBuilt.data ?? inputNormalized.data;
+  // components rendered inside another compiled document (e.g. the SourceLink
+  // render popup) belong to that document, not the outer page.
+  const sourcePath = configRuntime.sourcePath ?? docStore.docCurrentPath;
   const instanceId = configRuntime.instanceId
     ?? data.id
-    ?? `${compIdResolved}:${docStore.docCurrentPath || 'page'}:${idFallback}`;
+    ?? `${compIdResolved}:${sourcePath || 'page'}:${idFallback}`;
   const config = {
     ...resultBuilt.config,
     ...configRuntime,
     compId: compIdResolved,
     instanceId,
     placement,
-    sourcePath: docStore.docCurrentPath,
+    sourcePath,
   };
 
   const eventHandle = async (eventType, eventData = {}) => {

@@ -160,12 +160,19 @@ const DocDiagramERCanvas = observer(function DocDiagramERCanvas({ store }) {
 
 const ERTableNode = observer(function ERTableNode({ data }) {
 	const { table, handleListByColumnId = {} } = data;
+	const isChoice = table.kind === 'choice';
 	return (
-		<div className="doc-er-table">
+		<div className={`doc-er-table${isChoice ? ' is-choice' : ''}`}>
 			<div className="doc-er-table-title">
-				<span>{table.name}</span>
+				<span className="doc-er-table-title-name">
+					{isChoice ? <span className="doc-er-table-badge">Global Choice</span> : null}
+					<span>{table.name}</span>
+				</span>
 				{table.nameLogical ? <span>{table.nameLogical}</span> : null}
 			</div>
+			{table.description ? (
+				<div className="doc-er-table-description nodrag">{table.description}</div>
+			) : null}
 			<div className="doc-er-table-column-header nodrag">
 				<span>Key</span>
 				<span>列</span>

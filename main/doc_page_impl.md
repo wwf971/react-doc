@@ -34,7 +34,7 @@ mobx stores (source of truth for rendering)
 
 **Multilingual content.** Language inheritance, document-wide selection, headings, paragraphs, lists, degradation behavior, and file naming are specified in [doc_page_impl_multi-lang.md](doc_page_impl_multi-lang.md).
 
-**Doc collection via vite plugin.** The plugin reads the two-layer config, executes the source rules, expands side-panel subtree files, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any imported side-panel yaml invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
+**Doc collection via vite plugin.** The plugin reads the two-layer config, executes the source rules, expands side-panel subtree files, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any imported side-panel file — regardless of its extension — invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
 
 ## Can we keep fumadocs default components while owning link logic? YES
 
@@ -226,6 +226,16 @@ An index item defaults to `kind: document`. With `kind: inline-link`, it renders
 `SourceLink` and ordinary document links share `LinkDocRender` and `LinkWarning` for unavailable-target presentation. A target absent from the collected source uses the red broken-link state and explains the problem through its hover title. A collected source that cannot be opened uses the orange unavailable state and shows the same dismissible warning beside the activated link. Loading source links retain normal link styling rather than appearing disabled.
 
 MDX can invoke the registered component directly. Plain Markdown uses the ordinary degradation-compatible comment-block form; the marked fenced block supplies a visible fallback and can also supply the target from its first line when an explicit `target` property is absent. Registered custom components can compose the same `SourceLink` renderer and provide the host's `panelComponent`, so source viewing does not depend on index data or placement.
+
+Ordinary Markdown prose can also place a true inline source link through the optional link title:
+
+```markdown
+[Setup script](/guide/setup.ps1 "inline-link")
+[Setup script source](/guide/setup.ps1 "inline-link:source")
+[Rendered guide](/guide/details.mdx "inline-link:render")
+```
+
+`remarkDocLink` replaces such a link with an inline `SourceLink` element (an `mdxJsxTextElement`, so it stays inside its paragraph) that resolves through `compRegistry` and keeps the authored link text as its label. Activating it opens the compact popup without navigation. The marker must be an exact, case-sensitive match; any other title keeps normal `DocLink` behavior, and external URLs and same-page anchors are never affected. `inline-link` remains an alias for source mode. Render mode compiles the target through the same `DocSourceStore.loadDoc()` and `buildMdxComps()` pipeline as a normal document page and shows the compiled body, frontmatter title, and description in an independently scrolling popup with document padding; nested registered components receive the popup target as their source path through `buildMdxComps(configDoc, compById, { sourcePath })`, which overrides `docStore.docCurrentPath` in `RegisteredComp`. The target must be an absolute collected source path present in the source manifest; a side-panel entry is not required.
 
 For the `title-subtopics-items` index type, each subtopic contains exactly one of `items` or `component`. A component subtopic requires a stable subtopic `id` and has `{ name, data, config }`; `name` is resolved through the same `compRegistry` and `compById` layers as MDX components. `IndexSubtopicContent` renders it through `RegisteredComp` with placement `indexSubtopic` and a stable instance id derived from the parent index and subtopic ids. The nested component can emit `navigateRequest` with a document or document-plus-fragment target, and the ordinary registered-component fallback submits it to `DocStore.navigate()`.
 

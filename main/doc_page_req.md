@@ -138,6 +138,8 @@ A source link opens a collected source file in a compact read-only popup instead
 
 The target is an internal source path and does not need a side-panel item. Loading, syntax-language selection, popup rendering, copy behavior, and errors must use the shared source-store and compact-code-block implementation. The source link uses the unified component interface and must remain usable through both direct MDX authoring and the degradation-compatible comment-block form.
 
+Ordinary Markdown prose must be able to place a source link in place through an exact, case-sensitive link-title marker: `[label](/path "inline-link")` and `[label](/path "inline-link:source")` display the collected source, while `[label](/path "inline-link:render")` displays the target compiled through the normal document pipeline. The link stays inside its paragraph, keeps the authored text as its label, and opens the popup without navigating. Links with any other title keep normal behavior; external URLs and same-page anchors are unaffected.
+
 Parse layer might require taking over the rendering of almost everything, including the most basic nodes like plain text, so link pattern matching logic can be applied, and links embedded in plain text can be rendered properly.
 
 Various navigation mode should be supported. One basic example is to make clicking `[a.md](a.md)` possible to navigate to `a.md` within the source, regardless of where it is. A more advanced most is to display a dropdown allowing user to choose which one to navigate to, in case multiple `a.md` exists in the source.
