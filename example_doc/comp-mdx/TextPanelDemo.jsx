@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { X } from '../../../UICommon.js';
+import { X } from '../../main/frontend/UICommon.js';
 import './TextPanelDemo.css';
 
 // minimal popup panel for the demo app. an embedding host supplies its own

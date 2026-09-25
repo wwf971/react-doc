@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { useDocStores } from '../../store/context.js';
+import { useDocStores } from '../../main/frontend/src/store/context.js';
 
 // project-specific demo component: interactive counter whose state lives in
 // CompStateStore (data-driven, not hidden in local component state).

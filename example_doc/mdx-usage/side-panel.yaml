@@ -1,0 +1,18 @@
+# Subtree for the "MDX Components" part, imported from ../side-panel.yaml
+# through childrenFile. "root" configures the importing node itself: it binds
+# the part root document and declares the hosted part index authored inside it.
+root:
+  doc: /example/mdx-usage/mdx-components.md
+  defaultOpen: true
+  part:
+    index:
+      docId: mdx-usage
+      componentId: mdx-usage-index
+tree:
+  - doc: /example/mdx-usage/writing-style.md
+  - doc: /example/mdx-usage/comp-multi-lang.md
+  - doc: /example/mdx-usage/comp-block.md
+  - doc: /example/mdx-usage/comp-image.md
+  - doc: /example/mdx-usage/comp-diagram.md
+  - doc: /example/mdx-usage/comp-file-download.md
+  - doc: /example/mdx-usage/comp-mdx-native.mdx

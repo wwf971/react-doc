@@ -1,11 +1,13 @@
 import { Accordion, Accordions, Callout, File, Files, Folder, Step, Steps, Tab, Tabs } from '../../UICommon.js';
 import { DocLinkInline } from './DocLink.jsx';
 import { DocFileTree } from '../../../comp-mdx/file-tree/DocFileTree.jsx';
+import { DocIndex } from '../../../comp-mdx/index/DocIndex.jsx';
 import { DocMultiLang } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
 import { SourceLink } from '../../../comp-mdx/source-link/SourceLink.jsx';
-import { DemoCounter } from './specific/DemoCounter.jsx';
-import { StockTable } from './specific/StockTable.jsx';
-import { TextPanelDemo } from './specific/TextPanelDemo.jsx';
+// demo-specific components live beside the demonstration documents
+import { DemoCounter } from '../../../../example_doc/comp-mdx/DemoCounter.jsx';
+import { StockTable } from '../../../../example_doc/comp-mdx/StockTable.jsx';
+import { TextPanelDemo } from '../../../../example_doc/comp-mdx/TextPanelDemo.jsx';
 import { compDefine, compNativeDefine } from './comp-registry.js';
 
 // all components that docs may use. what is actually exposed to doc authors
@@ -23,6 +25,10 @@ export const compById = {
   'common/File': compNativeDefine(File, { placementList: ['mdx'] }),
   'common/Folder': compNativeDefine(Folder, { placementList: ['mdx'] }),
   'common/DocFileTree': compDefine(DocFileTree, { placementList: ['mdx', 'commentBlock'] }),
+  'common/DocIndex': compDefine(DocIndex, {
+    componentType: 'index',
+    placementList: ['mdx', 'commentBlock', 'partIndex'],
+  }),
   'common/DocLinkInline': compDefine(DocLinkInline, {
     placementList: ['fileTreeDescription'],
   }),

@@ -1,7 +1,9 @@
 ---
-title: MDX Feature Test
-description: exercises fumadocs default features and the component registry
+title: Direct MDX Components
+description: direct JSX usage in .mdx files, exercising fumadocs default features and the component registry
 ---
+
+This file is `.mdx`, so registered components are written directly as JSX. This style is fully supported, but it does not degrade in a plain Markdown renderer; for `.md` files, prefer the comment-block form described in [Recommended writing style](writing-style.md).
 
 ## Callout
 
@@ -35,9 +37,9 @@ export class DocStore {
 ## File tree
 
 <Files>
-  <Folder name="testdata_mdx" defaultOpen>
-    <File name="index.mdx" />
-    <File name="links.mdx" />
+  <Folder name="mdx-usage" defaultOpen>
+    <File name="mdx-components.md" />
+    <File name="writing-style.md" />
   </Folder>
 </Files>
 
@@ -49,17 +51,16 @@ With `maxHeight`, the box keeps that exact height and scrolls inside, so folder 
   maxHeight="12rem"
   tree={[
     {
-      name: 'testdata_mdx',
+      name: 'example_doc',
       defaultOpen: true,
       children: [
-        { name: 'sub', children: [{ name: 'notes.md' }] },
-        { name: 'index.mdx' },
-        { name: 'links.mdx' },
-        { name: 'comp-degrade.md' },
-        { name: 'sample.py' },
+        { name: 'mdx-usage', children: [{ name: 'mdx-components.md' }] },
+        { name: 'link-nav', children: [{ name: 'links.mdx' }] },
+        { name: 'doc.md' },
+        { name: 'side-panel.yaml' },
+        { name: 'source.yaml' },
       ],
     },
-    { name: 'side-panel.yaml' },
     { name: 'config.yaml' },
   ]}
 />
@@ -78,7 +79,7 @@ through the component registry (here `DocLinkInline` renders a document link).
       defaultOpen: true,
       description: {
         component: 'DocLinkInline',
-        data: { target: '/mdx-test/links.mdx', text: 'link test document' },
+        data: { target: '/example/link-nav/links.mdx', text: 'link test document' },
       },
       children: [
         {

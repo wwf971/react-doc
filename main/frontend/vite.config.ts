@@ -14,8 +14,9 @@ export default defineConfig({
     port: 45173,
     strictPort: true,
     fs: {
-      // doc source folders and gitignored third_party/shadcn live outside frontend/
-      allow: ['..', '../..', '../../..'],
+      // doc source folders and gitignored third_party/shadcn live outside frontend/;
+      // @wwf971/react-comp-misc is a linked workspace package served from its source folder
+      allow: ['..', '../..', '../../..', '../../../../2025/react-comp-misc'],
     },
   },
   preview: {

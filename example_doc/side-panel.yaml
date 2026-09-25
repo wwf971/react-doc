@@ -2,20 +2,26 @@
 # node forms:
 #   - doc: /rootId/xx/a.md     page (text overrides the doc title)
 #   - sourceRoot: rootId       generated tree for a complete source root
-#   - text + children          folder
+#   - text + children          folder; adding "doc" binds the label to that page
 #   - separator: Some Text     separator line
+#   - childrenFile: ./x.yaml   import a subtree; its "root" mapping configures this node
 
 tree:
   - separator: Example Docs
   - doc: /example/doc.md
     text: Document Model
   - doc: /example/database.md
-  - text: Frontend
+  - id: frontend-design
+    text: Frontend
+    doc: /example/frontend-store.md
     children:
-      - doc: /example/frontend-store.md
       - doc: /example/comp_text.md
   - doc: /example/doc-group.md
-  - separator: MDX Tests
+  - separator: MDX Usage
+  - id: mdx-usage
+    text: MDX Components
+    childrenFile: ./mdx-usage/side-panel.yaml
+  - separator: Tests
   - id: component-panel-demo
     text: Component Panel
     panel:
@@ -23,15 +29,14 @@ tree:
       data:
         id: side-panel-counter
         label: panel count
-  - doc: /mdx-test/index.mdx
-  - doc: /mdx-test/links.mdx
-  - doc: /mdx-test/comp-degrade.md
-  - text: Misc
+  - id: link-nav
+    text: Links & Navigation
+    doc: /example/link-nav/links.mdx
     children:
       - doc: notes.md
         text: Ambiguous Name Example
-      - doc: /mdx-test/sub/notes.md
-      - doc: /mdx-test/sample.py
+      - doc: /example/link-nav/sub/notes.md
+      - doc: /example/link-nav/sample.py
   - separator: Meta
   - doc: /req/doc_page_req.md
     text: Requirement

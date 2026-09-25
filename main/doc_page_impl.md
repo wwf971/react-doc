@@ -285,7 +285,7 @@ tree:
     panel:
       component: StatusPanel
       data: { mode: compact }
-  - doc: /mdx-test/index.mdx
+  - doc: /example/mdx-usage/comp-mdx-native.mdx
 ```
 
 `display.component` and `panel.component` use the same `compRegistry` and runtime `compById` registry as MDX. They receive the unified `{ data, config, onEvent }` props. Display text and file metadata are in `data`; panel item/runtime metadata are in `config`.
@@ -299,11 +299,14 @@ The search dialog UI comes from fumadocs-ui (composable `SearchDialog` parts plu
 ## Project Folder Structure
 
 ```text
+example_doc/             # root folder of the demonstration page
+├── source.yaml          # ordered source rules, referenced from config
+├── side-panel.yaml      # side panel tree, referenced from config
+├── mdx-usage/           # mdx component demonstrations (part with hosted index)
+└── link-nav/            # link, navigation, and non-md display test docs
 main/
 ├── config.yaml          # example config (tracked), actually runnable
 ├── config.0.yaml        # local override (untracked), entries overlay config.yaml
-├── side-panel.yaml      # side panel tree, referenced from config
-├── testdata_mdx/        # mdx test data: components, code diff, link cases
 ├── package.json         # delegates dev/build to frontend/
 └── frontend/            # Vite app + embeddable component
     ├── plugin/          # vite plugin: config load, rule scan, virtual module, watch
@@ -324,6 +327,7 @@ Run `pnpm install` from the workspace root once, then `pnpm dev` from either thi
 - Disable standard and contextual font ligatures in document `pre` and `code` elements. Code samples must display punctuation sequences such as `<!--` and `-->` literally rather than replacing them with font glyphs such as arrows.
 - Keep block spacing asymmetric: the upper margin of rendered code figures, `BlockSimple`, and `BlockMdx` is half of the lower margin so a preceding heading remains visually attached to its content.
 - Import the package stylesheet once and load project-specific overrides after it. Scope overrides under the document page root instead of changing global element styles.
+- Keep the three-column layout width-stable across document switching. The window scrollbar is the variable to control: a short document or the loading skeleton drops it, the viewport widens, and every layout column shifts. `style.css` reserves the gutter with `scrollbar-gutter: stable` on `html:has(.doc-page-mdx)`, so only pages hosting a document page are affected. Headingless documents are already width-stable at desktop widths because the fumadocs TOC renders a hidden `#nd-toc-placeholder` that keeps `--fd-toc-width` reserved.
 - Avoid broad selectors or CSS resets in embedded components. After changing the CSS pipeline, verify headings, links, code blocks, side panels, and scrolling in both the standalone demo and the embedded page.
 
 General visual components, hooks, and icons from Fumadocs, Lucide, and the local shadcn set are imported through `frontend/UICommon.js`. `frontend/UICommonExternal.js` owns external-library exports, while `UICommon.js` adds local shared components. Specialized engines such as React Flow and build-time remark or rehype plugins remain direct imports because they are feature-specific or compiler dependencies rather than general UI primitives.

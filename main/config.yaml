@@ -5,11 +5,12 @@ siteTitle: React Doc Test
 homeDoc: /example/doc.md
 
 # Ordered source rules live separately. Paths in that file are relative to it.
+# example_doc is the root folder of the demonstration page and owns both files.
 source:
-  file: ./source.yaml
+  file: ../example_doc/source.yaml
 
 sidePanel:
-  file: ./side-panel.yaml
+  file: ../example_doc/side-panel.yaml
 
 # tag name usable in docs -> component id in frontend/src/comp-doc/
 compRegistry:
@@ -24,6 +25,7 @@ compRegistry:
   File: common/File
   Folder: common/Folder
   DocFileTree: common/DocFileTree
+  DocIndex: common/DocIndex
   DocLinkInline: common/DocLinkInline
   DocMultiLang: common/DocMultiLang
   StockTable: specific/StockTable

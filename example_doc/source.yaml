@@ -1,0 +1,24 @@
+# Ordered source rules. Paths are relative to this file.
+# example_doc is the root folder of the demonstration page; this file and the
+# side-panel yaml files live here too and are excluded from the collected source.
+rules:
+  - action: addFolder
+    rootId: example
+    path: .
+  - action: addFile
+    rootId: req
+    path: ../main/doc_page_req.md
+  - action: removeByName
+    pattern: "*.pyc"
+  - action: removeByName
+    pattern: ".DS_Store"
+  - action: removeByPath
+    pattern: "**/.gitignore"
+  - action: removeByName
+    pattern: "source.yaml"
+  - action: removeByName
+    pattern: "side-panel.yaml"
+  # demo component implementations beside the demonstration docs are code,
+  # not document content
+  - action: removeByPath
+    pattern: "/example/comp-mdx/**"

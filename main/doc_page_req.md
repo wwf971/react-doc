@@ -86,6 +86,14 @@ This mechanism must be opt-in and index-agnostic. An ordinary index need not per
 
 The complete part-index feature must be globally configurable. It is enabled by default; floating mode is also enabled by default. Disabling the part-index feature restores the ordinary local page index without requiring changes to side-panel part declarations or document content.
 
+## Layout Stability
+
+Switching documents must not cause horizontal jitter between the three major areas: the left side panel, the main document area, and the local-index area at the right.
+
+1. While a document is loading, the temporary skeleton placeholder keeps the same global layout as the loaded document; the widths of the major areas do not change when the skeleton is replaced by the content.
+2. A short document, a loading skeleton, or a component panel page must not shift the layout by removing the window scrollbar. The scrollbar gutter is reserved whenever the document page is present, so the viewport width available to the layout stays constant.
+3. A document without headings has no document-level navigation at the right. This is normal, but it must not collapse the reserved width of the local-index area.
+
 
 ## Unified Component Registry
 
