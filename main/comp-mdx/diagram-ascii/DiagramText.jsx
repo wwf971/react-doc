@@ -1,10 +1,10 @@
-import './DocDiagramText.css';
+import './DiagramText.css';
 
 const graphemeSegmenter = typeof Intl?.Segmenter === 'function'
   ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
   : null;
 
-function DocDiagramText({ data = {} }) {
+function DiagramText({ data = {} }) {
   const text = String(data.raw ?? '').replace(/\r\n?/g, '\n');
   const lineList = diagramLineListNormalize(text.split('\n'));
   return (
@@ -158,4 +158,4 @@ function isCodePointWide(codePoint) {
   );
 }
 
-export { DocDiagramText };
+export { DiagramText, DiagramText as DocDiagramText };

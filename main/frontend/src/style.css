@@ -17,13 +17,8 @@
   --default-mono-font-family: var(--font-mono);
 }
 
-/* Document switching must not shift the horizontal layout. A short document
-   or the loading skeleton drops the window scrollbar, which widens the
-   viewport and moves/resizes every layout column (side panel, document body,
-   local index). Reserving the scrollbar gutter keeps the viewport width
-   constant. Scoped through :has() so only pages hosting a document page are
-   affected. The empty-TOC case needs no rule: fumadocs keeps the TOC column
-   width reserved through its hidden #nd-toc-placeholder. */
-html:has(.doc-page-mdx) {
-  scrollbar-gutter: stable;
-}
+/* Document switching must not shift the horizontal layout. The scrollbar
+   gutter is reserved on .doc-page-mdx itself (DocPageMdx.css), because the
+   document page, not the window, is the vertical scroll container. The
+   empty-TOC case needs no rule: fumadocs keeps the TOC column width reserved
+   through its hidden #nd-toc-placeholder. */

@@ -10,7 +10,7 @@ import { MultiLangParagraphs } from './MultiLangParagraph.jsx';
 
 // Shared entry for degradation-compatible multilingual basic components.
 // A marked YAML block may contain paragraphs and recursively nested lists.
-export function DocMultiLang({ data = {}, config = {} }) {
+export function MultiLang({ data = {}, config = {} }) {
   const languageOwn = typeof data.language === 'string' ? data.language.trim() : '';
 
   if (data.type === 'paragraphs') {
@@ -27,10 +27,12 @@ export function DocMultiLang({ data = {}, config = {} }) {
       </DocLanguageProvider>
     );
   }
-  return <DocMultiLangYaml data={data} languageOwn={languageOwn} />;
+  return <MultiLangYaml data={data} languageOwn={languageOwn} />;
 }
 
-function DocMultiLangYaml({ data, languageOwn }) {
+export { MultiLang as DocMultiLang };
+
+function MultiLangYaml({ data, languageOwn }) {
   const languageAncestor = useDocLanguage();
   const result = useMemo(() => multiLangContentParse(data.raw ?? ''), [data.raw]);
   const languagePreferred = languageOwn || languageAncestor;

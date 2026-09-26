@@ -23,10 +23,10 @@ For any item that lacks the preferred translation, the renderer uses that item's
 
 ## Shared YAML entry
 
-A normal Markdown renderer ignores the trigger comment and displays the YAML code block. The document runtime recognizes it as the shared `DocMultiLang` entry:
+A normal Markdown renderer ignores the trigger comment and displays the YAML code block. The document runtime recognizes it as the shared `MultiLang` entry:
 
 ````markdown
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ```yaml
 - type: p
   en: English paragraph
@@ -54,7 +54,7 @@ Paragraphs use `type: p` and put translations directly on the item. Inline text 
 A multilingual heading uses the same trigger comment immediately before a native Markdown heading. Its heading text is a YAML flow mapping:
 
 ```markdown
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ## {jp:日本語見出し, en:English Heading}
 ```
 
@@ -129,7 +129,7 @@ Language detection recursively scans all list items and nested child lists.
 
 ## Multilingual document indexes
 
-`DocIndex` is a reusable index entry with a two-level `type` then `layout` dispatch. The type selects the accepted semantic data, while the layout changes only its visual arrangement. The initial `title-subtopics-items` type renders a compact title, grouped subtopics, and document links. Its common data envelope keeps structural fields language-independent and uses explicit language mappings for visible text:
+`Index` is a reusable index entry with a two-level `type` then `layout` dispatch. The type selects the accepted semantic data, while the layout changes only its visual arrangement. The initial `title-subtopics-items` type renders a compact title, grouped subtopics, and document links. Its common data envelope keeps structural fields language-independent and uses explicit language mappings for visible text:
 
 ```yaml
 type: title-subtopics-items
@@ -152,13 +152,13 @@ subtopics:
 
 The type supports `vertical-list` and `horizontal-wrap`; omitting `layout` selects `vertical-list`. Future layouts reuse `title`, `subtopics`, and `items`, while future types can define another normalized data shape behind the same root entry. A local MobX store parses and validates the authored data before rendering. The selected language remains in the shared document language context rather than being duplicated as local state, so the index changes with the document toolbar selector. Missing translations fall back to the first authored translation and set `lang` to the language actually rendered.
 
-Index items render through `DocLink`, preserving centralized target resolution, unavailable-link behavior, navigation history, and route-mode handling. The index parser also exposes language-list and structured-search extractors. The consumer registers these callbacks under the author-facing `DocIndex` name so both translations appear in the language selector and search index.
+Index items render through `DocLink`, preserving centralized target resolution, unavailable-link behavior, navigation history, and route-mode handling. The index parser also exposes language-list and structured-search extractors. The consumer registers these callbacks under every author-facing tag name of the index (`Index`, and `DocIndex` for compatibility) so both translations appear in the language selector and search index.
 
 ## Search indexing
 
 Fumadocs `remarkStructure` scans ordinary Markdown nodes automatically. A rendered custom component has no ordinary text children, so its semantic content must be supplied separately. Fumadocs supports this through `node.data.structuredData.contents`; its default stringifier adds those entries to the current heading while extracting structured search data.
 
-The comment-component transform uses this extension point. `DocMultiLang` contributes every valid translation from paragraphs and recursively nested list items, so searches match content in any authored language, not only the currently selected language. Multilingual headings contribute one heading entry per translation, all sharing the native heading anchor.
+The comment-component transform uses this extension point. `MultiLang` contributes every valid translation from paragraphs and recursively nested list items, so searches match content in any authored language, not only the currently selected language. Multilingual headings contribute one heading entry per translation, all sharing the native heading anchor.
 
 Additional comment components can provide index content through `config.compile.structuredDataGetByComponent`, keyed by authored component name. The callback receives the raw marked block and a context object containing `compName` and parsed comment `props`. It returns the Fumadocs structured-data shape:
 
@@ -184,6 +184,6 @@ Malformed heading mappings intentionally behave differently: the native heading 
 
 ## Runtime boundaries
 
-The shared YAML entry is exposed as `common/DocMultiLang` and remains limited to the `commentBlock` placement. The `SegmentedControl` is runtime-injected by the consuming application, avoiding a dependency from the reusable document package to an application component library.
+The shared YAML entry is exposed as `common/MultiLang` (compatibility id `common/DocMultiLang`) and remains limited to the `commentBlock` placement. The `SegmentedControl` is runtime-injected by the consuming application, avoiding a dependency from the reusable document package to an application component library.
 
 Additional comment components can participate in toolbar language detection through `config.compile.languageListGetByComponent`. Each callback receives the raw marked block and returns its supported language codes.

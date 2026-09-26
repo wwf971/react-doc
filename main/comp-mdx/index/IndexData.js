@@ -1,6 +1,6 @@
 import { yamlParse } from '../../frontend/src/lib/yaml.js';
 
-function docIndexDataParse(data = {}) {
+function indexDataParse(data = {}) {
 	const dataParsed = dataParse(data);
 	if (!dataParsed || typeof dataParsed !== 'object' || Array.isArray(dataParsed)) {
 		throw new Error('Index data must be a mapping.');
@@ -31,9 +31,9 @@ function titleSubtopicsItemsNormalize(dataParsed) {
 	};
 }
 
-function docIndexLanguageListGet(raw) {
+function indexLanguageListGet(raw) {
 	try {
-		const dataIndex = docIndexDataParse(raw);
+		const dataIndex = indexDataParse(raw);
 		const languageSet = new Set();
 		for (const value of textLocalizedListGet(dataIndex)) {
 			if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
@@ -45,9 +45,9 @@ function docIndexLanguageListGet(raw) {
 	}
 }
 
-function docIndexStructuredDataGet(raw) {
+function indexStructuredDataGet(raw) {
 	try {
-		const dataIndex = docIndexDataParse(raw);
+		const dataIndex = indexDataParse(raw);
 		const contentList = textLocalizedListGet(dataIndex)
 			.flatMap((value) => typeof value === 'string' ? [value] : Object.values(value ?? {}))
 			.map((value) => String(value).trim())
@@ -207,8 +207,10 @@ function textIs(value) {
 }
 
 export {
-	docIndexDataParse,
-	docIndexLanguageListGet,
-	docIndexStructuredDataGet,
+	indexDataParse,
+	indexLanguageListGet,
+	indexStructuredDataGet,
 	textLocalizedGet,
+	indexLanguageListGet as docIndexLanguageListGet,
+	indexStructuredDataGet as docIndexStructuredDataGet,
 };

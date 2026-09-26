@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { DocImage } from '../image/DocImage.jsx';
-import { DocImageGridStore } from './DocImageGridStore.js';
-import './DocImageGrid.css';
+import { Image } from '../image/Image.jsx';
+import { ImageGridStore } from './ImageGridStore.js';
+import './ImageGrid.css';
 
-const DocImageGrid = observer(function DocImageGrid({ data = {}, config = {}, onEvent }) {
-	const [store] = useState(() => new DocImageGridStore(data));
+const ImageGrid = observer(function ImageGrid({ data = {}, config = {}, onEvent }) {
+	const [store] = useState(() => new ImageGridStore(data));
 	const source = data.raw ?? data;
 
 	useEffect(() => {
@@ -30,7 +30,7 @@ const DocImageGrid = observer(function DocImageGrid({ data = {}, config = {}, on
 		<div className="doc-image-grid" style={style}>
 			{store.imageList.map((image, index) => (
 				<div className="doc-image-grid-item" key={image.id ?? `${image.src ?? image.source}:${index}`}>
-					<DocImage
+					<Image
 						data={image}
 						config={{
 							assetUrlGet: config.assetUrlGet,
@@ -58,4 +58,4 @@ function sizeCssGet(value) {
 	return undefined;
 }
 
-export { DocImageGrid };
+export { ImageGrid, ImageGrid as DocImageGrid };

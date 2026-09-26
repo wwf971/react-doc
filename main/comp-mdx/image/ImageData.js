@@ -1,6 +1,6 @@
 import { yamlParse } from '../../frontend/src/lib/yaml.js';
 
-function docImageDataParse(data) {
+function imageDataParse(data) {
 	if (!data || typeof data !== 'object' || Array.isArray(data)) {
 		throw new Error('Image data must be a mapping.');
 	}
@@ -14,4 +14,4 @@ function docImageDataParse(data) {
 	return { ...dataParsed, ...dataExplicit };
 }
 
-export { docImageDataParse };
+export { imageDataParse };

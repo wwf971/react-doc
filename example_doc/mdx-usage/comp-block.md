@@ -4,7 +4,7 @@ description: BlockSimple highlights a quote block with a title; BlockMdx renders
 language: en
 ---
 
-<!--renderComp=DocMultiLang,type=paragraphs,languages=[en,jp]-->
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
 `BlockSimple` highlights a Markdown quote block with a title. The default title is the upper-case form of the display type; it can be changed with `title` and is hidden only when `isTitleHidden=true`. GitHub Markdown Alert markers such as `[!CAUTION]` are removed from the displayed content, so the block looks natural both on GitHub and in the document page.
 
@@ -17,10 +17,10 @@ language: en
 
 <span id="block-simple" />
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ## {en: "Simple Block", jp: "単純ブロック"}
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ### {en: "Syntax", jp: "構文"}
 
 ```markdown
@@ -29,7 +29,7 @@ language: en
 > この操作を実行する前に、変更内容を確認してください。
 ```
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ### {en: "Display example", jp: "表示例"}
 
 <!--renderComp=BlockSimple,type=warning-->
@@ -38,17 +38,17 @@ language: en
 
 <span id="block-mdx" />
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ## {en: "Markdown Block", jp: "Markdown ブロック"}
 
-<!--renderComp=DocMultiLang,type=paragraphs,languages=[en,jp]-->
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
 `BlockMdx` displays multi-line Markdown, including headings and nested lists, as a titled panel.
 
 `BlockMdx` は、見出しや階層リストを含む複数行の Markdown を、タイトル付きパネルとして表示します。
 ```
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ### {en: "Syntax", jp: "構文"}
 
 ````markdown
@@ -59,7 +59,7 @@ language: en
 ```
 ````
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ### {en: "Display example", jp: "表示例"}
 
 <!--renderComp=BlockMdx,title=関連資料-->

@@ -12,7 +12,11 @@ import { parse as parseYaml } from 'yaml';
 import { remarkDocLink } from './remark-doc-link.js';
 import { remarkCommentComp } from './remark-comment-comp.js';
 import { remarkStableHeadingAnchor } from './remark-stable-heading-anchor.js';
-import { multiLangLanguageListGet, multiLangStructuredDataGet } from '../../../comp-mdx/multi-lang/MultiLangData.js';
+import {
+  multiLangCompNameIs,
+  multiLangLanguageListGet,
+  multiLangStructuredDataGet,
+} from '../../../comp-mdx/multi-lang/MultiLangData.js';
 import { multiLangRemarkHeading } from '../../../comp-mdx/multi-lang/MultiLangRemarkHeading.js';
 import { MultiLangHeadingText } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
 
@@ -37,14 +41,14 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
       sourceOffset,
     });
     const languageListGet = config.languageListGetByComponent?.[compName]
-      ?? (compName === 'DocMultiLang' ? multiLangLanguageListGet : undefined);
+      ?? (multiLangCompNameIs(compName) ? multiLangLanguageListGet : undefined);
     for (const language of languageListGet?.(raw, { compName, props, lang }) ?? []) {
       languageSet.add(language);
     }
   };
   const structuredDataGet = ({ compName, props, raw }) => {
     const getter = config.structuredDataGetByComponent?.[compName]
-      ?? (compName === 'DocMultiLang' ? multiLangStructuredDataGet : undefined);
+      ?? (multiLangCompNameIs(compName) ? multiLangStructuredDataGet : undefined);
     return getter?.(raw, { compName, props });
   };
 

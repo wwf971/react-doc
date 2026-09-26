@@ -1,7 +1,7 @@
 import { makeAutoObservable } from 'mobx';
 import { load as yamlLoad } from 'js-yaml';
 
-class DocImageGridStore {
+class ImageGridStore {
 	imageList = [];
 	message = '';
 	options = {};
@@ -45,4 +45,4 @@ function imageNormalize(image, index) {
 	return image;
 }
 
-export { DocImageGridStore };
+export { ImageGridStore };

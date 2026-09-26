@@ -2,9 +2,9 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
 import { Copy, Expand, Scan, X } from '../../frontend/UICommon.js';
-import { docImageDataParse } from './DocImageData.js';
-import { DocImageStore } from './DocImageStore.js';
-import './DocImage.css';
+import { imageDataParse } from './ImageData.js';
+import { ImageStore } from './ImageStore.js';
+import './Image.css';
 
 function ImagePanZoom({ alt, sourceUrl }) {
 	const viewportRef = useRef(null);
@@ -127,9 +127,9 @@ function ImagePanZoom({ alt, sourceUrl }) {
 	);
 }
 
-function DocImage({ data = {}, config = {}, onEvent }) {
+function Image({ data = {}, config = {}, onEvent }) {
 	try {
-		return <DocImageRender data={docImageDataParse(data)} config={config} onEvent={onEvent} />;
+		return <ImageRender data={imageDataParse(data)} config={config} onEvent={onEvent} />;
 	} catch (error) {
 		return (
 			<div className="doc-image-error" role="alert">
@@ -139,13 +139,13 @@ function DocImage({ data = {}, config = {}, onEvent }) {
 	}
 }
 
-const DocImageRender = observer(function DocImageRender({ data, config, onEvent }) {
+const ImageRender = observer(function ImageRender({ data, config, onEvent }) {
 	const source = String(data.src ?? data.source ?? '').trim();
 	const sourceUrl = config.assetUrlGet?.(source) ?? source;
 	const alt = String(data.alt ?? data.caption ?? '');
 	const displayModeAuthored = config.displayMode ?? data.displayMode;
 	const displayModeDefault = ['fill', 'contain-auto'].includes(displayModeAuthored) ? displayModeAuthored : 'contain';
-	const [store] = useState(() => new DocImageStore(displayModeDefault));
+	const [store] = useState(() => new ImageStore(displayModeDefault));
 	const titleId = useId();
 	const width = sizeCssGet(config.width ?? data.width ?? data.maxWidth) ?? '100%';
 	const height = sizeCssGet(config.height ?? data.height) ?? 'auto';
@@ -275,4 +275,4 @@ async function imagePngBlobGet(sourceUrl) {
 	});
 }
 
-export { DocImage };
+export { Image, Image as DocImage };

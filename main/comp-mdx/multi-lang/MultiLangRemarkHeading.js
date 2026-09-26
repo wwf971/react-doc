@@ -1,7 +1,7 @@
 import { parse as parseYaml } from 'yaml';
-import { valueIsText } from './MultiLangData.js';
+import { multiLangCompNameIs, valueIsText } from './MultiLangData.js';
 
-const REGEX_MULTI_LANG_MARKER = /^<!--\s*renderComp=DocMultiLang\s*-->$/;
+const REGEX_RENDER_COMP_MARKER = /^<!--\s*renderComp=(\w+)\s*-->$/;
 
 // Keeps the native heading node (depth, anchor properties, TOC participation),
 // replacing only its text with a language-aware inline renderer.
@@ -16,7 +16,7 @@ function transformChildren(parent, options) {
     const heading = parent.children[index + 1];
     if (
       marker?.type === 'html'
-      && REGEX_MULTI_LANG_MARKER.test(marker.value.trim())
+      && multiLangCompNameIs(REGEX_RENDER_COMP_MARKER.exec(marker.value.trim())?.[1])
       && heading?.type === 'heading'
     ) {
       marker.data = { ...(marker.data ?? {}), isMultiLangHeadingMarker: true };

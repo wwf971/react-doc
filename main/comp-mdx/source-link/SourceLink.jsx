@@ -17,7 +17,7 @@ const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEven
 	const target = targetGet(data);
 	const label = String(data.label ?? data.title ?? target);
 	// every value other than 'render' means source mode, keeping existing
-	// DocIndex inline-link and block usages (no displayMode) compatible.
+	// Index inline-link and block usages (no displayMode) compatible.
 	const displayMode = data.displayMode === 'render' ? 'render' : 'source';
 	const sourceEntry = target ? sourceStore.entryByInternalPath.get(target) : undefined;
 	const sourceState = target

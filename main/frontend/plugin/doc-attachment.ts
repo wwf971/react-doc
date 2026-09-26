@@ -24,10 +24,10 @@ type SourceEntry = {
 };
 
 const commentComponentPattern = /<!--\s*renderComp=([\w/]+(?:-[\w/]+)*)([\s\S]*?)-->/g;
-const mermaidMdxPattern = /<DocDiagramMermaid\b[^>]*\blaneIcons\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
-const imageMdxPattern = /<DocImage\b[^>]*\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
-const imageCommentBlockPattern = /<!--\s*renderComp=DocImage(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n```/g;
-const imageGridCommentPattern = /<!--\s*renderComp=DocImageGrid(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n```/g;
+const mermaidMdxPattern = /<(?:Doc)?DiagramMermaid\b[^>]*\blaneIcons\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+const imageMdxPattern = /<(?:Doc)?Image\b[^>]*\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+const imageCommentBlockPattern = /<!--\s*renderComp=(?:Doc)?Image(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n```/g;
+const imageGridCommentPattern = /<!--\s*renderComp=(?:Doc)?ImageGrid(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n```/g;
 const fileDownloadCommentPattern = /<!--\s*renderComp=FileDownload(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n```/g;
 
 export const docAttachmentFinderDefaultList: DocAttachmentFinder[] = [
@@ -58,7 +58,7 @@ export function attachmentMermaidLaneIconFind(context: DocAttachmentFinderContex
   const valueList: string[] = [];
 
   for (const match of context.text.matchAll(commentComponentPattern)) {
-    if (match[1] !== 'DocDiagramMermaid') continue;
+    if (match[1] !== 'DiagramMermaid' && match[1] !== 'DocDiagramMermaid') continue;
     const props = propsCommentParse(match[2]);
     if (props.laneIcons) valueList.push(props.laneIcons);
   }
@@ -79,13 +79,13 @@ export function attachmentImageFind(context: DocAttachmentFinderContext): string
       if (typeof src === 'string' && src.trim()) result.push(src.trim());
     } catch (error) {
       console.warn(
-        `[doc-source] invalid DocImage YAML in ${context.doc.internalPath}: ` +
+        `[doc-source] invalid Image YAML in ${context.doc.internalPath}: ` +
         `${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
   for (const match of context.text.matchAll(commentComponentPattern)) {
-    if (match[1] !== 'DocImage') continue;
+    if (match[1] !== 'Image' && match[1] !== 'DocImage') continue;
     const src = propsCommentParse(match[2]).src;
     if (src) result.push(src);
   }

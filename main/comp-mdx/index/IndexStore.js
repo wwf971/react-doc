@@ -1,7 +1,7 @@
 import { makeAutoObservable } from 'mobx';
-import { docIndexDataParse } from './DocIndexData.js';
+import { indexDataParse } from './IndexData.js';
 
-class DocIndexStore {
+class IndexStore {
 	dataIndex = null;
 	message = '';
 
@@ -12,7 +12,7 @@ class DocIndexStore {
 
 	dataLoad(data = {}) {
 		try {
-			this.dataIndex = docIndexDataParse(data);
+			this.dataIndex = indexDataParse(data);
 			this.message = '';
 		} catch (error) {
 			this.dataIndex = null;
@@ -21,4 +21,4 @@ class DocIndexStore {
 	}
 }
 
-export { DocIndexStore };
+export { IndexStore };

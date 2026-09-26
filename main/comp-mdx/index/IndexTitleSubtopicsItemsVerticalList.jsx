@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { textLocalizedGet } from './DocIndexData.js';
+import { textLocalizedGet } from './IndexData.js';
 import { IndexSubtopicContent } from './IndexSubtopicContent.jsx';
 
 const IndexTitleSubtopicsItemsVerticalList = observer(function IndexTitleSubtopicsItemsVerticalList({

@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { useDocStores } from '../store/context.js';
-import { compDefinitionNormalize } from './comp-registry.js';
+import { compDefinitionNormalize, compInputNormalize } from './comp-registry.js';
+import { CompDataRefHost } from './CompDataRef.jsx';
 
 // One runtime boundary for every component resolved through compRegistry.
 // Registered render components always receive { data, config, onEvent }.
@@ -41,6 +42,17 @@ export function RegisteredComp({
     );
   }
 
+  if (definition.isLegacy && input.propsAuthored?.dataRef !== undefined) {
+    return (
+      <CompError
+        compId={compIdResolved}
+        compName={compName}
+        message={`${compName ?? compIdResolved} does not accept dataRef.`}
+        detail={`dataRef: ${String(input.propsAuthored.dataRef)}`}
+      />
+    );
+  }
+
   if (definition.isLegacy) {
     const CompLegacy = definition.CompRender;
     if (placement === 'commentBlock') {
@@ -68,28 +80,7 @@ export function RegisteredComp({
     return <CompLegacy {...(input.propsAuthored ?? {})} />;
   }
 
-  const propsAuthored = input.propsAuthored ?? {};
-  const { children, config: configAuthored, data: dataAuthored, onEvent: _onEventIgnored, ...dataProps } = propsAuthored;
-  const inputNormalized = {
-    ...input,
-    content: input.content ?? children,
-    data: {
-      ...(input.data ?? {}),
-      ...(dataAuthored && typeof dataAuthored === 'object' ? dataAuthored : {}),
-      ...dataProps,
-      ...(input.raw !== undefined ? { raw: input.raw } : {}),
-      ...(input.lang !== undefined ? { lang: input.lang } : {}),
-      ...(input.content !== undefined || children !== undefined
-        ? { content: input.content ?? children }
-        : {}),
-    },
-    config: {
-      ...(configAuthored && typeof configAuthored === 'object' ? configAuthored : {}),
-      ...(input.config ?? {}),
-    },
-  };
-  const resultBuilt = definition.dataBuild?.(inputNormalized) ?? inputNormalized;
-  const data = resultBuilt.data ?? inputNormalized.data;
+  const { data, config: configBuilt } = compInputNormalize(definition, input);
   // components rendered inside another compiled document (e.g. the SourceLink
   // render popup) belong to that document, not the outer page.
   const sourcePath = configRuntime.sourcePath ?? docStore.docCurrentPath;
@@ -97,7 +88,7 @@ export function RegisteredComp({
     ?? data.id
     ?? `${compIdResolved}:${sourcePath || 'page'}:${idFallback}`;
   const config = {
-    ...resultBuilt.config,
+    ...configBuilt,
     ...configRuntime,
     compId: compIdResolved,
     instanceId,
@@ -126,7 +117,19 @@ export function RegisteredComp({
   };
 
   const CompRender = definition.CompRender;
-  return <CompRender data={data} config={config} onEvent={eventHandle} />;
+  if (data.dataRef === undefined) {
+    return <CompRender data={data} config={config} onEvent={eventHandle} />;
+  }
+  return (
+    <CompDataRefHost
+      CompRender={CompRender}
+      compLabel={compName ?? compIdResolved}
+      config={config}
+      data={data}
+      definition={definition}
+      onEvent={eventHandle}
+    />
+  );
 }
 
 function CompError({ compId, compName, detail, message, raw }) {

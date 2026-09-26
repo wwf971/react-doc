@@ -26,7 +26,7 @@ mobx stores (source of truth for rendering)
 
 ## Key choices
 
-**Embeddable component, own "framework" adapter.** fumadocs-ui works without any framework: `FrameworkProvider` from `fumadocs-core/framework` only needs `usePathname`, `useRouter` ({push, refresh}) and a `Link` component. These are implemented on top of `DocStore`, so navigation is plain mobx state. Standalone mode syncs the current doc to the page url as a `?doc=` query param (heading anchors keep native `#hash` behavior); embedded/memory mode skips url sync entirely. A consumer app renders `<DocPageMdx data={...} config={...} onEvent={...}/>`.
+**Embeddable component, own "framework" adapter.** fumadocs-ui works without any framework: `FrameworkProvider` from `fumadocs-core/framework` only needs `usePathname`, `useRouter` ({push, refresh}) and a `Link` component. These are implemented on top of `DocStore`, so navigation is plain mobx state. Standalone mode syncs the current doc to the page url as a `?doc=` query param (heading anchors keep native `#hash` behavior); embedded/memory mode skips url sync entirely. A consumer app renders `<DocPageMdx data={...} config={...} onEvent={...}/>`. The page is its own scroll container, so its host must have a definite height (see [Avoid CSS Style Regression](#avoid-css-style-regression)).
 
 **Runtime compile in browser, not build-time mdx.** `fumadocs-mdx` needs one content dir known to the bundler and cannot express the rule-based multi-root source. Instead docs are shipped as raw text (lazy chunks) and compiled in the browser on first visit: `@mdx-js/mdx` with `mdxPreset()` from `fumadocs-core/content/mdx/preset-runtime`, which applies the same default plugins the official setup uses (shiki code blocks, heading anchors + toc, gfm, structured data for search). Compile results are cached per doc in the store. Local docs are trusted content, so runtime evaluation is acceptable here.
 
@@ -95,7 +95,7 @@ collectComponentAttachmentsOnBuild: true
 
 The layer runs only for a Vite build. It scans every md/mdx document remaining in the collected manifest, asks registered attachment finders for component-specific references, resolves each reference against the complete source set (before side-panel pruning), and bundles the resolved file. Development mode does not run this scan and keeps its existing direct-file behavior.
 
-The default finders recognize `DocDiagramMermaid`'s `laneIcons` property, `DocImage`'s `src` value in its YAML block, and image `src` values in a `DocImageGrid` YAML block. Direct MDX component properties are also recognized where applicable. For example, all four PNG files in the following value are retained even if they are not otherwise present in the pruned deployment manifest:
+The default finders recognize `DiagramMermaid`'s `laneIcons` property, `Image`'s `src` value in its YAML block, and image `src` values in a `ImageGrid` YAML block. Direct MDX component properties are also recognized where applicable. For example, all four PNG files in the following value are retained even if they are not otherwise present in the pruned deployment manifest:
 
 ```text
 laneIcons=Mda:doc-aux/image/icon-mda.png|Data:doc-aux/image/icon-dataverse.png|Flow:doc-aux/image/icon-powerautomate.png|Agent:doc-aux/image/icon-copilot studio.png
@@ -138,6 +138,8 @@ Registry values are component definitions created with `compDefine()`. A definit
 
 Multilingual component registration and authoring rules are specified in [doc_page_impl_multi-lang.md](doc_page_impl_multi-lang.md).
 
+Component naming, compatibility names, and the component data reference (a component reusing the authored data of another component through `dataRef="{document target}#{component id}"`) are described in [MDX components](doc_page_impl_mdx_comp.md).
+
 One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, `sidePanelPanel`, `partIndex`, and `indexSubtopic`.
 
 ### Isolate temporary rendering DOM
@@ -146,7 +148,7 @@ Components and third-party libraries sometimes create temporary DOM to measure, 
 
 Keep temporary rendering DOM inside a host owned by the component that performs the rendering. The host should remain mounted for the complete asynchronous operation and be fixed or absolutely positioned, zero-sized, clipped, hidden, non-interactive, and layout-contained. Insert only the completed output into the visible component. Fix overflow at the level where it is created: reserving a gutter on a nested document scroller cannot prevent temporary elements attached to `document.body` from changing window overflow.
 
-Mermaid is one example. `mermaid.render(id, source)` appends temporary rendering elements to `document.body` when its optional container is omitted. `DocDiagramMermaid` therefore passes a dedicated contained host as the third argument to `mermaid.render()`. Mermaid measures and serializes the SVG inside that host, then the component inserts the completed SVG into the visible diagram viewport. Diagrams default to `fit` mode so all content is visible, with a temporary toolbar toggle for original-size `intrinsic` mode. The same isolation principle applies to charting, diagram, export, rich-text, and measurement libraries that create off-screen or temporary DOM.
+Mermaid is one example. `mermaid.render(id, source)` appends temporary rendering elements to `document.body` when its optional container is omitted. `DiagramMermaid` therefore passes a dedicated contained host as the third argument to `mermaid.render()`. Mermaid measures and serializes the SVG inside that host, then the component inserts the completed SVG into the visible diagram viewport. Diagrams default to `fit` mode so all content is visible, with a temporary toolbar toggle for original-size `intrinsic` mode. The same isolation principle applies to charting, diagram, export, rich-text, and measurement libraries that create off-screen or temporary DOM.
 
 ## Side panel
 
@@ -197,7 +199,7 @@ tree:
 The referenced document marks the queryable component with a stable authored id:
 
 ````markdown
-<!--renderComp=DocIndex,id=guide-main-index-->
+<!--renderComp=Index,id=guide-main-index-->
 ```yaml
 type: title-subtopics-items
 layout: horizontal-wrap
@@ -221,7 +223,7 @@ The right-side local-index slot is wrapped by `DocPageToc`. Outside a configured
 
 For `partIndex` placement, the index receives host-only display-mode configuration. Its left-aligned title and display-mode control use a wrapping row, allowing the control to move below a long title. The segmented control emits a `displayModeChange` request, and the host submits that request to `DocStore`. The hosted TOC shell uses content height and visible overflow instead of an internal vertical viewport, so the document page remains the vertical scrolling surface. In `floating` mode the same component instance is rendered through a `document.body` portal, positioned at the top right, and assigned the application overlay stack maximum so it cannot pass below the side panel while being dragged. It has no internal vertical scrollbar. Ordinary `mdx` and `commentBlock` placements receive no display-mode control. On the part-root document, host state gives the index title the yellow current marker.
 
-An index item defaults to `kind: document`. With `kind: inline-link`, it renders the reusable `SourceLink` component rather than owning source-popup behavior. `SourceLink` is independent of `DocIndex`: it accepts a collected internal source path and label through the unified `{ data, config, onEvent }` interface, loads the source through `DocSourceStore.loadRaw()`, and owns a `CodeBlockCompactStore`. `CodeBlockCompactPopup` remains the shared implementation for the panel, syntax-highlighted body, copy operation, close event, and Escape-key behavior. Source-link targets do not need side-panel entries. A deployment that enables `pruneSourceToSidePanel` must instead list those raw-file targets in `sourceDependencies` on a retained side-panel item.
+An index item defaults to `kind: document`. With `kind: inline-link`, it renders the reusable `SourceLink` component rather than owning source-popup behavior. `SourceLink` is independent of `Index`: it accepts a collected internal source path and label through the unified `{ data, config, onEvent }` interface, loads the source through `DocSourceStore.loadRaw()`, and owns a `CodeBlockCompactStore`. `CodeBlockCompactPopup` remains the shared implementation for the panel, syntax-highlighted body, copy operation, close event, and Escape-key behavior. Source-link targets do not need side-panel entries. A deployment that enables `pruneSourceToSidePanel` must instead list those raw-file targets in `sourceDependencies` on a retained side-panel item.
 
 `SourceLink` and ordinary document links share `LinkDocRender` and `LinkWarning` for unavailable-target presentation. A target absent from the collected source uses the red broken-link state and explains the problem through its hover title. A collected source that cannot be opened uses the orange unavailable state and shows the same dismissible warning beside the activated link. Loading source links retain normal link styling rather than appearing disabled.
 
@@ -307,6 +309,7 @@ example_doc/             # root folder of the demonstration page
 main/
 ├── config.yaml          # example config (tracked), actually runnable
 ├── config.0.yaml        # local override (untracked), entries overlay config.yaml
+├── comp-mdx/            # components available in documents (FileTree, Index, MultiLang, ...)
 ├── package.json         # delegates dev/build to frontend/
 └── frontend/            # Vite app + embeddable component
     ├── plugin/          # vite plugin: config load, rule scan, virtual module, watch
@@ -327,7 +330,8 @@ Run `pnpm install` from the workspace root once, then `pnpm dev` from either thi
 - Disable standard and contextual font ligatures in document `pre` and `code` elements. Code samples must display punctuation sequences such as `<!--` and `-->` literally rather than replacing them with font glyphs such as arrows.
 - Keep block spacing asymmetric: the upper margin of rendered code figures, `BlockSimple`, and `BlockMdx` is half of the lower margin so a preceding heading remains visually attached to its content.
 - Import the package stylesheet once and load project-specific overrides after it. Scope overrides under the document page root instead of changing global element styles.
-- Keep the three-column layout width-stable across document switching. The window scrollbar is the variable to control: a short document or the loading skeleton drops it, the viewport widens, and every layout column shifts. `style.css` reserves the gutter with `scrollbar-gutter: stable` on `html:has(.doc-page-mdx)`, so only pages hosting a document page are affected. Headingless documents are already width-stable at desktop widths because the fumadocs TOC renders a hidden `#nd-toc-placeholder` that keeps `--fd-toc-width` reserved.
+- Give the document page a host with a definite height. `.doc-page-mdx` is the vertical scroll container (`height: 100%; overflow: auto`), and every sticky part of the layout — side panel, local index, floating navigation and theme controls — sticks relative to it. If the host height is `auto` (for example an unstyled `#root`), the document page grows with its content and never scrolls; the window scrolls instead, all sticky parts scroll away, and the floating controls appear only at the end of the page, or briefly while a short document or the loading skeleton is shown. The standalone demo sets this height in `frontend/src/main.css`.
+- Keep the three-column layout width-stable across document switching. The scrollbar of `.doc-page-mdx` is the variable to control: a short document or the loading skeleton drops it, the content width grows, and every layout column shifts. `DocPageMdx.css` reserves the gutter with `scrollbar-gutter: stable` on `.doc-page-mdx` itself. Headingless documents are already width-stable at desktop widths because the fumadocs TOC renders a hidden `#nd-toc-placeholder` that keeps `--fd-toc-width` reserved.
 - Avoid broad selectors or CSS resets in embedded components. After changing the CSS pipeline, verify headings, links, code blocks, side panels, and scrolling in both the standalone demo and the embedded page.
 
 General visual components, hooks, and icons from Fumadocs, Lucide, and the local shadcn set are imported through `frontend/UICommon.js`. `frontend/UICommonExternal.js` owns external-library exports, while `UICommon.js` adds local shared components. Specialized engines such as React Flow and build-time remark or rehype plugins remain direct imports because they are feature-specific or compiler dependencies rather than general UI primitives.

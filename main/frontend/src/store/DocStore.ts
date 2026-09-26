@@ -1,7 +1,7 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import { buildPageTreeModel } from '../lib/page-tree.js';
-import { compDefinitionNormalize } from '../comp-doc/comp-registry.js';
+import { compDefinitionNormalize, compInputNormalize } from '../comp-doc/comp-registry.js';
 
 // upper store layer: view state and navigation.
 // current doc, url sync, link dropdown state, search dialog state.
@@ -315,7 +315,93 @@ export class DocStore {
     if (!item?.docPath) {
       return { status: 'error', message: `Part index document id not found: ${docId}` };
     }
-    const result = this.sourceStore.componentGet(item.docPath, componentId);
+    return this.componentQueryByPath(item.docPath, componentId);
+  }
+
+  // component data reference target: "{document target}#{component id}".
+  // the document part accepts every document-link form; an empty document
+  // part ("#component-id") means the referencing document itself.
+  compDataRefQuery(target: unknown, fromPath: string): any {
+    const resolved = this.compDataRefDocResolve(target, fromPath);
+    if (resolved.message) return { status: 'error', message: resolved.message };
+    const result = this.componentQueryByPath(resolved.docPath, resolved.componentId);
+    const resultBase = {
+      componentId: resolved.componentId,
+      docPath: resolved.docPath,
+      target,
+      warning: resolved.warning,
+    };
+    if (result.status !== 'done') return { ...resultBase, ...result };
+    return {
+      ...resultBase,
+      ...result,
+      data: compInputNormalize(result.definition, result.component.input).data,
+    };
+  }
+
+  async compDataRefLoad(target: unknown, fromPath: string): Promise<void> {
+    const resolved = this.compDataRefDocResolve(target, fromPath);
+    if (resolved.message) return;
+    await this.sourceStore.loadDoc(resolved.docPath);
+  }
+
+  // shared by document links and component data references, so both accept
+  // the same target forms: "@first/{itemId}" resolves through the side-panel
+  // tree, every other form through DocSourceStore.resolveLink().
+  docTargetResolve(target: string, fromPath: string): { targetList: any[]; hash: string } {
+    const treeLink = this.resolveTreeLink(target);
+    if (treeLink) {
+      return {
+        targetList: [{
+          internalPath: treeLink.target.docPath,
+          name: treeLink.target.text,
+          title: treeLink.target.text,
+          navigationTarget: treeLink.target.route,
+        }],
+        hash: treeLink.hash,
+      };
+    }
+    const { targets, hash } = this.sourceStore.resolveLink(target, fromPath);
+    return { targetList: targets, hash };
+  }
+
+  private compDataRefDocResolve(target: unknown, fromPath: string): {
+    componentId: string;
+    docPath: string;
+    message: string;
+    warning: string;
+  } {
+    const resolved = { componentId: '', docPath: '', message: '', warning: '' };
+    if (typeof target !== 'string' || target.trim() === '') {
+      resolved.message = 'dataRef must be a non-empty string such as "a.md#component-id".';
+      return resolved;
+    }
+    const { path, hash } = splitTarget(target.trim());
+    resolved.componentId = hash;
+    if (!hash) {
+      resolved.message = `dataRef needs a component id after "#": ${target}`;
+      return resolved;
+    }
+    if (!path) {
+      resolved.docPath = fromPath;
+      if (!fromPath) resolved.message = `dataRef has no document part and no referencing document: ${target}`;
+      return resolved;
+    }
+    const { targetList } = this.docTargetResolve(path, fromPath);
+    if (targetList.length === 0 || !targetList[0].internalPath) {
+      resolved.message = `Referenced document not found in source: ${path}`;
+      return resolved;
+    }
+    resolved.docPath = targetList[0].internalPath;
+    if (targetList.length > 1) {
+      resolved.warning = `"${path}" matches ${targetList.length} documents; using the first one in source order. `
+        + `Matches: ${targetList.map((item) => item.internalPath).join(', ')}`;
+    }
+    return resolved;
+  }
+
+  private componentQueryByPath(docPath: string, componentId: string): any {
+    const result = this.sourceStore.componentGet(docPath, componentId);
     if (result.status !== 'done') return result;
     const component = result.component;
     const compId = this.sourceStore.configDoc.compRegistry?.[component.compName]
@@ -333,7 +419,7 @@ export class DocStore {
       component,
       componentType: definition.componentType ?? '',
       definition,
-      docPath: item.docPath,
+      docPath,
     };
   }
 

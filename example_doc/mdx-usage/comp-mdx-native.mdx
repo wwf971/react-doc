@@ -43,11 +43,11 @@ export class DocStore {
   </Folder>
 </Files>
 
-## File tree (DocFileTree, fumadocs-independent)
+## File tree (FileTree, fumadocs-independent)
 
 With `maxHeight`, the box keeps that exact height and scrolls inside, so folder toggling never jitters the page layout.
 
-<DocFileTree
+<FileTree
   maxHeight="12rem"
   tree={[
     {
@@ -71,7 +71,7 @@ With `maxHeight`, the box keeps that exact height and scrolls inside, so folder 
 `description` is either plain text or a `{ component, data, config }` descriptor resolved
 through the component registry (here `DocLinkInline` renders a document link).
 
-<DocFileTree
+<FileTree
   tree={[
     {
       name: 'react-doc/',

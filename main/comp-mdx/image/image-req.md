@@ -9,7 +9,7 @@ MD and MDX may specify `src`, `alt`, `caption`, `displayMode`, `width`, and `hei
 In plain Markdown, keep the component marker free of properties and put every authored property in the following YAML block:
 
 ````markdown
-<!--renderComp=DocImage-->
+<!--renderComp=Image-->
 ```yaml
 src: /doc-aux/image/example.png
 alt: Example screen

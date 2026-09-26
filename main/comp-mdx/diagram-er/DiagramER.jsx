@@ -13,12 +13,12 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Copy, Expand, X } from '../../frontend/UICommon.js';
-import { DocDiagramERStore } from './DocDiagramERStore.js';
-import './DocDiagramER.css';
+import { DiagramERStore } from './DiagramERStore.js';
+import './DiagramER.css';
 
-const DocDiagramER = observer(function DocDiagramER({ data = {}, config = {}, onEvent }) {
+const DiagramER = observer(function DiagramER({ data = {}, config = {}, onEvent }) {
 	const sourceDiagram = data.source || data.raw || '';
-	const [store] = useState(() => new DocDiagramERStore(sourceDiagram));
+	const [store] = useState(() => new DiagramERStore(sourceDiagram));
 	const titleId = useId();
 	const heightDiagram = heightGet(config.height);
 
@@ -73,7 +73,7 @@ const DocDiagramER = observer(function DocDiagramER({ data = {}, config = {}, on
 				</header>
 				<div className="doc-er-diagram-popup-content">
 					<ReactFlowProvider>
-						<DocDiagramERCanvas store={store} />
+						<DiagramERCanvas store={store} />
 					</ReactFlowProvider>
 				</div>
 			</section>
@@ -97,7 +97,7 @@ const DocDiagramER = observer(function DocDiagramER({ data = {}, config = {}, on
 			</div>
 			<div className="doc-er-diagram-viewport">
 				<ReactFlowProvider>
-					<DocDiagramERCanvas store={store} />
+					<DiagramERCanvas store={store} />
 				</ReactFlowProvider>
 			</div>
 			{popup}
@@ -105,7 +105,7 @@ const DocDiagramER = observer(function DocDiagramER({ data = {}, config = {}, on
 	);
 });
 
-const DocDiagramERCanvas = observer(function DocDiagramERCanvas({ store }) {
+const DiagramERCanvas = observer(function DiagramERCanvas({ store }) {
 	const { fitView } = useReactFlow();
 	const graphVersion = store.graphVersion;
 	const nodeList = toJS(store.nodeList);
@@ -212,4 +212,4 @@ function heightGet(value) {
 	return Number.isFinite(height) ? Math.max(360, Math.min(1000, height)) : 620;
 }
 
-export { DocDiagramER };
+export { DiagramER, DiagramER as DocDiagramER };

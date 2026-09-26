@@ -1,6 +1,6 @@
 import { makeAutoObservable } from 'mobx';
 
-class DocDiagramMermaidStore {
+class DiagramMermaidStore {
 	copyStatus = 'idle';
 	displayMode = 'contain';
 	isExpanded = false;
@@ -31,4 +31,4 @@ function displayModeNormalize(displayMode) {
 	return displayMode === 'fill' || displayMode === 'intrinsic' ? 'fill' : 'contain';
 }
 
-export { DocDiagramMermaidStore };
+export { DiagramMermaidStore };

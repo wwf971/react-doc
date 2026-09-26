@@ -1,8 +1,14 @@
+/* The document page is its own vertical scroll container and fills a host
+   with a definite height. Sticky layout parts (side panel, local index,
+   floating controls) stick relative to this element, not to the window. */
 .doc-page-mdx {
   min-width: 0;
   height: 100%;
   overflow: auto;
   overflow-anchor: none;
+  /* A short document or the loading skeleton drops the scrollbar, which
+     would widen the layout and shift every column. Reserve its gutter. */
+  scrollbar-gutter: stable;
   font-family: var(--font-sans);
 }
 

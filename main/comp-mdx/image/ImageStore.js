@@ -5,7 +5,7 @@ const displayModeNormalize = (displayMode) => {
 	return 'contain';
 };
 
-class DocImageStore {
+class ImageStore {
 	copyStatus = 'idle';
 	displayMode = 'contain';
 	isExpanded = false;
@@ -28,4 +28,4 @@ class DocImageStore {
 	}
 }
 
-export { DocImageStore };
+export { ImageStore };

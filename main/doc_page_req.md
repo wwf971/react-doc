@@ -101,6 +101,8 @@ The document page should maintain a unified component registry, supporting regis
 
 There should be a standard of the interface of custom components that can be registered, including a unified prop shape etc.
 
+A component in a document should be able to reuse the authored data of another component, instead of repeating it. The referenced component is addressed by its document and a document-unique component id, and the document part uses the same target grammar as the link/ref system. A component explicitly declares which component types it accepts data from. A missing document, a missing or duplicate component id, an incompatible component type, and a component without reference support must each be indicated in place where the reference is written.
+
 
 ## Link/Ref system
 

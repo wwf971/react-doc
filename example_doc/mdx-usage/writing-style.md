@@ -11,7 +11,7 @@ Documents in this source can be opened by two kinds of renderers: the dedicated 
 
 followed directly by a fenced code block, a quote block, or a table. The document page replaces the marked block with the rendered component. A normal Markdown renderer ignores the HTML comment and shows the plain block as-is — that is the degradation path. Writing `<ComponentName prop="value" />` directly is also supported, but only inside `.mdx` files; see [Direct MDX components](comp-mdx-native.mdx).
 
-Simple scalar properties go into the comment as `key=value` pairs. Components with structured properties take a single YAML code block instead, with only the component name in the comment — the image, diagram, and index components in this part all use that form, for example [DocImage](comp-image.md#image-single).
+Simple scalar properties go into the comment as `key=value` pairs. Components with structured properties take a single YAML code block instead, with only the component name in the comment — the image, diagram, and index components in this part all use that form, for example [Image](comp-image.md#image-single).
 
 ## Marked code block
 

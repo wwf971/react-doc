@@ -4,7 +4,7 @@ import { remarkHeading } from 'fumadocs-core/mdx-plugins/remark-heading';
 import { remarkStructure } from 'fumadocs-core/mdx-plugins/remark-structure';
 import { remarkCommentComp } from '../../frontend/src/lib/remark-comment-comp.js';
 import { multiLangRemarkHeading } from './MultiLangRemarkHeading.js';
-import { multiLangStructuredDataGet } from './MultiLangData.js';
+import { multiLangCompNameIs, multiLangStructuredDataGet } from './MultiLangData.js';
 
 // Fumadocs remarkStructure officially accepts custom-component search entries
 // through node.data.structuredData.contents. Run the rendering transforms first
@@ -13,7 +13,7 @@ export function multiLangSearchDataGet(markdown, config = {}) {
   const headingVariantList = [];
   const structuredDataGet = ({ compName, props, raw }) => {
     const getter = config.structuredDataGetByComponent?.[compName]
-      ?? (compName === 'DocMultiLang' ? multiLangStructuredDataGet : undefined);
+      ?? (multiLangCompNameIs(compName) ? multiLangStructuredDataGet : undefined);
     return getter?.(raw, { compName, props });
   };
   const file = remark()

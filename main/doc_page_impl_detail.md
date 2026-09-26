@@ -25,7 +25,7 @@ import { configDoc, fileManifest } from 'virtual:doc-source';
 />;
 ```
 
-The Vite plugin is build-time infrastructure. `DocPageMdx` is a runtime render component. External source files are bundled into the output and are not read from the file system after deployment.
+The Vite plugin is build-time infrastructure. `DocPageMdx` is a runtime render component. It fills its host and scrolls internally, so the host element needs a definite height (for a full-window page: `html, body, #root { height: 100%; }`); otherwise the side panel, local index, and floating controls do not stay in view. External source files are bundled into the output and are not read from the file system after deployment.
 
 ## Configuration composition
 

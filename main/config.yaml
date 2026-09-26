@@ -24,10 +24,14 @@ compRegistry:
   Files: common/Files
   File: common/File
   Folder: common/Folder
-  DocFileTree: common/DocFileTree
-  DocIndex: common/DocIndex
+  FileTree: common/FileTree
+  Index: common/Index
   DocLinkInline: common/DocLinkInline
-  DocMultiLang: common/DocMultiLang
+  MultiLang: common/MultiLang
+  # compatibility tag names, kept so existing documents still render
+  DocFileTree: common/FileTree
+  DocIndex: common/Index
+  DocMultiLang: common/MultiLang
   StockTable: specific/StockTable
   DemoCounter: specific/DemoCounter
   SourceLink: specific/SourceLink

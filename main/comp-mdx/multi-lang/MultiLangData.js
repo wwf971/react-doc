@@ -10,6 +10,14 @@ import {
 
 const KEY_LIST_STRUCTURAL = new Set(['children', 'items', 'text', 'type']);
 
+// author-facing tag names of the multilingual component. DocMultiLang is the
+// compatibility name; compile-time recognition must accept both.
+export const multiLangCompNameList = ['MultiLang', 'DocMultiLang'];
+
+export function multiLangCompNameIs(compName) {
+  return multiLangCompNameList.includes(compName);
+}
+
 export function multiLangContentParse(raw) {
   try {
     const value = parseYaml(raw);

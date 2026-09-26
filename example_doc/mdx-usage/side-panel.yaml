@@ -14,5 +14,7 @@ tree:
   - doc: /example/mdx-usage/comp-block.md
   - doc: /example/mdx-usage/comp-image.md
   - doc: /example/mdx-usage/comp-diagram.md
+  - doc: /example/mdx-usage/comp-file-tree.md
   - doc: /example/mdx-usage/comp-file-download.md
+  - doc: /example/mdx-usage/comp-data-ref.md
   - doc: /example/mdx-usage/comp-mdx-native.mdx

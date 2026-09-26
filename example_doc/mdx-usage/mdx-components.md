@@ -4,7 +4,7 @@ description: Syntax and display examples for the custom components available in 
 language: en
 ---
 
-<!--renderComp=DocMultiLang,type=paragraphs,languages=[en,jp]-->
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
 This part introduces the custom components available in MD / MDX documents, organized by type, with syntax and display examples for each. Detailed syntax and live examples are separated into one document per component type; this page gives the overview and the index.
 
@@ -15,7 +15,7 @@ Almost every example in this part introduces a component with an HTML comment fo
 このパートのほぼすべての例は、HTML コメントとコードブロックの組み合わせでコンポーネントを導入しているため、通常の Markdown レンダラーでもそのまま読めます。この記法の背景は、下記の記述スタイルの資料で説明しています。
 ```
 
-<!--renderComp=DocIndex,id=mdx-usage-index-->
+<!--renderComp=Index,id=mdx-usage-index-->
 ```yaml
 type: title-subtopics-items
 layout: horizontal-wrap
@@ -98,17 +98,32 @@ subtopics:
       en: Files
       jp: ファイル
     items:
+      - id: file-tree
+        title:
+          en: File tree
+          jp: ファイルツリー
+        target: /example/mdx-usage/comp-file-tree.md
       - id: file-download
         title:
           en: File download
           jp: ファイルダウンロード
         target: /example/mdx-usage/comp-file-download.md
+  - id: data-reuse
+    title:
+      en: Data reuse
+      jp: データの再利用
+    items:
+      - id: data-ref
+        title:
+          en: Component data reference
+          jp: コンポーネントデータ参照
+        target: /example/mdx-usage/comp-data-ref.md
 ```
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ## {en: "Writing Style", jp: "記述スタイル"}
 
-<!--renderComp=DocMultiLang,type=paragraphs,languages=[en,jp]-->
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
 Instead of writing an MDX component directly, a document introduces a component with an HTML comment and a fenced code block. A normal Markdown renderer ignores the comment and still shows readable content. Direct MDX syntax remains supported in `.mdx` files.
 
@@ -118,22 +133,22 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 - [Recommended writing style](writing-style.md)
 - [Direct MDX components](comp-mdx-native.mdx)
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ## {en: "Text and Language", jp: "テキストと言語"}
 
-<!--renderComp=DocMultiLang,type=paragraphs,languages=[en,jp]-->
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`DocMultiLang` switches headings, paragraphs, and lists to the language selected on the page.
+`MultiLang` switches headings, paragraphs, and lists to the language selected on the page.
 
-`DocMultiLang` は、ページで選択されている言語に合わせて、見出し、段落、一覧を切り替えて表示します。
+`MultiLang` は、ページで選択されている言語に合わせて、見出し、段落、一覧を切り替えて表示します。
 ```
 
 - [Multilingual display](comp-multi-lang.md)
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ## {en: "Blocks", jp: "ブロック"}
 
-<!--renderComp=DocMultiLang,type=paragraphs,languages=[en,jp]-->
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
 `BlockSimple` highlights a Markdown quote block with a title, and `BlockMdx` renders multi-line Markdown as a titled panel. `Block` is a compatibility entry that selects one of them automatically.
 
@@ -142,38 +157,51 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 
 - [Blocks](comp-block.md)
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ## {en: "Images", jp: "画像"}
 
-<!--renderComp=DocMultiLang,type=paragraphs,languages=[en,jp]-->
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`DocImage` fits one image into a configured display frame with a caption. `DocImageGrid` arranges several images into centered rows that wrap when the page becomes narrow.
+`Image` fits one image into a configured display frame with a caption. `ImageGrid` arranges several images into centered rows that wrap when the page becomes narrow.
 
-`DocImage` は、画像を指定した表示枠に収め、キャプション付きで表示します。`DocImageGrid` は複数の画像を中央揃えの行として配置し、表示幅が狭くなると折り返します。
+`Image` は、画像を指定した表示枠に収め、キャプション付きで表示します。`ImageGrid` は複数の画像を中央揃えの行として配置し、表示幅が狭くなると折り返します。
 ```
 
 - [Images and image grids](comp-image.md)
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ## {en: "Diagrams", jp: "図表"}
 
-<!--renderComp=DocMultiLang,type=paragraphs,languages=[en,jp]-->
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`DocDiagramText` keeps plain-text box diagrams aligned in the browser even when full-width and half-width characters are mixed. `DocDiagramMermaid` renders Mermaid sources such as sequence diagrams.
+`DiagramText` keeps plain-text box diagrams aligned in the browser even when full-width and half-width characters are mixed. `DiagramMermaid` renders Mermaid sources such as sequence diagrams.
 
-`DocDiagramText` は、全角文字と半角文字が混在してもテキスト図の罫線をブラウザー上で揃えて表示します。`DocDiagramMermaid` は、シーケンス図などの Mermaid ソースを描画します。
+`DiagramText` は、全角文字と半角文字が混在してもテキスト図の罫線をブラウザー上で揃えて表示します。`DiagramMermaid` は、シーケンス図などの Mermaid ソースを描画します。
 ```
 
 - [Text and Mermaid diagrams](comp-diagram.md)
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ## {en: "Files", jp: "ファイル"}
 
-<!--renderComp=DocMultiLang,type=paragraphs,languages=[en,jp]-->
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`FileDownload` shows a file from the document source as a download card, in a compact or detailed view.
+`FileTree` shows a folder structure with optional descriptions. `FileDownload` shows a file from the document source as a download card, in a compact or detailed view.
 
-`FileDownload` は資料ソース内のファイルをダウンロードカードとして、コンパクト表示または詳細表示で表示します。
+`FileTree` は説明付きのフォルダー構成を表示します。`FileDownload` は資料ソース内のファイルをダウンロードカードとして、コンパクト表示または詳細表示で表示します。
 ```
 
+- [File tree](comp-file-tree.md)
 - [File download](comp-file-download.md)
+
+<!--renderComp=MultiLang-->
+## {en: "Data Reuse", jp: "データの再利用"}
+
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
+```markdown
+A component can reuse the data of another component through `dataRef`, addressed by document and component id, so shared data is written only once.
+
+コンポーネントは `dataRef` により、ドキュメントとコンポーネント ID で指定した別のコンポーネントのデータを再利用できます。共有データは一度だけ記述すれば済みます。
+```
+
+- [Component data reference](comp-data-ref.md)

@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { DocIndexStore } from './DocIndexStore.js';
+import { IndexStore } from './IndexStore.js';
 import { IndexTitleSubtopicsItems } from './IndexTitleSubtopicsItems.jsx';
-import './DocIndex.css';
+import './Index.css';
 
 const componentByType = {
 	'title-subtopics-items': IndexTitleSubtopicsItems,
 };
 
-const DocIndex = observer(function DocIndex({ data = {}, config = {}, onEvent }) {
-	const [store] = useState(() => new DocIndexStore(data));
+const Index = observer(function Index({ data = {}, config = {}, onEvent }) {
+	const [store] = useState(() => new IndexStore(data));
 	const source = data.raw ?? data;
 
 	useEffect(() => {
@@ -17,18 +17,18 @@ const DocIndex = observer(function DocIndex({ data = {}, config = {}, onEvent })
 	}, [source, store]);
 
 	if (store.message) {
-		return <DocIndexError message={store.message} />;
+		return <IndexError message={store.message} />;
 	}
 
 	const Component = componentByType[store.dataIndex?.type];
 	if (!Component) {
-		return <DocIndexError message={`Unsupported index type: ${String(store.dataIndex?.type ?? '(missing)')}`} />;
+		return <IndexError message={`Unsupported index type: ${String(store.dataIndex?.type ?? '(missing)')}`} />;
 	}
 
 	return <Component data={store.dataIndex} config={config} onEvent={onEvent} />;
 });
 
-function DocIndexError({ message }) {
+function IndexError({ message }) {
 	return (
 		<div className="doc-index-error" role="alert">
 			<strong>Failed to render document index.</strong>
@@ -37,4 +37,4 @@ function DocIndexError({ message }) {
 	);
 }
 
-export { DocIndex };
+export { Index, Index as DocIndex };

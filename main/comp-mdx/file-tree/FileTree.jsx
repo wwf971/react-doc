@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { FileIcon, FolderIcon, FolderOpenIcon, ProjectIcon } from '#react-doc/frontend/UICommon.js';
 import { RegisteredComp } from '#react-doc/frontend/src/comp-doc/RegisteredComp.jsx';
-import { DocFileTreeStore } from './DocFileTreeStore.js';
-import './DocFileTree.css';
+import { FileTreeStore } from './FileTreeStore.js';
+import './FileTree.css';
 
 // file tree display independent of fumadocs. authored input:
 //
-//   <DocFileTree
+//   <FileTree
 //     maxHeight="12rem"
 //     tree={[
 //       { name: 'src', defaultOpen: true, children: [{ name: 'index.js' }] },
@@ -18,9 +18,14 @@ import './DocFileTree.css';
 // or the degradation-compatible comment-block form with the same shape in yaml.
 // when maxHeight is given, the component reserves exactly that height and
 // scrolls inside, so folder toggling never changes the outer page layout.
-const DocFileTree = observer(function DocFileTree({ data = {}, config = {} }) {
-	const [store] = useState(() => new DocFileTreeStore(data));
-	const sourceKey = data.raw ?? JSON.stringify(data.tree ?? null) + String(data.maxHeight ?? '');
+const FileTree = observer(function FileTree({ data = {}, config = {} }) {
+	const [store] = useState(() => new FileTreeStore(data));
+	const sourceKey = JSON.stringify([
+		data.raw ?? null,
+		data.tree ?? null,
+		data.maxHeight ?? null,
+		data.dataRefResolved?.data ?? null,
+	]);
 
 	useEffect(() => {
 		store.dataLoad(data);
@@ -115,7 +120,7 @@ function nodeIconRender(node, isOpen) {
 
 // description column of one row. a plain text description renders as-is;
 // a { component, data, config } description renders through the registry
-// with placement "fileTreeDescription". DocFileTree does not interpret the
+// with placement "fileTreeDescription". FileTree does not interpret the
 // component's meaning; for example it never knows a description is a link.
 const FileTreeDescription = observer(function FileTreeDescription({ node, instanceIdParent }) {
 	if (!node.descriptionComponent && !node.descriptionText) return null;
@@ -152,4 +157,4 @@ function sizeCssGet(value) {
 	return undefined;
 }
 
-export { DocFileTree };
+export { FileTree, FileTree as DocFileTree };

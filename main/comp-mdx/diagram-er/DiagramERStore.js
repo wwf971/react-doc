@@ -4,7 +4,7 @@ import { makeAutoObservable, toJS } from 'mobx';
 
 const sideList = ['left', 'right'];
 
-class DocDiagramERStore {
+class DiagramERStore {
 	source = '';
 	tableList = [];
 	relationshipList = [];
@@ -247,4 +247,4 @@ function numberGet(value, valueDefault) {
 	return Number.isFinite(number) ? number : valueDefault;
 }
 
-export { DocDiagramERStore };
+export { DiagramERStore };

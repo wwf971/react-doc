@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`DocIndex` gathers links to documents and other collected source items into a semantic index. It does not have to reproduce the side-panel hierarchy. A document can therefore provide a task-oriented roadmap, a compact contents panel, or another link ensemble while all navigation still uses the central document navigation system.
+`Index` gathers links to documents and other collected source items into a semantic index. It does not have to reproduce the side-panel hierarchy. A document can therefore provide a task-oriented roadmap, a compact contents panel, or another link ensemble while all navigation still uses the central document navigation system.
 
 The same semantic index can render in ordinary document content or be queried by id and hosted as a part index in the right-side local-index area. Hosted indexes can also move into a floating top-right panel without duplicating their authored data.
 
@@ -11,7 +11,7 @@ The same semantic index can render in ordinary document content or be queried by
 Index selection has two levels:
 
 ```text
-DocIndex entry
+Index entry
   -> index type
        -> layout
 ```
@@ -25,13 +25,13 @@ The initial type is `title-subtopics-items`. Its normalized data contains one ti
 
 ## Data flow
 
-`DocIndexStore` is the local MobX source of truth. It parses and normalizes authored YAML through the type-specific normalizer before any layout renders. Render components only observe accepted store data; they do not parse YAML or mutate semantic state during rendering.
+`IndexStore` is the local MobX source of truth. It parses and normalizes authored YAML through the type-specific normalizer before any layout renders. Render components only observe accepted store data; they do not parse YAML or mutate semantic state during rendering.
 
 ```text
 authored YAML or direct data
-  -> DocIndexStore.dataLoad()
+  -> IndexStore.dataLoad()
   -> type-specific normalization
-  -> DocIndex type dispatcher
+  -> Index type dispatcher
   -> type component
   -> layout dispatcher
   -> layout render component
@@ -61,7 +61,7 @@ A layout may ignore optional fields, but it must not reinterpret the core fields
 A plain Markdown document uses a comment-marked YAML block:
 
 ````markdown
-<!--renderComp=DocIndex-->
+<!--renderComp=Index-->
 ```yaml
 type: title-subtopics-items
 layout: horizontal-wrap
@@ -125,9 +125,9 @@ The component is resolved through the unified registry and rendered by `Register
 
 Visible text can be a language mapping such as `{ jp, en }`. Rendering reads the shared document language context, uses the preferred translation when available, and otherwise uses the first authored translation. The rendered element receives the language actually used.
 
-Language choice is not duplicated in `DocIndexStore`. It remains document-level state so toolbar and floating language controls update every index instance together.
+Language choice is not duplicated in `IndexStore`. It remains document-level state so toolbar and floating language controls update every index instance together.
 
-`docIndexLanguageListGet()` discovers all authored languages for document compilation. `docIndexStructuredDataGet()` contributes all translated titles and descriptions to search. Consumers register both callbacks under the author-facing `DocIndex` component name.
+`indexLanguageListGet()` discovers all authored languages for document compilation. `indexStructuredDataGet()` contributes all translated titles and descriptions to search. Consumers register both callbacks under the author-facing `Index` component name.
 
 ## Layout rules
 
@@ -141,7 +141,7 @@ All layouts should remain compact and suitable for navigation rather than resemb
 - keep long content scrollable or wrapping according to the layout contract;
 - preserve the `data`, `config`, and `onEvent` component boundary for future hosts.
 
-A part index is referenced from a semantic side-panel part by document item id plus component id. Querying returns the component's authored input and registered `componentType`; the host accepts only definitions declared with `componentType: index` and `partIndex` placement. This avoids coupling the page system to `DocIndex` or to one index data shape.
+A part index is referenced from a semantic side-panel part by document item id plus component id. Querying returns the component's authored input and registered `componentType`; the host accepts only definitions declared with `componentType: index` and `partIndex` placement. This avoids coupling the page system to `Index` or to one index data shape.
 
 The right-side host switches between the current page TOC and the current part index. The page/part selection is global and survives navigation, while docked/floating operation state can remain specific to each part. The host supplies display state through `config` and receives `displayModeChange` through `onEvent`. When entering floating mode, the host records the docked width so the index keeps its current layout. Empty panel space can be dragged, with the per-part floating geometry stored in `DocStore`; links, controls, and text headings retain their normal interactions. Consequently, moving an index into the floating panel changes only placement state; it does not alter semantic index data or create another index store.
 

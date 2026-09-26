@@ -1,0 +1,12 @@
+/* Standalone demo host. DocPageMdx is its own vertical scroll container
+   (height: 100%; overflow: auto), so its host must have a definite height.
+   Otherwise #root grows with the content, the window scrolls instead of the
+   document page, and every sticky element inside the page (side panel, local
+   index, floating navigation and theme controls) scrolls away with the
+   content. The floating controls then sit at the very end of the page and are
+   only visible while a short document or the loading skeleton is shown. */
+html,
+body,
+#root {
+  height: 100%;
+}

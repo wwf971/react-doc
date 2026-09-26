@@ -12,6 +12,7 @@ export { DocLink, DocLinkInline } from './comp-doc/DocLink.jsx';
 export { LinkDocRender } from './comp-doc/LinkDocRender.jsx';
 export { RegisteredComp } from './comp-doc/RegisteredComp.jsx';
 export { compDefine, compNativeDefine } from './comp-doc/comp-registry.js';
+export { useCompDataRef } from './comp-doc/CompDataRef.jsx';
 export { DocLanguageProvider, useDocLanguage } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 export { DynamicCodeBlock } from './comp-doc/DynamicCodeBlock.js';
 export { DocSourceStore } from './store/DocSourceStore.js';

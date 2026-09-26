@@ -1,10 +1,10 @@
 import { makeAutoObservable } from 'mobx';
 import { parse as yamlParse } from 'yaml';
 
-// ui/data store for one DocFileTree instance.
+// ui/data store for one FileTree instance.
 // semantic input is a "tree" node list; folder open/closed state is ui state
 // owned by this store, keyed by a path-like node key.
-class DocFileTreeStore {
+class FileTreeStore {
 	nodeList = [];
 	isFolderOpenByKey = {};
 	maxHeight = undefined;
@@ -17,10 +17,7 @@ class DocFileTreeStore {
 
 	dataLoad(data = {}) {
 		try {
-			const dataParsed = data.raw?.trim() ? yamlParse(data.raw) : data;
-			if (!dataParsed || typeof dataParsed !== 'object' || Array.isArray(dataParsed)) {
-				throw new Error('The file tree data must be an object.');
-			}
+			const dataParsed = fileTreeDataGet(data);
 			if (!Array.isArray(dataParsed.tree)) {
 				throw new Error('The file tree requires a "tree" list.');
 			}
@@ -45,6 +42,33 @@ class DocFileTreeStore {
 	folderIsOpen(key) {
 		return this.isFolderOpenByKey[key] === true;
 	}
+}
+
+// local data comes from the yaml block (raw) or from MDX properties. with a
+// component data reference, the referenced file tree is the base and local
+// top-level keys override it. "tree" is replaced as a whole, never merged
+// node by node, so local data usually only adjusts keys such as maxHeight.
+function fileTreeDataGet(data) {
+	const dataRefResolved = data.dataRefResolved;
+	const dataLocal = fileTreeDataParse(data, dataRefResolved !== undefined);
+	if (!dataRefResolved) return dataLocal;
+	let dataReferenced;
+	try {
+		dataReferenced = fileTreeDataParse(dataRefResolved.data ?? {}, false);
+	} catch (error) {
+		throw new Error(`Referenced data ${dataRefResolved.target}: ${String(error?.message ?? error)}`);
+	}
+	return { ...dataReferenced, ...dataLocal };
+}
+
+function fileTreeDataParse(data, isEmptyAllowed) {
+	if (!data.raw?.trim()) return data;
+	const dataParsed = yamlParse(data.raw);
+	if (dataParsed === null && isEmptyAllowed) return {};
+	if (!dataParsed || typeof dataParsed !== 'object' || Array.isArray(dataParsed)) {
+		throw new Error('The file tree data must be an object.');
+	}
+	return dataParsed;
 }
 
 // node "type" is one of file / folder / project. when absent, a node with
@@ -143,4 +167,4 @@ function folderOpenDefaultCollect(nodeList, isOpenByKey) {
 	}
 }
 
-export { DocFileTreeStore };
+export { FileTreeStore };

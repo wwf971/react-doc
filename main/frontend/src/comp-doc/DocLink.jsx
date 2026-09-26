@@ -10,22 +10,11 @@ import { LinkWarning } from './LinkWarning.jsx';
 //   1 candidate  -> normal link
 //   N candidates -> dropdown to pick the target
 export const DocLink = observer(function DocLink({ target, from, kind, children }) {
-  const { docStore, linkConfig, onEvent: onEventPage, sourceStore } = useDocStores();
+  const { docStore, linkConfig, onEvent: onEventPage } = useDocStores();
   const id = useId();
   const refWrap = useRef(null);
   const [warningText, setWarningText] = useState('');
-  const treeLink = docStore.resolveTreeLink(target ?? '');
-  const { targets, hash } = treeLink
-    ? {
-      targets: [{
-        internalPath: treeLink.target.docPath,
-        name: treeLink.target.text,
-        title: treeLink.target.text,
-        navigationTarget: treeLink.target.route,
-      }],
-      hash: treeLink.hash,
-    }
-    : sourceStore.resolveLink(target ?? '', from ?? '');
+  const { targetList: targets, hash } = docStore.docTargetResolve(target ?? '', from ?? '');
   const isDropdownOpen = docStore.linkDropdownOpenId === id;
   const CompRender = linkConfig.CompRender ?? LinkDocRender;
 
@@ -149,7 +138,7 @@ export const DocLink = observer(function DocLink({ target, from, kind, children 
 
 // adapts the standard registered-component input { data, config } to DocLink,
 // so a document link can be used wherever a registered component is expected
-// (for example a DocFileTree description). Not specific to DocFileTree.
+// (for example a FileTree description). Not specific to FileTree.
 export function DocLinkInline({ data = {}, config = {} }) {
   return (
     <DocLink

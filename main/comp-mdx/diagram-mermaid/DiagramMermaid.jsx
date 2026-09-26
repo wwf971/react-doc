@@ -2,8 +2,8 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
 import { Copy, Expand, Scan, X } from '../../frontend/UICommon.js';
-import { DocDiagramMermaidStore } from './DocDiagramMermaidStore.js';
-import './DocDiagramMermaid.css';
+import { DiagramMermaidStore } from './DiagramMermaidStore.js';
+import './DiagramMermaid.css';
 
 let mermaidPromise;
 
@@ -68,7 +68,7 @@ function swimlaneIconsApply(svg, iconByLaneId) {
 function mermaidGet(mermaidLoad) {
 	if (!mermaidPromise) {
 		if (typeof mermaidLoad !== 'function') {
-			return Promise.reject(new Error('DocDiagramMermaid requires config.mermaidLoad.'));
+			return Promise.reject(new Error('DiagramMermaid requires config.mermaidLoad.'));
 		}
 		mermaidPromise = mermaidLoad().then(({ default: mermaid }) => {
 			mermaid.initialize({
@@ -344,9 +344,9 @@ function MermaidPanZoom({ iconByLaneId, mermaidLoad, sourceDiagram }) {
 	);
 }
 
-const DocDiagramMermaid = observer(function DocDiagramMermaid({ data = {}, config = {}, onEvent }) {
+const DiagramMermaid = observer(function DiagramMermaid({ data = {}, config = {}, onEvent }) {
 	const displayModeDefault = config.displayMode === 'fill' || config.displayMode === 'intrinsic' ? 'fill' : 'contain';
-	const [store] = useState(() => new DocDiagramMermaidStore(displayModeDefault));
+	const [store] = useState(() => new DiagramMermaidStore(displayModeDefault));
 	const sourceDiagram = data.source || data.raw || '';
 	const displayModeResolved = store.displayMode;
 	const maxHeight = maxHeightNormalize(config.maxHeight);
@@ -465,4 +465,4 @@ const DocDiagramMermaid = observer(function DocDiagramMermaid({ data = {}, confi
 	);
 });
 
-export { DocDiagramMermaid };
+export { DiagramMermaid, DiagramMermaid as DocDiagramMermaid };

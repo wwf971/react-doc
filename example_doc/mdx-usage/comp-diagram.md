@@ -1,26 +1,26 @@
 ---
 title: Diagrams
-description: DocDiagramText aligns plain-text box diagrams; DocDiagramMermaid renders Mermaid sources
+description: DiagramText aligns plain-text box diagrams; DiagramMermaid renders Mermaid sources
 language: en
 ---
 
 <span id="diagram-text" />
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ## {en: "Text Diagram", jp: "テキスト図表"}
 
-<!--renderComp=DocMultiLang,type=paragraphs,languages=[en,jp]-->
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`DocDiagramText` displays text diagrams that remain readable in plain Markdown, with the box-drawing lines aligned in the browser. Full-width characters such as Japanese occupy 2 cells while alphanumeric characters and box-drawing lines occupy 1 cell, so the borders stay aligned even when font fallbacks are mixed.
+`DiagramText` displays text diagrams that remain readable in plain Markdown, with the box-drawing lines aligned in the browser. Full-width characters such as Japanese occupy 2 cells while alphanumeric characters and box-drawing lines occupy 1 cell, so the borders stay aligned even when font fallbacks are mixed.
 
-`DocDiagramText` は、Markdown だけでも読めるテキスト図を、ブラウザー上で罫線が揃うように表示します。日本語などの全角文字を 2 セル、英数字と罫線を 1 セルとして配置するため、フォントのフォールバックが混在しても境界線がずれません。
+`DiagramText` は、Markdown だけでも読めるテキスト図を、ブラウザー上で罫線が揃うように表示します。日本語などの全角文字を 2 セル、英数字と罫線を 1 セルとして配置するため、フォントのフォールバックが混在しても境界線がずれません。
 ```
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ### {en: "Syntax", jp: "構文"}
 
 ````markdown
-<!--renderComp=DocDiagramText-->
+<!--renderComp=DiagramText-->
 ```text
 ┌──────────────────────────────────────────────┐
 │ 操作ツールバー                               │
@@ -32,11 +32,11 @@ language: en
 ```
 ````
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ### {en: "Display example", jp: "表示例"}
 
 <!-- AI agent should not remove the text diagram below-->
-<!--renderComp=DocDiagramText-->
+<!--renderComp=DiagramText-->
 ```text
 ┌──────────────────────────────────────────────┐
 │ 操作ツールバー                               │
@@ -47,13 +47,13 @@ language: en
 └──────────────────────────────────────────────┘
 ```
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ### {en: "Authoring and maintenance", jp: "作成と保守"}
 
-<!--renderComp=DocMultiLang,type=list,languages=[en,jp]-->
+<!--renderComp=MultiLang,type=list,languages=[en,jp]-->
 ```markdown
-- Place `<!--renderComp=DocDiagramText-->` directly before a `text` code block. Since plain Markdown shows it as a code block, the content stays readable outside the dedicated page.
-- `<!--renderComp=DocDiagramText-->` を `text` コードブロックの直前に置きます。通常の Markdown ではコードブロックとして読めるため、専用画面以外でも内容を確認できます。
+- Place `<!--renderComp=DiagramText-->` directly before a `text` code block. Since plain Markdown shows it as a code block, the content stays readable outside the dedicated page.
+- `<!--renderComp=DiagramText-->` を `text` コードブロックの直前に置きます。通常の Markdown ではコードブロックとして読めるため、専用画面以外でも内容を確認できます。
 - Use the horizontal border lines as the reference for the outer frame and the positions of `┬` and `┴`. The component automatically adjusts the vertical borders of adjacent lines to those positions.
 - 横罫線の行を基準に、外枠と `┬`／`┴` の位置を決めます。コンポーネントは、その位置へ隣接行の縦罫線を自動調整します。
 - The number of Japanese characters and the number of display columns are not the same. When counting spaces by hand, treat a full-width character as 2 columns, and a half-width character or box-drawing line as 1 column.
@@ -66,24 +66,24 @@ language: en
 
 <span id="diagram-mermaid" />
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ## {en: "Mermaid Diagram", jp: "Mermaid 図表"}
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 ### {en: "Sequence diagram", jp: "シーケンス図"}
 
-<!--renderComp=DocMultiLang,type=paragraphs,languages=[en,jp]-->
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
 A sequence diagram shows in which order processing is handed over between the user, the frontend, and the backend.
 
 利用者、フロントエンド、バックエンドの間で、処理がどの順番で受け渡されるかを表します。
 ```
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 #### {en: "Syntax", jp: "構文"}
 
 ````markdown
-<!--renderComp=DocDiagramMermaid,title=ログイン処理のシーケンス図,displayMode=contain-->
+<!--renderComp=DiagramMermaid,title=ログイン処理のシーケンス図,displayMode=contain-->
 ```mermaid
 sequenceDiagram
   actor User as 利用者
@@ -97,10 +97,10 @@ sequenceDiagram
 ```
 ````
 
-<!--renderComp=DocMultiLang-->
+<!--renderComp=MultiLang-->
 #### {en: "Display example", jp: "表示例"}
 
-<!--renderComp=DocDiagramMermaid,title=ログイン処理のシーケンス図,displayMode=contain-->
+<!--renderComp=DiagramMermaid,title=ログイン処理のシーケンス図,displayMode=contain-->
 ```mermaid
 sequenceDiagram
 	actor User as 利用者
