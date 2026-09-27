@@ -3,6 +3,8 @@ import { observer } from 'mobx-react-lite';
 import { DocsLayout, DocsLayoutContainer, FrameworkProvider, RootProvider, ThemeSwitch } from '../UICommon.js';
 import { DocSourceStore } from './store/DocSourceStore.js';
 import { DocStore } from './store/DocStore.js';
+import { DocConfigStore } from './store/DocConfigStore.js';
+import { DocTagStore } from './store/DocTagStore.js';
 import { CompStateStore } from './store/CompStateStore.js';
 import { StoreContext, useDocStores } from './store/context.js';
 import { makeFramework } from './lib/framework-adapter.jsx';
@@ -10,6 +12,7 @@ import { DocPageView } from './DocPageView.jsx';
 import { DocNavigationButtons } from './comp-doc/DocNavigationButtons.jsx';
 import { DocSearchDialog } from './comp-doc/DocSearchDialog.jsx';
 import { DocSidebarFolder } from './comp-doc/DocSidebarFolder.jsx';
+import { TagOverviewPopup } from './comp-doc/TagOverviewPopup.jsx';
 import { DocLanguageProvider, useDocLanguage } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 import { MultiLangControl } from '../../comp-mdx/multi-lang/MultiLangControl.jsx';
 import { compById as compByIdDefault } from './comp-doc/registry.js';
@@ -19,7 +22,7 @@ import './DocPageMdx.css';
 //
 //   <DocPageMdx
 //     data={{ configDoc, fileManifest }}
-//     config={{ routeMode: 'memory', compById, link: { CompRender } }}
+//     config={{ routeMode: 'memory', compById, compConfigHost, configDefineList, link: { CompRender } }}
 //     onEvent={(eventType, eventData) => { ... }}
 //   />
 //
@@ -43,18 +46,23 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       language: languagePage,
       onInvalidBrowserRoute: config.onInvalidBrowserRoute,
     });
+    const configStore = new DocConfigStore(sourceStore, docStore, {
+      configDefineList: config.configDefineList,
+    });
+    const tagStore = new DocTagStore(sourceStore, docStore, configStore);
     const compStateStore = new CompStateStore();
-    return { sourceStore, docStore, compStateStore, compById };
+    return { sourceStore, docStore, configStore, tagStore, compStateStore, compById };
   });
   const framework = useMemo(() => makeFramework(stores.docStore), [stores]);
   const contextValue = useMemo(() => ({
     ...stores,
+    compConfigHost: config.compConfigHost ?? {},
     componentConfig: config.components ?? {},
     linkConfig: config.link ?? {},
     onEvent,
     pageElementRef,
     sidePanelConfig: config.sidePanel ?? {},
-  }), [stores, config.components, config.link, config.sidePanel, onEvent]);
+  }), [stores, config.compConfigHost, config.components, config.link, config.sidePanel, onEvent]);
 
   useEffect(() => {
     stores.docStore.init();
@@ -129,6 +137,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
           <FrameworkProvider {...framework}>
             <RootProvider search={{ SearchDialog: DocSearchDialog }}>
               <DocsShell />
+              <TagOverviewPopup />
             </RootProvider>
           </FrameworkProvider>
         </StoreContext.Provider>

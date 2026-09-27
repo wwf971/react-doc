@@ -6,10 +6,13 @@
 //   - sourceRoot: rootId     (generated tree for one complete source root)
 //   - text + children        (folder)
 //   - separator: Some Text
+// every node may also declare "tags" (doc_page_impl_tag.md) and "config"
+// (doc_page_impl_config.md), and every item label is created by
+// sidePanelItemNameCreate (doc_page_side_panel.md).
 
-import { createElement } from 'react';
-import { RegisteredComp } from '../comp-doc/RegisteredComp.jsx';
-import { compDefinitionNormalize } from '../comp-doc/comp-registry.js';
+import { sidePanelItemNameCreate } from './side-panel-item.js';
+import { tagSidePanelAssetKeyGet, tagSidePanelDeclare } from './doc-tag-side-panel.js';
+import { configSidePanelDeclareClose, configSidePanelDeclareOpen } from './doc-config-side-panel.js';
 
 // Build both the fumadocs PageTree and the navigation indexes used by DocStore.
 // A configured leaf always gets its own route, so multiple sidebar items can
@@ -33,6 +36,9 @@ export function buildPageTreeModel(configDoc, fileManifest, compById = {}) {
     itemIdsByDocPath: context.itemIdsByDocPath,
     partById: context.partById,
     items: context.items,
+    itemOutlineById: context.itemOutlineById,
+    tagDeclarationList: context.tagDeclarationList,
+    configDeclarationList: context.configDeclarationList,
   };
 }
 
@@ -53,18 +59,44 @@ function createBuildContext(configDoc, fileManifest, compById) {
     partById: new Map(),
     items: [],
     idUsed: new Set(),
+    // item id -> { assetKey, kind, text } of every labeled item, including
+    // folders and separators. the tag overview reads the tree through it.
+    itemOutlineById: new Map(),
+    // side-panel step of the tag system, in tree order
+    tagDeclarationList: [],
+    // side-panel level of the config system, in tree order
+    configDeclarationList: [],
   };
 }
 
+// a node's "config" covers the documents of every item created while
+// converting the node, so it is opened before and closed after conversion.
 function convertNode(node, position, context, partIdParent = '') {
   if (!node || typeof node !== 'object') return [];
+  const declarationConfig = configSidePanelDeclareOpen(
+    context.configDeclarationList,
+    node,
+    String(node.id ?? node.text ?? node.doc ?? position.join('-')),
+  );
+  const indexItemStart = context.items.length;
+  const result = convertNodeByForm(node, position, context, partIdParent);
+  configSidePanelDeclareClose(declarationConfig, context.items.slice(indexItemStart));
+  return result;
+}
+
+function convertNodeByForm(node, position, context, partIdParent) {
   const partId = partRegister(node, context) || partIdParent;
   if (node.separator !== undefined) {
     const id = uniqueId(node.id ?? `separator-${position.join('-')}`, context);
+    const assetKey = itemTagDeclare(node, { itemId: id }, context);
     return [{
       $id: id,
       type: 'separator',
-      name: displayName(node, node.separator, context, { kind: 'separator' }, false),
+      name: itemNameCreate(node, node.separator, context, {
+        assetKey,
+        dataItem: { kind: 'separator' },
+        itemId: id,
+      }),
     }];
   }
   if (node.doc !== undefined) {
@@ -90,10 +122,15 @@ function convertNode(node, position, context, partIdParent = '') {
   }
   if (Array.isArray(node.children)) {
     const id = uniqueId(node.id ?? `folder-${position.join('-')}`, context);
+    const assetKey = itemTagDeclare(node, { itemId: id }, context);
     return [{
       $id: id,
       type: 'folder',
-      name: displayName(node, node.text ?? '', context, { kind: 'folder' }, false),
+      name: itemNameCreate(node, node.text ?? '', context, {
+        assetKey,
+        dataItem: { kind: 'folder' },
+        itemId: id,
+      }),
       collapsible: node.collapsible !== false,
       defaultOpen: node.defaultOpen ?? true,
       children: node.children.flatMap((child, index) => (
@@ -121,19 +158,26 @@ function autoChildren(fileManifest, context) {
       result.push(registerDocItem({}, entries, position, context, ''));
       continue;
     }
+    const id = uniqueId(`root-${rootId}`, context);
+    const pathRoot = `/${rootId}`;
     result.push({
-      $id: uniqueId(`root-${rootId}`, context),
+      $id: id,
       type: 'folder',
-      name: rootId,
+      name: itemNameCreate({}, rootId, context, {
+        assetKey: tagSidePanelAssetKeyGet({ folderPath: pathRoot }),
+        dataItem: { kind: 'folder', sourcePath: pathRoot },
+        itemId: id,
+      }),
       collapsible: true,
       defaultOpen: true,
-      children: folderChildren(entries, position, context, ''),
+      children: folderChildren(entries, position, context, '', pathRoot),
     });
   }
   return result;
 }
 
-function folderChildren(entries, position, context, partId) {
+// pathFolder: internal path of the folder these entries are listed under
+function folderChildren(entries, position, context, partId, pathFolder) {
   const entriesDirect = [];
   const entriesBySubDir = new Map();
   for (const entry of entries) {
@@ -149,13 +193,21 @@ function folderChildren(entries, position, context, partId) {
     }
   }
 
-  const folders = [...entriesBySubDir.entries()].map(([subDir, entriesSub], index) => ({
-    $id: uniqueId(`dir-${position.join('-')}-${index}-${subDir}`, context),
-    type: 'folder',
-    name: subDir,
-    defaultOpen: true,
-    children: folderChildren(entriesSub, [...position, entriesDirect.length + index], context, partId),
-  }));
+  const folders = [...entriesBySubDir.entries()].map(([subDir, entriesSub], index) => {
+    const id = uniqueId(`dir-${position.join('-')}-${index}-${subDir}`, context);
+    const pathSub = `${pathFolder === '/' ? '' : pathFolder}/${subDir}`;
+    return {
+      $id: id,
+      type: 'folder',
+      name: itemNameCreate({}, subDir, context, {
+        assetKey: tagSidePanelAssetKeyGet({ folderPath: pathSub }),
+        dataItem: { kind: 'folder', sourcePath: pathSub },
+        itemId: id,
+      }),
+      defaultOpen: true,
+      children: folderChildren(entriesSub, [...position, entriesDirect.length + index], context, partId, pathSub),
+    };
+  });
   return [...entriesDirect, ...folders];
 }
 
@@ -194,27 +246,23 @@ function partRegister(node, context) {
   return partId;
 }
 
-function displayName(node, textDefault, context, dataItem = {}, isDefaultEnabled = true) {
-  const displayDefault = context.configDoc.sidePanel?.itemDisplay;
-  const componentName = node.display?.component
-    ?? (isDefaultEnabled ? displayDefault?.component : undefined);
-  if (!componentName) return node.text ?? textDefault;
-  const Component = resolveComponent(componentName, context);
-  if (!Component) {
-    console.warn(`[page-tree] display component not registered: ${componentName}`);
-    return node.text ?? textDefault;
-  }
-  return createElement(RegisteredComp, {
-    compId: Component.compId,
-    configRuntime: { instanceId: `side-panel-display:${node.id ?? textDefault}` },
-    input: { data: {
-      ...(displayDefault?.data ?? {}),
-      ...dataItem,
-      ...(node.display?.data ?? {}),
-      text: node.text ?? textDefault,
-    } },
-    placement: 'sidePanelDisplay',
+// every item label goes through here: records what the item is bound to for
+// tree readers such as the tag overview, then creates the label element.
+function itemNameCreate(node, textDefault, context, options) {
+  context.itemOutlineById.set(options.itemId, {
+    assetKey: options.assetKey,
+    kind: options.dataItem?.kind ?? '',
+    text: String(node.text ?? textDefault ?? ''),
   });
+  return sidePanelItemNameCreate(node, textDefault, context, options);
+}
+
+// records the node's "tags" against the asset its item is bound to, and
+// returns that asset key so the item label can show the resolved tags.
+function itemTagDeclare(node, binding, context) {
+  const assetKey = tagSidePanelAssetKeyGet(binding);
+  tagSidePanelDeclare(context.tagDeclarationList, node, assetKey, binding.itemId);
+  return assetKey;
 }
 
 function convertSourceFolder(node, position, context, partId) {
@@ -231,23 +279,26 @@ function convertSourceFolder(node, position, context, partId) {
     return [];
   }
 
+  const isFolderItem = node.text !== undefined || node.display !== undefined;
+  const id = isFolderItem
+    ? uniqueId(node.id ?? `source-folder-${position.join('-')}`, context)
+    : '';
+  // declared before the generated children, keeping tree order
+  const assetKey = itemTagDeclare(node, { folderPath: pathFolder, itemId: id }, context);
   const entriesRelative = entries.map((entry) => ({
     ...entry,
     relPathTree: entry.internalPath.slice(pathFolder.length).replace(/^\//, ''),
   }));
-  const children = folderChildren(entriesRelative, position, context, partId);
-  if (node.text === undefined && node.display === undefined) return children;
-  const id = uniqueId(node.id ?? `source-folder-${position.join('-')}`, context);
+  const children = folderChildren(entriesRelative, position, context, partId, pathFolder);
+  if (!isFolderItem) return children;
   return [{
     $id: id,
     type: 'folder',
-    name: displayName(
-      node,
-      node.text ?? pathFolder.split('/').at(-1),
-      context,
-      { kind: 'folder', sourcePath: pathFolder },
-      false,
-    ),
+    name: itemNameCreate(node, node.text ?? pathFolder.split('/').at(-1), context, {
+      assetKey,
+      dataItem: { kind: 'folder', sourcePath: pathFolder },
+      itemId: id,
+    }),
     collapsible: node.collapsible !== false,
     defaultOpen: node.defaultOpen ?? true,
     children,
@@ -301,15 +352,22 @@ function docPageCreate(node, entries, position, context, isFolderIndex = false, 
     text: node.text ?? entry.title,
   };
   registerItem(item, context);
+  const assetKey = itemTagDeclare(node, { docPath: entry.internalPath, itemId: id }, context);
+  item.assetKey = assetKey;
   const page = {
     $id: isFolderIndex ? uniqueId(`${id}-index`, context) : id,
     type: 'page',
-    name: displayName(node, item.text, context, {
-      kind: isFolderIndex ? 'folder-file' : 'file',
-      fileExt: entry.ext,
-      fileName: entry.name,
-      filePath: entry.internalPath,
-      isTextCustom: node.text !== undefined,
+    name: itemNameCreate(node, item.text, context, {
+      assetKey,
+      dataItem: {
+        kind: isFolderIndex ? 'folder-file' : 'file',
+        fileExt: entry.ext,
+        fileName: entry.name,
+        filePath: entry.internalPath,
+        isTextCustom: node.text !== undefined,
+      },
+      isItemDisplayApplied: true,
+      itemId: id,
     }),
     url: route,
   };
@@ -345,16 +403,23 @@ function docMissingPageCreate(node, position, context, isFolderIndex = false, pa
     text: node.text ?? fileName ?? sourceReference,
   };
   registerItem(item, context);
+  const assetKey = itemTagDeclare(node, { itemId: id }, context);
+  item.assetKey = assetKey;
   const page = {
     $id: isFolderIndex ? uniqueId(`${id}-index`, context) : id,
     type: 'page',
-    name: displayName(node, item.text, context, {
-      kind: isFolderIndex ? 'folder-file' : 'file',
-      fileExt,
-      fileName,
-      filePath: sourceReference,
-      isMissing: true,
-      isTextCustom: node.text !== undefined,
+    name: itemNameCreate(node, item.text, context, {
+      assetKey,
+      dataItem: {
+        kind: isFolderIndex ? 'folder-file' : 'file',
+        fileExt,
+        fileName,
+        filePath: sourceReference,
+        isMissing: true,
+        isTextCustom: node.text !== undefined,
+      },
+      isItemDisplayApplied: true,
+      itemId: id,
     }),
     url: route,
   };
@@ -375,10 +440,17 @@ function registerPanelItem(node, position, context, partId) {
     text: node.text ?? panel?.component ?? id,
   };
   registerItem(item, context);
+  const assetKey = itemTagDeclare(node, { itemId: id }, context);
+  item.assetKey = assetKey;
   return {
     $id: id,
     type: 'page',
-    name: displayName(node, item.text, context, { kind: 'panel' }),
+    name: itemNameCreate(node, item.text, context, {
+      assetKey,
+      dataItem: { kind: 'panel' },
+      isItemDisplayApplied: true,
+      itemId: id,
+    }),
     url: route,
   };
 }
@@ -397,10 +469,17 @@ function registerInlineItem(node, position, context, partId) {
     text: node.text ?? inline?.title ?? id,
   };
   registerItem(item, context);
+  const assetKey = itemTagDeclare(node, { itemId: id }, context);
+  item.assetKey = assetKey;
   return {
     $id: id,
     type: 'page',
-    name: displayName(node, item.text, context, { kind: 'inline' }),
+    name: itemNameCreate(node, item.text, context, {
+      assetKey,
+      dataItem: { kind: 'inline' },
+      isItemDisplayApplied: true,
+      itemId: id,
+    }),
     url: route,
   };
 }
@@ -425,12 +504,6 @@ function resolveDocEntries(reference, context) {
     return context.fileManifest.filter((entry) => entry.internalPath.endsWith(suffix));
   }
   return context.fileManifest.filter((entry) => entry.name === reference);
-}
-
-function resolveComponent(componentName, context) {
-  const componentId = context.configDoc.compRegistry?.[componentName] ?? componentName;
-  const definition = compDefinitionNormalize(context.compById[componentId]);
-  return definition ? { compId: componentId, definition } : undefined;
 }
 
 function itemRoute(id) {

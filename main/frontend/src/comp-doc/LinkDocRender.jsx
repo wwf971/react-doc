@@ -1,9 +1,12 @@
 // Default visual renderer for recognized document links.
+import { TagList } from '../../../comp-mdx/tag/TagList.jsx';
 import './LinkDocRender.css';
 //
 // Interface:
 //   data: accepted semantic/display data; never mutated by this component
+//     data.tagList          tags of the single target, [] when not shown
 //   config: operational state decided by the document stores
+//     config.tagsPosition   before | after | '' (tags beside, outside the link)
 //   onEvent: unified change-attempt callback
 //
 // Events emitted:
@@ -14,6 +17,7 @@ export function LinkDocRender({ data = {}, config = {}, onEvent }) {
     ariaHasPopup,
     displayContent,
     href,
+    tagList = [],
     targetList = [],
     titleText = '',
   } = data;
@@ -21,12 +25,19 @@ export function LinkDocRender({ data = {}, config = {}, onEvent }) {
     activationElement = 'anchor',
     className = '',
     Icon = LinkArrowIcon,
+    instanceId = 'doc-link',
     isBroken = false,
     isCurrent = false,
     isDropdownOpen = false,
     isMultiple = false,
     isNavigationUnavailable = false,
+    tagsPosition = '',
   } = config;
+  const tagListContent = tagsPosition && tagList.length > 0 ? (
+    <span className={`doc-link-render-tags is-${tagsPosition}`}>
+      <TagList data={{ tagList }} config={{ instanceId }} />
+    </span>
+  ) : null;
   const classNameLink = `doc-link-render${className ? ` ${className}` : ''}${isCurrent ? ' is-current' : ''}${isDropdownOpen ? ' is-active' : ''}${isNavigationUnavailable ? ' is-unavailable' : ''}`;
   const contentLink = (
     <>
@@ -48,6 +59,7 @@ export function LinkDocRender({ data = {}, config = {}, onEvent }) {
 
   return (
     <span className="doc-link-render-wrap">
+      {tagsPosition === 'before' ? tagListContent : null}
       {activationElement === 'button' ? (
         <button
           type="button"
@@ -68,6 +80,7 @@ export function LinkDocRender({ data = {}, config = {}, onEvent }) {
           {contentLink}
         </a>
       )}
+      {tagsPosition === 'after' ? tagListContent : null}
       {isDropdownOpen ? (
         <span className="doc-link-render-menu">
           {targetList.map((target) => (

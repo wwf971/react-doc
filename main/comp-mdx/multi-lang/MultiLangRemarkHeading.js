@@ -31,6 +31,8 @@ function transformChildren(parent, options) {
             'data-multi-lang-heading': variantsJson,
           },
         };
+        // This id can still be replaced, for example by a stable heading anchor.
+        // Callers that need the final id should read data-multi-lang-heading later.
         options.onHeading?.({
           id: heading.data.hProperties.id,
           variantsJson,
@@ -42,6 +44,25 @@ function transformChildren(parent, options) {
     }
     transformChildren(marker, options);
   }
+}
+
+// Records translations under the heading id after every plugin that can
+// replace that id has run. The value was stored on the heading earlier.
+export function multiLangRemarkHeadingCollect(options = {}) {
+  return (tree) => headingVariantCollect(tree, options);
+}
+
+function headingVariantCollect(node, options) {
+  if (!node || typeof node !== 'object') return;
+  if (node.type === 'heading') {
+    const id = node.data?.hProperties?.id;
+    const variantsJson = node.data?.hProperties?.['data-multi-lang-heading'];
+    if (typeof id === 'string' && id && typeof variantsJson === 'string' && variantsJson) {
+      options.onHeading?.({ id, variantsJson });
+    }
+  }
+  if (!Array.isArray(node.children)) return;
+  for (const child of node.children) headingVariantCollect(child, options);
 }
 
 function headingTranslationParse(heading) {

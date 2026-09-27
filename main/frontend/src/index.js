@@ -17,4 +17,14 @@ export { DocLanguageProvider, useDocLanguage } from '../../comp-mdx/multi-lang/M
 export { DynamicCodeBlock } from './comp-doc/DynamicCodeBlock.js';
 export { DocSourceStore } from './store/DocSourceStore.js';
 export { DocStore } from './store/DocStore.js';
+export { DocTagStore } from './store/DocTagStore.js';
+export { DocConfigStore } from './store/DocConfigStore.js';
 export { useDocStores } from './store/context.js';
+export { MdxRenderer } from './comp-doc/MdxRenderer.jsx';
+export { SidePanelItem } from './comp-doc/SidePanelItem.jsx';
+export { SidePanelItemSurfaceContext } from './comp-doc/SidePanelItemHost.jsx';
+export { Tag } from '../../comp-mdx/tag/Tag.jsx';
+export { TagList } from '../../comp-mdx/tag/TagList.jsx';
+export { TagOverview } from '../../comp-mdx/tag/TagOverview.jsx';
+export { tagAssetKeyGet } from './lib/doc-tag-declare.js';
+export { configDefineListBuiltin } from './lib/doc-config-define.js';

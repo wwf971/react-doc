@@ -12,6 +12,14 @@ import { visit } from 'unist-util-visit';
 //   [label](/guide/setup.ps1 "inline-link:source")   source popup, explicit
 //   [label](/guide/details.mdx "inline-link:render") compiled-document popup
 //
+// a document link whose title is an exact tag-display marker decides inline
+// whether the tags of the target are shown beside it (TagsDisplayAtLink...
+// config in doc_page_impl_config.md):
+//   [label](a.md "tags:before")   show, before the link text
+//   [label](a.md "tags:after")    show, after the link text
+//   [label](a.md "tags:on")       show, at the configured position
+//   [label](a.md "tags:off")      do not show
+//
 // the actual target resolution (by name / relative / exact path) happens at
 // render time inside the DocLink component, against the store's doc index.
 
@@ -38,6 +46,7 @@ export function remarkDocLink(options = {}) {
         target: node.url,
         fromPath,
         kind: 'link',
+        tagsDisplay: linkTagsDisplayGet(node.title),
         children: node.children,
       });
     });
@@ -87,17 +96,28 @@ export function remarkDocLink(options = {}) {
   };
 }
 
-function makeDocLinkNode({ target, fromPath, kind, children }) {
+function makeDocLinkNode({ target, fromPath, kind, tagsDisplay = '', children }) {
+  const attributes = [
+    { type: 'mdxJsxAttribute', name: 'target', value: target },
+    { type: 'mdxJsxAttribute', name: 'from', value: fromPath },
+    { type: 'mdxJsxAttribute', name: 'kind', value: kind },
+  ];
+  if (tagsDisplay) attributes.push({ type: 'mdxJsxAttribute', name: 'tagsDisplay', value: tagsDisplay });
   return {
     type: 'mdxJsxTextElement',
     name: 'DocLink',
-    attributes: [
-      { type: 'mdxJsxAttribute', name: 'target', value: target },
-      { type: 'mdxJsxAttribute', name: 'from', value: fromPath },
-      { type: 'mdxJsxAttribute', name: 'kind', value: kind },
-    ],
+    attributes,
     children,
   };
+}
+
+// exact, case-sensitive markers only; any other title is ignored as before.
+function linkTagsDisplayGet(title) {
+  if (title === 'tags:before') return 'before';
+  if (title === 'tags:after') return 'after';
+  if (title === 'tags:on') return 'on';
+  if (title === 'tags:off') return 'off';
+  return '';
 }
 
 // the emitted tag stays inside the paragraph (mdxJsxTextElement) and resolves

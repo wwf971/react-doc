@@ -50,6 +50,23 @@ export function compInputNormalize(definition, input = {}) {
   };
 }
 
+// names the page itself renders with even when config compRegistry does not
+// mention them. mapping one of these names in compRegistry replaces the
+// default, which is how an application provides its own side-panel item hook.
+export const compIdBuiltinByName = {
+  SidePanelItem: 'common/SidePanelItem',
+  Tag: 'common/Tag',
+  TagOverview: 'common/TagOverview',
+};
+
+// tag name -> component id: config compRegistry first, then built-in names,
+// otherwise the name itself is treated as an id.
+export function compIdResolve(configDoc, compName) {
+  return configDoc?.compRegistry?.[compName]
+    ?? compIdBuiltinByName[compName]
+    ?? compName;
+}
+
 export function compDefinitionNormalize(value) {
   if (compTypeIsValid(value)) {
     return { CompRender: value, isLegacy: true };

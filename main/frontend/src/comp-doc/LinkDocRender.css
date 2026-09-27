@@ -158,3 +158,15 @@
   font-size: 1rem;
   line-height: 1;
 }
+.doc-link-render-tags {
+  display: inline-flex;
+  vertical-align: 1px;
+}
+
+.doc-link-render-tags.is-before {
+  margin-inline-end: 2px;
+}
+
+.doc-link-render-tags.is-after {
+  margin-inline-start: 2px;
+}

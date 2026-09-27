@@ -8,6 +8,7 @@ rules:
   - action: addFile
     rootId: req
     path: ../main/doc_page_req.md
+    tags: [reference]           # tags every file this rule collects
   - action: removeByName
     pattern: "*.pyc"
   - action: removeByName
@@ -18,7 +19,30 @@ rules:
     pattern: "source.yaml"
   - action: removeByName
     pattern: "side-panel.yaml"
+  - action: removeByName
+    pattern: "tag.yaml"
   # demo component implementations beside the demonstration docs are code,
   # not document content
   - action: removeByPath
     pattern: "/example/comp-mdx/**"
+  # images are component attachments, not documents
+  - action: removeByPath
+    pattern: "/example/**/image/**"
+  # tag steps apply to the files collected so far
+  - action: addTagByPath
+    pattern: "/example/link-nav/**"
+    tags: [test]
+  - action: addTagByName
+    pattern: "*.py"
+    tags: [code]
+  # collected and tagged, but not bound by any side-panel item: the tag
+  # overview lists it last
+  - action: addTagByPath
+    pattern: "/example/tag-outside-side-panel.md"
+    tags: [guide]
+  # config steps also apply to the files collected so far (source level of
+  # the config system; side-panel.yaml and the frontmatter can override it)
+  - action: setConfigByPath
+    pattern: "/example/doc-config.md"
+    config:
+      TagsDisplayAtLinkIsOn: true

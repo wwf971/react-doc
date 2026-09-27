@@ -1,0 +1,80 @@
+.doc-tag-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.doc-tag-overview-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.doc-tag-overview-count,
+.doc-tag-overview-empty {
+  color: var(--color-fd-muted-foreground);
+  font-size: 12px;
+}
+
+.doc-tag-overview-section.is-outside {
+  padding-top: 4px;
+  border-top: 1px solid var(--color-fd-border);
+}
+
+.doc-tag-overview-section-title {
+  margin-bottom: 2px;
+  color: var(--color-fd-muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.doc-tag-overview-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.doc-tag-overview-row-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-tag-overview-row-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-tag-overview-row-text.is-link {
+  color: var(--color-fd-foreground);
+  text-decoration: none;
+}
+
+.doc-tag-overview-row-text.is-link:hover {
+  color: var(--color-fd-primary);
+  text-decoration: underline;
+}
+
+.doc-tag-overview-row.is-muted .doc-tag-overview-row-text {
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-tag-overview-row.is-current .doc-tag-overview-row-text {
+  color: var(--color-fd-primary);
+}
+
+.doc-tag-overview-row-path {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-fd-muted-foreground);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}

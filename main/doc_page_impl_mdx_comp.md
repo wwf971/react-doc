@@ -26,11 +26,16 @@ Component and file names carry no `Doc` prefix: inside a document every componen
 | `DiagramText` | `diagram-ascii/` | `DocDiagramText` |
 | `DiagramMermaid` | `diagram-mermaid/` | `DocDiagramMermaid` |
 | `DiagramER` | `diagram-er/` | `DocDiagramER` |
+| `BlockSimple`, `Block` | `block-simple/` | |
+| `BlockMdx` | `block-mdx/` | |
+| `Tag`, `TagOverview` | `tag/` | |
+
+Some components read host settings from `config`, supplied by the application through `DocPageMdx` `config.compConfigHost` (see [Component registry](doc_page_impl.md#component-registry)): `Image` and `ImageGrid` resolve `src` through `assetUrlGet`, and `DiagramMermaid` loads Mermaid through `mermaidLoad` and resolves lane icons through `assetUrlGet`. The block components receive `MdxRenderer` and `DocLink` from their package registry definitions.
 
 Documents and consumer code written with the old names keep working:
 
 - Each component module exports both names, for example `export { FileTree, FileTree as DocFileTree }`. `IndexData.js` also keeps `docIndexLanguageListGet` and `docIndexStructuredDataGet`.
-- The package registry keeps the old component ids (`common/DocFileTree`, `common/DocIndex`, `common/DocMultiLang`) as aliases of the new definitions, so existing consumer `compRegistry` entries still resolve.
+- The package registry keeps the old component ids (`common/DocFileTree`, `common/DocIndex`, `common/DocMultiLang`, `common/DocImage`, `common/DocImageGrid`, `common/DocDiagramText`, `common/DocDiagramMermaid`) as aliases of the new definitions, so existing consumer `compRegistry` entries still resolve.
 - The demo `config.yaml` maps both tag names to the same id.
 - Code that recognizes a component by tag name before the registry is involved accepts both names: the multilingual heading marker and compile callbacks (`multiLangCompNameList` in `MultiLangData.js`), and the build-time attachment finders for `Image`, `ImageGrid`, and `DiagramMermaid`. Consumer callbacks keyed by tag name, such as `compile.languageListGetByComponent`, must list every tag name in use.
 

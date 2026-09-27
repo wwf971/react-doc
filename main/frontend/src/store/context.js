@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 
-// one context carrying all stores: { sourceStore, docStore, compStateStore }
+// one context carrying all stores: { sourceStore, docStore, tagStore, compStateStore }
 export const StoreContext = createContext(null);
 
 export function useDocStores() {

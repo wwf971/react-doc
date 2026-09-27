@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { useDocStores } from '../store/context.js';
-import { compDefinitionNormalize, compInputNormalize } from './comp-registry.js';
+import { compDefinitionNormalize, compIdResolve, compInputNormalize } from './comp-registry.js';
 import { CompDataRefHost } from './CompDataRef.jsx';
 
 // One runtime boundary for every component resolved through compRegistry.
@@ -14,9 +14,9 @@ export function RegisteredComp({
   onEventRuntime,
   placement,
 }) {
-  const { compById, docStore, onEvent: onEventPage, sourceStore } = useDocStores();
+  const { compById, compConfigHost, docStore, onEvent: onEventPage, sourceStore } = useDocStores();
   const idFallback = useId();
-  const compIdResolved = compId ?? sourceStore.configDoc.compRegistry?.[compName] ?? compName;
+  const compIdResolved = compId ?? compIdResolve(sourceStore.configDoc, compName);
   const definitionValue = compDefinition ?? compById[compIdResolved];
   const definition = compDefinitionNormalize(definitionValue);
 
@@ -87,7 +87,9 @@ export function RegisteredComp({
   const instanceId = configRuntime.instanceId
     ?? data.id
     ?? `${compIdResolved}:${sourcePath || 'page'}:${idFallback}`;
+  // host settings (e.g. mermaidLoad, assetUrlGet) have the lowest priority
   const config = {
+    ...compConfigHost,
     ...configBuilt,
     ...configRuntime,
     compId: compIdResolved,

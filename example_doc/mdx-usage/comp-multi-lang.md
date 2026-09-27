@@ -121,7 +121,7 @@ Besides the Markdown block forms above, the same trigger comment accepts one YAM
         - type: ol
           items:
             - en: First nested step with `inline code`.
-              jp: `インラインコード`を含む最初のネストされた手順です。
+              jp: "`インラインコード`を含む最初のネストされた手順です。"
             - en: Second nested step.
               jp: 2番目のネストされた手順です。
     - en: Second unordered item.

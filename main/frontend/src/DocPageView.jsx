@@ -18,7 +18,10 @@ import { useDocDestinationNavigation } from './lib/use-doc-destination-navigatio
 import { DocPageToolbar } from './comp-doc/DocPageToolbar.jsx';
 import { DocPageSkeleton } from './comp-doc/DocPageSkeleton.jsx';
 import { DocPageToc } from './comp-doc/DocPageToc.jsx';
+import { DocPageTagBar } from './comp-doc/DocPageTagBar.jsx';
 import { RegisteredComp } from './comp-doc/RegisteredComp.jsx';
+import { compIdResolve } from './comp-doc/comp-registry.js';
+import { SidePanelItemSurfaceContext } from './comp-doc/SidePanelItemHost.jsx';
 import { DocLanguageProvider } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 import './DocPageView.css';
 
@@ -52,8 +55,7 @@ export const DocPageView = observer(function DocPageView() {
   ) : null;
 
   if (item?.type === 'component') {
-    const componentId = sourceStore.configDoc.compRegistry?.[item.panelComponent]
-      ?? item.panelComponent;
+    const componentId = compIdResolve(sourceStore.configDoc, item.panelComponent);
     const isComponentAvailable = Boolean(compById[componentId]);
     return (
       <DocsPage breadcrumb={{ includePage: true }} className="doc-page-with-toolbar" slots={docsPageSlots}>
@@ -182,7 +184,11 @@ function DocPageFooter({ className = '', ...props }) {
   let classSingleCard = '';
   if (itemPrevious && !itemNext) classSingleCard = ' doc-page-footer-previous-only';
   if (!itemPrevious && itemNext) classSingleCard = ' doc-page-footer-next-only';
-  return <PageFooter {...props} className={`doc-page-footer${classSingleCard} ${className}`.trim()} />;
+  return (
+    <SidePanelItemSurfaceContext.Provider value="footer">
+      <PageFooter {...props} className={`doc-page-footer${classSingleCard} ${className}`.trim()} />
+    </SidePanelItemSurfaceContext.Provider>
+  );
 }
 
 // same url normalization the fumadocs footer applies before comparing.
@@ -191,11 +197,17 @@ function pathNormalize(path) {
   return path;
 }
 
+// path bar: the breadcrumb, followed by the tags of the current page
 function DocPageBreadcrumb(props) {
   return (
     <>
       <DocPageToolbar />
-      <PageBreadcrumb {...props} />
+      <div className="doc-page-path-bar">
+        <SidePanelItemSurfaceContext.Provider value="breadcrumb">
+          <PageBreadcrumb {...props} />
+        </SidePanelItemSurfaceContext.Provider>
+        <DocPageTagBar />
+      </div>
     </>
   );
 }

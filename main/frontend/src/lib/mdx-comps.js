@@ -3,7 +3,7 @@ import { defaultMdxComponents } from '../../UICommon.js';
 import { DocLink } from '../comp-doc/DocLink.jsx';
 import { DocComp } from '../comp-doc/DocComp.jsx';
 import { compById } from '../comp-doc/registry.js';
-import { compDefinitionNormalize } from '../comp-doc/comp-registry.js';
+import { compDefinitionNormalize, compIdResolve } from '../comp-doc/comp-registry.js';
 import { RegisteredComp } from '../comp-doc/RegisteredComp.jsx';
 import { MultiLangHeadingText } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
 
@@ -25,7 +25,7 @@ export function buildMdxComps(configDoc, compByIdExtra = {}, options = {}) {
     DocLink,
     MultiLangHeadingText,
     DocComp: function MdxCommentRegisteredComp(props) {
-      const compId = configDoc.compRegistry?.[props.comp] ?? props.comp;
+      const compId = compIdResolve(configDoc, props.comp);
       return createElement(DocComp, {
         ...props,
         compDefinition: compByIdMerged[compId],

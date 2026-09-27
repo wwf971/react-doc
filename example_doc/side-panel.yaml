@@ -5,6 +5,9 @@
 #   - text + children          folder; adding "doc" binds the label to that page
 #   - separator: Some Text     separator line
 #   - childrenFile: ./x.yaml   import a subtree; its "root" mapping configures this node
+# any node may declare "tags"; they attach to the bound document/folder/item.
+# any node may declare "config"; it applies to the documents of the node and
+# of every item below it.
 
 tree:
   - separator: Example Docs
@@ -14,16 +17,28 @@ tree:
   - id: frontend-design
     text: Frontend
     doc: /example/frontend-store.md
+    tags: [part]
     children:
       - doc: /example/comp_text.md
   - doc: /example/doc-group.md
+  - doc: /example/side-panel-tag.md
+    tags: [guide]
+  # "config" belongs to the bound document, and on a folder node to every
+  # document below it. overrides the source level, below the frontmatter.
+  - doc: /example/doc-config.md
+    tags: [guide, reference]
+    config:
+      TagsDisplayAtLinkPosition: before
   - separator: MDX Usage
   - id: mdx-usage
     text: MDX Components
+    tags: [part]
     childrenFile: ./mdx-usage/side-panel.yaml
   - separator: Tests
   - id: component-panel-demo
     text: Component Panel
+    # no definition in tag.yaml: displayed with the default tag look
+    tags: [draft]
     panel:
       component: DemoCounter
       data:
@@ -32,11 +47,18 @@ tree:
   - id: link-nav
     text: Links & Navigation
     doc: /example/link-nav/links.mdx
+    tags: [part]
     children:
       - doc: notes.md
         text: Ambiguous Name Example
+      # replaces the "test" tag from source.yaml; same id, later declaration
       - doc: /example/link-nav/sub/notes.md
+        tags:
+          - id: test
+            data: { text: Test (sub) }
       - doc: /example/link-nav/sample.py
   - separator: Meta
+  # source.yaml already tags this file "reference"; "guide" is appended
   - doc: /req/doc_page_req.md
     text: Requirement
+    tags: [guide]

@@ -1,0 +1,12 @@
+.doc-page-path-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+.doc-page-tag-bar {
+  display: inline-flex;
+  align-items: center;
+}

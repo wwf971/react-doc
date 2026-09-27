@@ -9,13 +9,27 @@ import {
   type DocAttachmentFinder,
   type DocAttachmentResolved,
 } from './doc-attachment.ts';
+import {
+  tagSourceAddRuleApply,
+  tagSourceEntryMerge,
+  tagSourceRuleApply,
+  tagSourceRuleIs,
+} from './doc-tag-source.ts';
+import {
+  configFrontmatterRead,
+  configSourceAddRuleApply,
+  configSourceEntryMerge,
+  configSourceRuleApply,
+  configSourceRuleIs,
+} from './doc-config-source.ts';
 
 // vite plugin "doc-source".
 // reads two-layer yaml config, executes source rules against the file system,
 // and exposes the result as virtual module `virtual:doc-source`:
 //
 //   export const configDoc = {...}      // merged config (side panel yaml inlined)
-//   export const fileManifest = [{ rootId, relPath, name, ext, title, internalPath, load }]
+//   export const fileManifest = [{ rootId, relPath, name, ext, title, internalPath,
+//                                  tagList, configSource, configFrontmatter, load }]
 //
 // every doc file becomes a lazy `?raw` import, so dev gets hot reload and
 // build gets one lazy chunk per doc.
@@ -37,6 +51,8 @@ type FileEntry = {
   ext: string;
   absPath: string;
   internalPath: string; // /{rootId}/relPath or /{rootId}/name for root file
+  tagList?: any[]; // tags declared by source rules, see doc-tag-source.ts
+  configSource?: Record<string, any>; // config declared by source rules, see doc-config-source.ts
 };
 
 export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
@@ -174,6 +190,18 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
       enumerable: false,
       value: sidePanelLoaded.fileList.slice(1),
     });
+  }
+  // inline tag definitions; entries written in config itself win
+  if (config.tag?.file) {
+    const tagFile = path.resolve(configDir, config.tag.file);
+    const tagFileContent = readYaml(tagFile);
+    if (tagFileContent === undefined) {
+      throw new Error(`[doc-source] tag file not found: ${tagFile}`);
+    }
+    config.tag.defineById = {
+      ...(tagFileContent?.defineById ?? {}),
+      ...(config.tag.defineById ?? {}),
+    };
   }
   const itemIdsExcluded = new Set(options.excludeSidePanelItemIds ?? []);
   if (itemIdsExcluded.size > 0 && Array.isArray(config.sidePanel?.tree)) {
@@ -315,9 +343,25 @@ function mergeDeep(base: any, overlay: any): any {
 // ---------- source rules ----------
 
 function scanSource(configDoc: any, configDir: string): FileEntry[] {
-  let entries: FileEntry[] = [];
+  // keyed by internal path. a file added again while still collected keeps
+  // its original position, takes the later entry, and accumulates its tags
+  // and config in rule order.
+  const entryByPath = new Map<string, FileEntry>();
+  const entryAdd = (entry: FileEntry) => {
+    const entryKept = entryByPath.get(entry.internalPath);
+    if (entryKept) {
+      entry.tagList = tagSourceEntryMerge(entryKept, entry);
+      entry.configSource = configSourceEntryMerge(entryKept, entry);
+    }
+    entryByPath.set(entry.internalPath, entry);
+  };
+  const entryRemoveIf = (isRemoved: (entry: FileEntry) => boolean) => {
+    for (const entry of [...entryByPath.values()]) {
+      if (isRemoved(entry)) entryByPath.delete(entry.internalPath);
+    }
+  };
 
-  for (const rule of configDoc.source) {
+  for (const [ruleIndex, rule] of configDoc.source.entries()) {
     if (rule.action === 'addFolder') {
       const dirAbs = path.resolve(configDir, rule.path);
       if (!fs.existsSync(dirAbs)) {
@@ -326,7 +370,10 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
       }
       const rootId = rule.rootId ?? path.basename(dirAbs);
       for (const fileAbs of walkFiles(dirAbs)) {
-        entries.push(makeEntry(rootId, path.relative(dirAbs, fileAbs), fileAbs));
+        const entry = makeEntry(rootId, path.relative(dirAbs, fileAbs), fileAbs);
+        tagSourceAddRuleApply(entry, rule, ruleIndex);
+        configSourceAddRuleApply(entry, rule, ruleIndex);
+        entryAdd(entry);
       }
     } else if (rule.action === 'addFile') {
       const fileAbs = path.resolve(configDir, rule.path);
@@ -335,22 +382,26 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
         continue;
       }
       const rootId = rule.rootId ?? path.basename(fileAbs);
-      entries.push(makeEntry(rootId, path.basename(fileAbs), fileAbs));
+      const entry = makeEntry(rootId, path.basename(fileAbs), fileAbs);
+      tagSourceAddRuleApply(entry, rule, ruleIndex);
+      configSourceAddRuleApply(entry, rule, ruleIndex);
+      entryAdd(entry);
     } else if (rule.action === 'removeByName') {
       const regex = globToRegex(rule.pattern);
-      entries = entries.filter((e) => !regex.test(e.name));
+      entryRemoveIf((e) => regex.test(e.name));
     } else if (rule.action === 'removeByPath') {
       const regex = globToRegex(normalizeSlash(rule.pattern));
-      entries = entries.filter((e) => !regex.test(e.internalPath));
+      entryRemoveIf((e) => regex.test(e.internalPath));
+    } else if (tagSourceRuleIs(rule)) {
+      tagSourceRuleApply([...entryByPath.values()], rule, ruleIndex, globToRegex);
+    } else if (configSourceRuleIs(rule)) {
+      configSourceRuleApply([...entryByPath.values()], rule, ruleIndex, globToRegex);
     } else {
       throw new Error(`[doc-source] unknown source rule action: ${rule.action}`);
     }
   }
 
-  // same file re-added: keep last occurrence
-  const byInternalPath = new Map<string, FileEntry>();
-  for (const e of entries) byInternalPath.set(e.internalPath, e);
-  return [...byInternalPath.values()];
+  return [...entryByPath.values()];
 }
 
 function makeEntry(rootId: string, relPath: string, absPath: string): FileEntry {
@@ -451,11 +502,15 @@ function generateModuleCode(
   lines.push('export const fileManifest = [');
   for (const e of fileEntries) {
     const importId = (isBuild ? e.absPath : '/@fs/' + normalizeSlashPath(e.absPath)) + '?raw';
+    const text = docTextRead(e);
     lines.push(
       `  { rootId: ${JSON.stringify(e.rootId)}, relPath: ${JSON.stringify(e.relPath)},` +
         ` name: ${JSON.stringify(e.name)}, ext: ${JSON.stringify(e.ext)},` +
-        ` title: ${JSON.stringify(extractTitle(e))},` +
+        ` title: ${JSON.stringify(extractTitle(e, text))},` +
         ` internalPath: ${JSON.stringify(e.internalPath)},` +
+        ` tagList: ${JSON.stringify(e.tagList ?? [])},` +
+        ` configSource: ${JSON.stringify(e.configSource ?? {})},` +
+        ` configFrontmatter: ${JSON.stringify(configFrontmatterRead(text, e.absPath) ?? {})},` +
         ` load: () => import(${JSON.stringify(importId)}).then((m) => m.default) },`,
     );
   }
@@ -477,9 +532,14 @@ function generateModuleCode(
   return lines.join('\n');
 }
 
-function extractTitle(entry: FileEntry): string {
+// md/mdx text, read once for title and frontmatter config; '' for other files
+function docTextRead(entry: FileEntry): string {
+  if (entry.ext !== 'md' && entry.ext !== 'mdx') return '';
+  return fs.readFileSync(entry.absPath, 'utf-8');
+}
+
+function extractTitle(entry: FileEntry, text: string): string {
   if (entry.ext !== 'md' && entry.ext !== 'mdx') return entry.name;
-  const text = fs.readFileSync(entry.absPath, 'utf-8');
   const matchFrontmatter = /^---\r?\n[\s\S]*?\btitle:\s*["']?([^"'\r\n]+)["']?\r?\n[\s\S]*?---/.exec(text);
   if (matchFrontmatter) return matchFrontmatter[1].trim();
   const heading = firstLevelOneHeadingGet(text);
@@ -523,6 +583,7 @@ function collectPathsToWatch(configDoc: any, configDir: string, configFile: stri
   const configRaw = readYaml(configFile);
   if (configRaw?.source?.file) result.push(path.resolve(configDir, configRaw.source.file));
   if (configDoc.sidePanel?.file) result.push(path.resolve(configDir, configDoc.sidePanel.file));
+  if (configDoc.tag?.file) result.push(path.resolve(configDir, configDoc.tag.file));
   if (Array.isArray(configDoc.sidePanel?.fileListImported)) {
     result.push(...configDoc.sidePanel.fileListImported);
   }

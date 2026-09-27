@@ -1,0 +1,10 @@
+/* sizes apply where the host panel does not fix its own popup size */
+.doc-tag-overview-popup {
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(600px, calc(100vh - 48px));
+}
+
+.doc-tag-overview-popup-body {
+  overflow: auto;
+  padding: 6px 10px 8px;
+}

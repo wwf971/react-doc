@@ -9,8 +9,11 @@ import { LinkWarning } from './LinkWarning.jsx';
 //   0 candidates -> broken link (not clickable)
 //   1 candidate  -> normal link
 //   N candidates -> dropdown to pick the target
-export const DocLink = observer(function DocLink({ target, from, kind, children }) {
-  const { docStore, linkConfig, onEvent: onEventPage } = useDocStores();
+// tags of a single target are shown beside the link when the document
+// containing the link resolves TagsDisplayAtLinkIsOn to true, or when the link
+// says so inline (tagsDisplay: before | after | on | off, from remark-doc-link).
+export const DocLink = observer(function DocLink({ target, from, kind, tagsDisplay = '', children }) {
+  const { configStore, docStore, linkConfig, onEvent: onEventPage, tagStore } = useDocStores();
   const id = useId();
   const refWrap = useRef(null);
   const [warningText, setWarningText] = useState('');
@@ -40,6 +43,13 @@ export const DocLink = observer(function DocLink({ target, from, kind, children 
   const pathFirst = targetFirst
     ? (targetFirst.navigationTarget ?? targetFirst.internalPath) + (hash ? `#${hash}` : '')
     : '';
+  const tagsPosition = linkTagsPositionGet({
+    configLinkDoc: configStore.configDocGet(from ?? ''),
+    tagsDisplay,
+  });
+  const tagList = tagsPosition && !isBroken && !isMultiple && targetFirst.internalPath
+    ? tagStore.tagDisplayListGet(tagStore.tagService.assetKeyGet('doc', targetFirst.internalPath))
+    : [];
   const data = {
     displayContent: children ?? target,
     fromPath: from ?? '',
@@ -48,6 +58,7 @@ export const DocLink = observer(function DocLink({ target, from, kind, children 
       ? docStore.toBrowserHref(pathFirst)
       : undefined,
     kind: kind ?? 'markdown',
+    tagList,
     targetList: targets,
     targetRaw: target ?? '',
     titleText: isBroken
@@ -70,6 +81,8 @@ export const DocLink = observer(function DocLink({ target, from, kind, children 
     isMultiple,
     isNavigationUnavailable,
     Icon: linkConfig.Icon,
+    instanceId: `doc-link:${id}`,
+    tagsPosition,
   };
 
   const eventHandle = async (eventType, eventData = {}) => {
@@ -136,15 +149,26 @@ export const DocLink = observer(function DocLink({ target, from, kind, children 
   );
 });
 
+// '' (no tags), 'before' or 'after'. the inline value of the link wins over
+// the document config of the page containing the link.
+function linkTagsPositionGet({ configLinkDoc, tagsDisplay }) {
+  if (tagsDisplay === 'off') return '';
+  if (tagsDisplay === 'before' || tagsDisplay === 'after') return tagsDisplay;
+  const isOn = tagsDisplay === 'on' || configLinkDoc.TagsDisplayAtLinkIsOn === true;
+  return isOn ? configLinkDoc.TagsDisplayAtLinkPosition ?? 'after' : '';
+}
+
 // adapts the standard registered-component input { data, config } to DocLink,
 // so a document link can be used wherever a registered component is expected
 // (for example a FileTree description). Not specific to FileTree.
+//   data.tagsDisplay   optional: before | after | on | off, as the link title marker
 export function DocLinkInline({ data = {}, config = {} }) {
   return (
     <DocLink
       target={data.target ?? ''}
       from={config.sourcePath}
       kind="inline"
+      tagsDisplay={data.tagsDisplay ?? ''}
     >
       {data.text ?? data.target ?? ''}
     </DocLink>

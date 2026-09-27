@@ -43,7 +43,7 @@ A normal Markdown renderer shows the content as a YAML code block, while the ded
 ````markdown
 <!--renderComp=Image-->
 ```yaml
-src: image/ai_computer_sousa_robot.png
+src: image/robot-computer.svg
 alt: パソコンを操作するロボット
 caption: 資料作成を支援するロボット
 displayMode: contain
@@ -57,7 +57,7 @@ height: 320
 
 <!--renderComp=Image-->
 ```yaml
-src: image/ai_computer_sousa_robot.png
+src: image/robot-computer.svg
 alt: パソコンを操作するロボット
 caption: 資料作成を支援するロボット
 displayMode: contain
@@ -86,12 +86,12 @@ When the display width narrows, images move to the next row, and each row is cen
 itemWidth: 260
 gap: 16
 images:
-  - src: image/ai_computer_sousa_robot.png
+  - src: image/robot-computer.svg
     alt: パソコンを操作するロボット
     caption: 資料作成を支援するロボット
     displayMode: contain
     height: 220
-  - src: image/kaisya_man.png
+  - src: image/office-worker.svg
     alt: パソコンを操作する会社員
     caption: パソコンで作業する会社員
     displayMode: contain
@@ -107,12 +107,12 @@ images:
 itemWidth: 260
 gap: 16
 images:
-  - src: image/ai_computer_sousa_robot.png
+  - src: image/robot-computer.svg
     alt: パソコンを操作するロボット
     caption: 資料作成を支援するロボット
     displayMode: contain
     height: 220
-  - src: image/kaisya_man.png
+  - src: image/office-worker.svg
     alt: パソコンを操作する会社員
     caption: パソコンで作業する会社員
     displayMode: contain

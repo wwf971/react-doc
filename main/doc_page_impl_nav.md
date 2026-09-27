@@ -1,6 +1,6 @@
 # Navigation Design
 
-This document describes navigation for the reusable document page. For the overall architecture, source collection, component registry, and side-panel configuration, refer to [Document Page: Design](doc_page_impl.md).
+This document describes navigation for the reusable document page. For the overall architecture, source collection, and component registry, refer to [Document Page: Design](doc_page_impl.md); for the side-panel tree format and item rendering, refer to [Side panel design](doc_page_side_panel.md).
 
 `DocStore` is the navigation source of truth. Links and controls do not update the document body, URL, or history independently.
 

@@ -1,0 +1,25 @@
+# Tag definitions of the demonstration page, referenced from config.yaml
+# (tag.file). A definition decides how a tag looks; which documents, folders
+# and items carry the tag is declared in source.yaml and side-panel.yaml.
+# display.component defaults to Tag; display.data is passed to it.
+defineById:
+  part:
+    text: Part
+    display:
+      data: { colorBorder: '#d97706', colorBackground: '#fef3c7', colorText: '#92400e' }
+  guide:
+    text: Guide
+    display:
+      data: { colorBorder: '#2563eb', colorBackground: '#dbeafe', colorText: '#1e40af' }
+  reference:
+    text: Reference
+    display:
+      data: { colorBorder: '#7c3aed', colorBackground: '#ede9fe', colorText: '#5b21b6' }
+  code:
+    text: Code
+    display:
+      data: { colorBorder: '#059669', colorBackground: '#d1fae5', colorText: '#065f46' }
+  test:
+    text: Test
+    display:
+      data: { colorBorder: '#6b7280', colorBackground: '#f3f4f6', colorText: '#374151' }

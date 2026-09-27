@@ -17,7 +17,10 @@ import {
   multiLangLanguageListGet,
   multiLangStructuredDataGet,
 } from '../../../comp-mdx/multi-lang/MultiLangData.js';
-import { multiLangRemarkHeading } from '../../../comp-mdx/multi-lang/MultiLangRemarkHeading.js';
+import {
+  multiLangRemarkHeading,
+  multiLangRemarkHeadingCollect,
+} from '../../../comp-mdx/multi-lang/MultiLangRemarkHeading.js';
 import { MultiLangHeadingText } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
 
 // compiles one doc in the browser.
@@ -59,12 +62,16 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
       remarkGfm,
       [remarkHeading, { generateToc: false }],
       [multiLangRemarkHeading, {
-        onHeading: ({ id, variantsJson }) => headingVariantsById.set(id, variantsJson),
         onLanguage: (language) => languageSet.add(language),
       }],
-      // Keep this after heading ID generation: plain `.md` compilation drops
+      // Keep this after the multilingual marker is removed. That marker sits
+      // between an explicit <span id> and the heading, so the stable id can
+      // be copied only once the marker is gone. Plain `.md` compilation drops
       // raw span markers, so this transfers their stable IDs to the headings.
       remarkStableHeadingAnchor,
+      [multiLangRemarkHeadingCollect, {
+        onHeading: ({ id, variantsJson }) => headingVariantsById.set(id, variantsJson),
+      }],
       [remarkCodeTab],
       [remarkNpm],
       ...(config.isCommentComponentEnabled === false

@@ -2,7 +2,7 @@
 
 # Document Page: Design
 
-This project renders local md/mdx folders as a doc website. The whole doc page is one embeddable React component (`DocPageMdx`), built with Vite, driven by mobx stores — no Next.js, no router framework. Everything is configured by `config.yaml` (+ local override `config.0.yaml`): which folders/files form the source, how the side panel looks, and which custom components docs can use.
+This project renders local md/mdx folders as a doc website. The whole doc page is one embeddable React component (`DocPageMdx`), built with Vite, driven by mobx stores — no Next.js, no router framework. Everything is configured by `config.yaml` (+ local override `config.0.yaml`): which folders/files form the source, how the side panel looks, which tags documents carry, how page features behave (globally and per document), and which custom components docs can use.
 
 ```text
 config.yaml (overlay config.0.yaml)
@@ -16,7 +16,9 @@ vite plugin "doc-source"
      ▼
 mobx stores (source of truth for rendering)
      ├── DocSourceStore (lower): manifest, raw/compile caches, doc index, search data
-     └── DocStore (upper): current doc, navigation, link dropdown, url sync
+     ├── DocStore (upper): side-panel tree, current doc, navigation, link dropdown, url sync
+     ├── DocTagStore: tags resolved from source rules + side-panel tree, tag queries
+     └── DocConfigStore: feature config, global and resolved per document
      ▼
 <DocPageMdx/>  (embeddable component)
      ├── FrameworkProvider adapter: usePathname/useRouter/Link backed by DocStore
@@ -48,6 +50,8 @@ Follows the data-driven pattern of `react-comp-misc` (`comp_design.md`) and the 
 
 - `DocSourceStore` (lower, content): `fileManifest`, `configDoc`, `rawByPath`, `compiledByPath` (status/Body/toc/error), `targetsByName` (doc index for link resolution), `structuredDataByPath` (search). API: `loadDoc(path)`, `resolveLink(target, fromPath)`, `searchDocs(query)`.
 - `DocStore` (upper, view): `docCurrentPath`, `isDocLoading`, `linkDropdownOpenId` (which link's candidate-dropdown is open; one at a time, closes on outside click), page tree (computed), route mode + url sync. API: `navigate(path, hash)`, `navigationBack()`, `navigationUp()`, `navigationForward()`, `init()`.
+- `DocTagStore` (derived): the tag model computed from the manifest and the page tree, plus the tag service used by renderers and the open state of the tag overview popup. See [Tag system](doc_page_impl_tag.md).
+- `DocConfigStore` (derived): the config model computed from `globalConfig`, the manifest, and the page tree, plus the config service. See [Config system](doc_page_impl_config.md).
 
 Render components observe stores via context and submit change attempts through store APIs; no component talks to the file system or compiler directly.
 
@@ -70,6 +74,8 @@ source:
 ```
 
 Paths are relative to the config file. Internal representation of every file is `/{rootId}/relPath`, so same-name root folders never clash. `addFile` after a remove rule re-adds a single file (the "remove folder except one file" case in the requirement).
+
+Rules can also attach tags and document config. `tags` / `config` on an add rule apply to every file it collects. `addTagByPath` / `addTagByName` and `setConfigByPath` / `setConfigByName` apply to the files collected so far. See [Tag system](doc_page_impl_tag.md#declaring-tags) and [Config system](doc_page_impl_config.md#declaring-document-config).
 
 ### External source files
 
@@ -140,7 +146,17 @@ Multilingual component registration and authoring rules are specified in [doc_pa
 
 Component naming, compatibility names, and the component data reference (a component reusing the authored data of another component through `dataRef="{document target}#{component id}"`) are described in [MDX components](doc_page_impl_mdx_comp.md).
 
-One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, `sidePanelPanel`, `partIndex`, and `indexSubtopic`.
+One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, `sidePanelPanel`, `partIndex`, `indexSubtopic`, `tag`, and `tagOverview`.
+
+A few registry names are built in: the page renders with them even when `compRegistry` does not mention them. `SidePanelItem` resolves to `common/SidePanelItem` and renders every side-panel label; `Tag` resolves to `common/Tag` and renders tags; `TagOverview` resolves to `common/TagOverview` and renders the content of the tag overview popup. Mapping such a name in `compRegistry` replaces the default everywhere, which is how an application provides its own side-panel item rendering. `compIdResolve()` in `comp-registry.js` is the single place that turns a name into a component id.
+
+Some components need settings only the host application can supply, such as a Mermaid loader, a resolver from authored file references to URLs, or the text panel component that frames popups. The host passes them once through `DocPageMdx` `config.compConfigHost`; every registered component receives them in its `config` with the lowest priority, below authored and runtime values. The page itself reads `panelComponent` from the same place for the tag overview popup:
+
+```jsx
+<DocPageMdx config={{ compConfigHost: { assetUrlGet, mermaidLoad: () => import('mermaid'), panelComponent: PanelText } }} />
+```
+
+Components that display authored Markdown inside themselves (`BlockSimple`, `BlockMdx`) receive the package `MdxRenderer` and `DocLink` through their registry definitions, so they do not depend on the compile pipeline directly.
 
 ### Isolate temporary rendering DOM
 
@@ -152,34 +168,35 @@ Mermaid is one example. `mermaid.render(id, source)` appends temporary rendering
 
 ## Side panel
 
-`sidePanel.file` points to a yaml describing the tree. Folders and separators are free-form, so the panel need not mirror the file tree. A document can be selected by exact internal path, a path suffix, or file name. Name/suffix ambiguity selects the first source-order match and prepends a warning containing every match. `sourceFolder` expands any source subtree, while `sourceRoot` remains a shorthand for a complete root. If the tree is absent, one is generated from the complete file manifest.
+The side panel is a free tree declared in YAML (`sidePanel.file`), so it need not mirror the file tree. Items bind documents, source folders, or component panels, or act as virtual folders and separators. Subtrees can live in their own files through `childrenFile`. The tree decides document order, item routes, semantic parts, side-panel tags, and the side-panel level of document config.
 
-A folder node can move its children to another yaml through `childrenFile`. The referenced path is relative to the yaml file containing that node, and the referenced file must contain a `tree` list. The Vite plugin recursively expands imported trees before page-tree conversion, so runtime code receives the same inlined `children` shape as an ordinary tree. Imported children are placed before any local `children`, allowing a node to add a few local entries after a shared subtree.
+Every item label is rendered through one central path: the registry component named `SidePanelItem` receives the item data and its resolved tags. The package default shows the text followed by the tags; mapping `SidePanelItem` in `compRegistry` replaces the rendering of every item, and a node-level `display.component` overrides one item.
 
-```yaml
-# side-panel.yaml
-tree:
-  - id: codeapp-development
-    text: CodeApp development
-    doc: /codeapp-dev/doc/codeapp-doc.md
-    childrenFile: ./side-panel-codeapp.yaml
+For the tree format, document selection, subtree imports, item rendering, and the renderer interface, refer to [Side panel design](doc_page_side_panel.md).
+
+## Tags
+
+Documents, source folders, and side-panel items can carry tags. Tags are declared while files are collected (source rules) and on side-panel items, then resolved in a fixed order: later declarations of the same tag replace earlier ones, and different tags are appended. Tag definitions in config decide how each tag looks. `DocTagStore` owns the resolved tag model and answers queries such as "tags of this document" and "assets with this tag", so renderers never read tags from YAML nodes directly.
+
+Tags are displayed on side-panel items, next to the path bar of the main panel, and beside document links. Clicking a tag opens the tag overview, a popup listing every asset with that tag arranged like the side panel. Each of these is switched by config keys.
+
+For the resolution steps, declaration syntax, definitions, display places, the overview, and the tag service, refer to [Tag system](doc_page_impl_tag.md).
+
+## Config
+
+Features of the page, such as where tags are displayed, are switched by config keys. Every key has a definition in code (value type, default, scope) and a page-level value in `globalConfig` of `config.yaml`. Keys of one feature share a prefix, and switches end with `IsOn`, for example `TagsDisplayAtLinkIsOn`.
+
+A document-level key can also be set for single documents. Its value is resolved through a fixed order of levels, and a later level wins key by key:
+
+```text
+default  <  global (config.yaml)  <  source rules  <  side-panel items  <  document frontmatter
 ```
 
-```yaml
-# side-panel-codeapp.yaml
-root:                    # optional: properties for the importing node itself
-  doc: /codeapp-dev/doc/codeapp-doc.md
-  defaultOpen: false
-tree:
-  - text: Dataverse
-    doc: /codeapp-dev/doc/codeapp-dataverse.md
-  - text: Local development
-    doc: /codeapp-dev/doc/codeapp-test-local.md
-```
+`DocConfigStore` resolves these levels and answers queries such as "value of this key for this document" through the config service, so renderers never read the levels themselves. Applications can add their own keys.
 
-An imported file may declare an optional `root` mapping alongside `tree`. Its properties (`doc`, `part`, `defaultOpen`, ...) are merged onto the node that declares `childrenFile`, so a part can own its root document and part-index configuration in its own folder while the central file only names the node. Explicit properties on the importing node win over imported `root` values. `root` never becomes a visible child, and `root.children`/`root.childrenFile` are configuration errors — child ownership stays with the imported `tree`. Because the merge happens in the loader, an imported `part` registers against the importing node's `id` exactly as inline configuration does. Imported files can use `childrenFile` again. Import cycles, missing files, a non-string `childrenFile`, and files without a `tree` list are configuration errors with the relevant file path. All recursively imported files are added to the development-server watch set. When an import is added while the server is running, editing the containing yaml refreshes the watch set and reloads the generated manifest.
+For the key list, naming rules, declaration syntax of each level, and the config service, refer to [Config system](doc_page_impl_config.md).
 
-### Semantic parts and hosted indexes
+## Semantic parts and hosted indexes
 
 A side-panel node becomes a part root when it has a `part` mapping. An explicit node `id` is required because the part identity and its index document reference must remain stable when tree order changes. Membership is inherited by every descendant, including descendants expanded from `childrenFile`; a nested part root replaces the inherited part for its own subtree.
 
@@ -265,35 +282,6 @@ partIndex:
 
 Both flags default to `true`. `isEnabled: false` leaves declarations intact but restores the ordinary page TOC everywhere. `isFloatingEnabled: false` keeps the page/part switch while omitting the docked/floating control.
 
-Document items and indexed folders receive stable routes while the side-panel tree remains the semantic source of document order. Route selection, `@first` resolution, previous/next order, and Back/Forward/Up behavior are described in [Navigation design](doc_page_impl_nav.md#side-panel-routes-and-folder-navigation).
-
-```yaml
-tree:
-  - id: section-example
-    text: Example section
-    doc: /guide/overview.md           # folder index: this item also opens a document
-    display:
-      component: NavLabel
-      data: { badge: primary }
-    children:
-      - doc: /guide/start.md           # text defaults to page title
-      - doc: reference.md              # file-name lookup
-        text: Reference (renamed)      # ordinary custom display name
-      - sourceFolder: /guide/topics    # mirror one folder subtree
-        text: Topics
-  - separator: Examples
-  - id: status-panel
-    text: Status
-    panel:
-      component: StatusPanel
-      data: { mode: compact }
-  - doc: /example/mdx-usage/comp-mdx-native.mdx
-```
-
-`display.component` and `panel.component` use the same `compRegistry` and runtime `compById` registry as MDX. They receive the unified `{ data, config, onEvent }` props. Display text and file metadata are in `data`; panel item/runtime metadata are in `config`.
-
-Consumers can replace indexed-folder gestures through runtime `config.sidePanel.components.Folder` without replacing source resolution or navigation history logic. See [Navigation design](doc_page_impl_nav.md#indexed-folder-interaction) for the default gesture policy.
-
 ## Search
 
 The search dialog UI comes from fumadocs-ui (composable `SearchDialog` parts plugged into `RootProvider`). The engine is a small client-side matcher over per-doc structured data (headings + paragraphs, extracted with fumadocs' `remarkStructure`), computed lazily on first search and cached. Custom components can contribute semantic index entries through Fumadocs structured-data node metadata; multilingual extraction is specified in [doc_page_impl_multi-lang.md](doc_page_impl_multi-lang.md). Search results are grouped below a contextual page row whose label and route are normalized through the configured side-panel tree. Manifest title extraction ignores heading-looking lines inside fenced code blocks. No server, works embedded.
@@ -304,23 +292,28 @@ The search dialog UI comes from fumadocs-ui (composable `SearchDialog` parts plu
 example_doc/             # root folder of the demonstration page
 ├── source.yaml          # ordered source rules, referenced from config
 ├── side-panel.yaml      # side panel tree, referenced from config
+├── tag.yaml             # tag definitions, referenced from config
+├── side-panel-tag.md    # tag demonstration; doc-config.md: config demonstration
+├── comp-mdx/            # demo-specific components (not collected as documents)
 ├── mdx-usage/           # mdx component demonstrations (part with hosted index)
 └── link-nav/            # link, navigation, and non-md display test docs
 main/
 ├── config.yaml          # example config (tracked), actually runnable
 ├── config.0.yaml        # local override (untracked), entries overlay config.yaml
-├── comp-mdx/            # components available in documents (FileTree, Index, MultiLang, ...)
+├── comp-mdx/            # components available in documents (FileTree, Index, MultiLang, Tag, ...)
 ├── package.json         # delegates dev/build to frontend/
 └── frontend/            # Vite app + embeddable component
-    ├── plugin/          # vite plugin: config load, rule scan, virtual module, watch
+    ├── plugin/          # vite plugin: config load, rule scan, source-step tags/config, virtual module, watch
     ├── UICommon.js      # package-local facade for shared visual components and icons
     ├── UICommonExternal.js # external UI-library exports used by the facade
     └── src/
         ├── DocPageMdx.jsx       # the embeddable doc page component
-        ├── store/               # DocSourceStore (lower) + DocStore (upper)
-        ├── lib/                 # mdx compile, remark plugins, page tree build, framework adapter
-        └── comp-doc/            # DocLink + registry components (common/, specific/)
+        ├── store/               # DocSourceStore (lower) + DocStore (upper) + DocTagStore + DocConfigStore
+        ├── lib/                 # mdx compile, remark plugins, page tree build, doc-tag-*, doc-config-*, framework adapter
+        └── comp-doc/            # DocLink, SidePanelItem, MdxRenderer, tag bar/popup, registry (common/, specific/)
 ```
+
+Design documents: [side panel](doc_page_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [multilingual content](doc_page_impl_multi-lang.md), [package usage](doc_page_impl_detail.md).
 
 Run `pnpm install` from the workspace root once, then `pnpm dev` from either this folder or `frontend/`. `pnpm build` produces one static deployable artifact (docs bundled as lazy chunks); any static file server works, no doc folders needed at runtime.
 

@@ -12,6 +12,25 @@ source:
 sidePanel:
   file: ../example_doc/side-panel.yaml
 
+# tag definitions (how each tag looks). which assets carry a tag is declared
+# in source rules and side-panel nodes. design: doc_page_impl_tag.md
+tag:
+  file: ../example_doc/tag.yaml
+
+# page-level values of the config keys. keys of one feature share a prefix.
+# document-level keys can be overridden per document by source rules,
+# side-panel nodes and frontmatter "config". design: doc_page_impl_config.md
+globalConfig:
+  TagsDisplayAtMainPanelIsOn: true          # document level
+  TagsDisplayAtSidePanelItemIsOn: true      # page level
+  # page level. tag ids shown on side-panel items; remove the key to show all.
+  # "test" is left out, so it shows next to the path bar but not in the side
+  # panel. "file-ext" is the label added by the demo SidePanelItem renderer.
+  TagsDisplayAtSidePanelItemsList: [part, guide, reference, code, draft, file-ext]
+  TagsDisplayAtLinkIsOn: false              # document level
+  TagsDisplayAtLinkPosition: after          # document level: before | after
+  TagsOverviewPopupIsOn: true               # page level
+
 # tag name usable in docs -> component id in frontend/src/comp-doc/
 compRegistry:
   Tabs: common/Tabs
@@ -28,13 +47,36 @@ compRegistry:
   Index: common/Index
   DocLinkInline: common/DocLinkInline
   MultiLang: common/MultiLang
+  Image: common/Image
+  ImageGrid: common/ImageGrid
+  DiagramText: common/DiagramText
+  DiagramMermaid: common/DiagramMermaid
+  Block: common/Block
+  BlockSimple: common/BlockSimple
+  BlockMdx: common/BlockMdx
   # compatibility tag names, kept so existing documents still render
   DocFileTree: common/FileTree
   DocIndex: common/Index
   DocMultiLang: common/MultiLang
+  DocImage: common/Image
+  DocImageGrid: common/ImageGrid
+  DocDiagramText: common/DiagramText
+  DocDiagramMermaid: common/DiagramMermaid
+  Tag: common/Tag
+  # built-in name of the tag overview (popup content and document component)
+  TagOverview: common/TagOverview
+  # built-in name of the side-panel item renderer. without this entry the page
+  # uses common/SidePanelItem; the demo replaces it with a wrapper of it.
+  SidePanelItem: specific/SidePanelItemDemo
   StockTable: specific/StockTable
   DemoCounter: specific/DemoCounter
   SourceLink: specific/SourceLink
+  TagListAllDemo: specific/TagListAllDemo
+  DocConfigDemo: specific/DocConfigDemo
+
+# files referenced by Image / ImageGrid / DiagramMermaid properties are
+# exported as attachmentUrlByPath, which the host's assetUrlGet reads
+collectComponentAttachmentsOnBuild: true
 
 # display strategy for non-md files: suffix -> code block language
 fileDisplay:

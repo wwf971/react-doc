@@ -1,7 +1,7 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import { buildPageTreeModel } from '../lib/page-tree.js';
-import { compDefinitionNormalize, compInputNormalize } from '../comp-doc/comp-registry.js';
+import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../comp-doc/comp-registry.js';
 
 // upper store layer: view state and navigation.
 // current doc, url sync, link dropdown state, search dialog state.
@@ -404,8 +404,7 @@ export class DocStore {
     const result = this.sourceStore.componentGet(docPath, componentId);
     if (result.status !== 'done') return result;
     const component = result.component;
-    const compId = this.sourceStore.configDoc.compRegistry?.[component.compName]
-      ?? component.compName;
+    const compId = compIdResolve(this.sourceStore.configDoc, component.compName);
     const definition = compDefinitionNormalize(this.compById[compId]);
     if (!definition) {
       return {

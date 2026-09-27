@@ -38,19 +38,9 @@ sidePanel:
   file: ./side-panel.yaml
 ```
 
-A source file contains an ordered `rules` list. Its paths are relative to the source file. The side-panel tree supports:
+A source file contains an ordered `rules` list. Its paths are relative to the source file. The side-panel tree format (documents, virtual folders, source folders, component panels, separators, `childrenFile` imports, tags) and the side-panel item renderer are described in [Side panel design](doc_page_side_panel.md). Tags and tag definitions (`tag.file` or `tag.defineById`) are described in [Tag system](doc_page_impl_tag.md). Feature switches (`globalConfig`, and per-document `config` in source rules, side-panel nodes, and frontmatter) are described in [Config system](doc_page_impl_config.md); an application adds its own keys through `DocPageMdx` `config.configDefineList`.
 
-- `doc`: exact internal path, path suffix, or file name. An ambiguous suffix/name uses the first source-order match and displays all matches in a warning.
-- `text` + `children`: a virtual folder unrelated to disk layout.
-- `sourceRoot`: the generated tree for a complete source root.
-- `sourceFolder`: the generated tree below any internal source folder.
-- `separator`: a visual separator.
-- `panel.component` + `panel.data`: a leaf whose main panel is rendered by a registered component.
-- `display.component` + `display.data`: a custom sidebar label for any node.
-
-Set an optional stable `id` on any node. Every leaf has a distinct item route, so multiple leaves can bind the same source file. Document links and search results navigate to the first bound item in tree order. A valid source file that has no side-panel binding produces a visible navigation warning. `homeItem` selects the initial leaf by id; `homeDoc` remains supported and resolves through the same binding index.
-
-`sidePanel.itemDisplay.component` configures one central display component for all generated and explicit items; a node-level `display.component` can override it. Use `sourceFolder: /` as the final tree node to expose every collected source file as a fallback while preserving earlier semantic bindings as the primary navigation targets.
+A valid source file that has no side-panel binding produces a visible navigation warning. `homeItem` selects the initial leaf by id; `homeDoc` remains supported and resolves through the same binding index.
 
 The special target `@first/{tree-item-id}` resolves to the first document leaf below a folder item, skipping component-only leaves. It works through `DocStore.navigate()`, browser href generation, and ordinary Markdown links such as `[Open section](@first/guides)`.
 
@@ -71,7 +61,25 @@ const compById = {
 
 Package components and project components remain separate. Source files are displayed as source; they are never executed merely because they were collected.
 
-The same merged registry is used by MDX tags, comment-marked blocks, custom sidebar labels, and component-backed panels. A display component receives `{ text, data }`; a panel component receives `{ item, data }`.
+The same merged registry is used by MDX tags, comment-marked blocks, custom sidebar labels, and component-backed panels. Components defined with `compDefine()` receive `{ data, config, onEvent }`; a plain-function display component receives `{ text, data }`, and a plain-function panel component receives `{ item, data }`.
+
+Mapping the built-in name `SidePanelItem` in `compRegistry` replaces the label renderer of every side-panel item; mapping `Tag` replaces the default tag look; mapping `TagOverview` replaces the content of the tag overview popup.
+
+Host settings needed by package components are passed once through `config.compConfigHost` and reach every registered component's `config`:
+
+```jsx
+<DocPageMdx
+  data={{ configDoc, fileManifest }}
+  config={{
+    compById,
+    compConfigHost: {
+      assetUrlGet: (path) => attachmentUrlByPath[path] ?? path, // Image, ImageGrid, DiagramMermaid lane icons
+      mermaidLoad: () => import('mermaid'),                    // DiagramMermaid
+      panelComponent: PanelText,                               // popup frame: tag overview, SourceLink
+    },
+  }}
+/>
+```
 
 ## Link customization
 
@@ -93,10 +101,12 @@ A link renderer follows the common `data`, `config`, `onEvent` contract:
 - `data.href`: browser href for the first candidate.
 - `data.targetList`: resolved candidates with `internalPath`, `title`, and `name`.
 - `data.titleText`: accessible tooltip text.
+- `data.tagList`: tags of the single target, ready for `TagList`; empty when tags are not shown.
 - `config.isBroken`, `config.isClickable`, `config.isMultiple`, `config.isDropdownOpen`, `config.isNavigationUnavailable`: accepted operational state.
+- `config.tagsPosition`: `before`, `after`, or empty, resolved from the link title marker and the document config ([Tags beside links](doc_page_impl_tag.md#tags-beside-links)). The default renderer places the tags outside the clickable link.
 - `onEvent('activateRequest', { event })`: request activation of the main link.
 - `onEvent('candidateSelectRequest', { event, target })`: request navigation to one candidate.
 
 The renderer must not mutate `data` or `config`. It emits attempts through the unified callback; the document stores or consumer decide whether to accept them. The package default is `LinkDocRender`, exported from the package root.
 
-Custom remark recognizers should emit an MDX text element named `DocLink` with `target`, `from`, and `kind` attributes. This preserves the same resolution, rendering, and navigation pipeline.
+Custom remark recognizers should emit an MDX text element named `DocLink` with `target`, `from`, and `kind` attributes, and optionally `tagsDisplay` (`before`, `after`, `on`, `off`). This preserves the same resolution, rendering, and navigation pipeline.

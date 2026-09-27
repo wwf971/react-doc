@@ -4,6 +4,7 @@ import * as docSource from 'virtual:doc-source';
 import { DocPageMdx } from './DocPageMdx.jsx';
 import { DemoCounter } from '../../../example_doc/comp-mdx/DemoCounter.jsx';
 import { StockTable } from '../../../example_doc/comp-mdx/StockTable.jsx';
+import { TextPanelDemo } from '../../../example_doc/comp-mdx/TextPanelDemo.jsx';
 import {
   indexLanguageListGet,
   indexStructuredDataGet,
@@ -26,6 +27,15 @@ createRoot(document.getElementById('root')).render(
         'specific/DemoCounter': DemoCounter,
         'specific/StockTable': StockTable,
       },
+      // host settings handed to every registered component's config:
+      // Image/ImageGrid/DiagramMermaid resolve file references, and
+      // DiagramMermaid loads mermaid on first use, and the page frames popups
+      // such as the tag overview with panelComponent.
+      compConfigHost: {
+        assetUrlGet,
+        mermaidLoad: () => import('mermaid'),
+        panelComponent: TextPanelDemo,
+      },
       // the language selector and the page/part index switch both render
       // through this consumer-injected segmented control
       components: { SegmentedControl },
@@ -45,3 +55,10 @@ createRoot(document.getElementById('root')).render(
     }}
   />,
 );
+
+// attachments are collected by the doc-source plugin when
+// collectComponentAttachmentsOnBuild is enabled in config.yaml
+function assetUrlGet(path) {
+  const pathNormalized = String(path ?? '').trim().replace(/^\.?\//, '');
+  return docSource.attachmentUrlByPath?.[pathNormalized] ?? path;
+}
