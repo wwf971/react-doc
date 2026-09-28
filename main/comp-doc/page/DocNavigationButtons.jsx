@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite';
-import { ArrowLeft, ArrowRight, ArrowUp } from '../../UICommon.js';
-import { useDocStores } from '../store/context.js';
+import { ArrowLeft, ArrowRight, ArrowUp } from '../../frontend/UICommon.js';
+import { useDocStores } from '../../frontend/src/store/context.js';
 import './DocNavigationButtons.css';
 
 export const DocNavigationButtons = observer(function DocNavigationButtons({ isCompact = false }) {

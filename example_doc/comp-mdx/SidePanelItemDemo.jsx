@@ -1,4 +1,4 @@
-import { SidePanelItem } from '../../main/frontend/src/comp-doc/SidePanelItem.jsx';
+import { SidePanelItem } from '../../main/comp-doc/side-panel/SidePanelItem.jsx';
 
 // Demo side-panel item hook, registered in config.yaml under the built-in
 // name SidePanelItem. It keeps the default rendering and only adds a
@@ -10,7 +10,7 @@ export function SidePanelItemDemo({ data = {}, config = {}, onEvent }) {
   if (!isSourceFile) return <SidePanelItem data={data} config={config} onEvent={onEvent} />;
   const tagListDisplay = [
     ...(data.tagList ?? []),
-    { id: 'file-ext', compName: 'Tag', data: { text: `.${fileExt}` } },
+    { id: 'file-ext', compName: 'TagLabel', data: { text: `.${fileExt}` } },
   ];
   return <SidePanelItem data={{ ...data, tagList: tagListDisplay }} config={config} onEvent={onEvent} />;
 }

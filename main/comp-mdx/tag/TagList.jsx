@@ -1,4 +1,4 @@
-import { RegisteredComp } from '#react-doc/frontend/src/comp-doc/RegisteredComp.jsx';
+import { RegisteredComp } from '#react-doc/comp-doc/registry/RegisteredComp.jsx';
 import './Tag.css';
 
 // Renders resolved tags, each through the registry component of its tag

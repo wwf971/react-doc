@@ -33,6 +33,11 @@ subtopics:
           en: Recommended comment-block style
           jp: 推奨のコメントブロック記法
         target: /example/mdx-usage/writing-style.md
+      - id: writing-style-list
+        title:
+          en: Components in lists
+          jp: リスト内のコンポーネント
+        target: /example/comp-custom-list-el.md
       - id: writing-style-native
         title:
           en: Direct MDX components
@@ -131,6 +136,7 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 ```
 
 - [Recommended writing style](writing-style.md)
+- [Components in lists](../comp-custom-list-el.md)
 - [Direct MDX components](comp-mdx-native.mdx)
 
 <!--renderComp=MultiLang-->

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { FileIcon, FolderIcon, FolderOpenIcon, ProjectIcon } from '#react-doc/frontend/UICommon.js';
-import { RegisteredComp } from '#react-doc/frontend/src/comp-doc/RegisteredComp.jsx';
+import { RegisteredComp } from '#react-doc/comp-doc/registry/RegisteredComp.jsx';
 import { FileTreeStore } from './FileTreeStore.js';
 import './FileTree.css';
 

@@ -30,6 +30,22 @@ Later declarations of the same tag replace earlier ones; different tags are appe
 
 This page maps `SidePanelItem` to a small demo wrapper in `config.yaml`. The wrapper keeps the default rendering and adds a file-suffix label, such as `.py`, to non-Markdown documents. That label is a rendering decision only; it is not a tag, so it does not appear in the lists below.
 
+## Mentioning a tag in text
+
+A document can mention a tag inside its text with the built-in `Tag` component. The tag looks exactly as everywhere else, because its tag definition decides the look, and clicking it opens the tag overview. In Markdown, a comment marks the inline code directly after it, and the code text is the tag id. A normal Markdown renderer shows just the code:
+
+```markdown
+- Start with the <!--renderComp=Tag-->`guide` documents, then the <!--renderComp=Tag-->`reference` ones.
+- A mention can change the text: <!--renderComp=Tag,text=Guides-->`guide`.
+- An unknown id is marked: <!--renderComp=Tag-->`no-such-tag`.
+```
+
+- Start with the <!--renderComp=Tag-->`guide` documents, then the <!--renderComp=Tag-->`reference` ones.
+- A mention can change the text: <!--renderComp=Tag,text=Guides-->`guide`.
+- An unknown id is marked: <!--renderComp=Tag-->`no-such-tag`.
+
+In MDX files, the same mention is `<Tag tagId="guide" />` or `<Tag tagId="guide" text="Guides" />`. Properties other than `tagId` are the data of this one mention, the same as `data` of a tag declaration. See [Direct MDX components](mdx-usage/comp-mdx-native.mdx#tag-mention).
+
 ## Tag overview
 
 Clicking a tag on a side-panel item or next to the path bar opens a popup with every asset carrying that tag (`TagsOverviewPopupIsOn`). The assets are arranged like the side panel; assets that no side-panel item shows come last. The same overview can be placed in a document. This is the overview of `guide`:

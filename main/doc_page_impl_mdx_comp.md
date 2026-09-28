@@ -28,7 +28,7 @@ Component and file names carry no `Doc` prefix: inside a document every componen
 | `DiagramER` | `diagram-er/` | `DocDiagramER` |
 | `BlockSimple`, `Block` | `block-simple/` | |
 | `BlockMdx` | `block-mdx/` | |
-| `Tag`, `TagOverview` | `tag/` | |
+| `Tag`, `TagLabel`, `TagOverview` | `tag/` | |
 
 Some components read host settings from `config`, supplied by the application through `DocPageMdx` `config.compConfigHost` (see [Component registry](doc_page_impl.md#component-registry)): `Image` and `ImageGrid` resolve `src` through `assetUrlGet`, and `DiagramMermaid` loads Mermaid through `mermaidLoad` and resolves lane icons through `assetUrlGet`. The block components receive `MdxRenderer` and `DocLink` from their package registry definitions.
 

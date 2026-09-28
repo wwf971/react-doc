@@ -1,27 +1,28 @@
-import { Accordion, Accordions, Callout, File, Files, Folder, Step, Steps, Tab, Tabs } from '../../UICommon.js';
-import { DocLink, DocLinkInline } from './DocLink.jsx';
-import { MdxRenderer } from './MdxRenderer.jsx';
-import { SidePanelItem } from './SidePanelItem.jsx';
-import { Block } from '../../../comp-mdx/block-simple/Block.jsx';
-import { BlockMdx } from '../../../comp-mdx/block-mdx/BlockMdx.jsx';
-import { BlockSimple } from '../../../comp-mdx/block-simple/BlockSimple.jsx';
-import { DiagramMermaid } from '../../../comp-mdx/diagram-mermaid/DiagramMermaid.jsx';
-import { DiagramText } from '../../../comp-mdx/diagram-ascii/DiagramText.jsx';
-import { FileTree } from '../../../comp-mdx/file-tree/FileTree.jsx';
-import { Image } from '../../../comp-mdx/image/Image.jsx';
-import { ImageGrid } from '../../../comp-mdx/image-grid/ImageGrid.jsx';
-import { Index } from '../../../comp-mdx/index/Index.jsx';
-import { MultiLang } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
-import { SourceLink } from '../../../comp-mdx/source-link/SourceLink.jsx';
-import { Tag } from '../../../comp-mdx/tag/Tag.jsx';
-import { TagOverview } from '../../../comp-mdx/tag/TagOverview.jsx';
+import { Accordion, Accordions, Callout, File, Files, Folder, Step, Steps, Tab, Tabs } from '../../frontend/UICommon.js';
+import { DocLink, DocLinkInline } from '../link/DocLink.jsx';
+import { MdxRenderer } from '../mdx-render/MdxRenderer.jsx';
+import { SidePanelItem } from '../side-panel/SidePanelItem.jsx';
+import { Block } from '../../comp-mdx/block-simple/Block.jsx';
+import { BlockMdx } from '../../comp-mdx/block-mdx/BlockMdx.jsx';
+import { BlockSimple } from '../../comp-mdx/block-simple/BlockSimple.jsx';
+import { DiagramMermaid } from '../../comp-mdx/diagram-mermaid/DiagramMermaid.jsx';
+import { DiagramText } from '../../comp-mdx/diagram-ascii/DiagramText.jsx';
+import { FileTree } from '../../comp-mdx/file-tree/FileTree.jsx';
+import { Image } from '../../comp-mdx/image/Image.jsx';
+import { ImageGrid } from '../../comp-mdx/image-grid/ImageGrid.jsx';
+import { Index } from '../../comp-mdx/index/Index.jsx';
+import { MultiLang } from '../../comp-mdx/multi-lang/MultiLangEntry.jsx';
+import { SourceLink } from '../../comp-mdx/source-link/SourceLink.jsx';
+import { Tag } from '../../comp-mdx/tag/Tag.jsx';
+import { TagLabel } from '../../comp-mdx/tag/TagLabel.jsx';
+import { TagOverview } from '../../comp-mdx/tag/TagOverview.jsx';
 // demo-specific components live beside the demonstration documents
-import { DemoCounter } from '../../../../example_doc/comp-mdx/DemoCounter.jsx';
-import { DocConfigDemo } from '../../../../example_doc/comp-mdx/DocConfigDemo.jsx';
-import { SidePanelItemDemo } from '../../../../example_doc/comp-mdx/SidePanelItemDemo.jsx';
-import { StockTable } from '../../../../example_doc/comp-mdx/StockTable.jsx';
-import { TagListAllDemo } from '../../../../example_doc/comp-mdx/TagListAllDemo.jsx';
-import { TextPanelDemo } from '../../../../example_doc/comp-mdx/TextPanelDemo.jsx';
+import { DemoCounter } from '../../../example_doc/comp-mdx/DemoCounter.jsx';
+import { DocConfigDemo } from '../../../example_doc/comp-mdx/DocConfigDemo.jsx';
+import { SidePanelItemDemo } from '../../../example_doc/comp-mdx/SidePanelItemDemo.jsx';
+import { StockTable } from '../../../example_doc/comp-mdx/StockTable.jsx';
+import { TagListAllDemo } from '../../../example_doc/comp-mdx/TagListAllDemo.jsx';
+import { TextPanelDemo } from '../../../example_doc/comp-mdx/TextPanelDemo.jsx';
 import { compDefine, compNativeDefine } from './comp-registry.js';
 
 const compFileTree = compDefine(FileTree, {
@@ -84,7 +85,8 @@ export const compById = {
   // built-in names (comp-registry.js compIdBuiltinByName): the page renders
   // with these even when compRegistry does not mention them
   'common/SidePanelItem': compDefine(SidePanelItem, { placementList: ['sidePanelDisplay'] }),
-  'common/Tag': compDefine(Tag, { placementList: ['tag', 'mdx'] }),
+  'common/Tag': compDefine(Tag, { placementList: ['mdx', 'commentInline'] }),
+  'common/TagLabel': compDefine(TagLabel, { placementList: ['tag', 'mdx'] }),
   'common/TagOverview': compDefine(TagOverview, { placementList: ['tagOverview', 'mdx', 'commentBlock'] }),
   // compatibility ids: existing consumer configs map tags to these ids
   'common/DocFileTree': compFileTree,

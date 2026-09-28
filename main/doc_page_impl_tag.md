@@ -107,11 +107,13 @@ defineById:
   chapter:
     text: 章
     display:
-      component: Tag          # default; any registered component works
+      component: TagLabel     # default; any registered component works
       data: { colorBorder: '#d97706', colorBackground: '#fef3c7', colorText: '#92400e' }
 ```
 
-The display component is resolved through the unified component registry. `Tag` is a built-in name for `common/Tag`; an application can map `Tag` in `compRegistry` to its own component, or name a different component per definition. When a tag is displayed, its data is the definition's `display.data`, then the attached tag's `data`, with `text` falling back to the definition text.
+The display component is resolved through the unified component registry. `TagLabel` is a built-in name for `common/TagLabel`, the compact label; an application can map `TagLabel` in `compRegistry` to its own component, or name a different component per definition. When a tag is displayed, its data is the definition's `display.data`, then the attached tag's `data`, with `text` falling back to the definition text.
+
+The name `Tag` is reserved for [mentioning a tag in document text](#tags-mentioned-in-text). The look and the mention are two components on purpose: the look draws any label from data, while the mention knows the tag system and renders a tag id through the look its definition names.
 
 ## Where tags are displayed
 
@@ -123,6 +125,8 @@ main panel        TagsDisplayAtMainPanelIsOn                                    
 document link     TagsDisplayAtLinkIsOn, TagsDisplayAtLinkPosition, title marker    document level
 tag overview      TagsOverviewPopupIsOn                                             page level
 ```
+
+A document can also mention a tag inside its text; see [Tags mentioned in text](#tags-mentioned-in-text).
 
 Every place renders tags through `TagList`, so the tag definition decides the look everywhere.
 
@@ -146,6 +150,31 @@ A document link can show the tags of its target, before or after the link text. 
 ```
 
 Wiki links and file-like inline code have no title, so they follow the config. A broken link or a link with several candidate targets shows no tags. A registered component can pass the same value through `DocLinkInline` `data.tagsDisplay`.
+
+### Tags mentioned in text
+
+The built-in component `Tag` (`common/Tag`) mentions one tag inside document text, for example "start with the [guide] documents". The mention looks exactly like the same tag on a side-panel item, and clicking it opens the tag overview.
+
+```text
+MDX        <Tag tagId="guide" />
+           <Tag tagId="guide" text="Guides" />
+Markdown   <!--renderComp=Tag-->`guide`
+           <!--renderComp=Tag,text=Guides-->`guide`
+```
+
+- `tagId` is the id of the mentioned tag. In the Markdown form, the inline code after the comment supplies it when `tagId` is absent, and a normal Markdown renderer shows that code.
+- Every other property is the data of this one mention, the same as `data` of a tag declaration. It overrides the definition's display data, exactly as the data of an attached tag does.
+- A mention attaches nothing. Which assets carry a tag is still declared only in source rules and side-panel YAML.
+
+```text
+Tag (data.tagId, mention data)
+  -> tagService.tagDisplayGet({ id: tagId, data })   definition look + mention data
+  -> TagList                                         renders the definition's component, placement "tag"
+  -> click: onEvent('tagOverviewOpenRequest', { tagId })
+       -> RegisteredComp fallback: tagStore.overviewOpen(tagId)
+```
+
+A tag id that is neither defined nor attached anywhere is displayed in the default look with a dashed red outline, so a typo is visible to the author. The Markdown form relies on a general rule of the comment-marked components: a marker comment directly followed by inline code marks that code and renders an inline component (placement `commentInline`); see [Components in lists](doc_page_impl_mdx_li.md#inline-components).
 
 ### Tag overview
 
@@ -192,6 +221,7 @@ Renderers never read side-panel nodes to find tags. They use the tag service, a 
 ```text
 tagListGet(assetKey)          resolved tags of one asset
 tagListGetByDoc(docPath)      the same, for a document's internal path
+tagDisplayGet(tag)            one tag { id, data } ready to render: { id, compName, data }
 tagDisplayListGet(assetKey)   tags ready to render: [{ id, compName, data }]
 assetListGet(tagId)           [{ assetKey, assetType, assetId }] bound to one tag
 overviewGet(tagId)            tag overview: side-panel arrangement, then assets outside it
@@ -215,10 +245,11 @@ frontend/src/lib/doc-tag-side-panel.js  side-panel step, called from page-tree.j
 frontend/src/lib/doc-tag-model.js       resolution into the tag model, display data
 frontend/src/lib/doc-tag-overview.js    tag overview built from the tree and the tag model
 frontend/src/store/DocTagStore.ts       tag model owner, tag service, overview popup state
-comp-mdx/tag/Tag.jsx, TagList.jsx       tag display components
+comp-mdx/tag/TagLabel.jsx, TagList.jsx  tag display components (common/TagLabel)
+comp-mdx/tag/Tag.jsx                    tag mentioned in document text (common/Tag)
 comp-mdx/tag/TagOverview.jsx            default overview content (common/TagOverview)
-frontend/src/comp-doc/TagOverviewPopup.jsx  overview popup frame and open state binding
-frontend/src/comp-doc/DocPageTagBar.jsx     tags next to the path bar
+comp-doc/tag/TagOverviewPopup.jsx       overview popup frame and open state binding
+comp-doc/tag/DocPageTagBar.jsx          tags next to the path bar
 ```
 
 The source and side-panel steps are called from the existing source scan and tree conversion, because those processes are where files are collected and where side-panel nodes are bound to assets.

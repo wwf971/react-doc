@@ -94,7 +94,7 @@ function tagDeclarationListSourceGet(fileManifest = []) {
 //     defineById:
 //       chapter:
 //         text: Chapter
-//         display: { component: Tag, data: { colorBorder: '#d97706', colorBackground: '#fef3c7' } }
+//         display: { component: TagLabel, data: { colorBorder: '#d97706', colorBackground: '#fef3c7' } }
 function tagDefineByIdBuild(configDoc) {
   const tagDefineById = new Map();
   const defineById = configDoc?.tag?.defineById ?? {};
@@ -103,7 +103,7 @@ function tagDefineByIdBuild(configDoc) {
     tagDefineById.set(tagId, {
       id: tagId,
       text: String(defineValue.text ?? tagId),
-      compName: String(defineValue.display?.component ?? 'Tag'),
+      compName: String(defineValue.display?.component ?? 'TagLabel'),
       data: defineValue.display?.data ?? {},
       isDefined: true,
     });
@@ -112,5 +112,5 @@ function tagDefineByIdBuild(configDoc) {
 }
 
 function tagDefineDefaultGet(tagId) {
-  return { id: tagId, text: tagId, compName: 'Tag', data: {}, isDefined: false };
+  return { id: tagId, text: tagId, compName: 'TagLabel', data: {}, isDefined: false };
 }

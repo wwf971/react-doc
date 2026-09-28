@@ -1,4 +1,4 @@
-import { TagList } from '../../../comp-mdx/tag/TagList.jsx';
+import { TagList } from '../../comp-mdx/tag/TagList.jsx';
 import './SidePanelItem.css';
 
 // Default side-panel item label: the item text, followed by the tags of the

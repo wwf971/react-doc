@@ -1,5 +1,5 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
-import { compileDoc } from '../lib/mdx-compile.js';
+import { compileDoc } from '../../frontend/src/lib/mdx-compile.js';
 
 // compile state of one MdxRenderer instance.
 // Body is a component function, so it is observed only by reference.

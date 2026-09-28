@@ -1,10 +1,10 @@
 import { createElement } from 'react';
 import { defaultMdxComponents } from '../../UICommon.js';
-import { DocLink } from '../comp-doc/DocLink.jsx';
-import { DocComp } from '../comp-doc/DocComp.jsx';
-import { compById } from '../comp-doc/registry.js';
-import { compDefinitionNormalize, compIdResolve } from '../comp-doc/comp-registry.js';
-import { RegisteredComp } from '../comp-doc/RegisteredComp.jsx';
+import { DocLink } from '../../../comp-doc/link/DocLink.jsx';
+import { DocComp } from '../../../comp-doc/registry/DocComp.jsx';
+import { compById } from '../../../comp-doc/registry/registry.js';
+import { compDefinitionNormalize, compIdResolve } from '../../../comp-doc/registry/comp-registry.js';
+import { RegisteredComp } from '../../../comp-doc/registry/RegisteredComp.jsx';
 import { MultiLangHeadingText } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
 
 // component mapping used when rendering compiled docs.

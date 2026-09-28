@@ -59,6 +59,20 @@ The marked node does not have to be a code block. A comment directly before a Ma
 | #8192 | USB Dock | In Stock |
 | #8193 | Webcam | Low Stock |
 
+## Inside list items
+
+The same comment and block can be an element of a list item at any depth when they are indented to the item's text column. The comment may also end a line of text, and text can continue below the block:
+
+````markdown
+- as shown in this image<!--renderComp=Image-->
+  ```yaml
+  src: image/robot-computer.svg
+  ```
+  the robot prepares the documents.
+````
+
+The rules and examples are in [Components in lists](../comp-custom-list-el.md).
+
 ## Unknown component name
 
 A comment that names an unregistered component renders an inline error box instead of crashing the page, and the authored block stays visible inside it:

@@ -8,8 +8,8 @@ import {
   SearchDialogInput,
   SearchDialogList,
   SearchDialogOverlay,
-} from '../../UICommon.js';
-import { useDocStores } from '../store/context.js';
+} from '../../frontend/UICommon.js';
+import { useDocStores } from '../../frontend/src/store/context.js';
 
 // search dialog: fumadocs ui parts + our client-side matcher in the stores
 // (structured data extracted per doc, no server needed).

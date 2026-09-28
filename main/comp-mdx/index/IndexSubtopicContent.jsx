@@ -1,4 +1,4 @@
-import { RegisteredComp } from '../../frontend/src/comp-doc/RegisteredComp.jsx';
+import { RegisteredComp } from '../../comp-doc/registry/RegisteredComp.jsx';
 import { IndexItem } from './IndexItem.jsx';
 
 function IndexSubtopicContent({ config, docStore, languagePreferred, subtopic }) {

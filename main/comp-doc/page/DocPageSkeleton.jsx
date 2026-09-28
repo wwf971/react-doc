@@ -1,4 +1,4 @@
-import { Skeleton } from '../../UICommon.js';
+import { Skeleton } from '../../frontend/UICommon.js';
 import './DocPageSkeleton.css';
 
 function DocPageSkeleton() {

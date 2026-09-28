@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
-import { PageToc } from '../../UICommon.js';
-import { useDocStores } from '../store/context.js';
-import { RegisteredComp } from './RegisteredComp.jsx';
+import { PageToc } from '../../frontend/UICommon.js';
+import { useDocStores } from '../../frontend/src/store/context.js';
+import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import './DocPageToc.css';
 
 const DocPageToc = observer(function DocPageToc(props) {

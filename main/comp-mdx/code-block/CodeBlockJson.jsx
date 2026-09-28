@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { DynamicCodeBlock } from '#react-doc/frontend/src/comp-doc/DynamicCodeBlock.js';
+import { DynamicCodeBlock } from '#react-doc/comp-doc/mdx-render/DynamicCodeBlock.js';
 import { jsonContentFormat, jsonModeNext, jsonModeNormalize } from './CodeBlockJsonData.js';
 
 function CodeBlockJson({ data = {}, sourceStore, pathList = [] }) {

@@ -125,6 +125,8 @@ A second remark plugin (`remarkCommentComp`) scans HTML comment nodes of the for
 
 HTML comments only exist in md-format parsing; that is exactly the degradation-compatible style. In `.mdx`, authors write `<Comp a="b" />` directly (the more common style), through the same registry.
 
+The same comment and block can be an element of a list item at any depth: both are indented to the item's text column, the comment may also end a line of text, and text continues below the block. A comment directly followed by inline code marks that code instead and renders an inline component. The writing rules, the parser behavior behind them, and the reasons are in [Components in lists](doc_page_impl_mdx_li.md).
+
 ## Component registry
 
 `compRegistry` in config maps doc-visible tag names to component ids. General Fumadocs components come from the package registry; project-specific components are supplied by the consuming application through `config.compById`:
@@ -148,7 +150,7 @@ Component naming, compatibility names, and the component data reference (a compo
 
 One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, `sidePanelPanel`, `partIndex`, `indexSubtopic`, `tag`, and `tagOverview`.
 
-A few registry names are built in: the page renders with them even when `compRegistry` does not mention them. `SidePanelItem` resolves to `common/SidePanelItem` and renders every side-panel label; `Tag` resolves to `common/Tag` and renders tags; `TagOverview` resolves to `common/TagOverview` and renders the content of the tag overview popup. Mapping such a name in `compRegistry` replaces the default everywhere, which is how an application provides its own side-panel item rendering. `compIdResolve()` in `comp-registry.js` is the single place that turns a name into a component id.
+A few registry names are built in: the page renders with them even when `compRegistry` does not mention them. `SidePanelItem` resolves to `common/SidePanelItem` and renders every side-panel label; `TagLabel` resolves to `common/TagLabel` and is the default look of tags; `Tag` resolves to `common/Tag` and renders a tag mentioned in document text; `TagOverview` resolves to `common/TagOverview` and renders the content of the tag overview popup. Mapping such a name in `compRegistry` replaces the default everywhere, which is how an application provides its own side-panel item rendering. `compIdResolve()` in `comp-registry.js` is the single place that turns a name into a component id.
 
 Some components need settings only the host application can supply, such as a Mermaid loader, a resolver from authored file references to URLs, or the text panel component that frames popups. The host passes them once through `DocPageMdx` `config.compConfigHost`; every registered component receives them in its `config` with the lowest priority, below authored and runtime values. The page itself reads `panelComponent` from the same place for the tag overview popup:
 
@@ -294,6 +296,7 @@ example_doc/             # root folder of the demonstration page
 ├── side-panel.yaml      # side panel tree, referenced from config
 ├── tag.yaml             # tag definitions, referenced from config
 ├── side-panel-tag.md    # tag demonstration; doc-config.md: config demonstration
+├── comp-custom-list-el.md # components as list elements: rules and examples
 ├── comp-mdx/            # demo-specific components (not collected as documents)
 ├── mdx-usage/           # mdx component demonstrations (part with hosted index)
 └── link-nav/            # link, navigation, and non-md display test docs
@@ -301,6 +304,14 @@ main/
 ├── config.yaml          # example config (tracked), actually runnable
 ├── config.0.yaml        # local override (untracked), entries overlay config.yaml
 ├── comp-mdx/            # components available in documents (FileTree, Index, MultiLang, Tag, ...)
+├── comp-doc/            # components of the page itself, one folder per feature
+│   ├── registry/        # compById (registry.js), compDefine, RegisteredComp, DocComp, data references
+│   ├── link/            # DocLink, LinkDocRender, LinkWarning
+│   ├── side-panel/      # SidePanelItem, SidePanelItemHost, DocSidebarFolder
+│   ├── tag/             # tag bar next to the path bar, tag overview popup
+│   ├── toc/             # DocPageToc: page / part local index
+│   ├── page/            # toolbar, navigation buttons, search dialog, loading skeleton
+│   └── mdx-render/      # MdxRenderer, DynamicCodeBlock
 ├── package.json         # delegates dev/build to frontend/
 └── frontend/            # Vite app + embeddable component
     ├── plugin/          # vite plugin: config load, rule scan, source-step tags/config, virtual module, watch
@@ -309,11 +320,10 @@ main/
     └── src/
         ├── DocPageMdx.jsx       # the embeddable doc page component
         ├── store/               # DocSourceStore (lower) + DocStore (upper) + DocTagStore + DocConfigStore
-        ├── lib/                 # mdx compile, remark plugins, page tree build, doc-tag-*, doc-config-*, framework adapter
-        └── comp-doc/            # DocLink, SidePanelItem, MdxRenderer, tag bar/popup, registry (common/, specific/)
+        └── lib/                 # mdx compile, remark plugins, page tree build, doc-tag-*, doc-config-*, framework adapter
 ```
 
-Design documents: [side panel](doc_page_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [multilingual content](doc_page_impl_multi-lang.md), [package usage](doc_page_impl_detail.md).
+Design documents: [side panel](doc_page_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [package usage](doc_page_impl_detail.md).
 
 Run `pnpm install` from the workspace root once, then `pnpm dev` from either this folder or `frontend/`. `pnpm build` produces one static deployable artifact (docs bundled as lazy chunks); any static file server works, no doc folders needed at runtime.
 

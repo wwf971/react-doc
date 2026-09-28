@@ -12,3 +12,5 @@ fyi*
 *.rar
 package-lock.json
 third_party/shadcn/
+
+ai-dev*

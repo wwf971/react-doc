@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { defaultMdxComponents } from '../../UICommon.js';
+import { defaultMdxComponents } from '../../frontend/UICommon.js';
 import { MdxRendererStore } from './MdxRendererStore.js';
 
 // Renders one authored Markdown string compiled in the browser. Components

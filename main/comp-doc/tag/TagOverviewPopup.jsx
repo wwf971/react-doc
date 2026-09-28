@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
-import { useDocStores } from '../store/context.js';
-import { RegisteredComp } from './RegisteredComp.jsx';
+import { useDocStores } from '../../frontend/src/store/context.js';
+import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import './TagOverviewPopup.css';
 
 // Popup with the overview of one tag, opened by clicking a tag on a side-panel

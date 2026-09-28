@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Copy } from '../../frontend/UICommon.js';
-import { DynamicCodeBlock } from '../../frontend/src/comp-doc/DynamicCodeBlock.js';
+import { DynamicCodeBlock } from '../../comp-doc/mdx-render/DynamicCodeBlock.js';
 import './CodeBlock.css';
 
 function CodeBlockCompactPopup({ Panel, sourceStore, store }) {

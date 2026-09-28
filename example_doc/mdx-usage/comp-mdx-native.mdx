@@ -97,6 +97,29 @@ through the component registry (here `DocLinkInline` renders a document link).
   ]}
 />
 
+## Tag mention
+
+Read the <Tag tagId="guide" /> documents first. A mention can carry its own data: <Tag tagId="reference" text="Reference docs" />.
+
+## Components in lists
+
+JSX components are written at the text column of the list item, like any other block of that item. Multi-line JSX and components with Markdown children work the same way. The rules for the comment-block style are in [Components in lists](../comp-custom-list-el.md).
+
+- Callout as a list element
+  - <Callout type="info">This callout is the only content of a nested item.</Callout>
+  - a callout after text:
+    <Callout type="warn" title="Watch out">
+      Markdown **children** are allowed.
+    </Callout>
+    and the text continues below it.
+- File tree written over several lines
+  - <FileTree
+      tree={[
+        { name: 'guide/', defaultOpen: true, children: [{ name: 'setup.md' }] },
+      ]}
+    />
+  - tagged <Tag tagId="guide" /> inline
+
 ## Interactive component (state in mobx store)
 
 Click it, then switch docs and come back: <DemoCounter id="counter-home" label="clicks" />

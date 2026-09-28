@@ -34,6 +34,7 @@ export class DocTagStore {
       assetListGet: (tagId: string) => this.assetListGet(tagId),
       overviewGet: (tagId: string) => this.overviewGet(tagId),
       tagDefineGet: (tagId: string) => this.tagDefineGet(tagId),
+      tagDisplayGet: (tag: TagAttached) => this.tagDisplayGet(tag),
       tagDisplayListGet: (assetKey: string) => this.tagDisplayListGet(assetKey),
       tagIdListGet: () => this.tagIdList,
       tagListGet: (assetKey: string) => this.tagListGet(assetKey),
@@ -66,6 +67,12 @@ export class DocTagStore {
 
   tagListGetByDoc(docPath: string): TagAttached[] {
     return this.tagListGet(tagAssetKeyGet('doc', docPath));
+  }
+
+  // one tag ready to render, e.g. a tag mentioned in document text:
+  // its definition's display data, overridden by tag.data
+  tagDisplayGet(tag: TagAttached): TagDisplay {
+    return tagDisplayGet(this.tagModel, tag);
   }
 
   tagDisplayListGet(assetKey: string): TagDisplay[] {

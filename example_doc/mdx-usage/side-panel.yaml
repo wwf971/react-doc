@@ -10,6 +10,7 @@ root:
       componentId: mdx-usage-index
 tree:
   - doc: /example/mdx-usage/writing-style.md
+  - doc: /example/comp-custom-list-el.md
   - doc: /example/mdx-usage/comp-multi-lang.md
   - doc: /example/mdx-usage/comp-block.md
   - doc: /example/mdx-usage/comp-image.md

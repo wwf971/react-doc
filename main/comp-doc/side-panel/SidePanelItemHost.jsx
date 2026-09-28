@@ -1,8 +1,8 @@
 import { createContext, useContext } from 'react';
 import { observer } from 'mobx-react-lite';
-import { useDocStores } from '../store/context.js';
-import { RegisteredComp } from './RegisteredComp.jsx';
-import { useTagOverviewIsAvailable } from './TagOverviewPopup.jsx';
+import { useDocStores } from '../../frontend/src/store/context.js';
+import { RegisteredComp } from '../registry/RegisteredComp.jsx';
+import { useTagOverviewIsAvailable } from '../tag/TagOverviewPopup.jsx';
 
 // Where a side-panel item label is being displayed. fumadocs reuses the
 // page-tree name in breadcrumbs and previous/next cards, so those surfaces

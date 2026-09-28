@@ -102,7 +102,7 @@ sidePanelItemNameCreate(node)                        lib/side-panel-item.js
   -> else sidePanel.itemDisplay.component            document, panel, inline items only
   -> else registry name "SidePanelItem"
        compRegistry.SidePanelItem if configured
-       else built-in common/SidePanelItem            comp-doc/SidePanelItem.jsx
+       else built-in common/SidePanelItem            comp-doc/side-panel/SidePanelItem.jsx
   -> build item data from the declared node
   -> page-tree "name" = <SidePanelItemHost compName data assetKey itemId/>
 
@@ -156,7 +156,7 @@ A custom renderer usually wraps the default one. The demonstration page adds a f
 ```jsx
 function SidePanelItemProject({ data, config, onEvent }) {
   const tagList = [...data.tagList];
-  if (data.fileExt === 'py') tagList.push({ id: 'file-ext', compName: 'Tag', data: { text: '.py' } });
+  if (data.fileExt === 'py') tagList.push({ id: 'file-ext', compName: 'TagLabel', data: { text: '.py' } });
   return <SidePanelItem data={{ ...data, tagList }} config={config} onEvent={onEvent} />;
 }
 ```
@@ -178,7 +178,7 @@ TagsDisplayAtSidePanelItemsList set             -> only tags with these ids, in 
 otherwise                                       -> every tag of data.tagList
 ```
 
-It passes the result to `TagList`, which renders every tag through `RegisteredComp` with the component named by its tag definition (placement `tag`). The built-in `Tag` component is a compact label with a 2px radius and optional `colorBorder`, `colorBackground`, and `colorText`.
+It passes the result to `TagList`, which renders every tag through `RegisteredComp` with the component named by its tag definition (placement `tag`). The built-in `TagLabel` component is a compact label with a 2px radius and optional `colorBorder`, `colorBackground`, and `colorText`.
 
 When `config.isTagOverviewAvailable` is true, the tags are clickable. A click emits `tagOverviewOpenRequest`, which `SidePanelItemHost` accepts by opening the tag overview popup. The click does not activate the item itself. How tags are defined, attached, and listed in the overview is described in [Tag system](doc_page_impl_tag.md).
 
@@ -194,8 +194,8 @@ The default folder gesture (an inactive label navigates, the active label toggle
 frontend/plugin/doc-source.ts            load side-panel YAML, expand childrenFile, watch imports
 frontend/src/lib/page-tree.js            tree conversion, routes, parts, tag and config declarations
 frontend/src/lib/side-panel-item.js      renderer choice and item data
-frontend/src/comp-doc/SidePanelItemHost.jsx  runtime context, surfaces
-frontend/src/comp-doc/SidePanelItem.jsx  default renderer (common/SidePanelItem)
-frontend/src/comp-doc/DocSidebarFolder.jsx   default folder gesture
-comp-mdx/tag/Tag.jsx, TagList.jsx        tag display
+comp-doc/side-panel/SidePanelItemHost.jsx  runtime context, surfaces
+comp-doc/side-panel/SidePanelItem.jsx      default renderer (common/SidePanelItem)
+comp-doc/side-panel/DocSidebarFolder.jsx   default folder gesture
+comp-mdx/tag/TagLabel.jsx, TagList.jsx     tag display
 ```

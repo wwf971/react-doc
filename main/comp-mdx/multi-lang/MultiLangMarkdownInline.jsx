@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { DocLink } from '../../frontend/src/comp-doc/DocLink.jsx';
+import { DocLink } from '../../comp-doc/link/DocLink.jsx';
 
 export function multiLangInlineNodeListRender(nodeList, sourcePath) {
   return nodeList.map((node, index) => inlineNodeRender(node, index, sourcePath));

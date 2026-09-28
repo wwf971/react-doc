@@ -1,7 +1,7 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import { buildPageTreeModel } from '../lib/page-tree.js';
-import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../comp-doc/comp-registry.js';
+import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../../../comp-doc/registry/comp-registry.js';
 
 // upper store layer: view state and navigation.
 // current doc, url sync, link dropdown state, search dialog state.

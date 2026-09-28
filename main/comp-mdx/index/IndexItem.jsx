@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { DocLink } from '../../frontend/src/comp-doc/DocLink.jsx';
+import { DocLink } from '../../comp-doc/link/DocLink.jsx';
 import { SourceLink } from '../source-link/SourceLink.jsx';
 import { textLocalizedGet } from './IndexData.js';
 

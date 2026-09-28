@@ -9,13 +9,13 @@ import { CompStateStore } from './store/CompStateStore.js';
 import { StoreContext, useDocStores } from './store/context.js';
 import { makeFramework } from './lib/framework-adapter.jsx';
 import { DocPageView } from './DocPageView.jsx';
-import { DocNavigationButtons } from './comp-doc/DocNavigationButtons.jsx';
-import { DocSearchDialog } from './comp-doc/DocSearchDialog.jsx';
-import { DocSidebarFolder } from './comp-doc/DocSidebarFolder.jsx';
-import { TagOverviewPopup } from './comp-doc/TagOverviewPopup.jsx';
+import { DocNavigationButtons } from '../../comp-doc/page/DocNavigationButtons.jsx';
+import { DocSearchDialog } from '../../comp-doc/page/DocSearchDialog.jsx';
+import { DocSidebarFolder } from '../../comp-doc/side-panel/DocSidebarFolder.jsx';
+import { TagOverviewPopup } from '../../comp-doc/tag/TagOverviewPopup.jsx';
 import { DocLanguageProvider, useDocLanguage } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 import { MultiLangControl } from '../../comp-mdx/multi-lang/MultiLangControl.jsx';
-import { compById as compByIdDefault } from './comp-doc/registry.js';
+import { compById as compByIdDefault } from '../../comp-doc/registry/registry.js';
 import './DocPageMdx.css';
 
 // Embeddable MD/MDX document page.

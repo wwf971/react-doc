@@ -176,3 +176,9 @@ An embedded component is preferred to be written inside a code block, to avoid u
 ```
 
 To implement above design, remark plugins might need to be configured to be able to parse html comment that contain specific patterns, and mark the node next to the comment node.
+
+### Components as list elements
+
+Components must be usable as elements of nested list items (ordered or unordered, any depth), including components whose source spans several lines or that render as a rectangular block, such as code blocks, images, and diagrams. Many Markdown-based note tools make this fragile: authors cannot tell which indentation keeps a multi-line block inside a list item, and different renderers disagree.
+
+There should be one stipulated writing style that reads naturally in source, keeps the comment + code block style above, is parsed stably by the project's pipeline, and stays nested in the list item under common Markdown renderers. The comment may also follow the text of the item, and text may continue after the block within the same item.

@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { useDocStores } from '../store/context.js';
+import { useDocStores } from '../../frontend/src/store/context.js';
 import { LinkDocRender } from './LinkDocRender.jsx';
 import { LinkWarning } from './LinkWarning.jsx';
 

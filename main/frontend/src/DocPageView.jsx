@@ -15,13 +15,13 @@ import {
 import { useDocStores } from './store/context.js';
 import { buildMdxComps } from './lib/mdx-comps.js';
 import { useDocDestinationNavigation } from './lib/use-doc-destination-navigation.js';
-import { DocPageToolbar } from './comp-doc/DocPageToolbar.jsx';
-import { DocPageSkeleton } from './comp-doc/DocPageSkeleton.jsx';
-import { DocPageToc } from './comp-doc/DocPageToc.jsx';
-import { DocPageTagBar } from './comp-doc/DocPageTagBar.jsx';
-import { RegisteredComp } from './comp-doc/RegisteredComp.jsx';
-import { compIdResolve } from './comp-doc/comp-registry.js';
-import { SidePanelItemSurfaceContext } from './comp-doc/SidePanelItemHost.jsx';
+import { DocPageToolbar } from '../../comp-doc/page/DocPageToolbar.jsx';
+import { DocPageSkeleton } from '../../comp-doc/page/DocPageSkeleton.jsx';
+import { DocPageToc } from '../../comp-doc/toc/DocPageToc.jsx';
+import { DocPageTagBar } from '../../comp-doc/tag/DocPageTagBar.jsx';
+import { RegisteredComp } from '../../comp-doc/registry/RegisteredComp.jsx';
+import { compIdResolve } from '../../comp-doc/registry/comp-registry.js';
+import { SidePanelItemSurfaceContext } from '../../comp-doc/side-panel/SidePanelItemHost.jsx';
 import { DocLanguageProvider } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 import './DocPageView.css';
 

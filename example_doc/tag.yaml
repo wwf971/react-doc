@@ -1,7 +1,7 @@
 # Tag definitions of the demonstration page, referenced from config.yaml
 # (tag.file). A definition decides how a tag looks; which documents, folders
 # and items carry the tag is declared in source.yaml and side-panel.yaml.
-# display.component defaults to Tag; display.data is passed to it.
+# display.component defaults to TagLabel; display.data is passed to it.
 defineById:
   part:
     text: Part

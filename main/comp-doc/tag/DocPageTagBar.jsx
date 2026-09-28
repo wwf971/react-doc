@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite';
-import { useDocStores } from '../store/context.js';
-import { TagList } from '../../../comp-mdx/tag/TagList.jsx';
+import { useDocStores } from '../../frontend/src/store/context.js';
+import { TagList } from '../../comp-mdx/tag/TagList.jsx';
 import { useTagOverviewIsAvailable } from './TagOverviewPopup.jsx';
 import './DocPageTagBar.css';
 

@@ -31,7 +31,7 @@ globalConfig:
   TagsDisplayAtLinkPosition: after          # document level: before | after
   TagsOverviewPopupIsOn: true               # page level
 
-# tag name usable in docs -> component id in frontend/src/comp-doc/
+# tag name usable in docs -> component id in comp-doc/registry/registry.js
 compRegistry:
   Tabs: common/Tabs
   Tab: common/Tab
@@ -62,7 +62,10 @@ compRegistry:
   DocImageGrid: common/ImageGrid
   DocDiagramText: common/DiagramText
   DocDiagramMermaid: common/DiagramMermaid
+  # built-in name of a tag mentioned in document text: <Tag tagId="guide" />
   Tag: common/Tag
+  # built-in name of the default tag look, used by tag definitions
+  TagLabel: common/TagLabel
   # built-in name of the tag overview (popup content and document component)
   TagOverview: common/TagOverview
   # built-in name of the side-panel item renderer. without this entry the page

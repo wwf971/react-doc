@@ -1,5 +1,5 @@
 // Default visual renderer for recognized document links.
-import { TagList } from '../../../comp-mdx/tag/TagList.jsx';
+import { TagList } from '../../comp-mdx/tag/TagList.jsx';
 import './LinkDocRender.css';
 //
 // Interface:

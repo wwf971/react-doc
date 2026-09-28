@@ -1,4 +1,4 @@
-import { DocLink } from '../../frontend/src/comp-doc/DocLink.jsx';
+import { DocLink } from '../../comp-doc/link/DocLink.jsx';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import './ref-card.css';
 

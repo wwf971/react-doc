@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { LogOut } from '#react-doc/frontend/UICommon.js';
-import { LinkDocRender } from '#react-doc/frontend/src/comp-doc/LinkDocRender.jsx';
-import { LinkWarning } from '#react-doc/frontend/src/comp-doc/LinkWarning.jsx';
+import { LinkDocRender } from '#react-doc/comp-doc/link/LinkDocRender.jsx';
+import { LinkWarning } from '#react-doc/comp-doc/link/LinkWarning.jsx';
 import { useDocStores } from '#react-doc/frontend/src/store/context.js';
 import { CodeBlockCompactPopup } from '../code-block/CodeBlockCompactPopup.jsx';
 import { CodeBlockCompactStore } from '../code-block/CodeBlockCompactStore.js';

@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { DynamicCodeBlock } from '../../frontend/src/comp-doc/DynamicCodeBlock.js';
+import { DynamicCodeBlock } from '../../comp-doc/mdx-render/DynamicCodeBlock.js';
 
 function CodeBlockFull({ data = {}, sourceStore, pathList = [] }) {
 	return (

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
-import { useDocStores } from '../store/context.js';
+import { useDocStores } from '../../frontend/src/store/context.js';
 
 // Component data reference: a registered component authored with
 // dataRef="{document target}#{component id}" receives the authored data of

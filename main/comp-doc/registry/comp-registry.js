@@ -56,6 +56,7 @@ export function compInputNormalize(definition, input = {}) {
 export const compIdBuiltinByName = {
   SidePanelItem: 'common/SidePanelItem',
   Tag: 'common/Tag',
+  TagLabel: 'common/TagLabel',
   TagOverview: 'common/TagOverview',
 };
 

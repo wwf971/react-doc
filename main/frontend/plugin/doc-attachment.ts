@@ -26,9 +26,12 @@ type SourceEntry = {
 const commentComponentPattern = /<!--\s*renderComp=([\w/]+(?:-[\w/]+)*)([\s\S]*?)-->/g;
 const mermaidMdxPattern = /<(?:Doc)?DiagramMermaid\b[^>]*\blaneIcons\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 const imageMdxPattern = /<(?:Doc)?Image\b[^>]*\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
-const imageCommentBlockPattern = /<!--\s*renderComp=(?:Doc)?Image(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n```/g;
-const imageGridCommentPattern = /<!--\s*renderComp=(?:Doc)?ImageGrid(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n```/g;
-const fileDownloadCommentPattern = /<!--\s*renderComp=FileDownload(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n```/g;
+// the closing fence may be indented: a block inside a list item is indented
+// to the item's text column (doc_page_impl_mdx_li.md). YAML accepts the
+// uniformly indented content as is.
+const imageCommentBlockPattern = /<!--\s*renderComp=(?:Doc)?Image(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n[ \t]*```/g;
+const imageGridCommentPattern = /<!--\s*renderComp=(?:Doc)?ImageGrid(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n[ \t]*```/g;
+const fileDownloadCommentPattern = /<!--\s*renderComp=FileDownload(?:\s*,[^>]*)?-->\s*```(?:yaml|yml)\s*\r?\n([\s\S]*?)\r?\n[ \t]*```/g;
 
 export const docAttachmentFinderDefaultList: DocAttachmentFinder[] = [
   attachmentMermaidLaneIconFind,

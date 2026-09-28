@@ -63,7 +63,7 @@ Package components and project components remain separate. Source files are disp
 
 The same merged registry is used by MDX tags, comment-marked blocks, custom sidebar labels, and component-backed panels. Components defined with `compDefine()` receive `{ data, config, onEvent }`; a plain-function display component receives `{ text, data }`, and a plain-function panel component receives `{ item, data }`.
 
-Mapping the built-in name `SidePanelItem` in `compRegistry` replaces the label renderer of every side-panel item; mapping `Tag` replaces the default tag look; mapping `TagOverview` replaces the content of the tag overview popup.
+Mapping the built-in name `SidePanelItem` in `compRegistry` replaces the label renderer of every side-panel item; mapping `TagLabel` replaces the default tag look; mapping `Tag` replaces how a tag mentioned in document text is rendered; mapping `TagOverview` replaces the content of the tag overview popup.
 
 Host settings needed by package components are passed once through `config.compConfigHost` and reach every registered component's `config`:
 

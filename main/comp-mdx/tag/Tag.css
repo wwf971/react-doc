@@ -12,6 +12,22 @@
   white-space: nowrap;
 }
 
+.doc-tag-mention {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.doc-tag-mention.is-unknown {
+  outline: 1px dashed #dc2626;
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.doc-tag-mention-error {
+  color: #dc2626;
+  font-size: 0.8em;
+}
+
 .doc-tag-list {
   display: inline-flex;
   flex-wrap: wrap;

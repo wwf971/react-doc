@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { useDocStores } from '../store/context.js';
+import { useDocStores } from '../../frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from './comp-registry.js';
 import { CompDataRefHost } from './CompDataRef.jsx';
 
@@ -14,7 +14,7 @@ export function RegisteredComp({
   onEventRuntime,
   placement,
 }) {
-  const { compById, compConfigHost, docStore, onEvent: onEventPage, sourceStore } = useDocStores();
+  const { compById, compConfigHost, docStore, onEvent: onEventPage, sourceStore, tagStore } = useDocStores();
   const idFallback = useId();
   const compIdResolved = compId ?? compIdResolve(sourceStore.configDoc, compName);
   const definitionValue = compDefinition ?? compById[compIdResolved];
@@ -114,6 +114,9 @@ export function RegisteredComp({
     if (eventType === 'navigateRequest' && eventData.target) {
       docStore.navigate(eventData.target);
       return { isHandled: true };
+    }
+    if (eventType === 'tagOverviewOpenRequest' && eventData.tagId && compConfigHost.panelComponent) {
+      return { isHandled: tagStore.overviewOpen(eventData.tagId) };
     }
     return result;
   };

@@ -1,6 +1,6 @@
 import { createElement } from 'react';
-import { SidePanelItemHost } from '../comp-doc/SidePanelItemHost.jsx';
-import { compDefinitionNormalize, compIdResolve } from '../comp-doc/comp-registry.js';
+import { SidePanelItemHost } from '../../../comp-doc/side-panel/SidePanelItemHost.jsx';
+import { compDefinitionNormalize, compIdResolve } from '../../../comp-doc/registry/comp-registry.js';
 import { tagListNormalize } from './doc-tag-declare.js';
 
 // Decides how one side-panel item label is rendered. Design: doc_page_side_panel.md
