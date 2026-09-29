@@ -1,0 +1,45 @@
+/* zero-size layer at the content origin of the tree. FileTree is its
+   containing block (position: relative), so the layer scrolls with the rows.
+   a zero-size layer never enlarges the scroll area by itself, so the measured
+   geometry cannot feed back into the size of the tree. */
+.doc-file-tree-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 0;
+	height: 0;
+	overflow: visible;
+	z-index: 1;
+	pointer-events: none;
+}
+
+/* width/height are set from the store; max-width keeps global img/svg rules
+   from shrinking it to the zero-size layer. */
+.doc-file-tree-overlay-svg {
+	position: absolute;
+	top: 0;
+	left: 0;
+	max-width: none;
+	overflow: visible;
+}
+
+.doc-file-tree-overlay-label {
+	position: absolute;
+	width: max-content;
+	font-size: 0.75rem;
+	line-height: 1rem;
+	overflow-wrap: anywhere;
+	pointer-events: auto;
+}
+
+.doc-file-tree-overlay-warning {
+	display: flex;
+	flex-direction: column;
+	gap: 0.125rem;
+	margin: -0.5rem 0 1rem;
+	padding: 0.25rem 0.5rem;
+	border-inline-start: 2px solid #d97706;
+	color: #b45309;
+	font-size: 0.75rem;
+	line-height: 1rem;
+}

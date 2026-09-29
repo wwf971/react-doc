@@ -97,6 +97,28 @@ through the component registry (here `DocLinkInline` renders a document link).
   ]}
 />
 
+## File tree annotations
+
+In `.mdx`, `annotations` and `annotationStyle` are properties, with the same shape as in the YAML form.
+
+<FileTree
+  tree={[
+    {
+      name: 'src/',
+      defaultOpen: true,
+      children: [
+        { name: 'main.js', id: 'entry' },
+        { name: 'store.js', id: 'store' },
+      ],
+    },
+    { name: 'config.yaml', id: 'config' },
+  ]}
+  annotationStyle={{ arrow: { tailShape: 'none' } }}
+  annotations={[
+    { from: 'entry', to: ['store', 'config'], text: 'creates and reads' },
+  ]}
+/>
+
 ## Tag mention
 
 Read the <Tag tagId="guide" /> documents first. A mention can carry its own data: <Tag tagId="reference" text="Reference docs" />.

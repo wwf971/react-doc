@@ -192,9 +192,9 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`FileTree` shows a folder structure with optional descriptions. `FileDownload` shows a file from the document source as a download card, in a compact or detailed view.
+`FileTree` shows a folder structure with optional descriptions and annotation arrows between nodes. `FileDownload` shows a file from the document source as a download card, in a compact or detailed view.
 
-`FileTree` は説明付きのフォルダー構成を表示します。`FileDownload` は資料ソース内のファイルをダウンロードカードとして、コンパクト表示または詳細表示で表示します。
+`FileTree` は説明付きのフォルダー構成を表示し、ノード間に注釈の矢印も描けます。`FileDownload` は資料ソース内のファイルをダウンロードカードとして、コンパクト表示または詳細表示で表示します。
 ```
 
 - [File tree](comp-file-tree.md)

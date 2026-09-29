@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { FileIcon, FolderIcon, FolderOpenIcon, ProjectIcon } from '#react-doc/frontend/UICommon.js';
 import { RegisteredComp } from '#react-doc/comp-doc/registry/RegisteredComp.jsx';
+import { FileTreeOverlay, FileTreeOverlayWarning } from './FileTreeOverlay.jsx';
+import { FileTreeOverlayStore } from './FileTreeOverlayStore.js';
 import { FileTreeStore } from './FileTreeStore.js';
 import './FileTree.css';
 
@@ -18,12 +20,21 @@ import './FileTree.css';
 // or the degradation-compatible comment-block form with the same shape in yaml.
 // when maxHeight is given, the component reserves exactly that height and
 // scrolls inside, so folder toggling never changes the outer page layout.
+//
+// optional "annotations" (for example arrows between nodes) are drawn by
+// FileTreeOverlay above the rows. FileTree only reserves a gutter column of
+// the width the overlay asks for, and marks rows, names, and children clips
+// with data attributes so the overlay can measure them.
 const FileTree = observer(function FileTree({ data = {}, config = {} }) {
 	const [store] = useState(() => new FileTreeStore(data));
+	const [overlayStore] = useState(() => new FileTreeOverlayStore(store));
+	const rootRef = useRef(null);
 	const sourceKey = JSON.stringify([
 		data.raw ?? null,
 		data.tree ?? null,
 		data.maxHeight ?? null,
+		data.annotations ?? null,
+		data.annotationStyle ?? null,
 		data.dataRefResolved?.data ?? null,
 	]);
 
@@ -43,30 +54,42 @@ const FileTree = observer(function FileTree({ data = {}, config = {} }) {
 	}
 
 	const heightCss = sizeCssGet(store.maxHeight);
+	const isOverlayOn = overlayStore.annotationList.length > 0;
+	const styleRoot = { '--doc-file-tree-gutter-width': `${overlayStore.gutterWidth}px` };
+	if (heightCss) styleRoot.height = heightCss;
 	return (
-		<div
-			className={`not-prose doc-file-tree${heightCss ? ' doc-file-tree-height-fixed' : ''}`}
-			style={heightCss ? { height: heightCss } : undefined}
-		>
-			{store.nodeList.map((node) => (
-				<FileTreeNode
-					key={node.key}
-					node={node}
-					store={store}
-					instanceIdParent={config.instanceId}
-				/>
-			))}
-		</div>
+		<>
+			<div
+				ref={rootRef}
+				className={`not-prose doc-file-tree${heightCss ? ' doc-file-tree-height-fixed' : ''}`}
+				style={styleRoot}
+				data-file-tree-root=""
+			>
+				{store.nodeList.map((node) => (
+					<FileTreeNode
+						key={node.key}
+						node={node}
+						store={store}
+						instanceIdParent={config.instanceId}
+					/>
+				))}
+				{isOverlayOn ? <FileTreeOverlay overlayStore={overlayStore} rootRef={rootRef} /> : null}
+			</div>
+			<FileTreeOverlayWarning overlayStore={overlayStore} />
+		</>
 	);
 });
 
-const FileTreeNode = observer(function FileTreeNode({ node, store, instanceIdParent }) {
+// the inner function must not be named FileTreeNode: inside a named function
+// expression that name refers to the function itself, so nested <FileTreeNode>
+// would render the unwrapped function, which never reacts to folder toggling.
+const FileTreeNode = observer(function FileTreeNodeRender({ node, store, instanceIdParent }) {
 	if (node.type === 'file') {
 		return (
-			<div className="doc-file-tree-row">
-				<span className="doc-file-tree-main">
+			<div className="doc-file-tree-row" data-file-tree-row-key={node.key}>
+				<span className="doc-file-tree-main" data-file-tree-main="">
 					<FileIcon className="doc-file-tree-icon" />
-					<span className="doc-file-tree-name">{node.name}</span>
+					<span className="doc-file-tree-name" data-file-tree-name="">{node.name}</span>
 				</span>
 				<FileTreeDescription node={node} instanceIdParent={instanceIdParent} />
 			</div>
@@ -78,9 +101,10 @@ const FileTreeNode = observer(function FileTreeNode({ node, store, instanceIdPar
 		<div className="doc-file-tree-folder">
 			{/* the description column stays outside the toggle button, so links
 			    and other controls inside a description never toggle the folder. */}
-			<div className="doc-file-tree-row">
+			<div className="doc-file-tree-row" data-file-tree-row-key={node.key}>
 				<div
 					className="doc-file-tree-main doc-file-tree-folder-toggle"
+					data-file-tree-main=""
 					role="button"
 					tabIndex={0}
 					aria-expanded={isOpen}
@@ -92,11 +116,14 @@ const FileTreeNode = observer(function FileTreeNode({ node, store, instanceIdPar
 					}}
 				>
 					{nodeIconRender(node, isOpen)}
-					<span className="doc-file-tree-name">{node.name}</span>
+					<span className="doc-file-tree-name" data-file-tree-name="">{node.name}</span>
 				</div>
 				<FileTreeDescription node={node} instanceIdParent={instanceIdParent} />
 			</div>
-			<div className={`doc-file-tree-children-clip${isOpen ? ' doc-file-tree-children-open' : ''}`}>
+			<div
+				className={`doc-file-tree-children-clip${isOpen ? ' doc-file-tree-children-open' : ''}`}
+				data-file-tree-clip-key={node.key}
+			>
 				<div className="doc-file-tree-children">
 					{node.children.map((nodeChild) => (
 						<FileTreeNode

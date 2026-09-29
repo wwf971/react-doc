@@ -119,7 +119,7 @@ data.dataRefResolved = {
 }
 ```
 
-How referenced and local data are combined belongs to the component. `FileTree` parses both with the same parser, uses the referenced data as the base, and lets local top-level keys override it; `tree` is replaced as a whole. A local block containing only a YAML comment is valid when `dataRef` is present. An overlay diagram would instead keep the referenced tree as its background and read its own overlay data from the local block.
+How referenced and local data are combined belongs to the component. `FileTree` parses both with the same parser, uses the referenced data as the base, and lets local top-level keys override it; `tree` is replaced as a whole. A local block containing only a YAML comment is valid when `dataRef` is present. A local block containing only `annotations` keeps the referenced tree as its background and draws its own overlay above it (see [File tree annotations](#file-tree-annotations)).
 
 A component that needs more than one reference, or a reference chosen by its own data, calls `useCompDataRef(target, { sourcePath: config.sourcePath })` from an observer component. The hook is exported from the package entry and returns the same result object as `DocStore.compDataRefQuery()` (`status`, `message`, `warning`, `componentType`, `data`, ...). The component is then responsible for its own type checks and messages.
 
@@ -142,3 +142,54 @@ While the referenced document is compiling, a neutral loading line replaces the 
 - Only comment-block components with an `id` can be referenced. MDX component properties are JavaScript expressions evaluated at render time, so they are not available before the referenced document is rendered.
 - References are resolved one level deep. If the referenced component itself has a `dataRef`, its data is delivered unchanged, including that `dataRef`; the host does not follow chains.
 - With `pruneSourceToSidePanel`, a referenced document that has no side-panel item must be listed in `sourceDependencies` of a retained item; otherwise the deployed page reports it as not found.
+
+## File tree annotations
+
+A `FileTree` can draw annotations above its rows. The first annotation type is a right-angled arrow from one or more source nodes to one or more destination nodes, with optional text beside it:
+
+```text
+main.js     ●──╮
+               │ reads at startup
+config.yaml ◀──╯
+```
+
+```yaml
+tree:
+  - name: src/
+    children:
+      - name: main.js
+        id: entry            # optional, a short stable name for references
+  - name: config.yaml
+annotationStyle:             # optional, shared style per annotation type
+  arrow: { color: "#2563eb" }
+annotations:
+  - type: arrow              # default; the type decides the remaining keys
+    from: entry              # one reference or a list
+    to: [config.yaml]
+    text: reads at startup
+    lane: 0                  # optional; same lane = same vertical track
+    style: { lineStyle: dashed }   # optional, overrides annotationStyle.arrow
+```
+
+A node reference is a node `id`; when no node has that id, it is read as a name path such as `src/main.js`, ignoring the trailing `/` of folder names. An endpoint can also be written as `{ node: entry }`, which leaves room for per-endpoint options. Every annotation has its own lane by default, in list order; annotations sharing a `lane` share one vertical track, and the author keeps them from overlapping.
+
+Arrow style keys, all lengths in px: `color`, `textColor`, `lineWidth`, `lineStyle` (`solid` / `dashed` / `dotted`), `lineStyleCollapsed`, `cornerRadius`, `headShape` (`triangle` / `open` / `none`), `headSize`, `tailShape` (`dot` / `none`), `gap` (name to arrow end), `laneSpacing`, `textGap`, `textMaxWidth`. Defaults use the muted theme color, so arrows look like part of the tree.
+
+**Layout.** The tree grid has three columns: name, gutter, description. The gutter is empty unless annotations exist; its width is the sum of lane widths, and a lane is as wide as its trunk spacing plus its widest text. Each endpoint gets a horizontal branch from the end of its name to the trunk of its lane; the text sits to the right of the trunk, centered on it. The gutter width depends only on text sizes, never on row positions, so the layout cannot oscillate.
+
+**Collapsed folders.** An endpoint hidden in a collapsed folder is drawn at the outermost collapsed ancestor row, with the collapsed line style and a hollow marker, meaning "somewhere inside". Endpoints landing on the same row with the same role merge. When one row is both source and destination, the two branches move slightly apart, so an arrow whose ends all collapse into one folder becomes a small loop on that row; its text is hidden there, because it would cover the branches of other arrows on that row. The overlay reads open state from `FileTreeStore`, the same source the rows render from, so the arrows always match the displayed tree. While a folder is opening, endpoints stay inside the growing children clip instead of pointing at rows that are not visible yet.
+
+**Responsibilities.**
+
+```text
+FileTreeStore          parses data; keeps annotations / annotationStyle as authored
+FileTreeOverlayStore   annotation type registry, reference resolution, visible-row mapping,
+                       measured geometry (source of truth), lanes, gutter width, shapes
+FileTreeOverlayArrow.js  arrow type: grammar normalization, style defaults, geometry (pure)
+FileTreeOverlay.jsx    measures the tree, renders shapes, labels, and warnings
+FileTree               reserves the gutter, marks rows / names / clips with data attributes
+```
+
+`FileTreeOverlay` is a zero-size layer at the content origin of the tree, so it scrolls with the rows. Its SVG has a real size, the name column plus the gutter down to the last row, with a `viewBox` of the same size; the size comes from row geometry, never from the scroll size, so the drawing cannot enlarge the tree it measures. Measured positions are converted from on-screen px to css px by the on-screen scale of the tree, so CSS `zoom` or a scale transform on an ancestor does not shift the arrows away from the rows. A `ResizeObserver` watches the tree, every row, every children clip, and every label; any size change (container resize, font load, folder animation, data change) schedules one measurement per animation frame. The store ignores a measurement that is equal to the current one, then recomputes the shapes.
+
+A new annotation type adds a `{ normalize, laneWidthGet, layout }` entry to `overlayTypeById` in `FileTreeOverlayStore.js` and a renderer to `shapeRenderByType` in `FileTreeOverlay.jsx`. Problems such as an unknown type, an unknown style key, or an unresolved reference are listed below the tree; every valid annotation still renders.

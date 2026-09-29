@@ -4,10 +4,14 @@ import { parse as yamlParse } from 'yaml';
 // ui/data store for one FileTree instance.
 // semantic input is a "tree" node list; folder open/closed state is ui state
 // owned by this store, keyed by a path-like node key.
+// "annotations" and "annotationStyle" are kept as authored; FileTreeOverlayStore
+// interprets them, so this store never knows what an annotation means.
 class FileTreeStore {
 	nodeList = [];
 	isFolderOpenByKey = {};
 	maxHeight = undefined;
+	annotationListRaw = [];
+	annotationStyleRaw = {};
 	message = '';
 
 	constructor(data = {}) {
@@ -21,8 +25,12 @@ class FileTreeStore {
 			if (!Array.isArray(dataParsed.tree)) {
 				throw new Error('The file tree requires a "tree" list.');
 			}
-			this.nodeList = nodeListNormalize(dataParsed.tree, '');
+			const nodeList = nodeListNormalize(dataParsed.tree, '');
+			nodeIdUniqueCheck(nodeList, new Set());
+			this.nodeList = nodeList;
 			this.maxHeight = dataParsed.maxHeight;
+			this.annotationListRaw = dataParsed.annotations ?? [];
+			this.annotationStyleRaw = dataParsed.annotationStyle ?? {};
 			const isOpenByKey = {};
 			folderOpenDefaultCollect(this.nodeList, isOpenByKey);
 			this.isFolderOpenByKey = isOpenByKey;
@@ -31,6 +39,8 @@ class FileTreeStore {
 			this.nodeList = [];
 			this.isFolderOpenByKey = {};
 			this.maxHeight = undefined;
+			this.annotationListRaw = [];
+			this.annotationStyleRaw = {};
 			this.message = String(error?.message ?? error);
 		}
 	}
@@ -77,6 +87,7 @@ function fileTreeDataParse(data, isEmptyAllowed) {
 // a file node cannot declare "children". key stays stable for a given tree
 // shape. a "description" is either plain text (kept in descriptionText) or
 // a { component, data, config } descriptor (kept in descriptionComponent).
+// the optional "id" lets annotations refer to a node by a short stable name.
 function nodeListNormalize(nodeListRaw, keyParent) {
 	return nodeListRaw.map((node, index) => {
 		if (!node || typeof node !== 'object' || Array.isArray(node)) {
@@ -91,6 +102,7 @@ function nodeListNormalize(nodeListRaw, keyParent) {
 		const nodeBase = {
 			name,
 			key,
+			id: nodeIdNormalize(node.id, name),
 			type,
 			...descriptionNormalize(node.description, name),
 			descriptionIndent: descriptionIndentNormalize(node.descriptionIndent, name),
@@ -157,6 +169,24 @@ function descriptionIndentNormalize(descriptionIndent, name) {
 		throw new Error(`"descriptionIndent" of "${name}" must be a non-negative integer.`);
 	}
 	return descriptionIndent;
+}
+
+function nodeIdNormalize(id, name) {
+	if (id === undefined || id === null) return '';
+	if (typeof id !== 'string' || !id.trim()) {
+		throw new Error(`"id" of "${name}" must be a non-empty string.`);
+	}
+	return id.trim();
+}
+
+function nodeIdUniqueCheck(nodeList, idSet) {
+	for (const node of nodeList) {
+		if (node.id) {
+			if (idSet.has(node.id)) throw new Error(`Node id "${node.id}" is used more than once.`);
+			idSet.add(node.id);
+		}
+		if (node.isFolder) nodeIdUniqueCheck(node.children, idSet);
+	}
 }
 
 function folderOpenDefaultCollect(nodeList, isOpenByKey) {

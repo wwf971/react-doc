@@ -82,6 +82,34 @@ maxHeight: 8rem
 ```
 
 <!--renderComp=MultiLang-->
+## {en: "Overlay on a referenced tree", jp: "参照したツリーへのオーバーレイ"}
+
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
+```markdown
+Own YAML can also add keys that the referenced data does not have. Here `annotations` draws an arrow above the referenced tree, while the tree itself stays in `comp-file-tree.md`. Another document can reference the same tree and draw different arrows. For the annotation syntax, see [File tree](comp-file-tree.md).
+
+自身の YAML では、参照データにないキーを追加することもできます。ここでは `annotations` で参照したツリーの上に矢印を描いており、ツリー自体は `comp-file-tree.md` にあります。別のドキュメントから同じツリーを参照し、異なる矢印を描くこともできます。注釈の構文は[ファイルツリー](comp-file-tree.md)を参照してください。
+```
+
+````markdown
+<!--renderComp=FileTree,dataRef=comp-file-tree.md#example-project-tree-->
+```yaml
+annotations:
+  - from: react-doc/main/frontend
+    to: react-doc/example_doc
+    text: renders
+```
+````
+
+<!--renderComp=FileTree,dataRef=comp-file-tree.md#example-project-tree-->
+```yaml
+annotations:
+  - from: react-doc/main/frontend
+    to: react-doc/example_doc
+    text: renders
+```
+
+<!--renderComp=MultiLang-->
 ## {en: "Reference within the same document", jp: "同じドキュメント内の参照"}
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
