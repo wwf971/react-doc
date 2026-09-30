@@ -38,7 +38,7 @@ The YAML root must be a list. Every root item dispatches to a child renderer acc
 
 ## Paragraphs
 
-Paragraphs use `type: p` and put translations directly on the item. Inline text enclosed by single backticks renders as inline code.
+Paragraphs use `type: p` and put translations directly on the item. Each translation is parsed as Markdown and rendered by the shared `MdxRenderer` in inline mode, with the link transform and component mapping of the document body: inline code, emphasis, math, document links, `inline-link` source links, file-like inline code, and wiki links behave as in ordinary prose, and relative targets resolve from the containing document. List item text is rendered the same way. `MultiLang` has no link handling of its own.
 
 ```yaml
 - type: p

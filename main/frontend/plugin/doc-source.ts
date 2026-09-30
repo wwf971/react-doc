@@ -22,6 +22,12 @@ import {
   configSourceRuleApply,
   configSourceRuleIs,
 } from './doc-config-source.ts';
+import {
+  docSourceDependenciesCollect,
+  type DocSourceDependency,
+  type DocSourceDependencyCollect,
+} from './doc-source-dependency.ts';
+import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
 
 // vite plugin "doc-source".
 // reads two-layer yaml config, executes source rules against the file system,
@@ -41,6 +47,9 @@ export type DocSourcePluginOptions = {
   moduleId?: string;
   excludeSidePanelItemIds?: string[];
   pruneSourceToSidePanel?: boolean;
+  // extractors for the consumer's own component ids, used when pruning;
+  // see comp-doc/registry/registry-source-dependency.js
+  sourceDependencyCollectByCompId?: Record<string, DocSourceDependencyCollect>;
   attachmentFinderList?: DocAttachmentFinder[];
 };
 
@@ -94,7 +103,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       const configDoc = loadConfigDoc(configFile, options);
       const fileEntriesAll = scanSource(configDoc, configDir);
       const fileEntries = options.pruneSourceToSidePanel
-        ? pruneSourceToSidePanel(configDoc, fileEntriesAll)
+        ? pruneSourceToSidePanel(configDoc, fileEntriesAll, options.sourceDependencyCollectByCompId)
         : fileEntriesAll;
       const attachmentList = configDoc.collectComponentAttachmentsOnBuild === true
         ? docAttachmentsCollect(
@@ -443,29 +452,135 @@ function normalizeSlash(pattern: string): string {
   return pattern.startsWith('/') ? pattern : `/${pattern}`;
 }
 
-// Optional deployment optimization: retain only files explicitly referenced by
-// the semantic side panel. Components that load raw files declare those paths
-// through sourceDependencies, keeping this build policy out of rendering code.
-function pruneSourceToSidePanel(configDoc: any, entries: FileEntry[]): FileEntry[] {
-  const references: string[] = [];
+// Optional deployment optimization: retain only the files the side panel
+// navigates to, plus every file they statically reach.
+//
+// roots: side-panel `doc` items and source folders (after side-panel
+// exclusions), and the content of inline items. each retained .md/.mdx file is
+// scanned by doc-source-dependency.ts; reached documents are scanned in turn,
+// other files are retained without parsing. the side panel itself stays
+// navigation only.
+//
+// a recognized local target that cannot be resolved is reported, never
+// silently dropped. the manifest keeps the order of source rules.
+//
+// `sourceDependencies` on a side-panel item is the former manual list; it is
+// still read, with a deprecation warning, and merged with the discovered files.
+export function pruneSourceToSidePanel(
+  configDoc: any,
+  entries: FileEntry[],
+  collectByCompId: Record<string, DocSourceDependencyCollect> = {},
+): FileEntry[] {
+  const sourceIndex = sourceIndexBuild(entries);
+  const pathsRetained = new Set<string>();
+  const docQueue: FileEntry[] = [];
+  const entryRetain = (entry: FileEntry) => {
+    if (pathsRetained.has(entry.internalPath)) return;
+    pathsRetained.add(entry.internalPath);
+    if (entry.ext === 'md' || entry.ext === 'mdx') docQueue.push(entry);
+  };
+  const collected = (
+    result: { dependencyList: DocSourceDependency[]; warningList: string[] },
+    sourceLabel: string,
+  ) => {
+    for (const warning of result.warningList) console.warn(`[doc-source] ${warning}`);
+    for (const dependency of result.dependencyList) {
+      for (const entry of dependencyEntryListGet(dependency, sourceIndex, sourceLabel)) entryRetain(entry);
+    }
+  };
+
   const visit = (nodes: any[]) => {
     for (const node of nodes) {
-      if (node?.doc !== undefined) references.push(String(node.doc));
+      if (node?.doc !== undefined) {
+        for (const entry of resolveSourceReference(String(node.doc), entries)) entryRetain(entry);
+      }
+      if (node?.sourceFolder !== undefined || node?.sourceRoot !== undefined) {
+        for (const entry of sourceFolderEntryListGet(node, entries)) entryRetain(entry);
+      }
+      if (node?.inline !== undefined) {
+        const inline = typeof node.inline === 'string' ? { content: node.inline } : node.inline;
+        const sourceLabel = `side-panel inline item "${node.id ?? node.text ?? ''}"`;
+        collected(
+          docSourceDependenciesCollect(
+            String(inline?.content ?? ''),
+            { internalPath: '', ext: inline?.format === 'md' ? 'md' : 'mdx' },
+            configDoc,
+            collectByCompId,
+          ),
+          sourceLabel,
+        );
+      }
       if (Array.isArray(node?.sourceDependencies)) {
-        references.push(...node.sourceDependencies.map(String));
+        console.warn(
+          `[doc-source] side-panel item "${node.id ?? node.doc ?? ''}": sourceDependencies is deprecated.`
+          + ' Files referenced by retained documents are now discovered automatically; remove the list.',
+        );
+        for (const reference of node.sourceDependencies.map(String)) {
+          const entryList = resolveSourceReference(reference, entries);
+          if (entryList.length === 0) {
+            console.warn(`[doc-source] sourceDependencies entry not in the collected source: ${reference}`);
+          }
+          for (const entry of entryList) entryRetain(entry);
+        }
       }
       if (Array.isArray(node?.children)) visit(node.children);
     }
   };
   visit(Array.isArray(configDoc.sidePanel?.tree) ? configDoc.sidePanel.tree : []);
 
-  const pathsIncluded = new Set<string>();
-  for (const reference of references) {
-    for (const entry of resolveSourceReference(reference, entries)) {
-      pathsIncluded.add(entry.internalPath);
-    }
+  while (docQueue.length > 0) {
+    const entry = docQueue.shift()!;
+    const text = fs.readFileSync(entry.absPath, 'utf-8');
+    collected(docSourceDependenciesCollect(text, entry, configDoc, collectByCompId), entry.internalPath);
   }
-  return entries.filter((entry) => pathsIncluded.has(entry.internalPath));
+  return entries.filter((entry) => pathsRetained.has(entry.internalPath));
+}
+
+// same rules as at runtime: documents and assets through docTargetResolve
+// (DocSourceStore.resolveLink), source targets as exact internal paths
+// (SourceLink).
+function dependencyEntryListGet(
+  dependency: DocSourceDependency,
+  sourceIndex: any,
+  sourceLabel: string,
+): FileEntry[] {
+  const declared = `${sourceLabel}: ${dependency.construct} "${dependency.target}"`;
+  if (dependency.kind === 'source') {
+    const entry = sourceIndex.entryByInternalPath.get(dependency.target);
+    if (!entry) {
+      console.warn(
+        `[doc-source] ${declared} is not an exact internal path (/rootId/...) of the collected source;`
+        + ' nothing was retained for it.',
+      );
+    }
+    return entry ? [entry] : [];
+  }
+  const { entryList } = docTargetResolve(dependency.target, dependency.sourcePath, sourceIndex) as {
+    entryList: FileEntry[];
+  };
+  if (entryList.length === 0 && dependency.kind === 'document') {
+    console.warn(`[doc-source] ${declared} is not in the collected source; nothing was retained for it.`);
+  }
+  if (entryList.length > 1) {
+    console.warn(
+      `[doc-source] ${declared} matches ${entryList.length} files; all are retained: `
+      + entryList.map((entry) => entry.internalPath).join(', '),
+    );
+  }
+  return entryList;
+}
+
+// matches page-tree.js convertSourceFolder
+function sourceFolderEntryListGet(node: any, entries: FileEntry[]): FileEntry[] {
+  let pathFolder = `/${node.sourceRoot}`;
+  if (node.sourceFolder !== undefined) {
+    pathFolder = `/${String(node.sourceFolder)}`.replace(/\\/g, '/').replace(/\/+/g, '/');
+    if (pathFolder.length > 1) pathFolder = pathFolder.replace(/\/$/, '');
+  }
+  if (pathFolder === '/') return entries;
+  return entries.filter((entry) => (
+    entry.internalPath === pathFolder || entry.internalPath.startsWith(`${pathFolder}/`)
+  ));
 }
 
 function resolveSourceReference(reference: string, entries: FileEntry[]): FileEntry[] {

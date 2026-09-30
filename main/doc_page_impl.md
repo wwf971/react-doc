@@ -32,6 +32,8 @@ mobx stores (source of truth for rendering)
 
 **Runtime compile in browser, not build-time mdx.** `fumadocs-mdx` needs one content dir known to the bundler and cannot express the rule-based multi-root source. Instead docs are shipped as raw text (lazy chunks) and compiled in the browser on first visit: `@mdx-js/mdx` with `mdxPreset()` from `fumadocs-core/content/mdx/preset-runtime`, which applies the same default plugins the official setup uses (shiki code blocks, heading anchors + toc, gfm, structured data for search). Compile results are cached per doc in the store. Local docs are trusted content, so runtime evaluation is acceptable here.
 
+**LaTeX.** `remark-math` parses `$...$` (inline) and `$$...$$` (display) in `.md` and `.mdx`, and `rehype-katex` renders them; the package stylesheet imports the KaTeX CSS. `rehypeKatex` runs before Fumadocs `rehypeCode`: display math is emitted as a `math` code element, which Shiki would otherwise treat as a code block in an unknown language. Nested Markdown in components uses the same two extensions (see [Component registry](#component-registry)).
+
 **`.md` vs `.mdx`.** `.mdx` compiles with format `mdx` (JSX allowed). `.md` and everything else compiles with format `md`, so plain markdown containing `<xxx>` or `{}` text never breaks. Remark plugins can inject JSX nodes in both formats, which is how links/components get special rendering even in plain md.
 
 **Multilingual content.** Language inheritance, document-wide selection, headings, paragraphs, lists, degradation behavior, and file naming are specified in [doc_page_impl_multi-lang.md](doc_page_impl_multi-lang.md).
@@ -90,6 +92,37 @@ Source paths may point outside the application project. Use `addFile` for one ex
 The collected file has the internal path `/external-guide/guide.md`. Add that path to the side panel when the document should be directly navigable. The Vite development server must also allow the external folder; keep the allowed scope as narrow as practical.
 
 Non-md files get a display strategy by suffix (`fileDisplay` in config, suffix → code block language). The store synthesizes markdown: file name as title + one code block. Unknown suffixes fall back to a plain code block.
+
+### Source pruning for deployment
+
+Local development exposes every file selected by the source rules. The Vite plugin option `pruneSourceToSidePanel: true` reduces the manifest of a deployment build to the files the side panel navigates to and every file they reach statically, so authors write a dependency once, in the document that uses it.
+
+Pruning starts from the side panel after `excludeSidePanelItemIds` is applied: `doc` items, `sourceFolder` / `sourceRoot` items, and the content of inline items. Every retained `.md` / `.mdx` file is parsed by `plugin/doc-source-dependency.ts`; reached documents are parsed in turn, and other files are retained without parsing. A visited set ends cycles, and the manifest keeps source-rule order. The side panel stays responsible for navigation only: a supporting file does not need a visible item.
+
+The collector parses with the runtime extensions (GFM, math, comment components; MDX syntax for `.mdx`) and classifies links with `lib/doc-link-classify.js`, the rules `remarkDocLink` uses. Targets resolve with `lib/doc-target-resolve.js`, which `DocSourceStore.resolveLink()` also uses, so a target retained at build time is the target opened at runtime:
+
+| Authored | Kind | Resolution |
+| --- | --- | --- |
+| `[label](a.md)`, `` `a.md` ``, `[[a.md]]` | document | exact path, relative path, suffix, or file name |
+| `[label](/root/x.ps1 "inline-link")`, also `:source` / `:render` | source | exact internal path, as `SourceLink` |
+| `![alt](a.png)` | asset | as a document; a miss is not reported |
+| `dataRef="a.md#id"` on any component | document | as a document |
+| a registered component's data | per extractor | see below |
+
+External URLs, fragment-only links, and side-panel item targets (`@...`) are not dependencies. A target with several candidates retains all of them. A recognized local target that is not in the collected source produces a build warning naming the document, the construct, and the target; nothing is silently dropped.
+
+Component-specific knowledge lives in build-safe extractors keyed by component id, `comp-doc/registry/registry-source-dependency.js`. The package covers `BlockMdx`, `BlockSimple`, `Block` and `MultiLang` (nested Markdown, collected recursively), `SourceLink` (target or first raw line), and `Index` (item targets and subtopic components). An extractor receives the component data as the component sees it and reports targets through its context:
+
+```js
+docSourcePlugin({
+  pruneSourceToSidePanel: true,
+  sourceDependencyCollectByCompId: {
+    'specific/Chart': (data, context) => context.dependencyAdd(data.file, 'source'),
+  },
+});
+```
+
+MDX attributes written as expressions are not evaluated; when such an attribute belongs to a component with an extractor, the build reports it. The former side-panel property `sourceDependencies` is still read and merged with the discovered files, with a deprecation warning.
 
 ### Build-only component attachment collection
 
@@ -158,7 +191,13 @@ Some components need settings only the host application can supply, such as a Me
 <DocPageMdx config={{ compConfigHost: { assetUrlGet, mermaidLoad: () => import('mermaid'), panelComponent: PanelText } }} />
 ```
 
-Components that display authored Markdown inside themselves (`BlockSimple`, `BlockMdx`) receive the package `MdxRenderer` and `DocLink` through their registry definitions, so they do not depend on the compile pipeline directly.
+Components that display authored Markdown inside themselves (`BlockSimple`, `BlockMdx`, `Block`, `MultiLang`) receive the package `MdxRenderer` through their registry definitions, so they do not depend on the compile pipeline directly. `MdxRenderer` is the shared Markdown boundary (`lib/markdown-render.js`): the component decides what is shown, and the renderer decides what the Markdown means, the same way as the main document body.
+
+- Parsing uses GFM and math, as a compiled `.md` document.
+- `remarkDocLink` is the one link transform, so local links, `inline-link` markers, file-like inline code and wiki links behave as in the body; relative targets resolve from `config.sourcePath`.
+- The component mapping is `buildMdxComps()`, so `DocLink`, `SourceLink` and registered components receive the same host configuration (such as `panelComponent`) as in the body.
+
+`MdxRenderer` accepts Markdown text (`data.source`, compiled through `compileDoc()`) or already parsed mdast nodes (`data.nodeList`, rendered synchronously, e.g. the paragraph `MultiLang` picked for a language). `config.contentMode: 'inline'` renders phrasing content without a wrapper block. `config.nodeTypeAllowedList` restricts the allowed node types and degrades others to their content; `config.isContentSanitized` removes authored JSX, HTML and expressions while keeping the generated link elements.
 
 ### Isolate temporary rendering DOM
 
@@ -240,9 +279,9 @@ compDefine(ComponentExample, {
 
 The right-side local-index slot is wrapped by `DocPageToc`. Outside a configured part, when globally disabled, or when no segmented-control implementation is injected, it delegates directly to the native Fumadocs TOC. Inside a configured part, a segmented control switches between **On this page** and **In this part**, with **In this part** as the initial mode. Both modes retain the native Fumadocs TOC shell; part mode replaces its inner heading list rather than replacing the shell, so the layout's right-column width remains stable while switching. The part-mode class does not replace the shell's top padding, so switching modes also retains the same top inset without mode-specific size tuning. `DocStore.partIndexContentMode` is one global page/part selection that survives document and part navigation, while docked/floating mode can remain keyed by part id. The host loads the referenced document on demand and renders the referenced component through `RegisteredComp`, preserving component normalization, placement checks, and the common `{ data, config, onEvent }` boundary.
 
-For `partIndex` placement, the index receives host-only display-mode configuration. Its left-aligned title and display-mode control use a wrapping row, allowing the control to move below a long title. The segmented control emits a `displayModeChange` request, and the host submits that request to `DocStore`. The hosted TOC shell uses content height and visible overflow instead of an internal vertical viewport, so the document page remains the vertical scrolling surface. In `floating` mode the same component instance is rendered through a `document.body` portal, positioned at the top right, and assigned the application overlay stack maximum so it cannot pass below the side panel while being dragged. It has no internal vertical scrollbar. Ordinary `mdx` and `commentBlock` placements receive no display-mode control. On the part-root document, host state gives the index title the yellow current marker.
+For `partIndex` placement, the index receives host-only display-mode configuration. Its left-aligned title and display-mode control use a wrapping row, allowing the control to move below a long title. The segmented control emits a `displayModeChange` request, and the host submits that request to `DocStore`. The reusable `Index` has no scrolling viewport of its own; the host panel around it is the scroll owner. In both display modes the panel's maximum height is the space between its top edge and the bottom of the window (`--doc-part-index-height-available`, measured by `DocPageToc` on resize, scroll, and layout or position changes), so a short index keeps its natural height and a tall one scrolls inside the panel. Wide content scrolls horizontally in the same panel, and the page/part switch stays outside the scrolling content. In `floating` mode the same component instance is rendered through a `document.body` portal, positioned at the top right, and assigned the application overlay stack maximum so it cannot pass below the side panel while being dragged; its height bound follows the dragged position. Ordinary `mdx` and `commentBlock` placements receive no display-mode control. On the part-root document, host state gives the index title the yellow current marker.
 
-An index item defaults to `kind: document`. With `kind: inline-link`, it renders the reusable `SourceLink` component rather than owning source-popup behavior. `SourceLink` is independent of `Index`: it accepts a collected internal source path and label through the unified `{ data, config, onEvent }` interface, loads the source through `DocSourceStore.loadRaw()`, and owns a `CodeBlockCompactStore`. `CodeBlockCompactPopup` remains the shared implementation for the panel, syntax-highlighted body, copy operation, close event, and Escape-key behavior. Source-link targets do not need side-panel entries. A deployment that enables `pruneSourceToSidePanel` must instead list those raw-file targets in `sourceDependencies` on a retained side-panel item.
+An index item defaults to `kind: document`. With `kind: inline-link`, it renders the reusable `SourceLink` component rather than owning source-popup behavior. `SourceLink` is independent of `Index`: it accepts a collected internal source path and label through the unified `{ data, config, onEvent }` interface, loads the source through `DocSourceStore.loadRaw()`, and owns a `CodeBlockCompactStore`. `CodeBlockCompactPopup` remains the shared implementation for the panel, syntax-highlighted body, copy operation, close event, and Escape-key behavior. Source-link targets do not need side-panel entries; with `pruneSourceToSidePanel` they are retained because the containing document reaches them (see [Source pruning for deployment](#source-pruning-for-deployment)).
 
 `SourceLink` and ordinary document links share `LinkDocRender` and `LinkWarning` for unavailable-target presentation. A target absent from the collected source uses the red broken-link state and explains the problem through its hover title. A collected source that cannot be opened uses the orange unavailable state and shows the same dismissible warning beside the activated link. Loading source links retain normal link styling rather than appearing disabled.
 
@@ -305,7 +344,7 @@ main/
 ├── config.0.yaml        # local override (untracked), entries overlay config.yaml
 ├── comp-mdx/            # components available in documents (FileTree, Index, MultiLang, Tag, ...)
 ├── comp-doc/            # components of the page itself, one folder per feature
-│   ├── registry/        # compById (registry.js), compDefine, RegisteredComp, DocComp, data references
+│   ├── registry/        # compById (registry.js), compDefine, RegisteredComp, DocComp, data references, build-time dependency extractors
 │   ├── link/            # DocLink, LinkDocRender, LinkWarning
 │   ├── side-panel/      # SidePanelItem, SidePanelItemHost, DocSidebarFolder
 │   ├── tag/             # tag bar next to the path bar, tag overview popup
@@ -314,13 +353,13 @@ main/
 │   └── mdx-render/      # MdxRenderer, DynamicCodeBlock
 ├── package.json         # delegates dev/build to frontend/
 └── frontend/            # Vite app + embeddable component
-    ├── plugin/          # vite plugin: config load, rule scan, source-step tags/config, virtual module, watch
+    ├── plugin/          # vite plugin: config load, rule scan, source-step tags/config, source pruning, virtual module, watch
     ├── UICommon.js      # package-local facade for shared visual components and icons
     ├── UICommonExternal.js # external UI-library exports used by the facade
     └── src/
         ├── DocPageMdx.jsx       # the embeddable doc page component
         ├── store/               # DocSourceStore (lower) + DocStore (upper) + DocTagStore + DocConfigStore
-        └── lib/                 # mdx compile, remark plugins, page tree build, doc-tag-*, doc-config-*, framework adapter
+        └── lib/                 # mdx compile, nested Markdown renderer, link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, framework adapter
 ```
 
 Design documents: [side panel](doc_page_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [package usage](doc_page_impl_detail.md).

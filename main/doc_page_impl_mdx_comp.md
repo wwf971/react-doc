@@ -30,7 +30,7 @@ Component and file names carry no `Doc` prefix: inside a document every componen
 | `BlockMdx` | `block-mdx/` | |
 | `Tag`, `TagLabel`, `TagOverview` | `tag/` | |
 
-Some components read host settings from `config`, supplied by the application through `DocPageMdx` `config.compConfigHost` (see [Component registry](doc_page_impl.md#component-registry)): `Image` and `ImageGrid` resolve `src` through `assetUrlGet`, and `DiagramMermaid` loads Mermaid through `mermaidLoad` and resolves lane icons through `assetUrlGet`. The block components receive `MdxRenderer` and `DocLink` from their package registry definitions.
+Some components read host settings from `config`, supplied by the application through `DocPageMdx` `config.compConfigHost` (see [Component registry](doc_page_impl.md#component-registry)): `Image` and `ImageGrid` resolve `src` through `assetUrlGet`, and `DiagramMermaid` loads Mermaid through `mermaidLoad` and resolves lane icons through `assetUrlGet`. The block components and `MultiLang` receive the shared `MdxRenderer` from their package registry definitions, so nested Markdown has the link, math and component behavior of the document body.
 
 Documents and consumer code written with the old names keep working:
 
@@ -141,7 +141,7 @@ While the referenced document is compiling, a neutral loading line replaces the 
 
 - Only comment-block components with an `id` can be referenced. MDX component properties are JavaScript expressions evaluated at render time, so they are not available before the referenced document is rendered.
 - References are resolved one level deep. If the referenced component itself has a `dataRef`, its data is delivered unchanged, including that `dataRef`; the host does not follow chains.
-- With `pruneSourceToSidePanel`, a referenced document that has no side-panel item must be listed in `sourceDependencies` of a retained item; otherwise the deployed page reports it as not found.
+- With `pruneSourceToSidePanel`, a statically authored `dataRef` keeps the referenced document in the deployed manifest without a side-panel item (see [Source pruning for deployment](doc_page_impl.md#source-pruning-for-deployment)). A `dataRef` written as an MDX expression is not discovered and is reported at build time.
 
 ## File tree annotations
 

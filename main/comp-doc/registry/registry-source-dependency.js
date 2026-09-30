@@ -1,0 +1,63 @@
+import { indexDataParse } from '../../comp-mdx/index/IndexData.js';
+
+// Build-time dependency extractors, keyed by component id (the values of
+// config.yaml compRegistry). The doc-source plugin calls them while it prunes
+// the source manifest (pruneSourceToSidePanel), so a file a component reads
+// from its authored data stays in a deployed build without being listed again
+// in side-panel YAML.
+//
+// this module is imported by the Vite plugin, so it must stay free of React
+// components and browser APIs.
+//
+// an extractor receives the component data as the component sees it
+// ({ ...authored props, raw, lang } for a comment-marked block) and a context:
+//   context.dependencyAdd(target, kind)  kind: 'document' | 'source' | 'asset'
+//     document  resolved like a document link (name, relative, suffix, exact)
+//     source    exact internal path, as SourceLink and inline-link resolve it
+//     asset     resolved like a document link; a miss is not reported
+//   context.markdownCollect(text)        nested Markdown the component renders
+//   context.componentCollect(compName, data)  a nested registered component
+//   context.warn(message)
+//
+// a dataRef property is handled for every component by the collector itself.
+// consumers add extractors for their own component ids through the plugin
+// option sourceDependencyCollectByCompId.
+
+function markdownRawCollect(data, context) {
+  context.markdownCollect(String(data.raw ?? ''));
+}
+
+function sourceLinkCollect(data, context) {
+  const target = String(data.target ?? '').trim()
+    || String(data.raw ?? '').trim().split(/\r?\n/, 1)[0].trim();
+  if (target) context.dependencyAdd(target, 'source');
+}
+
+function indexCollect(data, context) {
+  let dataIndex;
+  try {
+    dataIndex = indexDataParse(data);
+  } catch (error) {
+    context.warn(`Index data is invalid, its targets are not discovered: ${String(error?.message ?? error)}`);
+    return;
+  }
+  for (const subtopic of dataIndex.subtopics ?? []) {
+    for (const item of subtopic.items ?? []) {
+      context.dependencyAdd(item.target, item.kind === 'inline-link' ? 'source' : 'document');
+    }
+    if (subtopic.component) {
+      context.componentCollect(subtopic.component.name, subtopic.component.data ?? {});
+    }
+  }
+}
+
+export const sourceDependencyCollectByCompId = {
+  'common/Block': markdownRawCollect,
+  'common/BlockSimple': markdownRawCollect,
+  'common/BlockMdx': markdownRawCollect,
+  'common/MultiLang': markdownRawCollect,
+  'common/DocMultiLang': markdownRawCollect,
+  'common/Index': indexCollect,
+  'common/DocIndex': indexCollect,
+  'specific/SourceLink': sourceLinkCollect,
+};

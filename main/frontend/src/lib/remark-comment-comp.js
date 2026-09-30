@@ -36,10 +36,21 @@ import { visit } from 'unist-util-visit';
 // <Comp .../> directly.
 
 const REGEX_RENDER_COMP = /^<!--\s*renderComp=([\w\/-]+)([\s\S]*?)\s*-->$/;
+// a whole html block: marker, complete inline code, remaining text of the line
+const REGEX_MARKER_FIRST_INLINE = /^(<!--\s*renderComp=[\w\/-]+[\s\S]*?-->)(`+)(?!`)([\s\S]*?[^`]|[^`])\2(?!`)([\s\S]*)$/;
 
 export function remarkCommentComp(options = {}) {
+  const processor = this;
   return (tree, file) => {
     const sourceText = String(file.value);
+
+    visit(tree, 'html', (node, index, parent) => {
+      if (parent?.type === 'paragraph') return undefined;
+      const paragraph = markerFirstInlineSplit(node, processor);
+      if (!paragraph) return undefined;
+      parent.children.splice(index, 1, paragraph);
+      return index + 1;
+    });
 
     visit(tree, 'paragraph', (node, index, parent) => {
       const isLifted = markerAtParagraphEndLift(node, index, parent);
@@ -59,7 +70,7 @@ export function remarkCommentComp(options = {}) {
       if (isInline && nodeMarked.type !== 'inlineCode') return;
 
       const compName = match[1];
-      const props = parseProps(match[2]);
+      const props = commentPropsParse(match[2]);
       const raw =
         nodeMarked.type === 'code' || nodeMarked.type === 'inlineCode'
           ? nodeMarked.value
@@ -122,6 +133,49 @@ export function remarkCommentComp(options = {}) {
   };
 }
 
+// a line that starts with the marker, as in
+//   - <!--renderComp=Tag-->`guide` description
+// is parsed as one flow html block holding marker, code, and text together.
+// it is split into the paragraph [html marker, inlineCode, ...rest] that the
+// inline path expects, the shape it has when text comes first. any other html
+// block is left alone.
+function markerFirstInlineSplit(node, processor) {
+  const match = REGEX_MARKER_FIRST_INLINE.exec(node.value.trim());
+  if (!match || !REGEX_RENDER_COMP.test(match[1])) return undefined;
+  const [, marker, , codeRaw, rest] = match;
+  return {
+    type: 'paragraph',
+    children: [
+      { type: 'html', value: marker, position: node.position },
+      { type: 'inlineCode', value: inlineCodeValueGet(codeRaw) },
+      ...inlineNodeListParse(rest, processor),
+    ],
+  };
+}
+
+// CommonMark: one space on each side is stripped when both are present
+function inlineCodeValueGet(codeRaw) {
+  const value = codeRaw.replace(/\r?\n/g, ' ');
+  const isPadded = value.length > 2 && value.startsWith(' ') && value.endsWith(' ') && value.trim() !== '';
+  return isPadded ? value.slice(1, -1) : value;
+}
+
+// the rest of the line is Markdown text (links, emphasis, ...)
+function inlineNodeListParse(text, processor) {
+  if (!text) return [];
+  const treeRest = typeof processor?.parse === 'function' ? processor.parse(text) : undefined;
+  const paragraph = treeRest?.children?.length === 1 ? treeRest.children[0] : undefined;
+  if (paragraph?.type !== 'paragraph') return [{ type: 'text', value: text }];
+  const isLeadingSpace = /^\s/.test(text);
+  const childList = paragraph.children;
+  if (isLeadingSpace && childList[0]?.type === 'text') {
+    childList[0] = { ...childList[0], value: ` ${childList[0].value}` };
+  } else if (isLeadingSpace) {
+    childList.unshift({ type: 'text', value: ' ' });
+  }
+  return childList;
+}
+
 // "text<!--renderComp=X-->" followed by a block on the next lines: moves the
 // comment out of the paragraph, so it stands directly before that block like
 // a comment on its own line. the paragraph is removed when nothing is left.
@@ -147,7 +201,12 @@ function markerAtParagraphEndLift(paragraph, index, parent) {
 }
 
 // ",a=b,c=d" -> { a: 'b', c: 'd' }
-function parseProps(text) {
+// commas inside [...] or {...} belong to the value, so list and inline YAML
+// mapping values stay whole:
+//   languages=[jp,en]
+//   titleComponentProps={label: "Q&A", color: "#0f766e"}
+// values are always strings; the component parses them.
+export function commentPropsParse(text) {
   const result = {};
   for (const part of propPartListGet(text)) {
     const partTrimmed = part.trim();
@@ -162,11 +221,14 @@ function parseProps(text) {
 function propPartListGet(text) {
   const partList = [];
   let depthSquare = 0;
+  let depthCurly = 0;
   let start = 0;
   for (let index = 0; index < text.length; index += 1) {
     if (text[index] === '[') depthSquare += 1;
     if (text[index] === ']') depthSquare = Math.max(0, depthSquare - 1);
-    if (text[index] === ',' && depthSquare === 0) {
+    if (text[index] === '{') depthCurly += 1;
+    if (text[index] === '}') depthCurly = Math.max(0, depthCurly - 1);
+    if (text[index] === ',' && depthSquare === 0 && depthCurly === 0) {
       partList.push(text.slice(start, index));
       start = index + 1;
     }

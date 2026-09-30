@@ -14,6 +14,17 @@ export const TagOverviewPopup = observer(function TagOverviewPopup() {
   const Panel = compConfigHost.panelComponent;
   const tagId = tagStore.overviewTagId;
   const isOpen = Boolean(Panel) && tagId !== '';
+  const isPanelMissing = tagStore.isOverviewPopupOn && !Panel && tagStore.tagIdList.length > 0;
+
+  // the frame is host-owned, so a missing one silently disables tag clicks;
+  // tell the integrator during development.
+  useEffect(() => {
+    if (!isPanelMissing || !import.meta.env?.DEV) return;
+    console.warn(
+      '[react-doc] TagsOverviewPopupIsOn is true and tags exist, but DocPageMdx'
+      + ' config.compConfigHost.panelComponent is not set, so tags are not clickable.',
+    );
+  }, [isPanelMissing]);
 
   useEffect(() => {
     if (!isOpen) return undefined;

@@ -1,7 +1,4 @@
-import { remark } from 'remark';
-import remarkGfm from 'remark-gfm';
-
-const markdownParser = remark().use(remarkGfm);
+import { markdownParse } from '../../frontend/src/lib/markdown-render.js';
 
 export function multiLangParagraphsParse(raw, languagesValue) {
   const languageList = multiLangLanguageListParse(languagesValue);
@@ -53,8 +50,10 @@ export function multiLangLanguageListParse(value) {
   return languageListNormalize(source.slice(1, -1).split(','));
 }
 
+// the package parser of nested Markdown, so grouping sees the same tree the
+// shared renderer later renders
 export function multiLangMarkdownParse(raw) {
-  return markdownParser.parse(raw);
+  return markdownParse(raw);
 }
 
 export function multiLangMarkdownTextGet(node) {

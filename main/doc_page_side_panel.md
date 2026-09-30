@@ -163,6 +163,8 @@ function SidePanelItemProject({ data, config, onEvent }) {
 
 Labels added this way are rendering decisions only, and the default renderer still filters them through `TagsDisplayAtSidePanelItemsList`. To give an asset a real tag that other components can query, declare it in source rules or side-panel YAML.
 
+The default renderer always renders its host element, `span.doc-side-panel-item` with `data-surface`, also for items without tags. On the `sidebar` surface the host wraps long text, including breaks inside a word, rather than clipping it with `nowrap` or an ellipsis, so the full item name stays readable. A custom renderer should wrap `SidePanelItem` as above to keep this host and its wrapping; a renderer that returns its own markup takes over that responsibility.
+
 ### Surfaces
 
 Fumadocs reuses the page-tree `name` in breadcrumbs and in the previous/next cards. Those surfaces wrap their content in `SidePanelItemSurfaceContext` with `breadcrumb` or `footer`; everything else is `sidebar`. The default renderer shows tags only on `sidebar`, keeping the other surfaces plain text. A custom renderer can make its own choice from `config.surface`.

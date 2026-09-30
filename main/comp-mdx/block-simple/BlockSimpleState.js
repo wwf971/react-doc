@@ -20,8 +20,37 @@ function blockSimpleTitleGet(data = {}, tone = blockSimpleToneGet(data)) {
 }
 
 function blockSimpleIsTitleHiddenGet(data = {}) {
-  return data.isTitleHidden === true
-    || String(data.isTitleHidden ?? '').trim().toLowerCase() === 'true';
+  return booleanAuthoredIs(data.isTitleHidden);
 }
 
-export { blockSimpleIsTitleHiddenGet, blockSimpleTitleGet, blockSimpleToneGet };
+function blockSimpleIsCopyEnabledGet(data = {}) {
+  return booleanAuthoredIs(data.isCopyEnabled);
+}
+
+// the body that is rendered and copied: quote markers and GitHub alert marker
+// lines removed, Markdown inside kept as written.
+//   > [!INFO]
+//   > Run `npm install`.     ->  Run `npm install`.
+function blockSimpleSourceGet(data = {}) {
+  return String(data.raw ?? '')
+    .split('\n')
+    .map((line) => line.replace(/^> ?/, ''))
+    .filter((line) => !alertMarkerPattern.test(line.trim()))
+    .join('\n')
+    .trim();
+}
+
+const alertMarkerPattern = /^\[!(?:CAUTION|WARNING|INFO|NOTE|ERROR|TIP|IMPORTANT|SUCCESS)\]$/i;
+
+// boolean true or the case-insensitive string "true"
+function booleanAuthoredIs(value) {
+  return value === true || String(value ?? '').trim().toLowerCase() === 'true';
+}
+
+export {
+  blockSimpleIsCopyEnabledGet,
+  blockSimpleIsTitleHiddenGet,
+  blockSimpleSourceGet,
+  blockSimpleTitleGet,
+  blockSimpleToneGet,
+};

@@ -16,14 +16,14 @@ export function MultiLang({ data = {}, config = {} }) {
   if (data.type === 'paragraphs') {
     return (
       <DocLanguageProvider language={languageOwn}>
-        <MultiLangParagraphs data={data} sourcePath={config.sourcePath} />
+        <MultiLangParagraphs data={data} config={config} />
       </DocLanguageProvider>
     );
   }
   if (data.type === 'list') {
     return (
       <DocLanguageProvider language={languageOwn}>
-        <MultiLangList data={data} sourcePath={config.sourcePath} />
+        <MultiLangList data={data} config={config} />
       </DocLanguageProvider>
     );
   }

@@ -5,11 +5,26 @@
 // children because Fumadocs copies heading content into its TOC and breadcrumb,
 // which would duplicate those IDs outside the document body.
 
-const anchorPattern = /<span\s+id=(['"])([^'"<>\s]+)\1\s*(?:\/>|><\/span>)/gi;
+//
+// The marker and the heading must be separated by a blank line:
+//
+//   <span id="configuration" />
+//
+//   ## Configuration
+//
+// Without it, Markdown continues the raw HTML block onto the heading line, and
+// the heading is omitted together with that block. That case is reported as
+// a warning, because it is almost always a missing blank line.
 
-export function remarkStableHeadingAnchor() {
+const anchorPattern = /<span\s+id=(['"])([^'"<>\s]+)\1\s*(?:\/>|><\/span>)/gi;
+const anchorStartPattern = /^\s*<span\s+id=(['"])[^'"<>\s]+\1/i;
+const headingLinePattern = /^ {0,3}#{1,6}(?:\s|$)/;
+
+export function remarkStableHeadingAnchor(options = {}) {
   return (tree) => {
     if (!Array.isArray(tree?.children)) return;
+
+    for (const node of tree.children) anchorHeadingSwallowedWarn(node, options.sourcePath);
 
     for (let index = 0; index < tree.children.length - 1; index += 1) {
       const nodeAnchor = tree.children[index];
@@ -29,6 +44,24 @@ export function remarkStableHeadingAnchor() {
       index += nodeAliasList.length - 1;
     }
   };
+}
+
+// returns the swallowed heading line, '' when there is none
+export function anchorHeadingSwallowedGet(node) {
+  if (node?.type !== 'html') return '';
+  const lineList = String(node.value ?? '').split(/\r?\n/);
+  if (!anchorStartPattern.test(lineList[0])) return '';
+  return lineList.find((line) => headingLinePattern.test(line))?.trim() ?? '';
+}
+
+function anchorHeadingSwallowedWarn(node, sourcePath) {
+  const lineHeading = anchorHeadingSwallowedGet(node);
+  if (!lineHeading) return;
+  console.warn(
+    `[react-doc] ${sourcePath || 'document'}: heading "${lineHeading}" directly follows a`
+    + ' <span id> anchor marker. Without a blank line between them, Markdown reads the'
+    + ' heading as part of the raw HTML block and does not render it.',
+  );
 }
 
 function anchorIdListGet(node) {

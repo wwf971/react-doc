@@ -1,5 +1,6 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { compileDoc } from '../lib/mdx-compile.js';
+import { docTargetResolve } from '../lib/doc-target-resolve.js';
 import { multiLangSearchDataGet } from '../../../comp-mdx/multi-lang/MultiLangSearchData.js';
 
 // lower store layer: owns the doc source content.
@@ -249,11 +250,8 @@ export class DocSourceStore {
     return { markdown, format: 'md', isSourceFile: true };
   }
 
-  // link resolution. target forms:
-  //   /rootId/xx/a.md  exact internal path
-  //   ./a.md, ../a.md  relative to fromPath
-  //   xx/a.md          suffix match on internal path
-  //   a.md             lookup by file name (may give multiple candidates)
+  // link resolution. target forms: see lib/doc-target-resolve.js, which the
+  // build-time dependency discovery shares.
   resolveLink(target: string, fromPath: string): { targets: LinkTarget[]; hash: string } {
     if (this.linkResolve) {
       const result = this.linkResolve({
@@ -265,24 +263,11 @@ export class DocSourceStore {
       });
       if (result) return result;
     }
-    const indexHash = target.indexOf('#');
-    const hash = indexHash >= 0 ? target.slice(indexHash + 1) : '';
-    const filePart = indexHash >= 0 ? target.slice(0, indexHash) : target;
-    if (filePart === '') return { targets: [], hash };
-
-    let candidates: FileEntry[];
-    if (filePart.startsWith('/')) {
-      const entry = this.entryByInternalPath.get(filePart);
-      candidates = entry ? [entry] : [];
-    } else if (filePart.startsWith('./') || filePart.startsWith('../')) {
-      const pathResolved = resolveRelative(dirOf(fromPath), filePart);
-      const entry = this.entryByInternalPath.get(pathResolved);
-      candidates = entry ? [entry] : [];
-    } else if (filePart.includes('/')) {
-      candidates = this.fileManifest.filter((e) => e.internalPath.endsWith('/' + filePart));
-    } else {
-      candidates = this.targetsByName.get(filePart) ?? [];
-    }
+    const { entryList: candidates, hash } = docTargetResolve(target, fromPath, {
+      entryList: this.fileManifest,
+      entryByInternalPath: this.entryByInternalPath,
+      entryListByName: this.targetsByName,
+    }) as { entryList: FileEntry[]; hash: string };
 
     const targets = candidates.map((e) => ({
       internalPath: e.internalPath,
@@ -355,23 +340,6 @@ export class DocSourceStore {
     }
     return results;
   }
-}
-
-// ---------- path utils ----------
-
-function dirOf(internalPath: string): string {
-  const index = internalPath.lastIndexOf('/');
-  return index <= 0 ? '/' : internalPath.slice(0, index);
-}
-
-function resolveRelative(baseDir: string, relPath: string): string {
-  const segsResult = baseDir.split('/').filter(Boolean);
-  for (const seg of relPath.split('/')) {
-    if (seg === '' || seg === '.') continue;
-    if (seg === '..') segsResult.pop();
-    else segsResult.push(seg);
-  }
-  return '/' + segsResult.join('/');
 }
 
 function stripFrontmatter(markdown: string): string {

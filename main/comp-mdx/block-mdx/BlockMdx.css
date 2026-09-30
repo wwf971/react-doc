@@ -1,32 +1,63 @@
+/* authored colors arrive as --doc-block-title-background and
+   --doc-block-content-background on the panel; the tone background is the
+   fallback when they are absent. */
 .doc-mdx-block-mdx {
+  --doc-mdx-block-mdx-background-tone: color-mix(in srgb, #64748b 5%, var(--color-fd-background));
   margin: 0.625rem 0 1.25rem;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, #64748b 42%, var(--color-fd-border));
   border-radius: 0.55rem;
-  background: color-mix(in srgb, #64748b 5%, var(--color-fd-background));
+  background: var(--doc-block-content-background, var(--doc-mdx-block-mdx-background-tone));
 }
 
 .doc-mdx-block-mdx.is-info {
+  --doc-mdx-block-mdx-background-tone: color-mix(in srgb, #2563eb 6%, var(--color-fd-background));
   border-color: color-mix(in srgb, #2563eb 48%, var(--color-fd-border));
-  background: color-mix(in srgb, #2563eb 6%, var(--color-fd-background));
 }
 
 .doc-mdx-block-mdx.is-warning {
+  --doc-mdx-block-mdx-background-tone: color-mix(in srgb, #f59e0b 7%, var(--color-fd-background));
   border-color: color-mix(in srgb, #d97706 48%, var(--color-fd-border));
-  background: color-mix(in srgb, #f59e0b 7%, var(--color-fd-background));
 }
 
 .doc-mdx-block-mdx-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   padding: 0.65rem 0.9rem;
   border-bottom: 1px solid color-mix(in srgb, #64748b 32%, var(--color-fd-border));
-  background: color-mix(in srgb, #64748b 8%, transparent);
+  background: var(--doc-block-title-background, color-mix(in srgb, #64748b 8%, transparent));
   font-size: 0.95rem;
   font-weight: 700;
   line-height: 1.4;
 }
 
+/* bounded slot: a title component never resizes the title bar */
+.doc-mdx-block-mdx-title-comp {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  overflow: hidden;
+}
+
+.doc-mdx-block-mdx-title-comp > * {
+  max-width: 100%;
+  max-height: 100%;
+}
+
 .doc-mdx-block-mdx-content {
   padding: 0.8rem 1rem;
+  background: var(--doc-block-content-background, transparent);
+  line-height: 1.5;
+}
+
+/* compact vertical rhythm, scoped to the panel content only */
+.doc-mdx-block-mdx-content > * {
+  margin-top: 0.45rem;
+  margin-bottom: 0.45rem;
 }
 
 .doc-mdx-block-mdx-content > :first-child {
@@ -38,16 +69,21 @@
 }
 
 .doc-mdx-block-mdx-content :is(h2, h3, h4, h5, h6) {
-  margin-top: 1rem;
-  margin-bottom: 0.35rem;
+  margin-top: 0.85rem;
+  margin-bottom: 0.25rem;
   font-size: 0.95rem;
   font-weight: 700;
   line-height: 1.4;
 }
 
 .doc-mdx-block-mdx-content :is(ul, ol) {
-  margin-top: 0.35rem;
-  margin-bottom: 0.35rem;
+  margin-top: 0.3rem;
+  margin-bottom: 0.3rem;
+}
+
+.doc-mdx-block-mdx-content :is(ul, ol) > * {
+  margin-top: 0.1rem;
+  margin-bottom: 0.1rem;
 }
 
 .doc-mdx-block-mdx-error {

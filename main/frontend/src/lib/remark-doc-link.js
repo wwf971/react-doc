@@ -1,4 +1,11 @@
 import { visit } from 'unist-util-visit';
+import {
+  inlineCodeIsDocTarget,
+  inlineLinkDisplayModeGet,
+  linkTagsDisplayGet,
+  linkUrlIsLocal,
+  wikiTextSplit,
+} from './doc-link-classify.js';
 
 // recognizes doc links in three patterns and rewrites each into <DocLink/>:
 //   [text](a.md)   normal markdown link (external/anchor urls are skipped)
@@ -20,11 +27,15 @@ import { visit } from 'unist-util-visit';
 //   [label](a.md "tags:on")       show, at the configured position
 //   [label](a.md "tags:off")      do not show
 //
-// the actual target resolution (by name / relative / exact path) happens at
-// render time inside the DocLink component, against the store's doc index.
-
-const REGEX_DOC_FILE = /^(?:\.{0,2}\/)?[\w@%+ .\/-]*\.(?:md|mdx)(?:#[^\s]*)?$/i;
-const REGEX_WIKI_LINK = /\[\[([^\[\]]+)\]\]/g;
+// how a link is classified lives in doc-link-classify.js, shared with the
+// build-time dependency discovery. the actual target resolution (by name /
+// relative / exact path) happens at render time inside the DocLink component.
+//
+// this is the one link transform of the package: the main document body and
+// every component that renders nested Markdown (MdxRenderer) run it.
+//
+// generated elements carry node.data.isDocLinkGenerated, so a later sanitizer
+// can tell them from authored JSX of the same name.
 
 export function remarkDocLink(options = {}) {
   const fromPath = options.fromPath ?? '';
@@ -32,7 +43,7 @@ export function remarkDocLink(options = {}) {
   return (tree) => {
     // [text](target): any relative url is treated as a doc link
     visit(tree, 'link', (node, index, parent) => {
-      if (isExternalUrl(node.url) || node.url.startsWith('#')) return;
+      if (!linkUrlIsLocal(node.url)) return;
       const displayMode = inlineLinkDisplayModeGet(node.title);
       if (displayMode) {
         parent.children[index] = makeSourceLinkNode({
@@ -54,7 +65,7 @@ export function remarkDocLink(options = {}) {
     // `a.md`
     visit(tree, 'inlineCode', (node, index, parent) => {
       if (isInsideDocLink(parent)) return;
-      if (!REGEX_DOC_FILE.test(node.value)) return;
+      if (!inlineCodeIsDocTarget(node.value)) return;
       parent.children[index] = makeDocLinkNode({
         target: node.value,
         fromPath,
@@ -66,32 +77,20 @@ export function remarkDocLink(options = {}) {
     // [[a.md]]
     visit(tree, 'text', (node, index, parent) => {
       if (isInsideDocLink(parent)) return;
-      if (!node.value.includes('[[')) return;
-
-      const partsNew = [];
-      let indexLast = 0;
-      REGEX_WIKI_LINK.lastIndex = 0;
-      let match;
-      while ((match = REGEX_WIKI_LINK.exec(node.value)) !== null) {
-        if (match.index > indexLast) {
-          partsNew.push({ type: 'text', value: node.value.slice(indexLast, match.index) });
-        }
-        partsNew.push(
-          makeDocLinkNode({
-            target: match[1],
+      const partList = wikiTextSplit(node.value);
+      if (partList.length === 0) return;
+      const nodeListNew = partList.map((part) => (
+        part.target === undefined
+          ? { type: 'text', value: part.text }
+          : makeDocLinkNode({
+            target: part.target,
             fromPath,
             kind: 'wiki',
-            children: [{ type: 'text', value: match[1] }],
-          }),
-        );
-        indexLast = match.index + match[0].length;
-      }
-      if (partsNew.length === 0) return;
-      if (indexLast < node.value.length) {
-        partsNew.push({ type: 'text', value: node.value.slice(indexLast) });
-      }
-      parent.children.splice(index, 1, ...partsNew);
-      return index + partsNew.length;
+            children: [{ type: 'text', value: part.target }],
+          })
+      ));
+      parent.children.splice(index, 1, ...nodeListNew);
+      return index + nodeListNew.length;
     });
   };
 }
@@ -108,16 +107,8 @@ function makeDocLinkNode({ target, fromPath, kind, tagsDisplay = '', children })
     name: 'DocLink',
     attributes,
     children,
+    data: { isDocLinkGenerated: true },
   };
-}
-
-// exact, case-sensitive markers only; any other title is ignored as before.
-function linkTagsDisplayGet(title) {
-  if (title === 'tags:before') return 'before';
-  if (title === 'tags:after') return 'after';
-  if (title === 'tags:on') return 'on';
-  if (title === 'tags:off') return 'off';
-  return '';
 }
 
 // the emitted tag stays inside the paragraph (mdxJsxTextElement) and resolves
@@ -133,14 +124,8 @@ function makeSourceLinkNode({ target, label, displayMode }) {
       { type: 'mdxJsxAttribute', name: 'displayMode', value: displayMode },
     ],
     children: [],
+    data: { isDocLinkGenerated: true },
   };
-}
-
-// exact, case-sensitive markers only; any other title keeps DocLink behavior.
-function inlineLinkDisplayModeGet(title) {
-  if (title === 'inline-link' || title === 'inline-link:source') return 'source';
-  if (title === 'inline-link:render') return 'render';
-  return '';
 }
 
 // keeps the visible label when the authored link text contains nested
@@ -154,8 +139,4 @@ function textContentGet(children = []) {
 
 function isInsideDocLink(parent) {
   return parent.type === 'mdxJsxTextElement' && parent.name === 'DocLink';
-}
-
-function isExternalUrl(url) {
-  return /^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('//');
 }

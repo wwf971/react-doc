@@ -150,8 +150,9 @@ export const DocLink = observer(function DocLink({ target, from, kind, tagsDispl
 });
 
 // '' (no tags), 'before' or 'after'. the inline value of the link wins over
-// the document config of the page containing the link.
-function linkTagsPositionGet({ configLinkDoc, tagsDisplay }) {
+// the document config of the page containing the link. shared by every link
+// renderer (DocLink, SourceLink), so all links follow one tag policy.
+export function linkTagsPositionGet({ configLinkDoc, tagsDisplay }) {
   if (tagsDisplay === 'off') return '';
   if (tagsDisplay === 'before' || tagsDisplay === 'after') return tagsDisplay;
   const isOn = tagsDisplay === 'on' || configLinkDoc.TagsDisplayAtLinkIsOn === true;

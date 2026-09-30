@@ -23,7 +23,20 @@
 | `type` / `tone` | `info` | `info`、`note`、`tip`、`important`、`success`、`warning`、`caution`、`error` の表示種別 |
 | `title` | 表示種別の大文字表記 | タイトルを変更 |
 | `isTitleHidden` | `false` | `true` の場合だけタイトルを非表示 |
+| `isCopyEnabled` | `false` | `true` の場合だけ、タイトル行の右端に本文のコピーボタンを表示 |
 | `variant` | 自動判定 | `Block` 使用時に `simple` または `mdx` を明示 |
 | 引用ブロック | 空 | 表示する Markdown |
 
-登録ホストは `config.MdxRenderer` を注入します。これにより、コンポーネント本体は特定アプリケーションの UI エントリへ依存しません。
+登録ホストは `config.MdxRenderer` を注入します。これにより、コンポーネント本体は特定アプリケーションの UI エントリへ依存しません。本文は共通の `MdxRenderer` で表示されるため、リンク、`inline-link`、数式は通常本文と同じく扱われます。
+
+## コピー
+
+```markdown
+<!--renderComp=BlockSimple,type=tip,isCopyEnabled=true-->
+> [!TIP]
+> `pnpm install` を実行してから `pnpm build` を実行します。
+```
+
+コピーされる値は表示される本文の Markdown ソースです。引用記号と Alert の種別行を除き、前後の空白を取り除いた値で、表示用の HTML ではありません。
+
+コピー操作はまず `onEvent('copyRequest', { text })` を送ります。ホストが `{ isHandled: true }` を返した場合はそれで終わり、そうでなければ `navigator.clipboard.writeText()` を使用します。ボタンの状態（成功、失敗）は `BlockSimpleStore` が持ち、短時間で元に戻ります。タイトルを非表示にした場合、コピーボタンも表示されません。

@@ -84,12 +84,16 @@ The resolved destination receives `doc-navigation-target`. The package styleshee
 
 ### Stable aliases in plain Markdown
 
-Plain `.md` documents can place one or more stable markers immediately before a heading:
+Plain `.md` documents can place one or more stable markers immediately before a heading, separated from it by a blank line:
 
-```html
+```markdown
 <span id="configuration" />
 <span id="configuration-legacy"></span>
+
+## Configuration
 ```
+
+The blank line is required. A raw HTML block starting with `<span` continues until a blank line, so without it the heading line becomes part of the HTML block and is omitted from the compiled page together with the marker. `remarkStableHeadingAnchor` reports that case as a compile warning naming the document and the heading line.
 
 Raw HTML is intentionally omitted when compiling with `format: 'md'`. `remarkStableHeadingAnchor` therefore recognizes only blocks made entirely from these marker forms. It transfers the first ID to the following heading and renders additional IDs as empty aliases immediately before that heading.
 

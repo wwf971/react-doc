@@ -84,26 +84,43 @@ const PartIndexPanel = observer(function PartIndexPanel({ isVisible, labels }) {
   const refPanel = useRef(null);
   const refDrag = useRef(null);
 
+  // the panel is the scroll owner of a tall index: its max height is the
+  // space between its own top edge and the bottom of the window, docked or
+  // floating (the floating top follows dragging). the docked width is also
+  // bounded by the window; the floating width comes from its saved layout.
   useEffect(() => {
     const panel = refPanel.current;
-    if (!isVisible || !panel || displayMode === 'floating') return undefined;
+    if (!isVisible || !panel) return undefined;
 
-    const widthUpdate = () => {
-      const left = panel.getBoundingClientRect().left;
-      const widthAvailable = Math.max(0, window.innerWidth - left - 16);
-      panel.style.setProperty('--doc-part-index-width-available', `${widthAvailable}px`);
+    let frameId = 0;
+    const sizeUpdate = () => {
+      frameId = 0;
+      const rect = panel.getBoundingClientRect();
+      const heightAvailable = Math.max(96, window.innerHeight - rect.top - 16);
+      panel.style.setProperty('--doc-part-index-height-available', `${heightAvailable}px`);
+      if (displayMode !== 'floating') {
+        const widthAvailable = Math.max(0, window.innerWidth - rect.left - 16);
+        panel.style.setProperty('--doc-part-index-width-available', `${widthAvailable}px`);
+      }
+    };
+    const sizeUpdateSchedule = () => {
+      if (!frameId) frameId = requestAnimationFrame(sizeUpdate);
     };
     const observer = typeof ResizeObserver === 'undefined'
       ? undefined
-      : new ResizeObserver(widthUpdate);
-    widthUpdate();
-    window.addEventListener('resize', widthUpdate);
+      : new ResizeObserver(sizeUpdateSchedule);
+    sizeUpdate();
+    window.addEventListener('resize', sizeUpdateSchedule);
+    // the docked panel moves until its sticky TOC column settles
+    window.addEventListener('scroll', sizeUpdateSchedule, true);
     if (panel.parentElement) observer?.observe(panel.parentElement);
     return () => {
-      window.removeEventListener('resize', widthUpdate);
+      window.removeEventListener('resize', sizeUpdateSchedule);
+      window.removeEventListener('scroll', sizeUpdateSchedule, true);
       observer?.disconnect();
+      if (frameId) cancelAnimationFrame(frameId);
     };
-  }, [displayMode, isVisible, result?.status]);
+  }, [displayMode, floatingLayout?.top, isVisible, result?.status]);
 
   const floatingLayoutPrepare = () => {
     const panel = refPanel.current;

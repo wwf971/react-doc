@@ -5,6 +5,8 @@
 /* same fonts as fumadocs.dev (there loaded via next/font), bundled locally */
 @import '@fontsource-variable/geist';
 @import '@fontsource-variable/jetbrains-mono';
+/* fonts and layout of the markup rehype-katex generates for $...$ / $$...$$ */
+@import 'katex/dist/katex.min.css';
 @source '../../../third_party/shadcn';
 
 @theme {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { LogOut } from '#react-doc/frontend/UICommon.js';
+import { linkTagsPositionGet } from '#react-doc/comp-doc/link/DocLink.jsx';
 import { LinkDocRender } from '#react-doc/comp-doc/link/LinkDocRender.jsx';
 import { LinkWarning } from '#react-doc/comp-doc/link/LinkWarning.jsx';
 import { useDocStores } from '#react-doc/frontend/src/store/context.js';
@@ -9,8 +10,11 @@ import { CodeBlockCompactStore } from '../code-block/CodeBlockCompactStore.js';
 import { SourceLinkRenderPopup } from './SourceLinkRenderPopup.jsx';
 import './SourceLink.css';
 
+// data.tagsDisplay   optional: before | after | on | off, as for DocLink. without
+//                    it, the document containing the link decides
+//                    (TagsDisplayAtLink... config).
 const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEvent }) {
-	const { sourceStore } = useDocStores();
+	const { configStore, docStore, sourceStore, tagStore } = useDocStores();
 	const [store] = useState(() => new CodeBlockCompactStore());
 	const [warningText, setWarningText] = useState('');
 	const refWrap = useRef(null);
@@ -28,6 +32,13 @@ const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEven
 	const isBroken = !target || !sourceEntry;
 	const isUnavailable = Boolean(sourceEntry)
 		&& (!Panel || sourceState?.status === 'error');
+	const tagsPosition = linkTagsPositionGet({
+		configLinkDoc: configStore.configDocGet(config.sourcePath || docStore.docCurrentPath),
+		tagsDisplay: data.tagsDisplay ?? '',
+	});
+	const tagList = tagsPosition && !isBroken
+		? tagStore.tagDisplayListGet(tagStore.tagService.assetKeyGet('doc', target))
+		: [];
 
 	useEffect(() => {
 		if (!target) return;
@@ -80,14 +91,17 @@ const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEven
 				data={{
 					ariaHasPopup: 'dialog',
 					displayContent: <span className="doc-source-link-label">{label}</span>,
+					tagList,
 					titleText: title,
 				}}
 				config={{
 					activationElement: 'button',
 					className: 'doc-source-link-button',
 					Icon: SourceLinkIcon,
+					instanceId: `source-link:${config.instanceId ?? 'page'}:${target}`,
 					isBroken,
 					isNavigationUnavailable: isUnavailable,
+					tagsPosition,
 				}}
 				onEvent={eventHandle}
 			/>

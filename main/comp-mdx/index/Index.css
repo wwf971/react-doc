@@ -201,20 +201,6 @@
 	display: inline-block;
 }
 
-.doc-index-title-subtopics-items.is-placement-part-index.is-layout-horizontal-wrap .doc-index-item .doc-link-controller,
-.doc-index-title-subtopics-items.is-placement-part-index.is-layout-horizontal-wrap .doc-index-item .doc-link-render-wrap {
-	display: block;
-	width: 100%;
-	max-width: none;
-}
-
-.doc-index-title-subtopics-items.is-placement-part-index.is-layout-horizontal-wrap .doc-index-item .doc-link-render {
-	display: flex;
-	box-sizing: border-box;
-	width: 100%;
-	max-width: none;
-}
-
 .doc-index-item .doc-link-render.is-current {
 	--doc-index-current-background: color-mix(in srgb, #facc15 38%, transparent);
 	background: var(--doc-index-current-background);

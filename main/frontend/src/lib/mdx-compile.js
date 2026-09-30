@@ -8,6 +8,8 @@ import { remarkHeading } from 'fumadocs-core/mdx-plugins/remark-heading';
 import { remarkNpm } from 'fumadocs-core/mdx-plugins/remark-npm';
 import { remarkStructure } from 'fumadocs-core/mdx-plugins/remark-structure';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { parse as parseYaml } from 'yaml';
 import { remarkDocLink } from './remark-doc-link.js';
 import { remarkCommentComp } from './remark-comment-comp.js';
@@ -60,6 +62,9 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
     outputFormat: 'function-body',
     remarkPlugins: [
       remarkGfm,
+      // $...$ and $$...$$ become math nodes; markdown-render.js parses
+      // nested Markdown with the same two extensions.
+      remarkMath,
       [remarkHeading, { generateToc: false }],
       [multiLangRemarkHeading, {
         onLanguage: (language) => languageSet.add(language),
@@ -68,7 +73,7 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
       // between an explicit <span id> and the heading, so the stable id can
       // be copied only once the marker is gone. Plain `.md` compilation drops
       // raw span markers, so this transfers their stable IDs to the headings.
-      remarkStableHeadingAnchor,
+      [remarkStableHeadingAnchor, { sourcePath: internalPath }],
       [multiLangRemarkHeadingCollect, {
         onHeading: ({ id, variantsJson }) => headingVariantsById.set(id, variantsJson),
       }],
@@ -84,6 +89,9 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
       [remarkStructure, { exportAs: 'structuredData' }],
     ],
     rehypePlugins: [
+      // before rehypeCode: display math is a <pre><code class="language-math">,
+      // which shiki would otherwise take as a code block in an unknown language.
+      rehypeKatex,
       [rehypeCode, config.rehypeCodeOptions],
       ...(config.rehypePlugins ?? []),
       rehypeToc,

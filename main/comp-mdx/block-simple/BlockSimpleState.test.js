@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  blockSimpleIsCopyEnabledGet,
   blockSimpleIsTitleHiddenGet,
+  blockSimpleSourceGet,
   blockSimpleTitleGet,
   blockSimpleToneGet,
 } from './BlockSimpleState.js';
@@ -30,4 +32,17 @@ test('simple block title is hidden only by the explicit boolean prop', () => {
   assert.equal(blockSimpleIsTitleHiddenGet({ isTitleHidden: 'false' }), false);
   assert.equal(blockSimpleIsTitleHiddenGet({ isTitleHidden: true }), true);
   assert.equal(blockSimpleIsTitleHiddenGet({ isTitleHidden: 'TRUE' }), true);
+});
+
+test('simple block copy action is enabled only by the explicit boolean prop', () => {
+  assert.equal(blockSimpleIsCopyEnabledGet({}), false);
+  assert.equal(blockSimpleIsCopyEnabledGet({ isCopyEnabled: 'false' }), false);
+  assert.equal(blockSimpleIsCopyEnabledGet({ isCopyEnabled: true }), true);
+  assert.equal(blockSimpleIsCopyEnabledGet({ isCopyEnabled: 'True' }), true);
+});
+
+test('simple block source drops quote and alert markers and keeps Markdown', () => {
+  const raw = ['> [!INFO]', '> Run `npm install`.', '>', '> Then [read](a.md).'].join('\n');
+  assert.equal(blockSimpleSourceGet({ raw }), 'Run `npm install`.\n\nThen [read](a.md).');
+  assert.equal(blockSimpleSourceGet({}), '');
 });

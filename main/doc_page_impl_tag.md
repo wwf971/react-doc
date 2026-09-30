@@ -194,7 +194,7 @@ Not in the side panel
 
 The popup is built from two parts that can each be replaced:
 
-- **Frame**: the host's text panel component, `DocPageMdx` `config.compConfigHost.panelComponent`, opened with `config.isPopup`. Without a panel component, tags are not clickable.
+- **Frame**: the host's text panel component, `DocPageMdx` `config.compConfigHost.panelComponent`, opened with `config.isPopup`. Without a panel component, tags are not clickable; in development the page warns once when `TagsOverviewPopupIsOn` is true, tags exist, and the panel component is missing.
 - **Content**: the registry component named `TagOverview`, placement `tagOverview`. `TagOverview` is a built-in name for `common/TagOverview`; mapping it in `compRegistry` replaces the content. The content receives `data.tagId`, `data.overview` (built by `tagService.overviewGet()`), and `data.itemCurrentId`. It requests navigation with `onEvent('navigateRequest', { target })`, and the popup closes after navigating.
 
 The open popup is UI state in `DocTagStore` (`overviewTagId`, `overviewOpen()`, `overviewClose()`). The popup also closes on Escape, on its close button, and on a click outside it. The same component can be placed in a document: `<!--renderComp=TagOverview,tagId=guide-->`.

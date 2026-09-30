@@ -25,9 +25,16 @@
   color: #b42318;
 }
 
+/* the host panel, not the reusable Index, is the scroll owner: a short index
+   keeps its natural height, a tall one scrolls within the window. the
+   height comes from DocPageToc.jsx; the page/part switch stays above it. */
 .doc-part-index-panel {
   min-width: 0;
-  overflow: visible;
+  max-height: var(--doc-part-index-height-available, calc(100dvh - 2rem));
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .doc-part-index-panel[hidden] {
@@ -51,6 +58,7 @@
   display: none;
 }
 
+/* no nested scroller inside the panel: wide content scrolls with the panel */
 .doc-part-index-panel .doc-index-title-subtopics-items {
   width: 100%;
   margin: 0;
@@ -64,7 +72,6 @@
   right: 1rem;
   width: min(36rem, calc(100vw - 2rem));
   max-width: calc(100vw - 2rem);
-  overflow: visible;
   border: 1px solid var(--color-fd-border);
   background: var(--color-fd-background);
   box-shadow: 0 12px 36px rgb(15 23 42 / 22%);

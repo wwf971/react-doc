@@ -1,22 +1,29 @@
 import { useMemo } from 'react';
 import { useDocLanguage } from './MultiLangContext.jsx';
 import { multiLangParagraphsParse } from './MultiLangParagraphData.js';
-import { multiLangInlineNodeListRender } from './MultiLangMarkdownInline.jsx';
 
-export function MultiLangParagraphs({ data = {}, sourcePath = '' }) {
+// MultiLang decides which language variant of each paragraph is shown; the
+// paragraph content itself, including every link form, is rendered by the
+// package renderer (config.MdxRenderer).
+export function MultiLangParagraphs({ data = {}, config = {} }) {
   const languagePreferred = useDocLanguage();
+  const MdxRenderer = config.MdxRenderer;
   const result = useMemo(
     () => multiLangParagraphsParse(data.raw ?? '', data.languages),
     [data.languages, data.raw],
   );
 
+  if (!MdxRenderer) return <MultiLangParagraphsError message="MultiLang requires config.MdxRenderer." />;
   if (result.error) return <MultiLangParagraphsError message={result.error} raw={data.raw} />;
 
   return result.groupList.map((group, index) => {
     const languageRendered = group[languagePreferred] ? languagePreferred : result.languageList[0];
     return (
       <p key={index} lang={languageRendered}>
-        {multiLangInlineNodeListRender(group[languageRendered].children, sourcePath)}
+        <MdxRenderer
+          data={{ nodeList: group[languageRendered].children }}
+          config={{ contentMode: 'inline', sourcePath: config.sourcePath }}
+        />
       </p>
     );
   });

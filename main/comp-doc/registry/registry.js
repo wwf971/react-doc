@@ -1,5 +1,5 @@
 import { Accordion, Accordions, Callout, File, Files, Folder, Step, Steps, Tab, Tabs } from '../../frontend/UICommon.js';
-import { DocLink, DocLinkInline } from '../link/DocLink.jsx';
+import { DocLinkInline } from '../link/DocLink.jsx';
 import { MdxRenderer } from '../mdx-render/MdxRenderer.jsx';
 import { SidePanelItem } from '../side-panel/SidePanelItem.jsx';
 import { Block } from '../../comp-mdx/block-simple/Block.jsx';
@@ -34,24 +34,28 @@ const compIndex = compDefine(Index, {
   componentType: 'index',
   placementList: ['mdx', 'commentBlock', 'partIndex'],
 });
-const compMultiLang = compDefine(MultiLang, { placementList: ['commentBlock'] });
+// components that display authored Markdown receive the package renderer,
+// which owns link meaning (lib/markdown-render.js)
+const compMultiLang = compDefine(MultiLang, {
+  dataBuild: markdownConfigBuild,
+  placementList: ['commentBlock'],
+});
 const compImage = compDefine(Image, { placementList: ['mdx', 'commentBlock'] });
 const compImageGrid = compDefine(ImageGrid, { placementList: ['mdx', 'commentBlock'] });
 const compDiagramText = compDefine(DiagramText, { placementList: ['commentBlock'] });
 // mermaid itself is not a package dependency: the host app supplies
 // config.mermaidLoad through DocPageMdx config.compConfigHost.
 const compDiagramMermaid = compDefine(DiagramMermaid, { placementList: ['mdx', 'commentBlock'] });
-// block components display authored Markdown through the package renderer
 const compBlockSimple = compDefine(BlockSimple, {
-  dataBuild: blockConfigBuild,
+  dataBuild: markdownConfigBuild,
   placementList: ['commentBlock'],
 });
 const compBlockMdx = compDefine(BlockMdx, {
-  dataBuild: blockConfigBuild,
+  dataBuild: markdownConfigBuild,
   placementList: ['commentBlock'],
 });
 const compBlock = compDefine(Block, {
-  dataBuild: blockConfigBuild,
+  dataBuild: markdownConfigBuild,
   placementList: ['commentBlock'],
 });
 
@@ -109,12 +113,11 @@ export const compById = {
   }),
 };
 
-function blockConfigBuild(input) {
+function markdownConfigBuild(input) {
   return {
     ...input,
     config: {
       ...input.config,
-      DocLink,
       MdxRenderer,
     },
   };

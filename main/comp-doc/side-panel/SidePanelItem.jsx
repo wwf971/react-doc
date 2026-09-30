@@ -18,19 +18,26 @@ import './SidePanelItem.css';
 //
 // Events emitted:
 //   tagOverviewOpenRequest { tagId }   a tag was clicked
+//
+// The label is always inside the .doc-side-panel-item host, with or without
+// tags. On the sidebar surface the host wraps long names onto more lines
+// (SidePanelItem.css) instead of clipping them. A custom renderer that only
+// changes the label should pass it as data.text to this component, which
+// keeps tags and wrapping.
 export function SidePanelItem({ data = {}, config = {}, onEvent }) {
   const tagList = sidePanelItemTagListShownGet(data, config);
-  if (tagList.length === 0) return data.text ?? '';
   return (
-    <span className="doc-side-panel-item">
+    <span className="doc-side-panel-item" data-surface={config.surface ?? 'sidebar'}>
       {data.text}
-      <TagList
-        data={{ tagList }}
-        config={{ instanceId: config.instanceId, isClickable: config.isTagOverviewAvailable === true }}
-        onEvent={(eventType, eventData) => {
-          if (eventType === 'tagActivateRequest') onEvent?.('tagOverviewOpenRequest', { tagId: eventData.tagId });
-        }}
-      />
+      {tagList.length > 0 ? (
+        <TagList
+          data={{ tagList }}
+          config={{ instanceId: config.instanceId, isClickable: config.isTagOverviewAvailable === true }}
+          onEvent={(eventType, eventData) => {
+            if (eventType === 'tagActivateRequest') onEvent?.('tagOverviewOpenRequest', { tagId: eventData.tagId });
+          }}
+        />
+      ) : null}
     </span>
   );
 }

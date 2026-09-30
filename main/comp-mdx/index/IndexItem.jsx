@@ -3,6 +3,8 @@ import { DocLink } from '../../comp-doc/link/DocLink.jsx';
 import { SourceLink } from '../source-link/SourceLink.jsx';
 import { textLocalizedGet } from './IndexData.js';
 
+// item.tagsDisplay (before | after | on | off) is the per-item tag override;
+// both item kinds pass it to their link renderer, which shares one tag policy.
 const IndexItem = observer(function IndexItem({ config = {}, docStore, item, languagePreferred }) {
 	if (item.kind === 'inline-link') {
 		return (
@@ -17,7 +19,12 @@ const IndexItem = observer(function IndexItem({ config = {}, docStore, item, lan
 	const titleItem = textLocalizedGet(item.title, languagePreferred);
 	return (
 		<div className="doc-index-item">
-			<DocLink target={item.target} from={docStore.docCurrentPath} kind="index-item">
+			<DocLink
+				target={item.target}
+				from={docStore.docCurrentPath}
+				kind="index-item"
+				tagsDisplay={item.tagsDisplay ?? ''}
+			>
 				<span lang={titleItem.language || undefined}>{titleItem.text}</span>
 			</DocLink>
 		</div>
@@ -34,7 +41,7 @@ const IndexItemInlineLink = observer(function IndexItemInlineLink({
 	return (
 		<div className="doc-index-item is-inline-link">
 			<SourceLink
-				data={{ label: titleItem.text, target: item.target }}
+				data={{ label: titleItem.text, tagsDisplay: item.tagsDisplay, target: item.target }}
 				config={config}
 			/>
 		</div>

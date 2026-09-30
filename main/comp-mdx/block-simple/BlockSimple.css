@@ -30,6 +30,10 @@
 }
 
 .doc-mdx-block-simple-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
   padding: 0.55rem 1rem;
   border-bottom: 1px solid color-mix(in srgb, var(--doc-mdx-block-simple-color) 32%, var(--color-fd-border));
   color: var(--doc-mdx-block-simple-color);
@@ -37,6 +41,46 @@
   font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.4;
+}
+
+.doc-mdx-block-simple-title-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* fixed size in every status, so feedback never resizes the title bar */
+.doc-mdx-block-simple-copy {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0.2rem;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.doc-mdx-block-simple-copy:hover {
+  background: color-mix(in srgb, var(--doc-mdx-block-simple-background-color) 14%, transparent);
+}
+
+.doc-mdx-block-simple-copy:focus-visible {
+  outline: 2px solid var(--doc-mdx-block-simple-color);
+  outline-offset: 1px;
+}
+
+.doc-mdx-block-simple-copy.is-copied {
+  border-color: color-mix(in srgb, #15803d 55%, transparent);
+  color: #15803d;
+}
+
+.doc-mdx-block-simple-copy.is-failed {
+  border-color: color-mix(in srgb, #b42318 55%, transparent);
+  color: #b42318;
 }
 
 .doc-mdx-block-simple-content {

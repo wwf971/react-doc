@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parse as yamlParse } from 'yaml';
+import { commentPropsParse } from '../src/lib/remark-comment-comp.js';
 
 export type DocAttachmentFinderContext = {
   configDoc: any;
@@ -62,7 +63,7 @@ export function attachmentMermaidLaneIconFind(context: DocAttachmentFinderContex
 
   for (const match of context.text.matchAll(commentComponentPattern)) {
     if (match[1] !== 'DiagramMermaid' && match[1] !== 'DocDiagramMermaid') continue;
-    const props = propsCommentParse(match[2]);
+    const props = commentPropsParse(match[2]);
     if (props.laneIcons) valueList.push(props.laneIcons);
   }
 
@@ -89,7 +90,7 @@ export function attachmentImageFind(context: DocAttachmentFinderContext): string
   }
   for (const match of context.text.matchAll(commentComponentPattern)) {
     if (match[1] !== 'Image' && match[1] !== 'DocImage') continue;
-    const src = propsCommentParse(match[2]).src;
+    const src = commentPropsParse(match[2]).src;
     if (src) result.push(src);
   }
   for (const match of context.text.matchAll(imageMdxPattern)) {
@@ -166,17 +167,6 @@ export function docAttachmentsCollect(
 export function attachmentDataUrlGet(filePath: string): string {
   const mime = mimeByExtension[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream';
   return `data:${mime};base64,${fs.readFileSync(filePath).toString('base64')}`;
-}
-
-function propsCommentParse(value: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const part of value.split(',')) {
-    const index = part.indexOf('=');
-    if (index < 0) continue;
-    const key = part.slice(0, index).trim();
-    if (key) result[key] = part.slice(index + 1).trim();
-  }
-  return result;
 }
 
 function laneIconPathListParse(value: string): string[] {
