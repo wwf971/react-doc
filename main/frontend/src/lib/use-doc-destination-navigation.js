@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
 import {
+  destinationElementFind,
   navigationHighlightSet,
   navigationHighlightTargetGet,
   pageScrollDestinationAlign,
@@ -41,9 +42,8 @@ export function useDocDestinationNavigation({
         return;
       }
 
-      const idEscaped = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(hash) : hash;
-  const contentElement = pageElement.querySelector('[data-doc-content]');
-  const elementAnchor = contentElement?.querySelector(`#${idEscaped}`);
+      const contentElement = pageElement.querySelector('[data-doc-content]');
+      const elementAnchor = destinationElementFind(contentElement, hash);
       if (!elementAnchor) {
         if (attemptCount === 0) navigationHighlightSet(pageElement, null);
         attemptCount += 1;

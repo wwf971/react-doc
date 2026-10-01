@@ -4,8 +4,7 @@ description: DiagramText aligns plain-text box diagrams; DiagramMermaid renders 
 language: en
 ---
 
-<span id="diagram-text" />
-
+<!--renderComp=Anchor,id=diagram-text-->
 <!--renderComp=MultiLang-->
 ## {en: "Text Diagram", jp: "テキスト図表"}
 
@@ -64,8 +63,7 @@ language: en
 - 自動調整は縦罫線の直前にある空白だけを増減します。文字を切り詰めたり折り返したりしないため、内容が長い場合は図の横幅を広げます。
 ```
 
-<span id="diagram-mermaid" />
-
+<!--renderComp=Anchor,id=diagram-mermaid-->
 <!--renderComp=MultiLang-->
 ## {en: "Mermaid Diagram", jp: "Mermaid 図表"}
 

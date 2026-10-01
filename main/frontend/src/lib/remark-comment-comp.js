@@ -1,4 +1,5 @@
 import { visit } from 'unist-util-visit';
+import { anchorCompNameIs } from '../../../comp-mdx/anchor/AnchorData.js';
 
 // graceful-degradation stipulation from the requirement:
 //
@@ -34,6 +35,10 @@ import { visit } from 'unist-util-visit';
 //
 // note: html comments only exist in md-format parsing. in .mdx, authors write
 // <Comp .../> directly.
+//
+// an Anchor marker declares ids for the next node instead of replacing it.
+// remarkAnchor handles it before this plugin; pipelines without remarkAnchor
+// (search index, build-time dependency scan) must still keep the next node.
 
 const REGEX_RENDER_COMP = /^<!--\s*renderComp=([\w\/-]+)([\s\S]*?)\s*-->$/;
 // a whole html block: marker, complete inline code, remaining text of the line
@@ -63,13 +68,14 @@ export function remarkCommentComp(options = {}) {
       const match = REGEX_RENDER_COMP.exec(node.value.trim());
       if (!match) return;
       if (node.data?.isMultiLangHeadingMarker) return;
+      const compName = match[1];
+      if (anchorCompNameIs(compName)) return;
 
       const nodeMarked = parent.children[index + 1];
       if (!nodeMarked) return;
       const isInline = parent.type === 'paragraph';
       if (isInline && nodeMarked.type !== 'inlineCode') return;
 
-      const compName = match[1];
       const props = commentPropsParse(match[2]);
       const raw =
         nodeMarked.type === 'code' || nodeMarked.type === 'inlineCode'
@@ -198,6 +204,14 @@ function markerAtParagraphEndLift(paragraph, index, parent) {
     parent.children.splice(index + 1, 0, nodeLast);
   }
   return true;
+}
+
+// "<!--renderComp=Name,a=b-->" -> { compName: 'Name', props: { a: 'b' } }
+// returns undefined for any other html value
+export function commentMarkerParse(value) {
+  const match = REGEX_RENDER_COMP.exec(String(value ?? '').trim());
+  if (!match) return undefined;
+  return { compName: match[1], props: commentPropsParse(match[2]) };
 }
 
 // ",a=b,c=d" -> { a: 'b', c: 'd' }

@@ -62,6 +62,9 @@ compRegistry:
   DocImageGrid: common/ImageGrid
   DocDiagramText: common/DiagramText
   DocDiagramMermaid: common/DiagramMermaid
+  # built-in name of the fragment id declaration before a heading or another node:
+  # <!--renderComp=Anchor,id=configuration-->
+  Anchor: common/Anchor
   # built-in name of a tag mentioned in document text: <Tag tagId="guide" />
   Tag: common/Tag
   # built-in name of the default tag look, used by tag definitions

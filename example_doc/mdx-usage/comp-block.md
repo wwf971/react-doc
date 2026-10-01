@@ -15,8 +15,7 @@ language: en
 `Block` は互換用の入口です。引用ブロックでは `BlockSimple`、`markdown` または `mdx` コードブロックでは `BlockMdx` を自動的に使用します。種類を明示したい場合は、`BlockSimple` または `BlockMdx` を直接指定できます。
 ```
 
-<span id="block-simple" />
-
+<!--renderComp=Anchor,id=block-simple-->
 <!--renderComp=MultiLang-->
 ## {en: "Simple Block", jp: "単純ブロック"}
 
@@ -36,8 +35,7 @@ language: en
 > [!CAUTION]
 > この操作を実行する前に、変更内容を確認してください。
 
-<span id="block-mdx" />
-
+<!--renderComp=Anchor,id=block-mdx-->
 <!--renderComp=MultiLang-->
 ## {en: "Markdown Block", jp: "Markdown ブロック"}
 

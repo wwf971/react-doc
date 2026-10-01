@@ -133,17 +133,16 @@ Besides the Markdown block forms above, the same trigger comment accepts one YAM
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-For a multilingual heading, place a Markdown heading whose text maps language codes to display strings directly after the `MultiLang` comment. Adding an explicit anchor allows the same fragment link to be used whichever language is displayed.
+For a multilingual heading, place a Markdown heading whose text maps language codes to display strings directly after the `MultiLang` comment. Adding an `Anchor` comment before it gives the heading an id, so the same fragment link works whichever language is displayed.
 
-多言語の見出しでは、`MultiLang` のコメント直後に、言語コードと表示文字列の対応を記述した Markdown 見出しを置きます。明示的なアンカーを付けると、どの言語を表示している場合でも同じフラグメントリンクを使用できます。
+多言語の見出しでは、`MultiLang` のコメント直後に、言語コードと表示文字列の対応を記述した Markdown 見出しを置きます。その前に `Anchor` コメントを置くと見出しに id が付き、どの言語を表示している場合でも同じフラグメントリンクを使用できます。
 ```
 
 <!--renderComp=MultiLang-->
 ### {en: "Syntax", jp: "構文"}
 
 ````markdown
-<span id="multilingual-heading-example" />
-
+<!--renderComp=Anchor,id=multilingual-heading-example-->
 <!--renderComp=MultiLang-->
 ### {jp: "多言語の見出し", en: "Multilingual Heading"}
 ````
@@ -151,13 +150,12 @@ For a multilingual heading, place a Markdown heading whose text maps language co
 <!--renderComp=MultiLang-->
 ### {en: "Display example", jp: "表示例"}
 
-<span id="multilingual-heading-display-example" />
-
+<!--renderComp=Anchor,id=multilingual-heading-display-example-->
 <!--renderComp=MultiLang-->
 #### {jp: "多言語の見出し", en: "Multilingual Heading"}
 
-<!--renderComp=BlockSimple,type=warning,title=アンカーの後には空行が必要です-->
-> `<span id="..." />` と `<!--renderComp=MultiLang-->` の間には、必ず空行を入れてください。空行がない場合、Markdown パーサーはアンカー、コメント、見出しを一つの生の HTML ブロックとして扱います。その結果、見出しが見出しノードとして認識されず、どの言語を選択しても表示されません。
+<!--renderComp=BlockSimple,type=info,title=Anchor は MultiLang の前に置きます-->
+> `Anchor` コメントは `MultiLang` コメントの前に置きます。空行は不要です。見出しのタイトルは表示言語によって変わるため、多言語の見出しへのリンクにはタイトルではなく id を使ってください。リンクと id の詳しい使い方は [link-usage.md](link-usage.md) を参照してください。
 
 <!--renderComp=MultiLang-->
 ### {en: "Unparsable mapping", jp: "解析できない対応表"}

@@ -49,6 +49,7 @@ tree:
     doc: /example/link-nav/links.mdx
     tags: [part]
     children:
+      - doc: /example/link-nav/link-usage.md
       - doc: notes.md
         text: Ambiguous Name Example
       # replaces the "test" tag from source.yaml; same id, later declaration

@@ -60,7 +60,15 @@ A multilingual heading uses the same trigger comment immediately before a native
 
 Whitespace after each colon is optional, so both `{jp:日本語, en:English}` and `{jp: 日本語, en: English}` are accepted. Heading levels 1 through 6 work because the transform retains the original native heading node and changes only its text child. Fumadocs therefore retains the heading depth, generated anchor properties, table-of-contents participation, copy-link control, and search structure.
 
-Without an explicit anchor, the heading id is generated from the original flow-mapping source and stays the same when the selected language changes. An explicit `<span id="stable-id" />` before the trigger comment replaces that generated id. Compilation removes the marker first, copies the stable id onto the heading, then records translations under the final id. The table of contents renders those titles with `MultiLangHeadingText`, so the TOC and the heading use the same selected language and the same first-available-language fallback. The TOC url remains `#stable-id`.
+Without an explicit anchor, the heading id is generated from the original flow-mapping source and stays the same when the selected language changes. An `Anchor` comment before the trigger comment replaces that generated id:
+
+```markdown
+<!--renderComp=Anchor,id=stable-id-->
+<!--renderComp=MultiLang-->
+## {jp:日本語見出し, en:English Heading}
+```
+
+Compilation removes the multilingual marker first, copies the declared id onto the heading, then records translations under the final id. A link by title matches only the title in the currently selected language, so links to a multilingual heading should use its id ([Navigation design](doc_page_impl_nav.md#fragment-targets-titles-and-declared-ids)). The table of contents renders those titles with `MultiLangHeadingText`, so the TOC and the heading use the same selected language and the same first-available-language fallback. The TOC url remains `#stable-id`.
 
 Only a trigger comment immediately followed by a heading activates this syntax. If the mapping cannot be parsed, has no entries, contains a non-text value, or contains Markdown child nodes rather than one plain text node, the transform records no languages and leaves the heading unchanged. The generic comment-block transform also skips that marker, so ordinary rendering displays the raw heading text instead of producing a component error.
 

@@ -4,8 +4,7 @@ description: Image fits one image into a display frame; ImageGrid arranges image
 language: en
 ---
 
-<span id="image-single" />
-
+<!--renderComp=Anchor,id=image-single-->
 <!--renderComp=MultiLang-->
 ## {en: "Image", jp: "画像"}
 
@@ -65,8 +64,7 @@ width: 420
 height: 320
 ```
 
-<span id="image-grid" />
-
+<!--renderComp=Anchor,id=image-grid-->
 <!--renderComp=MultiLang-->
 ## {en: "Image Grid", jp: "画像グリッド"}
 

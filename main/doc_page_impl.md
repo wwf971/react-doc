@@ -148,6 +148,8 @@ Component recognition is decoupled from the source-rule scanner. Additional comp
 
 `DocStore` is the navigation source of truth. Links, side-panel items, history controls, registered-component navigation requests, and hosted indexes all submit destinations through `DocStore.navigate()`. A destination combines a semantic document route with an optional heading fragment. Query mode synchronizes it with browser history; memory mode keeps it inside the embedded document page.
 
+The fragment names a place by id or by heading title: `guide.md#Configuration` needs no preparation, and `<!--renderComp=Anchor,id=configuration-->` before a heading declares an id that survives title edits.
+
 `DocLink` keeps recognition, target resolution, rendering, and navigation separate. `DocPageView` delegates fragment scrolling and highlighting to a dedicated destination controller. This allows applications to customize link presentation without bypassing route resolution or navigation history.
 
 For target formats, fragment behavior, history, Back/Forward/Up, side-panel routes, and hosted-index subscriptions, refer to [Navigation design](doc_page_impl_nav.md).
@@ -183,7 +185,7 @@ Component naming, compatibility names, and the component data reference (a compo
 
 One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, `sidePanelPanel`, `partIndex`, `indexSubtopic`, `tag`, and `tagOverview`.
 
-A few registry names are built in: the page renders with them even when `compRegistry` does not mention them. `SidePanelItem` resolves to `common/SidePanelItem` and renders every side-panel label; `TagLabel` resolves to `common/TagLabel` and is the default look of tags; `Tag` resolves to `common/Tag` and renders a tag mentioned in document text; `TagOverview` resolves to `common/TagOverview` and renders the content of the tag overview popup. Mapping such a name in `compRegistry` replaces the default everywhere, which is how an application provides its own side-panel item rendering. `compIdResolve()` in `comp-registry.js` is the single place that turns a name into a component id.
+A few registry names are built in: the page renders with them even when `compRegistry` does not mention them, in comment form and in `.mdx`. `Anchor` resolves to `common/Anchor` and declares fragment ids for the node after it (see [Navigation design](doc_page_impl_nav.md#fragment-targets-titles-and-declared-ids)); `SidePanelItem` resolves to `common/SidePanelItem` and renders every side-panel label; `TagLabel` resolves to `common/TagLabel` and is the default look of tags; `Tag` resolves to `common/Tag` and renders a tag mentioned in document text; `TagOverview` resolves to `common/TagOverview` and renders the content of the tag overview popup. Mapping such a name in `compRegistry` replaces the default everywhere, which is how an application provides its own side-panel item rendering. `compIdResolve()` in `comp-registry.js` is the single place that turns a name into a component id.
 
 Some components need settings only the host application can supply, such as a Mermaid loader, a resolver from authored file references to URLs, or the text panel component that frames popups. The host passes them once through `DocPageMdx` `config.compConfigHost`; every registered component receives them in its `config` with the lowest priority, below authored and runtime values. The page itself reads `panelComponent` from the same place for the tag overview popup:
 
@@ -338,11 +340,11 @@ example_doc/             # root folder of the demonstration page
 ├── comp-custom-list-el.md # components as list elements: rules and examples
 ├── comp-mdx/            # demo-specific components (not collected as documents)
 ├── mdx-usage/           # mdx component demonstrations (part with hosted index)
-└── link-nav/            # link, navigation, and non-md display test docs
+└── link-nav/            # link usage guide (sections by title / Anchor id), link and non-md display test docs
 main/
 ├── config.yaml          # example config (tracked), actually runnable
 ├── config.0.yaml        # local override (untracked), entries overlay config.yaml
-├── comp-mdx/            # components available in documents (FileTree, Index, MultiLang, Tag, ...)
+├── comp-mdx/            # components available in documents (FileTree, Index, MultiLang, Tag, Anchor, ...)
 ├── comp-doc/            # components of the page itself, one folder per feature
 │   ├── registry/        # compById (registry.js), compDefine, RegisteredComp, DocComp, data references, build-time dependency extractors
 │   ├── link/            # DocLink, LinkDocRender, LinkWarning

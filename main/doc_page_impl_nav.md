@@ -51,7 +51,7 @@ a.md                       file-name lookup
 														 └─ none       -> show a broken link
 ```
 
-A target can append a fragment, for example `/rootId/xx/a.md#configuration`. `DocStore.docTargetResolve()` resolves `@first/` targets through the side-panel tree and every other form through `DocSourceStore.resolveLink()`, which separates the source path from the fragment and resolves the path. `DocLink` then submits the resolved side-panel route and fragment to `DocStore.navigate()`. Component data references use the same resolver for their document part; see [MDX components](doc_page_impl_mdx_comp.md#component-data-reference).
+A target can append a fragment, for example `/rootId/xx/a.md#configuration` or `a.md#Configuration`; the fragment is an id or a heading title (see [Fragment targets](#fragment-targets-titles-and-declared-ids)). `DocStore.docTargetResolve()` resolves `@first/` targets through the side-panel tree and every other form through `DocSourceStore.resolveLink()`, which separates the source path from the fragment and resolves the path. `DocLink` then submits the resolved side-panel route and fragment to `DocStore.navigate()`. Component data references use the same resolver for their document part; see [MDX components](doc_page_impl_mdx_comp.md#component-data-reference).
 
 Resolution happens during rendering rather than compilation. Moving a source file therefore updates the document index without invalidating otherwise reusable compiled content.
 
@@ -82,24 +82,41 @@ same fragment again
 
 The resolved destination receives `doc-navigation-target`. The package stylesheet displays this as a full-content-width yellow marker until navigation selects another document or place. Alignment runs again after the browser layout phase only when movement is needed. Pending images above the destination also request another alignment when they finish loading.
 
-### Stable aliases in plain Markdown
+### Fragment targets: titles and declared ids
 
-Plain `.md` documents can place one or more stable markers immediately before a heading, separated from it by a blank line:
+A fragment names a place either by id or by heading title. `destinationElementFind()` in `lib/doc-destination-navigation.js` looks it up inside the document body:
+
+```text
+fragment (percent-decoded as a second try, so %20 means a space)
+  -> an element with that id?            heading id or Anchor marker -> found
+  -> a heading whose title text matches? case-insensitive, spaces collapsed,
+                                         first match in document order -> found
+  -> otherwise retry briefly while the document mounts
+```
+
+Every heading has an id generated from its title. A link by title (`guide.md#Configuration`) needs no preparation but breaks when the title is edited, and for a multilingual heading it matches only the displayed language. A section that other documents link to should therefore declare a stable id with the registered `Anchor` component, in the same comment style as other document components:
 
 ```markdown
-<span id="configuration" />
-<span id="configuration-legacy"></span>
-
+<!--renderComp=Anchor,id=configuration,aliases=[config-legacy]-->
 ## Configuration
 ```
 
-The blank line is required. A raw HTML block starting with `<span` continues until a blank line, so without it the heading line becomes part of the HTML block and is omitted from the compiled page together with the marker. `remarkStableHeadingAnchor` reports that case as a compile warning naming the document and the heading line.
+An HTML comment block ends on its own line, so no blank line is needed before the heading. A plain Markdown renderer ignores the comment. In `.mdx`, `<Anchor id="configuration" />` is written directly; it renders a marker before the heading instead of replacing the heading id.
 
-Raw HTML is intentionally omitted when compiling with `format: 'md'`. `remarkStableHeadingAnchor` therefore recognizes only blocks made entirely from these marker forms. It transfers the first ID to the following heading and renders additional IDs as empty aliases immediately before that heading.
+`remarkAnchor` (`lib/remark-anchor.js`) runs at compile time, after the multilingual heading marker is removed and before `remarkCommentComp`:
 
-Aliases must not be heading children. Fumadocs copies heading content into its breadcrumb and table of contents. An alias inside the heading would therefore create duplicate DOM IDs and make fragment lookup choose a navigation copy instead of the document destination. Scoping lookup to the document body provides an additional boundary.
+```text
+Anchor comment followed by
+  heading     -> the heading receives id (the TOC url uses it too)
+                 aliases -> one Anchor marker element before the heading
+  other node  -> id and aliases -> one Anchor marker element before that node
+```
 
-An empty alias delegates scrolling and highlighting to the following visible content element. The primary ID already belongs to the visible heading, so both primary and alias destinations highlight the same section title.
+The marker element is `DocComp` with `comp="Anchor"`, so it renders through the registry like any comment component (`common/Anchor`, built-in name `Anchor`). It produces empty `<span id>` elements. An empty marker delegates scrolling and highlighting to the following visible content element, so primary id and aliases all highlight the same heading or block. Pipelines that run `remarkCommentComp` without `remarkAnchor`, such as the search index and the build-time dependency scan, skip the `Anchor` comment so the next node stays intact.
+
+Markers must not be heading children. Fumadocs copies heading content into its breadcrumb and table of contents. A marker inside the heading would therefore create duplicate DOM ids and make fragment lookup choose a navigation copy instead of the document destination. Scoping lookup to the document body provides an additional boundary.
+
+Raw `<span id="..." />` markers before a heading are deprecated. `remarkAnchor` still converts them in the same way and logs a deprecation warning naming the document. Such a marker needs a blank line before the heading; otherwise Markdown continues the raw HTML block onto the heading line and the heading disappears, which is reported as a separate warning.
 
 ### Heading selection
 

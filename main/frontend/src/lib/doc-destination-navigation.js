@@ -11,6 +11,42 @@ function pageScrollTopReset(pageElement) {
   if (scrollingElement) scrollingElement.scrollTop = 0;
 }
 
+// a fragment names a place in the document body:
+//   1. an element id: a heading id (generated from the title, or declared
+//      with an Anchor comment), or an Anchor alias
+//   2. otherwise the title text of a heading, compared without case and with
+//      whitespace collapsed; the first matching heading wins
+// a fragment written in a link may be percent-encoded (%20 for a space).
+function destinationElementFind(contentElement, hash) {
+  if (!contentElement || !hash) return null;
+  const hashDecoded = fragmentDecode(hash);
+  const elementById = elementByIdFind(contentElement, hash) ?? elementByIdFind(contentElement, hashDecoded);
+  if (elementById) return elementById;
+
+  const titleWanted = headingTitleNormalize(hashDecoded);
+  for (const heading of contentElement.querySelectorAll('h1, h2, h3, h4, h5, h6')) {
+    if (headingTitleNormalize(heading.textContent) === titleWanted) return heading;
+  }
+  return null;
+}
+
+function elementByIdFind(contentElement, id) {
+  const idEscaped = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id;
+  return contentElement.querySelector(`#${idEscaped}`);
+}
+
+function fragmentDecode(hash) {
+  try {
+    return decodeURIComponent(hash);
+  } catch {
+    return hash;
+  }
+}
+
+function headingTitleNormalize(text) {
+  return String(text ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 function navigationHighlightTargetGet(element) {
   const isEmpty = !element.textContent?.trim() && element.children.length === 0;
   const heading = isEmpty ? element.closest('h1, h2, h3, h4, h5, h6') : null;
@@ -53,6 +89,7 @@ function pageScrollDestinationAlign(pageElement, targetElement) {
 }
 
 export {
+  destinationElementFind,
   navigationHighlightSet,
   navigationHighlightTargetGet,
   pageScrollDestinationAlign,

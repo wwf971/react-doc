@@ -23,6 +23,7 @@ export { useDocStores } from './store/context.js';
 export { MdxRenderer } from '../../comp-doc/mdx-render/MdxRenderer.jsx';
 export { SidePanelItem } from '../../comp-doc/side-panel/SidePanelItem.jsx';
 export { SidePanelItemSurfaceContext } from '../../comp-doc/side-panel/SidePanelItemHost.jsx';
+export { Anchor } from '../../comp-mdx/anchor/Anchor.jsx';
 export { Tag } from '../../comp-mdx/tag/Tag.jsx';
 export { TagLabel } from '../../comp-mdx/tag/TagLabel.jsx';
 export { TagList } from '../../comp-mdx/tag/TagList.jsx';

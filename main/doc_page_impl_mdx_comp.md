@@ -29,6 +29,9 @@ Component and file names carry no `Doc` prefix: inside a document every componen
 | `BlockSimple`, `Block` | `block-simple/` | |
 | `BlockMdx` | `block-mdx/` | |
 | `Tag`, `TagLabel`, `TagOverview` | `tag/` | |
+| `Anchor` | `anchor/` | |
+
+`Anchor` declares fragment ids for the node after it rather than displaying content. Compilation handles it before other comment components; see [Navigation design](doc_page_impl_nav.md#fragment-targets-titles-and-declared-ids).
 
 Some components read host settings from `config`, supplied by the application through `DocPageMdx` `config.compConfigHost` (see [Component registry](doc_page_impl.md#component-registry)): `Image` and `ImageGrid` resolve `src` through `assetUrlGet`, and `DiagramMermaid` loads Mermaid through `mermaidLoad` and resolves lane icons through `assetUrlGet`. The block components and `MultiLang` receive the shared `MdxRenderer` from their package registry definitions, so nested Markdown has the link, math and component behavior of the document body.
 

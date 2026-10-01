@@ -54,6 +54,7 @@ export function compInputNormalize(definition, input = {}) {
 // mention them. mapping one of these names in compRegistry replaces the
 // default, which is how an application provides its own side-panel item hook.
 export const compIdBuiltinByName = {
+  Anchor: 'common/Anchor',
   SidePanelItem: 'common/SidePanelItem',
   Tag: 'common/Tag',
   TagLabel: 'common/TagLabel',

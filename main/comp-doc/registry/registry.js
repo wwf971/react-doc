@@ -2,6 +2,7 @@ import { Accordion, Accordions, Callout, File, Files, Folder, Step, Steps, Tab, 
 import { DocLinkInline } from '../link/DocLink.jsx';
 import { MdxRenderer } from '../mdx-render/MdxRenderer.jsx';
 import { SidePanelItem } from '../side-panel/SidePanelItem.jsx';
+import { Anchor } from '../../comp-mdx/anchor/Anchor.jsx';
 import { Block } from '../../comp-mdx/block-simple/Block.jsx';
 import { BlockMdx } from '../../comp-mdx/block-mdx/BlockMdx.jsx';
 import { BlockSimple } from '../../comp-mdx/block-simple/BlockSimple.jsx';
@@ -89,6 +90,7 @@ export const compById = {
   // built-in names (comp-registry.js compIdBuiltinByName): the page renders
   // with these even when compRegistry does not mention them
   'common/SidePanelItem': compDefine(SidePanelItem, { placementList: ['sidePanelDisplay'] }),
+  'common/Anchor': compDefine(Anchor, { placementList: ['mdx', 'commentBlock', 'commentInline'] }),
   'common/Tag': compDefine(Tag, { placementList: ['mdx', 'commentInline'] }),
   'common/TagLabel': compDefine(TagLabel, { placementList: ['tag', 'mdx'] }),
   'common/TagOverview': compDefine(TagOverview, { placementList: ['tagOverview', 'mdx', 'commentBlock'] }),

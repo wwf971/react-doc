@@ -13,7 +13,7 @@ import rehypeKatex from 'rehype-katex';
 import { parse as parseYaml } from 'yaml';
 import { remarkDocLink } from './remark-doc-link.js';
 import { remarkCommentComp } from './remark-comment-comp.js';
-import { remarkStableHeadingAnchor } from './remark-stable-heading-anchor.js';
+import { remarkAnchor } from './remark-anchor.js';
 import {
   multiLangCompNameIs,
   multiLangLanguageListGet,
@@ -70,10 +70,10 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
         onLanguage: (language) => languageSet.add(language),
       }],
       // Keep this after the multilingual marker is removed. That marker sits
-      // between an explicit <span id> and the heading, so the stable id can
-      // be copied only once the marker is gone. Plain `.md` compilation drops
-      // raw span markers, so this transfers their stable IDs to the headings.
-      [remarkStableHeadingAnchor, { sourcePath: internalPath }],
+      // between an Anchor comment and the heading, so the declared id can be
+      // copied onto the heading only once the marker is gone. Keep it before
+      // remarkCommentComp, which would otherwise see the Anchor comment.
+      [remarkAnchor, { sourcePath: internalPath }],
       [multiLangRemarkHeadingCollect, {
         onHeading: ({ id, variantsJson }) => headingVariantsById.set(id, variantsJson),
       }],

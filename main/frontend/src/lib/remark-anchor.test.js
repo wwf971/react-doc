@@ -3,8 +3,8 @@ import test from 'node:test';
 import { remark } from 'remark';
 import {
   anchorHeadingSwallowedGet,
-  remarkStableHeadingAnchor,
-} from './remark-stable-heading-anchor.js';
+  remarkAnchor,
+} from './remark-anchor.js';
 
 test('renders every consecutive stable heading anchor', () => {
   const tree = treeBuild([
@@ -12,7 +12,7 @@ test('renders every consecutive stable heading anchor', () => {
     '<span id="component-b" />',
     '<span id="component-c"></span>',
   ].join('\n'));
-  remarkStableHeadingAnchor()(tree);
+  remarkAnchor()(tree);
 
   assert.equal(tree.children.length, 3);
   assert.equal(tree.children[2].data.hProperties.id, 'component-a');
@@ -31,7 +31,7 @@ test('does not convert an anchor block containing arbitrary HTML', () => {
     '<span id="component-a" />',
     '<div>Other content</div>',
   ].join('\n'));
-  remarkStableHeadingAnchor()(tree);
+  remarkAnchor()(tree);
 
   assert.equal(tree.children.length, 2);
   assert.equal(tree.children[1].data, undefined);
@@ -40,7 +40,7 @@ test('does not convert an anchor block containing arbitrary HTML', () => {
 test('authored anchor with a blank line before the heading gives the heading its id', () => {
   const tree = remark().parse('<span id="configuration" />\n\n## Configuration\n');
   assert.equal(anchorHeadingSwallowedGet(tree.children[0]), '');
-  remarkStableHeadingAnchor()(tree);
+  remarkAnchor()(tree);
   assert.equal(tree.children.at(-1).type, 'heading');
   assert.equal(tree.children.at(-1).data.hProperties.id, 'configuration');
 });
@@ -52,7 +52,7 @@ test('authored anchor directly followed by a heading line is reported', (context
   assert.equal(anchorHeadingSwallowedGet(tree.children[0]), '## Configuration');
 
   const warn = context.mock.method(console, 'warn', () => {});
-  remarkStableHeadingAnchor({ sourcePath: '/docs/page.md' })(tree);
+  remarkAnchor({ sourcePath: '/docs/page.md' })(tree);
   assert.equal(warn.mock.callCount(), 1);
   assert.match(warn.mock.calls[0].arguments[0], /\/docs\/page\.md: heading "## Configuration"/);
 });
