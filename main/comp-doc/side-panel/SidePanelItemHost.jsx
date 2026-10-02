@@ -9,18 +9,34 @@ import { useTagOverviewIsAvailable } from '../tag/TagOverviewPopup.jsx';
 // provide their own value; everything else is the side panel.
 export const SidePanelItemSurfaceContext = createContext('sidebar');
 
-// Runtime boundary of every side-panel item label: resolves the item's tags
-// from the tag service, adds page-level config, and renders the chosen
-// registry component with placement sidePanelDisplay.
+// Runtime boundary of every side-panel item label: selects the label
+// translation for the document language, resolves the item's tags from the
+// tag service, adds page-level config, and renders the chosen registry
+// component with placement sidePanelDisplay.
+//
+//   textLocalized  string or language mapping; the renderer receives the
+//                  selected string as data.text and its language as
+//                  data.textLanguage ('' for a plain string)
+//   textMessage    diagnostic of an invalid authored text, as data.textMessage
 export const SidePanelItemHost = observer(function SidePanelItemHost({
   assetKey,
   compName,
   data,
   itemId,
+  textLocalized,
+  textMessage,
 }) {
-  const { configStore, tagStore } = useDocStores();
+  const { configStore, docStore, tagStore } = useDocStores();
   const surface = useContext(SidePanelItemSurfaceContext);
   const isTagOverviewAvailable = useTagOverviewIsAvailable();
+  const textSelected = docStore.textDisplayGet(textLocalized);
+  const dataDisplay = {
+    ...data,
+    tagList: tagStore.tagDisplayListGet(assetKey),
+    text: textSelected.text,
+    textLanguage: textSelected.language,
+    textMessage: textMessage ?? '',
+  };
   return (
     <RegisteredComp
       compName={compName}
@@ -34,7 +50,7 @@ export const SidePanelItemHost = observer(function SidePanelItemHost({
         surface,
         tagService: tagStore.tagService,
       }}
-      input={{ data: { ...data, tagList: tagStore.tagDisplayListGet(assetKey) } }}
+      input={{ data: dataDisplay }}
       onEventRuntime={(eventType, eventData) => {
         if (eventType !== 'tagOverviewOpenRequest' || !isTagOverviewAvailable) return undefined;
         return { isHandled: tagStore.overviewOpen(eventData.tagId) };

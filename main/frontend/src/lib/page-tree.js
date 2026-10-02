@@ -8,9 +8,11 @@
 //   - separator: Some Text
 // every node may also declare "tags" (doc_page_impl_tag.md) and "config"
 // (doc_page_impl_config.md), and every item label is created by
-// sidePanelItemNameCreate (doc_page_side_panel.md).
+// sidePanelItemNameCreate (doc_page_side_panel.md). "text" is a string or a
+// language mapping (text-localized.js).
 
 import { sidePanelItemNameCreate } from './side-panel-item.js';
+import { textLocalizedGet, textLocalizedParse } from './text-localized.js';
 import { tagSidePanelAssetKeyGet, tagSidePanelDeclare } from './doc-tag-side-panel.js';
 import { configSidePanelDeclareClose, configSidePanelDeclareOpen } from './doc-config-side-panel.js';
 
@@ -59,8 +61,9 @@ function createBuildContext(configDoc, fileManifest, compById) {
     partById: new Map(),
     items: [],
     idUsed: new Set(),
-    // item id -> { assetKey, kind, text } of every labeled item, including
-    // folders and separators. the tag overview reads the tree through it.
+    // item id -> { assetKey, kind, text, textLocalized } of every labeled
+    // item, including folders and separators. the tag overview reads the
+    // tree through it.
     itemOutlineById: new Map(),
     // side-panel step of the tag system, in tree order
     tagDeclarationList: [],
@@ -76,7 +79,7 @@ function convertNode(node, position, context, partIdParent = '') {
   const declarationConfig = configSidePanelDeclareOpen(
     context.configDeclarationList,
     node,
-    String(node.id ?? node.text ?? node.doc ?? position.join('-')),
+    String(node.id ?? (textLocalizedGet(node.text).text || undefined) ?? node.doc ?? position.join('-')),
   );
   const indexItemStart = context.items.length;
   const result = convertNodeByForm(node, position, context, partIdParent);
@@ -92,7 +95,7 @@ function convertNodeByForm(node, position, context, partIdParent) {
     return [{
       $id: id,
       type: 'separator',
-      name: itemNameCreate(node, node.separator, context, {
+      name: itemNameCreate(node, separatorTextResolve(node, id), context, {
         assetKey,
         dataItem: { kind: 'separator' },
         itemId: id,
@@ -126,7 +129,7 @@ function convertNodeByForm(node, position, context, partIdParent) {
     return [{
       $id: id,
       type: 'folder',
-      name: itemNameCreate(node, node.text ?? '', context, {
+      name: itemNameCreate(node, itemTextResolve(node, '', id), context, {
         assetKey,
         dataItem: { kind: 'folder' },
         itemId: id,
@@ -163,7 +166,7 @@ function autoChildren(fileManifest, context) {
     result.push({
       $id: id,
       type: 'folder',
-      name: itemNameCreate({}, rootId, context, {
+      name: itemNameCreate({}, itemTextResolve({}, rootId, id), context, {
         assetKey: tagSidePanelAssetKeyGet({ folderPath: pathRoot }),
         dataItem: { kind: 'folder', sourcePath: pathRoot },
         itemId: id,
@@ -199,7 +202,7 @@ function folderChildren(entries, position, context, partId, pathFolder) {
     return {
       $id: id,
       type: 'folder',
-      name: itemNameCreate({}, subDir, context, {
+      name: itemNameCreate({}, itemTextResolve({}, subDir, id), context, {
         assetKey: tagSidePanelAssetKeyGet({ folderPath: pathSub }),
         dataItem: { kind: 'folder', sourcePath: pathSub },
         itemId: id,
@@ -248,13 +251,49 @@ function partRegister(node, context) {
 
 // every item label goes through here: records what the item is bound to for
 // tree readers such as the tag overview, then creates the label element.
-function itemNameCreate(node, textDefault, context, options) {
+// label: { textLocalized, textMessage } from itemTextResolve()
+function itemNameCreate(node, label, context, options) {
   context.itemOutlineById.set(options.itemId, {
     assetKey: options.assetKey,
     kind: options.dataItem?.kind ?? '',
-    text: String(node.text ?? textDefault ?? ''),
+    text: textLocalizedGet(label.textLocalized).text,
+    textLocalized: label.textLocalized,
   });
-  return sidePanelItemNameCreate(node, textDefault, context, options);
+  return sidePanelItemNameCreate(node, label, context, options);
+}
+
+// label of one item: the authored "text" when present, else textDefault.
+//   textLocalized  string or language mapping, selected at render time
+//   textMessage    '' or the diagnostic of an invalid authored "text"
+// an invalid "text" is reported and replaced by textDefault (or the item id),
+// so it never reaches React, or a string conversion, as an object.
+function itemTextResolve(node, textDefault, itemId, fieldName = 'text') {
+  const valueAuthored = node[fieldName];
+  if (valueAuthored === undefined || valueAuthored === null) {
+    return { textLocalized: textDefault ?? '', textMessage: '' };
+  }
+  const { textLocalized, message } = textLocalizedParse(valueAuthored);
+  if (!message) return { textLocalized, textMessage: '' };
+  const textMessage = `side panel item "${itemId}": "${fieldName}" ${message}`;
+  console.warn(`[page-tree] ${textMessage}`);
+  return { textLocalized: textDefault || itemId, textMessage };
+}
+
+// "separator: Some Text" is the label unless "text" is also set. a scalar
+// separator value keeps its plain string form; a mapping is localized text.
+function separatorTextResolve(node, itemId) {
+  if (node.text !== undefined && node.text !== null) return itemTextResolve(node, '', itemId);
+  if (node.separator && typeof node.separator === 'object') {
+    return itemTextResolve(node, '', itemId, 'separator');
+  }
+  return { textLocalized: String(node.separator ?? ''), textMessage: '' };
+}
+
+// item models keep a display-safe text (first authored translation) and the
+// authored textLocalized; DocStore selects the translation for display.
+function itemTextApply(item, label) {
+  item.text = textLocalizedGet(label.textLocalized).text;
+  item.textLocalized = label.textLocalized;
 }
 
 // records the node's "tags" against the asset its item is bound to, and
@@ -294,7 +333,7 @@ function convertSourceFolder(node, position, context, partId) {
   return [{
     $id: id,
     type: 'folder',
-    name: itemNameCreate(node, node.text ?? pathFolder.split('/').at(-1), context, {
+    name: itemNameCreate(node, itemTextResolve(node, pathFolder.split('/').at(-1), id), context, {
       assetKey,
       dataItem: { kind: 'folder', sourcePath: pathFolder },
       itemId: id,
@@ -349,15 +388,16 @@ function docPageCreate(node, entries, position, context, isFolderIndex = false, 
       title: candidate.title,
     })),
     partId,
-    text: node.text ?? entry.title,
   };
+  const label = itemTextResolve(node, entry.title, id);
+  itemTextApply(item, label);
   registerItem(item, context);
   const assetKey = itemTagDeclare(node, { docPath: entry.internalPath, itemId: id }, context);
   item.assetKey = assetKey;
   const page = {
     $id: isFolderIndex ? uniqueId(`${id}-index`, context) : id,
     type: 'page',
-    name: itemNameCreate(node, item.text, context, {
+    name: itemNameCreate(node, label, context, {
       assetKey,
       dataItem: {
         kind: isFolderIndex ? 'folder-file' : 'file',
@@ -400,15 +440,16 @@ function docMissingPageCreate(node, position, context, isFolderIndex = false, pa
     route,
     partId,
     sourceReference,
-    text: node.text ?? fileName ?? sourceReference,
   };
+  const label = itemTextResolve(node, fileName ?? sourceReference, id);
+  itemTextApply(item, label);
   registerItem(item, context);
   const assetKey = itemTagDeclare(node, { itemId: id }, context);
   item.assetKey = assetKey;
   const page = {
     $id: isFolderIndex ? uniqueId(`${id}-index`, context) : id,
     type: 'page',
-    name: itemNameCreate(node, item.text, context, {
+    name: itemNameCreate(node, label, context, {
       assetKey,
       dataItem: {
         kind: isFolderIndex ? 'folder-file' : 'file',
@@ -437,15 +478,16 @@ function registerPanelItem(node, position, context, partId) {
     panelComponent: panel?.component ?? '',
     panelData: panel?.data ?? {},
     partId,
-    text: node.text ?? panel?.component ?? id,
   };
+  const label = itemTextResolve(node, panel?.component ?? id, id);
+  itemTextApply(item, label);
   registerItem(item, context);
   const assetKey = itemTagDeclare(node, { itemId: id }, context);
   item.assetKey = assetKey;
   return {
     $id: id,
     type: 'page',
-    name: itemNameCreate(node, item.text, context, {
+    name: itemNameCreate(node, label, context, {
       assetKey,
       dataItem: { kind: 'panel' },
       isItemDisplayApplied: true,
@@ -466,15 +508,16 @@ function registerInlineItem(node, position, context, partId) {
     inlineContent: inline?.content ?? '',
     inlineFormat: inline?.format === 'md' ? 'md' : 'mdx',
     partId,
-    text: node.text ?? inline?.title ?? id,
   };
+  const label = itemTextResolve(node, inline?.title ?? id, id);
+  itemTextApply(item, label);
   registerItem(item, context);
   const assetKey = itemTagDeclare(node, { itemId: id }, context);
   item.assetKey = assetKey;
   return {
     $id: id,
     type: 'page',
-    name: itemNameCreate(node, item.text, context, {
+    name: itemNameCreate(node, label, context, {
       assetKey,
       dataItem: { kind: 'inline' },
       isItemDisplayApplied: true,

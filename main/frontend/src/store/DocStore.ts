@@ -1,6 +1,7 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import { buildPageTreeModel } from '../lib/page-tree.js';
+import { textLocalizedGet } from '../lib/text-localized.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../../../comp-doc/registry/comp-registry.js';
 
 // upper store layer: view state and navigation.
@@ -9,10 +10,13 @@ import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../.
 
 export type RouteMode = 'query' | 'memory';
 type NavigationHistoryMode = 'push' | 'replace' | 'skip';
+// text: display text in the current language; textLocalized: the item label
+// as authored, kept so the entry follows later language changes.
 type NavigationHistoryEntry = {
   hash: string;
   route: string;
   text: string;
+  textLocalized: unknown;
 };
 type NavigationSnapshot = {
   requestVersion: number;
@@ -70,7 +74,8 @@ export class DocStore {
   // id of the DocLink whose candidate dropdown is open; only one at a time
   linkDropdownOpenId = '';
   searchQuery = '';
-  searchResults: any[] = [];
+  // matcher output; searchResults derives the displayed rows from it
+  searchResultsRaw: any[] = [];
   isSearchRunning = false;
 
   constructor(sourceStore: DocSourceStore, options?: {
@@ -119,6 +124,23 @@ export class DocStore {
     if (languageList.includes(languageDocument)) return languageDocument;
     if (languageList.includes(this.languagePage)) return this.languagePage;
     return languageList[0];
+  }
+
+  // language of the visible document content. side-panel labels and the
+  // document body select localized text with it.
+  get languageDisplay(): string {
+    return this.languageSelected
+      || languageNormalize(this.sourceStore.compiledByPath[this.contentCurrentPath]?.language)
+      || this.languagePage;
+  }
+
+  // textLocalized: a string or a language mapping (lib/text-localized.js)
+  textDisplayGet(textLocalized: unknown): { language: string; text: string } {
+    return textLocalizedGet(textLocalized, this.languageDisplay);
+  }
+
+  itemTextGet(item: any): string {
+    return this.textDisplayGet(item?.textLocalized ?? item?.text).text;
   }
 
   get treeModel() {
@@ -192,19 +214,19 @@ export class DocStore {
 
   get navigationBackEntry(): NavigationHistoryEntry | undefined {
     return this.isNavigationBackAvailable
-      ? this.navigationHistoryEntryList[this.navigationHistoryIndex - 1]
+      ? this.navigationEntryDisplayGet(this.navigationHistoryEntryList[this.navigationHistoryIndex - 1])
       : undefined;
   }
 
   get navigationForwardEntry(): NavigationHistoryEntry | undefined {
     return this.isNavigationForwardAvailable
-      ? this.navigationHistoryEntryList[this.navigationHistoryIndex + 1]
+      ? this.navigationEntryDisplayGet(this.navigationHistoryEntryList[this.navigationHistoryIndex + 1])
       : undefined;
   }
 
   get navigationUpEntry(): NavigationHistoryEntry | undefined {
     const item = this.treeModel.itemAboveById.get(this.itemCurrentId);
-    return item ? { hash: '', route: item.route, text: item.text ?? item.route } : undefined;
+    return item ? this.navigationEntryDisplayGet(this.navigationEntryCreate(item, '')) : undefined;
   }
 
   get isNavigationUpAvailable(): boolean {
@@ -354,8 +376,8 @@ export class DocStore {
       return {
         targetList: [{
           internalPath: treeLink.target.docPath,
-          name: treeLink.target.text,
-          title: treeLink.target.text,
+          name: this.itemTextGet(treeLink.target),
+          title: this.itemTextGet(treeLink.target),
           navigationTarget: treeLink.target.route,
         }],
         hash: treeLink.hash,
@@ -481,7 +503,7 @@ export class DocStore {
     this.linkDropdownOpenId = '';
 
     const isHistoryChanged = this.navigationHistoryApply(
-      { hash, route: item.route, text: item.text ?? item.title ?? item.route },
+      this.navigationEntryCreate(item, hash),
       options?.historyMode ?? 'push',
     );
 
@@ -598,19 +620,20 @@ export class DocStore {
     this.searchQuery = query;
     this.isSearchRunning = true;
     void this.sourceStore.searchDocs(query).then((results) => {
-      const resultsNormalized = this.searchResultsNormalize(results);
       runInAction(() => {
         // ignore stale results from an outdated query
         if (this.searchQuery !== query) return;
-        this.searchResults = resultsNormalized;
+        this.searchResultsRaw = results;
         this.isSearchRunning = false;
       });
     });
   }
 
-  private searchResultsNormalize(results: any[]): any[] {
+  // page rows are labeled and routed through the side-panel tree, in the
+  // current display language
+  get searchResults(): any[] {
     const treeModel = this.treeModel;
-    return results.map((result) => {
+    return this.searchResultsRaw.map((result) => {
       const indexHash = typeof result.url === 'string' ? result.url.indexOf('#') : -1;
       const path = indexHash >= 0 ? result.url.slice(0, indexHash) : result.url;
       const hash = indexHash >= 0 ? result.url.slice(indexHash) : '';
@@ -621,9 +644,23 @@ export class DocStore {
       return {
         ...result,
         url: `${item.route}${hash}`,
-        ...(result.type === 'page' ? { content: item.text ?? result.content } : {}),
+        ...(result.type === 'page' ? { content: this.itemTextGet(item) || result.content } : {}),
       };
     });
+  }
+
+  private navigationEntryCreate(item: any, hash: string): NavigationHistoryEntry {
+    return {
+      hash,
+      route: item.route,
+      text: item.text || item.route,
+      textLocalized: item.textLocalized ?? item.text,
+    };
+  }
+
+  private navigationEntryDisplayGet(entry: NavigationHistoryEntry | undefined): NavigationHistoryEntry | undefined {
+    if (!entry) return undefined;
+    return { ...entry, text: this.textDisplayGet(entry.textLocalized).text || entry.route };
   }
 
   private navigationHistoryApply(entry: NavigationHistoryEntry, mode: NavigationHistoryMode): boolean {

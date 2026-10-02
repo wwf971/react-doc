@@ -1,3 +1,4 @@
+import { isValidElement } from 'react';
 import { TagList } from '../../comp-mdx/tag/TagList.jsx';
 import './SidePanelItem.css';
 
@@ -5,10 +6,13 @@ import './SidePanelItem.css';
 // asset the item is bound to. Registered as common/SidePanelItem under the
 // built-in name SidePanelItem; mapping that name in compRegistry replaces it.
 //
-//   data.text            display text
+//   data.text            display text, already a string in the selected language
+//   data.textLanguage    language of data.text, '' for a plain-string label
+//   data.textMessage     '' or the diagnostic of an invalid authored text
 //   data.tagList         resolved tags [{ id, compName, data }], unfiltered
 //   data.kind            separator | folder | folder-file | file | panel | inline
-//   data.itemDeclared    the side-panel yaml node, without children
+//   data.itemDeclared    the side-panel yaml node, without children; its
+//                        "text" is authored data and can be a language mapping
 //   config.surface       sidebar | breadcrumb | footer
 //   config.configGlobal  page-level config, see doc_page_impl_config.md
 //                          TagsDisplayAtSidePanelItemIsOn     show tags at all
@@ -23,12 +27,19 @@ import './SidePanelItem.css';
 // tags. On the sidebar surface the host wraps long names onto more lines
 // (SidePanelItem.css) instead of clipping them. A custom renderer that only
 // changes the label should pass it as data.text to this component, which
-// keeps tags and wrapping.
+// keeps tags, wrapping, and the lang attribute.
 export function SidePanelItem({ data = {}, config = {}, onEvent }) {
   const tagList = sidePanelItemTagListShownGet(data, config);
+  const isTextInvalid = Boolean(data.textMessage);
   return (
     <span className="doc-side-panel-item" data-surface={config.surface ?? 'sidebar'}>
-      {data.text}
+      <span
+        className={`doc-side-panel-item-text${isTextInvalid ? ' is-invalid' : ''}`}
+        lang={data.textLanguage || undefined}
+        title={isTextInvalid ? data.textMessage : undefined}
+      >
+        {textRenderableGet(data.text)}
+      </span>
       {tagList.length > 0 ? (
         <TagList
           data={{ tagList }}
@@ -40,6 +51,13 @@ export function SidePanelItem({ data = {}, config = {}, onEvent }) {
       ) : null}
     </span>
   );
+}
+
+// a custom renderer may pass an element as data.text; a plain object, such as
+// an authored language mapping passed by mistake, is not renderable
+function textRenderableGet(text) {
+  if (text && typeof text === 'object' && !Array.isArray(text) && !isValidElement(text)) return '';
+  return text;
 }
 
 function sidePanelItemTagListShownGet(data, config) {

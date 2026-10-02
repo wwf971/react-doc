@@ -162,6 +162,25 @@ The type supports `vertical-list` and `horizontal-wrap`; omitting `layout` selec
 
 Index items render through `DocLink`, preserving centralized target resolution, unavailable-link behavior, navigation history, and route-mode handling. The index parser also exposes language-list and structured-search extractors. The consumer registers these callbacks under every author-facing tag name of the index (`Index`, and `DocIndex` for compatibility) so both translations appear in the language selector and search index.
 
+## Multilingual side-panel labels
+
+The `text` of any side-panel node can be a string or the same kind of language mapping that index titles use. Plain and localized labels can be mixed at any depth:
+
+```yaml
+- text:
+    jp: 技術資料
+    en: Technical documents
+  children:
+    - text: { jp: データバース, en: Dataverse }
+      doc: /codeapp-dev/doc/codeapp-dataverse.md
+    - text: Python API
+      doc: /codeapp-dev/doc/python-api.md
+```
+
+Labels follow the language of the visible document, `DocStore.languageDisplay`: the selected language of the current document, then its frontmatter language, then the page language. This is the language the document body and its part index receive, so a label and the index beside it always agree. The selection uses the same rule as indexes: the preferred translation when present, otherwise the first authored one, with `lang` set to the language actually shown.
+
+Index text and side-panel labels share one parser and selector, `lib/text-localized.js`. The side-panel behavior (where the translation is selected, what renderers receive, and how invalid labels are reported) is described in [Side panel design](doc_page_side_panel.md#localized-labels).
+
 ## Search indexing
 
 Fumadocs `remarkStructure` scans ordinary Markdown nodes automatically. A rendered custom component has no ordinary text children, so its semantic content must be supplied separately. Fumadocs supports this through `node.data.structuredData.contents`; its default stringifier adds those entries to the current heading while extracting structured search data.

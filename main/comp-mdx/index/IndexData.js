@@ -1,4 +1,5 @@
 import { yamlParse } from '../../frontend/src/lib/yaml.js';
+import { textLocalizedGet, textLocalizedParse } from '../../frontend/src/lib/text-localized.js';
 
 function indexDataParse(data = {}) {
 	const dataParsed = dataParse(data);
@@ -56,20 +57,6 @@ function indexStructuredDataGet(raw) {
 	} catch {
 		return undefined;
 	}
-}
-
-function textLocalizedGet(value, languagePreferred = '') {
-	if (typeof value === 'string') return { language: '', text: value };
-	if (!value || typeof value !== 'object' || Array.isArray(value)) {
-		return { language: '', text: '' };
-	}
-	const language = textIs(value[languagePreferred])
-		? languagePreferred
-		: Object.keys(value).find((key) => textIs(value[key])) ?? '';
-	return {
-		language,
-		text: language ? String(value[language]) : '',
-	};
 }
 
 function dataParse(data) {
@@ -173,19 +160,9 @@ function titleSubtopicsItemsTextLocalizedListGet(dataIndex) {
 }
 
 function textLocalizedNormalize(value, label) {
-	if (typeof value === 'string') return textRequired(value, label);
-	if (!value || typeof value !== 'object' || Array.isArray(value)) {
-		throw new Error(`${label} must be text or a language mapping.`);
-	}
-	const valueNormalized = Object.fromEntries(
-		Object.entries(value)
-			.filter(([language, text]) => textIs(language) && textIs(text))
-			.map(([language, text]) => [language.trim(), text.trim()]),
-	);
-	if (Object.keys(valueNormalized).length === 0) {
-		throw new Error(`${label} requires at least one translation.`);
-	}
-	return valueNormalized;
+	const { textLocalized, message } = textLocalizedParse(value);
+	if (message) throw new Error(`${label} ${message}`);
+	return textLocalized;
 }
 
 function textLocalizedOptionalNormalize(value, label) {

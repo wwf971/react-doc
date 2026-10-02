@@ -9,7 +9,10 @@ import { tagDisplayGet } from './doc-tag-model.js';
 //                       documents collected by source rules but not listed
 //                       in the side panel; shown last
 //
-// overview node: { itemId, text, kind, assetKey, route, isTagged, children }
+// overview node: { itemId, text, textLocalized, kind, assetKey, route, isTagged, children }
+//   text           first authored translation of the item label
+//   textLocalized  the label as a string or language mapping, for selecting
+//                  the translation of the current document language
 //   kind      folder | folder-file | file | panel | inline | ... (side-panel item kind)
 //   route     item route to navigate to, '' for a folder without a document
 //   isTagged  false for a folder kept only because a descendant is tagged
@@ -30,6 +33,7 @@ export function tagOverviewBuild({ treeModel, tagModel, entryByPath, tagId }) {
     return {
       itemId: node.$id,
       text: outline?.text ?? '',
+      textLocalized: outline?.textLocalized ?? '',
       kind: outline?.kind ?? '',
       assetKey,
       route: node.type === 'folder' ? node.index?.url ?? '' : node.url ?? '',

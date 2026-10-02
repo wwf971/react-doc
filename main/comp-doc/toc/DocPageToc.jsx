@@ -96,7 +96,16 @@ const PartIndexPanel = observer(function PartIndexPanel({ isVisible, labels }) {
     const sizeUpdate = () => {
       frameId = 0;
       const rect = panel.getBoundingClientRect();
-      const heightAvailable = Math.max(96, window.innerHeight - rect.top - 16);
+      // at the document bottom the sticky TOC column moves up to stay in its
+      // containing block. measuring from its sticky anchor keeps that upward
+      // move from granting the panel more height, which would push the
+      // column further up until the index reaches its full content height.
+      const column = displayMode === 'floating' ? null : panel.closest('.doc-page-toc');
+      const topSticky = column ? parseFloat(window.getComputedStyle(column).top) || 0 : 0;
+      const top = column
+        ? Math.max(rect.top, topSticky + rect.top - column.getBoundingClientRect().top)
+        : rect.top;
+      const heightAvailable = Math.max(96, window.innerHeight - top - 16);
       panel.style.setProperty('--doc-part-index-height-available', `${heightAvailable}px`);
       if (displayMode !== 'floating') {
         const widthAvailable = Math.max(0, window.innerWidth - rect.left - 16);

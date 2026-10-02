@@ -1,6 +1,7 @@
 import { observer } from 'mobx-react-lite';
 import { FileIcon, FolderIcon } from '#react-doc/frontend/UICommon.js';
 import { useDocStores } from '#react-doc/frontend/src/store/context.js';
+import { textLocalizedGet } from '#react-doc/frontend/src/lib/text-localized.js';
 import { TagList } from './TagList.jsx';
 import './TagOverview.css';
 
@@ -21,6 +22,7 @@ export const TagOverview = observer(function TagOverview({ data = {}, onEvent })
   const { docStore, tagStore } = useDocStores();
   const overview = data.overview ?? tagStore.overviewGet(String(data.tagId ?? ''));
   const itemCurrentId = data.itemCurrentId ?? docStore.itemCurrentId;
+  const languageDisplay = docStore.languageDisplay;
   const isEmpty = overview.nodeList.length === 0 && overview.assetListOutside.length === 0;
   return (
     <div className="doc-tag-overview not-prose">
@@ -38,6 +40,7 @@ export const TagOverview = observer(function TagOverview({ data = {}, onEvent })
             nodeList={overview.nodeList}
             depth={0}
             itemCurrentId={itemCurrentId}
+            textGet={(node) => textLocalizedGet(node.textLocalized ?? node.text, languageDisplay)}
             hrefGet={(route) => docStore.toBrowserHref(route)}
             onEvent={onEvent}
           />
@@ -59,11 +62,13 @@ export const TagOverview = observer(function TagOverview({ data = {}, onEvent })
   );
 });
 
-function TagOverviewNodeList({ nodeList, depth, itemCurrentId, hrefGet, onEvent }) {
+// textGet(node) -> { text, language }: the label in the current document language
+function TagOverviewNodeList({ nodeList, depth, itemCurrentId, textGet, hrefGet, onEvent }) {
   return nodeList.map((node) => {
     const isFolder = node.children.length > 0 || node.kind === 'folder';
     const Icon = isFolder ? FolderIcon : FileIcon;
     const className = `doc-tag-overview-row${node.isTagged ? '' : ' is-muted'}${node.itemId === itemCurrentId ? ' is-current' : ''}`;
+    const textSelected = textGet(node);
     return (
       <div key={node.itemId}>
         <div className={className} style={{ paddingInlineStart: `${depth * 14}px` }}>
@@ -72,15 +77,18 @@ function TagOverviewNodeList({ nodeList, depth, itemCurrentId, hrefGet, onEvent 
             <a
               className="doc-tag-overview-row-text is-link"
               href={hrefGet(node.route)}
+              lang={textSelected.language || undefined}
               onClick={(event) => {
                 event.preventDefault();
                 onEvent?.('navigateRequest', { target: node.route });
               }}
             >
-              {node.text}
+              {textSelected.text}
             </a>
           ) : (
-            <span className="doc-tag-overview-row-text">{node.text}</span>
+            <span className="doc-tag-overview-row-text" lang={textSelected.language || undefined}>
+              {textSelected.text}
+            </span>
           )}
         </div>
         {node.children.length > 0 ? (
@@ -88,6 +96,7 @@ function TagOverviewNodeList({ nodeList, depth, itemCurrentId, hrefGet, onEvent 
             nodeList={node.children}
             depth={depth + 1}
             itemCurrentId={itemCurrentId}
+            textGet={textGet}
             hrefGet={hrefGet}
             onEvent={onEvent}
           />

@@ -28,6 +28,7 @@ import {
   type DocSourceDependencyCollect,
 } from './doc-source-dependency.ts';
 import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
+import { textLocalizedGet } from '../src/lib/text-localized.js';
 
 // vite plugin "doc-source".
 // reads two-layer yaml config, executes source rules against the file system,
@@ -499,7 +500,7 @@ export function pruneSourceToSidePanel(
       }
       if (node?.inline !== undefined) {
         const inline = typeof node.inline === 'string' ? { content: node.inline } : node.inline;
-        const sourceLabel = `side-panel inline item "${node.id ?? node.text ?? ''}"`;
+        const sourceLabel = `side-panel inline item "${node.id ?? textLocalizedGet(node.text).text}"`;
         collected(
           docSourceDependenciesCollect(
             String(inline?.content ?? ''),

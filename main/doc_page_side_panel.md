@@ -56,7 +56,7 @@ Node forms:
 - `panel.component` + `panel.data`: a leaf whose main panel is rendered by a registered component. It receives the unified `{ data, config, onEvent }` props, with the item and runtime metadata in `config`.
 - `separator`: a visual separator.
 
-Every node can set a stable `id`, a custom `text`, a custom `display` component, `tags`, and `config`. Tags attach to what the node binds. `config` applies to the documents of the node and of every item below it; see [Config system](doc_page_impl_config.md#declaring-document-config). Every leaf gets its own route, so several leaves can bind the same document; links and search results navigate to the first one in tree order. Use `sourceFolder: /` as the final node to expose every collected file as a fallback while earlier semantic bindings remain the primary navigation targets.
+Every node can set a stable `id`, a custom `text`, a custom `display` component, `tags`, and `config`. `text` is a string or a language mapping such as `{ jp: 技術資料, en: Technical documents }`; see [Localized labels](#localized-labels). Tags attach to what the node binds. `config` applies to the documents of the node and of every item below it; see [Config system](doc_page_impl_config.md#declaring-document-config). Every leaf gets its own route, so several leaves can bind the same document; links and search results navigate to the first one in tree order. Use `sourceFolder: /` as the final node to expose every collected file as a fallback while earlier semantic bindings remain the primary navigation targets.
 
 ## Selecting documents
 
@@ -107,6 +107,7 @@ sidePanelItemNameCreate(node)                        lib/side-panel-item.js
   -> page-tree "name" = <SidePanelItemHost compName data assetKey itemId/>
 
 SidePanelItemHost (render time, observer)
+  -> label translation for DocStore.languageDisplay
   -> tags of the bound asset from DocTagStore
   -> page-level config from DocConfigStore
   -> surface from SidePanelItemSurfaceContext
@@ -127,11 +128,15 @@ Tags are resolved at render time rather than when the tree is built, because a l
 The renderer receives the unified `{ data, config, onEvent }` props:
 
 ```text
-data.text              display text (node text, page title, or folder name)
+data.text              display text (node text, page title, or folder name), always
+                       a string in the selected language
+data.textLanguage      language of data.text, '' for a plain-string label
+data.textMessage       '' or the diagnostic of an invalid authored text
 data.kind              separator | folder | folder-file | file | panel | inline
 data.fileExt, fileName, filePath, isMissing, isTextCustom, sourcePath
                        present when the item is bound to a file or folder
-data.itemDeclared      the YAML node as authored, without children
+data.itemDeclared      the YAML node as authored, without children; its text
+                       can be a language mapping and is not meant for display
 data.tagListDeclared   tags written on this node, normalized to [{ id, data }]
 data.tagList           resolved tags of the bound asset, ready to display, not yet
                        filtered by config: [{ id, compName, data }]
@@ -165,6 +170,29 @@ Labels added this way are rendering decisions only, and the default renderer sti
 
 The default renderer always renders its host element, `span.doc-side-panel-item` with `data-surface`, also for items without tags. On the `sidebar` surface the host wraps long text, including breaks inside a word, rather than clipping it with `nowrap` or an ellipsis, so the full item name stays readable. A custom renderer should wrap `SidePanelItem` as above to keep this host and its wrapping; a renderer that returns its own markup takes over that responsibility.
 
+### Localized labels
+
+A label is chosen in two steps, so changing the document language updates every mounted label without rebuilding the tree:
+
+```text
+page-tree.js (tree build)
+  -> validate node "text": string, or mapping of language -> text
+  -> invalid: warn, naming the item; show the default text instead
+  -> item and outline models keep
+       textLocalized   the label as authored (string or mapping)
+       text            first authored translation, a safe plain string
+
+render time, for DocStore.languageDisplay
+  -> preferred translation, else the first authored one
+  -> SidePanelItemHost: data.text + data.textLanguage
+  -> other surfaces through DocStore: Back/Forward/Up titles, search page rows,
+     "@first/..." link targets; the tag overview selects the same way
+```
+
+The default renderer wraps the text in an element with `lang`. An invalid label, such as an array, an empty mapping, or a mapping without usable text, is shown with its fallback text, a wavy red underline, and the diagnostic as its hover title. Language selection rules are shared with indexes, see [Multilingual side-panel labels](doc_page_impl_multi-lang.md#multilingual-side-panel-labels).
+
+A custom renderer receives display-ready `data.text`, so wrapping `SidePanelItem` needs no language logic. It should not render `data.itemDeclared.text`, which can be a mapping.
+
 ### Surfaces
 
 Fumadocs reuses the page-tree `name` in breadcrumbs and in the previous/next cards. Those surfaces wrap their content in `SidePanelItemSurfaceContext` with `breadcrumb` or `footer`; everything else is `sidebar`. The default renderer shows tags only on `sidebar`, keeping the other surfaces plain text. A custom renderer can make its own choice from `config.surface`.
@@ -196,6 +224,7 @@ The default folder gesture (an inactive label navigates, the active label toggle
 frontend/plugin/doc-source.ts            load side-panel YAML, expand childrenFile, watch imports
 frontend/src/lib/page-tree.js            tree conversion, routes, parts, tag and config declarations
 frontend/src/lib/side-panel-item.js      renderer choice and item data
+frontend/src/lib/text-localized.js       localized label parsing and selection, shared with indexes
 comp-doc/side-panel/SidePanelItemHost.jsx  runtime context, surfaces
 comp-doc/side-panel/SidePanelItem.jsx      default renderer (common/SidePanelItem)
 comp-doc/side-panel/DocSidebarFolder.jsx   default folder gesture

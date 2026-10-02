@@ -7,6 +7,12 @@
   overflow-wrap: anywhere;
 }
 
+/* an invalid authored label shows its fallback text; the title explains why */
+.doc-side-panel-item-text.is-invalid {
+  text-decoration: underline wavy #dc2626;
+  text-underline-offset: 3px;
+}
+
 .doc-side-panel-item .doc-tag-list {
   margin-inline-start: 4px;
   vertical-align: 1px;

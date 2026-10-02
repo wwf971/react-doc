@@ -119,7 +119,7 @@ export const DocPageView = observer(function DocPageView() {
   const Body = compiled.Body;
   const candidates = item?.docCandidates ?? [];
   return (
-    <DocLanguageProvider language={docStore.languageSelected || compiled.language}>
+    <DocLanguageProvider language={docStore.languageDisplay}>
       <DocsPage
         breadcrumb={{ includePage: true }}
         toc={compiled.toc}
