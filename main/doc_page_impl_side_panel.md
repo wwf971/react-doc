@@ -1,12 +1,13 @@
-<!-- Design of the side panel. Parent document: doc_page_impl.md -->
+<!-- Design of the side panel. Parent document: doc_page_impl.md. This is the side-panel design document; other documents link here. -->
 
 # Side Panel: Design
 
 The side panel is a free tree declared in YAML. It does not need to mirror the file tree: an item can be a document, a source folder, a virtual folder, a component panel, or a separator. The tree is also the semantic backbone of the page: it decides document order, routes, parts, part of the tags, and part of the document config. For the overall architecture, refer to [Document Page: Design](doc_page_impl.md).
 
 ```text
-side-panel.yaml (+ files imported through childrenFile)
-   │  vite plugin: inline imported subtrees, merge imported "root" mappings
+side-panel resource file (+ resources included through childrenFile)
+   │  vite plugin: inline included trees, merge included "root" mappings,
+   │               append "source" sections to the source rules
    ▼
 configDoc.sidePanel.tree
    │  page-tree.js buildPageTreeModel()   (DocStore.treeModel, a mobx computed)
@@ -19,9 +20,74 @@ every item label = SidePanelItemHost
    -> registry component "SidePanelItem" (or the item's display.component)
 ```
 
+## A side panel is a resource
+
+Source rules decide which files exist. A side panel is a way of picking things from that collected source and arranging them as a tree: documents, source folders, component panels, virtual folders. It is therefore treated as a resource, not as one unique page setting:
+
+- A side-panel resource is one `{ root?, tree }` mapping. Its content does not depend on who uses it.
+- The page side panel is the resource named by `sidePanel.file` in `config.yaml`. A node includes another resource through `childrenFile`; the included resource's `tree` becomes the node's children and its `root` configures the node. A part's side panel is thus already an independent resource that a larger side panel includes.
+- A resource can declare the source rules of the files it organizes, in the same file ([Resource files](#resource-files)), so a part folder can carry everything about itself.
+
+Currently a file holds at most one resource, and the page uses one tree, the page side panel with every inclusion inlined by the loader. The model is kept so that later steps need no change of authored files:
+
+- several resources in one file, addressed by an id within that file (the section name `sidePanelById` is reserved for it);
+- one resource used in more than one place, for example a part's own side panel shown as a local panel while the page side panel also includes it.
+
+Runtime code receives only the inlined tree (`configDoc.sidePanel.tree`), so these steps stay in the loader (`loadSidePanelFile` in `plugin/doc-source.ts`).
+
+## Resource files
+
+A side-panel resource file is a YAML file in one of two forms:
+
+```yaml
+# sectioned form: the resource is the "sidePanel" section
+source:                    # optional: source rules, a list or { rules: [...] }
+  rules:
+    - action: addFolder
+      rootId: guide
+      path: .              # relative to this file
+    - action: removeByName
+      pattern: "*.yaml"
+sidePanel:
+  root:                    # optional, see "Including other resources"
+    doc: /guide/overview.md
+  tree:
+    - doc: /guide/setup.md
+```
+
+```yaml
+# legacy form: the resource is the file itself
+root:
+  doc: /guide/overview.md
+tree:
+  - doc: /guide/setup.md
+```
+
+The legacy form remains supported and can also carry a `source` section. A file must not combine a `sidePanel` section with a top-level `tree` or `root`, and the resource must contain a `tree` list. A file referenced by config `source.file` can be the same sectioned file; the loader then reads its `source` section as the main source rules and its `sidePanel` section as the page side panel.
+
+Source sections of resource files are executed together with the main source rules:
+
+```text
+source rules of the page =
+  config.yaml "source" (a list, { file }, or absent)
+  + "source" sections of the side-panel resource files, in load order:
+    the page side-panel file, then each included file depth-first in tree order
+each file's "source" section is read once, also when the file is config "source.file"
+or is included several times
+```
+
+Rule paths are relative to the file that contains them. Every rule form is available, including tag and config steps. Because rules run in this order, a removal rule in the main source rules does not affect files that a resource file adds later; a resource file writes the removals it needs, typically excluding its own YAML files. An item excluded through `excludeSidePanelItemIds` does not remove the source rules of the resource it included.
+
+With every rule in resource files, `config.yaml` needs only:
+
+```yaml
+sidePanel:
+  file: ../docs/doc.yaml
+```
+
 ## Tree format
 
-`sidePanel.file` in `config.yaml` points to a YAML file containing a `tree` list. If the tree is absent, one is generated from the complete file manifest.
+The `tree` list of the page side-panel resource describes the side panel. If the tree is absent, one is generated from the complete file manifest.
 
 ```yaml
 tree:
@@ -62,9 +128,9 @@ Every node can set a stable `id`, a custom `text`, a custom `display` component,
 
 A `doc` value is an exact internal path, a path suffix, or a file name. When a suffix or name matches several files, the first match in source order is used and the document page shows a warning listing every match. A `doc` that matches nothing stays in the tree as a missing-document item, which shows a clear error instead of disappearing.
 
-## Importing subtrees
+## Including other resources
 
-A folder node can move its children to another YAML file through `childrenFile`. The path is relative to the file containing the node, and the imported file must contain a `tree` list. The plugin expands imports recursively before page-tree conversion, so runtime code always receives the same inlined `children` shape. Imported children are placed before any local `children`.
+A folder node includes another side-panel resource through `childrenFile`. The path is relative to the file containing the node, and the file is a [resource file](#resource-files) of either form. The plugin expands inclusions recursively before page-tree conversion, so runtime code always receives the same inlined `children` shape. Included children are placed before any local `children`.
 
 ```yaml
 # side-panel.yaml
@@ -84,11 +150,29 @@ tree:
     doc: /codeapp-dev/doc/codeapp-dataverse.md
 ```
 
-The optional `root` mapping is merged onto the importing node, so a part can keep its root document, part index, and tags in its own folder while the central file only names the node. Explicit properties on the importing node win. Because the merge happens in the loader, an imported `part` registers against the importing node's `id` exactly as inline configuration does. `root` never becomes a visible child, and `root.children` / `root.childrenFile` are configuration errors. Import cycles, missing files, a non-string `childrenFile`, and files without a `tree` list are configuration errors that name the file. Every imported file is watched by the development server; when an import is added while the server runs, editing the containing YAML refreshes the watch set.
+The optional `root` mapping is merged onto the including node, so a part can keep its root document, part index, tags, and (through a `source` section) its source rules in its own folder while the central file only names the node. Explicit properties on the including node win. Because the merge happens in the loader, an included `part` registers against the including node's `id` exactly as inline configuration does. `root` never becomes a visible child, and `root.children` / `root.childrenFile` are configuration errors. Inclusion cycles, missing files, a non-string `childrenFile`, and resources without a `tree` list are configuration errors that name the file. Every included file is watched by the development server; when an inclusion is added while the server runs, editing the containing YAML refreshes the watch set.
 
 ## Semantic parts
 
-A node with a `part` mapping and an explicit `id` becomes the root of a semantic part; all descendants belong to it unless a nested part root takes over. The part can bind a hosted index authored inside one of its documents. The index behavior is described in [Semantic parts and hosted indexes](doc_page_impl.md#semantic-parts-and-hosted-indexes).
+A node becomes a part root when it has a `part` mapping. An explicit node `id` is required because the part identity and its index document reference must remain stable when tree order changes. Membership is inherited by every descendant, including descendants included through `childrenFile`; a nested part root replaces the inherited part for its own subtree.
+
+```yaml
+tree:
+  - id: guide-part
+    text: Guide
+    doc: /guide/overview.md
+    part:
+      index:
+        docId: guide-part                # side-panel item id of the index document
+        componentId: guide-main-index    # component id authored in that document
+        config:                          # optional, for the hosted index only
+          TagsDisplayAtLinkIsOn: true
+          TagsDisplayAtLinkPosition: before
+    children:
+      - doc: /guide/setup.md
+```
+
+`part.index` binds a hosted index without copying its data: the index stays authored in its document. `part.index.config` holds document-level config keys (see [Config system](doc_page_impl_config.md#part-index-level)) that apply to the index only while it is hosted in the local-index area, on top of the config of the index document; the same index rendered inside its document is unaffected. How the index is queried, rendered, and switched is described in [Semantic parts and hosted indexes](doc_page_impl.md#semantic-parts-and-hosted-indexes).
 
 ## Item rendering
 
@@ -221,7 +305,8 @@ The default folder gesture (an inactive label navigates, the active label toggle
 ## Implementation files
 
 ```text
-frontend/plugin/doc-source.ts            load side-panel YAML, expand childrenFile, watch imports
+frontend/plugin/doc-source.ts            load side-panel resource files, expand childrenFile,
+                                         append "source" sections, watch included files
 frontend/src/lib/page-tree.js            tree conversion, routes, parts, tag and config declarations
 frontend/src/lib/side-panel-item.js      renderer choice and item data
 frontend/src/lib/text-localized.js       localized label parsing and selection, shared with indexes

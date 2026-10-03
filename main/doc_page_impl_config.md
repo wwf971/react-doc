@@ -163,6 +163,28 @@ config:
 
 The vite plugin reads source and frontmatter config at build time and puts it in the manifest (`entry.configSource`, `entry.configFrontmatter`). The side-panel level is read in the browser while the side-panel tree is built. Validation happens in the browser, where the key definitions are known, including the ones added by the application.
 
+### Part index level
+
+A hosted part index belongs to its index document, so its links follow that document's config, whichever document is shown beside it. `part.index.config` on the part root of the side panel can replace document-level keys for the hosted index only:
+
+```yaml
+- id: guide
+  part:
+    index:
+      docId: guide
+      componentId: guide-index
+      config:
+        TagsDisplayAtLinkIsOn: true
+        TagsDisplayAtLinkPosition: before
+```
+
+```text
+hosted index of part P, index document D:
+  levels 1-5 of D  <  part.index.config of P  <  inline level
+```
+
+The level does not change the config of D itself: the same index rendered inside D, and every other component of D, keep levels 1-5. Page-level keys, unknown keys, and invalid values are ignored with a warning, as at the other levels. `DocConfigStore.configPartIndexOverrideGet(partId)` returns the validated keys; the index host passes them as `config.configDocOverride`.
+
 ### Inline level
 
 Some features also accept a value on one single use, which wins over every level. Document links take a title marker, for example `[Setup](setup.md "tags:before")`. The marker forms are described in [Tag system](doc_page_impl_tag.md#tags-beside-links).
@@ -180,7 +202,7 @@ levelDocGet(docPath, key)       level that decided it: default | global | source
 configDefineListGet()           every key definition
 ```
 
-Calls from observer components are tracked by mobx. Side-panel item renderers receive the page-level values and the service directly in their `config` (`config.configGlobal`, `config.configService`). See [Side panel design](doc_page_side_panel.md#renderer-interface).
+Calls from observer components are tracked by mobx. Side-panel item renderers receive the page-level values and the service directly in their `config` (`config.configGlobal`, `config.configService`). See [Side panel design](doc_page_impl_side_panel.md#renderer-interface).
 
 ## Adding keys
 

@@ -12,7 +12,16 @@ import { LinkWarning } from './LinkWarning.jsx';
 // tags of a single target are shown beside the link when the document
 // containing the link resolves TagsDisplayAtLinkIsOn to true, or when the link
 // says so inline (tagsDisplay: before | after | on | off, from remark-doc-link).
-export const DocLink = observer(function DocLink({ target, from, kind, tagsDisplay = '', children }) {
+// configDocOverride: document-level config values that replace the values of
+// the containing document, e.g. part.index.config for a hosted part index.
+export const DocLink = observer(function DocLink({
+  target,
+  from,
+  kind,
+  tagsDisplay = '',
+  configDocOverride,
+  children,
+}) {
   const { configStore, docStore, linkConfig, onEvent: onEventPage, tagStore } = useDocStores();
   const id = useId();
   const refWrap = useRef(null);
@@ -44,7 +53,7 @@ export const DocLink = observer(function DocLink({ target, from, kind, tagsDispl
     ? (targetFirst.navigationTarget ?? targetFirst.internalPath) + (hash ? `#${hash}` : '')
     : '';
   const tagsPosition = linkTagsPositionGet({
-    configLinkDoc: configStore.configDocGet(from ?? ''),
+    configLinkDoc: { ...configStore.configDocGet(from ?? ''), ...configDocOverride },
     tagsDisplay,
   });
   const tagList = tagsPosition && !isBroken && !isMultiple && targetFirst.internalPath

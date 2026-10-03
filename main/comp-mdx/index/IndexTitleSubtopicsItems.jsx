@@ -25,6 +25,14 @@ const IndexTitleSubtopicsItems = observer(function IndexTitleSubtopicsItems({
 		&& SegmentedControl
 		&& Array.isArray(config.displayModeSegList)
 	);
+	// a hosted part index has its own language, selected here rather than by
+	// the language selector of the visible document
+	const isLanguageControlVisible = Boolean(
+		config.isLanguageControlEnabled
+		&& SegmentedControl
+		&& Array.isArray(config.languageSegList)
+		&& config.languageSegList.length > 0
+	);
 	const isPartIndexPlacement = config.placement === 'partIndex';
 
 	if (!ComponentLayout) {
@@ -48,23 +56,45 @@ const IndexTitleSubtopicsItems = observer(function IndexTitleSubtopicsItems({
 							{title.text}
 						</span>
 					</div>
-					{isDisplayModeControlVisible ? (
-						<SegmentedControl
-							data={{
-								valueSelected: config.displayMode,
-								segList: config.displayModeSegList,
-							}}
-							config={{
-								classNameTrack: 'doc-index-display-mode-segments',
-								isInitialAnimationEnabled: true,
-								widthModeSegment: 'auto',
-							}}
-							onEvent={(eventType, eventData) => {
-								if (eventType === 'valueSelectedChange') {
-									onEvent?.('displayModeChange', { displayMode: eventData.valueSelected });
-								}
-							}}
-						/>
+					{isLanguageControlVisible || isDisplayModeControlVisible ? (
+						<div className="doc-index-title-control-list">
+							{isLanguageControlVisible ? (
+								<SegmentedControl
+									data={{
+										valueSelected: config.languageSelected,
+										segList: config.languageSegList,
+									}}
+									config={{
+										classNameTrack: 'doc-index-language-segments',
+										isInitialAnimationEnabled: true,
+										widthModeSegment: 'auto',
+									}}
+									onEvent={(eventType, eventData) => {
+										if (eventType === 'valueSelectedChange') {
+											onEvent?.('languageChange', { language: eventData.valueSelected });
+										}
+									}}
+								/>
+							) : null}
+							{isDisplayModeControlVisible ? (
+								<SegmentedControl
+									data={{
+										valueSelected: config.displayMode,
+										segList: config.displayModeSegList,
+									}}
+									config={{
+										classNameTrack: 'doc-index-display-mode-segments',
+										isInitialAnimationEnabled: true,
+										widthModeSegment: 'auto',
+									}}
+									onEvent={(eventType, eventData) => {
+										if (eventType === 'valueSelectedChange') {
+											onEvent?.('displayModeChange', { displayMode: eventData.valueSelected });
+										}
+									}}
+								/>
+							) : null}
+						</div>
 					) : null}
 				</div>
 				<ComponentLayout

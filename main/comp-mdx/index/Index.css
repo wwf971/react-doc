@@ -43,7 +43,15 @@
 		0.2rem 0 0 var(--doc-index-current-background);
 }
 
-.doc-index-display-mode-segments {
+.doc-index-title-control-list {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.3rem;
+}
+
+.doc-index-display-mode-segments,
+.doc-index-language-segments {
 	min-height: 1.75rem;
 	font-size: 0.75rem;
 }
@@ -107,7 +115,7 @@
 	text-align: center;
 }
 
-.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-display-mode-segments {
+.doc-index-title-subtopics-items.is-layout-horizontal-wrap .doc-index-title-control-list {
 	grid-column: 3;
 	justify-self: end;
 }
@@ -126,7 +134,7 @@
 	overflow-wrap: anywhere;
 }
 
-.doc-index-title-subtopics-items.is-placement-part-index .doc-index-display-mode-segments {
+.doc-index-title-subtopics-items.is-placement-part-index .doc-index-title-control-list {
 	flex: 0 0 auto;
 	margin-left: auto;
 }

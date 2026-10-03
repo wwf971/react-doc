@@ -187,20 +187,32 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
   const configBase = readYaml(configFile) ?? {};
   const configLocal = readYaml(configLocalFile) ?? {};
   const config = mergeDeep(configBase, configLocal);
-  config.source = loadSourceRules(config.source, configDir);
-  if (!Array.isArray(config.source)) {
+  const sourceRuleList = loadSourceRules(config.source, configDir);
+  if (!Array.isArray(sourceRuleList)) {
     throw new Error('[doc-source] config "source" must be a list of rules');
   }
-  // inline side panel yaml, so the browser side doesn't touch the file system
+  // inline side panel yaml, so the browser side doesn't touch the file system.
+  // "source" sections of the loaded side-panel resource files are appended to
+  // the source rules, in load order. a file already read as config "source"
+  // is not read twice.
+  const context: SidePanelLoadContext = {
+    configDir,
+    fileList: [],
+    sourceFileUsedSet: new Set(
+      config.source?.file ? [path.resolve(configDir, config.source.file)] : [],
+    ),
+    sourceRuleList: [],
+  };
   if (config.sidePanel?.file) {
     const panelPath = path.resolve(configDir, config.sidePanel.file);
-    const sidePanelLoaded = loadSidePanelFile(panelPath);
+    const sidePanelLoaded = loadSidePanelFile(panelPath, context);
     config.sidePanel.tree = sidePanelLoaded.tree;
     Object.defineProperty(config.sidePanel, 'fileListImported', {
       enumerable: false,
-      value: sidePanelLoaded.fileList.slice(1),
+      value: context.fileList.slice(1),
     });
   }
+  config.source = [...sourceRuleList, ...context.sourceRuleList];
   // inline tag definitions; entries written in config itself win
   if (config.tag?.file) {
     const tagFile = path.resolve(configDir, config.tag.file);
@@ -220,13 +232,34 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
   return config;
 }
 
+// ---------- side-panel resources ----------
+// a side-panel resource is one { root?, tree } mapping. it is read from a
+// YAML file in one of two forms:
+//   sectioned   "sidePanel" section, next to an optional "source" section
+//   legacy      top-level "root" / "tree" (a file holding only a side panel)
+// the page side panel is the resource named by config sidePanel.file; a node's
+// childrenFile includes another resource. design: doc_page_impl_side_panel.md
+
 type SidePanelLoaded = {
   root?: Record<string, any>;
   tree: any[];
-  fileList: string[];
 };
 
-function loadSidePanelFile(filePath: string, fileChain: string[] = []): SidePanelLoaded {
+type SidePanelLoadContext = {
+  configDir: string;
+  // every side-panel file loaded, the page side-panel file first
+  fileList: string[];
+  // files whose "source" section is already taken
+  sourceFileUsedSet: Set<string>;
+  // rules of the "source" sections, paths relative to configDir
+  sourceRuleList: any[];
+};
+
+function loadSidePanelFile(
+  filePath: string,
+  context: SidePanelLoadContext,
+  fileChain: string[] = [],
+): SidePanelLoaded {
   const filePathResolved = path.resolve(filePath);
   const cycleIndex = fileChain.indexOf(filePathResolved);
   if (cycleIndex >= 0) {
@@ -237,9 +270,23 @@ function loadSidePanelFile(filePath: string, fileChain: string[] = []): SidePane
     throw new Error(`[doc-source] side panel file not found: ${filePathResolved}`);
   }
 
-  const sidePanel = readYaml(filePathResolved);
+  const fileContent = readYaml(filePathResolved);
+  const sidePanel = sidePanelResourceGet(fileContent, filePathResolved);
   if (!Array.isArray(sidePanel?.tree)) {
-    throw new Error(`[doc-source] side panel file must contain a "tree" list: ${filePathResolved}`);
+    throw new Error(
+      `[doc-source] side panel file must contain a "tree" list, at top level or in a "sidePanel" section: ${filePathResolved}`,
+    );
+  }
+
+  if (fileContent?.source !== undefined && !context.sourceFileUsedSet.has(filePathResolved)) {
+    context.sourceFileUsedSet.add(filePathResolved);
+    const ruleList = sourceRuleListGet(fileContent);
+    if (!Array.isArray(ruleList)) {
+      throw new Error(`[doc-source] "source" section must be a rule list or contain "rules": ${filePathResolved}`);
+    }
+    context.sourceRuleList.push(
+      ...sourceRulesRebase(ruleList, path.dirname(filePathResolved), context.configDir),
+    );
   }
 
   // optional "root" metadata: properties applied to the parent node that
@@ -257,21 +304,31 @@ function loadSidePanelFile(filePath: string, fileChain: string[] = []): SidePane
     }
   }
 
-  const fileList = [filePathResolved];
+  context.fileList.push(filePathResolved);
   const tree = loadSidePanelNodes(
     sidePanel.tree,
     path.dirname(filePathResolved),
     [...fileChain, filePathResolved],
-    fileList,
+    context,
   );
-  return { root, tree, fileList };
+  return { root, tree };
+}
+
+function sidePanelResourceGet(fileContent: any, filePath: string): any {
+  if (fileContent?.sidePanel === undefined) return fileContent;
+  if (fileContent.tree !== undefined || fileContent.root !== undefined) {
+    throw new Error(
+      `[doc-source] side panel file must not combine a "sidePanel" section with top-level "tree" or "root": ${filePath}`,
+    );
+  }
+  return fileContent.sidePanel;
 }
 
 function loadSidePanelNodes(
   nodes: any[],
   fileDir: string,
   fileChain: string[],
-  fileList: string[],
+  context: SidePanelLoadContext,
 ): any[] {
   return nodes.map((node, index) => {
     if (!node || typeof node !== 'object' || Array.isArray(node)) return node;
@@ -292,14 +349,13 @@ function loadSidePanelNodes(
           `[doc-source] side panel "childrenFile" must be a non-empty path at ${fileChain.at(-1)} tree[${index}]`,
         );
       }
-      const loaded = loadSidePanelFile(path.resolve(fileDir, childrenFile), fileChain);
+      const loaded = loadSidePanelFile(path.resolve(fileDir, childrenFile), context, fileChain);
       childrenImported = loaded.tree;
       rootImported = loaded.root ?? {};
-      fileList.push(...loaded.fileList);
     }
 
     const childrenLoaded = Array.isArray(childrenLocal)
-      ? loadSidePanelNodes(childrenLocal, fileDir, fileChain, fileList)
+      ? loadSidePanelNodes(childrenLocal, fileDir, fileChain, context)
       : [];
     // imported root metadata applies to this node; explicit local properties win.
     const nodeMerged = { ...rootImported, ...nodeResult };
@@ -318,19 +374,33 @@ function excludeSidePanelItems(nodes: any[], itemIdsExcluded: Set<string>): any[
       : node);
 }
 
+// config "source": a rule list, { file }, or absent when every rule comes from
+// "source" sections of side-panel resource files.
 function loadSourceRules(source: any, configDir: string): any[] | any {
+  if (source === undefined || source === null) return [];
   if (Array.isArray(source)) return source;
   if (!source?.file) return source;
   const sourceFile = path.resolve(configDir, source.file);
-  const sourceConfig = readYaml(sourceFile);
-  const rules = Array.isArray(sourceConfig) ? sourceConfig : sourceConfig?.rules;
+  const rules = sourceRuleListGet(readYaml(sourceFile));
   if (!Array.isArray(rules)) {
     throw new Error(`[doc-source] source file must contain a rule list: ${sourceFile}`);
   }
-  const sourceDir = path.dirname(sourceFile);
+  return sourceRulesRebase(rules, path.dirname(sourceFile), configDir);
+}
+
+// a source file is a rule list, { rules }, or a file with a "source" section
+// (itself a rule list or { rules }), possibly next to a "sidePanel" section.
+function sourceRuleListGet(fileContent: any): any[] | undefined {
+  const section = fileContent?.source !== undefined ? fileContent.source : fileContent;
+  return Array.isArray(section) ? section : section?.rules;
+}
+
+// rule paths are written relative to their own file; the scan reads them
+// relative to configDir.
+function sourceRulesRebase(rules: any[], fileDir: string, configDir: string): any[] {
   return rules.map((rule) => {
     if ((rule.action !== 'addFolder' && rule.action !== 'addFile') || !rule.path) return rule;
-    const pathAbsolute = path.resolve(sourceDir, rule.path);
+    const pathAbsolute = path.resolve(fileDir, rule.path);
     return { ...rule, path: path.relative(configDir, pathAbsolute) || '.' };
   });
 }

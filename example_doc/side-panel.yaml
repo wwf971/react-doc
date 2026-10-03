@@ -4,7 +4,8 @@
 #   - sourceRoot: rootId       generated tree for a complete source root
 #   - text + children          folder; adding "doc" binds the label to that page
 #   - separator: Some Text     separator line
-#   - childrenFile: ./x.yaml   import a subtree; its "root" mapping configures this node
+#   - childrenFile: ./x.yaml   include another side-panel resource; its "root" mapping
+#                              configures this node, its "source" section adds source rules
 # any node may declare "tags"; they attach to the bound document/folder/item.
 # any node may declare "config"; it applies to the documents of the node and
 # of every item below it.

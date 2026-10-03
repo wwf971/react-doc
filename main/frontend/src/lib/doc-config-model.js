@@ -12,16 +12,23 @@ import { configDeclaredIs, configValueNormalize } from './doc-config-define.js';
 // page-scoped keys are read only at level 2. a feature with an inline form
 // (for example a link title marker) applies it after level 5 by itself.
 //
+// part index level: side-panel part.index.config, applied over the config of
+// the index document only while the index is hosted in the local-index area.
+// it is kept apart from configByDocPath, so the same document rendered as a
+// page keeps levels 1-5.
+//
 // configModel: {
-//   configGlobal          key -> value, levels 1-2
-//   levelGlobalByKey      key -> level
-//   configByDocPath       docPath -> { valueByKey, levelByKey }, levels 1-5
+//   configGlobal                key -> value, levels 1-2
+//   levelGlobalByKey            key -> level
+//   configByDocPath             docPath -> { valueByKey, levelByKey }, levels 1-5
+//   configPartIndexByPartId     partId -> { key: value }, only the keys declared
 // }
 export function configModelBuild({
   configDefineByKey,
   configDoc,
   fileManifest = [],
   declarationListSidePanel = [],
+  declarationListPartIndex = [],
 }) {
   const configGlobal = {};
   const levelGlobalByKey = {};
@@ -70,7 +77,21 @@ export function configModelBuild({
     configByDocPath.set(docPath, configResolved);
   }
 
-  return { configGlobal, levelGlobalByKey, configByDocPath };
+  const configPartIndexByPartId = new Map();
+  for (const declaration of declarationListPartIndex) {
+    const originText = `part.index.config of side-panel item ${declaration.partId}`;
+    if (!configDeclaredIs(declaration.config)) {
+      console.warn(`[doc-config] ${originText} must be a mapping`);
+      continue;
+    }
+    const configResolved = { valueByKey: {}, levelByKey: {} };
+    configLevelApply(configResolved, declaration.config, {
+      configDefineByKey, level: 'partIndex', originText,
+    });
+    configPartIndexByPartId.set(declaration.partId, configResolved.valueByKey);
+  }
+
+  return { configGlobal, levelGlobalByKey, configByDocPath, configPartIndexByPartId };
 }
 
 function configLevelApply(configResolved, configDeclared, { configDefineByKey, level, originText }) {

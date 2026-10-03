@@ -4,6 +4,7 @@ import { observer } from 'mobx-react-lite';
 import { PageToc } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
+import { DocLanguageProvider } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 import './DocPageToc.css';
 
 const DocPageToc = observer(function DocPageToc(props) {
@@ -76,7 +77,7 @@ const DocPageToc = observer(function DocPageToc(props) {
 });
 
 const PartIndexPanel = observer(function PartIndexPanel({ isVisible, labels }) {
-  const { componentConfig, docStore } = useDocStores();
+  const { componentConfig, configStore, docStore } = useDocStores();
   const part = docStore.partCurrent;
   const result = docStore.partIndexQueryCurrent;
   const displayMode = docStore.partIndexDisplayModeCurrent;
@@ -227,30 +228,44 @@ const PartIndexPanel = observer(function PartIndexPanel({ isVisible, labels }) {
       onPointerUp={dragEnd}
       onPointerCancel={dragEnd}
     >
-      <RegisteredComp
-        compDefinition={result.definition}
-        compId={result.compId}
-        configRuntime={{
-          displayMode,
-          displayModeSegList: [
-            { value: 'docked', labelText: labels.docked },
-            { value: 'floating', labelText: labels.floating },
-          ],
-          instanceId: `part-index:${part.id}:${result.component.id}`,
-          isDisplayModeControlEnabled: docStore.isPartIndexFloatingEnabled,
-          isPartRootCurrent: docStore.itemCurrent?.id === part.id,
-          navigation: docStore.navigationRuntime,
-          SegmentedControl: componentConfig.SegmentedControl,
-        }}
-        input={result.component.input}
-        onEventRuntime={(eventType, eventData) => {
-          if (eventType !== 'displayModeChange') return undefined;
-          if (eventData.displayMode === 'floating') floatingLayoutPrepare();
-          const isAccepted = docStore.partIndexDisplayModeSet(eventData.displayMode);
-          return { isHandled: true, isAccepted };
-        }}
-        placement="partIndex"
-      />
+      {/* the index keeps its own language and the config of its own document,
+          whichever document is visible beside it */}
+      <DocLanguageProvider language={docStore.partIndexLanguageCurrent}>
+        <RegisteredComp
+          compDefinition={result.definition}
+          compId={result.compId}
+          configRuntime={{
+            configDocOverride: configStore.configPartIndexOverrideGet(part.id),
+            displayMode,
+            displayModeSegList: [
+              { value: 'docked', labelText: labels.docked },
+              { value: 'floating', labelText: labels.floating },
+            ],
+            instanceId: `part-index:${part.id}:${result.component.id}`,
+            isDisplayModeControlEnabled: docStore.isPartIndexFloatingEnabled,
+            isLanguageControlEnabled: true,
+            isPartRootCurrent: docStore.itemCurrent?.id === part.id,
+            languageSegList: docStore.partIndexLanguageListCurrent
+              .map((language) => ({ value: language, labelText: language })),
+            languageSelected: docStore.partIndexLanguageCurrent,
+            navigation: docStore.navigationRuntime,
+            SegmentedControl: componentConfig.SegmentedControl,
+            sourcePath: result.docPath,
+          }}
+          input={result.component.input}
+          onEventRuntime={(eventType, eventData) => {
+            if (eventType === 'languageChange') {
+              const isAccepted = docStore.partIndexLanguageSet(eventData.language);
+              return { isHandled: true, isAccepted };
+            }
+            if (eventType !== 'displayModeChange') return undefined;
+            if (eventData.displayMode === 'floating') floatingLayoutPrepare();
+            const isAccepted = docStore.partIndexDisplayModeSet(eventData.displayMode);
+            return { isHandled: true, isAccepted };
+          }}
+          placement="partIndex"
+        />
+      </DocLanguageProvider>
     </div>
   );
   return displayMode === 'floating' && typeof document !== 'undefined'

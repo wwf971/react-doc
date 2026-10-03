@@ -50,6 +50,7 @@ export class DocStore {
   partIndexContentMode: 'page' | 'part' = 'part';
   partIndexDisplayModeByPartId: Record<string, 'docked' | 'floating'> = {};
   partIndexFloatingLayoutByPartId: Record<string, PartIndexFloatingLayout> = {};
+  partIndexLanguageSelectedByPartId: Record<string, string> = {};
 
   routeCurrentPath = '';
   itemCurrentId = '';
@@ -193,6 +194,29 @@ export class DocStore {
     return this.componentQuery(indexRef.docId, indexRef.componentId);
   }
 
+  // languages authored in the hosted index of the current part
+  get partIndexLanguageListCurrent(): string[] {
+    const result = this.partIndexQueryCurrent;
+    return result?.status === 'done' ? result.component.languageList ?? [] : [];
+  }
+
+  // language of the hosted index of the current part. independent of the
+  // visible document: the selection saved for the part, then the frontmatter
+  // language of the index document, then the page language, then the first
+  // language authored in the index.
+  get partIndexLanguageCurrent(): string {
+    const result = this.partIndexQueryCurrent;
+    if (result?.status !== 'done') return '';
+    const languageDocument = languageNormalize(this.sourceStore.compiledByPath[result.docPath]?.language);
+    const languageList = this.partIndexLanguageListCurrent;
+    if (languageList.length === 0) return languageDocument || this.languagePage;
+    const languageSaved = this.partIndexLanguageSelectedByPartId[this.partCurrent.id];
+    if (languageList.includes(languageSaved)) return languageSaved;
+    if (languageList.includes(languageDocument)) return languageDocument;
+    if (languageList.includes(this.languagePage)) return this.languagePage;
+    return languageList[0];
+  }
+
   get routeHome(): string {
     const homeItem = this.sourceStore.configDoc.homeItem;
     if (homeItem && this.treeModel.itemById.has(homeItem)) {
@@ -318,6 +342,13 @@ export class DocStore {
       top: layout.top,
       width: layout.width,
     };
+    return true;
+  }
+
+  partIndexLanguageSet(language: string): boolean {
+    const partId = this.partCurrent?.id;
+    if (!partId || !this.partIndexLanguageListCurrent.includes(language)) return false;
+    this.partIndexLanguageSelectedByPartId[partId] = language;
     return true;
   }
 

@@ -61,6 +61,8 @@ It's totally possible that there exists multiple leaf items that correspond to s
 
 For config file that describes that side panel's tree structure, the data format should be well designed, and keep things clean and clear.
 
+A side panel is a way of collecting things from what source selects and organizing them as a tree, so it is a resource rather than a unique page setting: a side panel can include another one (for example the side panel of a part), and the source rules of the files a side panel organizes can be declared in the same file as that side panel. The format must leave room for several side panels per file and for using one side panel in more than one place.
+
 ### Part index
 
 A side-panel node can be declared as the root of a semantic part. The node and all of its descendants belong to that part, except descendants under a more deeply nested part root. A part can bind an index by a pair of stable identifiers:
@@ -73,6 +75,8 @@ This binding must not duplicate the index data in the side-panel config. The doc
 When the current document belongs to a part with a valid index, the desktop local-index area should show a segmented control that switches between the ordinary **On this page** heading index and an **In this part** index. **In this part** is selected by default. The page/part selection is global document-page UI state, so it remains unchanged when navigating to another document or part. Floating display mode remains UI state owned by the MobX document store.
 
 A hosted part index can optionally switch between its normal docked location and a floating panel. The floating panel is placed at the top-right of the page by default. The docked/floating segmented control belongs at the rightmost side of the index title line. This control must not appear when the same index is rendered as an ordinary component inside an MDX/Markdown document.
+
+A hosted index belongs to the document that authors it, not to the document currently shown. Its language is its own state, kept per part and selected by a language control at the top right of the index when the index is multilingual; switching documents or the document language does not change it. Its links resolve and display (for example tags beside links) according to the index document, and the part declaration can override such document-level config for the hosted index only.
 
 In hosted placement, the index title is left-aligned and wraps naturally. The docked/floating control remains on the title row only when enough width exists and otherwise wraps below the title. The index component itself must not create its own vertical scrollbar. Its host panel, docked or floating, is bounded by the window: a short index keeps its natural height, and an index taller than the space below the panel's top edge scrolls inside the panel, while the page/part switch stays visible outside the scrolling content. An index link targeting the current source document is highlighted with a yellow background.
 

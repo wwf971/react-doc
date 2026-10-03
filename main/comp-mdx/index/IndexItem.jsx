@@ -5,6 +5,9 @@ import { textLocalizedGet } from './IndexData.js';
 
 // item.tagsDisplay (before | after | on | off) is the per-item tag override;
 // both item kinds pass it to their link renderer, which shares one tag policy.
+// links belong to the document containing the index (config.sourcePath), also
+// when a part index is hosted beside another document, so relative targets and
+// the TagsDisplayAtLink... config do not change with the visible document.
 const IndexItem = observer(function IndexItem({ config = {}, docStore, item, languagePreferred }) {
 	if (item.kind === 'inline-link') {
 		return (
@@ -21,9 +24,10 @@ const IndexItem = observer(function IndexItem({ config = {}, docStore, item, lan
 		<div className="doc-index-item">
 			<DocLink
 				target={item.target}
-				from={docStore.docCurrentPath}
+				from={config.sourcePath || docStore.docCurrentPath}
 				kind="index-item"
 				tagsDisplay={item.tagsDisplay ?? ''}
+				configDocOverride={config.configDocOverride}
 			>
 				<span lang={titleItem.language || undefined}>{titleItem.text}</span>
 			</DocLink>

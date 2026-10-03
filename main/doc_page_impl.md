@@ -38,7 +38,7 @@ mobx stores (source of truth for rendering)
 
 **Multilingual content.** Language inheritance, document-wide selection, headings, paragraphs, lists, degradation behavior, and file naming are specified in [doc_page_impl_multi-lang.md](doc_page_impl_multi-lang.md).
 
-**Doc collection via vite plugin.** The plugin reads the two-layer config, executes the source rules, expands side-panel subtree files, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any imported side-panel file — regardless of its extension — invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
+**Doc collection via vite plugin.** The plugin reads the two-layer config, expands side-panel resource files (collecting their source rules), executes the source rules, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any imported side-panel file — regardless of its extension — invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
 
 ## Can we keep fumadocs default components while owning link logic? YES
 
@@ -74,6 +74,8 @@ source:
   - action: removeByPath   # glob against internal path /{rootId}/relative/path
     pattern: "/example/private/**"
 ```
+
+Rules can also be declared in the `source` section of a side-panel resource file, next to the side panel that organizes the collected files; those rules are appended after the rules above (see [Resource files](doc_page_impl_side_panel.md#resource-files)). `source` in config can then be omitted.
 
 Paths are relative to the config file. Internal representation of every file is `/{rootId}/relPath`, so same-name root folders never clash. `addFile` after a remove rule re-adds a single file (the "remove folder except one file" case in the requirement).
 
@@ -211,11 +213,9 @@ Mermaid is one example. `mermaid.render(id, source)` appends temporary rendering
 
 ## Side panel
 
-The side panel is a free tree declared in YAML (`sidePanel.file`), so it need not mirror the file tree. Items bind documents, source folders, or component panels, or act as virtual folders and separators. Subtrees can live in their own files through `childrenFile`. The tree decides document order, item routes, semantic parts, side-panel tags, and the side-panel level of document config.
+The side panel is a free tree declared in YAML, so it need not mirror the file tree. It is treated as a resource: a way of picking things from the collected source and arranging them as a tree. The page side panel is the resource named by `sidePanel.file`; a node includes another resource, such as the side panel of a part, through `childrenFile`; a resource file can also hold the source rules of the files it organizes. The tree decides document order, item routes, semantic parts, side-panel tags, and the side-panel level of document config. Every item label is rendered through the registry component named `SidePanelItem`.
 
-Every item label is rendered through one central path: the registry component named `SidePanelItem` receives the item data and its resolved tags. The package default shows the text followed by the tags; mapping `SidePanelItem` in `compRegistry` replaces the rendering of every item, and a node-level `display.component` overrides one item.
-
-For the tree format, document selection, subtree imports, item rendering, and the renderer interface, refer to [Side panel design](doc_page_side_panel.md).
+For the resource model, file forms, tree format, inclusion, parts, and item rendering, refer to [Side panel design](doc_page_impl_side_panel.md).
 
 ## Tags
 
@@ -241,20 +241,7 @@ For the key list, naming rules, declaration syntax of each level, and the config
 
 ## Semantic parts and hosted indexes
 
-A side-panel node becomes a part root when it has a `part` mapping. An explicit node `id` is required because the part identity and its index document reference must remain stable when tree order changes. Membership is inherited by every descendant, including descendants expanded from `childrenFile`; a nested part root replaces the inherited part for its own subtree.
-
-```yaml
-tree:
-  - id: guide-part
-    text: Guide
-    doc: /guide/overview.md
-    part:
-      index:
-        docId: guide-part
-        componentId: guide-main-index
-    children:
-      - doc: /guide/setup.md
-```
+A side-panel node with a `part` mapping and an explicit `id` is a part root; its `part.index` names the index document by side-panel item id and the index component by authored id. The declaration is described in [Side panel design](doc_page_impl_side_panel.md#semantic-parts).
 
 The referenced document marks the queryable component with a stable authored id:
 
@@ -282,6 +269,11 @@ compDefine(ComponentExample, {
 The right-side local-index slot is wrapped by `DocPageToc`. Outside a configured part, when globally disabled, or when no segmented-control implementation is injected, it delegates directly to the native Fumadocs TOC. Inside a configured part, a segmented control switches between **On this page** and **In this part**, with **In this part** as the initial mode. Both modes retain the native Fumadocs TOC shell; part mode replaces its inner heading list rather than replacing the shell, so the layout's right-column width remains stable while switching. The part-mode class does not replace the shell's top padding, so switching modes also retains the same top inset without mode-specific size tuning. `DocStore.partIndexContentMode` is one global page/part selection that survives document and part navigation, while docked/floating mode can remain keyed by part id. The host loads the referenced document on demand and renders the referenced component through `RegisteredComp`, preserving component normalization, placement checks, and the common `{ data, config, onEvent }` boundary.
 
 For `partIndex` placement, the index receives host-only display-mode configuration. Its left-aligned title and display-mode control use a wrapping row, allowing the control to move below a long title. The segmented control emits a `displayModeChange` request, and the host submits that request to `DocStore`. The reusable `Index` has no scrolling viewport of its own; the host panel around it is the scroll owner. In both display modes the panel's maximum height is the space between its top edge and the bottom of the window (`--doc-part-index-height-available`, measured by `DocPageToc` on resize, scroll, and layout or position changes), so a short index keeps its natural height and a tall one scrolls inside the panel. A docked panel measures its top from the sticky anchor of the TOC column rather than only from its current position: at the document bottom the sticky column moves upward, and measuring from that moved position would grant more height, push the column further up, and let the index grow to its full height. Wide content scrolls horizontally in the same panel, and the page/part switch stays outside the scrolling content. In `floating` mode the same component instance is rendered through a `document.body` portal, positioned at the top right, and assigned the application overlay stack maximum so it cannot pass below the side panel while being dragged; its height bound follows the dragged position. Ordinary `mdx` and `commentBlock` placements receive no display-mode control. On the part-root document, host state gives the index title the yellow current marker.
+
+A hosted index belongs to its own document, not to the document shown beside it, so switching documents within the part changes neither its language nor its link style:
+
+- **Language.** `DocStore.partIndexLanguageCurrent` is kept per part: the saved selection, then the frontmatter `language` of the index document, then the page language, then the first authored language. The host wraps the index in `DocLanguageProvider` with it. When the index has authored languages (`languageList` of its compiled component entry, from `compile.languageListGetByComponent`), the host passes `languageSegList` and `languageSelected`, and the index shows a language control at the right of its title line, before the docked/floating control. The control emits `languageChange`, which the host submits to `DocStore.partIndexLanguageSet()`. The document toolbar selector and side-panel labels keep following the visible document.
+- **Document config.** The host sets `config.sourcePath` to the index document, so index links resolve relative targets and read `TagsDisplayAtLink...` from that document, and nested subtopic components receive the same source path. `part.index.config` is passed as `config.configDocOverride`; `DocLink` and `SourceLink` apply it over the containing document's config, below the inline link marker.
 
 An index item defaults to `kind: document`. With `kind: inline-link`, it renders the reusable `SourceLink` component rather than owning source-popup behavior. `SourceLink` is independent of `Index`: it accepts a collected internal source path and label through the unified `{ data, config, onEvent }` interface, loads the source through `DocSourceStore.loadRaw()`, and owns a `CodeBlockCompactStore`. `CodeBlockCompactPopup` remains the shared implementation for the panel, syntax-highlighted body, copy operation, close event, and Escape-key behavior. Source-link targets do not need side-panel entries; with `pruneSourceToSidePanel` they are retained because the containing document reaches them (see [Source pruning for deployment](#source-pruning-for-deployment)).
 
@@ -364,7 +356,7 @@ main/
         └── lib/                 # mdx compile, nested Markdown renderer, link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, framework adapter
 ```
 
-Design documents: [side panel](doc_page_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [package usage](doc_page_impl_detail.md).
+Design documents: [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [package usage](doc_page_impl_detail.md).
 
 Run `pnpm install` from the workspace root once, then `pnpm dev` from either this folder or `frontend/`. `pnpm build` produces one static deployable artifact (docs bundled as lazy chunks); any static file server works, no doc folders needed at runtime.
 

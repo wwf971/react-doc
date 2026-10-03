@@ -51,7 +51,16 @@ export class DocConfigStore {
       configDoc: this.sourceStore.configDoc,
       fileManifest: this.sourceStore.fileManifest,
       declarationListSidePanel: this.docStore.treeModel.configDeclarationList,
+      declarationListPartIndex: [...this.docStore.treeModel.partById.values()]
+        .filter((part: any) => part.index?.config !== undefined)
+        .map((part: any) => ({ partId: part.id, config: part.index.config })),
     });
+  }
+
+  // key -> value of the keys declared in part.index.config of one part. the
+  // hosted index applies them over the config of its index document.
+  configPartIndexOverrideGet(partId: string): Record<string, any> {
+    return this.configModel.configPartIndexByPartId.get(partId) ?? {};
   }
 
   // key -> value of every key, at page level

@@ -13,6 +13,8 @@ import './SourceLink.css';
 // data.tagsDisplay   optional: before | after | on | off, as for DocLink. without
 //                    it, the document containing the link decides
 //                    (TagsDisplayAtLink... config).
+// config.configDocOverride   optional document-level config values replacing
+//                    those of the containing document, as for DocLink.
 const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEvent }) {
 	const { configStore, docStore, sourceStore, tagStore } = useDocStores();
 	const [store] = useState(() => new CodeBlockCompactStore());
@@ -33,7 +35,10 @@ const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEven
 	const isUnavailable = Boolean(sourceEntry)
 		&& (!Panel || sourceState?.status === 'error');
 	const tagsPosition = linkTagsPositionGet({
-		configLinkDoc: configStore.configDocGet(config.sourcePath || docStore.docCurrentPath),
+		configLinkDoc: {
+			...configStore.configDocGet(config.sourcePath || docStore.docCurrentPath),
+			...config.configDocOverride,
+		},
 		tagsDisplay: data.tagsDisplay ?? '',
 	});
 	const tagList = tagsPosition && !isBroken

@@ -132,7 +132,7 @@ Every place renders tags through `TagList`, so the tag definition decides the lo
 
 ### Side-panel items
 
-The default side-panel item renderer shows the tags of the bound asset after the item text. `TagsDisplayAtSidePanelItemsList` limits which tag ids appear there. For example, a page can show only `chapter` in the side panel while every tag still appears next to the path bar. The renderer receives the unfiltered tags and the page-level config, so a custom renderer can choose differently. See [Side panel design](doc_page_side_panel.md#tag-display).
+The default side-panel item renderer shows the tags of the bound asset after the item text. `TagsDisplayAtSidePanelItemsList` limits which tag ids appear there. For example, a page can show only `chapter` in the side panel while every tag still appears next to the path bar. The renderer receives the unfiltered tags and the page-level config, so a custom renderer can choose differently. See [Side panel design](doc_page_impl_side_panel.md#tag-display).
 
 ### Main panel
 

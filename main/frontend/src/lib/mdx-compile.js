@@ -38,18 +38,20 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
   const componentList = [];
   const languageSet = new Set();
   const headingVariantsById = new Map();
+  // languageList of an entry: languages of that one component, e.g. for the
+  // language selector of a hosted part index
   const onCommentComponent = ({ compName, lang, props, raw, sourceOffset }) => {
+    const languageListGet = config.languageListGetByComponent?.[compName]
+      ?? (multiLangCompNameIs(compName) ? multiLangLanguageListGet : undefined);
+    const languageList = languageListGet?.(raw, { compName, props, lang }) ?? [];
     componentList.push({
       id: typeof props.id === 'string' ? props.id.trim() : '',
       compName,
       input: { lang, propsAuthored: props, raw },
+      languageList,
       sourceOffset,
     });
-    const languageListGet = config.languageListGetByComponent?.[compName]
-      ?? (multiLangCompNameIs(compName) ? multiLangLanguageListGet : undefined);
-    for (const language of languageListGet?.(raw, { compName, props, lang }) ?? []) {
-      languageSet.add(language);
-    }
+    for (const language of languageList) languageSet.add(language);
   };
   const structuredDataGet = ({ compName, props, raw }) => {
     const getter = config.structuredDataGetByComponent?.[compName]

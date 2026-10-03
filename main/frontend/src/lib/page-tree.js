@@ -8,7 +8,7 @@
 //   - separator: Some Text
 // every node may also declare "tags" (doc_page_impl_tag.md) and "config"
 // (doc_page_impl_config.md), and every item label is created by
-// sidePanelItemNameCreate (doc_page_side_panel.md). "text" is a string or a
+// sidePanelItemNameCreate (doc_page_impl_side_panel.md). "text" is a string or a
 // language mapping (text-localized.js).
 
 import { sidePanelItemNameCreate } from './side-panel-item.js';
@@ -241,6 +241,9 @@ function partRegister(node, context) {
       index: partConfig.index && typeof partConfig.index === 'object'
         ? {
             componentId: String(partConfig.index.componentId ?? ''),
+            // document-level config keys for the hosted index only, validated
+            // by the config system (part index level)
+            config: partConfig.index.config,
             docId: String(partConfig.index.docId ?? ''),
           }
         : undefined,

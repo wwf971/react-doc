@@ -39,6 +39,7 @@ export type ComponentSourceEntry = {
     propsAuthored?: Record<string, any>;
     raw?: string;
   };
+  languageList?: string[];
   sourceOffset?: number;
 };
 

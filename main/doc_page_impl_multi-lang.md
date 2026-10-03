@@ -158,7 +158,7 @@ subtopics:
         target: /guide/setup.md
 ```
 
-The type supports `vertical-list` and `horizontal-wrap`; omitting `layout` selects `vertical-list`. Future layouts reuse `title`, `subtopics`, and `items`, while future types can define another normalized data shape behind the same root entry. A local MobX store parses and validates the authored data before rendering. The selected language remains in the shared document language context rather than being duplicated as local state, so the index changes with the document toolbar selector. Missing translations fall back to the first authored translation and set `lang` to the language actually rendered.
+The type supports `vertical-list` and `horizontal-wrap`; omitting `layout` selects `vertical-list`. Future layouts reuse `title`, `subtopics`, and `items`, while future types can define another normalized data shape behind the same root entry. A local MobX store parses and validates the authored data before rendering. The selected language remains in the shared document language context rather than being duplicated as local state, so an index inside a document changes with the document toolbar selector. A hosted part index is the exception: its language is kept per part in `DocStore`, independent of the visible document, and selected by its own control in its title line ([Semantic parts and hosted indexes](doc_page_impl.md#semantic-parts-and-hosted-indexes)). Missing translations fall back to the first authored translation and set `lang` to the language actually rendered.
 
 Index items render through `DocLink`, preserving centralized target resolution, unavailable-link behavior, navigation history, and route-mode handling. The index parser also exposes language-list and structured-search extractors. The consumer registers these callbacks under every author-facing tag name of the index (`Index`, and `DocIndex` for compatibility) so both translations appear in the language selector and search index.
 
@@ -177,9 +177,9 @@ The `text` of any side-panel node can be a string or the same kind of language m
       doc: /codeapp-dev/doc/python-api.md
 ```
 
-Labels follow the language of the visible document, `DocStore.languageDisplay`: the selected language of the current document, then its frontmatter language, then the page language. This is the language the document body and its part index receive, so a label and the index beside it always agree. The selection uses the same rule as indexes: the preferred translation when present, otherwise the first authored one, with `lang` set to the language actually shown.
+Labels follow the language of the visible document, `DocStore.languageDisplay`: the selected language of the current document, then its frontmatter language, then the page language. This is the language the document body receives; the hosted part index keeps its own language. The selection uses the same rule as indexes: the preferred translation when present, otherwise the first authored one, with `lang` set to the language actually shown.
 
-Index text and side-panel labels share one parser and selector, `lib/text-localized.js`. The side-panel behavior (where the translation is selected, what renderers receive, and how invalid labels are reported) is described in [Side panel design](doc_page_side_panel.md#localized-labels).
+Index text and side-panel labels share one parser and selector, `lib/text-localized.js`. The side-panel behavior (where the translation is selected, what renderers receive, and how invalid labels are reported) is described in [Side panel design](doc_page_impl_side_panel.md#localized-labels).
 
 ## Search indexing
 
@@ -213,4 +213,4 @@ Malformed heading mappings intentionally behave differently: the native heading 
 
 The shared YAML entry is exposed as `common/MultiLang` (compatibility id `common/DocMultiLang`) and remains limited to the `commentBlock` placement. The `SegmentedControl` is runtime-injected by the consuming application, avoiding a dependency from the reusable document package to an application component library.
 
-Additional comment components can participate in toolbar language detection through `config.compile.languageListGetByComponent`. Each callback receives the raw marked block and returns its supported language codes.
+Additional comment components can participate in toolbar language detection through `config.compile.languageListGetByComponent`. Each callback receives the raw marked block and returns its supported language codes. The result is also kept on the component's compiled entry (`componentList[].languageList`), which is where a hosted part index gets the languages of its own control.

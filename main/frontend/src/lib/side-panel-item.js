@@ -4,7 +4,7 @@ import { compDefinitionNormalize, compIdResolve } from '../../../comp-doc/regist
 import { tagListNormalize } from './doc-tag-declare.js';
 import { textLocalizedGet } from './text-localized.js';
 
-// Decides how one side-panel item label is rendered. Design: doc_page_side_panel.md
+// Decides how one side-panel item label is rendered. Design: doc_page_impl_side_panel.md
 //
 //   node.display.component                    explicit per-item component
 //   -> sidePanel.itemDisplay.component        document, panel and inline items;
