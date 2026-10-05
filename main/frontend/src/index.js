@@ -19,7 +19,15 @@ export { DocSourceStore } from './store/DocSourceStore.js';
 export { DocStore } from './store/DocStore.js';
 export { DocTagStore } from './store/DocTagStore.js';
 export { DocConfigStore } from './store/DocConfigStore.js';
+export { DocEditStore } from './store/DocEditStore.js';
 export { useDocStores } from './store/context.js';
+// building blocks for a component's own edit mode (doc_page_impl_edit.md)
+export { EditActions } from '../../comp-doc/edit/EditActions.jsx';
+export { EditFloatingPanel } from '../../comp-doc/edit/EditFloatingPanel.jsx';
+export { EditSourceSurface } from '../../comp-doc/edit/EditSourceSurface.jsx';
+export { EditValueInline } from '../../comp-doc/edit/EditValueInline.jsx';
+export { BlockRender } from '../../comp-mdx/text/BlockRender.jsx';
+export { TextBlockEdit } from '../../comp-mdx/text/TextBlockEdit.jsx';
 export { MdxRenderer } from '../../comp-doc/mdx-render/MdxRenderer.jsx';
 export { SidePanelItem } from '../../comp-doc/side-panel/SidePanelItem.jsx';
 export { SidePanelItemSurfaceContext } from '../../comp-doc/side-panel/SidePanelItemHost.jsx';

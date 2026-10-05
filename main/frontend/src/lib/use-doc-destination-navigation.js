@@ -18,6 +18,10 @@ export function useDocDestinationNavigation({
   pathContent,
 }) {
   const pathContentPreviousRef = useRef('');
+  // the request version whose destination was applied to the current document.
+  // a recompile of the same document (source reload) does not change it, so
+  // the reader keeps the current position instead of jumping to the top.
+  const requestVersionAppliedRef = useRef(-1);
 
   useLayoutEffect(() => {
     if (!pathContent) return undefined;
@@ -28,7 +32,9 @@ export function useDocDestinationNavigation({
     if (!pageElement) return undefined;
     if (isDocumentChanged) pageScrollTopReset(pageElement);
     if (compiledStatus !== 'done') return undefined;
+    if (!isDocumentChanged && requestVersionAppliedRef.current === navigationRequestVersion) return undefined;
     pathContentPreviousRef.current = pathContent;
+    requestVersionAppliedRef.current = navigationRequestVersion;
 
     let elementTarget;
     let frameId;

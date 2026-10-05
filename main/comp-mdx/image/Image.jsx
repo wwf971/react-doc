@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
 import { Copy, Expand, Scan, X } from '../../frontend/UICommon.js';
 import { imageDataParse } from './ImageData.js';
+import { ImageEdit } from './ImageEdit.jsx';
 import { ImageStore } from './ImageStore.js';
 import './Image.css';
 
@@ -127,7 +128,11 @@ function ImagePanZoom({ alt, sourceUrl }) {
 	);
 }
 
+// in edit mode (config.isEdit, set by the edit layer) ImageEdit edits the
+// caption in place and the other yaml fields in a floating panel; the image
+// in the flow is the same ImageRender.
 function Image({ data = {}, config = {}, onEvent }) {
+	if (config.isEdit) return <ImageEdit data={data} config={config} onEvent={onEvent} />;
 	try {
 		return <ImageRender data={imageDataParse(data)} config={config} onEvent={onEvent} />;
 	} catch (error) {
@@ -139,7 +144,9 @@ function Image({ data = {}, config = {}, onEvent }) {
 	}
 }
 
-const ImageRender = observer(function ImageRender({ data, config, onEvent }) {
+// captionRender(caption): the editor passes it to put an editable value into
+// the figcaption, which is then shown even while the caption is empty
+const ImageRender = observer(function ImageRender({ data, config, onEvent, captionRender }) {
 	const source = String(data.src ?? data.source ?? '').trim();
 	const sourceUrl = config.assetUrlGet?.(source) ?? source;
 	const alt = String(data.alt ?? data.caption ?? '');
@@ -245,7 +252,9 @@ const ImageRender = observer(function ImageRender({ data, config, onEvent }) {
 					<img src={sourceUrl} alt={alt} loading="lazy" decoding="async" />
 				</div>
 			</div>
-			{data.caption ? <figcaption>{data.caption}</figcaption> : null}
+			{captionRender
+				? <figcaption>{captionRender(data.caption ?? '')}</figcaption>
+				: data.caption ? <figcaption>{data.caption}</figcaption> : null}
 			{popup}
 		</figure>
 	);
@@ -275,4 +284,4 @@ async function imagePngBlobGet(sourceUrl) {
 	});
 }
 
-export { Image, Image as DocImage };
+export { Image, Image as DocImage, ImageRender };

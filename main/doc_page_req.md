@@ -108,6 +108,21 @@ There should be a standard of the interface of custom components that can be reg
 A component in a document should be able to reuse the authored data of another component, instead of repeating it. The referenced component is addressed by its document and a document-unique component id, and the document part uses the same target grammar as the link/ref system. A component explicitly declares which component types it accepts data from. A missing document, a missing or duplicate component id, an incompatible component type, and a component without reference support must each be indicated in place where the reference is written.
 
 
+## In-place Editing
+
+When the page runs on the local development server, a document must be editable from the page itself. Deployed (built) pages are not editable and show no edit controls: the edit API exists only in the development server, and the page learns about it at runtime.
+
+A document consists of root-level blocks (headings, paragraphs, lists, code blocks, custom components, ...), each mapping to a range of source lines. Editing happens at this granularity through one unified layer with standardized operations: read the current source of a block, submit a replacement of its lines, insert a block between two blocks or at the top or end of the document, delete a block. The HTML comment and the block after it that together invoke a component (`<!--renderComp=X-->` + fenced block) are one block, never two. The server must refuse a change made against an outdated version of the file instead of overwriting another editor's work.
+
+How a block is edited is the job of the component that renders it. The layer provides default editors for the basic blocks (headings, paragraphs, lists, and plain source for everything else); a custom component `Xxx.jsx` opts in by declaring edit support and rendering `XxxEdit.jsx` when it receives `config.isEdit`. `Xxx` and `XxxEdit` should share their rendering code rather than duplicate it. Not every component needs an edit mode.
+
+The page has one global edit-mode toggle at the document toolbar, hidden when no edit API is available. In edit mode, clicking a block enters its edit mode; one block of a document is in edit mode at a time, so entering another block's edit mode leaves the previous one. A button group belongs to the border between two blocks and appears only while the block above or the block below is hovered: edit above, delete above, insert here, edit below, delete below; the borders at the top and the end of the page lack the actions that have no neighbour. Deleting asks for confirmation in place, never through a browser dialog. The layer is decoupled from the reading logic: an additional layer that changes nothing in how a document is read, and a save keeps the reading position.
+
+Editing is WYSIWYG in the sense that a block is edited directly where it is displayed, in its own typography: no separate panel repeating the block's content. The modification is saved at the moment the author leaves edit mode in a non-canceling way (clicking elsewhere, another block, a toolbar or border action, Save, Ctrl/⌘ + Enter, switching edit mode off); Escape or Cancel abandons the modification. A block created from the insert menu is removed again when its creation is canceled.
+
+Edit mode must not jitter the page: toggling it, and entering the edit mode of a block, keeps every block at its height and place. A block that is not being edited renders in view mode even while the document is in edit mode, and every control that exists only for editing floats instead of taking space in the flow. This applies to creating a block as much as to editing one: inserting a block offers a floating menu, never a form or a preview inserted into the document. Custom components that implement an edit mode must obey the same rule ([in-place editing and the no-jitter rule](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule)).
+
+
 ## Link/Ref system
 
 Link/Ref system consists of at least the following major logical layers:

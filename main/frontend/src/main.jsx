@@ -3,8 +3,9 @@ import { SegmentedControl } from '@wwf971/react-comp-misc';
 import * as docSource from 'virtual:doc-source';
 import { DocPageMdx } from './DocPageMdx.jsx';
 import { DemoCounter } from '../../../example_doc/comp-mdx/DemoCounter.jsx';
-import { StockTable } from '../../../example_doc/comp-mdx/StockTable.jsx';
+import { StockTable, stockTableDefineOptions } from '../../../example_doc/comp-mdx/StockTable.jsx';
 import { TextPanelDemo } from '../../../example_doc/comp-mdx/TextPanelDemo.jsx';
+import { compDefine } from '../../comp-doc/registry/comp-registry.js';
 import {
   indexLanguageListGet,
   indexStructuredDataGet,
@@ -23,10 +24,15 @@ createRoot(document.getElementById('root')).render(
     config={{
       language: 'en',
       routeMode: 'query',
+      // host components, as registry definitions so they receive
+      // { data, config, onEvent } like every registered component
       compById: {
-        'specific/DemoCounter': DemoCounter,
-        'specific/StockTable': StockTable,
+        'specific/DemoCounter': compDefine(DemoCounter),
+        'specific/StockTable': compDefine(StockTable, stockTableDefineOptions),
       },
+      // in-place editing, answered by the development server only; the
+      // virtual module exports an empty endpoint in a build
+      edit: { endpoint: docSource.docEditEndpoint },
       // host settings handed to every registered component's config:
       // Image/ImageGrid/DiagramMermaid resolve file references, and
       // DiagramMermaid loads mermaid on first use, and the page frames popups

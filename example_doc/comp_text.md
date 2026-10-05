@@ -1,6 +1,6 @@
 # Text Component Design (Bottom-Up)
 
-## Scope
+## Scope1
 
 - This doc defines the first text component family for `react-doc`.
 - The design starts from the smallest unit (`TextSegmentBasic`) and builds up to `TextBasic`.

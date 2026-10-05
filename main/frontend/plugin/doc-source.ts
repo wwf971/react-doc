@@ -27,6 +27,7 @@ import {
   type DocSourceDependency,
   type DocSourceDependencyCollect,
 } from './doc-source-dependency.ts';
+import { DOC_EDIT_ENDPOINT_NAME, docEditMiddlewareCreate } from './doc-edit-server.ts';
 import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
 import { textLocalizedGet } from '../src/lib/text-localized.js';
 
@@ -37,9 +38,13 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 //   export const configDoc = {...}      // merged config (side panel yaml inlined)
 //   export const fileManifest = [{ rootId, relPath, name, ext, title, internalPath,
 //                                  tagList, configSource, configFrontmatter, load }]
+//   export const docEditEndpoint = '/__doc-edit'   // '' in a build: no edit api
 //
 // every doc file becomes a lazy `?raw` import, so dev gets hot reload and
 // build gets one lazy chunk per doc.
+//
+// the development server also answers the edit api (doc-edit-server.ts), so
+// the page can rewrite root-level blocks of a document in place.
 
 const MODULE_ID_DEFAULT = 'virtual:doc-source';
 
@@ -69,6 +74,8 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
   let configDir = '';
   let configFile = '';
   let isBuild = false;
+  // url prefix of the edit api; '' when no development server answers it
+  let docEditEndpoint = '';
   const moduleId = options.moduleId ?? MODULE_ID_DEFAULT;
   const moduleIdResolved = `\0${moduleId}`;
 
@@ -93,6 +100,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       isBuild = viteConfig.command === 'build';
       configFile = findConfigFile(viteConfig.root, options.configFile);
       configDir = path.dirname(configFile);
+      docEditEndpoint = isBuild ? '' : editEndpointBuild(viteConfig.base);
     },
 
     resolveId(id) {
@@ -115,7 +123,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
             [...docAttachmentFinderDefaultList, ...(options.attachmentFinderList ?? [])],
           )
         : [];
-      return generateModuleCode(configDoc, fileEntries, attachmentList, isBuild);
+      return generateModuleCode(configDoc, fileEntries, attachmentList, isBuild, docEditEndpoint);
     },
 
     configureServer(server) {
@@ -123,11 +131,23 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       let pathsWatched = collectPathsToWatch(configDoc, configDir, configFile);
       for (const p of pathsWatched) server.watcher.add(p);
 
+      // the edit api resolves internal paths against the same scan that
+      // generates the manifest. the scan is kept until the manifest changes.
+      let fileEntryListCached: FileEntry[] | undefined;
+      const fileEntryListGet = () => {
+        if (!fileEntryListCached) {
+          fileEntryListCached = scanSource(loadConfigDoc(configFile, options), configDir);
+        }
+        return fileEntryListCached;
+      };
+      server.middlewares.use(docEditMiddlewareCreate({ endpoint: docEditEndpoint, fileEntryListGet }));
+
       const invalidateManifest = (filePath: string) => {
         const isRelated = pathsWatched.some(
           (p) => filePath === p || filePath.startsWith(p + path.sep),
         );
         if (!isRelated) return;
+        fileEntryListCached = undefined;
         try {
           const configDocUpdated = loadConfigDoc(configFile, options);
           pathsWatched = collectPathsToWatch(configDocUpdated, configDir, configFile);
@@ -672,9 +692,11 @@ function generateModuleCode(
   fileEntries: FileEntry[],
   attachmentList: DocAttachmentResolved[],
   isBuild: boolean,
+  docEditEndpoint: string,
 ): string {
   const lines: string[] = [];
   lines.push(`export const configDoc = ${JSON.stringify(configDoc)};`);
+  lines.push(`export const docEditEndpoint = ${JSON.stringify(docEditEndpoint)};`);
   const attachmentUrlByPath: Record<string, string> = {};
   for (const attachment of attachmentList) {
     const url = isBuild
@@ -758,6 +780,13 @@ function firstLevelOneHeadingGet(text: string): string {
 
 function normalizeSlashPath(filePath: string): string {
   return filePath.split(path.sep).join('/');
+}
+
+// "/__doc-edit", or "/base/__doc-edit" when vite serves below a base path
+function editEndpointBuild(base: string | undefined): string {
+  const baseNormalized = String(base ?? '/').replace(/\/+$/, '');
+  const basePath = baseNormalized.startsWith('/') || baseNormalized === '' ? baseNormalized : '';
+  return `${basePath}/${DOC_EDIT_ENDPOINT_NAME}`;
 }
 
 function collectPathsToWatch(configDoc: any, configDir: string, configFile: string): string[] {

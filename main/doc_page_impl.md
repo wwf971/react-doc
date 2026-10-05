@@ -18,7 +18,8 @@ mobx stores (source of truth for rendering)
      ├── DocSourceStore (lower): manifest, raw/compile caches, doc index, search data
      ├── DocStore (upper): side-panel tree, current doc, navigation, link dropdown, url sync
      ├── DocTagStore: tags resolved from source rules + side-panel tree, tag queries
-     └── DocConfigStore: feature config, global and resolved per document
+     ├── DocConfigStore: feature config, global and resolved per document
+     └── DocEditStore: in-place editing (dev server only): sessions, block model, edit api
      ▼
 <DocPageMdx/>  (embeddable component)
      ├── FrameworkProvider adapter: usePathname/useRouter/Link backed by DocStore
@@ -38,6 +39,8 @@ mobx stores (source of truth for rendering)
 
 **Multilingual content.** Language inheritance, document-wide selection, headings, paragraphs, lists, degradation behavior, and file naming are specified in [doc_page_impl_multi-lang.md](doc_page_impl_multi-lang.md).
 
+**In-place editing, an additional layer.** On the development server a document can be edited from the page, one root-level block at a time; the server rewrites the file and the page reloads from it. The layer has its own store, its own compiled body (root blocks wrapped for borders and button groups), and a component edit contract (`config.isEdit`, `XxxEdit.jsx` beside `Xxx.jsx`); the reading path is untouched and a built page has no edit mode. Specified in [doc_page_impl_edit.md](doc_page_impl_edit.md).
+
 **Doc collection via vite plugin.** The plugin reads the two-layer config, expands side-panel resource files (collecting their source rules), executes the source rules, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any imported side-panel file — regardless of its extension — invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
 
 ## Can we keep fumadocs default components while owning link logic? YES
@@ -54,6 +57,7 @@ Follows the data-driven pattern of `react-comp-misc` (`comp_design.md`) and the 
 - `DocStore` (upper, view): `docCurrentPath`, `isDocLoading`, `linkDropdownOpenId` (which link's candidate-dropdown is open; one at a time, closes on outside click), page tree (computed), route mode + url sync. API: `navigate(path, hash)`, `navigationBack()`, `navigationUp()`, `navigationForward()`, `init()`.
 - `DocTagStore` (derived): the tag model computed from the manifest and the page tree, plus the tag service used by renderers and the open state of the tag overview popup. See [Tag system](doc_page_impl_tag.md).
 - `DocConfigStore` (derived): the config model computed from `globalConfig`, the manifest, and the page tree, plus the config service. See [Config system](doc_page_impl_config.md).
+- `DocEditStore` (edit layer, beside the reading stores): availability of the development-server edit api, the global edit mode, the document source as read from disk with its hash, the dedicated compile with block wrappers, the one open edit session, and the pending deletion. It never writes to the reading stores; the file on disk is changed and reloads through the normal path. See [In-place editing](doc_page_impl_edit.md).
 
 Render components observe stores via context and submit change attempts through store APIs; no component talks to the file system or compiler directly.
 
@@ -185,9 +189,9 @@ Multilingual component registration and authoring rules are specified in [doc_pa
 
 Component naming, compatibility names, and the component data reference (a component reusing the authored data of another component through `dataRef="{document target}#{component id}"`) are described in [MDX components](doc_page_impl_mdx_comp.md).
 
-One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, `sidePanelPanel`, `partIndex`, `indexSubtopic`, `tag`, and `tagOverview`.
+One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, `sidePanelPanel`, `partIndex`, `indexSubtopic`, `tag`, `tagOverview`, and `edit` (the default block editors of the edit layer).
 
-A few registry names are built in: the page renders with them even when `compRegistry` does not mention them, in comment form and in `.mdx`. `Anchor` resolves to `common/Anchor` and declares fragment ids for the node after it (see [Navigation design](doc_page_impl_nav.md#fragment-targets-titles-and-declared-ids)); `SidePanelItem` resolves to `common/SidePanelItem` and renders every side-panel label; `TagLabel` resolves to `common/TagLabel` and is the default look of tags; `Tag` resolves to `common/Tag` and renders a tag mentioned in document text; `TagOverview` resolves to `common/TagOverview` and renders the content of the tag overview popup. Mapping such a name in `compRegistry` replaces the default everywhere, which is how an application provides its own side-panel item rendering. `compIdResolve()` in `comp-registry.js` is the single place that turns a name into a component id.
+A few registry names are built in: the page renders with them even when `compRegistry` does not mention them, in comment form and in `.mdx`. `Anchor` resolves to `common/Anchor` and declares fragment ids for the node after it (see [Navigation design](doc_page_impl_nav.md#fragment-targets-titles-and-declared-ids)); `SidePanelItem` resolves to `common/SidePanelItem` and renders every side-panel label; `TagLabel` resolves to `common/TagLabel` and is the default look of tags; `Tag` resolves to `common/Tag` and renders a tag mentioned in document text; `TagOverview` resolves to `common/TagOverview` and renders the content of the tag overview popup; `Heading`, `Paragraph`, `List`, and `BlockSource` resolve to the default block editors of edit mode (see [In-place editing](doc_page_impl_edit.md#component-edit-mode)). Mapping such a name in `compRegistry` replaces the default everywhere, which is how an application provides its own side-panel item rendering. `compIdResolve()` in `comp-registry.js` is the single place that turns a name into a component id.
 
 Some components need settings only the host application can supply, such as a Mermaid loader, a resolver from authored file references to URLs, or the text panel component that frames popups. The host passes them once through `DocPageMdx` `config.compConfigHost`; every registered component receives them in its `config` with the lowest priority, below authored and runtime values. The page itself reads `panelComponent` from the same place for the tag overview popup:
 
@@ -330,13 +334,16 @@ example_doc/             # root folder of the demonstration page
 ├── tag.yaml             # tag definitions, referenced from config
 ├── side-panel-tag.md    # tag demonstration; doc-config.md: config demonstration
 ├── comp-custom-list-el.md # components as list elements: rules and examples
-├── comp-mdx/            # demo-specific components (not collected as documents)
+├── edit-in-place.md     # edit-mode playground (editable on the development server)
+├── comp-mdx/            # demo-specific components (not collected as documents); StockTable + StockTableEdit
 ├── mdx-usage/           # mdx component demonstrations (part with hosted index)
 └── link-nav/            # link usage guide (sections by title / Anchor id), link and non-md display test docs
 main/
 ├── config.yaml          # example config (tracked), actually runnable
 ├── config.0.yaml        # local override (untracked), entries overlay config.yaml
 ├── comp-mdx/            # components available in documents (FileTree, Index, MultiLang, Tag, Anchor, ...)
+│   ├── text/            # headings, paragraphs, lists of the document body + their default editors, BlockRender
+│   └── image/           # Image + ImageEdit: component edit mode demonstration
 ├── comp-doc/            # components of the page itself, one folder per feature
 │   ├── registry/        # compById (registry.js), compDefine, RegisteredComp, DocComp, data references, build-time dependency extractors
 │   ├── link/            # DocLink, LinkDocRender, LinkWarning
@@ -344,19 +351,20 @@ main/
 │   ├── tag/             # tag bar next to the path bar, tag overview popup
 │   ├── toc/             # DocPageToc: page / part local index
 │   ├── page/            # toolbar, navigation buttons, search dialog, loading skeleton
+│   ├── edit/            # edit layer: toggle and toolbar controls, edit body, block borders and hover button groups, insert menu, editor chooser, floating bar and in-place editing primitives
 │   └── mdx-render/      # MdxRenderer, DynamicCodeBlock
 ├── package.json         # delegates dev/build to frontend/
 └── frontend/            # Vite app + embeddable component
-    ├── plugin/          # vite plugin: config load, rule scan, source-step tags/config, source pruning, virtual module, watch
+    ├── plugin/          # vite plugin: config load, rule scan, source-step tags/config, source pruning, virtual module, watch, dev-only edit api (doc-edit-server.ts, doc-edit-lines.ts)
     ├── UICommon.js      # package-local facade for shared visual components and icons
     ├── UICommonExternal.js # external UI-library exports used by the facade
     └── src/
         ├── DocPageMdx.jsx       # the embeddable doc page component
-        ├── store/               # DocSourceStore (lower) + DocStore (upper) + DocTagStore + DocConfigStore
-        └── lib/                 # mdx compile, nested Markdown renderer, link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, framework adapter
+        ├── store/               # DocSourceStore (lower) + DocStore (upper) + DocTagStore + DocConfigStore + DocEditStore
+        └── lib/                 # mdx compile, nested Markdown renderer, link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, doc-edit-* (block model, edit api client), framework adapter
 ```
 
-Design documents: [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [package usage](doc_page_impl_detail.md).
+Design documents: [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [in-place editing](doc_page_impl_edit.md), [package usage](doc_page_impl_detail.md).
 
 Run `pnpm install` from the workspace root once, then `pnpm dev` from either this folder or `frontend/`. `pnpm build` produces one static deployable artifact (docs bundled as lazy chunks); any static file server works, no doc folders needed at runtime.
 

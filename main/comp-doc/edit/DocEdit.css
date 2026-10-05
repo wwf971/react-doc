@@ -1,0 +1,662 @@
+/* The edit layer adds nothing to the document flow: borders take no height,
+   their button rows, the insert menu and every editor bar float over the
+   content, and a block in edit mode is edited in its own place. See
+   doc_page_impl_edit.md#no-jitter-rule.
+
+   one scale for everything that floats: 1.35rem tall controls, 0.72rem text,
+   1px borders, 2px radius. */
+
+/* ---------- toolbar: toggle and document controls ---------- */
+
+.doc-edit-toggle,
+.doc-edit-doc-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.25rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--color-fd-border);
+}
+
+.doc-navigation-floating .doc-edit-toggle {
+  padding-left: 0.3rem;
+}
+
+.doc-edit-toggle button,
+.doc-edit-doc-controls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.4rem;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 550;
+}
+
+.doc-edit-doc-controls button {
+  padding: 0.3rem 0.5rem;
+}
+
+.doc-edit-toggle button:hover:not(:disabled),
+.doc-edit-toggle button:focus-visible:not(:disabled),
+.doc-edit-doc-controls button:hover:not(:disabled),
+.doc-edit-doc-controls button:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-fd-foreground) 32%, var(--color-fd-border));
+  background: var(--color-fd-accent);
+  outline: none;
+}
+
+.doc-edit-toggle button[aria-pressed='true'],
+.doc-edit-doc-controls button[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border));
+  background: color-mix(in srgb, var(--color-fd-primary) 12%, var(--color-fd-background));
+  color: var(--color-fd-primary);
+}
+
+.doc-edit-doc-controls button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.doc-edit-stale {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-fd-muted-foreground);
+}
+
+/* ---------- shared pieces ---------- */
+
+.doc-edit-spin {
+  animation: doc-edit-spin 0.9s linear infinite;
+}
+
+@keyframes doc-edit-spin {
+  to { transform: rotate(360deg); }
+}
+
+.doc-edit-message {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-fd-destructive, #dc2626);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+/* a group of exclusive choices (heading level, list type, display mode) or
+   of related small actions: one frame, inner dividers */
+.doc-edit-segment {
+  display: inline-flex;
+  align-items: stretch;
+  height: 1.35rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+}
+
+.doc-edit-segment > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0 0.4rem;
+  border: 0;
+  border-left: 1px solid var(--color-fd-border);
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.doc-edit-segment > button:first-child {
+  border-left: 0;
+}
+
+.doc-edit-segment > button:hover:not(:disabled),
+.doc-edit-segment > button:focus-visible:not(:disabled) {
+  background: var(--color-fd-accent);
+  color: var(--color-fd-foreground);
+  outline: none;
+}
+
+.doc-edit-segment > button.is-active {
+  background: color-mix(in srgb, var(--color-fd-primary) 12%, var(--color-fd-background));
+  color: var(--color-fd-primary);
+}
+
+.doc-edit-segment > button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---------- body ---------- */
+
+.doc-edit-body {
+  position: relative;
+}
+
+/* anchor of the frontmatter / whole-source panel: no height of its own */
+.doc-edit-top-anchor {
+  position: relative;
+  height: 0;
+  z-index: 25;
+}
+
+.doc-edit-compile-error {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0.5rem 0;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--color-fd-destructive, #dc2626);
+  border-radius: 2px;
+  font-size: 0.8rem;
+}
+
+.doc-edit-compile-error > pre {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-fd-destructive, #dc2626);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+}
+
+/* ---------- blocks ---------- */
+
+/* the prose body removes the outer margins of its first and last child; the
+   wrappers would hide the first and last block from that rule */
+.doc-edit-block[data-first] > :first-child {
+  margin-top: 0;
+}
+
+.doc-edit-block[data-last] > :nth-last-child(1 of :not(.doc-edit-panel)) {
+  margin-bottom: 0;
+}
+
+/* the prose body removes the top margin of what follows an h2 / h3 / h4 or a
+   rule ("h2 + *"); across the wrappers that rule needs restating, otherwise
+   the edit body is taller than the reading body */
+.doc-edit-block[data-kind="heading"]:is([data-depth="2"], [data-depth="3"], [data-depth="4"]) + .doc-edit-border + .doc-edit-block > :first-child,
+.doc-edit-block[data-kind="thematicBreak"] + .doc-edit-border + .doc-edit-block > :first-child {
+  margin-top: 0;
+}
+
+.doc-edit-block {
+  position: relative;
+  border-radius: 2px;
+  outline: 1px solid transparent;
+  outline-offset: 4px;
+  cursor: pointer;
+}
+
+.doc-edit-block:hover {
+  outline-color: color-mix(in srgb, var(--color-fd-primary) 28%, transparent);
+}
+
+.doc-edit-block[data-editing] {
+  z-index: 20;
+  outline-color: color-mix(in srgb, var(--color-fd-primary) 55%, transparent);
+  cursor: auto;
+}
+
+.doc-edit-block[data-delete-pending] {
+  outline-color: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 60%, transparent);
+  background: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 5%, transparent);
+}
+
+/* a block that renders nothing: a floating chip over the gap it sits in */
+.doc-edit-block[data-invisible] {
+  height: 0;
+  outline: none;
+}
+
+.doc-edit-block-chip {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  z-index: 4;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 0.35rem;
+  border: 1px dashed var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.65rem;
+  line-height: 1.2rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-edit-block-chip:hover {
+  border-color: var(--color-fd-primary);
+  color: var(--color-fd-foreground);
+}
+
+/* ---------- borders between blocks ---------- */
+
+.doc-edit-border {
+  position: relative;
+  height: 0;
+  margin: 0;
+}
+
+/* a border with its insert menu or a confirmation open stays above the blocks */
+.doc-edit-border[data-open] {
+  z-index: 24;
+}
+
+/* the row floats over the gap between the two blocks and does not catch the
+   pointer while hidden. margins collapse through the border, which leaves it
+   right below the bottom margin of the block above, so the row grows upward
+   into that margin; the end border has no block below and grows downward */
+.doc-edit-border-row {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 1.35rem;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease 180ms, visibility 0s linear 300ms;
+}
+
+.doc-edit-border[data-position="end"] > .doc-edit-border-row {
+  top: 2px;
+  bottom: auto;
+}
+
+/* an invisible block has no height, so the border after it sits at the same
+   place as the border before it: its row goes below the chip of the block */
+.doc-edit-block[data-invisible] + .doc-edit-border > .doc-edit-border-row {
+  top: calc(1.2rem + 4px);
+  bottom: auto;
+}
+
+/* shown while a neighbour block (not the one being edited) or the row itself
+   is hovered, or while the row has its menu or a confirmation open */
+.doc-edit-border:hover > .doc-edit-border-row,
+.doc-edit-border:focus-within > .doc-edit-border-row,
+.doc-edit-border[data-open] > .doc-edit-border-row,
+.doc-edit-block:not([data-editing]):hover + .doc-edit-border > .doc-edit-border-row,
+.doc-edit-border:has(+ .doc-edit-block:not([data-editing]):hover) > .doc-edit-border-row {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 80ms ease, visibility 0s;
+}
+
+.doc-edit-border-line {
+  flex: 1 1 auto;
+  height: 1px;
+  background: color-mix(in srgb, var(--color-fd-primary) 30%, var(--color-fd-border));
+}
+
+.doc-edit-border-actions,
+.doc-edit-confirm,
+.doc-edit-insert-menu {
+  pointer-events: auto;
+}
+
+.doc-edit-border-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  height: 1.35rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 10%);
+}
+
+.doc-edit-border-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 0 0.3rem;
+  border: 0;
+  border-left: 1px solid var(--color-fd-border);
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.doc-edit-border-actions button:first-child {
+  border-left: 0;
+}
+
+.doc-edit-border-actions button:hover:not(:disabled),
+.doc-edit-border-actions button:focus-visible:not(:disabled) {
+  background: var(--color-fd-accent);
+  color: var(--color-fd-foreground);
+  outline: none;
+}
+
+.doc-edit-border-actions button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--color-fd-primary) 12%, var(--color-fd-background));
+  color: var(--color-fd-primary);
+}
+
+.doc-edit-border-actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.doc-edit-confirm {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0 0.1rem 0 0.45rem;
+  border: 1px solid var(--color-fd-destructive, #dc2626);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  font-size: 0.72rem;
+  line-height: 1.35rem;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 10%);
+}
+
+.doc-edit-confirm button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  height: 1.1rem;
+  padding: 0 0.35rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.doc-edit-confirm button.is-danger {
+  border-color: var(--color-fd-destructive, #dc2626);
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-edit-confirm button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+/* ---------- insert menu ---------- */
+
+/* floats below the border row; the starting texts in two rows */
+.doc-edit-insert-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: min(100%, 20rem);
+  max-width: 100%;
+  margin-top: 0.2rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  box-shadow: 0 4px 14px rgb(15 23 42 / 14%);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  cursor: auto;
+}
+
+.doc-edit-insert-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.doc-edit-insert-group-label {
+  min-width: 5.5rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-edit-insert-group button {
+  display: inline-flex;
+  align-items: center;
+  height: 1.35rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.doc-edit-insert-group button:hover:not(:disabled),
+.doc-edit-insert-group button:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border));
+  background: var(--color-fd-accent);
+  outline: none;
+}
+
+.doc-edit-insert-group button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.doc-edit-insert-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+/* ---------- floating bar of an editor ---------- */
+
+/* above the block by default (bottom: 100% of the wrapper), below it when
+   there is no room above; both overlap the content next to the block */
+.doc-edit-panel {
+  position: absolute;
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-width: 100%;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  box-shadow: 0 4px 14px rgb(15 23 42 / 14%);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  text-align: left;
+  cursor: auto;
+}
+
+.doc-edit-panel[data-placement="above"] {
+  bottom: 100%;
+  margin-bottom: 0.3rem;
+}
+
+.doc-edit-panel[data-placement="below"] {
+  top: 100%;
+  margin-top: 0.3rem;
+}
+
+/* the panel of the frontmatter / whole source fills the body width */
+.doc-edit-top-anchor > .doc-edit-panel {
+  top: 0;
+  width: 100%;
+  margin-top: 0;
+}
+
+.doc-edit-panel-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.doc-edit-panel-label {
+  padding-right: 0.4rem;
+  border-right: 1px solid var(--color-fd-border);
+  color: var(--color-fd-muted-foreground);
+  font-weight: 550;
+  line-height: 1.35rem;
+  white-space: nowrap;
+}
+
+.doc-edit-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--color-fd-border);
+}
+
+/* ---------- actions ---------- */
+
+.doc-edit-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.doc-edit-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  height: 1.35rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.doc-edit-action.is-primary {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border));
+  background: color-mix(in srgb, var(--color-fd-primary) 12%, var(--color-fd-background));
+  color: var(--color-fd-primary);
+}
+
+.doc-edit-action:hover:not(:disabled),
+.doc-edit-action:focus-visible:not(:disabled) {
+  background: var(--color-fd-accent);
+  outline: none;
+}
+
+.doc-edit-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---------- editing surface: the block in its place ---------- */
+
+/* the block's own element made editable. a paragraph and a heading surface
+   are a <p> / <h2>, so the prose rules of the page style them; the other
+   kinds get their typography here. no border: the wrapper's outline frames
+   the block. */
+.doc-edit-surface {
+  outline: none;
+  cursor: text;
+  caret-color: var(--color-fd-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+
+/* an empty surface keeps one line of height */
+.doc-edit-surface:empty::before {
+  content: '\200b';
+}
+
+.doc-edit-surface[data-locked] {
+  opacity: 0.6;
+}
+
+.doc-edit-surface[data-kind="list"] {
+  margin: 1.25em 0;
+}
+
+.doc-edit-surface[data-kind="blockquote"] {
+  margin: 1.6em 0;
+  padding-left: 1em;
+  border-left: 0.25rem solid var(--color-fd-border);
+  color: var(--color-fd-foreground);
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* source-like kinds (code, table, math, html, components, ...): monospace */
+.doc-edit-surface:not([data-kind="paragraph"], [data-kind="heading"], [data-kind="list"], [data-kind="blockquote"]) {
+  margin: 1rem 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-card, var(--color-fd-background));
+  color: var(--color-fd-foreground);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+/* in the floating panel (frontmatter, whole source) the surface is a scrolling area */
+.doc-edit-panel .doc-edit-surface {
+  min-height: 2.2rem;
+  max-height: 60vh;
+  margin: 0;
+  overflow: auto;
+}
+
+/* ---------- inline value ---------- */
+
+/* the dashed line is a text decoration, not a border: the value keeps the
+   exact box of the text it replaces */
+.doc-edit-value {
+  display: inline-block;
+  min-width: 2rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+  caret-color: var(--color-fd-primary);
+  text-decoration: underline dashed color-mix(in srgb, var(--color-fd-primary) 45%, var(--color-fd-border));
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.doc-edit-value:focus {
+  outline: none;
+  text-decoration-style: solid;
+  text-decoration-color: var(--color-fd-primary);
+}
+
+.doc-edit-value:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-edit-value[data-locked] {
+  opacity: 0.6;
+}

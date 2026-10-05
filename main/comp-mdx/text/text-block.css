@@ -1,0 +1,13 @@
+.doc-block-render-empty {
+  margin: 0;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+.doc-block-render-error {
+  margin: 0 0 0.25rem;
+  color: var(--color-fd-destructive, #dc2626);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+}

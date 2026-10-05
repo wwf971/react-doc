@@ -30,6 +30,9 @@ tree:
     tags: [guide, reference]
     config:
       TagsDisplayAtLinkPosition: before
+  # the edit layer playground; editable on the development server only
+  - doc: /example/edit-in-place.md
+    tags: [guide]
   - separator: MDX Usage
   - id: mdx-usage
     text: MDX Components

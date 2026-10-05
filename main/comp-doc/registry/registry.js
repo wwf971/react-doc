@@ -17,11 +17,15 @@ import { SourceLink } from '../../comp-mdx/source-link/SourceLink.jsx';
 import { Tag } from '../../comp-mdx/tag/Tag.jsx';
 import { TagLabel } from '../../comp-mdx/tag/TagLabel.jsx';
 import { TagOverview } from '../../comp-mdx/tag/TagOverview.jsx';
+import { BlockSource } from '../../comp-mdx/text/BlockSource.jsx';
+import { Heading } from '../../comp-mdx/text/Heading.jsx';
+import { List } from '../../comp-mdx/text/List.jsx';
+import { Paragraph } from '../../comp-mdx/text/Paragraph.jsx';
 // demo-specific components live beside the demonstration documents
 import { DemoCounter } from '../../../example_doc/comp-mdx/DemoCounter.jsx';
 import { DocConfigDemo } from '../../../example_doc/comp-mdx/DocConfigDemo.jsx';
 import { SidePanelItemDemo } from '../../../example_doc/comp-mdx/SidePanelItemDemo.jsx';
-import { StockTable } from '../../../example_doc/comp-mdx/StockTable.jsx';
+import { StockTable, stockTableDefineOptions } from '../../../example_doc/comp-mdx/StockTable.jsx';
 import { TagListAllDemo } from '../../../example_doc/comp-mdx/TagListAllDemo.jsx';
 import { TextPanelDemo } from '../../../example_doc/comp-mdx/TextPanelDemo.jsx';
 import { compDefine, compNativeDefine } from './comp-registry.js';
@@ -41,7 +45,13 @@ const compMultiLang = compDefine(MultiLang, {
   dataBuild: markdownConfigBuild,
   placementList: ['commentBlock'],
 });
-const compImage = compDefine(Image, { placementList: ['mdx', 'commentBlock'] });
+// Image demonstrates component edit mode: ImageEdit edits the yaml fields in
+// place (doc_page_impl_edit.md#component-edit-mode)
+const compImage = compDefine(Image, {
+  placementList: ['mdx', 'commentBlock'],
+  isEditSupported: true,
+  editTemplate: { lang: 'yaml', raw: 'src: path/to/image.png\nalt: \ncaption: \n' },
+});
 const compImageGrid = compDefine(ImageGrid, { placementList: ['mdx', 'commentBlock'] });
 const compDiagramText = compDefine(DiagramText, { placementList: ['commentBlock'] });
 // mermaid itself is not a package dependency: the host app supplies
@@ -94,6 +104,12 @@ export const compById = {
   'common/Tag': compDefine(Tag, { placementList: ['mdx', 'commentInline'] }),
   'common/TagLabel': compDefine(TagLabel, { placementList: ['tag', 'mdx'] }),
   'common/TagOverview': compDefine(TagOverview, { placementList: ['tagOverview', 'mdx', 'commentBlock'] }),
+  // default editors of the edit layer, one per block kind. mapping the
+  // built-in name in compRegistry replaces the editor of that kind.
+  'common/Heading': compDefine(Heading, { placementList: ['edit'] }),
+  'common/Paragraph': compDefine(Paragraph, { placementList: ['edit'] }),
+  'common/List': compDefine(List, { placementList: ['edit'] }),
+  'common/BlockSource': compDefine(BlockSource, { placementList: ['edit'] }),
   // compatibility ids: existing consumer configs map tags to these ids
   'common/DocFileTree': compFileTree,
   'common/DocIndex': compIndex,
@@ -103,7 +119,7 @@ export const compById = {
   'common/DocDiagramText': compDiagramText,
   'common/DocDiagramMermaid': compDiagramMermaid,
   'specific/DemoCounter': compDefine(DemoCounter),
-  'specific/StockTable': compDefine(StockTable),
+  'specific/StockTable': compDefine(StockTable, stockTableDefineOptions),
   'specific/SidePanelItemDemo': compDefine(SidePanelItemDemo, { placementList: ['sidePanelDisplay'] }),
   'specific/TagListAllDemo': compDefine(TagListAllDemo, { placementList: ['mdx', 'commentBlock'] }),
   'specific/DocConfigDemo': compDefine(DocConfigDemo, { placementList: ['mdx', 'commentBlock'] }),

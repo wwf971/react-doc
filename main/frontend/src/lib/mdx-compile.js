@@ -67,6 +67,9 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
       // $...$ and $$...$$ become math nodes; markdown-render.js parses
       // nested Markdown with the same two extensions.
       remarkMath,
+      // plugins that must see the parsed tree before any marker comment is
+      // consumed, e.g. the edit layer grouping root-level blocks
+      ...(config.remarkPluginsFirst ?? []),
       [remarkHeading, { generateToc: false }],
       [multiLangRemarkHeading, {
         onLanguage: (language) => languageSet.add(language),
@@ -132,8 +135,10 @@ function multiLangTocTransform(itemList, headingVariantsById) {
   });
 }
 
-// the runtime preset has no frontmatter plugin, so strip and parse it here
-function splitFrontmatter(source) {
+// the runtime preset has no frontmatter plugin, so strip and parse it here.
+// exported for the edit layer, which maps positions of the parsed content
+// back to lines of the complete file.
+export function splitFrontmatter(source) {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(source);
   if (!match) return { frontmatter: null, content: source };
   let frontmatter = null;

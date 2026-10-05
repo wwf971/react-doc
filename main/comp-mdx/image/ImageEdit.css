@@ -1,0 +1,28 @@
+/* the fields of the floating panel: name column, value column */
+.doc-image-edit-fields {
+	display: grid;
+	grid-template-columns: max-content minmax(0, 1fr);
+	gap: 0.1rem 0.6rem;
+	align-items: center;
+}
+
+.doc-image-edit-field {
+	display: contents;
+}
+
+.doc-image-edit-field-name {
+	color: var(--color-fd-muted-foreground);
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.7rem;
+	line-height: 1.5rem;
+}
+
+.doc-image-edit-fields .doc-edit-value {
+	font-size: 0.75rem;
+	line-height: 1.5rem;
+}
+
+.doc-image-edit-empty {
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.8rem;
+}

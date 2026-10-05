@@ -146,6 +146,10 @@ While the referenced document is compiling, a neutral loading line replaces the 
 - References are resolved one level deep. If the referenced component itself has a `dataRef`, its data is delivered unchanged, including that `dataRef`; the host does not follow chains.
 - With `pruneSourceToSidePanel`, a statically authored `dataRef` keeps the referenced document in the deployed manifest without a side-panel item (see [Source pruning for deployment](doc_page_impl.md#source-pruning-for-deployment)). A `dataRef` written as an MDX expression is not discovered and is reported at build time.
 
+## Text blocks and edit mode
+
+The headings, paragraphs, and lists of the document body are rendered by explicit components in `comp-mdx/text/` (`headingTagCreate`, `ParagraphTag`, `listTagCreate`, mapped onto `h1`–`h6`, `p`, `ul`/`ol`/`li` by `buildMdxComps`), so these blocks have a home beside their default editors `HeadingEdit`, `ParagraphEdit`, `ListEdit`, and the fallback `BlockSourceEdit`. A component that supports editing declares `isEditSupported` in its definition, may declare an `editTemplate` for the insert panel, and branches on `config.isEdit` to its `XxxEdit.jsx`. The edit contract, the naming rule, and the sharing of render code between `Xxx` and `XxxEdit` are specified in [In-place editing](doc_page_impl_edit.md#component-edit-mode); `Image` is the demonstration in this folder.
+
 ## File tree annotations
 
 A `FileTree` can draw annotations above its rows. The first annotation type is a right-angled arrow from one or more source nodes to one or more destination nodes, with optional text beside it:

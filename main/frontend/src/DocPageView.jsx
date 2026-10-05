@@ -19,6 +19,7 @@ import { DocPageToolbar } from '../../comp-doc/page/DocPageToolbar.jsx';
 import { DocPageSkeleton } from '../../comp-doc/page/DocPageSkeleton.jsx';
 import { DocPageToc } from '../../comp-doc/toc/DocPageToc.jsx';
 import { DocPageTagBar } from '../../comp-doc/tag/DocPageTagBar.jsx';
+import { DocEditBody } from '../../comp-doc/edit/DocEditBody.jsx';
 import { RegisteredComp } from '../../comp-doc/registry/RegisteredComp.jsx';
 import { compIdResolve } from '../../comp-doc/registry/comp-registry.js';
 import { SidePanelItemSurfaceContext } from '../../comp-doc/side-panel/SidePanelItemHost.jsx';
@@ -29,18 +30,21 @@ import './DocPageView.css';
 // fully driven by store state; the compile cache lives in DocSourceStore.
 
 export const DocPageView = observer(function DocPageView() {
-  const { compById, docStore, pageElementRef, sourceStore } = useDocStores();
+  const { compById, docStore, editStore, pageElementRef, sourceStore } = useDocStores();
   const item = docStore.itemCurrent;
   const path = docStore.docCurrentPath;
   const pathContent = item?.type === 'inline' ? item.route : path;
   const compiled = sourceStore.compiledByPath[pathContent];
+  // edit mode (doc_page_impl_edit.md): the edit layer compiles its own body
+  // with block wrappers; the reading compile result is left alone
+  const docEdit = editStore.docEditActiveGet(pathContent);
   const navigationRequestVersion = docStore.navigationRequestVersion;
   const mdxComps = useMemo(
     () => buildMdxComps(sourceStore.configDoc, compById),
     [sourceStore, compById],
   );
   useDocDestinationNavigation({
-    compiledStatus: compiled?.status,
+    compiledStatus: docEdit ? 'done' : compiled?.status,
     hash: docStore.docCurrentHash,
     navigationRequestVersion,
     pageElementRef,
@@ -94,6 +98,28 @@ export const DocPageView = observer(function DocPageView() {
   }
 
   if (!pathContent) return warningNavigation;
+
+  if (docEdit) {
+    return (
+      <DocLanguageProvider language={docStore.languageDisplay}>
+        <DocsPage
+          breadcrumb={{ includePage: true }}
+          toc={docEdit.toc ?? []}
+          className="doc-page-with-toolbar doc-page-edit"
+          slots={docsPageSlots}
+        >
+          {warningNavigation}
+          {docEdit.titleFrontmatter ? <DocsTitle className="doc-page-title">{docEdit.titleFrontmatter}</DocsTitle> : null}
+          {docEdit.description ? (
+            <DocsDescription className="doc-page-description">{docEdit.description}</DocsDescription>
+          ) : null}
+          <DocsBody data-doc-content="">
+            <DocEditBody path={pathContent} docEdit={docEdit} mdxComps={mdxComps} />
+          </DocsBody>
+        </DocsPage>
+      </DocLanguageProvider>
+    );
+  }
 
   if (!compiled || compiled.status === 'loading') {
     return (

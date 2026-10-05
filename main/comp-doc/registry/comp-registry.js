@@ -1,5 +1,13 @@
 import { createElement } from 'react';
 
+// options:
+//   componentType     semantic type other components can reference (dataRef, part index)
+//   dataBuild         input converter, see compInputNormalize
+//   dataRefTypeList   component types this component accepts data from
+//   placementList     where the component may render; undefined means anywhere
+//   isEditSupported   the component renders its own editor when config.isEdit
+//                     is true (doc_page_impl_edit.md#component-edit-mode)
+//   editTemplate      { lang, raw, props } of a new block inserted in edit mode
 export function compDefine(CompRender, options = {}) {
   return {
     CompRender,
@@ -7,6 +15,8 @@ export function compDefine(CompRender, options = {}) {
     dataBuild: options.dataBuild,
     dataRefTypeList: options.dataRefTypeList,
     placementList: options.placementList,
+    isEditSupported: options.isEditSupported === true,
+    editTemplate: options.editTemplate,
   };
 }
 
@@ -59,6 +69,11 @@ export const compIdBuiltinByName = {
   Tag: 'common/Tag',
   TagLabel: 'common/TagLabel',
   TagOverview: 'common/TagOverview',
+  // default editors of the edit layer, one per block kind (placement "edit")
+  Heading: 'common/Heading',
+  Paragraph: 'common/Paragraph',
+  List: 'common/List',
+  BlockSource: 'common/BlockSource',
 };
 
 // tag name -> component id: config compRegistry first, then built-in names,

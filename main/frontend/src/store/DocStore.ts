@@ -292,9 +292,12 @@ export class DocStore {
     const routeNext = routePrevious && this.routeResolve(routePrevious)
       ? routePrevious
       : this.routeHome;
+    // a source reload is not a navigation request: the reader keeps the
+    // position in the document while its new text is compiled
     this.navigate(routeNext, hashPrevious, {
       historyMode: 'replace',
       isReplaceUrl: true,
+      isRequestVersionKept: true,
     });
   }
 
@@ -512,6 +515,9 @@ export class DocStore {
     historyMode?: NavigationHistoryMode;
     isReplaceUrl?: boolean;
     isFromHistory?: boolean;
+    // do not ask the view to reapply the destination (top reset, fragment
+    // alignment); used when only the source text was reloaded
+    isRequestVersionKept?: boolean;
   }) {
     const indexHash = target.indexOf('#');
     const path = indexHash >= 0 ? target.slice(0, indexHash) : target;
@@ -529,7 +535,7 @@ export class DocStore {
     this.itemCurrentId = item.id;
     this.docCurrentPath = item.docPath ?? '';
     this.docCurrentHash = hash;
-    this.navigationRequestVersion += 1;
+    if (!options?.isRequestVersionKept) this.navigationRequestVersion += 1;
     this.navigationError = '';
     this.linkDropdownOpenId = '';
 

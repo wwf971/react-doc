@@ -10,6 +10,9 @@ import {
 } from '../../../comp-doc/registry/comp-registry.js';
 import { RegisteredComp } from '../../../comp-doc/registry/RegisteredComp.jsx';
 import { MultiLangHeadingText } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
+import { headingTagCreate } from '../../../comp-mdx/text/Heading.jsx';
+import { listTagCreate } from '../../../comp-mdx/text/List.jsx';
+import { ParagraphTag } from '../../../comp-mdx/text/Paragraph.jsx';
 
 // component mapping used when rendering compiled docs.
 // fumadocs defaults stay untouched (headings, code blocks, callout, ...);
@@ -39,19 +42,13 @@ export function buildMdxComps(configDoc, compByIdExtra = {}, options = {}) {
       });
     },
   };
+  // the text blocks live in comp-mdx/text, next to their edit-mode editors
   for (const tag of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']) {
-    const HeadingDefault = defaultMdxComponents[tag];
-    comps[tag] = function MdxMultiLangHeading({ children, ...props }) {
-      const variantsJson = props['data-multi-lang-heading'];
-      if (!variantsJson) return createElement(HeadingDefault, props, children);
-      const propsHeading = { ...props };
-      delete propsHeading['data-multi-lang-heading'];
-      return createElement(
-        HeadingDefault,
-        propsHeading,
-        createElement(MultiLangHeadingText, { variantsJson }),
-      );
-    };
+    comps[tag] = headingTagCreate(tag);
+  }
+  comps.p = ParagraphTag;
+  for (const tag of ['ul', 'ol', 'li']) {
+    comps[tag] = listTagCreate(tag);
   }
   const compIdByTag = { ...compIdBuiltinByName, ...configDoc.compRegistry };
   for (const [tag, compId] of Object.entries(compIdByTag)) {
