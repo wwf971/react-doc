@@ -6,15 +6,15 @@ import { useDocEditDoc } from './DocEditDocContext.js';
 import { editTemplateListBuild } from './edit-template.js';
 import './DocEdit.css';
 
-// The menu of the insert button of a border: the starting texts of a new
-// block, the basic blocks in one row and the components in another. It
-// floats below the border row and adds nothing to the flow; choosing an
-// entry writes that text to the document as the new block and opens it in
-// edit mode in its place (DocEditStore.blockCreate). Escape closes the menu;
-// a pointer going down outside the border row closes it too (DocEditBorder).
-//
-//   borderIndex   the border the menu belongs to = index of the new block
-export const DocEditInsertMenu = observer(function DocEditInsertMenu({ borderIndex }) {
+// The menu of an insert button: the starting texts of a new block, the
+// basic blocks in one row and the components in another. It floats below
+// the toolbar that opened it (DocEditBlockToolbar, or the empty-document
+// notice) and adds nothing to the flow; choosing an entry writes that text
+// to the document as the new block, at the border of the open menu
+// (DocEditStore.insertMenu), and opens it in edit mode in its place
+// (DocEditStore.blockCreate). Escape closes the menu; a pointer going down
+// outside the toolbar closes it too.
+export const DocEditInsertMenu = observer(function DocEditInsertMenu() {
   const { compById, editStore, sourceStore } = useDocStores();
   const { path } = useDocEditDoc();
   const menu = editStore.insertMenu;
@@ -40,7 +40,7 @@ export const DocEditInsertMenu = observer(function DocEditInsertMenu({ borderInd
           key={template.id}
           type="button"
           disabled={isSubmitting}
-          onClick={() => void editStore.blockCreate(path, borderIndex, template.text)}
+          onClick={() => void editStore.blockCreate(path, template.text)}
         >
           {template.label}
         </button>

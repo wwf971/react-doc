@@ -20,7 +20,7 @@ const copyLabelByStatus = {
 
 // Events emitted:
 //   copyRequest { text }   copy of the normalized body; a result with
-//                          isHandled: true skips the browser clipboard
+//                          code 0 (accepted) skips the browser clipboard
 const BlockSimple = observer(function BlockSimple({ data = {}, config = {}, onEvent }) {
   const titleId = useId();
   const [store] = useState(() => new BlockSimpleStore());
@@ -40,7 +40,7 @@ const BlockSimple = observer(function BlockSimple({ data = {}, config = {}, onEv
 
   const sourceCopy = async () => {
     const result = await onEvent?.('copyRequest', { text: source });
-    if (result?.isHandled) return;
+    if (result?.code === 0) return;
     try {
       await navigator.clipboard.writeText(source);
       store.copyStatusSet('copied');

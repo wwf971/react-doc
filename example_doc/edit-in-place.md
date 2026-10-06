@@ -7,23 +7,26 @@ This page is a playground for the edit layer. Open it on the local development s
 
 ## What edit mode shows
 
-In edit mode the page looks exactly as it reads: nothing moves when the toggle is switched. Click a block to edit it where it is; only one block is in edit mode at a time. Leaving the block in any way that is not canceling saves it: click somewhere else, click another block, press Ctrl/⌘ + Enter, or use **Save** in the small bar floating above the block. Escape or **Cancel** abandons the change. Hovering a block shows a button group above it and one below it, left-aligned:
+In edit mode the page looks exactly as it reads: nothing moves when the toggle is switched, and hovering a block changes nothing but one small toolbar floating above it, centered, with the block's kind and four buttons:
 
-- edit the block above, delete the block above
-- insert a new block here
-- edit the block below, delete the block below
+- edit the block where it is
+- insert a new block above it
+- insert a new block below it
+- delete the block
 
-The group above the first block and the one below the last block only carry the buttons that make sense there. Deleting asks for confirmation in the same row. The toolbar buttons **Frontmatter** and **Source** edit the frontmatter as one piece and the whole source file.
+When the top of a long block is scrolled away, the toolbar stays at the top of what is visible of it. Only one block is in edit mode at a time. Leaving the block in any way that is not canceling saves it: click somewhere else, enter another block, press Ctrl/⌘ + Enter, or use **Save** in the small bar floating above the block. Escape or **Cancel** abandons the change. Deleting asks for confirmation in the same toolbar. The toolbar buttons **Frontmatter** and **Source** edit the frontmatter as one piece and the whole source file.
+
+By default a block enters edit mode through its edit button, so text can be read and selected as usual. The settings panel (the gear at the top of the sidebar) has `EditBlockEnterMode`; set it to `click` and a click anywhere on a block enters it. The setting lasts for the page session. From inside a paragraph, pressing the down arrow on its last line continues in the next block, and the up arrow on the first line in the previous one; the block left behind is saved.
 
 ## Default editors
 
-Blocks without a component of their own are edited as source, in their own place and typography: this heading is edited as a heading, a paragraph as a paragraph, a code block in a monospace area. A few kinds add a control to the floating bar: this heading offers its level, the list below offers bullets or numbers.
+Blocks without a component of their own are edited as source, in their own place and typography: this heading is edited as a heading, a paragraph as a paragraph, a code block in a monospace area. The block keeps the height it has when read: source that needs more lines than the rendered block extends over the block below, and the page does not move; the code block below shows it, its fences are two more lines. A few kinds add a control to the floating bar: this heading offers its level, the list below offers bullets or numbers.
 
 1. the first item of an ordered list
 2. the second item, with `inline code`
 3. the third item
 
-A paragraph with **bold**, _emphasis_, and a [link to the writing style page](mdx-usage/writing-style.md). Click it: the source replaces the text in the same place, and clicking elsewhere saves it.
+A paragraph with **bold**, _emphasis_, and a [link to the writing style page](mdx-usage/writing-style.md). Enter it: the source replaces the text in the same place, and clicking elsewhere saves it.
 
 > A quote block, a table, or a code block falls back to the plain source editor.
 
@@ -76,4 +79,4 @@ Components that do not declare edit support are edited as source, like any other
 
 ## Insert at the end
 
-Hover this paragraph and use the `+` of the group below it to insert a block at the end of the document. A floating menu offers a starting text for the basic blocks and for every component that declares an edit template; the chosen block is written to the file and opened in edit mode right away, with its text selected. Escape removes a block that was just created.
+Hover this paragraph and use **insert below** in its toolbar to insert a block at the end of the document. A floating menu offers a starting text for the basic blocks and for every component that declares an edit template; the chosen block is written to the file and opened in edit mode right away, with its text selected. Escape removes a block that was just created. Nothing is added to the page until a block is chosen: there is no placeholder at the end of the document.

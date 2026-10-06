@@ -168,19 +168,19 @@ const ImageRender = observer(function ImageRender({ data, config, onEvent, capti
 
 	const isExpandedSet = async (isExpanded) => {
 		const result = await onEvent?.('expandChangeRequest', { isExpanded });
-		if (!result?.isHandled) store.expandedSet(isExpanded);
+		if (result?.code !== 0) store.expandedSet(isExpanded);
 	};
 
 	const displayModeToggle = async () => {
 		const displayModeContain = displayModeDefault === 'contain-auto' ? 'contain-auto' : 'contain';
 		const displayMode = store.displayMode === 'fill' ? displayModeContain : 'fill';
 		const result = await onEvent?.('displayModeChangeRequest', { displayMode });
-		if (!result?.isHandled) store.displayModeSet(displayMode);
+		if (result?.code !== 0) store.displayModeSet(displayMode);
 	};
 
 	const imageCopy = async () => {
 		const result = await onEvent?.('copyRequest', { source, sourceUrl });
-		if (result?.isHandled) return;
+		if (result?.code === 0) return;
 		try {
 			const blob = await imagePngBlobGet(sourceUrl);
 			if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {

@@ -39,4 +39,4 @@
 
 コピーされる値は表示される本文の Markdown ソースです。引用記号と Alert の種別行を除き、前後の空白を取り除いた値で、表示用の HTML ではありません。
 
-コピー操作はまず `onEvent('copyRequest', { text })` を送ります。ホストが `{ isHandled: true }` を返した場合はそれで終わり、そうでなければ `navigator.clipboard.writeText()` を使用します。ボタンの状態（成功、失敗）は `BlockSimpleStore` が持ち、短時間で元に戻ります。タイトルを非表示にした場合、コピーボタンも表示されません。
+コピー操作はまず `onEvent('copyRequest', { text })` を送ります。ホストが `{ code: 0 }` を返した場合はそれで終わり、そうでなければ `navigator.clipboard.writeText()` を使用します。ボタンの状態（成功、失敗）は `BlockSimpleStore` が持ち、短時間で元に戻ります。タイトルを非表示にした場合、コピーボタンも表示されません。

@@ -9,23 +9,26 @@ import { configDeclaredIs, configValueNormalize } from './doc-config-define.js';
 //   3. source       source rules that collected D, in rule order   (manifest entry.configSource)
 //   4. side panel   side-panel nodes binding D or a folder above D, in tree order
 //   5. doc          frontmatter "config" of D                     (manifest entry.configFrontmatter)
-// page-scoped keys are read only at level 2. a feature with an inline form
-// (for example a link title marker) applies it after level 5 by itself.
+//   6. user         the reader's override from the settings panel (configUser)
+// page-scoped keys are read at levels 2 and 6 only. a feature with an inline
+// form (for example a link title marker) applies it after level 6 by itself.
 //
 // part index level: side-panel part.index.config, applied over the config of
 // the index document only while the index is hosted in the local-index area.
 // it is kept apart from configByDocPath, so the same document rendered as a
-// page keeps levels 1-5.
+// page keeps levels 1-6. the user level is applied over it too.
 //
 // configModel: {
-//   configGlobal                key -> value, levels 1-2
+//   configGlobal                key -> value, levels 1-2 and 6
+//   configGlobalDeclared        key -> value, levels 1-2 (without the user's override)
 //   levelGlobalByKey            key -> level
-//   configByDocPath             docPath -> { valueByKey, levelByKey }, levels 1-5
+//   configByDocPath             docPath -> { valueByKey, levelByKey }, levels 1-6
 //   configPartIndexByPartId     partId -> { key: value }, only the keys declared
 // }
 export function configModelBuild({
   configDefineByKey,
   configDoc,
+  configUser = {},
   fileManifest = [],
   declarationListSidePanel = [],
   declarationListPartIndex = [],
@@ -45,6 +48,11 @@ export function configModelBuild({
     configDeclaredIs(globalConfig) ? globalConfig : {},
     { configDefineByKey, level: 'global', originText: 'globalConfig' },
   );
+  // the values of levels 1-5 before the user's override, the base of every document
+  const configGlobalDeclared = { ...configGlobal };
+  const levelGlobalDeclaredByKey = { ...levelGlobalByKey };
+  const optionsUser = { configDefineByKey, level: 'user', originText: 'the settings panel' };
+  configLevelApply({ valueByKey: configGlobal, levelByKey: levelGlobalByKey }, configUser, optionsUser);
 
   // side-panel declarations folded per document, in tree order
   const configSidePanelByDocPath = new Map();
@@ -60,8 +68,8 @@ export function configModelBuild({
   for (const entry of fileManifest) {
     const docPath = entry.internalPath;
     const configResolved = {
-      valueByKey: { ...configGlobal },
-      levelByKey: { ...levelGlobalByKey },
+      valueByKey: { ...configGlobalDeclared },
+      levelByKey: { ...levelGlobalDeclaredByKey },
     };
     configLevelApply(configResolved, entry.configSource, {
       configDefineByKey, level: 'source', originText: `source rules of ${docPath}`,
@@ -74,6 +82,7 @@ export function configModelBuild({
     configLevelApply(configResolved, entry.configFrontmatter, {
       configDefineByKey, level: 'doc', originText: `frontmatter of ${docPath}`,
     });
+    configLevelApply(configResolved, configUser, optionsUser);
     configByDocPath.set(docPath, configResolved);
   }
 
@@ -88,10 +97,16 @@ export function configModelBuild({
     configLevelApply(configResolved, declaration.config, {
       configDefineByKey, level: 'partIndex', originText,
     });
+    // the reader's override wins over the part index declaration as well,
+    // restricted to the keys the part index declared
+    for (const key of Object.keys(configResolved.valueByKey)) {
+      if (configUser[key] === undefined) continue;
+      configLevelApply(configResolved, { [key]: configUser[key] }, optionsUser);
+    }
     configPartIndexByPartId.set(declaration.partId, configResolved.valueByKey);
   }
 
-  return { configGlobal, levelGlobalByKey, configByDocPath, configPartIndexByPartId };
+  return { configGlobal, configGlobalDeclared, levelGlobalByKey, configByDocPath, configPartIndexByPartId };
 }
 
 function configLevelApply(configResolved, configDeclared, { configDefineByKey, level, originText }) {
@@ -102,7 +117,7 @@ function configLevelApply(configResolved, configDeclared, { configDefineByKey, l
       console.warn(`[doc-config] unknown config key "${key}" in ${originText}`);
       continue;
     }
-    if (define.scope === 'page' && level !== 'global') {
+    if (define.scope === 'page' && level !== 'global' && level !== 'user') {
       console.warn(`[doc-config] "${key}" is a page-level key; set it in globalConfig, not in ${originText}`);
       continue;
     }

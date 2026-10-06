@@ -19,6 +19,7 @@ export {
   Plus,
   RotateCw,
   Scan,
+  Settings,
   Trash2,
   X,
 } from 'lucide-react';

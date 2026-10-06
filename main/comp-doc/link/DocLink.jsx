@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
+import { eventResultIsAccepted, resultNormalize } from '../../frontend/src/lib/doc-event.js';
 import { LinkDocRender } from './LinkDocRender.jsx';
 import { LinkWarning } from './LinkWarning.jsx';
 
@@ -113,7 +114,8 @@ export const DocLink = observer(function DocLink({
       linkConfig.onEvent?.(eventType, eventForward),
       onEventPage?.(`link:${eventType}`, eventForward),
     ]);
-    if (resultLink?.isHandled || resultPage?.isHandled) return;
+    // a host result with code 0 means the host took the activation over
+    if (eventResultIsAccepted(resultNormalize(resultLink)) || eventResultIsAccepted(resultNormalize(resultPage))) return;
 
     if (eventType === 'activateRequest') {
       if (isBroken) {

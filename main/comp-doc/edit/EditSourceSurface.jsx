@@ -13,23 +13,30 @@ import './DocEdit.css';
 //   tag                 element to render: 'p', 'h1'..'h6', 'div' (default)
 //   kind                block kind, for the typography of the surface
 //   text, textVersion   content to show; rewritten when textVersion changes
-//   isSelectAll         the whole text is selected when the surface opens
-//                       (a block created from a template: typing replaces it)
+//   selectionInitial    where the caret is when the surface opens:
+//                       'end' (default), 'start' (entered from the block
+//                       above), 'all' (a block created from a template:
+//                       typing replaces it)
 //   isLocked            no editing while a change request is pending
 //   onTextChange(text)  typed text
 //   onSubmitRequest()   Ctrl/Cmd + Enter
 //   onCancelRequest()   Escape
+//   onFocusShiftRequest(direction)
+//                       ArrowDown on the last line ('next') / ArrowUp on the
+//                       first line ('previous'): the author wants to go on
+//                       to the neighbor block
 export function EditSourceSurface({
   tag = 'div',
   kind,
   text,
   textVersion = 0,
-  isSelectAll = false,
+  selectionInitial = 'end',
   isLocked = false,
   className = '',
   onTextChange,
   onSubmitRequest,
   onCancelRequest,
+  onFocusShiftRequest,
   ariaLabel = 'Block source',
 }) {
   const elementRef = useRef(null);
@@ -40,7 +47,7 @@ export function EditSourceSurface({
     element.textContent = text;
     // text set by code happens when the author is already working here
     if (textVersion > 0 && document.activeElement !== element) element.focus();
-    caretMoveToEnd(element);
+    caretPlace(element, 'end');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [textVersion, tag]);
 
@@ -48,8 +55,8 @@ export function EditSourceSurface({
     const element = elementRef.current;
     if (!element || isLocked) return;
     element.focus({ preventScroll: true });
-    if (isSelectAll) selectionSetAll(element);
-    else caretMoveToEnd(element);
+    if (selectionInitial === 'all') selectionSetAll(element);
+    else caretPlace(element, selectionInitial === 'start' ? 'start' : 'end');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -68,6 +75,14 @@ export function EditSourceSurface({
     if (event.key === 'Tab') {
       event.preventDefault();
       document.execCommand('insertText', false, '  ');
+      return;
+    }
+    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && onFocusShiftRequest) {
+      if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return;
+      const direction = event.key === 'ArrowDown' ? 'next' : 'previous';
+      if (!caretIsAtEdgeLine(event.currentTarget, direction)) return;
+      event.preventDefault();
+      onFocusShiftRequest(direction);
     }
   };
 
@@ -114,14 +129,51 @@ function contentEditableValueGet() {
   return contentEditableValue;
 }
 
-function caretMoveToEnd(element) {
+// the caret inside the text of the surface (not at the element boundary,
+// where the browser has no caret rectangle and arrow keys do not move it)
+function caretPlace(element, position) {
   const selection = window.getSelection?.();
   if (!selection) return;
   const range = document.createRange();
-  range.selectNodeContents(element);
-  range.collapse(false);
+  const textNode = position === 'end' ? element.lastChild : element.firstChild;
+  if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+    range.setStart(textNode, position === 'end' ? textNode.length : 0);
+    range.collapse(true);
+  } else {
+    range.selectNodeContents(element);
+    range.collapse(position === 'start');
+  }
   selection.removeAllRanges();
   selection.addRange(range);
+}
+
+// true when the collapsed caret is on the last visual line of the surface
+// (direction 'next') or on its first one ('previous'): an arrow key in that
+// direction has nowhere to go inside the surface. the caret rectangle is
+// compared with the content box; when the browser gives no rectangle (an
+// empty element, a caret right after a line break) the text lines decide.
+function caretIsAtEdgeLine(element, direction) {
+  const selection = window.getSelection?.();
+  if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return false;
+  if (!element.contains(selection.anchorNode)) return false;
+  const range = selection.getRangeAt(0);
+  const rectCaret = range.getClientRects()[0];
+  if (rectCaret && rectCaret.height > 0) {
+    const rectElement = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    const halfLine = rectCaret.height / 2;
+    if (direction === 'previous') {
+      return rectCaret.top < rectElement.top + parseFloat(style.paddingTop) + halfLine;
+    }
+    return rectCaret.bottom > rectElement.bottom - parseFloat(style.paddingBottom) - halfLine;
+  }
+  const rangeBefore = document.createRange();
+  rangeBefore.selectNodeContents(element);
+  rangeBefore.setEnd(range.startContainer, range.startOffset);
+  const textBefore = rangeBefore.toString();
+  if (direction === 'previous') return !textBefore.includes('\n');
+  const textAfter = surfaceTextGet(element).slice(textBefore.length);
+  return !textAfter.includes('\n');
 }
 
 function selectionSetAll(element) {

@@ -55,7 +55,7 @@ export const TagOverviewPopup = observer(function TagOverviewPopup() {
             if (eventType !== 'navigateRequest' || !eventData.target) return undefined;
             const isNavigated = docStore.navigate(eventData.target);
             if (isNavigated) tagStore.overviewClose();
-            return { isHandled: true };
+            return isNavigated ? { code: 0 } : { code: -1, message: docStore.navigationError };
           }}
           placement="tagOverview"
         />

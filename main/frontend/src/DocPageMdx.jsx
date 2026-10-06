@@ -4,8 +4,9 @@ import { DocsLayout, DocsLayoutContainer, FrameworkProvider, RootProvider, Theme
 import { DocSourceStore } from './store/DocSourceStore.js';
 import { DocStore } from './store/DocStore.js';
 import { DocConfigStore } from './store/DocConfigStore.js';
-import { DocEditStore } from './store/DocEditStore.js';
+import { DocEditStore, editEventTypeList } from './store/DocEditStore.js';
 import { DocTagStore } from './store/DocTagStore.js';
+import { DocEventRouter } from './lib/doc-event.js';
 import { CompStateStore } from './store/CompStateStore.js';
 import { StoreContext, useDocStores } from './store/context.js';
 import { makeFramework } from './lib/framework-adapter.jsx';
@@ -17,6 +18,8 @@ import { TagOverviewPopup } from '../../comp-doc/tag/TagOverviewPopup.jsx';
 import { DocLanguageProvider, useDocLanguage } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 import { MultiLangControl } from '../../comp-mdx/multi-lang/MultiLangControl.jsx';
 import { DocEditToggle } from '../../comp-doc/edit/DocEditToggle.jsx';
+import { DocSettingsButton } from '../../comp-doc/settings/DocSettingsButton.jsx';
+import { DocSettingsPanel } from '../../comp-doc/settings/DocSettingsPanel.jsx';
 import { compById as compByIdDefault } from '../../comp-doc/registry/registry.js';
 import './DocPageMdx.css';
 
@@ -56,8 +59,33 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     });
     const tagStore = new DocTagStore(sourceStore, docStore, configStore);
     const compStateStore = new CompStateStore();
-    const editStore = new DocEditStore(sourceStore, docStore, { endpoint: config.edit?.endpoint });
-    return { sourceStore, docStore, configStore, tagStore, compStateStore, editStore, compById };
+    const editStore = new DocEditStore(sourceStore, docStore, configStore, { endpoint: config.edit?.endpoint });
+    // the event layer (doc_page_impl_event.md): component reports are routed
+    // to the domain that answers them; the stores never see onEvent callbacks
+    const eventRouter = new DocEventRouter();
+    eventRouter.routeAdd({
+      name: 'navigation',
+      typeList: ['navigateRequest'],
+      handle: (event) => {
+        if (!event.data.target) return { code: -1, message: 'navigateRequest without target' };
+        const isNavigated = docStore.navigate(event.data.target);
+        return isNavigated ? { code: 0 } : { code: -1, message: docStore.navigationError };
+      },
+    });
+    eventRouter.routeAdd({
+      name: 'tag',
+      typeList: ['tagOverviewOpenRequest'],
+      handle: (event) => {
+        if (!event.data.tagId || !config.compConfigHost?.panelComponent) return undefined;
+        return tagStore.overviewOpen(event.data.tagId) ? { code: 0 } : { code: -1, message: 'tag overview not available' };
+      },
+    });
+    eventRouter.routeAdd({
+      name: 'edit',
+      typeList: editEventTypeList,
+      handle: (event) => editStore.eventHandle(event),
+    });
+    return { sourceStore, docStore, configStore, tagStore, compStateStore, editStore, eventRouter, compById };
   });
   const framework = useMemo(() => makeFramework(stores.docStore), [stores]);
   const contextValue = useMemo(() => ({
@@ -148,6 +176,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
             <RootProvider search={{ SearchDialog: DocSearchDialog }}>
               <DocsShell />
               <TagOverviewPopup />
+              <DocSettingsPanel />
             </RootProvider>
           </FrameworkProvider>
         </StoreContext.Provider>
@@ -175,7 +204,7 @@ const DocsShell = observer(function DocsShell() {
   return (
     <DocsLayout
       tree={docStore.treePage}
-      nav={{ title: sourceStore.configDoc.siteTitle ?? 'Docs' }}
+      nav={{ title: sourceStore.configDoc.siteTitle ?? 'Docs', children: <DocSettingsButton /> }}
       sidebar={sidePanelProps}
       slots={docsLayoutSlots}
       themeSwitch={themeSwitchSidebarDisabled}

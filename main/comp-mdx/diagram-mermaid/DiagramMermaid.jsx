@@ -360,13 +360,13 @@ const DiagramMermaid = observer(function DiagramMermaid({ data = {}, config = {}
 
 	const isExpandedSet = async (isExpanded) => {
 		const result = await onEvent?.('expandChangeRequest', { isExpanded });
-		if (!result?.isHandled) store.expandedSet(isExpanded);
+		if (result?.code !== 0) store.expandedSet(isExpanded);
 	};
 
 	const displayModeToggle = async () => {
 		const displayMode = displayModeResolved === 'contain' ? 'fill' : 'contain';
 		const result = await onEvent?.('displayModeChangeRequest', { displayMode });
-		if (!result?.isHandled) store.displayModeSet(displayMode);
+		if (result?.code !== 0) store.displayModeSet(displayMode);
 	};
 
 	useEffect(() => {
@@ -380,7 +380,7 @@ const DiagramMermaid = observer(function DiagramMermaid({ data = {}, config = {}
 
 	async function sourceCopy() {
 		const result = await onEvent?.('copyRequest', { text: sourceDiagram });
-		if (result?.isHandled) return;
+		if (result?.code === 0) return;
 		try {
 			await navigator.clipboard.writeText(sourceDiagram);
 			store.copyStatusSet('copied');

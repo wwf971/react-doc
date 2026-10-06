@@ -150,6 +150,15 @@ While the referenced document is compiling, a neutral loading line replaces the 
 
 The headings, paragraphs, and lists of the document body are rendered by explicit components in `comp-mdx/text/` (`headingTagCreate`, `ParagraphTag`, `listTagCreate`, mapped onto `h1`–`h6`, `p`, `ul`/`ol`/`li` by `buildMdxComps`), so these blocks have a home beside their default editors `HeadingEdit`, `ParagraphEdit`, `ListEdit`, and the fallback `BlockSourceEdit`. A component that supports editing declares `isEditSupported` in its definition, may declare an `editTemplate` for the insert panel, and branches on `config.isEdit` to its `XxxEdit.jsx`. The edit contract, the naming rule, and the sharing of render code between `Xxx` and `XxxEdit` are specified in [In-place editing](doc_page_impl_edit.md#component-edit-mode); `Image` is the demonstration in this folder.
 
+An editor, built-in or custom, must not move the page when it appears ([the no-jitter rule](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule)). The edit layer locks the wrapper of the block being edited to the height and margins the block had in view mode and lets the editor's content extend over the next block when it needs more room; for that to work, an editor keeps to these rules:
+
+- **One in-flow root, the one the block renders as.** The editor renders the same render component (or the same element) the reading page renders, with the editable values in it, and nothing else in the flow. Everything that exists only for editing goes into `EditFloatingPanel`.
+- **The wrapper owns the geometry.** The editor does not set a height, a min-height, or outer margins on its root to fit its content; the wrapper carries the margins and the height of the view mode. Inner spacing (padding, the margins between children) stays as in view mode.
+- **The root paints a background.** The layer gives the root the page background so that, where it extends over the next block, it covers it; a root with a background of its own (a card, a code surface) keeps it, and a root that is transparent by design must not rely on seeing through to the page.
+- **No layout from editing state.** Showing a field, a message, or an action in response to the author must not change the height of the root; it floats, or it replaces a value in place (`EditValueInline` keeps the exact box of the text it replaces).
+
+`ImageEdit` (`comp-mdx/image/`) and `StockTableEdit` (`example_doc/comp-mdx/`) follow these rules and are the references for a new component editor.
+
 ## File tree annotations
 
 A `FileTree` can draw annotations above its rows. The first annotation type is a right-angled arrow from one or more source nodes to one or more destination nodes, with optional text beside it:

@@ -19,7 +19,7 @@ import './text-block.css';
 // surface is inside the floating panel instead (config.edit.isSurfaceFloating).
 //
 //   data.text                      source of the block when editing started
-//   config.edit.session            { textDraft, draftVersion, isCreated, status, message }
+//   config.edit.session            { textDraft, draftVersion, selectionInitial, status, message }
 //   config.edit.block              the block model entry (kind decides the surface)
 //   config.edit.label              what is being edited, e.g. "Paragraph"
 //   config.edit.isSurfaceFloating  the surface goes into the panel (frontmatter, document)
@@ -29,6 +29,9 @@ import './text-block.css';
 //   editTextSetRequest { text }   text set by a control; the surface is rewritten
 //   editSubmitRequest             Save
 //   editCancelRequest             Cancel
+//   editFocusShiftRequest { direction: 'previous' | 'next' }
+//                                 ArrowUp on the first line / ArrowDown on
+//                                 the last line: go on to the neighbor block
 export const TextBlockEdit = observer(function TextBlockEdit({ data = {}, config = {}, onEvent, children }) {
   const edit = config.edit ?? {};
   const session = edit.session ?? {};
@@ -57,12 +60,13 @@ export const TextBlockEdit = observer(function TextBlockEdit({ data = {}, config
       kind={kind}
       text={textDraft}
       textVersion={draftVersion}
-      isSelectAll={session.isCreated === true}
+      selectionInitial={session.selectionInitial ?? 'end'}
       isLocked={isLocked}
       ariaLabel={`${label} source`}
       onTextChange={(text) => void onEvent?.('editDraftChange', { text })}
       onSubmitRequest={submitRequest}
       onCancelRequest={cancelRequest}
+      onFocusShiftRequest={edit.isSurfaceFloating ? undefined : (direction) => void onEvent?.('editFocusShiftRequest', { direction })}
     />
   );
   const actions = (

@@ -81,7 +81,7 @@ const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEven
 		if (eventType !== 'activateRequest') return;
 		eventData.event?.preventDefault();
 		const result = await onEvent?.('openRequest', { ...eventData, target });
-		if (result?.isHandled) return;
+		if (result?.code === 0) return;
 		if (!Panel || !isReady) {
 			setWarningText(title);
 			return;

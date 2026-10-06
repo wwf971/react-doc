@@ -53,7 +53,7 @@ export const SidePanelItemHost = observer(function SidePanelItemHost({
       input={{ data: dataDisplay }}
       onEventRuntime={(eventType, eventData) => {
         if (eventType !== 'tagOverviewOpenRequest' || !isTagOverviewAvailable) return undefined;
-        return { isHandled: tagStore.overviewOpen(eventData.tagId) };
+        return tagStore.overviewOpen(eventData.tagId) ? { code: 0 } : { code: -1, message: 'tag overview not available' };
       }}
       placement="sidePanelDisplay"
     />

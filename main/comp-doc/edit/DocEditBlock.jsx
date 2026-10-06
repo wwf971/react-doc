@@ -1,24 +1,44 @@
-import { useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { BlockRender } from '../../comp-mdx/text/BlockRender.jsx';
-import { useDocEditDoc } from './DocEditDocContext.js';
-import { DocEditBorder } from './DocEditBorder.jsx';
-import { DocEditBlockEditor } from './DocEditBlockEditor.jsx';
+import { DocEditBlockFloatContext, useDocEditDoc } from './DocEditDocContext.js';
+import { DocEditBlockToolbar } from './DocEditBlockToolbar.jsx';
+import { DocEditBlockEditor, blockLabelGet } from './DocEditBlockEditor.jsx';
 import { editFocusRelease, useEditOutsidePointer } from './use-edit-outside-pointer.js';
 import './DocEdit.css';
 
 // The wrapper remarkEditBlock puts around every root-level block of the
-// compiled edit body (<DocEditBlock blockIndex>...</DocEditBlock>). It draws
-// the border above its block, enters the block's edit session on click, and,
-// while that session is open, hands the block to its editor. The editor
-// edits the block in its place and floats its controls, so nothing else on
-// the page moves.
+// compiled edit body (<DocEditBlock blockIndex>...</DocEditBlock>). It owns
+// the floating controls of its block and, while the block's session is
+// open, hands the block to its editor. The editor edits the block in its
+// place and floats its controls, so nothing else on the page moves.
 //
-// a block that is not being edited renders exactly as in reading mode; only
-// one block of a document is in edit mode at a time (the store holds one
-// session). the session is left, saving the draft, when a pointer goes down
-// outside the block or Ctrl/⌘ + Enter is pressed in it; Escape cancels it.
+// floating controls: the first child of the wrapper is a zero-height sticky
+// anchor; the toolbar (DocEditBlockToolbar) and the bar of the editor
+// (EditFloatingPanel, placement above) are laid out from its bottom edge
+// upward, over the gap above the block. the anchor sticks below the top of
+// the scroll container by the height of what floats in it, so when the top
+// of the block is scrolled out of view, the controls stay at the top of the
+// block's visible range (doc_page_impl_edit.md#floating-controls).
+//
+// a block that is not being edited renders exactly as in reading mode: no
+// outline, no background; only its toolbar appears on hover. the session is
+// entered with the toolbar's Edit button, or, when EditBlockEnterMode is
+// 'click', with a click anywhere on the block. only one block of a document
+// is in edit mode at a time (the store holds one session). the session is
+// left, saving the draft, when a pointer goes down outside the block or
+// Ctrl/⌘ + Enter is pressed in it; Escape cancels it.
+//
+// geometry lock: while the block is edited, the wrapper keeps the height and
+// the gaps to its neighbors that the block had in view mode (measured by
+// useGeometryLock the moment the session starts, before the editor is
+// rendered, and set as inline styles). the editor's in-flow root has no outer
+// margins and paints the page background (DocEdit.css), so when the source
+// needs more room than the rendered block it extends over the next block
+// instead of pushing it down, and when it needs less the block keeps its
+// height (doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule).
 //
 // blocks that render nothing visible (a comment, trailing component markers)
 // get a small floating chip, so they can be found and edited.
@@ -26,19 +46,27 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
   const { editStore } = useDocStores();
   const { path, model, format } = useDocEditDoc();
   const elementRef = useRef(null);
+  const anchorRef = useRef(null);
+  const [floatElement, floatElementSet] = useState(null);
   const index = Number(blockIndex);
   const block = model.blockList[index];
   const isEditing = Boolean(block) && editStore.sessionIs(path, 'block', index);
+  const geometryLock = useGeometryLock(elementRef, editStore, path, index);
   useEditOutsidePointer(elementRef, isEditing, () => void editStore.sessionLeave());
+  useFloatHeightFollow(anchorRef, floatElement);
   if (!block) return children;
   const isDeletePending = editStore.deleteConfirmIs(path, index);
+  const isOpen = isDeletePending || editStore.insertMenuIs(path, index);
   const isInvisible = block.kind === 'html' || block.kind === 'marker';
+  const isEnterByClick = editStore.blockEnterMode === 'click';
   const textPending = editStore.blockTextPendingGet(path, index);
+  const label = blockLabelGet(block);
 
-  // a click anywhere on the block starts its session; the block's own
-  // controls (buttons, editable values, form fields) keep working
+  // EditBlockEnterMode 'click': a click anywhere on the block starts its
+  // session; the block's own controls (buttons, editable values, form
+  // fields) and the floating controls keep working
   const clickCaptureHandle = (event) => {
-    if (isEditing) return;
+    if (!isEnterByClick || isEditing) return;
     if (event.target.closest?.(clickOwnSelector)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -86,8 +114,7 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
   }
 
   return (
-    <>
-      <DocEditBorder indexBefore={index} />
+    <DocEditBlockFloatContext.Provider value={floatElement}>
       <div
         ref={elementRef}
         className="doc-edit-block"
@@ -97,15 +124,86 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
         data-kind={block.kind}
         data-depth={block.depth}
         data-editing={isEditing ? '' : undefined}
+        data-open={isOpen ? '' : undefined}
+        data-enter-click={isEnterByClick && !isEditing ? '' : undefined}
         data-delete-pending={isDeletePending ? '' : undefined}
         data-invisible={isInvisible && !isEditing ? '' : undefined}
+        data-geometry-locked={isEditing && geometryLock ? '' : undefined}
+        style={isEditing && geometryLock ? geometryLock : undefined}
         onClickCapture={clickCaptureHandle}
         onKeyDown={keyDownHandle}
       >
+        <div ref={anchorRef} className="doc-edit-block-anchor not-prose">
+          <div ref={floatElementSet} className="doc-edit-block-float">
+            {isEditing ? null : <DocEditBlockToolbar blockIndex={index} label={label} />}
+          </div>
+        </div>
         {content}
       </div>
-    </>
+    </DocEditBlockFloatContext.Provider>
   );
 });
 
 const clickOwnSelector = 'button, [role="button"], input, select, textarea, summary, [contenteditable]:not([contenteditable="false"])';
+
+// the inline styles that keep the wrapper at the geometry its block had in
+// view mode while the block is edited, or null while it is not. the mobx
+// reaction runs synchronously when the session changes, before React renders
+// the editor, so the wrapper still holds the rendered block when it is
+// measured. a block that mounts already in a session (one just created) has
+// no view geometry and gets none.
+function useGeometryLock(elementRef, editStore, path, index) {
+  const [geometryLock, geometryLockSet] = useState(null);
+  useEffect(() => reaction(
+    () => editStore.sessionIs(path, 'block', index),
+    (isEditing) => {
+      geometryLockSet(isEditing ? blockGeometryMeasure(elementRef.current) : null);
+    },
+  ), [elementRef, editStore, path, index]);
+  return geometryLock;
+}
+
+// the height of the wrapper and its distances to the previous and the next
+// block (or to the edge of the body for the first and the last block). the
+// distances are the collapsed margins between the blocks; given to the
+// wrapper as its own margins they collapse with the neighbors' margins to
+// the same distances, whatever the editor renders in the wrapper.
+function blockGeometryMeasure(wrapper) {
+  if (!wrapper) return null;
+  const rect = wrapper.getBoundingClientRect();
+  const parent = wrapper.parentElement;
+  const parentStyle = getComputedStyle(parent);
+  const parentContentTop = parent.getBoundingClientRect().top + parent.clientTop + parseFloat(parentStyle.paddingTop);
+  const parentContentBottom = parent.getBoundingClientRect().top + parent.clientTop + parent.clientHeight - parseFloat(parentStyle.paddingBottom);
+  const previous = wrapper.previousElementSibling;
+  const next = wrapper.nextElementSibling;
+  const edgeTop = previous ? previous.getBoundingClientRect().bottom : parentContentTop;
+  const edgeBottom = next ? next.getBoundingClientRect().top : parentContentBottom;
+  return {
+    height: `${rect.height}px`,
+    marginTop: `${Math.max(0, rect.top - edgeTop)}px`,
+    marginBottom: `${Math.max(0, edgeBottom - rect.bottom)}px`,
+  };
+}
+
+// keeps --doc-edit-float-height of the anchor equal to the height of what
+// floats in it (the toolbar, or the editor bar with its fields), which is
+// the distance the anchor sticks below the sticky rows of the layout
+function useFloatHeightFollow(anchorRef, floatElement) {
+  const heightApply = () => {
+    const anchor = anchorRef.current;
+    if (!anchor || !floatElement) return;
+    anchor.style.setProperty('--doc-edit-float-height', `${floatElement.offsetHeight}px`);
+  };
+  // after every commit of the block: the toolbar and the editor bar replace
+  // each other when a session starts or ends
+  useLayoutEffect(heightApply);
+  // between commits: the bar grows with a message, a field, a wrapped row
+  useLayoutEffect(() => {
+    if (!floatElement) return undefined;
+    const observer = new ResizeObserver(heightApply);
+    observer.observe(floatElement);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [floatElement]);
+}

@@ -18,12 +18,14 @@ mobx stores (source of truth for rendering)
      ├── DocSourceStore (lower): manifest, raw/compile caches, doc index, search data
      ├── DocStore (upper): side-panel tree, current doc, navigation, link dropdown, url sync
      ├── DocTagStore: tags resolved from source rules + side-panel tree, tag queries
-     ├── DocConfigStore: feature config, global and resolved per document
+     ├── DocConfigStore: feature config, global and resolved per document, user overrides
      └── DocEditStore: in-place editing (dev server only): sessions, block model, edit api
+     ▼
+DocEventRouter: component reports → host → local handler → domain route (navigation, tag, edit)
      ▼
 <DocPageMdx/>  (embeddable component)
      ├── FrameworkProvider adapter: usePathname/useRouter/Link backed by DocStore
-     └── fumadocs-ui: RootProvider + DocsLayout (sidebar) + DocsPage (toc, breadcrumb)
+     └── fumadocs-ui: RootProvider + DocsLayout (sidebar + settings button) + DocsPage (toc, breadcrumb)
            body = mdx compiled in browser (@mdx-js/mdx + fumadocs runtime preset)
 ```
 
@@ -39,7 +41,9 @@ mobx stores (source of truth for rendering)
 
 **Multilingual content.** Language inheritance, document-wide selection, headings, paragraphs, lists, degradation behavior, and file naming are specified in [doc_page_impl_multi-lang.md](doc_page_impl_multi-lang.md).
 
-**In-place editing, an additional layer.** On the development server a document can be edited from the page, one root-level block at a time; the server rewrites the file and the page reloads from it. The layer has its own store, its own compiled body (root blocks wrapped for borders and button groups), and a component edit contract (`config.isEdit`, `XxxEdit.jsx` beside `Xxx.jsx`); the reading path is untouched and a built page has no edit mode. Specified in [doc_page_impl_edit.md](doc_page_impl_edit.md).
+**In-place editing, an additional layer.** On the development server a document can be edited from the page, one root-level block at a time; the server rewrites the file and the page reloads from it. The layer has its own store, its own compiled body (root blocks wrapped, each with a floating toolbar from a sticky anchor), and a component edit contract (`config.isEdit`, `XxxEdit.jsx` beside `Xxx.jsx`); the reading path is untouched and a built page has no edit mode. Specified in [doc_page_impl_edit.md](doc_page_impl_edit.md).
+
+**One event layer between components and stores.** A registered component reports through `onEvent` and never calls a store; `DocEventRouter` turns the report into an event with its source, lets the host application and the rendering place answer first, then routes it to the domain that owns the type (navigation, tags, editing). Every answer is `{ code, data, message }`. Specified in [doc_page_impl_event.md](doc_page_impl_event.md).
 
 **Doc collection via vite plugin.** The plugin reads the two-layer config, expands side-panel resource files (collecting their source rules), executes the source rules, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any imported side-panel file — regardless of its extension — invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
 
@@ -56,8 +60,8 @@ Follows the data-driven pattern of `react-comp-misc` (`comp_design.md`) and the 
 - `DocSourceStore` (lower, content): `fileManifest`, `configDoc`, `rawByPath`, `compiledByPath` (status/Body/toc/error), `targetsByName` (doc index for link resolution), `structuredDataByPath` (search). API: `loadDoc(path)`, `resolveLink(target, fromPath)`, `searchDocs(query)`.
 - `DocStore` (upper, view): `docCurrentPath`, `isDocLoading`, `linkDropdownOpenId` (which link's candidate-dropdown is open; one at a time, closes on outside click), page tree (computed), route mode + url sync. API: `navigate(path, hash)`, `navigationBack()`, `navigationUp()`, `navigationForward()`, `init()`.
 - `DocTagStore` (derived): the tag model computed from the manifest and the page tree, plus the tag service used by renderers and the open state of the tag overview popup. See [Tag system](doc_page_impl_tag.md).
-- `DocConfigStore` (derived): the config model computed from `globalConfig`, the manifest, and the page tree, plus the config service. See [Config system](doc_page_impl_config.md).
-- `DocEditStore` (edit layer, beside the reading stores): availability of the development-server edit api, the global edit mode, the document source as read from disk with its hash, the dedicated compile with block wrappers, the one open edit session, and the pending deletion. It never writes to the reading stores; the file on disk is changed and reloads through the normal path. See [In-place editing](doc_page_impl_edit.md).
+- `DocConfigStore` (derived): the config model computed from `globalConfig`, the manifest, and the page tree, the reader's session overrides from the settings panel, plus the config service. See [Config system](doc_page_impl_config.md).
+- `DocEditStore` (edit layer, beside the reading stores): availability of the development-server edit api, the global edit mode, the document source as read from disk with its hash, the dedicated compile with block wrappers, the one open edit session, the open insert menu, and the pending deletion; every write goes through `operationApply`, and the events of editors arrive at `eventHandle`. It never writes to the reading stores; the file on disk is changed and reloads through the normal path. See [In-place editing](doc_page_impl_edit.md).
 
 Render components observe stores via context and submit change attempts through store APIs; no component talks to the file system or compiler directly.
 
@@ -181,7 +185,7 @@ compRegistry:
 
 Config decides what doc authors can use; code decides what exists.
 
-All registered render components use the same top-level props: `{ data, config, onEvent }`. `data` contains semantic content, `config` contains operation state and runtime context, and `onEvent(eventType, eventData)` submits interaction requests. The internal shape of `data` and `config` remains component-specific. Components with meaningful mutable operation state can use `CompStateStore` or their own MobX store; simple components can remain stateless.
+All registered render components use the same top-level props: `{ data, config, onEvent }`. `data` contains semantic content, `config` contains operation state and runtime context, and `onEvent(eventType, eventData)` submits interaction requests, which the [event layer](doc_page_impl_event.md) routes and answers with `{ code, data, message }`. The internal shape of `data` and `config` remains component-specific. Components with meaningful mutable operation state can use `CompStateStore` or their own MobX store; simple components can remain stateless.
 
 Registry values are component definitions created with `compDefine()`. A definition provides `CompRender`, and can also provide supported placements and an input converter. Fumadocs-native components use adapters created with `compNativeDefine()`, so their framework-specific props do not become the public contract for project components.
 
@@ -352,6 +356,7 @@ main/
 │   ├── toc/             # DocPageToc: page / part local index
 │   ├── page/            # toolbar, navigation buttons, search dialog, loading skeleton
 │   ├── edit/            # edit layer: toggle and toolbar controls, edit body, block borders and hover button groups, insert menu, editor chooser, floating bar and in-place editing primitives
+│   ├── settings/        # settings button and panel (user overrides of config keys)
 │   └── mdx-render/      # MdxRenderer, DynamicCodeBlock
 ├── package.json         # delegates dev/build to frontend/
 └── frontend/            # Vite app + embeddable component
@@ -361,10 +366,10 @@ main/
     └── src/
         ├── DocPageMdx.jsx       # the embeddable doc page component
         ├── store/               # DocSourceStore (lower) + DocStore (upper) + DocTagStore + DocConfigStore + DocEditStore
-        └── lib/                 # mdx compile, nested Markdown renderer, link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, doc-edit-* (block model, edit api client), framework adapter
+        └── lib/                 # mdx compile, nested Markdown renderer, link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, doc-edit-* (block model, edit api client), doc-event (event router), framework adapter
 ```
 
-Design documents: [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [in-place editing](doc_page_impl_edit.md), [package usage](doc_page_impl_detail.md).
+Design documents: [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [in-place editing](doc_page_impl_edit.md), [event layer](doc_page_impl_event.md), [package usage](doc_page_impl_detail.md).
 
 Run `pnpm install` from the workspace root once, then `pnpm dev` from either this folder or `frontend/`. `pnpm build` produces one static deployable artifact (docs bundled as lazy chunks); any static file server works, no doc folders needed at runtime.
 
@@ -377,6 +382,7 @@ Run `pnpm install` from the workspace root once, then `pnpm dev` from either thi
 - Give the document page a host with a definite height. `.doc-page-mdx` is the vertical scroll container (`height: 100%; overflow: auto`), and every sticky part of the layout — side panel, local index, floating navigation and theme controls — sticks relative to it. If the host height is `auto` (for example an unstyled `#root`), the document page grows with its content and never scrolls; the window scrolls instead, all sticky parts scroll away, and the floating controls appear only at the end of the page, or briefly while a short document or the loading skeleton is shown. The standalone demo sets this height in `frontend/src/main.css`.
 - Keep the three-column layout width-stable across document switching. The scrollbar of `.doc-page-mdx` is the variable to control: a short document or the loading skeleton drops it, the content width grows, and every layout column shifts. `DocPageMdx.css` reserves the gutter with `scrollbar-gutter: stable` on `.doc-page-mdx` itself. Headingless documents are already width-stable at desktop widths because the fumadocs TOC renders a hidden `#nd-toc-placeholder` that keeps `--fd-toc-width` reserved.
 - Avoid broad selectors or CSS resets in embedded components. After changing the CSS pipeline, verify headings, links, code blocks, side panels, and scrolling in both the standalone demo and the embedded page.
+- A component stylesheet that writes into a Tailwind cascade layer (`@layer utilities { … }`, as `DocEdit.css` does to restate prose margins) must first state the full layer order, `@layer theme, base, components, utilities;`. Component stylesheets are imported by their components and reach the document before the Tailwind entry does; the first `@layer` statement fixes the order of the layers it names, so a lone `@layer utilities` block would put `utilities` before `base` and let Preflight win over every utility class of the page (tight sidebar items, misplaced header icons, an unstyled search box). Stating the order first makes the component stylesheet independent of its import position.
 
 General visual components, hooks, and icons from Fumadocs, Lucide, and the local shadcn set are imported through `frontend/UICommon.js`. `frontend/UICommonExternal.js` owns external-library exports, while `UICommon.js` adds local shared components. Specialized engines such as React Flow and build-time remark or rehype plugins remain direct imports because they are feature-specific or compiler dependencies rather than general UI primitives.
 

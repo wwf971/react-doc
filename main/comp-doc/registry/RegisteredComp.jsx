@@ -14,7 +14,7 @@ export function RegisteredComp({
   onEventRuntime,
   placement,
 }) {
-  const { compById, compConfigHost, docStore, onEvent: onEventPage, sourceStore, tagStore } = useDocStores();
+  const { compById, compConfigHost, docStore, eventRouter, onEvent: onEventPage, sourceStore } = useDocStores();
   const idFallback = useId();
   const compIdResolved = compId ?? compIdResolve(sourceStore.configDoc, compName);
   const definitionValue = compDefinition ?? compById[compIdResolved];
@@ -98,27 +98,24 @@ export function RegisteredComp({
     sourcePath,
   };
 
-  const eventHandle = async (eventType, eventData = {}) => {
-    const eventDataForward = {
-      ...eventData,
-      compId: compIdResolved,
-      instanceId,
-      itemId: config.itemId,
-      placement,
-      sourcePath: config.sourcePath,
-    };
-    const result = await onEventPage?.(`component:${eventType}`, eventDataForward);
-    if (result?.isHandled) return result;
-    const resultRuntime = await onEventRuntime?.(eventType, eventDataForward);
-    if (resultRuntime?.isHandled) return resultRuntime;
-    if (eventType === 'navigateRequest' && eventData.target) {
-      docStore.navigate(eventData.target);
-      return { isHandled: true };
-    }
-    if (eventType === 'tagOverviewOpenRequest' && eventData.tagId && compConfigHost.panelComponent) {
-      return { isHandled: tagStore.overviewOpen(eventData.tagId) };
-    }
-    return result;
+  // every report of the component becomes one event of the event layer
+  // (doc_page_impl_event.md): the host application answers first, then the
+  // place that rendered the component (onEventRuntime), then the domain
+  // route of the event type.
+  const eventHandle = (eventType, eventData = {}) => {
+    const event = eventRouter.eventBuild({
+      type: eventType,
+      data: eventData,
+      source: {
+        compId: compIdResolved,
+        instanceId,
+        itemId: config.itemId,
+        placement,
+        sourcePath: config.sourcePath,
+        blockIndex: configRuntime.blockIndex,
+      },
+    });
+    return eventRouter.dispatch(event, { onEventHost: onEventPage, onEventLocal: onEventRuntime });
   };
 
   const CompRender = definition.CompRender;

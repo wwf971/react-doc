@@ -256,12 +256,12 @@ const PartIndexPanel = observer(function PartIndexPanel({ isVisible, labels }) {
           onEventRuntime={(eventType, eventData) => {
             if (eventType === 'languageChange') {
               const isAccepted = docStore.partIndexLanguageSet(eventData.language);
-              return { isHandled: true, isAccepted };
+              return isAccepted ? { code: 0 } : { code: -1, message: 'not accepted' };
             }
             if (eventType !== 'displayModeChange') return undefined;
             if (eventData.displayMode === 'floating') floatingLayoutPrepare();
             const isAccepted = docStore.partIndexDisplayModeSet(eventData.displayMode);
-            return { isHandled: true, isAccepted };
+            return isAccepted ? { code: 0 } : { code: -1, message: 'not accepted' };
           }}
           placement="partIndex"
         />

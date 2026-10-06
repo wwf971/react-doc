@@ -2,12 +2,13 @@
 
 # Config System: Design
 
-The config system decides how the doc page behaves, for example whether tags appear next to the path bar. It has two parts:
+The config system decides how the doc page behaves, for example whether tags appear next to the path bar. It has three parts:
 
 - **Global config**: one value per key for the whole page, written in `config.yaml`.
 - **Document config**: for some keys, a single document can have its own value. That value is resolved from several places in a fixed order: global config, source rules, side-panel items, and the document's frontmatter.
+- **User config**: the reader changes a value for the page session from the settings panel; it wins over everything declared and is gone with the page.
 
-Both parts use the same list of known keys, and renderers read both through one config service. For the overall architecture, refer to [Document Page: Design](doc_page_impl.md).
+All parts use the same list of known keys, and renderers read them through one config service. For the overall architecture, refer to [Document Page: Design](doc_page_impl.md).
 
 ```text
 key definitions (code)          which keys exist, their values, default, scope
@@ -18,6 +19,8 @@ config.yaml globalConfig  ──►  page-level value of every key
         ├── source.yaml       rules that collected the document
         ├── side-panel.yaml   items that bind the document, or a folder above it
         └── frontmatter       "config" of the document itself
+        │
+settings panel (reader, not persisted)  ──►  overrides any key, page or document
         ▼
 DocConfigStore  ──►  config service  ──►  renderers (side-panel items, path bar, links, ...)
 ```
@@ -26,9 +29,9 @@ This is separate from the rest of `config.yaml`, such as `source`, `sidePanel`, 
 
 ## Core concepts
 
-- **Key definition**: declares that a key exists: its value type, its default, and its scope. Definitions live in code; values live in YAML. This mirrors the component registry, where code decides what exists and config decides what is used.
-- **Scope**: `page` keys have one value for the whole page and are read only from global config. `doc` keys can additionally be set for single documents.
-- **Level**: one place where a value can be declared. The levels are default, global, source, side panel, and document. Some features add an inline level of their own, such as a link title marker.
+- **Key definition**: declares that a key exists: its value type, its default, its scope, a description for the settings panel, and whether the reader may change it. Definitions live in code; values live in YAML. This mirrors the component registry, where code decides what exists and config decides what is used.
+- **Scope**: `page` keys have one value for the whole page and are read from global config and the user level. `doc` keys can additionally be set for single documents.
+- **Level**: one place where a value can be declared. The levels are default, global, source, side panel, document, and user. Some features add an inline level of their own, such as a link title marker.
 - **Config service**: the query object renderers use. They never read `globalConfig`, source rules, side-panel nodes, or frontmatter themselves.
 
 ## Naming keys
@@ -74,8 +77,9 @@ Built-in keys:
 | `TagsDisplayAtLinkIsOn` | doc | `false` | Show the target's tags beside document links in a document. |
 | `TagsDisplayAtLinkPosition` | doc | `after` | `before` or `after` the link text. |
 | `TagsOverviewPopupIsOn` | page | `true` | Clicking a tag opens the tag overview popup. |
+| `EditBlockEnterMode` | page | `button` | `button`: a block enters edit mode through the Edit button of its toolbar; `click`: also by clicking the block. Development server only. |
 
-How these features behave is described in [Tag system](doc_page_impl_tag.md#where-tags-are-displayed).
+How the tag features behave is described in [Tag system](doc_page_impl_tag.md#where-tags-are-displayed), the edit key in [In-place editing](doc_page_impl_edit.md#availability-and-mode).
 
 ## Document config
 
@@ -88,12 +92,13 @@ value of a document-level key K for document D:
 3. source         source rules that collected D, in rule order
 4. side panel     side-panel nodes that bind D, or a folder node above an item of D, in tree order
 5. document       frontmatter config.K of D
+6. user           the reader's override from the settings panel
 -> a later level replaces the value of an earlier one, key by key
 ```
 
 A level only replaces the keys it writes. If a document sets `TagsDisplayAtLinkPosition` in its frontmatter, the other keys keep the values from the earlier levels.
 
-A page-level key written at levels 3 to 5 is ignored with a warning. So is an unknown key or a value of the wrong type. When this happens, the earlier value stays in effect.
+A page-level key written at levels 3 to 5 is ignored with a warning. So is an unknown key or a value of the wrong type. When this happens, the earlier value stays in effect. Level 6 is the exception that applies to both scopes: the reader's choice is meant to win for the whole page.
 
 A page without a document, such as a component panel or an inline side-panel item, uses the global value.
 
@@ -180,7 +185,7 @@ A hosted part index belongs to its index document, so its links follow that docu
 
 ```text
 hosted index of part P, index document D:
-  levels 1-5 of D  <  part.index.config of P  <  inline level
+  levels 1-5 of D  <  part.index.config of P  <  user level (for the declared keys)  <  inline level
 ```
 
 The level does not change the config of D itself: the same index rendered inside D, and every other component of D, keep levels 1-5. Page-level keys, unknown keys, and invalid values are ignored with a warning, as at the other levels. `DocConfigStore.configPartIndexOverrideGet(partId)` returns the validated keys; the index host passes them as `config.configDocOverride`.
@@ -188,6 +193,30 @@ The level does not change the config of D itself: the same index rendered inside
 ### Inline level
 
 Some features also accept a value on one single use, which wins over every level. Document links take a title marker, for example `[Setup](setup.md "tags:before")`. The marker forms are described in [Tag system](doc_page_impl_tag.md#tags-beside-links).
+
+## User level
+
+The reader can change the value of a key for the page session. The settings button (a gear, left of the sidebar collapse trigger in the sidebar header) opens the settings panel, a floating panel anchored under the button that lists every key definition with `isUserSettable` not `false`: its key, its description, and a control for its type (switch for `boolean`, dropdown for `enum`, number or text field otherwise; `any` keys are listed hidden). A value the reader changes becomes the user level, level 6 of the resolution: it replaces the declared value of the key at the page level, in every document, and in part index overrides that declared the key. Reset returns every key to its declared value. Nothing is persisted; a reload starts from the declared values again.
+
+```text
+settings panel ──► DocConfigStore.valueUserSet(key, value) ──► configUserByKey (observable)
+                                                                      │
+                                   configModelBuild({ ..., configUser })  recomputes
+                                                                      ▼
+                                   configGlobal / configByDocPath / configPartIndexByPartId  (with the override)
+                                   configGlobalDeclared                                      (without it: the panel's "declared" value)
+```
+
+A key can be listed but not changeable at the moment: the panel marks the item disabled and says why in its tooltip. `EditBlockEnterMode` is disabled with "editing is available on the development server only" when the page has no edit api, so a built page lists the key but cannot change it; a key whose feature is absent for a similar reason follows the same form. The panel itself is a `ConfigPanel` of `@wwf971/react-comp-misc`, which the application injects through `config.components.ConfigPanel` of `DocPageMdx` (as it injects `SegmentedControl` for the local index); without it the settings button renders nothing. `isHidden`, `isDisabled`, and `disabledReason` on a panel item are the panel's own item properties.
+
+Store api of the level:
+
+```text
+configDefineListUserSettable          the definitions the panel lists
+valueDeclaredGet(key)                 page value without the reader's override
+valueUserSet(key, value) / valueUserClear(key) / configUserClear()
+isSettingsOpen, settingsOpenSet(isOpen, anchorElement)
+```
 
 ## Config service
 
@@ -198,7 +227,7 @@ configGlobalGet()               { key: value } of every key, page level
 valueGlobalGet(key)             one page-level value
 configDocGet(docPath)           { key: value } of every key, resolved for one document
 valueDocGet(docPath, key)       one resolved value
-levelDocGet(docPath, key)       level that decided it: default | global | source | sidePanel | doc
+levelDocGet(docPath, key)       level that decided it: default | global | source | sidePanel | doc | user
 configDefineListGet()           every key definition
 ```
 
@@ -209,10 +238,13 @@ Calls from observer components are tracked by mobx. Side-panel item renderers re
 A new feature adds its key definitions to `configDefineListBuiltin` in `lib/doc-config-define.js`, then reads the values through the config service. An application can define its own keys through `DocPageMdx` `config.configDefineList`, using the same form. A definition with an existing key replaces the built-in one.
 
 ```js
-{ key: 'TagsDisplayAtLinkPosition', type: 'enum', valueList: ['before', 'after'], valueDefault: 'after', scope: 'doc' }
+{
+  key: 'TagsDisplayAtLinkPosition', type: 'enum', valueList: ['before', 'after'], valueDefault: 'after', scope: 'doc',
+  description: 'Where the tags of a link target appear, before or after the link text.',
+}
 ```
 
-Supported types are `boolean`, `string`, `number`, `enum` (with `valueList`), `stringList`, and `any`. `null` is accepted only when it is the default, and it means "not set".
+Supported types are `boolean`, `string`, `number`, `enum` (with `valueList`), `stringList`, and `any`. `null` is accepted only when it is the default, and it means "not set". `description` is the text of the key in the settings panel; `isUserSettable: false` keeps a key out of the panel (the default is listed).
 
 ## Implementation files
 
@@ -223,5 +255,6 @@ frontend/src/lib/doc-config-define.js      key definitions, value validation (sh
 frontend/plugin/doc-config-source.ts       source and frontmatter levels, called from the source scan
 frontend/src/lib/doc-config-side-panel.js  side-panel level, called from page-tree.js
 frontend/src/lib/doc-config-model.js       resolution into the config model
-frontend/src/store/DocConfigStore.ts       config model owner and config service
+frontend/src/store/DocConfigStore.ts       config model owner, user level, settings panel state, config service
+comp-doc/settings/                         DocSettingsButton (sidebar header), DocSettingsPanel (floating, anchored to the button)
 ```

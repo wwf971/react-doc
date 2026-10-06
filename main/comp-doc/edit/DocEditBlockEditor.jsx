@@ -1,6 +1,5 @@
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
-import { componentBlockTextBuild } from '../../frontend/src/lib/doc-edit-block.js';
 import { compDefinitionNormalize, compIdResolve } from '../registry/comp-registry.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import { useDocEditDoc } from './DocEditDocContext.js';
@@ -22,10 +21,13 @@ import { useDocEditDoc } from './DocEditDocContext.js';
 // every editor edits the block in its place and floats its controls
 // (doc_page_impl_edit.md#no-jitter-rule). it receives config.edit =
 // { session, block, format, sourcePath, label, viewRendered,
-// isSurfaceFloating } and reports through events; editEventHandlerCreate
-// turns them into store calls. the session draft is what a leave saves, so
-// an editor reports every change of its draft: text editors as { text }, a
-// component's own editor as { raw, props }, rebuilt into the block text here.
+// isSurfaceFloating } and reports through events (editDraftChange,
+// editTextSetRequest, editSubmitRequest, editCancelRequest,
+// editFocusShiftRequest); the event layer routes them to
+// DocEditStore.eventHandle. the session draft is what a leave saves, so an
+// editor reports every change of its draft: text editors as { text }, a
+// component's own editor as { raw, props }, rebuilt into the block text by
+// the store.
 //
 //   block         the block of a block session
 //   viewRendered  the block as the body rendered it, for editors that keep a
@@ -36,7 +38,6 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
   const session = editStore.session;
   if (!session || session.path !== path) return null;
 
-  const onEventRuntime = editEventHandlerCreate(editStore, block);
   const configEdit = {
     isEdit: true,
     sourcePath: path,
@@ -62,9 +63,8 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
           compDefinition={definition}
           compId={compId}
           compName={component.compName}
-          configRuntime={{ ...configEdit, instanceId: `edit:${path}:${block.index}` }}
+          configRuntime={{ ...configEdit, instanceId: `edit:${path}:${block.index}`, blockIndex: block.index }}
           input={{ lang: component.lang, propsAuthored: component.props ?? {}, raw: component.raw }}
-          onEventRuntime={onEventRuntime}
           placement="commentBlock"
         />
       );
@@ -75,9 +75,8 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
   return (
     <RegisteredComp
       compName={compName}
-      configRuntime={{ ...configEdit, instanceId: `edit:${path}:${session.type}:${session.blockIndex}` }}
+      configRuntime={{ ...configEdit, instanceId: `edit:${path}:${session.type}:${session.blockIndex}`, blockIndex: session.blockIndex }}
       input={{ data: { text: session.textInitial } }}
-      onEventRuntime={onEventRuntime}
       placement="edit"
     />
   );
@@ -112,44 +111,11 @@ const labelByBlockKind = {
 function sessionLabelGet(session, block) {
   if (session.type === 'frontmatter') return 'Frontmatter';
   if (session.type === 'document') return 'Document source';
+  return blockLabelGet(block);
+}
+
+// what a block is called in its toolbar and editor bar
+export function blockLabelGet(block) {
   if (block?.component) return block.component.compName;
   return labelByBlockKind[block?.kind] ?? 'Block';
-}
-
-// the block text an editor's event describes: { text } as is, { raw, props }
-// of a component editor rebuilt into the block (submitted props replace the
-// authored props of the same name only)
-function eventBlockTextGet(eventData, block) {
-  if (typeof eventData.text === 'string') return eventData.text;
-  if (block?.component && (eventData.raw !== undefined || eventData.props !== undefined)) {
-    const props = eventData.props ? { ...block.component.props, ...eventData.props } : undefined;
-    return componentBlockTextBuild(block, { raw: eventData.raw, props });
-  }
-  return undefined;
-}
-
-export function editEventHandlerCreate(editStore, block) {
-  return async (eventType, eventData = {}) => {
-    if (eventType === 'editDraftChange') {
-      const text = eventBlockTextGet(eventData, block);
-      if (text !== undefined) editStore.sessionDraftSet(text);
-      return { isHandled: true };
-    }
-    if (eventType === 'editTextSetRequest') {
-      editStore.sessionTextSet(String(eventData.text ?? ''));
-      return { isHandled: true };
-    }
-    if (eventType === 'editCancelRequest') {
-      const isCanceled = await editStore.sessionCancel();
-      return { isHandled: true, isCanceled };
-    }
-    if (eventType === 'editSubmitRequest') {
-      // Save: the explicit leave. an editor may hand over its final draft here.
-      const text = eventBlockTextGet(eventData, block);
-      if (text !== undefined) editStore.sessionDraftSet(text);
-      const isSubmitted = await editStore.sessionLeave();
-      return { isHandled: true, isSubmitted };
-    }
-    return undefined;
-  };
 }

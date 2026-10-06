@@ -90,7 +90,7 @@ Link handling has four replaceable layers:
 1. Recognition: the default remark plugin recognizes Markdown links, file-like inline code, and wiki links, in the document body and in Markdown rendered by components (`MdxRenderer`). Disable it with `config.compile.isDefaultLinkRecognitionEnabled: false` and supply `config.compile.remarkPlugins` for a different syntax.
 2. Resolution: set `config.link.resolve`. Return `{ targets, hash }`, or return nothing to use the default internal-path/name resolver. Source pruning at build time knows only the default resolver; targets a custom resolver maps elsewhere must be reachable through the default rules or another retained document.
 3. Rendering: set `config.link.CompRender`. The package continues to own state and navigation while the application owns visual output.
-4. Navigation policy: set `config.link.onEvent`, or handle root events through `DocPageMdx.onEvent`. The callback may be synchronous or asynchronous; return `{ isHandled: true }` to suppress default handling.
+4. Navigation policy: set `config.link.onEvent`, or handle root events through `DocPageMdx.onEvent`. The callback may be synchronous or asynchronous; return `{ code: 0 }` to suppress default handling (`{ isHandled: true }` of earlier hosts is still accepted). Component events arrive as `component:<type>` with the component's source fields merged into the data; see [event layer](doc_page_impl_event.md).
 
 Set `config.link.Icon` to replace the default icon used by `LinkDocRender`.
 

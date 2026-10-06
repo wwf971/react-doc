@@ -1,12 +1,14 @@
 import { makeAutoObservable, observable, reaction, runInAction } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import type { DocStore } from './DocStore.js';
+import type { DocConfigStore } from './DocConfigStore.js';
 import { compileDoc } from '../lib/mdx-compile.js';
 import { docEditApiCreate } from '../lib/doc-edit-api.js';
 import {
   blockDeleteOperationBuild,
   blockInsertOperationBuild,
   blockReplaceOperationBuild,
+  componentBlockTextBuild,
   editDocModelBuild,
   frontmatterReplaceOperationBuild,
   remarkEditBlock,
@@ -19,21 +21,35 @@ import {
 //
 //   isAvailable       a development server answers the edit api
 //   isEditMode        the global toggle
+//   blockEnterMode    how a block enters its edit mode (config EditBlockEnterMode)
 //   sourceByPath      text + hash of a document as read from disk
 //   docEditByPath     the document compiled with block wrappers + its block model
 //   session           the one block being edited, or the frontmatter / whole document
-//   insertMenu        the one border whose insert menu is open
+//   insertMenu        the one insert menu that is open, anchored to a block toolbar
 //   deleteConfirm     the one block whose deletion waits for confirmation
 //
 // a session ends in one of two ways:
 //   leave    the draft is saved when it changed (click outside, another edit
-//            action, Save, Ctrl/⌘+Enter, edit mode switched off)
+//            action, Save, Ctrl/⌘+Enter, edit mode switched off, a focus
+//            shift to a neighbor block)
 //   cancel   the draft is dropped (Esc, Cancel); a block that was just
 //            created from the insert menu is removed again
 // every edit action first leaves the open session, so a draft is never lost
 // by starting something else.
+//
+// every change of the file goes through operationApply, the one place a
+// future history (undo/redo) records operations at.
+//
+// the events of the edit domain (doc_page_impl_event.md) arrive at
+// eventHandle, routed there by the event layer.
 
 export type EditSessionType = 'block' | 'frontmatter' | 'document';
+
+// where the caret is when the editing surface opens: at the end (an edit
+// started from the toolbar), at the start (entered from the block above by
+// a focus shift), or the whole text selected (a block created from a
+// template: typing replaces it)
+export type EditSelectionInitial = 'all' | 'start' | 'end';
 
 export type EditSession = {
   type: EditSessionType;
@@ -42,6 +58,7 @@ export type EditSession = {
   blockIndex: number;
   // the block was created from the insert menu by this session; cancel removes it
   isCreated: boolean;
+  selectionInitial: EditSelectionInitial;
   textInitial: string;
   textDraft: string;
   // increases only when the text is set by code (a level control, a
@@ -55,6 +72,8 @@ export type EditInsertMenu = {
   path: string;
   // index of the border = index the new block gets
   borderIndex: number;
+  // the block whose toolbar opened the menu and shows it; -1 in an empty document
+  blockIndexAnchor: number;
   status: 'open' | 'submitting' | 'error';
   message: string;
 };
@@ -62,11 +81,11 @@ export type EditInsertMenu = {
 export type EditDeleteConfirm = {
   path: string;
   blockIndex: number;
-  // the border whose button asked for the deletion shows the confirmation
-  borderIndex: number;
   status: 'confirming' | 'submitting' | 'error';
   message: string;
 };
+
+export type EditFocusShiftDirection = 'previous' | 'next';
 
 type EditSource = {
   status: 'loading' | 'done' | 'error';
@@ -88,11 +107,25 @@ export type EditDocState = {
   message?: string;
 };
 
+export type EditResult = { code: number; data?: any; message: string };
+
+type DocEvent = { type: string; data: Record<string, any>; source: Record<string, any> };
+
+// the event types the edit route of the event layer brings here
+export const editEventTypeList = [
+  'editDraftChange',
+  'editTextSetRequest',
+  'editSubmitRequest',
+  'editCancelRequest',
+  'editFocusShiftRequest',
+];
+
 const messageConflict = 'The document changed on disk since it was loaded. Re-read the file, then edit again.';
 
 export class DocEditStore {
   sourceStore: DocSourceStore;
   docStore: DocStore;
+  configStore: DocConfigStore;
   api: ReturnType<typeof docEditApiCreate> | undefined;
   isAvailable = false;
   isEditMode = false;
@@ -109,12 +142,16 @@ export class DocEditStore {
   leavePromise: Promise<boolean> | undefined;
   reactionDispose: (() => void) | undefined;
 
-  constructor(sourceStore: DocSourceStore, docStore: DocStore, options?: { endpoint?: string }) {
+  constructor(sourceStore: DocSourceStore, docStore: DocStore, configStore: DocConfigStore, options?: { endpoint?: string }) {
     this.sourceStore = sourceStore;
     this.docStore = docStore;
+    this.configStore = configStore;
     this.api = options?.endpoint ? docEditApiCreate(options.endpoint) : undefined;
     makeAutoObservable(this, {
       api: false,
+      configStore: false,
+      docStore: false,
+      sourceStore: false,
       docEditByPath: observable.shallow,
       sourceByPath: observable.shallow,
       compilePendingByPath: false,
@@ -180,6 +217,12 @@ export class DocEditStore {
     return this.editModeSet(!this.isEditMode);
   }
 
+  // 'button': the Edit button of the block toolbar only
+  // 'click':  a click anywhere on the block as well
+  get blockEnterMode(): 'button' | 'click' {
+    return this.configStore.valueGlobalGet('EditBlockEnterMode') === 'click' ? 'click' : 'button';
+  }
+
   // an md/mdx file of the collected source. inline items, component panels
   // and synthesized source-file pages have no file of their own.
   docIsEditable(path: string): boolean {
@@ -206,6 +249,10 @@ export class DocEditStore {
     const state = this.docEditByPath[path];
     const source = this.sourceByPath[path];
     return Boolean(state && source?.hash && state.hash !== source.hash);
+  }
+
+  blockCountGet(path: string): number {
+    return this.docEditByPath[path]?.model?.blockList.length ?? 0;
   }
 
   // reads the file from disk and compiles it when its text changed
@@ -320,6 +367,33 @@ export class DocEditStore {
     await this.docEditEnsure(path);
   }
 
+  // ---------- operations on the file ----------
+
+  // the one path every change of a document takes: the operation is sent
+  // with the hash of the text it was built on, the new text is accepted and
+  // compiled. a history of the edit layer records operations here.
+  //   messageFailure   what a failure other than a conflict is reported as
+  //   onApplied        state to settle once the file is written, before the
+  //                    new text is accepted (compiling it takes a moment)
+  private async operationApply(
+    path: string,
+    operation: any,
+    { messageFailure, onApplied }: { messageFailure: string; onApplied?: () => void },
+  ): Promise<EditResult> {
+    if (!this.api) return { code: -1, message: 'The edit api is not available.' };
+    const source = this.sourceByPath[path];
+    if (source?.status !== 'done' || !source.hash) {
+      return { code: -1, message: 'The document source is not loaded.' };
+    }
+    const result = await this.api.sourceApply(path, source.hash, operation);
+    if (result.code !== 0) {
+      return { code: result.code, message: result.code === -2 ? messageConflict : result.message || messageFailure };
+    }
+    if (onApplied) runInAction(onApplied);
+    await this.sourceAccept(path, result.data.text, result.data.hash);
+    return { code: 0, data: result.data, message: '' };
+  }
+
   // ---------- sessions ----------
 
   sessionIs(path: string, type: EditSessionType, blockIndex?: number): boolean {
@@ -338,13 +412,24 @@ export class DocEditStore {
       || this.deleteConfirm?.status === 'submitting';
   }
 
-  async sessionBlockStart(path: string, blockIndex: number, options: { isCreated?: boolean } = {}): Promise<boolean> {
+  async sessionBlockStart(
+    path: string,
+    blockIndex: number,
+    options: { isCreated?: boolean; selectionInitial?: EditSelectionInitial } = {},
+  ): Promise<boolean> {
     if (this.sessionIs(path, 'block', blockIndex)) return true;
     const isLeft = await this.sessionLeaveForIndexAction(path);
     if (!isLeft) return false;
     const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
     if (!block) return false;
-    this.sessionStart({ type: 'block', path, blockIndex, textInitial: block.text, isCreated: options.isCreated === true });
+    this.sessionStart({
+      type: 'block',
+      path,
+      blockIndex,
+      textInitial: block.text,
+      isCreated: options.isCreated === true,
+      selectionInitial: options.selectionInitial ?? 'end',
+    });
     return true;
   }
 
@@ -354,12 +439,11 @@ export class DocEditStore {
   // no longer mean the same blocks; the action is dropped and nothing opens.
   private async sessionLeaveForIndexAction(path: string): Promise<boolean> {
     const isSessionOpen = this.session !== undefined;
-    const blockCountBefore = this.docEditByPath[path]?.model?.blockList.length;
+    const blockCountBefore = this.blockCountGet(path);
     const isLeft = await this.sessionLeave();
     if (!isLeft) return false;
     if (!isSessionOpen) return true;
-    const blockCountAfter = this.docEditByPath[path]?.model?.blockList.length;
-    return blockCountAfter === blockCountBefore;
+    return this.blockCountGet(path) === blockCountBefore;
   }
 
   async sessionFrontmatterStart(path: string): Promise<boolean> {
@@ -368,7 +452,9 @@ export class DocEditStore {
     if (!isLeft) return false;
     const frontmatter = this.docEditByPath[path]?.model?.frontmatter;
     if (!frontmatter) return false;
-    this.sessionStart({ type: 'frontmatter', path, blockIndex: -1, textInitial: frontmatter.text, isCreated: false });
+    this.sessionStart({
+      type: 'frontmatter', path, blockIndex: -1, textInitial: frontmatter.text, isCreated: false, selectionInitial: 'all',
+    });
     return true;
   }
 
@@ -379,11 +465,15 @@ export class DocEditStore {
     if (!isLeft) return false;
     const source = this.sourceByPath[path];
     if (source?.status !== 'done') return false;
-    this.sessionStart({ type: 'document', path, blockIndex: -1, textInitial: source.text ?? '', isCreated: false });
+    this.sessionStart({
+      type: 'document', path, blockIndex: -1, textInitial: source.text ?? '', isCreated: false, selectionInitial: 'all',
+    });
     return true;
   }
 
-  private sessionStart(sessionPartial: Pick<EditSession, 'type' | 'path' | 'blockIndex' | 'textInitial' | 'isCreated'>) {
+  private sessionStart(
+    sessionPartial: Pick<EditSession, 'type' | 'path' | 'blockIndex' | 'textInitial' | 'isCreated' | 'selectionInitial'>,
+  ) {
     runInAction(() => {
       this.insertMenu = undefined;
       this.deleteConfirm = undefined;
@@ -427,7 +517,9 @@ export class DocEditStore {
         session.status = 'submitting';
         session.message = '';
       });
-      const result = await this.blockDeleteApply(session.path, session.blockIndex);
+      const result = await this.blockDeleteApply(session.path, session.blockIndex, () => {
+        if (this.session === session) this.session = undefined;
+      });
       if (result.code !== 0) {
         runInAction(() => {
           session.status = 'error';
@@ -435,10 +527,6 @@ export class DocEditStore {
         });
         return false;
       }
-      runInAction(() => {
-        this.session = undefined;
-      });
-      await this.sourceAccept(session.path, result.data.text, result.data.hash);
       return true;
     }
     this.session = undefined;
@@ -460,7 +548,7 @@ export class DocEditStore {
 
   private async sessionSubmit(): Promise<boolean> {
     const session = this.session;
-    if (!session || !this.api) return false;
+    if (!session) return false;
     if (session.status === 'submitting') return false;
     const text = session.textDraft.replace(/\r\n/g, '\n');
     if (text === session.textInitial) {
@@ -470,11 +558,6 @@ export class DocEditStore {
       return true;
     }
     const model = this.docEditByPath[session.path]?.model;
-    const source = this.sourceByPath[session.path];
-    if (source?.status !== 'done' || !source.hash) {
-      this.sessionFail('The document source is not loaded.');
-      return false;
-    }
 
     let operation;
     if (session.type === 'document') {
@@ -500,21 +583,24 @@ export class DocEditStore {
       session.status = 'submitting';
       session.message = '';
     });
-    const result = await this.api.sourceApply(session.path, source.hash, operation);
+    const result = await this.operationApply(session.path, operation, {
+      messageFailure: 'The edit was not applied.',
+      // the session closes as soon as the file is written; the saved block
+      // shows its pending text until the document is compiled again
+      onApplied: () => {
+        this.session = undefined;
+        if (session.type === 'block') {
+          this.blockTextPending = { path: session.path, blockIndex: session.blockIndex, text };
+        }
+      },
+    });
     if (result.code !== 0) {
       runInAction(() => {
         session.status = 'error';
-        session.message = result.code === -2 ? messageConflict : result.message || 'The edit was not applied.';
+        session.message = result.message;
       });
       return false;
     }
-    runInAction(() => {
-      this.session = undefined;
-      if (session.type === 'block') {
-        this.blockTextPending = { path: session.path, blockIndex: session.blockIndex, text };
-      }
-    });
-    await this.sourceAccept(session.path, result.data.text, result.data.hash);
     return true;
   }
 
@@ -524,19 +610,75 @@ export class DocEditStore {
     this.session.message = message;
   }
 
-  // ---------- insert menu and block creation ----------
-
-  insertMenuIs(path: string, borderIndex: number): boolean {
-    return this.insertMenu?.path === path && this.insertMenu.borderIndex === borderIndex;
+  // the session moves to the neighbor block in `direction`: the open session
+  // is left (saved), the neighbor opens with the caret at its near end.
+  // nothing happens at the first / last block.
+  async sessionFocusShift(direction: EditFocusShiftDirection): Promise<boolean> {
+    const session = this.session;
+    if (!session || session.type !== 'block') return false;
+    const blockIndexNext = direction === 'next' ? session.blockIndex + 1 : session.blockIndex - 1;
+    if (blockIndexNext < 0 || blockIndexNext >= this.blockCountGet(session.path)) return false;
+    return this.sessionBlockStart(session.path, blockIndexNext, {
+      selectionInitial: direction === 'next' ? 'start' : 'end',
+    });
   }
 
-  async insertMenuOpen(path: string, borderIndex: number): Promise<boolean> {
-    if (this.insertMenuIs(path, borderIndex)) return true;
+  // ---------- events of the edit domain ----------
+
+  // the handler the edit route of the event layer calls. the session events
+  // are accepted only from the editor of the open session.
+  async eventHandle(event: DocEvent): Promise<EditResult | undefined> {
+    const session = this.session;
+    if (!session) return { code: -1, message: 'no edit session is open' };
+    if (event.source.sourcePath && event.source.sourcePath !== session.path) {
+      return { code: -1, message: 'the event is not from the open edit session' };
+    }
+    const block = session.type === 'block' ? this.docEditByPath[session.path]?.model?.blockList[session.blockIndex] : undefined;
+
+    if (event.type === 'editDraftChange') {
+      const text = eventBlockTextGet(event.data, block);
+      if (text !== undefined) this.sessionDraftSet(text);
+      return { code: 0, message: '' };
+    }
+    if (event.type === 'editTextSetRequest') {
+      this.sessionTextSet(String(event.data.text ?? ''));
+      return { code: 0, message: '' };
+    }
+    if (event.type === 'editCancelRequest') {
+      const isCanceled = await this.sessionCancel();
+      return isCanceled ? { code: 0, message: '' } : { code: -1, message: this.session?.message ?? 'the edit was not canceled' };
+    }
+    if (event.type === 'editSubmitRequest') {
+      // Save: the explicit leave. an editor may hand over its final draft here.
+      const text = eventBlockTextGet(event.data, block);
+      if (text !== undefined) this.sessionDraftSet(text);
+      const isSubmitted = await this.sessionLeave();
+      return isSubmitted ? { code: 0, message: '' } : { code: -1, message: this.session?.message ?? 'the edit was not saved' };
+    }
+    if (event.type === 'editFocusShiftRequest') {
+      const direction: EditFocusShiftDirection = event.data.direction === 'previous' ? 'previous' : 'next';
+      const isShifted = await this.sessionFocusShift(direction);
+      return isShifted ? { code: 0, message: '' } : { code: -1, message: `no block ${direction === 'next' ? 'after' : 'before'} this one` };
+    }
+    return undefined;
+  }
+
+  // ---------- insert menu and block creation ----------
+
+  insertMenuIs(path: string, blockIndexAnchor: number): boolean {
+    return this.insertMenu?.path === path && this.insertMenu.blockIndexAnchor === blockIndexAnchor;
+  }
+
+  // opens the insert menu at the toolbar of block blockIndexAnchor, for a new
+  // block at border borderIndex (before or after that block). an empty
+  // document opens it with blockIndexAnchor -1 and borderIndex 0.
+  async insertMenuOpen(path: string, blockIndexAnchor: number, borderIndex: number): Promise<boolean> {
+    if (this.insertMenuIs(path, blockIndexAnchor) && this.insertMenu?.borderIndex === borderIndex) return true;
     const isLeft = await this.sessionLeaveForIndexAction(path);
     if (!isLeft) return false;
     runInAction(() => {
       this.deleteConfirm = undefined;
-      this.insertMenu = { path, borderIndex, status: 'open', message: '' };
+      this.insertMenu = { path, borderIndex, blockIndexAnchor, status: 'open', message: '' };
     });
     return true;
   }
@@ -546,16 +688,13 @@ export class DocEditStore {
     this.insertMenu = undefined;
   }
 
-  // writes a new block (a template text) before block borderIndex and opens
-  // it in edit mode once the document is compiled with it
-  async blockCreate(path: string, borderIndex: number, text: string): Promise<boolean> {
+  // writes a new block (a template text) at the border of the open insert
+  // menu and opens it in edit mode once the document is compiled with it
+  async blockCreate(path: string, text: string): Promise<boolean> {
     const menu = this.insertMenu;
-    if (!menu || menu.path !== path || menu.borderIndex !== borderIndex || menu.status === 'submitting' || !this.api) {
-      return false;
-    }
+    if (!menu || menu.path !== path || menu.status === 'submitting') return false;
     const model = this.docEditByPath[path]?.model;
-    const source = this.sourceByPath[path];
-    if (!model || source?.status !== 'done' || !source.hash) {
+    if (!model) {
       runInAction(() => {
         menu.status = 'error';
         menu.message = 'The document is not loaded.';
@@ -566,33 +705,32 @@ export class DocEditStore {
       menu.status = 'submitting';
       menu.message = '';
     });
-    const operation = blockInsertOperationBuild(model, borderIndex, text.replace(/\r\n/g, '\n'));
-    const result = await this.api.sourceApply(path, source.hash, operation);
+    const operation = blockInsertOperationBuild(model, menu.borderIndex, text.replace(/\r\n/g, '\n'));
+    const result = await this.operationApply(path, operation, {
+      messageFailure: 'The block was not created.',
+      onApplied: () => {
+        if (this.insertMenu === menu) this.insertMenu = undefined;
+      },
+    });
     if (result.code !== 0) {
       runInAction(() => {
         menu.status = 'error';
-        menu.message = result.code === -2 ? messageConflict : result.message || 'The block was not created.';
+        menu.message = result.message;
       });
       return false;
     }
-    await this.sourceAccept(path, result.data.text, result.data.hash);
-    runInAction(() => {
-      if (this.insertMenu === menu) this.insertMenu = undefined;
-    });
-    return this.sessionBlockStart(path, borderIndex, { isCreated: true });
+    return this.sessionBlockStart(path, menu.borderIndex, { isCreated: true, selectionInitial: 'all' });
   }
 
   // ---------- deletion ----------
 
-  // borderIndex: index of the border (= index of the block below it) whose
-  // button asked; defaults to the border above the block
-  async deleteConfirmSet(path: string, blockIndex: number, borderIndex = blockIndex): Promise<boolean> {
+  async deleteConfirmSet(path: string, blockIndex: number): Promise<boolean> {
     if (this.deleteConfirm?.status === 'submitting') return false;
     const isLeft = await this.sessionLeaveForIndexAction(path);
     if (!isLeft) return false;
     runInAction(() => {
       this.insertMenu = undefined;
-      this.deleteConfirm = { path, blockIndex, borderIndex, status: 'confirming', message: '' };
+      this.deleteConfirm = { path, blockIndex, status: 'confirming', message: '' };
     });
     return true;
   }
@@ -615,7 +753,9 @@ export class DocEditStore {
       confirm.status = 'submitting';
       confirm.message = '';
     });
-    const result = await this.blockDeleteApply(path, blockIndex);
+    const result = await this.blockDeleteApply(path, blockIndex, () => {
+      if (this.deleteConfirm === confirm) this.deleteConfirm = undefined;
+    });
     if (result.code !== 0) {
       runInAction(() => {
         confirm.status = 'error';
@@ -623,26 +763,31 @@ export class DocEditStore {
       });
       return false;
     }
-    runInAction(() => {
-      this.deleteConfirm = undefined;
-    });
-    await this.sourceAccept(path, result.data.text, result.data.hash);
     return true;
   }
 
   // the delete operation of one block, shared by the confirmed deletion and
-  // by canceling a created block. returns the api result.
-  private async blockDeleteApply(path: string, blockIndex: number): Promise<{ code: number; data?: any; message: string }> {
-    if (!this.api) return { code: -1, message: 'The edit api is not available.' };
+  // by canceling a created block
+  private blockDeleteApply(path: string, blockIndex: number, onApplied: () => void): Promise<EditResult> {
     const model = this.docEditByPath[path]?.model;
-    const source = this.sourceByPath[path];
-    if (!model || source?.status !== 'done' || !source.hash || !model.blockList[blockIndex]) {
-      return { code: -1, message: 'The block no longer exists.' };
+    if (!model || !model.blockList[blockIndex]) {
+      return Promise.resolve({ code: -1, message: 'The block no longer exists.' });
     }
-    const result = await this.api.sourceApply(path, source.hash, blockDeleteOperationBuild(model, blockIndex));
-    if (result.code !== 0) {
-      return { code: result.code, message: result.code === -2 ? messageConflict : result.message || 'The block was not deleted.' };
-    }
-    return result;
+    return this.operationApply(path, blockDeleteOperationBuild(model, blockIndex), {
+      messageFailure: 'The block was not deleted.',
+      onApplied,
+    });
   }
+}
+
+// the block text an editor's event describes: { text } as is, { raw, props }
+// of a component editor rebuilt into the block (submitted props replace the
+// authored props of the same name only)
+function eventBlockTextGet(eventData: Record<string, any>, block: any): string | undefined {
+  if (typeof eventData.text === 'string') return eventData.text;
+  if (block?.component && (eventData.raw !== undefined || eventData.props !== undefined)) {
+    const props = eventData.props ? { ...block.component.props, ...eventData.props } : undefined;
+    return componentBlockTextBuild(block, { raw: eventData.raw, props });
+  }
+  return undefined;
 }

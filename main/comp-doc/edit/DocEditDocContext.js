@@ -10,3 +10,9 @@ export function useDocEditDoc() {
   if (!value) throw new Error('edit layer components must be rendered inside <DocEditBody/>');
   return value;
 }
+
+// the floating area of the block being rendered: the element inside the
+// block's sticky anchor that EditFloatingPanel portals its bar into, so the
+// bar stays at the top of the block's visible range (DocEditBlock). null
+// outside a block (the frontmatter / whole-source panel).
+export const DocEditBlockFloatContext = createContext(null);

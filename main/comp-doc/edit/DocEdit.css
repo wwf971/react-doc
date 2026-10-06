@@ -1,7 +1,7 @@
-/* The edit layer adds nothing to the document flow: borders take no height,
-   their button rows, the insert menu and every editor bar float over the
-   content, and a block in edit mode is edited in its own place. See
-   doc_page_impl_edit.md#no-jitter-rule.
+/* The edit layer adds nothing to the document flow: the toolbar of a block,
+   the insert menu and every editor bar float over the content from a
+   zero-height sticky anchor, and a block in edit mode is edited in its own
+   place. See doc_page_impl_edit.md#no-jitter-rule.
 
    one scale for everything that floats: 1.35rem tall controls, 0.72rem text,
    1px borders, 2px radius. */
@@ -169,51 +169,83 @@
 
 /* ---------- blocks ---------- */
 
-/* the prose body removes the outer margins of its first and last child; the
-   wrappers would hide the first and last block from that rule */
-.doc-edit-block[data-first] > :first-child {
-  margin-top: 0;
+/* this file is imported by its components, before the page's Tailwind entry
+   (style.css) is. the first @layer statement a document meets fixes the
+   order of the layers it names, so the "@layer utilities" block below, met
+   alone, would put utilities before theme / base / components and let the
+   preflight base styles win over every utility class of the page. the full
+   Tailwind order is therefore stated here first; Tailwind's own statement
+   later is then a no-op. */
+@layer theme, base, components, utilities;
+
+/* the prose body (Tailwind typography, layer utilities, specificity (0,1,0),
+   not-prose excluded) removes the outer margins of its first and last child
+   and the top margin of what follows an h2 / h3 / h4 or a rule ("h2 + *").
+   the wrappers hide the blocks from those rules, so they are restated here
+   across the wrappers, in the same layer, with the same specificity and the
+   same exclusion, so that they win and lose against the other rules of the
+   page exactly as the prose rules do; otherwise the edit body is not the
+   same height as the reading body. */
+@layer utilities {
+  .prose :where(.doc-edit-block[data-first] > .doc-edit-block-anchor + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+  }
+
+  .prose :where(.doc-edit-block[data-last] > :nth-last-child(1 of :not(.doc-edit-panel))):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-bottom: 0;
+  }
+
+  .prose :where(
+    .doc-edit-block[data-kind="heading"]:is([data-depth="2"], [data-depth="3"], [data-depth="4"]) + .doc-edit-block > .doc-edit-block-anchor + *,
+    .doc-edit-block[data-kind="thematicBreak"] + .doc-edit-block > .doc-edit-block-anchor + *
+  ):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+  }
 }
 
-.doc-edit-block[data-last] > :nth-last-child(1 of :not(.doc-edit-panel)) {
-  margin-bottom: 0;
-}
-
-/* the prose body removes the top margin of what follows an h2 / h3 / h4 or a
-   rule ("h2 + *"); across the wrappers that rule needs restating, otherwise
-   the edit body is taller than the reading body */
-.doc-edit-block[data-kind="heading"]:is([data-depth="2"], [data-depth="3"], [data-depth="4"]) + .doc-edit-border + .doc-edit-block > :first-child,
-.doc-edit-block[data-kind="thematicBreak"] + .doc-edit-border + .doc-edit-block > :first-child {
-  margin-top: 0;
-}
-
+/* a block looks exactly as in reading mode: no outline, no background, no
+   change on hover. its toolbar appears on hover; its editor bar while it is
+   being edited. */
 .doc-edit-block {
   position: relative;
-  border-radius: 2px;
-  outline: 1px solid transparent;
-  outline-offset: 4px;
-  cursor: pointer;
 }
 
-.doc-edit-block:hover {
-  outline-color: color-mix(in srgb, var(--color-fd-primary) 28%, transparent);
+.doc-edit-block[data-enter-click] {
+  cursor: pointer;
 }
 
 .doc-edit-block[data-editing] {
   z-index: 20;
-  outline-color: color-mix(in srgb, var(--color-fd-primary) 55%, transparent);
-  cursor: auto;
+}
+
+/* geometry lock: while the block is edited, the wrapper has the height and
+   the margins its block had in view mode (inline styles set by DocEditBlock)
+   and lays its content out in its own formatting context, so the editor's
+   root cannot move it. the root has no outer margins of its own: the wrapper
+   carries them. it paints the page background, because the source may need
+   more room than the rendered block and then extends over the next block
+   (z-index above) instead of pushing it down; a root with a background of
+   its own (the source surface) keeps it (:where keeps this rule weaker). */
+.doc-edit-block[data-geometry-locked] {
+  display: flow-root;
+}
+
+.doc-edit-block[data-geometry-locked] > .doc-edit-block-anchor ~ :not(.doc-edit-panel) {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.doc-edit-block[data-geometry-locked] > :where(.doc-edit-block-anchor ~ :not(.doc-edit-panel)) {
+  background: var(--color-fd-background);
 }
 
 .doc-edit-block[data-delete-pending] {
-  outline-color: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 60%, transparent);
-  background: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 5%, transparent);
+  background: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 6%, transparent);
 }
 
 /* a block that renders nothing: a floating chip over the gap it sits in */
 .doc-edit-block[data-invisible] {
   height: 0;
-  outline: none;
 }
 
 .doc-edit-block-chip {
@@ -241,29 +273,57 @@
   color: var(--color-fd-foreground);
 }
 
-/* ---------- borders between blocks ---------- */
+/* ---------- floating area of a block ---------- */
 
-.doc-edit-border {
-  position: relative;
+/* the first child of a block wrapper: no height, sticky. what floats in it
+   is laid out from its bottom edge upward, over the gap above the block,
+   centered on the block. the anchor sticks below
+   the sticky rows of the layout (--fd-docs-row-3: the end of the header and
+   toc-popover rows of fumadocs) by the height of the floating content
+   (--doc-edit-float-height, set by DocEditBlock) plus a small gap, so the
+   controls stay at the top of the block's visible range while the top of
+   the block is scrolled out. */
+.doc-edit-block-anchor {
+  position: sticky;
+  top: calc(var(--fd-docs-row-3, 0px) + var(--doc-edit-float-height, 1.35rem) + 0.25rem);
+  z-index: 10;
   height: 0;
-  margin: 0;
 }
 
-/* a border with its insert menu or a confirmation open stays above the blocks */
-.doc-edit-border[data-open] {
+.doc-edit-block[data-open] > .doc-edit-block-anchor,
+.doc-edit-block[data-editing] > .doc-edit-block-anchor {
   z-index: 24;
 }
 
-/* the row floats over the gap between the two blocks and does not catch the
-   pointer while hidden. margins collapse through the border, which leaves it
-   right below the bottom margin of the block above, so the row grows upward
-   into that margin; the end border has no block below and grows downward */
-.doc-edit-border-row {
+.doc-edit-block-float {
   position: absolute;
-  bottom: 0;
   right: 0;
+  bottom: 0;
   left: 0;
-  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.doc-edit-block-float > * {
+  pointer-events: auto;
+}
+
+/* an invisible block has no height, so its toolbar would sit at the same
+   place as the toolbar of the next block: it goes below the chip instead */
+.doc-edit-block[data-invisible] > .doc-edit-block-anchor > .doc-edit-block-float {
+  top: calc(1.2rem + 4px);
+  bottom: auto;
+}
+
+/* ---------- toolbar of a block ---------- */
+
+/* hidden until the block is hovered, or while its insert menu or a
+   confirmation is open; it does not catch the pointer while hidden. not
+   positioned: its insert menu is placed against the floating area, so the
+   menu spans up to the block width. */
+.doc-edit-toolbar {
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -272,45 +332,36 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease 180ms, visibility 0s linear 300ms;
+  cursor: auto;
 }
 
-.doc-edit-border[data-position="end"] > .doc-edit-border-row {
-  top: 2px;
-  bottom: auto;
-}
-
-/* an invisible block has no height, so the border after it sits at the same
-   place as the border before it: its row goes below the chip of the block */
-.doc-edit-block[data-invisible] + .doc-edit-border > .doc-edit-border-row {
-  top: calc(1.2rem + 4px);
-  bottom: auto;
-}
-
-/* shown while a neighbour block (not the one being edited) or the row itself
-   is hovered, or while the row has its menu or a confirmation open */
-.doc-edit-border:hover > .doc-edit-border-row,
-.doc-edit-border:focus-within > .doc-edit-border-row,
-.doc-edit-border[data-open] > .doc-edit-border-row,
-.doc-edit-block:not([data-editing]):hover + .doc-edit-border > .doc-edit-border-row,
-.doc-edit-border:has(+ .doc-edit-block:not([data-editing]):hover) > .doc-edit-border-row {
+.doc-edit-block:hover .doc-edit-toolbar,
+.doc-edit-block[data-open] .doc-edit-toolbar,
+.doc-edit-toolbar:focus-within,
+.doc-edit-toolbar[data-open] {
   visibility: visible;
   opacity: 1;
+  pointer-events: auto;
   transition: opacity 80ms ease, visibility 0s;
 }
 
-.doc-edit-border-line {
-  flex: 1 1 auto;
-  height: 1px;
-  background: color-mix(in srgb, var(--color-fd-primary) 30%, var(--color-fd-border));
+.doc-edit-toolbar-label {
+  padding: 0 0.3rem;
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 550;
+  line-height: 1.35rem;
+  white-space: nowrap;
 }
 
-.doc-edit-border-actions,
-.doc-edit-confirm,
-.doc-edit-insert-menu {
+.doc-edit-toolbar-actions,
+.doc-edit-confirm {
   pointer-events: auto;
 }
 
-.doc-edit-border-actions {
+.doc-edit-toolbar-actions {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: stretch;
@@ -321,7 +372,7 @@
   box-shadow: 0 1px 3px rgb(15 23 42 / 10%);
 }
 
-.doc-edit-border-actions button {
+.doc-edit-toolbar-actions button {
   display: inline-flex;
   align-items: center;
   gap: 1px;
@@ -331,26 +382,27 @@
   background: transparent;
   color: var(--color-fd-muted-foreground);
   cursor: pointer;
+  font-size: 0.72rem;
   line-height: 1;
 }
 
-.doc-edit-border-actions button:first-child {
+.doc-edit-toolbar-actions button:first-child {
   border-left: 0;
 }
 
-.doc-edit-border-actions button:hover:not(:disabled),
-.doc-edit-border-actions button:focus-visible:not(:disabled) {
+.doc-edit-toolbar-actions button:hover:not(:disabled),
+.doc-edit-toolbar-actions button:focus-visible:not(:disabled) {
   background: var(--color-fd-accent);
   color: var(--color-fd-foreground);
   outline: none;
 }
 
-.doc-edit-border-actions button[aria-pressed='true'] {
+.doc-edit-toolbar-actions button[aria-pressed='true'] {
   background: color-mix(in srgb, var(--color-fd-primary) 12%, var(--color-fd-background));
   color: var(--color-fd-primary);
 }
 
-.doc-edit-border-actions button:disabled {
+.doc-edit-toolbar-actions button:disabled {
   opacity: 0.35;
   cursor: default;
 }
@@ -395,13 +447,32 @@
   cursor: default;
 }
 
+/* the empty-document notice carries the insert button; its toolbar is
+   always visible and in the flow (there is no block to float over) */
+.doc-edit-empty {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.doc-edit-empty > .doc-edit-toolbar {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* ---------- insert menu ---------- */
 
-/* floats below the border row; the starting texts in two rows */
+/* floats below the floating area that holds the toolbar which opened it
+   (over the top of the block), centered like the toolbar; the starting
+   texts in two rows */
 .doc-edit-insert-menu {
+  pointer-events: auto;
   position: absolute;
   top: 100%;
-  left: 0;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 30;
   display: flex;
   flex-direction: column;
@@ -417,6 +488,12 @@
   font-size: 0.72rem;
   line-height: 1.3;
   cursor: auto;
+}
+
+/* the menu of the empty-document notice opens under its left-aligned button */
+.doc-edit-empty .doc-edit-insert-menu {
+  left: 0;
+  transform: none;
 }
 
 .doc-edit-insert-group {
@@ -466,11 +543,11 @@
 
 /* ---------- floating bar of an editor ---------- */
 
-/* above the block by default (bottom: 100% of the wrapper), below it when
-   there is no room above; both overlap the content next to the block */
+/* in the floating area of the block (placement above): laid out from the
+   bottom edge of the sticky anchor upward, like the toolbar. below the
+   block (placement below): absolutely under it. both overlap the content
+   next to the block. */
 .doc-edit-panel {
-  position: absolute;
-  left: 0;
   z-index: 30;
   display: flex;
   flex-direction: column;
@@ -487,21 +564,24 @@
   cursor: auto;
 }
 
-.doc-edit-panel[data-placement="above"] {
-  bottom: 100%;
-  margin-bottom: 0.3rem;
+.doc-edit-block-float > .doc-edit-panel {
+  position: relative;
+  margin-bottom: 0.2rem;
 }
 
-.doc-edit-panel[data-placement="below"] {
+.doc-edit-block > .doc-edit-panel[data-placement="below"] {
+  position: absolute;
   top: 100%;
+  left: 0;
   margin-top: 0.3rem;
 }
 
 /* the panel of the frontmatter / whole source fills the body width */
 .doc-edit-top-anchor > .doc-edit-panel {
+  position: absolute;
   top: 0;
+  left: 0;
   width: 100%;
-  margin-top: 0;
 }
 
 .doc-edit-panel-row {
@@ -574,8 +654,8 @@
 
 /* the block's own element made editable. a paragraph and a heading surface
    are a <p> / <h2>, so the prose rules of the page style them; the other
-   kinds get their typography here. no border: the wrapper's outline frames
-   the block. */
+   kinds get their typography here. no border and no outline: the block
+   looks as it does in reading mode, only the caret shows. */
 .doc-edit-surface {
   outline: none;
   cursor: text;

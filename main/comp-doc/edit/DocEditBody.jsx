@@ -2,18 +2,20 @@ import { useMemo, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { DocEditDocContext } from './DocEditDocContext.js';
+import { Plus } from '../../frontend/UICommon.js';
 import { DocEditBlock } from './DocEditBlock.jsx';
-import { DocEditBorder } from './DocEditBorder.jsx';
 import { DocEditBlockEditor } from './DocEditBlockEditor.jsx';
+import { DocEditInsertMenu } from './DocEditInsertMenu.jsx';
 import { editFocusRelease, useEditOutsidePointer } from './use-edit-outside-pointer.js';
 import './DocEdit.css';
 
 // The document body in edit mode, rendered by DocPageView instead of the
 // reading body. It looks exactly like the reading body: the compiled edit
-// body with every root block wrapped in DocEditBlock, borders between them
-// that take no height, and one zero-height border after the last block for
-// inserting at the end. Nothing is added to the flow when edit mode is
-// toggled (doc_page_impl_edit.md#no-jitter-rule).
+// body with every root block wrapped in DocEditBlock, whose controls float.
+// Nothing is added to the flow when edit mode is toggled
+// (doc_page_impl_edit.md#no-jitter-rule). blocks are inserted from the
+// toolbar of a neighbor block; an empty document offers its insert button
+// in the notice that replaces the body.
 //
 // the frontmatter and whole-source sessions (started from the toolbar,
 // DocEditDocControls) float their editor at the top of the body.
@@ -52,15 +54,41 @@ export const DocEditBody = observer(function DocEditBody({ path, docEdit, mdxCom
         ) : (
           <>
             {docEdit.isContentEmpty ? (
-              <p className="doc-content-empty">This document is empty. Insert the first block below.</p>
+              <DocEditEmptyNotice />
             ) : Body ? (
               <Body components={mdxCompsEdit} />
             ) : null}
-            <DocEditBorder indexBefore={model.blockList.length} />
           </>
         )}
       </div>
     </DocEditDocContext.Provider>
+  );
+});
+
+// an empty document has no block toolbar to insert from: the notice carries
+// the insert button; its menu creates block 0
+const DocEditEmptyNotice = observer(function DocEditEmptyNotice() {
+  const { editStore } = useDocStores();
+  const { path } = useDocEditDoc();
+  const elementRef = useRef(null);
+  const isMenuHere = editStore.insertMenuIs(path, -1);
+  useEditOutsidePointer(elementRef, isMenuHere, () => editStore.insertMenuClose());
+
+  return (
+    <div ref={elementRef} className="doc-edit-empty not-prose">
+      <span className="doc-content-empty">This document is empty.</span>
+      <div className="doc-edit-toolbar" data-open={isMenuHere ? '' : undefined}>
+        <div className="doc-edit-toolbar-actions">
+          <button type="button" disabled={editStore.isSubmitting} aria-pressed={isMenuHere}
+            title="Insert the first block" aria-label="Insert the first block"
+            onClick={() => void (isMenuHere ? editStore.insertMenuClose() : editStore.insertMenuOpen(path, -1, 0))}>
+            <Plus aria-hidden="true" size={11} strokeWidth={2.2} />
+            <span>Insert a block</span>
+          </button>
+        </div>
+        {isMenuHere ? <DocEditInsertMenu /> : null}
+      </div>
+    </div>
   );
 });
 
