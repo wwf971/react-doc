@@ -12,14 +12,16 @@ vite plugin "doc-source"
      ├── executes source rules ──► file manifest (multi-root: /{rootId}/relPath)
      │     each doc = lazy `?raw` import ──► dev: HMR reload on edit
      │                                       build: one lazy chunk per doc
-     └── emits virtual module `virtual:doc-source` = { config, fileManifest }
+     ├── serves the dev-only apis: edit (files), asset (the asset store folder)
+     └── emits virtual module `virtual:doc-source` = { config, fileManifest, assetSnapshot }
      ▼
 mobx stores (source of truth for rendering)
      ├── DocSourceStore (lower): manifest, raw/compile caches, doc index, search data
      ├── DocStore (upper): side-panel tree, current doc, navigation, link dropdown, url sync
      ├── DocTagStore: tags resolved from source rules + side-panel tree, tag queries
      ├── DocConfigStore: feature config, global and resolved per document, user overrides
-     └── DocEditStore: in-place editing (dev server only): sessions, block model, edit api
+     ├── DocEditStore: in-place editing (dev server only): sessions, block model, edit api
+     └── DocAssetStore: component data kept in the asset store: objects, versions, the asset panel
      ▼
 DocEventRouter: component reports → host → local handler → domain route (navigation, tag, edit)
      ▼
@@ -43,6 +45,8 @@ DocEventRouter: component reports → host → local handler → domain route (n
 
 **In-place editing, an additional layer.** On the development server a document can be edited from the page, one root-level block at a time; the server rewrites the file and the page reloads from it. The layer has its own store, its own compiled body (root blocks wrapped, each with a floating toolbar from a sticky anchor), and a component edit contract (`config.isEdit`, `XxxEdit.jsx` beside `Xxx.jsx`); the reading path is untouched and a built page has no edit mode. Specified in [doc_page_impl_edit.md](doc_page_impl_edit.md).
 
+**Component data in an asset store.** A component block can hold a reference (a fenced block in the language `asset`, yaml naming an object and a version or the head) in place of its data; the data lives in one folder of versioned text objects with a DAG history and a standard api (create, update in place or as a new version, checkout, delete, history), served by the development server and bundled read-only into a build. The runtime boundary resolves the reference before the component renders, so components never know; a title line above the component names the asset and opens the asset panel. Specified in [doc_page_impl_asset.md](doc_page_impl_asset.md).
+
 **One event layer between components and stores.** A registered component reports through `onEvent` and never calls a store; `DocEventRouter` turns the report into an event with its source, lets the host application and the rendering place answer first, then routes it to the domain that owns the type (navigation, tags, editing). Every answer is `{ code, data, message }`. Specified in [doc_page_impl_event.md](doc_page_impl_event.md).
 
 **Doc collection via vite plugin.** The plugin reads the two-layer config, expands side-panel resource files (collecting their source rules), executes the source rules, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any imported side-panel file — regardless of its extension — invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
@@ -62,6 +66,7 @@ Follows the data-driven pattern of `react-comp-misc` (`comp_design.md`) and the 
 - `DocTagStore` (derived): the tag model computed from the manifest and the page tree, plus the tag service used by renderers and the open state of the tag overview popup. See [Tag system](doc_page_impl_tag.md).
 - `DocConfigStore` (derived): the config model computed from `globalConfig`, the manifest, and the page tree, the reader's session overrides from the settings panel, plus the config service. See [Config system](doc_page_impl_config.md).
 - `DocEditStore` (edit layer, beside the reading stores): availability of the development-server edit api, the global edit mode, the document source as read from disk with its hash, the dedicated compile with block wrappers, the one open edit session, the open insert menu, and the pending deletion; every write goes through `operationApply`, and the events of editors arrive at `eventHandle`. It never writes to the reading stores; the file on disk is changed and reloads through the normal path. See [In-place editing](doc_page_impl_edit.md).
+- `DocAssetStore` (beside the reading stores): the backend of the asset store (the development-server api, or the snapshot bundled into a build), the objects and version texts read so far, what a reference resolves to (`refQuery` / `refLoad`), every write to the store (`writeApply`), and the one open asset panel. See [Asset store](doc_page_impl_asset.md).
 
 Render components observe stores via context and submit change attempts through store APIs; no component talks to the file system or compiler directly.
 
@@ -107,7 +112,7 @@ Non-md files get a display strategy by suffix (`fileDisplay` in config, suffix �
 
 Local development exposes every file selected by the source rules. The Vite plugin option `pruneSourceToSidePanel: true` reduces the manifest of a deployment build to the files the side panel navigates to and every file they reach statically, so authors write a dependency once, in the document that uses it.
 
-Pruning starts from the side panel after `excludeSidePanelItemIds` is applied: `doc` items, `sourceFolder` / `sourceRoot` items, and the content of inline items. Every retained `.md` / `.mdx` file is parsed by `plugin/doc-source-dependency.ts`; reached documents are parsed in turn, and other files are retained without parsing. A visited set ends cycles, and the manifest keeps source-rule order. The side panel stays responsible for navigation only: a supporting file does not need a visible item.
+Pruning starts from the side panel after `excludeSidePanelItemIds` is applied: `doc` items, `sourceFolder` / `sourceRoot` items, and the content of inline items. Every retained `.md` / `.mdx` file is parsed by `plugin/doc-source-dependency.ts`, with its [asset references](doc_page_impl_asset.md#build) expanded to the referenced data first; reached documents are parsed in turn, and other files are retained without parsing. A visited set ends cycles, and the manifest keeps source-rule order. The side panel stays responsible for navigation only: a supporting file does not need a visible item.
 
 The collector parses with the runtime extensions (GFM, math, comment components; MDX syntax for `.mdx`) and classifies links with `lib/doc-link-classify.js`, the rules `remarkDocLink` uses. Targets resolve with `lib/doc-target-resolve.js`, which `DocSourceStore.resolveLink()` also uses, so a target retained at build time is the target opened at runtime:
 
@@ -142,7 +147,7 @@ Some document components refer to attachment files through authored properties r
 collectComponentAttachmentsOnBuild: true
 ```
 
-The layer runs only for a Vite build. It scans every md/mdx document remaining in the collected manifest, asks registered attachment finders for component-specific references, resolves each reference against the complete source set (before side-panel pruning), and bundles the resolved file. Development mode does not run this scan and keeps its existing direct-file behavior.
+The layer runs only for a Vite build. It scans every md/mdx document remaining in the collected manifest (component blocks that reference the [asset store](doc_page_impl_asset.md#build) are expanded to their data first), asks registered attachment finders for component-specific references, resolves each reference against the complete source set (before side-panel pruning), and bundles the resolved file. Development mode does not run this scan and keeps its existing direct-file behavior.
 
 The default finders recognize `DiagramMermaid`'s `laneIcons` property, `Image`'s `src` value in its YAML block, and image `src` values in a `ImageGrid` YAML block. Direct MDX component properties are also recognized where applicable. For example, all four PNG files in the following value are retained even if they are not otherwise present in the pruned deployment manifest:
 
@@ -193,11 +198,11 @@ Multilingual component registration and authoring rules are specified in [doc_pa
 
 Component naming, compatibility names, and the component data reference (a component reusing the authored data of another component through `dataRef="{document target}#{component id}"`) are described in [MDX components](doc_page_impl_mdx_comp.md).
 
-One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, `sidePanelPanel`, `partIndex`, `indexSubtopic`, `tag`, `tagOverview`, and `edit` (the default block editors of the edit layer).
+One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; a comment-marked block in the language `asset` is a reference into the [asset store](doc_page_impl_asset.md), which the host resolves to the referenced text before normalizing; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, `sidePanelPanel`, `partIndex`, `indexSubtopic`, `tag`, `tagOverview`, and `edit` (the default block editors of the edit layer).
 
 A few registry names are built in: the page renders with them even when `compRegistry` does not mention them, in comment form and in `.mdx`. `Anchor` resolves to `common/Anchor` and declares fragment ids for the node after it (see [Navigation design](doc_page_impl_nav.md#fragment-targets-titles-and-declared-ids)); `SidePanelItem` resolves to `common/SidePanelItem` and renders every side-panel label; `TagLabel` resolves to `common/TagLabel` and is the default look of tags; `Tag` resolves to `common/Tag` and renders a tag mentioned in document text; `TagOverview` resolves to `common/TagOverview` and renders the content of the tag overview popup; `Heading`, `Paragraph`, `List`, and `BlockSource` resolve to the default block editors of edit mode (see [In-place editing](doc_page_impl_edit.md#component-edit-mode)). Mapping such a name in `compRegistry` replaces the default everywhere, which is how an application provides its own side-panel item rendering. `compIdResolve()` in `comp-registry.js` is the single place that turns a name into a component id.
 
-Some components need settings only the host application can supply, such as a Mermaid loader, a resolver from authored file references to URLs, or the text panel component that frames popups. The host passes them once through `DocPageMdx` `config.compConfigHost`; every registered component receives them in its `config` with the lowest priority, below authored and runtime values. The page itself reads `panelComponent` from the same place for the tag overview popup:
+Some components need settings only the host application can supply, such as a Mermaid loader, a resolver from authored file references to URLs, or the text panel component that frames popups. The host passes them once through `DocPageMdx` `config.compConfigHost`; every registered component receives them in its `config` with the lowest priority, below authored and runtime values. The page itself reads `panelComponent` from the same place for the tag overview popup and the asset panel:
 
 ```jsx
 <DocPageMdx config={{ compConfigHost: { assetUrlGet, mermaidLoad: () => import('mermaid'), panelComponent: PanelText } }} />
@@ -339,6 +344,8 @@ example_doc/             # root folder of the demonstration page
 ├── side-panel-tag.md    # tag demonstration; doc-config.md: config demonstration
 ├── comp-custom-list-el.md # components as list elements: rules and examples
 ├── edit-in-place.md     # edit-mode playground (editable on the development server)
+├── asset-store.md       # components reading their data from the asset store
+├── asset/               # the asset store folder: one folder per object (object.yaml + version files)
 ├── comp-mdx/            # demo-specific components (not collected as documents); StockTable + StockTableEdit
 ├── mdx-usage/           # mdx component demonstrations (part with hosted index)
 └── link-nav/            # link usage guide (sections by title / Anchor id), link and non-md display test docs
@@ -356,20 +363,21 @@ main/
 │   ├── toc/             # DocPageToc: page / part local index
 │   ├── page/            # toolbar, navigation buttons, search dialog, loading skeleton
 │   ├── edit/            # edit layer: toggle and toolbar controls, edit body, block borders and hover button groups, insert menu, editor chooser, floating bar and in-place editing primitives
+│   ├── asset/           # asset store: the host resolving a reference, the frame above the component, the asset panel popup
 │   ├── settings/        # settings button and panel (user overrides of config keys)
 │   └── mdx-render/      # MdxRenderer, DynamicCodeBlock
 ├── package.json         # delegates dev/build to frontend/
 └── frontend/            # Vite app + embeddable component
-    ├── plugin/          # vite plugin: config load, rule scan, source-step tags/config, source pruning, virtual module, watch, dev-only edit api (doc-edit-server.ts, doc-edit-lines.ts)
+    ├── plugin/          # vite plugin: config load, rule scan, source-step tags/config, source pruning, virtual module, watch, dev-only edit api (doc-edit-server.ts, doc-edit-lines.ts), the asset store and its api (doc-asset-store.ts, doc-asset-server.ts, id-ms48.ts)
     ├── UICommon.js      # package-local facade for shared visual components and icons
     ├── UICommonExternal.js # external UI-library exports used by the facade
     └── src/
         ├── DocPageMdx.jsx       # the embeddable doc page component
-        ├── store/               # DocSourceStore (lower) + DocStore (upper) + DocTagStore + DocConfigStore + DocEditStore
-        └── lib/                 # mdx compile, nested Markdown renderer, link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, doc-edit-* (block model, edit api client), doc-event (event router), framework adapter
+        ├── store/               # DocSourceStore (lower) + DocStore (upper) + DocTagStore + DocConfigStore + DocEditStore + DocAssetStore
+        └── lib/                 # mdx compile, nested Markdown renderer, link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, doc-edit-* (block model, edit api client), doc-asset-* (reference, backends), doc-event (event router), framework adapter
 ```
 
-Design documents: [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [in-place editing](doc_page_impl_edit.md), [event layer](doc_page_impl_event.md), [package usage](doc_page_impl_detail.md).
+Design documents: [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [in-place editing](doc_page_impl_edit.md), [asset store](doc_page_impl_asset.md), [event layer](doc_page_impl_event.md), [package usage](doc_page_impl_detail.md).
 
 Run `pnpm install` from the workspace root once, then `pnpm dev` from either this folder or `frontend/`. `pnpm build` produces one static deployable artifact (docs bundled as lazy chunks); any static file server works, no doc folders needed at runtime.
 

@@ -5,6 +5,7 @@ import { DocSourceStore } from './store/DocSourceStore.js';
 import { DocStore } from './store/DocStore.js';
 import { DocConfigStore } from './store/DocConfigStore.js';
 import { DocEditStore, editEventTypeList } from './store/DocEditStore.js';
+import { DocAssetStore } from './store/DocAssetStore.js';
 import { DocTagStore } from './store/DocTagStore.js';
 import { DocEventRouter } from './lib/doc-event.js';
 import { CompStateStore } from './store/CompStateStore.js';
@@ -15,6 +16,7 @@ import { DocNavigationButtons } from '../../comp-doc/page/DocNavigationButtons.j
 import { DocSearchDialog } from '../../comp-doc/page/DocSearchDialog.jsx';
 import { DocSidebarFolder } from '../../comp-doc/side-panel/DocSidebarFolder.jsx';
 import { TagOverviewPopup } from '../../comp-doc/tag/TagOverviewPopup.jsx';
+import { AssetPanelPopup } from '../../comp-doc/asset/AssetPanelPopup.jsx';
 import { DocLanguageProvider, useDocLanguage } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 import { MultiLangControl } from '../../comp-mdx/multi-lang/MultiLangControl.jsx';
 import { DocEditToggle } from '../../comp-doc/edit/DocEditToggle.jsx';
@@ -26,9 +28,9 @@ import './DocPageMdx.css';
 // Embeddable MD/MDX document page.
 //
 //   <DocPageMdx
-//     data={{ configDoc, fileManifest }}
+//     data={{ configDoc, fileManifest, assetSnapshot }}
 //     config={{ routeMode: 'memory', compById, compConfigHost, configDefineList, link: { CompRender },
-//               edit: { endpoint } }}
+//               edit: { endpoint }, asset: { endpoint, subscribe } }}
 //     onEvent={(eventType, eventData) => { ... }}
 //   />
 //
@@ -36,6 +38,9 @@ import './DocPageMdx.css';
 // config contains application/runtime policy rather than semantic document data.
 // config.edit.endpoint is the edit api of the development server (the virtual
 // module exports it as docEditEndpoint); without it the page has no edit mode.
+// config.asset.endpoint is the asset api of the development server
+// (docAssetEndpoint), config.asset.subscribe its change feed (subscribeDocAsset);
+// a built site reads data.assetSnapshot instead (doc_page_impl_asset.md).
 
 export function DocPageMdx({ data, config = {}, onEvent }) {
   const languageAncestor = useDocLanguage();
@@ -60,6 +65,11 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     const tagStore = new DocTagStore(sourceStore, docStore, configStore);
     const compStateStore = new CompStateStore();
     const editStore = new DocEditStore(sourceStore, docStore, configStore, { endpoint: config.edit?.endpoint });
+    const assetStore = new DocAssetStore({
+      endpoint: config.asset?.endpoint,
+      snapshot: data.assetSnapshot,
+      subscribe: config.asset?.subscribe,
+    });
     // the event layer (doc_page_impl_event.md): component reports are routed
     // to the domain that answers them; the stores never see onEvent callbacks
     const eventRouter = new DocEventRouter();
@@ -85,7 +95,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       typeList: editEventTypeList,
       handle: (event) => editStore.eventHandle(event),
     });
-    return { sourceStore, docStore, configStore, tagStore, compStateStore, editStore, eventRouter, compById };
+    return { sourceStore, docStore, configStore, tagStore, compStateStore, editStore, assetStore, eventRouter, compById };
   });
   const framework = useMemo(() => makeFramework(stores.docStore), [stores]);
   const contextValue = useMemo(() => ({
@@ -101,7 +111,9 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
   useEffect(() => {
     stores.docStore.init();
     stores.editStore.init();
+    stores.assetStore.init();
     return () => {
+      stores.assetStore.dispose();
       stores.editStore.dispose();
       stores.docStore.dispose();
     };
@@ -176,6 +188,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
             <RootProvider search={{ SearchDialog: DocSearchDialog }}>
               <DocsShell />
               <TagOverviewPopup />
+              <AssetPanelPopup />
               <DocSettingsPanel />
             </RootProvider>
           </FrameworkProvider>

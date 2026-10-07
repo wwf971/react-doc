@@ -13,6 +13,7 @@ export {
   FilePenLine,
   FolderIcon,
   FolderOpenIcon,
+  History,
   LoaderCircle,
   LogOut,
   Pencil,

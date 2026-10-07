@@ -3,6 +3,7 @@ import { useDocStores } from '../../frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve } from '../registry/comp-registry.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import { useDocEditDoc } from './DocEditDocContext.js';
+import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
 
 // The editor of the open session, chosen by what is edited
 // (doc_page_impl_edit.md#component-edit-mode):
@@ -11,6 +12,9 @@ import { useDocEditDoc } from './DocEditDocContext.js';
 //     -> the component itself, rendered as in the document (placement
 //        commentBlock, same data) but with config.isEdit = true, so it
 //        renders its XxxEdit
+//   a component block whose data is a reference into the asset store
+//     -> BlockSource: the block holds the reference, the data is changed
+//        through the asset panel (doc_page_impl_asset.md#edit-mode)
 //   any other block
 //     -> the default editor of the block kind: the registered components
 //        Heading / Paragraph / List, or BlockSource for every other kind
@@ -54,7 +58,7 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
   };
 
   const component = session.type === 'block' ? block?.component : undefined;
-  if (component) {
+  if (component && !assetRefLangIs(component.lang)) {
     const compId = compIdResolve(sourceStore.configDoc, component.compName);
     const definition = compDefinitionNormalize(compById[compId]);
     if (definition?.isEditSupported) {
@@ -116,6 +120,8 @@ function sessionLabelGet(session, block) {
 
 // what a block is called in its toolbar and editor bar
 export function blockLabelGet(block) {
-  if (block?.component) return block.component.compName;
+  if (block?.component) {
+    return assetRefLangIs(block.component.lang) ? `${block.component.compName} (asset)` : block.component.compName;
+  }
   return labelByBlockKind[block?.kind] ?? 'Block';
 }

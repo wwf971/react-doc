@@ -77,6 +77,15 @@ Components that do not declare edit support are edited as source, like any other
 +---------+      +---------+
 ```
 
+## Components backed by the asset store
+
+A component block whose code block is written in the language `asset` holds a reference into the asset store instead of its data (see [Asset Store](asset-store.md)). In edit mode such a block is edited as source, whatever its component declares: the block is the reference, and the editor shows the reference, labeled `Image (asset)`. The data belongs to the object and is changed through the **asset** button of the frame above the component, which saves the head text in place or as a new version.
+
+<!--renderComp=Image-->
+```asset
+objectId: w4laejhlzjh
+```
+
 ## Insert at the end
 
 Hover this paragraph and use **insert below** in its toolbar to insert a block at the end of the document. A floating menu offers a starting text for the basic blocks and for every component that declares an edit template; the chosen block is written to the file and opened in edit mode right away, with its text selected. Escape removes a block that was just created. Nothing is added to the page until a block is chosen: there is no placeholder at the end of the document.

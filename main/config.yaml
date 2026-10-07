@@ -12,6 +12,13 @@ source:
 sidePanel:
   file: ../example_doc/side-panel.yaml
 
+# the asset store: one folder holding every text object a component block
+# can reference instead of carrying its data inline (```asset blocks).
+# served through the asset api on the development server, bundled as a
+# read-only snapshot into a build. design: doc_page_impl_asset.md
+asset:
+  folder: ../example_doc/asset
+
 # tag definitions (how each tag looks). which assets carry a tag is declared
 # in source rules and side-panel nodes. design: doc_page_impl_tag.md
 tag:

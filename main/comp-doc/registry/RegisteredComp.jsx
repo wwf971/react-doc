@@ -2,23 +2,32 @@ import { useId } from 'react';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from './comp-registry.js';
 import { CompDataRefHost } from './CompDataRef.jsx';
+import { CompAssetHost, compInputIsAssetRef } from '../asset/CompAssetHost.jsx';
 
 // One runtime boundary for every component resolved through compRegistry.
 // Registered render components always receive { data, config, onEvent }.
-export function RegisteredComp({
-  compDefinition,
-  compId,
-  compName,
-  configRuntime = {},
-  input = {},
-  onEventRuntime,
-  placement,
-}) {
+export function RegisteredComp(props) {
+  const {
+    compDefinition,
+    compId,
+    compName,
+    configRuntime = {},
+    input = {},
+    onEventRuntime,
+    placement,
+  } = props;
   const { compById, compConfigHost, docStore, eventRouter, onEvent: onEventPage, sourceStore } = useDocStores();
   const idFallback = useId();
   const compIdResolved = compId ?? compIdResolve(sourceStore.configDoc, compName);
   const definitionValue = compDefinition ?? compById[compIdResolved];
   const definition = compDefinitionNormalize(definitionValue);
+
+  // a fenced block in the language "asset" is a reference into the asset
+  // store, not the data: CompAssetHost reads the referenced version and
+  // renders this boundary again with that text (doc_page_impl_asset.md)
+  if (definition && placement === 'commentBlock' && compInputIsAssetRef(input)) {
+    return <CompAssetHost input={input} registeredProps={{ ...props, compId: compIdResolved }} />;
+  }
 
   if (!definition) {
     return (

@@ -14,3 +14,7 @@ package-lock.json
 third_party/shadcn/
 
 ai-dev*
+# backups and temporary files of the asset store (doc_page_impl_asset.md);
+# the folder itself is content and is tracked
+example_doc/asset/**/*.bak
+example_doc/asset/**/*.tmp

@@ -1,0 +1,18 @@
+objectId: w4laejhlzjh
+name: hero image
+lang: yaml
+fileExt: yaml
+versionIdHead: w4laekvw5oi
+isDeleted: false
+timeCreated: 20261019_03392269+09
+timeUpdated: 20261019_03392398+09
+versionList:
+  - versionId: w4laejhlaxj
+    versionIdPrevList: []
+    time: 20261019_03392269+09
+    note: robot at the computer
+  - versionId: w4laekvw5oi
+    versionIdPrevList:
+      - w4laejhlaxj
+    time: 20261019_03392398+09
+    note: office worker instead of the robot

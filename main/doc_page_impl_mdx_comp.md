@@ -64,6 +64,8 @@ maxHeight: 8rem
 
 In `.mdx`, the same reference is a property: `<FileTree dataRef="comp-file-tree.md#example-project-tree" />`. `dataRef` is always a component property (a comment key or an MDX attribute), never a key inside the YAML block, because the host resolves it before the component parses its own data.
 
+`dataRef` reuses data that is authored in some document. Data that belongs to no document, or that should have a history of its own, goes to the [asset store](doc_page_impl_asset.md) instead: the component block holds a reference (a fenced block in the language `asset`) in place of its data, and the host resolves it to the referenced version's text before the component sees its input. The two mechanisms are resolved by the same runtime boundary (`RegisteredComp`) and compose in one direction: an asset-backed component can carry a `dataRef`, since the reference is resolved first and the resolved text is normalized as authored data.
+
 ### Reference grammar
 
 ```text
@@ -143,7 +145,7 @@ While the referenced document is compiling, a neutral loading line replaces the 
 ### Constraints
 
 - Only comment-block components with an `id` can be referenced. MDX component properties are JavaScript expressions evaluated at render time, so they are not available before the referenced document is rendered.
-- References are resolved one level deep. If the referenced component itself has a `dataRef`, its data is delivered unchanged, including that `dataRef`; the host does not follow chains.
+- References are resolved one level deep. If the referenced component itself has a `dataRef`, its data is delivered unchanged, including that `dataRef`; the host does not follow chains. Likewise, a referenced component whose data is an asset reference delivers the reference text, not the asset text: an asset-backed block is not a `dataRef` source, both documents should reference the store.
 - With `pruneSourceToSidePanel`, a statically authored `dataRef` keeps the referenced document in the deployed manifest without a side-panel item (see [Source pruning for deployment](doc_page_impl.md#source-pruning-for-deployment)). A `dataRef` written as an MDX expression is not discovered and is reported at build time.
 
 ## Text blocks and edit mode

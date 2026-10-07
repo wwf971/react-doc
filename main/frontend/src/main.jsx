@@ -20,6 +20,9 @@ createRoot(document.getElementById('root')).render(
       configDoc: docSource.configDoc,
       fileManifest: docSource.fileManifest,
       subscribe: docSource.subscribeDocSource,
+      // the asset objects bundled into a build; null in development, where
+      // the asset api of the development server is used instead
+      assetSnapshot: docSource.assetSnapshot,
     }}
     config={{
       language: 'en',
@@ -33,6 +36,9 @@ createRoot(document.getElementById('root')).render(
       // in-place editing, answered by the development server only; the
       // virtual module exports an empty endpoint in a build
       edit: { endpoint: docSource.docEditEndpoint },
+      // the asset store (doc_page_impl_asset.md): the asset api of the
+      // development server and its change feed; both empty in a build
+      asset: { endpoint: docSource.docAssetEndpoint, subscribe: docSource.subscribeDocAsset },
       // host settings handed to every registered component's config:
       // Image/ImageGrid/DiagramMermaid resolve file references, and
       // DiagramMermaid loads mermaid on first use, and the page frames popups

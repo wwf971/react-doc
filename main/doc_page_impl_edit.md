@@ -165,6 +165,7 @@ The text editors (`TextBlockEdit`) and `ImageEdit` / `StockTableEdit` are the re
 Editing is a job of the component. The page decides *which* lines are edited and *how* the result is written; the component decides how the author changes it. One chooser, `DocEditBlockEditor`, picks the editor of a session:
 
 - A component block whose registered definition declares `isEditSupported` is rendered through `RegisteredComp` exactly as in the document (placement `commentBlock`, the same `raw`, `lang`, and authored props), with `configRuntime.isEdit = true`. The component sees `config.isEdit` and renders its own editor.
+- A component block whose fenced block is in the language `asset` is edited as source whatever its component declares, labeled `Xxx (asset)`: the block holds a reference into the [asset store](doc_page_impl_asset.md#edit-mode), not data, and the reference is what the lines of this document contain. The component's editor would produce a draft that is not lines of this document, so it is not offered; the data is changed through the asset panel, which saves it to the object in place or as a new version, and the frame above the component updates from `DocAssetStore` without a write to the document. Changing the `versionId` of the reference, or replacing the fence language and writing the data inline, is an ordinary source edit of the block.
 - Any other block gets the default editor of its kind: the registered components `Heading`, `Paragraph`, `List`, or `BlockSource` for every other kind (code, table, quote, math, html, MDX, components without edit support). They are built-in names (`compIdBuiltinByName`), placement `edit`, input `data.text`; mapping one of them in `compRegistry` replaces the default editor of that kind.
 - The frontmatter and the whole document use `BlockSource` with the surface in the floating panel.
 
@@ -248,10 +249,13 @@ frontend/src/DocPageView.jsx           edit branch
 comp-doc/edit/                         DocEditToggle, DocEditDocControls, DocEditBody (+ the
                                        empty-document notice), DocEditBlock (anchor, floating
                                        area, enter mode, geometry lock), DocEditBlockToolbar, DocEditInsertMenu,
-                                       DocEditBlockEditor, DocEditDocContext (doc + floating area
+                                       DocEditBlockEditor (editor chooser; asset-backed blocks → BlockSource),
+                                       DocEditDocContext (doc + floating area
                                        contexts), edit-template.js, use-edit-outside-pointer.js,
                                        EditFloatingPanel, EditSourceSurface, EditValueInline,
                                        EditActions, DocEdit.css
+comp-doc/asset/AssetPanel.jsx          the editing of asset data (doc_page_impl_asset.md): the head
+                                       text saved in place or as a new version, outside the edit layer
 comp-mdx/text/                         Heading/Paragraph/List/BlockSource (+ XxxEdit, XxxData),
                                        TextBlockEdit, BlockRender (+ BlockRenderStore)
 comp-mdx/image/ImageEdit.jsx           component edit mode demonstration (+ ImageEditStore)

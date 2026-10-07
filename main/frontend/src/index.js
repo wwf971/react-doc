@@ -20,7 +20,12 @@ export { DocStore } from './store/DocStore.js';
 export { DocTagStore } from './store/DocTagStore.js';
 export { DocConfigStore } from './store/DocConfigStore.js';
 export { DocEditStore } from './store/DocEditStore.js';
+export { DocAssetStore } from './store/DocAssetStore.js';
 export { useDocStores } from './store/context.js';
+// the asset store (doc_page_impl_asset.md): the reference form in documents
+// and the browser backends over the asset api / a bundled snapshot
+export { ASSET_REF_LANG, assetRefLangIs, assetRefParse, assetBlockTextExpand } from './lib/doc-asset-ref.js';
+export { assetBackendApiCreate, assetBackendSnapshotCreate } from './lib/doc-asset-backend.js';
 // building blocks for a component's own edit mode (doc_page_impl_edit.md)
 export { EditActions } from '../../comp-doc/edit/EditActions.jsx';
 export { EditFloatingPanel } from '../../comp-doc/edit/EditFloatingPanel.jsx';

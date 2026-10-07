@@ -115,19 +115,22 @@ export function attachmentImageGridFind(context: DocAttachmentFinderContext): st
   return result;
 }
 
+// textExpand(text): the document text as the finders see it; asset reference
+// blocks are expanded to the data they stand for (doc_page_impl_asset.md)
 export function docAttachmentsCollect(
   configDoc: any,
   docEntryList: SourceEntry[],
   sourceEntryList: SourceEntry[],
   configDir: string,
   finderList: DocAttachmentFinder[],
+  textExpand: (text: string) => string = (text) => text,
 ): DocAttachmentResolved[] {
   const attachmentByPath = new Map<string, { absPath: string; referenceSet: Set<string> }>();
 
   for (const doc of docEntryList) {
     const extension = path.extname(doc.absPath).toLowerCase();
     if (extension !== '.md' && extension !== '.mdx') continue;
-    const text = fs.readFileSync(doc.absPath, 'utf-8');
+    const text = textExpand(fs.readFileSync(doc.absPath, 'utf-8'));
     const context = { configDoc, doc, text };
 
     for (const finder of finderList) {

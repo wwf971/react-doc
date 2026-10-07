@@ -1,0 +1,10 @@
+displayMode: contain
+width: 220
+height: 160
+images:
+  - src: mdx-usage/image/robot-computer.svg
+    alt: A robot operating a computer
+    caption: robot
+  - src: mdx-usage/image/office-worker.svg
+    alt: An office worker at a desk
+    caption: office worker

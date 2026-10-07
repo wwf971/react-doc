@@ -1,0 +1,18 @@
+objectId: w4laenhx59b
+name: warehouse B stock
+lang: md
+fileExt: md
+versionIdHead: w4laeot1asf
+isDeleted: false
+timeCreated: 20261019_03392639+09
+timeUpdated: 20261019_03392759+09
+versionList:
+  - versionId: w4laenhwzl4
+    versionIdPrevList: []
+    time: 20261019_03392639+09
+    note: stock at the start of the month
+  - versionId: w4laeot1asf
+    versionIdPrevList:
+      - w4laenhwzl4
+    time: 20261019_03392759+09
+    note: after the mid-month delivery

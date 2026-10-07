@@ -27,6 +27,8 @@ import { configDoc, fileManifest } from 'virtual:doc-source';
 
 In-place editing on the development server is enabled by passing the edit api url the virtual module exports: `config={{ ..., edit: { endpoint: docEditEndpoint } }}` with `import { docEditEndpoint } from 'virtual:doc-source'`. It is an empty string in a build, so the deployed page has no edit mode ([In-place editing](doc_page_impl_edit.md)).
 
+The asset store ([Asset store](doc_page_impl_asset.md)) needs `asset.folder` in `config.yaml` and two more values of the virtual module: `data={{ ..., assetSnapshot }}` (the objects bundled into a build, `null` in development) and `config={{ ..., asset: { endpoint: docAssetEndpoint, subscribe: subscribeDocAsset } }}` (the asset api of the development server and its change feed, both inert in a build). The asset panel is framed by `config.compConfigHost.panelComponent`, like the tag overview; without it the frame shows the asset and has no button.
+
 The Vite plugin is build-time infrastructure. `DocPageMdx` is a runtime render component. It fills its host and scrolls internally, so the host element needs a definite height (for a full-window page: `html, body, #root { height: 100%; }`); otherwise the side panel, local index, and floating controls do not stay in view. External source files are bundled into the output and are not read from the file system after deployment.
 
 ## Configuration composition

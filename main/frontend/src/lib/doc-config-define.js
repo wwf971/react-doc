@@ -64,6 +64,15 @@ export const configDefineListBuiltin = [
     description: 'Clicking a tag opens the tag overview popup.',
   },
   {
+    // the title line above a component whose data comes from the asset store
+    // (object, version, the button opening the asset panel)
+    key: 'AssetFrameIsOn',
+    type: 'boolean',
+    valueDefault: true,
+    scope: 'page',
+    description: 'A component whose data comes from the asset store shows a title line with the asset and its version.',
+  },
+  {
     // how the edit mode of a block is entered while the page is in edit mode:
     //   button   the Edit button of the block toolbar only
     //   click    a click anywhere on the block as well

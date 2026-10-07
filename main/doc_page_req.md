@@ -125,6 +125,13 @@ Edit mode must not jitter the page: toggling it, and entering the edit mode of a
 Components report what the user asked for through events and never call page logic themselves; one centralized layer receives, routes, and answers these events (navigation events go to the navigation system, edit events to the edit layer), with room for later concerns such as undo / redo ([event layer](doc_page_impl_event.md)). Every answer is a formatted result `{ code, data, message }`, code 0 for success and a negative code for failure.
 
 
+## Asset Store
+
+The data of a component invoked through an HTML comment and a code block can be kept outside the document, in a managed asset store, so that it can be shared, versioned, and edited without touching the document. The store is a general local storage of text objects with versioning, exposed through a standard set of apis: declare (create) an object, delete it, update it in place or as a new version, query its history, and switch its head version. The history model is a DAG. Object ids follow the project id format (ms_48, no prefix or suffix). The store is one folder, and the data must be fully reflected in that folder's files; a metadata file is allowed, and every edit of the metadata file, or of a data file, leaves a backup file beside it in the same folder. The data format follows the object store of `homepage-utils/storage-obj` but is stored locally; further backends may follow.
+
+MDX components must not know or care whether their data is inline or in the store. In the document an asset-backed component is still a code block after the comment, with a special language type; its content is yaml, parsed with yaml, that briefly locates the asset and names a version or the head. Components whose data is in the store get an additional asset configuration button, which opens a general popup panel provided by the asset service: viewing and deleting history versions, setting the head, and so on. To keep components decoupled from the store, the button and the asset information live in a wrapper around the component: an additional title line above it, with the buttons aligned to its right end ([asset store](doc_page_impl_asset.md)).
+
+
 ## Link/Ref system
 
 Link/Ref system consists of at least the following major logical layers:

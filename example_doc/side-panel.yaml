@@ -33,6 +33,9 @@ tree:
   # the edit layer playground; editable on the development server only
   - doc: /example/edit-in-place.md
     tags: [guide]
+  # component data kept in the asset store; writable on the development server only
+  - doc: /example/asset-store.md
+    tags: [guide]
   - separator: MDX Usage
   - id: mdx-usage
     text: MDX Components

@@ -14,6 +14,7 @@ import { parse as parseYaml } from 'yaml';
 import { remarkDocLink } from './remark-doc-link.js';
 import { remarkCommentComp } from './remark-comment-comp.js';
 import { remarkAnchor } from './remark-anchor.js';
+import { assetRefLangIs } from './doc-asset-ref.js';
 import {
   multiLangCompNameIs,
   multiLangLanguageListGet,
@@ -39,11 +40,15 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
   const languageSet = new Set();
   const headingVariantsById = new Map();
   // languageList of an entry: languages of that one component, e.g. for the
-  // language selector of a hosted part index
+  // language selector of a hosted part index. a block in the language
+  // "asset" holds a reference into the asset store, not the data
+  // (doc_page_impl_asset.md): the component-specific readers of the data
+  // do not run on it (the plugin expands references before compiling when
+  // the data is wanted at build time).
   const onCommentComponent = ({ compName, lang, props, raw, sourceOffset }) => {
     const languageListGet = config.languageListGetByComponent?.[compName]
       ?? (multiLangCompNameIs(compName) ? multiLangLanguageListGet : undefined);
-    const languageList = languageListGet?.(raw, { compName, props, lang }) ?? [];
+    const languageList = assetRefLangIs(lang) ? [] : languageListGet?.(raw, { compName, props, lang }) ?? [];
     componentList.push({
       id: typeof props.id === 'string' ? props.id.trim() : '',
       compName,
@@ -53,7 +58,8 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
     });
     for (const language of languageList) languageSet.add(language);
   };
-  const structuredDataGet = ({ compName, props, raw }) => {
+  const structuredDataGet = ({ compName, props, raw, lang }) => {
+    if (assetRefLangIs(lang)) return undefined;
     const getter = config.structuredDataGetByComponent?.[compName]
       ?? (multiLangCompNameIs(compName) ? multiLangStructuredDataGet : undefined);
     return getter?.(raw, { compName, props });

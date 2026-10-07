@@ -111,7 +111,7 @@ export function remarkCommentComp(options = {}) {
 
       let structuredData;
       try {
-        structuredData = options.structuredDataGet?.({ compName, props, raw });
+        structuredData = options.structuredDataGet?.({ compName, props, raw, lang: nodeMarked.lang ?? '' });
       } catch (error) {
         console.warn(`[remark-comment-comp] failed to index component "${compName}":`, error);
       }
