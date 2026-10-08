@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import {
   blockDeleteOperationBuild,
   blockInsertOperationBuild,
+  blockSwapOperationBuild,
   componentBlockTextBuild,
   componentTemplateTextBuild,
   editDocModelBuild,
@@ -142,6 +143,27 @@ test('delete operations take the separating blank lines with the block', () => {
   assert.deepEqual(blockDeleteOperationBuild(model, 6), { action: 'deleteLines', lineStart: 23, lineEnd: 27 });
   const modelSingle = modelBuild('---\ntitle: x\n---\n\nonly\n');
   assert.deepEqual(blockDeleteOperationBuild(modelSingle, 0), { action: 'deleteLines', lineStart: 4, lineEnd: 5 });
+});
+
+test('swap operations exchange two neighbor blocks and keep the lines between them', () => {
+  const model = modelBuild(sourceDemo);
+  // the paragraph (lines 9-10) and the component block (lines 12-16)
+  assert.deepEqual(blockSwapOperationBuild(model, 2), {
+    action: 'replaceLines',
+    lineStart: 9,
+    lineEnd: 16,
+    text: [
+      '<!--renderComp=Anchor,id=pic-->',
+      '<!--renderComp=Image-->',
+      '```yaml',
+      'src: dog.png',
+      '```',
+      '',
+      'A paragraph',
+      'on two lines.',
+    ].join('\n'),
+  });
+  assert.throws(() => blockSwapOperationBuild(model, 6), /no two blocks/);
 });
 
 test('trailing markers without a node form a marker block', () => {

@@ -61,9 +61,11 @@ function createBuildContext(configDoc, fileManifest, compById) {
     partById: new Map(),
     items: [],
     idUsed: new Set(),
-    // item id -> { assetKey, kind, text, textLocalized } of every labeled
-    // item, including folders and separators. the tag overview reads the
-    // tree through it.
+    // item id -> { assetKey, kind, text, textLocalized, textSource,
+    // isTextAuthored } of every labeled item, including folders and
+    // separators. the tag overview reads the tree through it; the edit layer
+    // finds where a label is authored (textSource, annotated by the plugin;
+    // undefined for generated items).
     itemOutlineById: new Map(),
     // side-panel step of the tag system, in tree order
     tagDeclarationList: [],
@@ -261,6 +263,11 @@ function itemNameCreate(node, label, context, options) {
     kind: options.dataItem?.kind ?? '',
     text: textLocalizedGet(label.textLocalized).text,
     textLocalized: label.textLocalized,
+    textMessage: label.textMessage,
+    textSource: node.textSource,
+    // the label is written in the side panel file (else it is a default such
+    // as the document title, and an edit adds the "text")
+    isTextAuthored: node.text !== undefined || node.separator !== undefined,
   });
   return sidePanelItemNameCreate(node, label, context, options);
 }

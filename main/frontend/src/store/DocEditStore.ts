@@ -8,6 +8,7 @@ import {
   blockDeleteOperationBuild,
   blockInsertOperationBuild,
   blockReplaceOperationBuild,
+  blockSwapOperationBuild,
   componentBlockTextBuild,
   editDocModelBuild,
   frontmatterReplaceOperationBuild,
@@ -27,6 +28,8 @@ import {
 //   session           the one block being edited, or the frontmatter / whole document
 //   insertMenu        the one insert menu that is open, anchored to a block toolbar
 //   deleteConfirm     the one block whose deletion waits for confirmation
+//   blockMove         the one block being moved up or down (swapped with its
+//                     neighbor), or the failure of the last move
 //
 // a session ends in one of two ways:
 //   leave    the draft is saved when it changed (click outside, another edit
@@ -87,6 +90,23 @@ export type EditDeleteConfirm = {
 
 export type EditFocusShiftDirection = 'previous' | 'next';
 
+export type EditBlockMoveDirection = 'up' | 'down';
+
+export type EditBlockMove = {
+  path: string;
+  blockIndex: number;
+  direction: EditBlockMoveDirection;
+  status: 'submitting' | 'error';
+  message: string;
+};
+
+// the one side-panel item whose label is being edited in place
+export type EditSidePanelText = {
+  itemId: string;
+  status: 'editing' | 'submitting' | 'error';
+  message: string;
+};
+
 type EditSource = {
   status: 'loading' | 'done' | 'error';
   text?: string;
@@ -111,13 +131,19 @@ export type EditResult = { code: number; data?: any; message: string };
 
 type DocEvent = { type: string; data: Record<string, any>; source: Record<string, any> };
 
-// the event types the edit route of the event layer brings here
+// the event types the edit route of the event layer brings here: the
+// session events of the editor of the open session, and the block events a
+// toolbar reports for the block it belongs to
 export const editEventTypeList = [
   'editDraftChange',
   'editTextSetRequest',
   'editSubmitRequest',
   'editCancelRequest',
   'editFocusShiftRequest',
+  'editBlockMoveRequest',
+  'sidePanelTextEditStartRequest',
+  'sidePanelTextSubmitRequest',
+  'sidePanelTextCancelRequest',
 ];
 
 const messageConflict = 'The document changed on disk since it was loaded. Re-read the file, then edit again.';
@@ -135,12 +161,18 @@ export class DocEditStore {
   session: EditSession | undefined = undefined;
   insertMenu: EditInsertMenu | undefined = undefined;
   deleteConfirm: EditDeleteConfirm | undefined = undefined;
+  blockMove: EditBlockMove | undefined = undefined;
   // the text a block was just saved as, shown in its place until the document
   // is compiled again, so the saved block never flashes back to its old text
   blockTextPending: { path: string; blockIndex: number; text: string } | undefined = undefined;
+  sidePanelText: EditSidePanelText | undefined = undefined;
+  // the label an item was just saved as, shown until the side panel is built
+  // from the new configuration, for the same reason as blockTextPending
+  sidePanelTextPending: { itemId: string; text: string } | undefined = undefined;
   // the leave in progress, so that a second leave request waits for it
   leavePromise: Promise<boolean> | undefined;
   reactionDispose: (() => void) | undefined;
+  reactionConfigDispose: (() => void) | undefined;
 
   constructor(sourceStore: DocSourceStore, docStore: DocStore, configStore: DocConfigStore, options?: { endpoint?: string }) {
     this.sourceStore = sourceStore;
@@ -157,6 +189,7 @@ export class DocEditStore {
       compilePendingByPath: false,
       leavePromise: false,
       reactionDispose: false,
+      reactionConfigDispose: false,
     });
   }
 
@@ -175,16 +208,28 @@ export class DocEditStore {
         runInAction(() => {
           if (this.insertMenu && this.insertMenu.path !== path) this.insertMenu = undefined;
           if (this.deleteConfirm && this.deleteConfirm.path !== path) this.deleteConfirm = undefined;
+          if (this.blockMove && this.blockMove.path !== path) this.blockMove = undefined;
         });
         if (isEditMode && this.docIsEditable(path)) void this.docEditEnsure(path);
       },
       { fireImmediately: true },
+    );
+    // the new configuration arrived: the side panel shows the saved label itself
+    this.reactionConfigDispose = reaction(
+      () => this.sourceStore.configDoc,
+      () => {
+        runInAction(() => {
+          this.sidePanelTextPending = undefined;
+        });
+      },
     );
   }
 
   dispose() {
     this.reactionDispose?.();
     this.reactionDispose = undefined;
+    this.reactionConfigDispose?.();
+    this.reactionConfigDispose = undefined;
   }
 
   // ---------- availability and mode ----------
@@ -209,6 +254,9 @@ export class DocEditStore {
       this.isEditMode = isEditMode;
       this.insertMenu = undefined;
       this.deleteConfirm = undefined;
+      this.blockMove = undefined;
+      // a label still being typed is dropped: it was never saved
+      if (this.sidePanelText?.status !== 'submitting') this.sidePanelText = undefined;
     });
     return true;
   }
@@ -291,6 +339,9 @@ export class DocEditStore {
       }
       if (isChanged && this.insertMenu?.path === path && this.insertMenu.status !== 'submitting') {
         this.insertMenu = undefined;
+      }
+      if (isChanged && this.blockMove?.path === path && this.blockMove.status !== 'submitting') {
+        this.blockMove = undefined;
       }
     });
     const stateCompiled = this.docEditByPath[path];
@@ -409,7 +460,9 @@ export class DocEditStore {
   get isSubmitting(): boolean {
     return this.session?.status === 'submitting'
       || this.insertMenu?.status === 'submitting'
-      || this.deleteConfirm?.status === 'submitting';
+      || this.deleteConfirm?.status === 'submitting'
+      || this.blockMove?.status === 'submitting'
+      || this.sidePanelText?.status === 'submitting';
   }
 
   async sessionBlockStart(
@@ -477,6 +530,7 @@ export class DocEditStore {
     runInAction(() => {
       this.insertMenu = undefined;
       this.deleteConfirm = undefined;
+      this.blockMoveClear();
       this.session = {
         ...sessionPartial,
         textDraft: sessionPartial.textInitial,
@@ -625,9 +679,38 @@ export class DocEditStore {
 
   // ---------- events of the edit domain ----------
 
-  // the handler the edit route of the event layer calls. the session events
-  // are accepted only from the editor of the open session.
+  // the handler the edit route of the event layer calls. a block event names
+  // its block through event.source (sourcePath, blockIndex); the session
+  // events are accepted only from the editor of the open session.
   async eventHandle(event: DocEvent): Promise<EditResult | undefined> {
+    if (event.type === 'editBlockMoveRequest') {
+      const path = String(event.source.sourcePath ?? '');
+      const blockIndex = Number(event.source.blockIndex);
+      if (!path || !Number.isInteger(blockIndex)) {
+        return { code: -1, message: 'editBlockMoveRequest needs the document path and the block index' };
+      }
+      const direction: EditBlockMoveDirection = event.data.direction === 'up' ? 'up' : 'down';
+      const isMoved = await this.blockMoveApply(path, blockIndex, direction);
+      return isMoved ? { code: 0, message: '' } : { code: -1, message: this.blockMove?.message || 'the block was not moved' };
+    }
+
+    if (event.type.startsWith('sidePanelText')) {
+      const itemId = String(event.source.itemId ?? '');
+      if (!itemId) return { code: -1, message: `${event.type} needs the item id` };
+      if (event.type === 'sidePanelTextEditStartRequest') {
+        const isStarted = await this.sidePanelTextEditStart(itemId);
+        return isStarted ? { code: 0, message: '' } : { code: -1, message: 'the label of this item cannot be edited' };
+      }
+      if (event.type === 'sidePanelTextSubmitRequest') {
+        return this.sidePanelTextSubmit(itemId, String(event.data.text ?? ''));
+      }
+      if (event.type === 'sidePanelTextCancelRequest') {
+        this.sidePanelTextCancel(itemId);
+        return { code: 0, message: '' };
+      }
+      return undefined;
+    }
+
     const session = this.session;
     if (!session) return { code: -1, message: 'no edit session is open' };
     if (event.source.sourcePath && event.source.sourcePath !== session.path) {
@@ -678,6 +761,7 @@ export class DocEditStore {
     if (!isLeft) return false;
     runInAction(() => {
       this.deleteConfirm = undefined;
+      this.blockMoveClear();
       this.insertMenu = { path, borderIndex, blockIndexAnchor, status: 'open', message: '' };
     });
     return true;
@@ -722,6 +806,158 @@ export class DocEditStore {
     return this.sessionBlockStart(path, menu.borderIndex, { isCreated: true, selectionInitial: 'all' });
   }
 
+  // ---------- moving a block ----------
+
+  // a block can move up when a block is above it, down when one is below
+  blockMoveIsAvailable(path: string, blockIndex: number, direction: EditBlockMoveDirection): boolean {
+    const blockIndexOther = direction === 'up' ? blockIndex - 1 : blockIndex + 1;
+    return blockIndexOther >= 0 && blockIndexOther < this.blockCountGet(path);
+  }
+
+  blockMoveIs(path: string, blockIndex: number): boolean {
+    return this.blockMove?.path === path && this.blockMove.blockIndex === blockIndex;
+  }
+
+  blockMoveClear() {
+    if (this.blockMove?.status === 'submitting') return;
+    this.blockMove = undefined;
+  }
+
+  // swaps the block with its neighbor in `direction`: one replaceLines
+  // operation over the lines of the two blocks and the lines between them,
+  // so the file keeps its line count and the blank lines that separate the
+  // blocks. requested through the event layer (editBlockMoveRequest).
+  private async blockMoveApply(path: string, blockIndex: number, direction: EditBlockMoveDirection): Promise<boolean> {
+    if (this.blockMove?.status === 'submitting') return false;
+    if (!this.blockMoveIsAvailable(path, blockIndex, direction)) {
+      runInAction(() => {
+        this.blockMove = {
+          path, blockIndex, direction, status: 'error', message: `no block ${direction === 'up' ? 'above' : 'below'} this one`,
+        };
+      });
+      return false;
+    }
+    const isLeft = await this.sessionLeaveForIndexAction(path);
+    if (!isLeft) return false;
+    const model = this.docEditByPath[path]?.model;
+    const indexUpper = direction === 'up' ? blockIndex - 1 : blockIndex;
+    if (!model?.blockList[indexUpper] || !model.blockList[indexUpper + 1]) return false;
+    const move: EditBlockMove = { path, blockIndex, direction, status: 'submitting', message: '' };
+    runInAction(() => {
+      this.insertMenu = undefined;
+      this.deleteConfirm = undefined;
+      this.blockMove = move;
+    });
+    const result = await this.operationApply(path, blockSwapOperationBuild(model, indexUpper), {
+      messageFailure: 'The block was not moved.',
+      onApplied: () => {
+        if (this.blockMove === move) this.blockMove = undefined;
+      },
+    });
+    if (result.code !== 0) {
+      runInAction(() => {
+        move.status = 'error';
+        move.message = result.message;
+      });
+      return false;
+    }
+    return true;
+  }
+
+  // ---------- side-panel item labels ----------
+  // the label of a side-panel item is edited where it is displayed and
+  // written back into its yaml file by the development server, in place
+  // (doc_page_impl_side_panel.md). the server then reports the new
+  // configuration as data, which rebuilds the side panel.
+
+  // an item authored in a side-panel file (the plugin annotated where); an
+  // item generated from the source tree has no label to write
+  sidePanelTextIsEditable(itemId: string): boolean {
+    if (!this.isAvailable || !this.isEditMode) return false;
+    return Boolean(this.sidePanelOutlineGet(itemId)?.textSource);
+  }
+
+  sidePanelTextIs(itemId: string): boolean {
+    return this.sidePanelText?.itemId === itemId;
+  }
+
+  // the label to show for an item: the one just saved, until the new
+  // configuration arrives; undefined when the displayed label is current
+  sidePanelTextPendingGet(itemId: string): string | undefined {
+    return this.sidePanelTextPending?.itemId === itemId ? this.sidePanelTextPending.text : undefined;
+  }
+
+  // editing a label is an edit action like any other: the open block
+  // session is left (saved) first
+  async sidePanelTextEditStart(itemId: string): Promise<boolean> {
+    if (!this.sidePanelTextIsEditable(itemId)) return false;
+    if (this.sidePanelText?.status === 'submitting') return false;
+    const isLeft = await this.sessionLeave();
+    if (!isLeft) return false;
+    runInAction(() => {
+      this.insertMenu = undefined;
+      this.deleteConfirm = undefined;
+      this.blockMoveClear();
+      this.sidePanelText = { itemId, status: 'editing', message: '' };
+    });
+    return true;
+  }
+
+  sidePanelTextCancel(itemId: string) {
+    if (!this.sidePanelTextIs(itemId) || this.sidePanelText.status === 'submitting') return;
+    this.sidePanelText = undefined;
+  }
+
+  // writes the label; an unchanged or empty text only ends the editing
+  async sidePanelTextSubmit(itemId: string, text: string): Promise<EditResult> {
+    const edit = this.sidePanelText;
+    if (!edit || edit.itemId !== itemId || edit.status === 'submitting') {
+      return { code: -1, message: 'no label edit is open for this item' };
+    }
+    const outline = this.sidePanelOutlineGet(itemId);
+    if (!outline?.textSource || !this.api) {
+      return { code: -1, message: 'the label of this item cannot be edited' };
+    }
+    const textNext = text.replace(/\s+/g, ' ').trim();
+    const textShown = this.docStore.textDisplayGet(outline.textLocalized);
+    if (textNext === '' || textNext === textShown.text) {
+      runInAction(() => {
+        this.sidePanelText = undefined;
+      });
+      return { code: 0, message: '' };
+    }
+    runInAction(() => {
+      edit.status = 'submitting';
+      edit.message = '';
+    });
+    const configDocBefore = this.sourceStore.configDoc;
+    const result = await this.api.sidePanelTextApply({
+      file: outline.textSource.file,
+      nodePath: outline.textSource.path,
+      language: textShown.language,
+      text: textNext,
+      textBase: outline.isTextAuthored ? textShown.text : undefined,
+    });
+    runInAction(() => {
+      if (result.code !== 0) {
+        edit.status = 'error';
+        edit.message = result.message || 'The label was not saved.';
+        return;
+      }
+      // the new configuration is reported by the server as data; until it
+      // is here, the item shows the saved label itself
+      if (this.sourceStore.configDoc === configDocBefore) {
+        this.sidePanelTextPending = { itemId, text: textNext };
+      }
+      if (this.sidePanelText === edit) this.sidePanelText = undefined;
+    });
+    return result;
+  }
+
+  private sidePanelOutlineGet(itemId: string): any {
+    return this.docStore.treeModel.itemOutlineById.get(itemId);
+  }
+
   // ---------- deletion ----------
 
   async deleteConfirmSet(path: string, blockIndex: number): Promise<boolean> {
@@ -730,6 +966,7 @@ export class DocEditStore {
     if (!isLeft) return false;
     runInAction(() => {
       this.insertMenu = undefined;
+      this.blockMoveClear();
       this.deleteConfirm = { path, blockIndex, status: 'confirming', message: '' };
     });
     return true;

@@ -14,6 +14,12 @@ export type FileEntry = {
   ext: string;
   title: string;
   internalPath: string;
+  // sha256 of the file content, from the development server; the caches of
+  // a path survive a manifest replacement while its hash is unchanged
+  contentHash?: string;
+  tagList?: any[];
+  configSource?: Record<string, any>;
+  configFrontmatter?: Record<string, any>;
   load: () => Promise<string>;
 };
 
@@ -57,6 +63,12 @@ export class DocSourceStore {
   compiledByPath: Record<string, CompileState> = {};
   rawByPath: Record<string, { status: 'loading' | 'done' | 'error'; content?: string; message?: string }> = {};
   structuredDataByPath: Record<string, any> = {};
+  // source version of every path, not observable. it increases when the
+  // content of the path is replaced or the path is removed; a compile, a raw
+  // read or a search extraction accepts its result only while the version
+  // it started with is the current one, so an older result can neither
+  // overwrite a newer one nor bring a removed path back.
+  versionByPath: Record<string, number> = {};
 
   constructor(
     sourceData: { configDoc: any; fileManifest: FileEntry[] },
@@ -77,7 +89,16 @@ export class DocSourceStore {
       fileManifest: observable.ref,
       compileConfig: false,
       linkResolve: false,
+      versionByPath: false,
     });
+  }
+
+  versionGet(path: string): number {
+    return this.versionByPath[path] ?? 0;
+  }
+
+  private versionBump(path: string) {
+    this.versionByPath[path] = this.versionGet(path) + 1;
   }
 
   get entryByInternalPath(): Map<string, FileEntry> {
@@ -96,17 +117,70 @@ export class DocSourceStore {
     return result;
   }
 
-  replaceSourceData(sourceData: { configDoc: any; fileManifest: FileEntry[] }) {
+  // new source data (the development server reports a changed file, or the
+  // manifest module was regenerated). only what changed is refreshed:
+  //   unchanged path   compiled body, raw text, search data and pending loads
+  //                    are kept; a part index of another document stays as it is
+  //   changed path     its search data is dropped; a loaded body or raw text
+  //                    is read and compiled again right away, the previous
+  //                    result staying visible until the new one is ready
+  //   removed path     its caches are dropped
+  // a changed configuration also drops the compiled inline items (their
+  // content is configuration) and refreshes synthesized source-file pages
+  // when their display strategy changed. resolves when the refreshes are done.
+  replaceSourceData(sourceData: { configDoc: any; fileManifest: FileEntry[] }): Promise<void> {
+    const entryByPathPrevious = this.entryByInternalPath;
+    const configPrevious = this.configDoc;
+    const isConfigChanged = JSON.stringify(configPrevious) !== JSON.stringify(sourceData.configDoc);
+    const isFileDisplayChanged = isConfigChanged
+      && JSON.stringify(configPrevious?.fileDisplay ?? null) !== JSON.stringify(sourceData.configDoc?.fileDisplay ?? null);
     this.configDoc = sourceData.configDoc;
     this.fileManifest = sourceData.fileManifest;
-    this.compiledByPath = {};
-    this.rawByPath = {};
-    this.structuredDataByPath = {};
+    const entryByPathNext = this.entryByInternalPath;
+
+    const pathsChanged: string[] = [];
+    for (const entry of sourceData.fileManifest) {
+      const entryPrevious = entryByPathPrevious.get(entry.internalPath);
+      if (!entryPrevious) continue;
+      const isSourceFile = entry.ext !== 'md' && entry.ext !== 'mdx';
+      if (!entryIsSameContent(entryPrevious, entry) || (isFileDisplayChanged && isSourceFile)) {
+        pathsChanged.push(entry.internalPath);
+      }
+    }
+    const pathsRemoved: string[] = [];
+    for (const path of entryByPathPrevious.keys()) {
+      if (!entryByPathNext.has(path)) pathsRemoved.push(path);
+    }
+    if (isConfigChanged) {
+      // compiled entries that are not files are inline items of the side panel
+      for (const path of Object.keys(this.compiledByPath)) {
+        if (!entryByPathNext.has(path) && !entryByPathPrevious.has(path)) pathsRemoved.push(path);
+      }
+    }
+
+    for (const path of pathsRemoved) {
+      this.versionBump(path);
+      delete this.compiledByPath[path];
+      delete this.rawByPath[path];
+      delete this.structuredDataByPath[path];
+    }
+    const refreshList: Promise<void>[] = [];
+    for (const path of pathsChanged) {
+      this.versionBump(path);
+      delete this.structuredDataByPath[path];
+      if (this.compiledByPath[path]) refreshList.push(this.loadDoc(path, { isRefresh: true }));
+      if (this.rawByPath[path]) refreshList.push(this.loadRaw(path, { isRefresh: true }));
+    }
+    return Promise.all(refreshList).then(() => undefined);
   }
 
-  async loadDoc(internalPath: string): Promise<void> {
+  // isRefresh: the path is loaded again after its source changed; the
+  // previous result stays until the new one replaces it
+  async loadDoc(internalPath: string, options: { isRefresh?: boolean } = {}): Promise<void> {
     const stateExisting = this.compiledByPath[internalPath];
-    if (stateExisting && stateExisting.status !== 'error') return;
+    if (!options.isRefresh && stateExisting && stateExisting.status !== 'error') return;
+    const version = this.versionGet(internalPath);
+    const isVersionCurrent = () => this.versionGet(internalPath) === version;
 
     const entry = this.entryByInternalPath.get(internalPath);
     if (!entry) {
@@ -119,9 +193,11 @@ export class DocSourceStore {
       return;
     }
 
-    runInAction(() => {
-      this.compiledByPath[internalPath] = { status: 'loading' };
-    });
+    if (!options.isRefresh || stateExisting?.status !== 'done') {
+      runInAction(() => {
+        this.compiledByPath[internalPath] = { status: 'loading' };
+      });
+    }
     try {
       const raw = await entry.load();
       const { markdown, format, isSourceFile } = this.toMarkdown(entry, raw);
@@ -131,6 +207,7 @@ export class DocSourceStore {
         format,
         config: this.compileConfig,
       });
+      if (!isVersionCurrent()) return;
       runInAction(() => {
         this.compiledByPath[internalPath] = {
           status: 'done',
@@ -141,6 +218,7 @@ export class DocSourceStore {
         };
       });
     } catch (error: any) {
+      if (!isVersionCurrent()) return;
       runInAction(() => {
         this.compiledByPath[internalPath] = {
           status: 'error',
@@ -157,6 +235,7 @@ export class DocSourceStore {
   ): Promise<void> {
     const stateExisting = this.compiledByPath[itemId];
     if (stateExisting && stateExisting.status !== 'error') return;
+    const version = this.versionGet(itemId);
     runInAction(() => {
       this.compiledByPath[itemId] = { status: 'loading' };
     });
@@ -167,6 +246,7 @@ export class DocSourceStore {
         format,
         config: this.compileConfig,
       });
+      if (this.versionGet(itemId) !== version) return;
       runInAction(() => {
         this.compiledByPath[itemId] = {
           status: 'done',
@@ -186,9 +266,10 @@ export class DocSourceStore {
     }
   }
 
-  async loadRaw(internalPath: string): Promise<void> {
+  async loadRaw(internalPath: string, options: { isRefresh?: boolean } = {}): Promise<void> {
     const stateExisting = this.rawByPath[internalPath];
-    if (stateExisting && stateExisting.status !== 'error') return;
+    if (!options.isRefresh && stateExisting && stateExisting.status !== 'error') return;
+    const version = this.versionGet(internalPath);
     const entry = this.entryByInternalPath.get(internalPath);
     if (!entry) {
       runInAction(() => {
@@ -199,15 +280,19 @@ export class DocSourceStore {
       });
       return;
     }
-    runInAction(() => {
-      this.rawByPath[internalPath] = { status: 'loading' };
-    });
+    if (!options.isRefresh || stateExisting?.status !== 'done') {
+      runInAction(() => {
+        this.rawByPath[internalPath] = { status: 'loading' };
+      });
+    }
     try {
       const content = await entry.load();
+      if (this.versionGet(internalPath) !== version) return;
       runInAction(() => {
         this.rawByPath[internalPath] = { status: 'done', content };
       });
     } catch (error: any) {
+      if (this.versionGet(internalPath) !== version) return;
       runInAction(() => {
         this.rawByPath[internalPath] = {
           status: 'error',
@@ -283,10 +368,12 @@ export class DocSourceStore {
   async ensureSearchData(): Promise<void> {
     for (const entry of this.fileManifest) {
       if (this.structuredDataByPath[entry.internalPath]) continue;
+      const version = this.versionGet(entry.internalPath);
       try {
         const raw = await entry.load();
         const { markdown } = this.toMarkdown(entry, raw);
         const data = multiLangSearchDataGet(stripFrontmatter(markdown), this.compileConfig);
+        if (this.versionGet(entry.internalPath) !== version) continue;
         runInAction(() => {
           this.structuredDataByPath[entry.internalPath] = data;
         });
@@ -341,6 +428,17 @@ export class DocSourceStore {
     }
     return results;
   }
+}
+
+// two manifest entries of one path describe the same text when their content
+// hashes and extensions agree. entries without a hash (a host building its
+// own manifest) are compared by their loader: a new loader is new content.
+function entryIsSameContent(entryPrevious: FileEntry, entryNext: FileEntry): boolean {
+  if (entryPrevious.ext !== entryNext.ext) return false;
+  if (entryPrevious.contentHash && entryNext.contentHash) {
+    return entryPrevious.contentHash === entryNext.contentHash;
+  }
+  return entryPrevious.load === entryNext.load;
 }
 
 function stripFrontmatter(markdown: string): string {

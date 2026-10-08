@@ -92,21 +92,29 @@ const PartIndexPanel = observer(function PartIndexPanel({ isVisible, labels }) {
   useEffect(() => {
     const panel = refPanel.current;
     if (!isVisible || !panel) return undefined;
+    // docked: the height is computed from the document scrollport and the
+    // panel's fixed offset inside the sticky TOC column, never from where
+    // the panel happens to be in the viewport. at the document bottom the
+    // sticky column moves up to stay inside its containing block; measuring
+    // the viewport position there would grant the panel more height, push
+    // the column further up, and repeat until the index reaches its full
+    // content height.
+    const column = displayMode === 'floating' ? null : panel.closest('.doc-page-toc');
+    const scrollContainer = column?.closest('.doc-page-mdx');
 
     let frameId = 0;
     const sizeUpdate = () => {
       frameId = 0;
       const rect = panel.getBoundingClientRect();
-      // at the document bottom the sticky TOC column moves up to stay in its
-      // containing block. measuring from its sticky anchor keeps that upward
-      // move from granting the panel more height, which would push the
-      // column further up until the index reaches its full content height.
-      const column = displayMode === 'floating' ? null : panel.closest('.doc-page-toc');
-      const topSticky = column ? parseFloat(window.getComputedStyle(column).top) || 0 : 0;
-      const top = column
-        ? Math.max(rect.top, topSticky + rect.top - column.getBoundingClientRect().top)
-        : rect.top;
-      const heightAvailable = Math.max(96, window.innerHeight - top - 16);
+      const heightAvailable = column
+        ? Math.max(
+          96,
+          (scrollContainer?.clientHeight ?? window.innerHeight)
+            - (parseFloat(window.getComputedStyle(column).top) || 0)
+            - (rect.top - column.getBoundingClientRect().top)
+            - 16,
+        )
+        : Math.max(96, window.innerHeight - rect.top - 16);
       panel.style.setProperty('--doc-part-index-height-available', `${heightAvailable}px`);
       if (displayMode !== 'floating') {
         const widthAvailable = Math.max(0, window.innerWidth - rect.left - 16);
@@ -121,12 +129,10 @@ const PartIndexPanel = observer(function PartIndexPanel({ isVisible, labels }) {
       : new ResizeObserver(sizeUpdateSchedule);
     sizeUpdate();
     window.addEventListener('resize', sizeUpdateSchedule);
-    // the docked panel moves until its sticky TOC column settles
-    window.addEventListener('scroll', sizeUpdateSchedule, true);
     if (panel.parentElement) observer?.observe(panel.parentElement);
+    if (scrollContainer) observer?.observe(scrollContainer);
     return () => {
       window.removeEventListener('resize', sizeUpdateSchedule);
-      window.removeEventListener('scroll', sizeUpdateSchedule, true);
       observer?.disconnect();
       if (frameId) cancelAnimationFrame(frameId);
     };

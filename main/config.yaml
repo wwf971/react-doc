@@ -37,6 +37,9 @@ globalConfig:
   TagsDisplayAtLinkIsOn: false              # document level
   TagsDisplayAtLinkPosition: after          # document level: before | after
   TagsOverviewPopupIsOn: true               # page level
+  # page level, default false: a tag on a side-panel item opens the overview
+  # too. on here so the demo can show it; off, a click on the item navigates
+  TagsOverviewPopupAtSidePanelItemIsOn: true
 
 # tag name usable in docs -> component id in comp-doc/registry/registry.js
 compRegistry:

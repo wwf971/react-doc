@@ -56,7 +56,7 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
   useFloatHeightFollow(anchorRef, floatElement);
   if (!block) return children;
   const isDeletePending = editStore.deleteConfirmIs(path, index);
-  const isOpen = isDeletePending || editStore.insertMenuIs(path, index);
+  const isOpen = isDeletePending || editStore.insertMenuIs(path, index) || editStore.blockMoveIs(path, index);
   const isInvisible = block.kind === 'html' || block.kind === 'marker';
   const isEnterByClick = editStore.blockEnterMode === 'click';
   const textPending = editStore.blockTextPendingGet(path, index);
@@ -71,6 +71,18 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
     event.preventDefault();
     event.stopPropagation();
     void editStore.sessionBlockStart(path, index);
+  };
+
+  // the geometry lock keeps the wrapper at the height the block had in view
+  // mode; an editor shorter than that leaves uncovered wrapper space below
+  // it. a primary click on that bare space is a click outside the editor:
+  // it leaves the session like a pointer going down outside the block. only
+  // the wrapper itself counts, so the editor, its fields, buttons, and the
+  // rendered content keep working; a right click does nothing.
+  const pointerDownHandle = (event) => {
+    if (!isEditing || event.button !== 0 || event.target !== event.currentTarget) return;
+    editFocusRelease(elementRef.current);
+    void editStore.sessionLeave();
   };
 
   // keys not handled by a control of the editor: Escape cancels, Ctrl/⌘ +
@@ -132,6 +144,7 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
         style={isEditing && geometryLock ? geometryLock : undefined}
         onClickCapture={clickCaptureHandle}
         onKeyDown={keyDownHandle}
+        onPointerDown={pointerDownHandle}
       >
         <div ref={anchorRef} className="doc-edit-block-anchor not-prose">
           <div ref={floatElementSet} className="doc-edit-block-float">

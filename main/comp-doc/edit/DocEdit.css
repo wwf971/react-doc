@@ -169,39 +169,11 @@
 
 /* ---------- blocks ---------- */
 
-/* this file is imported by its components, before the page's Tailwind entry
-   (style.css) is. the first @layer statement a document meets fixes the
-   order of the layers it names, so the "@layer utilities" block below, met
-   alone, would put utilities before theme / base / components and let the
-   preflight base styles win over every utility class of the page. the full
-   Tailwind order is therefore stated here first; Tailwind's own statement
-   later is then a no-op. */
-@layer theme, base, components, utilities;
-
-/* the prose body (Tailwind typography, layer utilities, specificity (0,1,0),
-   not-prose excluded) removes the outer margins of its first and last child
-   and the top margin of what follows an h2 / h3 / h4 or a rule ("h2 + *").
-   the wrappers hide the blocks from those rules, so they are restated here
-   across the wrappers, in the same layer, with the same specificity and the
-   same exclusion, so that they win and lose against the other rules of the
-   page exactly as the prose rules do; otherwise the edit body is not the
-   same height as the reading body. */
-@layer utilities {
-  .prose :where(.doc-edit-block[data-first] > .doc-edit-block-anchor + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
-    margin-top: 0;
-  }
-
-  .prose :where(.doc-edit-block[data-last] > :nth-last-child(1 of :not(.doc-edit-panel))):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
-    margin-bottom: 0;
-  }
-
-  .prose :where(
-    .doc-edit-block[data-kind="heading"]:is([data-depth="2"], [data-depth="3"], [data-depth="4"]) + .doc-edit-block > .doc-edit-block-anchor + *,
-    .doc-edit-block[data-kind="thematicBreak"] + .doc-edit-block > .doc-edit-block-anchor + *
-  ):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
-    margin-top: 0;
-  }
-}
+/* the prose margin rules the wrappers hide from the page (first / last
+   child, what follows a heading or a rule) are restated as part of the
+   "prose" utility in frontend/src/style.css, so that they come after the
+   typography rules in the generated stylesheet; see
+   doc_page_impl_edit.md#prose-spacing-across-the-wrappers. */
 
 /* a block looks exactly as in reading mode: no outline, no background, no
    change on hover. its toolbar appears on hover; its editor bar while it is
@@ -359,6 +331,15 @@
 .doc-edit-toolbar-actions,
 .doc-edit-confirm {
   pointer-events: auto;
+}
+
+/* the failure of a move, shown beside the buttons on the toolbar's one row */
+.doc-edit-toolbar-message {
+  flex-basis: auto;
+  padding: 0 0.3rem;
+  background: var(--color-fd-background);
+  line-height: 1.35rem;
+  white-space: nowrap;
 }
 
 .doc-edit-toolbar-actions {

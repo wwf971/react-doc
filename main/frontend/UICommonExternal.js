@@ -6,6 +6,7 @@ export {
   Boxes as ProjectIcon,
   Check,
   ChevronDown,
+  ChevronUp,
   Copy,
   Expand,
   FileCode,

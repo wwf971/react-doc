@@ -21,9 +21,9 @@ objectId: w4laejhlzjh
 
 A reference reading `head` follows the object's head: moving the head changes what every such reference shows. A reference with a version id is pinned to that version until the document is edited.
 
-## The frame
+## The asset panel
 
-Above a component whose data comes from the store, the page shows one title line: the component name, the object's name, the version being read and whether it is the head, and at the right end an **asset** button. The button opens the asset panel for the object: its metadata, every version with its time and note, the text of any version, and, on the development server, the actions that change the object. The line is switched off with the page config `AssetFrameIsOn` (the gear at the top of the sidebar).
+A component whose data comes from the store looks exactly as it would with the data written inline; while the data loads, or when the reference cannot be resolved, a short line with the component name and the object id stands in its place. The store is reached from edit mode: switch **Edit** on in the toolbar (see [In-place Editing](edit-in-place.md)), hover the component, and the toolbar floating above it shows an **asset** button next to Edit. The button opens the asset panel for the object: its metadata, every version with its time and note, the text of any version, and, on the development server, the actions that change the object.
 
 ## Image, reading the head
 
@@ -45,7 +45,7 @@ objectId: w4laem6vxbe
 
 ## StockTable, pinned to a version
 
-This table object also has two versions; the document pins the first one, so moving the head changes nothing here. The frame says `version … (head)` only when the pinned version happens to be the head. The marker keeps its own props (`title`) as usual: a reference replaces the data block only.
+This table object also has two versions; the document pins the first one, so moving the head changes nothing here; the asset panel marks the pinned version with `read here`. The marker keeps its own props (`title`) as usual: a reference replaces the data block only.
 
 <!--renderComp=StockTable,title=Warehouse B (start of month)-->
 ```asset

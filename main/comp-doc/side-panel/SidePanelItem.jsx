@@ -1,4 +1,5 @@
-import { isValidElement } from 'react';
+import { isValidElement, useEffect, useRef } from 'react';
+import { Pencil } from '../../frontend/UICommon.js';
 import { TagList } from '../../comp-mdx/tag/TagList.jsx';
 import './SidePanelItem.css';
 
@@ -19,27 +20,55 @@ import './SidePanelItem.css';
 //                          TagsDisplayAtSidePanelItemsList    tag ids to show, null = all
 //   config.isTagOverviewAvailable  clicking a tag may open the tag overview
 //   config.tagService, config.configService   queries
+//   config.isTextEditable    edit mode: the label may be edited in place
+//   config.textEditStatus    '' | editing | submitting | error (SidePanelItemHost)
+//   config.textEditMessage   why the last save failed
 //
 // Events emitted:
-//   tagOverviewOpenRequest { tagId }   a tag was clicked
+//   tagOverviewOpenRequest { tagId }      a tag was clicked
+//   sidePanelTextEditStartRequest         the edit button of the label was clicked
+//   sidePanelTextSubmitRequest { text }   the edited label (Enter, focus left)
+//   sidePanelTextCancelRequest            the edit was dropped (Escape)
 //
 // The label is always inside the .doc-side-panel-item host, with or without
 // tags. On the sidebar surface the host wraps long names onto more lines
 // (SidePanelItem.css) instead of clipping them. A custom renderer that only
 // changes the label should pass it as data.text to this component, which
 // keeps tags, wrapping, and the lang attribute.
+//
+// Editing happens in the text span itself, made contenteditable, so the row
+// keeps its size; the edit button sits in a zero-width anchor after the
+// label, styled like a block toolbar button, and is shown on hover, so
+// entering and leaving edit mode moves nothing. Both stop their pointer
+// events from reaching the sidebar link or folder trigger around them.
 export function SidePanelItem({ data = {}, config = {}, onEvent }) {
   const tagList = sidePanelItemTagListShownGet(data, config);
   const isTextInvalid = Boolean(data.textMessage);
+  const textEditStatus = config.textEditStatus ?? '';
+  const isTextEditing = textEditStatus === 'editing' || textEditStatus === 'submitting';
+  const isTextEditFailed = textEditStatus === 'error';
+  const titleText = isTextInvalid ? data.textMessage : (isTextEditFailed ? config.textEditMessage : undefined);
   return (
     <span className="doc-side-panel-item" data-surface={config.surface ?? 'sidebar'}>
-      <span
-        className={`doc-side-panel-item-text${isTextInvalid ? ' is-invalid' : ''}`}
-        lang={data.textLanguage || undefined}
-        title={isTextInvalid ? data.textMessage : undefined}
-      >
-        {textRenderableGet(data.text)}
-      </span>
+      {isTextEditing ? (
+        <SidePanelItemTextEdit
+          key="edit"
+          text={textRenderableGet(data.text)}
+          language={data.textLanguage}
+          isLocked={textEditStatus === 'submitting'}
+          onEvent={onEvent}
+        />
+      ) : (
+        <span
+          key="view"
+          className={`doc-side-panel-item-text${isTextInvalid ? ' is-invalid' : ''}`}
+          data-edit-status={isTextEditFailed ? 'error' : undefined}
+          lang={data.textLanguage || undefined}
+          title={titleText}
+        >
+          {textRenderableGet(data.text)}
+        </span>
+      )}
       {tagList.length > 0 ? (
         <TagList
           data={{ tagList }}
@@ -49,7 +78,98 @@ export function SidePanelItem({ data = {}, config = {}, onEvent }) {
           }}
         />
       ) : null}
+      {config.isTextEditable && !isTextEditing ? (
+        <span className="doc-side-panel-item-edit">
+          <button
+            type="button"
+            className="doc-side-panel-item-edit-button"
+            title="Edit this label"
+            aria-label="Edit this label"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onEvent?.('sidePanelTextEditStartRequest');
+            }}
+          >
+            <Pencil aria-hidden="true" className="doc-side-panel-item-edit-icon" size={11} strokeWidth={2} />
+          </button>
+        </span>
+      ) : null}
     </span>
+  );
+}
+
+// the text span while its label is edited: the same span, contenteditable.
+// uncontrolled while typing; Enter and leaving focus submit, Escape drops.
+function SidePanelItemTextEdit({ text, language, isLocked, onEvent }) {
+  const elementRef = useRef(null);
+  const isCancelRef = useRef(false);
+  const textValue = typeof text === 'string' ? text : '';
+
+  // the label is written once, then the caret goes to its end
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element) return;
+    element.textContent = textValue;
+    element.focus();
+    const selection = window.getSelection();
+    if (!selection) return;
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const keyDownHandle = (event) => {
+    event.stopPropagation();
+    if (event.nativeEvent?.isComposing) return;
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.currentTarget.blur();
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      isCancelRef.current = true;
+      event.currentTarget.blur();
+    }
+  };
+
+  const blurHandle = (event) => {
+    if (isCancelRef.current) {
+      isCancelRef.current = false;
+      onEvent?.('sidePanelTextCancelRequest');
+      return;
+    }
+    onEvent?.('sidePanelTextSubmitRequest', { text: event.currentTarget.textContent.replace(/\n/g, ' ') });
+  };
+
+  return (
+    <span
+      ref={elementRef}
+      className="doc-side-panel-item-text"
+      data-edit-status={isLocked ? 'submitting' : 'editing'}
+      lang={language || undefined}
+      role="textbox"
+      contentEditable={isLocked ? 'false' : 'plaintext-only'}
+      suppressContentEditableWarning
+      spellCheck={false}
+      onBlur={blurHandle}
+      onKeyDown={keyDownHandle}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onDragStart={(event) => event.preventDefault()}
+      onPaste={(event) => {
+        event.preventDefault();
+        document.execCommand('insertText', false, (event.clipboardData?.getData('text/plain') ?? '').replace(/\n/g, ' '));
+      }}
+    />
   );
 }
 

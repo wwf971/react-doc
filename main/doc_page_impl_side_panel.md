@@ -7,7 +7,8 @@ The side panel is a free tree declared in YAML. It does not need to mirror the f
 ```text
 side-panel resource file (+ resources included through childrenFile)
    │  vite plugin: inline included trees, merge included "root" mappings,
-   │               append "source" sections to the source rules
+   │               append "source" sections to the source rules,
+   │               annotate every node with where its label is written (textSource)
    ▼
 configDoc.sidePanel.tree
    │  page-tree.js buildPageTreeModel()   (DocStore.treeModel, a mobx computed)
@@ -233,9 +234,15 @@ config.configGlobal    page-level config { key: value }, see doc_page_impl_confi
 config.configService   config queries, including document-level values
 config.isTagOverviewAvailable   true when a clicked tag can open the tag overview
 config.tagService      tag queries, see doc_page_impl_tag.md#tag-service
+config.isTextEditable  edit mode, sidebar surface: the label may be edited in place
+config.textEditStatus  '' | editing | submitting | error, for this item
+config.textEditMessage why the last save of the label failed
 config.instanceId, placement, compId, sourcePath
 
 onEvent('tagOverviewOpenRequest', { tagId })   ask to open the tag overview popup
+onEvent('sidePanelTextEditStartRequest')       start editing the label (see "Editing a label in place")
+onEvent('sidePanelTextSubmitRequest', { text })  the edited label
+onEvent('sidePanelTextCancelRequest')          drop the edit
 ```
 
 `data.tagList` is every resolved tag of the asset; `data.tagListDeclared` is only what this one node wrote. They differ when tags come from source rules or from other items bound to the same document. Which tags are actually shown is a decision of the renderer, guided by `config.configGlobal`.
@@ -294,7 +301,41 @@ otherwise                                       -> every tag of data.tagList
 
 It passes the result to `TagList`, which renders every tag through `RegisteredComp` with the component named by its tag definition (placement `tag`). The built-in `TagLabel` component is a compact label with a 2px radius and optional `colorBorder`, `colorBackground`, and `colorText`.
 
-When `config.isTagOverviewAvailable` is true, the tags are clickable. A click emits `tagOverviewOpenRequest`, which `SidePanelItemHost` accepts by opening the tag overview popup. The click does not activate the item itself. How tags are defined, attached, and listed in the overview is described in [Tag system](doc_page_impl_tag.md).
+When `config.isTagOverviewAvailable` is true, the tags are clickable. A click emits `tagOverviewOpenRequest`, which `SidePanelItemHost` accepts by opening the tag overview popup. The click does not activate the item itself. The host sets the flag only when the page asks for it: `TagsOverviewPopupIsOn` and `TagsOverviewPopupAtSidePanelItemIsOn` (page scope, default off) are both on; by default a click on a side-panel item navigates, whatever part of the label it lands on. How tags are defined, attached, and listed in the overview is described in [Tag system](doc_page_impl_tag.md).
+
+## Editing a label in place
+
+In edit mode ([In-place Editing](doc_page_impl_edit.md)) the label of an item can be changed from the side panel, and the change is written into the yaml file the label comes from. It is available on the development server only, like every edit, on the `sidebar` surface, and for items that exist as a node in a side-panel file: items generated from a source folder have no label to write. The default renderer implements it; a custom renderer that wraps `SidePanelItem` gets it, one that renders its own markup does not (it may implement it from the same `config` and events).
+
+```text
+plugin (load time)         every node: textSource = { file, path }
+                             file  the side-panel file, relative to the config directory
+                             path  yaml address of the node: ["tree", 2],
+                                   ["sidePanel", "tree", 0, "children", 1], ["root"]
+page-tree.js               itemOutlineById[itemId]: textSource, isTextAuthored
+SidePanelItemHost          config.isTextEditable, textEditStatus, textEditMessage;
+                           data.text = the label just saved while the new tree is pending
+SidePanelItem              hover: [✎] after the label  ->  sidePanelTextEditStartRequest
+                           the text span made contenteditable, Enter / blur
+                           -> sidePanelTextSubmitRequest { text }, Escape -> ...CancelRequest
+event layer                edit route -> DocEditStore.eventHandle (source.itemId)
+DocEditStore               sidePanelText { itemId, status, message }, sidePanelTextPending
+                           POST {editEndpoint}/side-panel/text
+                             { file, nodePath, language, text, textBase }
+plugin/doc-side-panel-text.ts   parsed yaml -> one line operation on the file
+plugin                     write; report the new configuration as "doc-source-change"
+                           (data, no reload); the watcher recognizes its own write
+```
+
+**Where a label is written.** The loader annotates every node of every loaded resource with `textSource`, the file and the yaml address of the node, while it inlines the trees; the annotation travels with the node into `configDoc.sidePanel.tree` and into `data.itemDeclared`. A node whose label comes from the `root` of a file it includes through `childrenFile` points at that root, because that is where the text is. The server resolves `file` against the config directory and accepts only files the current configuration loads (the page side-panel file and every included file); the yaml address is applied to the parsed document, never to the file system.
+
+**How the file is changed.** The file is never rebuilt from its parsed object: that would drop every comment and could reorder or requote what the author wrote. `doc-side-panel-text.ts` parses the file with `yaml` (which keeps the character range of every node), finds the label the way `page-tree.js` reads it (`text` when the node has one; the `separator` value of a separator node; for a language mapping the translation that was displayed, named by `language`), and builds one line operation of the [edit api](doc_page_impl_edit.md#edit-api-and-line-operations): `replaceLines` over the lines holding the value, rebuilt as the text before the value on its first line, the new scalar, and the text after it on its last line (a trailing comment stays); or, for a node without a `text` (a document labeled by its title), `insertLines` of one `text:` line after the node's first key at the node's indentation, so the title becomes an authored label. The new scalar is plain when yaml would write it plain and quoted otherwise (`yaml.stringify` decides, with folding off), and a value authored over several lines becomes one line. Every other line of the file is untouched, byte for byte. The request carries `textBase`, the authored label the edit started from; when the file no longer holds it, the edit is refused (code -2) rather than overwriting someone else's change. A node written as a flow mapping cannot receive a new key and is refused with an explanation.
+
+**No reload.** A side-panel file is configuration, and a change of configuration normally regenerates the manifest and reloads the page. A label written by the page is different: the plugin re-reads the configuration itself, invalidates the manifest module, and sends the new `configDoc` and `fileManifest` as the `doc-source-change` data event ([Saving without a reload](doc_page_impl_edit.md#saving-without-a-reload)); `DocStore.treeModel` recomputes from the new tree and the side panel re-renders in place. The watcher then reports the same file change; the plugin remembers the content hash it wrote and skips the reload while the file still has that content, so an edit made in an editor afterwards still reloads the page as before.
+
+**In the browser.** `DocEditStore.sidePanelText` is the one label being edited (`editing`, `submitting`, `error` with its message). Starting it is an edit action like any other: the open block session is left (saved) first. `SidePanelItemHost` hands the renderer `config.isTextEditable` (edit mode, sidebar surface, the item has a `textSource`) and the status; the default renderer shows a small edit button after the label while the row is hovered, and on click reports `sidePanelTextEditStartRequest`. The events are routed like component reports ([event layer](doc_page_impl_event.md)): the host application sees them first, then the edit route brings them to `DocEditStore.eventHandle`, which identifies the item by `event.source.itemId` and finds its `textSource`, its displayed translation and the authored text in `DocStore.treeModel.itemOutlineById`. An empty or unchanged text only ends the edit. After a successful write the item shows the saved text as `data.text` (`sidePanelTextPending`) until the new configuration has rebuilt the tree, so the label never flashes back to its old value. The rebuilt tree does not reach the sidebar itself: fumadocs keeps the page tree it received first as long as the root `$id` stays the same, and changing the id would remount the sidebar list and close the folders the reader opened. `SidePanelItemHost` therefore reads the label (`textLocalized`, `textMessage`) from the current `itemOutlineById` by its `itemId`, and the props of its element are only the fallback.
+
+**No jitter.** Nothing moves when edit mode is toggled or when a label is edited. The edit button hangs off a zero-width inline anchor placed after the label and the tags, absolutely positioned, transparent until the row or the button itself is hovered: it takes no room, and the label host fills the row of the sidebar link (`flex: 1 1 auto`) so that hovering anywhere on the row shows it. It is styled like a button of the block toolbar (no frame, muted icon, accent background on hover; the icon size is set by class, because the sidebar link sizes every svg inside it) and it always takes the pointer, even while transparent, so a click on it never falls through to the link and navigates. The label is edited in its own span, made `contenteditable` (plain text), with an outline drawn outside its box: same element, same typography, same size. Enter and leaving the focus submit, Escape drops the edit; the button and the editable span stop their pointer events, so the sidebar link does not navigate and the folder does not toggle while a label is edited. While the write is pending the span is locked and dimmed; a failure shows the message as the label's hover title with a red outline, and the edit button is back so the edit can be retried.
 
 ## Folder interaction and routes
 
@@ -306,12 +347,16 @@ The default folder gesture (an inactive label navigates, the active label toggle
 
 ```text
 frontend/plugin/doc-source.ts            load side-panel resource files, expand childrenFile,
-                                         append "source" sections, watch included files
+                                         append "source" sections, annotate textSource, watch
+                                         included files, report a label write as data
+frontend/plugin/doc-side-panel-text.ts   a label change as one line operation of its yaml file
+frontend/plugin/doc-edit-server.ts       POST {editEndpoint}/side-panel/text
 frontend/src/lib/page-tree.js            tree conversion, routes, parts, tag and config declarations
 frontend/src/lib/side-panel-item.js      renderer choice and item data
 frontend/src/lib/text-localized.js       localized label parsing and selection, shared with indexes
-comp-doc/side-panel/SidePanelItemHost.jsx  runtime context, surfaces
-comp-doc/side-panel/SidePanelItem.jsx      default renderer (common/SidePanelItem)
+frontend/src/store/DocEditStore.ts       sidePanelText: the label being edited, the write
+comp-doc/side-panel/SidePanelItemHost.jsx  runtime context, surfaces, edit state of the label
+comp-doc/side-panel/SidePanelItem.jsx      default renderer (common/SidePanelItem), label editing
 comp-doc/side-panel/DocSidebarFolder.jsx   default folder gesture
 comp-mdx/tag/TagLabel.jsx, TagList.jsx     tag display
 ```

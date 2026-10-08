@@ -32,9 +32,11 @@ tree:
       TagsDisplayAtLinkPosition: before
   # the edit layer playground; editable on the development server only
   - doc: /example/edit-in-place.md
+    text: In-place Editing
     tags: [guide]
   # component data kept in the asset store; writable on the development server only
   - doc: /example/asset-store.md
+    text: Asset Store
     tags: [guide]
   - separator: MDX Usage
   - id: mdx-usage
@@ -43,7 +45,11 @@ tree:
     childrenFile: ./mdx-usage/side-panel.yaml
   - separator: Tests
   - id: component-panel-demo
-    text: Component Panel
+    # a language mapping: the translation of the document language is shown.
+    # in edit mode, editing the label rewrites only the line of that translation
+    text:
+      en: Component Panel
+      jp: コンポーネントパネル
     # no definition in tag.yaml: displayed with the default tag look
     tags: [draft]
     panel:

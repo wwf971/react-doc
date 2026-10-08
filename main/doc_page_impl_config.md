@@ -65,6 +65,7 @@ globalConfig:
   TagsDisplayAtLinkIsOn: false
   TagsDisplayAtLinkPosition: after
   TagsOverviewPopupIsOn: true
+  TagsOverviewPopupAtSidePanelItemIsOn: false
 ```
 
 Built-in keys:
@@ -77,10 +78,10 @@ Built-in keys:
 | `TagsDisplayAtLinkIsOn` | doc | `false` | Show the target's tags beside document links in a document. |
 | `TagsDisplayAtLinkPosition` | doc | `after` | `before` or `after` the link text. |
 | `TagsOverviewPopupIsOn` | page | `true` | Clicking a tag opens the tag overview popup. |
-| `AssetFrameIsOn` | page | `true` | A component whose data comes from the asset store shows a title line with the asset, its version, and the button opening the asset panel. |
+| `TagsOverviewPopupAtSidePanelItemIsOn` | page | `false` | The popup also opens from a tag on a side-panel item. Off, a click there is a plain navigation gesture. |
 | `EditBlockEnterMode` | page | `button` | `button`: a block enters edit mode through the Edit button of its toolbar; `click`: also by clicking the block. Development server only. |
 
-How the tag features behave is described in [Tag system](doc_page_impl_tag.md#where-tags-are-displayed), the edit key in [In-place editing](doc_page_impl_edit.md#availability-and-mode), the asset frame in [Asset store](doc_page_impl_asset.md#the-frame-and-the-panel).
+How the tag features behave is described in [Tag system](doc_page_impl_tag.md#where-tags-are-displayed), the edit key in [In-place editing](doc_page_impl_edit.md#availability-and-mode).
 
 ## Document config
 

@@ -48,7 +48,7 @@ In MDX files, the same mention is `<Tag tagId="guide" />` or `<Tag tagId="guide"
 
 ## Tag overview
 
-Clicking a tag on a side-panel item or next to the path bar opens a popup with every asset carrying that tag (`TagsOverviewPopupIsOn`). The assets are arranged like the side panel; assets that no side-panel item shows come last. The same overview can be placed in a document. This is the overview of `guide`:
+Clicking a tag next to the path bar, beside a link, or mentioned in text opens a popup with every asset carrying that tag (`TagsOverviewPopupIsOn`). A tag on a side-panel item opens it only when `TagsOverviewPopupAtSidePanelItemIsOn` is on as well; it is off by default, so that a click anywhere on a side-panel item navigates, and this demo switches it on in `config.yaml`. The assets are arranged like the side panel; assets that no side-panel item shows come last. The same overview can be placed in a document. This is the overview of `guide`:
 
 <!--renderComp=TagOverview,tagId=guide-->
 ```text

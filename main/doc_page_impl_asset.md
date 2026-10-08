@@ -12,10 +12,11 @@ objectId: w4laejhlzjh                  ▼                                      
 versionId: head                      CompAssetHost ── refLoad ──► DocAssetStore ──► POST {endpoint}/object/update …
 (fence)                                │ { text, lang } of the version         │        │
                                        ▼                                       │        ▼
-                                     AssetFrame (title line, [asset] button)   │   plugin/doc-asset-store.ts
+                                     AssetFrame (loading / error stand-in)      │   plugin/doc-asset-store.ts
                                        └─ RegisteredComp (raw = text,          │   {folder}/{objectId}/object.yaml
                                            lang = object.lang)                 │                       {versionId}.yaml
                                                                                │
+                                     edit mode: block toolbar [asset] button   │
                                      AssetPanelPopup ◄── panel state ──────────┘
                                        versions, head, text, edit actions
 
@@ -120,28 +121,30 @@ The host is the only code that knows both sides; a new component works with the 
 
 ## The frame and the panel
 
-A component whose data comes from the store is shown inside `AssetFrame`: one title line above the component, in the document flow, with the component name, the object's name (its id when it has none), the version the document reads (`head w4la…`, or `version w4la…`, with `(head)` when a pinned version is the head), a `deleted` flag for a marked object, and at the right end the button `asset` that opens the panel. The component renders below, unchanged. The line is the one place where the document says that this block is an asset, and the one place where the panel is reached; the component has no asset button of its own, which is why a wrapper was chosen over an addition to every component. The page config key `AssetFrameIsOn` (page scope, default true) switches the line off for readers who do not need it; a reference that cannot be resolved shows its message and the reference text in the frame's place regardless, as a component error would.
+A component whose data comes from the store renders exactly as it would with the data written inline: nothing in the document flow says that the block is an asset, so reading mode looks the same whether a component's data is inline or in the store. `AssetFrame` stands in for the component only while it has no data: a short line with the component name, the object id, and a spinner while the version is read, or the error of a reference that cannot be resolved with the reference text, as a component error would be shown.
+
+The panel is reached from the edit layer: the toolbar that floats over a block in edit mode ([floating controls](doc_page_impl_edit.md#floating-controls)) carries an `asset` button for a block whose fence language is `asset`, next to the Edit button, and the button opens the panel of the referenced object (`panelOpen(objectId, versionId)`). The toolbar reads the reference from the block model, so the component has no asset button of its own and knows nothing of the store.
 
 The **asset panel** (`AssetPanel`, in the host's text panel component through `AssetPanelPopup`, the way the tag overview is framed) is the whole user interface of the store, provided once by the store and the same for every component:
 
 - the object: id, name (edited in its field, `EditValueInline`), language and file extension, head, times; `Delete object` / `Restore object`;
-- the versions, newest first, each with its id, time, note, its predecessors, a `head` badge, and a `read here` badge on the version the frame that opened the panel reads; the selected version shows its actions `Set as head` and `Delete version` (never the head);
+- the versions, newest first, each with its id, time, note, its predecessors, a `head` badge, and a `read here` badge on the version the block that opened the panel reads; the selected version shows its actions `Set as head` and `Delete version` (never the head);
 - the text of the selected version; `Edit head` makes the head text editable in its place (a `<pre>` made editable, uncontrolled while typing, the draft taken on every input), with `Save in place` and `Save as new version`.
 
-Deletions ask for confirmation in the panel itself, never through a browser dialog. With a read-only backend the panel shows and does not offer the actions; every pending state and every message is `panel` state in the store (`edit`, `confirm`, `status`, `message`), and the panel renders that state. The panel is opened from a frame (`panelOpen(objectId, versionIdRef)`) and knows nothing of the component.
+Deletions ask for confirmation in the panel itself, never through a browser dialog. With a read-only backend the panel shows and does not offer the actions; every pending state and every message is `panel` state in the store (`edit`, `confirm`, `status`, `message`), and the panel renders that state. The panel is opened from a block toolbar (`panelOpen(objectId, versionIdRef)`) and knows nothing of the component.
 
 ## Build
 
 A build has no development server, so the plugin does two things at build time with the store of `asset.folder`:
 
 - its own scans of document text see the data, not the reference: `assetBlockTextExpand` replaces every `asset` block with the data block of the referenced version (`{lang}` fence, the text) before the attachment finder collects image references ([build-only attachment collection](doc_page_impl.md#build-only-component-attachment-collection)) and before source pruning follows component dependencies ([source pruning](doc_page_impl.md#source-pruning-for-deployment)). The documents themselves are not rewritten; the page resolves at run time as in development.
-- the virtual module exports `assetSnapshot`, `snapshotBuild()` of the store: every object that is not deleted with the texts of all its versions. The host passes it as `data.assetSnapshot`; `DocAssetStore` reads it through the snapshot backend, so a built page shows every asset-backed component, its frame, and its panel, read-only. `docAssetEndpoint` is `''` in a build and `subscribeDocAsset` does nothing, as for the edit layer ([availability](doc_page_impl_edit.md#availability-and-mode)).
+- the virtual module exports `assetSnapshot`, `snapshotBuild()` of the store: every object that is not deleted with the texts of all its versions. The host passes it as `data.assetSnapshot`; `DocAssetStore` reads it through the snapshot backend, so a built page shows every asset-backed component, read-only; the panel needs edit mode and is not reached in a build. `docAssetEndpoint` is `''` in a build and `subscribeDocAsset` does nothing, as for the edit layer ([availability](doc_page_impl_edit.md#availability-and-mode)).
 
 In development the attachment map of the virtual module is computed when the module loads; a data change that introduces a new image reference through the panel is resolved after the manifest is next regenerated.
 
 ## Edit mode
 
-In edit mode an asset-backed component block is edited as source, whatever its component declares: the block is the reference, and `DocEditBlockEditor` gives it `BlockSource` with the label `Xxx (asset)`. Changing the `versionId` there pins or unpins the block; replacing the fence language and writing the data inline takes the block out of the store. The data itself belongs to the object and is changed through the panel, which saves in place or as a new version; the frame updates from the store, and no document is written for it. The component's own editor (`isEditSupported`) is not offered for such a block, because it would edit a draft the edit layer cannot write anywhere: its result is not lines of this document.
+In edit mode an asset-backed component block is edited as source, whatever its component declares: the block is the reference, and `DocEditBlockEditor` gives it `BlockSource` with the label `Xxx (asset)`. Changing the `versionId` there pins or unpins the block; replacing the fence language and writing the data inline takes the block out of the store. The data itself belongs to the object and is changed through the panel, opened with the toolbar's `asset` button, which saves in place or as a new version; the component re-renders from the store, and no document is written for it. The component's own editor (`isEditSupported`) is not offered for such a block, because it would edit a draft the edit layer cannot write anywhere: its result is not lines of this document.
 
 The compile-time readers of component data (`languageListGetByComponent`, `structuredDataGetByComponent` in `compileDoc`) do not run on a reference block; with the data in the store they would read the reference as data. The search index and the language selector therefore do not see asset-backed content.
 
@@ -159,8 +162,8 @@ frontend/src/store/DocAssetStore.ts        backend, objects and texts, refLoad /
 frontend/src/DocPageMdx.jsx                config.asset, data.assetSnapshot, AssetPanelPopup
 comp-doc/registry/RegisteredComp.jsx       the asset branch of the runtime boundary
 comp-doc/asset/                            CompAssetHost, AssetFrame, AssetPanel, AssetPanelPopup, DocAsset.css
+comp-doc/edit/DocEditBlockToolbar.jsx      the asset button of an asset-backed block
 comp-doc/edit/DocEditBlockEditor.jsx       asset-backed blocks are edited as source
-frontend/src/lib/doc-config-define.js      AssetFrameIsOn
 example_doc/asset/                         the demonstration store
 example_doc/asset-store.md                 demonstration document
 ```

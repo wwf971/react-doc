@@ -363,7 +363,7 @@ main/
 │   ├── toc/             # DocPageToc: page / part local index
 │   ├── page/            # toolbar, navigation buttons, search dialog, loading skeleton
 │   ├── edit/            # edit layer: toggle and toolbar controls, edit body, block borders and hover button groups, insert menu, editor chooser, floating bar and in-place editing primitives
-│   ├── asset/           # asset store: the host resolving a reference, the frame above the component, the asset panel popup
+│   ├── asset/           # asset store: the host resolving a reference, the loading/error stand-in, the asset panel popup
 │   ├── settings/        # settings button and panel (user overrides of config keys)
 │   └── mdx-render/      # MdxRenderer, DynamicCodeBlock
 ├── package.json         # delegates dev/build to frontend/

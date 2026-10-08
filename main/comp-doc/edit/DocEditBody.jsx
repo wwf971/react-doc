@@ -1,7 +1,8 @@
 import { useMemo, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
-import { DocEditDocContext } from './DocEditDocContext.js';
+import { MdxBody } from '../../frontend/src/lib/MdxBody.jsx';
+import { DocEditDocContext, useDocEditDoc } from './DocEditDocContext.js';
 import { Plus } from '../../frontend/UICommon.js';
 import { DocEditBlock } from './DocEditBlock.jsx';
 import { DocEditBlockEditor } from './DocEditBlockEditor.jsx';
@@ -56,7 +57,9 @@ export const DocEditBody = observer(function DocEditBody({ path, docEdit, mdxCom
             {docEdit.isContentEmpty ? (
               <DocEditEmptyNotice />
             ) : Body ? (
-              <Body components={mdxCompsEdit} />
+              // the stable adapter keeps the mounted blocks across a save:
+              // only the changed block renders anew (lib/MdxBody.jsx)
+              <MdxBody key={path} Body={Body} components={mdxCompsEdit} />
             ) : null}
           </>
         )}

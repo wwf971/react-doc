@@ -12,8 +12,9 @@ import { AssetFrame } from './AssetFrame.jsx';
 // host resolves the reference through DocAssetStore and renders the
 // component again with the text and language of that version in place of
 // the reference, so the component sees exactly the input it would see with
-// the data written inline. Around it, AssetFrame shows which asset and
-// version the data comes from and opens the asset panel.
+// the data written inline. AssetFrame stands in for it while the data is
+// loading or when the reference cannot be resolved; the asset panel is
+// opened from the block's toolbar in edit mode.
 //
 //   <!--renderComp=Image-->
 //   ```asset
@@ -40,7 +41,7 @@ export const CompAssetHost = observer(function CompAssetHost({ input, registered
   }, [assetStore, reference, resultStatus, resultVersionId]);
 
   const label = registeredProps.compName ?? registeredProps.compId ?? 'component';
-  const frameProps = { label, reference, result, raw: input.raw };
+  const frameProps = { label, reference, raw: input.raw };
 
   if (reference.message) {
     return <AssetFrame {...frameProps} message={reference.message} />;

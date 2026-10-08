@@ -19,6 +19,33 @@
   --default-mono-font-family: var(--font-mono);
 }
 
+/* In edit mode every root block of a document sits in a wrapper
+   (.doc-edit-block, comp-doc/edit/DocEditBlock.jsx). The prose typography
+   removes the outer margins of the first and the last child of the body and
+   the top margin of what follows an h2 / h3 / h4 or a rule; the wrappers
+   hide the blocks from those sibling relations, so they are restated here
+   from the data attributes of the wrappers. They extend the "prose" utility
+   itself, so they are emitted together with the typography rules and after
+   them: a rule in a component stylesheet, in the same layer and with the
+   same specificity, would be overridden by the later paragraph and heading
+   margins. See doc_page_impl_edit.md#prose-spacing-across-the-wrappers. */
+@utility prose {
+  & :where(.doc-edit-block[data-first] > .doc-edit-block-anchor + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+  }
+
+  & :where(.doc-edit-block[data-last] > :nth-last-child(1 of :not(.doc-edit-panel))):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-bottom: 0;
+  }
+
+  & :where(
+    .doc-edit-block[data-kind="heading"]:is([data-depth="2"], [data-depth="3"], [data-depth="4"]) + .doc-edit-block > .doc-edit-block-anchor + *,
+    .doc-edit-block[data-kind="thematicBreak"] + .doc-edit-block > .doc-edit-block-anchor + *
+  ):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+  }
+}
+
 /* Document switching must not shift the horizontal layout. The scrollbar
    gutter is reserved on .doc-page-mdx itself (DocPageMdx.css), because the
    document page, not the window, is the vertical scroll container. The

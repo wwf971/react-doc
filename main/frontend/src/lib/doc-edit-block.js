@@ -357,6 +357,23 @@ export function blockInsertOperationBuild(model, indexBefore, text) {
   return { action: 'insertLines', lineAt: blockPrevious.lineEnd + 1, text: lineList.join('\n') };
 }
 
+// swaps blockList[indexUpper] with the block after it: the lines from the
+// first line of the upper block to the last line of the lower one are
+// replaced by the lower block, the lines that separated the two (as they
+// are), then the upper block. the line count does not change.
+export function blockSwapOperationBuild(model, indexUpper) {
+  const blockUpper = model.blockList[indexUpper];
+  const blockLower = model.blockList[indexUpper + 1];
+  if (!blockUpper || !blockLower) throw new Error(`no two blocks at index ${indexUpper}`);
+  const lineListBetween = model.lineList.slice(blockUpper.lineEnd, blockLower.lineStart - 1);
+  return {
+    action: 'replaceLines',
+    lineStart: blockUpper.lineStart,
+    lineEnd: blockLower.lineEnd,
+    text: [blockLower.text, ...lineListBetween, blockUpper.text].join('\n'),
+  };
+}
+
 export function blockDeleteOperationBuild(model, index) {
   const { blockList, frontmatter } = model;
   const block = blockList[index];

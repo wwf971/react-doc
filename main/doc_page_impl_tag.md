@@ -123,7 +123,7 @@ Resolved tags appear in four places. Each place has its own config keys, which s
 side-panel item   TagsDisplayAtSidePanelItemIsOn, TagsDisplayAtSidePanelItemsList   page level
 main panel        TagsDisplayAtMainPanelIsOn                                        document level
 document link     TagsDisplayAtLinkIsOn, TagsDisplayAtLinkPosition, title marker    document level
-tag overview      TagsOverviewPopupIsOn                                             page level
+tag overview      TagsOverviewPopupIsOn, TagsOverviewPopupAtSidePanelItemIsOn       page level
 ```
 
 A document can also mention a tag inside its text; see [Tags mentioned in text](#tags-mentioned-in-text).
@@ -178,7 +178,7 @@ A tag id that is neither defined nor attached anywhere is displayed in the defau
 
 ### Tag overview
 
-The tag overview lists every asset that carries one tag. When `TagsOverviewPopupIsOn` is on, clicking a tag on a side-panel item or next to the path bar opens the overview in a popup. Clicking a tag never activates the item or link it sits in.
+The tag overview lists every asset that carries one tag. When `TagsOverviewPopupIsOn` is on, clicking a tag next to the path bar, beside a link, or mentioned in text opens the overview in a popup. A tag on a side-panel item opens it only when `TagsOverviewPopupAtSidePanelItemIsOn` is on as well (default off): a click in the side panel is a navigation gesture, and a tag there is a label first. Clicking a tag never activates the item or link it sits in.
 
 The overview is arranged like the side panel. Tagged items keep their folders above them, so the reader sees where each asset lives. Tagged assets that no side-panel item binds, such as documents collected by source rules but not listed in the side panel, are shown last.
 

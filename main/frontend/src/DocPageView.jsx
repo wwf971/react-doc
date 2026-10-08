@@ -14,6 +14,7 @@ import {
 } from '../UICommon.js';
 import { useDocStores } from './store/context.js';
 import { buildMdxComps } from './lib/mdx-comps.js';
+import { MdxBody } from './lib/MdxBody.jsx';
 import { useDocDestinationNavigation } from './lib/use-doc-destination-navigation.js';
 import { DocPageToolbar } from '../../comp-doc/page/DocPageToolbar.jsx';
 import { DocPageSkeleton } from '../../comp-doc/page/DocPageSkeleton.jsx';
@@ -175,7 +176,7 @@ export const DocPageView = observer(function DocPageView() {
           {compiled.isContentEmpty ? (
             <p className="doc-content-empty">This Markdown file is empty. Content can be added later.</p>
           ) : (
-            <Body components={mdxComps} />
+            <MdxBody key={pathContent} Body={Body} components={mdxComps} />
           )}
         </DocsBody>
       </DocsPage>

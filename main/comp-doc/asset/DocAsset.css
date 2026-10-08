@@ -1,12 +1,10 @@
-/* The asset frame above a component and the asset panel popup. The frame
-   is a title line in the document flow; the panel reuses the control scale
-   of the edit layer (DocEdit.css: doc-edit-action, doc-edit-confirm,
-   doc-edit-message, doc-edit-value, doc-edit-surface). */
+/* The stand-in of an asset-backed component while its data is loading or
+   its reference fails, and the asset panel popup. The panel reuses the
+   control scale of the edit layer (DocEdit.css: doc-edit-action,
+   doc-edit-confirm, doc-edit-message, doc-edit-value, doc-edit-surface). */
 
-/* ---------- frame ---------- */
+/* ---------- frame (loading / error only) ---------- */
 
-/* the component below keeps its own margins; the frame only adds the gap
-   above its title line */
 .doc-asset-frame {
   margin-top: 1rem;
 }
@@ -29,50 +27,11 @@
   font-weight: 550;
 }
 
-.doc-asset-frame-object,
-.doc-asset-frame-version {
+.doc-asset-frame-object {
   font-family: var(--font-mono, ui-monospace, monospace);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.doc-asset-frame-flag {
-  padding: 0 0.3rem;
-  border: 1px solid var(--color-fd-destructive, #dc2626);
-  border-radius: 2px;
-  color: var(--color-fd-destructive, #dc2626);
-  line-height: 1.1rem;
-}
-
-/* the buttons of the frame sit at the right end of the title line */
-.doc-asset-frame-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  margin-left: auto;
-}
-
-.doc-asset-frame-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  height: 1.2rem;
-  padding: 0 0.35rem;
-  border: 1px solid var(--color-fd-border);
-  border-radius: 2px;
-  background: var(--color-fd-background);
-  color: var(--color-fd-muted-foreground);
-  cursor: pointer;
-  font-size: 0.72rem;
-  line-height: 1;
-}
-
-.doc-asset-frame-button:hover,
-.doc-asset-frame-button:focus-visible {
-  background: var(--color-fd-accent);
-  color: var(--color-fd-foreground);
-  outline: none;
 }
 
 .doc-asset-frame[data-error] .doc-asset-frame-title {

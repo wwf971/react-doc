@@ -1,3 +1,8 @@
+/* the same top gap as the main document controls */
+.doc-page-toc {
+  padding-top: 1rem;
+}
+
 .doc-part-index-source-control {
   display: flex;
   flex: 0 0 auto;

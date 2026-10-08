@@ -2,6 +2,9 @@
    presentation. anywhere-wrapping is the fallback for paths and identifiers
    without natural break points. */
 .doc-side-panel-item[data-surface='sidebar'] {
+  /* fills the row of the sidebar link, so that hovering anywhere on the row
+     hovers the label (the edit button below depends on it) */
+  flex: 1 1 auto;
   min-width: 0;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -16,4 +19,82 @@
 .doc-side-panel-item .doc-tag-list {
   margin-inline-start: 4px;
   vertical-align: 1px;
+}
+
+/* ---------- label editing (edit mode, sidebar surface) ----------
+   the text span itself becomes editable, so the row keeps its size; the
+   outline is drawn outside the box and moves nothing */
+.doc-side-panel-item-text[data-edit-status] {
+  border-radius: 2px;
+  outline: 1px solid var(--color-fd-primary);
+  outline-offset: 1px;
+}
+
+.doc-side-panel-item-text[data-edit-status='editing'],
+.doc-side-panel-item-text[data-edit-status='submitting'] {
+  cursor: text;
+  text-decoration: none;
+}
+
+.doc-side-panel-item-text[data-edit-status='submitting'] {
+  opacity: 0.6;
+}
+
+.doc-side-panel-item-text[data-edit-status='error'] {
+  outline-color: #dc2626;
+  text-decoration: underline wavy #dc2626;
+  text-underline-offset: 3px;
+}
+
+/* the edit button hangs off a zero-width anchor right after the label, so it
+   takes no room in the row. it looks like a button of the block toolbar
+   (DocEdit.css .doc-edit-toolbar-actions): no frame of its own, the muted
+   icon, the accent background on hover. it is invisible until the row or
+   the button itself is hovered, but always takes the pointer, so the click
+   never falls through to the sidebar link below it. */
+.doc-side-panel-item-edit {
+  position: relative;
+  display: inline-block;
+  width: 0;
+  height: 0;
+  vertical-align: middle;
+}
+
+.doc-side-panel-item-edit-button {
+  position: absolute;
+  top: -9px;
+  left: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 80ms ease;
+}
+
+/* the sidebar link sizes every svg inside it ([&_svg]:size-4); the icon of
+   this button keeps the toolbar scale */
+.doc-side-panel-item-edit-button .doc-side-panel-item-edit-icon {
+  width: 11px;
+  height: 11px;
+}
+
+.doc-side-panel-item:hover .doc-side-panel-item-edit-button,
+.doc-side-panel-item-edit-button:hover,
+.doc-side-panel-item-edit-button:focus-visible {
+  opacity: 1;
+}
+
+.doc-side-panel-item-edit-button:hover,
+.doc-side-panel-item-edit-button:focus-visible {
+  background: var(--color-fd-accent);
+  color: var(--color-fd-foreground);
+  outline: none;
 }

@@ -64,13 +64,14 @@ export const configDefineListBuiltin = [
     description: 'Clicking a tag opens the tag overview popup.',
   },
   {
-    // the title line above a component whose data comes from the asset store
-    // (object, version, the button opening the asset panel)
-    key: 'AssetFrameIsOn',
+    // the popup also opens from the tags on side-panel items. off by
+    // default: a click in the side panel is a navigation gesture, and a tag
+    // there is a label first
+    key: 'TagsOverviewPopupAtSidePanelItemIsOn',
     type: 'boolean',
-    valueDefault: true,
+    valueDefault: false,
     scope: 'page',
-    description: 'A component whose data comes from the asset store shows a title line with the asset and its version.',
+    description: 'Clicking a tag on a side-panel item opens the tag overview popup too.',
   },
   {
     // how the edit mode of a block is entered while the page is in edit mode:

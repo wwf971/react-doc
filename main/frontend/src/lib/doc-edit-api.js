@@ -41,5 +41,18 @@ export function docEditApiCreate(endpoint) {
         body: JSON.stringify({ internalPath, hashBase, operation }),
       });
     },
+
+    // rewrites the label of one side-panel item in its yaml file
+    // (plugin/doc-side-panel-text.ts); answers { file, fieldName, text }
+    //   file, nodePath   the item's textSource, annotated by the plugin
+    //   language         '' for a plain string label, else the shown translation
+    //   textBase         the authored label the edit started from
+    sidePanelTextApply({ file, nodePath, language, text, textBase }) {
+      return requestSend('/side-panel/text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file, nodePath, language, text, textBase }),
+      });
+    },
   };
 }
