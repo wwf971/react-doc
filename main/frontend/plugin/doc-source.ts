@@ -31,7 +31,9 @@ import {
 } from './doc-source-dependency.ts';
 import { DOC_EDIT_ENDPOINT_NAME, docEditMiddlewareCreate } from './doc-edit-server.ts';
 import { DOC_ASSET_ENDPOINT_NAME, docAssetMiddlewareCreate } from './doc-asset-server.ts';
-import { assetStoreCreate, type AssetSnapshot, type AssetStore } from './doc-asset-store.ts';
+import {
+  assetConfigRead, assetStoreCreate, objectIdFromDirName, type AssetSnapshot, type AssetStore, type AssetStoreConfig,
+} from './doc-asset-store.ts';
 import { assetBlockTextExpand } from '../src/lib/doc-asset-ref.js';
 import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
 import { textLocalizedGet } from '../src/lib/text-localized.js';
@@ -44,10 +46,10 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 //   export let fileManifest = [{ rootId, relPath, name, ext, title, internalPath,
 //                                contentHash, tagList, configSource, configFrontmatter, load }]
 //   export const docEditEndpoint = '/__doc-edit'    // '' in a build: no edit api
-//   export const docAssetEndpoint = '/__doc-asset'  // '' in a build or without asset.folder
+//   export const docAssetEndpoint = '/__doc-asset'  // '' in a build or without asset.file
 //   export const assetSnapshot = {...} | null       // the asset store, bundled in a build
 //   export function subscribeDocSource(listener)    // dev: the source data changed
-//   export function subscribeDocAsset(listener)     // dev: an object changed on disk
+//   export function subscribeDocAsset(listener)     // dev: an object or the store's folders changed on disk
 //
 // document text is data, not code. in a build every document becomes a lazy
 // `?raw` import, one chunk per document. during development the text is read
@@ -60,9 +62,10 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 //
 // the development server also answers the edit api (doc-edit-server.ts), so
 // the page can rewrite root-level blocks of a document in place, and the
-// asset api (doc-asset-server.ts) over the folder named by config
-// asset.folder (doc_page_impl_asset.md). the asset folder is never part of
-// the collected source, wherever it is placed.
+// asset api (doc-asset-server.ts) over the local asset store, whose config
+// file is named by config asset.file and whose folders are listed in that
+// file (doc_page_impl_asset.md). the store's files are never part of the
+// collected source, wherever they are placed.
 
 const MODULE_ID_DEFAULT = 'virtual:doc-source';
 export const DOC_SOURCE_ENDPOINT_NAME = '__doc-source';
@@ -106,10 +109,11 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
   const moduleId = options.moduleId ?? MODULE_ID_DEFAULT;
   const moduleIdResolved = `\0${moduleId}`;
 
-  // the asset store of config asset.folder, or undefined without one
+  // the local asset store of config asset.file, or undefined without one;
+  // created from the config file as it is now
   const assetStoreGet = (configDoc: any): AssetStore | undefined => {
-    const folder = assetFolderGet(configDoc, configDir);
-    return folder ? assetStoreCreate(folder) : undefined;
+    const assetConfig = assetConfigGet(configDoc, configDir);
+    return assetConfig ? assetStoreCreate(assetConfig) : undefined;
   };
   // expands asset reference blocks of a document text for build-time scans
   const assetTextExpandGet = (store: AssetStore | undefined) => (text: string) => (
@@ -153,7 +157,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       docEditEndpoint = isBuild ? '' : endpointBuild(viteConfig.base, DOC_EDIT_ENDPOINT_NAME);
       const configDocEarly = loadConfigDoc(configFile, options);
       pathsConfiguration = collectPathsConfiguration(configDocEarly, configDir, configFile);
-      docAssetEndpoint = isBuild || !assetFolderGet(configDocEarly, configDir)
+      docAssetEndpoint = isBuild || !assetConfigGet(configDocEarly, configDir)
         ? ''
         : endpointBuild(viteConfig.base, DOC_ASSET_ENDPOINT_NAME);
     },
@@ -299,20 +303,37 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         },
       }));
 
-      // the asset api works on the folder of the current config; a change
-      // of the asset folder on disk (an external editor, a git checkout) is
-      // reported to the page as a custom hmr event, see generateModuleCode
-      const assetFolder = assetFolderGet(configDoc, configDir);
-      if (docAssetEndpoint && assetFolder) {
+      // the asset api works on the store as its config file says now; a
+      // change on disk (an external editor, a git checkout, the panel's own
+      // write) is reported to the page as a custom hmr event, see
+      // generateModuleCode: { objectId } for an object, { isStoreChanged }
+      // when the folder list changed
+      let assetConfig = assetConfigGet(configDoc, configDir);
+      if (docAssetEndpoint && assetConfig) {
+        const assetConfigFile = assetConfig.file;
         server.middlewares.use(docAssetMiddlewareCreate({
           endpoint: docAssetEndpoint,
-          storeGet: () => assetStoreCreate(assetFolderGet(loadConfigDoc(configFile, options), configDir) || assetFolder),
+          storeGet: () => assetStoreCreate(assetConfigGet(loadConfigDoc(configFile, options), configDir) ?? assetConfig!),
         }));
-        server.watcher.add(assetFolder);
+        const assetFoldersWatch = () => {
+          for (const folder of assetConfig!.folderList) server.watcher.add(folder.pathAbs);
+        };
+        server.watcher.add(assetConfigFile);
+        assetFoldersWatch();
         const assetChangeSend = (filePath: string) => {
-          if (!pathIsInside(filePath, assetFolder)) return;
-          const objectId = path.relative(assetFolder, filePath).split(path.sep)[0] ?? '';
-          server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { objectId } });
+          if (filePath === assetConfigFile) {
+            assetConfig = assetConfigRead(assetConfigFile);
+            assetFoldersWatch();
+            server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { objectId: '', isStoreChanged: true } });
+            return;
+          }
+          const folder = assetConfig!.folderList.find((item) => pathIsInside(filePath, item.pathAbs));
+          if (!folder) return;
+          // the object's folder is {objectId}--{name}; a file right in the
+          // store folder is not an object's
+          const objectId = objectIdFromDirName(path.relative(folder.pathAbs, filePath).split(path.sep)[0] ?? '');
+          if (!objectId) return;
+          server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { objectId, isStoreChanged: false } });
         };
         server.watcher.on('add', assetChangeSend);
         server.watcher.on('change', assetChangeSend);
@@ -321,7 +342,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
 
       const invalidateManifest = (filePath: string) => {
         // files of the asset store are not documents, even inside a source folder
-        if (assetFolder && pathIsInside(filePath, assetFolder)) return;
+        if (assetConfig && assetPathIs(assetConfig, filePath)) return;
         const isRelated = pathsWatched.some(
           (p) => filePath === p || filePath.startsWith(p + path.sep),
         );
@@ -764,16 +785,24 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
   }
 
   // the asset store keeps its own files (doc_page_impl_asset.md); they are
-  // never documents, even when the folder lies inside a source folder
-  const assetFolder = assetFolderGet(configDoc, configDir);
-  return [...entryByPath.values()].filter((entry) => !assetFolder || !pathIsInside(entry.absPath, assetFolder));
+  // never documents, even when they lie inside a source folder
+  const assetConfig = assetConfigGet(configDoc, configDir);
+  return [...entryByPath.values()].filter((entry) => !assetConfig || !assetPathIs(assetConfig, entry.absPath));
 }
 
-// absolute path of config asset.folder, '' when the config has none
-function assetFolderGet(configDoc: any, configDir: string): string {
-  const folder = configDoc?.asset?.folder;
-  if (typeof folder !== 'string' || !folder.trim()) return '';
-  return path.resolve(configDir, folder.trim());
+// the local asset store as config asset.file describes it now; undefined
+// when the config names no store
+function assetConfigGet(configDoc: any, configDir: string): AssetStoreConfig | undefined {
+  const file = configDoc?.asset?.file;
+  if (typeof file !== 'string' || !file.trim()) return undefined;
+  return assetConfigRead(path.resolve(configDir, file.trim()));
+}
+
+// a file of the asset store: its config file (and the backup / temporary
+// file the store writes beside it), or anything inside one of its folders
+function assetPathIs(assetConfig: AssetStoreConfig, filePath: string): boolean {
+  if (filePath === assetConfig.file || filePath === `${assetConfig.file}.bak` || filePath === `${assetConfig.file}.tmp`) return true;
+  return assetConfig.folderList.some((folder) => pathIsInside(filePath, folder.pathAbs));
 }
 
 function pathIsInside(filePath: string, folder: string): boolean {
@@ -1074,7 +1103,7 @@ export function generateModuleCode(
     lines.push('    sourceState.current = dataNext;');
     lines.push('    for (const listener of listenersDocSource) listener(dataNext);');
     lines.push('  });');
-    // an object of the asset store changed on disk: listeners get { objectId }
+    // the asset store changed on disk: listeners get { objectId, isStoreChanged }
     lines.push("  import.meta.hot.on('doc-asset-change', (dataChange) => {");
     lines.push('    for (const listener of listenersDocAsset) listener(dataChange);');
     lines.push('  });');

@@ -79,7 +79,7 @@ Built-in keys:
 | `TagsDisplayAtLinkPosition` | doc | `after` | `before` or `after` the link text. |
 | `TagsOverviewPopupIsOn` | page | `true` | Clicking a tag opens the tag overview popup. |
 | `TagsOverviewPopupAtSidePanelItemIsOn` | page | `false` | The popup also opens from a tag on a side-panel item. Off, a click there is a plain navigation gesture. |
-| `EditBlockEnterMode` | page | `button` | `button`: a block enters edit mode through the Edit button of its toolbar; `click`: also by clicking the block. Development server only. |
+| `EditBlockEnterMode` | page | `click` | `click`: a block enters edit mode by clicking it (the caret at the clicked text) as well as through the Edit button of its toolbar; `button`: through the Edit button only. Development server only. |
 
 How the tag features behave is described in [Tag system](doc_page_impl_tag.md#where-tags-are-displayed), the edit key in [In-place editing](doc_page_impl_edit.md#availability-and-mode).
 
@@ -198,7 +198,7 @@ Some features also accept a value on one single use, which wins over every level
 
 ## User level
 
-The reader can change the value of a key for the page session. The settings button (a gear, left of the sidebar collapse trigger in the sidebar header) opens the settings panel, a floating panel anchored under the button that lists every key definition with `isUserSettable` not `false`: its key, its description, and a control for its type (switch for `boolean`, dropdown for `enum`, number or text field otherwise; `any` keys are listed hidden). A value the reader changes becomes the user level, level 6 of the resolution: it replaces the declared value of the key at the page level, in every document, and in part index overrides that declared the key. Reset returns every key to its declared value. Nothing is persisted; a reload starts from the declared values again.
+The reader can change the value of a key for the page session. The settings button (a gear, left of the sidebar collapse trigger in the sidebar header) opens the settings panel, a floating panel anchored under the button with two tabs. The **Config** tab lists every key definition with `isUserSettable` not `false`: its key, its description, and a control for its type (switch for `boolean`, dropdown for `enum`, number or text field otherwise; `any` keys are listed hidden). A value the reader changes becomes the user level, level 6 of the resolution: it replaces the declared value of the key at the page level, in every document, and in part index overrides that declared the key. Reset returns every key to its declared value. Nothing is persisted; a reload starts from the declared values again. The **Asset store** tab is not config of the page at all but the folders of the local asset store, and the opposite in persistence: a change there is written to the store's own file by the development server ([the local store](doc_page_impl_asset.md#the-local-store-folders-fully-reflected)). It lives in the settings panel because it is where a reader looks for how the page is set up. The tab shown is `DocConfigStore.settingsTabId`, kept while the panel is closed.
 
 ```text
 settings panel ──► DocConfigStore.valueUserSet(key, value) ──► configUserByKey (observable)
@@ -218,6 +218,7 @@ configDefineListUserSettable          the definitions the panel lists
 valueDeclaredGet(key)                 page value without the reader's override
 valueUserSet(key, value) / valueUserClear(key) / configUserClear()
 isSettingsOpen, settingsOpenSet(isOpen, anchorElement)
+settingsTabId, settingsTabIdSet(tabId)  'config' | 'assetStore'
 ```
 
 ## Config service
@@ -258,5 +259,6 @@ frontend/plugin/doc-config-source.ts       source and frontmatter levels, called
 frontend/src/lib/doc-config-side-panel.js  side-panel level, called from page-tree.js
 frontend/src/lib/doc-config-model.js       resolution into the config model
 frontend/src/store/DocConfigStore.ts       config model owner, user level, settings panel state, config service
-comp-doc/settings/                         DocSettingsButton (sidebar header), DocSettingsPanel (floating, anchored to the button)
+comp-doc/settings/                         DocSettingsButton (sidebar header), DocSettingsPanel (floating, anchored to the
+                                           button; tabs Config / Asset store), AssetStoreSettings (the asset store tab)
 ```

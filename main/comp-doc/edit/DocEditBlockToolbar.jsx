@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import {
-  ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, History, LoaderCircle, Pencil, Plus, Trash2, X,
+  ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, History, LoaderCircle, Pencil, Plus, Trash2, Upload, X,
 } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { assetRefLangIs, assetRefParse } from '../../frontend/src/lib/doc-asset-ref.js';
@@ -19,24 +19,38 @@ import './DocEdit.css';
 // move failure is open (DocEdit.css), so the document looks exactly as in
 // reading mode until the pointer reaches a block.
 //
-//   [Label]  [edit] [asset] [insert above] [insert below] [move up] [move down] [delete]
+//   [Label]  [edit] [asset | to asset] [insert above] [insert below] [move up] [move down] [delete]
 //
 // every action first leaves the open session (saving it). the insert
 // buttons open a floating menu of starting texts (DocEditInsertMenu) under
 // the toolbar; a deletion is confirmed in the toolbar itself. a pointer
-// going down outside the toolbar closes the menu, the confirmation or the
-// move failure. the asset button exists for a component block whose data is
-// a reference into the asset store (doc_page_impl_asset.md): it opens the
-// asset panel of that object, the one place the panel is reached from.
+// going down outside the toolbar closes the menu, the confirmation or a
+// failure message. the asset button exists for a component block whose data
+// is a reference into the asset store (doc_page_impl_asset.md): it opens
+// the asset panel of that object, the one place the panel is reached from.
+// a component block whose data is written inline in a fenced block has the
+// "to asset" button instead: the data becomes an object of the local store
+// (in its default folder) and the block is rewritten as the reference.
 //
-// moving a block is an operation of the document, so it is reported as an
-// event (editBlockMoveRequest { direction }, source: this document and this
-// block) and travels through the event layer to DocEditStore like a report
-// of a component (doc_page_impl_event.md); the up / down button is greyed
-// out for the first / last block.
+// entering the block, moving it and moving its data are operations of the
+// document, so they are reported as events (editBlockEnterRequest,
+// editBlockMoveRequest { direction }, editBlockAssetMoveRequest; source:
+// this document and this block) and travel through the event layer to
+// DocEditStore like a report of a component (doc_page_impl_event.md). the
+// Edit button reports no point: the caret opens at the end of the text. the
+// up / down button is greyed out for the first / last block.
+//
+// the asset button carries the block (component name, marker props, this
+// document) to the panel, so its preview pane can render the data the way
+// the block does. a reference by name resolves through the asset store
+// index; until then the button is disabled.
 //
 //   blockIndex   the block the toolbar belongs to
 //   label        what the block is, e.g. "Paragraph"
+
+// the icons of the toolbar buttons (DocEdit.css sets the button height to match)
+const ICON_SIZE = 14;
+
 export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ blockIndex, label }) {
   const { assetStore, editStore, eventRouter, onEvent: onEventPage } = useDocStores();
   const { path, model } = useDocEditDoc();
@@ -44,6 +58,8 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
   const isAssetPanelAvailable = useAssetPanelIsAvailable();
   const component = model?.blockList?.[blockIndex]?.component;
   const assetReference = component && assetRefLangIs(component.lang) ? assetRefParse(component.raw) : undefined;
+  // a reference by name opens the panel once the name is resolved to an object
+  const assetObjectId = assetReference && !assetReference.message ? assetStore.refObjectIdGet(assetReference) : '';
   const isSubmitting = editStore.isSubmitting;
   const menu = editStore.insertMenu;
   const isMenuHere = editStore.insertMenuIs(path, blockIndex);
@@ -51,16 +67,21 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
   const isConfirmHere = editStore.deleteConfirmIs(path, blockIndex);
   const move = editStore.blockMove;
   const isMoveHere = editStore.blockMoveIs(path, blockIndex);
-  useEditOutsidePointer(toolbarRef, isMenuHere || isConfirmHere || isMoveHere, () => {
+  const assetMove = editStore.blockAssetMove;
+  const isAssetMoveHere = editStore.blockAssetMoveIs(path, blockIndex);
+  const isAssetMoveAvailable = editStore.blockAssetMoveIsAvailable(path, blockIndex);
+  useEditOutsidePointer(toolbarRef, isMenuHere || isConfirmHere || isMoveHere || isAssetMoveHere, () => {
     if (isMenuHere) editStore.insertMenuClose();
     if (isConfirmHere) editStore.deleteConfirmClear();
     if (isMoveHere) editStore.blockMoveClear();
+    if (isAssetMoveHere) editStore.blockAssetMoveClear();
   });
 
-  const moveRequest = (direction) => {
+  // a block operation reported as an event of this document and this block
+  const blockEventDispatch = (type, data = {}) => {
     const event = eventRouter.eventBuild({
-      type: 'editBlockMoveRequest',
-      data: { direction },
+      type,
+      data,
       source: { placement: 'editToolbar', sourcePath: path, blockIndex },
     });
     void eventRouter.dispatch(event, { onEventHost: onEventPage });
@@ -82,46 +103,60 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
       <span className="doc-edit-toolbar-label">{label}</span>
       <div className="doc-edit-toolbar-actions" role="group" aria-label="Block actions">
         <button type="button" disabled={isSubmitting} title="Edit this block" aria-label="Edit this block"
-          onClick={() => void editStore.sessionBlockStart(path, blockIndex)}>
-          <Pencil aria-hidden="true" size={11} strokeWidth={2} />
+          onClick={() => blockEventDispatch('editBlockEnterRequest')}>
+          <Pencil aria-hidden="true" size={ICON_SIZE} strokeWidth={2} />
         </button>
         {assetReference && isAssetPanelAvailable ? (
-          <button type="button" disabled={isSubmitting || Boolean(assetReference.message)}
-            title="Asset: versions and history" aria-label="Asset: versions and history"
-            onClick={() => assetStore.panelOpen(assetReference.objectId, assetReference.versionId)}>
-            <History aria-hidden="true" size={11} strokeWidth={2} />
+          <button type="button" disabled={isSubmitting || !assetObjectId}
+            title={assetReference.message || (assetObjectId ? 'Asset: versions and history' : 'Asset: the object is not resolved yet')}
+            aria-label="Asset: versions and history"
+            onClick={() => assetStore.panelOpen(assetReference.store, assetObjectId, assetReference.versionId, {
+              compName: component.compName,
+              propsAuthored: component.props ?? {},
+              sourcePath: path,
+            })}>
+            <History aria-hidden="true" size={ICON_SIZE} strokeWidth={2} />
+          </button>
+        ) : null}
+        {isAssetMoveAvailable ? (
+          <button type="button" disabled={isSubmitting}
+            title="Move the inline data into the asset store" aria-label="Move the inline data into the asset store"
+            onClick={() => blockEventDispatch('editBlockAssetMoveRequest')}>
+            {isAssetMoveHere && assetMove.status === 'submitting'
+              ? <LoaderCircle aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} className="doc-edit-spin" />
+              : <Upload aria-hidden="true" size={ICON_SIZE} strokeWidth={2} />}
           </button>
         ) : null}
         <button type="button" disabled={isSubmitting} aria-pressed={isMenuBefore}
           title="Insert a block above" aria-label="Insert a block above"
           onClick={() => insertMenuToggle(blockIndex)}>
-          <Plus aria-hidden="true" size={11} strokeWidth={2.2} />
-          <ArrowUp aria-hidden="true" size={11} strokeWidth={2.2} />
+          <Plus aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} />
+          <ArrowUp aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} />
         </button>
         <button type="button" disabled={isSubmitting} aria-pressed={isMenuAfter}
           title="Insert a block below" aria-label="Insert a block below"
           onClick={() => insertMenuToggle(blockIndex + 1)}>
-          <Plus aria-hidden="true" size={11} strokeWidth={2.2} />
-          <ArrowDown aria-hidden="true" size={11} strokeWidth={2.2} />
+          <Plus aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} />
+          <ArrowDown aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} />
         </button>
         <button type="button" disabled={isSubmitting || !editStore.blockMoveIsAvailable(path, blockIndex, 'up')}
           title="Move this block up" aria-label="Move this block up"
-          onClick={() => moveRequest('up')}>
+          onClick={() => blockEventDispatch('editBlockMoveRequest', { direction: 'up' })}>
           {isMoveHere && move.status === 'submitting' && move.direction === 'up'
-            ? <LoaderCircle aria-hidden="true" size={11} strokeWidth={2.2} className="doc-edit-spin" />
-            : <ChevronUp aria-hidden="true" size={11} strokeWidth={2.2} />}
+            ? <LoaderCircle aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} className="doc-edit-spin" />
+            : <ChevronUp aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} />}
         </button>
         <button type="button" disabled={isSubmitting || !editStore.blockMoveIsAvailable(path, blockIndex, 'down')}
           title="Move this block down" aria-label="Move this block down"
-          onClick={() => moveRequest('down')}>
+          onClick={() => blockEventDispatch('editBlockMoveRequest', { direction: 'down' })}>
           {isMoveHere && move.status === 'submitting' && move.direction === 'down'
-            ? <LoaderCircle aria-hidden="true" size={11} strokeWidth={2.2} className="doc-edit-spin" />
-            : <ChevronDown aria-hidden="true" size={11} strokeWidth={2.2} />}
+            ? <LoaderCircle aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} className="doc-edit-spin" />
+            : <ChevronDown aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} />}
         </button>
         <button type="button" disabled={isSubmitting} aria-pressed={isConfirmHere}
           title="Delete this block" aria-label="Delete this block"
           onClick={() => void editStore.deleteConfirmSet(path, blockIndex)}>
-          <Trash2 aria-hidden="true" size={11} strokeWidth={2} />
+          <Trash2 aria-hidden="true" size={ICON_SIZE} strokeWidth={2} />
         </button>
       </div>
       {isConfirmHere ? (
@@ -133,6 +168,9 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
       ) : null}
       {isMoveHere && move.status === 'error' ? (
         <span className="doc-edit-message doc-edit-toolbar-message" role="alert">{move.message}</span>
+      ) : null}
+      {isAssetMoveHere && assetMove.status === 'error' ? (
+        <span className="doc-edit-message doc-edit-toolbar-message" role="alert">{assetMove.message}</span>
       ) : null}
       {isMenuHere ? <DocEditInsertMenu /> : null}
     </div>

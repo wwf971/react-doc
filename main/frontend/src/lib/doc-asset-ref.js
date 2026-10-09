@@ -2,20 +2,22 @@ import { yamlParse } from './yaml.js';
 
 // An asset reference: a component's fenced block written in the language
 // "asset" instead of holding the data itself. The content is yaml that
-// names an object of the asset store and the version to read
-// (design: doc_page_impl_asset.md):
+// names the store, the object in it (by id, or by its name), and the
+// version to read (design: doc_page_impl_asset.md):
 //
 //   <!--renderComp=Image-->
 //   ```asset
-//   objectId: m2x1k9q4z0a1b
-//   versionId: head        # optional; a version id pins that version
+//   store: local
+//   objectId: m2x1k9q4z0a1b   # or:  name: hero image
+//   versionId: head           # optional; a version id pins that version
 //   ```
 //
-// a bare object id is the shortest form:
-//
-//   ```asset
-//   m2x1k9q4z0a1b
-//   ```
+// store is required, and one of objectId and name: a reference says where
+// the object is and which one it is, so that the page never has to guess
+// (or create) an object that is not where it looks. a name is unique in its
+// store, so it names one object as an id does; it is what a person writes,
+// the id what the page writes. "local" is the one local store; further
+// store ids are reserved for remote stores.
 //
 // the component never sees this block: the runtime boundary replaces raw
 // and lang with the text and language of the referenced version before the
@@ -24,27 +26,43 @@ import { yamlParse } from './yaml.js';
 
 export const ASSET_REF_LANG = 'asset';
 
+// the id of the local store
+export const ASSET_STORE_ID_LOCAL = 'local';
+
 export function assetRefLangIs(lang) {
   return String(lang ?? '').trim().toLowerCase() === ASSET_REF_LANG;
 }
 
-// { objectId, versionId ('head' or an id), message } ; message is '' when valid
+// { store, objectId, name, versionId ('head' or an id), message } ; message
+// is '' when valid; one of objectId and name is '' (both when invalid)
 export function assetRefParse(raw) {
+  const reference = { store: '', objectId: '', name: '', versionId: 'head', message: '' };
   let content;
   try {
     content = yamlParse(String(raw ?? ''));
   } catch (error) {
-    return { objectId: '', versionId: 'head', message: `asset reference is not valid yaml: ${String(error?.message ?? error)}` };
+    return { ...reference, message: `asset reference is not valid yaml: ${String(error?.message ?? error)}` };
   }
-  if (typeof content === 'string') content = { objectId: content };
   if (!content || typeof content !== 'object' || Array.isArray(content)) {
-    return { objectId: '', versionId: 'head', message: 'asset reference must be a mapping with objectId, or a bare object id' };
+    return { ...reference, message: 'asset reference must be a mapping with store and objectId or name' };
   }
-  const objectId = String(content.objectId ?? '').trim();
-  if (!objectId) return { objectId: '', versionId: 'head', message: 'asset reference needs objectId' };
+  reference.store = String(content.store ?? '').trim();
+  reference.objectId = String(content.objectId ?? '').trim();
+  reference.name = String(content.name ?? '').trim();
   const versionIdText = String(content.versionId ?? 'head').trim();
-  const versionId = versionIdText === '' ? 'head' : versionIdText;
-  return { objectId, versionId, message: '' };
+  reference.versionId = versionIdText === '' ? 'head' : versionIdText;
+  if (!reference.store) return { ...reference, message: 'asset reference needs store (the id of the asset store, e.g. local)' };
+  if (!reference.objectId && !reference.name) return { ...reference, message: 'asset reference needs objectId or name' };
+  if (reference.objectId && reference.name) return { ...reference, message: 'asset reference names the object by objectId or by name, not both' };
+  return reference;
+}
+
+// the text of a reference block: store, the object by name when a name is
+// given else by id, and versionId when it is not the head
+export function assetRefTextBuild({ store, objectId = '', name = '', versionId = 'head' }) {
+  const lineList = [`store: ${store}`, name ? `name: ${name}` : `objectId: ${objectId}`];
+  if (versionId && versionId !== 'head') lineList.push(`versionId: ${versionId}`);
+  return lineList.join('\n');
 }
 
 // a fenced block in the language asset, with its indentation (a block inside

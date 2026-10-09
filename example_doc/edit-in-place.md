@@ -10,7 +10,7 @@ This page is a playground for the edit layer. Open it on the local development s
 In edit mode the page looks exactly as it reads: nothing moves when the toggle is switched, and hovering a block changes nothing but one small toolbar floating above it, centered, with the block's kind and its buttons:
 
 - edit the block where it is
-- open the asset panel (only on a block whose data comes from the [asset store](asset-store.md))
+- open the asset panel (only on a block whose data comes from the [asset store](asset-store.md)), or move the block's inline data into the store (only on a component block with a data block)
 - insert a new block above it
 - insert a new block below it
 - move the block up, swapping it with the block above
@@ -31,7 +31,9 @@ Third of three short paragraphs.
 
 Edit mode also reaches the side panel. Hover an item of the sidebar and a small pencil appears after its label; click it and the label becomes editable in its place: type, then press Enter or click elsewhere to save, Escape to drop the change. The new text is written into the yaml file the item comes from (`example_doc/side-panel.yaml`, or `mdx-usage/side-panel.yaml` for the items of the MDX Components folder), only on the line of that label: comments, order, and everything else in the file stay as they are, and the side panel updates without a reload. A document item whose label is its title (this page's own item, for example) gets a `text:` line added below its `doc:` line. The item of this page in the sidebar, `In-place Editing`, is a good one to try, as is the separator `Tests` and the two-language label of the `Component Panel` item below it, whose displayed translation is the one that is edited. Items generated from a source folder have no line to write and show no pencil.
 
-By default a block enters edit mode through its edit button, so text can be read and selected as usual. The settings panel (the gear at the top of the sidebar) has `EditBlockEnterMode`; set it to `click` and a click anywhere on a block enters it. The setting lasts for the page session. From inside a paragraph, pressing the down arrow on its last line continues in the next block, and the up arrow on the first line in the previous one; the block left behind is saved.
+## Entering a block and where the caret goes
+
+By default a click anywhere on a block enters it, and the caret lands on the source text nearest to where you clicked, so a word in the middle of a paragraph is reached in one click; the edit button of the toolbar enters the block too, with the caret at the end. The settings panel (the gear at the top of the sidebar, tab **Config**) has `EditBlockEnterMode`; set it to `button` and only the edit button enters a block, so text can be read and selected as usual. The setting lasts for the page session. From inside a paragraph, pressing the down arrow on its last line continues in the next block, and the up arrow on the first line in the previous one; the caret keeps its column, and the block left behind is saved. Try it on the three short paragraphs above: click into the middle of one, then arrow down through the others.
 
 ## Default editors
 

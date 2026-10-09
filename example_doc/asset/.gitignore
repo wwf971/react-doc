@@ -1,0 +1,24 @@
+# the default folder of the demonstration asset store (doc_page_impl_asset.md).
+# trying the asset panel writes here: new versions, new objects, backups.
+# everything new is ignored; only the files listed below are part of the
+# example. to add an object or a version to the example on purpose, list its
+# files here (or `git add -f` them).
+#
+# an ignore file cannot hide changes of files git already tracks: an edited
+# object.yaml, or a version rewritten in place, still shows as modified.
+# `git restore example_doc/asset` undoes those.
+
+*
+!*/
+!/.gitignore
+
+!/w4okcncucnu--hero image/object.yaml
+!/w4okcncucnu--hero image/w4okcnctumh.yaml
+!/w4okcncucnu--hero image/w4okcoobv98.yaml
+
+!/w4okcpzk7k5--gallery/object.yaml
+!/w4okcpzk7k5--gallery/w4okcpzk5gp.yaml
+
+!/w4okcraoqic--warehouse B stock/object.yaml
+!/w4okcraoqic--warehouse B stock/w4okcraofnf.md
+!/w4okcraoqic--warehouse B stock/w4okcsly2p7.md

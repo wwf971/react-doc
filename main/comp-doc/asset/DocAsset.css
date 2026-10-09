@@ -1,7 +1,7 @@
 /* The stand-in of an asset-backed component while its data is loading or
-   its reference fails, and the asset panel popup. The panel reuses the
-   control scale of the edit layer (DocEdit.css: doc-edit-action,
-   doc-edit-confirm, doc-edit-message, doc-edit-value, doc-edit-surface). */
+   its reference fails, and the asset panel popup with its preview pane. The
+   panel reuses the control scale of the edit layer (DocEdit.css:
+   doc-edit-action, doc-edit-confirm, doc-edit-message, doc-edit-value). */
 
 /* ---------- frame (loading / error only) ---------- */
 
@@ -55,14 +55,60 @@
 
 /* ---------- popup ---------- */
 
+/* wider while the preview pane is open; the two columns scroll on their own */
 .doc-asset-popup {
-  width: min(720px, calc(100vw - 48px));
-  max-height: min(680px, calc(100vh - 48px));
+  width: min(1040px, calc(100vw - 32px));
+  height: min(860px, calc(100vh - 32px));
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-asset-popup.is-preview-open {
+  width: min(1560px, calc(100vw - 32px));
 }
 
 .doc-asset-popup-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.doc-asset-popup-content {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.doc-asset-popup-main {
+  flex: 1 1 0;
+  min-width: 0;
   overflow: auto;
-  padding: 6px 10px 8px;
+  padding: 6px 12px 10px;
+}
+
+/* ---------- preview pane ---------- */
+
+.doc-asset-preview {
+  display: flex;
+  flex: 0 0 44%;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: 6px 12px 10px;
+  border-left: 1px solid var(--color-fd-border);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.doc-asset-preview-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
 }
 
 /* ---------- panel ---------- */
@@ -70,9 +116,9 @@
 .doc-asset-panel {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  font-size: 0.78rem;
-  line-height: 1.35;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 .doc-asset-section {
@@ -135,55 +181,118 @@
   gap: 0.25rem;
 }
 
-.doc-asset-confirm {
+/* the data text with its buttons: one area, the inside of "editing" for a
+   pointer going down (outside it, the editing is left) */
+.doc-asset-data {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.3rem;
 }
 
-.doc-asset-version-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+/* ---------- tables: versions, events ---------- */
+
+/* a table, so the values of one column line up across the rows; the
+   cells do not wrap, and a table wider than the panel scrolls sideways in
+   its own box (frontend-design-table-like.md) rather than stretching it */
+.doc-asset-table-scroll {
+  overflow: auto;
   border: 1px solid var(--color-fd-border);
   border-radius: 2px;
 }
 
-.doc-asset-version {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.25rem 0.4rem;
+.doc-asset-table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+.doc-asset-table th,
+.doc-asset-table td {
+  height: 1.7rem;
+  padding: 0 0.5rem;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.doc-asset-table th {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 550;
+}
+
+.doc-asset-table tbody tr {
   border-top: 1px solid var(--color-fd-border);
 }
 
-.doc-asset-version:first-child {
-  border-top: 0;
+/* one row per version, every row the same height; the actions of the
+   selected version are below the table, not in the row */
+.doc-asset-version {
+  cursor: pointer;
+}
+
+.doc-asset-version:hover {
+  background: color-mix(in srgb, var(--color-fd-primary) 4%, var(--color-fd-background));
 }
 
 .doc-asset-version[data-selected] {
-  background: color-mix(in srgb, var(--color-fd-primary) 8%, var(--color-fd-background));
-}
-
-.doc-asset-version-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  cursor: pointer;
+  background: color-mix(in srgb, var(--color-fd-primary) 10%, var(--color-fd-background));
 }
 
 .doc-asset-version-id {
   color: var(--color-fd-foreground);
 }
 
+.doc-asset-version-badges {
+  min-width: 2.6rem;
+}
+
+.doc-asset-version-badges > .doc-asset-badge + .doc-asset-badge {
+  margin-left: 0.25rem;
+}
+
+.doc-asset-version-size {
+  text-align: right;
+}
+
+/* the lock column: an icon or nothing, always the same width */
+.doc-asset-table .doc-asset-version-lock {
+  width: 1.4rem;
+  padding: 0 0.2rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-asset-version-lock > svg {
+  vertical-align: middle;
+}
+
+/* the note and the predecessors take what is left and are cut with an
+   ellipsis (the full text in the title); max-width 0 lets a table cell shrink */
+.doc-asset-version-note,
+.doc-asset-version-prev {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .doc-asset-version-note {
-  overflow-wrap: anywhere;
+  width: 55%;
 }
 
 .doc-asset-version-prev {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  width: 45%;
   font-size: 0.7rem;
+}
+
+/* the events, in the object fields: a small table under the summary line */
+.doc-asset-event-list {
+  width: auto;
+  margin-top: 0.15rem;
+}
+
+.doc-asset-event-list td {
+  height: 1.3rem;
+  padding: 0 0.6rem 0 0;
 }
 
 .doc-asset-badge {
@@ -200,10 +309,16 @@
   color: var(--color-fd-primary);
 }
 
+/* the data text, shown and edited in the same element with the same box:
+   one set of margins, padding, type and height rules whether it is being
+   edited or not, so nothing moves when editing starts (the no-jitter rule
+   of doc_page_impl_edit.md). it does not take the edit layer's
+   doc-edit-surface class, whose source-kind rules would change its padding. */
 .doc-asset-text {
   margin: 0;
   padding: 0.4rem 0.5rem;
-  max-height: 40vh;
+  min-height: 4rem;
+  max-height: 48vh;
   overflow: auto;
   border: 1px solid var(--color-fd-border);
   border-radius: 2px;
@@ -217,10 +332,95 @@
   tab-size: 2;
 }
 
-/* the editing surface keeps the look of the text; the caret shows */
-.doc-asset-text.doc-edit-surface {
-  margin: 0;
-  min-height: 4rem;
+/* the head text invites a click */
+.doc-asset-text[data-editable] {
+  cursor: text;
+}
+
+.doc-asset-text[data-editable]:hover {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 50%, var(--color-fd-border));
+}
+
+/* while editing: no outline, the caret shows; an empty text keeps one line */
+.doc-asset-text[data-editing] {
+  outline: none;
+  cursor: text;
+  caret-color: var(--color-fd-primary);
+}
+
+.doc-asset-text[data-editing]:empty::before {
+  content: '\200b';
+}
+
+.doc-asset-text[data-locked] {
+  opacity: 0.6;
+}
+
+/* the reason a disabled action is disabled, next to it */
+.doc-asset-actions-note {
   font-size: 0.76rem;
-  line-height: 1.5;
+}
+
+/* ---------- save mode, upload, binary data ---------- */
+
+.doc-asset-save-mode {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.7rem;
+}
+
+.doc-asset-save-mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+}
+
+.doc-asset-save-mode-option[data-disabled] {
+  cursor: default;
+}
+
+.doc-asset-save-mode-option > input {
+  margin: 0;
+}
+
+/* a small text action next to the text it belongs to */
+.doc-asset-link {
+  margin-left: 0.4rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-fd-primary);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* the file input stays in the tree for the Upload button; it is not shown */
+.doc-asset-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.doc-asset-binary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.doc-asset-binary-preview {
+  max-width: 100%;
+  max-height: 40vh;
+  object-fit: contain;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-card, var(--color-fd-background));
+}
+
+.doc-asset-actions > a.doc-edit-action {
+  text-decoration: none;
 }

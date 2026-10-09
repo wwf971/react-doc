@@ -8,17 +8,19 @@ import { AssetFrame } from './AssetFrame.jsx';
 // The runtime boundary of a component whose data lives in the asset store
 // (design: doc_page_impl_asset.md). RegisteredComp hands a comment-block
 // invocation here when its fenced block is written in the language "asset":
-// the block holds a reference { objectId, versionId }, not the data. The
-// host resolves the reference through DocAssetStore and renders the
+// the block holds a reference { store, objectId | name, versionId }, not the data.
+// The host resolves the reference through DocAssetStore and renders the
 // component again with the text and language of that version in place of
 // the reference, so the component sees exactly the input it would see with
 // the data written inline. AssetFrame stands in for it while the data is
-// loading or when the reference cannot be resolved; the asset panel is
+// loading, when the reference cannot be resolved, or when the data of the
+// version is not text (a component block reads text); the asset panel is
 // opened from the block's toolbar in edit mode.
 //
 //   <!--renderComp=Image-->
 //   ```asset
-//   objectId: m2x1k9q4z0a1b
+//   store: local
+//   name: hero image        (or objectId: m2x1k9q4z0a1b)
 //   ```
 //
 //   input            the invocation input: { raw: reference yaml, lang: 'asset', propsAuthored }
@@ -34,8 +36,8 @@ export const CompAssetHost = observer(function CompAssetHost({ input, registered
   const result = reference.message ? undefined : assetStore.refQuery(reference);
   const resultStatus = result?.status;
   const resultVersionId = result?.versionId;
-  // the object read first decides the version a "head" reference means;
-  // the effect runs again once it is known, to read that version's text
+  // the object decides the version a "head" reference means; the effect runs
+  // again once it is known, to read that version's data
   useEffect(() => {
     if (!reference.message) void assetStore.refLoad(reference);
   }, [assetStore, reference, resultStatus, resultVersionId]);
@@ -53,13 +55,22 @@ export const CompAssetHost = observer(function CompAssetHost({ input, registered
     return <AssetFrame {...frameProps} />;
   }
   if (assetRefLangIs(result.object.lang)) {
-    return <AssetFrame {...frameProps} message={`asset object ${reference.objectId} has lang "asset", which is reserved for references`} />;
+    return <AssetFrame {...frameProps} message={`asset object ${result.object.objectId} has lang "asset", which is reserved for references`} />;
+  }
+  if (!result.version.isText) {
+    const sizeText = `${result.version.size ?? 0} bytes`;
+    return (
+      <AssetFrame
+        {...frameProps}
+        message={`version ${result.versionId} of the asset is not text (${result.object.contentType}, ${sizeText}); ${label} reads a ${result.object.lang || 'text'} block`}
+      />
+    );
   }
   return (
     <AssetFrame {...frameProps}>
       <RegisteredComp
         {...registeredProps}
-        input={{ ...input, raw: result.text, lang: result.object.lang }}
+        input={{ ...input, raw: result.version.text, lang: result.object.lang }}
       />
     </AssetFrame>
   );

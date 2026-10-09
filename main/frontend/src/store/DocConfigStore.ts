@@ -34,6 +34,10 @@ export class DocConfigStore {
   // panel is placed under it)
   isSettingsOpen = false;
   settingsAnchorElement: HTMLElement | null = null;
+  // the tab of the settings panel that is shown: the config keys, or the
+  // folders of the asset store (doc_page_impl_asset.md); kept while the
+  // panel is closed, so it opens again where it was
+  settingsTabId: 'config' | 'assetStore' = 'config';
 
   constructor(sourceStore: DocSourceStore, docStore: DocStore, options?: { configDefineList?: ConfigDefine[] }) {
     this.sourceStore = sourceStore;
@@ -100,6 +104,10 @@ export class DocConfigStore {
   settingsOpenSet(isOpen: boolean, anchorElement: HTMLElement | null = null): void {
     this.isSettingsOpen = isOpen;
     this.settingsAnchorElement = isOpen ? anchorElement : null;
+  }
+
+  settingsTabIdSet(tabId: string): void {
+    this.settingsTabId = tabId === 'assetStore' ? 'assetStore' : 'config';
   }
 
   // ----- queries -----

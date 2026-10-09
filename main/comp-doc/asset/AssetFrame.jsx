@@ -10,17 +10,18 @@ import './DocAsset.css';
 // reached from the block's toolbar in edit mode (DocEditBlockToolbar).
 //
 //   label      the component name
-//   reference  { objectId, versionId } as written in the document
+//   reference  { store, objectId, name, versionId } as written in the document
 //   raw        the reference yaml, shown with an error
 //   message    an error of the reference (not shown while loading)
 //   children   the component, when the reference is resolved
 export const AssetFrame = observer(function AssetFrame({ label, reference, raw, message, children }) {
+  const objectText = `${reference.store || '(no store)'} / ${reference.objectId || reference.name || '(no objectId or name)'}`;
   if (message) {
     return (
       <div className="doc-asset-frame not-prose" data-error="">
         <div className="doc-asset-frame-title">
           <span className="doc-asset-frame-label">{label}</span>
-          <span className="doc-asset-frame-object">{reference.objectId || '(no objectId)'}</span>
+          <span className="doc-asset-frame-object">{objectText}</span>
         </div>
         <p className="doc-asset-frame-message">{message}</p>
         {raw ? <pre className="doc-asset-frame-raw">{raw}</pre> : null}
@@ -32,7 +33,7 @@ export const AssetFrame = observer(function AssetFrame({ label, reference, raw, 
       <div className="doc-asset-frame not-prose" data-loading="">
         <div className="doc-asset-frame-title">
           <span className="doc-asset-frame-label">{label}</span>
-          <span className="doc-asset-frame-object" title={reference.objectId}>{reference.objectId}</span>
+          <span className="doc-asset-frame-object" title={objectText}>{objectText}</span>
           <LoaderCircle size={12} className="doc-edit-spin" aria-label="loading" />
         </div>
       </div>

@@ -1,30 +1,40 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AssetError, type AssetStore } from './doc-asset-store.ts';
+import { ASSET_STORE_ID_LOCAL, AssetError, type AssetObjectKey, type AssetStore, type AssetVersionData } from './doc-asset-store.ts';
 
 // Asset api of the development server (design: doc_page_impl_asset.md). Like
 // the edit api, it exists only while `vite` serves the page; a built page
-// reads the bundled snapshot of the store instead and cannot write.
+// reads the bundled snapshot of the store instead and cannot write. The api
+// serves the local store; every object route names the store it means
+// (store=local), the way a reference does.
 //
-//   GET  {endpoint}/status                            -> { isWritable: true, folder }
-//   GET  {endpoint}/object/list                       -> { objectList }
-//   GET  {endpoint}/object/get?objectId=&versionId=   -> { object, version }   versionId default head
-//   POST {endpoint}/object/create    { name, lang, text, note }          -> { object, version }
-//   POST {endpoint}/object/update    { objectId, hashBase, text, mode, note } -> { object, version }
-//                                     mode: inPlace | newVersion
-//   POST {endpoint}/object/delete    { objectId }                        -> { object }   (soft)
-//   POST {endpoint}/object/restore   { objectId }                        -> { object }
-//   POST {endpoint}/object/meta/set  { objectId, name?, lang? }          -> { object }
-//   POST {endpoint}/version/checkout { objectId, versionId }             -> { object }   head moves
-//   POST {endpoint}/version/delete   { objectId, versionId }             -> { object }
+//   GET  {endpoint}/status                                   -> { isWritable: true, storeIdList, folderList }
+//   GET  {endpoint}/object/list?store=                        -> { objectList }
+//   GET  {endpoint}/object/get?store=&objectId=|name=&versionId=  -> { object, version }   versionId default head
+//   GET  {endpoint}/object/data?store=&objectId=|name=&versionId= -> the bytes of the version, with their content type
+//   POST {endpoint}/object/create    { store, name, lang, contentType, fileExt, text | dataBase64, note, folder } -> { object, version, isCreated }
+//                                     isCreated false: an object of that name exists and is answered, nothing is created
+//   POST {endpoint}/object/update    { store, objectId, hashBase, text | dataBase64, mode, note }                -> { object, version }
+//                                     mode: inPlace | newVersion; absent: the object's saveMode
+//   POST {endpoint}/object/delete    { store, objectId }                                 -> { object }   (soft)
+//   POST {endpoint}/object/restore   { store, objectId }                                 -> { object }
+//   POST {endpoint}/object/meta/set  { store, objectId, name?, lang?, contentType?, saveMode? } -> { object }
+//   POST {endpoint}/version/checkout { store, objectId, versionId }                      -> { object }   head moves
+//   POST {endpoint}/version/delete   { store, objectId, versionId }                      -> { object }
+//   POST {endpoint}/object/lock/set  { store, objectId, isLocked }                       -> { object }
+//   POST {endpoint}/version/lock/set { store, objectId, versionId, isLocked }            -> { object }
+//   POST {endpoint}/folder/set       { folderList: [{ path, isDefault }] }               -> { folderList }
 //
-// every response is { code, data, message }. code 0 is success; negative codes:
+// every json response is { code, data, message }. code 0 is success; negative codes:
 //   -1  bad request or unexpected failure
-//   -2  hashBase is not the hash of the head text (changed meanwhile)
-//   -3  object or version not found
+//   -2  hashBase is not the hash of the head data (changed meanwhile)
+//   -3  store, object or version not found
 //
-// object: { objectId, name, lang, fileExt, versionIdHead, isDeleted,
-//           timeCreated, timeUpdated, versionList: [{ versionId, versionIdPrevList, time, note }] }
-// version: { versionId, text, hash }
+// object:  { objectId, name, lang, contentType, fileExt, saveMode?, versionIdHead, isDeleted, isLocked,
+//            timeCreated, folder, dirName,
+//            versionList: [{ versionId, versionIdPrevList, time, note, size, hash, isLocked }],
+//            eventList: [{ eventType, time, versionId?, userId? }] }
+// version: { versionId, size, hash, isText, text? }   text only when the bytes are utf-8 text
+// folder:  { path, pathAbs, isDefault, isExists, objectCount }
 
 export const DOC_ASSET_ENDPOINT_NAME = '__doc-asset';
 
@@ -39,15 +49,31 @@ export function docAssetMiddlewareCreate(options: { endpoint: string; storeGet: 
       return;
     }
     const route = url.pathname.slice(endpoint.length);
+    const failureSend = (error: any) => {
+      if (error instanceof AssetError) {
+        jsonSend(res, statusByCode[error.code] ?? 400, { code: error.code, data: null, message: error.message });
+        return;
+      }
+      jsonSend(res, 500, { code: -1, data: null, message: String(error?.message ?? error) });
+    };
+    if (req.method === 'GET' && route === '/object/data') {
+      try {
+        const store = storeGet();
+        const object = store.objectFind(storeObjectKeyGet(url.searchParams));
+        const version = store.versionDataGetOf(object, url.searchParams.get('versionId') ?? 'head');
+        res.statusCode = 200;
+        res.setHeader('Content-Type', object.contentType || 'application/octet-stream');
+        res.setHeader('Content-Length', String(version.size));
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(version.bytes);
+      } catch (error) {
+        failureSend(error);
+      }
+      return;
+    }
     void routeHandle(req, route, url, storeGet())
       .then((data) => jsonSend(res, 200, { code: 0, data, message: '' }))
-      .catch((error) => {
-        if (error instanceof AssetError) {
-          jsonSend(res, statusByCode[error.code] ?? 400, { code: error.code, data: null, message: error.message });
-          return;
-        }
-        jsonSend(res, 500, { code: -1, data: null, message: String(error?.message ?? error) });
-      });
+      .catch(failureSend);
   };
 }
 
@@ -57,32 +83,97 @@ const statusByCode: Record<number, number> = { [-1]: 400, [-2]: 409, [-3]: 404 }
 async function routeHandle(req: IncomingMessage, route: string, url: URL, store: AssetStore): Promise<any> {
   const method = req.method ?? 'GET';
   if (method === 'GET') {
-    if (route === '/status') return { isWritable: true, folder: store.folder };
-    if (route === '/object/list') return { objectList: store.objectList() };
+    if (route === '/status') return { isWritable: true, storeIdList: [ASSET_STORE_ID_LOCAL], folderList: store.folderInfoList() };
+    if (route === '/object/list') {
+      storeIdCheck(url.searchParams.get('store'));
+      return { objectList: store.objectList() };
+    }
     if (route === '/object/get') {
-      const objectId = url.searchParams.get('objectId') ?? '';
-      const versionId = url.searchParams.get('versionId') ?? 'head';
-      const object = store.objectGet(objectId);
-      const version = store.versionTextGet(objectId, versionId);
-      return { object, version };
+      const object = store.objectFind(storeObjectKeyGet(url.searchParams));
+      const version = store.versionDataGetOf(object, url.searchParams.get('versionId') ?? 'head');
+      return { object, version: versionResponseBuild(version) };
     }
   }
   if (method === 'POST') {
     const body = await jsonBodyRead(req);
+    if (route === '/folder/set') {
+      if (!Array.isArray(body?.folderList)) throw new AssetError(-1, 'folderList is required');
+      return { folderList: store.folderSet(body.folderList) };
+    }
+    storeIdCheck(body?.store);
     const objectId = String(body?.objectId ?? '');
     if (route === '/object/create') {
-      return store.objectCreate({ name: body?.name, lang: body?.lang, text: body?.text, note: body?.note });
+      const result = store.objectCreate({
+        name: body?.name,
+        lang: body?.lang,
+        contentType: body?.contentType,
+        fileExt: body?.fileExt,
+        data: bodyDataGet(body),
+        note: body?.note,
+        folder: body?.folder ? String(body.folder) : undefined,
+      });
+      return { object: result.object, version: versionResponseBuild(result.version), isCreated: result.isCreated };
     }
     if (route === '/object/update') {
-      return store.objectUpdate({ objectId, hashBase: body?.hashBase, text: body?.text, mode: body?.mode, note: body?.note });
+      const result = store.objectUpdate({
+        objectId,
+        hashBase: body?.hashBase,
+        data: bodyDataGet(body),
+        mode: body?.mode,
+        note: body?.note,
+      });
+      return { object: result.object, version: versionResponseBuild(result.version) };
     }
     if (route === '/object/delete') return { object: store.objectDelete(objectId) };
     if (route === '/object/restore') return { object: store.objectRestore(objectId) };
-    if (route === '/object/meta/set') return { object: store.objectMetaSet(objectId, { name: body?.name, lang: body?.lang }) };
+    if (route === '/object/meta/set') {
+      return {
+        object: store.objectMetaSet(objectId, {
+          name: body?.name,
+          lang: body?.lang,
+          contentType: body?.contentType,
+          saveMode: body?.saveMode,
+        }),
+      };
+    }
     if (route === '/version/checkout') return { object: store.versionCheckout(objectId, String(body?.versionId ?? '')) };
     if (route === '/version/delete') return { object: store.versionDelete(objectId, String(body?.versionId ?? '')) };
+    if (route === '/object/lock/set') return { object: store.objectLockSet(objectId, body?.isLocked) };
+    if (route === '/version/lock/set') {
+      return { object: store.versionLockSet(objectId, String(body?.versionId ?? ''), body?.isLocked) };
+    }
   }
   throw new AssetError(-1, `unknown asset api route: ${method} ${route}`);
+}
+
+// the api serves the local store only; a reference into another store is not found here
+function storeIdCheck(storeId: unknown) {
+  if (storeId === undefined || storeId === null || storeId === '') throw new AssetError(-1, 'store is required');
+  if (storeId !== ASSET_STORE_ID_LOCAL) throw new AssetError(-3, `unknown asset store: ${String(storeId)}`);
+}
+
+// the object a read names: by objectId, or by name
+function storeObjectKeyGet(searchParams: URLSearchParams): AssetObjectKey {
+  storeIdCheck(searchParams.get('store'));
+  return { objectId: searchParams.get('objectId') ?? '', name: searchParams.get('name') ?? '' };
+}
+
+// the data of a write: text (utf-8) or dataBase64 (any bytes)
+function bodyDataGet(body: any): Buffer {
+  if (typeof body?.text === 'string') return Buffer.from(body.text, 'utf-8');
+  if (typeof body?.dataBase64 === 'string') return Buffer.from(body.dataBase64, 'base64');
+  throw new AssetError(-1, 'text or dataBase64 is required');
+}
+
+// the version without its bytes; the bytes are read through /object/data
+function versionResponseBuild(version: AssetVersionData) {
+  return {
+    versionId: version.versionId,
+    size: version.size,
+    hash: version.hash,
+    isText: version.isText,
+    ...(version.isText ? { text: version.text } : {}),
+  };
 }
 
 function jsonBodyRead(req: IncomingMessage): Promise<any> {

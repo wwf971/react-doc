@@ -1,0 +1,32 @@
+objectId: w4okcraoqic
+name: warehouse B stock
+lang: md
+contentType: text/markdown
+fileExt: md
+versionIdHead: w4okcsly2p7
+isDeleted: false
+isLocked: false
+timeCreated: 20261020_18500105+09
+versionList:
+  - versionId: w4okcraofnf
+    versionIdPrevList: []
+    time: 20261020_18500105+09
+    note: stock at the start of the month
+    size: 200
+    hash: 4d73fc537c65fa2d3b900d55389d5bff68b63d1a
+    isLocked: false
+  - versionId: w4okcsly2p7
+    versionIdPrevList:
+      - w4okcraofnf
+    time: 20261020_18500226+09
+    note: after the mid-month delivery
+    size: 234
+    hash: a91b9df9af2dcbb9f9c0a983c559e77012bf56b8
+    isLocked: false
+eventList:
+  - eventType: create
+    time: 20261020_18500105+09
+    versionId: w4okcraofnf
+  - eventType: versionCreate
+    time: 20261020_18500226+09
+    versionId: w4okcsly2p7

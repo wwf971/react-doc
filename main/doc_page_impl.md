@@ -12,7 +12,7 @@ vite plugin "doc-source"
      ├── executes source rules ──► file manifest (multi-root: /{rootId}/relPath)
      │     each doc = lazy `?raw` import ──► dev: HMR reload on edit
      │                                       build: one lazy chunk per doc
-     ├── serves the dev-only apis: edit (files), asset (the asset store folder)
+     ├── serves the dev-only apis: edit (files), asset (the local asset store: its folders)
      └── emits virtual module `virtual:doc-source` = { config, fileManifest, assetSnapshot }
      ▼
 mobx stores (source of truth for rendering)
@@ -45,7 +45,7 @@ DocEventRouter: component reports → host → local handler → domain route (n
 
 **In-place editing, an additional layer.** On the development server a document can be edited from the page, one root-level block at a time; the server rewrites the file and the page reloads from it. The layer has its own store, its own compiled body (root blocks wrapped, each with a floating toolbar from a sticky anchor), and a component edit contract (`config.isEdit`, `XxxEdit.jsx` beside `Xxx.jsx`); the reading path is untouched and a built page has no edit mode. Specified in [doc_page_impl_edit.md](doc_page_impl_edit.md).
 
-**Component data in an asset store.** A component block can hold a reference (a fenced block in the language `asset`, yaml naming an object and a version or the head) in place of its data; the data lives in one folder of versioned text objects with a DAG history and a standard api (create, update in place or as a new version, checkout, delete, history), served by the development server and bundled read-only into a build. The runtime boundary resolves the reference before the component renders, so components never know; a title line above the component names the asset and opens the asset panel. Specified in [doc_page_impl_asset.md](doc_page_impl_asset.md).
+**Component data in an asset store.** A component block can hold a reference (a fenced block in the language `asset`, yaml naming a store, an object by its unique name or its id, and a version or the head) in place of its data; the data lives in a store of versioned objects, modeled after an object storage (an object is metadata with a DAG history and a record of its events, a version is bytes, text or not), with a standard api (create, update in place or as a new version, checkout, delete, history). The one store today is the local store: one or more folders on disk (an object's folder is `{id}--{name}`), served by the development server and bundled read-only into a build. The runtime boundary resolves the reference before the component renders, so components never know; the block toolbar of edit mode opens the asset panel, with a preview pane that renders the data as it is edited. Specified in [doc_page_impl_asset.md](doc_page_impl_asset.md).
 
 **One event layer between components and stores.** A registered component reports through `onEvent` and never calls a store; `DocEventRouter` turns the report into an event with its source, lets the host application and the rendering place answer first, then routes it to the domain that owns the type (navigation, tags, editing). Every answer is `{ code, data, message }`. Specified in [doc_page_impl_event.md](doc_page_impl_event.md).
 
@@ -66,7 +66,7 @@ Follows the data-driven pattern of `react-comp-misc` (`comp_design.md`) and the 
 - `DocTagStore` (derived): the tag model computed from the manifest and the page tree, plus the tag service used by renderers and the open state of the tag overview popup. See [Tag system](doc_page_impl_tag.md).
 - `DocConfigStore` (derived): the config model computed from `globalConfig`, the manifest, and the page tree, the reader's session overrides from the settings panel, plus the config service. See [Config system](doc_page_impl_config.md).
 - `DocEditStore` (edit layer, beside the reading stores): availability of the development-server edit api, the global edit mode, the document source as read from disk with its hash, the dedicated compile with block wrappers, the one open edit session, the open insert menu, and the pending deletion; every write goes through `operationApply`, and the events of editors arrive at `eventHandle`. It never writes to the reading stores; the file on disk is changed and reloads through the normal path. See [In-place editing](doc_page_impl_edit.md).
-- `DocAssetStore` (beside the reading stores): the backend of the asset store (the development-server api, or the snapshot bundled into a build), the objects and version texts read so far, what a reference resolves to (`refQuery` / `refLoad`), every write to the store (`writeApply`), and the one open asset panel. See [Asset store](doc_page_impl_asset.md).
+- `DocAssetStore` (beside the reading stores): the backend of the asset store (the development-server api, or the snapshot bundled into a build), the index of its objects loaded at page start and the version data read so far, what a reference by id or by name resolves to (`refQuery` / `refLoad`), every write to the store (`writeApply`), the folders of the local store, and the one open asset panel with its preview. See [Asset store](doc_page_impl_asset.md).
 
 Render components observe stores via context and submit change attempts through store APIs; no component talks to the file system or compiler directly.
 
@@ -345,7 +345,8 @@ example_doc/             # root folder of the demonstration page
 ├── comp-custom-list-el.md # components as list elements: rules and examples
 ├── edit-in-place.md     # edit-mode playground (editable on the development server)
 ├── asset-store.md       # components reading their data from the asset store
-├── asset/               # the asset store folder: one folder per object (object.yaml + version files)
+├── asset.yaml           # the local asset store: its folders and the default one
+├── asset/, asset-archive/ # folders of the store: one folder per object, {id}--{name} (object.yaml + version files)
 ├── comp-mdx/            # demo-specific components (not collected as documents); StockTable + StockTableEdit
 ├── mdx-usage/           # mdx component demonstrations (part with hosted index)
 └── link-nav/            # link usage guide (sections by title / Anchor id), link and non-md display test docs
@@ -363,7 +364,7 @@ main/
 │   ├── toc/             # DocPageToc: page / part local index
 │   ├── page/            # toolbar, navigation buttons, search dialog, loading skeleton
 │   ├── edit/            # edit layer: toggle and toolbar controls, edit body, block borders and hover button groups, insert menu, editor chooser, floating bar and in-place editing primitives
-│   ├── asset/           # asset store: the host resolving a reference, the loading/error stand-in, the asset panel popup
+│   ├── asset/           # asset store: the host resolving a reference, the loading/error stand-in, the asset panel popup and its preview
 │   ├── settings/        # settings button and panel (user overrides of config keys)
 │   └── mdx-render/      # MdxRenderer, DynamicCodeBlock
 ├── package.json         # delegates dev/build to frontend/

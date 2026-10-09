@@ -31,7 +31,9 @@ import './text-block.css';
 //   editCancelRequest             Cancel
 //   editFocusShiftRequest { direction: 'previous' | 'next' }
 //                                 ArrowUp on the first line / ArrowDown on
-//                                 the last line: go on to the neighbor block
+//                                 the last line: go on to the neighbor block.
+//                                 reported with the caret position as the
+//                                 event point, so the neighbor keeps the x
 export const TextBlockEdit = observer(function TextBlockEdit({ data = {}, config = {}, onEvent, children }) {
   const edit = config.edit ?? {};
   const session = edit.session ?? {};
@@ -66,7 +68,9 @@ export const TextBlockEdit = observer(function TextBlockEdit({ data = {}, config
       onTextChange={(text) => void onEvent?.('editDraftChange', { text })}
       onSubmitRequest={submitRequest}
       onCancelRequest={cancelRequest}
-      onFocusShiftRequest={edit.isSurfaceFloating ? undefined : (direction) => void onEvent?.('editFocusShiftRequest', { direction })}
+      onFocusShiftRequest={edit.isSurfaceFloating
+        ? undefined
+        : (direction, { point } = {}) => void onEvent?.('editFocusShiftRequest', { direction }, { point })}
     />
   );
   const actions = (

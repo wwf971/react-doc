@@ -1,0 +1,33 @@
+objectId: w4okcncucnu
+name: hero image
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+saveMode: newVersion
+versionIdHead: w4okcoobv98
+isDeleted: false
+isLocked: false
+timeCreated: 20261020_18495741+09
+versionList:
+  - versionId: w4okcnctumh
+    versionIdPrevList: []
+    time: 20261020_18495741+09
+    note: robot at the computer
+    size: 187
+    hash: 5531461c3475fd7decb7cd4742f156bc1ec82433
+    isLocked: false
+  - versionId: w4okcoobv98
+    versionIdPrevList:
+      - w4okcnctumh
+    time: 20261020_18495863+09
+    note: office worker instead of the robot
+    size: 186
+    hash: dfb4fa0e4ec51e0d8836b6b2792ac30bc182474d
+    isLocked: false
+eventList:
+  - eventType: create
+    time: 20261020_18495741+09
+    versionId: w4okcnctumh
+  - eventType: versionCreate
+    time: 20261020_18495863+09
+    versionId: w4okcoobv98

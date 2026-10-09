@@ -17,9 +17,16 @@
 // event on to the next stage.
 //
 //   DocEvent        { type, data, source: { compId, instanceId, placement,
-//                     sourcePath, blockIndex, itemId }, time }
+//                     sourcePath, blockIndex, itemId }, point, time }
 //   DocEventResult  { code, data, message }
 //                     code 0 accepted, -1 rejected or failed, -2 unrouted
+//
+// point is where the pointer was when the user asked (undefined for a
+// keyboard or programmatic report): { clientX, clientY } in viewport
+// coordinates, the ones a pointer event reports and getBoundingClientRect
+// measures in, so a handler can compare it with any element on the screen
+// without converting. a handler that places a caret uses it to put the caret
+// where the user pointed (doc_page_impl_edit.md).
 
 export const eventCodeAccepted = 0;
 export const eventCodeRejected = -1;
@@ -45,15 +52,20 @@ export class DocEventRouter {
     return this.routeByType.get(type);
   }
 
-  // the event one component report becomes
-  eventBuild({ type, data = {}, source = {} }) {
-    return { type, data, source, time: Date.now() };
+  // the event one component report becomes. point: the pointer position of
+  // the report, kept only when it is a complete viewport point.
+  eventBuild({ type, data = {}, source = {}, point }) {
+    return { type, data, source, point: pointNormalize(point), time: Date.now() };
   }
 
   //   onEventHost    the application's handler, stage 1 (optional)
   //   onEventLocal   the handler of the rendering place, stage 2 (optional)
+  //
+  // the host and local handlers receive the flat (eventType, data) form;
+  // the point travels in it as `point`, so a handler of either stage sees
+  // where the user pointed as well.
   async dispatch(event, { onEventHost, onEventLocal } = {}) {
-    const dataForHandler = { ...event.data, ...event.source };
+    const dataForHandler = { ...event.data, ...event.source, point: event.point };
     const resultHost = resultNormalize(await onEventHost?.(`component:${event.type}`, dataForHandler));
     if (resultHost) return resultHost;
 
@@ -84,4 +96,14 @@ export function resultNormalize(result) {
 
 export function eventResultIsAccepted(result) {
   return result?.code === eventCodeAccepted;
+}
+
+// { clientX, clientY } when both are finite numbers, else undefined. a
+// pointer event (or anything with clientX / clientY) can be passed as is.
+export function pointNormalize(point) {
+  if (!point) return undefined;
+  const clientX = Number(point.clientX);
+  const clientY = Number(point.clientY);
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return undefined;
+  return { clientX, clientY };
 }

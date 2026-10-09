@@ -110,8 +110,11 @@ export function RegisteredComp(props) {
   // every report of the component becomes one event of the event layer
   // (doc_page_impl_event.md): the host application answers first, then the
   // place that rendered the component (onEventRuntime), then the domain
-  // route of the event type.
-  const eventHandle = (eventType, eventData = {}) => {
+  // route of the event type. the third argument carries what the report
+  // knows beyond its data: { point } where the pointer was (the pointer
+  // event itself can be passed as point), so a handler can act where the
+  // user pointed.
+  const eventHandle = (eventType, eventData = {}, eventContext = {}) => {
     const event = eventRouter.eventBuild({
       type: eventType,
       data: eventData,
@@ -123,6 +126,7 @@ export function RegisteredComp(props) {
         sourcePath: config.sourcePath,
         blockIndex: configRuntime.blockIndex,
       },
+      point: eventContext.point,
     });
     return eventRouter.dispatch(event, { onEventHost: onEventPage, onEventLocal: onEventRuntime });
   };

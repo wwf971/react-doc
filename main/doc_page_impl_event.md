@@ -5,8 +5,9 @@
 A component on the page never calls a store. It reports what the author or reader asked for (`onEvent(eventType, eventData)`, the third of the common props `{ data, config, onEvent }`), and the page decides who answers. This document specifies the layer between the two: how a report becomes an event, how an event is routed to the domain that owns it (navigation, tags, editing), how the answer comes back, and how the layer grows when a new domain or a new concern (undo / redo) arrives. For the overall architecture, refer to [Document Page: Design](doc_page_impl.md). The design follows the document store of Yamd (`doc-mobx`): one event shape, one result shape, routing centralized in one place that knows the current state, and handlers that are plain store methods.
 
 ```text
-component            RegisteredComp               DocEventRouter                 stores
-onEvent(type, data) ─► eventBuild({type,data,source}) ─► dispatch(event)
+component            RegisteredComp                        DocEventRouter                 stores
+onEvent(type, data,  ─► eventBuild({type,data,source,point}) ─► dispatch(event)
+        { point })
                                                     1. host      DocPageMdx onEvent('component:' + type)
                                                     2. local     onEventRuntime of the rendering place
                                                     3. route     the domain declared for the type ──► DocStore.navigate
@@ -23,11 +24,13 @@ Before it existed, a report was answered in whichever place happened to render t
 ## Event and result
 
 ```text
-DocEvent         { type, data, source, time }
+DocEvent         { type, data, source, point, time }
   type           the component's event name, e.g. navigateRequest, editDraftChange
   data           what the component reported (its own shape per event)
   source         where it came from: { compId, instanceId, placement, sourcePath,
                  itemId, blockIndex }, filled by RegisteredComp from its runtime config
+  point          where the pointer was when the user asked: { clientX, clientY },
+                 or undefined for a keyboard or programmatic report
   time           Date.now() at dispatch
 
 DocEventResult   { code, data, message }
@@ -36,13 +39,15 @@ DocEventResult   { code, data, message }
   code -2        unrouted: nobody answered
 ```
 
+`point` is the one piece of the user's gesture an event carries besides its data: a handler that places a caret, opens a menu, or scrolls puts the result where the user pointed instead of at a default spot. A component reports it as the third argument of `onEvent` (`onEvent(type, data, { point })`; the pointer event itself can be passed as `point`), the page's own ui gives it to `eventBuild` directly, and `eventBuild` keeps it only when both coordinates are finite numbers. The point is a point of the **viewport**, the coordinates a pointer event reports as `clientX` / `clientY` and `getBoundingClientRect()` measures in; never page coordinates (which add the scroll offset) or coordinates of some element (which an element other than that one cannot use). Every handler can therefore compare the point with any element on the screen, and with the caret, without converting ([where the caret goes](doc_page_impl_edit.md#where-the-caret-goes)). Host and local handlers receive it in their flat data as `point`.
+
 Every result the layer returns has this shape ([formatted responses](doc_page_req.md): `code` 0 is success, negative is failure). A handler returns a result to answer, or `undefined` to pass the event on to the next stage. `resultNormalize` turns the result of a host handler into this shape, which is where the legacy `{ isHandled: true }` of host applications written before the layer is accepted as code 0; nothing else in the page produces or reads `isHandled`. A component that falls back to a browser default (copying to the clipboard, opening a popup of its own) checks `result.code === 0` to know the host took the action over (`eventResultIsAccepted`).
 
 ## Dispatch
 
 `DocEventRouter` (`lib/doc-event.js`) is created with the stores in `DocPageMdx` and handed down in the store context as `eventRouter`. `dispatch(event, { onEventHost, onEventLocal })` tries, in order:
 
-1. **host**: the application's `DocPageMdx.onEvent`, called as `onEvent('component:' + type, { ...data, ...source })`, so an application overrides anything (its own navigation policy, its own copy handler) without knowing the routes.
+1. **host**: the application's `DocPageMdx.onEvent`, called as `onEvent('component:' + type, { ...data, ...source, point })`, so an application overrides anything (its own navigation policy, its own copy handler) without knowing the routes.
 2. **local**: the handler of the place that rendered the component (`onEventRuntime` of `RegisteredComp`): a hosted index that turns `activateRequest` into navigation of its own target, the tag overview popup, a side-panel item. Local knowledge stays local; it is a stage, not a bypass.
 3. **route**: the domain route declared for the type (`routeAdd({ name, typeList, handle })`, the last declaration of a type wins). The route handles the event with the stores.
 4. **unrouted**: `{ code: -2 }` with the type in the message. A component that reports an event the page does not know about gets a definite answer, never silence.
@@ -53,15 +58,15 @@ The routes of the page are declared in one place, `DocPageMdx`, next to the stor
 | ------------ | ------------------------------------------------------ | ------------------------------------------------------------------ |
 | `navigation` | `navigateRequest { target }`                           | `DocStore.navigate`; code -1 with `navigationError` when the target does not resolve ([navigation](doc_page_impl_nav.md)) |
 | `tag`        | `tagOverviewOpenRequest { tagId }`                     | `DocTagStore.overviewOpen`, only when the host provides `panelComponent` ([tags](doc_page_impl_tag.md)) |
-| `edit`       | `editEventTypeList` of `DocEditStore`: the session events `editDraftChange`, `editTextSetRequest`, `editSubmitRequest`, `editCancelRequest`, `editFocusShiftRequest`; the block event `editBlockMoveRequest { direction }`; the side-panel label events `sidePanelTextEditStartRequest`, `sidePanelTextSubmitRequest { text }`, `sidePanelTextCancelRequest` | `DocEditStore.eventHandle` ([editor contract](doc_page_impl_edit.md#the-editor-contract), [moving a block](doc_page_impl_edit.md#floating-controls), [editing a label](doc_page_impl_side_panel.md#editing-a-label-in-place)) |
+| `edit`       | `editEventTypeList` of `DocEditStore`: the session events `editDraftChange`, `editTextSetRequest`, `editSubmitRequest`, `editCancelRequest`, `editFocusShiftRequest` (with the caret as `point`); the block events `editBlockEnterRequest` (with the click as `point`), `editBlockMoveRequest { direction }`, `editBlockAssetMoveRequest`; the side-panel label events `sidePanelTextEditStartRequest`, `sidePanelTextSubmitRequest { text }`, `sidePanelTextCancelRequest` | `DocEditStore.eventHandle` ([editor contract](doc_page_impl_edit.md#the-editor-contract), [entering and moving a block](doc_page_impl_edit.md#floating-controls), [moving data into the asset store](doc_page_impl_asset.md#moving-inline-data-into-the-store), [editing a label](doc_page_impl_side_panel.md#editing-a-label-in-place)) |
 
-A route handles the type for every component that reports it: a `navigateRequest` from an index item, a tag overview entry, or a link component takes the same path. The page's own ui (`DocLink`, the navigation buttons, the document toolbar) is not a component in this sense and calls the stores directly; the router is the boundary of registered components. One piece of the page's own ui joins the layer on purpose: the block toolbar of the edit layer dispatches its move buttons as `editBlockMoveRequest` (with `eventBuild`, source `{ sourcePath, blockIndex, placement: 'editToolbar' }`), because moving a block is an operation of the document like the ones components request, and the host application and a future history should see it the same way.
+A route handles the type for every component that reports it: a `navigateRequest` from an index item, a tag overview entry, or a link component takes the same path. The page's own ui (`DocLink`, the navigation buttons, the document toolbar) is not a component in this sense and calls the stores directly; the router is the boundary of registered components. Two pieces of the page's own ui join the layer on purpose: the block wrapper and the block toolbar of the edit layer dispatch entering a block, moving it, and moving its data into the asset store as `editBlockEnterRequest`, `editBlockMoveRequest`, and `editBlockAssetMoveRequest` (with `eventBuild`, source `{ sourcePath, blockIndex, placement: 'editBlock' | 'editToolbar' }`, the click's position as `point`), because these are operations of the document like the ones components request, and the host application and a future history should see them the same way.
 
 ## The edit domain and the focus shift
 
 The edit store is the one handler of its domain, so the route is a single line (`handle: (event) => editStore.eventHandle(event)`), and the store decides with its own state whether an event applies: session events are accepted only from the editor of the open session (`event.source.sourcePath` is the session's document), the rest get code -1 with a reason. The events of the domain name their subject in `source`, filled by `RegisteredComp` from the runtime config of the component: a session event is matched against the session, a block event carries `sourcePath` and `blockIndex`, a side-panel label event carries `itemId` (the host of a side-panel item renders it with `itemId` in its runtime config, so every report of an item label knows its item).
 
-A focus shift is the event that shows why routing belongs to the store and not to the component. The editing surface knows only that the caret left it at its first or last line; it reports `editFocusShiftRequest { direction }`. The store knows the session, the block index, and the number of blocks, so it leaves the session (saving it) and starts the neighbor with the caret at the near end, or rejects the request at the ends of the document ([focus shift](doc_page_impl_edit.md#sessions-leave-and-cancel)). This is the default routing of Yamd's `unfocus` with a direction: the component says "out, this way", the document store picks the destination from its state.
+A focus shift is the event that shows why routing belongs to the store and not to the component. The editing surface knows only that the caret left it at its first or last line, and where the caret was; it reports `editFocusShiftRequest { direction }` with the caret's position as the event's point. The store knows the session, the block index, and the number of blocks, so it leaves the session (saving it) and starts the neighbor with the caret on the near line at the same x, or rejects the request at the ends of the document ([focus shift](doc_page_impl_edit.md#sessions-leave-and-cancel)). This is the default routing of Yamd's `unfocus` with a direction: the component says "out, this way, from here", the document store picks the destination from its state.
 
 ## Extending the layer
 
@@ -74,9 +79,10 @@ A focus shift is the event that shows why routing belongs to the store and not t
 
 ```text
 frontend/src/lib/doc-event.js          DocEventRouter (routeAdd, eventBuild, dispatch),
-                                       resultNormalize, eventResultIsAccepted, result codes
+                                       resultNormalize, eventResultIsAccepted, pointNormalize, result codes
 frontend/src/DocPageMdx.jsx            router creation and the route declarations
-comp-doc/registry/RegisteredComp.jsx   eventHandle: the component report becomes an event
-comp-doc/edit/DocEditBlockToolbar.jsx  the move buttons dispatch editBlockMoveRequest
+comp-doc/registry/RegisteredComp.jsx   eventHandle: the component report (data, { point }) becomes an event
+comp-doc/edit/DocEditBlock.jsx         a click on a block dispatches editBlockEnterRequest with its point
+comp-doc/edit/DocEditBlockToolbar.jsx  the edit, move, and to-asset buttons dispatch their block events
 frontend/src/store/DocEditStore.ts     editEventTypeList, eventHandle (the edit domain)
 ```

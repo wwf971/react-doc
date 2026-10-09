@@ -32,7 +32,7 @@
   z-index: 60;
   display: flex;
   flex-direction: column;
-  width: min(34rem, calc(100vw - 1rem));
+  width: min(40rem, calc(100vw - 1rem));
   max-height: calc(100vh - 4rem);
   border: 1px solid var(--color-fd-border);
   border-radius: 4px;
@@ -94,4 +94,112 @@
 .doc-settings-body {
   overflow: auto;
   padding: 0.5rem;
+}
+
+/* ---------- the asset store tab: folders of the local store ---------- */
+
+.doc-settings-asset {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.doc-settings-asset-note {
+  margin: 0;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.74rem;
+}
+
+.doc-settings-asset-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+}
+
+/* one row per folder: path, flags, object count, actions */
+.doc-settings-asset-folder {
+  display: grid;
+  grid-template-columns: minmax(6rem, 1fr) max-content max-content max-content;
+  align-items: center;
+  gap: 0 0.6rem;
+  min-height: 1.7rem;
+  padding: 0.1rem 0.5rem;
+  border-top: 1px solid var(--color-fd-border);
+}
+
+.doc-settings-asset-folder:first-child {
+  border-top: 0;
+}
+
+.doc-settings-asset-folder[data-missing] .doc-settings-asset-path {
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-settings-asset-path {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.74rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-settings-asset-flags {
+  display: inline-flex;
+  gap: 0.25rem;
+  min-width: 3rem;
+}
+
+.doc-settings-asset-badge {
+  padding: 0 0.3rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.68rem;
+  line-height: 1.05rem;
+}
+
+.doc-settings-asset-badge.is-default {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border));
+  color: var(--color-fd-primary);
+}
+
+.doc-settings-asset-badge.is-missing {
+  border-color: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 60%, var(--color-fd-border));
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-settings-asset-count {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.doc-settings-asset-actions {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.doc-settings-asset-add {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.doc-settings-asset-add-path {
+  min-width: 10rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.74rem;
+}
+
+.doc-settings-asset-link {
+  margin-left: 0.4rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-fd-primary);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
 }

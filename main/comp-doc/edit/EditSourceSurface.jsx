@@ -1,4 +1,5 @@
 import { createElement, useEffect, useLayoutEffect, useRef } from 'react';
+import { caretPlaceAtEdge, caretPlaceInitial, caretRectGet } from './caret-place.js';
 import './DocEdit.css';
 
 // The editing surface of a block's source: the block's own element made
@@ -13,18 +14,24 @@ import './DocEdit.css';
 //   tag                 element to render: 'p', 'h1'..'h6', 'div' (default)
 //   kind                block kind, for the typography of the surface
 //   text, textVersion   content to show; rewritten when textVersion changes
-//   selectionInitial    where the caret is when the surface opens:
-//                       'end' (default), 'start' (entered from the block
-//                       above), 'all' (a block created from a template:
-//                       typing replaces it)
+//   selectionInitial    where the caret is when the surface opens
+//                       (doc_page_impl_edit.md#where-the-caret-goes):
+//                       'end' (default), 'start', 'all' (a block created
+//                       from a template: typing replaces it),
+//                       { type: 'point', clientX, clientY } (the block was
+//                       clicked there: the caret goes to the text nearest
+//                       that point), { type: 'line', line: 'first' | 'last',
+//                       clientX } (entered from the neighbor block by a
+//                       focus shift: the caret keeps its x on the near line)
 //   isLocked            no editing while a change request is pending
 //   onTextChange(text)  typed text
 //   onSubmitRequest()   Ctrl/Cmd + Enter
 //   onCancelRequest()   Escape
-//   onFocusShiftRequest(direction)
+//   onFocusShiftRequest(direction, { point })
 //                       ArrowDown on the last line ('next') / ArrowUp on the
 //                       first line ('previous'): the author wants to go on
-//                       to the neighbor block
+//                       to the neighbor block. point is where the caret is
+//                       (viewport coordinates), so the neighbor can keep its x.
 export function EditSourceSurface({
   tag = 'div',
   kind,
@@ -47,7 +54,7 @@ export function EditSourceSurface({
     element.textContent = text;
     // text set by code happens when the author is already working here
     if (textVersion > 0 && document.activeElement !== element) element.focus();
-    caretPlace(element, 'end');
+    caretPlaceAtEdge(element, 'end');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [textVersion, tag]);
 
@@ -55,8 +62,7 @@ export function EditSourceSurface({
     const element = elementRef.current;
     if (!element || isLocked) return;
     element.focus({ preventScroll: true });
-    if (selectionInitial === 'all') selectionSetAll(element);
-    else caretPlace(element, selectionInitial === 'start' ? 'start' : 'end');
+    caretPlaceInitial(element, selectionInitial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -80,9 +86,11 @@ export function EditSourceSurface({
     if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && onFocusShiftRequest) {
       if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return;
       const direction = event.key === 'ArrowDown' ? 'next' : 'previous';
-      if (!caretIsAtEdgeLine(event.currentTarget, direction)) return;
+      const rectCaret = caretRectGet(event.currentTarget);
+      if (!caretIsAtEdgeLine(event.currentTarget, direction, rectCaret)) return;
       event.preventDefault();
-      onFocusShiftRequest(direction);
+      const point = rectCaret ? { clientX: rectCaret.left, clientY: rectCaret.top + rectCaret.height / 2 } : undefined;
+      onFocusShiftRequest(direction, { point });
     }
   };
 
@@ -129,35 +137,16 @@ function contentEditableValueGet() {
   return contentEditableValue;
 }
 
-// the caret inside the text of the surface (not at the element boundary,
-// where the browser has no caret rectangle and arrow keys do not move it)
-function caretPlace(element, position) {
-  const selection = window.getSelection?.();
-  if (!selection) return;
-  const range = document.createRange();
-  const textNode = position === 'end' ? element.lastChild : element.firstChild;
-  if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-    range.setStart(textNode, position === 'end' ? textNode.length : 0);
-    range.collapse(true);
-  } else {
-    range.selectNodeContents(element);
-    range.collapse(position === 'start');
-  }
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
-
 // true when the collapsed caret is on the last visual line of the surface
 // (direction 'next') or on its first one ('previous'): an arrow key in that
-// direction has nowhere to go inside the surface. the caret rectangle is
-// compared with the content box; when the browser gives no rectangle (an
-// empty element, a caret right after a line break) the text lines decide.
-function caretIsAtEdgeLine(element, direction) {
+// direction has nowhere to go inside the surface. the caret rectangle
+// (rectCaret, from caretRectGet) is compared with the content box; when the
+// browser gives none, the text lines decide.
+function caretIsAtEdgeLine(element, direction, rectCaret) {
   const selection = window.getSelection?.();
   if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return false;
   if (!element.contains(selection.anchorNode)) return false;
   const range = selection.getRangeAt(0);
-  const rectCaret = range.getClientRects()[0];
   if (rectCaret && rectCaret.height > 0) {
     const rectElement = element.getBoundingClientRect();
     const style = getComputedStyle(element);
@@ -174,13 +163,4 @@ function caretIsAtEdgeLine(element, direction) {
   if (direction === 'previous') return !textBefore.includes('\n');
   const textAfter = surfaceTextGet(element).slice(textBefore.length);
   return !textAfter.includes('\n');
-}
-
-function selectionSetAll(element) {
-  const selection = window.getSelection?.();
-  if (!selection) return;
-  const range = document.createRange();
-  range.selectNodeContents(element);
-  selection.removeAllRanges();
-  selection.addRange(range);
 }

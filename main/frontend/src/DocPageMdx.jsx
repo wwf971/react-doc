@@ -64,12 +64,14 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     });
     const tagStore = new DocTagStore(sourceStore, docStore, configStore);
     const compStateStore = new CompStateStore();
-    const editStore = new DocEditStore(sourceStore, docStore, configStore, { endpoint: config.edit?.endpoint });
     const assetStore = new DocAssetStore({
       endpoint: config.asset?.endpoint,
       snapshot: data.assetSnapshot,
       subscribe: config.asset?.subscribe,
     });
+    // the edit store creates asset objects when a block's inline data is
+    // moved into the asset store (doc_page_impl_asset.md)
+    const editStore = new DocEditStore(sourceStore, docStore, configStore, { endpoint: config.edit?.endpoint, assetStore });
     // the event layer (doc_page_impl_event.md): component reports are routed
     // to the domain that answers them; the stores never see onEvent callbacks
     const eventRouter = new DocEventRouter();

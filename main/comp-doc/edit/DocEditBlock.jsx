@@ -26,10 +26,14 @@ import './DocEdit.css';
 // a block that is not being edited renders exactly as in reading mode: no
 // outline, no background; only its toolbar appears on hover. the session is
 // entered with the toolbar's Edit button, or, when EditBlockEnterMode is
-// 'click', with a click anywhere on the block. only one block of a document
-// is in edit mode at a time (the store holds one session). the session is
-// left, saving the draft, when a pointer goes down outside the block or
-// Ctrl/⌘ + Enter is pressed in it; Escape cancels it.
+// 'click', with a click anywhere on the block. entering is reported as an
+// event (editBlockEnterRequest, source: this document and this block) with
+// the pointer position as the event point, and travels through the event
+// layer to DocEditStore (doc_page_impl_event.md); with a point the caret
+// opens at the text nearest to where the block was clicked. only one block
+// of a document is in edit mode at a time (the store holds one session).
+// the session is left, saving the draft, when a pointer goes down outside
+// the block or Ctrl/⌘ + Enter is pressed in it; Escape cancels it.
 //
 // geometry lock: while the block is edited, the wrapper keeps the height and
 // the gaps to its neighbors that the block had in view mode (measured by
@@ -43,7 +47,7 @@ import './DocEdit.css';
 // blocks that render nothing visible (a comment, trailing component markers)
 // get a small floating chip, so they can be found and edited.
 export const DocEditBlock = observer(function DocEditBlock({ blockIndex, children }) {
-  const { editStore } = useDocStores();
+  const { editStore, eventRouter, onEvent: onEventPage } = useDocStores();
   const { path, model, format } = useDocEditDoc();
   const elementRef = useRef(null);
   const anchorRef = useRef(null);
@@ -56,21 +60,37 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
   useFloatHeightFollow(anchorRef, floatElement);
   if (!block) return children;
   const isDeletePending = editStore.deleteConfirmIs(path, index);
-  const isOpen = isDeletePending || editStore.insertMenuIs(path, index) || editStore.blockMoveIs(path, index);
+  const isOpen = isDeletePending
+    || editStore.insertMenuIs(path, index)
+    || editStore.blockMoveIs(path, index)
+    || editStore.blockAssetMoveIs(path, index);
   const isInvisible = block.kind === 'html' || block.kind === 'marker';
   const isEnterByClick = editStore.blockEnterMode === 'click';
   const textPending = editStore.blockTextPendingGet(path, index);
   const label = blockLabelGet(block);
 
+  // entering the block's session is reported as an event; point is where
+  // the pointer was (a pointer event can be passed), undefined for a report
+  // without one
+  const enterRequest = (point) => {
+    const event = eventRouter.eventBuild({
+      type: 'editBlockEnterRequest',
+      source: { placement: 'editBlock', sourcePath: path, blockIndex: index },
+      point,
+    });
+    void eventRouter.dispatch(event, { onEventHost: onEventPage });
+  };
+
   // EditBlockEnterMode 'click': a click anywhere on the block starts its
-  // session; the block's own controls (buttons, editable values, form
-  // fields) and the floating controls keep working
+  // session, with the caret where the block was clicked; the block's own
+  // controls (buttons, editable values, form fields) and the floating
+  // controls keep working
   const clickCaptureHandle = (event) => {
     if (!isEnterByClick || isEditing) return;
     if (event.target.closest?.(clickOwnSelector)) return;
     event.preventDefault();
     event.stopPropagation();
-    void editStore.sessionBlockStart(path, index);
+    enterRequest(event);
   };
 
   // the geometry lock keeps the wrapper at the height the block had in view
@@ -116,7 +136,7 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
         type="button"
         className="doc-edit-block-chip not-prose"
         title={block.text}
-        onClick={() => void editStore.sessionBlockStart(path, index)}
+        onClick={() => enterRequest(undefined)}
       >
         {block.kind === 'marker' ? 'markers' : 'comment'}: {block.text.split('\n')[0]}
       </button>

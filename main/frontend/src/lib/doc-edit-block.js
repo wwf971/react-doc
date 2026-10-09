@@ -240,9 +240,10 @@ function componentDetailBuild(componentCompiled, text, offsetBlock) {
   };
 }
 
-// the text of a component block after its component changed `raw` and/or
-// the marker props. the marker and the fences stay as authored unless the
-// new raw text would close the fence early.
+// the text of a component block after its component changed `raw`, the
+// marker props and/or the language of its fenced block (`lang`, a fenced
+// block only: the info string is replaced). the marker and the fences stay
+// as authored unless the new raw text would close the fence early.
 export function componentBlockTextBuild(block, change = {}) {
   const component = block.component;
   if (!component) throw new Error('componentBlockTextBuild needs a component block');
@@ -253,7 +254,7 @@ export function componentBlockTextBuild(block, change = {}) {
   // reports it); serializers such as yaml stringify end with one
   const raw = change.raw !== undefined ? String(change.raw).replace(/\n$/, '') : component.raw;
   const nodeText = component.nodeType === 'code'
-    ? fencedCodeTextBuild(component.nodeText, raw)
+    ? fencedCodeTextBuild(component.nodeText, raw, change.lang)
     : raw;
   return component.textBefore + markerText + component.textBetween + nodeText;
 }
@@ -290,12 +291,14 @@ function fencedCodeValueGet(nodeText) {
 }
 
 // the fenced block with a new value. the fence character and the info string
-// are kept; the fence grows when a line of the value could close it.
-function fencedCodeTextBuild(nodeText, raw) {
+// are kept (with `lang` given, the info string becomes that language); the
+// fence grows when a line of the value could close it.
+function fencedCodeTextBuild(nodeText, raw, lang) {
   const lineList = nodeText.split('\n');
   const match = REGEX_FENCE_OPEN.exec(lineList[0]);
   if (!match) return raw;
-  const [, indent, fenceAuthored, info] = match;
+  const [, indent, fenceAuthored, infoAuthored] = match;
+  const info = lang !== undefined ? String(lang) : infoAuthored;
   const fence = fenceRunGet(raw, fenceAuthored[0], fenceAuthored.length);
   const lineListRaw = raw === '' ? [] : raw.split('\n');
   return [

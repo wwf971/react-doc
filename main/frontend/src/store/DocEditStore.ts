@@ -2,8 +2,10 @@ import { makeAutoObservable, observable, reaction, runInAction } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import type { DocStore } from './DocStore.js';
 import type { DocConfigStore } from './DocConfigStore.js';
+import type { DocAssetStore } from './DocAssetStore.js';
 import { compileDoc } from '../lib/mdx-compile.js';
 import { docEditApiCreate } from '../lib/doc-edit-api.js';
+import { ASSET_REF_LANG, ASSET_STORE_ID_LOCAL, assetRefLangIs, assetRefTextBuild } from '../lib/doc-asset-ref.js';
 import {
   blockDeleteOperationBuild,
   blockInsertOperationBuild,
@@ -48,11 +50,21 @@ import {
 
 export type EditSessionType = 'block' | 'frontmatter' | 'document';
 
-// where the caret is when the editing surface opens: at the end (an edit
-// started from the toolbar), at the start (entered from the block above by
-// a focus shift), or the whole text selected (a block created from a
-// template: typing replaces it)
-export type EditSelectionInitial = 'all' | 'start' | 'end';
+// where the caret is when the editing surface opens
+// (doc_page_impl_edit.md#where-the-caret-goes): at the end (an edit started
+// from the toolbar), at the start, the whole text selected (a block created
+// from a template: typing replaces it), at the text nearest to a point of
+// the screen (the block was clicked there), or on the first / last line at
+// an x of the screen (entered from the neighbor block by a focus shift: the
+// caret keeps its column). points are viewport coordinates.
+export type EditSelectionInitial =
+  | 'all'
+  | 'start'
+  | 'end'
+  | { type: 'point'; clientX: number; clientY: number }
+  | { type: 'line'; line: 'first' | 'last'; clientX: number };
+
+export type EditPoint = { clientX: number; clientY: number };
 
 export type EditSession = {
   type: EditSessionType;
@@ -100,6 +112,15 @@ export type EditBlockMove = {
   message: string;
 };
 
+// the one component block whose inline data is being moved into the asset
+// store, or the failure of the last such move
+export type EditBlockAssetMove = {
+  path: string;
+  blockIndex: number;
+  status: 'submitting' | 'error';
+  message: string;
+};
+
 // the one side-panel item whose label is being edited in place
 export type EditSidePanelText = {
   itemId: string;
@@ -129,18 +150,20 @@ export type EditDocState = {
 
 export type EditResult = { code: number; data?: any; message: string };
 
-type DocEvent = { type: string; data: Record<string, any>; source: Record<string, any> };
+type DocEvent = { type: string; data: Record<string, any>; source: Record<string, any>; point?: EditPoint };
 
 // the event types the edit route of the event layer brings here: the
-// session events of the editor of the open session, and the block events a
-// toolbar reports for the block it belongs to
+// session events of the editor of the open session, and the block events
+// the block wrapper or a toolbar reports for the block it belongs to
 export const editEventTypeList = [
   'editDraftChange',
   'editTextSetRequest',
   'editSubmitRequest',
   'editCancelRequest',
   'editFocusShiftRequest',
+  'editBlockEnterRequest',
   'editBlockMoveRequest',
+  'editBlockAssetMoveRequest',
   'sidePanelTextEditStartRequest',
   'sidePanelTextSubmitRequest',
   'sidePanelTextCancelRequest',
@@ -162,6 +185,7 @@ export class DocEditStore {
   insertMenu: EditInsertMenu | undefined = undefined;
   deleteConfirm: EditDeleteConfirm | undefined = undefined;
   blockMove: EditBlockMove | undefined = undefined;
+  blockAssetMove: EditBlockAssetMove | undefined = undefined;
   // the text a block was just saved as, shown in its place until the document
   // is compiled again, so the saved block never flashes back to its old text
   blockTextPending: { path: string; blockIndex: number; text: string } | undefined = undefined;
@@ -174,13 +198,23 @@ export class DocEditStore {
   reactionDispose: (() => void) | undefined;
   reactionConfigDispose: (() => void) | undefined;
 
-  constructor(sourceStore: DocSourceStore, docStore: DocStore, configStore: DocConfigStore, options?: { endpoint?: string }) {
+  // the asset store, for moving a block's inline data into it
+  assetStore: DocAssetStore | undefined;
+
+  constructor(
+    sourceStore: DocSourceStore,
+    docStore: DocStore,
+    configStore: DocConfigStore,
+    options?: { endpoint?: string; assetStore?: DocAssetStore },
+  ) {
     this.sourceStore = sourceStore;
     this.docStore = docStore;
     this.configStore = configStore;
+    this.assetStore = options?.assetStore;
     this.api = options?.endpoint ? docEditApiCreate(options.endpoint) : undefined;
     makeAutoObservable(this, {
       api: false,
+      assetStore: false,
       configStore: false,
       docStore: false,
       sourceStore: false,
@@ -209,6 +243,7 @@ export class DocEditStore {
           if (this.insertMenu && this.insertMenu.path !== path) this.insertMenu = undefined;
           if (this.deleteConfirm && this.deleteConfirm.path !== path) this.deleteConfirm = undefined;
           if (this.blockMove && this.blockMove.path !== path) this.blockMove = undefined;
+          if (this.blockAssetMove && this.blockAssetMove.path !== path) this.blockAssetMove = undefined;
         });
         if (isEditMode && this.docIsEditable(path)) void this.docEditEnsure(path);
       },
@@ -265,10 +300,10 @@ export class DocEditStore {
     return this.editModeSet(!this.isEditMode);
   }
 
+  // 'click':  a click anywhere on the block, as well as the Edit button (the default)
   // 'button': the Edit button of the block toolbar only
-  // 'click':  a click anywhere on the block as well
   get blockEnterMode(): 'button' | 'click' {
-    return this.configStore.valueGlobalGet('EditBlockEnterMode') === 'click' ? 'click' : 'button';
+    return this.configStore.valueGlobalGet('EditBlockEnterMode') === 'button' ? 'button' : 'click';
   }
 
   // an md/mdx file of the collected source. inline items, component panels
@@ -462,6 +497,7 @@ export class DocEditStore {
       || this.insertMenu?.status === 'submitting'
       || this.deleteConfirm?.status === 'submitting'
       || this.blockMove?.status === 'submitting'
+      || this.blockAssetMove?.status === 'submitting'
       || this.sidePanelText?.status === 'submitting';
   }
 
@@ -665,16 +701,22 @@ export class DocEditStore {
   }
 
   // the session moves to the neighbor block in `direction`: the open session
-  // is left (saved), the neighbor opens with the caret at its near end.
+  // is left (saved), the neighbor opens with the caret on its near line. with
+  // the caret position of the leaving surface (point, viewport coordinates)
+  // the caret keeps its x on that line; without it, it goes to the near end.
   // nothing happens at the first / last block.
-  async sessionFocusShift(direction: EditFocusShiftDirection): Promise<boolean> {
+  async sessionFocusShift(direction: EditFocusShiftDirection, point?: EditPoint): Promise<boolean> {
     const session = this.session;
     if (!session || session.type !== 'block') return false;
     const blockIndexNext = direction === 'next' ? session.blockIndex + 1 : session.blockIndex - 1;
     if (blockIndexNext < 0 || blockIndexNext >= this.blockCountGet(session.path)) return false;
-    return this.sessionBlockStart(session.path, blockIndexNext, {
-      selectionInitial: direction === 'next' ? 'start' : 'end',
-    });
+    let selectionInitial: EditSelectionInitial;
+    if (point) {
+      selectionInitial = { type: 'line', line: direction === 'next' ? 'first' : 'last', clientX: point.clientX };
+    } else {
+      selectionInitial = direction === 'next' ? 'start' : 'end';
+    }
+    return this.sessionBlockStart(session.path, blockIndexNext, { selectionInitial });
   }
 
   // ---------- events of the edit domain ----------
@@ -683,15 +725,28 @@ export class DocEditStore {
   // its block through event.source (sourcePath, blockIndex); the session
   // events are accepted only from the editor of the open session.
   async eventHandle(event: DocEvent): Promise<EditResult | undefined> {
-    if (event.type === 'editBlockMoveRequest') {
+    if (event.type === 'editBlockEnterRequest' || event.type === 'editBlockMoveRequest' || event.type === 'editBlockAssetMoveRequest') {
       const path = String(event.source.sourcePath ?? '');
       const blockIndex = Number(event.source.blockIndex);
       if (!path || !Number.isInteger(blockIndex)) {
-        return { code: -1, message: 'editBlockMoveRequest needs the document path and the block index' };
+        return { code: -1, message: `${event.type} needs the document path and the block index` };
       }
-      const direction: EditBlockMoveDirection = event.data.direction === 'up' ? 'up' : 'down';
-      const isMoved = await this.blockMoveApply(path, blockIndex, direction);
-      return isMoved ? { code: 0, message: '' } : { code: -1, message: this.blockMove?.message || 'the block was not moved' };
+      if (event.type === 'editBlockEnterRequest') {
+        // with a point (the block was clicked) the caret goes to the text
+        // nearest to it; without one (the toolbar button) to the end
+        const selectionInitial: EditSelectionInitial = event.point ? { type: 'point', ...event.point } : 'end';
+        const isStarted = await this.sessionBlockStart(path, blockIndex, { selectionInitial });
+        return isStarted ? { code: 0, message: '' } : { code: -1, message: this.session?.message || 'the block was not opened for editing' };
+      }
+      if (event.type === 'editBlockMoveRequest') {
+        const direction: EditBlockMoveDirection = event.data.direction === 'up' ? 'up' : 'down';
+        const isMoved = await this.blockMoveApply(path, blockIndex, direction);
+        return isMoved ? { code: 0, message: '' } : { code: -1, message: this.blockMove?.message || 'the block was not moved' };
+      }
+      const isMovedToAsset = await this.blockAssetMoveApply(path, blockIndex);
+      return isMovedToAsset
+        ? { code: 0, message: '' }
+        : { code: -1, message: this.blockAssetMove?.message || 'the data was not moved into the asset store' };
     }
 
     if (event.type.startsWith('sidePanelText')) {
@@ -740,7 +795,7 @@ export class DocEditStore {
     }
     if (event.type === 'editFocusShiftRequest') {
       const direction: EditFocusShiftDirection = event.data.direction === 'previous' ? 'previous' : 'next';
-      const isShifted = await this.sessionFocusShift(direction);
+      const isShifted = await this.sessionFocusShift(direction, event.point);
       return isShifted ? { code: 0, message: '' } : { code: -1, message: `no block ${direction === 'next' ? 'after' : 'before'} this one` };
     }
     return undefined;
@@ -858,6 +913,96 @@ export class DocEditStore {
       runInAction(() => {
         move.status = 'error';
         move.message = result.message;
+      });
+      return false;
+    }
+    return true;
+  }
+
+  // ---------- moving a block's data into the asset store ----------
+
+  // a component block with its data written inline in a fenced block can
+  // move that data into the asset store (doc_page_impl_asset.md): a component
+  // block with a reference already, or without a fenced block, cannot
+  blockAssetMoveIsAvailable(path: string, blockIndex: number): boolean {
+    if (!this.assetStore?.isWritable) return false;
+    const component = this.docEditByPath[path]?.model?.blockList[blockIndex]?.component;
+    return Boolean(component) && component.nodeType === 'code' && !assetRefLangIs(component.lang);
+  }
+
+  blockAssetMoveIs(path: string, blockIndex: number): boolean {
+    return this.blockAssetMove?.path === path && this.blockAssetMove.blockIndex === blockIndex;
+  }
+
+  blockAssetMoveClear() {
+    if (this.blockAssetMove?.status === 'submitting') return;
+    this.blockAssetMove = undefined;
+  }
+
+  // the inline data of the block becomes an object of the local asset store
+  // (in its default folder, with the block's language), and the fenced
+  // block is rewritten as the reference to that object by id (lang
+  // "asset"). the object gets no name: a name means one object of the
+  // store, and the store answers an existing object for a name it has, so
+  // naming it after the component would make the second Image block
+  // reference the first one's data. the person names it in the asset
+  // panel. the object is created first; when the document write then
+  // fails, the object stays in the store and the block keeps its inline
+  // data. requested through the event layer (editBlockAssetMoveRequest).
+  private async blockAssetMoveApply(path: string, blockIndex: number): Promise<boolean> {
+    if (this.blockAssetMove?.status === 'submitting') return false;
+    const failSet = (message: string) => {
+      runInAction(() => {
+        this.blockAssetMove = { path, blockIndex, status: 'error', message };
+      });
+    };
+    if (!this.assetStore?.isWritable) {
+      failSet('the asset store is not writable');
+      return false;
+    }
+    if (!this.blockAssetMoveIsAvailable(path, blockIndex)) {
+      failSet('only a component block with inline data in a fenced block can move it into the asset store');
+      return false;
+    }
+    const isLeft = await this.sessionLeaveForIndexAction(path);
+    if (!isLeft) return false;
+    const model = this.docEditByPath[path]?.model;
+    const block = model?.blockList[blockIndex];
+    if (!block?.component) return false;
+    const move: EditBlockAssetMove = { path, blockIndex, status: 'submitting', message: '' };
+    runInAction(() => {
+      this.insertMenu = undefined;
+      this.deleteConfirm = undefined;
+      this.blockMove = undefined;
+      this.blockAssetMove = move;
+    });
+    const resultCreate = await this.assetStore.objectCreate({
+      store: ASSET_STORE_ID_LOCAL,
+      lang: block.component.lang,
+      text: block.component.raw,
+      note: `${block.component.compName} data moved from ${path}`,
+    });
+    const objectId: string = resultCreate.data?.object?.objectId ?? '';
+    if (resultCreate.code !== 0 || !objectId) {
+      runInAction(() => {
+        move.status = 'error';
+        move.message = resultCreate.message || 'The asset object was not created.';
+      });
+      return false;
+    }
+    const referenceText = assetRefTextBuild({ store: ASSET_STORE_ID_LOCAL, objectId });
+    const text = componentBlockTextBuild(block, { raw: referenceText, lang: ASSET_REF_LANG });
+    const result = await this.operationApply(path, blockReplaceOperationBuild(block, text), {
+      messageFailure: 'The block was not rewritten as a reference.',
+      onApplied: () => {
+        if (this.blockAssetMove === move) this.blockAssetMove = undefined;
+        this.blockTextPending = { path, blockIndex, text };
+      },
+    });
+    if (result.code !== 0) {
+      runInAction(() => {
+        move.status = 'error';
+        move.message = `${result.message} The data is in the asset store as object ${objectId}.`;
       });
       return false;
     }

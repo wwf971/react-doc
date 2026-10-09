@@ -1,14 +1,19 @@
 import { useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
+import { PanelRightClose, PanelRightOpen } from '../../frontend/UICommon.js';
 import { AssetPanel } from './AssetPanel.jsx';
+import { AssetPreview } from './AssetPreview.jsx';
 import './DocAsset.css';
 
-// Popup with the asset panel of one object, opened from the frame above a
-// component whose data comes from the asset store. Open state lives in
-// DocAssetStore (panel). The popup frame is the host's text panel
+// Popup with the asset panel of one object, opened from the toolbar of a
+// component block whose data comes from the asset store. Open state lives
+// in DocAssetStore (panel). The popup frame is the host's text panel
 // component (config.compConfigHost.panelComponent), as for the tag
-// overview; its content is AssetPanel.
+// overview; its content is AssetPanel and, when the preview pane is open,
+// AssetPreview at its right. The side-panel button in the header (left of
+// the close button; lucide PanelRightOpen, PanelRightClose while open)
+// toggles the pane; the popup is wider while the pane is shown.
 export const AssetPanelPopup = observer(function AssetPanelPopup() {
   const { assetStore, compConfigHost } = useDocStores();
   const Panel = compConfigHost.panelComponent;
@@ -25,17 +30,36 @@ export const AssetPanelPopup = observer(function AssetPanelPopup() {
   }, [isOpen, assetStore]);
 
   if (!isOpen) return null;
-  const object = assetStore.objectGet(panel.objectId);
+  const object = assetStore.objectGet(panel.store, panel.objectId);
+  const isPreviewOpen = panel.isPreviewOpen;
   return (
     <Panel
       data={{ title: `Asset: ${object?.name || panel.objectId}` }}
       config={{
         isPopup: true,
         isCloseVisible: true,
-        className: 'doc-asset-popup',
+        className: isPreviewOpen ? 'doc-asset-popup is-preview-open' : 'doc-asset-popup',
         bodyClassName: 'doc-asset-popup-body',
       }}
-      content={<AssetPanel />}
+      headerRightContent={(
+        <button
+          type="button"
+          title={isPreviewOpen ? 'Hide the preview' : 'Show the preview: what the data renders as'}
+          aria-label={isPreviewOpen ? 'Hide the preview' : 'Show the preview'}
+          aria-pressed={isPreviewOpen}
+          onClick={() => assetStore.panelPreviewToggle()}
+        >
+          {isPreviewOpen ? <PanelRightClose size={16} aria-hidden="true" /> : <PanelRightOpen size={16} aria-hidden="true" />}
+        </button>
+      )}
+      content={(
+        <div className="doc-asset-popup-content">
+          <div className="doc-asset-popup-main">
+            <AssetPanel />
+          </div>
+          {isPreviewOpen ? <AssetPreview /> : null}
+        </div>
+      )}
       onEvent={(eventType) => {
         if (eventType === 'closeRequest') assetStore.panelClose();
       }}

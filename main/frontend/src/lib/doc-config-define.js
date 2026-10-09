@@ -75,12 +75,13 @@ export const configDefineListBuiltin = [
   },
   {
     // how the edit mode of a block is entered while the page is in edit mode:
+    //   click    a click anywhere on the block (the caret opens where the
+    //            block was clicked), as well as the Edit button
     //   button   the Edit button of the block toolbar only
-    //   click    a click anywhere on the block as well
     key: 'EditBlockEnterMode',
     type: 'enum',
-    valueList: ['button', 'click'],
-    valueDefault: 'button',
+    valueList: ['click', 'button'],
+    valueDefault: 'click',
     scope: 'page',
     description: 'How a block enters its edit mode: with the Edit button of its toolbar only, or also by clicking the block.',
   },

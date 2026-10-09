@@ -3,17 +3,25 @@ import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
 import { RotateCw, X } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
+import { AssetStoreSettings } from './AssetStoreSettings.jsx';
 import './DocSettings.css';
 
-// The settings panel: every config key that is user settable, one item per
-// key, rendered by the application's ConfigPanel (config.components). A
-// change sets the user level of that key (DocConfigStore.valueUserSet), the
-// override that comes after every declared level and lives for the page
-// session only; "Reset" drops every override.
+// The settings panel, rendered by the application's ConfigPanel
+// (config.components) with two tabs (subtab items):
 //
-// the panel is rendered once at page level while DocConfigStore.isSettingsOpen,
-// and floats under the settings button that opened it; a pointer going down
-// outside it, or Escape, closes it.
+//   Config       every config key that is user settable, one item per key.
+//                a change sets the user level of that key
+//                (DocConfigStore.valueUserSet), the override that comes
+//                after every declared level and lives for the page session
+//                only; "Reset" drops every override.
+//   Asset store  the folders of the local asset store (AssetStoreSettings),
+//                written into the store's config file by the development
+//                server, so they are kept (doc_page_impl_asset.md).
+//
+// the tab shown is DocConfigStore.settingsTabId. the panel is rendered once
+// at page level while DocConfigStore.isSettingsOpen, and floats under the
+// settings button that opened it; a pointer going down outside it, or
+// Escape, closes it.
 export const DocSettingsPanel = observer(function DocSettingsPanel() {
   const stores = useDocStores();
   const { configStore } = stores;
@@ -52,14 +60,28 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen({ anchorElem
     };
   }, [anchorElement, configStore]);
 
-  const itemList = configStore.configDefineListUserSettable.map((define) => settingsItemBuild(define, stores));
+  const itemListConfig = configStore.configDefineListUserSettable.map((define) => settingsItemBuild(define, stores));
   const data = {};
   for (const define of configStore.configDefineListUserSettable) {
     data[define.key] = settingsValueToItem(define, configStore.valueGlobalGet(define.key));
   }
   const isOverrideAny = Object.keys(configStore.configUserByKey).length > 0;
+  const isConfigTab = configStore.settingsTabId === 'config';
+  const itemList = [
+    { id: 'config', type: 'subtab', name: 'Config', children: itemListConfig },
+    {
+      id: 'assetStore',
+      type: 'subtab',
+      name: 'Asset store',
+      children: [{ id: 'assetStoreFolders', type: 'custom', comp: AssetStoreSettings, isFullWidth: true }],
+    },
+  ];
 
   const eventHandle = (eventType, eventData) => {
+    if (eventType === 'activeSubtabChange') {
+      configStore.settingsTabIdSet(eventData.subtabId);
+      return { code: 0 };
+    }
     if (eventType !== 'valueChangeAttempt') return undefined;
     const define = configStore.configDefineByKey.get(eventData.valueId);
     if (!define) return { code: -1, message: `unknown config key ${eventData.valueId}` };
@@ -77,18 +99,24 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen({ anchorElem
     >
       <div className="doc-settings-head">
         <span className="doc-settings-title">Settings</span>
-        <button
-          type="button"
-          className="doc-settings-head-button"
-          disabled={!isOverrideAny}
-          title="Reset every setting to the configured value"
-          aria-label="Reset every setting to the configured value"
-          onClick={() => configStore.configUserClear()}
-        >
-          <RotateCw aria-hidden="true" size={13} strokeWidth={2} />
-          <span>Reset</span>
-        </button>
-        <span className="doc-settings-note">for this page session; the document config is not changed</span>
+        {isConfigTab ? (
+          <>
+            <button
+              type="button"
+              className="doc-settings-head-button"
+              disabled={!isOverrideAny}
+              title="Reset every setting to the configured value"
+              aria-label="Reset every setting to the configured value"
+              onClick={() => configStore.configUserClear()}
+            >
+              <RotateCw aria-hidden="true" size={13} strokeWidth={2} />
+              <span>Reset</span>
+            </button>
+            <span className="doc-settings-note">for this page session; the document config is not changed</span>
+          </>
+        ) : (
+          <span className="doc-settings-note">the folders are written into the store's config file</span>
+        )}
         <button
           type="button"
           className="doc-settings-head-button doc-settings-close"
@@ -102,7 +130,7 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen({ anchorElem
       <div className="doc-settings-body">
         <ConfigPanel
           data={data}
-          config={{ compPath: ['docSettings'], items: itemList }}
+          config={{ compPath: ['docSettings'], items: itemList, activeSubtabId: configStore.settingsTabId }}
           onEvent={eventHandle}
         />
       </div>

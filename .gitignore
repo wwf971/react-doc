@@ -15,6 +15,9 @@ third_party/shadcn/
 
 ai-dev*
 # backups and temporary files of the asset store (doc_page_impl_asset.md);
-# the folder itself is content and is tracked
-example_doc/asset/**/*.bak
-example_doc/asset/**/*.tmp
+# the folders themselves are content and are tracked. example_doc/asset has
+# its own .gitignore, which keeps out everything not listed in it.
+example_doc/asset-archive/**/*.bak
+example_doc/asset-archive/**/*.tmp
+example_doc/asset.yaml.bak
+example_doc/asset.yaml.tmp

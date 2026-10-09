@@ -1,0 +1,21 @@
+objectId: w4okcpzk7k5
+name: gallery
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+versionIdHead: w4okcpzk5gp
+isDeleted: false
+isLocked: false
+timeCreated: 20261020_18495984+09
+versionList:
+  - versionId: w4okcpzk5gp
+    versionIdPrevList: []
+    time: 20261020_18495984+09
+    note: both demo images
+    size: 259
+    hash: 2e68ef3761c5606478c4aa070c7f6ed453b244ff
+    isLocked: false
+eventList:
+  - eventType: create
+    time: 20261020_18495984+09
+    versionId: w4okcpzk5gp

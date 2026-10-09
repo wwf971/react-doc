@@ -5,21 +5,29 @@
 //
 //   assetBackendApiCreate(endpoint)        the asset api of the development
 //                                          server (plugin/doc-asset-server.ts):
-//                                          reads and writes the folder on disk
+//                                          reads and writes the folders on disk
 //   assetBackendSnapshotCreate(snapshot)   the store bundled into a build by
 //                                          the vite plugin: read-only
 //
 // a further backend (a remote object storage) implements the same calls.
+// every object call names the store (the id written in a reference).
 //
-//   statusGet()                        { isWritable }
-//   objectList()                       { objectList }
-//   objectGet(objectId, versionId)     { object, version: { versionId, text, hash } }
-//   objectCreate({ name, lang, text, note })
-//   objectUpdate({ objectId, hashBase, text, mode, note })
-//   objectDelete(objectId) / objectRestore(objectId)
-//   objectMetaSet(objectId, { name, lang })
-//   versionCheckout(objectId, versionId)
-//   versionDelete(objectId, versionId)
+//   statusGet()                                 { isWritable, storeIdList, folderList }
+//   objectList(store)                           { objectList }
+//   objectGet(store, objectId, versionId)       { object, version: { versionId, size, hash, isText, text? } }
+//   objectGetByName(store, name, versionId)     the same, the object found by its name
+//   dataUrlGet(store, objectId, versionId)      the url the bytes of a version are read from ('' when none)
+//   objectCreate({ store, name, lang, contentType, fileExt, text | dataBase64, note, folder })
+//                                               { object, version, isCreated }; isCreated false when an
+//                                               object of that name exists: it is answered, nothing is created
+//   objectUpdate({ store, objectId, hashBase, text | dataBase64, mode, note })
+//   objectDelete(store, objectId) / objectRestore(store, objectId)
+//   objectMetaSet(store, objectId, { name, lang, contentType, saveMode })
+//   versionCheckout(store, objectId, versionId)
+//   versionDelete(store, objectId, versionId)
+//   objectLockSet(store, objectId, isLocked)
+//   versionLockSet(store, objectId, versionId, isLocked)
+//   folderSet(folderList)                       { folderList }   the folders of the local store
 
 export function assetBackendApiCreate(endpoint) {
   const endpointNormalized = String(endpoint ?? '').replace(/\/+$/, '');
@@ -41,56 +49,87 @@ export function assetBackendApiCreate(endpoint) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  const objectQueryBuild = (store, objectId, versionId) => (
+    `store=${encodeURIComponent(store)}&objectId=${encodeURIComponent(objectId)}&versionId=${encodeURIComponent(versionId)}`
+  );
 
   return {
     kind: 'api',
     statusGet: () => requestSend('/status'),
-    objectList: () => requestSend('/object/list'),
-    objectGet: (objectId, versionId = 'head') => requestSend(
-      `/object/get?objectId=${encodeURIComponent(objectId)}&versionId=${encodeURIComponent(versionId)}`,
+    objectList: (store) => requestSend(`/object/list?store=${encodeURIComponent(store)}`),
+    objectGet: (store, objectId, versionId = 'head') => requestSend(`/object/get?${objectQueryBuild(store, objectId, versionId)}`),
+    objectGetByName: (store, name, versionId = 'head') => requestSend(
+      `/object/get?store=${encodeURIComponent(store)}&name=${encodeURIComponent(name)}&versionId=${encodeURIComponent(versionId)}`,
     ),
+    dataUrlGet: (store, objectId, versionId = 'head') => `${endpointNormalized}/object/data?${objectQueryBuild(store, objectId, versionId)}`,
     objectCreate: (input) => requestPost('/object/create', input),
     objectUpdate: (input) => requestPost('/object/update', input),
-    objectDelete: (objectId) => requestPost('/object/delete', { objectId }),
-    objectRestore: (objectId) => requestPost('/object/restore', { objectId }),
-    objectMetaSet: (objectId, change) => requestPost('/object/meta/set', { objectId, ...change }),
-    versionCheckout: (objectId, versionId) => requestPost('/version/checkout', { objectId, versionId }),
-    versionDelete: (objectId, versionId) => requestPost('/version/delete', { objectId, versionId }),
+    objectDelete: (store, objectId) => requestPost('/object/delete', { store, objectId }),
+    objectRestore: (store, objectId) => requestPost('/object/restore', { store, objectId }),
+    objectMetaSet: (store, objectId, change) => requestPost('/object/meta/set', { store, objectId, ...change }),
+    versionCheckout: (store, objectId, versionId) => requestPost('/version/checkout', { store, objectId, versionId }),
+    versionDelete: (store, objectId, versionId) => requestPost('/version/delete', { store, objectId, versionId }),
+    objectLockSet: (store, objectId, isLocked) => requestPost('/object/lock/set', { store, objectId, isLocked }),
+    versionLockSet: (store, objectId, versionId, isLocked) => requestPost('/version/lock/set', { store, objectId, versionId, isLocked }),
+    folderSet: (folderList) => requestPost('/folder/set', { folderList }),
   };
 }
 
-// snapshot: { objectById: { [objectId]: { ...object, textByVersionId } } }
-export function assetBackendSnapshotCreate(snapshot) {
+// snapshot: { objectById: { [objectId]: { ...object, versionDataById:
+// { [versionId]: { size, hash, isText, text | dataBase64 } } } } }, the
+// local store as it was at build time
+export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
   const objectById = snapshot?.objectById ?? {};
   const readOnly = () => Promise.resolve({ code: -1, data: null, message: 'the asset store of a built page is read-only' });
   const objectMetaGet = (objectId) => {
     const entry = objectById[objectId];
     if (!entry) return undefined;
-    const { textByVersionId: _text, ...object } = entry;
+    const { versionDataById: _versionData, ...object } = entry;
     return object;
+  };
+  const storeCheck = (store) => (
+    store === storeIdLocal ? undefined : { code: -3, data: null, message: `unknown asset store: ${store}` }
+  );
+  const versionResolve = (store, objectId, versionIdRequested) => {
+    const failureStore = storeCheck(store);
+    if (failureStore) return { failure: failureStore };
+    const entry = objectById[objectId];
+    if (!entry) return { failure: { code: -3, data: null, message: `asset object not found: ${objectId}` } };
+    const versionId = versionIdRequested === '' || versionIdRequested === 'head' ? entry.versionIdHead : versionIdRequested;
+    const versionData = entry.versionDataById[versionId];
+    if (!versionData) return { failure: { code: -3, data: null, message: `version ${versionId} not found in object ${objectId}` } };
+    return { entry, versionId, versionData };
+  };
+  const objectGet = (store, objectId, versionIdRequested = 'head') => {
+    const resolved = versionResolve(store, objectId, versionIdRequested);
+    if (resolved.failure) return Promise.resolve(resolved.failure);
+    const { versionId, versionData } = resolved;
+    const version = { versionId, size: versionData.size, hash: versionData.hash, isText: versionData.isText };
+    if (versionData.isText) version.text = versionData.text;
+    return Promise.resolve({ code: 0, data: { object: objectMetaGet(objectId), version }, message: '' });
   };
 
   return {
     kind: 'snapshot',
-    statusGet: () => Promise.resolve({ code: 0, data: { isWritable: false }, message: '' }),
-    objectList: () => Promise.resolve({
+    statusGet: () => Promise.resolve({ code: 0, data: { isWritable: false, storeIdList: [storeIdLocal], folderList: [] }, message: '' }),
+    objectList: (store) => Promise.resolve(storeCheck(store) ?? {
       code: 0,
       data: { objectList: Object.keys(objectById).map(objectMetaGet) },
       message: '',
     }),
-    objectGet: (objectId, versionIdRequested = 'head') => {
-      const entry = objectById[objectId];
-      if (!entry) return Promise.resolve({ code: -3, data: null, message: `asset object not found: ${objectId}` });
-      const versionId = versionIdRequested === '' || versionIdRequested === 'head' ? entry.versionIdHead : versionIdRequested;
-      const text = entry.textByVersionId[versionId];
-      if (text === undefined) {
-        return Promise.resolve({ code: -3, data: null, message: `version ${versionId} not found in object ${objectId}` });
-      }
-      return Promise.resolve({
-        code: 0,
-        data: { object: objectMetaGet(objectId), version: { versionId, text, hash: '' } },
-        message: '',
-      });
+    objectGet,
+    objectGetByName: (store, name, versionIdRequested = 'head') => {
+      const failureStore = storeCheck(store);
+      if (failureStore) return Promise.resolve(failureStore);
+      const entry = Object.values(objectById).find((item) => item.name === name);
+      if (!entry) return Promise.resolve({ code: -3, data: null, message: `asset object not found by name: ${name}` });
+      return objectGet(store, entry.objectId, versionIdRequested);
+    },
+    // the bytes of a binary version as a data url; a text version has no url of its own
+    dataUrlGet: (store, objectId, versionIdRequested = 'head') => {
+      const resolved = versionResolve(store, objectId, versionIdRequested);
+      if (resolved.failure || resolved.versionData.isText) return '';
+      return `data:${resolved.entry.contentType || 'application/octet-stream'};base64,${resolved.versionData.dataBase64}`;
     },
     objectCreate: readOnly,
     objectUpdate: readOnly,
@@ -99,5 +138,8 @@ export function assetBackendSnapshotCreate(snapshot) {
     objectMetaSet: readOnly,
     versionCheckout: readOnly,
     versionDelete: readOnly,
+    objectLockSet: readOnly,
+    versionLockSet: readOnly,
+    folderSet: readOnly,
   };
 }
