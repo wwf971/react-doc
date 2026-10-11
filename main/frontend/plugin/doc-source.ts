@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { parse as parseYaml } from 'yaml';
 import { isCSSRequest, type EnvironmentModuleNode, type Plugin } from 'vite';
+import { docEntryLoad, readYaml } from './doc-entry.ts';
 import {
   attachmentDataUrlGet,
   docAttachmentFinderDefaultList,
@@ -42,7 +42,8 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 // reads two-layer yaml config, executes source rules against the file system,
 // and exposes the result as virtual module `virtual:doc-source`:
 //
-//   export let configDoc = {...}        // merged config (side panel yaml inlined)
+//   export let configDoc = {...}        // merged config (the document entry loaded: source rules,
+//                                       //   the page side panel inlined, tag definitions merged)
 //   export let fileManifest = [{ rootId, relPath, name, ext, title, internalPath,
 //                                contentHash, tagList, configSource, configFrontmatter, load }]
 //   export const docEditEndpoint = '/__doc-edit'    // '' in a build: no edit api
@@ -102,9 +103,10 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
   let docEditEndpoint = '';
   let docAssetEndpoint = '';
   // the configuration files of the page: config.yaml and its local layer,
-  // the source / side-panel / tag files, and every side-panel file included
-  // through childrenFile. a change of one of them regenerates the manifest
-  // and reloads the page; a change of a collected document does not.
+  // the entry file of the document and every yaml file it reaches (included
+  // side panels, source and tag files), and the tag file of config. a change
+  // of one of them regenerates the manifest and reloads the page; a change
+  // of a collected document does not.
   let pathsConfiguration: string[] = [];
   const moduleId = options.moduleId ?? MODULE_ID_DEFAULT;
   const moduleIdResolved = `\0${moduleId}`;
@@ -156,7 +158,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       docSourceEndpoint = isBuild ? '' : endpointBuild(viteConfig.base, DOC_SOURCE_ENDPOINT_NAME);
       docEditEndpoint = isBuild ? '' : endpointBuild(viteConfig.base, DOC_EDIT_ENDPOINT_NAME);
       const configDocEarly = loadConfigDoc(configFile, options);
-      pathsConfiguration = collectPathsConfiguration(configDocEarly, configDir, configFile);
+      pathsConfiguration = collectPathsConfiguration(configDocEarly);
       docAssetEndpoint = isBuild || !assetConfigGet(configDocEarly, configDir)
         ? ''
         : endpointBuild(viteConfig.base, DOC_ASSET_ENDPOINT_NAME);
@@ -244,7 +246,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
 
     configureServer(server) {
       const configDoc = loadConfigDoc(configFile, options);
-      let pathsWatched = collectPathsToWatch(configDoc, configDir, configFile);
+      let pathsWatched = collectPathsToWatch(configDoc, configDir);
       for (const p of pathsWatched) server.watcher.add(p);
 
       // the edit api resolves internal paths against the same scan that
@@ -279,8 +281,8 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       const sidePanelFileWritten = (filePath: string, text: string) => {
         contentHashWrittenByPath.set(filePath, textContentHashGet(text));
         const configDocUpdated = loadConfigDoc(configFile, options);
-        pathsWatched = collectPathsToWatch(configDocUpdated, configDir, configFile);
-        pathsConfiguration = collectPathsConfiguration(configDocUpdated, configDir, configFile);
+        pathsWatched = collectPathsToWatch(configDocUpdated, configDir);
+        pathsConfiguration = collectPathsConfiguration(configDocUpdated);
         for (const p of pathsWatched) server.watcher.add(p);
         configDataSend(configDocUpdated);
       };
@@ -298,7 +300,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         fileEntryListGet,
         sidePanel: {
           configDir,
-          fileListGet: () => collectSidePanelFiles(loadConfigDoc(configFile, options), configDir),
+          fileListGet: () => collectDocYamlFiles(loadConfigDoc(configFile, options)),
           onFileWritten: sidePanelFileWritten,
         },
       }));
@@ -350,8 +352,8 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         fileEntryListCached = undefined;
         try {
           const configDocUpdated = loadConfigDoc(configFile, options);
-          pathsWatched = collectPathsToWatch(configDocUpdated, configDir, configFile);
-          pathsConfiguration = collectPathsConfiguration(configDocUpdated, configDir, configFile);
+          pathsWatched = collectPathsToWatch(configDocUpdated, configDir);
+          pathsConfiguration = collectPathsConfiguration(configDocUpdated);
           for (const p of pathsWatched) server.watcher.add(p);
         } catch {
           // Keep the last valid watch set while an edited config is incomplete.
@@ -365,8 +367,8 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       // the manifest itself must be regenerated.
       server.watcher.on('add', invalidateManifest);
       server.watcher.on('unlink', invalidateManifest);
-      // change of a configuration file (config.yaml, the source / side-panel /
-      // tag files, included side-panel files). a changed document under a
+      // change of a configuration file (config.yaml, the entry and every yaml
+      // file it reaches, the tag file of config). a changed document under a
       // source folder is not configuration: the hotUpdate hook above reports
       // it to the page as data, whatever its extension.
       server.watcher.on('change', (filePath) => {
@@ -456,217 +458,89 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
   const configBase = readYaml(configFile) ?? {};
   const configLocal = readYaml(configLocalFile) ?? {};
   const config = mergeDeep(configBase, configLocal);
-  const sourceRuleList = loadSourceRules(config.source, configDir);
-  if (!Array.isArray(sourceRuleList)) {
-    throw new Error('[doc-source] config "source" must be a list of rules');
+  configFormerKeysReject(config, configFile);
+  if (typeof config.docEntry?.file !== 'string' || !config.docEntry.file.trim()) {
+    throw new Error(
+      `[doc-source] config "docEntry.file" must name the entry file of the document (xxx-entry.yaml): ${configFile}`,
+    );
   }
-  // inline side panel yaml, so the browser side doesn't touch the file system.
-  // "source" sections of the loaded side-panel resource files are appended to
-  // the source rules, in load order. a file already read as config "source"
-  // is not read twice.
-  const context: SidePanelLoadContext = {
-    configDir,
-    fileList: [],
-    sourceFileUsedSet: new Set(
-      config.source?.file ? [path.resolve(configDir, config.source.file)] : [],
-    ),
-    sourceRuleList: [],
+  if (config.docEntry.sidePanel !== undefined && typeof config.docEntry.sidePanel !== 'string') {
+    throw new Error(`[doc-source] config "docEntry.sidePanel" must be a side panel id: ${configFile}`);
+  }
+
+  // the document entry: its source rules, its page side panel inlined (so the
+  // browser side never touches the file system), its tag definitions.
+  // design: doc_page_impl_side_panel.md#the-document-entry
+  const entryFile = path.resolve(configDir, config.docEntry.file);
+  const entryLoaded = docEntryLoad(entryFile, configDir, config.docEntry.sidePanel ?? '');
+  config.source = entryLoaded.sourceRuleList;
+  config.sidePanel = { ...(config.sidePanel ?? {}), tree: entryLoaded.sidePanel?.tree };
+  config.docEntry = {
+    ...config.docEntry,
+    sidePanel: entryLoaded.sidePanelId,
+    sidePanelIdList: entryLoaded.sidePanelIdList,
   };
-  if (config.sidePanel?.file) {
-    const panelPath = path.resolve(configDir, config.sidePanel.file);
-    const sidePanelLoaded = loadSidePanelFile(panelPath, context);
-    config.sidePanel.tree = sidePanelLoaded.tree;
-    Object.defineProperty(config.sidePanel, 'fileListImported', {
-      enumerable: false,
-      value: context.fileList.slice(1),
-    });
-  }
-  config.source = [...sourceRuleList, ...context.sourceRuleList];
-  // inline tag definitions; entries written in config itself win
+  // every yaml file the entry reaches, for the edit api; not part of the
+  // data sent to the page
+  Object.defineProperty(config.docEntry, 'fileListLoaded', {
+    enumerable: false,
+    value: entryLoaded.fileListLoaded,
+  });
+  // page values the entry supplies when config.yaml does not set them, so
+  // that a document used as the entry of another deployment brings its own
+  config.siteTitle ??= entryLoaded.entry.title;
+  config.homeDoc ??= entryLoaded.entry.homeDoc;
+  config.homeItem ??= entryLoaded.entry.homeItem;
+
+  // tag definitions: the entry's (its own over what it includes), then the
+  // tag file of config, then entries written in config itself
+  let tagDefineByIdConfigFile: Record<string, any> = {};
   if (config.tag?.file) {
     const tagFile = path.resolve(configDir, config.tag.file);
     const tagFileContent = readYaml(tagFile);
     if (tagFileContent === undefined) {
       throw new Error(`[doc-source] tag file not found: ${tagFile}`);
     }
-    config.tag.defineById = {
-      ...(tagFileContent?.defineById ?? {}),
-      ...(config.tag.defineById ?? {}),
-    };
+    tagDefineByIdConfigFile = tagFileContent?.defineById ?? {};
   }
+  config.tag = {
+    ...(config.tag ?? {}),
+    defineById: {
+      ...entryLoaded.tagDefineById,
+      ...tagDefineByIdConfigFile,
+      ...(config.tag?.defineById ?? {}),
+    },
+  };
+
   const itemIdsExcluded = new Set(options.excludeSidePanelItemIds ?? []);
   if (itemIdsExcluded.size > 0 && Array.isArray(config.sidePanel?.tree)) {
     config.sidePanel.tree = excludeSidePanelItems(config.sidePanel.tree, itemIdsExcluded);
   }
+  // the configuration files of the page: config.yaml and its local layer,
+  // the yaml files of the document, the tag file of config. the watcher
+  // reloads the page when one changes; the scan never collects them as
+  // documents. not part of the data sent to the page.
+  const fileListConfiguration = [configFile, configLocalFile, ...entryLoaded.fileListLoaded];
+  if (config.tag.file) fileListConfiguration.push(path.resolve(configDir, config.tag.file));
+  Object.defineProperty(config, 'fileListConfiguration', { enumerable: false, value: fileListConfiguration });
   return config;
 }
 
-// ---------- side-panel resources ----------
-// a side-panel resource is one { root?, tree } mapping. it is read from a
-// YAML file in one of two forms:
-//   sectioned   "sidePanel" section, next to an optional "source" section
-//   legacy      top-level "root" / "tree" (a file holding only a side panel)
-// the page side panel is the resource named by config sidePanel.file; a node's
-// childrenFile includes another resource. design: doc_page_impl_side_panel.md
-//
-// every node is annotated with textSource: the file (relative to the config
-// directory) and yaml address of the node whose label it shows, so the edit
-// layer can rewrite that label in place (doc-side-panel-text.ts). a node
-// labeled by the "root" of an included file points at that root.
-
-type SidePanelTextSource = {
-  file: string;
-  path: (string | number)[];
-};
-
-type SidePanelLoaded = {
-  root?: Record<string, any>;
-  // where the root's label is written, when the file has a root
-  rootTextSource?: SidePanelTextSource;
-  tree: any[];
-};
-
-type SidePanelLoadContext = {
-  configDir: string;
-  // every side-panel file loaded, the page side-panel file first
-  fileList: string[];
-  // files whose "source" section is already taken
-  sourceFileUsedSet: Set<string>;
-  // rules of the "source" sections, paths relative to configDir
-  sourceRuleList: any[];
-};
-
-function loadSidePanelFile(
-  filePath: string,
-  context: SidePanelLoadContext,
-  fileChain: string[] = [],
-): SidePanelLoaded {
-  const filePathResolved = path.resolve(filePath);
-  const cycleIndex = fileChain.indexOf(filePathResolved);
-  if (cycleIndex >= 0) {
-    const cycle = [...fileChain.slice(cycleIndex), filePathResolved].join(' -> ');
-    throw new Error(`[doc-source] side panel childrenFile cycle: ${cycle}`);
-  }
-  if (!fs.existsSync(filePathResolved)) {
-    throw new Error(`[doc-source] side panel file not found: ${filePathResolved}`);
-  }
-
-  const fileContent = readYaml(filePathResolved);
-  const sidePanel = sidePanelResourceGet(fileContent, filePathResolved);
-  // yaml address of the resource inside the file: [] or ["sidePanel"]
-  const addressResource: (string | number)[] = fileContent?.sidePanel === undefined ? [] : ['sidePanel'];
-  if (!Array.isArray(sidePanel?.tree)) {
+// the keys of the former configuration, which named the source rules and the
+// side-panel file from config itself; both are declared by the entry now
+function configFormerKeysReject(config: any, configFile: string) {
+  if (config.source !== undefined) {
     throw new Error(
-      `[doc-source] side panel file must contain a "tree" list, at top level or in a "sidePanel" section: ${filePathResolved}`,
+      `[doc-source] config "source" is not read any more: declare the source rules in the entry file`
+        + ` named by "docEntry.file" (its "source" section): ${configFile}`,
     );
   }
-
-  if (fileContent?.source !== undefined && !context.sourceFileUsedSet.has(filePathResolved)) {
-    context.sourceFileUsedSet.add(filePathResolved);
-    const ruleList = sourceRuleListGet(fileContent);
-    if (!Array.isArray(ruleList)) {
-      throw new Error(`[doc-source] "source" section must be a rule list or contain "rules": ${filePathResolved}`);
-    }
-    context.sourceRuleList.push(
-      ...sourceRulesRebase(ruleList, path.dirname(filePathResolved), context.configDir),
-    );
-  }
-
-  // optional "root" metadata: properties applied to the parent node that
-  // imports this file through childrenFile. never a visible child item.
-  const root = sidePanel.root;
-  if (root !== undefined) {
-    if (root === null || typeof root !== 'object' || Array.isArray(root)) {
-      throw new Error(`[doc-source] side panel "root" must be a mapping: ${filePathResolved}`);
-    }
-    if (root.children !== undefined || root.childrenFile !== undefined) {
-      throw new Error(
-        `[doc-source] side panel "root" must not contain "children" or "childrenFile"` +
-          ` (children belong to the top-level "tree" list): ${filePathResolved}`,
-      );
-    }
-  }
-
-  context.fileList.push(filePathResolved);
-  const fileRelative = sidePanelFileRelativeGet(filePathResolved, context.configDir);
-  const tree = loadSidePanelNodes(
-    sidePanel.tree,
-    path.dirname(filePathResolved),
-    [...fileChain, filePathResolved],
-    context,
-    { file: fileRelative, path: [...addressResource, 'tree'] },
-  );
-  const rootTextSource = root === undefined
-    ? undefined
-    : { file: fileRelative, path: [...addressResource, 'root'] };
-  return { root, rootTextSource, tree };
-}
-
-// side-panel files are named relative to the config directory, with "/"
-function sidePanelFileRelativeGet(filePath: string, configDir: string): string {
-  return path.relative(configDir, filePath).split(path.sep).join('/');
-}
-
-function sidePanelResourceGet(fileContent: any, filePath: string): any {
-  if (fileContent?.sidePanel === undefined) return fileContent;
-  if (fileContent.tree !== undefined || fileContent.root !== undefined) {
+  if (config.sidePanel?.file !== undefined) {
     throw new Error(
-      `[doc-source] side panel file must not combine a "sidePanel" section with top-level "tree" or "root": ${filePath}`,
+      `[doc-source] config "sidePanel.file" is not read any more: declare the side panel in the entry file`
+        + ` named by "docEntry.file" (its "sidePanelById" section): ${configFile}`,
     );
   }
-  return fileContent.sidePanel;
-}
-
-// addressList: file and yaml address of the list these nodes are read from
-function loadSidePanelNodes(
-  nodes: any[],
-  fileDir: string,
-  fileChain: string[],
-  context: SidePanelLoadContext,
-  addressList: SidePanelTextSource,
-): any[] {
-  return nodes.map((node, index) => {
-    if (!node || typeof node !== 'object' || Array.isArray(node)) return node;
-
-    const { childrenFile, ...nodeResult } = node;
-    const addressNode: SidePanelTextSource = { file: addressList.file, path: [...addressList.path, index] };
-    const childrenLocal = node.children;
-    if (childrenLocal !== undefined && !Array.isArray(childrenLocal)) {
-      throw new Error(
-        `[doc-source] side panel "children" must be a list at ${fileChain.at(-1)} tree[${index}]`,
-      );
-    }
-
-    let childrenImported: any[] = [];
-    let rootImported: Record<string, any> = {};
-    let rootTextSourceImported: SidePanelTextSource | undefined;
-    if (childrenFile !== undefined) {
-      if (typeof childrenFile !== 'string' || !childrenFile.trim()) {
-        throw new Error(
-          `[doc-source] side panel "childrenFile" must be a non-empty path at ${fileChain.at(-1)} tree[${index}]`,
-        );
-      }
-      const loaded = loadSidePanelFile(path.resolve(fileDir, childrenFile), context, fileChain);
-      childrenImported = loaded.tree;
-      rootImported = loaded.root ?? {};
-      rootTextSourceImported = loaded.rootTextSource;
-    }
-
-    const childrenLoaded = Array.isArray(childrenLocal)
-      ? loadSidePanelNodes(childrenLocal, fileDir, fileChain, context, { ...addressNode, path: [...addressNode.path, 'children'] })
-      : [];
-    // imported root metadata applies to this node; explicit local properties win.
-    const nodeMerged = { ...rootImported, ...nodeResult };
-    if (childrenFile !== undefined || childrenLocal !== undefined) {
-      nodeMerged.children = [...childrenImported, ...childrenLoaded];
-    }
-    // the label is written where page-tree.js reads it from: the node's own
-    // "text" when it has one, else the imported root's "text", else the node
-    // itself (a "text" would be added there)
-    const isTextFromRoot = nodeResult.text === undefined && rootImported.text !== undefined;
-    nodeMerged.textSource = isTextFromRoot && rootTextSourceImported ? rootTextSourceImported : addressNode;
-    return nodeMerged;
-  });
 }
 
 function excludeSidePanelItems(nodes: any[], itemIdsExcluded: Set<string>): any[] {
@@ -675,42 +549,6 @@ function excludeSidePanelItems(nodes: any[], itemIdsExcluded: Set<string>): any[
     .map((node) => Array.isArray(node?.children)
       ? { ...node, children: excludeSidePanelItems(node.children, itemIdsExcluded) }
       : node);
-}
-
-// config "source": a rule list, { file }, or absent when every rule comes from
-// "source" sections of side-panel resource files.
-function loadSourceRules(source: any, configDir: string): any[] | any {
-  if (source === undefined || source === null) return [];
-  if (Array.isArray(source)) return source;
-  if (!source?.file) return source;
-  const sourceFile = path.resolve(configDir, source.file);
-  const rules = sourceRuleListGet(readYaml(sourceFile));
-  if (!Array.isArray(rules)) {
-    throw new Error(`[doc-source] source file must contain a rule list: ${sourceFile}`);
-  }
-  return sourceRulesRebase(rules, path.dirname(sourceFile), configDir);
-}
-
-// a source file is a rule list, { rules }, or a file with a "source" section
-// (itself a rule list or { rules }), possibly next to a "sidePanel" section.
-function sourceRuleListGet(fileContent: any): any[] | undefined {
-  const section = fileContent?.source !== undefined ? fileContent.source : fileContent;
-  return Array.isArray(section) ? section : section?.rules;
-}
-
-// rule paths are written relative to their own file; the scan reads them
-// relative to configDir.
-function sourceRulesRebase(rules: any[], fileDir: string, configDir: string): any[] {
-  return rules.map((rule) => {
-    if ((rule.action !== 'addFolder' && rule.action !== 'addFile') || !rule.path) return rule;
-    const pathAbsolute = path.resolve(fileDir, rule.path);
-    return { ...rule, path: path.relative(configDir, pathAbsolute) || '.' };
-  });
-}
-
-function readYaml(filePath: string): any {
-  if (!fs.existsSync(filePath)) return undefined;
-  return parseYaml(fs.readFileSync(filePath, 'utf-8'));
 }
 
 // objects merge recursively; arrays and scalars from local layer replace base layer
@@ -784,10 +622,14 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
     }
   }
 
-  // the asset store keeps its own files (doc_page_impl_asset.md); they are
-  // never documents, even when they lie inside a source folder
+  // the configuration files (config.yaml, the yaml files of the document)
+  // and the files of the asset store (doc_page_impl_asset.md) are never
+  // documents, even when they lie inside a source folder
+  const configurationPathSet = new Set(collectPathsConfiguration(configDoc));
   const assetConfig = assetConfigGet(configDoc, configDir);
-  return [...entryByPath.values()].filter((entry) => !assetConfig || !assetPathIs(assetConfig, entry.absPath));
+  return [...entryByPath.values()].filter((entry) => (
+    !configurationPathSet.has(entry.absPath) && (!assetConfig || !assetPathIs(assetConfig, entry.absPath))
+  ));
 }
 
 // the local asset store as config asset.file describes it now; undefined
@@ -1158,36 +1000,24 @@ function endpointBuild(base: string | undefined, endpointName: string): string {
   return `${basePath}/${endpointName}`;
 }
 
-// the configuration files of the page: a change of one of them regenerates
-// the manifest and reloads the page
-function collectPathsConfiguration(configDoc: any, configDir: string, configFile: string): string[] {
-  const extension = path.extname(configFile);
-  const result = [
-    configFile,
-    path.join(configDir, `${path.basename(configFile, extension)}.0${extension}`),
-  ];
-  const configRaw = readYaml(configFile);
-  if (configRaw?.source?.file) result.push(path.resolve(configDir, configRaw.source.file));
-  result.push(...collectSidePanelFiles(configDoc, configDir));
-  if (configDoc.tag?.file) result.push(path.resolve(configDir, configDoc.tag.file));
-  return result;
+// the configuration files of the page, as loadConfigDoc recorded them: a
+// change of one of them regenerates the manifest and reloads the page
+function collectPathsConfiguration(configDoc: any): string[] {
+  const fileListConfiguration = configDoc.fileListConfiguration;
+  return Array.isArray(fileListConfiguration) ? [...fileListConfiguration] : [];
 }
 
-// the side-panel files the configuration loads: the page side-panel file and
-// every file included through childrenFile, absolute
-function collectSidePanelFiles(configDoc: any, configDir: string): string[] {
-  const result: string[] = [];
-  if (configDoc.sidePanel?.file) result.push(path.resolve(configDir, configDoc.sidePanel.file));
-  if (Array.isArray(configDoc.sidePanel?.fileListImported)) {
-    result.push(...configDoc.sidePanel.fileListImported);
-  }
-  return result;
+// the yaml files of the document the configuration loads: the entry file and
+// every file it reaches (included side panels, source and tag files), absolute
+function collectDocYamlFiles(configDoc: any): string[] {
+  const fileListLoaded = configDoc.docEntry?.fileListLoaded;
+  return Array.isArray(fileListLoaded) ? [...fileListLoaded] : [];
 }
 
 // the configuration files plus the source folders and files, so that the
 // watcher reports additions and removals inside the source
-function collectPathsToWatch(configDoc: any, configDir: string, configFile: string): string[] {
-  const result = collectPathsConfiguration(configDoc, configDir, configFile);
+function collectPathsToWatch(configDoc: any, configDir: string): string[] {
+  const result = collectPathsConfiguration(configDoc);
   for (const rule of configDoc.source) {
     if (rule.action === 'addFolder') {
       result.push(path.resolve(configDir, rule.path));

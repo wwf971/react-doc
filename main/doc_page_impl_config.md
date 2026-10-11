@@ -155,7 +155,7 @@ tree:
       - sourceFolder: /guide/api
 ```
 
-`config` on a node applies to the document the node binds and to every document bound by items below it, including items generated from `sourceFolder`. Nodes are read in tree order, so a deeper node overrides its folder. When a document is bound by several items, the later item in tree order wins. A `root` mapping imported through `childrenFile` can carry `config` like any other property of the importing node.
+`config` on a node applies to the document the node binds and to every document bound by items below it, including items generated from `sourceFolder`. Nodes are read in tree order, so a deeper node overrides its folder. When a document is bound by several items, the later item in tree order wins. A `root` mapping of an included side panel (`include`) can carry `config` like any other property of the including node.
 
 Document frontmatter:
 

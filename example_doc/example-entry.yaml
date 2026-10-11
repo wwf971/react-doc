@@ -1,0 +1,39 @@
+# Entry of the demonstration document, named by config.yaml docEntry.file.
+# An entry file declares itself with "docEntry" and is called xxx-entry.yaml
+# by convention. It declares everything that makes up the document: its
+# source rules, its tag definitions, and its side panels. Here each of them
+# is kept in its own file next to this one, so the entry only names them.
+# design: doc_page_impl_side_panel.md#the-document-entry
+docEntry:
+  title: React Doc Test          # siteTitle, when config.yaml sets none
+  homeDoc: /example/doc.md       # document opened at start, when config.yaml sets none
+
+# source rules: a rule list, { rules }, or { file }. paths are relative to the
+# file holding the rules. the yaml files of the document are never collected.
+source:
+  file: ./source.yaml
+
+# tag definitions: { defineById } or { file }. definitions of an included
+# document are merged below these.
+tag:
+  file: ./tag.yaml
+
+# the side panels of this document. the page shows the default one
+# (config.yaml docEntry.sidePanel picks another); a node of any side panel
+# includes one of them through "include". a value is a side panel
+# { root?, tree } or a reference to one declared in another file.
+sidePanelDefault: main
+sidePanelById:
+  # the page side panel, written in its own file
+  main:
+    file: ./side-panel.yaml
+  # a second side panel of the same document: a short list for a reduced
+  # deployment. config.yaml "docEntry: { sidePanel: compact }" shows it.
+  compact:
+    tree:
+      - doc: /example/doc.md
+        text: Document Model
+      - id: sub-doc-compact
+        include: ./sub-doc/sub-doc-entry.yaml
+      - doc: /req/doc_page_req.md
+        text: Requirement

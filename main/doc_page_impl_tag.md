@@ -34,7 +34,7 @@ Definitions and declarations are separate on purpose: one place decides how "Cha
 4. tag model      fold all declarations in order with the merge rule
 ```
 
-Merge rule, applied at every step: a later declaration of the same tag id replaces the earlier tag in place; a different tag id is appended. A document bound by several side-panel items therefore receives the tags of every item, and a later item can change an earlier tag's data. Tree order is the order in which items appear in the side panel, with `childrenFile` imports already inlined.
+Merge rule, applied at every step: a later declaration of the same tag id replaces the earlier tag in place; a different tag id is appended. A document bound by several side-panel items therefore receives the tags of every item, and a later item can change an earlier tag's data. Tree order is the order in which items appear in the side panel, with `include` inclusions already inlined.
 
 Example, with the declarations in order:
 
@@ -93,10 +93,10 @@ tree:
 
 ## Tag definitions
 
-Definitions live under `tag` in `config.yaml`, or in a separate file referenced by `tag.file`. Entries written directly in `config.yaml` win over the file.
+Definitions belong to the document: they live under `tag` of its entry file (`defineById` inline, or a separate file referenced by `tag.file`), so a self-contained document brings the look of its tags along when another document includes it ([The document entry](doc_page_impl_side_panel.md#the-document-entry)). A tag defined by the entry keeps its definition when an included document defines the same id. `config.yaml` can add page-level definitions in the same form, under `tag`; they win over every definition of the document, and entries written directly in `config.yaml` win over its `tag.file`.
 
 ```yaml
-# config.yaml
+# guide-entry.yaml
 tag:
   file: ./tag.yaml
 ```

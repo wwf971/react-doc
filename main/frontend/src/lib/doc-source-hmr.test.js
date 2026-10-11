@@ -28,33 +28,52 @@ function fixtureCreate() {
   fs.writeFileSync(path.join(dir, 'docs', 'a.md'), '# A\n\nfirst\n');
   fs.writeFileSync(path.join(dir, 'docs', 'b.md'), '# B\n\nsecond\n');
   fs.writeFileSync(path.join(dir, 'docs', 'c.md'), '# C\n\nthird\n');
-  fs.writeFileSync(path.join(dir, 'side-panel.yaml'), [
-    '# the side panel of the fixture',
-    'tree:',
-    '  - separator: Docs   # keep this comment',
-    '  - doc: /docs/a.md',
-    '    text: Label A',
-    '  - doc: /docs/b.md',
-    '  - id: group',
-    '    text:',
-    '      en: Group',
-    '      jp: グループ',
-    '    children:',
-    '      - doc: /docs/c.md',
-    '',
-  ].join('\n'));
-  fs.writeFileSync(path.join(dir, 'config.yaml'), [
-    'siteTitle: Fixture',
+  // the entry of the fixture document: its source rules inline, its side
+  // panel in a resource file next to it
+  fs.writeFileSync(path.join(dir, 'fixture-entry.yaml'), [
+    'docEntry:',
+    '  title: Fixture',
     'source:',
     '  - action: addFolder',
     '    rootId: docs',
     '    path: docs',
-    'sidePanel:',
-    '  file: ./side-panel.yaml',
+    '  # a yaml file of the document is configuration, never a document,',
+    '  # whatever the rules say',
+    '  - action: addFile',
+    '    rootId: cfg',
+    '    path: ./side-panel.yaml',
+    'sidePanelById:',
+    '  main:',
+    '    file: ./side-panel.yaml',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'side-panel.yaml'), [
+    '# the side panel of the fixture',
+    'sidePanelById:',
+    '  main:',
+    '    tree:',
+    '      - separator: Docs   # keep this comment',
+    '      - doc: /docs/a.md',
+    '        text: Label A',
+    '      - doc: /docs/b.md',
+    '      - id: group',
+    '        text:',
+    '          en: Group',
+    '          jp: グループ',
+    '        children:',
+    '          - doc: /docs/c.md',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'config.yaml'), [
+    'docEntry:',
+    '  file: ./fixture-entry.yaml',
     '',
   ].join('\n'));
   return dir;
 }
+
+// yaml address of the fixture's tree nodes inside side-panel.yaml
+const TREE_PATH = ['sidePanelById', 'main', 'tree'];
 
 function pluginCreate(dir, { base = '/', command = 'serve' } = {}) {
   const plugin = docSourcePlugin({ configFile: path.join(dir, 'config.yaml') });
@@ -196,7 +215,10 @@ test('development module reads text over http; a build imports ?raw', () => {
   assert.ok(codeDev.includes("'doc-source-change'"));
   assert.ok(!/import\([^)]*\?raw/.test(codeDev));
   assert.ok(codeDev.includes('"contentHash":'));
-  assert.ok(codeDev.includes('"textSource":{"file":"side-panel.yaml","path":["tree",1]}'));
+  assert.ok(codeDev.includes('"textSource":{"file":"side-panel.yaml","path":["sidePanelById","main","tree",1]}'));
+  // the entry supplies the page title; its yaml files are not documents
+  assert.ok(codeDev.includes('"siteTitle":"Fixture"'));
+  assert.ok(!codeDev.includes('"internalPath":"/cfg/side-panel.yaml"'));
 
   const codeBuild = pluginCreate(dir, { command: 'build' }).load('\0virtual:doc-source');
   assert.ok(/import\("[^"]+a\.md\?raw"\)/.test(codeBuild));
@@ -322,12 +344,12 @@ test('side-panel label route rewrites one value in place and reports the write',
   const replaced = await server.request({
     method: 'POST',
     url: '/__doc-edit/side-panel/text',
-    body: { file: 'side-panel.yaml', nodePath: ['tree', 1], language: '', text: 'Label A: renamed', textBase: 'Label A' },
+    body: { file: 'side-panel.yaml', nodePath: [...TREE_PATH, 1], language: '', text: 'Label A: renamed', textBase: 'Label A' },
   });
   assert.equal(replaced.status, 200);
   assert.deepEqual(JSON.parse(replaced.text).data, { file: 'side-panel.yaml', fieldName: 'text', text: 'Label A: renamed' });
   const fileAfter = fs.readFileSync(path.join(dir, 'side-panel.yaml'), 'utf-8');
-  assert.equal(fileAfter, fileBefore.replace('    text: Label A\n', '    text: "Label A: renamed"\n'));
+  assert.equal(fileAfter, fileBefore.replace('        text: Label A\n', '        text: "Label A: renamed"\n'));
   assert.equal(server.sidePanelWrittenList.length, 1);
   assert.equal(server.sidePanelWrittenList[0].text, fileAfter);
   assert.equal(server.configDocGet().sidePanel.tree[1].text, 'Label A: renamed');
@@ -336,36 +358,36 @@ test('side-panel label route rewrites one value in place and reports the write',
   const translated = await server.request({
     method: 'POST',
     url: '/__doc-edit/side-panel/text',
-    body: { file: 'side-panel.yaml', nodePath: ['tree', 3], language: 'jp', text: '組', textBase: 'グループ' },
+    body: { file: 'side-panel.yaml', nodePath: [...TREE_PATH, 3], language: 'jp', text: '組', textBase: 'グループ' },
   });
   assert.equal(translated.status, 200);
-  assert.ok(fs.readFileSync(path.join(dir, 'side-panel.yaml'), 'utf-8').includes('      jp: 組\n'));
+  assert.ok(fs.readFileSync(path.join(dir, 'side-panel.yaml'), 'utf-8').includes('          jp: 組\n'));
 
   // a document labeled by its title gets a "text" line after its first key
   const inserted = await server.request({
     method: 'POST',
     url: '/__doc-edit/side-panel/text',
-    body: { file: 'side-panel.yaml', nodePath: ['tree', 2], language: '', text: 'Second' },
+    body: { file: 'side-panel.yaml', nodePath: [...TREE_PATH, 2], language: '', text: 'Second' },
   });
   assert.equal(inserted.status, 200);
-  assert.ok(fs.readFileSync(path.join(dir, 'side-panel.yaml'), 'utf-8').includes('  - doc: /docs/b.md\n    text: Second\n  - id: group\n'));
+  assert.ok(fs.readFileSync(path.join(dir, 'side-panel.yaml'), 'utf-8').includes('      - doc: /docs/b.md\n        text: Second\n      - id: group\n'));
 
   // the separator keeps its trailing comment
   const separator = await server.request({
     method: 'POST',
     url: '/__doc-edit/side-panel/text',
-    body: { file: 'side-panel.yaml', nodePath: ['tree', 0], language: '', text: 'Documents', textBase: 'Docs' },
+    body: { file: 'side-panel.yaml', nodePath: [...TREE_PATH, 0], language: '', text: 'Documents', textBase: 'Docs' },
   });
   assert.equal(separator.status, 200);
   const fileFinal = fs.readFileSync(path.join(dir, 'side-panel.yaml'), 'utf-8');
-  assert.ok(fileFinal.includes('  - separator: Documents   # keep this comment\n'));
+  assert.ok(fileFinal.includes('      - separator: Documents   # keep this comment\n'));
   assert.ok(fileFinal.startsWith('# the side panel of the fixture\n'));
 
   // refused: a stale base, a file outside the configuration, an empty text
   const stale = await server.request({
     method: 'POST',
     url: '/__doc-edit/side-panel/text',
-    body: { file: 'side-panel.yaml', nodePath: ['tree', 1], language: '', text: 'X', textBase: 'Label A' },
+    body: { file: 'side-panel.yaml', nodePath: [...TREE_PATH, 1], language: '', text: 'X', textBase: 'Label A' },
   });
   assert.equal(stale.status, 409);
   assert.equal(JSON.parse(stale.text).code, -2);
@@ -378,7 +400,7 @@ test('side-panel label route rewrites one value in place and reports the write',
   const empty = await server.request({
     method: 'POST',
     url: '/__doc-edit/side-panel/text',
-    body: { file: 'side-panel.yaml', nodePath: ['tree', 1], language: '', text: '  ' },
+    body: { file: 'side-panel.yaml', nodePath: [...TREE_PATH, 1], language: '', text: '  ' },
   });
   assert.equal(empty.status, 400);
   assert.equal(fs.readFileSync(path.join(dir, 'side-panel.yaml'), 'utf-8'), fileFinal, 'refused edits leave the file as it is');

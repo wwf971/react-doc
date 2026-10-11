@@ -33,6 +33,12 @@ For files other than md/mdx, there should be a default display, and display stra
 
 Source should be able to be specified from a config file, typically using yaml, and with file name `source.yaml`.
 
+## Document entry
+
+A document is a self-contained unit: the files it collects (its source), the side panels that arrange them, and the definitions of the tags its files carry. Each document has one yaml entry file that declares all of this, either inline or by naming separate files for each part. The entry file declares itself as an entry with a dedicated marker, and is named `xxx-entry.yaml` by convention, so that an entry is recognizable among the other yaml files of a folder.
+
+A document page is composed by including other documents: a side-panel node includes a side panel of another document's entry, and that document's source and tag definitions come along, so the including page needs to know nothing about the included folder. The included document must suffice as a page of its own, and the same entry can be the entry of another deployment without change. Side panels are resources with many instances: an entry can declare several side panels, addressed by id, with one default; the page shows the default unless its configuration picks another; any side panel can include any other, and one side panel can be included in several places.
+
 ## SidePanel
 
 Custom side panel structure should be supported, not necessarily plainly reflecting the file tree structure of source. The custom side panel tree structure should be able to be specified from an index config file.
@@ -61,7 +67,7 @@ It's totally possible that there exists multiple leaf items that correspond to s
 
 For config file that describes that side panel's tree structure, the data format should be well designed, and keep things clean and clear.
 
-A side panel is a way of collecting things from what source selects and organizing them as a tree, so it is a resource rather than a unique page setting: a side panel can include another one (for example the side panel of a part), and the source rules of the files a side panel organizes can be declared in the same file as that side panel. The format must leave room for several side panels per file and for using one side panel in more than one place.
+A side panel is a way of collecting things from what source selects and organizing them as a tree, so it is a resource rather than a unique page setting: a side panel can include another one (for example the side panel of a part, or of a whole sub document), and the source rules of the files a side panel organizes are declared in the same entry file as that side panel. Several side panels per file and one side panel used in more than one place are part of the format (see [Document entry](#document-entry)).
 
 ### Part index
 

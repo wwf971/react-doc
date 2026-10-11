@@ -7,7 +7,7 @@ import { tagAssetKeyGet, tagListNormalize } from './doc-tag-declare.js';
 //   sourceFolder / sourceRoot     -> folder:{internal folder path}
 //   every other item              -> item:{item id}
 // page-tree.js calls these while converting the tree, so declarations are
-// recorded in tree order (childrenFile imports are already inlined).
+// recorded in tree order (included side panels are already inlined).
 
 export function tagSidePanelAssetKeyGet({ docPath, folderPath, itemId }) {
   if (docPath) return tagAssetKeyGet('doc', docPath);

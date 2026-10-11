@@ -2,13 +2,14 @@
 
 # Document Page: Design
 
-This project renders local md/mdx folders as a doc website. The whole doc page is one embeddable React component (`DocPageMdx`), built with Vite, driven by mobx stores — no Next.js, no router framework. Everything is configured by `config.yaml` (+ local override `config.0.yaml`): which folders/files form the source, how the side panel looks, which tags documents carry, how page features behave (globally and per document), and which custom components docs can use.
+This project renders local md/mdx folders as a doc website. The whole doc page is one embeddable React component (`DocPageMdx`), built with Vite, driven by mobx stores — no Next.js, no router framework. Everything is configured by `config.yaml` (+ local override `config.0.yaml`): which document the page shows (its entry file), how page features behave (globally and per document), and which custom components docs can use. The document itself is described by its entry file, `xxx-entry.yaml`: which folders/files form its source, which side panels arrange them, which tags its documents carry.
 
 ```text
-config.yaml (overlay config.0.yaml)
+config.yaml (overlay config.0.yaml) ──► docEntry.file: the entry of the document
      │  read at dev/build time by a small vite plugin
      ▼
 vite plugin "doc-source"
+     ├── loads the entry and every yaml file it reaches: source rules, side panels, tags
      ├── executes source rules ──► file manifest (multi-root: /{rootId}/relPath)
      │     each doc = lazy `?raw` import ──► dev: HMR reload on edit
      │                                       build: one lazy chunk per doc
@@ -49,7 +50,7 @@ DocEventRouter: component reports → host → local handler → domain route (n
 
 **One event layer between components and stores.** A registered component reports through `onEvent` and never calls a store; `DocEventRouter` turns the report into an event with its source, lets the host application and the rendering place answer first, then routes it to the domain that owns the type (navigation, tags, editing). Every answer is `{ code, data, message }`. Specified in [doc_page_impl_event.md](doc_page_impl_event.md).
 
-**Doc collection via vite plugin.** The plugin reads the two-layer config, expands side-panel resource files (collecting their source rules), executes the source rules, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any imported side-panel file — regardless of its extension — invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
+**Doc collection via vite plugin.** The plugin reads the two-layer config, loads the document entry it names and every yaml file the entry reaches (collecting their source rules, side panels, and tag definitions), executes the source rules, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any loaded yaml file invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
 
 ## Can we keep fumadocs default components while owning link logic? YES
 
@@ -70,27 +71,39 @@ Follows the data-driven pattern of `react-comp-misc` (`comp_design.md`) and the 
 
 Render components observe stores via context and submit change attempts through store APIs; no component talks to the file system or compiler directly.
 
+## The document entry
+
+`config.yaml` names the document the page shows through its entry file:
+
+```yaml
+docEntry:
+  file: ../example_doc/example-entry.yaml
+  # sidePanel: compact     # optional: one of the entry's side panels instead of its default
+```
+
+The entry is a YAML file marked by a `docEntry` section and named `xxx-entry.yaml` by convention. It declares the document's `source` rules, its `tag` definitions, and its side panels (`sidePanelById`), each section inline or in a file of its own; a side panel includes the side panel of another entry, so a document is composed of self-contained documents, each of which can also be the entry of a deployment. The entry supplies `siteTitle`, `homeDoc`, and `homeItem` when `config.yaml` sets none. The grammar, the loading order, and the inclusion forms are specified in [The document entry](doc_page_impl_side_panel.md#the-document-entry).
+
 ## Source rules
 
-`source` in config is an ordered rule list executed against a growing file set. It can also be `{ file: './source.yaml' }`; the referenced file contains the ordered `rules` list and resolves paths relative to itself:
+`source` of a document yaml file is an ordered rule list executed against a growing file set. It can also be `{ rules: [...] }` or `{ file: './source.yaml' }`; the referenced file contains the ordered `rules` list and resolves paths relative to itself:
 
 ```yaml
 source:
   - action: addFolder      # scan folder recursively, becomes one root
     rootId: example
-    path: ../example_doc
+    path: .
   - action: addFile        # one file becomes one root
     rootId: req
-    path: ./doc_page_req.md
+    path: ../main/doc_page_req.md
   - action: removeByName   # glob against file name
     pattern: "*.pyc"
   - action: removeByPath   # glob against internal path /{rootId}/relative/path
     pattern: "/example/private/**"
 ```
 
-Rules can also be declared in the `source` section of a side-panel resource file, next to the side panel that organizes the collected files; those rules are appended after the rules above (see [Resource files](doc_page_impl_side_panel.md#resource-files)). `source` in config can then be omitted.
+The rules of the entry come first; the rules of every included document follow in order of appearance (see [Loading](doc_page_impl_side_panel.md#loading)). The yaml files of the document and `config.yaml` are never collected.
 
-Paths are relative to the config file. Internal representation of every file is `/{rootId}/relPath`, so same-name root folders never clash. `addFile` after a remove rule re-adds a single file (the "remove folder except one file" case in the requirement).
+Paths are relative to the file holding the rules. Internal representation of every file is `/{rootId}/relPath`, so same-name root folders never clash. `addFile` after a remove rule re-adds a single file (the "remove folder except one file" case in the requirement).
 
 Rules can also attach tags and document config. `tags` / `config` on an add rule apply to every file it collects. `addTagByPath` / `addTagByName` and `setConfigByPath` / `setConfigByName` apply to the files collected so far. See [Tag system](doc_page_impl_tag.md#declaring-tags) and [Config system](doc_page_impl_config.md#declaring-document-config).
 
@@ -226,9 +239,9 @@ Mermaid is one example. `mermaid.render(id, source)` appends temporary rendering
 
 ## Side panel
 
-The side panel is a free tree declared in YAML, so it need not mirror the file tree. It is treated as a resource: a way of picking things from the collected source and arranging them as a tree. The page side panel is the resource named by `sidePanel.file`; a node includes another resource, such as the side panel of a part, through `childrenFile`; a resource file can also hold the source rules of the files it organizes. The tree decides document order, item routes, semantic parts, side-panel tags, and the side-panel level of document config. Every item label is rendered through the registry component named `SidePanelItem`.
+The side panel is a free tree declared in YAML, so it need not mirror the file tree. It is treated as a resource: a way of picking things from the collected source and arranging them as a tree. A document declares its side panels in its entry (`sidePanelById`), and the page shows the default one; a node includes another side panel, such as the side panel of a part or of a self-contained sub document, through `include`. The tree decides document order, item routes, semantic parts, side-panel tags, and the side-panel level of document config. Every item label is rendered through the registry component named `SidePanelItem`.
 
-For the resource model, file forms, tree format, inclusion, parts, and item rendering, refer to [Side panel design](doc_page_impl_side_panel.md).
+For the entry grammar, tree format, inclusion, parts, and item rendering, refer to [Side panel design](doc_page_impl_side_panel.md).
 
 ## Tags
 
@@ -338,9 +351,13 @@ The search dialog UI comes from fumadocs-ui (composable `SearchDialog` parts plu
 
 ```text
 example_doc/             # root folder of the demonstration page
-├── source.yaml          # ordered source rules, referenced from config
-├── side-panel.yaml      # side panel tree, referenced from config
-├── tag.yaml             # tag definitions, referenced from config
+├── example-entry.yaml   # the entry of the document, named by config docEntry.file: its source,
+│                        #   tag and side panels, each kept in its own file below
+├── source.yaml          # ordered source rules (entry: source.file)
+├── side-panel.yaml      # the page side panel (entry: sidePanelById.main), as a resource file
+├── tag.yaml             # tag definitions (entry: tag.file)
+├── sub-doc/             # a self-contained sub document: its own entry (sub-doc-entry.yaml) with
+│                        #   source, tag and side panel; included by the page, deployable alone
 ├── side-panel-tag.md    # tag demonstration; doc-config.md: config demonstration
 ├── comp-custom-list-el.md # components as list elements: rules and examples
 ├── edit-in-place.md     # edit-mode playground (editable on the development server)
@@ -348,7 +365,7 @@ example_doc/             # root folder of the demonstration page
 ├── asset.yaml           # the local asset store: its folders and the default one
 ├── asset/, asset-archive/ # folders of the store: one folder per object, {id}--{name} (object.yaml + version files)
 ├── comp-mdx/            # demo-specific components (not collected as documents); StockTable + StockTableEdit
-├── mdx-usage/           # mdx component demonstrations (part with hosted index)
+├── mdx-usage/           # mdx component demonstrations (part with hosted index; its side-panel.yaml is a resource file)
 └── link-nav/            # link usage guide (sections by title / Anchor id), link and non-md display test docs
 main/
 ├── config.yaml          # example config (tracked), actually runnable
@@ -369,7 +386,7 @@ main/
 │   └── mdx-render/      # MdxRenderer, DynamicCodeBlock
 ├── package.json         # delegates dev/build to frontend/
 └── frontend/            # Vite app + embeddable component
-    ├── plugin/          # vite plugin: config load, rule scan, source-step tags/config, source pruning, virtual module, watch, dev-only edit api (doc-edit-server.ts, doc-edit-lines.ts), the asset store and its api (doc-asset-store.ts, doc-asset-server.ts, id-ms48.ts)
+    ├── plugin/          # vite plugin: config load, the document entry and its yaml files (doc-entry.ts), rule scan, source-step tags/config, source pruning, virtual module, watch, dev-only edit api (doc-edit-server.ts, doc-edit-lines.ts), the asset store and its api (doc-asset-store.ts, doc-asset-server.ts, id-ms48.ts)
     ├── UICommon.js      # package-local facade for shared visual components and icons
     ├── UICommonExternal.js # external UI-library exports used by the facade
     └── src/

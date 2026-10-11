@@ -1,16 +1,18 @@
 # doc system config (example layer; local overrides go to config.0.yaml)
 
-siteTitle: React Doc Test
-# doc opened at start (internal path: /{rootId}/relative/path)
-homeDoc: /example/doc.md
+# the document this page shows: its entry file (xxx-entry.yaml), which
+# declares the source rules, the tag definitions and the side panels of the
+# document. "sidePanel" names one of its side panels instead of its default.
+# design: doc_page_impl_side_panel.md#the-document-entry
+docEntry:
+  file: ../example_doc/example-entry.yaml
+  # sidePanel: compact
 
-# Ordered source rules live separately. Paths in that file are relative to it.
-# example_doc is the root folder of the demonstration page and owns both files.
-source:
-  file: ../example_doc/source.yaml
-
-sidePanel:
-  file: ../example_doc/side-panel.yaml
+# page values. when absent, the entry's "docEntry" mapping supplies them
+# (title, homeDoc, homeItem), so another document deploys by changing
+# docEntry.file alone; the demonstration leaves them to the entry.
+# siteTitle: React Doc Test
+# homeDoc: /example/doc.md       # internal path: /{rootId}/relative/path
 
 # the local asset store: versioned objects (text or binary) a component block
 # can reference instead of carrying its data inline (```asset blocks). the
@@ -21,10 +23,13 @@ sidePanel:
 asset:
   file: ../example_doc/asset.yaml
 
-# tag definitions (how each tag looks). which assets carry a tag is declared
-# in source rules and side-panel nodes. design: doc_page_impl_tag.md
-tag:
-  file: ../example_doc/tag.yaml
+# tag definitions of the page (how each tag looks), merged over the ones the
+# entry and the documents it includes declare. which assets carry a tag is
+# declared in source rules and side-panel nodes. the demonstration declares
+# its definitions in the entry (tag.file); page-level entries would go here:
+# tag:
+#   defineById: { ... }
+# design: doc_page_impl_tag.md
 
 # page-level values of the config keys. keys of one feature share a prefix.
 # document-level keys can be overridden per document by source rules,
@@ -35,7 +40,7 @@ globalConfig:
   # page level. tag ids shown on side-panel items; remove the key to show all.
   # "test" is left out, so it shows next to the path bar but not in the side
   # panel. "file-ext" is the label added by the demo SidePanelItem renderer.
-  TagsDisplayAtSidePanelItemsList: [part, guide, reference, code, draft, file-ext]
+  TagsDisplayAtSidePanelItemsList: [part, guide, reference, code, draft, sub, file-ext]
   TagsDisplayAtLinkIsOn: false              # document level
   TagsDisplayAtLinkPosition: after          # document level: before | after
   TagsOverviewPopupIsOn: true               # page level

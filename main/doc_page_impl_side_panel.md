@@ -5,12 +5,13 @@
 The side panel is a free tree declared in YAML. It does not need to mirror the file tree: an item can be a document, a source folder, a virtual folder, a component panel, or a separator. The tree is also the semantic backbone of the page: it decides document order, routes, parts, part of the tags, and part of the document config. For the overall architecture, refer to [Document Page: Design](doc_page_impl.md).
 
 ```text
-side-panel resource file (+ resources included through childrenFile)
-   │  vite plugin: inline included trees, merge included "root" mappings,
-   │               append "source" sections to the source rules,
-   │               annotate every node with where its label is written (textSource)
+entry file of the document (+ the yaml files its side panels include)
+   │  vite plugin (doc-entry.ts): load every file once, inline included trees,
+   │               merge included "root" mappings, append "source" sections to
+   │               the source rules, merge "tag" definitions, annotate every
+   │               node with where its label is written (textSource)
    ▼
-configDoc.sidePanel.tree
+configDoc.sidePanel.tree   (the side panel the page shows)
    │  page-tree.js buildPageTreeModel()   (DocStore.treeModel, a mobx computed)
    ├── fumadocs page tree       -> sidebar, breadcrumb, previous/next cards
    ├── navigation index         -> item routes, items bound to each document, parts
@@ -21,74 +22,83 @@ every item label = SidePanelItemHost
    -> registry component "SidePanelItem" (or the item's display.component)
 ```
 
-## A side panel is a resource
+## The document entry
 
-Source rules decide which files exist. A side panel is a way of picking things from that collected source and arranging them as a tree: documents, source folders, component panels, virtual folders. It is therefore treated as a resource, not as one unique page setting:
+A document is described by one YAML file, its **entry**, named by `docEntry.file` in `config.yaml`. The entry declares everything that makes the document a whole: the source rules that collect its files, the definitions of its tags, and its side panels. A document is therefore self-contained: another document includes it by naming its entry, and a deployment shows it alone by naming the same entry in its `config.yaml`. The entry file carries the marker `docEntry`, and its name ends with `-entry.yaml` by convention (`example-entry.yaml`, `sub-doc-entry.yaml`); the loader warns about an entry named otherwise.
 
-- A side-panel resource is one `{ root?, tree }` mapping. Its content does not depend on who uses it.
-- The page side panel is the resource named by `sidePanel.file` in `config.yaml`. A node includes another resource through `childrenFile`; the included resource's `tree` becomes the node's children and its `root` configures the node. A part's side panel is thus already an independent resource that a larger side panel includes.
-- A resource can declare the source rules of the files it organizes, in the same file ([Resource files](#resource-files)), so a part folder can carry everything about itself.
+Source rules decide which files exist. A side panel is a way of picking things from that collected source and arranging them as a tree: documents, source folders, component panels, virtual folders. It is a resource, not a unique page setting: a document declares as many side panels as it needs, each addressed by an id, and a node of any side panel includes another one, of the same file or of another document. The included side panel's `tree` becomes the node's children and its `root` configures the node. A part's side panel, or a whole sub document, is thus an independent resource that a larger side panel includes.
 
-Currently a file holds at most one resource, and the page uses one tree, the page side panel with every inclusion inlined by the loader. The model is kept so that later steps need no change of authored files:
+### Document yaml files
 
-- several resources in one file, addressed by an id within that file (the section name `sidePanelById` is reserved for it);
-- one resource used in more than one place, for example a part's own side panel shown as a local panel while the page side panel also includes it.
-
-Runtime code receives only the inlined tree (`configDoc.sidePanel.tree`), so these steps stay in the loader (`loadSidePanelFile` in `plugin/doc-source.ts`).
-
-## Resource files
-
-A side-panel resource file is a YAML file in one of two forms:
+The entry and every YAML file it reaches share one grammar, the document yaml file. A file without `docEntry` is a resource file: it holds declarations for others (a side panel of a part, a long tree kept out of the entry) and cannot be the entry of a page.
 
 ```yaml
-# sectioned form: the resource is the "sidePanel" section
-source:                    # optional: source rules, a list or { rules: [...] }
-  rules:
-    - action: addFolder
-      rootId: guide
-      path: .              # relative to this file
-    - action: removeByName
-      pattern: "*.yaml"
-sidePanel:
-  root:                    # optional, see "Including other resources"
-    doc: /guide/overview.md
-  tree:
-    - doc: /guide/setup.md
+docEntry:                      # marks the file as the entry of a document: true, or a mapping
+  title: Guide                 #   siteTitle, when config.yaml sets none
+  homeDoc: /guide/overview.md  #   homeDoc / homeItem, when config.yaml sets none
+source:                        # optional: a rule list, { rules: [...] }, or { file: ./source.yaml }
+  - action: addFolder
+    rootId: guide
+    path: .                    # relative to the file holding the rules
+tag:                           # optional: { defineById: {...} } or { file: ./tag.yaml }
+  file: ./tag.yaml
+sidePanelDefault: main         # optional when the file declares exactly one side panel
+sidePanelById:
+  main:                        # a side panel: { root?, tree }
+    root:                      #   optional, see "Including other side panels"
+      doc: /guide/overview.md
+    tree:
+      - doc: /guide/setup.md
+      - id: reference
+        include: ./reference/reference-entry.yaml   # a side panel of another document
+  compact:                     # a side panel declared in another file, by reference
+    file: ./panels.yaml
+    sidePanel: compact
 ```
 
-```yaml
-# legacy form: the resource is the file itself
-root:
-  doc: /guide/overview.md
-tree:
-  - doc: /guide/setup.md
-```
+Any other top-level key is an error naming the file, as are the former forms (a top-level `tree` or `root`, a `sidePanel` section, `childrenFile` on a node), so that a file of the old format fails with the hint it needs.
 
-The legacy form remains supported and can also carry a `source` section. A file must not combine a `sidePanel` section with a top-level `tree` or `root`, and the resource must contain a `tree` list. A file referenced by config `source.file` can be the same sectioned file; the loader then reads its `source` section as the main source rules and its `sidePanel` section as the page side panel.
+A **side-panel reference** names one side panel. A string is a file path, relative to the file holding the reference, and means the default side panel of that file. A mapping `{ file?, sidePanel? }` names the file (the file holding the reference when absent) and the side panel id (the file's default when absent). The default side panel of a file is `sidePanelDefault`, or the only side panel it declares; a reference that needs the default of a file declaring several without `sidePanelDefault` is an error. References appear as the `include` property of a tree node, as an alias value of `sidePanelById`, and, without `file`, as `docEntry.sidePanel` in `config.yaml`.
 
-Source sections of resource files are executed together with the main source rules:
+### Loading
+
+Loading a file loads everything in it, once, and the entry is loaded first:
 
 ```text
+file loaded (doc-entry.ts fileLoad)
+  -> "source": rules rebased from the file holding them to the config directory,
+               appended to the rules of the page
+  -> "tag":    definitions merged; a tag already defined by a file loaded earlier
+               keeps that definition, so the entry decides over what it includes
+  -> every side panel of sidePanelById: tree expanded, "include" references resolved
+     by loading the referenced file (its source and tag come along) and taking
+     the referenced side panel; a side panel is loaded once and shared
+
 source rules of the page =
-  config.yaml "source" (a list, { file }, or absent)
-  + "source" sections of the side-panel resource files, in load order:
-    the page side-panel file, then each included file depth-first in tree order
-each file's "source" section is read once, also when the file is config "source.file"
-or is included several times
+  "source" of the entry
+  + "source" of each file reached, in order of appearance: sidePanelById in key
+    order, tree depth-first
 ```
 
-Rule paths are relative to the file that contains them. Every rule form is available, including tag and config steps. Because rules run in this order, a removal rule in the main source rules does not affect files that a resource file adds later; a resource file writes the removals it needs, typically excluding its own YAML files. An item excluded through `excludeSidePanelItemIds` does not remove the source rules of the resource it included.
+Rule paths are relative to the file that contains them. Every rule form is available, including tag and config steps. Because rules run in this order, a removal rule of the entry does not affect files that an included document adds later. The yaml files of the document (the entry, every file it reaches, its source and tag files) and `config.yaml` itself are configuration and are never collected as documents, whatever the rules say; no rule needs to exclude them. An item excluded through `excludeSidePanelItemIds` does not remove the source rules of the file it included.
 
-With every rule in resource files, `config.yaml` needs only:
+A cycle of inclusions is detected per side panel, not per file: two side panels of one file may include each other's siblings, but a side panel that reaches itself is an error naming the chain. Every file read is watched by the development server; when an inclusion is added while the server runs, editing the containing YAML refreshes the watch set.
+
+### What the page receives
+
+`config.yaml` names the entry and, optionally, which of its side panels the page shows:
 
 ```yaml
-sidePanel:
-  file: ../docs/doc.yaml
+docEntry:
+  file: ../docs/guide-entry.yaml
+  sidePanel: compact            # optional: a side panel of the entry other than its default
 ```
+
+The loader fills `configDoc` with what runtime code reads today: `source` (every rule), `sidePanel.tree` (the selected side panel, every inclusion inlined, every node annotated with `textSource`), `tag.defineById` (the entry's definitions, then the `tag` of `config.yaml` over them), and `siteTitle` / `homeDoc` / `homeItem` from the entry when `config.yaml` sets none. `configDoc.docEntry` carries the resolved side panel id and `sidePanelIdList`. Runtime code receives only this inlined shape, so a change of the file grammar stays in the loader (`plugin/doc-entry.ts`). The same side panel used in two places (a sub document included by the page side panel and by a compact one) is one loaded resource.
 
 ## Tree format
 
-The `tree` list of the page side-panel resource describes the side panel. If the tree is absent, one is generated from the complete file manifest.
+The `tree` list of a side panel describes it. If the entry declares no side panel, one is generated from the complete file manifest.
 
 ```yaml
 tree:
@@ -129,33 +139,44 @@ Every node can set a stable `id`, a custom `text`, a custom `display` component,
 
 A `doc` value is an exact internal path, a path suffix, or a file name. When a suffix or name matches several files, the first match in source order is used and the document page shows a warning listing every match. A `doc` that matches nothing stays in the tree as a missing-document item, which shows a clear error instead of disappearing.
 
-## Including other resources
+## Including other side panels
 
-A folder node includes another side-panel resource through `childrenFile`. The path is relative to the file containing the node, and the file is a [resource file](#resource-files) of either form. The plugin expands inclusions recursively before page-tree conversion, so runtime code always receives the same inlined `children` shape. Included children are placed before any local `children`.
+A folder node includes another side panel through `include`, a [side-panel reference](#document-yaml-files): the default side panel of a file, a named side panel of a file, or a side panel of the same file. The plugin expands inclusions recursively before page-tree conversion, so runtime code always receives the same inlined `children` shape. Included children are placed before any local `children`.
 
 ```yaml
-# side-panel.yaml
+# guide-entry.yaml, side panel "main"
 tree:
   - id: codeapp-development
-    text: CodeApp development
-    childrenFile: ./side-panel-codeapp.yaml
+    include: ./codeapp/codeapp-entry.yaml          # a self-contained sub document
+  - id: appendix
+    text: Appendix
+    include: { file: ./panels.yaml, sidePanel: appendix }
+  - id: shortcuts
+    text: Shortcuts
+    include: { sidePanel: shortcuts }              # declared in this file
 ```
 
 ```yaml
-# side-panel-codeapp.yaml
-root:                    # optional: properties of the importing node itself
-  doc: /codeapp-dev/doc/codeapp-doc.md
-  defaultOpen: false
-tree:
-  - text: Dataverse
-    doc: /codeapp-dev/doc/codeapp-dataverse.md
+# codeapp/codeapp-entry.yaml
+docEntry: true
+source:
+  - { action: addFolder, rootId: codeapp-dev, path: . }
+sidePanelById:
+  main:
+    root:                    # properties of the including node itself
+      text: CodeApp development
+      doc: /codeapp-dev/doc/codeapp-doc.md
+      defaultOpen: false
+    tree:
+      - text: Dataverse
+        doc: /codeapp-dev/doc/codeapp-dataverse.md
 ```
 
-The optional `root` mapping is merged onto the including node, so a part can keep its root document, part index, tags, and (through a `source` section) its source rules in its own folder while the central file only names the node. Explicit properties on the including node win. Because the merge happens in the loader, an included `part` registers against the including node's `id` exactly as inline configuration does. `root` never becomes a visible child, and `root.children` / `root.childrenFile` are configuration errors. Inclusion cycles, missing files, a non-string `childrenFile`, and resources without a `tree` list are configuration errors that name the file. Every included file is watched by the development server; when an inclusion is added while the server runs, editing the containing YAML refreshes the watch set.
+The optional `root` mapping is merged onto the including node, so a document keeps its label, root document, part index, tags, source rules, and tag definitions in its own folder while the including file only names the node. Explicit properties on the including node win. Because the merge happens in the loader, an included `part` registers against the including node's `id` exactly as inline configuration does. `root` never becomes a visible child, and `root.children` / `root.include` are configuration errors. Inclusion cycles, missing files, an invalid reference, a side panel id the file does not declare, and side panels without a `tree` list are configuration errors that name the file.
 
 ## Semantic parts
 
-A node becomes a part root when it has a `part` mapping. An explicit node `id` is required because the part identity and its index document reference must remain stable when tree order changes. Membership is inherited by every descendant, including descendants included through `childrenFile`; a nested part root replaces the inherited part for its own subtree.
+A node becomes a part root when it has a `part` mapping. An explicit node `id` is required because the part identity and its index document reference must remain stable when tree order changes. Membership is inherited by every descendant, including descendants included through `include`; a nested part root replaces the inherited part for its own subtree.
 
 ```yaml
 tree:
@@ -309,9 +330,10 @@ In edit mode ([In-place Editing](doc_page_impl_edit.md)) the label of an item ca
 
 ```text
 plugin (load time)         every node: textSource = { file, path }
-                             file  the side-panel file, relative to the config directory
-                             path  yaml address of the node: ["tree", 2],
-                                   ["sidePanel", "tree", 0, "children", 1], ["root"]
+                             file  the document yaml file, relative to the config directory
+                             path  yaml address of the node: ["sidePanelById", "main", "tree", 2],
+                                   ["sidePanelById", "main", "tree", 0, "children", 1],
+                                   ["sidePanelById", "main", "root"]
 page-tree.js               itemOutlineById[itemId]: textSource, isTextAuthored
 SidePanelItemHost          config.isTextEditable, textEditStatus, textEditMessage;
                            data.text = the label just saved while the new tree is pending
@@ -327,7 +349,7 @@ plugin                     write; report the new configuration as "doc-source-ch
                            (data, no reload); the watcher recognizes its own write
 ```
 
-**Where a label is written.** The loader annotates every node of every loaded resource with `textSource`, the file and the yaml address of the node, while it inlines the trees; the annotation travels with the node into `configDoc.sidePanel.tree` and into `data.itemDeclared`. A node whose label comes from the `root` of a file it includes through `childrenFile` points at that root, because that is where the text is. The server resolves `file` against the config directory and accepts only files the current configuration loads (the page side-panel file and every included file); the yaml address is applied to the parsed document, never to the file system.
+**Where a label is written.** The loader annotates every node of every loaded side panel with `textSource`, the file and the yaml address of the node, while it inlines the trees; the annotation travels with the node into `configDoc.sidePanel.tree` and into `data.itemDeclared`. A node whose label comes from the `root` of a side panel it includes points at that root, because that is where the text is. The server resolves `file` against the config directory and accepts only files the current configuration loads (the entry and every yaml file it reaches); the yaml address is applied to the parsed document, never to the file system.
 
 **How the file is changed.** The file is never rebuilt from its parsed object: that would drop every comment and could reorder or requote what the author wrote. `doc-side-panel-text.ts` parses the file with `yaml` (which keeps the character range of every node), finds the label the way `page-tree.js` reads it (`text` when the node has one; the `separator` value of a separator node; for a language mapping the translation that was displayed, named by `language`), and builds one line operation of the [edit api](doc_page_impl_edit.md#edit-api-and-line-operations): `replaceLines` over the lines holding the value, rebuilt as the text before the value on its first line, the new scalar, and the text after it on its last line (a trailing comment stays); or, for a node without a `text` (a document labeled by its title), `insertLines` of one `text:` line after the node's first key at the node's indentation, so the title becomes an authored label. The new scalar is plain when yaml would write it plain and quoted otherwise (`yaml.stringify` decides, with folding off), and a value authored over several lines becomes one line. Every other line of the file is untouched, byte for byte. The request carries `textBase`, the authored label the edit started from; when the file no longer holds it, the edit is refused (code -2) rather than overwriting someone else's change. A node written as a flow mapping cannot receive a new key and is refused with an explanation.
 
@@ -346,9 +368,11 @@ The default folder gesture (an inactive label navigates, the active label toggle
 ## Implementation files
 
 ```text
-frontend/plugin/doc-source.ts            load side-panel resource files, expand childrenFile,
-                                         append "source" sections, annotate textSource, watch
-                                         included files, report a label write as data
+frontend/plugin/doc-entry.ts             load the entry and every document yaml file it reaches:
+                                         side panels and their includes, "source" and "tag"
+                                         sections, textSource annotation
+frontend/plugin/doc-source.ts            config.yaml docEntry -> configDoc, watch the loaded
+                                         files, report a label write as data
 frontend/plugin/doc-side-panel-text.ts   a label change as one line operation of its yaml file
 frontend/plugin/doc-edit-server.ts       POST {editEndpoint}/side-panel/text
 frontend/src/lib/page-tree.js            tree conversion, routes, parts, tag and config declarations

@@ -1,78 +1,92 @@
-# side panel tree. free structure, not required to mirror the file tree.
-# node forms:
+# The page side panel of the demonstration document, declared as the side
+# panel "main" of this file and named by example-entry.yaml. A side panel is
+# a free tree, not required to mirror the file tree. node forms:
 #   - doc: /rootId/xx/a.md     page (text overrides the doc title)
 #   - sourceRoot: rootId       generated tree for a complete source root
 #   - text + children          folder; adding "doc" binds the label to that page
 #   - separator: Some Text     separator line
-#   - childrenFile: ./x.yaml   include another side-panel resource; its "root" mapping
-#                              configures this node, its "source" section adds source rules
+#   - include: <reference>     include another side panel as the children of this
+#                              node: a file path (its default side panel) or
+#                              { file?, sidePanel? }. its "root" configures this
+#                              node; the source rules and tag definitions of that
+#                              file come along.
 # any node may declare "tags"; they attach to the bound document/folder/item.
 # any node may declare "config"; it applies to the documents of the node and
 # of every item below it.
 
-tree:
-  - separator: Example Docs
-  - doc: /example/doc.md
-    text: Document Model
-  - doc: /example/database.md
-  - id: frontend-design
-    text: Frontend
-    doc: /example/frontend-store.md
-    tags: [part]
-    children:
-      - doc: /example/comp_text.md
-  - doc: /example/doc-group.md
-  - doc: /example/side-panel-tag.md
-    tags: [guide]
-  # "config" belongs to the bound document, and on a folder node to every
-  # document below it. overrides the source level, below the frontmatter.
-  - doc: /example/doc-config.md
-    tags: [guide, reference]
-    config:
-      TagsDisplayAtLinkPosition: before
-  # the edit layer playground; editable on the development server only
-  - doc: /example/edit-in-place.md
-    text: In-place Editing
-    tags: [guide]
-  # component data kept in the asset store; writable on the development server only
-  - doc: /example/asset-store.md
-    text: Asset Store
-    tags: [guide]
-  - separator: MDX Usage
-  - id: mdx-usage
-    text: MDX Components
-    tags: [part]
-    childrenFile: ./mdx-usage/side-panel.yaml
-  - separator: Tests
-  - id: component-panel-demo
-    # a language mapping: the translation of the document language is shown.
-    # in edit mode, editing the label rewrites only the line of that translation
-    text:
-      en: Component Panel
-      jp: コンポーネントパネル
-    # no definition in tag.yaml: displayed with the default tag look
-    tags: [draft]
-    panel:
-      component: DemoCounter
-      data:
-        id: side-panel-counter
-        label: panel count
-  - id: link-nav
-    text: Links & Navigation
-    doc: /example/link-nav/links.mdx
-    tags: [part]
-    children:
-      - doc: /example/link-nav/link-usage.md
-      - doc: notes.md
-        text: Ambiguous Name Example
-      # replaces the "test" tag from source.yaml; same id, later declaration
-      - doc: /example/link-nav/sub/notes.md
-        tags:
-          - id: test
-            data: { text: Test (sub) }
-      - doc: /example/link-nav/sample.py
-  - separator: Meta
-  # source.yaml already tags this file "reference"; "guide" is appended
-  - doc: /req/doc_page_req.md
-    text: Requirement
-    tags: [guide]
+sidePanelById:
+  main:
+    tree:
+      - separator: Example Docs
+      - doc: /example/doc.md
+        text: Document Model
+      - doc: /example/database.md
+      - id: frontend-design
+        text: Frontend
+        doc: /example/frontend-store.md
+        tags: [part]
+        children:
+          - doc: /example/comp_text.md
+      - doc: /example/doc-group.md
+      - doc: /example/side-panel-tag.md
+        tags: [guide]
+      # "config" belongs to the bound document, and on a folder node to every
+      # document below it. overrides the source level, below the frontmatter.
+      - doc: /example/doc-config.md
+        tags: [guide, reference]
+        config:
+          TagsDisplayAtLinkPosition: before
+      # the edit layer playground; editable on the development server only
+      - doc: /example/edit-in-place.md
+        text: In-place Editing
+        tags: [guide]
+      # component data kept in the asset store; writable on the development server only
+      - doc: /example/asset-store.md
+        text: Asset Store
+        tags: [guide]
+      - separator: MDX Usage
+      # a side panel of a resource file (no entry of its own): the part's own
+      # folder holds its tree and part index, this node only names it
+      - id: mdx-usage
+        text: MDX Components
+        tags: [part]
+        include: ./mdx-usage/side-panel.yaml
+      - separator: Sub Document
+      # the default side panel of a self-contained document: its entry file
+      # brings its own source rules and tag definitions; its "root" labels and
+      # binds this node. the same entry can be config.yaml docEntry.file.
+      - id: sub-doc
+        include: ./sub-doc/sub-doc-entry.yaml
+      - separator: Tests
+      - id: component-panel-demo
+        # a language mapping: the translation of the document language is shown.
+        # in edit mode, editing the label rewrites only the line of that translation
+        text:
+          en: Component Panel
+          jp: コンポーネントパネル
+        # no definition in tag.yaml: displayed with the default tag look
+        tags: [draft]
+        panel:
+          component: DemoCounter
+          data:
+            id: side-panel-counter
+            label: panel count
+      - id: link-nav
+        text: Links & Navigation
+        doc: /example/link-nav/links.mdx
+        tags: [part]
+        children:
+          - doc: /example/link-nav/link-usage.md
+          - doc: notes.md
+            text: Ambiguous Name Example
+          # replaces the "test" tag from source.yaml; same id, later declaration
+          - doc: /example/link-nav/sub/notes.md
+            tags:
+              - id: test
+                data: { text: Test (sub) }
+          - doc: /example/link-nav/sample.py
+      - separator: Meta
+      # source.yaml already tags this file "reference"; "guide" is appended
+      - doc: /req/doc_page_req.md
+        text: Requirement
+        tags: [guide]

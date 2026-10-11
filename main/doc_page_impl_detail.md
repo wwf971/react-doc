@@ -33,16 +33,29 @@ The Vite plugin is build-time infrastructure. `DocPageMdx` is a runtime render c
 
 ## Configuration composition
 
-The main YAML may keep source rules and side-panel structure in separate files:
+`config.yaml` holds the settings of the page and names the document it shows through the document's entry file:
 
 ```yaml
-source:
-  file: ./source.yaml
-sidePanel:
-  file: ./side-panel.yaml
+# config.yaml
+docEntry:
+  file: ./doc/guide-entry.yaml
 ```
 
-A source file contains an ordered `rules` list. Its paths are relative to the source file. Source rules and a side panel can also share one file, with a `source` and a `sidePanel` section; a part's own side-panel file can carry the source rules of its files the same way ([Resource files](doc_page_impl_side_panel.md#resource-files)). The side-panel tree format (documents, virtual folders, source folders, component panels, separators, `childrenFile` imports, tags) and the side-panel item renderer are described in [Side panel design](doc_page_impl_side_panel.md). Tags and tag definitions (`tag.file` or `tag.defineById`) are described in [Tag system](doc_page_impl_tag.md). Feature switches (`globalConfig`, and per-document `config` in source rules, side-panel nodes, and frontmatter) are described in [Config system](doc_page_impl_config.md); an application adds its own keys through `DocPageMdx` `config.configDefineList`.
+```yaml
+# doc/guide-entry.yaml
+docEntry:
+  title: Guide
+  homeDoc: /guide/overview.md
+source:
+  file: ./source.yaml           # or the rule list inline
+tag:
+  file: ./tag.yaml              # or defineById inline
+sidePanelById:
+  main:
+    file: ./side-panel.yaml     # or { root?, tree } inline
+```
+
+The entry (named `xxx-entry.yaml` by convention) declares the source rules, the tag definitions, and the side panels of the document; each section can stay inline or move to a file of its own, and a side-panel node includes the side panel of another entry through `include`, so a document is composed of self-contained documents that are each deployable alone by naming their entry in `config.yaml`. The grammar is specified in [The document entry](doc_page_impl_side_panel.md#the-document-entry); the side-panel tree format (documents, virtual folders, source folders, component panels, separators, inclusions, tags) and the side-panel item renderer in the rest of [Side panel design](doc_page_impl_side_panel.md). Tags and tag definitions are described in [Tag system](doc_page_impl_tag.md). Feature switches (`globalConfig`, and per-document `config` in source rules, side-panel nodes, and frontmatter) are described in [Config system](doc_page_impl_config.md); an application adds its own keys through `DocPageMdx` `config.configDefineList`.
 
 A valid source file that has no side-panel binding produces a visible navigation warning. `homeItem` selects the initial leaf by id; `homeDoc` remains supported and resolves through the same binding index.
 

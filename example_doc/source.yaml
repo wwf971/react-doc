@@ -1,6 +1,7 @@
-# Ordered source rules. Paths are relative to this file.
-# example_doc is the root folder of the demonstration page; this file and the
-# side-panel yaml files live here too and are excluded from the collected source.
+# Ordered source rules, named by example-entry.yaml (source.file). Paths are
+# relative to this file. example_doc is the root folder of the demonstration
+# page; the yaml files of the document (the entry, this file, the side-panel
+# and tag files) live here too and are never collected, so no rule excludes them.
 rules:
   - action: addFolder
     rootId: example
@@ -15,12 +16,10 @@ rules:
     pattern: ".DS_Store"
   - action: removeByPath
     pattern: "**/.gitignore"
-  - action: removeByName
-    pattern: "source.yaml"
-  - action: removeByName
-    pattern: "side-panel.yaml"
-  - action: removeByName
-    pattern: "tag.yaml"
+  # the sub document declares its own source rules in its entry file; its
+  # folder is not part of the "example" root
+  - action: removeByPath
+    pattern: "/example/sub-doc/**"
   # demo component implementations beside the demonstration docs are code,
   # not document content
   - action: removeByPath
@@ -41,7 +40,7 @@ rules:
     pattern: "/example/tag-outside-side-panel.md"
     tags: [guide]
   # config steps also apply to the files collected so far (source level of
-  # the config system; side-panel.yaml and the frontmatter can override it)
+  # the config system; side-panel items and the frontmatter can override it)
   - action: setConfigByPath
     pattern: "/example/doc-config.md"
     config:

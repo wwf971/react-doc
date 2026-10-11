@@ -11,8 +11,10 @@ import { textLineListGet, type LineOperation } from './doc-edit-lines.ts';
 // every other line of the file stays byte for byte as it was.
 //
 //   nodePath   yaml address of the side-panel node, as the plugin annotated
-//              it: e.g. ["tree", 2], ["sidePanel", "tree", 0, "children", 1],
-//              ["root"] for a label imported through childrenFile
+//              it: e.g. ["sidePanelById", "main", "tree", 2],
+//              ["sidePanelById", "main", "tree", 0, "children", 1],
+//              ["sidePanelById", "main", "root"] for a label that comes from
+//              the root of an included side panel
 //   language   '' for a plain string label, the language code of the shown
 //              translation for a language mapping
 //   text       the new label; a single line of non-empty text

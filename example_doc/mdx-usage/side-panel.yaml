@@ -1,21 +1,26 @@
-# Subtree for the "MDX Components" part, imported from ../side-panel.yaml
-# through childrenFile. "root" configures the importing node itself: it binds
-# the part root document and declares the hosted part index authored inside it.
-root:
-  doc: /example/mdx-usage/mdx-components.md
-  defaultOpen: true
-  part:
-    index:
-      docId: mdx-usage
-      componentId: mdx-usage-index
-tree:
-  - doc: /example/mdx-usage/writing-style.md
-  - doc: /example/comp-custom-list-el.md
-  - doc: /example/mdx-usage/comp-multi-lang.md
-  - doc: /example/mdx-usage/comp-block.md
-  - doc: /example/mdx-usage/comp-image.md
-  - doc: /example/mdx-usage/comp-diagram.md
-  - doc: /example/mdx-usage/comp-file-tree.md
-  - doc: /example/mdx-usage/comp-file-download.md
-  - doc: /example/mdx-usage/comp-data-ref.md
-  - doc: /example/mdx-usage/comp-mdx-native.mdx
+# Side panel of the "MDX Components" part, included from ../side-panel.yaml
+# through "include". This is a resource file, not an entry: the part is not
+# a document of its own (its files belong to the "example" root), so the file
+# only declares a side panel. "root" configures the including node itself: it
+# binds the part root document and declares the hosted part index authored
+# inside it.
+sidePanelById:
+  main:
+    root:
+      doc: /example/mdx-usage/mdx-components.md
+      defaultOpen: true
+      part:
+        index:
+          docId: mdx-usage
+          componentId: mdx-usage-index
+    tree:
+      - doc: /example/mdx-usage/writing-style.md
+      - doc: /example/comp-custom-list-el.md
+      - doc: /example/mdx-usage/comp-multi-lang.md
+      - doc: /example/mdx-usage/comp-block.md
+      - doc: /example/mdx-usage/comp-image.md
+      - doc: /example/mdx-usage/comp-diagram.md
+      - doc: /example/mdx-usage/comp-file-tree.md
+      - doc: /example/mdx-usage/comp-file-download.md
+      - doc: /example/mdx-usage/comp-data-ref.md
+      - doc: /example/mdx-usage/comp-mdx-native.mdx
