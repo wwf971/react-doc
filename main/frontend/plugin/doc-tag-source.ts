@@ -7,7 +7,7 @@ import { tagListMerge, tagListNormalize } from '../src/lib/doc-tag-declare.js';
 //     path: ./guide
 //     tags: [guide]
 //   - action: addTagByPath       tags apply to files already collected whose
-//     pattern: "/guide/**.py"    internal path matches the glob
+//     pattern: "~guide/**.py"    source path matches the glob
 //     tags: [code]
 //   - action: addTagByName       same, matching the file name
 //     pattern: "*.sh"
@@ -45,8 +45,8 @@ export function tagSourceRuleApply(
   const tagList = tagListNormalize(rule.tags);
   if (tagList.length === 0 || typeof rule.pattern !== 'string') return;
   const isByPath = rule.action === 'addTagByPath';
-  const pattern = isByPath && !rule.pattern.startsWith('/') ? `/${rule.pattern}` : rule.pattern;
-  const regex = globToRegex(pattern);
+  // a ByPath pattern is a glob over the whole source path (~rootId/...)
+  const regex = globToRegex(rule.pattern);
   for (const entry of entries) {
     if (!regex.test(isByPath ? entry.internalPath : entry.name)) continue;
     entry.tagList = tagListMerge(entry.tagList, tagList, { step: 'source', ruleIndex });

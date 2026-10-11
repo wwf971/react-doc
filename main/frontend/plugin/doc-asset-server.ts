@@ -11,10 +11,18 @@ import { ASSET_STORE_ID_LOCAL, AssetError, type AssetObjectKey, type AssetStore,
 //   GET  {endpoint}/object/list?store=                        -> { objectList }
 //   GET  {endpoint}/object/get?store=&objectId=|name=&versionId=  -> { object, version }   versionId default head
 //   GET  {endpoint}/object/data?store=&objectId=|name=&versionId= -> the bytes of the version, with their content type
-//   POST {endpoint}/object/create    { store, name, lang, contentType, fileExt, text | dataBase64, note, folder } -> { object, version, isCreated }
+//   GET  {endpoint}/dependency/list?store=&objectId=&versionId=   -> { versionId, dependencyList }   versionId default head
+//   GET  {endpoint}/dependent/list?store=&objectId=&versionId=    -> { dependentList }   the versions depending on the
+//                                                                    object (with versionId: on that version)
+//   POST {endpoint}/object/create    { store, name, lang, contentType, fileExt, text | dataBase64, note, folder, dependencyList }
+//                                                                 -> { object, version, isCreated }
 //                                     isCreated false: an object of that name exists and is answered, nothing is created
-//   POST {endpoint}/object/update    { store, objectId, hashBase, text | dataBase64, mode, note }                -> { object, version }
+//   POST {endpoint}/object/update    { store, objectId, hashBase, text | dataBase64, mode, note, dependencyList } -> { object, version }
 //                                     mode: inPlace | newVersion; absent: the object's saveMode
+//                                     dependencyList absent: the list of the version written over / made from is kept
+//   POST {endpoint}/dependency/set    { store, objectId, versionId, dependencyList }  -> { object }
+//   POST {endpoint}/dependency/add    { store, objectId, versionId, dependency }      -> { object }
+//   POST {endpoint}/dependency/remove { store, objectId, versionId, dependency }      -> { object }
 //   POST {endpoint}/object/delete    { store, objectId }                                 -> { object }   (soft)
 //   POST {endpoint}/object/restore   { store, objectId }                                 -> { object }
 //   POST {endpoint}/object/meta/set  { store, objectId, name?, lang?, contentType?, saveMode? } -> { object }
@@ -31,8 +39,10 @@ import { ASSET_STORE_ID_LOCAL, AssetError, type AssetObjectKey, type AssetStore,
 //
 // object:  { objectId, name, lang, contentType, fileExt, saveMode?, versionIdHead, isDeleted, isLocked,
 //            timeCreated, folder, dirName,
-//            versionList: [{ versionId, versionIdPrevList, time, note, size, hash, isLocked }],
+//            versionList: [{ versionId, versionIdPrevList, time, note, size, hash, isLocked, dependencyList }],
 //            eventList: [{ eventType, time, versionId?, userId? }] }
+// dependency: { type: source, path } | { type: asset, objectId, versionId? }   (doc_page_impl_asset.md#dependencies)
+// dependent:  { objectId, versionId, dependency }
 // version: { versionId, size, hash, isText, text? }   text only when the bytes are utf-8 text
 // folder:  { path, pathAbs, isDefault, isExists, objectCount }
 
@@ -93,6 +103,14 @@ async function routeHandle(req: IncomingMessage, route: string, url: URL, store:
       const version = store.versionDataGetOf(object, url.searchParams.get('versionId') ?? 'head');
       return { object, version: versionResponseBuild(version) };
     }
+    if (route === '/dependency/list') {
+      const object = store.objectFind(storeObjectKeyGet(url.searchParams));
+      return store.dependencyListGet(object.objectId, url.searchParams.get('versionId') ?? 'head');
+    }
+    if (route === '/dependent/list') {
+      const object = store.objectFind(storeObjectKeyGet(url.searchParams));
+      return { dependentList: store.dependentListGet(object.objectId, url.searchParams.get('versionId') ?? '') };
+    }
   }
   if (method === 'POST') {
     const body = await jsonBodyRead(req);
@@ -111,6 +129,7 @@ async function routeHandle(req: IncomingMessage, route: string, url: URL, store:
         data: bodyDataGet(body),
         note: body?.note,
         folder: body?.folder ? String(body.folder) : undefined,
+        dependencyList: body?.dependencyList,
       });
       return { object: result.object, version: versionResponseBuild(result.version), isCreated: result.isCreated };
     }
@@ -121,8 +140,18 @@ async function routeHandle(req: IncomingMessage, route: string, url: URL, store:
         data: bodyDataGet(body),
         mode: body?.mode,
         note: body?.note,
+        dependencyList: body?.dependencyList,
       });
       return { object: result.object, version: versionResponseBuild(result.version) };
+    }
+    if (route === '/dependency/set') {
+      return { object: store.dependencyListSet(objectId, String(body?.versionId ?? ''), body?.dependencyList) };
+    }
+    if (route === '/dependency/add') {
+      return { object: store.dependencyAdd(objectId, String(body?.versionId ?? ''), body?.dependency) };
+    }
+    if (route === '/dependency/remove') {
+      return { object: store.dependencyRemove(objectId, String(body?.versionId ?? ''), body?.dependency) };
     }
     if (route === '/object/delete') return { object: store.objectDelete(objectId) };
     if (route === '/object/restore') return { object: store.objectRestore(objectId) };

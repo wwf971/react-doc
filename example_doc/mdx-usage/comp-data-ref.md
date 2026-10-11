@@ -17,7 +17,7 @@ A component can reuse the data authored for another component instead of repeati
 ```text
 dataRef = {document target}#{component id}
 
-/example/mdx-usage/comp-file-tree.md#example-project-tree   exact internal path
+~example/mdx-usage/comp-file-tree.md#example-project-tree   exact source path (~rootId/...)
 ./comp-file-tree.md#example-project-tree                     relative to this document
 comp-file-tree.md#example-project-tree                       file name
 @first/mdx-usage#mdx-usage-index                             first document of a side-panel item

@@ -8,8 +8,8 @@ import { configDeclaredIs } from '../src/lib/doc-config-define.js';
 //   - action: addFolder              "config" applies to every file this rule collects
 //     path: ./guide
 //     config: { TagsDisplayAtLinkIsOn: true }
-//   - action: setConfigByPath        files already collected whose internal path
-//     pattern: "/guide/**"             matches the glob
+//   - action: setConfigByPath        files already collected whose source path
+//     pattern: "~guide/**"             matches the glob
 //     config: { TagsDisplayAtMainPanelIsOn: false }
 //   - action: setConfigByName        same, matching the file name
 //     pattern: "*.py"
@@ -17,6 +17,9 @@ import { configDeclaredIs } from '../src/lib/doc-config-define.js';
 // a later rule replaces the same key; a removed file loses its config with itself.
 //
 // document level: the "config" mapping in md/mdx frontmatter.
+// a "compConfig" mapping inside a declared config carries component-level
+// keys (doc_page_impl_config.md#component-level-config); it travels with
+// the rest and is read apart in the browser.
 //
 // both are emitted in the manifest (entry.configSource, entry.configFrontmatter).
 // keys and values are validated in the browser, where the key definitions
@@ -56,8 +59,8 @@ export function configSourceRuleApply(
     return;
   }
   const isByPath = rule.action === 'setConfigByPath';
-  const pattern = isByPath && !rule.pattern.startsWith('/') ? `/${rule.pattern}` : rule.pattern;
-  const regex = globToRegex(pattern);
+  // a ByPath pattern is a glob over the whole source path (~rootId/...)
+  const regex = globToRegex(rule.pattern);
   for (const entry of entries) {
     if (!regex.test(isByPath ? entry.internalPath : entry.name)) continue;
     entry.configSource = { ...(entry.configSource ?? {}), ...rule.config };

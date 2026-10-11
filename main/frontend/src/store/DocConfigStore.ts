@@ -1,8 +1,9 @@
 import { makeAutoObservable, observable } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import type { DocStore } from './DocStore.js';
-import { configDefineByKeyBuild } from '../lib/doc-config-define.js';
+import { compConfigDefineByCompIdBuild, configDefineByKeyBuild } from '../lib/doc-config-define.js';
 import { configModelBuild } from '../lib/doc-config-model.js';
+import { compIdResolve } from '../../../comp-doc/registry/comp-registry.js';
 
 // Config service of the doc page. Design: doc_page_impl_config.md
 // Page-level values come from config.yaml globalConfig; document-level values
@@ -10,6 +11,11 @@ import { configModelBuild } from '../lib/doc-config-model.js';
 // frontmatter. The reader's own overrides from the settings panel (the user
 // level) come last and live only for the page session. Renderers ask here
 // instead of reading any of those places.
+//
+// Component-level keys (doc_page_impl_config.md#component-level-config) are
+// declared by the registered components themselves (compDefine
+// configDefineList) and resolved the same way under "compConfig"; a
+// component receives its values in its config (RegisteredComp).
 
 export type ConfigLevel = 'default' | 'global' | 'source' | 'sidePanel' | 'doc' | 'user';
 export type ConfigDefine = {
@@ -18,9 +24,14 @@ export type ConfigDefine = {
   valueDefault: any;
   scope: 'page' | 'doc';
   valueList?: any[];
+  // type 'sourcePath': what the path names, for completion
+  pathSpec?: { kind: 'dir' | 'file'; extList?: string[] };
   description?: string;
   isUserSettable?: boolean;
 };
+
+export type SettingsTabId = 'config' | 'compConfig' | 'assetStore';
+const settingsTabIdList: SettingsTabId[] = ['config', 'compConfig', 'assetStore'];
 
 export class DocConfigStore {
   sourceStore: DocSourceStore;
@@ -30,14 +41,17 @@ export class DocConfigStore {
   configService: Readonly<Record<string, (...args: any[]) => any>>;
   // key -> value set by the reader in the settings panel (the user level)
   configUserByKey: Record<string, any> = {};
+  // compId -> key -> value set by the reader (the user level of component keys)
+  configUserCompByCompId: Record<string, Record<string, any>> = {};
   // the settings panel is open, and the button it was opened from (the
   // panel is placed under it)
   isSettingsOpen = false;
   settingsAnchorElement: HTMLElement | null = null;
-  // the tab of the settings panel that is shown: the config keys, or the
-  // folders of the asset store (doc_page_impl_asset.md); kept while the
-  // panel is closed, so it opens again where it was
-  settingsTabId: 'config' | 'assetStore' = 'config';
+  // the tab of the settings panel that is shown: the config keys, the
+  // component-level keys, or the folders of the asset store
+  // (doc_page_impl_asset.md); kept while the panel is closed, so it opens
+  // again where it was
+  settingsTabId: SettingsTabId = 'config';
 
   constructor(sourceStore: DocSourceStore, docStore: DocStore, options?: { configDefineList?: ConfigDefine[] }) {
     this.sourceStore = sourceStore;
@@ -50,6 +64,8 @@ export class DocConfigStore {
       levelDocGet: (docPath: string, key: string) => this.levelDocGet(docPath, key),
       valueDocGet: (docPath: string, key: string) => this.valueDocGet(docPath, key),
       valueGlobalGet: (key: string) => this.valueGlobalGet(key),
+      compConfigGet: (compId: string, docPath: string) => this.compConfigGet(compId, docPath),
+      compConfigDefineListGet: (compId: string) => this.compConfigDefineListGet(compId),
     });
     makeAutoObservable(this, {
       configDefineByKey: false,
@@ -60,16 +76,25 @@ export class DocConfigStore {
     });
   }
 
+  // the keys the registered components declare; follows replaceCompById
+  get compConfigDefineByCompId(): Map<string, Map<string, ConfigDefine>> {
+    void this.docStore.compByIdVersion;
+    return compConfigDefineByCompIdBuild(this.docStore.compById);
+  }
+
   get configModel() {
     return configModelBuild({
       configDefineByKey: this.configDefineByKey,
       configDoc: this.sourceStore.configDoc,
       configUser: this.configUserByKey,
+      configUserComp: this.configUserCompByCompId,
       fileManifest: this.sourceStore.fileManifest,
       declarationListSidePanel: this.docStore.treeModel.configDeclarationList,
       declarationListPartIndex: [...this.docStore.treeModel.partById.values()]
         .filter((part: any) => part.index?.config !== undefined)
         .map((part: any) => ({ partId: part.id, config: part.index.config })),
+      compConfigDefineByCompId: this.compConfigDefineByCompId,
+      compIdResolve: (compName: string) => compIdResolve(this.sourceStore.configDoc, compName),
     });
   }
 
@@ -99,6 +124,11 @@ export class DocConfigStore {
 
   configUserClear(): void {
     this.configUserByKey = {};
+    this.configUserCompByCompId = {};
+  }
+
+  get isUserOverrideAny(): boolean {
+    return Object.keys(this.configUserByKey).length > 0 || Object.keys(this.configUserCompByCompId).length > 0;
   }
 
   settingsOpenSet(isOpen: boolean, anchorElement: HTMLElement | null = null): void {
@@ -107,7 +137,7 @@ export class DocConfigStore {
   }
 
   settingsTabIdSet(tabId: string): void {
-    this.settingsTabId = tabId === 'assetStore' ? 'assetStore' : 'config';
+    this.settingsTabId = settingsTabIdList.includes(tabId as SettingsTabId) ? (tabId as SettingsTabId) : 'config';
   }
 
   // ----- queries -----
@@ -141,5 +171,43 @@ export class DocConfigStore {
   levelDocGet(docPath: string, key: string): ConfigLevel {
     const configResolved = this.configModel.configByDocPath.get(docPath);
     return configResolved?.levelByKey[key] ?? this.configModel.levelGlobalByKey[key];
+  }
+
+  // ----- component-level keys -----
+
+  // the keys a component declares, in declaration order; [] for a component
+  // without any
+  compConfigDefineListGet(compId: string): ConfigDefine[] {
+    return [...(this.compConfigDefineByCompId.get(compId)?.values() ?? [])];
+  }
+
+  // the components that declare keys, with their ids
+  get compIdListWithConfig(): string[] {
+    return [...this.compConfigDefineByCompId.keys()];
+  }
+
+  // key -> value of the component's keys for one document ({} for a
+  // component without keys); a path that is not a collected document gets
+  // page values
+  compConfigGet(compId: string, docPath = ''): Record<string, any> {
+    const byCompId = this.configModel.compConfigByDocPath.get(docPath) ?? this.configModel.compConfigGlobalByCompId;
+    return byCompId.get(compId)?.valueByKey ?? {};
+  }
+
+  // the page value of a component key without the reader's override
+  compValueDeclaredGet(compId: string, key: string): any {
+    return this.configModel.compConfigGlobalDeclaredByCompId.get(compId)?.[key];
+  }
+
+  compValueGlobalGet(compId: string, key: string): any {
+    return this.configModel.compConfigGlobalByCompId.get(compId)?.valueByKey[key];
+  }
+
+  compValueUserSet(compId: string, key: string, value: any): void {
+    if (!this.compConfigDefineByCompId.get(compId)?.has(key)) return;
+    this.configUserCompByCompId = {
+      ...this.configUserCompByCompId,
+      [compId]: { ...(this.configUserCompByCompId[compId] ?? {}), [key]: value },
+    };
   }
 }

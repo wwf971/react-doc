@@ -1,11 +1,22 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { compileDoc } from '../lib/mdx-compile.js';
 import { docTargetResolve } from '../lib/doc-target-resolve.js';
+import {
+  sourcePathIsInside,
+  sourcePathIsRooted,
+  sourcePathNameGet,
+  sourcePathNormalize,
+} from '../lib/doc-source-path.js';
 import { multiLangSearchDataGet } from '../../../comp-mdx/multi-lang/MultiLangSearchData.js';
 
-// lower store layer: owns the doc source content.
-// manifest + raw text + compile cache + doc index + search data.
+// lower store layer: the source layer of the page (doc_page_impl_source.md).
+// owns the doc source content: the manifest of files and folders, raw text,
+// compile cache, doc index, search data, and the services over the source:
+// file reference resolution and urls, path completion, file creation
+// through the source api of the development server.
 // it never touches ui state; the upper DocStore asks it for content.
+
+export type SourceCollectMode = 'recursive' | 'direct' | 'referenced';
 
 export type FileEntry = {
   rootId: string;
@@ -14,6 +25,8 @@ export type FileEntry = {
   ext: string;
   title: string;
   internalPath: string;
+  // how the file was collected; 'referenced' files are not pages
+  collect?: SourceCollectMode;
   // sha256 of the file content, from the development server; the caches of
   // a path survive a manifest replacement while its hash is unchanged
   contentHash?: string;
@@ -22,6 +35,25 @@ export type FileEntry = {
   configFrontmatter?: Record<string, any>;
   load: () => Promise<string>;
 };
+
+// a folder of the source: the folder of an addFolder rule or one below it
+export type DirEntry = {
+  rootId: string;
+  relPath: string;
+  internalPath: string;
+  collect: SourceCollectMode;
+};
+
+export type SourceData = {
+  configDoc: any;
+  fileManifest: FileEntry[];
+  dirManifest?: DirEntry[];
+};
+
+export type SourceResult = { code: number; data?: any; message: string };
+
+// what a path completion asks for: folders, or files (of some extensions)
+export type SourcePathSpec = { kind: 'dir' | 'file'; extList?: string[] };
 
 export type CompileState = {
   status: 'loading' | 'done' | 'error';
@@ -58,8 +90,15 @@ export type LinkTarget = {
 export class DocSourceStore {
   configDoc: any;
   fileManifest: FileEntry[];
+  dirManifest: DirEntry[];
   compileConfig: any;
   linkResolve: any;
+  // the source api of the development server ('' in a build: the source is
+  // read-only, and the bytes of a file come from fileUrlByPath)
+  sourceEndpoint: string;
+  // source path (or the spelling a document used) -> url of the file's bytes,
+  // as the vite plugin collected them (fileUrlByPath of the virtual module)
+  fileUrlByPath: Record<string, string>;
   compiledByPath: Record<string, CompileState> = {};
   rawByPath: Record<string, { status: 'loading' | 'done' | 'error'; content?: string; message?: string }> = {};
   structuredDataByPath: Record<string, any> = {};
@@ -69,15 +108,28 @@ export class DocSourceStore {
   // it started with is the current one, so an older result can neither
   // overwrite a newer one nor bring a removed path back.
   versionByPath: Record<string, number> = {};
+  // stable service object handed to registered components (config.source)
+  sourceService: Readonly<Record<string, (...args: any[]) => any>>;
 
   constructor(
-    sourceData: { configDoc: any; fileManifest: FileEntry[] },
-    options?: { compile?: any; linkResolve?: any },
+    sourceData: SourceData,
+    options?: { compile?: any; linkResolve?: any; endpoint?: string; fileUrlByPath?: Record<string, string> },
   ) {
     this.configDoc = sourceData.configDoc;
     this.fileManifest = sourceData.fileManifest;
+    this.dirManifest = sourceData.dirManifest ?? [];
     this.compileConfig = options?.compile ?? {};
     this.linkResolve = options?.linkResolve;
+    this.sourceEndpoint = String(options?.endpoint ?? '').replace(/\/+$/, '');
+    this.fileUrlByPath = options?.fileUrlByPath ?? {};
+    this.sourceService = Object.freeze({
+      isWritable: () => this.isWritable,
+      fileResolve: (reference: string, fromPath: string) => this.fileResolve(reference, fromPath),
+      fileUrlGet: (reference: string, fromPath: string) => this.fileUrlGet(reference, fromPath),
+      dirListGet: () => this.dirManifest,
+      pathComplete: (text: string, spec: SourcePathSpec) => this.pathComplete(text, spec),
+      fileNameUniqueGet: (dirPath: string, name: string) => this.fileNameUniqueGet(dirPath, name),
+    });
     // compile results hold React elements (toc titles) and component functions
     // (Body); they must stay plain references. only key-level changes are
     // observable, and loadDoc always replaces the value object wholesale.
@@ -87,10 +139,19 @@ export class DocSourceStore {
       structuredDataByPath: observable.shallow,
       configDoc: observable.ref,
       fileManifest: observable.ref,
+      dirManifest: observable.ref,
       compileConfig: false,
       linkResolve: false,
+      sourceEndpoint: false,
+      fileUrlByPath: false,
+      sourceService: false,
       versionByPath: false,
     });
+  }
+
+  // the source api answers (development server): files can be created
+  get isWritable(): boolean {
+    return this.sourceEndpoint !== '';
   }
 
   versionGet(path: string): number {
@@ -128,7 +189,7 @@ export class DocSourceStore {
   // a changed configuration also drops the compiled inline items (their
   // content is configuration) and refreshes synthesized source-file pages
   // when their display strategy changed. resolves when the refreshes are done.
-  replaceSourceData(sourceData: { configDoc: any; fileManifest: FileEntry[] }): Promise<void> {
+  replaceSourceData(sourceData: SourceData): Promise<void> {
     const entryByPathPrevious = this.entryByInternalPath;
     const configPrevious = this.configDoc;
     const isConfigChanged = JSON.stringify(configPrevious) !== JSON.stringify(sourceData.configDoc);
@@ -136,6 +197,7 @@ export class DocSourceStore {
       && JSON.stringify(configPrevious?.fileDisplay ?? null) !== JSON.stringify(sourceData.configDoc?.fileDisplay ?? null);
     this.configDoc = sourceData.configDoc;
     this.fileManifest = sourceData.fileManifest;
+    if (sourceData.dirManifest) this.dirManifest = sourceData.dirManifest;
     const entryByPathNext = this.entryByInternalPath;
 
     const pathsChanged: string[] = [];
@@ -363,6 +425,123 @@ export class DocSourceStore {
     return { targets, hash };
   }
 
+  // ---------- files: resolution, urls ----------
+
+  // the one file a reference names (a source path, a path relative to
+  // fromPath, a suffix, a name: doc-target-resolve.js); undefined when none
+  // or several match
+  fileResolve(reference: string, fromPath = ''): FileEntry | undefined {
+    const { entryList } = docTargetResolve(reference, fromPath, {
+      entryList: this.fileManifest,
+      entryByInternalPath: this.entryByInternalPath,
+      entryListByName: this.targetsByName,
+    }) as { entryList: FileEntry[] };
+    return entryList.length === 1 ? entryList[0] : undefined;
+  }
+
+  // the url the bytes of a file are read from: the source api in
+  // development, the url the build collected otherwise. a reference that is
+  // not in the collected source still answers the url the build collected
+  // for its spelling (a file found beside the document on disk); undefined
+  // when nothing is known.
+  fileUrlGet(reference: string, fromPath = ''): string | undefined {
+    const text = String(reference ?? '').trim();
+    if (text === '') return undefined;
+    const entry = this.fileResolve(text, fromPath);
+    if (entry) {
+      if (this.fileUrlByPath[entry.internalPath]) return this.fileUrlByPath[entry.internalPath];
+      if (this.sourceEndpoint) return `${this.sourceEndpoint}/data?path=${encodeURIComponent(entry.internalPath)}`;
+    }
+    return this.fileUrlByPath[text.replace(/^\.\//, '')];
+  }
+
+  // ---------- folders: completion ----------
+
+  // the folders a file can be created in: the folder of a recursive or
+  // referenced rule and every folder below, the folder of a direct rule
+  get dirListWritable(): DirEntry[] {
+    return this.dirManifest;
+  }
+
+  // completion of a path being typed, as source paths. an empty text lists
+  // the roots; a text without the root mark is matched against the end of
+  // every candidate (typing "image" finds ~example/mdx-usage/image).
+  //   spec.kind 'dir'   folders of the source
+  //   spec.kind 'file'  files, of spec.extList when given
+  pathComplete(text: string, spec: SourcePathSpec = { kind: 'dir' }): string[] {
+    const typed = sourcePathNormalize(text);
+    let candidateList: string[];
+    if (spec.kind === 'file') {
+      const extSet = new Set((spec.extList ?? []).map((ext) => ext.toLowerCase().replace(/^\./, '')));
+      candidateList = this.fileManifest
+        .filter((entry) => extSet.size === 0 || extSet.has(entry.ext))
+        .map((entry) => entry.internalPath);
+    } else {
+      candidateList = this.dirManifest.map((dir) => dir.internalPath);
+    }
+    if (typed === '') return candidateList;
+    if (sourcePathIsRooted(typed)) {
+      return candidateList.filter((candidate) => candidate.startsWith(typed));
+    }
+    const typedLower = typed.toLowerCase();
+    return candidateList.filter((candidate) => candidate.toLowerCase().includes(typedLower));
+  }
+
+  // a file name not used in the folder yet: "a.png", then "a-2.png", "a-3.png"
+  fileNameUniqueGet(dirPath: string, name: string): string {
+    const dir = sourcePathNormalize(dirPath);
+    const nameSet = new Set(
+      this.fileManifest
+        .filter((entry) => sourcePathIsInside(entry.internalPath, dir) && entry.internalPath.slice(dir.length + 1).indexOf('/') < 0)
+        .map((entry) => entry.name),
+    );
+    if (!nameSet.has(name)) return name;
+    const indexDot = name.lastIndexOf('.');
+    const base = indexDot > 0 ? name.slice(0, indexDot) : name;
+    const ext = indexDot > 0 ? name.slice(indexDot) : '';
+    for (let counter = 2; ; counter += 1) {
+      const candidate = `${base}-${counter}${ext}`;
+      if (!nameSet.has(candidate)) return candidate;
+    }
+  }
+
+  // ---------- files: creation ----------
+
+  // writes a file into a folder of the source through the source api
+  // (POST file/create). the new file joins the manifest when the server
+  // reports the source data again; its entry is answered right away.
+  //   { code: 0, data: { path, entry } } | { code: -1 | -2 (exists) | -3 (folder not in the source), message }
+  async fileCreate(input: { dirPath: string; name: string; text?: string; blob?: Blob; isOverwrite?: boolean }): Promise<SourceResult> {
+    if (!this.isWritable) return { code: -1, message: 'The source is read-only: files are created through the development server only.' };
+    const dirPath = sourcePathNormalize(input.dirPath);
+    if (!sourcePathIsRooted(dirPath)) return { code: -1, message: `The folder must be a source path (~rootId/dir): ${dirPath}` };
+    const body: Record<string, unknown> = { dirPath, name: input.name, isOverwrite: input.isOverwrite === true };
+    if (input.blob) body.dataBase64 = await blobBase64Get(input.blob);
+    else body.text = String(input.text ?? '');
+    let payload: any;
+    try {
+      const response = await fetch(`${this.sourceEndpoint}/file/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        cache: 'no-store',
+      });
+      payload = await response.json().catch(() => undefined);
+      if (!payload || typeof payload.code !== 'number') {
+        return { code: -1, message: `the source api answered ${response.status} without a result` };
+      }
+    } catch (error: any) {
+      return { code: -1, message: `the source api is not reachable: ${String(error?.message ?? error)}` };
+    }
+    if (payload.code !== 0) return { code: payload.code, message: payload.message };
+    return { code: 0, data: payload.data, message: '' };
+  }
+
+  // the source path a file of the folder would have
+  filePathBuild(dirPath: string, name: string): string {
+    return `${sourcePathNormalize(dirPath)}/${sourcePathNameGet(name)}`;
+  }
+
   // ---------- search ----------
 
   async ensureSearchData(): Promise<void> {
@@ -439,6 +618,19 @@ function entryIsSameContent(entryPrevious: FileEntry, entryNext: FileEntry): boo
     return entryPrevious.contentHash === entryNext.contentHash;
   }
   return entryPrevious.load === entryNext.load;
+}
+
+// the bytes of a blob as base64, for the json body of the source api
+function blobBase64Get(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? '');
+      resolve(dataUrl.slice(dataUrl.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('the file could not be read'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 function stripFrontmatter(markdown: string): string {

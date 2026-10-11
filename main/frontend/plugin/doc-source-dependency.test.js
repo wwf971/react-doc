@@ -17,19 +17,19 @@ const configDoc = {
 };
 
 function targetListGet(text, ext = 'md') {
-  return docSourceDependenciesCollect(text, { internalPath: '/docs/page.md', ext }, configDoc)
+  return docSourceDependenciesCollect(text, { internalPath: '~docs/page.md', ext }, configDoc)
     .dependencyList
     .map((dependency) => [dependency.kind, dependency.target]);
 }
 
 test('collects links, inline-links, images, inline code, and wiki links', () => {
   assert.deepEqual(targetListGet([
-    '[a](./a.md) [s](/docs/run.ps1 "inline-link") [r](/docs/b.mdx "inline-link:render")',
+    '[a](./a.md) [s](~docs/run.ps1 "inline-link") [r](~docs/b.mdx "inline-link:render")',
     '![i](./i.png) `c.md` [[d.md]]',
   ].join('\n')), [
     ['document', './a.md'],
-    ['source', '/docs/run.ps1'],
-    ['source', '/docs/b.mdx'],
+    ['source', '~docs/run.ps1'],
+    ['source', '~docs/b.mdx'],
     ['asset', './i.png'],
     ['document', 'c.md'],
     ['document', 'd.md'],
@@ -44,12 +44,12 @@ test('collects nested BlockMdx Markdown, SourceLink, Index, and dataRef targets'
   assert.deepEqual(targetListGet([
     '<!--renderComp=BlockMdx,title=Note-->',
     `${F}md`,
-    'run [setup](/docs/setup.ps1 "inline-link")',
+    'run [setup](~docs/setup.ps1 "inline-link")',
     F,
     '',
     '<!--renderComp=SourceLink-->',
     F,
-    '/docs/config.yaml',
+    '~docs/config.yaml',
     F,
     '',
     '<!--renderComp=FileTree,dataRef=tree.md#project-->',
@@ -65,26 +65,26 @@ test('collects nested BlockMdx Markdown, SourceLink, Index, and dataRef targets'
     '  - title: Start',
     '    items:',
     '      - { title: Install, target: install.md }',
-    '      - { title: Script, kind: inline-link, target: /docs/install.sh }',
+    '      - { title: Script, kind: inline-link, target: ~docs/install.sh }',
     F,
   ].join('\n')), [
-    ['source', '/docs/setup.ps1'],
-    ['source', '/docs/config.yaml'],
+    ['source', '~docs/setup.ps1'],
+    ['source', '~docs/config.yaml'],
     ['document', 'tree.md'],
     ['document', 'install.md'],
-    ['source', '/docs/install.sh'],
+    ['source', '~docs/install.sh'],
   ]);
 });
 
 test('mdx: static attributes reach extractors, expressions are reported', () => {
   const result = docSourceDependenciesCollect(
-    '<SourceLink target="/docs/a.ps1" />\n\n<SourceLink target={path} />\n\n<Callout>see [b](b.md)</Callout>\n',
-    { internalPath: '/docs/page.mdx', ext: 'mdx' },
+    '<SourceLink target="~docs/a.ps1" />\n\n<SourceLink target={path} />\n\n<Callout>see [b](b.md)</Callout>\n',
+    { internalPath: '~docs/page.mdx', ext: 'mdx' },
     configDoc,
   );
   assert.deepEqual(
     result.dependencyList.map((dependency) => [dependency.kind, dependency.target]),
-    [['source', '/docs/a.ps1'], ['document', 'b.md']],
+    [['source', '~docs/a.ps1'], ['document', 'b.md']],
   );
   assert.equal(result.warningList.length, 1);
   assert.match(result.warningList[0], /<SourceLink> attribute target is an expression/);
@@ -92,12 +92,12 @@ test('mdx: static attributes reach extractors, expressions are reported', () => 
 
 test('a consumer extractor retains its static target', () => {
   const result = docSourceDependenciesCollect(
-    `<!--renderComp=Chart,file=/docs/data.csv-->\n${F}\n${F}\n`,
-    { internalPath: '/docs/page.md', ext: 'md' },
+    `<!--renderComp=Chart,file=~docs/data.csv-->\n${F}\n${F}\n`,
+    { internalPath: '~docs/page.md', ext: 'md' },
     { compRegistry: { Chart: 'app/Chart' } },
     { 'app/Chart': (data, context) => context.dependencyAdd(data.file, 'source') },
   );
-  assert.deepEqual(result.dependencyList.map((dependency) => dependency.target), ['/docs/data.csv']);
+  assert.deepEqual(result.dependencyList.map((dependency) => dependency.target), ['~docs/data.csv']);
 });
 
 // ---------- pruning ----------
@@ -115,7 +115,7 @@ function sourceBuild(fileByRelPath) {
       name,
       ext: path.extname(name).slice(1),
       absPath,
-      internalPath: `/docs/${relPath}`,
+      internalPath: `~docs/${relPath}`,
     };
   });
 }
@@ -130,27 +130,27 @@ test('pruning keeps side-panel documents and what they reach, recursively, in so
   const entryList = sourceBuild({
     'unused.md': '# Unused',
     'guide/c.md': 'back to [start](../start.md)',
-    'guide/b.md': '[next](./c.md) and [render](/docs/guide/d.mdx "inline-link:render")',
+    'guide/b.md': '[next](./c.md) and [render](~docs/guide/d.mdx "inline-link:render")',
     'guide/d.mdx': 'rendered',
     'scripts/run.ps1': 'Write-Host hi',
-    'start.md': '[b](guide/b.md) [run](/docs/scripts/run.ps1 "inline-link:source")',
+    'start.md': '[b](guide/b.md) [run](~docs/scripts/run.ps1 "inline-link:source")',
   });
   assert.deepEqual(prunedPathListGet(entryList, [{ doc: 'start.md' }]), [
-    '/docs/guide/c.md',
-    '/docs/guide/b.md',
-    '/docs/guide/d.mdx',
-    '/docs/scripts/run.ps1',
-    '/docs/start.md',
+    '~docs/guide/c.md',
+    '~docs/guide/b.md',
+    '~docs/guide/d.mdx',
+    '~docs/scripts/run.ps1',
+    '~docs/start.md',
   ]);
 });
 
 test('pruning keeps a nested BlockMdx source link without sourceDependencies', () => {
   const entryList = sourceBuild({
-    'page.md': `<!--renderComp=BlockMdx-->\n${F}md\n[cfg](/docs/cfg.yaml "inline-link")\n${F}\n`,
+    'page.md': `<!--renderComp=BlockMdx-->\n${F}md\n[cfg](~docs/cfg.yaml "inline-link")\n${F}\n`,
     'cfg.yaml': 'a: 1',
     'other.yaml': 'b: 2',
   });
-  assert.deepEqual(prunedPathListGet(entryList, [{ doc: 'page.md' }]), ['/docs/page.md', '/docs/cfg.yaml']);
+  assert.deepEqual(prunedPathListGet(entryList, [{ doc: 'page.md' }]), ['~docs/page.md', '~docs/cfg.yaml']);
 });
 
 test('a file reached by a retained document survives even if its own item was excluded', () => {
@@ -159,7 +159,7 @@ test('a file reached by a retained document survives even if its own item was ex
     'b.md': '# B',
   });
   // the excluded item for b.md is already gone from the tree
-  assert.deepEqual(prunedPathListGet(entryList, [{ doc: 'a.md' }]), ['/docs/a.md', '/docs/b.md']);
+  assert.deepEqual(prunedPathListGet(entryList, [{ doc: 'a.md' }]), ['~docs/a.md', '~docs/b.md']);
 });
 
 test('an unresolved local target is reported', (context) => {
@@ -167,10 +167,10 @@ test('an unresolved local target is reported', (context) => {
   const entryList = sourceBuild({
     'a.md': '[gone](./gone.md) [script](scripts/run.ps1 "inline-link")',
   });
-  assert.deepEqual(prunedPathListGet(entryList, [{ doc: 'a.md' }]), ['/docs/a.md']);
+  assert.deepEqual(prunedPathListGet(entryList, [{ doc: 'a.md' }]), ['~docs/a.md']);
   const messageList = warn.mock.calls.map((call) => call.arguments[0]);
-  assert.ok(messageList.some((message) => /\/docs\/a\.md: link "\.\/gone\.md" is not in the collected source/.test(message)));
-  assert.ok(messageList.some((message) => /"scripts\/run\.ps1" is not an exact internal path/.test(message)));
+  assert.ok(messageList.some((message) => /~docs\/a\.md: link "\.\/gone\.md" is not in the collected source/.test(message)));
+  assert.ok(messageList.some((message) => /"scripts\/run\.ps1" is not an exact source path/.test(message)));
 });
 
 test('legacy sourceDependencies are still retained, with a deprecation warning', (context) => {
@@ -180,8 +180,8 @@ test('legacy sourceDependencies are still retained, with a deprecation warning',
     'extra.txt': 'x',
   });
   assert.deepEqual(
-    prunedPathListGet(entryList, [{ id: 'a', doc: 'a.md', sourceDependencies: ['/docs/extra.txt'] }]),
-    ['/docs/a.md', '/docs/extra.txt'],
+    prunedPathListGet(entryList, [{ id: 'a', doc: 'a.md', sourceDependencies: ['~docs/extra.txt'] }]),
+    ['~docs/a.md', '~docs/extra.txt'],
   );
   assert.match(warn.mock.calls[0].arguments[0], /sourceDependencies is deprecated/);
 });

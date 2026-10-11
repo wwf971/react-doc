@@ -57,6 +57,108 @@
 	text-align: center;
 }
 
+/* ---------- empty state and paste flow (image-req.md#paste) ---------- */
+
+.doc-image.is-empty .doc-image-body {
+	min-height: 6rem;
+}
+
+.doc-image-empty {
+	display: flex;
+	width: 100%;
+	height: 100%;
+	min-height: 6rem;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	border: 1px dashed var(--color-fd-border);
+	border-radius: 3px;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.8rem;
+	line-height: 1.4;
+	text-align: center;
+}
+
+.doc-image-empty:focus-visible {
+	outline: none;
+	border-color: var(--color-fd-primary);
+	border-style: solid;
+}
+
+.doc-image-empty-title {
+	font-weight: 600;
+}
+
+.doc-image-empty-folder {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.72rem;
+}
+
+.doc-image-paste-button {
+	display: inline-flex;
+	align-items: center;
+	padding: 0 6px;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 3px;
+	background: var(--color-fd-background);
+	color: var(--color-fd-foreground);
+	font: inherit;
+	font-size: 0.72rem;
+	line-height: 1.5;
+	cursor: pointer;
+}
+
+.doc-image-paste-button:hover,
+.doc-image-paste-button:focus-visible,
+.doc-image-paste-button[aria-pressed='true'] {
+	background: var(--color-fd-accent);
+	color: var(--color-fd-accent-foreground);
+	outline: none;
+}
+
+.doc-image-paste-confirm {
+	position: absolute;
+	z-index: 3;
+	top: 0.5rem;
+	left: 0.5rem;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 6px;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--color-fd-background) 94%, transparent);
+	box-shadow: 0 2px 8px rgb(15 23 42 / 12%);
+	color: var(--color-fd-foreground);
+	font-size: 0.78rem;
+}
+
+.doc-image-paste-status {
+	position: absolute;
+	z-index: 3;
+	bottom: 0.5rem;
+	left: 0.5rem;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 6px;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--color-fd-background) 94%, transparent);
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.72rem;
+}
+
+.doc-image-paste-status.is-error {
+	border-color: var(--color-fd-destructive, #dc2626);
+	color: var(--color-fd-destructive, #dc2626);
+}
+
 .doc-image-error {
 	margin: 1rem 0;
 	padding: 0.75rem 1rem;

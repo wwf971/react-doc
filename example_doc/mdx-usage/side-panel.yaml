@@ -7,20 +7,20 @@
 sidePanelById:
   main:
     root:
-      doc: /example/mdx-usage/mdx-components.md
+      doc: ~example/mdx-usage/mdx-components.md
       defaultOpen: true
       part:
         index:
           docId: mdx-usage
           componentId: mdx-usage-index
     tree:
-      - doc: /example/mdx-usage/writing-style.md
-      - doc: /example/comp-custom-list-el.md
-      - doc: /example/mdx-usage/comp-multi-lang.md
-      - doc: /example/mdx-usage/comp-block.md
-      - doc: /example/mdx-usage/comp-image.md
-      - doc: /example/mdx-usage/comp-diagram.md
-      - doc: /example/mdx-usage/comp-file-tree.md
-      - doc: /example/mdx-usage/comp-file-download.md
-      - doc: /example/mdx-usage/comp-data-ref.md
-      - doc: /example/mdx-usage/comp-mdx-native.mdx
+      - doc: ~example/mdx-usage/writing-style.md
+      - doc: ~example/comp-custom-list-el.md
+      - doc: ~example/mdx-usage/comp-multi-lang.md
+      - doc: ~example/mdx-usage/comp-block.md
+      - doc: ~example/mdx-usage/comp-image.md
+      - doc: ~example/mdx-usage/comp-diagram.md
+      - doc: ~example/mdx-usage/comp-file-tree.md
+      - doc: ~example/mdx-usage/comp-file-download.md
+      - doc: ~example/mdx-usage/comp-data-ref.md
+      - doc: ~example/mdx-usage/comp-mdx-native.mdx

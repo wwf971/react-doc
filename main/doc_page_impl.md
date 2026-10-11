@@ -10,21 +10,22 @@ config.yaml (overlay config.0.yaml) ──► docEntry.file: the entry of the do
      ▼
 vite plugin "doc-source"
      ├── loads the entry and every yaml file it reaches: source rules, side panels, tags
-     ├── executes source rules ──► file manifest (multi-root: /{rootId}/relPath)
+     ├── executes source rules ──► file manifest (multi-root: ~rootId/relPath) + folder manifest
      │     each doc = lazy `?raw` import ──► dev: HMR reload on edit
      │                                       build: one lazy chunk per doc
-     ├── serves the dev-only apis: edit (files), asset (the local asset store: its folders)
-     └── emits virtual module `virtual:doc-source` = { config, fileManifest, assetSnapshot }
+     ├── serves the dev-only apis: source (file bytes, file creation), edit (files), asset (the local asset store)
+     └── emits virtual module `virtual:doc-source` = { config, fileManifest, dirManifest, fileUrlByPath, assetSnapshot }
      ▼
 mobx stores (source of truth for rendering)
-     ├── DocSourceStore (lower): manifest, raw/compile caches, doc index, search data
+     ├── DocSourceStore (lower): manifest, raw/compile caches, doc index, search data, the source service
+     ├── DocSourceFileStore: files created from the page (pasted images), the location prompt
      ├── DocStore (upper): side-panel tree, current doc, navigation, link dropdown, url sync
      ├── DocTagStore: tags resolved from source rules + side-panel tree, tag queries
-     ├── DocConfigStore: feature config, global and resolved per document, user overrides
+     ├── DocConfigStore: feature config, global and resolved per document, component-level keys, user overrides
      ├── DocEditStore: in-place editing (dev server only): sessions, block model, edit api
-     └── DocAssetStore: component data kept in the asset store: objects, versions, the asset panel
+     └── DocAssetStore: component data kept in the asset store: objects, versions, dependencies, the asset panel
      ▼
-DocEventRouter: component reports → host → local handler → domain route (navigation, tag, edit)
+DocEventRouter: component reports → host → local handler → domain route (navigation, tag, edit, source)
      ▼
 <DocPageMdx/>  (embeddable component)
      ├── FrameworkProvider adapter: usePathname/useRouter/Link backed by DocStore
@@ -46,11 +47,13 @@ DocEventRouter: component reports → host → local handler → domain route (n
 
 **In-place editing, an additional layer.** On the development server a document can be edited from the page, one root-level block at a time; the server rewrites the file and the page reloads from it. The layer has its own store, its own compiled body (root blocks wrapped, each with a floating toolbar from a sticky anchor), and a component edit contract (`config.isEdit`, `XxxEdit.jsx` beside `Xxx.jsx`); the reading path is untouched and a built page has no edit mode. Specified in [doc_page_impl_edit.md](doc_page_impl_edit.md).
 
-**Component data in an asset store.** A component block can hold a reference (a fenced block in the language `asset`, yaml naming a store, an object by its unique name or its id, and a version or the head) in place of its data; the data lives in a store of versioned objects, modeled after an object storage (an object is metadata with a DAG history and a record of its events, a version is bytes, text or not), with a standard api (create, update in place or as a new version, checkout, delete, history). The one store today is the local store: one or more folders on disk (an object's folder is `{id}--{name}`), served by the development server and bundled read-only into a build. The runtime boundary resolves the reference before the component renders, so components never know; the block toolbar of edit mode opens the asset panel, with a preview pane that renders the data as it is edited. Specified in [doc_page_impl_asset.md](doc_page_impl_asset.md).
+**Component data in an asset store.** A component block can hold a reference (a fenced block in the language `asset`, yaml naming a store, an object by its unique name or its id, and a version or the head) in place of its data; the data lives in a store of versioned objects, modeled after an object storage (an object is metadata with a DAG history and a record of its events, a version is bytes, text or not), with a standard api (create, update in place or as a new version, checkout, delete, history). The one store today is the local store: one or more folders on disk (an object's folder is `{id}--{name}`), served by the development server and bundled read-only into a build. Every version records what its data depends on (a file of the source, another asset), so a build keeps the files and a deletion can know what it breaks. The runtime boundary resolves the reference before the component renders, so components never know unless they opt in (`isAssetAware`: where the data is and what a write to it does, and one `dataReplaceRequest` event that updates the object or rewrites the inline block); the block toolbar of edit mode opens the asset panel, with a preview pane that renders the data as it is edited. Specified in [doc_page_impl_asset.md](doc_page_impl_asset.md).
 
 **One event layer between components and stores.** A registered component reports through `onEvent` and never calls a store; `DocEventRouter` turns the report into an event with its source, lets the host application and the rendering place answer first, then routes it to the domain that owns the type (navigation, tags, editing). Every answer is `{ code, data, message }`. Specified in [doc_page_impl_event.md](doc_page_impl_event.md).
 
 **Doc collection via vite plugin.** The plugin reads the two-layer config, loads the document entry it names and every yaml file the entry reaches (collecting their source rules, side panels, and tag definitions), executes the source rules, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any loaded yaml file invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
+
+**An explicit source layer.** The files and folders of the document are one layer with one grammar and one api: every file is named by its source path `~rootId/relPath`, every folder rule says how it collects (`recursive`, `direct`, or `referenced`: collectable, bundled only when used), the development server serves file bytes and creates files, and the page offers the source to components as a service (resolution, urls, path completion, file creation through the event layer). Specified in [Source layer](doc_page_impl_source.md).
 
 ## Can we keep fumadocs default components while owning link logic? YES
 
@@ -62,12 +65,13 @@ Ordinary fenced JSON is rendered by the default Fumadocs/Shiki pipeline. A comme
 
 Follows the data-driven pattern of `react-comp-misc` (`comp_design.md`) and the two-layer split of `example_doc/frontend-store.md`, adapted to a readonly local source (no websocket/lock layer needed here):
 
-- `DocSourceStore` (lower, content): `fileManifest`, `configDoc`, `rawByPath`, `compiledByPath` (status/Body/toc/error), `targetsByName` (doc index for link resolution), `structuredDataByPath` (search). API: `loadDoc(path)`, `resolveLink(target, fromPath)`, `searchDocs(query)`.
+- `DocSourceStore` (lower, content): `fileManifest`, `dirManifest`, `configDoc`, `rawByPath`, `compiledByPath` (status/Body/toc/error), `targetsByName` (doc index for link resolution), `structuredDataByPath` (search), and the source service handed to components (`fileResolve`, `fileUrlGet`, `pathComplete`, `fileCreate`). API: `loadDoc(path)`, `resolveLink(target, fromPath)`, `searchDocs(query)`. See [Source layer](doc_page_impl_source.md).
+- `DocSourceFileStore` (source layer, beside it): the file-creation requests of components (`fileCreateRequest`, the source route of the event layer) and the one open location prompt.
 - `DocStore` (upper, view): `docCurrentPath`, `isDocLoading`, `linkDropdownOpenId` (which link's candidate-dropdown is open; one at a time, closes on outside click), page tree (computed), route mode + url sync. API: `navigate(path, hash)`, `navigationBack()`, `navigationUp()`, `navigationForward()`, `init()`.
 - `DocTagStore` (derived): the tag model computed from the manifest and the page tree, plus the tag service used by renderers and the open state of the tag overview popup. See [Tag system](doc_page_impl_tag.md).
 - `DocConfigStore` (derived): the config model computed from `globalConfig`, the manifest, and the page tree, the reader's session overrides from the settings panel, plus the config service. See [Config system](doc_page_impl_config.md).
 - `DocEditStore` (edit layer, beside the reading stores): availability of the development-server edit api, the global edit mode, the document source as read from disk with its hash, the dedicated compile with block wrappers, the one open edit session, the open insert menu, and the pending deletion; every write goes through `operationApply`, and the events of editors arrive at `eventHandle`. It never writes to the reading stores; the file on disk is changed and reloads through the normal path. See [In-place editing](doc_page_impl_edit.md).
-- `DocAssetStore` (beside the reading stores): the backend of the asset store (the development-server api, or the snapshot bundled into a build), the index of its objects loaded at page start and the version data read so far, what a reference by id or by name resolves to (`refQuery` / `refLoad`), every write to the store (`writeApply`), the folders of the local store, and the one open asset panel with its preview. See [Asset store](doc_page_impl_asset.md).
+- `DocAssetStore` (beside the reading stores): the backend of the asset store (the development-server api, or the snapshot bundled into a build), the index of its objects loaded at page start and the version data read so far, what a reference by id or by name resolves to (`refQuery` / `refLoad`), every write to the store (`writeApply`), the dependencies of versions, the folders of the local store, and the one open asset panel with its preview. See [Asset store](doc_page_impl_asset.md).
 
 Render components observe stores via context and submit change attempts through store APIs; no component talks to the file system or compiler directly.
 
@@ -89,21 +93,26 @@ The entry is a YAML file marked by a `docEntry` section and named `xxx-entry.yam
 
 ```yaml
 source:
-  - action: addFolder      # scan folder recursively, becomes one root
+  - action: addFolder      # a folder becomes one root; collect says how (required)
     rootId: example
     path: .
+    collect: recursive     # recursive | direct | referenced
   - action: addFile        # one file becomes one root
     rootId: req
     path: ../main/doc_page_req.md
+  - action: addFolder      # the same root, a folder inside it collected differently
+    rootId: example
+    path: ./mdx-usage/image
+    collect: referenced    # collectable: part of the page only when used, never a page
   - action: removeByName   # glob against file name
     pattern: "*.pyc"
-  - action: removeByPath   # glob against internal path /{rootId}/relative/path
-    pattern: "/example/private/**"
+  - action: removeByPath   # glob against the source path ~rootId/relative/path
+    pattern: "~example/private/**"
 ```
 
 The rules of the entry come first; the rules of every included document follow in order of appearance (see [Loading](doc_page_impl_side_panel.md#loading)). The yaml files of the document and `config.yaml` are never collected.
 
-Paths are relative to the file holding the rules. Internal representation of every file is `/{rootId}/relPath`, so same-name root folders never clash. `addFile` after a remove rule re-adds a single file (the "remove folder except one file" case in the requirement).
+Paths are relative to the file holding the rules. Every collected file is named by its **source path** `~rootId/relPath` (the root id marked by `~`, then the path from the root folder), so same-name root folders never clash; the same name is used in links, side panels, component data, urls and apis. A folder rule must declare how it **collects**: `recursive` (every file below is a page), `direct` (the files right in the folder are pages), or `referenced` (the files are collectable, not pages: they are served when something names them and kept in a build only when used, which is how a folder of images or of files the page creates belongs to the source). A root id names one folder; a later rule with the same id refines a folder inside it. `addFile` after a remove rule re-adds a single file (the "remove folder except one file" case in the requirement). The grammar, the collect modes and the folder manifest are specified in [Source layer](doc_page_impl_source.md#source-rules-and-collection).
 
 Rules can also attach tags and document config. `tags` / `config` on an add rule apply to every file it collects. `addTagByPath` / `addTagByName` and `setConfigByPath` / `setConfigByName` apply to the files collected so far. See [Tag system](doc_page_impl_tag.md#declaring-tags) and [Config system](doc_page_impl_config.md#declaring-document-config).
 
@@ -117,7 +126,7 @@ Source paths may point outside the application project. Use `addFile` for one ex
   path: ../../shared-docs/guide.md
 ```
 
-The collected file has the internal path `/external-guide/guide.md`. Add that path to the side panel when the document should be directly navigable. The Vite development server must also allow the external folder; keep the allowed scope as narrow as practical.
+The collected file has the source path `~external-guide/guide.md`. Add that path to the side panel when the document should be directly navigable. The Vite development server must also allow the external folder; keep the allowed scope as narrow as practical.
 
 Non-md files get a display strategy by suffix (`fileDisplay` in config, suffix → code block language). The store synthesizes markdown: file name as title + one code block. Unknown suffixes fall back to a plain code block.
 
@@ -125,14 +134,14 @@ Non-md files get a display strategy by suffix (`fileDisplay` in config, suffix �
 
 Local development exposes every file selected by the source rules. The Vite plugin option `pruneSourceToSidePanel: true` reduces the manifest of a deployment build to the files the side panel navigates to and every file they reach statically, so authors write a dependency once, in the document that uses it.
 
-Pruning starts from the side panel after `excludeSidePanelItemIds` is applied: `doc` items, `sourceFolder` / `sourceRoot` items, and the content of inline items. Every retained `.md` / `.mdx` file is parsed by `plugin/doc-source-dependency.ts`, with its [asset references](doc_page_impl_asset.md#build) expanded to the referenced data first; reached documents are parsed in turn, and other files are retained without parsing. A visited set ends cycles, and the manifest keeps source-rule order. The side panel stays responsible for navigation only: a supporting file does not need a visible item.
+Pruning starts from the side panel after `excludeSidePanelItemIds` is applied: `doc` items, `sourceFolder` / `sourceRoot` items, and the content of inline items. Every retained `.md` / `.mdx` file is parsed by `plugin/doc-source-dependency.ts`, with its [asset references](doc_page_impl_asset.md#build) expanded to the referenced data first; reached documents are parsed in turn, and other files are retained without parsing. The source files the [asset versions depend on](doc_page_impl_asset.md#dependencies) are retained as well. A visited set ends cycles, and the manifest keeps source-rule order. The side panel stays responsible for navigation only: a supporting file does not need a visible item. Files of a `referenced` folder are never pages, so they enter the build only this way: reached by a document, named by a component, or depended on by an asset.
 
 The collector parses with the runtime extensions (GFM, math, comment components; MDX syntax for `.mdx`) and classifies links with `lib/doc-link-classify.js`, the rules `remarkDocLink` uses. Targets resolve with `lib/doc-target-resolve.js`, which `DocSourceStore.resolveLink()` also uses, so a target retained at build time is the target opened at runtime:
 
 | Authored | Kind | Resolution |
 | --- | --- | --- |
 | `[label](a.md)`, `` `a.md` ``, `[[a.md]]` | document | exact path, relative path, suffix, or file name |
-| `[label](/root/x.ps1 "inline-link")`, also `:source` / `:render` | source | exact internal path, as `SourceLink` |
+| `[label](~root/x.ps1 "inline-link")`, also `:source` / `:render` | source | exact source path, as `SourceLink` |
 | `![alt](a.png)` | asset | as a document; a miss is not reported |
 | `dataRef="a.md#id"` on any component | document | as a document |
 | a registered component's data | per extractor | see below |
@@ -160,7 +169,7 @@ Some document components refer to attachment files through authored properties r
 collectComponentAttachmentsOnBuild: true
 ```
 
-The layer runs only for a Vite build. It scans every md/mdx document remaining in the collected manifest (component blocks that reference the [asset store](doc_page_impl_asset.md#build) are expanded to their data first), asks registered attachment finders for component-specific references, resolves each reference against the complete source set (before side-panel pruning), and bundles the resolved file. Development mode does not run this scan and keeps its existing direct-file behavior.
+The layer runs only for a Vite build. It scans every md/mdx document remaining in the collected manifest (component blocks that reference the [asset store](doc_page_impl_asset.md#build) are expanded to their data first), asks registered attachment finders for component-specific references, resolves each reference against the complete source set (before side-panel pruning) the way the page resolves a target at runtime (source path, relative path, suffix, name), and bundles the resolved file. The binary files that survive pruning and the source files asset versions depend on are bundled the same way. Development mode does not run this scan: the page reads file bytes through the source api instead ([Source layer](doc_page_impl_source.md#the-source-api)).
 
 The default finders recognize `DiagramMermaid`'s `laneIcons` property, `Image`'s `src` value in its YAML block, and image `src` values in a `ImageGrid` YAML block. Direct MDX component properties are also recognized where applicable. For example, all four PNG files in the following value are retained even if they are not otherwise present in the pruned deployment manifest:
 
@@ -168,7 +177,7 @@ The default finders recognize `DiagramMermaid`'s `laneIcons` property, `Image`'s
 laneIcons=Mda:doc-aux/image/icon-mda.png|Data:doc-aux/image/icon-dataverse.png|Flow:doc-aux/image/icon-powerautomate.png|Agent:doc-aux/image/icon-copilot studio.png
 ```
 
-Collected attachments are exported by `virtual:doc-source` as `attachmentUrlByPath`. They are represented as data URLs so a deployment that packages the JavaScript artifact but does not preserve separate Vite image outputs still contains the attachment. The consuming application's `assetUrlGet` should check this map before its development fallback.
+Collected files are exported by `virtual:doc-source` as `fileUrlByPath`, keyed by source path (and by the spelling the document used, for a file found beside the document but not collected). They are represented as data URLs so a deployment that packages the JavaScript artifact but does not preserve separate Vite image outputs still contains the file. The page hands the map to `DocSourceStore` (`data.fileUrlByPath`), whose `fileUrlGet` is the default `config.assetUrlGet` of every component; a consuming application that hands its own `assetUrlGet` should check this map before its fallback.
 
 Component recognition is decoupled from the source-rule scanner. Additional component-specific finders can be passed through the Vite plugin's `attachmentFinderList` option; each finder receives the document text, document paths, and merged config, and returns attachment path strings. Missing references produce a build warning containing the source document path. The feature defaults to off when the boolean is absent or false.
 
@@ -215,11 +224,13 @@ One runtime host normalizes every registry invocation. Normal MDX attributes rem
 
 A few registry names are built in: the page renders with them even when `compRegistry` does not mention them, in comment form and in `.mdx`. `Anchor` resolves to `common/Anchor` and declares fragment ids for the node after it (see [Navigation design](doc_page_impl_nav.md#fragment-targets-titles-and-declared-ids)); `SidePanelItem` resolves to `common/SidePanelItem` and renders every side-panel label; `TagLabel` resolves to `common/TagLabel` and is the default look of tags; `Tag` resolves to `common/Tag` and renders a tag mentioned in document text; `TagOverview` resolves to `common/TagOverview` and renders the content of the tag overview popup; `Heading`, `Paragraph`, `List`, and `BlockSource` resolve to the default block editors of edit mode (see [In-place editing](doc_page_impl_edit.md#component-edit-mode)). Mapping such a name in `compRegistry` replaces the default everywhere, which is how an application provides its own side-panel item rendering. `compIdResolve()` in `comp-registry.js` is the single place that turns a name into a component id.
 
-Some components need settings only the host application can supply, such as a Mermaid loader, a resolver from authored file references to URLs, or the text panel component that frames popups. The host passes them once through `DocPageMdx` `config.compConfigHost`; every registered component receives them in its `config` with the lowest priority, below authored and runtime values. The page itself reads `panelComponent` from the same place for the tag overview popup and the asset panel:
+Some components need settings only the host application can supply, such as a Mermaid loader or the text panel component that frames popups. The host passes them once through `DocPageMdx` `config.compConfigHost`; every registered component receives them in its `config` with the lowest priority, below authored and runtime values. The page itself reads `panelComponent` from the same place for the tag overview popup and the asset panel:
 
 ```jsx
-<DocPageMdx config={{ compConfigHost: { assetUrlGet, mermaidLoad: () => import('mermaid'), panelComponent: PanelText } }} />
+<DocPageMdx config={{ compConfigHost: { mermaidLoad: () => import('mermaid'), panelComponent: PanelText } }} />
 ```
+
+Beside the host settings, `RegisteredComp` gives every component what the page layers know for it: `config.assetUrlGet`, the resolver from authored file references to urls, bound to the component's document by the [source layer](doc_page_impl_source.md#the-page-side-docsourcestore-and-the-source-service) (a host may override it in `compConfigHost`); `config.source`, the source service; `config.compConfig`, the component's own [component-level config](doc_page_impl_config.md#component-level-config) resolved for the document; `config.blockIndex`, the block of the edit body the component is rendered in (undefined in reading mode); and, for a component declared `isAssetAware`, `config.assetInfo` ([component awareness](doc_page_impl_asset.md#component-awareness)).
 
 Components that display authored Markdown inside themselves (`BlockSimple`, `BlockMdx`, `Block`, `MultiLang`) receive the package `MdxRenderer` through their registry definitions, so they do not depend on the compile pipeline directly. `MdxRenderer` is the shared Markdown boundary (`lib/markdown-render.js`): the component decides what is shown, and the renderer decides what the Markdown means, the same way as the main document body.
 
@@ -263,7 +274,9 @@ default  <  global (config.yaml)  <  source rules  <  side-panel items  <  docum
 
 `DocConfigStore` resolves these levels and answers queries such as "value of this key for this document" through the config service, so renderers never read the levels themselves. Applications can add their own keys.
 
-For the key list, naming rules, declaration syntax of each level, and the config service, refer to [Config system](doc_page_impl_config.md).
+A registered component can declare keys of its own (`compDefine` `configDefineList`); they are resolved through the same levels under a `compConfig` mapping keyed by the component's tag name, kept apart from the page keys in `config.yaml` and in the settings panel (tab **Component**), and handed to the component as `config.compConfig`. A string value at any level may use `${name}` variables declared in `config.yaml` `variable`; a key of type `sourcePath` is edited with completion from the source layer.
+
+For the key list, naming rules, declaration syntax of each level, component-level keys, variables, and the config service, refer to [Config system](doc_page_impl_config.md).
 
 ## Semantic parts and hosted indexes
 
@@ -364,6 +377,7 @@ example_doc/             # root folder of the demonstration page
 ├── asset-store.md       # components reading their data from the asset store
 ├── asset.yaml           # the local asset store: its folders and the default one
 ├── asset/, asset-archive/ # folders of the store: one folder per object, {id}--{name} (object.yaml + version files)
+├── asset-file/image/    # a "referenced" source folder: where pasted images are created (nothing tracked)
 ├── comp-mdx/            # demo-specific components (not collected as documents); StockTable + StockTableEdit
 ├── mdx-usage/           # mdx component demonstrations (part with hosted index; its side-panel.yaml is a resource file)
 └── link-nav/            # link usage guide (sections by title / Anchor id), link and non-md display test docs
@@ -372,7 +386,7 @@ main/
 ├── config.0.yaml        # local override (untracked), entries overlay config.yaml
 ├── comp-mdx/            # components available in documents (FileTree, Index, MultiLang, Tag, Anchor, ...)
 │   ├── text/            # headings, paragraphs, lists of the document body + their default editors, BlockRender
-│   └── image/           # Image + ImageEdit: component edit mode demonstration
+│   └── image/           # Image + ImageEdit: component edit mode, empty state and paste (image-paste.js)
 ├── comp-doc/            # components of the page itself, one folder per feature
 │   ├── registry/        # compById (registry.js), compDefine, RegisteredComp, DocComp, data references, build-time dependency extractors
 │   ├── link/            # DocLink, LinkDocRender, LinkWarning
@@ -382,20 +396,21 @@ main/
 │   ├── page/            # toolbar, navigation buttons, search dialog, loading skeleton
 │   ├── edit/            # edit layer: toggle and toolbar controls, edit body, block borders and hover button groups, insert menu, editor chooser, floating bar and in-place editing primitives
 │   ├── asset/           # asset store: the host resolving a reference, the loading/error stand-in, the asset panel popup and its preview
-│   ├── settings/        # settings button and panel (user overrides of config keys)
+│   ├── settings/        # settings button and panel (user overrides of page and component config keys)
+│   ├── source/          # source layer ui: SourcePathInput (path with completion), SourceFilePrompt (file location)
 │   └── mdx-render/      # MdxRenderer, DynamicCodeBlock
 ├── package.json         # delegates dev/build to frontend/
 └── frontend/            # Vite app + embeddable component
-    ├── plugin/          # vite plugin: config load, the document entry and its yaml files (doc-entry.ts), rule scan, source-step tags/config, source pruning, virtual module, watch, dev-only edit api (doc-edit-server.ts, doc-edit-lines.ts), the asset store and its api (doc-asset-store.ts, doc-asset-server.ts, id-ms48.ts)
+    ├── plugin/          # vite plugin: config load, the document entry and its yaml files (doc-entry.ts), rule scan and collect modes, source-step tags/config, source pruning, virtual module, watch, dev-only source api (in doc-source.ts), edit api (doc-edit-server.ts, doc-edit-lines.ts), the asset store and its api (doc-asset-store.ts, doc-asset-server.ts, id-ms48.ts)
     ├── UICommon.js      # package-local facade for shared visual components and icons
     ├── UICommonExternal.js # external UI-library exports used by the facade
     └── src/
         ├── DocPageMdx.jsx       # the embeddable doc page component
-        ├── store/               # DocSourceStore (lower) + DocStore (upper) + DocTagStore + DocConfigStore + DocEditStore + DocAssetStore
-        └── lib/                 # mdx compile, nested Markdown renderer, link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, doc-edit-* (block model, edit api client), doc-asset-* (reference, backends), doc-event (event router), framework adapter
+        ├── store/               # DocSourceStore (lower) + DocSourceFileStore + DocStore (upper) + DocTagStore + DocConfigStore + DocEditStore + DocAssetStore
+        └── lib/                 # mdx compile, nested Markdown renderer, doc-source-path (the path grammar), link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, doc-edit-* (block model, edit api client), doc-asset-* (reference, backends), doc-event (event router), framework adapter
 ```
 
-Design documents: [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [in-place editing](doc_page_impl_edit.md), [asset store](doc_page_impl_asset.md), [event layer](doc_page_impl_event.md), [package usage](doc_page_impl_detail.md).
+Design documents: [source layer](doc_page_impl_source.md), [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [in-place editing](doc_page_impl_edit.md), [asset store](doc_page_impl_asset.md), [event layer](doc_page_impl_event.md), [package usage](doc_page_impl_detail.md).
 
 Run `pnpm install` from the workspace root once, then `pnpm dev` from either this folder or `frontend/`. `pnpm build` produces one static deployable artifact (docs bundled as lazy chunks); any static file server works, no doc folders needed at runtime.
 

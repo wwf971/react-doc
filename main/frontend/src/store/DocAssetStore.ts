@@ -34,6 +34,12 @@ import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
 
 export type AssetSaveMode = 'inPlace' | 'newVersion';
 
+// what the data of a version depends on (doc_page_impl_asset.md#dependencies)
+export type AssetDependency =
+  | { type: 'source'; path: string }
+  | { type: 'asset'; objectId: string; versionId?: string };
+export type AssetDependent = { objectId: string; versionId: string; dependency: AssetDependency };
+
 export type AssetEventType =
   | 'create' | 'updateInPlace' | 'versionCreate' | 'checkout' | 'versionDelete' | 'metaSet' | 'delete' | 'restore'
   | 'lock' | 'unlock';
@@ -51,6 +57,7 @@ export type AssetVersionMeta = {
   hash: string;
   // not rewritten in place, not deleted
   isLocked: boolean;
+  dependencyList: AssetDependency[];
 };
 
 export type AssetObject = {
@@ -497,13 +504,33 @@ export class DocAssetStore {
   // unless a folder is named; data: { object, version, isCreated }. a name
   // an object of the store has answers that object and creates nothing
   // (isCreated false).
-  objectCreate(input: { store: string; name?: string; lang?: string; contentType?: string; fileExt?: string; text: string; note?: string; folder?: string }): Promise<AssetResult> {
+  // dependencyList: what the data depends on (doc_page_impl_asset.md#dependencies)
+  objectCreate(input: {
+    store: string;
+    name?: string;
+    lang?: string;
+    contentType?: string;
+    fileExt?: string;
+    text?: string;
+    dataBase64?: string;
+    note?: string;
+    folder?: string;
+    dependencyList?: AssetDependency[];
+  }): Promise<AssetResult> {
     return this.writeApply(input.store, () => this.backend!.objectCreate(input), 'The asset object was not created.');
   }
 
   // the head data replaced in place, or a new version from the head; mode
-  // absent means the object's save mode
-  async objectUpdate(store: string, objectId: string, data: { text?: string; dataBase64?: string }, mode?: AssetSaveMode, note = ''): Promise<AssetResult> {
+  // absent means the object's save mode. dependencyList absent keeps the
+  // dependencies of the head version for the new data.
+  async objectUpdate(
+    store: string,
+    objectId: string,
+    data: { text?: string; dataBase64?: string },
+    mode?: AssetSaveMode,
+    note = '',
+    dependencyList?: AssetDependency[],
+  ): Promise<AssetResult> {
     const object = this.objectGet(store, objectId);
     const head = object ? this.versionGet(store, objectId, object.versionIdHead) : undefined;
     if (!object || head?.status !== 'done' || head.hash === undefined) {
@@ -511,11 +538,40 @@ export class DocAssetStore {
     }
     const result = await this.writeApply(
       store,
-      () => this.backend!.objectUpdate({ store, objectId, hashBase: head.hash, ...data, mode, note }),
+      () => this.backend!.objectUpdate({ store, objectId, hashBase: head.hash, ...data, mode, note, dependencyList }),
       'The asset was not updated.',
     );
     if (result.code === -2) void this.objectReload(store, objectId);
     return result;
+  }
+
+  // ---------- dependencies ----------
+
+  // the dependencies of a loaded version, from the object metadata
+  dependencyListGet(store: string, objectId: string, versionId: string): AssetDependency[] {
+    const object = this.objectGet(store, objectId);
+    const versionIdResolved = versionId === '' || versionId === 'head' ? object?.versionIdHead ?? '' : versionId;
+    return object?.versionList.find((version) => version.versionId === versionIdResolved)?.dependencyList ?? [];
+  }
+
+  // the versions of the store depending on the object (versionId '' ) or on
+  // one version of it; asked from the backend, since it needs every object
+  async dependentListGet(store: string, objectId: string, versionId = ''): Promise<AssetResult> {
+    if (!this.backend) return { code: -1, message: 'The page has no asset store.' };
+    const result = await this.backend.dependentListGet(store, objectId, versionId);
+    return result.code === 0 ? { code: 0, data: result.data, message: '' } : { code: result.code, message: result.message };
+  }
+
+  dependencyListSet(store: string, objectId: string, versionId: string, dependencyList: AssetDependency[]): Promise<AssetResult> {
+    return this.writeApply(store, () => this.backend!.dependencyListSet(store, objectId, versionId, dependencyList), 'The dependencies were not changed.');
+  }
+
+  dependencyAdd(store: string, objectId: string, versionId: string, dependency: AssetDependency): Promise<AssetResult> {
+    return this.writeApply(store, () => this.backend!.dependencyAdd(store, objectId, versionId, dependency), 'The dependency was not added.');
+  }
+
+  dependencyRemove(store: string, objectId: string, versionId: string, dependency: AssetDependency): Promise<AssetResult> {
+    return this.writeApply(store, () => this.backend!.dependencyRemove(store, objectId, versionId, dependency), 'The dependency was not removed.');
   }
 
   objectDelete(store: string, objectId: string): Promise<AssetResult> {

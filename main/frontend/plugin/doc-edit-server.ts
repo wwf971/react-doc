@@ -14,7 +14,7 @@ import { sidePanelTextOperationBuild } from './doc-side-panel-text.ts';
 // design: doc_page_impl_edit.md
 //
 //   GET  {endpoint}/status                 -> { code: 0, data: { isWritable: true } }
-//   GET  {endpoint}/source?path=/root/a.md -> { code: 0, data: { internalPath, text, hash } }
+//   GET  {endpoint}/source?path=~root/a.md -> { code: 0, data: { internalPath, text, hash } }
 //   POST {endpoint}/source/apply           -> { code: 0, data: { internalPath, text, hash } }
 //        body { internalPath, hashBase, operation }   operation: doc-edit-lines.ts
 //   POST {endpoint}/side-panel/text        -> { code: 0, data: { file, fieldName, text } }

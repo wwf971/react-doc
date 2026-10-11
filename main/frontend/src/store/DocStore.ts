@@ -509,7 +509,7 @@ export class DocStore {
     }
   };
 
-  // target can be a sidebar item route or '/rootId/xx/a.md'. A document path
+  // target can be a sidebar item route or a source path '~rootId/xx/a.md'. A document path
   // resolves to the first matching sidebar item in tree order.
   navigate(target: string, hashExtra?: string, options?: {
     historyMode?: NavigationHistoryMode;

@@ -86,11 +86,12 @@ Host settings needed by package components are passed once through `config.compC
 
 ```jsx
 <DocPageMdx
-  data={{ configDoc, fileManifest }}
+  data={{ configDoc, fileManifest, dirManifest, fileUrlByPath }}
   config={{
     compById,
+    source: { endpoint: docSourceEndpoint },                   // file bytes, file creation (dev server)
     compConfigHost: {
-      assetUrlGet: (path) => attachmentUrlByPath[path] ?? path, // Image, ImageGrid, DiagramMermaid lane icons
+      // assetUrlGet is answered by the source layer by default (doc_page_impl_source.md)
       mermaidLoad: () => import('mermaid'),                    // DiagramMermaid
       panelComponent: PanelText,                               // popup frame: tag overview, SourceLink
     },

@@ -35,20 +35,21 @@ The entry and every YAML file it reaches share one grammar, the document yaml fi
 ```yaml
 docEntry:                      # marks the file as the entry of a document: true, or a mapping
   title: Guide                 #   siteTitle, when config.yaml sets none
-  homeDoc: /guide/overview.md  #   homeDoc / homeItem, when config.yaml sets none
+  homeDoc: ~guide/overview.md  #   homeDoc / homeItem, when config.yaml sets none
 source:                        # optional: a rule list, { rules: [...] }, or { file: ./source.yaml }
   - action: addFolder
     rootId: guide
     path: .                    # relative to the file holding the rules
+    collect: recursive         # recursive | direct | referenced (doc_page_impl_source.md)
 tag:                           # optional: { defineById: {...} } or { file: ./tag.yaml }
   file: ./tag.yaml
 sidePanelDefault: main         # optional when the file declares exactly one side panel
 sidePanelById:
   main:                        # a side panel: { root?, tree }
     root:                      #   optional, see "Including other side panels"
-      doc: /guide/overview.md
+      doc: ~guide/overview.md
     tree:
-      - doc: /guide/setup.md
+      - doc: ~guide/setup.md
       - id: reference
         include: ./reference/reference-entry.yaml   # a side panel of another document
   compact:                     # a side panel declared in another file, by reference
@@ -103,12 +104,12 @@ The `tree` list of a side panel describes it. If the entry declares no side pane
 ```yaml
 tree:
   - separator: Examples                # separator line
-  - doc: /guide/start.md               # document item; text defaults to the page title
+  - doc: ~guide/start.md               # document item; text defaults to the page title
   - doc: reference.md                  # file-name lookup
     text: Reference (renamed)          # custom display text
   - id: section-example                # folder bound to a document
     text: Example section
-    doc: /guide/overview.md
+    doc: ~guide/overview.md
     tags: [chapter]                    # tags, see doc_page_impl_tag.md
     config:                            # document config of this and every document below,
       TagsDisplayAtLinkIsOn: true      #   see doc_page_impl_config.md
@@ -116,7 +117,7 @@ tree:
       component: NavLabel
       data: { badge: primary }
     children:
-      - sourceFolder: /guide/topics    # mirrors one source folder subtree
+      - sourceFolder: ~guide/topics    # mirrors one source folder subtree
         text: Topics
   - id: status-panel                   # leaf whose main panel is a component
     text: Status
@@ -129,15 +130,15 @@ Node forms:
 
 - `doc`: a document item. With `children` it becomes a folder bound to that document.
 - `text` + `children`: a virtual folder unrelated to the disk layout.
-- `sourceFolder`: the generated tree below any internal source folder. `sourceRoot` is a shorthand for a complete root. Without `text` or `display`, the generated children are placed directly in the parent.
+- `sourceFolder`: the generated tree below any source folder (`~rootId/dir`); files of a `referenced` folder are not pages and are left out. `sourceRoot: rootId` is a shorthand for a complete root. Without `text` or `display`, the generated children are placed directly in the parent.
 - `panel.component` + `panel.data`: a leaf whose main panel is rendered by a registered component. It receives the unified `{ data, config, onEvent }` props, with the item and runtime metadata in `config`.
 - `separator`: a visual separator.
 
-Every node can set a stable `id`, a custom `text`, a custom `display` component, `tags`, and `config`. `text` is a string or a language mapping such as `{ jp: 技術資料, en: Technical documents }`; see [Localized labels](#localized-labels). Tags attach to what the node binds. `config` applies to the documents of the node and of every item below it; see [Config system](doc_page_impl_config.md#declaring-document-config). Every leaf gets its own route, so several leaves can bind the same document; links and search results navigate to the first one in tree order. Use `sourceFolder: /` as the final node to expose every collected file as a fallback while earlier semantic bindings remain the primary navigation targets.
+Every node can set a stable `id`, a custom `text`, a custom `display` component, `tags`, and `config`. `text` is a string or a language mapping such as `{ jp: 技術資料, en: Technical documents }`; see [Localized labels](#localized-labels). Tags attach to what the node binds. `config` applies to the documents of the node and of every item below it; see [Config system](doc_page_impl_config.md#declaring-document-config). Every leaf gets its own route, so several leaves can bind the same document; links and search results navigate to the first one in tree order. Use `sourceRoot` nodes at the end to expose every collected file of a root as a fallback while earlier semantic bindings remain the primary navigation targets.
 
 ## Selecting documents
 
-A `doc` value is an exact internal path, a path suffix, or a file name. When a suffix or name matches several files, the first match in source order is used and the document page shows a warning listing every match. A `doc` that matches nothing stays in the tree as a missing-document item, which shows a clear error instead of disappearing.
+A `doc` value is an exact source path (`~rootId/...`), a path suffix, or a file name. When a suffix or name matches several files, the first match in source order is used and the document page shows a warning listing every match. A `doc` that matches nothing stays in the tree as a missing-document item, which shows a clear error instead of disappearing.
 
 ## Including other side panels
 
@@ -160,16 +161,16 @@ tree:
 # codeapp/codeapp-entry.yaml
 docEntry: true
 source:
-  - { action: addFolder, rootId: codeapp-dev, path: . }
+  - { action: addFolder, rootId: codeapp-dev, path: ., collect: recursive }
 sidePanelById:
   main:
     root:                    # properties of the including node itself
       text: CodeApp development
-      doc: /codeapp-dev/doc/codeapp-doc.md
+      doc: ~codeapp-dev/doc/codeapp-doc.md
       defaultOpen: false
     tree:
       - text: Dataverse
-        doc: /codeapp-dev/doc/codeapp-dataverse.md
+        doc: ~codeapp-dev/doc/codeapp-dataverse.md
 ```
 
 The optional `root` mapping is merged onto the including node, so a document keeps its label, root document, part index, tags, source rules, and tag definitions in its own folder while the including file only names the node. Explicit properties on the including node win. Because the merge happens in the loader, an included `part` registers against the including node's `id` exactly as inline configuration does. `root` never becomes a visible child, and `root.children` / `root.include` are configuration errors. Inclusion cycles, missing files, an invalid reference, a side panel id the file does not declare, and side panels without a `tree` list are configuration errors that name the file.
@@ -182,7 +183,7 @@ A node becomes a part root when it has a `part` mapping. An explicit node `id` i
 tree:
   - id: guide-part
     text: Guide
-    doc: /guide/overview.md
+    doc: ~guide/overview.md
     part:
       index:
         docId: guide-part                # side-panel item id of the index document
@@ -191,7 +192,7 @@ tree:
           TagsDisplayAtLinkIsOn: true
           TagsDisplayAtLinkPosition: before
     children:
-      - doc: /guide/setup.md
+      - doc: ~guide/setup.md
 ```
 
 `part.index` binds a hosted index without copying its data: the index stays authored in its document. `part.index.config` holds document-level config keys (see [Config system](doc_page_impl_config.md#part-index-level)) that apply to the index only while it is hosted in the local-index area, on top of the config of the index document; the same index rendered inside its document is unaffected. How the index is queried, rendered, and switched is described in [Semantic parts and hosted indexes](doc_page_impl.md#semantic-parts-and-hosted-indexes).

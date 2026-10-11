@@ -12,9 +12,14 @@ versionList:
     versionIdPrevList: []
     time: 20261020_18495984+09
     note: both demo images
-    size: 259
-    hash: 2e68ef3761c5606478c4aa070c7f6ed453b244ff
+    size: 277
+    hash: dc5d76dad66d494b81651ba41444ed4d398f6295
     isLocked: false
+    dependencyList:
+      - type: source
+        path: ~example/mdx-usage/image/robot-computer.svg
+      - type: source
+        path: ~example/mdx-usage/image/office-worker.svg
 eventList:
   - eventType: create
     time: 20261020_18495984+09

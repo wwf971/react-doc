@@ -1,12 +1,16 @@
-import { useId } from 'react';
+import { useContext, useId } from 'react';
+import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from './comp-registry.js';
 import { CompDataRefHost } from './CompDataRef.jsx';
 import { CompAssetHost, compInputIsAssetRef } from '../asset/CompAssetHost.jsx';
+import { DocEditBlockContext } from '../edit/DocEditDocContext.js';
 
 // One runtime boundary for every component resolved through compRegistry.
 // Registered render components always receive { data, config, onEvent }.
-export function RegisteredComp(props) {
+// An observer, so a component follows its component-level config values
+// (the reader may change them in the settings panel).
+export const RegisteredComp = observer(function RegisteredComp(props) {
   const {
     compDefinition,
     compId,
@@ -16,8 +20,10 @@ export function RegisteredComp(props) {
     onEventRuntime,
     placement,
   } = props;
-  const { compById, compConfigHost, docStore, eventRouter, onEvent: onEventPage, sourceStore } = useDocStores();
+  const { compById, compConfigHost, configStore, docStore, eventRouter, onEvent: onEventPage, sourceStore } = useDocStores();
   const idFallback = useId();
+  // the block of the edit body the component is rendered in, when it is
+  const editBlock = useContext(DocEditBlockContext);
   const compIdResolved = compId ?? compIdResolve(sourceStore.configDoc, compName);
   const definitionValue = compDefinition ?? compById[compIdResolved];
   const definition = compDefinitionNormalize(definitionValue);
@@ -96,11 +102,30 @@ export function RegisteredComp(props) {
   const instanceId = configRuntime.instanceId
     ?? data.id
     ?? `${compIdResolved}:${sourcePath || 'page'}:${idFallback}`;
-  // host settings (e.g. mermaidLoad, assetUrlGet) have the lowest priority
+  // the source layer resolves file references of the component relative to
+  // the document it is in (doc_page_impl_source.md); a host may still hand
+  // its own assetUrlGet in compConfigHost
+  const assetUrlGet = compConfigHost.assetUrlGet
+    ?? ((reference) => sourceStore.fileUrlGet(reference, sourcePath) ?? reference);
+  // host settings (e.g. mermaidLoad, assetUrlGet) have the lowest priority.
+  // compConfig: the component's own keys resolved for this document
+  // (doc_page_impl_config.md#component-level-config). assetInfo: where the
+  // data came from, for a component declared isAssetAware
+  // (doc_page_impl_asset.md#component-awareness); CompAssetHost hands the
+  // asset's info in configRuntime, so a plain block means inline data.
+  // the block the component is in: given by the editor of a session, else
+  // by the wrapper of the edit body; undefined in reading mode, where the
+  // document cannot be written
+  const blockIndex = configRuntime.blockIndex ?? (editBlock?.path === sourcePath ? editBlock.blockIndex : undefined);
   const config = {
+    assetUrlGet,
+    source: sourceStore.sourceService,
     ...compConfigHost,
     ...configBuilt,
     ...configRuntime,
+    compConfig: configStore.compConfigGet(compIdResolved, sourcePath),
+    ...(definition.isAssetAware ? { assetInfo: configRuntime.assetInfo ?? { isFromAsset: false } } : {}),
+    blockIndex,
     compId: compIdResolved,
     instanceId,
     placement,
@@ -124,7 +149,10 @@ export function RegisteredComp(props) {
         itemId: config.itemId,
         placement,
         sourcePath: config.sourcePath,
-        blockIndex: configRuntime.blockIndex,
+        blockIndex,
+        // the asset the component's data came from, so a route that
+        // replaces the data knows to update the asset, not the block
+        asset: configRuntime.assetInfo?.isFromAsset ? configRuntime.assetInfo : undefined,
       },
       point: eventContext.point,
     });
@@ -145,7 +173,7 @@ export function RegisteredComp(props) {
       onEvent={eventHandle}
     />
   );
-}
+});
 
 function CompError({ compId, compName, detail, message, raw }) {
   return (

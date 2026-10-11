@@ -1,9 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { BlockRender } from '../../comp-mdx/text/BlockRender.jsx';
-import { DocEditBlockFloatContext, useDocEditDoc } from './DocEditDocContext.js';
+import { DocEditBlockContext, DocEditBlockFloatContext, useDocEditDoc } from './DocEditDocContext.js';
 import { DocEditBlockToolbar } from './DocEditBlockToolbar.jsx';
 import { DocEditBlockEditor, blockLabelGet } from './DocEditBlockEditor.jsx';
 import { editFocusRelease, useEditOutsidePointer } from './use-edit-outside-pointer.js';
@@ -58,6 +58,7 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
   const geometryLock = useGeometryLock(elementRef, editStore, path, index);
   useEditOutsidePointer(elementRef, isEditing, () => void editStore.sessionLeave());
   useFloatHeightFollow(anchorRef, floatElement);
+  const blockContextValue = useMemo(() => ({ path, blockIndex: index }), [path, index]);
   if (!block) return children;
   const isDeletePending = editStore.deleteConfirmIs(path, index);
   const isOpen = isDeletePending
@@ -147,6 +148,7 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
 
   return (
     <DocEditBlockFloatContext.Provider value={floatElement}>
+    <DocEditBlockContext.Provider value={blockContextValue}>
       <div
         ref={elementRef}
         className="doc-edit-block"
@@ -173,6 +175,7 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
         </div>
         {content}
       </div>
+    </DocEditBlockContext.Provider>
     </DocEditBlockFloatContext.Provider>
   );
 });

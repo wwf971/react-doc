@@ -43,7 +43,7 @@ Two route modes share this boundary:
 
 ```text
 target form                resolution
-/rootId/xx/a.md            exact internal path
+~rootId/xx/a.md            exact source path (doc_page_impl_source.md#source-paths)
 ./sub/a.md, ../a.md        path relative to the source document
 a.md                       file-name lookup
 														 ├─ one match  -> navigate
@@ -51,7 +51,7 @@ a.md                       file-name lookup
 														 └─ none       -> show a broken link
 ```
 
-A target can append a fragment, for example `/rootId/xx/a.md#configuration` or `a.md#Configuration`; the fragment is an id or a heading title (see [Fragment targets](#fragment-targets-titles-and-declared-ids)). `DocStore.docTargetResolve()` resolves `@first/` targets through the side-panel tree and every other form through `DocSourceStore.resolveLink()`, which separates the source path from the fragment and resolves the path. `DocLink` then submits the resolved side-panel route and fragment to `DocStore.navigate()`. Component data references use the same resolver for their document part; see [MDX components](doc_page_impl_mdx_comp.md#component-data-reference).
+A target can append a fragment, for example `~rootId/xx/a.md#configuration` or `a.md#Configuration`; the fragment is an id or a heading title (see [Fragment targets](#fragment-targets-titles-and-declared-ids)). `DocStore.docTargetResolve()` resolves `@first/` targets through the side-panel tree and every other form through `DocSourceStore.resolveLink()`, which separates the source path from the fragment and resolves the path. `DocLink` then submits the resolved side-panel route and fragment to `DocStore.navigate()`. Component data references use the same resolver for their document part; see [MDX components](doc_page_impl_mdx_comp.md#component-data-reference).
 
 Resolution happens during rendering rather than compilation. Moving a source file therefore updates the document index without invalidating otherwise reusable compiled content.
 

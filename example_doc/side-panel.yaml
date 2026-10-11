@@ -18,30 +18,30 @@ sidePanelById:
   main:
     tree:
       - separator: Example Docs
-      - doc: /example/doc.md
+      - doc: ~example/doc.md
         text: Document Model
-      - doc: /example/database.md
+      - doc: ~example/database.md
       - id: frontend-design
         text: Frontend
-        doc: /example/frontend-store.md
+        doc: ~example/frontend-store.md
         tags: [part]
         children:
-          - doc: /example/comp_text.md
-      - doc: /example/doc-group.md
-      - doc: /example/side-panel-tag.md
+          - doc: ~example/comp_text.md
+      - doc: ~example/doc-group.md
+      - doc: ~example/side-panel-tag.md
         tags: [guide]
       # "config" belongs to the bound document, and on a folder node to every
       # document below it. overrides the source level, below the frontmatter.
-      - doc: /example/doc-config.md
+      - doc: ~example/doc-config.md
         tags: [guide, reference]
         config:
           TagsDisplayAtLinkPosition: before
       # the edit layer playground; editable on the development server only
-      - doc: /example/edit-in-place.md
+      - doc: ~example/edit-in-place.md
         text: In-place Editing
         tags: [guide]
       # component data kept in the asset store; writable on the development server only
-      - doc: /example/asset-store.md
+      - doc: ~example/asset-store.md
         text: Asset Store
         tags: [guide]
       - separator: MDX Usage
@@ -73,20 +73,20 @@ sidePanelById:
             label: panel count
       - id: link-nav
         text: Links & Navigation
-        doc: /example/link-nav/links.mdx
+        doc: ~example/link-nav/links.mdx
         tags: [part]
         children:
-          - doc: /example/link-nav/link-usage.md
+          - doc: ~example/link-nav/link-usage.md
           - doc: notes.md
             text: Ambiguous Name Example
           # replaces the "test" tag from source.yaml; same id, later declaration
-          - doc: /example/link-nav/sub/notes.md
+          - doc: ~example/link-nav/sub/notes.md
             tags:
               - id: test
                 data: { text: Test (sub) }
-          - doc: /example/link-nav/sample.py
+          - doc: ~example/link-nav/sample.py
       - separator: Meta
       # source.yaml already tags this file "reference"; "guide" is appended
-      - doc: /req/doc_page_req.md
+      - doc: ~req/doc_page_req.md
         text: Requirement
         tags: [guide]

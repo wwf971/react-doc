@@ -10,7 +10,9 @@ import { DiagramMermaid } from '../../comp-mdx/diagram-mermaid/DiagramMermaid.js
 import { DiagramText } from '../../comp-mdx/diagram-ascii/DiagramText.jsx';
 import { FileTree } from '../../comp-mdx/file-tree/FileTree.jsx';
 import { Image } from '../../comp-mdx/image/Image.jsx';
+import { imageAssetDependencyListGet, imageConfigDefineList } from '../../comp-mdx/image/image-paste.js';
 import { ImageGrid } from '../../comp-mdx/image-grid/ImageGrid.jsx';
+import { imageGridAssetDependencyListGet } from '../../comp-mdx/image-grid/ImageGridStore.js';
 import { Index } from '../../comp-mdx/index/Index.jsx';
 import { MultiLang } from '../../comp-mdx/multi-lang/MultiLangEntry.jsx';
 import { SourceLink } from '../../comp-mdx/source-link/SourceLink.jsx';
@@ -47,12 +49,27 @@ const compMultiLang = compDefine(MultiLang, {
 });
 // Image demonstrates component edit mode: ImageEdit edits the yaml fields in
 // place (doc_page_impl_edit.md#component-edit-mode)
+// a new Image / ImageGrid block is created empty (no src: the placeholder
+// takes a pasted image). both declare the component-level config of the
+// paste flow (FileStoreDir, PasteReplaceConfirmIsOn), learn whether their
+// data is an asset (isAssetAware), and name the files their data refers
+// to, recorded as the dependencies of an asset made from it
+// (doc_page_impl_asset.md#dependencies)
 const compImage = compDefine(Image, {
   placementList: ['mdx', 'commentBlock'],
   isEditSupported: true,
-  editTemplate: { lang: 'yaml', raw: 'src: path/to/image.png\nalt: \ncaption: \n' },
+  isAssetAware: true,
+  editTemplate: { lang: 'yaml', raw: 'src: \nalt: \ncaption: \n' },
+  configDefineList: imageConfigDefineList,
+  assetDependencyListGet: imageAssetDependencyListGet,
 });
-const compImageGrid = compDefine(ImageGrid, { placementList: ['mdx', 'commentBlock'] });
+const compImageGrid = compDefine(ImageGrid, {
+  placementList: ['mdx', 'commentBlock'],
+  isAssetAware: true,
+  editTemplate: { lang: 'yaml', raw: 'images:\n  - src: \n  - src: \n' },
+  configDefineList: imageConfigDefineList,
+  assetDependencyListGet: imageGridAssetDependencyListGet,
+});
 const compDiagramText = compDefine(DiagramText, { placementList: ['commentBlock'] });
 // mermaid itself is not a package dependency: the host app supplies
 // config.mermaidLoad through DocPageMdx config.compConfigHost.

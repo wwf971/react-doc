@@ -6,7 +6,7 @@
 # design: doc_page_impl_side_panel.md#the-document-entry
 docEntry:
   title: React Doc Test          # siteTitle, when config.yaml sets none
-  homeDoc: /example/doc.md       # document opened at start, when config.yaml sets none
+  homeDoc: ~example/doc.md       # document opened at start, when config.yaml sets none
 
 # source rules: a rule list, { rules }, or { file }. paths are relative to the
 # file holding the rules. the yaml files of the document are never collected.
@@ -31,9 +31,9 @@ sidePanelById:
   # deployment. config.yaml "docEntry: { sidePanel: compact }" shows it.
   compact:
     tree:
-      - doc: /example/doc.md
+      - doc: ~example/doc.md
         text: Document Model
       - id: sub-doc-compact
         include: ./sub-doc/sub-doc-entry.yaml
-      - doc: /req/doc_page_req.md
+      - doc: ~req/doc_page_req.md
         text: Requirement

@@ -56,7 +56,7 @@
 - 通常の Markdown リンク: `[資料](./document.md)`
 - 資料名を示すインラインコード: `` `document.md` ``
 - Wiki 形式: `[[document.md]]`
-- ソース表示リンク: `[設定](/root/setup.ps1 "inline-link")`、`"inline-link:source"`、`"inline-link:render"`
+- ソース表示リンク: `[設定](~root/setup.ps1 "inline-link")`、`"inline-link:source"`、`"inline-link:render"`
 
 内部リンクは資料マニフェストとサイドパネルに対して解決されるため、通常本文と同じナビゲーション、候補選択、リンク切れ、サイドパネル外資料の警告、現在地判定を使用します。`inline-link` 系のリンクは本文と同じ `SourceLink` として表示され、ホストの `panelComponent` を受け取ります。外部 URL と `#fragment` だけのリンクは通常のアンカーとして残します。
 

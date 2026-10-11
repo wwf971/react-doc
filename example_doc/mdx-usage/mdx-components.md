@@ -32,17 +32,17 @@ subtopics:
         title:
           en: Recommended comment-block style
           jp: 推奨のコメントブロック記法
-        target: /example/mdx-usage/writing-style.md
+        target: ~example/mdx-usage/writing-style.md
       - id: writing-style-list
         title:
           en: Components in lists
           jp: リスト内のコンポーネント
-        target: /example/comp-custom-list-el.md
+        target: ~example/comp-custom-list-el.md
       - id: writing-style-native
         title:
           en: Direct MDX components
           jp: MDX 直接記法
-        target: /example/mdx-usage/comp-mdx-native.mdx
+        target: ~example/mdx-usage/comp-mdx-native.mdx
   - id: text-language
     title:
       en: Text and language
@@ -52,7 +52,7 @@ subtopics:
         title:
           en: Multilingual display
           jp: 多言語表示
-        target: /example/mdx-usage/comp-multi-lang.md
+        target: ~example/mdx-usage/comp-multi-lang.md
   - id: blocks
     title:
       en: Blocks
@@ -62,12 +62,12 @@ subtopics:
         title:
           en: Simple block
           jp: 単純ブロック
-        target: /example/mdx-usage/comp-block.md#block-simple
+        target: ~example/mdx-usage/comp-block.md#block-simple
       - id: block-mdx
         title:
           en: Markdown block
           jp: Markdown ブロック
-        target: /example/mdx-usage/comp-block.md#block-mdx
+        target: ~example/mdx-usage/comp-block.md#block-mdx
   - id: images
     title:
       en: Images
@@ -77,12 +77,12 @@ subtopics:
         title:
           en: Single image
           jp: 画像
-        target: /example/mdx-usage/comp-image.md#image-single
+        target: ~example/mdx-usage/comp-image.md#image-single
       - id: image-grid
         title:
           en: Image grid
           jp: 画像グリッド
-        target: /example/mdx-usage/comp-image.md#image-grid
+        target: ~example/mdx-usage/comp-image.md#image-grid
   - id: diagrams
     title:
       en: Diagrams
@@ -92,12 +92,12 @@ subtopics:
         title:
           en: Text diagram
           jp: テキスト図表
-        target: /example/mdx-usage/comp-diagram.md#diagram-text
+        target: ~example/mdx-usage/comp-diagram.md#diagram-text
       - id: diagram-mermaid
         title:
           en: Mermaid diagram
           jp: Mermaid 図表
-        target: /example/mdx-usage/comp-diagram.md#diagram-mermaid
+        target: ~example/mdx-usage/comp-diagram.md#diagram-mermaid
   - id: files
     title:
       en: Files
@@ -107,12 +107,12 @@ subtopics:
         title:
           en: File tree
           jp: ファイルツリー
-        target: /example/mdx-usage/comp-file-tree.md
+        target: ~example/mdx-usage/comp-file-tree.md
       - id: file-download
         title:
           en: File download
           jp: ファイルダウンロード
-        target: /example/mdx-usage/comp-file-download.md
+        target: ~example/mdx-usage/comp-file-download.md
   - id: data-reuse
     title:
       en: Data reuse
@@ -122,7 +122,7 @@ subtopics:
         title:
           en: Component data reference
           jp: コンポーネントデータ参照
-        target: /example/mdx-usage/comp-data-ref.md
+        target: ~example/mdx-usage/comp-data-ref.md
 ```
 
 <!--renderComp=MultiLang-->

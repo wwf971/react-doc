@@ -2,14 +2,38 @@
 # relative to this file. example_doc is the root folder of the demonstration
 # page; the yaml files of the document (the entry, this file, the side-panel
 # and tag files) live here too and are never collected, so no rule excludes them.
+#
+# every collected file is named by its source path ~rootId/path-in-root
+# (design: doc_page_impl_source.md#source-paths). an addFolder rule says how
+# it collects (collect):
+#   recursive   every file below the folder is a document
+#   direct      the files right in the folder are documents
+#   referenced  the files are collectable, not documents: they are part of the
+#               page only when used (an image an Image block names, a file an
+#               asset version depends on)
+# a root id names one folder; a later rule with the same root id refines how
+# a folder inside it is collected.
 rules:
   - action: addFolder
     rootId: example
     path: .
+    collect: recursive
   - action: addFile
     rootId: req
     path: ../main/doc_page_req.md
     tags: [reference]           # tags every file this rule collects
+  # the images of the demonstration: referenced files, bundled into a build
+  # only when a document or an asset version uses them
+  - action: addFolder
+    rootId: example
+    path: ./mdx-usage/image
+    collect: referenced
+  # the files the page itself creates: images pasted into Image / ImageGrid
+  # (config.yaml variable imageFileStoreDirDefault names this folder)
+  - action: addFolder
+    rootId: example
+    path: ./asset-file/image
+    collect: referenced
   - action: removeByName
     pattern: "*.pyc"
   - action: removeByName
@@ -19,17 +43,14 @@ rules:
   # the sub document declares its own source rules in its entry file; its
   # folder is not part of the "example" root
   - action: removeByPath
-    pattern: "/example/sub-doc/**"
+    pattern: "~example/sub-doc/**"
   # demo component implementations beside the demonstration docs are code,
   # not document content
   - action: removeByPath
-    pattern: "/example/comp-mdx/**"
-  # images are component attachments, not documents
-  - action: removeByPath
-    pattern: "/example/**/image/**"
+    pattern: "~example/comp-mdx/**"
   # tag steps apply to the files collected so far
   - action: addTagByPath
-    pattern: "/example/link-nav/**"
+    pattern: "~example/link-nav/**"
     tags: [test]
   - action: addTagByName
     pattern: "*.py"
@@ -37,11 +58,11 @@ rules:
   # collected and tagged, but not bound by any side-panel item: the tag
   # overview lists it last
   - action: addTagByPath
-    pattern: "/example/tag-outside-side-panel.md"
+    pattern: "~example/tag-outside-side-panel.md"
     tags: [guide]
   # config steps also apply to the files collected so far (source level of
   # the config system; side-panel items and the frontmatter can override it)
   - action: setConfigByPath
-    pattern: "/example/doc-config.md"
+    pattern: "~example/doc-config.md"
     config:
       TagsDisplayAtLinkIsOn: true

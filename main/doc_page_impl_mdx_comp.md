@@ -71,7 +71,7 @@ In `.mdx`, the same reference is a property: `<FileTree dataRef="comp-file-tree.
 ```text
 dataRef = {document target}#{component id}
 
-/root/a.md#tree        exact internal path
+~root/a.md#tree        exact source path
 ./a.md#tree, ../a.md   relative to the referencing document
 xx/a.md#tree           path suffix
 a.md#tree              file name
@@ -115,7 +115,7 @@ After validation, the component receives its own data plus `data.dataRefResolved
 ```text
 data.dataRefResolved = {
   target,          authored dataRef
-  docPath,         internal path of the referenced document
+  docPath,         source path of the referenced document
   componentId,     id of the referenced component
   compName,        authored tag name of the referenced component
   compId,          resolved registry id

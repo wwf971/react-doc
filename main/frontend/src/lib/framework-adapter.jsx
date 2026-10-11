@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { reaction } from 'mobx';
+import { sourcePathIsRooted } from './doc-source-path.js';
 
 // fumadocs-ui is framework-agnostic through FrameworkProvider; here the
 // "framework" is simply the DocStore: pathname is the current sidebar item
@@ -18,7 +19,8 @@ export function makeFramework(docStore) {
   }
 
   function LinkAdapter({ href = '', prefetch: _prefetch, children, onClick, ...props }) {
-    const isDocHref = href.startsWith('/') || href.startsWith('?doc=');
+    // an item route (/__doc-item/...), a source path (~rootId/...), or a browser href
+    const isDocHref = href.startsWith('/') || sourcePathIsRooted(href) || href.startsWith('?doc=');
     if (!isDocHref) {
       return (
         <a href={href} onClick={onClick} {...props}>
@@ -52,7 +54,7 @@ export function makeFramework(docStore) {
   };
 }
 
-// accepts both internal paths '/rootId/a.md#hash' and browser hrefs '?doc=...'
+// accepts both source paths '~rootId/a.md#hash' and browser hrefs '?doc=...'
 function fromBrowserHref(url) {
   if (!url.startsWith('?') && !url.includes('?doc=')) return url;
   const indexQuery = url.indexOf('?');

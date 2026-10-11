@@ -1,0 +1,152 @@
+/* source layer UI: path input with completion, file location prompt */
+
+/* ---------- SourcePathInput ---------- */
+
+.doc-source-path-input {
+  position: relative;
+  display: inline-block;
+  min-width: 8rem;
+  max-width: 100%;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
+}
+
+.doc-source-path-text {
+  display: inline-block;
+  min-width: 6rem;
+  max-width: 100%;
+  white-space: pre;
+  overflow-x: auto;
+  cursor: text;
+  caret-color: var(--color-fd-primary);
+  text-decoration: underline dashed color-mix(in srgb, var(--color-fd-primary) 45%, var(--color-fd-border));
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.doc-source-path-text:focus {
+  outline: none;
+  text-decoration-style: solid;
+  text-decoration-color: var(--color-fd-primary);
+}
+
+.doc-source-path-text:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-source-path-text[data-disabled] {
+  opacity: 0.6;
+}
+
+.doc-source-path-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 40;
+  max-height: 14rem;
+  min-width: 100%;
+  margin: 2px 0 0;
+  padding: 2px 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-popover, var(--color-fd-background));
+  color: var(--color-fd-popover-foreground, var(--color-fd-foreground));
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.12);
+  white-space: nowrap;
+}
+
+.doc-source-path-option {
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.doc-source-path-option:hover,
+.doc-source-path-option[data-active] {
+  background: var(--color-fd-accent);
+}
+
+/* ---------- SourceFilePrompt ---------- */
+
+.doc-source-prompt {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(22rem, calc(100vw - 16px));
+  padding: 6px 8px;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-popover, var(--color-fd-background));
+  color: var(--color-fd-popover-foreground, var(--color-fd-foreground));
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.16);
+  font-size: 0.8rem;
+}
+
+.doc-source-prompt-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.doc-source-prompt-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.doc-source-prompt-label {
+  flex: 0 0 3rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-source-prompt-row .doc-source-path-input,
+.doc-source-prompt-row .doc-edit-value {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.doc-source-prompt-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.doc-source-prompt-button {
+  padding: 1px 8px;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-background);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.doc-source-prompt-button:hover:not(:disabled),
+.doc-source-prompt-button:focus-visible:not(:disabled) {
+  background: var(--color-fd-accent);
+  outline: none;
+}
+
+.doc-source-prompt-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.doc-source-prompt-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+}
+
+.doc-source-prompt-message {
+  margin: 0;
+  color: var(--color-fd-destructive, #dc2626);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}

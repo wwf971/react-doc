@@ -43,7 +43,7 @@ test('ordinary local link still becomes DocLink with the authoring path', () => 
   assert.equal(node.name, 'DocLink');
   assert.deepEqual(attributesGet(node), {
     target: './guide/setup.md',
-    from: '/root/doc.md',
+    from: '~root/doc.md',
     kind: 'link',
   });
   assert.equal(node.children.length, 1);
@@ -76,7 +76,7 @@ test('the authored label is retained for nested inline text nodes', () => {
 
 function paragraphTransform(markdown) {
   const tree = remark().parse(markdown);
-  remarkDocLink({ fromPath: '/root/doc.md' })(tree);
+  remarkDocLink({ fromPath: '~root/doc.md' })(tree);
   return tree.children[0];
 }
 

@@ -1,0 +1,8 @@
+# the folder images pasted into Image / ImageGrid are written to
+# (config.yaml variable imageFileStoreDirDefault; design:
+# doc_page_impl_source.md#creating-files). trying the paste writes here;
+# everything new is ignored. to make a pasted image part of the example,
+# list it here (or `git add -f` it).
+
+*
+!/.gitignore

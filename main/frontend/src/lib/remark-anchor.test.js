@@ -52,9 +52,9 @@ test('authored anchor directly followed by a heading line is reported', (context
   assert.equal(anchorHeadingSwallowedGet(tree.children[0]), '## Configuration');
 
   const warn = context.mock.method(console, 'warn', () => {});
-  remarkAnchor({ sourcePath: '/docs/page.md' })(tree);
+  remarkAnchor({ sourcePath: '~docs/page.md' })(tree);
   assert.equal(warn.mock.callCount(), 1);
-  assert.match(warn.mock.calls[0].arguments[0], /\/docs\/page\.md: heading "## Configuration"/);
+  assert.match(warn.mock.calls[0].arguments[0], /~docs\/page\.md: heading "## Configuration"/);
 });
 
 function treeBuild(anchorHtml) {

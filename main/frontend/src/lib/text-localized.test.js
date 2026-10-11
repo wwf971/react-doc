@@ -29,8 +29,8 @@ test('invalid label values are reported instead of accepted', () => {
 });
 
 const fileManifest = [
-  { internalPath: '/example/a.md', rootId: 'example', relPath: 'a.md', name: 'a.md', ext: 'md', title: 'A' },
-  { internalPath: '/example/b.md', rootId: 'example', relPath: 'b.md', name: 'b.md', ext: 'md', title: 'B' },
+  { internalPath: '~example/a.md', rootId: 'example', relPath: 'a.md', name: 'a.md', ext: 'md', title: 'A' },
+  { internalPath: '~example/b.md', rootId: 'example', relPath: 'b.md', name: 'b.md', ext: 'md', title: 'B' },
 ];
 
 const configDoc = {
@@ -38,16 +38,16 @@ const configDoc = {
   sidePanel: {
     tree: [
       { separator: { jp: '例', en: 'Examples' } },
-      { doc: '/example/a.md', text: { jp: '文書A', en: 'Document A' } },
+      { doc: '~example/a.md', text: { jp: '文書A', en: 'Document A' } },
       {
         id: 'part',
         text: { en: 'Part', jp: '部' },
         children: [
-          { doc: '/example/b.md', text: 'Plain B' },
+          { doc: '~example/b.md', text: 'Plain B' },
           { id: 'folder', text: { jp: 'フォルダ' }, children: [] },
         ],
       },
-      { id: 'broken', doc: '/example/b.md', text: ['not', 'a', 'label'] },
+      { id: 'broken', doc: '~example/b.md', text: ['not', 'a', 'label'] },
     ],
   },
 };
@@ -62,7 +62,7 @@ test('item models keep the authored mapping and a display-safe text at every dep
   } finally {
     console.warn = warnOriginal;
   }
-  const itemA = [...model.itemById.values()].find((item) => item.docPath === '/example/a.md');
+  const itemA = [...model.itemById.values()].find((item) => item.docPath === '~example/a.md');
   assert.deepEqual(itemA.textLocalized, { jp: '文書A', en: 'Document A' });
   assert.equal(itemA.text, '文書A');
 

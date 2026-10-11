@@ -11,20 +11,21 @@ Every document has one entry file, named `xxx-entry.yaml` by convention and mark
 ```yaml
 docEntry:
   title: Sub Document            # siteTitle when config.yaml sets none
-  homeDoc: /sub-doc/sub-doc.md   # homeDoc / homeItem when config.yaml sets none
+  homeDoc: ~sub-doc/sub-doc.md   # homeDoc / homeItem when config.yaml sets none
 source:                          # rules | { rules } | { file }
   - action: addFolder
-    rootId: sub-doc
+    rootId: sub-doc              # files are named ~sub-doc/path-in-folder
     path: .
+    collect: recursive           # recursive | direct | referenced
 tag:                             # { defineById } | { file }
   defineById:
     sub: { text: Sub }
 sidePanelById:                   # the side panels of the document
   main:
-    root: { doc: /sub-doc/sub-doc.md, text: Sub Document, tags: [sub] }
+    root: { doc: ~sub-doc/sub-doc.md, text: Sub Document, tags: [sub] }
     tree:
-      - doc: /sub-doc/entry-format.md
-      - doc: /sub-doc/including.md
+      - doc: ~sub-doc/entry-format.md
+      - doc: ~sub-doc/including.md
 ```
 
 ## Splitting the declaration

@@ -16,3 +16,9 @@ export function useDocEditDoc() {
 // bar stays at the top of the block's visible range (DocEditBlock). null
 // outside a block (the frontmatter / whole-source panel).
 export const DocEditBlockFloatContext = createContext(null);
+
+// the block being rendered: { path, blockIndex }. a component rendered in
+// the edit body learns its block from it (RegisteredComp puts it in the
+// source of the component's events), so it can ask for its data to be
+// replaced (dataReplaceRequest). null outside the edit body.
+export const DocEditBlockContext = createContext(null);

@@ -5,6 +5,7 @@ import { Copy, Expand, Scan, X } from '../../frontend/UICommon.js';
 import { imageDataParse } from './ImageData.js';
 import { ImageEdit } from './ImageEdit.jsx';
 import { ImageStore } from './ImageStore.js';
+import { clipboardImageFileGet, imageRawWithSourceBuild, pastedFileNameBuild, pasteTargetIsText } from './image-paste.js';
 import './Image.css';
 
 function ImagePanZoom({ alt, sourceUrl }) {
@@ -145,8 +146,20 @@ function Image({ data = {}, config = {}, onEvent }) {
 }
 
 // captionRender(caption): the editor passes it to put an editable value into
-// the figcaption, which is then shown even while the caption is empty
-const ImageRender = observer(function ImageRender({ data, config, onEvent, captionRender }) {
+// the figcaption, which is then shown even while the caption is empty.
+// onSourcePaste(sourcePath): the editor passes it to take the source of a
+// pasted image into its draft instead of the block being rewritten.
+//
+// an Image without src is the empty state (the state a new block is created
+// in): a placeholder that takes a pasted image. a paste anywhere on the page
+// while the pointer is over the image (or while the placeholder has focus)
+// writes the clipboard image as a file of the source (fileCreateRequest,
+// into the component config FileStoreDir, or a folder chosen in the
+// location prompt when "choose folder" is on) and sets it as the source
+// (dataReplaceRequest). over an existing image the paste asks first when
+// PasteReplaceConfirmIsOn (image-req.md#paste). both need the document to be
+// in edit mode (config.blockIndex) and the source to be writable.
+const ImageRender = observer(function ImageRender({ data, config, onEvent, captionRender, onSourcePaste }) {
 	const source = String(data.src ?? data.source ?? '').trim();
 	const sourceUrl = config.assetUrlGet?.(source) ?? source;
 	const alt = String(data.alt ?? data.caption ?? '');
@@ -156,6 +169,12 @@ const ImageRender = observer(function ImageRender({ data, config, onEvent, capti
 	const titleId = useId();
 	const width = sizeCssGet(config.width ?? data.width ?? data.maxWidth) ?? '100%';
 	const height = sizeCssGet(config.height ?? data.height) ?? 'auto';
+	const pointLastRef = useRef(undefined);
+	const pasteHandleRef = useRef(null);
+	const isSourceWritable = Boolean(config.source?.isWritable?.());
+	const isPasteAvailable = isSourceWritable && (config.blockIndex !== undefined || typeof onSourcePaste === 'function');
+	const fileStoreDir = String(config.compConfig?.FileStoreDir ?? '');
+	const isReplaceConfirmOn = config.compConfig?.PasteReplaceConfirmIsOn !== false;
 
 	useEffect(() => {
 		if (!store.isExpanded) return undefined;
@@ -165,6 +184,99 @@ const ImageRender = observer(function ImageRender({ data, config, onEvent, capti
 		window.addEventListener('keydown', keyDownHandle);
 		return () => window.removeEventListener('keydown', keyDownHandle);
 	}, [store.isExpanded]);
+
+	// the file is written through the source layer, then the block (or the
+	// editor's draft) takes the new source
+	const pasteApply = async (file) => {
+		store.pastePendingSet(undefined);
+		store.pasteStatusSet('submitting');
+		const resultFile = await onEvent?.('fileCreateRequest', {
+			name: pastedFileNameBuild(file),
+			blob: file,
+			dirPath: fileStoreDir,
+			isLocationCustom: store.isLocationCustom,
+		}, { point: pointLastRef.current });
+		if (resultFile?.code !== 0) {
+			store.pasteStatusSet('error', resultFile?.message || 'The pasted image was not written as a file.');
+			return;
+		}
+		const sourcePath = String(resultFile.data?.path ?? '');
+		if (onSourcePaste) {
+			onSourcePaste(sourcePath);
+			store.pasteStatusSet('idle');
+			return;
+		}
+		const resultData = await onEvent?.('dataReplaceRequest', { raw: imageRawWithSourceBuild(data, sourcePath) });
+		if (resultData?.code !== 0) {
+			store.pasteStatusSet('error', resultData?.message || `The image was not set; the file is at ${sourcePath}.`);
+			return;
+		}
+		store.pasteStatusSet('idle');
+	};
+
+	const pasteHandle = (file) => {
+		if (!isPasteAvailable || store.pasteStatus === 'submitting') return;
+		if (source && isReplaceConfirmOn) {
+			store.pastePendingSet({ file });
+			return;
+		}
+		void pasteApply(file);
+	};
+	pasteHandleRef.current = pasteHandle;
+
+	// a paste anywhere on the page targets the image under the pointer,
+	// unless a text field has it (the browser then pastes into the field)
+	useEffect(() => {
+		if (!store.isHovered || !isPasteAvailable) return undefined;
+		const pasteWindowHandle = (event) => {
+			if (event.defaultPrevented || pasteTargetIsText(event.target)) return;
+			const file = clipboardImageFileGet(event.clipboardData);
+			if (!file) return;
+			event.preventDefault();
+			pasteHandleRef.current?.(file);
+		};
+		window.addEventListener('paste', pasteWindowHandle);
+		return () => window.removeEventListener('paste', pasteWindowHandle);
+	}, [store.isHovered, isPasteAvailable]);
+
+	const pointerProps = {
+		onPointerEnter: () => store.hoveredSet(true),
+		onPointerLeave: () => store.hoveredSet(false),
+		onPointerMove: (event) => { pointLastRef.current = { clientX: event.clientX, clientY: event.clientY }; },
+	};
+
+	// what a replacement does to the data: an asset-aware component knows
+	// whether its data is an asset (config.assetInfo,
+	// doc_page_impl_asset.md#component-awareness)
+	const assetInfo = config.assetInfo;
+	const replaceNote = assetInfo?.isFromAsset
+		? `The data is asset "${assetInfo.name || assetInfo.objectId}": the paste ${assetInfo.saveMode === 'newVersion' ? 'adds a version' : 'replaces its head version in place'}.`
+		: '';
+
+	// the floating controls of the paste flow: the confirmation over an
+	// existing image, the status, the failure
+	const pasteControls = (
+		<>
+			{store.pastePending ? (
+				<div className="doc-image-paste-confirm not-prose" role="alertdialog" aria-label="Replace the image">
+					<span>Replace this image with the pasted one?{replaceNote ? ` ${replaceNote}` : ''}</span>
+					<button type="button" className="doc-image-paste-button" onClick={() => void pasteApply(store.pastePending.file)}>Replace</button>
+					<button type="button" className="doc-image-paste-button" onClick={() => store.pastePendingSet(undefined)}>Cancel</button>
+				</div>
+			) : null}
+			{store.pasteStatus === 'submitting' ? (
+				<span className="doc-image-paste-status not-prose" role="status">Saving the pasted image…</span>
+			) : null}
+			{store.pasteStatus === 'error' ? (
+				<span className="doc-image-paste-status is-error not-prose" role="alert">
+					<span>{store.pasteMessage}</span>
+					<button type="button" className="doc-image-paste-button" aria-label="Dismiss" onClick={() => store.pasteStatusSet('idle')}>
+						<X size={12} aria-hidden="true" />
+					</button>
+				</span>
+			) : null}
+		</>
+	);
 
 	const isExpandedSet = async (isExpanded) => {
 		const result = await onEvent?.('expandChangeRequest', { isExpanded });
@@ -193,7 +305,54 @@ const ImageRender = observer(function ImageRender({ data, config, onEvent, capti
 		}
 	};
 
-	if (!source || !sourceUrl) {
+	const styleArea = { '--doc-image-width': width, '--doc-image-height': height };
+	const captionElement = captionRender
+		? <figcaption>{captionRender(data.caption ?? '')}</figcaption>
+		: data.caption ? <figcaption>{data.caption}</figcaption> : null;
+
+	if (!source) {
+		return (
+			<figure className="doc-image is-empty" style={styleArea} {...pointerProps}>
+				<div className="doc-image-body">
+					<div
+						className="doc-image-empty"
+						tabIndex={isPasteAvailable ? 0 : undefined}
+						onPaste={(event) => {
+							const file = clipboardImageFileGet(event.clipboardData);
+							if (!file) return;
+							event.preventDefault();
+							pasteHandle(file);
+						}}
+					>
+						<span className="doc-image-empty-title">No image</span>
+						{isPasteAvailable ? (
+							<>
+								<span className="doc-image-empty-hint">
+									{onSourcePaste ? 'Set src in the panel, or paste an image (Ctrl/⌘+V)' : 'Paste an image (Ctrl/⌘+V) to set it'}
+								</span>
+								<span className="doc-image-empty-folder">
+									<span>into {store.isLocationCustom ? 'a folder you choose' : fileStoreDir || 'a folder you choose'}</span>
+									<button
+										type="button"
+										className="doc-image-paste-button"
+										aria-pressed={store.isLocationCustom}
+										title="Choose the folder when pasting"
+										onClick={() => store.locationCustomToggle()}
+									>
+										choose folder
+									</button>
+								</span>
+							</>
+						) : null}
+					</div>
+					{pasteControls}
+				</div>
+				{captionElement}
+			</figure>
+		);
+	}
+
+	if (!sourceUrl) {
 		return (
 		<div className="doc-image-error" role="alert">
 			Image source could not be resolved.
@@ -207,7 +366,6 @@ const ImageRender = observer(function ImageRender({ data, config, onEvent, capti
 			? 'コピーできませんでした'
 			: '画像をコピー';
 	const displayModeLabel = store.displayMode === 'fill' ? 'Contain 表示に切り替え' : 'Fill 表示に切り替え';
-	const styleArea = { '--doc-image-width': width, '--doc-image-height': height };
 	const popup = store.isExpanded && typeof document !== 'undefined' ? createPortal(
 		<div className="doc-image-overlay" onMouseDown={() => void isExpandedSet(false)}>
 			<section
@@ -235,8 +393,10 @@ const ImageRender = observer(function ImageRender({ data, config, onEvent, capti
 		<figure
 			className={`doc-image is-${store.displayMode}`}
 			style={styleArea}
+			{...pointerProps}
 		>
 			<div className="doc-image-body">
+				{pasteControls}
 				<div className="doc-image-toolbar">
 					<button type="button" title={displayModeLabel} aria-label={displayModeLabel} aria-pressed={store.displayMode !== 'fill'} onClick={() => void displayModeToggle()}>
 						<Scan size={17} />
@@ -252,9 +412,7 @@ const ImageRender = observer(function ImageRender({ data, config, onEvent, capti
 					<img src={sourceUrl} alt={alt} loading="lazy" decoding="async" />
 				</div>
 			</div>
-			{captionRender
-				? <figcaption>{captionRender(data.caption ?? '')}</figcaption>
-				: data.caption ? <figcaption>{data.caption}</figcaption> : null}
+			{captionElement}
 			{popup}
 		</figure>
 	);

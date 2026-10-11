@@ -51,18 +51,18 @@ test('wiki text splits into text and targets', () => {
 
 test('targets resolve by exact path, relative path, suffix, and name', () => {
   const sourceIndex = sourceIndexBuild([
-    { internalPath: '/docs/guide/a.md', name: 'a.md' },
-    { internalPath: '/docs/guide/b.md', name: 'b.md' },
-    { internalPath: '/docs/ref/a.md', name: 'a.md' },
+    { internalPath: '~docs/guide/a.md', name: 'a.md' },
+    { internalPath: '~docs/guide/b.md', name: 'b.md' },
+    { internalPath: '~docs/ref/a.md', name: 'a.md' },
   ]);
-  const pathListGet = (target, fromPath = '/docs/guide/b.md') => (
+  const pathListGet = (target, fromPath = '~docs/guide/b.md') => (
     docTargetResolve(target, fromPath, sourceIndex).entryList.map((entry) => entry.internalPath)
   );
-  assert.deepEqual(pathListGet('/docs/ref/a.md'), ['/docs/ref/a.md']);
-  assert.deepEqual(pathListGet('./a.md'), ['/docs/guide/a.md']);
-  assert.deepEqual(pathListGet('../ref/a.md'), ['/docs/ref/a.md']);
-  assert.deepEqual(pathListGet('ref/a.md'), ['/docs/ref/a.md']);
-  assert.deepEqual(pathListGet('a.md'), ['/docs/guide/a.md', '/docs/ref/a.md']);
-  assert.deepEqual(pathListGet('/docs/missing.md'), []);
-  assert.equal(docTargetResolve('./a.md#setup', '/docs/guide/b.md', sourceIndex).hash, 'setup');
+  assert.deepEqual(pathListGet('~docs/ref/a.md'), ['~docs/ref/a.md']);
+  assert.deepEqual(pathListGet('./a.md'), ['~docs/guide/a.md']);
+  assert.deepEqual(pathListGet('../ref/a.md'), ['~docs/ref/a.md']);
+  assert.deepEqual(pathListGet('ref/a.md'), ['~docs/ref/a.md']);
+  assert.deepEqual(pathListGet('a.md'), ['~docs/guide/a.md', '~docs/ref/a.md']);
+  assert.deepEqual(pathListGet('~docs/missing.md'), []);
+  assert.equal(docTargetResolve('./a.md#setup', '~docs/guide/b.md', sourceIndex).hash, 'setup');
 });

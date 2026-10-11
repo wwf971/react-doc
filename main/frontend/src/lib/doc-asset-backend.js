@@ -17,10 +17,15 @@
 //   objectGet(store, objectId, versionId)       { object, version: { versionId, size, hash, isText, text? } }
 //   objectGetByName(store, name, versionId)     the same, the object found by its name
 //   dataUrlGet(store, objectId, versionId)      the url the bytes of a version are read from ('' when none)
-//   objectCreate({ store, name, lang, contentType, fileExt, text | dataBase64, note, folder })
+//   objectCreate({ store, name, lang, contentType, fileExt, text | dataBase64, note, folder, dependencyList })
 //                                               { object, version, isCreated }; isCreated false when an
 //                                               object of that name exists: it is answered, nothing is created
-//   objectUpdate({ store, objectId, hashBase, text | dataBase64, mode, note })
+//   objectUpdate({ store, objectId, hashBase, text | dataBase64, mode, note, dependencyList })
+//   dependencyListGet(store, objectId, versionId)      { versionId, dependencyList }
+//   dependentListGet(store, objectId, versionId)       { dependentList }   versionId '' for the whole object
+//   dependencyListSet(store, objectId, versionId, dependencyList)   { object }
+//   dependencyAdd(store, objectId, versionId, dependency)           { object }
+//   dependencyRemove(store, objectId, versionId, dependency)        { object }
 //   objectDelete(store, objectId) / objectRestore(store, objectId)
 //   objectMetaSet(store, objectId, { name, lang, contentType, saveMode })
 //   versionCheckout(store, objectId, versionId)
@@ -71,6 +76,11 @@ export function assetBackendApiCreate(endpoint) {
     versionDelete: (store, objectId, versionId) => requestPost('/version/delete', { store, objectId, versionId }),
     objectLockSet: (store, objectId, isLocked) => requestPost('/object/lock/set', { store, objectId, isLocked }),
     versionLockSet: (store, objectId, versionId, isLocked) => requestPost('/version/lock/set', { store, objectId, versionId, isLocked }),
+    dependencyListGet: (store, objectId, versionId = 'head') => requestSend(`/dependency/list?${objectQueryBuild(store, objectId, versionId)}`),
+    dependentListGet: (store, objectId, versionId = '') => requestSend(`/dependent/list?${objectQueryBuild(store, objectId, versionId)}`),
+    dependencyListSet: (store, objectId, versionId, dependencyList) => requestPost('/dependency/set', { store, objectId, versionId, dependencyList }),
+    dependencyAdd: (store, objectId, versionId, dependency) => requestPost('/dependency/add', { store, objectId, versionId, dependency }),
+    dependencyRemove: (store, objectId, versionId, dependency) => requestPost('/dependency/remove', { store, objectId, versionId, dependency }),
     folderSet: (folderList) => requestPost('/folder/set', { folderList }),
   };
 }
@@ -99,6 +109,32 @@ export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
     const versionData = entry.versionDataById[versionId];
     if (!versionData) return { failure: { code: -3, data: null, message: `version ${versionId} not found in object ${objectId}` } };
     return { entry, versionId, versionData };
+  };
+  // the dependencies are part of the version metadata the snapshot carries
+  const dependencyListGet = (store, objectId, versionIdRequested = 'head') => {
+    const resolved = versionResolve(store, objectId, versionIdRequested);
+    if (resolved.failure) return Promise.resolve(resolved.failure);
+    const versionMeta = resolved.entry.versionList.find((version) => version.versionId === resolved.versionId);
+    return Promise.resolve({ code: 0, data: { versionId: resolved.versionId, dependencyList: versionMeta?.dependencyList ?? [] }, message: '' });
+  };
+  const dependentListGet = (store, objectId, versionIdRequested = '') => {
+    const failureStore = storeCheck(store);
+    if (failureStore) return Promise.resolve(failureStore);
+    const entryTarget = objectById[objectId];
+    if (!entryTarget) return Promise.resolve({ code: -3, data: null, message: `asset object not found: ${objectId}` });
+    const versionIdWanted = versionIdRequested === '' ? '' : (versionIdRequested === 'head' ? entryTarget.versionIdHead : versionIdRequested);
+    const dependentList = [];
+    for (const entry of Object.values(objectById)) {
+      for (const version of entry.versionList) {
+        for (const dependency of version.dependencyList ?? []) {
+          if (dependency.type !== 'asset' || dependency.objectId !== objectId) continue;
+          const versionIdDepended = dependency.versionId ?? entryTarget.versionIdHead;
+          if (versionIdWanted !== '' && versionIdDepended !== versionIdWanted) continue;
+          dependentList.push({ objectId: entry.objectId, versionId: version.versionId, dependency });
+        }
+      }
+    }
+    return Promise.resolve({ code: 0, data: { dependentList }, message: '' });
   };
   const objectGet = (store, objectId, versionIdRequested = 'head') => {
     const resolved = versionResolve(store, objectId, versionIdRequested);
@@ -140,6 +176,11 @@ export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
     versionDelete: readOnly,
     objectLockSet: readOnly,
     versionLockSet: readOnly,
+    dependencyListGet,
+    dependentListGet,
+    dependencyListSet: readOnly,
+    dependencyAdd: readOnly,
+    dependencyRemove: readOnly,
     folderSet: readOnly,
   };
 }

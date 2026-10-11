@@ -169,7 +169,7 @@ test('keeps stable aliases as separate fragment targets without duplicate ids', 
 async function compileMarkdown(source) {
   return compileDoc({
     source,
-    internalPath: '/example/heading.md',
+    internalPath: '~example/heading.md',
     format: 'md',
   });
 }

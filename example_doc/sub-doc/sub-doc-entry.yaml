@@ -6,12 +6,13 @@
 # instead, and the sub document deploys on its own.
 docEntry:
   title: Sub Document
-  homeDoc: /sub-doc/sub-doc.md
+  homeDoc: ~sub-doc/sub-doc.md
 
 source:
   - action: addFolder
     rootId: sub-doc
     path: .
+    collect: recursive
 
 tag:
   defineById:
@@ -26,10 +27,10 @@ sidePanelById:
     # properties of the node that includes this side panel: in the page side
     # panel it is a folder bound to the overview, labeled and tagged from here
     root:
-      doc: /sub-doc/sub-doc.md
+      doc: ~sub-doc/sub-doc.md
       text: Sub Document
       tags: [sub]
       defaultOpen: true
     tree:
-      - doc: /sub-doc/entry-format.md
-      - doc: /sub-doc/including.md
+      - doc: ~sub-doc/entry-format.md
+      - doc: ~sub-doc/including.md

@@ -16,6 +16,7 @@ export { useCompDataRef } from '../../comp-doc/registry/CompDataRef.jsx';
 export { DocLanguageProvider, useDocLanguage } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 export { DynamicCodeBlock } from '../../comp-doc/mdx-render/DynamicCodeBlock.js';
 export { DocSourceStore } from './store/DocSourceStore.js';
+export { DocSourceFileStore } from './store/DocSourceFileStore.js';
 export { DocStore } from './store/DocStore.js';
 export { DocTagStore } from './store/DocTagStore.js';
 export { DocConfigStore } from './store/DocConfigStore.js';
@@ -43,3 +44,15 @@ export { TagList } from '../../comp-mdx/tag/TagList.jsx';
 export { TagOverview } from '../../comp-mdx/tag/TagOverview.jsx';
 export { tagAssetKeyGet } from './lib/doc-tag-declare.js';
 export { configDefineListBuiltin } from './lib/doc-config-define.js';
+// the source layer (doc_page_impl_source.md): the source path grammar and
+// the path input with completion
+export {
+  SOURCE_ROOT_MARK,
+  sourcePathBuild,
+  sourcePathIsRooted,
+  sourcePathParse,
+  sourcePathNormalize,
+  sourcePathDirGet,
+  sourcePathNameGet,
+} from './lib/doc-source-path.js';
+export { SourcePathInput } from '../../comp-doc/source/SourcePathInput.jsx';

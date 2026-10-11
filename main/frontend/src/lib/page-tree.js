@@ -2,8 +2,9 @@
 //
 // preferred: custom tree from side panel yaml (config.sidePanel.tree), whose
 // structure is free and need not mirror the file tree. nodes:
-//   - doc: /rootId/xx/a.md   (page; text overrides the doc title)
+//   - doc: ~rootId/xx/a.md   (page; text overrides the doc title)
 //   - sourceRoot: rootId     (generated tree for one complete source root)
+//   - sourceFolder: ~rootId/xx (generated tree for one source folder)
 //   - text + children        (folder)
 //   - separator: Some Text
 // every node may also declare "tags" (doc_page_impl_tag.md) and "config"
@@ -12,6 +13,7 @@
 // language mapping (text-localized.js).
 
 import { sidePanelItemNameCreate } from './side-panel-item.js';
+import { sourcePathBuild, sourcePathIsInside, sourcePathIsRooted, sourcePathNormalize } from './doc-source-path.js';
 import { textLocalizedGet, textLocalizedParse } from './text-localized.js';
 import { tagSidePanelAssetKeyGet, tagSidePanelDeclare } from './doc-tag-side-panel.js';
 import { configSidePanelDeclareClose, configSidePanelDeclareOpen } from './doc-config-side-panel.js';
@@ -150,6 +152,7 @@ function convertNodeByForm(node, position, context, partIdParent) {
 function autoChildren(fileManifest, context) {
   const entriesByRootId = new Map();
   for (const entry of fileManifest) {
+    if (entry.collect === 'referenced') continue;
     const entries = entriesByRootId.get(entry.rootId) ?? [];
     entries.push({ ...entry, relPathTree: entry.relPath });
     entriesByRootId.set(entry.rootId, entries);
@@ -164,7 +167,7 @@ function autoChildren(fileManifest, context) {
       continue;
     }
     const id = uniqueId(`root-${rootId}`, context);
-    const pathRoot = `/${rootId}`;
+    const pathRoot = sourcePathBuild(rootId);
     result.push({
       $id: id,
       type: 'folder',
@@ -200,7 +203,7 @@ function folderChildren(entries, position, context, partId, pathFolder) {
 
   const folders = [...entriesBySubDir.entries()].map(([subDir, entriesSub], index) => {
     const id = uniqueId(`dir-${position.join('-')}-${index}-${subDir}`, context);
-    const pathSub = `${pathFolder === '/' ? '' : pathFolder}/${subDir}`;
+    const pathSub = `${pathFolder}/${subDir}`;
     return {
       $id: id,
       type: 'folder',
@@ -316,13 +319,16 @@ function itemTagDeclare(node, binding, context) {
 
 function convertSourceFolder(node, position, context, partId) {
   const pathFolder = node.sourceFolder !== undefined
-    ? normalizeFolderPath(String(node.sourceFolder))
-    : `/${node.sourceRoot}`;
-  const entries = pathFolder === '/'
-    ? context.fileManifest
-    : context.fileManifest.filter((entry) => (
-      entry.internalPath === pathFolder || entry.internalPath.startsWith(`${pathFolder}/`)
-    ));
+    ? sourcePathNormalize(String(node.sourceFolder))
+    : sourcePathBuild(String(node.sourceRoot));
+  if (!sourcePathIsRooted(pathFolder)) {
+    console.warn(`[page-tree] side panel sourceFolder must be a source path (~rootId/dir): ${pathFolder}`);
+    return [];
+  }
+  // files of a folder collected for reference only are not pages
+  const entries = context.fileManifest.filter((entry) => (
+    entry.collect !== 'referenced' && sourcePathIsInside(entry.internalPath, pathFolder)
+  ));
   if (entries.length === 0) {
     console.warn(`[page-tree] side panel source folder not found: ${pathFolder}`);
     return [];
@@ -548,8 +554,8 @@ function registerItem(item, context) {
 }
 
 function resolveDocEntries(reference, context) {
-  if (reference.startsWith('/')) {
-    const entry = context.entryByPath.get(reference);
+  if (sourcePathIsRooted(reference)) {
+    const entry = context.entryByPath.get(sourcePathNormalize(reference));
     return entry ? [entry] : [];
   }
   if (reference.includes('/')) {
@@ -561,11 +567,6 @@ function resolveDocEntries(reference, context) {
 
 function itemRoute(id) {
   return `/__doc-item/${encodeURIComponent(id)}`;
-}
-
-function normalizeFolderPath(path) {
-  const normalized = `/${path}`.replace(/\\/g, '/').replace(/\/+/g, '/');
-  return normalized.length > 1 ? normalized.replace(/\/$/, '') : normalized;
 }
 
 function indexFirstDocItems(treePage, itemByRoute) {

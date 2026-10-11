@@ -8,21 +8,24 @@ The config system decides how the doc page behaves, for example whether tags app
 - **Document config**: for some keys, a single document can have its own value. That value is resolved from several places in a fixed order: global config, source rules, side-panel items, and the document's frontmatter.
 - **User config**: the reader changes a value for the page session from the settings panel; it wins over everything declared and is gone with the page.
 
-All parts use the same list of known keys, and renderers read them through one config service. For the overall architecture, refer to [Document Page: Design](doc_page_impl.md).
+The keys of the page are declared in code. A registered component may declare keys of its own, which go through the same levels under a `compConfig` mapping, kept visibly apart from the page keys ([Component-level config](#component-level-config)); and a value at any level may use a variable of `config.yaml` ([Variables](#variables)). All parts use the same lists of known keys, and renderers read them through one config service. For the overall architecture, refer to [Document Page: Design](doc_page_impl.md).
 
 ```text
 key definitions (code)          which keys exist, their values, default, scope
+component definitions (code)    the keys a component declares for itself (compDefine configDefineList)
         │
-config.yaml globalConfig  ──►  page-level value of every key
-        │
+config.yaml globalConfig  ──►  page-level value of every page key
+config.yaml compConfig    ──►  page-level value of every component key, by component name
+        │                      (${name} in a value: config.yaml variable)
         │  document-level keys only, later wins:
-        ├── source.yaml       rules that collected the document
+        ├── source.yaml       rules that collected the document         config: { K, compConfig: { Comp: { K } } }
         ├── side-panel.yaml   items that bind the document, or a folder above it
         └── frontmatter       "config" of the document itself
         │
-settings panel (reader, not persisted)  ──►  overrides any key, page or document
+settings panel (reader, not persisted)  ──►  overrides any key, page or document; tabs Config / Component
         ▼
 DocConfigStore  ──►  config service  ──►  renderers (side-panel items, path bar, links, ...)
+                                     ──►  RegisteredComp: config.compConfig of every component
 ```
 
 This is separate from the rest of `config.yaml`, such as `source`, `sidePanel`, `tag`, and `compRegistry`. Those describe what the page contains. The config system describes how features behave.
@@ -108,11 +111,11 @@ Example, with the declarations in order:
 
 ```text
 config.yaml       globalConfig: TagsDisplayAtLinkIsOn: false
-source.yaml       setConfigByPath /guide/**, TagsDisplayAtLinkIsOn: true
-side-panel.yaml   folder "Guide" above /guide/a.md, TagsDisplayAtLinkPosition: before
-/guide/a.md       frontmatter config: TagsDisplayAtLinkIsOn: false
--> /guide/a.md:   TagsDisplayAtLinkIsOn false (document), TagsDisplayAtLinkPosition before (side panel)
--> /guide/b.md:   TagsDisplayAtLinkIsOn true (source), TagsDisplayAtLinkPosition before (side panel)
+source.yaml       setConfigByPath ~guide/**, TagsDisplayAtLinkIsOn: true
+side-panel.yaml   folder "Guide" above ~guide/a.md, TagsDisplayAtLinkPosition: before
+~guide/a.md       frontmatter config: TagsDisplayAtLinkIsOn: false
+-> ~guide/a.md:   TagsDisplayAtLinkIsOn false (document), TagsDisplayAtLinkPosition before (side panel)
+-> ~guide/b.md:   TagsDisplayAtLinkIsOn true (source), TagsDisplayAtLinkPosition before (side panel)
 ```
 
 ### Declaring document config
@@ -126,10 +129,11 @@ rules:
   - action: addFolder
     rootId: guide
     path: ./guide
+    collect: recursive
     config:                   # every file this rule collects
       TagsDisplayAtLinkIsOn: true
-  - action: setConfigByPath   # files collected so far, glob on the internal path
-    pattern: "/guide/api/**"
+  - action: setConfigByPath   # files collected so far, glob on the source path
+    pattern: "~guide/api/**"
     config:
       TagsDisplayAtMainPanelIsOn: false
   - action: setConfigByName   # files collected so far, glob on the file name
@@ -149,10 +153,10 @@ tree:
     config:                   # every document below this folder
       TagsDisplayAtLinkPosition: before
     children:
-      - doc: /guide/a.md
+      - doc: ~guide/a.md
         config:               # this document; declared later, so it wins
           TagsDisplayAtLinkIsOn: true
-      - sourceFolder: /guide/api
+      - sourceFolder: ~guide/api
 ```
 
 `config` on a node applies to the document the node binds and to every document bound by items below it, including items generated from `sourceFolder`. Nodes are read in tree order, so a deeper node overrides its folder. When a document is bound by several items, the later item in tree order wins. A `root` mapping of an included side panel (`include`) can carry `config` like any other property of the including node.
@@ -198,7 +202,7 @@ Some features also accept a value on one single use, which wins over every level
 
 ## User level
 
-The reader can change the value of a key for the page session. The settings button (a gear, left of the sidebar collapse trigger in the sidebar header) opens the settings panel, a floating panel anchored under the button with two tabs. The **Config** tab lists every key definition with `isUserSettable` not `false`: its key, its description, and a control for its type (switch for `boolean`, dropdown for `enum`, number or text field otherwise; `any` keys are listed hidden). A value the reader changes becomes the user level, level 6 of the resolution: it replaces the declared value of the key at the page level, in every document, and in part index overrides that declared the key. Reset returns every key to its declared value. Nothing is persisted; a reload starts from the declared values again. The **Asset store** tab is not config of the page at all but the folders of the local asset store, and the opposite in persistence: a change there is written to the store's own file by the development server ([the local store](doc_page_impl_asset.md#the-local-store-folders-fully-reflected)). It lives in the settings panel because it is where a reader looks for how the page is set up. The tab shown is `DocConfigStore.settingsTabId`, kept while the panel is closed.
+The reader can change the value of a key for the page session. The settings button (a gear, left of the sidebar collapse trigger in the sidebar header) opens the settings panel, a floating panel anchored under the button with three tabs. The **Config** tab lists every key definition with `isUserSettable` not `false`: its key, its description, and a control for its type (switch for `boolean`, dropdown for `enum`, number or text field otherwise; `any` keys are listed hidden). A value the reader changes becomes the user level, level 6 of the resolution: it replaces the declared value of the key at the page level, in every document, and in part index overrides that declared the key. Reset returns every key, page and component, to its declared value. Nothing is persisted; a reload starts from the declared values again. The **Component** tab is the same for the keys components declare ([Component-level config](#component-level-config)), one group per component. The **Asset store** tab is not config of the page at all but the folders of the local asset store, and the opposite in persistence: a change there is written to the store's own file by the development server ([the local store](doc_page_impl_asset.md#the-local-store-folders-fully-reflected)). It lives in the settings panel because it is where a reader looks for how the page is set up. The tab shown is `DocConfigStore.settingsTabId`, kept while the panel is closed.
 
 ```text
 settings panel ──► DocConfigStore.valueUserSet(key, value) ──► configUserByKey (observable)
@@ -216,9 +220,12 @@ Store api of the level:
 ```text
 configDefineListUserSettable          the definitions the panel lists
 valueDeclaredGet(key)                 page value without the reader's override
-valueUserSet(key, value) / valueUserClear(key) / configUserClear()
+valueUserSet(key, value) / valueUserClear(key) / configUserClear()   (clears component keys too)
+compIdListWithConfig, compConfigDefineListGet(compId)                the Component tab
+compValueDeclaredGet(compId, key) / compValueUserSet(compId, key, value)
+isUserOverrideAny                     whether Reset has anything to do
 isSettingsOpen, settingsOpenSet(isOpen, anchorElement)
-settingsTabId, settingsTabIdSet(tabId)  'config' | 'assetStore'
+settingsTabId, settingsTabIdSet(tabId)  'config' | 'compConfig' | 'assetStore'
 ```
 
 ## Config service
@@ -232,6 +239,8 @@ configDocGet(docPath)           { key: value } of every key, resolved for one do
 valueDocGet(docPath, key)       one resolved value
 levelDocGet(docPath, key)       level that decided it: default | global | source | sidePanel | doc | user
 configDefineListGet()           every key definition
+compConfigGet(compId, docPath)  { key: value } of a component's own keys, resolved for one document
+compConfigDefineListGet(compId) the keys a component declares
 ```
 
 Calls from observer components are tracked by mobx. Side-panel item renderers receive the page-level values and the service directly in their `config` (`config.configGlobal`, `config.configService`). See [Side panel design](doc_page_impl_side_panel.md#renderer-interface).
@@ -247,18 +256,81 @@ A new feature adds its key definitions to `configDefineListBuiltin` in `lib/doc-
 }
 ```
 
-Supported types are `boolean`, `string`, `number`, `enum` (with `valueList`), `stringList`, and `any`. `null` is accepted only when it is the default, and it means "not set". `description` is the text of the key in the settings panel; `isUserSettable: false` keeps a key out of the panel (the default is listed).
+Supported types are `boolean`, `string`, `number`, `enum` (with `valueList`), `stringList`, `sourcePath`, and `any`. `null` is accepted only when it is the default, and it means "not set". `description` is the text of the key in the settings panel; `isUserSettable: false` keeps a key out of the panel (the default is listed).
+
+A `sourcePath` key holds a string that names a folder or a file of the doc page source by its source path (`~rootId/…`, [source paths](doc_page_impl_source.md#source-paths)). The definition says what it names with `pathSpec: { kind: 'dir' | 'file', extList? }`, and the settings panel edits it with completion from the source layer (`SourcePathInput`: the editable text itself, a dropdown of `sourceStore.pathComplete(typed, pathSpec)` below it, arrow keys and Enter), instead of a plain text field. The value is validated as a string; whether the path exists is the concern of whoever reads it, since a folder for files the page creates may not exist yet.
+
+## Component-level config
+
+A component may need settings of its own: where `Image` writes a pasted image, whether it asks before replacing one. They are config of the page in every way (declared at the same levels, overridden per document, changed by the reader), yet they are not keys of the page: they belong to one component, their names make sense only beside it, and an application with thirty components would otherwise fill the key list with keys nobody can place. So a component declares its own keys, and they are kept under their own mapping everywhere a page key is written.
+
+A registered component declares its keys in its definition, the same form as a page key without `scope` (every component key is document-level):
+
+```js
+compDefine(ImageRender, {
+  configDefineList: [
+    { key: 'FileStoreDir', type: 'sourcePath', pathSpec: { kind: 'dir' }, valueDefault: null,
+      description: 'The folder of the source a pasted image is written to.' },
+    { key: 'PasteReplaceConfirmIsOn', type: 'boolean', valueDefault: true,
+      description: 'Ask before a pasted image replaces the current one.' },
+  ],
+})
+```
+
+Values are set under `compConfig`, by the component's tag name of `compRegistry` (the store turns the name into the component id the keys are declared for, so two names of one component share its keys):
+
+```yaml
+# config.yaml: the page level, a sibling of globalConfig
+compConfig:
+  Image:
+    FileStoreDir: ${imageFileStoreDirDefault}
+    PasteReplaceConfirmIsOn: true
+
+# a source rule, a side-panel node, or frontmatter: inside the "config" mapping of the level
+config:
+  TagsDisplayAtLinkIsOn: true
+  compConfig:
+    Image:
+      FileStoreDir: ~guide/images
+```
+
+The resolution is the one of [document config](#resolution-steps), run per component: default, `config.yaml` `compConfig`, the `compConfig` mapping of the source rules, of the side-panel nodes, of the frontmatter, and the reader's override. The page keys and the component keys never mix: a `compConfig` mapping inside a `config` is not a page key, and a component key written beside the page keys is unknown and warned about. A name that is not in `compRegistry`, or a key the component does not declare, is warned about and ignored like an unknown page key.
+
+A component receives its resolved values as `config.compConfig` (the `config` prop of every registered component, [component registry](doc_page_impl.md#component-registry)), resolved for the document it is rendered in, so a component reads `config.compConfig.FileStoreDir` and knows nothing of the levels. The settings panel lists the component keys on a tab of their own, **Component**, grouped by component name (only components that declare keys appear; a page without such components says so), and a change there is the user level of that key as for a page key. The config service answers `compConfigGet(compId, docPath)` and `compConfigDefineListGet(compId)`; the store keeps `compValueDeclaredGet`, `compValueUserSet`, and `compIdListWithConfig` for the panel.
+
+## Variables
+
+A value that several keys share, such as the folder pasted images go to for `Image` and for `ImageGrid`, is written once as a variable of `config.yaml` and used as `${name}`:
+
+```yaml
+variable:
+  imageFileStoreDirDefault: ~example/asset-file/image
+
+compConfig:
+  Image:
+    FileStoreDir: ${imageFileStoreDirDefault}
+  ImageGrid:
+    FileStoreDir: ${imageFileStoreDirDefault}
+```
+
+`${name}` is replaced in every string value of every level, page keys and component keys alike (`variableExpand`), when the config model is built; a name that is not declared stays as written and is warned about with the place it was found. The mapping is one more entry of `config.yaml`, so `config.0.yaml` overrides a variable like any other entry, which is the intended way to point a local checkout at another folder without touching the keys that use it. Variables hold strings, are not nested, and are not read by anything but the config model; a built-in variable is simply one the demonstration config declares and documents, there is no hidden set.
 
 ## Implementation files
 
 All config logic uses the `doc-config` prefix:
 
 ```text
-frontend/src/lib/doc-config-define.js      key definitions, value validation (shared with the plugin)
+frontend/src/lib/doc-config-define.js      key definitions, value validation (shared with the plugin), the
+                                           component key index (compConfigDefineByCompIdBuild), variableExpand
 frontend/plugin/doc-config-source.ts       source and frontmatter levels, called from the source scan
 frontend/src/lib/doc-config-side-panel.js  side-panel level, called from page-tree.js
 frontend/src/lib/doc-config-model.js       resolution into the config model
-frontend/src/store/DocConfigStore.ts       config model owner, user level, settings panel state, config service
+frontend/src/store/DocConfigStore.ts       config model owner, user level (page and component keys), settings
+                                           panel state, config service
+comp-doc/registry/comp-registry.js         compDefine configDefineList: the keys of a component
+comp-doc/registry/RegisteredComp.jsx       config.compConfig of every rendered component
 comp-doc/settings/                         DocSettingsButton (sidebar header), DocSettingsPanel (floating, anchored to the
-                                           button; tabs Config / Asset store), AssetStoreSettings (the asset store tab)
+                                           button; tabs Config / Component / Asset store), AssetStoreSettings (the asset
+                                           store tab), SourcePathSettingsItem in DocSettingsPanel (a sourcePath key, edited with completion)
+comp-doc/source/SourcePathInput.jsx        the editable path with its completion dropdown (source layer)
 ```

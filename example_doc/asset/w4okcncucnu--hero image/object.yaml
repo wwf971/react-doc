@@ -13,17 +13,23 @@ versionList:
     versionIdPrevList: []
     time: 20261020_18495741+09
     note: robot at the computer
-    size: 187
-    hash: 5531461c3475fd7decb7cd4742f156bc1ec82433
+    size: 196
+    hash: 6474b5f9834a85b18d565d40d7644d90c4bd1271
     isLocked: false
+    dependencyList:
+      - type: source
+        path: ~example/mdx-usage/image/robot-computer.svg
   - versionId: w4okcoobv98
     versionIdPrevList:
       - w4okcnctumh
     time: 20261020_18495863+09
     note: office worker instead of the robot
-    size: 186
-    hash: dfb4fa0e4ec51e0d8836b6b2792ac30bc182474d
+    size: 195
+    hash: 0df3cc20584d0e3c1ea5d8a7eb3fa8b2d524a00b
     isLocked: false
+    dependencyList:
+      - type: source
+        path: ~example/mdx-usage/image/office-worker.svg
 eventList:
   - eventType: create
     time: 20261020_18495741+09

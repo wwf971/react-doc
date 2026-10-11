@@ -8,7 +8,19 @@ import { createElement } from 'react';
 //   isEditSupported   the component renders its own editor when config.isEdit
 //                     is true (doc_page_impl_edit.md#component-edit-mode)
 //   editTemplate      { lang, raw, props } of a new block inserted in edit mode
+//   configDefineList  component-level config keys the component reads from
+//                     config.compConfig (doc_page_impl_config.md#component-level-config):
+//                     [{ key, type, valueDefault, description, pathSpec? }]
+//   isAssetAware      the component receives config.assetInfo telling whether
+//                     its data is inline or an asset-store object
+//                     (doc_page_impl_asset.md#component-awareness)
+//   assetDependencyListGet(data) -> [{ type, path | objectId }] the source files
+//                     and assets the component's data refers to; recorded as the
+//                     dependencies of an asset created from the data
 export function compDefine(CompRender, options = {}) {
+  if (options.configDefineList !== undefined && !Array.isArray(options.configDefineList)) {
+    throw new Error('compDefine: configDefineList must be an array.');
+  }
   return {
     CompRender,
     componentType: options.componentType,
@@ -17,6 +29,9 @@ export function compDefine(CompRender, options = {}) {
     placementList: options.placementList,
     isEditSupported: options.isEditSupported === true,
     editTemplate: options.editTemplate,
+    configDefineList: options.configDefineList ?? [],
+    isAssetAware: options.isAssetAware === true,
+    assetDependencyListGet: options.assetDependencyListGet,
   };
 }
 

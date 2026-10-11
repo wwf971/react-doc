@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { assetRefLangIs, assetRefParse } from '../../frontend/src/lib/doc-asset-ref.js';
+import { assetSaveModeGet } from '../../frontend/src/store/DocAssetStore.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import { AssetFrame } from './AssetFrame.jsx';
 
@@ -66,10 +67,24 @@ export const CompAssetHost = observer(function CompAssetHost({ input, registered
       />
     );
   }
+  // what a component declared isAssetAware learns about its data
+  // (doc_page_impl_asset.md#component-awareness)
+  const assetInfo = {
+    isFromAsset: true,
+    store: reference.store,
+    objectId: result.object.objectId,
+    name: result.object.name,
+    versionId: result.versionId,
+    versionIdHead: result.object.versionIdHead,
+    isHead: result.versionId === result.object.versionIdHead,
+    saveMode: assetSaveModeGet(result.object),
+    isLocked: result.object.isLocked,
+  };
   return (
     <AssetFrame {...frameProps}>
       <RegisteredComp
         {...registeredProps}
+        configRuntime={{ ...(registeredProps.configRuntime ?? {}), assetInfo }}
         input={{ ...input, raw: result.version.text, lang: result.object.lang }}
       />
     </AssetFrame>

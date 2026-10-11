@@ -58,7 +58,7 @@ tree:
         description:
           component: DocLinkInline
           data:
-            target: /example/mdx-usage/mdx-components.md
+            target: ~example/mdx-usage/mdx-components.md
             text: Demonstration documents
 ```
 ````
@@ -99,7 +99,7 @@ tree:
         description:
           component: DocLinkInline
           data:
-            target: /example/mdx-usage/mdx-components.md
+            target: ~example/mdx-usage/mdx-components.md
             text: Demonstration documents
 ```
 

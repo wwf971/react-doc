@@ -4,16 +4,24 @@ import { observer } from 'mobx-react-lite';
 import { RotateCw, X } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { AssetStoreSettings } from './AssetStoreSettings.jsx';
+import { SourcePathInput } from '../source/SourcePathInput.jsx';
 import './DocSettings.css';
 
 // The settings panel, rendered by the application's ConfigPanel
-// (config.components) with two tabs (subtab items):
+// (config.components) with three tabs (subtab items):
 //
 //   Config       every config key that is user settable, one item per key.
 //                a change sets the user level of that key
 //                (DocConfigStore.valueUserSet), the override that comes
 //                after every declared level and lives for the page session
 //                only; "Reset" drops every override.
+//   Component    the component-level keys
+//                (doc_page_impl_config.md#component-level-config), one group
+//                per component that declares keys, named as the component is
+//                written in documents. a change sets the user level of that
+//                component key (DocConfigStore.compValueUserSet). a key of
+//                type sourcePath is edited with SourcePathInput, completed
+//                from the folders / files of the source.
 //   Asset store  the folders of the local asset store (AssetStoreSettings),
 //                written into the store's config file by the development
 //                server, so they are kept (doc_page_impl_asset.md).
@@ -60,15 +68,39 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen({ anchorElem
     };
   }, [anchorElement, configStore]);
 
-  const itemListConfig = configStore.configDefineListUserSettable.map((define) => settingsItemBuild(define, stores));
+  const itemListConfig = configStore.configDefineListUserSettable.map((define) => settingsItemBuild(define.key, define, stores));
   const data = {};
   for (const define of configStore.configDefineListUserSettable) {
     data[define.key] = settingsValueToItem(define, configStore.valueGlobalGet(define.key));
   }
-  const isOverrideAny = Object.keys(configStore.configUserByKey).length > 0;
-  const isConfigTab = configStore.settingsTabId === 'config';
+
+  // component-level keys: one group per component; an item id is
+  // "compId::key", so the flat data of the panel holds every component
+  const itemListComp = [];
+  for (const compId of configStore.compIdListWithConfig) {
+    const defineList = configStore.compConfigDefineListGet(compId).filter((define) => define.isUserSettable !== false);
+    if (defineList.length === 0) continue;
+    const children = [];
+    for (const define of defineList) {
+      const itemId = compItemIdBuild(compId, define.key);
+      children.push(settingsItemBuild(itemId, define, stores));
+      data[itemId] = settingsValueToItem(define, configStore.compValueGlobalGet(compId, define.key));
+    }
+    itemListComp.push({ id: `comp:${compId}`, type: 'group', label: compNameGet(stores.sourceStore.configDoc, compId), children });
+  }
+
+  const isOverrideAny = configStore.isUserOverrideAny;
+  const isValueTab = configStore.settingsTabId === 'config' || configStore.settingsTabId === 'compConfig';
   const itemList = [
     { id: 'config', type: 'subtab', name: 'Config', children: itemListConfig },
+    {
+      id: 'compConfig',
+      type: 'subtab',
+      name: 'Component',
+      children: itemListComp.length > 0
+        ? itemListComp
+        : [{ id: 'compConfigNone', type: 'custom', comp: CompConfigNoneNote, isFullWidth: true }],
+    },
     {
       id: 'assetStore',
       type: 'subtab',
@@ -83,6 +115,13 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen({ anchorElem
       return { code: 0 };
     }
     if (eventType !== 'valueChangeAttempt') return undefined;
+    const compItem = compItemIdParse(eventData.valueId);
+    if (compItem) {
+      const define = configStore.compConfigDefineListGet(compItem.compId).find((defineOne) => defineOne.key === compItem.key);
+      if (!define) return { code: -1, message: `unknown component config key ${eventData.valueId}` };
+      configStore.compValueUserSet(compItem.compId, define.key, settingsValueFromItem(define, eventData.value));
+      return { code: 0 };
+    }
     const define = configStore.configDefineByKey.get(eventData.valueId);
     if (!define) return { code: -1, message: `unknown config key ${eventData.valueId}` };
     configStore.valueUserSet(define.key, settingsValueFromItem(define, eventData.value));
@@ -99,7 +138,7 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen({ anchorElem
     >
       <div className="doc-settings-head">
         <span className="doc-settings-title">Settings</span>
-        {isConfigTab ? (
+        {isValueTab ? (
           <>
             <button
               type="button"
@@ -139,10 +178,11 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen({ anchorElem
   );
 });
 
-// the ConfigPanel item of one config define. an enum is a dropdown.
-function settingsItemBuild(define, stores) {
+// the ConfigPanel item of one config define. an enum is a dropdown; a
+// source path is edited with completion.
+function settingsItemBuild(itemId, define, stores) {
   const item = {
-    id: define.key,
+    id: itemId,
     label: define.key,
     description: define.description,
     defaultValue: settingsValueToItem(define, define.valueDefault),
@@ -153,6 +193,11 @@ function settingsItemBuild(define, stores) {
     item.options = define.valueList;
   } else if (define.type === 'number') item.type = 'number';
   else if (define.type === 'string' || define.type === 'stringList') item.type = 'string';
+  else if (define.type === 'sourcePath') {
+    item.type = 'custom';
+    item.comp = SourcePathSettingsItem;
+    item.compProps = { pathSpec: define.pathSpec ?? { kind: 'dir' } };
+  }
   // a key of type any has no control; it stays settable from YAML only
   else item.isHidden = true;
 
@@ -176,8 +221,48 @@ function itemDisabledReasonGet(key, { editStore }) {
 // separated text
 function settingsValueToItem(define, value) {
   if (define.type === 'stringList') return Array.isArray(value) ? value.join(', ') : '';
-  if (define.type === 'string') return value ?? '';
+  if (define.type === 'string' || define.type === 'sourcePath') return value ?? '';
   return value;
+}
+
+// the panel item of a key of type sourcePath: the path with completion
+// from the source layer; the value is committed on blur / Enter / choice
+function SourcePathSettingsItem({ value, isDisabled, onValueChange, pathSpec }) {
+  return (
+    <SourcePathInput
+      value={value}
+      spec={pathSpec}
+      placeholder={pathSpec?.kind === 'file' ? '~rootId/dir/file' : '~rootId/dir'}
+      isDisabled={isDisabled}
+      onCommit={(text) => onValueChange(text)}
+    />
+  );
+}
+
+function CompConfigNoneNote() {
+  return <span className="doc-settings-note">no registered component declares config keys</span>;
+}
+
+// item ids of the component tab: "compId::key"
+const compItemIdSeparator = '::';
+
+function compItemIdBuild(compId, key) {
+  return `${compId}${compItemIdSeparator}${key}`;
+}
+
+function compItemIdParse(itemId) {
+  const indexSeparator = String(itemId ?? '').lastIndexOf(compItemIdSeparator);
+  if (indexSeparator < 0) return undefined;
+  return { compId: itemId.slice(0, indexSeparator), key: itemId.slice(indexSeparator + compItemIdSeparator.length) };
+}
+
+// the name a component is written with in documents (config compRegistry
+// maps names to ids); the id itself when no name maps to it
+function compNameGet(configDoc, compId) {
+  for (const [compName, compIdMapped] of Object.entries(configDoc?.compRegistry ?? {})) {
+    if (compIdMapped === compId) return compName;
+  }
+  return compId;
 }
 
 // the value a panel item reports, back in the form of the config key

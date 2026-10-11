@@ -18,7 +18,7 @@ function htmlRender(text, options = {}) {
   const nodeList = options.isInline ? tree.children[0].children : tree.children;
   const element = markdownFragmentRender({
     nodeList,
-    transformList: markdownTransformListGet({ sourcePath: '/docs/guide/page.md', ...options }),
+    transformList: markdownTransformListGet({ sourcePath: '~docs/guide/page.md', ...options }),
     components: componentsStub,
     isInline: options.isInline === true,
   });
@@ -27,12 +27,12 @@ function htmlRender(text, options = {}) {
 
 test('local links become DocLink with the containing document as base', () => {
   const html = htmlRender('see [setup](./setup.md)', { isInline: true });
-  assert.equal(html, '<div>see <x-doc-link data-target="./setup.md" data-from="/docs/guide/page.md">setup</x-doc-link></div>');
+  assert.equal(html, '<div>see <x-doc-link data-target="./setup.md" data-from="~docs/guide/page.md">setup</x-doc-link></div>');
 });
 
 test('inline-link markers become SourceLink, keeping a nested-emphasis label', () => {
-  const html = htmlRender('run [the **setup** script](/docs/setup.ps1 "inline-link:render")', { isInline: true });
-  assert.equal(html, '<div>run <x-source-link data-target="/docs/setup.ps1" data-mode="render">the setup script</x-source-link></div>');
+  const html = htmlRender('run [the **setup** script](~docs/setup.ps1 "inline-link:render")', { isInline: true });
+  assert.equal(html, '<div>run <x-source-link data-target="~docs/setup.ps1" data-mode="render">the setup script</x-source-link></div>');
 });
 
 test('inline nodes are rendered without added whitespace between them', () => {

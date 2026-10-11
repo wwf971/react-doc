@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 import { idMs48Create, idMs48Is } from './id-ms48.ts';
+import { sourcePathIsRooted, sourcePathNormalize } from '../src/lib/doc-source-path.js';
 
 // The local asset store on disk (design: doc_page_impl_asset.md). A general
 // store of objects with a version history, modeled after an object storage
@@ -24,8 +25,22 @@ import { idMs48Create, idMs48Is } from './id-ms48.ts';
 // object.yaml:
 //   objectId, name, lang, contentType, fileExt, saveMode?, versionIdHead,
 //   isDeleted, isLocked, timeCreated,
-//   versionList: [{ versionId, versionIdPrevList, time, note, size, hash, isLocked }]
+//   versionList: [{ versionId, versionIdPrevList, time, note, size, hash, isLocked, dependencyList }]
 //   eventList:   [{ eventType, time, versionId?, userId? }]
+//
+// dependencies (doc_page_impl_asset.md#dependencies): the data of a version
+// may stand for more than its bytes: an Image version names an image file of
+// the doc page source, a version may reuse another asset. every version
+// records what its data depends on as dependencyList, one mapping per
+// dependency with a type:
+//   { type: source, path }                          a file of the source, by source path (~rootId/...)
+//   { type: asset, objectId, versionId? }           a version of another object of this store;
+//                                                   no versionId means the head
+// the list is declared by whoever writes the data (the page knows which
+// component the data is for, the store does not) and kept with the version:
+// a new version copies the list of the version it is made from unless the
+// write names one. the store answers the other direction too (the versions
+// that depend on an object or a version), the base of resolving a deletion.
 //
 // locks: a locked version cannot be rewritten in place or deleted (a new
 // version can still be made from it, and the head can still move to it or
@@ -79,7 +94,15 @@ export type AssetSaveMode = 'inPlace' | 'newVersion';
 
 export type AssetEventType =
   | 'create' | 'updateInPlace' | 'versionCreate' | 'checkout' | 'versionDelete' | 'metaSet' | 'delete' | 'restore'
-  | 'lock' | 'unlock';
+  | 'lock' | 'unlock' | 'dependencySet';
+
+// what the data of a version depends on
+export type AssetDependency =
+  | { type: 'source'; path: string }
+  | { type: 'asset'; objectId: string; versionId?: string };
+
+// a version that depends on an object (or one of its versions)
+export type AssetDependent = { objectId: string; versionId: string; dependency: AssetDependency };
 
 export type AssetEvent = {
   eventType: AssetEventType;
@@ -100,6 +123,7 @@ export type AssetVersionMeta = {
   hash: string;
   // not rewritten in place, not deleted
   isLocked: boolean;
+  dependencyList: AssetDependency[];
 };
 
 export type AssetObjectMeta = {
@@ -356,7 +380,8 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   // a new object with its first version. when the name is the name of an
   // object of the store, that object is returned (isCreated false) and
   // nothing is written: a name means one object.
-  //   folder   the folder the object is created in (as written in asset.yaml); the default folder when absent
+  //   folder          the folder the object is created in (as written in asset.yaml); the default folder when absent
+  //   dependencyList  what the data of the first version depends on (none when absent)
   function objectCreate(input: {
     name?: string;
     lang?: string;
@@ -365,8 +390,10 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     data: Buffer;
     note?: string;
     folder?: string;
+    dependencyList?: unknown;
   }): { object: AssetObjectMeta; version: AssetVersionData; isCreated: boolean } {
     if (!Buffer.isBuffer(input.data)) throw new AssetError(-1, 'data is required');
+    const dependencyList = dependencyListNormalize(input.dependencyList ?? []);
     const name = nameNormalize(input.name);
     if (name) {
       const metaExisting = objectList().find((item) => item.name === name);
@@ -393,7 +420,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       isDeleted: false,
       isLocked: false,
       timeCreated: time,
-      versionList: [versionMetaBuild(versionId, [], time, input.note, input.data)],
+      versionList: [versionMetaBuild(versionId, [], time, input.note, input.data, dependencyList)],
       eventList: [{ eventType: 'create', time, versionId }],
       folder: folder.path,
       dirName: objectDirNameBuild(objectId, name),
@@ -409,14 +436,18 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   //   mode   inPlace: the head version's data is rewritten (its .bak keeps the old one)
   //          newVersion: a new version is created from the head and becomes the head
   //          absent: the object's saveMode, inPlace when none is written
+  //   dependencyList   what the new data depends on; absent: the list of the
+  //                    version the data replaces or is made from is kept
   function objectUpdate(input: {
     objectId: string;
     hashBase: string;
     data: Buffer;
     mode?: AssetSaveMode;
     note?: string;
+    dependencyList?: unknown;
   }): { object: AssetObjectMeta; version: AssetVersionData } {
     if (!Buffer.isBuffer(input.data)) throw new AssetError(-1, 'data is required');
+    const dependencyListNext = input.dependencyList === undefined ? undefined : dependencyListNormalize(input.dependencyList);
     const meta = objectGet(input.objectId);
     objectUnlockedCheck(meta);
     if (meta.isDeleted) throw new AssetError(-1, 'the object is deleted; restore it first');
@@ -431,16 +462,18 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     }
     const time = timeTextGet();
     let versionId = head.versionId;
+    const versionHead = versionMetaGet(meta, head.versionId);
     if (mode === 'newVersion') {
       versionId = idMs48Create((id) => meta.versionList.some((version) => version.versionId === id));
-      meta.versionList.push(versionMetaBuild(versionId, [head.versionId], time, input.note, input.data));
+      const dependencyList = dependencyListNext ?? versionHead.dependencyList.map((item) => ({ ...item }));
+      meta.versionList.push(versionMetaBuild(versionId, [head.versionId], time, input.note, input.data, dependencyList));
       meta.versionIdHead = versionId;
       meta.eventList.push({ eventType: 'versionCreate', time, versionId });
     } else {
-      const version = versionMetaGet(meta, versionId);
-      version.size = input.data.length;
-      version.hash = bytesHashGet(input.data);
-      if (input.note !== undefined) version.note = String(input.note);
+      versionHead.size = input.data.length;
+      versionHead.hash = bytesHashGet(input.data);
+      if (input.note !== undefined) versionHead.note = String(input.note);
+      if (dependencyListNext !== undefined) versionHead.dependencyList = dependencyListNext;
       meta.eventList.push({ eventType: 'updateInPlace', time, versionId });
     }
     fileWriteSafe(versionPathGet(meta, versionId), input.data);
@@ -569,6 +602,81 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     return meta;
   }
 
+  // ---------- dependencies ----------
+
+  // what the data of a version depends on; versionId 'head' or '' reads the head
+  function dependencyListGet(objectId: string, versionIdRequested = 'head'): { versionId: string; dependencyList: AssetDependency[] } {
+    const meta = objectGet(objectId);
+    const versionId = versionIdResolve(meta, versionIdRequested);
+    return { versionId, dependencyList: versionMetaGet(meta, versionId).dependencyList };
+  }
+
+  // the list replaced. the dependencies describe the data of the version, so
+  // a locked version keeps them as they are, like its bytes.
+  function dependencyListSet(objectId: string, versionIdRequested: string, dependencyListInput: unknown): AssetObjectMeta {
+    const meta = objectGet(objectId);
+    objectUnlockedCheck(meta);
+    const versionId = versionIdResolve(meta, versionIdRequested);
+    versionUnlockedCheck(meta, versionId, 'given other dependencies');
+    const version = versionMetaGet(meta, versionId);
+    version.dependencyList = dependencyListNormalize(dependencyListInput);
+    meta.eventList.push({ eventType: 'dependencySet', time: timeTextGet(), versionId });
+    objectMetaWrite(meta);
+    return meta;
+  }
+
+  // one dependency added, unless the version has it already
+  function dependencyAdd(objectId: string, versionIdRequested: string, dependencyInput: unknown): AssetObjectMeta {
+    const dependency = dependencyNormalize(dependencyInput);
+    const { versionId, dependencyList } = dependencyListGet(objectId, versionIdRequested);
+    if (dependencyList.some((item) => dependencyIsSame(item, dependency))) return objectGet(objectId);
+    return dependencyListSet(objectId, versionId, [...dependencyList, dependency]);
+  }
+
+  function dependencyRemove(objectId: string, versionIdRequested: string, dependencyInput: unknown): AssetObjectMeta {
+    const dependency = dependencyNormalize(dependencyInput);
+    const { versionId, dependencyList } = dependencyListGet(objectId, versionIdRequested);
+    const dependencyListNext = dependencyList.filter((item) => !dependencyIsSame(item, dependency));
+    if (dependencyListNext.length === dependencyList.length) return objectGet(objectId);
+    return dependencyListSet(objectId, versionId, dependencyListNext);
+  }
+
+  // the versions of the store (deleted objects included) whose data depends
+  // on the object; with a versionId, on that version: a dependency without
+  // versionId means the head, so it counts when the head is that version
+  function dependentListGet(objectId: string, versionIdRequested = ''): AssetDependent[] {
+    if (!idMs48Is(objectId)) throw new AssetError(-1, `not an object id: ${String(objectId)}`);
+    const metaTarget = objectGet(objectId);
+    const versionIdWanted = versionIdRequested === '' ? '' : versionIdResolve(metaTarget, versionIdRequested);
+    const result: AssetDependent[] = [];
+    for (const meta of objectList()) {
+      for (const version of meta.versionList) {
+        for (const dependency of version.dependencyList) {
+          if (dependency.type !== 'asset' || dependency.objectId !== objectId) continue;
+          const versionIdDepended = dependency.versionId ?? metaTarget.versionIdHead;
+          if (versionIdWanted !== '' && versionIdDepended !== versionIdWanted) continue;
+          result.push({ objectId: meta.objectId, versionId: version.versionId, dependency });
+        }
+      }
+    }
+    return result;
+  }
+
+  // the source files the versions of the live objects depend on, each once;
+  // a build collects them (doc_page_impl_source.md#files-in-a-build)
+  function dependencySourcePathList(): string[] {
+    const pathSet = new Set<string>();
+    for (const meta of objectList()) {
+      if (meta.isDeleted) continue;
+      for (const version of meta.versionList) {
+        for (const dependency of version.dependencyList) {
+          if (dependency.type === 'source') pathSet.add(dependency.path);
+        }
+      }
+    }
+    return [...pathSet];
+  }
+
   // ---------- build ----------
 
   // everything a built page needs: the live objects with the data of every
@@ -656,6 +764,12 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     versionDelete,
     objectLockSet,
     versionLockSet,
+    dependencyListGet,
+    dependencyListSet,
+    dependencyAdd,
+    dependencyRemove,
+    dependentListGet,
+    dependencySourcePathList,
     snapshotBuild,
     referenceTextGet,
   };
@@ -713,7 +827,61 @@ const contentTypeByLang: Record<string, string> = {
 
 const eventTypeList: AssetEventType[] = [
   'create', 'updateInPlace', 'versionCreate', 'checkout', 'versionDelete', 'metaSet', 'delete', 'restore', 'lock', 'unlock',
+  'dependencySet',
 ];
+
+// ---------- dependencies ----------
+
+export function dependencyListNormalize(listInput: unknown): AssetDependency[] {
+  if (!Array.isArray(listInput)) throw new AssetError(-1, 'dependencyList must be a list');
+  const result: AssetDependency[] = [];
+  for (const item of listInput) {
+    const dependency = dependencyNormalize(item);
+    if (!result.some((kept) => dependencyIsSame(kept, dependency))) result.push(dependency);
+  }
+  return result;
+}
+
+export function dependencyNormalize(item: any): AssetDependency {
+  if (!item || typeof item !== 'object') throw new AssetError(-1, 'a dependency must be a mapping with a type');
+  if (item.type === 'source') {
+    const pathText = sourcePathNormalize(item.path ?? '');
+    if (!sourcePathIsRooted(pathText)) {
+      throw new AssetError(-1, `a source dependency names a file by its source path (~rootId/...): ${JSON.stringify(item.path)}`);
+    }
+    return { type: 'source', path: pathText };
+  }
+  if (item.type === 'asset') {
+    const objectId = String(item.objectId ?? '');
+    if (!idMs48Is(objectId)) throw new AssetError(-1, `an asset dependency names an object by id: ${JSON.stringify(item.objectId)}`);
+    const versionId = item.versionId === undefined || item.versionId === null || item.versionId === '' || item.versionId === 'head'
+      ? undefined
+      : String(item.versionId);
+    return versionId === undefined ? { type: 'asset', objectId } : { type: 'asset', objectId, versionId };
+  }
+  throw new AssetError(-1, `unknown dependency type: ${JSON.stringify(item.type)} (source or asset)`);
+}
+
+export function dependencyIsSame(a: AssetDependency, b: AssetDependency): boolean {
+  if (a.type !== b.type) return false;
+  if (a.type === 'source' && b.type === 'source') return a.path === b.path;
+  if (a.type === 'asset' && b.type === 'asset') return a.objectId === b.objectId && (a.versionId ?? '') === (b.versionId ?? '');
+  return false;
+}
+
+// the list as a file holds it: items that are not dependencies are dropped
+function dependencyListRead(listInput: unknown): AssetDependency[] {
+  if (!Array.isArray(listInput)) return [];
+  const result: AssetDependency[] = [];
+  for (const item of listInput) {
+    try {
+      result.push(dependencyNormalize(item));
+    } catch {
+      // not a dependency
+    }
+  }
+  return result;
+}
 
 function objectUnlockedCheck(meta: AssetObjectMeta) {
   if (meta.isLocked) throw new AssetError(-1, `object ${meta.objectId} is locked; unlock it first`);
@@ -736,8 +904,24 @@ function versionMetaGet(meta: AssetObjectMeta, versionId: string): AssetVersionM
   return version;
 }
 
-function versionMetaBuild(versionId: string, versionIdPrevList: string[], time: string, note: unknown, data: Buffer): AssetVersionMeta {
-  return { versionId, versionIdPrevList, time, note: String(note ?? ''), size: data.length, hash: bytesHashGet(data), isLocked: false };
+function versionMetaBuild(
+  versionId: string,
+  versionIdPrevList: string[],
+  time: string,
+  note: unknown,
+  data: Buffer,
+  dependencyList: AssetDependency[],
+): AssetVersionMeta {
+  return {
+    versionId,
+    versionIdPrevList,
+    time,
+    note: String(note ?? ''),
+    size: data.length,
+    hash: bytesHashGet(data),
+    isLocked: false,
+    dependencyList,
+  };
 }
 
 function versionDataBuild(versionId: string, bytes: Buffer): AssetVersionData {
@@ -793,6 +977,7 @@ function objectMetaNormalize(content: any, objectId: string, folder: string, dir
       size: Number.isFinite(Number(version?.size)) ? Number(version.size) : 0,
       hash: String(version?.hash ?? ''),
       isLocked: version?.isLocked === true,
+      dependencyList: dependencyListRead(version?.dependencyList),
     })),
     eventList,
     folder,

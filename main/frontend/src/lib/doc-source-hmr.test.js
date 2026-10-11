@@ -37,6 +37,7 @@ function fixtureCreate() {
     '  - action: addFolder',
     '    rootId: docs',
     '    path: docs',
+    '    collect: recursive',
     '  # a yaml file of the document is configuration, never a document,',
     '  # whatever the rules say',
     '  - action: addFile',
@@ -53,15 +54,15 @@ function fixtureCreate() {
     '  main:',
     '    tree:',
     '      - separator: Docs   # keep this comment',
-    '      - doc: /docs/a.md',
+    '      - doc: ~docs/a.md',
     '        text: Label A',
-    '      - doc: /docs/b.md',
+    '      - doc: ~docs/b.md',
     '      - id: group',
     '        text:',
     '          en: Group',
     '          jp: グループ',
     '        children:',
-    '          - doc: /docs/c.md',
+    '          - doc: ~docs/c.md',
     '',
   ].join('\n'));
   fs.writeFileSync(path.join(dir, 'config.yaml'), [
@@ -185,25 +186,25 @@ test('source endpoint serves the current text of collected files as plain text, 
   const plugin = pluginCreate(dir, { base: '/docs-site/' });
   const server = serverCreate(dir, plugin, { base: '/docs-site/' });
 
-  const first = await server.request({ url: '/docs-site/__doc-source/file?path=%2Fdocs%2Fa.md' });
+  const first = await server.request({ url: '/docs-site/__doc-source/file?path=~docs%2Fa.md' });
   assert.equal(first.status, 200);
   assert.equal(first.text, '# A\n\nfirst\n');
   assert.equal(first.headers['content-type'], 'text/plain; charset=utf-8');
   assert.equal(first.headers['cache-control'], 'no-store');
 
   fs.writeFileSync(path.join(dir, 'docs', 'a.md'), '# A\n\nchanged\n');
-  const second = await server.request({ url: '/docs-site/__doc-source/file?path=%2Fdocs%2Fa.md' });
+  const second = await server.request({ url: '/docs-site/__doc-source/file?path=~docs%2Fa.md' });
   assert.equal(second.text, '# A\n\nchanged\n');
 
-  const unknown = await server.request({ url: '/docs-site/__doc-source/file?path=%2Fdocs%2Fnone.md' });
+  const unknown = await server.request({ url: '/docs-site/__doc-source/file?path=~docs%2Fnone.md' });
   assert.equal(unknown.status, 404);
   const traversal = await server.request({ url: '/docs-site/__doc-source/file?path=..%2Fconfig.yaml' });
   assert.equal(traversal.status, 404);
-  const method = await server.request({ method: 'POST', url: '/docs-site/__doc-source/file?path=%2Fdocs%2Fa.md' });
+  const method = await server.request({ method: 'POST', url: '/docs-site/__doc-source/file?path=~docs%2Fa.md' });
   assert.equal(method.status, 405);
   assert.equal(method.headers.allow, 'GET');
   // below the base path only
-  const outsideBase = await server.request({ url: '/__doc-source/file?path=%2Fdocs%2Fa.md' });
+  const outsideBase = await server.request({ url: '/__doc-source/file?path=~docs%2Fa.md' });
   assert.equal(outsideBase.status, 404);
   assert.match(outsideBase.text, /spa fallback/);
 });
@@ -272,7 +273,7 @@ test('emitted client replays the latest data, ignores other module ids, and load
 function manifestBuild(textByPath) {
   return Object.entries(textByPath).map(([internalPath, text]) => ({
     rootId: 'docs',
-    relPath: internalPath.slice('/docs/'.length),
+    relPath: internalPath.slice('~docs/'.length),
     name: path.basename(internalPath),
     ext: 'md',
     title: internalPath,
@@ -285,40 +286,40 @@ function manifestBuild(textByPath) {
 test('source store refreshes only the changed paths and keeps the caches of the others', async () => {
   const store = new DocSourceStore({
     configDoc: {},
-    fileManifest: manifestBuild({ '/docs/a.md': '# A\n\none', '/docs/b.md': '# B\n\ntwo', '/docs/c.md': '# C' }),
+    fileManifest: manifestBuild({ '~docs/a.md': '# A\n\none', '~docs/b.md': '# B\n\ntwo', '~docs/c.md': '# C' }),
   });
-  await Promise.all([store.loadDoc('/docs/a.md'), store.loadDoc('/docs/b.md'), store.loadRaw('/docs/c.md')]);
-  const compiledA = store.compiledByPath['/docs/a.md'];
-  const compiledB = store.compiledByPath['/docs/b.md'];
+  await Promise.all([store.loadDoc('~docs/a.md'), store.loadDoc('~docs/b.md'), store.loadRaw('~docs/c.md')]);
+  const compiledA = store.compiledByPath['~docs/a.md'];
+  const compiledB = store.compiledByPath['~docs/b.md'];
   assert.equal(compiledA.status, 'done');
 
-  const versionB = store.versionGet('/docs/b.md');
+  const versionB = store.versionGet('~docs/b.md');
   await store.replaceSourceData({
     configDoc: {},
-    fileManifest: manifestBuild({ '/docs/a.md': '# A\n\none', '/docs/b.md': '# B\n\ntwo changed' }),
+    fileManifest: manifestBuild({ '~docs/a.md': '# A\n\none', '~docs/b.md': '# B\n\ntwo changed' }),
   });
-  assert.equal(store.compiledByPath['/docs/a.md'], compiledA, 'unchanged path keeps its compiled object');
-  assert.notEqual(store.compiledByPath['/docs/b.md'], compiledB, 'changed path is compiled again');
-  assert.equal(store.compiledByPath['/docs/b.md'].status, 'done');
-  assert.equal(store.versionGet('/docs/b.md'), versionB + 1);
-  assert.equal(store.rawByPath['/docs/c.md'], undefined, 'removed path loses its cache');
+  assert.equal(store.compiledByPath['~docs/a.md'], compiledA, 'unchanged path keeps its compiled object');
+  assert.notEqual(store.compiledByPath['~docs/b.md'], compiledB, 'changed path is compiled again');
+  assert.equal(store.compiledByPath['~docs/b.md'].status, 'done');
+  assert.equal(store.versionGet('~docs/b.md'), versionB + 1);
+  assert.equal(store.rawByPath['~docs/c.md'], undefined, 'removed path loses its cache');
 });
 
 test('a read of an older version never overwrites the newer one', async () => {
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
-  const entrySlow = manifestBuild({ '/docs/a.md': '# A\n\nold' })[0];
+  const entrySlow = manifestBuild({ '~docs/a.md': '# A\n\nold' })[0];
   entrySlow.load = () => gate.then(() => '# A\n\nold');
   const store = new DocSourceStore({ configDoc: {}, fileManifest: [entrySlow] });
-  const loadOld = store.loadRaw('/docs/a.md');
+  const loadOld = store.loadRaw('~docs/a.md');
   // the source changes while the old read is still pending; the pending
   // read is not refreshed (nothing is loaded yet), only its version moves
-  const replace = store.replaceSourceData({ configDoc: {}, fileManifest: manifestBuild({ '/docs/a.md': '# A\n\nnew' }) });
+  const replace = store.replaceSourceData({ configDoc: {}, fileManifest: manifestBuild({ '~docs/a.md': '# A\n\nnew' }) });
   release();
   await Promise.all([loadOld, replace]);
-  assert.notEqual(store.rawByPath['/docs/a.md']?.content, '# A\n\nold', 'the stale read was dropped');
-  await store.loadRaw('/docs/a.md');
-  assert.equal(store.rawByPath['/docs/a.md'].content, '# A\n\nnew');
+  assert.notEqual(store.rawByPath['~docs/a.md']?.content, '# A\n\nold', 'the stale read was dropped');
+  await store.loadRaw('~docs/a.md');
+  assert.equal(store.rawByPath['~docs/a.md'].content, '# A\n\nnew');
 });
 
 // ---------- the stable body adapter ----------
@@ -326,8 +327,8 @@ test('a read of an older version never overwrites the newer one', async () => {
 test('MdxBody keeps one element type for every compiled body of the same path', () => {
   const BodyFirst = () => null;
   const BodySecond = () => null;
-  const elementFirst = createElement(MdxBody, { key: '/docs/a.md', Body: BodyFirst, components: {} });
-  const elementSecond = createElement(MdxBody, { key: '/docs/a.md', Body: BodySecond, components: {} });
+  const elementFirst = createElement(MdxBody, { key: '~docs/a.md', Body: BodyFirst, components: {} });
+  const elementSecond = createElement(MdxBody, { key: '~docs/a.md', Body: BodySecond, components: {} });
   assert.equal(elementFirst.type, elementSecond.type);
   assert.equal(elementFirst.key, elementSecond.key);
   assert.notEqual(elementFirst.props.Body, elementSecond.props.Body);
@@ -370,7 +371,7 @@ test('side-panel label route rewrites one value in place and reports the write',
     body: { file: 'side-panel.yaml', nodePath: [...TREE_PATH, 2], language: '', text: 'Second' },
   });
   assert.equal(inserted.status, 200);
-  assert.ok(fs.readFileSync(path.join(dir, 'side-panel.yaml'), 'utf-8').includes('      - doc: /docs/b.md\n        text: Second\n      - id: group\n'));
+  assert.ok(fs.readFileSync(path.join(dir, 'side-panel.yaml'), 'utf-8').includes('      - doc: ~docs/b.md\n        text: Second\n      - id: group\n'));
 
   // the separator keeps its trailing comment
   const separator = await server.request({
@@ -419,10 +420,10 @@ test('side-panel label operation quotes what yaml needs quoted and collapses a b
 
 test('production module generation keeps raw imports and no-op subscriptions', () => {
   const entry = {
-    rootId: 'docs', relPath: 'a.md', name: 'a.md', ext: 'md', internalPath: '/docs/a.md',
+    rootId: 'docs', relPath: 'a.md', name: 'a.md', ext: 'md', internalPath: '~docs/a.md', collect: 'recursive',
     absPath: path.join(fixtureCreate(), 'docs', 'a.md'),
   };
-  const code = generateModuleCode({}, [entry], [], true, {
+  const code = generateModuleCode({}, [entry], [], [], true, {
     docSourceEndpoint: '', docEditEndpoint: '', docAssetEndpoint: '', assetSnapshot: null, moduleId: 'virtual:doc-source',
   });
   assert.ok(code.includes('?raw'));

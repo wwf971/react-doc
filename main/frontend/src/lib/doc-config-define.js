@@ -11,6 +11,23 @@
 //
 //   description      one line shown in the settings panel
 //   isUserSettable   false hides the key from the settings panel (default true)
+//   type             boolean | string | number | enum (valueList) | stringList | any
+//                    | sourcePath: a string naming a folder or file of the doc page
+//                      source (~rootId/...); pathSpec { kind: 'dir' | 'file', extList? }
+//                      says what it names, so the settings panel completes it from
+//                      the source layer (doc_page_impl_source.md)
+//
+// Component-level keys (doc_page_impl_config.md#component-level-config): a
+// registered component declares its own keys in its definition
+// (compDefine configDefineList, the same fields without scope); they are
+// resolved per component and document, and set in YAML under "compConfig"
+// by the component's tag name:
+//   compConfig:
+//     Image:
+//       FileStoreDir: ${imageFileStoreDirDefault}
+//
+// Variables: a string value may hold ${name}; the name is replaced by the
+// value of config.yaml "variable" (variableExpand) at every level.
 //
 // Key naming: keys of one feature share one prefix, and a switch ends with IsOn.
 //   TagsDisplayAtMainPanel...   tags next to the path bar of the main panel
@@ -108,13 +125,52 @@ export function configDefineByKeyBuild(configDefineListExtra = []) {
   return configDefineByKey;
 }
 
+// the keys one registered component declares: compId -> (key -> define).
+// compById holds registry definitions ({ CompRender, configDefineList, ... });
+// a legacy component (a bare React component) declares none.
+export function compConfigDefineByCompIdBuild(compById = {}) {
+  const result = new Map();
+  for (const [compId, definition] of Object.entries(compById)) {
+    const defineList = definition?.configDefineList;
+    if (!Array.isArray(defineList) || defineList.length === 0) continue;
+    const defineByKey = new Map();
+    for (const define of defineList) {
+      if (!define || typeof define.key !== 'string' || !define.key) continue;
+      defineByKey.set(define.key, {
+        type: 'any',
+        valueDefault: null,
+        description: '',
+        isUserSettable: true,
+        ...define,
+        scope: 'doc',
+      });
+    }
+    if (defineByKey.size > 0) result.set(compId, defineByKey);
+  }
+  return result;
+}
+
+// the key under which component-level values are declared in a config mapping
+export const COMP_CONFIG_KEY = 'compConfig';
+
+// ${name} in a string replaced by variableByName[name]; an unknown name is
+// left as written and reported. other value types pass through.
+export function variableExpand(value, variableByName = {}, originText = '') {
+  if (typeof value !== 'string' || !value.includes('${')) return value;
+  return value.replace(/\$\{([\w.-]+)\}/g, (matchText, name) => {
+    if (Object.prototype.hasOwnProperty.call(variableByName, name)) return String(variableByName[name]);
+    console.warn(`[doc-config] unknown variable ${matchText}${originText ? ` in ${originText}` : ''}`);
+    return matchText;
+  });
+}
+
 // returns { isValid, value }. null always means "not set" for nullable keys.
 export function configValueNormalize(define, value) {
   if (value === null) return { isValid: define.valueDefault === null, value: null };
   if (define.type === 'boolean') {
     return { isValid: typeof value === 'boolean', value };
   }
-  if (define.type === 'string') {
+  if (define.type === 'string' || define.type === 'sourcePath') {
     return { isValid: typeof value === 'string', value };
   }
   if (define.type === 'number') {

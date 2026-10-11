@@ -21,3 +21,5 @@ example_doc/asset-archive/**/*.bak
 example_doc/asset-archive/**/*.tmp
 example_doc/asset.yaml.bak
 example_doc/asset.yaml.tmp
+
+update-*.md

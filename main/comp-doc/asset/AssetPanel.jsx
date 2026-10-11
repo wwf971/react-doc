@@ -258,6 +258,21 @@ const VersionSection = observer(function VersionSection({ object, panel, isWrita
           </tbody>
         </table>
       </div>
+      {versionSelected ? (
+        <p className="doc-asset-dependency-list">
+          <span className="doc-asset-mono doc-asset-muted">{versionSelected.versionId}</span>
+          <span className="doc-asset-muted"> depends on: </span>
+          {(versionSelected.dependencyList ?? []).length === 0
+            ? <span className="doc-asset-muted">nothing declared</span>
+            : (versionSelected.dependencyList ?? []).map((dependency, index) => (
+              <span key={index} className="doc-asset-mono doc-asset-dependency" title={dependency.type}>
+                {dependency.type === 'source'
+                  ? dependency.path
+                  : `${dependency.objectId}${dependency.versionId ? `@${dependency.versionId}` : ' (head)'}`}
+              </span>
+            ))}
+        </p>
+      ) : null}
       {versionSelected && isWritable && !object.isDeleted ? (
         <div className="doc-asset-actions">
           <span className="doc-asset-mono doc-asset-muted">{versionSelected.versionId}</span>

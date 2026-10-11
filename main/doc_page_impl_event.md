@@ -13,6 +13,7 @@ onEvent(type, data,  ─► eventBuild({type,data,source,point}) ─► dispatch
                                                     3. route     the domain declared for the type ──► DocStore.navigate
                                                                                                        DocTagStore.overviewOpen
                                                                                                        DocEditStore.eventHandle
+                                                                                                       DocSourceFileStore.eventHandle
                                                     4. unrouted  { code: -2 }
                      ◄─────────────────────────────── { code, data, message } ◄───────────────────────
 ```
@@ -28,7 +29,9 @@ DocEvent         { type, data, source, point, time }
   type           the component's event name, e.g. navigateRequest, editDraftChange
   data           what the component reported (its own shape per event)
   source         where it came from: { compId, instanceId, placement, sourcePath,
-                 itemId, blockIndex }, filled by RegisteredComp from its runtime config
+                 itemId, blockIndex, asset }, filled by RegisteredComp from its runtime
+                 config (asset: the object and version the data comes from, for a
+                 component rendered from the asset store; else undefined)
   point          where the pointer was when the user asked: { clientX, clientY },
                  or undefined for a keyboard or programmatic report
   time           Date.now() at dispatch
@@ -58,13 +61,16 @@ The routes of the page are declared in one place, `DocPageMdx`, next to the stor
 | ------------ | ------------------------------------------------------ | ------------------------------------------------------------------ |
 | `navigation` | `navigateRequest { target }`                           | `DocStore.navigate`; code -1 with `navigationError` when the target does not resolve ([navigation](doc_page_impl_nav.md)) |
 | `tag`        | `tagOverviewOpenRequest { tagId }`                     | `DocTagStore.overviewOpen`, only when the host provides `panelComponent` ([tags](doc_page_impl_tag.md)) |
-| `edit`       | `editEventTypeList` of `DocEditStore`: the session events `editDraftChange`, `editTextSetRequest`, `editSubmitRequest`, `editCancelRequest`, `editFocusShiftRequest` (with the caret as `point`); the block events `editBlockEnterRequest` (with the click as `point`), `editBlockMoveRequest { direction }`, `editBlockAssetMoveRequest`; the side-panel label events `sidePanelTextEditStartRequest`, `sidePanelTextSubmitRequest { text }`, `sidePanelTextCancelRequest` | `DocEditStore.eventHandle` ([editor contract](doc_page_impl_edit.md#the-editor-contract), [entering and moving a block](doc_page_impl_edit.md#floating-controls), [moving data into the asset store](doc_page_impl_asset.md#moving-inline-data-into-the-store), [editing a label](doc_page_impl_side_panel.md#editing-a-label-in-place)) |
+| `edit`       | `editEventTypeList` of `DocEditStore`: the session events `editDraftChange`, `editTextSetRequest`, `editSubmitRequest`, `editCancelRequest`, `editFocusShiftRequest` (with the caret as `point`); the block events `editBlockEnterRequest` (with the click as `point`), `editBlockMoveRequest { direction }`, `editBlockAssetMoveRequest`; the side-panel label events `sidePanelTextEditStartRequest`, `sidePanelTextSubmitRequest { text }`, `sidePanelTextCancelRequest`; the data event `dataReplaceRequest { raw }` of a component rendered in a block of the edit body | `DocEditStore.eventHandle` ([editor contract](doc_page_impl_edit.md#the-editor-contract), [entering and moving a block](doc_page_impl_edit.md#floating-controls), [moving data into the asset store](doc_page_impl_asset.md#moving-inline-data-into-the-store), [editing a label](doc_page_impl_side_panel.md#editing-a-label-in-place), [a component replacing its data](doc_page_impl_asset.md#component-awareness)) |
+| `source`     | `sourceEventTypeList` of `DocSourceFileStore`: `fileCreateRequest { name, blob | text, dirPath, isLocationCustom }` (with the pointer as `point`, where the location prompt opens) | `DocSourceFileStore.eventHandle`: the file is created in the source through the source api, after a location prompt when asked for or needed; the result's data is `{ path }`, the source path of the new file ([creating files](doc_page_impl_source.md#creating-files)) |
 
 A route handles the type for every component that reports it: a `navigateRequest` from an index item, a tag overview entry, or a link component takes the same path. The page's own ui (`DocLink`, the navigation buttons, the document toolbar) is not a component in this sense and calls the stores directly; the router is the boundary of registered components. Two pieces of the page's own ui join the layer on purpose: the block wrapper and the block toolbar of the edit layer dispatch entering a block, moving it, and moving its data into the asset store as `editBlockEnterRequest`, `editBlockMoveRequest`, and `editBlockAssetMoveRequest` (with `eventBuild`, source `{ sourcePath, blockIndex, placement: 'editBlock' | 'editToolbar' }`, the click's position as `point`), because these are operations of the document like the ones components request, and the host application and a future history should see them the same way.
 
 ## The edit domain and the focus shift
 
 The edit store is the one handler of its domain, so the route is a single line (`handle: (event) => editStore.eventHandle(event)`), and the store decides with its own state whether an event applies: session events are accepted only from the editor of the open session (`event.source.sourcePath` is the session's document), the rest get code -1 with a reason. The events of the domain name their subject in `source`, filled by `RegisteredComp` from the runtime config of the component: a session event is matched against the session, a block event carries `sourcePath` and `blockIndex`, a side-panel label event carries `itemId` (the host of a side-panel item renders it with `itemId` in its runtime config, so every report of an item label knows its item).
+
+`dataReplaceRequest` is the event of a component that changes its own data without an editor session: a pasted image gives `Image` a new `src`, and the component reports the whole new data text. The edit store knows what the block is (`source.sourcePath`, `source.blockIndex`): a reference to the asset store gets its head updated, an inline block gets its fenced content rewritten, and the component never learns which ([component awareness](doc_page_impl_asset.md#component-awareness)). Its companion `fileCreateRequest` goes to the source domain and is answered with a path, which the component then puts into the data it reports; two events, because creating a file and changing a block are two operations of two layers, and a component may need one without the other (an editor of a draft creates the file and keeps the path in its draft).
 
 A focus shift is the event that shows why routing belongs to the store and not to the component. The editing surface knows only that the caret left it at its first or last line, and where the caret was; it reports `editFocusShiftRequest { direction }` with the caret's position as the event's point. The store knows the session, the block index, and the number of blocks, so it leaves the session (saving it) and starts the neighbor with the caret on the near line at the same x, or rejects the request at the ends of the document ([focus shift](doc_page_impl_edit.md#sessions-leave-and-cancel)). This is the default routing of Yamd's `unfocus` with a direction: the component says "out, this way, from here", the document store picks the destination from its state.
 
@@ -85,4 +91,6 @@ comp-doc/registry/RegisteredComp.jsx   eventHandle: the component report (data, 
 comp-doc/edit/DocEditBlock.jsx         a click on a block dispatches editBlockEnterRequest with its point
 comp-doc/edit/DocEditBlockToolbar.jsx  the edit, move, and to-asset buttons dispatch their block events
 frontend/src/store/DocEditStore.ts     editEventTypeList, eventHandle (the edit domain)
+frontend/src/store/DocSourceFileStore.ts sourceEventTypeList, eventHandle (the source domain: file creation)
+comp-doc/edit/DocEditDocContext.js     DocEditBlockContext: the block index a component in the edit body reports with
 ```

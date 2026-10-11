@@ -6,11 +6,20 @@ import { isCSSRequest, type EnvironmentModuleNode, type Plugin } from 'vite';
 import { docEntryLoad, readYaml } from './doc-entry.ts';
 import {
   attachmentDataUrlGet,
+  attachmentExtIsBinary,
+  attachmentMimeGet,
   docAttachmentFinderDefaultList,
   docAttachmentsCollect,
   type DocAttachmentFinder,
   type DocAttachmentResolved,
 } from './doc-attachment.ts';
+import {
+  sourcePathBuild,
+  sourcePathIsInside,
+  sourcePathIsRooted,
+  sourcePathNormalize,
+  sourcePathParse,
+} from '../src/lib/doc-source-path.js';
 import {
   tagSourceAddRuleApply,
   tagSourceEntryMerge,
@@ -38,19 +47,35 @@ import { assetBlockTextExpand } from '../src/lib/doc-asset-ref.js';
 import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
 import { textLocalizedGet } from '../src/lib/text-localized.js';
 
-// vite plugin "doc-source".
+// vite plugin "doc-source" (design: doc_page_impl_source.md).
 // reads two-layer yaml config, executes source rules against the file system,
 // and exposes the result as virtual module `virtual:doc-source`:
 //
 //   export let configDoc = {...}        // merged config (the document entry loaded: source rules,
 //                                       //   the page side panel inlined, tag definitions merged)
-//   export let fileManifest = [{ rootId, relPath, name, ext, title, internalPath,
+//   export let fileManifest = [{ rootId, relPath, name, ext, title, internalPath, collect,
 //                                contentHash, tagList, configSource, configFrontmatter, load }]
+//   export let dirManifest = [{ rootId, relPath, internalPath, collect }]   // the folders of the source
+//   export const fileUrlByPath = {...}              // source path -> url of the file's bytes (build: data url)
+//   export const docSourceEndpoint = '/__doc-source' // '' in a build: no source api
 //   export const docEditEndpoint = '/__doc-edit'    // '' in a build: no edit api
 //   export const docAssetEndpoint = '/__doc-asset'  // '' in a build or without asset.file
 //   export const assetSnapshot = {...} | null       // the asset store, bundled in a build
 //   export function subscribeDocSource(listener)    // dev: the source data changed
 //   export function subscribeDocAsset(listener)     // dev: an object or the store's folders changed on disk
+//
+// every file is named by its source path ~rootId/relPath (doc-source-path.js).
+// an addFolder rule says how its folder is collected (rule.collect):
+//   recursive   every file in the folder and its subfolders is a document
+//   direct      the files right in the folder are documents
+//   referenced  the files in the folder (and its subfolders) are collectable:
+//               they are part of the page only when something uses them (an
+//               image an Image block names, a dependency of an asset version)
+// a referenced file is in the manifest with collect "referenced"; it is not
+// a page of the side panel, and a build keeps it only when it is used.
+// a root id names one folder: the first add rule with the id fixes it; a
+// later rule with the same id names a folder inside it and sets the
+// collect mode of that part (a file collected twice takes the later rule).
 //
 // document text is data, not code. in a build every document becomes a lazy
 // `?raw` import, one chunk per document. during development the text is read
@@ -59,14 +84,17 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 // "doc-source-change" carrying the new manifest metadata: no executable
 // module is replaced, so nothing in the page reloads (design:
 // doc_page_impl_edit.md#saving-without-a-reload). configuration changes and
-// files added to / removed from the source still reload the page.
+// files added to / removed from the source still reload the page, except a
+// file the page itself created through the source api: that is reported as
+// data too.
 //
-// the development server also answers the edit api (doc-edit-server.ts), so
-// the page can rewrite root-level blocks of a document in place, and the
-// asset api (doc-asset-server.ts) over the local asset store, whose config
-// file is named by config asset.file and whose folders are listed in that
-// file (doc_page_impl_asset.md). the store's files are never part of the
-// collected source, wherever they are placed.
+// the development server also answers the source api (file text and bytes,
+// file creation; docSourceMiddlewareCreate), the edit api
+// (doc-edit-server.ts), so the page can rewrite root-level blocks of a
+// document in place, and the asset api (doc-asset-server.ts) over the local
+// asset store, whose config file is named by config asset.file and whose
+// folders are listed in that file (doc_page_impl_asset.md). the store's
+// files are never part of the collected source, wherever they are placed.
 
 const MODULE_ID_DEFAULT = 'virtual:doc-source';
 export const DOC_SOURCE_ENDPOINT_NAME = '__doc-source';
@@ -82,15 +110,46 @@ export type DocSourcePluginOptions = {
   attachmentFinderList?: DocAttachmentFinder[];
 };
 
-type FileEntry = {
+// how an addFolder rule collects its folder, and how a file was collected
+export type SourceCollectMode = 'recursive' | 'direct' | 'referenced';
+const sourceCollectModeList: SourceCollectMode[] = ['recursive', 'direct', 'referenced'];
+
+export type FileEntry = {
   rootId: string;
-  relPath: string; // path inside root, '' for a root file
+  relPath: string; // path inside root, the file name for a root file
   name: string;
   ext: string;
   absPath: string;
-  internalPath: string; // /{rootId}/relPath or /{rootId}/name for root file
+  internalPath: string; // the source path ~{rootId}/relPath (doc-source-path.js)
+  collect: SourceCollectMode; // 'referenced': part of the page only when used
   tagList?: any[]; // tags declared by source rules, see doc-tag-source.ts
   configSource?: Record<string, any>; // config declared by source rules, see doc-config-source.ts
+};
+
+// a folder of the source: the folder of an addFolder rule and (recursive,
+// referenced) every folder below it. the page lists them (a location to
+// create a file in) without the file system.
+export type DirEntry = {
+  rootId: string;
+  relPath: string; // '' for the folder of the rule
+  absPath: string;
+  internalPath: string; // ~{rootId} or ~{rootId}/relPath
+  collect: SourceCollectMode;
+};
+
+// the folder or file of an add rule, as the source api resolves paths
+// what one add rule collects. a root id names one folder on disk
+// (rootAbsPath): the first rule with the id fixes it, and a later rule with
+// the same id collects a folder inside it (with its own collect mode), so
+// the source paths of both are ~rootId/<path from the root folder>.
+export type SourceRoot = {
+  rootId: string;
+  // the folder (or file) the rule names
+  absPath: string;
+  // the folder of the root id, which source paths are relative to
+  rootAbsPath: string;
+  kind: 'folder' | 'file';
+  collect: SourceCollectMode;
 };
 
 export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
@@ -123,16 +182,24 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
   );
   // the entries the page receives: every collected file, or only the files
   // the side panel reaches when pruning is configured
-  const entriesVisibleGet = (configDoc: any, entries: FileEntry[]): FileEntry[] => (
-    options.pruneSourceToSidePanel
-      ? pruneSourceToSidePanel(
-          configDoc,
-          entries,
-          options.sourceDependencyCollectByCompId,
-          assetTextExpandGet(assetStoreGet(configDoc)),
-        )
-      : entries
-  );
+  const entriesVisibleGet = (configDoc: any, entries: FileEntry[]): FileEntry[] => {
+    if (!options.pruneSourceToSidePanel) return entries;
+    const assetStore = assetStoreGet(configDoc);
+    return pruneSourceToSidePanel(
+      configDoc,
+      entries,
+      options.sourceDependencyCollectByCompId,
+      assetTextExpandGet(assetStore),
+      assetStore ? assetStore.dependencySourcePathList() : [],
+    );
+  };
+  // the data of one "doc-source-change" event: the manifest and the folders
+  const sourceDataBuild = (configDoc: any, entries: FileEntry[]) => ({
+    moduleId,
+    configDoc,
+    fileManifest: entriesVisibleGet(configDoc, entries).map(fileMetadataBuild),
+    dirManifest: scanSourceDirs(configDoc, configDir).map(dirMetadataBuild),
+  });
 
   return {
     name: `doc-source:${moduleId}`,
@@ -174,6 +241,9 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       const assetStore = assetStoreGet(configDoc);
       const fileEntriesAll = scanSource(configDoc, configDir);
       const fileEntries = entriesVisibleGet(configDoc, fileEntriesAll);
+      const dirEntries = scanSourceDirs(configDoc, configDir);
+      // the files a component names (an Image src) and the source files the
+      // asset versions depend on, so a build carries their bytes
       const attachmentList = configDoc.collectComponentAttachmentsOnBuild === true
         ? docAttachmentsCollect(
             configDoc,
@@ -182,12 +252,13 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
             configDir,
             [...docAttachmentFinderDefaultList, ...(options.attachmentFinderList ?? [])],
             assetTextExpandGet(assetStore),
+            assetStore ? assetStore.dependencySourcePathList() : [],
           )
         : [];
       // the built page has no asset api: the store is bundled. the
       // development server answers the api, so nothing is bundled there.
       const assetSnapshot = isBuild && assetStore ? assetStore.snapshotBuild() : null;
-      return generateModuleCode(configDoc, fileEntries, attachmentList, isBuild, {
+      return generateModuleCode(configDoc, fileEntries, dirEntries, attachmentList, isBuild, {
         docSourceEndpoint,
         docEditEndpoint,
         docAssetEndpoint,
@@ -220,7 +291,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         this.environment.hot.send({
           type: 'custom',
           event: 'doc-source-change',
-          data: { moduleId, configDoc, fileManifest: entriesVisibleGet(configDoc, entries).map(fileMetadataBuild) },
+          data: sourceDataBuild(configDoc, entries),
         });
 
         // a collected application source file (.js shown as a document) is
@@ -249,8 +320,8 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       let pathsWatched = collectPathsToWatch(configDoc, configDir);
       for (const p of pathsWatched) server.watcher.add(p);
 
-      // the edit api resolves internal paths against the same scan that
-      // generates the manifest. the scan is kept until the manifest changes.
+      // the source and edit apis resolve source paths against the same scan
+      // that generates the manifest. the scan is kept until the manifest changes.
       let fileEntryListCached: FileEntry[] | undefined;
       const fileEntryListGet = () => {
         if (!fileEntryListCached) {
@@ -258,7 +329,6 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         }
         return fileEntryListCached;
       };
-      server.middlewares.use(docSourceMiddlewareCreate({ endpoint: docSourceEndpoint, fileEntryListGet }));
 
       // the current configuration, re-read, reported to the page as data:
       // the side panel tree is data of the page like the documents are
@@ -270,9 +340,22 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         server.ws.send({
           type: 'custom',
           event: 'doc-source-change',
-          data: { moduleId, configDoc: configDocUpdated, fileManifest: entriesVisibleGet(configDocUpdated, entries).map(fileMetadataBuild) },
+          data: sourceDataBuild(configDocUpdated, entries),
         });
       };
+
+      // a file the page created through the source api: the watcher reports
+      // the addition too, and must report it as data, not reload the page
+      const pathsCreatedByPage = new Set<string>();
+      server.middlewares.use(docSourceMiddlewareCreate({
+        endpoint: docSourceEndpoint,
+        fileEntryListGet,
+        sourceRootListGet: () => sourceRootListGet(loadConfigDoc(configFile, options), configDir),
+        onFileCreated: (filePath) => {
+          pathsCreatedByPage.add(filePath);
+          configDataSend(loadConfigDoc(configFile, options));
+        },
+      }));
       // a side-panel file the page itself rewrote (a label edit), by content
       // hash. the watcher reports that change too; when the file still has
       // this content, the change was already reported as data and must not
@@ -349,6 +432,8 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
           (p) => filePath === p || filePath.startsWith(p + path.sep),
         );
         if (!isRelated) return;
+        // the page created it and was already told as data
+        if (pathsCreatedByPage.delete(filePath)) return;
         fileEntryListCached = undefined;
         try {
           const configDocUpdated = loadConfigDoc(configFile, options);
@@ -380,52 +465,171 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
   };
 }
 
-// ---------- source read api ----------
-// GET {endpoint}/file?path=/root/a.md -> the text of that collected file,
-// plain utf-8, never cached. the development page loads every document
-// through it instead of importing the file as a module. only internal paths
-// of the collected source resolve; the query is never used as a file path.
+// ---------- source api ----------
+// the source layer of the development server (doc_page_impl_source.md#the-source-api):
+//
+//   GET  {endpoint}/file?path=~root/a.md   the text of a collected file, plain utf-8, never
+//                                          cached. the development page loads every document
+//                                          through it instead of importing the file as a module.
+//   GET  {endpoint}/data?path=~root/x.png  the bytes of a collected file with their media type
+//                                          (an image an Image block names)
+//   POST {endpoint}/file/create            { dirPath, name, text | dataBase64, isOverwrite? }
+//                                          -> { code, data: { path, entry }, message }
+//                                          writes a file into a folder of the source. dirPath is a
+//                                          source path (~root or ~root/dir) inside the folder of an
+//                                          addFolder rule; the folders on the way are created. codes:
+//                                          -1 bad request, -2 the file exists (isOverwrite false),
+//                                          -3 the folder is not in the source
+//
+// only source paths resolve; a query is never used as a file path. the folder
+// of a "direct" rule accepts files right in it only; "recursive" and
+// "referenced" folders accept any folder below.
 
 type SourceMiddlewareOptions = {
   endpoint: string;
   fileEntryListGet: () => FileEntry[];
+  sourceRootListGet: () => SourceRoot[];
+  onFileCreated: (filePath: string) => void;
 };
 
 export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
-  const { endpoint, fileEntryListGet } = options;
+  const { endpoint, fileEntryListGet, sourceRootListGet, onFileCreated } = options;
+  const textSend = (res: ServerResponse, statusCode: number, text: string) => {
+    res.statusCode = statusCode;
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.end(text);
+  };
+  const jsonSend = (res: ServerResponse, statusCode: number, payload: { code: number; data: any; message: string }) => {
+    res.statusCode = statusCode;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.end(JSON.stringify(payload));
+  };
   return (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
-    if (url.pathname !== `${endpoint}/file`) {
+    const route = url.pathname.startsWith(`${endpoint}/`) ? url.pathname.slice(endpoint.length) : '';
+    if (route !== '/file' && route !== '/data' && route !== '/file/create') {
       next();
       return;
     }
     res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    if (req.method !== 'GET') {
-      res.statusCode = 405;
-      res.setHeader('Allow', 'GET');
-      res.end('the source api answers GET only');
+
+    if (route === '/file/create') {
+      if (req.method !== 'POST') {
+        res.setHeader('Allow', 'POST');
+        jsonSend(res, 405, { code: -1, data: null, message: 'file/create answers POST only' });
+        return;
+      }
+      void jsonBodyRead(req)
+        .then((body) => {
+          const result = sourceFileCreate(body, sourceRootListGet(), fileEntryListGet());
+          if (result.code === 0) onFileCreated(result.data.entry.absPath);
+          jsonSend(res, statusByCode[result.code] ?? 400, {
+            code: result.code,
+            data: result.code === 0 ? { path: result.data.path, entry: fileMetadataBuild(result.data.entry) } : null,
+            message: result.message,
+          });
+        })
+        .catch((error) => jsonSend(res, 400, { code: -1, data: null, message: String(error?.message ?? error) }));
       return;
     }
-    const internalPath = url.searchParams.get('path') ?? '';
+
+    if (req.method !== 'GET') {
+      res.setHeader('Allow', 'GET');
+      textSend(res, 405, 'the source api answers GET here');
+      return;
+    }
+    const internalPath = sourcePathNormalize(url.searchParams.get('path') ?? '');
     const entry = fileEntryListGet().find((item) => item.internalPath === internalPath);
     if (!entry) {
-      res.statusCode = 404;
-      res.end(`not a file of the collected source: ${internalPath}`);
+      textSend(res, 404, `not a file of the collected source: ${internalPath}`);
+      return;
+    }
+    if (route === '/data') {
+      let bytes: Buffer;
+      try {
+        bytes = fs.readFileSync(entry.absPath);
+      } catch {
+        textSend(res, 404, `the source file is not available: ${internalPath}`);
+        return;
+      }
+      res.statusCode = 200;
+      res.setHeader('Content-Type', attachmentMimeGet(entry.absPath));
+      res.setHeader('Content-Length', String(bytes.length));
+      res.end(bytes);
       return;
     }
     let text: string;
     try {
       text = fs.readFileSync(entry.absPath, 'utf-8');
     } catch {
-      res.statusCode = 404;
-      res.end(`the source file is not available: ${internalPath}`);
+      textSend(res, 404, `the source file is not available: ${internalPath}`);
       return;
     }
-    res.statusCode = 200;
-    res.end(text);
+    textSend(res, 200, text);
   };
+}
+
+const statusByCode: Record<number, number> = { 0: 200, [-1]: 400, [-2]: 409, [-3]: 404 };
+
+// the file of POST file/create, written; { code, data: { path, entry }, message }
+export function sourceFileCreate(
+  body: any,
+  sourceRootList: SourceRoot[],
+  fileEntryList: FileEntry[],
+): { code: number; data: any; message: string } {
+  const dirPath = sourcePathNormalize(body?.dirPath ?? '');
+  const name = String(body?.name ?? '').trim();
+  if (!sourcePathIsRooted(dirPath)) return { code: -1, data: null, message: `dirPath must be a source path (~rootId/dir): ${dirPath}` };
+  if (!name || name.includes('/') || name.includes('\\') || name === '.' || name === '..') {
+    return { code: -1, data: null, message: `name must be a file name without a folder: ${name}` };
+  }
+  let data: Buffer;
+  if (typeof body?.text === 'string') data = Buffer.from(body.text, 'utf-8');
+  else if (typeof body?.dataBase64 === 'string') data = Buffer.from(body.dataBase64, 'base64');
+  else return { code: -1, data: null, message: 'text or dataBase64 is required' };
+
+  const parsed = sourcePathParse(dirPath)!;
+  const rootRuleList = sourceRootList.filter((item) => item.kind === 'folder' && item.rootId === parsed.rootId);
+  if (rootRuleList.length === 0) return { code: -3, data: null, message: `no source folder has the root ${parsed.rootId}` };
+  const dirAbs = path.resolve(rootRuleList[0].rootAbsPath, ...parsed.relPath.split('/').filter(Boolean));
+  if (!pathIsInside(dirAbs, rootRuleList[0].rootAbsPath)) return { code: -1, data: null, message: `dirPath leaves its root: ${dirPath}` };
+  // the folder must be collected by a folder rule: inside a recursive or
+  // referenced folder, or the folder of a direct rule itself
+  const root = rootRuleList.find((item) => (
+    item.collect === 'direct' ? dirAbs === item.absPath : pathIsInside(dirAbs, item.absPath)
+  ));
+  if (!root) return { code: -3, data: null, message: `the folder is not collected by any source rule: ${dirPath}` };
+  const fileAbs = path.join(dirAbs, name);
+  const relPath = path.relative(root.rootAbsPath, fileAbs);
+  if (fs.existsSync(fileAbs) && body?.isOverwrite !== true) {
+    return { code: -2, data: null, message: `the file exists: ${sourcePathBuild(parsed.rootId, relPath)}` };
+  }
+  fs.mkdirSync(dirAbs, { recursive: true });
+  fs.writeFileSync(fileAbs, data);
+  const entryExisting = fileEntryList.find((item) => item.absPath === fileAbs);
+  const entry = entryExisting ?? makeEntry(parsed.rootId, relPath, fileAbs, root.collect);
+  return { code: 0, data: { path: entry.internalPath, entry }, message: '' };
+}
+
+function jsonBodyRead(req: IncomingMessage): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const chunkList: Buffer[] = [];
+    req.on('data', (chunk) => chunkList.push(Buffer.from(chunk)));
+    req.on('end', () => {
+      const text = Buffer.concat(chunkList).toString('utf-8');
+      if (text === '') {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(text));
+      } catch {
+        reject(new Error('request body is not valid JSON'));
+      }
+    });
+    req.on('error', reject);
+  });
 }
 
 // ---------- config ----------
@@ -582,28 +786,27 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
     }
   };
 
+  const rootAbsPathById = new Map<string, string>();
   for (const [ruleIndex, rule] of configDoc.source.entries()) {
     if (rule.action === 'addFolder') {
-      const dirAbs = path.resolve(configDir, rule.path);
-      if (!fs.existsSync(dirAbs)) {
-        console.warn(`[doc-source] addFolder: not found: ${dirAbs}`);
+      const root = sourceRootOfRule(rule, configDir, rootAbsPathById);
+      if (!fs.existsSync(root.absPath)) {
+        console.warn(`[doc-source] addFolder: not found: ${root.absPath}`);
         continue;
       }
-      const rootId = rule.rootId ?? path.basename(dirAbs);
-      for (const fileAbs of walkFiles(dirAbs)) {
-        const entry = makeEntry(rootId, path.relative(dirAbs, fileAbs), fileAbs);
+      for (const fileAbs of walkFiles(root.absPath, root.collect !== 'direct')) {
+        const entry = makeEntry(root.rootId, path.relative(root.rootAbsPath, fileAbs), fileAbs, root.collect);
         tagSourceAddRuleApply(entry, rule, ruleIndex);
         configSourceAddRuleApply(entry, rule, ruleIndex);
         entryAdd(entry);
       }
     } else if (rule.action === 'addFile') {
-      const fileAbs = path.resolve(configDir, rule.path);
-      if (!fs.existsSync(fileAbs)) {
-        console.warn(`[doc-source] addFile: not found: ${fileAbs}`);
+      const root = sourceRootOfRule(rule, configDir, rootAbsPathById);
+      if (!fs.existsSync(root.absPath)) {
+        console.warn(`[doc-source] addFile: not found: ${root.absPath}`);
         continue;
       }
-      const rootId = rule.rootId ?? path.basename(fileAbs);
-      const entry = makeEntry(rootId, path.basename(fileAbs), fileAbs);
+      const entry = makeEntry(root.rootId, path.relative(root.rootAbsPath, root.absPath), root.absPath, root.collect);
       tagSourceAddRuleApply(entry, rule, ruleIndex);
       configSourceAddRuleApply(entry, rule, ruleIndex);
       entryAdd(entry);
@@ -611,7 +814,8 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
       const regex = globToRegex(rule.pattern);
       entryRemoveIf((e) => regex.test(e.name));
     } else if (rule.action === 'removeByPath') {
-      const regex = globToRegex(normalizeSlash(rule.pattern));
+      // a glob over the whole source path (~rootId/...)
+      const regex = globToRegex(rule.pattern);
       entryRemoveIf((e) => regex.test(e.internalPath));
     } else if (tagSourceRuleIs(rule)) {
       tagSourceRuleApply([...entryByPath.values()], rule, ruleIndex, globToRegex);
@@ -652,7 +856,74 @@ function pathIsInside(filePath: string, folder: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-function makeEntry(rootId: string, relPath: string, absPath: string): FileEntry {
+// the root an add rule declares. an addFolder rule must say how it collects
+// (collect: recursive | direct | referenced); a file of addFile is a
+// document. rootAbsPathById remembers the folder of every root id seen so
+// far: the first rule with an id fixes it (for addFile, the folder of the
+// file), a later rule with the same id must name a folder inside it.
+function sourceRootOfRule(rule: any, configDir: string, rootAbsPathById: Map<string, string>): SourceRoot {
+  const absPath = path.resolve(configDir, rule.path);
+  const rootId: string = rule.rootId ?? path.basename(absPath);
+  const kind = rule.action === 'addFile' ? 'file' : 'folder';
+  let collect: SourceCollectMode = 'direct';
+  if (kind === 'folder') {
+    if (!sourceCollectModeList.includes(rule.collect)) {
+      throw new Error(
+        `[doc-source] addFolder "${rule.path}": "collect" must be one of ${sourceCollectModeList.join(', ')}`
+        + ` (got ${JSON.stringify(rule.collect)})`,
+      );
+    }
+    collect = rule.collect;
+  }
+  const rootAbsPathOwn = kind === 'file' ? path.dirname(absPath) : absPath;
+  const rootAbsPath = rootAbsPathById.get(rootId) ?? rootAbsPathOwn;
+  if (!pathIsInside(rootAbsPathOwn, rootAbsPath)) {
+    throw new Error(
+      `[doc-source] ${rule.action} "${rule.path}": root "${rootId}" is the folder ${rootAbsPath};`
+      + ' a later rule with the same rootId must name a path inside it',
+    );
+  }
+  rootAbsPathById.set(rootId, rootAbsPath);
+  return { rootId, absPath, rootAbsPath, kind, collect };
+}
+
+// the roots of every add rule, in rule order
+export function sourceRootListGet(configDoc: any, configDir: string): SourceRoot[] {
+  const rootAbsPathById = new Map<string, string>();
+  return (configDoc.source as any[])
+    .filter((rule) => rule.action === 'addFolder' || rule.action === 'addFile')
+    .map((rule) => sourceRootOfRule(rule, configDir, rootAbsPathById));
+}
+
+// the folders of the source: for every addFolder rule its folder, and for a
+// recursive or referenced rule every folder below it. removeByPath rules
+// remove the folders they cover (a pattern "~root/sub/**" removes what is
+// inside ~root/sub and the folder itself).
+export function scanSourceDirs(configDoc: any, configDir: string): DirEntry[] {
+  const dirByPath = new Map<string, DirEntry>();
+  const rootAbsPathById = new Map<string, string>();
+  for (const rule of configDoc.source as any[]) {
+    if (rule.action === 'addFolder' || rule.action === 'addFile') {
+      const root = sourceRootOfRule(rule, configDir, rootAbsPathById);
+      if (root.kind === 'file' || !fs.existsSync(root.absPath)) continue;
+      const dirAbsList = root.collect === 'direct' ? [root.absPath] : [root.absPath, ...walkDirs(root.absPath)];
+      for (const dirAbs of dirAbsList) {
+        const relPath = path.relative(root.rootAbsPath, dirAbs).split(path.sep).join('/');
+        const internalPath = sourcePathBuild(root.rootId, relPath);
+        dirByPath.set(internalPath, { rootId: root.rootId, relPath, absPath: dirAbs, internalPath, collect: root.collect });
+      }
+    } else if (rule.action === 'removeByPath') {
+      const regex = globToRegex(rule.pattern);
+      for (const dir of [...dirByPath.values()]) {
+        if (regex.test(dir.internalPath) || regex.test(`${dir.internalPath}/`)) dirByPath.delete(dir.internalPath);
+      }
+    }
+  }
+  const assetConfig = assetConfigGet(configDoc, configDir);
+  return [...dirByPath.values()].filter((dir) => !assetConfig || !assetPathIs(assetConfig, dir.absPath));
+}
+
+function makeEntry(rootId: string, relPath: string, absPath: string, collect: SourceCollectMode): FileEntry {
   const relSlash = relPath.split(path.sep).join('/');
   const name = path.basename(absPath);
   return {
@@ -661,17 +932,33 @@ function makeEntry(rootId: string, relPath: string, absPath: string): FileEntry 
     name,
     ext: path.extname(name).slice(1).toLowerCase(),
     absPath,
-    internalPath: `/${rootId}/${relSlash}`,
+    internalPath: sourcePathBuild(rootId, relSlash),
+    collect,
   };
 }
 
-function walkFiles(dirAbs: string): string[] {
+const dirNameSkipSet = new Set(['.git', 'node_modules']);
+
+function walkFiles(dirAbs: string, isRecursive: boolean): string[] {
   const result: string[] = [];
   for (const item of fs.readdirSync(dirAbs, { withFileTypes: true })) {
-    if (item.name === '.git' || item.name === 'node_modules') continue;
+    if (dirNameSkipSet.has(item.name)) continue;
     const itemAbs = path.join(dirAbs, item.name);
-    if (item.isDirectory()) result.push(...walkFiles(itemAbs));
-    else if (item.isFile()) result.push(itemAbs);
+    if (item.isDirectory()) {
+      if (isRecursive) result.push(...walkFiles(itemAbs, true));
+    } else if (item.isFile()) {
+      result.push(itemAbs);
+    }
+  }
+  return result;
+}
+
+function walkDirs(dirAbs: string): string[] {
+  const result: string[] = [];
+  for (const item of fs.readdirSync(dirAbs, { withFileTypes: true })) {
+    if (!item.isDirectory() || dirNameSkipSet.has(item.name)) continue;
+    const itemAbs = path.join(dirAbs, item.name);
+    result.push(itemAbs, ...walkDirs(itemAbs));
   }
   return result;
 }
@@ -687,10 +974,6 @@ function globToRegex(pattern: string): RegExp {
   return new RegExp(`^${escaped}$`);
 }
 
-function normalizeSlash(pattern: string): string {
-  return pattern.startsWith('/') ? pattern : `/${pattern}`;
-}
-
 // Optional deployment optimization: retain only the files the side panel
 // navigates to, plus every file they statically reach.
 //
@@ -698,7 +981,10 @@ function normalizeSlash(pattern: string): string {
 // exclusions), and the content of inline items. each retained .md/.mdx file is
 // scanned by doc-source-dependency.ts; reached documents are scanned in turn,
 // other files are retained without parsing. the side panel itself stays
-// navigation only.
+// navigation only. a file collected as "referenced" is never a root: it is
+// retained when a document reaches it or an asset version depends on it
+// (assetDependencyPathList, the source paths of every version's
+// dependencies; doc_page_impl_asset.md#dependencies).
 //
 // a recognized local target that cannot be resolved is reported, never
 // silently dropped. the manifest keeps the order of source rules.
@@ -713,6 +999,7 @@ export function pruneSourceToSidePanel(
   entries: FileEntry[],
   collectByCompId: Record<string, DocSourceDependencyCollect> = {},
   textExpand: (text: string) => string = (text) => text,
+  assetDependencyPathList: string[] = [],
 ): FileEntry[] {
   const sourceIndex = sourceIndexBuild(entries);
   const pathsRetained = new Set<string>();
@@ -722,6 +1009,13 @@ export function pruneSourceToSidePanel(
     pathsRetained.add(entry.internalPath);
     if (entry.ext === 'md' || entry.ext === 'mdx') docQueue.push(entry);
   };
+  for (const dependencyPath of assetDependencyPathList) {
+    const { entryList } = docTargetResolve(dependencyPath, '', sourceIndex) as { entryList: FileEntry[] };
+    if (entryList.length === 0) {
+      console.warn(`[doc-source] asset dependency "${dependencyPath}" is not in the collected source; nothing was retained for it.`);
+    }
+    for (const entry of entryList) entryRetain(entry);
+  }
   const collected = (
     result: { dependencyList: DocSourceDependency[]; warningList: string[] },
     sourceLabel: string,
@@ -789,10 +1083,10 @@ function dependencyEntryListGet(
 ): FileEntry[] {
   const declared = `${sourceLabel}: ${dependency.construct} "${dependency.target}"`;
   if (dependency.kind === 'source') {
-    const entry = sourceIndex.entryByInternalPath.get(dependency.target);
+    const entry = sourceIndex.entryByInternalPath.get(sourcePathNormalize(dependency.target));
     if (!entry) {
       console.warn(
-        `[doc-source] ${declared} is not an exact internal path (/rootId/...) of the collected source;`
+        `[doc-source] ${declared} is not an exact source path (~rootId/...) of the collected source;`
         + ' nothing was retained for it.',
       );
     }
@@ -813,22 +1107,21 @@ function dependencyEntryListGet(
   return entryList;
 }
 
-// matches page-tree.js convertSourceFolder
+// matches page-tree.js convertSourceFolder: the pages of a source folder;
+// files collected for reference only are not pages
 function sourceFolderEntryListGet(node: any, entries: FileEntry[]): FileEntry[] {
-  let pathFolder = `/${node.sourceRoot}`;
-  if (node.sourceFolder !== undefined) {
-    pathFolder = `/${String(node.sourceFolder)}`.replace(/\\/g, '/').replace(/\/+/g, '/');
-    if (pathFolder.length > 1) pathFolder = pathFolder.replace(/\/$/, '');
-  }
-  if (pathFolder === '/') return entries;
-  return entries.filter((entry) => (
-    entry.internalPath === pathFolder || entry.internalPath.startsWith(`${pathFolder}/`)
-  ));
+  const pathFolder = node.sourceFolder !== undefined
+    ? sourcePathNormalize(String(node.sourceFolder))
+    : sourcePathBuild(String(node.sourceRoot));
+  if (!sourcePathIsRooted(pathFolder)) return [];
+  return entries.filter((entry) => entry.collect !== 'referenced' && sourcePathIsInside(entry.internalPath, pathFolder));
 }
 
+// matches page-tree.js resolveDocEntries
 function resolveSourceReference(reference: string, entries: FileEntry[]): FileEntry[] {
-  if (reference.startsWith('/')) {
-    return entries.filter((entry) => entry.internalPath === reference);
+  if (sourcePathIsRooted(reference)) {
+    const pathWanted = sourcePathNormalize(reference);
+    return entries.filter((entry) => entry.internalPath === pathWanted);
   }
   if (reference.includes('/')) {
     const suffix = `/${reference.replace(/^\.\//, '')}`;
@@ -853,11 +1146,16 @@ export function fileMetadataBuild(entry: FileEntry) {
     ext: entry.ext,
     title: extractTitle(entry, text),
     internalPath: entry.internalPath,
+    collect: entry.collect,
     contentHash: textContentHashGet(content),
     tagList: entry.tagList ?? [],
     configSource: entry.configSource ?? {},
     configFrontmatter: configFrontmatterRead(text, entry.absPath) ?? {},
   };
+}
+
+export function dirMetadataBuild(dir: DirEntry) {
+  return { rootId: dir.rootId, relPath: dir.relPath, internalPath: dir.internalPath, collect: dir.collect };
 }
 
 function textContentHashGet(content: string | Buffer): string {
@@ -867,6 +1165,7 @@ function textContentHashGet(content: string | Buffer): string {
 export function generateModuleCode(
   configDoc: any,
   fileEntries: FileEntry[],
+  dirEntries: DirEntry[],
   attachmentList: DocAttachmentResolved[],
   isBuild: boolean,
   services: {
@@ -879,19 +1178,24 @@ export function generateModuleCode(
 ): string {
   const lines: string[] = [];
   lines.push(`export let configDoc = ${JSON.stringify(configDoc)};`);
+  lines.push(`export const docSourceEndpoint = ${JSON.stringify(services.docSourceEndpoint)};`);
   lines.push(`export const docEditEndpoint = ${JSON.stringify(services.docEditEndpoint)};`);
   lines.push(`export const docAssetEndpoint = ${JSON.stringify(services.docAssetEndpoint)};`);
   lines.push(`export const assetSnapshot = ${JSON.stringify(services.assetSnapshot)};`);
-  const attachmentUrlByPath: Record<string, string> = {};
+  // the bytes of the files components name: a build inlines them as data
+  // urls, keyed by source path and by the spelling the reference used; in
+  // development the page reads them through the source api instead, and the
+  // table only covers files found outside the collected source
+  const fileUrlByPath: Record<string, string> = {};
   for (const attachment of attachmentList) {
     const url = isBuild
       ? attachmentDataUrlGet(attachment.absPath)
       : `/@fs/${normalizeSlashPath(attachment.absPath)}`;
     for (const reference of attachment.referenceList) {
-      attachmentUrlByPath[reference.replace(/^\.?\//, '')] = url;
+      fileUrlByPath[reference.replace(/^\.\//, '')] = url;
     }
   }
-  lines.push(`export const attachmentUrlByPath = ${JSON.stringify(attachmentUrlByPath)};`);
+  lines.push(`export const fileUrlByPath = ${JSON.stringify(fileUrlByPath)};`);
   if (!isBuild) {
     // development: the text of a file is read over http, never imported
     lines.push('async function sourceTextLoad(path) {');
@@ -903,13 +1207,16 @@ export function generateModuleCode(
   lines.push('export let fileManifest = [');
   for (const e of fileEntries) {
     // build: one lazy ?raw import per document, a literal specifier so the
-    // bundler finds it
-    const load = isBuild
-      ? `() => import(${JSON.stringify(`${e.absPath}?raw`)}).then((m) => m.default)`
-      : `() => sourceTextLoad(${JSON.stringify(e.internalPath)})`;
+    // bundler finds it. a binary file (an image) has no text to load: its
+    // bytes are reached through fileUrlByPath.
+    let load: string;
+    if (!isBuild) load = `() => sourceTextLoad(${JSON.stringify(e.internalPath)})`;
+    else if (attachmentExtIsBinary(e.ext)) load = `() => Promise.reject(new Error(${JSON.stringify(`${e.internalPath} is not a text file`)}))`;
+    else load = `() => import(${JSON.stringify(`${e.absPath}?raw`)}).then((m) => m.default)`;
     lines.push(`  { ...${JSON.stringify(fileMetadataBuild(e))}, load: ${load} },`);
   }
   lines.push('];');
+  lines.push(`export let dirManifest = ${JSON.stringify(dirEntries.map(dirMetadataBuild))};`);
   if (!isBuild) {
     // the listeners and the latest source data survive a replacement of
     // this module (hot.data), so subscriptions a host keeps stay valid and
@@ -930,7 +1237,8 @@ export function generateModuleCode(
     lines.push(`    if (dataNext.moduleId !== ${JSON.stringify(services.moduleId)}) return;`);
     lines.push('    configDoc = dataNext.configDoc;');
     lines.push('    fileManifest = dataNext.fileManifest.map((entry) => ({ ...entry, load: () => sourceTextLoad(entry.internalPath) }));');
-    lines.push('    sourceState.current = { configDoc, fileManifest };');
+    lines.push('    dirManifest = dataNext.dirManifest;');
+    lines.push('    sourceState.current = { configDoc, fileManifest, dirManifest };');
     lines.push('    for (const listener of listenersDocSource) listener(sourceState.current);');
     lines.push('  });');
     lines.push('  import.meta.hot.dispose((data) => {');
@@ -941,7 +1249,7 @@ export function generateModuleCode(
     // the module itself was replaced (a genuine regeneration, not a content save)
     lines.push('  import.meta.hot.accept((moduleNext) => {');
     lines.push('    if (!moduleNext) return;');
-    lines.push('    const dataNext = { configDoc: moduleNext.configDoc, fileManifest: moduleNext.fileManifest };');
+    lines.push('    const dataNext = { configDoc: moduleNext.configDoc, fileManifest: moduleNext.fileManifest, dirManifest: moduleNext.dirManifest };');
     lines.push('    sourceState.current = dataNext;');
     lines.push('    for (const listener of listenersDocSource) listener(dataNext);');
     lines.push('  });');

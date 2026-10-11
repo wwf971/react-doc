@@ -29,7 +29,6 @@ export const ImageEdit = observer(function ImageEdit({ data = {}, config = {}, o
   const session = config.edit?.session ?? {};
   const isLocked = session.status === 'submitting';
   const draft = toJS(store.draft);
-  const isSourceSet = String(draft.src ?? draft.source ?? '').trim() !== '';
 
   // a change of the draft: applied to the store, then reported as the yaml
   // the block would be saved as
@@ -55,11 +54,13 @@ export const ImageEdit = observer(function ImageEdit({ data = {}, config = {}, o
     />
   );
 
+  // a pasted image (written as a file by the source layer, Image's paste
+  // flow) becomes the src of the draft, like a value typed in the panel
+  const sourcePaste = (sourcePath) => draftChange(() => store.fieldSet('src', sourcePath));
+
   return (
     <>
-      {isSourceSet
-        ? <ImageRender data={draft} config={config} captionRender={captionRender} />
-        : <p className="doc-image-edit-empty">Set src in the panel to show the image.</p>}
+      <ImageRender data={draft} config={config} onEvent={onEvent} captionRender={captionRender} onSourcePaste={sourcePaste} />
       <EditFloatingPanel
         label="Image"
         placement="below"

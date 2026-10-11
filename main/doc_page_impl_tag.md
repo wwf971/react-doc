@@ -7,8 +7,8 @@ A tag is a short label such as "Guide" or "Chapter" attached to a document, a so
 ## Core concepts
 
 - **Asset**: anything a tag can be attached to, identified by an asset key.
-  - `doc:/rootId/a.md`: a collected source file.
-  - `folder:/rootId/sub`: a source folder.
+  - `doc:~rootId/a.md`: a collected source file (its source path).
+  - `folder:~rootId/sub`: a source folder.
   - `item:{itemId}`: a side-panel item bound to neither, such as a virtual folder, a component panel, or a missing document.
 - **Tag**: `{ id, data }`. The id is the identity; `data` carries per-attachment values, such as a different display text.
 - **Declaration**: "these tags belong to this asset", written in source rules or side-panel YAML.
@@ -41,7 +41,7 @@ Example, with the declarations in order:
 ```text
 source.yaml        addFile doc_page_req.md, tags [reference]
 side-panel.yaml    doc_page_req.md, tags [guide]                 -> reference, guide
-source.yaml        addTagByPath /example/link-nav/**, tags [test]
+source.yaml        addTagByPath ~example/link-nav/**, tags [test]
 side-panel.yaml    sub/notes.md, tags [{ id: test, data: { text: Test (sub) } }]
                                                                   -> test (text "Test (sub)")
 ```
@@ -66,9 +66,10 @@ rules:
   - action: addFolder
     rootId: guide
     path: ./guide
+    collect: recursive
     tags: [guide]             # every file collected by this rule
-  - action: addTagByPath      # files collected so far, glob on the internal path
-    pattern: "/guide/**/*.py"
+  - action: addTagByPath      # files collected so far, glob on the source path
+    pattern: "~guide/**/*.py"
     tags: [code]
   - action: addTagByName      # files collected so far, glob on the file name
     pattern: "*.sh"
@@ -83,10 +84,10 @@ Side-panel items (`side-panel.yaml`):
 tree:
   - id: part-design
     text: Design
-    doc: /guide/design.md
+    doc: ~guide/design.md
     tags: [chapter]           # belongs to /guide/design.md, not to the item
     children:
-      - sourceFolder: /guide/scripts
+      - sourceFolder: ~guide/scripts
         text: Scripts
         tags: [code]          # belongs to folder /guide/scripts
 ```
@@ -220,7 +221,7 @@ Renderers never read side-panel nodes to find tags. They use the tag service, a 
 
 ```text
 tagListGet(assetKey)          resolved tags of one asset
-tagListGetByDoc(docPath)      the same, for a document's internal path
+tagListGetByDoc(docPath)      the same, for a document's source path
 tagDisplayGet(tag)            one tag { id, data } ready to render: { id, compName, data }
 tagDisplayListGet(assetKey)   tags ready to render: [{ id, compName, data }]
 assetListGet(tagId)           [{ assetKey, assetType, assetId }] bound to one tag

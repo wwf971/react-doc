@@ -1,4 +1,4 @@
-src: mdx-usage/image/office-worker.svg
+src: ~example/mdx-usage/image/office-worker.svg
 alt: An office worker at a desk
 caption: An office worker at a desk (version 2 of the asset, the head)
 displayMode: contain

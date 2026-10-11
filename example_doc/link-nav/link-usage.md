@@ -22,7 +22,7 @@ Each of these forms becomes a navigable link, in `.md` and `.mdx`:
 [[database.md]]                       wiki-style link
 ```
 
-The target can be a file name, a path relative to the current document (`./sub/notes.md`), or an internal path (`/example/database.md`). When a file name matches several documents, the link shows a list to choose from. More forms are collected in [Link Test Cases](links.mdx).
+The target can be a file name, a path relative to the current document (`./sub/notes.md`), or a source path (`~example/database.md`, the root id after `~`). When a file name matches several documents, the link shows a list to choose from. More forms are collected in [Link Test Cases](links.mdx).
 
 ## Linking to a section
 

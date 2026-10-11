@@ -44,6 +44,8 @@ name: hero image
 
 This object's save mode is **new version**: a save of its head text in the panel appends a version instead of rewriting the head (see [Changing the data](#changing-the-data)).
 
+The data of each version names an image file of the source by its source path (`src: ~example/mdx-usage/image/office-worker.svg`), and each version declares that file as a **dependency** (see [Dependencies](#dependencies)); the panel lists the dependencies of the selected version under the version table.
+
 ## ImageGrid, by id, one version
 
 The same reference form works for any component that takes a code block: here `ImageGrid` with its YAML in the store, referenced by the object's id.
@@ -87,6 +89,25 @@ width: 320
 height: 240
 ```
 
+The object is created with the dependencies the component's data has: the `Image` above names `mdx-usage/image/robot-computer.svg`, so the new object's first version depends on `~example/mdx-usage/image/robot-computer.svg`.
+
+## Dependencies
+
+A version of an object can depend on other things: a file of the source (the image an `Image` object names) or another object of the store (a version of it, or its head). The dependencies are part of the version's metadata in `object.yaml`, as a list of typed entries:
+
+```yaml
+dependencyList:
+  - type: source
+    path: ~example/mdx-usage/image/office-worker.svg
+  - type: asset
+    objectId: w4okcpzk7k5          # the head of that object
+  - type: asset
+    objectId: w4okcpzk7k5
+    versionId: w4okcpzk5gp         # one version of it
+```
+
+A `source` dependency is written as a source path (`~rootId/...`), so it names the file whatever document the object is read from. The page records the dependencies itself when it creates an object or saves a version from a component's data (the component declares, in its registry definition, which files its data refers to); the asset api also lets them be read and changed directly (`dependency/list`, `dependency/set|add|remove`), and asked the other way round (`dependent/list`: which versions depend on a given file or object). A build collects the source files the versions depend on, so the asset above keeps working on a built site even though no document names its image directly. The dependencies are the basis of later features, such as telling what a deletion would break.
+
 ## Binary data
 
 The store holds bytes, so an object can be an image file or anything else. This object is a small PNG in the second folder of the store (`asset-archive`). A component block reads text, so a reference to it shows what went wrong instead of the component; the asset panel of the block still opens and shows the object: its type and size, a preview since it is an image, and a download link. **Edit head** is greyed out there, with the reason beside it: the head is not text, so there is nothing to edit in the panel.
@@ -120,6 +141,10 @@ The local store is one store, but its objects may live in several folders: `exam
 ## In edit mode
 
 In edit mode an asset-backed component block is edited as source: the block is the reference, and that is what the editor shows, labeled `Image (asset)`. Change the `versionId` there to pin or unpin the block, or replace the fence language and write the data inline to take the block out of the store. The data itself is changed through the asset panel, since it belongs to the object and not to this document.
+
+## What a component knows
+
+The component normally does not know where its data came from. A component that declares `isAssetAware` in its registry definition receives `config.assetInfo` beside its data: `{ isFromAsset: false }` for inline data, or, for data from the store, the store, object id and name, the version read, whether it is the head, the object's save mode and whether it is locked. `Image` and `ImageGrid` are asset-aware: when a paste is about to replace an image whose data is an asset, the confirmation says so and tells whether the paste adds a version or rewrites the head in place. A component that wants its data replaced reports `dataReplaceRequest` with the new text; the page then saves the asset (by its save mode) or rewrites the fenced block, whichever the data is, and the component stays the same in both cases.
 
 ## Errors
 

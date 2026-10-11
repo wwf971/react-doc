@@ -6,6 +6,7 @@ import type { DocAssetStore } from './DocAssetStore.js';
 import { compileDoc } from '../lib/mdx-compile.js';
 import { docEditApiCreate } from '../lib/doc-edit-api.js';
 import { ASSET_REF_LANG, ASSET_STORE_ID_LOCAL, assetRefLangIs, assetRefTextBuild } from '../lib/doc-asset-ref.js';
+import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../../../comp-doc/registry/comp-registry.js';
 import {
   blockDeleteOperationBuild,
   blockInsertOperationBuild,
@@ -164,6 +165,7 @@ export const editEventTypeList = [
   'editBlockEnterRequest',
   'editBlockMoveRequest',
   'editBlockAssetMoveRequest',
+  'dataReplaceRequest',
   'sidePanelTextEditStartRequest',
   'sidePanelTextSubmitRequest',
   'sidePanelTextCancelRequest',
@@ -749,6 +751,8 @@ export class DocEditStore {
         : { code: -1, message: this.blockAssetMove?.message || 'the data was not moved into the asset store' };
     }
 
+    if (event.type === 'dataReplaceRequest') return this.dataReplaceApply(event);
+
     if (event.type.startsWith('sidePanelText')) {
       const itemId = String(event.source.itemId ?? '');
       if (!itemId) return { code: -1, message: `${event.type} needs the item id` };
@@ -981,6 +985,7 @@ export class DocEditStore {
       lang: block.component.lang,
       text: block.component.raw,
       note: `${block.component.compName} data moved from ${path}`,
+      dependencyList: this.blockDependencyListGet(block, block.component.raw, path),
     });
     const objectId: string = resultCreate.data?.object?.objectId ?? '';
     if (resultCreate.code !== 0 || !objectId) {
@@ -1146,6 +1151,78 @@ export class DocEditStore {
       return false;
     }
     return true;
+  }
+
+  // ---------- data replacement requested by a component ----------
+
+  // a component asks for its data to be replaced with new text
+  // (dataReplaceRequest { raw, dependencyList? }; doc_page_impl_asset.md
+  // #component-awareness). the block is named by event.source; when the
+  // block's data is an asset (event.source.asset), the asset object is
+  // updated in its save mode and the block is untouched; otherwise the
+  // fenced block of the component is rewritten in the document. the
+  // dependencies recorded with asset data are what the component's
+  // definition extracts from the new data, unless the request names them.
+  private async dataReplaceApply(event: DocEvent): Promise<EditResult> {
+    const path = String(event.source.sourcePath ?? '');
+    const blockIndex = Number(event.source.blockIndex);
+    const raw = String(event.data.raw ?? '');
+    if (!path || !Number.isInteger(blockIndex)) {
+      return { code: -1, message: 'dataReplaceRequest needs the document path and the block index (the document must be in edit mode)' };
+    }
+    const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
+    if (!block?.component) return { code: -1, message: 'dataReplaceRequest names a block that is not a component block' };
+    const dependencyList = Array.isArray(event.data.dependencyList)
+      ? event.data.dependencyList
+      : this.blockDependencyListGet(block, raw, path);
+
+    const asset = event.source.asset;
+    if (asset?.isFromAsset) {
+      if (!this.assetStore?.isWritable) return { code: -1, message: 'the asset store is not writable' };
+      const result = await this.assetStore.objectUpdate(
+        asset.store,
+        asset.objectId,
+        { text: raw },
+        undefined,
+        `${block.component.compName} data replaced from ${path}`,
+        dependencyList,
+      );
+      return { code: result.code, data: result.data, message: result.message };
+    }
+
+    const isLeft = await this.sessionLeaveForIndexAction(path);
+    if (!isLeft) return { code: -1, message: 'the open edit session was not left' };
+    const text = componentBlockTextBuild(block, { raw });
+    return this.operationApply(path, blockReplaceOperationBuild(block, text), {
+      messageFailure: 'The data of the block was not replaced.',
+      onApplied: () => {
+        this.blockTextPending = { path, blockIndex, text };
+      },
+    });
+  }
+
+  // the dependencies of a component's data as its definition declares them
+  // (compDefine assetDependencyListGet): source references are resolved
+  // relative to the document into source paths; a reference naming no
+  // file of the source is dropped.
+  private blockDependencyListGet(block: any, raw: string, path: string): any[] {
+    const compName = String(block.component?.compName ?? '');
+    const compId = compIdResolve(this.sourceStore.configDoc, compName);
+    const definition = compDefinitionNormalize(this.docStore.compById[compId]);
+    if (typeof definition?.assetDependencyListGet !== 'function') return [];
+    const { data } = compInputNormalize(definition, { raw, lang: block.component.lang, propsAuthored: block.component.props ?? {} });
+    const dependencyList: any[] = [];
+    for (const dependency of definition.assetDependencyListGet(data) ?? []) {
+      if (dependency?.type === 'source') {
+        const entry = this.sourceStore.fileResolve(String(dependency.path ?? ''), path);
+        if (entry) dependencyList.push({ type: 'source', path: entry.internalPath });
+        continue;
+      }
+      if (dependency?.type === 'asset' && dependency.objectId) {
+        dependencyList.push({ type: 'asset', objectId: dependency.objectId, ...(dependency.versionId ? { versionId: dependency.versionId } : {}) });
+      }
+    }
+    return dependencyList;
   }
 
   // the delete operation of one block, shared by the confirmed deletion and

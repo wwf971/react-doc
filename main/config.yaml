@@ -12,7 +12,15 @@ docEntry:
 # (title, homeDoc, homeItem), so another document deploys by changing
 # docEntry.file alone; the demonstration leaves them to the entry.
 # siteTitle: React Doc Test
-# homeDoc: /example/doc.md       # internal path: /{rootId}/relative/path
+# homeDoc: ~example/doc.md       # source path: ~{rootId}/relative/path (doc_page_impl_source.md)
+
+# variables: ${name} in any string value of this file, of the entry's
+# config declarations and of frontmatter "config" is replaced by the value
+# here. design: doc_page_impl_config.md#variables
+variable:
+  # where Image / ImageGrid write a pasted image by default: a folder of
+  # the source that the entry collects as "referenced" (example source.yaml)
+  imageFileStoreDirDefault: ~example/asset-file/image
 
 # the local asset store: versioned objects (text or binary) a component block
 # can reference instead of carrying its data inline (```asset blocks). the
@@ -47,6 +55,20 @@ globalConfig:
   # page level, default false: a tag on a side-panel item opens the overview
   # too. on here so the demo can show it; off, a click on the item navigates
   TagsOverviewPopupAtSidePanelItemIsOn: true
+
+# component-level config: the keys a registered component declares for
+# itself (compDefine configDefineList), set by the component's tag name.
+# overridden per document the same way as document-level keys, under a
+# "compConfig" mapping of a source rule, a side-panel node or frontmatter
+# "config"; the settings panel shows them on its Component tab.
+# design: doc_page_impl_config.md#component-level-config
+compConfig:
+  Image:
+    FileStoreDir: ${imageFileStoreDirDefault}   # the folder a pasted image is written to
+    PasteReplaceConfirmIsOn: true               # ask before a paste replaces an existing image
+  ImageGrid:
+    FileStoreDir: ${imageFileStoreDirDefault}
+    PasteReplaceConfirmIsOn: true
 
 # tag name usable in docs -> component id in comp-doc/registry/registry.js
 compRegistry:
@@ -97,8 +119,11 @@ compRegistry:
   TagListAllDemo: specific/TagListAllDemo
   DocConfigDemo: specific/DocConfigDemo
 
-# files referenced by Image / ImageGrid / DiagramMermaid properties are
-# exported as attachmentUrlByPath, which the host's assetUrlGet reads
+# files referenced by Image / ImageGrid / DiagramMermaid properties, the
+# binary files the source collects and the source files asset versions
+# depend on are bundled into a build and exported as fileUrlByPath, which
+# the source layer answers from (config.assetUrlGet of a component).
+# design: doc_page_impl_source.md#files-in-a-build
 collectComponentAttachmentsOnBuild: true
 
 # display strategy for non-md files: suffix -> code block language

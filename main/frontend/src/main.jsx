@@ -19,6 +19,12 @@ createRoot(document.getElementById('root')).render(
     data={{
       configDoc: docSource.configDoc,
       fileManifest: docSource.fileManifest,
+      // the folders of the source (doc_page_impl_source.md): where files
+      // can be created, what path completion offers
+      dirManifest: docSource.dirManifest,
+      // the bytes of the source files a build collected, by source path;
+      // empty in development, where the source api answers them
+      fileUrlByPath: docSource.fileUrlByPath,
       subscribe: docSource.subscribeDocSource,
       // the asset objects bundled into a build; null in development, where
       // the asset api of the development server is used instead
@@ -33,6 +39,9 @@ createRoot(document.getElementById('root')).render(
         'specific/DemoCounter': compDefine(DemoCounter),
         'specific/StockTable': compDefine(StockTable, stockTableDefineOptions),
       },
+      // the source layer (doc_page_impl_source.md): the source api of the
+      // development server (file bytes, file creation); empty in a build
+      source: { endpoint: docSource.docSourceEndpoint },
       // in-place editing, answered by the development server only; the
       // virtual module exports an empty endpoint in a build
       edit: { endpoint: docSource.docEditEndpoint },
@@ -40,11 +49,11 @@ createRoot(document.getElementById('root')).render(
       // development server and its change feed; both empty in a build
       asset: { endpoint: docSource.docAssetEndpoint, subscribe: docSource.subscribeDocAsset },
       // host settings handed to every registered component's config:
-      // Image/ImageGrid/DiagramMermaid resolve file references, and
       // DiagramMermaid loads mermaid on first use, and the page frames popups
-      // such as the tag overview with panelComponent.
+      // such as the tag overview with panelComponent. file references of
+      // Image/ImageGrid/DiagramMermaid are resolved by the source layer
+      // (config.assetUrlGet, default); a host may hand its own assetUrlGet here.
       compConfigHost: {
-        assetUrlGet,
         mermaidLoad: () => import('mermaid'),
         panelComponent: TextPanelDemo,
       },
@@ -68,10 +77,3 @@ createRoot(document.getElementById('root')).render(
     }}
   />,
 );
-
-// attachments are collected by the doc-source plugin when
-// collectComponentAttachmentsOnBuild is enabled in config.yaml
-function assetUrlGet(path) {
-  const pathNormalized = String(path ?? '').trim().replace(/^\.?\//, '');
-  return docSource.attachmentUrlByPath?.[pathNormalized] ?? path;
-}

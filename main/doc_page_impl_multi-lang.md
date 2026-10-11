@@ -172,9 +172,9 @@ The `text` of any side-panel node can be a string or the same kind of language m
     en: Technical documents
   children:
     - text: { jp: データバース, en: Dataverse }
-      doc: /codeapp-dev/doc/codeapp-dataverse.md
+      doc: ~codeapp-dev/doc/codeapp-dataverse.md
     - text: Python API
-      doc: /codeapp-dev/doc/python-api.md
+      doc: ~codeapp-dev/doc/python-api.md
 ```
 
 Labels follow the language of the visible document, `DocStore.languageDisplay`: the selected language of the current document, then its frontmatter language, then the page language. This is the language the document body receives; the hosted part index keeps its own language. The selection uses the same rule as indexes: the preferred translation when present, otherwise the first authored one, with `lang` set to the language actually shown.
