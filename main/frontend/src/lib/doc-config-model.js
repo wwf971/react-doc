@@ -4,20 +4,27 @@ import { COMP_CONFIG_KEY, configDeclaredIs, configValueNormalize, variableExpand
 // Design: doc_page_impl_config.md
 //
 // value of key K for document D, later levels win:
-//   1. default      definition valueDefault
-//   2. global       configDoc.globalConfig.K
-//   3. source       source rules that collected D, in rule order   (manifest entry.configSource)
-//   4. side panel   side-panel nodes binding D or a folder above D, in tree order
-//   5. doc          frontmatter "config" of D                     (manifest entry.configFrontmatter)
-//   6. user         the reader's override from the settings panel (configUser)
-// page-scoped keys are read at levels 2 and 6 only. a feature with an inline
-// form (for example a link title marker) applies it after level 6 by itself.
+//   1. default        definition valueDefault
+//   2. layers below   the config layers with isAboveDocLevels false, in order
+//                     (global: configDoc.globalConfig.K)
+//   3. source         source rules that collected D, in rule order   (manifest entry.configSource)
+//   4. side panel     side-panel nodes binding D or a folder above D, in tree order
+//   5. doc            frontmatter "config" of D                     (manifest entry.configFrontmatter)
+//   6. layers above   the config layers with isAboveDocLevels true, in order
+//                     (client: the reader's values kept in the browser)
+// page-scoped keys are read at the layer levels only (2 and 6). a feature
+// with an inline form (for example a link title marker) applies it after
+// level 6 by itself.
+//
+// a layer is { id, config, compConfig, isCompKeyedById, isAboveDocLevels }:
+// config is { K: value } of the page keys, compConfig { Comp: { K: value } }
+// of the component keys, Comp being a component's tag name (a yaml layer;
+// compIdResolve turns it into the component id) or the component id itself
+// (isCompKeyedById, a layer the page writes).
 //
 // component-level keys (doc_page_impl_config.md#component-level-config) are
-// resolved the same way, per component: level 2 is configDoc.compConfig,
-// levels 3-5 read the "compConfig" mapping inside the declared config, level
-// 6 is configUserComp. a declaration names the component by its tag name
-// (compIdResolve turns it into the component id the keys are declared for).
+// resolved the same way, per component: the layers read their compConfig,
+// levels 3-5 read the "compConfig" mapping inside the declared config.
 //
 // a string value may hold ${name}: it is replaced by configDoc.variable[name]
 // at every level (variableExpand).
@@ -25,23 +32,24 @@ import { COMP_CONFIG_KEY, configDeclaredIs, configValueNormalize, variableExpand
 // part index level: side-panel part.index.config, applied over the config of
 // the index document only while the index is hosted in the local-index area.
 // it is kept apart from configByDocPath, so the same document rendered as a
-// page keeps levels 1-6. the user level is applied over it too.
+// page keeps levels 1-6. the layers above the document levels are applied
+// over it too, for the keys it declares.
 //
 // configModel: {
-//   configGlobal                key -> value, levels 1-2 and 6
-//   configGlobalDeclared        key -> value, levels 1-2 (without the user's override)
+//   configGlobal                key -> value, every layer (levels 1, 2 and 6)
 //   levelGlobalByKey            key -> level
+//   configByLayerId             layerId -> { valueByKey, levelByKey }, the layers up to and
+//                               including this one: what the settings panel shows on its tab
 //   configByDocPath             docPath -> { valueByKey, levelByKey }, levels 1-6
 //   configPartIndexByPartId     partId -> { key: value }, only the keys declared
-//   compConfigGlobalByCompId    compId -> { valueByKey, levelByKey }, levels 1-2 and 6
-//   compConfigGlobalDeclaredByCompId  compId -> key -> value, levels 1-2
+//   compConfigGlobalByCompId    compId -> { valueByKey, levelByKey }, every layer
+//   compConfigByLayerId         layerId -> compId -> { valueByKey, levelByKey }, the layers up to this one
 //   compConfigByDocPath         docPath -> compId -> { valueByKey, levelByKey }, levels 1-6
 // }
 export function configModelBuild({
   configDefineByKey,
   configDoc,
-  configUser = {},
-  configUserComp = {},
+  layerList = [],
   fileManifest = [],
   declarationListSidePanel = [],
   declarationListPartIndex = [],
@@ -52,37 +60,37 @@ export function configModelBuild({
   if (configDoc?.variable !== undefined && !configDeclaredIs(configDoc.variable)) {
     console.warn('[doc-config] variable must be a mapping');
   }
+  const compOptions = { compConfigDefineByCompId, compIdResolve, variableByName };
+  const layerListBelow = layerList.filter((layer) => !layer.isAboveDocLevels);
+  const layerListAbove = layerList.filter((layer) => layer.isAboveDocLevels);
+
+  // ----- page level: the default, then every layer in order -----
   const configGlobal = {};
   const levelGlobalByKey = {};
   for (const [key, define] of configDefineByKey) {
     configGlobal[key] = define.valueDefault;
     levelGlobalByKey[key] = 'default';
   }
-  const globalConfig = configDoc?.globalConfig;
-  if (globalConfig !== undefined && !configDeclaredIs(globalConfig)) {
-    console.warn('[doc-config] globalConfig must be a mapping');
-  }
-  configLevelApply(
-    { valueByKey: configGlobal, levelByKey: levelGlobalByKey },
-    configDeclaredIs(globalConfig) ? globalConfig : {},
-    { configDefineByKey, variableByName, level: 'global', originText: 'globalConfig' },
-  );
-  // the values of levels 1-5 before the user's override, the base of every document
-  const configGlobalDeclared = { ...configGlobal };
-  const levelGlobalDeclaredByKey = { ...levelGlobalByKey };
-  const optionsUser = { configDefineByKey, variableByName, level: 'user', originText: 'the settings panel' };
-  configLevelApply({ valueByKey: configGlobal, levelByKey: levelGlobalByKey }, configUser, optionsUser);
-
-  // ----- component-level keys, page level -----
-  const compOptions = { compConfigDefineByCompId, compIdResolve, variableByName };
+  const configResolvedGlobal = { valueByKey: configGlobal, levelByKey: levelGlobalByKey };
   const compConfigGlobalByCompId = compConfigResolvedBuild(compConfigDefineByCompId);
-  const compConfigGlobal = configDoc?.[COMP_CONFIG_KEY];
-  if (compConfigGlobal !== undefined && !configDeclaredIs(compConfigGlobal)) {
-    console.warn(`[doc-config] ${COMP_CONFIG_KEY} must be a mapping of component names`);
+  const configByLayerId = new Map();
+  const compConfigByLayerId = new Map();
+  for (const layer of layerList) {
+    layerApply(configResolvedGlobal, compConfigGlobalByCompId, layer, { configDefineByKey, variableByName, ...compOptions });
+    configByLayerId.set(layer.id, configResolvedCopy(configResolvedGlobal));
+    compConfigByLayerId.set(layer.id, compConfigResolvedCopy(compConfigGlobalByCompId));
   }
-  compConfigLevelApply(compConfigGlobalByCompId, compConfigGlobal, { ...compOptions, level: 'global', originText: COMP_CONFIG_KEY });
-  const compConfigGlobalDeclaredByCompId = compConfigResolvedCopy(compConfigGlobalByCompId);
-  compConfigUserApply(compConfigGlobalByCompId, configUserComp, compOptions);
+
+  // ----- document level: the default and the layers below, then the document levels, then the layers above -----
+  const configResolvedBase = { valueByKey: {}, levelByKey: {} };
+  for (const [key, define] of configDefineByKey) {
+    configResolvedBase.valueByKey[key] = define.valueDefault;
+    configResolvedBase.levelByKey[key] = 'default';
+  }
+  const compConfigBaseByCompId = compConfigResolvedBuild(compConfigDefineByCompId);
+  for (const layer of layerListBelow) {
+    layerApply(configResolvedBase, compConfigBaseByCompId, layer, { configDefineByKey, variableByName, ...compOptions });
+  }
 
   // side-panel declarations folded per document, in tree order
   const configSidePanelByDocPath = new Map();
@@ -98,11 +106,8 @@ export function configModelBuild({
   const compConfigByDocPath = new Map();
   for (const entry of fileManifest) {
     const docPath = entry.internalPath;
-    const configResolved = {
-      valueByKey: { ...configGlobalDeclared },
-      levelByKey: { ...levelGlobalDeclaredByKey },
-    };
-    const compConfigResolved = compConfigResolvedCopy(compConfigGlobalDeclaredByCompId);
+    const configResolved = configResolvedCopy(configResolvedBase);
+    const compConfigResolved = compConfigResolvedCopy(compConfigBaseByCompId);
     const levelList = [
       { configDeclared: entry.configSource, level: 'source', originText: `source rules of ${docPath}` },
       ...(configSidePanelByDocPath.get(docPath) ?? []).map((declaration) => ({
@@ -114,8 +119,9 @@ export function configModelBuild({
       configLevelApply(configResolved, configDeclared, { configDefineByKey, variableByName, level, originText });
       compConfigLevelApply(compConfigResolved, configDeclared?.[COMP_CONFIG_KEY], { ...compOptions, level, originText: `${COMP_CONFIG_KEY} of ${originText}` });
     }
-    configLevelApply(configResolved, configUser, optionsUser);
-    compConfigUserApply(compConfigResolved, configUserComp, compOptions);
+    for (const layer of layerListAbove) {
+      layerApply(configResolved, compConfigResolved, layer, { configDefineByKey, variableByName, ...compOptions });
+    }
     configByDocPath.set(docPath, configResolved);
     compConfigByDocPath.set(docPath, compConfigResolved);
   }
@@ -131,29 +137,60 @@ export function configModelBuild({
     configLevelApply(configResolved, declaration.config, {
       configDefineByKey, variableByName, level: 'partIndex', originText,
     });
-    // the reader's override wins over the part index declaration as well,
-    // restricted to the keys the part index declared
-    for (const key of Object.keys(configResolved.valueByKey)) {
-      if (configUser[key] === undefined) continue;
-      configLevelApply(configResolved, { [key]: configUser[key] }, optionsUser);
+    // the layers above the document levels win over the part index
+    // declaration as well, restricted to the keys the part index declared
+    for (const layer of layerListAbove) {
+      const configLayerDeclaredKeys = {};
+      for (const key of Object.keys(configResolved.valueByKey)) {
+        if (configDeclaredIs(layer.config) && layer.config[key] !== undefined) configLayerDeclaredKeys[key] = layer.config[key];
+      }
+      configLevelApply(configResolved, configLayerDeclaredKeys, layerOptionsBuild(layer, { configDefineByKey, variableByName }));
     }
     configPartIndexByPartId.set(declaration.partId, configResolved.valueByKey);
   }
 
   return {
     configGlobal,
-    configGlobalDeclared,
     levelGlobalByKey,
+    configByLayerId,
     configByDocPath,
     configPartIndexByPartId,
     compConfigGlobalByCompId,
-    compConfigGlobalDeclaredByCompId: compConfigValueByCompIdGet(compConfigGlobalDeclaredByCompId),
+    compConfigByLayerId,
     compConfigByDocPath,
   };
 }
 
+// ----- layers -----
+
+function layerOptionsBuild(layer, { configDefineByKey, variableByName }) {
+  return { configDefineByKey, variableByName, level: layer.id, originText: `the ${layer.id} config layer` };
+}
+
+// one layer applied to resolved page keys and component keys
+function layerApply(configResolved, compConfigByCompId, layer, { configDefineByKey, variableByName, compConfigDefineByCompId, compIdResolve }) {
+  const options = layerOptionsBuild(layer, { configDefineByKey, variableByName });
+  if (layer.config !== undefined && !configDeclaredIs(layer.config)) {
+    console.warn(`[doc-config] the config of ${options.originText} must be a mapping`);
+  } else {
+    configLevelApply(configResolved, layer.config ?? {}, options);
+  }
+  compConfigLevelApply(compConfigByCompId, layer.compConfig, {
+    compConfigDefineByCompId,
+    compIdResolve: layer.isCompKeyedById ? (compId) => compId : compIdResolve,
+    variableByName,
+    level: layer.id,
+    originText: `${COMP_CONFIG_KEY} of ${options.originText}`,
+  });
+}
+
+function configResolvedCopy(configResolved) {
+  return { valueByKey: { ...configResolved.valueByKey }, levelByKey: { ...configResolved.levelByKey } };
+}
+
 function configLevelApply(configResolved, configDeclared, { configDefineByKey, variableByName, level, originText }) {
   if (!configDeclaredIs(configDeclared)) return;
+  const isLayer = level !== 'source' && level !== 'sidePanel' && level !== 'doc' && level !== 'partIndex';
   for (const [key, valueDeclared] of Object.entries(configDeclared)) {
     // component-level values live under their own key (compConfigLevelApply)
     if (key === COMP_CONFIG_KEY) continue;
@@ -162,8 +199,8 @@ function configLevelApply(configResolved, configDeclared, { configDefineByKey, v
       console.warn(`[doc-config] unknown config key "${key}" in ${originText}`);
       continue;
     }
-    if (define.scope === 'page' && level !== 'global' && level !== 'user') {
-      console.warn(`[doc-config] "${key}" is a page-level key; set it in globalConfig, not in ${originText}`);
+    if (define.scope === 'page' && !isLayer) {
+      console.warn(`[doc-config] "${key}" is a page-level key; set it in a config layer (globalConfig), not in ${originText}`);
       continue;
     }
     const { isValid, value } = configValueNormalize(define, variableExpand(valueDeclared, variableByName, originText));
@@ -201,14 +238,8 @@ function compConfigResolvedCopy(compConfigByCompId) {
   return result;
 }
 
-function compConfigValueByCompIdGet(compConfigByCompId) {
-  const result = new Map();
-  for (const [compId, resolved] of compConfigByCompId) result.set(compId, { ...resolved.valueByKey });
-  return result;
-}
-
 // compConfigDeclared: { CompName: { Key: value } }, the component named as
-// written in documents
+// written in documents (or by its id, when compIdResolve is the identity)
 function compConfigLevelApply(compConfigByCompId, compConfigDeclared, { compConfigDefineByCompId, compIdResolve, variableByName, level, originText }) {
   if (compConfigDeclared === undefined) return;
   if (!configDeclaredIs(compConfigDeclared)) {
@@ -223,15 +254,6 @@ function compConfigLevelApply(compConfigByCompId, compConfigDeclared, { compConf
       continue;
     }
     compConfigOneApply(compConfigByCompId.get(compId), configDeclared, defineByKey, { variableByName, level, originText: `${originText}, ${compName}` });
-  }
-}
-
-// the reader's overrides: { compId: { Key: value } }
-function compConfigUserApply(compConfigByCompId, configUserComp, { compConfigDefineByCompId, variableByName }) {
-  for (const [compId, configDeclared] of Object.entries(configUserComp ?? {})) {
-    const defineByKey = compConfigDefineByCompId.get(compId);
-    if (!defineByKey) continue;
-    compConfigOneApply(compConfigByCompId.get(compId), configDeclared, defineByKey, { variableByName, level: 'user', originText: `the settings panel, ${compId}` });
   }
 }
 

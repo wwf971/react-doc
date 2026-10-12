@@ -1,6 +1,7 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { compileDoc } from '../lib/mdx-compile.js';
 import { docTargetResolve } from '../lib/doc-target-resolve.js';
+import { sourcePathCompleteList } from '../lib/doc-source-complete.js';
 import {
   sourcePathIsInside,
   sourcePathIsRooted,
@@ -52,8 +53,16 @@ export type SourceData = {
 
 export type SourceResult = { code: number; data?: any; message: string };
 
-// what a path completion asks for: folders, or files (of some extensions)
-export type SourcePathSpec = { kind: 'dir' | 'file'; extList?: string[] };
+// what a path completion asks for (lib/doc-source-complete.js): folders,
+// files, or both, narrowed by extension, root, folder, or a rule in code
+export type SourcePathSpec = {
+  kind: 'dir' | 'file' | 'any';
+  extList?: string[];
+  rootIdList?: string[];
+  dirPath?: string;
+  isMatch?: (candidate: SourcePathCandidate) => boolean;
+};
+export type SourcePathCandidate = { path: string; kind: 'dir' | 'file'; entry: FileEntry | DirEntry };
 
 export type CompileState = {
   status: 'loading' | 'done' | 'error';
@@ -463,28 +472,12 @@ export class DocSourceStore {
     return this.dirManifest;
   }
 
-  // completion of a path being typed, as source paths. an empty text lists
-  // the roots; a text without the root mark is matched against the end of
-  // every candidate (typing "image" finds ~example/mdx-usage/image).
-  //   spec.kind 'dir'   folders of the source
-  //   spec.kind 'file'  files, of spec.extList when given
-  pathComplete(text: string, spec: SourcePathSpec = { kind: 'dir' }): string[] {
-    const typed = sourcePathNormalize(text);
-    let candidateList: string[];
-    if (spec.kind === 'file') {
-      const extSet = new Set((spec.extList ?? []).map((ext) => ext.toLowerCase().replace(/^\./, '')));
-      candidateList = this.fileManifest
-        .filter((entry) => extSet.size === 0 || extSet.has(entry.ext))
-        .map((entry) => entry.internalPath);
-    } else {
-      candidateList = this.dirManifest.map((dir) => dir.internalPath);
-    }
-    if (typed === '') return candidateList;
-    if (sourcePathIsRooted(typed)) {
-      return candidateList.filter((candidate) => candidate.startsWith(typed));
-    }
-    const typedLower = typed.toLowerCase();
-    return candidateList.filter((candidate) => candidate.toLowerCase().includes(typedLower));
+  // completion of a path being typed (lib/doc-source-complete.js): the
+  // folders and / or files the spec allows that match the text. an empty
+  // text lists them all; a rooted text matches by prefix; another text
+  // anywhere in the path (typing "image" finds ~example/mdx-usage/image).
+  pathComplete(text: string, spec: SourcePathSpec = { kind: 'dir' }): SourcePathCandidate[] {
+    return sourcePathCompleteList(text, spec, { fileManifest: this.fileManifest, dirManifest: this.dirManifest });
   }
 
   // a file name not used in the folder yet: "a.png", then "a-2.png", "a-3.png"

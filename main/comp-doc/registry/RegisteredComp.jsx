@@ -2,6 +2,7 @@ import { useContext, useId } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from './comp-registry.js';
+import { compViewModeDefaultIdGet, compViewModeListGet } from './comp-expose.js';
 import { CompDataRefHost } from './CompDataRef.jsx';
 import { CompAssetHost, compInputIsAssetRef } from '../asset/CompAssetHost.jsx';
 import { DocEditBlockContext } from '../edit/DocEditDocContext.js';
@@ -20,7 +21,7 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
     onEventRuntime,
     placement,
   } = props;
-  const { compById, compConfigHost, configStore, docStore, eventRouter, onEvent: onEventPage, sourceStore } = useDocStores();
+  const { compById, compConfigHost, configStore, docStore, editStore, eventRouter, onEvent: onEventPage, sourceStore } = useDocStores();
   const idFallback = useId();
   // the block of the edit body the component is rendered in, when it is
   const editBlock = useContext(DocEditBlockContext);
@@ -117,6 +118,13 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
   // by the wrapper of the edit body; undefined in reading mode, where the
   // document cannot be written
   const blockIndex = configRuntime.blockIndex ?? (editBlock?.path === sourcePath ? editBlock.blockIndex : undefined);
+  // the view mode of a component that exposes view modes
+  // (doc_page_impl_mdx_comp.md#view-modes-and-edit-modes): the one a reader
+  // picked for this block through the mode menu, else the component's
+  // default; absent for a component without view modes
+  const viewMode = compViewModeListGet(definition).length > 0
+    ? (blockIndex !== undefined ? editStore?.blockViewModeGet(sourcePath, blockIndex) : undefined) ?? compViewModeDefaultIdGet(definition)
+    : undefined;
   const config = {
     assetUrlGet,
     source: sourceStore.sourceService,
@@ -125,6 +133,7 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
     ...configRuntime,
     compConfig: configStore.compConfigGet(compIdResolved, sourcePath),
     ...(definition.isAssetAware ? { assetInfo: configRuntime.assetInfo ?? { isFromAsset: false } } : {}),
+    ...(viewMode !== undefined ? { viewMode } : {}),
     blockIndex,
     compId: compIdResolved,
     instanceId,

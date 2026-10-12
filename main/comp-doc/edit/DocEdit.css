@@ -503,6 +503,7 @@
 .doc-edit-insert-group button {
   display: inline-flex;
   align-items: center;
+  gap: 0.25rem;
   height: 1.35rem;
   padding: 0 0.45rem;
   border: 1px solid var(--color-fd-border);
@@ -531,6 +532,106 @@
   align-items: center;
   gap: 0.3rem;
   color: var(--color-fd-muted-foreground);
+}
+
+/* ---------- mode menu of a block ---------- */
+
+/* the modes button: in the toolbar's control group it is one of its
+   buttons; in the editor bar it is a doc-edit-action of the bar's scale */
+.doc-edit-panel-row > .doc-edit-mode-button {
+  padding: 0 0.3rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-edit-mode-button[aria-expanded='true'] {
+  color: var(--color-fd-primary);
+}
+
+/* the dropdown (Menu of react-comp-misc, portaled to the body) in the
+   colors and the scale of the floating controls of the edit layer */
+.menu-core-root.doc-edit-mode-menu {
+  padding: 0.15rem 0;
+  border-color: var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  box-shadow: 0 4px 14px rgb(15 23 42 / 14%);
+  font-size: 0.72rem;
+}
+
+.doc-edit-mode-menu .menu-core-item {
+  padding: 0.15rem 0.5rem;
+  color: var(--color-fd-foreground);
+  font-size: 0.72rem;
+  line-height: 1.35rem;
+}
+
+.doc-edit-mode-menu .menu-core-item:hover:not(.disabled) {
+  background: var(--color-fd-accent);
+}
+
+.doc-edit-mode-menu .menu-core-item.disabled,
+.doc-edit-mode-menu .menu-core-item[aria-disabled='true'] {
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  opacity: 0.55;
+}
+
+/* a section head is a container item: not clickable, a line under it */
+.doc-edit-mode-menu .menu-core-item.is-container {
+  padding-top: 0.25rem;
+  cursor: default;
+}
+
+.doc-edit-mode-menu .menu-core-item.is-container ~ .menu-core-item.is-container {
+  margin-top: 0.15rem;
+  border-top: 1px solid var(--color-fd-border);
+}
+
+.doc-edit-mode-menu .menu-core-item-component {
+  width: 100%;
+  max-width: none;
+}
+
+.doc-edit-mode-head {
+  display: block;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.65rem;
+  font-weight: 550;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.doc-edit-mode-note {
+  display: block;
+  color: var(--color-fd-muted-foreground);
+  font-style: italic;
+}
+
+.doc-edit-mode-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.doc-edit-mode-item-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 13px;
+  justify-content: center;
+}
+
+.doc-edit-mode-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-edit-mode-item-marks {
+  flex: 0 0 auto;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.65rem;
 }
 
 /* ---------- floating bar of an editor ---------- */

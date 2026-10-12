@@ -11,42 +11,23 @@
   font-size: 0.8rem;
 }
 
-.doc-source-path-text {
-  display: inline-block;
+/* the text is an EditValueInline; these are the path's own layout */
+.doc-source-path-input .doc-edit-value {
   min-width: 6rem;
   max-width: 100%;
   white-space: pre;
+  overflow-wrap: normal;
   overflow-x: auto;
-  cursor: text;
-  caret-color: var(--color-fd-primary);
-  text-decoration: underline dashed color-mix(in srgb, var(--color-fd-primary) 45%, var(--color-fd-border));
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
 }
 
-.doc-source-path-text:focus {
-  outline: none;
-  text-decoration-style: solid;
-  text-decoration-color: var(--color-fd-primary);
-}
-
-.doc-source-path-text:empty::before {
-  content: attr(data-placeholder);
-  color: var(--color-fd-muted-foreground);
-}
-
-.doc-source-path-text[data-disabled] {
-  opacity: 0.6;
-}
-
+/* the completion list: rendered into document.body at a fixed position
+   under the text (SourcePathInput sets top / left / widths), above the
+   settings panel (z-index 60) and the location prompt */
 .doc-source-path-list {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 40;
+  position: fixed;
+  z-index: 70;
   max-height: 14rem;
-  min-width: 100%;
-  margin: 2px 0 0;
+  margin: 0;
   padding: 2px 0;
   overflow-y: auto;
   list-style: none;
@@ -55,10 +36,15 @@
   background: var(--color-fd-popover, var(--color-fd-background));
   color: var(--color-fd-popover-foreground, var(--color-fd-foreground));
   box-shadow: 0 4px 12px rgb(0 0 0 / 0.12);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
   white-space: nowrap;
 }
 
 .doc-source-path-option {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   padding: 2px 6px;
   cursor: pointer;
 }
@@ -66,6 +52,17 @@
 .doc-source-path-option:hover,
 .doc-source-path-option[data-active] {
   background: var(--color-fd-accent);
+}
+
+.doc-source-path-option-path {
+  flex: 1 1 auto;
+}
+
+/* the kind of a candidate, shown when folders and files are listed together */
+.doc-source-path-option-kind {
+  flex: 0 0 auto;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.7rem;
 }
 
 /* ---------- SourceFilePrompt ---------- */
@@ -107,6 +104,11 @@
 .doc-source-prompt-row .doc-edit-value {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.doc-source-prompt-row .doc-source-path-input .doc-edit-value {
+  display: block;
+  width: 100%;
 }
 
 .doc-source-prompt-actions {

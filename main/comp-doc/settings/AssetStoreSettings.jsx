@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Check, LoaderCircle, Plus, Trash2 } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
+import { EditValueInline } from '../edit/EditValueInline.jsx';
 import '../edit/DocEdit.css';
 import './DocSettings.css';
 
@@ -63,8 +64,8 @@ export const AssetStoreSettings = observer(function AssetStoreSettings() {
             ) : null}
           </li>
         ))}
+        {isWritable ? <FolderAddRow isBusy={isBusy} /> : null}
       </ul>
-      {isWritable ? <FolderAddRow isBusy={isBusy} /> : null}
       {assetStore.folder.status === 'error' ? (
         <p className="doc-edit-message">
           {assetStore.folder.message}
@@ -75,42 +76,38 @@ export const AssetStoreSettings = observer(function AssetStoreSettings() {
   );
 });
 
-// a new folder path typed in place (a span made editable, no <input>) and
-// added with Enter or the Add button; the folder is created on disk by the
-// development server when it does not exist
+// a new folder path, the same editable text as a source path
+// (EditValueInline): Enter, the Add button, or a click outside adds it,
+// and leaving it empty shows the placeholder. the folder is created on
+// disk by the development server when it does not exist.
 const FolderAddRow = observer(function FolderAddRow({ isBusy }) {
   const { assetStore } = useDocStores();
   const elementRef = useRef(null);
+  const addingRef = useRef(false);
 
-  const add = async () => {
+  const add = async (pathText) => {
     const element = elementRef.current;
-    const pathText = element?.textContent.trim() ?? '';
-    if (!pathText || isBusy) return;
-    const isAdded = await assetStore.folderAdd(pathText);
-    if (isAdded && element) element.textContent = '';
+    const text = String(pathText ?? element?.textContent ?? '').trim();
+    if (!text || isBusy || addingRef.current) return;
+    addingRef.current = true;
+    try {
+      const isAdded = await assetStore.folderAdd(text);
+      if (isAdded && element) element.textContent = '';
+    } finally {
+      addingRef.current = false;
+    }
   };
 
   return (
-    <div className="doc-settings-asset-add">
-      <span
+    <li className="doc-settings-asset-folder doc-settings-asset-add">
+      <EditValueInline
         ref={elementRef}
-        className="doc-settings-asset-add-path doc-edit-value"
-        role="textbox"
+        value=""
+        placeholder="./asset-more"
+        isLocked={isBusy}
+        className="doc-settings-asset-add-path"
         aria-label="Path of the folder to add"
-        data-placeholder="./asset-more"
-        contentEditable={isBusy ? 'false' : 'plaintext-only'}
-        suppressContentEditableWarning
-        spellCheck={false}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            void add();
-          }
-        }}
-        onPaste={(event) => {
-          event.preventDefault();
-          document.execCommand('insertText', false, (event.clipboardData?.getData('text/plain') ?? '').replace(/\n/g, ' '));
-        }}
+        onCommit={(text) => void add(text)}
       />
       <button type="button" className="doc-settings-head-button" disabled={isBusy} title="adds the folder and scans it" onClick={() => void add()}>
         {isBusy
@@ -118,6 +115,6 @@ const FolderAddRow = observer(function FolderAddRow({ isBusy }) {
           : <Plus aria-hidden="true" size={11} strokeWidth={2} />}
         <span>Add folder</span>
       </button>
-    </div>
+    </li>
   );
 });

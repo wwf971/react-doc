@@ -8,6 +8,13 @@ import { docEditApiCreate } from '../lib/doc-edit-api.js';
 import { ASSET_REF_LANG, ASSET_STORE_ID_LOCAL, assetRefLangIs, assetRefTextBuild } from '../lib/doc-asset-ref.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../../../comp-doc/registry/comp-registry.js';
 import {
+  COMP_EDIT_MODE_SOURCE_ID,
+  compEditModeListGet,
+  compEditModeSource,
+  compMetaGet,
+  compViewModeListGet,
+} from '../../../comp-doc/registry/comp-expose.js';
+import {
   blockDeleteOperationBuild,
   blockInsertOperationBuild,
   blockReplaceOperationBuild,
@@ -28,7 +35,10 @@ import {
 //   blockEnterMode    how a block enters its edit mode (config EditBlockEnterMode)
 //   sourceByPath      text + hash of a document as read from disk
 //   docEditByPath     the document compiled with block wrappers + its block model
-//   session           the one block being edited, or the frontmatter / whole document
+//   session           the one block being edited, or the frontmatter / whole document,
+//                     in one edit mode of the block (editModeId)
+//   blockViewModeById the view mode a reader picked for a block, by "path#index"
+//   blockModeMenu     the one mode menu (view modes / edit modes of a block) that is open
 //   insertMenu        the one insert menu that is open, anchored to a block toolbar
 //   deleteConfirm     the one block whose deletion waits for confirmation
 //   blockMove         the one block being moved up or down (swapped with its
@@ -74,6 +84,10 @@ export type EditSession = {
   blockIndex: number;
   // the block was created from the insert menu by this session; cancel removes it
   isCreated: boolean;
+  // the edit mode the block is open in (doc_page_impl_mdx_comp.md#view-modes-and-edit-modes):
+  // one the component exposes, or the built-in 'source'; the frontmatter and
+  // the whole document are always 'source'
+  editModeId: string;
   selectionInitial: EditSelectionInitial;
   textInitial: string;
   textDraft: string;
@@ -99,6 +113,25 @@ export type EditDeleteConfirm = {
   blockIndex: number;
   status: 'confirming' | 'submitting' | 'error';
   message: string;
+};
+
+// one entry of the mode menu of a block: a view mode or an edit mode as the
+// component exposes it (comp-expose.js), plus whether it can be chosen now
+export type EditModeEntry = {
+  id: string;
+  label: string;
+  description: string;
+  icon?: any;
+  isBuiltin: boolean;
+  isDefault: boolean;
+  isDisabled: boolean;
+  disabledReason: string;
+};
+
+// the one block whose mode menu is open
+export type EditBlockModeMenu = {
+  path: string;
+  blockIndex: number;
 };
 
 export type EditFocusShiftDirection = 'previous' | 'next';
@@ -184,6 +217,8 @@ export class DocEditStore {
   docEditByPath: Record<string, EditDocState> = {};
   compilePendingByPath: Record<string, { hash: string; promise: Promise<void> }> = {};
   session: EditSession | undefined = undefined;
+  blockViewModeById: Record<string, string> = {};
+  blockModeMenu: EditBlockModeMenu | undefined = undefined;
   insertMenu: EditInsertMenu | undefined = undefined;
   deleteConfirm: EditDeleteConfirm | undefined = undefined;
   blockMove: EditBlockMove | undefined = undefined;
@@ -380,6 +415,7 @@ export class DocEditStore {
       if (isChanged && this.blockMove?.path === path && this.blockMove.status !== 'submitting') {
         this.blockMove = undefined;
       }
+      if (isChanged && this.blockModeMenu?.path === path) this.blockModeMenu = undefined;
     });
     const stateCompiled = this.docEditByPath[path];
     if (stateCompiled?.hash === hash) {
@@ -433,6 +469,12 @@ export class DocEditStore {
       // a newer text is already compiling; its result replaces this one
       if (this.compilePendingByPath[path]?.hash !== hash) return;
       delete this.compilePendingByPath[path];
+      // the view modes picked for the blocks are kept by block index; when
+      // the new text has another number of blocks the indices name other
+      // blocks, so the picks of this document are dropped
+      const blockCountBefore = this.docEditByPath[path]?.model?.blockList.length;
+      const blockCountNext = stateNext.model?.blockList.length;
+      if (blockCountBefore !== undefined && blockCountBefore !== blockCountNext) this.blockViewModeClearForPath(path);
       this.docEditByPath[path] = stateNext;
       if (this.blockTextPending?.path === path) this.blockTextPending = undefined;
     });
@@ -451,6 +493,7 @@ export class DocEditStore {
       if (this.session?.path === path && this.session.status !== 'submitting') this.session = undefined;
       if (this.deleteConfirm?.path === path) this.deleteConfirm = undefined;
       if (this.insertMenu?.path === path) this.insertMenu = undefined;
+      if (this.blockModeMenu?.path === path) this.blockModeMenu = undefined;
     });
     await this.docEditEnsure(path);
   }
@@ -503,12 +546,20 @@ export class DocEditStore {
       || this.sidePanelText?.status === 'submitting';
   }
 
+  // opens the block in one of its edit modes (blockEditModeListGet): the
+  // requested one, else the default. a read-only block, or a mode the block
+  // does not have, opens nothing. the same block already open in another
+  // mode is left (saved) and opened again in the requested one.
   async sessionBlockStart(
     path: string,
     blockIndex: number,
-    options: { isCreated?: boolean; selectionInitial?: EditSelectionInitial } = {},
+    options: { isCreated?: boolean; selectionInitial?: EditSelectionInitial; editModeId?: string } = {},
   ): Promise<boolean> {
-    if (this.sessionIs(path, 'block', blockIndex)) return true;
+    const modeList = this.blockEditModeListGet(path, blockIndex);
+    const editModeId = options.editModeId ?? modeList.find((mode) => mode.isDefault)?.id;
+    const mode = modeList.find((modeOne) => modeOne.id === editModeId);
+    if (!mode || mode.isDisabled) return false;
+    if (this.sessionIs(path, 'block', blockIndex) && this.session?.editModeId === editModeId) return true;
     const isLeft = await this.sessionLeaveForIndexAction(path);
     if (!isLeft) return false;
     const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
@@ -519,9 +570,101 @@ export class DocEditStore {
       blockIndex,
       textInitial: block.text,
       isCreated: options.isCreated === true,
+      editModeId: mode.id,
       selectionInitial: options.selectionInitial ?? 'end',
     });
     return true;
+  }
+
+  // ---------- view modes and edit modes of a block ----------
+  // what a block can be shown as and edited as comes from the component's
+  // definition (comp-expose.js); a block without a component is shown one
+  // way and edited as source (doc_page_impl_mdx_comp.md#view-modes-and-edit-modes)
+
+  // the registry definition of a component block; undefined for other blocks
+  private blockDefinitionGet(path: string, blockIndex: number): any {
+    const component = this.docEditByPath[path]?.model?.blockList[blockIndex]?.component;
+    if (!component) return undefined;
+    const compId = compIdResolve(this.sourceStore.configDoc, String(component.compName ?? ''));
+    return compDefinitionNormalize(this.docStore.compById[compId]);
+  }
+
+  // a component that declares itself read-only: nothing of the block can
+  // be edited from the page, so no edit mode exists for it
+  blockIsReadOnly(path: string, blockIndex: number): boolean {
+    const definition = this.blockDefinitionGet(path, blockIndex);
+    return Boolean(definition) && compMetaGet(definition).isReadOnly;
+  }
+
+  blockViewModeListGet(path: string, blockIndex: number): EditModeEntry[] {
+    const definition = this.blockDefinitionGet(path, blockIndex);
+    return compViewModeListGet(definition).map((mode) => ({ ...mode, isDisabled: false, disabledReason: '' }));
+  }
+
+  // the view mode a reader picked for the block; undefined means the
+  // component's default (RegisteredComp resolves it)
+  blockViewModeGet(path: string, blockIndex: number): string | undefined {
+    return this.blockViewModeById[blockViewModeKeyBuild(path, blockIndex)];
+  }
+
+  blockViewModeSet(path: string, blockIndex: number, viewModeId: string): boolean {
+    const isKnown = this.blockViewModeListGet(path, blockIndex).some((mode) => mode.id === viewModeId);
+    if (!isKnown) return false;
+    this.blockViewModeById[blockViewModeKeyBuild(path, blockIndex)] = viewModeId;
+    return true;
+  }
+
+  private blockViewModeClearForPath(path: string) {
+    for (const key of Object.keys(this.blockViewModeById)) {
+      if (key.startsWith(`${path}#`)) delete this.blockViewModeById[key];
+    }
+  }
+
+  // the edit modes of the block, for the mode menu and for opening it. a
+  // component block: what its component exposes, with the built-in source
+  // mode (comp-expose.js); when its data is a reference into the asset
+  // store, only the source mode can be entered, since the component's
+  // editor would edit the asset's text and not the lines of this block
+  // (doc_page_impl_asset.md#edit-mode). any other block: the source mode.
+  blockEditModeListGet(path: string, blockIndex: number): EditModeEntry[] {
+    const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
+    if (!block) return [];
+    if (!block.component) return [{ ...compEditModeSource, isDefault: true, isDisabled: false, disabledReason: '' }];
+    const definition = this.blockDefinitionGet(path, blockIndex);
+    const isAssetRef = assetRefLangIs(block.component.lang);
+    const modeList = compEditModeListGet(definition);
+    if (!isAssetRef) return modeList.map((mode) => ({ ...mode, isDisabled: false, disabledReason: '' }));
+    const isSourceListed = modeList.some((mode) => mode.id === COMP_EDIT_MODE_SOURCE_ID);
+    const modeListAsset = modeList.map((mode) => ({
+      ...mode,
+      isDefault: mode.id === COMP_EDIT_MODE_SOURCE_ID,
+      isDisabled: mode.id !== COMP_EDIT_MODE_SOURCE_ID,
+      disabledReason: mode.id !== COMP_EDIT_MODE_SOURCE_ID ? 'the data is in the asset store; edit it through the asset panel' : '',
+    }));
+    if (!isSourceListed && !compMetaGet(definition).isReadOnly) {
+      modeListAsset.push({ ...compEditModeSource, isDefault: true, isDisabled: false, disabledReason: '' });
+    }
+    return modeListAsset;
+  }
+
+  // the mode menu is offered where there is something to choose: a
+  // component block with more than one view mode or more than one edit mode
+  blockModeMenuIsAvailable(path: string, blockIndex: number): boolean {
+    const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
+    if (!block?.component) return false;
+    return this.blockViewModeListGet(path, blockIndex).length > 1 || this.blockEditModeListGet(path, blockIndex).length > 1;
+  }
+
+  blockModeMenuIs(path: string, blockIndex: number): boolean {
+    return this.blockModeMenu?.path === path && this.blockModeMenu.blockIndex === blockIndex;
+  }
+
+  blockModeMenuOpen(path: string, blockIndex: number) {
+    this.blockModeMenu = { path, blockIndex };
+  }
+
+  blockModeMenuClose() {
+    this.blockModeMenu = undefined;
   }
 
   // the leave before an action that names a block or border index of
@@ -544,7 +687,13 @@ export class DocEditStore {
     const frontmatter = this.docEditByPath[path]?.model?.frontmatter;
     if (!frontmatter) return false;
     this.sessionStart({
-      type: 'frontmatter', path, blockIndex: -1, textInitial: frontmatter.text, isCreated: false, selectionInitial: 'all',
+      type: 'frontmatter',
+      path,
+      blockIndex: -1,
+      textInitial: frontmatter.text,
+      isCreated: false,
+      editModeId: COMP_EDIT_MODE_SOURCE_ID,
+      selectionInitial: 'all',
     });
     return true;
   }
@@ -557,17 +706,24 @@ export class DocEditStore {
     const source = this.sourceByPath[path];
     if (source?.status !== 'done') return false;
     this.sessionStart({
-      type: 'document', path, blockIndex: -1, textInitial: source.text ?? '', isCreated: false, selectionInitial: 'all',
+      type: 'document',
+      path,
+      blockIndex: -1,
+      textInitial: source.text ?? '',
+      isCreated: false,
+      editModeId: COMP_EDIT_MODE_SOURCE_ID,
+      selectionInitial: 'all',
     });
     return true;
   }
 
   private sessionStart(
-    sessionPartial: Pick<EditSession, 'type' | 'path' | 'blockIndex' | 'textInitial' | 'isCreated' | 'selectionInitial'>,
+    sessionPartial: Pick<EditSession, 'type' | 'path' | 'blockIndex' | 'textInitial' | 'isCreated' | 'editModeId' | 'selectionInitial'>,
   ) {
     runInAction(() => {
       this.insertMenu = undefined;
       this.deleteConfirm = undefined;
+      this.blockModeMenu = undefined;
       this.blockMoveClear();
       this.session = {
         ...sessionPartial,
@@ -735,9 +891,13 @@ export class DocEditStore {
       }
       if (event.type === 'editBlockEnterRequest') {
         // with a point (the block was clicked) the caret goes to the text
-        // nearest to it; without one (the toolbar button) to the end
+        // nearest to it; without one (the toolbar button) to the end. the
+        // edit mode is the one named by the request (the mode menu), else
+        // the block's default
+        if (this.blockIsReadOnly(path, blockIndex)) return { code: -1, message: 'the component is read-only' };
         const selectionInitial: EditSelectionInitial = event.point ? { type: 'point', ...event.point } : 'end';
-        const isStarted = await this.sessionBlockStart(path, blockIndex, { selectionInitial });
+        const editModeId = typeof event.data.editModeId === 'string' ? event.data.editModeId : undefined;
+        const isStarted = await this.sessionBlockStart(path, blockIndex, { selectionInitial, editModeId });
         return isStarted ? { code: 0, message: '' } : { code: -1, message: this.session?.message || 'the block was not opened for editing' };
       }
       if (event.type === 'editBlockMoveRequest') {
@@ -1237,6 +1397,10 @@ export class DocEditStore {
       onApplied,
     });
   }
+}
+
+function blockViewModeKeyBuild(path: string, blockIndex: number): string {
+  return `${path}#${blockIndex}`;
 }
 
 // the block text an editor's event describes: { text } as is, { raw, props }

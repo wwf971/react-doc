@@ -8,6 +8,7 @@ import {
   type LineOperation,
 } from './doc-edit-lines.ts';
 import { sidePanelTextOperationBuild } from './doc-side-panel-text.ts';
+import { yamlValueGet, yamlValueSetOperationBuild, yamlValueTextBuild } from './doc-yaml-edit.ts';
 
 // Edit api of the development server. It exists only while `vite` serves the
 // page: a built page has no server behind it and shows no edit controls.
@@ -19,17 +20,24 @@ import { sidePanelTextOperationBuild } from './doc-side-panel-text.ts';
 //        body { internalPath, hashBase, operation }   operation: doc-edit-lines.ts
 //   POST {endpoint}/side-panel/text        -> { code: 0, data: { file, fieldName, text } }
 //        body { file, nodePath, language, text, textBase }   doc-side-panel-text.ts
+//   POST {endpoint}/config/value           -> { code: 0, data: { file, keyPath, value } }
+//        body { keyPath, value, valueBase }   a value of config.yaml globalConfig / compConfig
+//                                             (doc_page_impl_config.md#config-layers)
 //
 // every response is { code, data, message }. code 0 is success; negative codes:
 //   -1  bad request or unexpected failure
-//   -2  hashBase is not the hash of the file on disk (changed elsewhere), or
-//       the side-panel label is no longer the one the edit started from
-//   -3  the path is not an editable document of the collected source, or the
-//       file is not a loaded side-panel file
+//   -2  hashBase is not the hash of the file on disk (changed elsewhere), the
+//       side-panel label is no longer the one the edit started from, or the
+//       config value in the file is no longer the one the page displayed
+//   -3  the path is not an editable document of the collected source, the
+//       file is not a loaded side-panel file, or the page has no config file
 //
 // only md/mdx files of the current file manifest can be read or written, so
 // the source rules of config.yaml also bound what the page may edit. only
-// the side-panel files the configuration loads can have a label rewritten.
+// the side-panel files the configuration loads can have a label rewritten;
+// only the config key sections of config.yaml (and its local layer) can
+// receive a value. every yaml file is edited in place (doc-yaml-edit.ts),
+// and a backup of the previous content is kept beside it as {file}.bak.
 
 export const DOC_EDIT_ENDPOINT_NAME = '__doc-edit';
 
@@ -49,11 +57,25 @@ export type DocEditSidePanelOptions = {
   onFileWritten: (filePath: string, text: string) => void;
 };
 
+// the config value route: the files of the global config layer
+export type DocEditConfigOptions = {
+  // config.yaml, then its local layer (config.0.yaml, which may not exist).
+  // a key is written where it is declared: the local layer when that file
+  // declares it, otherwise config.yaml
+  fileList: string[];
+  onFileWritten: (filePath: string, text: string) => void;
+};
+
 export type DocEditMiddlewareOptions = {
   endpoint: string;
   fileEntryListGet: () => DocEditFileEntry[];
   sidePanel?: DocEditSidePanelOptions;
+  config?: DocEditConfigOptions;
 };
+
+// the sections of config.yaml the config/value route may write, with the
+// depth of a value below them: globalConfig.Key, compConfig.Name.Key
+const configKeyPathDepthBySection: Record<string, number> = { globalConfig: 2, compConfig: 3 };
 
 type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
 
@@ -138,7 +160,89 @@ async function routeHandle(
     return;
   }
 
+  if (req.method === 'POST' && route === '/config/value') {
+    const body = await jsonBodyRead(req);
+    configValueRouteHandle(res, body, options.config);
+    return;
+  }
+
   jsonSend(res, 404, { code: -1, data: null, message: `unknown edit api route: ${req.method} ${route}` });
+}
+
+// writes one value of the global config layer into config.yaml, or into its
+// local layer when that file declares the key (the local layer overrides
+// config.yaml key by key, so writing config.yaml would change nothing).
+//   keyPath     ['globalConfig', Key] or ['compConfig', CompName, Key]
+//   value       null, boolean, number, string, or a list of strings
+//   valueBase   the value the page displayed for the key, as the file
+//               declares it (undefined: the key was not declared); when
+//               the file says otherwise now, the write is refused (-2)
+// the previous file is kept as {file}.bak before the write.
+function configValueRouteHandle(res: ServerResponse, body: any, config: DocEditConfigOptions | undefined) {
+  if (!config) {
+    jsonSend(res, 404, { code: -3, data: null, message: 'the page has no config file to write' });
+    return;
+  }
+  const keyPath = body?.keyPath;
+  if (!configKeyPathIsValid(keyPath)) {
+    jsonSend(res, 400, { code: -1, data: null, message: 'keyPath must be [globalConfig, Key] or [compConfig, CompName, Key]' });
+    return;
+  }
+  const valueText = yamlValueTextBuild(body?.value);
+  if (valueText === undefined) {
+    jsonSend(res, 400, { code: -1, data: null, message: 'value must be null, a boolean, a number, a string, or a list of strings' });
+    return;
+  }
+  const filePath = configFileForKeyPathGet(config.fileList, keyPath);
+  if (!filePath) {
+    jsonSend(res, 404, { code: -3, data: null, message: 'the config file does not exist' });
+    return;
+  }
+  const textCurrent = fs.readFileSync(filePath, 'utf-8');
+  if ('valueBase' in (body ?? {})) {
+    const valueCurrent = yamlValueGet(textCurrent, keyPath);
+    if (JSON.stringify(valueCurrent ?? null) !== JSON.stringify(body.valueBase ?? null)) {
+      jsonSend(res, 409, {
+        code: -2,
+        data: { file: filePath, keyPath, value: valueCurrent },
+        message: `the value of ${keyPath.join('.')} changed in ${path.basename(filePath)} since it was displayed; the edit was not applied`,
+      });
+      return;
+    }
+  }
+  const result = yamlValueSetOperationBuild(textCurrent, keyPath, valueText);
+  if (result.code !== 0) {
+    jsonSend(res, 400, { code: -1, data: null, message: `${path.basename(filePath)}: ${result.message}` });
+    return;
+  }
+  const textNext = lineOperationApply(textCurrent, result.data.operation);
+  fileWriteWithBackup(filePath, textNext);
+  config.onFileWritten(filePath, textNext);
+  jsonSend(res, 200, { code: 0, data: { file: filePath, keyPath, value: body.value }, message: '' });
+}
+
+function configKeyPathIsValid(keyPath: unknown): keyPath is string[] {
+  if (!Array.isArray(keyPath) || keyPath.length === 0) return false;
+  if (!keyPath.every((step) => typeof step === 'string' && step.trim() !== '')) return false;
+  const depth = configKeyPathDepthBySection[keyPath[0]];
+  return depth !== undefined && keyPath.length === depth;
+}
+
+// the file of the layer that declares the key: the last file of the list
+// (the local layer) that exists and holds the key, else the first file (config.yaml)
+function configFileForKeyPathGet(fileList: string[], keyPath: string[]): string | undefined {
+  for (const filePath of [...fileList].reverse()) {
+    if (!fs.existsSync(filePath)) continue;
+    if (yamlValueGet(fs.readFileSync(filePath, 'utf-8'), keyPath) !== undefined) return filePath;
+  }
+  const fileBase = fileList[0];
+  return fileBase && fs.existsSync(fileBase) ? fileBase : undefined;
+}
+
+// the previous content is kept as {file}.bak, then the file is rewritten
+function fileWriteWithBackup(filePath: string, text: string) {
+  fs.copyFileSync(filePath, `${filePath}.bak`);
+  fs.writeFileSync(filePath, text, 'utf-8');
 }
 
 // rewrites one side-panel label in its file. the file is named as the plugin
@@ -169,7 +273,7 @@ function sidePanelTextRouteHandle(res: ServerResponse, body: any, sidePanel: Doc
     return;
   }
   const textNext = lineOperationApply(textCurrent, result.data.operation);
-  fs.writeFileSync(filePath, textNext, 'utf-8');
+  fileWriteWithBackup(filePath, textNext);
   sidePanel.onFileWritten(filePath, textNext);
   jsonSend(res, 200, { code: 0, data: { file, fieldName: result.data.fieldName, text: body.text }, message: '' });
 }

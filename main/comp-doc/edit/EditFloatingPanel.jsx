@@ -1,6 +1,7 @@
 import { useContext } from 'react';
 import { createPortal } from 'react-dom';
-import { DocEditBlockFloatContext } from './DocEditDocContext.js';
+import { DocEditBlockContext, DocEditBlockFloatContext } from './DocEditDocContext.js';
+import { DocEditBlockModeButton } from './DocEditBlockModeButton.jsx';
 import './DocEdit.css';
 
 // The floating bar of an editor: everything that exists only for editing
@@ -9,6 +10,11 @@ import './DocEdit.css';
 // (doc_page_impl_edit.md#no-jitter-rule). One compact row holds the label,
 // the editor's controls, and the Save / Cancel actions; fields that need more
 // room (ImageEdit) go into the body below the row.
+//
+// in a block whose component has more than one edit mode (or view mode),
+// the mode switch of the block follows the label (DocEditBlockModeButton),
+// so the author can move to another edit mode without leaving the block
+// first: choosing one saves this session and opens the block again in it.
 //
 //   label        what is being edited, first in the row
 //   head         controls after the label (level, list type, add row, ...)
@@ -23,6 +29,8 @@ import './DocEdit.css';
 // editing surface, so a control (H1..H6) applies to the text being typed.
 export function EditFloatingPanel({ label, head, actions, children, placement = 'above', className = '' }) {
   const floatElement = useContext(DocEditBlockFloatContext);
+  // the block the bar belongs to; null for the frontmatter / whole-source panel
+  const editBlock = useContext(DocEditBlockContext);
 
   const mouseDownHandle = (event) => {
     if (event.target.closest?.('button')) event.preventDefault();
@@ -38,6 +46,7 @@ export function EditFloatingPanel({ label, head, actions, children, placement = 
     >
       <div className="doc-edit-panel-row">
         {label ? <span className="doc-edit-panel-label">{label}</span> : null}
+        {editBlock ? <DocEditBlockModeButton blockIndex={editBlock.blockIndex} size="panel" /> : null}
         {head}
         {actions}
       </div>

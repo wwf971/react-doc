@@ -68,8 +68,12 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       language: languagePage,
       onInvalidBrowserRoute: config.onInvalidBrowserRoute,
     });
+    // the config layers (doc_page_impl_config.md#config-layers): the global
+    // layer is config.yaml, written through the edit api of the development
+    // server; the client layer is this browser's storage
     const configStore = new DocConfigStore(sourceStore, docStore, {
       configDefineList: config.configDefineList,
+      editEndpoint: config.edit?.endpoint,
     });
     const tagStore = new DocTagStore(sourceStore, docStore, configStore);
     const compStateStore = new CompStateStore();

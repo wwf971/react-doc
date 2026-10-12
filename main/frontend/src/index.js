@@ -12,6 +12,16 @@ export { DocLink, DocLinkInline } from '../../comp-doc/link/DocLink.jsx';
 export { LinkDocRender } from '../../comp-doc/link/LinkDocRender.jsx';
 export { RegisteredComp } from '../../comp-doc/registry/RegisteredComp.jsx';
 export { compDefine, compNativeDefine } from '../../comp-doc/registry/comp-registry.js';
+// what a component exposes (doc_page_impl_mdx_comp.md#what-a-component-exposes):
+// reading a definition's exposure, and drawing an icon for one
+export {
+  COMP_EDIT_MODE_SOURCE_ID,
+  compEditModeListGet,
+  compExposeGet,
+  compMetaGet,
+  compViewModeListGet,
+} from '../../comp-doc/registry/comp-expose.js';
+export { compIconDefine } from '../../comp-doc/registry/comp-icon.jsx';
 export { useCompDataRef } from '../../comp-doc/registry/CompDataRef.jsx';
 export { DocLanguageProvider, useDocLanguage } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 export { DynamicCodeBlock } from '../../comp-doc/mdx-render/DynamicCodeBlock.js';

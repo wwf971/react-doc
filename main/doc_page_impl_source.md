@@ -99,14 +99,26 @@ A build has no api. The bytes of the files that are used are bundled as data url
 | `fileResolve(reference, fromPath)` | the one file entry a reference names (source path, relative, suffix, name), or undefined |
 | `fileUrlGet(reference, fromPath)` | the url the bytes of the file are read from (build map, or the `/data` route); undefined when unknown |
 | `dirListGet()` | the folders of the source |
-| `pathComplete(text, { kind: 'dir' \| 'file', extList? })` | the folders or files that complete what is typed: an empty text lists everything, a rooted text matches by prefix, another text anywhere in the path |
+| `pathComplete(text, spec)` | the candidates `{ path, kind, entry }` that complete what is typed, filtered by the [specification](#path-completion): an empty text lists everything, a rooted text matches by prefix, another text anywhere in the path |
 | `fileNameUniqueGet(dirPath, name)` | a file name not used in the folder yet (`a.png`, `a-2.png`, ...) |
 
 `config.assetUrlGet`, which `Image`, `ImageGrid` and `DiagramMermaid` call with the references in their data, is `fileUrlGet` bound to the component's document by default (`RegisteredComp`); a host application may still hand its own through `compConfigHost.assetUrlGet`.
 
 ### Path completion
 
-A **source path specification** says what a path names, `{ kind: 'dir' | 'file', extList? }`, so completion lists the right candidates. It is declared where a path is declared: a config key of type `sourcePath` carries `pathSpec` (see [component-level config](doc_page_impl_config.md#component-level-config)), and the location prompt completes folders. The page renders completion with its own element, `SourcePathInput` (`comp-doc/source/`): an editable span holding the path and a dropdown of the candidates from `pathComplete`, moved through with the arrow keys; it is not the browser's datalist. The settings panel uses it for `sourcePath` keys, the location prompt for the folder.
+A **source path specification** says what a path names, so completion lists the right candidates. It is declared where a path is declared: a config key of type `sourcePath` carries `pathSpec` (see [component-level config](doc_page_impl_config.md#component-level-config)), and the location prompt completes folders. The specification is a plain object; every field but `kind` is optional, and a field left out does not filter:
+
+```text
+kind        'dir' | 'file' | 'any'   folders, files, or both (a mixed list tells the kind of each candidate)
+extList     ['.png', '.jpg']         files with one of these extensions (the dot optional, case-insensitive)
+rootIdList  ['example']              under these roots only
+dirPath     '~example/asset'         under this folder only
+isMatch     (candidate) => boolean   anything else, decided by the caller
+```
+
+The logic lives in `lib/doc-source-complete.js`, apart from the store: `sourcePathCandidateListBuild(spec, manifests)` turns the file and folder manifests into the allowed candidates `{ path, kind, entry }`, `sourcePathCompleteList(text, spec, manifests)` narrows them to what is typed. A new way of narrowing is one more field read there, and every path field of the page gets it.
+
+The page renders completion with its own element, `SourcePathInput` (`comp-doc/source/`): an `EditValueInline` holding the path and a dropdown of the candidates from `pathComplete`, moved through with the arrow keys; it is not the browser's datalist. The dropdown is rendered into `document.body` at a fixed position under the text, not inside the field, because the field usually sits in a clipping container (every item of the settings panel hides its overflow) where a list placed inside would be cut off; it follows the text when the page scrolls. Leaving the field commits, including a click outside it; a click on a candidate takes it before the field is left. An empty field shows its placeholder. The settings panel uses it for `sourcePath` keys (the path ends at the right of the value column), the location prompt for the folder.
 
 ## Creating files
 
@@ -127,6 +139,7 @@ The two requests keep the component thin: it knows how to turn a clipboard into 
 | --- | --- |
 | `lib/doc-source-path.js` | the source path grammar |
 | `lib/doc-target-resolve.js` | every spelling of a target resolved to source paths |
+| `lib/doc-source-complete.js` | path completion: the specification, the candidates, the narrowing |
 | `plugin/doc-source.ts` | rules, collection, folder manifest, source api, module generation |
 | `plugin/doc-attachment.ts` | the files components name, the mime types, the data urls of a build |
 | `store/DocSourceStore.ts` | the source as the page reads it, the source service |

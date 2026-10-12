@@ -11,7 +11,7 @@ config:
 A config key has one page-level value in `globalConfig` of `config.yaml`. A document-level key can also be set for single documents. For each document, the levels are applied in this order, and a later level wins:
 
 ```text
-default  <  global (config.yaml)  <  source (source.yaml)  <  side panel (side-panel.yaml)  <  document (frontmatter)
+default  <  global (config.yaml)  <  source (source.yaml)  <  side panel (side-panel.yaml)  <  document (frontmatter)  <  client (this browser)
 ```
 
 This page sets one key at each level:
@@ -28,6 +28,15 @@ So this page shows no tags next to the path bar, although `globalConfig` turns t
 ```text
 Resolved config of this document. The document page replaces this block with the DocConfigDemo component.
 ```
+
+## Config layers
+
+The two page-wide levels, global and client, are **config layers**: values the page can also write, from the settings panel (the gear in the side panel). The Config and Component tabs carry a second tab line, one tab per layer:
+
+- **Global** is `config.yaml`. A change there is written into the file by the development server: only the one value changes, the rest of the file, its order and its comments stay, and the previous file is kept beside it as `config.yaml.bak`. On a built page the tab is shown but cannot be changed.
+- **Client** is kept in this browser (`localStorage`) and survives a reload. It sits above the document levels, so a value there wins over what documents declare; **Reset** drops every value of it.
+
+The tab of a layer shows the page values with the layers up to that one applied, and beside each key the level that decided it (`default`, `global`, `client`). Try it: `TagsDisplayAtLinkIsOn` is `false` in `config.yaml`, and a source rule turns it on for this page. Turn it on in the Client tab and nothing changes here (the source rule already did), but every other page shows tags beside its links; turn it off there and the links below lose their tags although the source rule turns them on, because the client layer sits above the document levels. Reset drops the value again.
 
 ## Tags beside links
 
@@ -54,7 +63,7 @@ compConfig:
     PasteReplaceConfirmIsOn: true
 ```
 
-and a source rule, a side-panel item or the frontmatter of a document overrides them for that document inside its `config` mapping (`config: { compConfig: { Image: { FileStoreDir: ~example/other } } }`). The settings panel (the gear in the side panel) shows the component keys on their own tab, **Component**, apart from the page keys, one group per component; a change there is the reader's override for the page session, like on the Config tab. A key of type `sourcePath` (a folder or file of the source) is edited with completion: the dropdown lists the folders of the source that match what is typed.
+and a source rule, a side-panel item or the frontmatter of a document overrides them for that document inside its `config` mapping (`config: { compConfig: { Image: { FileStoreDir: ~example/other } } }`). The settings panel shows the component keys on their own tab, **Component**, apart from the page keys, one group per component, with the same layer tabs as the Config tab: a change on Global is written under the component's tag name in `compConfig` of `config.yaml`, a change on Client stays in this browser. A key of type `sourcePath` (a folder or file of the source) is edited with completion: the dropdown lists the folders of the source that match what is typed (`FileStoreDir` names a folder, so files are left out).
 
 `Image` and `ImageGrid` declare `FileStoreDir`, the folder a pasted image is written to, and `PasteReplaceConfirmIsOn` (see [Images](mdx-usage/comp-image.md#image-empty)).
 

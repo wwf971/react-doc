@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
-import { RotateCw, X } from '../../frontend/UICommon.js';
+import { LoaderCircle, RotateCw, X } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
+import { compIdBuiltinByName } from '../registry/comp-registry.js';
 import { AssetStoreSettings } from './AssetStoreSettings.jsx';
 import { SourcePathInput } from '../source/SourcePathInput.jsx';
 import './DocSettings.css';
@@ -10,97 +11,95 @@ import './DocSettings.css';
 // The settings panel, rendered by the application's ConfigPanel
 // (config.components) with three tabs (subtab items):
 //
-//   Config       every config key that is user settable, one item per key.
-//                a change sets the user level of that key
-//                (DocConfigStore.valueUserSet), the override that comes
-//                after every declared level and lives for the page session
-//                only; "Reset" drops every override.
+//   Config       every config key that is user settable, one item per key
 //   Component    the component-level keys
 //                (doc_page_impl_config.md#component-level-config), one group
 //                per component that declares keys, named as the component is
-//                written in documents. a change sets the user level of that
-//                component key (DocConfigStore.compValueUserSet). a key of
-//                type sourcePath is edited with SourcePathInput, completed
-//                from the folders / files of the source.
+//                written in documents. a key of type sourcePath is edited
+//                with SourcePathInput, completed from the folders / files of
+//                the source.
 //   Asset store  the folders of the local asset store (AssetStoreSettings),
 //                written into the store's config file by the development
 //                server, so they are kept (doc_page_impl_asset.md).
 //
+// Config and Component carry a second tab line, one tab per config layer
+// (doc_page_impl_config.md#config-layers, DocConfigStore.layerList): Global
+// is config.yaml, Client is this browser. The tab of a layer shows the page
+// values as they are with the layers up to that one applied, marks which
+// level decided each (its own values stand out), and a change there is
+// written into that layer: config.yaml through the development server (the
+// previous file kept as a backup), the browser's storage for Client. "Reset"
+// drops every value of a layer that can be cleared at once. The layer shown
+// is DocConfigStore.settingsLayerId, shared by the two tabs.
+//
 // the tab shown is DocConfigStore.settingsTabId. the panel is rendered once
-// at page level while DocConfigStore.isSettingsOpen, and floats under the
-// settings button that opened it; a pointer going down outside it, or
-// Escape, closes it.
+// at page level while DocConfigStore.isSettingsOpen: a popup centered in
+// the browser window, at a fixed height. a tab taller than that scrolls
+// inside the tab; the title and the tabs stay put. it closes only with the
+// close button at the top right. the header, aside from its buttons, drags
+// the panel.
 export const DocSettingsPanel = observer(function DocSettingsPanel() {
   const stores = useDocStores();
   const { configStore } = stores;
   if (!configStore.isSettingsOpen) return null;
-  return <DocSettingsPanelOpen anchorElement={configStore.settingsAnchorElement} />;
+  return <DocSettingsPanelOpen />;
 });
 
-const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen({ anchorElement }) {
+const panelPath = ['docSettings'];
+
+const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
   const stores = useDocStores();
   const { componentConfig, configStore } = stores;
-  const panelRef = useRef(null);
-  const [position, positionSet] = useState(null);
   const ConfigPanel = componentConfig.ConfigPanel;
+  const panelRef = useRef(null);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const [dragOffset, dragOffsetSet] = useState(dragOffsetRef.current);
+  const [isDragging, isDraggingSet] = useState(false);
 
-  useLayoutEffect(() => {
-    const rect = anchorElement?.getBoundingClientRect();
-    if (!rect) return;
-    positionSet({ top: rect.bottom + 4, left: rect.left });
-  }, [anchorElement]);
-
-  useEffect(() => {
-    const pointerDownHandle = (event) => {
-      if (event.button !== 0) return;
-      const panel = panelRef.current;
-      if (!panel || panel.contains(event.target) || anchorElement?.contains(event.target)) return;
-      configStore.settingsOpenSet(false);
-    };
-    const keyDownHandle = (event) => {
-      if (event.key === 'Escape') configStore.settingsOpenSet(false);
-    };
-    document.addEventListener('pointerdown', pointerDownHandle, true);
-    document.addEventListener('keydown', keyDownHandle, true);
-    return () => {
-      document.removeEventListener('pointerdown', pointerDownHandle, true);
-      document.removeEventListener('keydown', keyDownHandle, true);
-    };
-  }, [anchorElement, configStore]);
-
-  const itemListConfig = configStore.configDefineListUserSettable.map((define) => settingsItemBuild(define.key, define, stores));
+  // the flat data of the panel holds every item of every layer: an item id
+  // carries its layer, "layerId:key" or "layerId:compId::key"
   const data = {};
-  for (const define of configStore.configDefineListUserSettable) {
-    data[define.key] = settingsValueToItem(define, configStore.valueGlobalGet(define.key));
-  }
-
-  // component-level keys: one group per component; an item id is
-  // "compId::key", so the flat data of the panel holds every component
-  const itemListComp = [];
-  for (const compId of configStore.compIdListWithConfig) {
-    const defineList = configStore.compConfigDefineListGet(compId).filter((define) => define.isUserSettable !== false);
-    if (defineList.length === 0) continue;
-    const children = [];
-    for (const define of defineList) {
-      const itemId = compItemIdBuild(compId, define.key);
-      children.push(settingsItemBuild(itemId, define, stores));
-      data[itemId] = settingsValueToItem(define, configStore.compValueGlobalGet(compId, define.key));
+  const layerTabListConfig = [];
+  const layerTabListComp = [];
+  for (const layer of configStore.layerList) {
+    const itemListConfig = [];
+    for (const define of configStore.configDefineListUserSettable) {
+      const itemId = itemIdBuild(layer.id, define.key);
+      const level = configStore.layerIsDeclaring(layer.id, define.key) ? layer.id : levelOfLayerValueGet(configStore, layer.id, define.key);
+      itemListConfig.push(settingsItemBuild(itemId, define, layer, level, stores));
+      data[itemId] = settingsValueToItem(define, configStore.layerValueGet(layer.id, define.key));
     }
-    itemListComp.push({ id: `comp:${compId}`, type: 'group', label: compNameGet(stores.sourceStore.configDoc, compId), children });
-  }
+    layerTabListConfig.push({ id: layer.id, type: 'subtab', name: layer.define.label, children: itemListConfig });
 
-  const isOverrideAny = configStore.isUserOverrideAny;
-  const isValueTab = configStore.settingsTabId === 'config' || configStore.settingsTabId === 'compConfig';
-  const itemList = [
-    { id: 'config', type: 'subtab', name: 'Config', children: itemListConfig },
-    {
-      id: 'compConfig',
+    // component-level keys: one group per component that documents can name
+    const itemListComp = [];
+    for (const compId of configStore.compIdListWithConfig) {
+      const compName = compNameGet(stores.sourceStore.configDoc, compId);
+      if (compName === '') continue;
+      const defineList = configStore.compConfigDefineListGet(compId).filter((define) => define.isUserSettable !== false);
+      if (defineList.length === 0) continue;
+      const children = [];
+      for (const define of defineList) {
+        const itemId = itemIdBuild(layer.id, compItemIdBuild(compId, define.key));
+        const level = configStore.layerCompIsDeclaring(layer.id, compId, define.key) ? layer.id : levelOfLayerCompValueGet(configStore, layer.id, compId, define.key);
+        children.push(settingsItemBuild(itemId, define, layer, level, stores));
+        data[itemId] = settingsValueToItem(define, configStore.layerCompValueGet(layer.id, compId, define.key));
+      }
+      itemListComp.push({ id: `${layer.id}:comp:${compId}`, type: 'group', label: compName, children });
+    }
+    layerTabListComp.push({
+      id: layer.id,
       type: 'subtab',
-      name: 'Component',
+      name: layer.define.label,
       children: itemListComp.length > 0
         ? itemListComp
-        : [{ id: 'compConfigNone', type: 'custom', comp: CompConfigNoneNote, isFullWidth: true }],
-    },
+        : [{ id: `${layer.id}:compConfigNone`, type: 'custom', comp: CompConfigNoneNote, isFullWidth: true }],
+    });
+  }
+
+  const itemList = [
+    { id: 'config', type: 'subtab', name: 'Config', children: layerTabListConfig },
+    { id: 'compConfig', type: 'subtab', name: 'Component', children: layerTabListComp },
     {
       id: 'assetStore',
       type: 'subtab',
@@ -108,25 +107,77 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen({ anchorElem
       children: [{ id: 'assetStoreFolders', type: 'custom', comp: AssetStoreSettings, isFullWidth: true }],
     },
   ];
+  // the layer line of both value tabs shows the same layer
+  const operationStateByPath = {
+    'docSettings.config': { activeSubtabId: configStore.settingsLayerId },
+    'docSettings.compConfig': { activeSubtabId: configStore.settingsLayerId },
+  };
 
   const eventHandle = (eventType, eventData) => {
     if (eventType === 'activeSubtabChange') {
-      configStore.settingsTabIdSet(eventData.subtabId);
+      const isTabLine = (eventData.compPath ?? []).length === panelPath.length;
+      if (isTabLine) configStore.settingsTabIdSet(eventData.subtabId);
+      else configStore.settingsLayerIdSet(eventData.subtabId);
       return { code: 0 };
     }
     if (eventType !== 'valueChangeAttempt') return undefined;
-    const compItem = compItemIdParse(eventData.valueId);
+    const item = itemIdParse(eventData.valueId);
+    if (!item) return { code: -1, message: `unknown settings item ${eventData.valueId}` };
+    const compItem = compItemIdParse(item.key);
     if (compItem) {
       const define = configStore.compConfigDefineListGet(compItem.compId).find((defineOne) => defineOne.key === compItem.key);
       if (!define) return { code: -1, message: `unknown component config key ${eventData.valueId}` };
-      configStore.compValueUserSet(compItem.compId, define.key, settingsValueFromItem(define, eventData.value));
+      void configStore.layerCompValueSet(item.layerId, compItem.compId, define.key, settingsValueFromItem(define, eventData.value));
       return { code: 0 };
     }
-    const define = configStore.configDefineByKey.get(eventData.valueId);
+    const define = configStore.configDefineByKey.get(item.key);
     if (!define) return { code: -1, message: `unknown config key ${eventData.valueId}` };
-    configStore.valueUserSet(define.key, settingsValueFromItem(define, eventData.value));
+    void configStore.layerValueSet(item.layerId, define.key, settingsValueFromItem(define, eventData.value));
     return { code: 0 };
   };
+
+  // the header moves the panel. a button in the header (Reset, Close) is
+  // not a drag handle, so a click there stays a click.
+  const headPointerDownHandle = (event) => {
+    if (event.button !== 0 || event.target.closest('button')) return;
+    const panel = panelRef.current;
+    const head = event.currentTarget;
+    if (!panel) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startRect = panel.getBoundingClientRect();
+    const origin = dragOffsetRef.current;
+    head.setPointerCapture(event.pointerId);
+    isDraggingSet(true);
+    const moveHandle = (moveEvent) => {
+      const margin = 8;
+      let left = startRect.left + moveEvent.clientX - startX;
+      let top = startRect.top + moveEvent.clientY - startY;
+      const maxLeft = Math.max(margin, window.innerWidth - startRect.width - margin);
+      const maxTop = Math.max(margin, window.innerHeight - startRect.height - margin);
+      left = Math.min(Math.max(margin, left), maxLeft);
+      top = Math.min(Math.max(margin, top), maxTop);
+      const next = {
+        x: origin.x + (left - startRect.left),
+        y: origin.y + (top - startRect.top),
+      };
+      dragOffsetRef.current = next;
+      dragOffsetSet(next);
+    };
+    const upHandle = () => {
+      head.removeEventListener('pointermove', moveHandle);
+      head.removeEventListener('pointerup', upHandle);
+      head.removeEventListener('pointercancel', upHandle);
+      isDraggingSet(false);
+    };
+    head.addEventListener('pointermove', moveHandle);
+    head.addEventListener('pointerup', upHandle);
+    head.addEventListener('pointercancel', upHandle);
+  };
+
+  const isValueTab = configStore.settingsTabId === 'config' || configStore.settingsTabId === 'compConfig';
+  const layerShown = isValueTab ? configStore.layerGet(configStore.settingsLayerId) : undefined;
 
   return createPortal(
     <div
@@ -134,28 +185,16 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen({ anchorElem
       className="doc-settings-panel"
       role="dialog"
       aria-label="Settings"
-      style={position ? { top: position.top, left: position.left } : { visibility: 'hidden' }}
+      data-dragging={isDragging ? '' : undefined}
+      style={{ transform: `translate(calc(-50% + ${dragOffset.x}px), calc(-50% + ${dragOffset.y}px))` }}
     >
-      <div className="doc-settings-head">
-        <span className="doc-settings-title">Settings</span>
-        {isValueTab ? (
-          <>
-            <button
-              type="button"
-              className="doc-settings-head-button"
-              disabled={!isOverrideAny}
-              title="Reset every setting to the configured value"
-              aria-label="Reset every setting to the configured value"
-              onClick={() => configStore.configUserClear()}
-            >
-              <RotateCw aria-hidden="true" size={13} strokeWidth={2} />
-              <span>Reset</span>
-            </button>
-            <span className="doc-settings-note">for this page session; the document config is not changed</span>
-          </>
-        ) : (
-          <span className="doc-settings-note">the folders are written into the store's config file</span>
-        )}
+      <div className="doc-settings-head" onPointerDown={headPointerDownHandle}>
+        <div className="doc-settings-head-main">
+          <span className="doc-settings-title">Settings</span>
+          {layerShown ? <LayerHead layer={layerShown} /> : (
+            <span className="doc-settings-note">the folders are written into the store&apos;s config file</span>
+          )}
+        </div>
         <button
           type="button"
           className="doc-settings-head-button doc-settings-close"
@@ -169,7 +208,7 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen({ anchorElem
       <div className="doc-settings-body">
         <ConfigPanel
           data={data}
-          config={{ compPath: ['docSettings'], items: itemList, activeSubtabId: configStore.settingsTabId }}
+          config={{ compPath: panelPath, items: itemList, activeSubtabId: configStore.settingsTabId, operationStateByPath }}
           onEvent={eventHandle}
         />
       </div>
@@ -178,12 +217,56 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen({ anchorElem
   );
 });
 
-// the ConfigPanel item of one config define. an enum is a dropdown; a
-// source path is edited with completion.
-function settingsItemBuild(itemId, define, stores) {
+// the head of a value tab: what the layer shown is, Reset when it can be
+// cleared, and the state of its last write
+const LayerHead = observer(function LayerHead({ layer }) {
+  const { configStore } = useDocStores();
+  return (
+    <>
+      {layer.isClearable ? (
+        <button
+          type="button"
+          className="doc-settings-head-button"
+          disabled={!configStore.layerIsDeclaringAny(layer.id)}
+          title={`Drop every value of the ${layer.define.label} layer`}
+          aria-label={`Drop every value of the ${layer.define.label} layer`}
+          onClick={() => void configStore.layerClear(layer.id)}
+        >
+          <RotateCw aria-hidden="true" size={13} strokeWidth={2} />
+          <span>Reset</span>
+        </button>
+      ) : null}
+      <span className="doc-settings-note">
+        {layer.define.label}: {layer.isWritable ? layer.define.description : layer.disabledReason}
+      </span>
+      {layer.request.status === 'submitting' ? (
+        <span className="doc-settings-note doc-settings-request" role="status">
+          <LoaderCircle aria-hidden="true" size={11} strokeWidth={2} className="doc-edit-spin" />
+          <span>writing…</span>
+        </span>
+      ) : null}
+      {layer.request.status === 'error' ? (
+        <span className="doc-settings-note doc-settings-request is-error" role="alert">
+          {layer.request.message}
+          <button type="button" className="doc-settings-asset-link" onClick={() => layer.requestMessageClear()}>dismiss</button>
+        </span>
+      ) : null}
+    </>
+  );
+});
+
+// the ConfigPanel item of one config define on the tab of one layer. an enum
+// is a dropdown; a source path is edited with completion. the label carries
+// the level that decided the value shown: the layer itself, or one below it.
+function settingsItemBuild(itemId, define, layer, level, stores) {
   const item = {
     id: itemId,
-    label: define.key,
+    label: (
+      <span className="doc-settings-item-label">
+        <span>{define.key}</span>
+        <span className={`doc-settings-level${level === layer.id ? ' is-own' : ''}`} title={`decided by the ${level} level`}>{level}</span>
+      </span>
+    ),
     description: define.description,
     defaultValue: settingsValueToItem(define, define.valueDefault),
   };
@@ -201,7 +284,7 @@ function settingsItemBuild(itemId, define, stores) {
   // a key of type any has no control; it stays settable from YAML only
   else item.isHidden = true;
 
-  const disabledReason = itemDisabledReasonGet(define.key, stores);
+  const disabledReason = layer.isWritable ? itemDisabledReasonGet(define.key, stores) : layer.disabledReason;
   if (disabledReason) {
     item.isDisabled = true;
     item.disabledReason = disabledReason;
@@ -215,6 +298,15 @@ function itemDisabledReasonGet(key, { editStore }) {
     return 'In-place editing is answered by the development server only; this build has no edit mode.';
   }
   return '';
+}
+
+// the level that decided the value a layer's tab shows, when not the layer itself
+function levelOfLayerValueGet(configStore, layerId, key) {
+  return configStore.configModel.configByLayerId.get(layerId)?.levelByKey[key] ?? 'default';
+}
+
+function levelOfLayerCompValueGet(configStore, layerId, compId, key) {
+  return configStore.configModel.compConfigByLayerId.get(layerId)?.get(compId)?.levelByKey[key] ?? 'default';
 }
 
 // a config value as the panel item shows it: a string list as its comma
@@ -243,8 +335,19 @@ function CompConfigNoneNote() {
   return <span className="doc-settings-note">no registered component declares config keys</span>;
 }
 
-// item ids of the component tab: "compId::key"
+// item ids: "layerId:key"; a component key is "compId::key"
+const itemIdSeparator = ':';
 const compItemIdSeparator = '::';
+
+function itemIdBuild(layerId, key) {
+  return `${layerId}${itemIdSeparator}${key}`;
+}
+
+function itemIdParse(itemId) {
+  const indexSeparator = String(itemId ?? '').indexOf(itemIdSeparator);
+  if (indexSeparator < 0) return undefined;
+  return { layerId: itemId.slice(0, indexSeparator), key: itemId.slice(indexSeparator + itemIdSeparator.length) };
+}
 
 function compItemIdBuild(compId, key) {
   return `${compId}${compItemIdSeparator}${key}`;
@@ -257,12 +360,16 @@ function compItemIdParse(itemId) {
 }
 
 // the name a component is written with in documents (config compRegistry
-// maps names to ids); the id itself when no name maps to it
+// maps names to ids, then the built-in names); '' for an id no name maps
+// to, which no document can use and the panel does not list
 function compNameGet(configDoc, compId) {
   for (const [compName, compIdMapped] of Object.entries(configDoc?.compRegistry ?? {})) {
     if (compIdMapped === compId) return compName;
   }
-  return compId;
+  for (const [compName, compIdMapped] of Object.entries(compIdBuiltinByName)) {
+    if (compIdMapped === compId && configDoc?.compRegistry?.[compName] === undefined) return compName;
+  }
+  return '';
 }
 
 // the value a panel item reports, back in the form of the config key

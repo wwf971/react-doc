@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { ConfigPanel, SegmentedControl } from '@wwf971/react-comp-misc';
+import { ConfigPanel, Menu, SegmentedControl } from '@wwf971/react-comp-misc';
 import * as docSource from 'virtual:doc-source';
 import { DocPageMdx } from './DocPageMdx.jsx';
 import { DemoCounter } from '../../../example_doc/comp-mdx/DemoCounter.jsx';
@@ -59,8 +59,10 @@ createRoot(document.getElementById('root')).render(
       },
       // the language selector and the page/part index switch both render
       // through this consumer-injected segmented control; the settings panel
-      // through the injected config panel (no ConfigPanel, no settings button)
-      components: { ConfigPanel, SegmentedControl },
+      // through the injected config panel (no ConfigPanel, no settings
+      // button); the mode menu of a block in edit mode through the injected
+      // dropdown menu (no Menu, no mode button)
+      components: { ConfigPanel, Menu, SegmentedControl },
       // Index contributes its translations to the language selector and
       // its titles/descriptions to the search index. both maps are keyed by
       // author-facing tag name, so the compatibility tag DocIndex is listed too.

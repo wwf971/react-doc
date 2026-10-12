@@ -10,8 +10,10 @@ import { DiagramMermaid } from '../../comp-mdx/diagram-mermaid/DiagramMermaid.js
 import { DiagramText } from '../../comp-mdx/diagram-ascii/DiagramText.jsx';
 import { FileTree } from '../../comp-mdx/file-tree/FileTree.jsx';
 import { Image } from '../../comp-mdx/image/Image.jsx';
-import { imageAssetDependencyListGet, imageConfigDefineList } from '../../comp-mdx/image/image-paste.js';
+import { imageExpose } from '../../comp-mdx/image/image-expose.js';
+import { imageAssetDependencyListGet } from '../../comp-mdx/image/image-paste.js';
 import { ImageGrid } from '../../comp-mdx/image-grid/ImageGrid.jsx';
+import { imageGridExpose } from '../../comp-mdx/image-grid/image-grid-expose.js';
 import { imageGridAssetDependencyListGet } from '../../comp-mdx/image-grid/ImageGridStore.js';
 import { Index } from '../../comp-mdx/index/Index.jsx';
 import { MultiLang } from '../../comp-mdx/multi-lang/MultiLangEntry.jsx';
@@ -47,28 +49,25 @@ const compMultiLang = compDefine(MultiLang, {
   dataBuild: markdownConfigBuild,
   placementList: ['commentBlock'],
 });
-// Image demonstrates component edit mode: ImageEdit edits the yaml fields in
-// place (doc_page_impl_edit.md#component-edit-mode)
-// a new Image / ImageGrid block is created empty (no src: the placeholder
-// takes a pasted image). both declare the component-level config of the
-// paste flow (FileStoreDir, PasteReplaceConfirmIsOn), learn whether their
-// data is an asset (isAssetAware), and name the files their data refers
+// Image and ImageGrid demonstrate component edit modes: what each exposes
+// (its edit mode beside the built-in source mode, the shape of the
+// component-level config of the paste flow, its icon, the starting text of
+// a new block) is in image-expose.js / image-grid-expose.js
+// (doc_page_impl_mdx_comp.md#what-a-component-exposes). both learn whether
+// their data is an asset (isAssetAware) and name the files their data refers
 // to, recorded as the dependencies of an asset made from it
 // (doc_page_impl_asset.md#dependencies)
 const compImage = compDefine(Image, {
   placementList: ['mdx', 'commentBlock'],
-  isEditSupported: true,
   isAssetAware: true,
-  editTemplate: { lang: 'yaml', raw: 'src: \nalt: \ncaption: \n' },
-  configDefineList: imageConfigDefineList,
   assetDependencyListGet: imageAssetDependencyListGet,
+  expose: imageExpose,
 });
 const compImageGrid = compDefine(ImageGrid, {
   placementList: ['mdx', 'commentBlock'],
   isAssetAware: true,
-  editTemplate: { lang: 'yaml', raw: 'images:\n  - src: \n  - src: \n' },
-  configDefineList: imageConfigDefineList,
   assetDependencyListGet: imageGridAssetDependencyListGet,
+  expose: imageGridExpose,
 });
 const compDiagramText = compDefine(DiagramText, { placementList: ['commentBlock'] });
 // mermaid itself is not a package dependency: the host app supplies
@@ -138,7 +137,12 @@ export const compById = {
   'specific/DemoCounter': compDefine(DemoCounter),
   'specific/StockTable': compDefine(StockTable, stockTableDefineOptions),
   'specific/SidePanelItemDemo': compDefine(SidePanelItemDemo, { placementList: ['sidePanelDisplay'] }),
-  'specific/TagListAllDemo': compDefine(TagListAllDemo, { placementList: ['mdx', 'commentBlock'] }),
+  // a component with nothing to edit declares itself read-only: no edit
+  // mode, no Edit button (doc_page_impl_mdx_comp.md#what-a-component-exposes)
+  'specific/TagListAllDemo': compDefine(TagListAllDemo, {
+    placementList: ['mdx', 'commentBlock'],
+    expose: { meta: { isReadOnly: true, description: 'Every tag the page knows; read from the tag service, nothing to edit.' } },
+  }),
   'specific/DocConfigDemo': compDefine(DocConfigDemo, { placementList: ['mdx', 'commentBlock'] }),
   // demo-host binding: the popup panel implementation is host configuration,
   // so SourceLink is registered here with the demo panel rather than in common/.

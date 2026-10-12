@@ -1,29 +1,85 @@
+import { ChartBar, TableIcon, TextCursorInput } from '../../main/frontend/UICommon.js';
+import { compIconDefine } from '../../main/comp-doc/registry/comp-icon.jsx';
 import { StockTableEdit } from './StockTableEdit.jsx';
-import { isStockText, parseMarkdownTable } from './StockTableData.js';
+import { isStockText, parseMarkdownTable, stockTextList } from './StockTableData.js';
 
 // project-specific demo component: renders a markdown table (received as raw
 // text through the comment-marked block) with stock status badges.
 //
-// it also demonstrates component edit mode (doc_page_impl_edit.md): when the
-// edit layer renders the block with config.isEdit, StockTableEdit takes over
-// and edits the cells in place; the table itself is shared by both modes.
+// it demonstrates what a host component exposes to the page
+// (doc_page_impl_mdx_comp.md#what-a-component-exposes): two view modes, the
+// table and a summary of the stock states, chosen through config.viewMode
+// (the mode menu of the block in edit mode); one edit mode of its own,
+// 'cells' (StockTableEdit edits the cells in place; the markdown table as
+// written is the built-in 'source' mode); an icon drawn with
+// compIconDefine; and the starting text of a new block.
 export function StockTable({ data = {}, config = {}, onEvent }) {
   if (config.isEdit) return <StockTableEdit data={data} config={config} onEvent={onEvent} />;
   const { headers, rows } = parseMarkdownTable(data.raw ?? '');
+  if (config.viewMode === 'summary') {
+    return <StockTableSummary title={data.title} headers={headers} rows={rows} />;
+  }
   return (
     <StockTableView title={data.title} headers={headers} rows={rows} />
   );
 }
 
+// the icon of the component: a table with one highlighted cell
+const StockTableIcon = compIconDefine(
+  <>
+    <rect x="3" y="4" width="18" height="16" rx="1" />
+    <path d="M3 10h18M3 15h18M9 4v16M15 4v16" />
+    <rect x="15" y="15" width="6" height="5" fill="currentColor" stroke="none" />
+  </>,
+);
+
 // registration options shared by the component registry and the host entry
 export const stockTableDefineOptions = {
-  isEditSupported: true,
-  editTemplate: {
-    lang: 'md',
-    raw: '| Product | Status |\n| --- | --- |\n| Widget | In Stock |',
-    props: { title: 'Stock' },
+  expose: {
+    meta: {
+      label: 'Stock table',
+      description: 'A markdown table of products with stock status badges.',
+    },
+    icon: StockTableIcon,
+    viewModeList: [
+      { id: 'table', label: 'Table', description: 'every product as a row', icon: TableIcon, isDefault: true },
+      { id: 'summary', label: 'Summary', description: 'how many products are in each stock state', icon: ChartBar },
+    ],
+    editModeList: [
+      { id: 'cells', label: 'Cells', description: 'the title and the cells edited in the table', icon: TextCursorInput, isDefault: true },
+    ],
+    editTemplate: {
+      lang: 'md',
+      raw: '| Product | Status |\n| --- | --- |\n| Widget | In Stock |',
+      props: { title: 'Stock' },
+    },
   },
 };
+
+// the 'summary' view mode: one line per stock state with its count, over
+// the status column of the table (the column whose header says "status")
+export function StockTableSummary({ title, headers, rows }) {
+  const indexStatus = headers.findIndex((header) => /status/i.test(header));
+  const countByText = Object.fromEntries(stockTextList.map((text) => [text, 0]));
+  for (const cells of rows) {
+    const text = indexStatus === -1 ? undefined : cells[indexStatus];
+    if (text in countByText) countByText[text] += 1;
+  }
+  return (
+    <div className="not-prose my-2 text-sm">
+      {title ? <p className="font-medium text-sm mb-1">{title}</p> : null}
+      <div className="flex flex-row flex-wrap items-center gap-x-4 gap-y-1">
+        {stockTextList.map((text) => (
+          <span key={text} className="inline-flex items-center gap-1">
+            <StockBadge text={text} />
+            <span className="font-mono text-xs">{countByText[text]}</span>
+          </span>
+        ))}
+        <span className="text-xs text-fd-muted-foreground">{rows.length} products</span>
+      </div>
+    </div>
+  );
+}
 
 // the table of both modes. the editor passes cellRender(cell, indexRow,
 // indexCell) to put an editable value into each cell, headerRender for the

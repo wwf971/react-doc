@@ -1,14 +1,14 @@
-import { isMap, isScalar, parseDocument, stringify as yamlStringify, type Pair, type Scalar, type YAMLMap } from 'yaml';
-import { textLineListGet, type LineOperation } from './doc-edit-lines.ts';
+import { isMap, isScalar, parseDocument, type Node, type Pair, type Scalar, type YAMLMap } from 'yaml';
+import type { LineOperation } from './doc-edit-lines.ts';
+import { lineAtAfterNodeGet, linesInsertBuild, nodeColumnGet, nodeReplaceBuild, yamlScalarTextBuild } from './doc-yaml-edit.ts';
 
 // Changing the label of one side-panel item in its YAML file, as a line
 // operation (doc-edit-lines.ts). design: doc_page_impl_side_panel.md
 //
-// The file is never rebuilt from its parsed object: that would drop the
-// comments and reorder nothing predictably. Instead the parsed document only
-// tells where the authored label is (yaml keeps the character range of every
-// node), the lines holding that value are rebuilt around the new scalar, and
-// every other line of the file stays byte for byte as it was.
+// The file is edited in place (doc-yaml-edit.ts): the parsed document only
+// tells where the authored label is, the lines holding that value are
+// rebuilt around the new scalar, and every other line of the file stays
+// byte for byte as it was.
 //
 //   nodePath   yaml address of the side-panel node, as the plugin annotated
 //              it: e.g. ["sidePanelById", "main", "tree", 2],
@@ -80,7 +80,11 @@ export function sidePanelTextOperationBuild(source: string, request: SidePanelTe
   if (request.textBase !== undefined && String(scalar.value ?? '').trim() !== request.textBase.trim()) {
     return { code: -2, data: null, message: 'the label changed in the file since it was displayed; the edit was not applied' };
   }
-  return { code: 0, data: { operation: scalarReplaceBuild(source, scalar, request.text), fieldName }, message: '' };
+  return {
+    code: 0,
+    data: { operation: nodeReplaceBuild(source, scalar as Scalar, yamlScalarTextBuild(request.text)), fieldName },
+    message: '',
+  };
 }
 
 export function sidePanelTextRequestIsValid(request: any): request is SidePanelTextRequest {
@@ -105,67 +109,10 @@ function labelFieldNameGet(node: YAMLMap): string {
   return '';
 }
 
-// the lines holding the scalar are rebuilt: what precedes the value on its
-// first line, the new value, what follows it on its last line (a trailing
-// comment). a value written over several lines becomes one line.
-function scalarReplaceBuild(source: string, scalar: Scalar, text: string): LineOperation {
-  const [offsetStart, offsetEndRange] = scalar.range as [number, number, number];
-  // the range of a block scalar ("|", ">") ends after its final line break:
-  // step back onto its last line
-  let offsetEnd = offsetEndRange;
-  while (offsetEnd > offsetStart && (source[offsetEnd - 1] === '\n' || source[offsetEnd - 1] === '\r')) offsetEnd--;
-  const lineList = textLineListGet(source);
-  const lineIndexStart = lineIndexOfOffset(source, offsetStart);
-  const lineIndexEnd = lineIndexOfOffset(source, offsetEnd);
-  const offsetLineStart = lineOffsetGet(source, lineIndexStart);
-  const prefix = source.slice(offsetLineStart, offsetStart);
-  const suffix = source.slice(offsetEnd, lineOffsetGet(source, lineIndexEnd) + lineList[lineIndexEnd].length);
-  return {
-    action: 'replaceLines',
-    lineStart: lineIndexStart + 1,
-    lineEnd: lineIndexEnd + 1,
-    text: `${prefix}${yamlScalarTextBuild(text)}${suffix}`,
-  };
-}
-
 // a "text" line after the first pair of the node, indented like its keys
 function textLineInsertBuild(source: string, node: YAMLMap, text: string): LineOperation {
-  const pairFirst = node.items[0] as Pair<any, any> | undefined;
-  const [offsetNodeStart] = node.range as [number, number, number];
-  const offsetPairEnd = pairFirst?.value?.range?.[1] ?? pairFirst?.key?.range?.[1] ?? offsetNodeStart;
-  const lineIndexPairEnd = lineIndexOfOffset(source, offsetPairEnd);
-  const indent = offsetNodeStart - lineOffsetGet(source, lineIndexOfOffset(source, offsetNodeStart));
-  return {
-    action: 'insertLines',
-    lineAt: lineIndexPairEnd + 2,
-    text: `${' '.repeat(indent)}text: ${yamlScalarTextBuild(text)}`,
-  };
-}
-
-// one yaml scalar on one line: plain when yaml writes it plain, otherwise
-// quoted. yaml's own stringify decides what needs quoting ("a: b", "- x",
-// "12", a leading space); folding is off so the scalar never wraps.
-export function yamlScalarTextBuild(text: string): string {
-  const scalarText = yamlStringify(text, { lineWidth: 0 }).replace(/\n$/, '');
-  if (scalarText.includes('\n')) return JSON.stringify(text);
-  return scalarText;
-}
-
-// the line holding the character at offset: one line per "\n" before it. the
-// end offset of a value is at most its line's "\n", which still counts to
-// that line.
-function lineIndexOfOffset(source: string, offset: number): number {
-  let lineIndex = 0;
-  for (let index = 0; index < offset; index++) {
-    if (source[index] === '\n') lineIndex++;
-  }
-  return lineIndex;
-}
-
-function lineOffsetGet(source: string, lineIndex: number): number {
-  let offset = 0;
-  for (let index = 0; index < lineIndex; index++) {
-    offset = source.indexOf('\n', offset) + 1;
-  }
-  return offset;
+  const pairFirst = node.items[0] as Pair<Node, Node | null> | undefined;
+  const nodeAfter = pairFirst?.value && Array.isArray(pairFirst.value.range) ? pairFirst.value : pairFirst?.key ?? node;
+  const indent = nodeColumnGet(source, node);
+  return linesInsertBuild(lineAtAfterNodeGet(source, nodeAfter), [`${' '.repeat(indent)}text: ${yamlScalarTextBuild(text)}`]);
 }

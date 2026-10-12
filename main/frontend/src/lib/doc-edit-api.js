@@ -54,5 +54,19 @@ export function docEditApiCreate(endpoint) {
         body: JSON.stringify({ file, nodePath, language, text, textBase }),
       });
     },
+
+    // writes one value of the global config layer into config.yaml (or its
+    // local layer, where the key is declared); answers { file, keyPath, value }
+    //   keyPath     ['globalConfig', Key] or ['compConfig', CompName, Key]
+    //   value       null, boolean, number, string, or a list of strings
+    //   valueBase   the value the file declared when the page displayed it
+    //               (undefined: not declared); refused with -2 when it changed
+    configValueApply({ keyPath, value, valueBase }) {
+      return requestSend('/config/value', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyPath, value, valueBase }),
+      });
+    },
   };
 }

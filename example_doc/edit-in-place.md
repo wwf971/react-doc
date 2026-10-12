@@ -9,6 +9,7 @@ This page is a playground for the edit layer. Open it on the local development s
 
 In edit mode the page looks exactly as it reads: nothing moves when the toggle is switched, and hovering a block changes nothing but one small toolbar floating above it, centered, with the block's kind and its buttons:
 
+- choose a view mode or an edit mode of the block (only on a component block that has modes to choose from; see [View modes and edit modes](#view-modes-and-edit-modes))
 - edit the block where it is
 - open the asset panel (only on a block whose data comes from the [asset store](asset-store.md)), or move the block's inline data into the store (only on a component block with a data block)
 - insert a new block above it
@@ -55,11 +56,11 @@ function greet(name) {
 
 ## Components with their own editor
 
-A component declares `isEditSupported` in its registration and renders `XxxEdit` when the page hands it `config.isEdit`. The editor keeps the component in the flow at its usual size, makes the values it displays editable where they are, and floats the rest, so entering edit mode does not move the page. The comment marker and its block are one block to the edit layer, so editing or deleting them never separates the two.
+A component exposes the edit modes of its editor in its registration (`expose.editModeList`) and renders `XxxEdit` when the page hands it `config.isEdit`. The editor keeps the component in the flow at its usual size, makes the values it displays editable where they are, and floats the rest, so entering edit mode does not move the page. The comment marker and its block are one block to the edit layer, so editing or deleting them never separates the two. Every such block also keeps the plain source editor as a second edit mode, **Source**, one entry away in the mode menu.
 
 ### Image
 
-The caption is edited in the figcaption; the fields the page does not show (src, alt, size, display mode) are in the floating panel below the image.
+The edit mode **Fields** is the default: the caption is edited in the figcaption; the fields the page does not show (src, alt, size, display mode) are in the floating panel below the image. A paste over the image replaces it.
 
 <!--renderComp=Image-->
 ```yaml
@@ -70,9 +71,27 @@ width: 240
 height: 160
 ```
 
+### ImageGrid
+
+The edit mode **Images** is the default: a click on the grid keeps the grid as it is and makes its slots take pastes, so filling a grid is pasting into one slot after another; a slot shows a remove icon on hover, and **Add image** in the floating bar appends an empty slot. The gap and the slot width are in the same bar. The yaml of the grid is not shown in this mode; choose **Source** in the mode menu to see or edit it.
+
+<!--renderComp=ImageGrid-->
+```yaml
+itemWidth: 200
+gap: 12
+images:
+  - src: mdx-usage/image/robot-computer.svg
+    alt: A robot at a computer
+    caption: Paste over a slot to replace it
+    height: 150
+  - src:
+    caption: an empty slot
+    height: 150
+```
+
 ### StockTable
 
-The title, the headers, and the cells are edited in the table; a status cell cycles through the stock states; rows get insert / remove icons. Adding a row or a column is in the floating bar.
+The edit mode **Cells** is the default: the title, the headers, and the cells are edited in the table; a status cell cycles through the stock states; rows get insert / remove icons. Adding a row or a column is in the floating bar.
 
 <!--renderComp=StockTable,title=Warehouse A-->
 ```
@@ -83,9 +102,42 @@ The title, the headers, and the cells are edited in the table; a status cell cyc
 | #4096 | Monitor Arm | Out of Stock |
 ```
 
+## View modes and edit modes
+
+A component can expose several ways of displaying its data (view modes) and several ways of editing it (edit modes). Where there is something to choose, the toolbar of the block shows a **modes** button next to the block's label, and so does the bar of its editor; it opens a menu with the view modes first and the edit modes after them, the current and the default ones marked:
+
+```text
+VIEW MODE
+  Table     [current, default]
+  Summary
+EDIT MODE
+  Cells     [default]
+  Source    [built-in]
+```
+
+Choosing a view mode re-renders the block at once; the choice lasts for the page session and is not written to the file. Choosing an edit mode opens the block in it; choosing another while the block is open saves it and opens it again in the new mode. The `StockTable` below has two view modes: **Table**, and **Summary**, which counts the rows by their status. Switch it to Summary, then open the mode menu again and choose **Cells**: the editor is the table, whatever the view mode, and the block returns to Summary when the editor closes.
+
+<!--renderComp=StockTable,title=Warehouse D-->
+```
+| Product ID | Description | Stock Status |
+| :--- | :--- | :---: |
+| #1101 | Standing Desk | In Stock |
+| #1102 | Desk Lamp | In Stock |
+| #1103 | Cable Tray | Low Stock |
+| #1104 | Footrest | Out of Stock |
+```
+
+Edit modes are greyed out when they cannot be chosen now: while a save is pending, or on a block whose data is an asset, where only **Source** can be chosen ([below](#components-backed-by-the-asset-store)). The **Source** mode is built in and belongs to every block whose component does not refuse it; a component that has no editor of its own has only this mode, and shows no modes button.
+
+### Read-only components
+
+A component that displays what the page knows, and has no data of its own to change, declares itself read-only. Its block has no edit mode: the Edit button is greyed out, a click does not enter it, and the mode menu, when there is one, says so. The tag list below is such a component (it renders every tag of this page); it can still be moved, deleted, or have a block inserted around it.
+
+<!--renderComp=TagListAllDemo-->
+
 ## Components without an editor
 
-Components that do not declare edit support are edited as source, like any other block. The diagram below opens in the plain source editor:
+Components that expose no edit mode are edited as source, like any other block. The diagram below opens in the plain source editor:
 
 <!--renderComp=DiagramText-->
 ```
@@ -105,4 +157,4 @@ objectId: w4laejhlzjh
 
 ## Insert at the end
 
-Hover this paragraph and use **insert below** in its toolbar to insert a block at the end of the document. A floating menu offers a starting text for the basic blocks and for every component that declares an edit template; the chosen block is written to the file and opened in edit mode right away, with its text selected. Escape removes a block that was just created. Nothing is added to the page until a block is chosen: there is no placeholder at the end of the document.
+Hover this paragraph and use **insert below** in its toolbar to insert a block at the end of the document. A floating menu offers a starting text for the basic blocks and for every component that exposes an edit template, each with the component's icon; the chosen block is written to the file and opened in its default edit mode right away, with its text selected. Escape removes a block that was just created. Nothing is added to the page until a block is chosen: there is no placeholder at the end of the document.

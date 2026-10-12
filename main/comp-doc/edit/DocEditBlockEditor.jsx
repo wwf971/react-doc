@@ -1,30 +1,35 @@
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve } from '../registry/comp-registry.js';
+import { COMP_EDIT_MODE_SOURCE_ID } from '../registry/comp-expose.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import { useDocEditDoc } from './DocEditDocContext.js';
 import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
 
-// The editor of the open session, chosen by what is edited
-// (doc_page_impl_edit.md#component-edit-mode):
+// The editor of the open session, chosen by the edit mode the session was
+// opened in (session.editModeId, doc_page_impl_edit.md#component-edit-mode):
 //
-//   a component block whose component declares isEditSupported
+//   a component block in one of the modes its component exposes
 //     -> the component itself, rendered as in the document (placement
-//        commentBlock, same data) but with config.isEdit = true, so it
-//        renders its XxxEdit
-//   a component block whose data is a reference into the asset store
-//     -> BlockSource: the block holds the reference, the data is changed
-//        through the asset panel (doc_page_impl_asset.md#edit-mode)
-//   any other block
+//        commentBlock, same data) but with config.isEdit = true and
+//        config.edit.modeId = the mode, so it renders its XxxEdit of that mode
+//   a block in the built-in mode 'source' (the lines of the block as written;
+//   the only mode of a block without a component, and of a component block
+//   whose data is a reference into the asset store, which is changed through
+//   the asset panel, doc_page_impl_asset.md#edit-mode)
 //     -> the default editor of the block kind: the registered components
 //        Heading / Paragraph / List, or BlockSource for every other kind
 //   the frontmatter, the whole document
 //     -> BlockSource, with its surface in the floating panel (there is no
 //        place in the body where they are displayed)
 //
+// the store has already checked that the mode is one the block has
+// (DocEditStore.sessionBlockStart), so a component block in a mode other
+// than 'source' always has a definition that exposes it.
+//
 // every editor edits the block in its place and floats its controls
 // (doc_page_impl_edit.md#no-jitter-rule). it receives config.edit =
-// { session, block, format, sourcePath, label, viewRendered,
+// { session, block, format, sourcePath, label, modeId, viewRendered,
 // isSurfaceFloating } and reports through events (editDraftChange,
 // editTextSetRequest, editSubmitRequest, editCancelRequest,
 // editFocusShiftRequest); the event layer routes them to
@@ -51,6 +56,7 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
       format,
       sourcePath: path,
       label: sessionLabelGet(session, block),
+      modeId: session.editModeId,
       viewRendered,
       // the frontmatter and the whole file are not blocks of the body
       isSurfaceFloating: session.type === 'frontmatter' || session.type === 'document',
@@ -58,10 +64,10 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
   };
 
   const component = session.type === 'block' ? block?.component : undefined;
-  if (component && !assetRefLangIs(component.lang)) {
+  if (component && session.editModeId !== COMP_EDIT_MODE_SOURCE_ID) {
     const compId = compIdResolve(sourceStore.configDoc, component.compName);
     const definition = compDefinitionNormalize(compById[compId]);
-    if (definition?.isEditSupported) {
+    if (definition) {
       return (
         <RegisteredComp
           compDefinition={definition}

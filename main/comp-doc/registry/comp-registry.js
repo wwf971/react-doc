@@ -1,25 +1,30 @@
 import { createElement } from 'react';
+import { compExposeNormalize } from './comp-expose.js';
 
-// options:
+// options: how the registry boundary (RegisteredComp) treats the component
 //   componentType     semantic type other components can reference (dataRef, part index)
 //   dataBuild         input converter, see compInputNormalize
 //   dataRefTypeList   component types this component accepts data from
 //   placementList     where the component may render; undefined means anywhere
-//   isEditSupported   the component renders its own editor when config.isEdit
-//                     is true (doc_page_impl_edit.md#component-edit-mode)
-//   editTemplate      { lang, raw, props } of a new block inserted in edit mode
-//   configDefineList  component-level config keys the component reads from
-//                     config.compConfig (doc_page_impl_config.md#component-level-config):
-//                     [{ key, type, valueDefault, description, pathSpec? }]
 //   isAssetAware      the component receives config.assetInfo telling whether
 //                     its data is inline or an asset-store object
 //                     (doc_page_impl_asset.md#component-awareness)
 //   assetDependencyListGet(data) -> [{ type, path | objectId }] the source files
 //                     and assets the component's data refers to; recorded as the
 //                     dependencies of an asset created from the data
+//   expose            what the component tells the page about itself
+//                     (comp-expose.js): meta (read-only, the source edit mode,
+//                     the shape of its config, ...), icon, viewModeList,
+//                     editModeList, editTemplate, and any non-standard name
+//
+// the former flat options isEditSupported, editTemplate and configDefineList
+// are refused, so a definition still written with them fails here instead of
+// silently losing its editor, its template or its config keys.
 export function compDefine(CompRender, options = {}) {
-  if (options.configDefineList !== undefined && !Array.isArray(options.configDefineList)) {
-    throw new Error('compDefine: configDefineList must be an array.');
+  for (const optionRemoved of ['isEditSupported', 'editTemplate', 'configDefineList']) {
+    if (options[optionRemoved] !== undefined) {
+      throw new Error(`compDefine: '${optionRemoved}' is declared through 'expose' now (comp-expose.js).`);
+    }
   }
   return {
     CompRender,
@@ -27,11 +32,9 @@ export function compDefine(CompRender, options = {}) {
     dataBuild: options.dataBuild,
     dataRefTypeList: options.dataRefTypeList,
     placementList: options.placementList,
-    isEditSupported: options.isEditSupported === true,
-    editTemplate: options.editTemplate,
-    configDefineList: options.configDefineList ?? [],
     isAssetAware: options.isAssetAware === true,
     assetDependencyListGet: options.assetDependencyListGet,
+    expose: compExposeNormalize(options.expose),
   };
 }
 

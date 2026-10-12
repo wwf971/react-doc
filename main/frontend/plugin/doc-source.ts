@@ -356,12 +356,12 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
           configDataSend(loadConfigDoc(configFile, options));
         },
       }));
-      // a side-panel file the page itself rewrote (a label edit), by content
-      // hash. the watcher reports that change too; when the file still has
-      // this content, the change was already reported as data and must not
-      // reload the page.
+      // a configuration file the page itself rewrote (a side-panel label, a
+      // config value), by content hash. the watcher reports that change
+      // too; when the file still has this content, the change was already
+      // reported as data and must not reload the page.
       const contentHashWrittenByPath = new Map<string, string>();
-      const sidePanelFileWritten = (filePath: string, text: string) => {
+      const configurationFileWritten = (filePath: string, text: string) => {
         contentHashWrittenByPath.set(filePath, textContentHashGet(text));
         const configDocUpdated = loadConfigDoc(configFile, options);
         pathsWatched = collectPathsToWatch(configDocUpdated, configDir);
@@ -384,7 +384,13 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         sidePanel: {
           configDir,
           fileListGet: () => collectDocYamlFiles(loadConfigDoc(configFile, options)),
-          onFileWritten: sidePanelFileWritten,
+          onFileWritten: configurationFileWritten,
+        },
+        // the global config layer (doc_page_impl_config.md#config-layers):
+        // config.yaml and its local layer
+        config: {
+          fileList: [configFile, configLocalFileGet(configFile)],
+          onFileWritten: configurationFileWritten,
         },
       }));
 
@@ -428,6 +434,8 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       const invalidateManifest = (filePath: string) => {
         // files of the asset store are not documents, even inside a source folder
         if (assetConfig && assetPathIs(assetConfig, filePath)) return;
+        // the backup the edit api writes beside a configuration file is not a document
+        if (configurationBackupPathIs(pathsConfiguration, filePath)) return;
         const isRelated = pathsWatched.some(
           (p) => filePath === p || filePath.startsWith(p + path.sep),
         );
@@ -652,13 +660,16 @@ function findConfigFile(viteRoot: string, configFileOption?: string): string {
   throw new Error(`[doc-source] config.yaml not found near ${viteRoot}`);
 }
 
+// the local layer of config.yaml: config.0.yaml beside it, merged over it
+// key by key when it exists
+function configLocalFileGet(configFile: string): string {
+  const extension = path.extname(configFile);
+  return path.join(path.dirname(configFile), `${path.basename(configFile, extension)}.0${extension}`);
+}
+
 function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {}): any {
   const configDir = path.dirname(configFile);
-  const extension = path.extname(configFile);
-  const configLocalFile = path.join(
-    configDir,
-    `${path.basename(configFile, extension)}.0${extension}`,
-  );
+  const configLocalFile = configLocalFileGet(configFile);
   const configBase = readYaml(configFile) ?? {};
   const configLocal = readYaml(configLocalFile) ?? {};
   const config = mergeDeep(configBase, configLocal);
@@ -826,14 +837,23 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
     }
   }
 
-  // the configuration files (config.yaml, the yaml files of the document)
-  // and the files of the asset store (doc_page_impl_asset.md) are never
+  // the configuration files (config.yaml, the yaml files of the document),
+  // their backups (the edit api keeps {file}.bak when it rewrites one) and
+  // the files of the asset store (doc_page_impl_asset.md) are never
   // documents, even when they lie inside a source folder
-  const configurationPathSet = new Set(collectPathsConfiguration(configDoc));
+  const pathsConfiguration = collectPathsConfiguration(configDoc);
+  const configurationPathSet = new Set(pathsConfiguration);
   const assetConfig = assetConfigGet(configDoc, configDir);
   return [...entryByPath.values()].filter((entry) => (
-    !configurationPathSet.has(entry.absPath) && (!assetConfig || !assetPathIs(assetConfig, entry.absPath))
+    !configurationPathSet.has(entry.absPath)
+    && !configurationBackupPathIs(pathsConfiguration, entry.absPath)
+    && (!assetConfig || !assetPathIs(assetConfig, entry.absPath))
   ));
+}
+
+// the backup the edit api keeps beside a configuration file it rewrote
+function configurationBackupPathIs(pathsConfiguration: string[], filePath: string): boolean {
+  return pathsConfiguration.some((configurationPath) => filePath === `${configurationPath}.bak`);
 }
 
 // the local asset store as config asset.file describes it now; undefined

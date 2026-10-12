@@ -131,11 +131,16 @@ function ImagePanZoom({ alt, sourceUrl }) {
 
 // in edit mode (config.isEdit, set by the edit layer) ImageEdit edits the
 // caption in place and the other yaml fields in a floating panel; the image
-// in the flow is the same ImageRender.
-function Image({ data = {}, config = {}, onEvent }) {
+// in the flow is the same ImageRender. 'fields' is the one edit mode Image
+// exposes (image-expose.js), so config.edit.modeId needs no branching here.
+//
+// onSourcePaste(sourcePath): given by an editor that holds this image in
+// its draft (ImageGridEdit), so a pasted image goes to the draft instead
+// of the block being rewritten (see ImageRender).
+function Image({ data = {}, config = {}, onEvent, onSourcePaste }) {
 	if (config.isEdit) return <ImageEdit data={data} config={config} onEvent={onEvent} />;
 	try {
-		return <ImageRender data={imageDataParse(data)} config={config} onEvent={onEvent} />;
+		return <ImageRender data={imageDataParse(data)} config={config} onEvent={onEvent} onSourcePaste={onSourcePaste} />;
 	} catch (error) {
 		return (
 			<div className="doc-image-error" role="alert">

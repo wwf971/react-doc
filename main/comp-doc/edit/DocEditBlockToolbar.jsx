@@ -7,6 +7,7 @@ import { useDocStores } from '../../frontend/src/store/context.js';
 import { assetRefLangIs, assetRefParse } from '../../frontend/src/lib/doc-asset-ref.js';
 import { useAssetPanelIsAvailable } from '../asset/AssetPanelPopup.jsx';
 import { useDocEditDoc } from './DocEditDocContext.js';
+import { DocEditBlockModeButton } from './DocEditBlockModeButton.jsx';
 import { DocEditInsertMenu } from './DocEditInsertMenu.jsx';
 import { useEditOutsidePointer } from './use-edit-outside-pointer.js';
 import './DocEdit.css';
@@ -19,7 +20,12 @@ import './DocEdit.css';
 // move failure is open (DocEdit.css), so the document looks exactly as in
 // reading mode until the pointer reaches a block.
 //
-//   [Label]  [edit] [asset | to asset] [insert above] [insert below] [move up] [move down] [delete]
+//   [Label]  [modes] [edit] [asset | to asset] [insert above] [insert below] [move up] [move down] [delete]
+//
+// the modes button (DocEditBlockModeButton, next to the label it belongs
+// to) exists for a component block with more than one view mode or edit
+// mode; the Edit button opens the block in its default edit mode and is
+// greyed out for a read-only component.
 //
 // every action first leaves the open session (saving it). the insert
 // buttons open a floating menu of starting texts (DocEditInsertMenu) under
@@ -70,6 +76,7 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
   const assetMove = editStore.blockAssetMove;
   const isAssetMoveHere = editStore.blockAssetMoveIs(path, blockIndex);
   const isAssetMoveAvailable = editStore.blockAssetMoveIsAvailable(path, blockIndex);
+  const isReadOnly = editStore.blockIsReadOnly(path, blockIndex);
   useEditOutsidePointer(toolbarRef, isMenuHere || isConfirmHere || isMoveHere || isAssetMoveHere, () => {
     if (isMenuHere) editStore.insertMenuClose();
     if (isConfirmHere) editStore.deleteConfirmClear();
@@ -102,7 +109,9 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
     <div ref={toolbarRef} className="doc-edit-toolbar not-prose" role="toolbar" aria-label={`${label} block`}>
       <span className="doc-edit-toolbar-label">{label}</span>
       <div className="doc-edit-toolbar-actions" role="group" aria-label="Block actions">
-        <button type="button" disabled={isSubmitting} title="Edit this block" aria-label="Edit this block"
+        <DocEditBlockModeButton blockIndex={blockIndex} size="toolbar" />
+        <button type="button" disabled={isSubmitting || isReadOnly}
+          title={isReadOnly ? 'This component is read-only' : 'Edit this block'} aria-label="Edit this block"
           onClick={() => blockEventDispatch('editBlockEnterRequest')}>
           <Pencil aria-hidden="true" size={ICON_SIZE} strokeWidth={2} />
         </button>

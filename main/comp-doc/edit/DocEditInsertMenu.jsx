@@ -42,7 +42,8 @@ export const DocEditInsertMenu = observer(function DocEditInsertMenu() {
           disabled={isSubmitting}
           onClick={() => void editStore.blockCreate(path, template.text)}
         >
-          {template.label}
+          {template.icon ? <template.icon size={12} aria-hidden="true" /> : null}
+          <span>{template.label}</span>
         </button>
       ))}
     </div>

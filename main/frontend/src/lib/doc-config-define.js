@@ -1,13 +1,16 @@
-// Definitions of the doc page config keys. Design: doc_page_impl_config.md
+// Definitions of the doc page config keys and of the config layers.
+// Design: doc_page_impl_config.md
 //
 // A definition says that a key exists, what values it accepts, its default,
 // and at which levels it can be declared:
-//   scope 'page'   one value for the whole page, declared only in globalConfig
-//   scope 'doc'    resolved per document: global < source < side panel < document
+//   scope 'page'   one value for the whole page, declared in the config layers only
+//   scope 'doc'    resolved per document: the layers below the document levels
+//                  < source < side panel < document < the layers above them
 //
-// Values are chosen in YAML, or by the reader in the settings panel (the user
-// level, kept for the page session only); definitions live in code. An
-// application adds its own keys through DocPageMdx config.configDefineList.
+// Values are chosen in YAML, or by the reader in the settings panel (written
+// into one of the config layers, configLayerDefineList); definitions live
+// in code. An application adds its own keys through DocPageMdx
+// config.configDefineList.
 //
 //   description      one line shown in the settings panel
 //   isUserSettable   false hides the key from the settings panel (default true)
@@ -19,7 +22,7 @@
 //
 // Component-level keys (doc_page_impl_config.md#component-level-config): a
 // registered component declares its own keys in its definition
-// (compDefine configDefineList, the same fields without scope); they are
+// (compDefine expose.meta.configDefineList, the same fields without scope); they are
 // resolved per component and document, and set in YAML under "compConfig"
 // by the component's tag name:
 //   compConfig:
@@ -104,9 +107,46 @@ export const configDefineListBuiltin = [
   },
 ];
 
-// user is the reader's own override, set in the settings panel for the page
-// session; it comes after every declared level
-export const configLevelList = ['default', 'global', 'source', 'sidePanel', 'doc', 'user'];
+// The config layers (doc_page_impl_config.md#config-layers): the places a
+// page-level value is kept, each with its own persistence, stacked in this
+// order. The settings panel shows one tab per layer and writes into the
+// layer shown. A layer holds page keys and component keys alike.
+//   id                 the level name of a value decided by the layer
+//   label              the tab of the settings panel
+//   storage            how the layer keeps its values:
+//                        'file'      config.yaml of the page (globalConfig, compConfig),
+//                                    rewritten in place by the development server
+//                        'browser'   the browser's localStorage, for this page
+//   isAboveDocLevels   the layer is applied after the document levels (source,
+//                      side panel, frontmatter), so it wins over what documents
+//                      declare; false: before them, so documents refine it
+//   description        shown in the head of the settings panel
+// another layer is one more entry here, with a storage the store knows how
+// to read and write (store/doc-config-layer.ts).
+export const configLayerDefineList = [
+  {
+    id: 'global',
+    label: 'Global',
+    storage: 'file',
+    isAboveDocLevels: false,
+    description: 'config.yaml of the page; documents may refine a value',
+  },
+  {
+    id: 'client',
+    label: 'Client',
+    storage: 'browser',
+    isAboveDocLevels: true,
+    description: 'kept in this browser for this page; wins over what documents declare',
+  },
+];
+
+// the levels a value can be decided by, in resolution order: the default,
+// the layers below the document levels, the document levels, the layers above
+export function configLevelListBuild(layerDefineList = configLayerDefineList) {
+  const layerIdListBelow = layerDefineList.filter((define) => !define.isAboveDocLevels).map((define) => define.id);
+  const layerIdListAbove = layerDefineList.filter((define) => define.isAboveDocLevels).map((define) => define.id);
+  return ['default', ...layerIdListBelow, 'source', 'sidePanel', 'doc', ...layerIdListAbove];
+}
 
 // later entries with the same key replace earlier ones
 export function configDefineByKeyBuild(configDefineListExtra = []) {
@@ -126,12 +166,14 @@ export function configDefineByKeyBuild(configDefineListExtra = []) {
 }
 
 // the keys one registered component declares: compId -> (key -> define).
-// compById holds registry definitions ({ CompRender, configDefineList, ... });
-// a legacy component (a bare React component) declares none.
+// compById holds registry definitions; the shape of a component's config
+// is part of what it exposes, expose.meta.configDefineList
+// (doc_page_impl_mdx_comp.md#what-a-component-exposes). a legacy component
+// (a bare React component) declares none.
 export function compConfigDefineByCompIdBuild(compById = {}) {
   const result = new Map();
   for (const [compId, definition] of Object.entries(compById)) {
-    const defineList = definition?.configDefineList;
+    const defineList = definition?.expose?.meta?.configDefineList;
     if (!Array.isArray(defineList) || defineList.length === 0) continue;
     const defineByKey = new Map();
     for (const define of defineList) {

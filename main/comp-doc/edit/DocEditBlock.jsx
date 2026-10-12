@@ -64,9 +64,11 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
   const isOpen = isDeletePending
     || editStore.insertMenuIs(path, index)
     || editStore.blockMoveIs(path, index)
-    || editStore.blockAssetMoveIs(path, index);
+    || editStore.blockAssetMoveIs(path, index)
+    || editStore.blockModeMenuIs(path, index);
   const isInvisible = block.kind === 'html' || block.kind === 'marker';
-  const isEnterByClick = editStore.blockEnterMode === 'click';
+  // a read-only component cannot be entered, by a click or otherwise
+  const isEnterByClick = editStore.blockEnterMode === 'click' && !editStore.blockIsReadOnly(path, index);
   const textPending = editStore.blockTextPendingGet(path, index);
   const label = blockLabelGet(block);
 
@@ -85,7 +87,8 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
   // EditBlockEnterMode 'click': a click anywhere on the block starts its
   // session, with the caret where the block was clicked; the block's own
   // controls (buttons, editable values, form fields) and the floating
-  // controls keep working
+  // controls keep working. a popup of the edit layer portaled to the body
+  // (the mode menu) still bubbles its clicks through the React tree to here.
   const clickCaptureHandle = (event) => {
     if (!isEnterByClick || isEditing) return;
     if (event.target.closest?.(clickOwnSelector)) return;
@@ -100,18 +103,30 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
   // it leaves the session like a pointer going down outside the block. only
   // the wrapper itself counts, so the editor, its fields, buttons, and the
   // rendered content keep working; a right click does nothing.
+  //
+  // the click of that same gesture is hit-tested after the leave, once the
+  // block is back in view mode and fills the space that was empty. with
+  // EditBlockEnterMode 'click' that click would enter the block again, so
+  // it is swallowed.
   const pointerDownHandle = (event) => {
     if (!isEditing || event.button !== 0 || event.target !== event.currentTarget) return;
     editFocusRelease(elementRef.current);
+    clickAfterLeaveSuppress();
     void editStore.sessionLeave();
   };
 
   // keys not handled by a control of the editor: Escape cancels, Ctrl/⌘ +
   // Enter leaves (saves). focus is released first so an inline value commits.
+  // an open mode menu of the block takes Escape first: it closes, the
+  // session stays.
   const keyDownHandle = (event) => {
     if (!isEditing || event.defaultPrevented || event.nativeEvent?.isComposing) return;
     if (event.key === 'Escape') {
       event.preventDefault();
+      if (editStore.blockModeMenuIs(path, index)) {
+        editStore.blockModeMenuClose();
+        return;
+      }
       void editStore.sessionCancel();
       return;
     }
@@ -180,7 +195,36 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
   );
 });
 
-const clickOwnSelector = 'button, [role="button"], input, select, textarea, summary, [contenteditable]:not([contenteditable="false"])';
+const clickOwnSelector = 'button, [role="button"], input, select, textarea, summary, [contenteditable]:not([contenteditable="false"]), .doc-edit-popup';
+
+// the click that completes a bare-space pointerdown must not enter a block.
+// the guard covers that one click. a gesture that produces no click (it was
+// cancelled, or the pointer was released without one) drops the guard, so a
+// later click is not swallowed.
+function clickAfterLeaveSuppress() {
+  let isRemoved = false;
+  const remove = () => {
+    if (isRemoved) return;
+    isRemoved = true;
+    document.removeEventListener('click', clickGuard, true);
+    document.removeEventListener('pointercancel', remove, true);
+    document.removeEventListener('pointerup', pointerUpHandle, true);
+  };
+  const clickGuard = (clickEvent) => {
+    remove();
+    clickEvent.preventDefault();
+    clickEvent.stopPropagation();
+  };
+  // click is dispatched after pointerup, in the same turn. if none comes,
+  // the timer drops the guard before the next thing the author clicks.
+  const pointerUpHandle = () => {
+    document.removeEventListener('pointerup', pointerUpHandle, true);
+    setTimeout(remove, 0);
+  };
+  document.addEventListener('click', clickGuard, true);
+  document.addEventListener('pointercancel', remove, true);
+  document.addEventListener('pointerup', pointerUpHandle, true);
+}
 
 // the inline styles that keep the wrapper at the geometry its block had in
 // view mode while the block is edited, or null while it is not. the mobx

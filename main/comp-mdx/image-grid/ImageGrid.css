@@ -8,9 +8,63 @@
 }
 
 .doc-image-grid-item {
+	position: relative;
 	width: var(--doc-image-grid-item-width);
 	max-width: 100%;
 	flex: 0 1 var(--doc-image-grid-item-width);
+}
+
+/* edit mode ('images'): the remove button floats at the top right of a
+   slot, shown while the slot is hovered; it takes no room in the slot */
+.doc-image-grid-slot-remove {
+	position: absolute;
+	top: 0.25rem;
+	right: 0.25rem;
+	z-index: 2;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.35rem;
+	height: 1.35rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 2px;
+	background: var(--color-fd-background);
+	color: var(--color-fd-muted-foreground);
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 80ms ease;
+}
+
+.doc-image-grid-item:hover .doc-image-grid-slot-remove,
+.doc-image-grid-slot-remove:focus-visible {
+	opacity: 1;
+}
+
+.doc-image-grid-slot-remove:hover:not(:disabled) {
+	border-color: var(--color-fd-destructive, #dc2626);
+	color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-image-grid-slot-remove:disabled {
+	cursor: default;
+}
+
+/* the layout fields in the floating bar: name, then the value in place */
+.doc-image-grid-edit-field {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+}
+
+.doc-image-grid-edit-field-name {
+	color: var(--color-fd-muted-foreground);
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.7rem;
+}
+
+.doc-image-grid-edit-field .doc-edit-value {
+	min-width: 3rem;
+	font-size: 0.72rem;
 }
 
 .doc-image-grid-item > .doc-image {

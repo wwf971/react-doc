@@ -1,31 +1,38 @@
-import { makeAutoObservable, observable } from 'mobx';
+import { makeAutoObservable } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import type { DocStore } from './DocStore.js';
-import { compConfigDefineByCompIdBuild, configDefineByKeyBuild } from '../lib/doc-config-define.js';
+import { compConfigDefineByCompIdBuild, configDefineByKeyBuild, configLayerDefineList } from '../lib/doc-config-define.js';
 import { configModelBuild } from '../lib/doc-config-model.js';
 import { compIdResolve } from '../../../comp-doc/registry/comp-registry.js';
+import { configLayerCreate, type ConfigLayer, type ConfigLayerDefine, type ConfigLayerResult } from './doc-config-layer.js';
 
 // Config service of the doc page. Design: doc_page_impl_config.md
-// Page-level values come from config.yaml globalConfig; document-level values
-// are resolved per document from global, source rules, side-panel nodes and
-// frontmatter. The reader's own overrides from the settings panel (the user
-// level) come last and live only for the page session. Renderers ask here
-// instead of reading any of those places.
+// Page-level values come from the config layers (doc-config-layer.ts):
+// config.yaml (global), the reader's values kept in the browser (client),
+// stacked in the order of configLayerDefineList. Document-level values are
+// resolved per document: the layers below the document levels, source
+// rules, side-panel nodes, frontmatter, then the layers above. Renderers
+// ask here instead of reading any of those places.
 //
 // Component-level keys (doc_page_impl_config.md#component-level-config) are
 // declared by the registered components themselves (compDefine
-// configDefineList) and resolved the same way under "compConfig"; a
+// expose.meta.configDefineList) and resolved the same way under "compConfig"; a
 // component receives its values in its config (RegisteredComp).
+//
+// The settings panel edits one layer at a time (settingsLayerId): it reads
+// the values as they are with the layers up to that one applied
+// (layerValueGet) and writes into that layer (layerValueSet).
 
-export type ConfigLevel = 'default' | 'global' | 'source' | 'sidePanel' | 'doc' | 'user';
+// the level that decided a value: 'default', a layer id, 'source', 'sidePanel', 'doc'
+export type ConfigLevel = string;
 export type ConfigDefine = {
   key: string;
   type: string;
   valueDefault: any;
   scope: 'page' | 'doc';
   valueList?: any[];
-  // type 'sourcePath': what the path names, for completion
-  pathSpec?: { kind: 'dir' | 'file'; extList?: string[] };
+  // type 'sourcePath': what the path names, for completion (lib/doc-source-complete.js)
+  pathSpec?: { kind: 'dir' | 'file' | 'any'; extList?: string[]; rootIdList?: string[]; dirPath?: string };
   description?: string;
   isUserSettable?: boolean;
 };
@@ -37,26 +44,35 @@ export class DocConfigStore {
   sourceStore: DocSourceStore;
   docStore: DocStore;
   configDefineByKey: Map<string, ConfigDefine>;
+  // the config layers in stack order (doc-config-layer.ts)
+  layerList: ConfigLayer[];
   // stable query object handed to registered components through config
   configService: Readonly<Record<string, (...args: any[]) => any>>;
-  // key -> value set by the reader in the settings panel (the user level)
-  configUserByKey: Record<string, any> = {};
-  // compId -> key -> value set by the reader (the user level of component keys)
-  configUserCompByCompId: Record<string, Record<string, any>> = {};
-  // the settings panel is open, and the button it was opened from (the
-  // panel is placed under it)
+  // the settings panel is open (a centered popup; see DocSettingsPanel)
   isSettingsOpen = false;
-  settingsAnchorElement: HTMLElement | null = null;
   // the tab of the settings panel that is shown: the config keys, the
   // component-level keys, or the folders of the asset store
   // (doc_page_impl_asset.md); kept while the panel is closed, so it opens
   // again where it was
   settingsTabId: SettingsTabId = 'config';
+  // the config layer the Config and Component tabs show and write
+  settingsLayerId: string;
 
-  constructor(sourceStore: DocSourceStore, docStore: DocStore, options?: { configDefineList?: ConfigDefine[] }) {
+  constructor(
+    sourceStore: DocSourceStore,
+    docStore: DocStore,
+    options?: { configDefineList?: ConfigDefine[]; layerDefineList?: ConfigLayerDefine[]; editEndpoint?: string },
+  ) {
     this.sourceStore = sourceStore;
     this.docStore = docStore;
     this.configDefineByKey = configDefineByKeyBuild(options?.configDefineList ?? []);
+    const layerDefineList: ConfigLayerDefine[] = options?.layerDefineList ?? (configLayerDefineList as ConfigLayerDefine[]);
+    this.layerList = layerDefineList.map((define) => configLayerCreate(define, {
+      sourceStore,
+      editEndpoint: String(options?.editEndpoint ?? ''),
+    }));
+    // the panel opens on the last layer: the one whose values win
+    this.settingsLayerId = this.layerList[this.layerList.length - 1]?.id ?? '';
     this.configService = Object.freeze({
       configDefineListGet: () => [...this.configDefineByKey.values()],
       configDocGet: (docPath: string) => this.configDocGet(docPath),
@@ -72,7 +88,7 @@ export class DocConfigStore {
       configService: false,
       docStore: false,
       sourceStore: false,
-      settingsAnchorElement: observable.ref,
+      layerList: false,
     });
   }
 
@@ -86,8 +102,13 @@ export class DocConfigStore {
     return configModelBuild({
       configDefineByKey: this.configDefineByKey,
       configDoc: this.sourceStore.configDoc,
-      configUser: this.configUserByKey,
-      configUserComp: this.configUserCompByCompId,
+      layerList: this.layerList.map((layer) => ({
+        id: layer.id,
+        config: layer.config,
+        compConfig: layer.compConfig,
+        isCompKeyedById: layer.isCompKeyedById,
+        isAboveDocLevels: layer.define.isAboveDocLevels,
+      })),
       fileManifest: this.sourceStore.fileManifest,
       declarationListSidePanel: this.docStore.treeModel.configDeclarationList,
       declarationListPartIndex: [...this.docStore.treeModel.partById.values()]
@@ -103,41 +124,72 @@ export class DocConfigStore {
     return [...this.configDefineByKey.values()].filter((define) => define.isUserSettable !== false);
   }
 
-  // ----- user level -----
+  // ----- layers -----
 
-  // the value the reader would see without an override of their own: the
-  // page value of the key (document levels differ per document and are
-  // shown at the page value in the settings panel)
-  valueDeclaredGet(key: string): any {
-    return this.configModel.configGlobalDeclared[key];
+  layerGet(layerId: string): ConfigLayer | undefined {
+    return this.layerList.find((layer) => layer.id === layerId);
   }
 
-  valueUserSet(key: string, value: any): void {
-    if (!this.configDefineByKey.has(key)) return;
-    this.configUserByKey = { ...this.configUserByKey, [key]: value };
+  // the page value of a key with the layers up to and including this one
+  // applied: what the settings panel shows on the layer's tab
+  layerValueGet(layerId: string, key: string): any {
+    return this.configModel.configByLayerId.get(layerId)?.valueByKey[key];
   }
 
-  valueUserClear(key: string): void {
-    const { [key]: _valueCleared, ...configUserRest } = this.configUserByKey;
-    this.configUserByKey = configUserRest;
+  // the layer itself declares the key (the value shown is its own)
+  layerIsDeclaring(layerId: string, key: string): boolean {
+    return this.configModel.configByLayerId.get(layerId)?.levelByKey[key] === layerId;
   }
 
-  configUserClear(): void {
-    this.configUserByKey = {};
-    this.configUserCompByCompId = {};
+  layerCompValueGet(layerId: string, compId: string, key: string): any {
+    return this.configModel.compConfigByLayerId.get(layerId)?.get(compId)?.valueByKey[key];
   }
 
-  get isUserOverrideAny(): boolean {
-    return Object.keys(this.configUserByKey).length > 0 || Object.keys(this.configUserCompByCompId).length > 0;
+  layerCompIsDeclaring(layerId: string, compId: string, key: string): boolean {
+    return this.configModel.compConfigByLayerId.get(layerId)?.get(compId)?.levelByKey[key] === layerId;
   }
 
-  settingsOpenSet(isOpen: boolean, anchorElement: HTMLElement | null = null): void {
+  // the layer holds any value of its own (Reset has something to do)
+  layerIsDeclaringAny(layerId: string): boolean {
+    const layer = this.layerGet(layerId);
+    if (!layer) return false;
+    return Object.keys(layer.config).length > 0 || Object.keys(layer.compConfig).length > 0;
+  }
+
+  layerValueSet(layerId: string, key: string, value: any): Promise<ConfigLayerResult> {
+    const layer = this.layerGet(layerId);
+    if (!layer) return Promise.resolve({ code: -1, message: `unknown config layer ${layerId}` });
+    if (!this.configDefineByKey.has(key)) return Promise.resolve({ code: -1, message: `unknown config key ${key}` });
+    return layer.valueSet(key, value);
+  }
+
+  layerCompValueSet(layerId: string, compId: string, key: string, value: any): Promise<ConfigLayerResult> {
+    const layer = this.layerGet(layerId);
+    if (!layer) return Promise.resolve({ code: -1, message: `unknown config layer ${layerId}` });
+    if (!this.compConfigDefineByCompId.get(compId)?.has(key)) {
+      return Promise.resolve({ code: -1, message: `unknown component config key ${compId} ${key}` });
+    }
+    return layer.compValueSet(compId, key, value);
+  }
+
+  layerClear(layerId: string): Promise<ConfigLayerResult> {
+    const layer = this.layerGet(layerId);
+    if (!layer) return Promise.resolve({ code: -1, message: `unknown config layer ${layerId}` });
+    return layer.clear();
+  }
+
+  // ----- settings panel state -----
+
+  settingsOpenSet(isOpen: boolean): void {
     this.isSettingsOpen = isOpen;
-    this.settingsAnchorElement = isOpen ? anchorElement : null;
   }
 
   settingsTabIdSet(tabId: string): void {
     this.settingsTabId = settingsTabIdList.includes(tabId as SettingsTabId) ? (tabId as SettingsTabId) : 'config';
+  }
+
+  settingsLayerIdSet(layerId: string): void {
+    if (this.layerGet(layerId)) this.settingsLayerId = layerId;
   }
 
   // ----- queries -----
@@ -167,7 +219,7 @@ export class DocConfigStore {
     return this.configDocGet(docPath)[key];
   }
 
-  // which level decided the value: default | global | source | sidePanel | doc | user
+  // which level decided the value: default | a layer id | source | sidePanel | doc
   levelDocGet(docPath: string, key: string): ConfigLevel {
     const configResolved = this.configModel.configByDocPath.get(docPath);
     return configResolved?.levelByKey[key] ?? this.configModel.levelGlobalByKey[key];
@@ -194,20 +246,7 @@ export class DocConfigStore {
     return byCompId.get(compId)?.valueByKey ?? {};
   }
 
-  // the page value of a component key without the reader's override
-  compValueDeclaredGet(compId: string, key: string): any {
-    return this.configModel.compConfigGlobalDeclaredByCompId.get(compId)?.[key];
-  }
-
   compValueGlobalGet(compId: string, key: string): any {
     return this.configModel.compConfigGlobalByCompId.get(compId)?.valueByKey[key];
-  }
-
-  compValueUserSet(compId: string, key: string, value: any): void {
-    if (!this.compConfigDefineByCompId.get(compId)?.has(key)) return;
-    this.configUserCompByCompId = {
-      ...this.configUserCompByCompId,
-      [compId]: { ...(this.configUserCompByCompId[compId] ?? {}), [key]: value },
-    };
   }
 }

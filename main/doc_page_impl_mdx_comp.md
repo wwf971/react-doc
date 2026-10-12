@@ -2,15 +2,96 @@
 
 # MDX Components: Design
 
-Components that authors can use inside md/mdx documents live under `main/comp-mdx/`, one folder per component family. They are ordinary registered components: `config.yaml` `compRegistry` maps a tag name to a component id, and the component definition in `compById` (created with `compDefine()`) provides the render component and its declared capabilities. Registration, placements, and the common `{ data, config, onEvent }` interface are described in [Document Page: Design](doc_page_impl.md#component-registry).
+Components that authors can use inside md/mdx documents live under `main/comp-mdx/`, one folder per component family. They are ordinary registered components: `config.yaml` `compRegistry` maps a tag name to a component id, and the component definition in `compById` (created with `compDefine()`) provides the render component, how the registry boundary treats it, and what it exposes about itself ([What a component exposes](#what-a-component-exposes)). Registration, placements, and the common `{ data, config, onEvent }` interface are described in [Document Page: Design](doc_page_impl.md#component-registry).
 
 ```text
 document  <!--renderComp=FileTree,id=x-->  or  <FileTree .../>
    -> compRegistry: tag name FileTree -> id common/FileTree
-   -> compById: definition { CompRender, componentType, dataRefTypeList, placementList, dataBuild }
+   -> compById: definition { CompRender, componentType, dataRefTypeList, placementList, dataBuild, expose }
    -> RegisteredComp: normalize input into { data, config, onEvent }
    -> render component
 ```
+
+## What a component exposes
+
+A definition says two kinds of things about a component. The first is how the registry boundary (`RegisteredComp`) treats it: where it may render (`placementList`), what it can be referenced as (`componentType`, `dataRefTypeList`), how its input is normalized (`dataBuild`), what it is told about its data (`isAssetAware`, `assetDependencyListGet`). The second is what the component tells the page about itself, for the page to offer to readers and authors: that it is read-only, in which ways it can be displayed and edited, what its icon is, how a new block of it starts, which config keys it has. These are the component's **exposure**, the `expose` option of `compDefine()`:
+
+```text
+compDefine(Xxx, {
+  placementList, componentType, dataRefTypeList, dataBuild,     how the registry boundary treats it
+  isAssetAware, assetDependencyListGet,
+  expose: {                                                     what it tells the page about itself
+    meta:          { label, description, isReadOnly, isEditSourceAccepted, configDefineList, ... }
+    icon:          a component drawing the icon of Xxx at any size
+    viewModeList:  [{ id, label, description, icon, isDefault }]   the ways its data is displayed
+    editModeList:  [{ id, label, description, icon, isDefault }]   the ways its data is edited in place
+    editTemplate:  { lang, raw, props }                             the starting text of a new block
+    anythingElse:  kept as written                                  for a host or a later feature
+  },
+})
+```
+
+Five names are **standard**: the page knows their shape, normalizes them at registration (`comp-expose.js`, `compExposeNormalize`; a wrong shape fails there, not later in some reader), and reads them where it needs them. Every other name is **non-standard**: kept exactly as declared, read by whoever knows it through `compExposeGet(definition, name)`, so a host application or a feature that does not exist yet can hang its own facts on a component without a change to the registry. A legacy definition (a bare React component in `compById`) exposes nothing and gets the defaults of every standard name. The standard names are read through small accessors rather than by reaching into the definition (`compMetaGet`, `compViewModeListGet`, `compEditModeListGet`, `compExposeGet`); for a component that exposes nothing they return the defaults described below.
+
+### Metadata (`meta`)
+
+Facts about the component that are not modes or drawings, as one object, so that a new fact is one more key of it and not one more option of `compDefine()`:
+
+| key | default | meaning |
+| --- | --- | --- |
+| `label`, `description` | — | how the component is presented to a reader, where the page lists components (the mode menu's reasons, the future Notion-style insert) |
+| `isReadOnly` | `false` | nothing of a block of this component can be edited from the page: it has no edit mode at all, the toolbar's Edit button is greyed out, a click does not enter it, and the mode menu, when the block has one for its view modes, says so. For a component that displays what the page knows (every tag, the resolved config) and has no data of its own |
+| `isEditSourceAccepted` | `true` | the built-in `source` edit mode is offered for its blocks ([below](#view-modes-and-edit-modes)). `false` for a component whose source must not be edited by hand, when it declares edit modes of its own |
+| `configDefineList` | `[]` | the shape of its component-level config: which keys exist, their types, defaults, descriptions. Only the shape; the values come from the config layers and the document levels, and reach the component as `config.compConfig` ([Component-level config](doc_page_impl_config.md#component-level-config)) |
+
+A component may add keys of its own to `meta`; they are kept beside the standard ones.
+
+### Icons
+
+An icon is a React component drawn at any size: `size` for a square, or `width` and `height` separately. A rectangular size draws the icon in the largest square that fits, centered: the svg has a square `viewBox` and `preserveAspectRatio="xMidYMid meet"`, so the drawing is never stretched. `compIconDefine(drawing, { viewBox, isStroke })` in `comp-icon.jsx` builds such a component from svg elements, with the stroke attributes of the page's line icons (or filled shapes with `isStroke: false`), in the current text color; the lucide icons of `frontend/UICommon.js` already satisfy the contract and can be exposed directly. A component exposes one icon for itself (`expose.icon`) and may give one to each view mode and edit mode. The page draws them in the insert menu beside the component's name and in the mode menu beside each mode; the Notion-style block creation that is to come draws the same icons larger, which is why they are declared as drawings and not as fixed images.
+
+### View modes and edit modes
+
+A component can display the same data in more than one way, and can let an author change the data in more than one way. Both are **modes** the component exposes, each a list with one default, and the page offers them in one place: the **mode menu** of the block, opened from the button next to the block's label in its toolbar (and in the bar of its editor), while the document is in edit mode:
+
+```text
+  [StockTable] [≡ modes] [✎] [+↑] [+↓] [˄] [˅] [🗑]
+               ┌────────────────────────────┐
+               │ VIEW MODE                  │
+               │ ▦ Table   [current, default]│  ◄ applied at once: the block re-renders
+               │ ▥ Summary                  │
+               │ EDIT MODE                  │
+               │ ⌶ Cells   [default]        │  ◄ opens the block in that mode
+               │ ⌨ Source  [built-in]       │
+               └────────────────────────────┘
+```
+
+**View modes** (`viewModeList`) are ways of display: a table and its summary, a diagram fitted to its box and at its own size. The reader's choice for a block is kept by the edit layer for the document session (`DocEditStore.blockViewModeById`, by block; dropped when the number of blocks changes, since the indices then name other blocks) and handed to the component as `config.viewMode`, the id of the mode to render; without a choice the component receives its default mode, and a component without view modes receives no `config.viewMode`. The component renders the mode it is told and keeps no mode state of its own, so the menu and the block never disagree. A display variant that the author writes into the data (the `displayMode` of an `Image`) is data, not a view mode: it has an authored default per block, which a list declared once per component cannot express.
+
+**Edit modes** (`editModeList`) are ways of changing the data in place: the fields of an image, the cells of a table, pasting into the slots of an image grid. One mode is **built-in** and belongs to the page, not to the component: `source`, the lines of the block as written, edited by the default editor of the block's kind. Every block has it unless its component says otherwise:
+
+```text
+edit modes of a block of component X  (compEditModeListGet)
+  X.meta.isReadOnly              -> none: the block cannot be edited
+  else X.editModeList            -> the declared modes, in order
+       + 'source' (built-in)     -> unless X.meta.isEditSourceAccepted is false
+  default: the declared mode marked isDefault, else the first declared, else 'source'
+
+a block without a component      -> 'source' only
+a block whose data is an asset   -> 'source' only; the declared modes are listed greyed out,
+                                    since the lines of the block are the reference and the data
+                                    is edited through the asset panel (doc_page_impl_asset.md#edit-mode)
+```
+
+A session of the edit layer is therefore always *a block in one edit mode* (`session.editModeId`). The Edit button and a click open the block in its default mode; the mode menu opens it in the chosen one, reported as the same `editBlockEnterRequest` with `editModeId`; choosing another mode while the block is open saves the session and opens the block again in it. The component's editor learns its mode as `config.edit.modeId` and branches on it when it has more than one; a component with a single mode of its own can keep branching on `config.isEdit` alone. How the editor is chosen, what it receives and reports, and the no-jitter rule it obeys are specified in [In-place editing](doc_page_impl_edit.md#component-edit-mode).
+
+The menu is offered where there is something to choose: a component block with more than one view mode or more than one edit mode. Its entries are greyed out when they cannot be chosen now (a write is pending, the data is an asset), each with its reason as its tooltip; a read-only component lists no edit mode and says so. The dropdown is the `Menu` of `@wwf971/react-comp-misc`, which the host injects as `config.components.Menu` like the settings panel; without it the button is not rendered.
+
+Among the components of this folder, `Image` exposes the edit mode `fields` ([Text blocks and edit mode](#text-blocks-and-edit-mode)) and `ImageGrid` the edit mode `images`: a grid clicked in edit mode takes pastes into its slots and adds or removes slots, and its yaml is the built-in `source` mode one entry away, instead of the yaml being what a click shows. The demo `StockTable` of `example_doc/` exposes two view modes (`table`, `summary`) and the edit mode `cells`; the demo `TagListAllDemo` is read-only.
+
+### Edit template
+
+`editTemplate` is `{ lang, raw, props }` of a new block of the component: the insert menu of the edit layer offers it under the tag name authors use, with the component's icon, and the chosen block is written to the document and opened in its default edit mode ([Creating a block](doc_page_impl_edit.md#floating-controls)). A component without a template cannot be inserted from the menu, only written by hand.
 
 ## Component names
 
@@ -150,7 +231,7 @@ While the referenced document is compiling, a neutral loading line replaces the 
 
 ## Text blocks and edit mode
 
-The headings, paragraphs, and lists of the document body are rendered by explicit components in `comp-mdx/text/` (`headingTagCreate`, `ParagraphTag`, `listTagCreate`, mapped onto `h1`–`h6`, `p`, `ul`/`ol`/`li` by `buildMdxComps`), so these blocks have a home beside their default editors `HeadingEdit`, `ParagraphEdit`, `ListEdit`, and the fallback `BlockSourceEdit`. A component that supports editing declares `isEditSupported` in its definition, may declare an `editTemplate` for the insert panel, and branches on `config.isEdit` to its `XxxEdit.jsx`. The edit contract, the naming rule, and the sharing of render code between `Xxx` and `XxxEdit` are specified in [In-place editing](doc_page_impl_edit.md#component-edit-mode); `Image` is the demonstration in this folder.
+The headings, paragraphs, and lists of the document body are rendered by explicit components in `comp-mdx/text/` (`headingTagCreate`, `ParagraphTag`, `listTagCreate`, mapped onto `h1`–`h6`, `p`, `ul`/`ol`/`li` by `buildMdxComps`), so these blocks have a home beside their default editors `HeadingEdit`, `ParagraphEdit`, `ListEdit`, and the fallback `BlockSourceEdit`; these editors are the built-in `source` edit mode of every block. A component with an editor of its own exposes it as an edit mode (`expose.editModeList`, [above](#view-modes-and-edit-modes)), may expose an `editTemplate` for the insert menu, and branches on `config.isEdit` (and on `config.edit.modeId` when it has several modes) to its `XxxEdit.jsx`. The edit contract, the naming rule, and the sharing of render code between `Xxx` and `XxxEdit` are specified in [In-place editing](doc_page_impl_edit.md#component-edit-mode); `Image` (mode `fields`) and `ImageGrid` (mode `images`) are the demonstrations in this folder.
 
 An editor, built-in or custom, must not move the page when it appears ([the no-jitter rule](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule)). The edit layer locks the wrapper of the block being edited to the height and margins the block had in view mode and lets the editor's content extend over the next block when it needs more room; for that to work, an editor keeps to these rules:
 
@@ -159,7 +240,7 @@ An editor, built-in or custom, must not move the page when it appears ([the no-j
 - **The root paints a background.** The layer gives the root the page background so that, where it extends over the next block, it covers it; a root with a background of its own (a card, a code surface) keeps it, and a root that is transparent by design must not rely on seeing through to the page.
 - **No layout from editing state.** Showing a field, a message, or an action in response to the author must not change the height of the root; it floats, or it replaces a value in place (`EditValueInline` keeps the exact box of the text it replaces).
 
-`ImageEdit` (`comp-mdx/image/`) and `StockTableEdit` (`example_doc/comp-mdx/`) follow these rules and are the references for a new component editor.
+`ImageEdit` and `ImageGridEdit` (`comp-mdx/image/`, `comp-mdx/image-grid/`) and `StockTableEdit` (`example_doc/comp-mdx/`) follow these rules and are the references for a new component editor. `ImageGridEdit` shows an editor whose in-flow root holds other components: every slot is an `Image` bound to the editor's draft (`onSourcePaste`), so a paste changes the draft and not the document, and the slot's remove button floats inside the slot.
 
 ## File tree annotations
 

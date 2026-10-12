@@ -97,9 +97,9 @@ caption: an empty image, waiting for a paste
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-When the display width narrows, images move to the next row, and each row is centered. A slot without `src` is empty, like an empty `Image`; in edit mode a paste over a slot fills that slot (the slot under the pointer takes the paste). A new ImageGrid block from the insert menu starts with two empty slots.
+When the display width narrows, images move to the next row, and each row is centered. A slot without `src` is empty, like an empty `Image`; in edit mode a paste over a slot fills that slot (the slot under the pointer takes the paste). A grid opened for editing is in its **Images** mode: it stays a grid, its slots take pastes, slots can be added and removed, and the yaml is one entry away in the mode menu, as the **Source** mode (see [In-place Editing](../edit-in-place.md#imagegrid)). A new ImageGrid block from the insert menu starts with two empty slots.
 
-表示幅が狭くなると画像を次の行へ移し、各行を中央揃えにします。`src` のないスロットは空の `Image` と同じく空の状態です。編集モードでは、ポインターを置いたスロットへの貼り付けがそのスロットを埋めます。挿入メニューから作った新しい ImageGrid ブロックは、2 つの空のスロットから始まります。
+表示幅が狭くなると画像を次の行へ移し、各行を中央揃えにします。`src` のないスロットは空の `Image` と同じく空の状態です。編集モードでは、ポインターを置いたスロットへの貼り付けがそのスロットを埋めます。編集のために開いたグリッドは **Images** モードになります。グリッドのまま、スロットへの貼り付け、スロットの追加と削除ができ、yaml はモードメニューの **Source** モードで開けます（[In-place Editing](../edit-in-place.md#imagegrid) を参照）。挿入メニューから作った新しい ImageGrid ブロックは、2 つの空のスロットから始まります。
 ```
 
 <!--renderComp=MultiLang-->
