@@ -1061,11 +1061,13 @@ export class DocEditStore {
     const model = this.docEditByPath[path]?.model;
     const indexUpper = direction === 'up' ? blockIndex - 1 : blockIndex;
     if (!model?.blockList[indexUpper] || !model.blockList[indexUpper + 1]) return false;
-    const move: EditBlockMove = { path, blockIndex, direction, status: 'submitting', message: '' };
-    runInAction(() => {
+    // the store keeps an observable copy of what it is given: the copy is
+    // the one compared and changed below
+    const move = runInAction(() => {
       this.insertMenu = undefined;
       this.deleteConfirm = undefined;
-      this.blockMove = move;
+      this.blockMove = { path, blockIndex, direction, status: 'submitting', message: '' };
+      return this.blockMove!;
     });
     const result = await this.operationApply(path, blockSwapOperationBuild(model, indexUpper), {
       messageFailure: 'The block was not moved.',
@@ -1133,12 +1135,13 @@ export class DocEditStore {
     const model = this.docEditByPath[path]?.model;
     const block = model?.blockList[blockIndex];
     if (!block?.component) return false;
-    const move: EditBlockAssetMove = { path, blockIndex, status: 'submitting', message: '' };
-    runInAction(() => {
+    // the observable copy the store keeps, as in blockMoveApply
+    const move = runInAction(() => {
       this.insertMenu = undefined;
       this.deleteConfirm = undefined;
       this.blockMove = undefined;
-      this.blockAssetMove = move;
+      this.blockAssetMove = { path, blockIndex, status: 'submitting', message: '' };
+      return this.blockAssetMove!;
     });
     const resultCreate = await this.assetStore.objectCreate({
       store: ASSET_STORE_ID_LOCAL,

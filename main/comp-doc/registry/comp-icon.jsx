@@ -11,6 +11,9 @@
 // the drawing inherits the text color (currentColor); a stroke icon gets the
 // stroke attributes of the page's line icons, a fill icon (isStroke false)
 // paints its shapes.
+//
+// compIconDefault is drawn for a component that exposes no icon of its own
+// (compIconGet in comp-expose.js).
 export function compIconDefine(drawing, { viewBox = '0 0 24 24', isStroke = true } = {}) {
   const attributeList = isStroke
     ? { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }
@@ -34,3 +37,11 @@ export function compIconDefine(drawing, { viewBox = '0 0 24 24', isStroke = true
     );
   };
 }
+
+// a block with a smaller block inside: "some component"
+export const compIconDefault = compIconDefine(
+  <>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <rect x="8" y="8" width="8" height="8" rx="1" />
+  </>,
+);

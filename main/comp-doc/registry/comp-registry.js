@@ -15,11 +15,11 @@ import { compExposeNormalize } from './comp-expose.js';
 //   expose            what the component tells the page about itself
 //                     (comp-expose.js): meta (read-only, the source edit mode,
 //                     the shape of its config, ...), icon, viewModeList,
-//                     editModeList, editTemplate, and any non-standard name
+//                     editModeList, sourceDefaultCreate, and any non-standard name
 //
 // the former flat options isEditSupported, editTemplate and configDefineList
 // are refused, so a definition still written with them fails here instead of
-// silently losing its editor, its template or its config keys.
+// silently losing its editor, its starting source or its config keys.
 export function compDefine(CompRender, options = {}) {
   for (const optionRemoved of ['isEditSupported', 'editTemplate', 'configDefineList']) {
     if (options[optionRemoved] !== undefined) {

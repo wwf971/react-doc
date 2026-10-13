@@ -282,7 +282,7 @@ A new feature adds its key definitions to `configDefineListBuiltin` in `lib/doc-
 
 Supported types are `boolean`, `string`, `number`, `enum` (with `valueList`), `stringList`, `sourcePath`, and `any`. `null` is accepted only when it is the default, and it means "not set". `description` is the text of the key in the settings panel; `isUserSettable: false` keeps a key out of the panel (the default is listed).
 
-A `sourcePath` key holds a string that names a folder or a file of the doc page source by its source path (`~rootId/…`, [source paths](doc_page_impl_source.md#source-paths)). The definition says what it names with `pathSpec` ([path completion](doc_page_impl_source.md#path-completion): `{ kind: 'dir' | 'file' | 'any', extList?, rootIdList?, dirPath? }`), and the settings panel edits it with completion from the source layer (`SourcePathInput`: an `EditValueInline`, a dropdown of `sourceStore.pathComplete(typed, pathSpec)` below it, arrow keys and Enter; a click outside commits, and the path ends at the right of the value column), instead of a plain text field. The value is validated as a string; whether the path exists is the concern of whoever reads it, since a folder for files the page creates may not exist yet.
+A `sourcePath` key holds a string that names a folder or a file of the doc page source by its source path (`~rootId/…`, [source paths](doc_page_impl_source.md#source-paths)). The definition says what it names with `pathSpec` ([path completion](doc_page_impl_source.md#path-completion): `{ kind: 'dir' | 'file' | 'any', extList?, rootIdList?, dirPath? }`), and the settings panel edits it with completion from the source layer (`SourcePathInput`: an `EditValueInline`, a dropdown of `sourceStore.pathComplete(typed, pathSpec)` below it, arrow keys and Enter; a click outside commits, and the path ends at the right of the value column), instead of a plain text field. A revert button appears before the path when there is something to go back to. While the path is being edited and its text differs from the value it had when the editing started, the button resets the text to that value; nothing is written and the field stays in edit mode. Once an edit has been written, the panel remembers the value the item had before its first edit of the page session (`DocConfigStore.settingsValueOriginalByItemId`, by item, so per layer), and the button writes that value back, an ordinary write of the layer; an edit back to the remembered value, by the button or by hand, forgets it and the button disappears. The value is validated as a string; whether the path exists is the concern of whoever reads it, since a folder for files the page creates may not exist yet.
 
 ## Component-level config
 
@@ -294,11 +294,11 @@ A registered component tells the page about itself through the `expose` option o
 
 | name | read by | what it declares |
 | --- | --- | --- |
-| `meta` | the config system, the edit layer | facts about the component as one object: `label` and `description`, `isReadOnly` (no edit mode at all), `isEditSourceAccepted` (whether the built-in source edit mode is offered), and **`configDefineList`, the shape of its component-level config** |
-| `icon` | the insert menu, the mode menu, the block creation to come | a component drawing the icon at any size |
+| `meta` | the config system, the edit layer | facts about the component as one object: `label` and `description`, `isReadOnly` (no edit mode at all), `isEditSourceAccepted` (whether the built-in source edit mode is offered), `isInsertCommon` (listed directly in the insert menu), and **`configDefineList`, the shape of its component-level config** |
+| `icon` | the insert menu, the mode menu | a component drawing the icon at any size |
 | `viewModeList` | the mode menu, `RegisteredComp` | the ways its data is displayed, handed to it as `config.viewMode` |
 | `editModeList` | the mode menu, the edit layer | the ways its data is edited in place, beside the built-in `source` mode |
-| `editTemplate` | the insert menu | the starting text of a new block |
+| `sourceDefaultCreate` | the insert menu | the factory of the source of a new block, given the document it goes to |
 
 Only `meta.configDefineList` concerns this document: the config system reads it to know which keys a component has (`compConfigDefineByCompIdBuild`, `lib/doc-config-define.js`) and nothing else of the exposure; the modes and the icon are the subject of [MDX components](doc_page_impl_mdx_comp.md#what-a-component-exposes) and [In-place editing](doc_page_impl_edit.md#component-edit-mode). The shape of config is what a component exposes, never its values: the values come from the levels and layers below and reach the component resolved.
 

@@ -6,7 +6,12 @@ import { BlockRender } from '../../comp-mdx/text/BlockRender.jsx';
 import { DocEditBlockContext, DocEditBlockFloatContext, useDocEditDoc } from './DocEditDocContext.js';
 import { DocEditBlockToolbar } from './DocEditBlockToolbar.jsx';
 import { DocEditBlockEditor, blockLabelGet } from './DocEditBlockEditor.jsx';
-import { editFocusRelease, useEditOutsidePointer } from './use-edit-outside-pointer.js';
+import {
+  EDIT_CLICK_OWN_SELECTOR,
+  clickAfterPointerDownSuppress,
+  editFocusRelease,
+  useEditOutsidePointer,
+} from './use-edit-outside-pointer.js';
 import './DocEdit.css';
 
 // The wrapper remarkEditBlock puts around every root-level block of the
@@ -86,12 +91,14 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
 
   // EditBlockEnterMode 'click': a click anywhere on the block starts its
   // session, with the caret where the block was clicked; the block's own
-  // controls (buttons, editable values, form fields) and the floating
-  // controls keep working. a popup of the edit layer portaled to the body
-  // (the mode menu) still bubbles its clicks through the React tree to here.
+  // controls (buttons, editable values, form fields) and everything in its
+  // floating area (the toolbar, the insert menu with its search results)
+  // keep working and never enter the block. a popup of the edit layer
+  // portaled to the body (the mode menu) still bubbles its clicks through
+  // the React tree to here.
   const clickCaptureHandle = (event) => {
     if (!isEnterByClick || isEditing) return;
-    if (event.target.closest?.(clickOwnSelector)) return;
+    if (event.target.closest?.(EDIT_CLICK_OWN_SELECTOR)) return;
     event.preventDefault();
     event.stopPropagation();
     enterRequest(event);
@@ -111,7 +118,7 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
   const pointerDownHandle = (event) => {
     if (!isEditing || event.button !== 0 || event.target !== event.currentTarget) return;
     editFocusRelease(elementRef.current);
-    clickAfterLeaveSuppress();
+    clickAfterPointerDownSuppress();
     void editStore.sessionLeave();
   };
 
@@ -194,37 +201,6 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
     </DocEditBlockFloatContext.Provider>
   );
 });
-
-const clickOwnSelector = 'button, [role="button"], input, select, textarea, summary, [contenteditable]:not([contenteditable="false"]), .doc-edit-popup';
-
-// the click that completes a bare-space pointerdown must not enter a block.
-// the guard covers that one click. a gesture that produces no click (it was
-// cancelled, or the pointer was released without one) drops the guard, so a
-// later click is not swallowed.
-function clickAfterLeaveSuppress() {
-  let isRemoved = false;
-  const remove = () => {
-    if (isRemoved) return;
-    isRemoved = true;
-    document.removeEventListener('click', clickGuard, true);
-    document.removeEventListener('pointercancel', remove, true);
-    document.removeEventListener('pointerup', pointerUpHandle, true);
-  };
-  const clickGuard = (clickEvent) => {
-    remove();
-    clickEvent.preventDefault();
-    clickEvent.stopPropagation();
-  };
-  // click is dispatched after pointerup, in the same turn. if none comes,
-  // the timer drops the guard before the next thing the author clicks.
-  const pointerUpHandle = () => {
-    document.removeEventListener('pointerup', pointerUpHandle, true);
-    setTimeout(remove, 0);
-  };
-  document.addEventListener('click', clickGuard, true);
-  document.addEventListener('pointercancel', remove, true);
-  document.addEventListener('pointerup', pointerUpHandle, true);
-}
 
 // the inline styles that keep the wrapper at the geometry its block had in
 // view mode while the block is edited, or null while it is not. the mobx

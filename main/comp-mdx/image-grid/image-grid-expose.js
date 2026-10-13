@@ -11,6 +11,7 @@ export const imageGridExpose = {
 	meta: {
 		label: 'Image grid',
 		description: 'Several images of the source in a wrapping row.',
+		isInsertCommon: true,
 		configDefineList: imageConfigDefineList,
 	},
 	icon: ImagesIcon,
@@ -23,5 +24,5 @@ export const imageGridExpose = {
 			isDefault: true,
 		},
 	],
-	editTemplate: { lang: 'yaml', raw: 'images:\n  - src: \n  - src: \n' },
+	sourceDefaultCreate: () => ({ lang: 'yaml', raw: 'images:\n  - src: \n  - src: \n' }),
 };

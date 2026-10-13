@@ -20,7 +20,9 @@ const DiagramER = observer(function DiagramER({ data = {}, config = {}, onEvent 
 	const sourceDiagram = data.source || data.raw || '';
 	const [store] = useState(() => new DiagramERStore(sourceDiagram));
 	const titleId = useId();
-	const heightDiagram = heightGet(config.height);
+	// the height is an authored prop (data.height); config.height is the
+	// form a host passes it in
+	const heightDiagram = heightGet(data.height ?? config.height);
 
 	const isExpandedSet = async (isExpanded) => {
 		const result = await onEvent?.('expandChangeRequest', { isExpanded });

@@ -57,6 +57,11 @@ export class DocConfigStore {
   settingsTabId: SettingsTabId = 'config';
   // the config layer the Config and Component tabs show and write
   settingsLayerId: string;
+  // settings item id -> the value the item had before its first successful
+  // edit of the page session, as the panel item shows it. kept for the items
+  // whose edits are reverted from the panel (keys of type sourcePath); an
+  // edit back to that value drops the entry.
+  settingsValueOriginalByItemId = new Map<string, any>();
 
   constructor(
     sourceStore: DocSourceStore,
@@ -190,6 +195,22 @@ export class DocConfigStore {
 
   settingsLayerIdSet(layerId: string): void {
     if (this.layerGet(layerId)) this.settingsLayerId = layerId;
+  }
+
+  // undefined when the item has not been edited, or was edited back
+  settingsValueOriginalGet(itemId: string): any {
+    return this.settingsValueOriginalByItemId.get(itemId);
+  }
+
+  // an edit of a settings item was written: the value before it is the
+  // original unless an earlier edit already recorded one
+  settingsValueEditRecord(itemId: string, valueBefore: any, valueAfter: any): void {
+    if (!this.settingsValueOriginalByItemId.has(itemId)) {
+      this.settingsValueOriginalByItemId.set(itemId, valueBefore);
+    }
+    if (this.settingsValueOriginalByItemId.get(itemId) === valueAfter) {
+      this.settingsValueOriginalByItemId.delete(itemId);
+    }
   }
 
   // ----- queries -----

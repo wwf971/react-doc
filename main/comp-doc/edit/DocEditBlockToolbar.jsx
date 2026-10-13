@@ -9,7 +9,7 @@ import { useAssetPanelIsAvailable } from '../asset/AssetPanelPopup.jsx';
 import { useDocEditDoc } from './DocEditDocContext.js';
 import { DocEditBlockModeButton } from './DocEditBlockModeButton.jsx';
 import { DocEditInsertMenu } from './DocEditInsertMenu.jsx';
-import { useEditOutsidePointer } from './use-edit-outside-pointer.js';
+import { clickAfterPointerDownSuppress, useEditOutsidePointer } from './use-edit-outside-pointer.js';
 import './DocEdit.css';
 
 // The toolbar of one block: its only hover controls. It lives in the
@@ -77,7 +77,11 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
   const isAssetMoveHere = editStore.blockAssetMoveIs(path, blockIndex);
   const isAssetMoveAvailable = editStore.blockAssetMoveIsAvailable(path, blockIndex);
   const isReadOnly = editStore.blockIsReadOnly(path, blockIndex);
+  // the pointer down that closes what is open only closes it: the click
+  // that follows does not also enter the block it lands on; a click on a
+  // control still works. entering takes another click.
   useEditOutsidePointer(toolbarRef, isMenuHere || isConfirmHere || isMoveHere || isAssetMoveHere, () => {
+    clickAfterPointerDownSuppress({ isControlClickKept: true });
     if (isMenuHere) editStore.insertMenuClose();
     if (isConfirmHere) editStore.deleteConfirmClear();
     if (isMoveHere) editStore.blockMoveClear();

@@ -8,6 +8,7 @@ import { BlockMdx } from '../../comp-mdx/block-mdx/BlockMdx.jsx';
 import { BlockSimple } from '../../comp-mdx/block-simple/BlockSimple.jsx';
 import { DiagramMermaid } from '../../comp-mdx/diagram-mermaid/DiagramMermaid.jsx';
 import { DiagramText } from '../../comp-mdx/diagram-ascii/DiagramText.jsx';
+import { DiagramER } from '../../comp-mdx/diagram-er/DiagramER.jsx';
 import { FileTree } from '../../comp-mdx/file-tree/FileTree.jsx';
 import { Image } from '../../comp-mdx/image/Image.jsx';
 import { imageExpose } from '../../comp-mdx/image/image-expose.js';
@@ -33,21 +34,45 @@ import { StockTable, stockTableDefineOptions } from '../../../example_doc/comp-m
 import { TagListAllDemo } from '../../../example_doc/comp-mdx/TagListAllDemo.jsx';
 import { TextPanelDemo } from '../../../example_doc/comp-mdx/TextPanelDemo.jsx';
 import { compDefine, compNativeDefine } from './comp-registry.js';
+import {
+  accordionsExpose,
+  blockExpose,
+  blockMdxExpose,
+  blockSimpleExpose,
+  calloutExpose,
+  demoCounterExpose,
+  diagramERExpose,
+  diagramMermaidExpose,
+  diagramTextExpose,
+  docConfigDemoExpose,
+  fileTreeExpose,
+  filesExpose,
+  indexExpose,
+  multiLangExpose,
+  sourceLinkExpose,
+  stepsExpose,
+  tabsExpose,
+  tagListAllDemoExpose,
+  tagOverviewExpose,
+} from './registry-expose.js';
 
 const compFileTree = compDefine(FileTree, {
   componentType: 'fileTree',
   dataRefTypeList: ['fileTree'],
   placementList: ['mdx', 'commentBlock'],
+  expose: fileTreeExpose,
 });
 const compIndex = compDefine(Index, {
   componentType: 'index',
   placementList: ['mdx', 'commentBlock', 'partIndex'],
+  expose: indexExpose,
 });
 // components that display authored Markdown receive the package renderer,
 // which owns link meaning (lib/markdown-render.js)
 const compMultiLang = compDefine(MultiLang, {
   dataBuild: markdownConfigBuild,
   placementList: ['commentBlock'],
+  expose: multiLangExpose,
 });
 // Image and ImageGrid demonstrate component edit modes: what each exposes
 // (its edit mode beside the built-in source mode, the shape of the
@@ -69,35 +94,40 @@ const compImageGrid = compDefine(ImageGrid, {
   assetDependencyListGet: imageGridAssetDependencyListGet,
   expose: imageGridExpose,
 });
-const compDiagramText = compDefine(DiagramText, { placementList: ['commentBlock'] });
+const compDiagramText = compDefine(DiagramText, { placementList: ['commentBlock'], expose: diagramTextExpose });
 // mermaid itself is not a package dependency: the host app supplies
 // config.mermaidLoad through DocPageMdx config.compConfigHost.
-const compDiagramMermaid = compDefine(DiagramMermaid, { placementList: ['mdx', 'commentBlock'] });
+const compDiagramMermaid = compDefine(DiagramMermaid, { placementList: ['mdx', 'commentBlock'], expose: diagramMermaidExpose });
+// the ER diagram draws with @xyflow/react, a dependency of the package
+const compDiagramER = compDefine(DiagramER, { placementList: ['mdx', 'commentBlock'], expose: diagramERExpose });
 const compBlockSimple = compDefine(BlockSimple, {
   dataBuild: markdownConfigBuild,
   placementList: ['commentBlock'],
+  expose: blockSimpleExpose,
 });
 const compBlockMdx = compDefine(BlockMdx, {
   dataBuild: markdownConfigBuild,
   placementList: ['commentBlock'],
+  expose: blockMdxExpose,
 });
 const compBlock = compDefine(Block, {
   dataBuild: markdownConfigBuild,
   placementList: ['commentBlock'],
+  expose: blockExpose,
 });
 
 // all components that docs may use. what is actually exposed to doc authors
 // (and under which tag name) is decided by compRegistry in config.yaml.
 export const compById = {
   // relatively common components, re-exported from the fumadocs default theme
-  'common/Tabs': compNativeDefine(Tabs, { placementList: ['mdx'] }),
+  'common/Tabs': compNativeDefine(Tabs, { placementList: ['mdx'], expose: tabsExpose }),
   'common/Tab': compNativeDefine(Tab, { placementList: ['mdx'] }),
-  'common/Callout': compNativeDefine(Callout, { placementList: ['mdx'] }),
-  'common/Accordions': compNativeDefine(Accordions, { placementList: ['mdx'] }),
+  'common/Callout': compNativeDefine(Callout, { placementList: ['mdx'], expose: calloutExpose }),
+  'common/Accordions': compNativeDefine(Accordions, { placementList: ['mdx'], expose: accordionsExpose }),
   'common/Accordion': compNativeDefine(Accordion, { placementList: ['mdx'] }),
-  'common/Steps': compNativeDefine(Steps, { placementList: ['mdx'] }),
+  'common/Steps': compNativeDefine(Steps, { placementList: ['mdx'], expose: stepsExpose }),
   'common/Step': compNativeDefine(Step, { placementList: ['mdx'] }),
-  'common/Files': compNativeDefine(Files, { placementList: ['mdx'] }),
+  'common/Files': compNativeDefine(Files, { placementList: ['mdx'], expose: filesExpose }),
   'common/File': compNativeDefine(File, { placementList: ['mdx'] }),
   'common/Folder': compNativeDefine(Folder, { placementList: ['mdx'] }),
   'common/FileTree': compFileTree,
@@ -110,6 +140,7 @@ export const compById = {
   'common/ImageGrid': compImageGrid,
   'common/DiagramText': compDiagramText,
   'common/DiagramMermaid': compDiagramMermaid,
+  'common/DiagramER': compDiagramER,
   'common/Block': compBlock,
   'common/BlockSimple': compBlockSimple,
   'common/BlockMdx': compBlockMdx,
@@ -119,7 +150,7 @@ export const compById = {
   'common/Anchor': compDefine(Anchor, { placementList: ['mdx', 'commentBlock', 'commentInline'] }),
   'common/Tag': compDefine(Tag, { placementList: ['mdx', 'commentInline'] }),
   'common/TagLabel': compDefine(TagLabel, { placementList: ['tag', 'mdx'] }),
-  'common/TagOverview': compDefine(TagOverview, { placementList: ['tagOverview', 'mdx', 'commentBlock'] }),
+  'common/TagOverview': compDefine(TagOverview, { placementList: ['tagOverview', 'mdx', 'commentBlock'], expose: tagOverviewExpose }),
   // default editors of the edit layer, one per block kind. mapping the
   // built-in name in compRegistry replaces the editor of that kind.
   'common/Heading': compDefine(Heading, { placementList: ['edit'] }),
@@ -134,21 +165,22 @@ export const compById = {
   'common/DocImageGrid': compImageGrid,
   'common/DocDiagramText': compDiagramText,
   'common/DocDiagramMermaid': compDiagramMermaid,
-  'specific/DemoCounter': compDefine(DemoCounter),
+  'specific/DemoCounter': compDefine(DemoCounter, { expose: demoCounterExpose }),
   'specific/StockTable': compDefine(StockTable, stockTableDefineOptions),
   'specific/SidePanelItemDemo': compDefine(SidePanelItemDemo, { placementList: ['sidePanelDisplay'] }),
   // a component with nothing to edit declares itself read-only: no edit
   // mode, no Edit button (doc_page_impl_mdx_comp.md#what-a-component-exposes)
   'specific/TagListAllDemo': compDefine(TagListAllDemo, {
     placementList: ['mdx', 'commentBlock'],
-    expose: { meta: { isReadOnly: true, description: 'Every tag the page knows; read from the tag service, nothing to edit.' } },
+    expose: tagListAllDemoExpose,
   }),
-  'specific/DocConfigDemo': compDefine(DocConfigDemo, { placementList: ['mdx', 'commentBlock'] }),
+  'specific/DocConfigDemo': compDefine(DocConfigDemo, { placementList: ['mdx', 'commentBlock'], expose: docConfigDemoExpose }),
   // demo-host binding: the popup panel implementation is host configuration,
   // so SourceLink is registered here with the demo panel rather than in common/.
   'specific/SourceLink': compDefine(SourceLink, {
     dataBuild: sourceLinkDataBuild,
     placementList: ['mdx', 'commentBlock'],
+    expose: sourceLinkExpose,
   }),
 };
 

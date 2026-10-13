@@ -12,7 +12,7 @@ import { isStockText, parseMarkdownTable, stockTextList } from './StockTableData
 // (the mode menu of the block in edit mode); one edit mode of its own,
 // 'cells' (StockTableEdit edits the cells in place; the markdown table as
 // written is the built-in 'source' mode); an icon drawn with
-// compIconDefine; and the starting text of a new block.
+// compIconDefine; and the source of a new block (sourceDefaultCreate).
 export function StockTable({ data = {}, config = {}, onEvent }) {
   if (config.isEdit) return <StockTableEdit data={data} config={config} onEvent={onEvent} />;
   const { headers, rows } = parseMarkdownTable(data.raw ?? '');
@@ -48,11 +48,11 @@ export const stockTableDefineOptions = {
     editModeList: [
       { id: 'cells', label: 'Cells', description: 'the title and the cells edited in the table', icon: TextCursorInput, isDefault: true },
     ],
-    editTemplate: {
+    sourceDefaultCreate: () => ({
       lang: 'md',
       raw: '| Product | Status |\n| --- | --- |\n| Widget | In Stock |',
       props: { title: 'Stock' },
-    },
+    }),
   },
 };
 

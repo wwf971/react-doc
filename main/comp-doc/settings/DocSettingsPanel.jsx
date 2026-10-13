@@ -127,13 +127,26 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
     if (compItem) {
       const define = configStore.compConfigDefineListGet(compItem.compId).find((defineOne) => defineOne.key === compItem.key);
       if (!define) return { code: -1, message: `unknown component config key ${eventData.valueId}` };
-      void configStore.layerCompValueSet(item.layerId, compItem.compId, define.key, settingsValueFromItem(define, eventData.value));
+      const request = configStore.layerCompValueSet(item.layerId, compItem.compId, define.key, settingsValueFromItem(define, eventData.value));
+      settingsEditRecord(eventData.valueId, define, eventData.value, request);
       return { code: 0 };
     }
     const define = configStore.configDefineByKey.get(item.key);
     if (!define) return { code: -1, message: `unknown config key ${eventData.valueId}` };
-    void configStore.layerValueSet(item.layerId, define.key, settingsValueFromItem(define, eventData.value));
+    const request = configStore.layerValueSet(item.layerId, define.key, settingsValueFromItem(define, eventData.value));
+    settingsEditRecord(eventData.valueId, define, eventData.value, request);
     return { code: 0 };
+  };
+
+  // a source path can be reverted from its item (SourcePathSettingsItem):
+  // once the write succeeded, the value before it is remembered as the
+  // item's original, unless an earlier edit already remembered one
+  const settingsEditRecord = (itemId, define, valueAfter, request) => {
+    if (define.type !== 'sourcePath') return;
+    const valueBefore = data[itemId];
+    void request.then((result) => {
+      if (result.code === 0) configStore.settingsValueEditRecord(itemId, valueBefore, valueAfter);
+    });
   };
 
   // the header moves the panel. a button in the header (Reset, Close) is
@@ -318,8 +331,12 @@ function settingsValueToItem(define, value) {
 }
 
 // the panel item of a key of type sourcePath: the path with completion
-// from the source layer; the value is committed on blur / Enter / choice
-function SourcePathSettingsItem({ value, isDisabled, onValueChange, pathSpec }) {
+// from the source layer; the value is committed on blur / Enter / choice.
+// after an edit, the revert button before the path writes the value the
+// item had before it was first edited (DocConfigStore.settingsValueOriginalByItemId)
+const SourcePathSettingsItem = observer(function SourcePathSettingsItem({ item, value, isDisabled, onValueChange, pathSpec }) {
+  const { configStore } = useDocStores();
+  const valueOriginal = configStore.settingsValueOriginalGet(item.id);
   return (
     <SourcePathInput
       value={value}
@@ -327,9 +344,11 @@ function SourcePathSettingsItem({ value, isDisabled, onValueChange, pathSpec }) 
       placeholder={pathSpec?.kind === 'file' ? '~rootId/dir/file' : '~rootId/dir'}
       isDisabled={isDisabled}
       onCommit={(text) => onValueChange(text)}
+      valueRevert={valueOriginal}
+      onRevert={() => onValueChange(valueOriginal)}
     />
   );
-}
+});
 
 function CompConfigNoneNote() {
   return <span className="doc-settings-note">no registered component declares config keys</span>;

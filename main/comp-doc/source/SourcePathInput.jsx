@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
+import { Undo2 } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
 import './DocSource.css';
@@ -28,6 +29,15 @@ import './DocSource.css';
 //   isDisabled       read-only
 //   onChange(text)   every edit of the text (optional)
 //   onCommit(text)   the text on blur / Enter / choice, when it differs
+//   valueRevert      a value an earlier edit replaced (optional); with
+//                    onRevert, a revert button before the path writes it back
+//   onRevert()       write valueRevert back
+//
+// the revert button sits before the path and has two meanings. while the
+// path is being edited and its text differs from the value it had when the
+// editing started, it resets the text to that value (nothing is written,
+// the field stays in edit mode). otherwise, when valueRevert differs from
+// the value, it calls onRevert, which is another write.
 export const SourcePathInput = observer(function SourcePathInput({
   value,
   spec = { kind: 'dir' },
@@ -36,10 +46,14 @@ export const SourcePathInput = observer(function SourcePathInput({
   className = '',
   onChange,
   onCommit,
+  valueRevert,
+  onRevert,
 }) {
   const { sourceStore } = useDocStores();
   const elementRef = useRef(null);
   const listRef = useRef(null);
+  const revertRef = useRef(null);
+  const [isFocused, isFocusedSet] = useState(false);
   const [isOpen, isOpenSet] = useState(false);
   const [typed, typedSet] = useState('');
   const [indexActive, indexActiveSet] = useState(-1);
@@ -50,6 +64,10 @@ export const SourcePathInput = observer(function SourcePathInput({
   const isListShown = isOpen && candidateList.length > 0;
   // the kind of a candidate is told only when the list mixes both
   const isKindShown = spec.kind === 'any';
+  const isTextChanged = isFocused && typed !== valueText;
+  const isValueRevertable = !isTextChanged && onRevert !== undefined
+    && valueRevert !== undefined && String(valueRevert ?? '') !== valueText;
+  const isRevertShown = !isDisabled && (isTextChanged || isValueRevertable);
 
   // the list follows the text: placed when it opens, and again when the
   // page scrolls or the window resizes while it is open
@@ -85,6 +103,32 @@ export const SourcePathInput = observer(function SourcePathInput({
     typedSet(candidate.path);
     onChange?.(candidate.path);
     commit(candidate.path);
+  };
+
+  // the text back to the value, the caret at its end; still editing
+  const textReset = () => {
+    const element = elementRef.current;
+    if (!element) return;
+    element.textContent = valueText;
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    typedSet(valueText);
+    indexActiveSet(-1);
+    onChange?.(valueText);
+  };
+
+  const revertClickHandle = () => {
+    if (isTextChanged) {
+      textReset();
+      return;
+    }
+    // the text is unchanged, so leaving the field commits nothing
+    elementRef.current?.blur();
+    onRevert?.();
   };
 
   const inputHandle = (text) => {
@@ -129,21 +173,39 @@ export const SourcePathInput = observer(function SourcePathInput({
 
   return (
     <span className={`doc-source-path-input${className ? ` ${className}` : ''}`}>
+      {isRevertShown ? (
+        <button
+          ref={revertRef}
+          type="button"
+          className="doc-source-path-revert"
+          title={isTextChanged ? `Reset the text to ${valueText || '(empty)'}` : `Revert to ${valueRevert || '(empty)'}`}
+          aria-label={isTextChanged ? 'Reset the text' : 'Revert to the previous value'}
+          // the field keeps the focus: a text reset stays in edit mode
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={revertClickHandle}
+        >
+          <Undo2 aria-hidden="true" size={12} strokeWidth={2} />
+        </button>
+      ) : null}
       <EditValueInline
         ref={elementRef}
         value={valueText}
         placeholder={placeholder}
         isLocked={isDisabled}
         newlineAs=""
-        commitRootRef={listRef}
+        commitRootRef={[listRef, revertRef]}
         role="combobox"
         aria-expanded={isListShown}
         aria-autocomplete="list"
         onFocus={(event) => {
           typedSet(event.currentTarget.textContent.replace(/\n/g, ''));
+          isFocusedSet(true);
           isOpenSet(true);
         }}
-        onBlur={close}
+        onBlur={() => {
+          isFocusedSet(false);
+          close();
+        }}
         onCommit={(text) => {
           if (text !== valueText) onCommit?.(text);
         }}

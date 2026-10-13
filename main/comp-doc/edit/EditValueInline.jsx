@@ -16,7 +16,8 @@ import './DocEdit.css';
 //   isLocked         read-only while a change request is pending
 //   newlineAs        what a newline becomes in the committed text
 //   commitRootRef    clicks inside this element do not leave the field
-//                    (a completion dropdown beside the text)
+//                    (a completion dropdown beside the text); a list of
+//                    refs names several such elements
 //   onCommit(value)  the edited value, only when it differs
 //   onInput(value)   every edit of the text
 export const EditValueInline = forwardRef(function EditValueInline({
@@ -82,8 +83,12 @@ export const EditValueInline = forwardRef(function EditValueInline({
       const element = elementRef.current;
       if (!element || !element.isConnected || isLockedRef.current) return;
       if (event.target === element || element.contains(event.target)) return;
-      const root = commitRootHeldRef.current?.current;
-      if (root && (event.target === root || root.contains(event.target))) return;
+      const commitRootRefHeld = commitRootHeldRef.current;
+      const rootRefList = Array.isArray(commitRootRefHeld) ? commitRootRefHeld : [commitRootRefHeld];
+      for (const rootRef of rootRefList) {
+        const root = rootRef?.current;
+        if (root && (event.target === root || root.contains(event.target))) return;
+      }
       if (document.activeElement === element) {
         element.blur();
         return;

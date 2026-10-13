@@ -90,6 +90,7 @@ compRegistry:
   ImageGrid: common/ImageGrid
   DiagramText: common/DiagramText
   DiagramMermaid: common/DiagramMermaid
+  DiagramER: common/DiagramER
   Block: common/Block
   BlockSimple: common/BlockSimple
   BlockMdx: common/BlockMdx
@@ -101,6 +102,7 @@ compRegistry:
   DocImageGrid: common/ImageGrid
   DocDiagramText: common/DiagramText
   DocDiagramMermaid: common/DiagramMermaid
+  DocDiagramER: common/DiagramER
   # built-in name of the fragment id declaration before a heading or another node:
   # <!--renderComp=Anchor,id=configuration-->
   Anchor: common/Anchor

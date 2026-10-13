@@ -1,5 +1,5 @@
 import { applyNodeChanges, MarkerType } from '@xyflow/react';
-import { load as yamlLoad } from 'js-yaml';
+import { yamlParse } from '../../frontend/src/lib/yaml.js';
 import { makeAutoObservable, toJS } from 'mobx';
 
 const sideList = ['left', 'right'];
@@ -33,7 +33,7 @@ class DiagramERStore {
 		}
 
 		try {
-			const data = yamlLoad(this.source);
+			const data = yamlParse(this.source);
 			const graphData = graphDataNormalize(data);
 			this.tableList = graphData.tableList;
 			this.relationshipList = graphData.relationshipList;

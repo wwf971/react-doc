@@ -36,6 +36,12 @@ import { anchorCompNameIs } from '../../../comp-mdx/anchor/AnchorData.js';
 // note: html comments only exist in md-format parsing. in .mdx, authors write
 // <Comp .../> directly.
 //
+// DO NOT CHANGE THE MARKER STYLE. `<!--renderComp=...-->` is the authoring
+// form of the project and is what the page writes for a new component
+// block (edit-template.js, the sourceDefaultCreate of every component).
+// the note above describes this plugin's parser, it is not a reason to
+// emit `{/* ... */}` or any other comment syntax anywhere.
+//
 // an Anchor marker declares ids for the next node instead of replacing it.
 // remarkAnchor handles it before this plugin; pipelines without remarkAnchor
 // (search index, build-time dependency scan) must still keep the next node.

@@ -18,10 +18,12 @@ export {
   COMP_EDIT_MODE_SOURCE_ID,
   compEditModeListGet,
   compExposeGet,
+  compIconGet,
   compMetaGet,
+  compSourceDefaultGet,
   compViewModeListGet,
 } from '../../comp-doc/registry/comp-expose.js';
-export { compIconDefine } from '../../comp-doc/registry/comp-icon.jsx';
+export { compIconDefault, compIconDefine } from '../../comp-doc/registry/comp-icon.jsx';
 export { useCompDataRef } from '../../comp-doc/registry/CompDataRef.jsx';
 export { DocLanguageProvider, useDocLanguage } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 export { DynamicCodeBlock } from '../../comp-doc/mdx-render/DynamicCodeBlock.js';

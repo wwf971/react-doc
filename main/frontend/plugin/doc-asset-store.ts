@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 import { idMs48Create, idMs48Is } from './id-ms48.ts';
 import { sourcePathIsRooted, sourcePathNormalize } from '../src/lib/doc-source-path.js';
+import { timeTextGet } from '../src/lib/time-text.js';
 
 // The local asset store on disk (design: doc_page_impl_asset.md). A general
 // store of objects with a version history, modeled after an object storage
@@ -1029,12 +1030,5 @@ export function textDecodeTry(bytes: Buffer): string | undefined {
   }
 }
 
-// time-format.md: 20260520_23250530+09 (local time, 10 ms, whole-hour zone)
-export function timeTextGet(date = new Date()): string {
-  const pad = (value: number, length = 2) => String(value).padStart(length, '0');
-  const zoneHours = -Math.round(date.getTimezoneOffset() / 60);
-  const zoneText = `${zoneHours < 0 ? '-' : '+'}${pad(Math.abs(zoneHours))}`;
-  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`
-    + `_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}${pad(Math.floor(date.getMilliseconds() / 10))}`
-    + zoneText;
-}
+// time-format.md: 20260520_23250530+09 (lib/time-text.js)
+export { timeTextGet };
