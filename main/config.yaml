@@ -94,6 +94,18 @@ compRegistry:
   Block: common/Block
   BlockSimple: common/BlockSimple
   BlockMdx: common/BlockMdx
+  BlockQA: common/BlockQA
+  FileDownload: common/FileDownload
+  FileIcon: common/FileIcon              # the default icon of FileDownload (placement fileDownloadIcon)
+  TableHierarchy: common/TableHierarchy
+  ListHierarchy: common/ListHierarchy
+  SwitchView: common/SwitchView
+  # parts of the hierarchies: cells (tableCell), rows (hierarchyRow), header controls (hierarchyHeader)
+  TextInfoCell: common/TextInfoCell
+  TableCapabilityCell: common/TableCapabilityCell
+  ListSupportedToolsRow: common/ListSupportedToolsRow
+  ListToolsControls: common/ListToolsControls
+  ProxyConnectionDiagram: common/ProxyConnectionDiagram
   # compatibility tag names, kept so existing documents still render
   DocFileTree: common/FileTree
   DocIndex: common/Index

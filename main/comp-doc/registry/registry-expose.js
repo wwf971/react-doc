@@ -18,6 +18,15 @@ import {
   TextQuote,
   Waypoints,
   Workflow,
+  CircleHelp,
+  FileDown,
+  FileIcon,
+  Info,
+  ListCollapse,
+  MessageCircleQuestion,
+  Network,
+  PanelsTopLeft,
+  Rows3,
 } from '../../frontend/UICommon.js';
 
 // What the components registered in registry.js expose about themselves
@@ -251,5 +260,160 @@ export const docConfigDemoExpose = {
   sourceDefaultCreate: () => ({
     lang: 'text',
     raw: 'Resolved config of this document; replaced by the DocConfigDemo component.',
+  }),
+};
+
+// ---------- Q&A, downloads, hierarchies, switchable views ----------
+
+export const blockQAExpose = {
+  meta: { label: 'Q&A', description: 'Questions and answers, optionally collapsible; answers may be Markdown.', isInsertCommon: true },
+  icon: MessageCircleQuestion,
+  sourceDefaultCreate: () => ({
+    lang: 'yaml',
+    raw: [
+      'isCollapsible: true',
+      'items:',
+      '  - question: The question?',
+      '    answer: The answer.',
+      '  - question: A question with a Markdown answer?',
+      '    answer:',
+      '      type: markdown',
+      '      content: |',
+      '        The answer, with **Markdown**.',
+    ].join('\n'),
+  }),
+};
+
+// the card downloads the document it is written in until the author
+// points it at another file of the source
+export const fileDownloadExpose = {
+  meta: { label: 'File download', description: 'A file of the source as a download card, compact or detailed.', isInsertCommon: true },
+  icon: FileDown,
+  sourceDefaultCreate: ({ docPath }) => ({
+    lang: 'yaml',
+    raw: `src: ${docPath}\nview: detailed\n`,
+  }),
+};
+
+export const fileIconExpose = {
+  meta: { label: 'File icon', description: 'The default icon of a FileDownload card (placement fileDownloadIcon).' },
+  icon: FileIcon,
+};
+
+export const tableHierarchyExpose = {
+  meta: { label: 'Hierarchy table', description: 'A comparison table whose rows are grouped at any depth, groups expand and collapse.', isInsertCommon: true },
+  icon: Rows3,
+  sourceDefaultCreate: () => ({
+    lang: 'yaml',
+    raw: [
+      'title: Comparison',
+      'rowHeader: Item',
+      'columns:',
+      '  - id: first',
+      '    label: First',
+      '  - id: second',
+      '    label: Second',
+      'rows:',
+      '  - label: Group',
+      '    children:',
+      '      - label: Item A',
+      '        cells:',
+      '          first: 1',
+      '          second: 2',
+      '      - label: Item B',
+      '        cells:',
+      '          first: 3',
+      '          second: 4',
+    ].join('\n'),
+  }),
+};
+
+// a list needs a row component; the capability rows of the package read the
+// same columns and cells as a TableHierarchy with TableCapabilityCell
+export const listHierarchyExpose = {
+  meta: { label: 'Hierarchy list', description: 'Groups at any depth with a registered component for every row.' },
+  icon: ListCollapse,
+  sourceDefaultCreate: () => ({
+    lang: 'yaml',
+    raw: [
+      'title: Supported tools',
+      'rowComponent: ListSupportedToolsRow',
+      'columns:',
+      '  - id: toolA',
+      '    label: Tool A',
+      '  - id: toolB',
+      '    label: Tool B',
+      'rows:',
+      '  - label: Group',
+      '    children:',
+      '      - label: Read',
+      '        cells:',
+      '          toolA: yes',
+      '          toolB: partial',
+    ].join('\n'),
+  }),
+};
+
+// both views read one dataset through a yaml anchor
+export const switchViewExpose = {
+  meta: { label: 'Switch view', description: 'The same data shown by several registered components, chosen by tabs.' },
+  icon: PanelsTopLeft,
+  sourceDefaultCreate: () => ({
+    lang: 'yaml',
+    raw: [
+      'label: Views',
+      'views:',
+      '  - id: table',
+      '    label: Table',
+      '    icon: table',
+      '    component: TableHierarchy',
+      '    data: &shared',
+      '      title: Supported tools',
+      '      rowComponent: ListSupportedToolsRow',
+      '      columns:',
+      '        - id: toolA',
+      '          label: Tool A',
+      '          cellComponent: TableCapabilityCell',
+      '        - id: toolB',
+      '          label: Tool B',
+      '          cellComponent: TableCapabilityCell',
+      '      rows:',
+      '        - label: Read',
+      '          cells:',
+      '            toolA: yes',
+      '            toolB: partial',
+      '  - id: list',
+      '    label: List',
+      '    icon: list',
+      '    component: ListHierarchy',
+      '    data: *shared',
+    ].join('\n'),
+  }),
+};
+
+export const textInfoCellExpose = {
+  meta: { label: 'Text with info', description: 'A cell or label of a hierarchy with an info icon and its tooltip (placement tableCell).' },
+  icon: Info,
+};
+
+export const tableCapabilityCellExpose = {
+  meta: { label: 'Capability cell', description: 'A support status (yes, partial, no, na, unknown) with a note (placement tableCell).' },
+  icon: CircleHelp,
+};
+
+export const listSupportedToolsRowExpose = {
+  meta: { label: 'Supported tools row', description: 'A row of a ListHierarchy with a badge per supported tool (placement hierarchyRow).' },
+};
+
+export const listToolsControlsExpose = {
+  meta: { label: 'Tool display controls', description: 'Header buttons of a ListHierarchy choosing which tools are shown (placement hierarchyHeader).' },
+};
+
+export const proxyConnectionDiagramExpose = {
+  meta: { label: 'Proxy connection diagram', description: 'The route of a command through a local proxy and an authenticated upstream proxy.' },
+  icon: Network,
+  sourceDefaultCreate: () => ({
+    lang: 'text',
+    raw: 'Connection route through the authenticated proxy; replaced by the ProxyConnectionDiagram component.',
   }),
 };

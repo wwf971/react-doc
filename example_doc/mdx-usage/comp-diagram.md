@@ -173,3 +173,19 @@ relationships:
     source: { tableId: customer, columnId: id }
     target: { tableId: order, columnId: customerId }
 ```
+
+<!--renderComp=Anchor,id=proxy-connection-diagram-->
+<!--renderComp=MultiLang-->
+## {en: "Interactive diagram", jp: "インタラクティブ図"}
+
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
+```markdown
+`ProxyConnectionDiagram` is a fixed interactive diagram: drag to pan, scroll to zoom, click a node for its details. It is not driven by data; the text of its block is only what a plain Markdown viewer shows.
+
+`ProxyConnectionDiagram` は固定のインタラクティブ図です。ドラッグで移動、スクロールで拡大縮小し、ノードをクリックすると詳細を表示します。データでは制御されず、ブロックのテキストは通常の Markdown ビューアーで表示される内容です。
+```
+
+<!--renderComp=ProxyConnectionDiagram-->
+```text
+Connection route through the authenticated proxy; replaced by the ProxyConnectionDiagram component.
+```

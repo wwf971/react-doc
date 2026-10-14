@@ -1,4 +1,6 @@
+import { blockQADataParse } from '../../comp-mdx/block-qa/BlockQAData.js';
 import { indexDataParse } from '../../comp-mdx/index/IndexData.js';
+import { switchViewDependenciesCollect } from '../../comp-mdx/switch-view/SwitchViewData.js';
 
 // Build-time dependency extractors, keyed by component id (the values of
 // config.yaml compRegistry). The doc-source plugin calls them while it prunes
@@ -51,6 +53,22 @@ function indexCollect(data, context) {
   }
 }
 
+// the questions and answers written as Markdown
+function blockQACollect(data, context) {
+  let dataQA;
+  try {
+    dataQA = blockQADataParse(data);
+  } catch (error) {
+    context.warn(`BlockQA data is invalid, its links are not discovered: ${String(error?.message ?? error)}`);
+    return;
+  }
+  for (const item of dataQA.items) {
+    for (const content of [item.question, item.answer]) {
+      if (content.type === 'markdown') context.markdownCollect(content.content);
+    }
+  }
+}
+
 export const sourceDependencyCollectByCompId = {
   'common/Block': markdownRawCollect,
   'common/BlockSimple': markdownRawCollect,
@@ -59,5 +77,8 @@ export const sourceDependencyCollectByCompId = {
   'common/DocMultiLang': markdownRawCollect,
   'common/Index': indexCollect,
   'common/DocIndex': indexCollect,
+  'common/BlockQA': blockQACollect,
+  // every view, including those not shown, through the collector of its component
+  'common/SwitchView': switchViewDependenciesCollect,
   'specific/SourceLink': sourceLinkCollect,
 };

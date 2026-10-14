@@ -1,0 +1,329 @@
+.table-hierarchy-panel {
+  --table-hierarchy-border: #d9e2eb;
+  --table-hierarchy-title-background: #f0f4f7;
+  --table-hierarchy-title-color: #34495e;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-width: 100%;
+  margin: 0.75rem 0 1.5rem;
+  overflow: hidden;
+  border: 1px solid var(--table-hierarchy-border);
+  border-radius: 0.45rem;
+  background: #fff;
+  color: #334155;
+}
+
+.table-hierarchy-title {
+  display: flex;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.2rem 0.6rem 0.2rem 0.85rem;
+  border-bottom: 1px solid var(--table-hierarchy-border);
+  background: var(--table-hierarchy-title-background);
+  color: var(--table-hierarchy-title-color);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.table-hierarchy-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-hierarchy-title-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+}
+
+.hierarchy-header-right {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.hierarchy-header-custom {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 600px) {
+  .table-hierarchy-title:has(.hierarchy-header-custom) .hierarchy-header-right {
+    flex-basis: 100%;
+    align-items: flex-start;
+  }
+
+  .hierarchy-header-custom {
+    flex: 1 1 0;
+  }
+}
+
+.table-hierarchy-title-actions button {
+  display: inline-flex;
+  width: 1.65rem;
+  height: 1.65rem;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.2rem;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.table-hierarchy-title-actions button:hover {
+  background: #e3ebf2;
+}
+
+.table-hierarchy-scroll {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.table-hierarchy-panel.is-height-fixed .table-hierarchy-scroll {
+  flex: 1 1 0;
+}
+
+.table-hierarchy-panel.is-height-max .table-hierarchy-scroll {
+  flex: 0 1 auto;
+}
+
+.table-hierarchy-scroll .table-hierarchy {
+  margin: 0;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: inherit;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.table-hierarchy-panel .table-hierarchy :is(th, td) {
+  padding: 0.62rem 0.7rem;
+  border: 0;
+  background: transparent;
+  vertical-align: top;
+  letter-spacing: 0;
+}
+
+.table-hierarchy-panel.is-density-roomy .table-hierarchy :is(th, td) {
+  padding-block: 0.9rem;
+}
+
+.table-hierarchy-panel.has-cell-borders .table-hierarchy :is(th, td) {
+  border-right: 1px solid var(--table-hierarchy-border);
+  border-bottom: 1px solid var(--table-hierarchy-border);
+}
+
+.table-hierarchy-panel.has-cell-borders .table-hierarchy tr > :last-child {
+  border-right: 0;
+}
+
+.table-hierarchy-panel.has-cell-borders .table-hierarchy tbody tr:last-child > :is(th, td) {
+  border-bottom: 0;
+}
+
+.table-hierarchy-panel .table-hierarchy thead th {
+  border-bottom: 1px solid var(--table-hierarchy-border);
+  color: var(--table-hierarchy-title-color);
+  font-weight: 700;
+  text-align: start;
+}
+
+.table-hierarchy-column-heading small,
+.table-hierarchy :is(.table-hierarchy-row-group, .table-hierarchy-row-leaf) small {
+  display: block;
+  margin-top: 0.2rem;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.table-hierarchy-row-group {
+  font-weight: 700;
+  text-align: start;
+}
+
+.table-hierarchy-row-leaf {
+  font-weight: 600;
+  text-align: start;
+}
+
+.table-hierarchy-name {
+  min-width: 0;
+  max-width: 100%;
+  cursor: text;
+  user-select: text;
+}
+
+.table-hierarchy-cell-plain,
+.table-hierarchy-name small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-hierarchy :is(.table-hierarchy-row-group, .table-hierarchy-row-leaf) .table-hierarchy-cell-plain,
+.table-hierarchy-name small {
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.text-info-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.text-info-cell-icon {
+  display: inline-flex;
+  flex: 0 0 1.25rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #6b7280;
+  cursor: help;
+  user-select: none;
+}
+
+.text-info-cell-icon:hover {
+  background: #e3ebf2;
+  color: #34495e;
+}
+
+.text-info-cell-icon:focus-visible {
+  outline: 2px solid #2d648d;
+  outline-offset: 1px;
+}
+
+:is(.table-hierarchy-row-group, .list-hierarchy-group) .table-hierarchy-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+:is(.table-hierarchy-row-group, .list-hierarchy-group) .table-hierarchy-name > small {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.table-hierarchy-status {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.table-hierarchy-status-symbol {
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.table-capability-cell small {
+  display: block;
+  margin-top: 0.25rem;
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.table-capability-cell.is-yes .table-hierarchy-status {
+  color: #047857;
+}
+
+.table-capability-cell.is-partial .table-hierarchy-status {
+  color: #a16207;
+}
+
+.table-capability-cell.is-no .table-hierarchy-status {
+  color: #be123c;
+}
+
+.table-capability-cell.is-na .table-hierarchy-status,
+.table-capability-cell.is-unknown .table-hierarchy-status {
+  color: #64748b;
+}
+
+.table-hierarchy-error {
+  margin: 1rem 0;
+  color: #b42318;
+}
+
+.table-hierarchy-scroll.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.table-hierarchy-row-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.table-hierarchy-toggle {
+  display: inline-flex;
+  flex: 0 0 1.5rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.2rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.table-hierarchy-toggle:hover {
+  background: #e3ebf2;
+}
+
+.table-hierarchy-toggle:focus-visible,
+.table-hierarchy-title-actions button:focus-visible {
+  outline: 2px solid #2d648d;
+  outline-offset: 1px;
+}
+
+.table-hierarchy-group-rule {
+  flex: 1;
+  min-width: 1rem;
+  border-top: 1px solid var(--table-hierarchy-border);
+}
+
+.table-hierarchy-panel .table-hierarchy-row-group.is-band {
+  padding-block: 0.4rem;
+  color: var(--table-hierarchy-title-color);
+  cursor: pointer;
+}
+
+.table-hierarchy-panel .table-hierarchy-row-group.is-band:hover {
+  background: #f8fafc;
+}

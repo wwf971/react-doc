@@ -192,9 +192,9 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`FileTree` shows a folder structure with optional descriptions and annotation arrows between nodes. `FileDownload` shows a file from the document source as a download card, in a compact or detailed view.
+`FileTree` shows a folder structure with optional descriptions and annotation arrows between nodes. `FileDownload` shows a file from the document source as a download card, in a compact or detailed view. `BlockQA` lists questions and answers. `TableHierarchy` and `ListHierarchy` group rows at any depth, and `SwitchView` shows one dataset through both.
 
-`FileTree` は説明付きのフォルダー構成を表示し、ノード間に注釈の矢印も描けます。`FileDownload` は資料ソース内のファイルをダウンロードカードとして、コンパクト表示または詳細表示で表示します。
+`FileTree` は説明付きのフォルダー構成を表示し、ノード間に注釈の矢印も描けます。`FileDownload` は資料ソース内のファイルをダウンロードカードとして、コンパクト表示または詳細表示で表示します。`BlockQA` は質問と回答を一覧表示します。`TableHierarchy` と `ListHierarchy` は行を任意の深さでグループ化し、`SwitchView` は一つのデータを両方で表示します。
 ```
 
 - [File tree](comp-file-tree.md)

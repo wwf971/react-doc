@@ -5,10 +5,14 @@ import { SidePanelItem } from '../side-panel/SidePanelItem.jsx';
 import { Anchor } from '../../comp-mdx/anchor/Anchor.jsx';
 import { Block } from '../../comp-mdx/block-simple/Block.jsx';
 import { BlockMdx } from '../../comp-mdx/block-mdx/BlockMdx.jsx';
+import { BlockQA } from '../../comp-mdx/block-qa/BlockQA.jsx';
 import { BlockSimple } from '../../comp-mdx/block-simple/BlockSimple.jsx';
 import { DiagramMermaid } from '../../comp-mdx/diagram-mermaid/DiagramMermaid.jsx';
 import { DiagramText } from '../../comp-mdx/diagram-ascii/DiagramText.jsx';
 import { DiagramER } from '../../comp-mdx/diagram-er/DiagramER.jsx';
+import { FileDownload } from '../../comp-mdx/file-download/FileDownload.jsx';
+import { fileDownloadAssetDependencyListGet } from '../../comp-mdx/file-download/FileDownloadData.js';
+import { FileIcon as FileDownloadIcon } from '../../comp-mdx/file-download/FileIcon.jsx';
 import { FileTree } from '../../comp-mdx/file-tree/FileTree.jsx';
 import { Image } from '../../comp-mdx/image/Image.jsx';
 import { imageExpose } from '../../comp-mdx/image/image-expose.js';
@@ -17,8 +21,16 @@ import { ImageGrid } from '../../comp-mdx/image-grid/ImageGrid.jsx';
 import { imageGridExpose } from '../../comp-mdx/image-grid/image-grid-expose.js';
 import { imageGridAssetDependencyListGet } from '../../comp-mdx/image-grid/ImageGridStore.js';
 import { Index } from '../../comp-mdx/index/Index.jsx';
+import { ListHierarchy } from '../../comp-mdx/list-hierarchy/ListHierarchy.jsx';
+import { ListSupportedToolsRow } from '../../comp-mdx/list-hierarchy/ListSupportedToolsRow.jsx';
+import { ListToolsControls } from '../../comp-mdx/list-hierarchy/ListToolsControls.jsx';
 import { MultiLang } from '../../comp-mdx/multi-lang/MultiLangEntry.jsx';
+import { ProxyConnectionDiagram } from '../../comp-mdx/proxy-connection-diagram/ProxyConnectionDiagram.jsx';
 import { SourceLink } from '../../comp-mdx/source-link/SourceLink.jsx';
+import { SwitchView } from '../../comp-mdx/switch-view/SwitchView.jsx';
+import { TableCapabilityCell } from '../../comp-mdx/table-hierarchy/TableCapabilityCell.jsx';
+import { TableHierarchy } from '../../comp-mdx/table-hierarchy/TableHierarchy.jsx';
+import { TextInfoCell } from '../../comp-mdx/table-hierarchy/TextInfoCell.jsx';
 import { Tag } from '../../comp-mdx/tag/Tag.jsx';
 import { TagLabel } from '../../comp-mdx/tag/TagLabel.jsx';
 import { TagOverview } from '../../comp-mdx/tag/TagOverview.jsx';
@@ -38,6 +50,7 @@ import {
   accordionsExpose,
   blockExpose,
   blockMdxExpose,
+  blockQAExpose,
   blockSimpleExpose,
   calloutExpose,
   demoCounterExpose,
@@ -45,15 +58,25 @@ import {
   diagramMermaidExpose,
   diagramTextExpose,
   docConfigDemoExpose,
+  fileDownloadExpose,
+  fileIconExpose,
   fileTreeExpose,
   filesExpose,
   indexExpose,
+  listHierarchyExpose,
+  listSupportedToolsRowExpose,
+  listToolsControlsExpose,
   multiLangExpose,
+  proxyConnectionDiagramExpose,
   sourceLinkExpose,
   stepsExpose,
+  switchViewExpose,
+  tableCapabilityCellExpose,
+  tableHierarchyExpose,
   tabsExpose,
   tagListAllDemoExpose,
   tagOverviewExpose,
+  textInfoCellExpose,
 } from './registry-expose.js';
 
 const compFileTree = compDefine(FileTree, {
@@ -115,6 +138,27 @@ const compBlock = compDefine(Block, {
   placementList: ['commentBlock'],
   expose: blockExpose,
 });
+// answers written as Markdown are rendered by the package renderer
+const compBlockQA = compDefine(BlockQA, {
+  dataBuild: markdownConfigBuild,
+  placementList: ['commentBlock'],
+  expose: blockQAExpose,
+});
+// the file of a download card is named as the dependency of an asset made
+// from its data, like the src of an Image. its icon is a component of
+// placement fileDownloadIcon (FileIcon by default)
+const compFileDownload = compDefine(FileDownload, {
+  placementList: ['mdx', 'commentBlock'],
+  assetDependencyListGet: fileDownloadAssetDependencyListGet,
+  expose: fileDownloadExpose,
+});
+// the hierarchies render their parts through the registry: table cells
+// (placement tableCell), list rows (hierarchyRow) and header controls
+// (hierarchyHeader). SwitchView renders block components (placement
+// commentBlock) from yaml data, one per view.
+const compTableHierarchy = compDefine(TableHierarchy, { placementList: ['commentBlock'], expose: tableHierarchyExpose });
+const compListHierarchy = compDefine(ListHierarchy, { placementList: ['commentBlock'], expose: listHierarchyExpose });
+const compSwitchView = compDefine(SwitchView, { placementList: ['commentBlock'], expose: switchViewExpose });
 
 // all components that docs may use. what is actually exposed to doc authors
 // (and under which tag name) is decided by compRegistry in config.yaml.
@@ -144,6 +188,20 @@ export const compById = {
   'common/Block': compBlock,
   'common/BlockSimple': compBlockSimple,
   'common/BlockMdx': compBlockMdx,
+  'common/BlockQA': compBlockQA,
+  'common/FileDownload': compFileDownload,
+  'common/FileIcon': compDefine(FileDownloadIcon, { placementList: ['fileDownloadIcon'], expose: fileIconExpose }),
+  'common/TableHierarchy': compTableHierarchy,
+  'common/ListHierarchy': compListHierarchy,
+  'common/SwitchView': compSwitchView,
+  'common/TextInfoCell': compDefine(TextInfoCell, { placementList: ['tableCell'], expose: textInfoCellExpose }),
+  'common/TableCapabilityCell': compDefine(TableCapabilityCell, { placementList: ['tableCell'], expose: tableCapabilityCellExpose }),
+  'common/ListSupportedToolsRow': compDefine(ListSupportedToolsRow, { placementList: ['hierarchyRow'], expose: listSupportedToolsRowExpose }),
+  'common/ListToolsControls': compDefine(ListToolsControls, { placementList: ['hierarchyHeader'], expose: listToolsControlsExpose }),
+  'common/ProxyConnectionDiagram': compDefine(ProxyConnectionDiagram, {
+    placementList: ['mdx', 'commentBlock'],
+    expose: proxyConnectionDiagramExpose,
+  }),
   // built-in names (comp-registry.js compIdBuiltinByName): the page renders
   // with these even when compRegistry does not mention them
   'common/SidePanelItem': compDefine(SidePanelItem, { placementList: ['sidePanelDisplay'] }),

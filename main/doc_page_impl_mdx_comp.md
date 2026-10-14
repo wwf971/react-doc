@@ -121,7 +121,7 @@ returns
                          in an .md document
 ```
 
-The returned shape is checked when the factory is called; a factory that throws or returns a wrong shape is reported in the console and its component left out of the menu, so one faulty component does not take the menu with it. A component without a factory cannot be inserted from the menu, only written by hand: the components a document writes only inside another one (`Tab`, `Step`, `Accordion`, `File`, `Folder`), markers of the next node (`Anchor`), inline components (`Tag`, `DocLinkInline`), and what is not document content (`SidePanelItem`, `TagLabel`, the editors of the edit layer).
+The returned shape is checked when the factory is called; a factory that throws or returns a wrong shape is reported in the console and its component left out of the menu, so one faulty component does not take the menu with it. A component without a factory cannot be inserted from the menu, only written by hand: the components a document writes only inside another one (`Tab`, `Step`, `Accordion`, `File`, `Folder`), markers of the next node (`Anchor`), inline components (`Tag`, `DocLinkInline`), the parts other components render through the registry (`FileIcon`, the cells, rows and header controls of the hierarchies), and what is not document content (`SidePanelItem`, `TagLabel`, the editors of the edit layer).
 
 ## Component names
 
@@ -141,10 +141,27 @@ Component and file names carry no `Doc` prefix: inside a document every componen
 | `BlockMdx` | `block-mdx/` | |
 | `Tag`, `TagLabel`, `TagOverview` | `tag/` | |
 | `Anchor` | `anchor/` | |
+| `BlockQA` | `block-qa/` | |
+| `FileDownload`, `FileIcon` | `file-download/` | |
+| `TableHierarchy`, `TextInfoCell`, `TableCapabilityCell` | `table-hierarchy/` | |
+| `ListHierarchy`, `ListSupportedToolsRow`, `ListToolsControls` | `list-hierarchy/` | |
+| `SwitchView` | `switch-view/` | |
+| `ProxyConnectionDiagram` | `proxy-connection-diagram/` (with `diagram-interactive/`) | |
 
 `Anchor` declares fragment ids for the node after it rather than displaying content. Compilation handles it before other comment components; see [Navigation design](doc_page_impl_nav.md#fragment-targets-titles-and-declared-ids).
 
-Some components read host settings from `config`, supplied by the application through `DocPageMdx` `config.compConfigHost` (see [Component registry](doc_page_impl.md#component-registry)): `Image` and `ImageGrid` resolve `src` through `assetUrlGet`, and `DiagramMermaid` loads Mermaid through `mermaidLoad` and resolves lane icons through `assetUrlGet`. The block components and `MultiLang` receive the shared `MdxRenderer` from their package registry definitions, so nested Markdown has the link, math and component behavior of the document body.
+Some components render their parts through the registry rather than importing them, so a document can name another registered component for a part. Each part has its own placement:
+
+| Placement | Rendered by | Built-in components |
+| --- | --- | --- |
+| `fileDownloadIcon` | the icon of a `FileDownload` card (`icon`, or `iconByExtension` and `iconFallback` of the component config) | `FileIcon` |
+| `tableCell` | a cell (`cellComponent` of a column or a cell) or a row label (`labelComponent`) of `TableHierarchy` | `TextInfoCell`, `TableCapabilityCell` |
+| `hierarchyRow` | a row of `ListHierarchy` (`rowComponent`) | `ListSupportedToolsRow` |
+| `hierarchyHeader` | the header controls of both hierarchies (`headerRight`) | `ListToolsControls` |
+
+`SwitchView` shows the same data through several block components, one per view, rendered in the placement `commentBlock`. Its build-time collector hands every view to the collector of its component, so links in views that are not shown are still discovered; `BlockQA` collects its Markdown questions and answers. `FileDownload` names its file as the dependency of an asset made from its data, like the `src` of an `Image`. `ProxyConnectionDiagram` is a fixed diagram, not driven by data: the text of its block is only what a plain Markdown viewer shows. The usage of each component is described beside it (`comp_block_qa.md`, `comp_table_hierarchy.md`, `comp_list_hierarchy.md`, `comp_switch_view.md`).
+
+Some components read host settings from `config`, supplied by the application through `DocPageMdx` `config.compConfigHost` (see [Component registry](doc_page_impl.md#component-registry)): `Image`, `ImageGrid` and `FileDownload` resolve `src` through `assetUrlGet`, and `DiagramMermaid` loads Mermaid through `mermaidLoad` and resolves lane icons through `assetUrlGet`. The block components, `BlockQA` and `MultiLang` receive the shared `MdxRenderer` from their package registry definitions, so nested Markdown has the link, math and component behavior of the document body.
 
 Documents and consumer code written with the old names keep working:
 

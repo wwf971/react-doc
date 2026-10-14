@@ -17,16 +17,16 @@ language: en
 ````markdown
 <!--renderComp=FileDownload-->
 ```yaml
-src: /doc-page/doc-page-introduction.md
-name: doc-page-introduction-example-with-a-long-file-name.md
+src: writing-style.md
+name: writing-style-of-mdx-components-example-with-a-long-file-name.md
 view: compact
 ```
 ````
 
 <!--renderComp=FileDownload-->
 ```yaml
-src: /doc-page/doc-page-introduction.md
-name: doc-page-introduction-example-with-a-long-file-name.md
+src: writing-style.md
+name: writing-style-of-mdx-components-example-with-a-long-file-name.md
 view: compact
 ```
 
@@ -36,17 +36,17 @@ view: compact
 ````markdown
 <!--renderComp=FileDownload-->
 ```yaml
-src: /doc-page/doc-page-introduction.md
-name: doc-page-introduction.md
-size: 1.2 KB
+src: image/office-worker.svg
+name: office-worker.svg
+size: 1.4 KB
 view: detailed
 ```
 ````
 
 <!--renderComp=FileDownload-->
 ```yaml
-src: /doc-page/doc-page-introduction.md
-name: doc-page-introduction.md
-size: 1.2 KB
+src: image/office-worker.svg
+name: office-worker.svg
+size: 1.4 KB
 view: detailed
 ```

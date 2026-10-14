@@ -1,0 +1,46 @@
+.switch-view {
+  margin: 0.75rem 0 1.5rem;
+  min-width: 0;
+}
+
+.switch-view-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.4rem;
+}
+
+.switch-view-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid #d9e2eb;
+  border-radius: 4px;
+  background: #fff;
+  color: #34495e;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.switch-view-tabs button[aria-selected='true'] {
+  background: #e9f1f7;
+  border-color: #6d94b2;
+  color: #174e73;
+}
+
+.switch-view-tabs button:focus-visible {
+  outline: 2px solid #2d648d;
+  outline-offset: 2px;
+}
+
+.switch-view > [role='tabpanel'][hidden] {
+  display: none;
+}
+
+.switch-view > [role='tabpanel'] > .table-hierarchy-panel {
+  margin: 0;
+}
