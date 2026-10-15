@@ -299,6 +299,11 @@
   border-radius: 2px;
 }
 
+/* the metadata of a version, one line of json that wraps anywhere */
+.doc-asset-version-metadata {
+  overflow-wrap: anywhere;
+}
+
 /* the events, in the object fields: a small table under the summary line */
 .doc-asset-event-list {
   width: auto;

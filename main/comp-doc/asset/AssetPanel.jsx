@@ -273,6 +273,7 @@ const VersionSection = observer(function VersionSection({ object, panel, isWrita
             ))}
         </p>
       ) : null}
+      {versionSelected ? <VersionMetadataLine object={object} panel={panel} versionId={versionSelected.versionId} /> : null}
       {versionSelected && isWritable && !object.isDeleted ? (
         <div className="doc-asset-actions">
           <span className="doc-asset-mono doc-asset-muted">{versionSelected.versionId}</span>
@@ -308,6 +309,26 @@ const VersionSection = observer(function VersionSection({ object, panel, isWrita
         </div>
       ) : null}
     </section>
+  );
+});
+
+// what the writer of the version's data said about it
+// ({versionId}.metadata.yaml, doc_page_impl_asset.md#version-metadata), read
+// with the version's data: shown once that is loaded
+const VersionMetadataLine = observer(function VersionMetadataLine({ object, panel, versionId }) {
+  const { assetStore } = useDocStores();
+  const stateVersion = assetStore.versionGet(panel.store, object.objectId, versionId);
+  if (stateVersion?.status !== 'done') return null;
+  const metadata = stateVersion.metadata ?? {};
+  const isEmpty = Object.keys(metadata).length === 0;
+  return (
+    <p className="doc-asset-dependency-list">
+      <span className="doc-asset-mono doc-asset-muted">{versionId}</span>
+      <span className="doc-asset-muted"> metadata: </span>
+      {isEmpty
+        ? <span className="doc-asset-muted">none</span>
+        : <span className="doc-asset-mono doc-asset-version-metadata">{JSON.stringify(metadata)}</span>}
+    </p>
   );
 });
 

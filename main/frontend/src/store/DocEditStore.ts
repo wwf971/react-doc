@@ -5,7 +5,7 @@ import type { DocConfigStore } from './DocConfigStore.js';
 import type { DocAssetStore } from './DocAssetStore.js';
 import { compileDoc } from '../lib/mdx-compile.js';
 import { docEditApiCreate } from '../lib/doc-edit-api.js';
-import { ASSET_REF_LANG, ASSET_STORE_ID_LOCAL, assetRefLangIs, assetRefTextBuild } from '../lib/doc-asset-ref.js';
+import { ASSET_REF_LANG, ASSET_STORE_ID_LOCAL, assetRefLangIs, assetRefParse, assetRefTextBuild } from '../lib/doc-asset-ref.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../../../comp-doc/registry/comp-registry.js';
 import {
   COMP_EDIT_MODE_SOURCE_ID,
@@ -20,6 +20,7 @@ import {
   blockReplaceOperationBuild,
   blockSwapOperationBuild,
   componentBlockTextBuild,
+  componentTemplateTextBuild,
   editDocModelBuild,
   frontmatterReplaceOperationBuild,
   remarkEditBlock,
@@ -43,6 +44,9 @@ import {
 //   deleteConfirm     the one block whose deletion waits for confirmation
 //   blockMove         the one block being moved up or down (swapped with its
 //                     neighbor), or the failure of the last move
+//   blockAssetMove    the one block whose inline data waits for the
+//                     confirmation of its move into the asset store, is
+//                     being moved, or the failure of the last such move
 //
 // a session ends in one of two ways:
 //   leave    the draft is saved when it changed (click outside, another edit
@@ -94,8 +98,25 @@ export type EditSession = {
   // increases only when the text is set by code (a level control, a
   // template), so the uncontrolled editing surface knows when to rewrite its DOM
   draftVersion: number;
+  // the draft of the asset data, for a block whose data is a reference into
+  // the asset store, open in an edit mode of its component (an isAssetOnly
+  // component): the component edits the asset, not the lines of the block.
+  // a leave writes it into the asset object; undefined while unchanged
+  assetDraft?: EditAssetDraft;
+  // the asset object created for this block when it was created from the
+  // insert menu (an isAssetOnly component); canceling the creation deletes
+  // it (softly) with the block
+  assetObjectIdCreated?: string;
   status: 'editing' | 'submitting' | 'error';
   message: string;
+};
+
+export type EditAssetDraft = {
+  store: string;
+  objectId: string;
+  raw: string;
+  // the metadata of the version the data is saved as; undefined keeps the head's
+  versionMetadata?: Record<string, unknown>;
 };
 
 export type EditInsertMenu = {
@@ -146,12 +167,13 @@ export type EditBlockMove = {
   message: string;
 };
 
-// the one component block whose inline data is being moved into the asset
-// store, or the failure of the last such move
+// the one component block whose inline data waits for the confirmation of
+// its move into the asset store, is being moved, or the failure of the last
+// such move
 export type EditBlockAssetMove = {
   path: string;
   blockIndex: number;
-  status: 'submitting' | 'error';
+  status: 'confirming' | 'submitting' | 'error';
   message: string;
 };
 
@@ -327,6 +349,7 @@ export class DocEditStore {
       this.insertMenu = undefined;
       this.deleteConfirm = undefined;
       this.blockMove = undefined;
+      this.blockAssetMoveClear();
       // a label still being typed is dropped: it was never saved
       if (this.sidePanelText?.status !== 'submitting') this.sidePanelText = undefined;
     });
@@ -415,6 +438,10 @@ export class DocEditStore {
       if (isChanged && this.blockMove?.path === path && this.blockMove.status !== 'submitting') {
         this.blockMove = undefined;
       }
+      // the block a confirmation names may be another one now
+      if (isChanged && this.blockAssetMove?.path === path && this.blockAssetMove.status === 'confirming') {
+        this.blockAssetMove = undefined;
+      }
       if (isChanged && this.blockModeMenu?.path === path) this.blockModeMenu = undefined;
     });
     const stateCompiled = this.docEditByPath[path];
@@ -494,6 +521,7 @@ export class DocEditStore {
       if (this.deleteConfirm?.path === path) this.deleteConfirm = undefined;
       if (this.insertMenu?.path === path) this.insertMenu = undefined;
       if (this.blockModeMenu?.path === path) this.blockModeMenu = undefined;
+      if (this.blockAssetMove?.path === path) this.blockAssetMoveClear();
     });
     await this.docEditEnsure(path);
   }
@@ -596,6 +624,14 @@ export class DocEditStore {
     return Boolean(definition) && compMetaGet(definition).isReadOnly;
   }
 
+  // a component that is entered only through an explicit control (the
+  // toolbar's Edit button, the mode menu): a click on the block or a focus
+  // shift from its neighbor does not open it, whatever EditBlockEnterMode is
+  blockIsEditEnterButtonOnly(path: string, blockIndex: number): boolean {
+    const definition = this.blockDefinitionGet(path, blockIndex);
+    return Boolean(definition) && compMetaGet(definition).isEditEnterButtonOnly;
+  }
+
   blockViewModeListGet(path: string, blockIndex: number): EditModeEntry[] {
     const definition = this.blockDefinitionGet(path, blockIndex);
     return compViewModeListGet(definition).map((mode) => ({ ...mode, isDisabled: false, disabledReason: '' }));
@@ -626,6 +662,8 @@ export class DocEditStore {
   // store, only the source mode can be entered, since the component's
   // editor would edit the asset's text and not the lines of this block
   // (doc_page_impl_asset.md#edit-mode). any other block: the source mode.
+  // a component declared isAssetOnly is the other way round
+  // (blockEditModeAssetOnlyListGet).
   blockEditModeListGet(path: string, blockIndex: number): EditModeEntry[] {
     const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
     if (!block) return [];
@@ -633,6 +671,7 @@ export class DocEditStore {
     const definition = this.blockDefinitionGet(path, blockIndex);
     const isAssetRef = assetRefLangIs(block.component.lang);
     const modeList = compEditModeListGet(definition);
+    if (compMetaGet(definition).isAssetOnly) return this.blockEditModeAssetOnlyListGet(block, definition, modeList);
     if (!isAssetRef) return modeList.map((mode) => ({ ...mode, isDisabled: false, disabledReason: '' }));
     const isSourceListed = modeList.some((mode) => mode.id === COMP_EDIT_MODE_SOURCE_ID);
     const modeListAsset = modeList.map((mode) => ({
@@ -645,6 +684,34 @@ export class DocEditStore {
       modeListAsset.push({ ...compEditModeSource, isDefault: true, isDisabled: false, disabledReason: '' });
     }
     return modeListAsset;
+  }
+
+  // the edit modes of a block of an isAssetOnly component
+  // (doc_page_impl_edit.md#asset-only-components): its data is only ever in
+  // the asset store, so the component's own modes edit the referenced asset
+  // (the session's assetDraft) and are what the block opens in. the source
+  // mode, when the component accepts it, is kept for the lines of the
+  // block. a block with the data written inline cannot be edited in the
+  // component's modes until "to asset" moved the data; a reference pinned to
+  // a version other than the head cannot, since a save writes the head.
+  private blockEditModeAssetOnlyListGet(block: any, definition: any, modeList: any[]): EditModeEntry[] {
+    let disabledReason = '';
+    if (!assetRefLangIs(block.component.lang)) {
+      disabledReason = 'the data must be in the asset store; move it there with "to asset" first';
+    } else {
+      const reference = assetRefParse(block.component.raw);
+      if (reference.message) disabledReason = reference.message;
+      else if (reference.versionId !== 'head') disabledReason = `the reference reads version ${reference.versionId}, not the head; a save writes the head`;
+      else if (!this.assetStore?.isWritable) disabledReason = 'the asset store is not writable';
+    }
+    return modeList.map((mode) => {
+      const isSource = mode.id === COMP_EDIT_MODE_SOURCE_ID;
+      return {
+        ...mode,
+        isDisabled: !isSource && Boolean(disabledReason),
+        disabledReason: isSource ? '' : disabledReason,
+      };
+    });
   }
 
   // the mode menu is offered where there is something to choose: a
@@ -725,6 +792,7 @@ export class DocEditStore {
       this.deleteConfirm = undefined;
       this.blockModeMenu = undefined;
       this.blockMoveClear();
+      this.blockAssetMoveClear();
       this.session = {
         ...sessionPartial,
         textDraft: sessionPartial.textInitial,
@@ -743,6 +811,71 @@ export class DocEditStore {
       this.session.status = 'editing';
       this.session.message = '';
     }
+  }
+
+  // a draft event of the open block session is about asset data when the
+  // component rendered the data of a reference (event.source.asset) in one
+  // of its own edit modes: the block is an isAssetOnly component's
+  // (blockEditModeAssetOnlyListGet enables nothing else)
+  private sessionAssetDraftIsFor(event: DocEvent): boolean {
+    const session = this.session;
+    if (!session || session.type !== 'block' || session.editModeId === COMP_EDIT_MODE_SOURCE_ID) return false;
+    return Boolean(event.source.asset?.isFromAsset);
+  }
+
+  // { raw, versionMetadata? } of the component's editor
+  private sessionAssetDraftSet(event: DocEvent) {
+    const session = this.session;
+    if (!session || session.status === 'submitting') return;
+    const asset = event.source.asset;
+    const versionMetadata = event.data.versionMetadata;
+    session.assetDraft = {
+      store: String(asset.store),
+      objectId: String(asset.objectId),
+      raw: String(event.data.raw ?? session.assetDraft?.raw ?? ''),
+      versionMetadata: versionMetadata && typeof versionMetadata === 'object' ? { ...versionMetadata } : session.assetDraft?.versionMetadata,
+    };
+    if (session.status === 'error') {
+      session.status = 'editing';
+      session.message = '';
+    }
+  }
+
+  // the asset draft written into its object, in the object's save mode: the
+  // block (the reference) is not touched. the session closes once the store
+  // answers.
+  private async sessionAssetDraftSubmit(session: EditSession, assetDraft: EditAssetDraft): Promise<boolean> {
+    if (!this.assetStore?.isWritable) {
+      this.sessionFail('The asset store is not writable.');
+      return false;
+    }
+    const block = this.docEditByPath[session.path]?.model?.blockList[session.blockIndex];
+    if (!block?.component) {
+      this.sessionFail('The block no longer exists.');
+      return false;
+    }
+    runInAction(() => {
+      session.status = 'submitting';
+      session.message = '';
+    });
+    const result = await this.assetStore.objectUpdate(
+      assetDraft.store,
+      assetDraft.objectId,
+      { text: assetDraft.raw },
+      undefined,
+      `${block.component.compName} edited in ${session.path}`,
+      this.blockDependencyListGet(block, assetDraft.raw, session.path),
+      assetDraft.versionMetadata,
+    );
+    runInAction(() => {
+      if (result.code !== 0) {
+        session.status = 'error';
+        session.message = result.message;
+        return;
+      }
+      if (this.session === session) this.session = undefined;
+    });
+    return result.code === 0;
   }
 
   // text set by code; the editing surface rewrites its content
@@ -775,6 +908,11 @@ export class DocEditStore {
         });
         return false;
       }
+      // the object made for the block is referenced by nothing now; deleted
+      // softly, so it can still be restored from the asset store
+      if (session.assetObjectIdCreated && this.assetStore) {
+        await this.assetStore.objectDelete(ASSET_STORE_ID_LOCAL, session.assetObjectIdCreated);
+      }
       return true;
     }
     this.session = undefined;
@@ -798,6 +936,7 @@ export class DocEditStore {
     const session = this.session;
     if (!session) return false;
     if (session.status === 'submitting') return false;
+    if (session.assetDraft) return this.sessionAssetDraftSubmit(session, session.assetDraft);
     const text = session.textDraft.replace(/\r\n/g, '\n');
     if (text === session.textInitial) {
       runInAction(() => {
@@ -862,12 +1001,14 @@ export class DocEditStore {
   // is left (saved), the neighbor opens with the caret on its near line. with
   // the caret position of the leaving surface (point, viewport coordinates)
   // the caret keeps its x on that line; without it, it goes to the near end.
-  // nothing happens at the first / last block.
+  // nothing happens at the first / last block, nor before a block that is
+  // entered only through its Edit button.
   async sessionFocusShift(direction: EditFocusShiftDirection, point?: EditPoint): Promise<boolean> {
     const session = this.session;
     if (!session || session.type !== 'block') return false;
     const blockIndexNext = direction === 'next' ? session.blockIndex + 1 : session.blockIndex - 1;
     if (blockIndexNext < 0 || blockIndexNext >= this.blockCountGet(session.path)) return false;
+    if (this.blockIsEditEnterButtonOnly(session.path, blockIndexNext)) return false;
     let selectionInitial: EditSelectionInitial;
     if (point) {
       selectionInitial = { type: 'line', line: direction === 'next' ? 'first' : 'last', clientX: point.clientX };
@@ -938,6 +1079,10 @@ export class DocEditStore {
     const block = session.type === 'block' ? this.docEditByPath[session.path]?.model?.blockList[session.blockIndex] : undefined;
 
     if (event.type === 'editDraftChange') {
+      if (this.sessionAssetDraftIsFor(event)) {
+        this.sessionAssetDraftSet(event);
+        return { code: 0, message: '' };
+      }
       const text = eventBlockTextGet(event.data, block);
       if (text !== undefined) this.sessionDraftSet(text);
       return { code: 0, message: '' };
@@ -952,15 +1097,19 @@ export class DocEditStore {
     }
     if (event.type === 'editSubmitRequest') {
       // Save: the explicit leave. an editor may hand over its final draft here.
-      const text = eventBlockTextGet(event.data, block);
-      if (text !== undefined) this.sessionDraftSet(text);
+      if (this.sessionAssetDraftIsFor(event)) {
+        if (event.data.raw !== undefined) this.sessionAssetDraftSet(event);
+      } else {
+        const text = eventBlockTextGet(event.data, block);
+        if (text !== undefined) this.sessionDraftSet(text);
+      }
       const isSubmitted = await this.sessionLeave();
       return isSubmitted ? { code: 0, message: '' } : { code: -1, message: this.session?.message ?? 'the edit was not saved' };
     }
     if (event.type === 'editFocusShiftRequest') {
       const direction: EditFocusShiftDirection = event.data.direction === 'previous' ? 'previous' : 'next';
       const isShifted = await this.sessionFocusShift(direction, event.point);
-      return isShifted ? { code: 0, message: '' } : { code: -1, message: `no block ${direction === 'next' ? 'after' : 'before'} this one` };
+      return isShifted ? { code: 0, message: '' } : { code: -1, message: `no block ${direction === 'next' ? 'after' : 'before'} this one the caret can enter` };
     }
     return undefined;
   }
@@ -981,6 +1130,7 @@ export class DocEditStore {
     runInAction(() => {
       this.deleteConfirm = undefined;
       this.blockMoveClear();
+      this.blockAssetMoveClear();
       this.insertMenu = { path, borderIndex, blockIndexAnchor, status: 'open', message: '' };
     });
     return true;
@@ -1025,6 +1175,77 @@ export class DocEditStore {
     return this.sessionBlockStart(path, menu.borderIndex, { isCreated: true, selectionInitial: 'all' });
   }
 
+  // a new block of an isAssetOnly component (doc_page_impl_edit.md#asset-only-components):
+  // its starting data (template.assetSource, from the component's factory)
+  // becomes a new object of the local asset store, in the save mode the
+  // component declares, then the block is written at the border of the open
+  // insert menu as a reference to it, and opened in its default edit mode.
+  // the document is written last: when that write fails, the object made
+  // for it is deleted again (softly) and the document is as it was.
+  async blockCreateAsAsset(
+    path: string,
+    template: { compName: string; assetSource: { lang: string; raw: string; props: Record<string, unknown> } },
+  ): Promise<boolean> {
+    const menu = this.insertMenu;
+    if (!menu || menu.path !== path || menu.status === 'submitting') return false;
+    const failSet = (message: string) => {
+      runInAction(() => {
+        menu.status = 'error';
+        menu.message = message;
+      });
+    };
+    const model = this.docEditByPath[path]?.model;
+    if (!model) {
+      failSet('The document is not loaded.');
+      return false;
+    }
+    if (!this.assetStore?.isWritable) {
+      failSet(`${template.compName} keeps its data in the asset store, which is not writable here.`);
+      return false;
+    }
+    runInAction(() => {
+      menu.status = 'submitting';
+      menu.message = '';
+    });
+    const compId = compIdResolve(this.sourceStore.configDoc, template.compName);
+    const definition = compDefinitionNormalize(this.docStore.compById[compId]);
+    const resultCreate = await this.assetStore.objectCreate({
+      store: ASSET_STORE_ID_LOCAL,
+      lang: template.assetSource.lang,
+      text: template.assetSource.raw,
+      note: `${template.compName} block created in ${path}`,
+      saveMode: compMetaGet(definition).assetSaveMode,
+    });
+    const objectId: string = resultCreate.data?.object?.objectId ?? '';
+    if (resultCreate.code !== 0 || !objectId) {
+      failSet(resultCreate.message || 'The asset object of the new block was not created.');
+      return false;
+    }
+    const text = componentTemplateTextBuild(template.compName, {
+      lang: ASSET_REF_LANG,
+      raw: assetRefTextBuild({ store: ASSET_STORE_ID_LOCAL, objectId }),
+      props: template.assetSource.props,
+    });
+    const result = await this.operationApply(path, blockInsertOperationBuild(model, menu.borderIndex, text), {
+      messageFailure: 'The block was not created.',
+      onApplied: () => {
+        if (this.insertMenu === menu) this.insertMenu = undefined;
+      },
+    });
+    if (result.code !== 0) {
+      await this.assetStore.objectDelete(ASSET_STORE_ID_LOCAL, objectId);
+      failSet(result.message);
+      return false;
+    }
+    const isStarted = await this.sessionBlockStart(path, menu.borderIndex, { isCreated: true, selectionInitial: 'all' });
+    if (isStarted) {
+      runInAction(() => {
+        if (this.session) this.session.assetObjectIdCreated = objectId;
+      });
+    }
+    return isStarted;
+  }
+
   // ---------- moving a block ----------
 
   // a block can move up when a block is above it, down when one is below
@@ -1066,6 +1287,7 @@ export class DocEditStore {
     const move = runInAction(() => {
       this.insertMenu = undefined;
       this.deleteConfirm = undefined;
+      this.blockAssetMoveClear();
       this.blockMove = { path, blockIndex, direction, status: 'submitting', message: '' };
       return this.blockMove!;
     });
@@ -1105,16 +1327,37 @@ export class DocEditStore {
     this.blockAssetMove = undefined;
   }
 
+  // the move is confirmed in the toolbar first, like a deletion: the "to
+  // asset" button asks, the confirmation reports editBlockAssetMoveRequest
+  async blockAssetMoveConfirmSet(path: string, blockIndex: number): Promise<boolean> {
+    if (this.blockAssetMove?.status === 'submitting') return false;
+    if (!this.blockAssetMoveIsAvailable(path, blockIndex)) return false;
+    const isLeft = await this.sessionLeaveForIndexAction(path);
+    if (!isLeft) return false;
+    runInAction(() => {
+      this.insertMenu = undefined;
+      this.deleteConfirm = undefined;
+      this.blockMoveClear();
+      this.blockAssetMove = { path, blockIndex, status: 'confirming', message: '' };
+    });
+    return true;
+  }
+
+  blockAssetMoveConfirmIs(path: string, blockIndex: number): boolean {
+    return this.blockAssetMoveIs(path, blockIndex) && this.blockAssetMove!.status !== 'error';
+  }
+
   // the inline data of the block becomes an object of the local asset store
-  // (in its default folder, with the block's language), and the fenced
-  // block is rewritten as the reference to that object by id (lang
-  // "asset"). the object gets no name: a name means one object of the
-  // store, and the store answers an existing object for a name it has, so
-  // naming it after the component would make the second Image block
-  // reference the first one's data. the person names it in the asset
-  // panel. the object is created first; when the document write then
-  // fails, the object stays in the store and the block keeps its inline
-  // data. requested through the event layer (editBlockAssetMoveRequest).
+  // (in its default folder, with the block's language, in the save mode its
+  // component declares), and the fenced block is rewritten as the reference
+  // to that object by id (lang "asset"). the object gets no name: a name
+  // means one object of the store, and the store answers an existing object
+  // for a name it has, so naming it after the component would make the
+  // second Image block reference the first one's data. the person names it
+  // in the asset panel. the object is created first and the document is
+  // written last: only that write makes the move happen. when it fails, the
+  // object stays in the store, the block keeps its inline data and works as
+  // before. requested through the event layer (editBlockAssetMoveRequest).
   private async blockAssetMoveApply(path: string, blockIndex: number): Promise<boolean> {
     if (this.blockAssetMove?.status === 'submitting') return false;
     const failSet = (message: string) => {
@@ -1149,6 +1392,7 @@ export class DocEditStore {
       text: block.component.raw,
       note: `${block.component.compName} data moved from ${path}`,
       dependencyList: this.blockDependencyListGet(block, block.component.raw, path),
+      saveMode: compMetaGet(this.blockDefinitionGet(path, blockIndex)).assetSaveMode,
     });
     const objectId: string = resultCreate.data?.object?.objectId ?? '';
     if (resultCreate.code !== 0 || !objectId) {
@@ -1211,6 +1455,7 @@ export class DocEditStore {
       this.insertMenu = undefined;
       this.deleteConfirm = undefined;
       this.blockMoveClear();
+      this.blockAssetMoveClear();
       this.sidePanelText = { itemId, status: 'editing', message: '' };
     });
     return true;
@@ -1280,6 +1525,7 @@ export class DocEditStore {
     runInAction(() => {
       this.insertMenu = undefined;
       this.blockMoveClear();
+      this.blockAssetMoveClear();
       this.deleteConfirm = { path, blockIndex, status: 'confirming', message: '' };
     });
     return true;

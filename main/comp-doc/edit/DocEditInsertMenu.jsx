@@ -25,7 +25,9 @@ import './DocEdit.css';
 //
 // choosing an entry writes its text to the document as the new block, at
 // the border of the open menu (DocEditStore.insertMenu), and opens it in
-// edit mode in its place (DocEditStore.blockCreate).
+// edit mode in its place (DocEditStore.blockCreate). an entry of an
+// isAssetOnly component creates its asset object first and writes a
+// reference block to it (DocEditStore.blockCreateAsAsset).
 export const DocEditInsertMenu = observer(function DocEditInsertMenu() {
   const { editStore } = useDocStores();
   const menu = editStore.insertMenu;
@@ -58,6 +60,10 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
 
   const choose = (template) => {
     if (isSubmitting) return;
+    if (template.isAssetOnly) {
+      void editStore.blockCreateAsAsset(path, template);
+      return;
+    }
     void editStore.blockCreate(path, template.text);
   };
 

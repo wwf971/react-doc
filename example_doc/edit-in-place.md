@@ -18,7 +18,7 @@ In edit mode the page looks exactly as it reads: nothing moves when the toggle i
 - move the block down, swapping it with the block below
 - delete the block
 
-When the top of a long block is scrolled away, the toolbar stays at the top of what is visible of it. Only one block is in edit mode at a time. Leaving the block in any way that is not canceling saves it: click somewhere else, enter another block, press Ctrl/⌘ + Enter, or use **Save** in the small bar floating above the block. Escape or **Cancel** abandons the change. Deleting asks for confirmation in the same toolbar. The toolbar buttons **Frontmatter** and **Source** edit the frontmatter as one piece and the whole source file.
+When the top of a long block is scrolled away, the toolbar stays at the top of what is visible of it. Only one block is in edit mode at a time. Leaving the block in any way that is not canceling saves it: click somewhere else, enter another block, press Ctrl/⌘ + Enter, or use **Save** in the small bar floating above the block. Escape or **Cancel** abandons the change. Deleting a block, and moving its data into the asset store, ask for confirmation in the same toolbar. The toolbar buttons **Frontmatter** and **Source** edit the frontmatter as one piece and the whole source file.
 
 The move buttons are greyed out where there is nothing to swap with: up on the first block of the document, down on the last one. Try them on the three short paragraphs below; the blank line between two blocks stays where it is, only the blocks change places.
 

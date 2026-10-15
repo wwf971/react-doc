@@ -42,7 +42,11 @@ export type AssetDependent = { objectId: string; versionId: string; dependency: 
 
 export type AssetEventType =
   | 'create' | 'updateInPlace' | 'versionCreate' | 'checkout' | 'versionDelete' | 'metaSet' | 'delete' | 'restore'
-  | 'lock' | 'unlock';
+  | 'lock' | 'unlock' | 'dependencySet' | 'versionMetadataSet';
+
+// what the writer of a version's data says about it ({versionId}.metadata.yaml,
+// doc_page_impl_asset.md#version-metadata); the store never interprets it
+export type AssetVersionMetadata = Record<string, unknown>;
 
 // what happened to an object: every event is a mapping, so a key may be
 // missing (userId is reserved for a store that knows who writes)
@@ -89,13 +93,15 @@ type AssetObjectState = { status: 'loading' | 'done' | 'error'; object?: AssetOb
 type AssetNameLookupState = { status: 'loading' | 'error'; message: string };
 
 // the data of one version as the page holds it: the text when the bytes are
-// utf-8 text, otherwise only size and hash (the bytes are reached by url)
+// utf-8 text, otherwise only size and hash (the bytes are reached by url),
+// and the version's metadata ({} when it has none)
 export type AssetVersionState = {
   status: 'loading' | 'done' | 'error';
   isText?: boolean;
   text?: string;
   hash?: string;
   size?: number;
+  metadata?: AssetVersionMetadata;
   message?: string;
 };
 
@@ -463,13 +469,18 @@ export class DocAssetStore {
     if (this.panel?.store === store && this.panel.objectId === objectId) this.panel = undefined;
   }
 
-  private versionAccept(store: string, objectId: string, version: { versionId: string; size: number; hash: string; isText: boolean; text?: string }) {
+  private versionAccept(
+    store: string,
+    objectId: string,
+    version: { versionId: string; size: number; hash: string; isText: boolean; text?: string; metadata?: AssetVersionMetadata },
+  ) {
     this.versionByKey[versionKeyGet(store, objectId, version.versionId)] = {
       status: 'done',
       isText: version.isText === true,
       text: version.isText === true ? version.text ?? '' : undefined,
       hash: version.hash,
       size: version.size,
+      metadata: version.metadata ?? {},
     };
   }
 
@@ -505,6 +516,8 @@ export class DocAssetStore {
   // an object of the store has answers that object and creates nothing
   // (isCreated false).
   // dependencyList: what the data depends on (doc_page_impl_asset.md#dependencies)
+  // saveMode: written into the object (absent: the store's default applies)
+  // versionMetadata: the metadata of the first version
   objectCreate(input: {
     store: string;
     name?: string;
@@ -516,13 +529,16 @@ export class DocAssetStore {
     note?: string;
     folder?: string;
     dependencyList?: AssetDependency[];
+    saveMode?: AssetSaveMode;
+    versionMetadata?: AssetVersionMetadata;
   }): Promise<AssetResult> {
     return this.writeApply(input.store, () => this.backend!.objectCreate(input), 'The asset object was not created.');
   }
 
   // the head data replaced in place, or a new version from the head; mode
   // absent means the object's save mode. dependencyList absent keeps the
-  // dependencies of the head version for the new data.
+  // dependencies of the head version for the new data, versionMetadata absent
+  // keeps its metadata.
   async objectUpdate(
     store: string,
     objectId: string,
@@ -530,6 +546,7 @@ export class DocAssetStore {
     mode?: AssetSaveMode,
     note = '',
     dependencyList?: AssetDependency[],
+    versionMetadata?: AssetVersionMetadata,
   ): Promise<AssetResult> {
     const object = this.objectGet(store, objectId);
     const head = object ? this.versionGet(store, objectId, object.versionIdHead) : undefined;
@@ -538,7 +555,7 @@ export class DocAssetStore {
     }
     const result = await this.writeApply(
       store,
-      () => this.backend!.objectUpdate({ store, objectId, hashBase: head.hash, ...data, mode, note, dependencyList }),
+      () => this.backend!.objectUpdate({ store, objectId, hashBase: head.hash, ...data, mode, note, dependencyList, versionMetadata }),
       'The asset was not updated.',
     );
     if (result.code === -2) void this.objectReload(store, objectId);
@@ -592,6 +609,15 @@ export class DocAssetStore {
 
   versionDelete(store: string, objectId: string, versionId: string): Promise<AssetResult> {
     return this.writeApply(store, () => this.backend!.versionDelete(store, objectId, versionId), 'The version was not deleted.');
+  }
+
+  // the metadata of one version replaced; {} removes it
+  versionMetadataSet(store: string, objectId: string, versionId: string, versionMetadata: AssetVersionMetadata): Promise<AssetResult> {
+    return this.writeApply(
+      store,
+      () => this.backend!.versionMetadataSet(store, objectId, versionId, versionMetadata),
+      'The metadata of the version was not changed.',
+    );
   }
 
   objectLockSet(store: string, objectId: string, isLocked: boolean): Promise<AssetResult> {

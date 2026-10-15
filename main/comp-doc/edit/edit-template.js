@@ -39,8 +39,15 @@ const templateTextList = [
   { id: 'comment', label: 'Comment', icon: MessageSquareDashed, text: '<!-- note to the authors -->' },
 ];
 
+// A component declared isNotInDoc is never offered. One declared isAssetOnly
+// is offered with isAssetOnly and its starting data (assetSource: { lang,
+// raw, props }): choosing it creates an asset object with that data first
+// and writes a reference block to it (DocEditStore blockCreateAsAsset); its
+// text is the block as the data would be written inline, for the search.
+//
 // env: { configDoc, compById, docPath, docFormat: 'md' | 'mdx', compConfigGet(compId) }
-// -> [{ id, compName, label, description, text, icon, group: 'text' | 'component', isCommon }]
+// -> [{ id, compName, label, description, text, icon, group: 'text' | 'component', isCommon,
+//       isAssetOnly, assetSource? }]
 export function editTemplateListBuild({ configDoc, compById, docPath, docFormat, compConfigGet }) {
   const templateListText = templateTextList.map((template) => ({
     id: template.id,
@@ -51,6 +58,7 @@ export function editTemplateListBuild({ configDoc, compById, docPath, docFormat,
     icon: template.icon,
     group: 'text',
     isCommon: true,
+    isAssetOnly: false,
   }));
 
   const compIdByTag = { ...compIdBuiltinByName, ...(configDoc?.compRegistry ?? {}) };
@@ -62,6 +70,8 @@ export function editTemplateListBuild({ configDoc, compById, docPath, docFormat,
     if (compIdDoneSet.has(compId)) continue;
     const definition = compDefinitionNormalize(compById[compId]);
     if (!definition) continue;
+    const meta = compMetaGet(definition);
+    if (meta.isNotInDoc) continue;
     const source = sourceDefaultSafeGet(definition, {
       compName,
       docPath,
@@ -70,7 +80,6 @@ export function editTemplateListBuild({ configDoc, compById, docPath, docFormat,
     });
     if (!source) continue;
     compIdDoneSet.add(compId);
-    const meta = compMetaGet(definition);
     templateListComponent.push({
       id: `component:${compName}`,
       compName,
@@ -80,6 +89,8 @@ export function editTemplateListBuild({ configDoc, compById, docPath, docFormat,
       icon: compIconGet(definition),
       group: 'component',
       isCommon: meta.isInsertCommon,
+      isAssetOnly: meta.isAssetOnly,
+      ...(meta.isAssetOnly ? { assetSource: source } : {}),
     });
   }
   templateListComponent.sort((a, b) => a.compName.localeCompare(b.compName));

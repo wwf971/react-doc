@@ -79,6 +79,8 @@ export const CompAssetHost = observer(function CompAssetHost({ input, registered
     isHead: result.versionId === result.object.versionIdHead,
     saveMode: assetSaveModeGet(result.object),
     isLocked: result.object.isLocked,
+    // what the writer of the data said about it ({versionId}.metadata.yaml)
+    versionMetadata: result.version.metadata ?? {},
   };
   return (
     <AssetFrame {...frameProps}>

@@ -1,0 +1,198 @@
+{
+  "id": "workbook",
+  "name": "Quarterly sales",
+  "sheetOrder": [
+    "sales",
+    "notes"
+  ],
+  "styles": {
+    "header": {
+      "bl": 1,
+      "bg": {
+        "rgb": "#eef2f7"
+      }
+    }
+  },
+  "sheets": {
+    "sales": {
+      "id": "sales",
+      "name": "Sales",
+      "rowCount": 40,
+      "columnCount": 10,
+      "columnData": {
+        "0": {
+          "w": 110
+        }
+      },
+      "cellData": {
+        "0": {
+          "0": {
+            "v": "Region",
+            "s": "header"
+          },
+          "1": {
+            "v": "Q1",
+            "s": "header"
+          },
+          "2": {
+            "v": "Q2",
+            "s": "header"
+          },
+          "3": {
+            "v": "Q3",
+            "s": "header"
+          },
+          "4": {
+            "v": "Q4",
+            "s": "header"
+          },
+          "5": {
+            "v": "Total",
+            "s": "header"
+          }
+        },
+        "1": {
+          "0": {
+            "v": "North"
+          },
+          "1": {
+            "v": 120
+          },
+          "2": {
+            "v": 135
+          },
+          "3": {
+            "v": 150
+          },
+          "4": {
+            "v": 160
+          },
+          "5": {
+            "f": "=SUM(B2:E2)",
+            "v": 565
+          }
+        },
+        "2": {
+          "0": {
+            "v": "South"
+          },
+          "1": {
+            "v": 90
+          },
+          "2": {
+            "v": 95
+          },
+          "3": {
+            "v": 110
+          },
+          "4": {
+            "v": 130
+          },
+          "5": {
+            "f": "=SUM(B3:E3)",
+            "v": 425
+          }
+        },
+        "3": {
+          "0": {
+            "v": "East"
+          },
+          "1": {
+            "v": 140
+          },
+          "2": {
+            "v": 150
+          },
+          "3": {
+            "v": 145
+          },
+          "4": {
+            "v": 170
+          },
+          "5": {
+            "f": "=SUM(B4:E4)",
+            "v": 605
+          }
+        },
+        "4": {
+          "0": {
+            "v": "West"
+          },
+          "1": {
+            "v": 80
+          },
+          "2": {
+            "v": 100
+          },
+          "3": {
+            "v": 120
+          },
+          "4": {
+            "v": 125
+          },
+          "5": {
+            "f": "=SUM(B5:E5)",
+            "v": 425
+          }
+        },
+        "5": {
+          "0": {
+            "v": "All",
+            "s": "header"
+          },
+          "1": {
+            "f": "=SUM(B2:B5)",
+            "v": 430,
+            "s": "header"
+          },
+          "2": {
+            "f": "=SUM(C2:C5)",
+            "v": 480,
+            "s": "header"
+          },
+          "3": {
+            "f": "=SUM(D2:D5)",
+            "v": 525,
+            "s": "header"
+          },
+          "4": {
+            "f": "=SUM(E2:E5)",
+            "v": 585,
+            "s": "header"
+          },
+          "5": {
+            "f": "=SUM(F2:F5)",
+            "v": 2020,
+            "s": "header"
+          }
+        },
+        "7": {
+          "0": {
+            "v": "figures in thousand units; rows below are working notes"
+          }
+        },
+        "9": {
+          "0": {
+            "v": "draft forecast"
+          },
+          "1": {
+            "v": 180
+          }
+        }
+      }
+    },
+    "notes": {
+      "id": "notes",
+      "name": "Notes",
+      "rowCount": 20,
+      "columnCount": 6,
+      "cellData": {
+        "0": {
+          "0": {
+            "v": "Q4 numbers are preliminary."
+          }
+        }
+      }
+    }
+  }
+}

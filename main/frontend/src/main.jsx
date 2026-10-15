@@ -49,12 +49,14 @@ createRoot(document.getElementById('root')).render(
       // development server and its change feed; both empty in a build
       asset: { endpoint: docSource.docAssetEndpoint, subscribe: docSource.subscribeDocAsset },
       // host settings handed to every registered component's config:
-      // DiagramMermaid loads mermaid on first use, and the page frames popups
-      // such as the tag overview with panelComponent. file references of
-      // Image/ImageGrid/DiagramMermaid are resolved by the source layer
-      // (config.assetUrlGet, default); a host may hand its own assetUrlGet here.
+      // DiagramMermaid loads mermaid on first use, ExcelUniver the Univer
+      // sheet engine, and the page frames popups such as the tag overview
+      // with panelComponent. file references of Image/ImageGrid/DiagramMermaid
+      // are resolved by the source layer (config.assetUrlGet, default); a
+      // host may hand its own assetUrlGet here.
       compConfigHost: {
         mermaidLoad: () => import('mermaid'),
+        univerLoad: () => import('./univer-load.js'),
         panelComponent: TextPanelDemo,
       },
       // the language selector and the page/part index switch both render

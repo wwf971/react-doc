@@ -72,8 +72,11 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
     || editStore.blockAssetMoveIs(path, index)
     || editStore.blockModeMenuIs(path, index);
   const isInvisible = block.kind === 'html' || block.kind === 'marker';
-  // a read-only component cannot be entered, by a click or otherwise
-  const isEnterByClick = editStore.blockEnterMode === 'click' && !editStore.blockIsReadOnly(path, index);
+  // a read-only component cannot be entered, by a click or otherwise; a
+  // component declared isEditEnterButtonOnly is entered by its Edit button only
+  const isEnterByClick = editStore.blockEnterMode === 'click'
+    && !editStore.blockIsReadOnly(path, index)
+    && !editStore.blockIsEditEnterButtonOnly(path, index);
   const textPending = editStore.blockTextPendingGet(path, index);
   const label = blockLabelGet(block);
 

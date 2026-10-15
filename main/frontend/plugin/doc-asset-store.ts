@@ -22,12 +22,24 @@ import { timeTextGet } from '../src/lib/time-text.js';
 //       object.yaml.bak               the previous object.yaml, before the last rewrite
 //       {versionId}.{fileExt}         the bytes of one version
 //       {versionId}.{fileExt}.bak     the previous bytes, before an in-place update
+//       {versionId}.metadata.yaml     the metadata of one version's data, when it has any
+//       {versionId}.metadata.yaml.bak the previous metadata, before it was rewritten
 //
 // object.yaml:
 //   objectId, name, lang, contentType, fileExt, saveMode?, versionIdHead,
 //   isDeleted, isLocked, timeCreated,
 //   versionList: [{ versionId, versionIdPrevList, time, note, size, hash, isLocked, dependencyList }]
 //   eventList:   [{ eventType, time, versionId?, userId? }]
+//
+// what each file records: object.yaml is what the store itself keeps and
+// answers questions with, the object and, for every version, its place in
+// the history (predecessors, time, note), what identifies its bytes (size,
+// hash), its lock and its dependencies: everything the store needs without
+// reading any version file. {versionId}.metadata.yaml is what the writer of
+// the data says about that data, a mapping the store never interprets (the
+// version of the engine that wrote it, how a component displays it). it is
+// read and written with the version's bytes, not with the object: listing
+// the store reads no version file. a version without metadata has no file.
 //
 // dependencies (doc_page_impl_asset.md#dependencies): the data of a version
 // may stand for more than its bytes: an Image version names an image file of
@@ -95,7 +107,11 @@ export type AssetSaveMode = 'inPlace' | 'newVersion';
 
 export type AssetEventType =
   | 'create' | 'updateInPlace' | 'versionCreate' | 'checkout' | 'versionDelete' | 'metaSet' | 'delete' | 'restore'
-  | 'lock' | 'unlock' | 'dependencySet';
+  | 'lock' | 'unlock' | 'dependencySet' | 'versionMetadataSet';
+
+// what the writer of a version's data says about it ({versionId}.metadata.yaml);
+// the store keeps it and never interprets it
+export type AssetVersionMetadata = Record<string, unknown>;
 
 // what the data of a version depends on
 export type AssetDependency =
@@ -150,7 +166,8 @@ export type AssetObjectMeta = {
   dirName: string;
 };
 
-// the bytes of one version, with the text when the bytes are valid utf-8
+// the bytes of one version, with the text when the bytes are valid utf-8,
+// and the version's metadata ({} when it has none)
 export type AssetVersionData = {
   versionId: string;
   bytes: Buffer;
@@ -158,6 +175,7 @@ export type AssetVersionData = {
   hash: string;
   isText: boolean;
   text?: string;
+  metadata: AssetVersionMetadata;
 };
 
 export type AssetFolder = {
@@ -269,6 +287,8 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   const objectDirGet = (meta: AssetObjectMeta) => path.join(folderAbsGet(meta.folder), meta.dirName);
   const objectMetaPathGet = (meta: AssetObjectMeta) => path.join(objectDirGet(meta), ASSET_OBJECT_META_NAME);
   const versionPathGet = (meta: AssetObjectMeta, versionId: string) => path.join(objectDirGet(meta), `${versionId}.${meta.fileExt}`);
+  // always yaml, whatever the extension of the data file
+  const versionMetadataPathGet = (meta: AssetObjectMeta, versionId: string) => path.join(objectDirGet(meta), `${versionId}.metadata.yaml`);
 
   function folderAbsGet(folderPath: string): string {
     const folder = folderList.find((item) => item.path === folderPath);
@@ -373,7 +393,46 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     if (!fs.existsSync(filePath)) {
       throw new AssetError(-3, `data file of version ${versionId} is missing: ${filePath}`);
     }
-    return versionDataBuild(versionId, fs.readFileSync(filePath));
+    return versionDataBuild(versionId, fs.readFileSync(filePath), versionMetadataRead(meta, versionId));
+  }
+
+  // ---------- the metadata of a version ----------
+
+  // the mapping of {versionId}.metadata.yaml; {} when the file is missing or
+  // does not hold a mapping
+  function versionMetadataRead(meta: AssetObjectMeta, versionId: string): AssetVersionMetadata {
+    const filePath = versionMetadataPathGet(meta, versionId);
+    if (!fs.existsSync(filePath)) return {};
+    const content = yamlParse(fs.readFileSync(filePath, 'utf-8'));
+    if (!content || typeof content !== 'object' || Array.isArray(content)) return {};
+    return content as AssetVersionMetadata;
+  }
+
+  // an empty mapping removes the file (its previous content is kept as .bak)
+  function versionMetadataWrite(meta: AssetObjectMeta, versionId: string, metadata: AssetVersionMetadata) {
+    const filePath = versionMetadataPathGet(meta, versionId);
+    if (Object.keys(metadata).length === 0) {
+      if (fs.existsSync(filePath)) {
+        fs.copyFileSync(filePath, `${filePath}.bak`);
+        fs.rmSync(filePath);
+      }
+      return;
+    }
+    fileWriteSafe(filePath, yamlStringify(metadata));
+  }
+
+  // the metadata of one version replaced; versionId 'head' or '' is the head.
+  // it describes the version's data, so a locked version keeps it, like its bytes
+  function versionMetadataSet(objectId: string, versionIdRequested: string, metadataInput: unknown): { object: AssetObjectMeta; version: AssetVersionData } {
+    const metadata = versionMetadataNormalize(metadataInput);
+    const meta = objectGet(objectId);
+    objectUnlockedCheck(meta);
+    const versionId = versionIdResolve(meta, versionIdRequested);
+    versionUnlockedCheck(meta, versionId, 'given other metadata');
+    versionMetadataWrite(meta, versionId, metadata);
+    meta.eventList.push({ eventType: 'versionMetadataSet', time: timeTextGet(), versionId });
+    objectMetaWrite(meta);
+    return { object: meta, version: versionDataGetOf(meta, versionId) };
   }
 
   // ---------- writing ----------
@@ -381,8 +440,10 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   // a new object with its first version. when the name is the name of an
   // object of the store, that object is returned (isCreated false) and
   // nothing is written: a name means one object.
-  //   folder          the folder the object is created in (as written in asset.yaml); the default folder when absent
-  //   dependencyList  what the data of the first version depends on (none when absent)
+  //   folder           the folder the object is created in (as written in asset.yaml); the default folder when absent
+  //   dependencyList   what the data of the first version depends on (none when absent)
+  //   saveMode         written into the object when given; absent: the key is not written
+  //   versionMetadata  the metadata of the first version (none when absent)
   function objectCreate(input: {
     name?: string;
     lang?: string;
@@ -392,9 +453,15 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     note?: string;
     folder?: string;
     dependencyList?: unknown;
+    saveMode?: unknown;
+    versionMetadata?: unknown;
   }): { object: AssetObjectMeta; version: AssetVersionData; isCreated: boolean } {
     if (!Buffer.isBuffer(input.data)) throw new AssetError(-1, 'data is required');
     const dependencyList = dependencyListNormalize(input.dependencyList ?? []);
+    const versionMetadata = versionMetadataNormalize(input.versionMetadata ?? {});
+    if (input.saveMode !== undefined && input.saveMode !== 'inPlace' && input.saveMode !== 'newVersion') {
+      throw new AssetError(-1, `saveMode must be inPlace or newVersion, got ${String(input.saveMode)}`);
+    }
     const name = nameNormalize(input.name);
     if (name) {
       const metaExisting = objectList().find((item) => item.name === name);
@@ -426,10 +493,12 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       folder: folder.path,
       dirName: objectDirNameBuild(objectId, name),
     };
+    if (input.saveMode === 'inPlace' || input.saveMode === 'newVersion') meta.saveMode = input.saveMode;
     fs.mkdirSync(objectDirGet(meta), { recursive: true });
     fileWriteSafe(versionPathGet(meta, versionId), input.data);
+    versionMetadataWrite(meta, versionId, versionMetadata);
     objectMetaWrite(meta);
-    return { object: meta, version: versionDataBuild(versionId, input.data), isCreated: true };
+    return { object: meta, version: versionDataBuild(versionId, input.data, versionMetadata), isCreated: true };
   }
 
   // hashBase: the hash of the head data the caller changed; a different
@@ -439,6 +508,8 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   //          absent: the object's saveMode, inPlace when none is written
   //   dependencyList   what the new data depends on; absent: the list of the
   //                    version the data replaces or is made from is kept
+  //   versionMetadata  the metadata of the new data; absent: the metadata of
+  //                    the version the data replaces or is made from is kept
   function objectUpdate(input: {
     objectId: string;
     hashBase: string;
@@ -446,9 +517,11 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     mode?: AssetSaveMode;
     note?: string;
     dependencyList?: unknown;
+    versionMetadata?: unknown;
   }): { object: AssetObjectMeta; version: AssetVersionData } {
     if (!Buffer.isBuffer(input.data)) throw new AssetError(-1, 'data is required');
     const dependencyListNext = input.dependencyList === undefined ? undefined : dependencyListNormalize(input.dependencyList);
+    const versionMetadataNext = input.versionMetadata === undefined ? undefined : versionMetadataNormalize(input.versionMetadata);
     const meta = objectGet(input.objectId);
     objectUnlockedCheck(meta);
     if (meta.isDeleted) throw new AssetError(-1, 'the object is deleted; restore it first');
@@ -464,6 +537,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     const time = timeTextGet();
     let versionId = head.versionId;
     const versionHead = versionMetaGet(meta, head.versionId);
+    const versionMetadata = versionMetadataNext ?? head.metadata;
     if (mode === 'newVersion') {
       versionId = idMs48Create((id) => meta.versionList.some((version) => version.versionId === id));
       const dependencyList = dependencyListNext ?? versionHead.dependencyList.map((item) => ({ ...item }));
@@ -478,8 +552,11 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       meta.eventList.push({ eventType: 'updateInPlace', time, versionId });
     }
     fileWriteSafe(versionPathGet(meta, versionId), input.data);
+    // a new version always gets its own file; in place, the file is written
+    // only when the update names metadata
+    if (mode === 'newVersion' || versionMetadataNext !== undefined) versionMetadataWrite(meta, versionId, versionMetadata);
     objectMetaWrite(meta);
-    return { object: meta, version: versionDataBuild(versionId, input.data) };
+    return { object: meta, version: versionDataBuild(versionId, input.data, versionMetadata) };
   }
 
   // soft delete: the folder and every version stay; the object reads as
@@ -572,7 +649,8 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     meta.eventList.push({ eventType: 'versionDelete', time: timeTextGet(), versionId });
     objectMetaWrite(meta);
     const filePath = versionPathGet(meta, versionId);
-    for (const file of [filePath, `${filePath}.bak`]) {
+    const metadataPath = versionMetadataPathGet(meta, versionId);
+    for (const file of [filePath, `${filePath}.bak`, metadataPath, `${metadataPath}.bak`]) {
       if (fs.existsSync(file)) fs.rmSync(file);
     }
     return meta;
@@ -691,10 +769,10 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       for (const version of meta.versionList) {
         const filePath = versionPathGet(meta, version.versionId);
         if (!fs.existsSync(filePath)) continue;
-        const data = versionDataBuild(version.versionId, fs.readFileSync(filePath));
+        const data = versionDataBuild(version.versionId, fs.readFileSync(filePath), versionMetadataRead(meta, version.versionId));
         versionDataById[version.versionId] = data.isText
-          ? { size: data.size, hash: data.hash, isText: true, text: data.text }
-          : { size: data.size, hash: data.hash, isText: false, dataBase64: data.bytes.toString('base64') };
+          ? { size: data.size, hash: data.hash, isText: true, text: data.text, metadata: data.metadata }
+          : { size: data.size, hash: data.hash, isText: false, dataBase64: data.bytes.toString('base64'), metadata: data.metadata };
       }
       objectById[meta.objectId] = { ...meta, versionDataById };
     }
@@ -763,6 +841,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     objectMetaSet,
     versionCheckout,
     versionDelete,
+    versionMetadataSet,
     objectLockSet,
     versionLockSet,
     dependencyListGet,
@@ -779,8 +858,8 @@ export function assetStoreCreate(config: AssetStoreConfig) {
 export type AssetStore = ReturnType<typeof assetStoreCreate>;
 
 export type AssetSnapshotVersion =
-  | { size: number; hash: string; isText: true; text: string }
-  | { size: number; hash: string; isText: false; dataBase64: string };
+  | { size: number; hash: string; isText: true; text: string; metadata: AssetVersionMetadata }
+  | { size: number; hash: string; isText: false; dataBase64: string; metadata: AssetVersionMetadata };
 
 export type AssetSnapshot = {
   objectById: Record<string, AssetObjectMeta & { versionDataById: Record<string, AssetSnapshotVersion> }>;
@@ -828,8 +907,19 @@ const contentTypeByLang: Record<string, string> = {
 
 const eventTypeList: AssetEventType[] = [
   'create', 'updateInPlace', 'versionCreate', 'checkout', 'versionDelete', 'metaSet', 'delete', 'restore', 'lock', 'unlock',
-  'dependencySet',
+  'dependencySet', 'versionMetadataSet',
 ];
+
+// ---------- version metadata ----------
+
+// a mapping of plain values (what yaml can hold); a copy, so the caller's
+// object is not kept
+export function versionMetadataNormalize(input: unknown): AssetVersionMetadata {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new AssetError(-1, 'versionMetadata must be a mapping');
+  }
+  return JSON.parse(JSON.stringify(input));
+}
 
 // ---------- dependencies ----------
 
@@ -925,7 +1015,7 @@ function versionMetaBuild(
   };
 }
 
-function versionDataBuild(versionId: string, bytes: Buffer): AssetVersionData {
+function versionDataBuild(versionId: string, bytes: Buffer, metadata: AssetVersionMetadata): AssetVersionData {
   const text = textDecodeTry(bytes);
   return {
     versionId,
@@ -934,6 +1024,7 @@ function versionDataBuild(versionId: string, bytes: Buffer): AssetVersionData {
     hash: bytesHashGet(bytes),
     isText: text !== undefined,
     text,
+    metadata,
   };
 }
 

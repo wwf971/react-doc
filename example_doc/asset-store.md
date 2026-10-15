@@ -77,7 +77,7 @@ objectId: w4okcraoqic
 
 ## Moving inline data into the store
 
-A component block whose data is written inline can be moved into the store from its toolbar: the **to asset** button (an upload arrow, shown next to Edit for such a block) creates an object in the default folder of the local store, with the block's language, and rewrites the block as the reference to it by id. The object gets no name (a name means one object, so two Image blocks could not both be named after the component); give it one in its panel, and the folder of the object is renamed with it. Try it on the block below; the document on disk changes, as with any edit, and the new object appears in the asset panel of the block.
+A component block whose data is written inline can be moved into the store from its toolbar: the **to asset** button (an upload arrow, shown next to Edit for such a block) asks first, in the toolbar, like a deletion: **Move** or **Keep**. Confirmed, it creates an object in the default folder of the local store, with the block's language (and the save mode the component declares, if it declares one), and then rewrites the block as the reference to it by id. Rewriting the document is the last step, and only it makes the move happen: when it fails, the block keeps its inline data and works as before, and the message names the object that was already created. The object gets no name (a name means one object, so two Image blocks could not both be named after the component); give it one in its panel, and the folder of the object is renamed with it. Try it on the block below; the document on disk changes, as with any edit, and the new object appears in the asset panel of the block.
 
 <!--renderComp=Image-->
 ```yaml
@@ -108,6 +108,22 @@ dependencyList:
 
 A `source` dependency is written as a source path (`~rootId/...`), so it names the file whatever document the object is read from. The page records the dependencies itself when it creates an object or saves a version from a component's data (the component declares, in its registry definition, which files its data refers to); the asset api also lets them be read and changed directly (`dependency/list`, `dependency/set|add|remove`), and asked the other way round (`dependent/list`: which versions depend on a given file or object). A build collects the source files the versions depend on, so the asset above keeps working on a built site even though no document names its image directly. The dependencies are the basis of later features, such as telling what a deletion would break.
 
+## Version metadata
+
+A version can also carry what the **writer of its data** says about that data: a free mapping in its own file, `{versionId}.metadata.yaml`, beside the data file `{versionId}.{ext}` (always yaml, whatever the data's extension). The store keeps it and never reads meaning into it. `object.yaml` stays the store's own record: the object, and for every version its place in the history (its predecessors, time, note), its size and hash, its lock and its dependencies. The metadata file is about the content: which engine wrote it, how a component shows it. A version without metadata has no such file.
+
+The spreadsheet of [ExcelUniver](mdx-usage/comp-excel-univer.md) is an example: its version `w4r63zmf1ga` has
+
+```yaml
+engine: univer
+engineVersion: 1.1.0
+view:
+  sheetId: sales
+  range: A1:F6
+```
+
+A save in place keeps the version's metadata unless the save names new metadata; a new version starts with the metadata of the version it is made from. Deleting a version deletes its metadata file. The asset panel shows the metadata of the selected version under its dependencies.
+
 ## Binary data
 
 The store holds bytes, so an object can be an image file or anything else. This object is a small PNG in the second folder of the store (`asset-archive`). A component block reads text, so a reference to it shows what went wrong instead of the component; the asset panel of the block still opens and shows the object: its type and size, a preview since it is an image, and a download link. **Edit head** is greyed out there, with the reason beside it: the head is not text, so there is nothing to edit in the panel.
@@ -132,7 +148,7 @@ On the development server the asset panel is writable:
 - **Lock version** protects a version: it cannot be rewritten in place or deleted (a save of a locked head makes a new version). **Lock object** protects the whole object: nothing about it changes until **Unlock object**. Locked versions are marked in their own column, and what a lock forbids is greyed out with the reason.
 - the object's name is edited in its field; a name another object has is refused.
 
-Every change is written to the object's folder `{folder}/{objectId}--{name}/` (the id alone for an object without a name): the data files `{versionId}.{ext}` and the object file `object.yaml`, which is backed up to `object.yaml.bak` before each rewrite. The object file holds the metadata, the whole version history (each version with its size and hash), and the **events**: what happened to the object and when (`create`, `versionCreate`, `updateInPlace`, `checkout`, `versionDelete`, `metaSet`, `delete`, `restore`, `lock`, `unlock`), each with its time and zone and the version it concerns; the panel shows their count and the last one, and unfolds the list. Since an in-place save leaves no new version behind, the events are where it is recorded. A change made outside the page (an editor, a git checkout) is picked up as soon as it is saved. The default folder of this example has its own `.gitignore` listing the example's files, so new versions, new objects, and backups made while trying the panel stay out of git; edits of the listed files still show, and `git restore example_doc/asset` undoes them. On a built site the objects are bundled into the page as they were at build time, and the panel shows them without the actions.
+Every change is written to the object's folder `{folder}/{objectId}--{name}/` (the id alone for an object without a name): the data files `{versionId}.{ext}`, the metadata files `{versionId}.metadata.yaml` of the versions that have metadata, and the object file `object.yaml`, which is backed up to `object.yaml.bak` before each rewrite. The object file holds the metadata of the object, the whole version history (each version with its size and hash), and the **events**: what happened to the object and when (`create`, `versionCreate`, `updateInPlace`, `checkout`, `versionDelete`, `metaSet`, `delete`, `restore`, `lock`, `unlock`, `dependencySet`, `versionMetadataSet`), each with its time and zone and the version it concerns; the panel shows their count and the last one, and unfolds the list. Since an in-place save leaves no new version behind, the events are where it is recorded. A change made outside the page (an editor, a git checkout) is picked up as soon as it is saved. The default folder of this example has its own `.gitignore` listing the example's files, so new versions, new objects, and backups made while trying the panel stay out of git; edits of the listed files still show, and `git restore example_doc/asset` undoes them. On a built site the objects are bundled into the page as they were at build time, and the panel shows them without the actions.
 
 ## The folders of the store
 
@@ -142,9 +158,11 @@ The local store is one store, but its objects may live in several folders: `exam
 
 In edit mode an asset-backed component block is edited as source: the block is the reference, and that is what the editor shows, labeled `Image (asset)`. Change the `versionId` there to pin or unpin the block, or replace the fence language and write the data inline to take the block out of the store. The data itself is changed through the asset panel, since it belongs to the object and not to this document.
 
+A component can also declare itself **asset-only**: its data is never written inline. Its block is always a reference; the insert menu creates the object first and then writes the reference block, and the component's own edit mode edits the referenced data, which a leave saves into the object (by its save mode) while the document stays as it is. [ExcelUniver](mdx-usage/comp-excel-univer.md) is one; an asset-only component whose data was written inline anyway shows an error asking for **to asset**.
+
 ## What a component knows
 
-The component normally does not know where its data came from. A component that declares `isAssetAware` in its registry definition receives `config.assetInfo` beside its data: `{ isFromAsset: false }` for inline data, or, for data from the store, the store, object id and name, the version read, whether it is the head, the object's save mode and whether it is locked. `Image` and `ImageGrid` are asset-aware: when a paste is about to replace an image whose data is an asset, the confirmation says so and tells whether the paste adds a version or rewrites the head in place. A component that wants its data replaced reports `dataReplaceRequest` with the new text; the page then saves the asset (by its save mode) or rewrites the fenced block, whichever the data is, and the component stays the same in both cases.
+The component normally does not know where its data came from. A component that declares `isAssetAware` in its registry definition receives `config.assetInfo` beside its data: `{ isFromAsset: false }` for inline data, or, for data from the store, the store, object id and name, the version read, whether it is the head, the object's save mode, whether it is locked, and the version's metadata. `Image` and `ImageGrid` are asset-aware: when a paste is about to replace an image whose data is an asset, the confirmation says so and tells whether the paste adds a version or rewrites the head in place. A component that wants its data replaced reports `dataReplaceRequest` with the new text; the page then saves the asset (by its save mode) or rewrites the fenced block, whichever the data is, and the component stays the same in both cases.
 
 ## Errors
 

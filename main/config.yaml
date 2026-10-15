@@ -91,6 +91,8 @@ compRegistry:
   DiagramText: common/DiagramText
   DiagramMermaid: common/DiagramMermaid
   DiagramER: common/DiagramER
+  # asset-only: its data is a workbook in the asset store, the block a reference to it
+  ExcelUniver: common/ExcelUniver
   Block: common/Block
   BlockSimple: common/BlockSimple
   BlockMdx: common/BlockMdx

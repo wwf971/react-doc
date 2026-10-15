@@ -434,6 +434,16 @@
   color: var(--color-fd-destructive, #dc2626);
 }
 
+/* a confirmation of an action that loses nothing (to asset) */
+.doc-edit-confirm.is-neutral {
+  border-color: var(--color-fd-primary);
+}
+
+.doc-edit-confirm button.is-primary {
+  border-color: var(--color-fd-primary);
+  color: var(--color-fd-primary);
+}
+
 .doc-edit-confirm button:disabled {
   opacity: 0.42;
   cursor: default;

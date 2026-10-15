@@ -1,0 +1,23 @@
+objectId: w4r63zmeaor
+name: quarterly sales
+lang: json
+contentType: application/json
+fileExt: json
+saveMode: inPlace
+versionIdHead: w4r63zmf1ga
+isDeleted: false
+isLocked: false
+timeCreated: 20261022_01582956+09
+versionList:
+  - versionId: w4r63zmf1ga
+    versionIdPrevList: []
+    time: 20261022_01582956+09
+    note: example workbook of the ExcelUniver page
+    size: 3572
+    hash: 900c543b8a7ef0de74090762d8caf38b18ae1b49
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261022_01582956+09
+    versionId: w4r63zmf1ga

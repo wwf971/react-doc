@@ -1,0 +1,42 @@
+.doc-mdx-excel-univer {
+  margin: 0.75rem 0;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: #fff;
+}
+
+.doc-mdx-excel-univer-sheet {
+  position: relative;
+}
+
+/* the engine draws into this element and sizes itself to it */
+.doc-mdx-excel-univer-engine {
+  position: absolute;
+  inset: 0;
+}
+
+.doc-mdx-excel-univer-message {
+  margin: 0;
+  padding: 0.25rem 0.4rem;
+  color: var(--color-fd-destructive, #dc2626);
+  font-size: 0.78rem;
+}
+
+/* the view controls in the row of the floating panel */
+.doc-mdx-excel-univer-edit-view {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+}
+
+.doc-mdx-excel-univer-edit-name,
+.doc-mdx-excel-univer-edit-muted {
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-mdx-excel-univer-edit-range {
+  min-width: 4rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}

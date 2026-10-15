@@ -10,6 +10,8 @@ import { BlockSimple } from '../../comp-mdx/block-simple/BlockSimple.jsx';
 import { DiagramMermaid } from '../../comp-mdx/diagram-mermaid/DiagramMermaid.jsx';
 import { DiagramText } from '../../comp-mdx/diagram-ascii/DiagramText.jsx';
 import { DiagramER } from '../../comp-mdx/diagram-er/DiagramER.jsx';
+import { ExcelUniver } from '../../comp-mdx/excel-univer/ExcelUniver.jsx';
+import { excelUniverExpose } from '../../comp-mdx/excel-univer/excel-univer-expose.js';
 import { FileDownload } from '../../comp-mdx/file-download/FileDownload.jsx';
 import { fileDownloadAssetDependencyListGet } from '../../comp-mdx/file-download/FileDownloadData.js';
 import { FileIcon as FileDownloadIcon } from '../../comp-mdx/file-download/FileIcon.jsx';
@@ -123,6 +125,11 @@ const compDiagramText = compDefine(DiagramText, { placementList: ['commentBlock'
 const compDiagramMermaid = compDefine(DiagramMermaid, { placementList: ['mdx', 'commentBlock'], expose: diagramMermaidExpose });
 // the ER diagram draws with @xyflow/react, a dependency of the package
 const compDiagramER = compDefine(DiagramER, { placementList: ['mdx', 'commentBlock'], expose: diagramERExpose });
+// a spreadsheet drawn by Univer, which is not a package dependency either:
+// the host supplies config.univerLoad. it is asset-only (excel-univer-expose.js),
+// so it is a comment block whose fenced block is an asset reference, and it
+// reads the version metadata of its data (isAssetAware)
+const compExcelUniver = compDefine(ExcelUniver, { placementList: ['commentBlock'], isAssetAware: true, expose: excelUniverExpose });
 const compBlockSimple = compDefine(BlockSimple, {
   dataBuild: markdownConfigBuild,
   placementList: ['commentBlock'],
@@ -185,6 +192,7 @@ export const compById = {
   'common/DiagramText': compDiagramText,
   'common/DiagramMermaid': compDiagramMermaid,
   'common/DiagramER': compDiagramER,
+  'common/ExcelUniver': compExcelUniver,
   'common/Block': compBlock,
   'common/BlockSimple': compBlockSimple,
   'common/BlockMdx': compBlockMdx,
@@ -204,7 +212,10 @@ export const compById = {
   }),
   // built-in names (comp-registry.js compIdBuiltinByName): the page renders
   // with these even when compRegistry does not mention them
-  'common/SidePanelItem': compDefine(SidePanelItem, { placementList: ['sidePanelDisplay'] }),
+  'common/SidePanelItem': compDefine(SidePanelItem, {
+    placementList: ['sidePanelDisplay'],
+    expose: { meta: { label: 'Side panel item', isNotInDoc: true } },
+  }),
   'common/Anchor': compDefine(Anchor, { placementList: ['mdx', 'commentBlock', 'commentInline'] }),
   'common/Tag': compDefine(Tag, { placementList: ['mdx', 'commentInline'] }),
   'common/TagLabel': compDefine(TagLabel, { placementList: ['tag', 'mdx'] }),
@@ -225,7 +236,10 @@ export const compById = {
   'common/DocDiagramMermaid': compDiagramMermaid,
   'specific/DemoCounter': compDefine(DemoCounter, { expose: demoCounterExpose }),
   'specific/StockTable': compDefine(StockTable, stockTableDefineOptions),
-  'specific/SidePanelItemDemo': compDefine(SidePanelItemDemo, { placementList: ['sidePanelDisplay'] }),
+  'specific/SidePanelItemDemo': compDefine(SidePanelItemDemo, {
+    placementList: ['sidePanelDisplay'],
+    expose: { meta: { label: 'Side panel item demo', isNotInDoc: true } },
+  }),
   // a component with nothing to edit declares itself read-only: no edit
   // mode, no Edit button (doc_page_impl_mdx_comp.md#what-a-component-exposes)
   'specific/TagListAllDemo': compDefine(TagListAllDemo, {

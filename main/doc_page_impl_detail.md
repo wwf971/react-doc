@@ -93,6 +93,7 @@ Host settings needed by package components are passed once through `config.compC
     compConfigHost: {
       // assetUrlGet is answered by the source layer by default (doc_page_impl_source.md)
       mermaidLoad: () => import('mermaid'),                    // DiagramMermaid
+      univerLoad: () => import('./univer-load.js'),            // ExcelUniver: Univer engine, preset, css
       panelComponent: PanelText,                               // popup frame: tag overview, SourceLink
     },
   }}

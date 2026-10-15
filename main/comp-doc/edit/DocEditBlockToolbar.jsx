@@ -35,8 +35,9 @@ import './DocEdit.css';
 // is a reference into the asset store (doc_page_impl_asset.md): it opens
 // the asset panel of that object, the one place the panel is reached from.
 // a component block whose data is written inline in a fenced block has the
-// "to asset" button instead: the data becomes an object of the local store
-// (in its default folder) and the block is rewritten as the reference.
+// "to asset" button instead: confirmed in the toolbar like a deletion, the
+// data becomes an object of the local store (in its default folder) and the
+// block is rewritten as the reference, the last step of the move.
 //
 // entering the block, moving it and moving its data are operations of the
 // document, so they are reported as events (editBlockEnterRequest,
@@ -75,6 +76,7 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
   const isMoveHere = editStore.blockMoveIs(path, blockIndex);
   const assetMove = editStore.blockAssetMove;
   const isAssetMoveHere = editStore.blockAssetMoveIs(path, blockIndex);
+  const isAssetMoveConfirmHere = editStore.blockAssetMoveConfirmIs(path, blockIndex);
   const isAssetMoveAvailable = editStore.blockAssetMoveIsAvailable(path, blockIndex);
   const isReadOnly = editStore.blockIsReadOnly(path, blockIndex);
   // the pointer down that closes what is open only closes it: the click
@@ -132,12 +134,10 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
           </button>
         ) : null}
         {isAssetMoveAvailable ? (
-          <button type="button" disabled={isSubmitting}
+          <button type="button" disabled={isSubmitting} aria-pressed={isAssetMoveConfirmHere}
             title="Move the inline data into the asset store" aria-label="Move the inline data into the asset store"
-            onClick={() => blockEventDispatch('editBlockAssetMoveRequest')}>
-            {isAssetMoveHere && assetMove.status === 'submitting'
-              ? <LoaderCircle aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} className="doc-edit-spin" />
-              : <Upload aria-hidden="true" size={ICON_SIZE} strokeWidth={2} />}
+            onClick={() => void editStore.blockAssetMoveConfirmSet(path, blockIndex)}>
+            <Upload aria-hidden="true" size={ICON_SIZE} strokeWidth={2} />
           </button>
         ) : null}
         <button type="button" disabled={isSubmitting} aria-pressed={isMenuBefore}
@@ -173,10 +173,23 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
         </button>
       </div>
       {isConfirmHere ? (
-        <DeleteConfirm
+        <ToolbarConfirm
+          question="Delete this block?"
+          actionLabel="Delete"
+          isDanger
           confirm={confirm}
           onConfirm={() => void editStore.blockDelete(path, blockIndex)}
           onCancel={() => editStore.deleteConfirmClear()}
+        />
+      ) : null}
+      {isAssetMoveConfirmHere ? (
+        <ToolbarConfirm
+          question="Move the data of this block into the asset store?"
+          actionLabel="Move"
+          isDanger={false}
+          confirm={assetMove}
+          onConfirm={() => blockEventDispatch('editBlockAssetMoveRequest')}
+          onCancel={() => editStore.blockAssetMoveClear()}
         />
       ) : null}
       {isMoveHere && move.status === 'error' ? (
@@ -190,16 +203,18 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
   );
 });
 
-function DeleteConfirm({ confirm, onConfirm, onCancel }) {
+// the confirmation of a block action, in the toolbar itself
+//   confirm  { status: 'confirming' | 'submitting' | 'error', message }
+function ToolbarConfirm({ question, actionLabel, isDanger, confirm, onConfirm, onCancel }) {
   const isSubmitting = confirm.status === 'submitting';
   return (
-    <div className="doc-edit-confirm" role="alertdialog" aria-label="Confirm deletion">
-      <span>Delete this block?</span>
-      <button type="button" className="is-danger" disabled={isSubmitting} onClick={onConfirm}>
+    <div className={isDanger ? 'doc-edit-confirm' : 'doc-edit-confirm is-neutral'} role="alertdialog" aria-label={question}>
+      <span>{question}</span>
+      <button type="button" className={isDanger ? 'is-danger' : 'is-primary'} disabled={isSubmitting} onClick={onConfirm}>
         {isSubmitting
           ? <LoaderCircle aria-hidden="true" size={11} strokeWidth={2.2} className="doc-edit-spin" />
           : <Check aria-hidden="true" size={11} strokeWidth={2.2} />}
-        <span>Delete</span>
+        <span>{actionLabel}</span>
       </button>
       <button type="button" disabled={isSubmitting} onClick={onCancel}>
         <X aria-hidden="true" size={11} strokeWidth={2.2} />

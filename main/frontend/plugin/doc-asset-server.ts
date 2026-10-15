@@ -14,12 +14,14 @@ import { ASSET_STORE_ID_LOCAL, AssetError, type AssetObjectKey, type AssetStore,
 //   GET  {endpoint}/dependency/list?store=&objectId=&versionId=   -> { versionId, dependencyList }   versionId default head
 //   GET  {endpoint}/dependent/list?store=&objectId=&versionId=    -> { dependentList }   the versions depending on the
 //                                                                    object (with versionId: on that version)
-//   POST {endpoint}/object/create    { store, name, lang, contentType, fileExt, text | dataBase64, note, folder, dependencyList }
-//                                                                 -> { object, version, isCreated }
+//   POST {endpoint}/object/create    { store, name, lang, contentType, fileExt, text | dataBase64, note, folder, dependencyList,
+//                                       saveMode, versionMetadata }  -> { object, version, isCreated }
 //                                     isCreated false: an object of that name exists and is answered, nothing is created
-//   POST {endpoint}/object/update    { store, objectId, hashBase, text | dataBase64, mode, note, dependencyList } -> { object, version }
+//   POST {endpoint}/object/update    { store, objectId, hashBase, text | dataBase64, mode, note, dependencyList, versionMetadata }
+//                                                                 -> { object, version }
 //                                     mode: inPlace | newVersion; absent: the object's saveMode
-//                                     dependencyList absent: the list of the version written over / made from is kept
+//                                     dependencyList, versionMetadata absent: those of the version written over / made from are kept
+//   POST {endpoint}/version/metadata/set { store, objectId, versionId, versionMetadata } -> { object, version }
 //   POST {endpoint}/dependency/set    { store, objectId, versionId, dependencyList }  -> { object }
 //   POST {endpoint}/dependency/add    { store, objectId, versionId, dependency }      -> { object }
 //   POST {endpoint}/dependency/remove { store, objectId, versionId, dependency }      -> { object }
@@ -43,7 +45,8 @@ import { ASSET_STORE_ID_LOCAL, AssetError, type AssetObjectKey, type AssetStore,
 //            eventList: [{ eventType, time, versionId?, userId? }] }
 // dependency: { type: source, path } | { type: asset, objectId, versionId? }   (doc_page_impl_asset.md#dependencies)
 // dependent:  { objectId, versionId, dependency }
-// version: { versionId, size, hash, isText, text? }   text only when the bytes are utf-8 text
+// version: { versionId, size, hash, isText, text?, metadata }   text only when the bytes are utf-8 text;
+//          metadata: the mapping of {versionId}.metadata.yaml, {} when the version has none
 // folder:  { path, pathAbs, isDefault, isExists, objectCount }
 
 export const DOC_ASSET_ENDPOINT_NAME = '__doc-asset';
@@ -130,6 +133,8 @@ async function routeHandle(req: IncomingMessage, route: string, url: URL, store:
         note: body?.note,
         folder: body?.folder ? String(body.folder) : undefined,
         dependencyList: body?.dependencyList,
+        saveMode: body?.saveMode,
+        versionMetadata: body?.versionMetadata,
       });
       return { object: result.object, version: versionResponseBuild(result.version), isCreated: result.isCreated };
     }
@@ -141,7 +146,12 @@ async function routeHandle(req: IncomingMessage, route: string, url: URL, store:
         mode: body?.mode,
         note: body?.note,
         dependencyList: body?.dependencyList,
+        versionMetadata: body?.versionMetadata,
       });
+      return { object: result.object, version: versionResponseBuild(result.version) };
+    }
+    if (route === '/version/metadata/set') {
+      const result = store.versionMetadataSet(objectId, String(body?.versionId ?? ''), body?.versionMetadata);
       return { object: result.object, version: versionResponseBuild(result.version) };
     }
     if (route === '/dependency/set') {
@@ -202,6 +212,7 @@ function versionResponseBuild(version: AssetVersionData) {
     hash: version.hash,
     isText: version.isText,
     ...(version.isText ? { text: version.text } : {}),
+    metadata: version.metadata,
   };
 }
 

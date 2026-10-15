@@ -12,6 +12,17 @@ import { compIconDefault } from './comp-icon.jsx';
 //                  (the built-in source edit mode is offered; default true),
 //                  isInsertCommon (listed directly in the insert menu, not
 //                  only found through its search; default false),
+//                  isEditEnterButtonOnly (a block of it enters edit mode only
+//                  through an explicit control, the toolbar's Edit button or
+//                  the mode menu, never by a click on the block or a focus
+//                  shift, whatever EditBlockEnterMode is; default false),
+//                  isAssetOnly (its data lives in the asset store only and is
+//                  never written inline in a document; default false),
+//                  isNotInDoc (it cannot be placed in a document: it renders
+//                  elsewhere, e.g. in the side panel; default false),
+//                  assetSaveMode (inPlace | newVersion: the save mode written
+//                  into an asset object the page creates for a block of the
+//                  component; absent: the store's default applies),
 //                  configDefineList (the shape of its component-level config,
 //                  doc_page_impl_config.md#component-level-config), label,
 //                  description, and any further key the component adds
@@ -66,8 +77,19 @@ const metaDefault = Object.freeze({
   isReadOnly: false,
   isEditSourceAccepted: true,
   isInsertCommon: false,
+  isEditEnterButtonOnly: false,
+  isAssetOnly: false,
+  isNotInDoc: false,
+  assetSaveMode: undefined,
   configDefineList: [],
 });
+
+const ASSET_SAVE_MODE_LIST = ['inPlace', 'newVersion'];
+
+// the placements of a block written in a document by its author; a
+// component declared isNotInDoc is refused there, a component declared
+// isAssetOnly renders there only with data from the asset store
+export const COMP_PLACEMENT_DOC_LIST = ['mdx', 'commentBlock'];
 
 export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate'];
 
@@ -101,12 +123,19 @@ function metaNormalize(meta) {
   if (meta.configDefineList !== undefined && !Array.isArray(meta.configDefineList)) {
     throw new Error('compDefine: expose.meta.configDefineList must be an array.');
   }
+  if (meta.assetSaveMode !== undefined && !ASSET_SAVE_MODE_LIST.includes(meta.assetSaveMode)) {
+    throw new Error(`compDefine: expose.meta.assetSaveMode must be one of ${ASSET_SAVE_MODE_LIST.join(', ')}.`);
+  }
   return {
     ...metaDefault,
     ...meta,
     isReadOnly: meta.isReadOnly === true,
     isEditSourceAccepted: meta.isEditSourceAccepted !== false,
     isInsertCommon: meta.isInsertCommon === true,
+    isEditEnterButtonOnly: meta.isEditEnterButtonOnly === true,
+    isAssetOnly: meta.isAssetOnly === true,
+    isNotInDoc: meta.isNotInDoc === true,
+    assetSaveMode: meta.assetSaveMode,
     configDefineList: meta.configDefineList ?? [],
   };
 }
@@ -202,10 +231,17 @@ export function compIconGet(definition) {
 // the source of a new block of the component in the environment env (see
 // sourceDefaultCreate above): { lang, raw, props } or { text }, or
 // undefined when the component exposes no factory or starts no block there
+// a component declared isAssetOnly must answer the comment-block form: its
+// lang and raw become the first version of a new asset object, the block
+// written in the document is a reference to it
 export function compSourceDefaultGet(definition, env) {
   const sourceDefaultCreate = definition?.expose?.sourceDefaultCreate;
   if (!sourceDefaultCreate) return undefined;
-  return sourceDefaultResultNormalize(sourceDefaultCreate(env), env.compName);
+  const source = sourceDefaultResultNormalize(sourceDefaultCreate(env), env.compName);
+  if (source?.text !== undefined && compMetaGet(definition).isAssetOnly) {
+    throw new Error(`sourceDefaultCreate of ${env.compName}: an isAssetOnly component returns { lang, raw, props }, not { text }.`);
+  }
+  return source;
 }
 
 export function compViewModeListGet(definition) {

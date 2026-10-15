@@ -98,6 +98,16 @@ subtopics:
           en: Mermaid diagram
           jp: Mermaid 図表
         target: ~example/mdx-usage/comp-diagram.md#diagram-mermaid
+  - id: spreadsheets
+    title:
+      en: Spreadsheets
+      jp: スプレッドシート
+    items:
+      - id: excel-univer
+        title:
+          en: Spreadsheet (Univer)
+          jp: スプレッドシート（Univer）
+        target: ~example/mdx-usage/comp-excel-univer.md
   - id: files
     title:
       en: Files
@@ -186,6 +196,18 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 ```
 
 - [Text and Mermaid diagrams](comp-diagram.md)
+
+<!--renderComp=MultiLang-->
+## {en: "Spreadsheets", jp: "スプレッドシート"}
+
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
+```markdown
+`ExcelUniver` shows an Excel-style spreadsheet drawn by Univer, limited to a chosen range in view mode and fully editable in edit mode. Its workbook always lives in the asset store.
+
+`ExcelUniver` は Univer で描画した Excel 形式のスプレッドシートを表示します。表示モードでは選んだ範囲だけを表示し、編集モードではすべてを編集できます。ワークブックは常にアセットストアに保存されます。
+```
+
+- [Spreadsheet](comp-excel-univer.md)
 
 <!--renderComp=MultiLang-->
 ## {en: "Files", jp: "ファイル"}

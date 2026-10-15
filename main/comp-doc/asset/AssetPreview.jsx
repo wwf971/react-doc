@@ -1,5 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
+import { assetSaveModeGet } from '../../frontend/src/store/DocAssetStore.js';
 import { DocsBody, LoaderCircle } from '../../frontend/UICommon.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import { sizeTextGet } from './AssetPanel.jsx';
@@ -63,11 +64,26 @@ const PreviewBody = observer(function PreviewBody({ object, panel, preview, bloc
   if (!block) {
     return <p className="doc-asset-muted">The panel was not opened from a component block, so nothing says how this text is rendered.</p>;
   }
+  // the data comes from the asset, as in the document: a component declared
+  // isAssetOnly renders only so, and one declared isAssetAware learns which
+  // version (and its metadata) it shows
+  const assetInfo = {
+    isFromAsset: true,
+    store: panel.store,
+    objectId: object.objectId,
+    name: object.name,
+    versionId: preview.versionId,
+    versionIdHead: object.versionIdHead,
+    isHead: preview.versionId === object.versionIdHead,
+    saveMode: assetSaveModeGet(object),
+    isLocked: object.isLocked,
+    versionMetadata: version.metadata ?? {},
+  };
   return (
     <DocsBody>
       <RegisteredComp
         compName={block.compName}
-        configRuntime={{ instanceId: `asset-preview:${object.objectId}`, sourcePath: block.sourcePath }}
+        configRuntime={{ instanceId: `asset-preview:${object.objectId}`, sourcePath: block.sourcePath, assetInfo }}
         input={{ lang: object.lang, raw: preview.text, propsAuthored: block.propsAuthored }}
         placement="commentBlock"
       />

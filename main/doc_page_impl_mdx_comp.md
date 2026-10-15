@@ -22,6 +22,7 @@ compDefine(Xxx, {
   isAssetAware, assetDependencyListGet,
   expose: {                                                     what it tells the page about itself
     meta:          { label, description, isReadOnly, isEditSourceAccepted, isInsertCommon,
+                     isEditEnterButtonOnly, isAssetOnly, isNotInDoc, assetSaveMode,
                      configDefineList, ... }
     icon:          a component drawing the icon of Xxx at any size
     viewModeList:  [{ id, label, description, icon, isDefault }]   the ways its data is displayed
@@ -47,9 +48,31 @@ Facts about the component that are not modes or drawings, as one object, so that
 | `isInsertCommon` | `false` | the insert menu lists the component directly in its row of components; every other component is found through the menu's search ([Creating a block](doc_page_impl_edit.md#floating-controls)) |
 | `isReadOnly` | `false` | nothing of a block of this component can be edited from the page: it has no edit mode at all, the toolbar's Edit button is greyed out, a click does not enter it, and the mode menu, when the block has one for its view modes, says so. For a component that displays what the page knows (every tag, the resolved config) and has no data of its own |
 | `isEditSourceAccepted` | `true` | the built-in `source` edit mode is offered for its blocks ([below](#view-modes-and-edit-modes)). `false` for a component whose source must not be edited by hand, when it declares edit modes of its own |
+| `isEditEnterButtonOnly` | `false` | a block of it enters edit mode only through an explicit control: the toolbar's Edit button, or an edit mode chosen in the mode menu. A click on the block does not enter it even when `EditBlockEnterMode` is `click`, and a focus shift from the neighbor block (the arrow keys) stops before it. For a component whose view takes clicks itself (selecting cells of a sheet), where entering by click would turn every interaction into an edit session |
+| `isAssetOnly` | `false` | its data lives in the asset store only and is never written inline in a document: a block of it is always an asset reference ([Asset-only and not-in-doc](#asset-only-and-not-in-doc)) |
+| `isNotInDoc` | `false` | it cannot be a block of a document at all, because it renders elsewhere (a side-panel item); the insert menu does not offer it and a block of it shows an error ([Asset-only and not-in-doc](#asset-only-and-not-in-doc)) |
+| `assetSaveMode` | — | `inPlace` or `newVersion`: the save mode an asset object gets when the page creates it for a block of this component (from the insert menu, or by **to asset**). Without it the object has no save mode, which saves in place ([Save modes](doc_page_impl_asset.md#save-modes)). Only the creation reads it; the object's own mode decides every later save |
 | `configDefineList` | `[]` | the shape of its component-level config: which keys exist, their types, defaults, descriptions. Only the shape; the values come from the config layers and the document levels, and reach the component as `config.compConfig` ([Component-level config](doc_page_impl_config.md#component-level-config)) |
 
 A component may add keys of its own to `meta`; they are kept beside the standard ones.
+
+### Asset-only and not-in-doc
+
+Two keys of `meta` restrict where a component's blocks can be, and both are enforced at the registry boundary (`RegisteredComp`), so every way a block reaches the page (comment block, MDX element, side panel, preview) gets the same answer:
+
+```text
+RegisteredComp(placement, definition)
+  meta.isNotInDoc  and placement is a document one (mdx, commentBlock)
+      -> error "cannot be used in a document"         checked before placementList,
+                                                       so this is the message, not "not allowed here"
+  placement not in placementList  -> error, as for any component
+  meta.isAssetOnly and the data is not from an asset (configRuntime.assetInfo.isFromAsset)
+      -> error: the data must be in the asset store; "to asset" moves it there
+```
+
+**Not-in-doc** marks a component that is rendered by something other than a document: `SidePanelItem` (and its demo) draws the items of the side panel. The insert menu leaves such components out (`edit-template.js`).
+
+**Asset-only** marks a component whose data is too large or too opaque to be part of a document's text, and has a history of its own: a workbook. Its `sourceDefaultCreate` still returns `{ lang, raw }`, but that is the data of a new *asset object*, not of a fenced block; `{ text }` is refused as a wrong shape when the factory is called (`compSourceDefaultGet`), since it could only be written inline. The edit layer builds on this ([Asset-only components](doc_page_impl_edit.md#asset-only-components)): the insert menu creates the object and then writes the reference block; the component's own edit modes edit the referenced data and save into the object; the block's lines are the reference. An asset-only block whose data is inline anyway (written by hand) renders the error, and its declared edit modes are greyed out with the reason, while the toolbar's **to asset** stays available to repair it. An asset-only component declares `isAssetAware` too, since it needs the reference (and the version's metadata) to save.
 
 ### Icons
 
@@ -86,6 +109,10 @@ a block without a component      -> 'source' only
 a block whose data is an asset   -> 'source' only; the declared modes are listed greyed out,
                                     since the lines of the block are the reference and the data
                                     is edited through the asset panel (doc_page_impl_asset.md#edit-mode)
+a block of an asset-only X       -> the declared modes, editing the referenced data, when the block
+                                    reads the head of an object in a writable store; greyed out with
+                                    the reason otherwise (inline data, a pinned version, a read-only
+                                    store). 'source' (the reference) only if X accepts it
 ```
 
 A session of the edit layer is therefore always *a block in one edit mode* (`session.editModeId`). The Edit button and a click open the block in its default mode; the mode menu opens it in the chosen one, reported as the same `editBlockEnterRequest` with `editModeId`; choosing another mode while the block is open saves the session and opens the block again in it. The component's editor learns its mode as `config.edit.modeId` and branches on it when it has more than one; a component with a single mode of its own can keep branching on `config.isEdit` alone. How the editor is chosen, what it receives and reports are specified in [In-place editing](doc_page_impl_edit.md#component-edit-mode).
@@ -121,7 +148,7 @@ returns
                          in an .md document
 ```
 
-The returned shape is checked when the factory is called; a factory that throws or returns a wrong shape is reported in the console and its component left out of the menu, so one faulty component does not take the menu with it. A component without a factory cannot be inserted from the menu, only written by hand: the components a document writes only inside another one (`Tab`, `Step`, `Accordion`, `File`, `Folder`), markers of the next node (`Anchor`), inline components (`Tag`, `DocLinkInline`), the parts other components render through the registry (`FileIcon`, the cells, rows and header controls of the hierarchies), and what is not document content (`SidePanelItem`, `TagLabel`, the editors of the edit layer).
+The returned shape is checked when the factory is called; a factory that throws or returns a wrong shape is reported in the console and its component left out of the menu, so one faulty component does not take the menu with it. A component without a factory cannot be inserted from the menu, only written by hand: the components a document writes only inside another one (`Tab`, `Step`, `Accordion`, `File`, `Folder`), markers of the next node (`Anchor`), inline components (`Tag`, `DocLinkInline`), the parts other components render through the registry (`FileIcon`, the cells, rows and header controls of the hierarchies), and what is not document content (`SidePanelItem`, `TagLabel`, the editors of the edit layer). A component declared `isNotInDoc` is left out of the menu even with a factory.
 
 ## Component names
 
@@ -137,6 +164,7 @@ Component and file names carry no `Doc` prefix: inside a document every componen
 | `DiagramText` | `diagram-ascii/` | `DocDiagramText` |
 | `DiagramMermaid` | `diagram-mermaid/` | `DocDiagramMermaid` |
 | `DiagramER` | `diagram-er/` | `DocDiagramER` |
+| `ExcelUniver` | `excel-univer/` | |
 | `BlockSimple`, `Block` | `block-simple/` | |
 | `BlockMdx` | `block-mdx/` | |
 | `Tag`, `TagLabel`, `TagOverview` | `tag/` | |
@@ -161,7 +189,7 @@ Some components render their parts through the registry rather than importing th
 
 `SwitchView` shows the same data through several block components, one per view, rendered in the placement `commentBlock`. Its build-time collector hands every view to the collector of its component, so links in views that are not shown are still discovered; `BlockQA` collects its Markdown questions and answers. `FileDownload` names its file as the dependency of an asset made from its data, like the `src` of an `Image`. `ProxyConnectionDiagram` is a fixed diagram, not driven by data: the text of its block is only what a plain Markdown viewer shows. The usage of each component is described beside it (`comp_block_qa.md`, `comp_table_hierarchy.md`, `comp_list_hierarchy.md`, `comp_switch_view.md`).
 
-Some components read host settings from `config`, supplied by the application through `DocPageMdx` `config.compConfigHost` (see [Component registry](doc_page_impl.md#component-registry)): `Image`, `ImageGrid` and `FileDownload` resolve `src` through `assetUrlGet`, and `DiagramMermaid` loads Mermaid through `mermaidLoad` and resolves lane icons through `assetUrlGet`. The block components, `BlockQA` and `MultiLang` receive the shared `MdxRenderer` from their package registry definitions, so nested Markdown has the link, math and component behavior of the document body.
+Some components read host settings from `config`, supplied by the application through `DocPageMdx` `config.compConfigHost` (see [Component registry](doc_page_impl.md#component-registry)): `Image`, `ImageGrid` and `FileDownload` resolve `src` through `assetUrlGet`, `DiagramMermaid` loads Mermaid through `mermaidLoad` and resolves lane icons through `assetUrlGet`, and `ExcelUniver` loads Univer through `univerLoad`. The block components, `BlockQA` and `MultiLang` receive the shared `MdxRenderer` from their package registry definitions, so nested Markdown has the link, math and component behavior of the document body.
 
 Documents and consumer code written with the old names keep working:
 
@@ -288,6 +316,42 @@ An editor, built-in or custom, in whichever of its modes, must not move the page
 - **No layout from editing state.** Showing a field, a message, or an action in response to the author must not change the height of the root; it floats, or it replaces a value in place (`EditValueInline` keeps the exact box of the text it replaces).
 
 `ImageEdit` and `ImageGridEdit` (`comp-mdx/image/`, `comp-mdx/image-grid/`) and `StockTableEdit` (`example_doc/comp-mdx/`) follow these rules and are the references for a new component editor. `ImageGridEdit` shows an editor whose in-flow root holds other components: every slot is an `Image` bound to the editor's draft (`onSourcePaste`), so a paste changes the draft and not the document, and the slot's remove button floats inside the slot.
+
+## ExcelUniver
+
+`ExcelUniver` (`comp-mdx/excel-univer/`) shows an Excel-style workbook drawn by [Univer](https://univer.ai) (`@univerjs/presets` with the sheets-core preset). It is the asset-only component of the package: its data is the workbook snapshot of Univer (`IWorkbookData`, as `workbook.save()` returns it) in JSON, kept as an asset object, and its block is always a reference. The component declares `isAssetOnly`, `isAssetAware`, `isEditSourceAccepted: false` (a workbook is not edited as JSON by hand), `isEditEnterButtonOnly` (a click on the sheet selects cells; only the Edit button opens the editor) and `assetSaveMode: 'inPlace'` (an edit rewrites the head; the store keeps the previous files as `.bak`), and one edit mode, `sheet`. It is allowed in the placement `commentBlock` only.
+
+**Loading.** Univer is large and only some documents use it, so the package does not import it: the host passes `config.compConfigHost.univerLoad`, a function returning the module of `frontend/src/univer-load.js` (`createUniver`, the preset, the locale, `CommandType`, the engine version `univerVersion`, and its css). The demo loads it with a dynamic `import()`, so it is a chunk of its own, fetched by the first sheet on a page and shared by the rest. Without `univerLoad` the block shows a message.
+
+**Data and metadata.** What the component reads and writes:
+
+```text
+asset version  {versionId}.json            the workbook (IWorkbookData)
+               {versionId}.metadata.yaml   engine: univer
+                                           engineVersion: 1.1.0      Univer that last wrote it
+                                           view: { sheetId, range,   what view mode shows;
+                                                   isReadOnlyWarningShown }
+                                                                     no sheetId: the first sheet,
+                                                                     no range: the whole sheet,
+                                                                     isReadOnlyWarningShown: see view mode
+```
+
+The metadata reaches the component as `config.assetInfo.versionMetadata` ([Version metadata](doc_page_impl_asset.md#version-metadata)). The range is A1 notation (`A1:F6`, or one cell); it is stored as written by the edit panel and parsed when rendered, so an invalid one shows a message rather than a wrong sheet.
+
+**View mode.** The sheet is shown without header, toolbar, formula bar, sheet tabs (footer) and context menu. The component builds a copy of the workbook for display (`excelUniverViewWorkbookBuild`): the view sheet first in the order, its scroll at the top left, and every row and column outside the range hidden; the block's height is the height of the visible rows (all used rows, within limits, for a whole sheet), so the page reserves the right room and a range shows without inner scrolling. The workbook is made read-only by Univer's permission (`setReadOnly`), and in addition every command that would change it is canceled before it runs (`BeforeCommandExecute`: a mutation that is not formula bookkeeping), so selection, copying, and scrolling work while no value or style can change. An attempt to change the sheet (a double click on a cell) does nothing: Univer's dialog saying the sheet cannot be edited is turned off (`setPermissionDialogVisible(false)`), unless the version's metadata asks for it with `view.isReadOnlyWarningShown: true`. A save from the editor keeps that key, and any other key of `view` it does not set.
+
+**Edit mode `sheet`.** `ExcelUniverEdit` renders the full Univer UI in the block (at least `EDIT_HEIGHT_MIN` high) on the head data, and an `EditFloatingPanel` for the view range: a range field (`EditValueInline`, empty meaning the whole sheet) on the active sheet, **Use selection** (the active range of Univer) and **Whole sheet**. Every change of the workbook (a mutation, coalesced) and of the range is reported as `editDraftChange` with `{ raw, versionMetadata }`; the edit layer saves both into the object when the session ends ([Asset-only components](doc_page_impl_edit.md#asset-only-components)), writing `engineVersion` of the running Univer. Univer handles Escape and Ctrl/⌘ + Enter itself (the cell editor), so the editor keeps them from reaching the block; the panel's **Save** and **Cancel** end the session. Univer's menus and dialogs are portaled into `document.body`, outside the block; while the editor is open it marks the nodes Univer adds there as edit popups (`EDIT_POPUP_CLASS`), so a click in them is not a click outside the block.
+
+```text
+ExcelUniver.jsx           routes to ExcelUniverView (view) or ExcelUniverEdit (config.isEdit)
+ExcelUniverSheet.jsx      one Univer instance on a workbook text; view guard or change reports
+ExcelUniverEdit.jsx       the sheet editor and the view-range panel
+ExcelUniverEditStore.js   the draft: workbook text, view, metadata to save
+ExcelUniverData.js        parsing, ranges, metadata, the view workbook and its height (pure)
+excel-univer-expose.js    meta, icon, edit mode, the default workbook
+```
+
+The usage is shown in `example_doc/mdx-usage/comp-excel-univer.md`.
 
 ## File tree annotations
 

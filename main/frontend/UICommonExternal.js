@@ -74,6 +74,7 @@ export {
   Settings,
   ShieldCheck,
   ShieldX,
+  Sheet as SheetIcon,
   SlidersHorizontal,
   SquareCode,
   SquareTerminal,

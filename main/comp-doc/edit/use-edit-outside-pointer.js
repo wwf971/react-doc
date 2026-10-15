@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 
-export const EDIT_POPUP_SELECTOR = '.doc-edit-popup';
+export const EDIT_POPUP_CLASS = 'doc-edit-popup';
+export const EDIT_POPUP_SELECTOR = `.${EDIT_POPUP_CLASS}`;
 
 // what a click on a block does not enter the block through
 // (EditBlockEnterMode 'click'): the block's own controls (buttons, editable

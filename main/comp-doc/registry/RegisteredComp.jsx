@@ -2,7 +2,7 @@ import { useContext, useId } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from './comp-registry.js';
-import { compViewModeDefaultIdGet, compViewModeListGet } from './comp-expose.js';
+import { COMP_PLACEMENT_DOC_LIST, compMetaGet, compViewModeDefaultIdGet, compViewModeListGet } from './comp-expose.js';
 import { CompDataRefHost } from './CompDataRef.jsx';
 import { CompAssetHost, compInputIsAssetRef } from '../asset/CompAssetHost.jsx';
 import { DocEditBlockContext } from '../edit/DocEditDocContext.js';
@@ -47,12 +47,38 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
     );
   }
 
+  // what the component's metadata allows in a document
+  // (doc_page_impl_mdx_comp.md#asset-only-and-not-in-doc): isNotInDoc refuses
+  // the document, isAssetOnly refuses data written inline in it
+  const meta = compMetaGet(definition);
+  const isPlacementDoc = COMP_PLACEMENT_DOC_LIST.includes(placement);
+  if (isPlacementDoc && meta.isNotInDoc) {
+    return (
+      <CompError
+        compId={compIdResolved}
+        compName={compName}
+        message={`${compName ?? compIdResolved} cannot be used in a document.`}
+      />
+    );
+  }
+
   if (definition.placementList && !definition.placementList.includes(placement)) {
     return (
       <CompError
         compId={compIdResolved}
         compName={compName}
         message={`component is not available for placement: ${placement}`}
+        raw={input.raw}
+      />
+    );
+  }
+
+  if (isPlacementDoc && meta.isAssetOnly && !configRuntime.assetInfo?.isFromAsset) {
+    return (
+      <CompError
+        compId={compIdResolved}
+        compName={compName}
+        message={`${compName ?? compIdResolved} keeps its data in the asset store only; move this block's data there with "to asset" in edit mode.`}
         raw={input.raw}
       />
     );

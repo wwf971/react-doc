@@ -14,13 +14,16 @@
 //
 //   statusGet()                                 { isWritable, storeIdList, folderList }
 //   objectList(store)                           { objectList }
-//   objectGet(store, objectId, versionId)       { object, version: { versionId, size, hash, isText, text? } }
+//   objectGet(store, objectId, versionId)       { object, version: { versionId, size, hash, isText, text?, metadata } }
+//                                               metadata: the version's metadata mapping ({} when none)
 //   objectGetByName(store, name, versionId)     the same, the object found by its name
 //   dataUrlGet(store, objectId, versionId)      the url the bytes of a version are read from ('' when none)
-//   objectCreate({ store, name, lang, contentType, fileExt, text | dataBase64, note, folder, dependencyList })
+//   objectCreate({ store, name, lang, contentType, fileExt, text | dataBase64, note, folder, dependencyList,
+//                  saveMode, versionMetadata })
 //                                               { object, version, isCreated }; isCreated false when an
 //                                               object of that name exists: it is answered, nothing is created
-//   objectUpdate({ store, objectId, hashBase, text | dataBase64, mode, note, dependencyList })
+//   objectUpdate({ store, objectId, hashBase, text | dataBase64, mode, note, dependencyList, versionMetadata })
+//   versionMetadataSet(store, objectId, versionId, versionMetadata)  { object, version }
 //   dependencyListGet(store, objectId, versionId)      { versionId, dependencyList }
 //   dependentListGet(store, objectId, versionId)       { dependentList }   versionId '' for the whole object
 //   dependencyListSet(store, objectId, versionId, dependencyList)   { object }
@@ -74,6 +77,7 @@ export function assetBackendApiCreate(endpoint) {
     objectMetaSet: (store, objectId, change) => requestPost('/object/meta/set', { store, objectId, ...change }),
     versionCheckout: (store, objectId, versionId) => requestPost('/version/checkout', { store, objectId, versionId }),
     versionDelete: (store, objectId, versionId) => requestPost('/version/delete', { store, objectId, versionId }),
+    versionMetadataSet: (store, objectId, versionId, versionMetadata) => requestPost('/version/metadata/set', { store, objectId, versionId, versionMetadata }),
     objectLockSet: (store, objectId, isLocked) => requestPost('/object/lock/set', { store, objectId, isLocked }),
     versionLockSet: (store, objectId, versionId, isLocked) => requestPost('/version/lock/set', { store, objectId, versionId, isLocked }),
     dependencyListGet: (store, objectId, versionId = 'head') => requestSend(`/dependency/list?${objectQueryBuild(store, objectId, versionId)}`),
@@ -86,7 +90,7 @@ export function assetBackendApiCreate(endpoint) {
 }
 
 // snapshot: { objectById: { [objectId]: { ...object, versionDataById:
-// { [versionId]: { size, hash, isText, text | dataBase64 } } } } }, the
+// { [versionId]: { size, hash, isText, text | dataBase64, metadata } } } } }, the
 // local store as it was at build time
 export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
   const objectById = snapshot?.objectById ?? {};
@@ -140,7 +144,7 @@ export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
     const resolved = versionResolve(store, objectId, versionIdRequested);
     if (resolved.failure) return Promise.resolve(resolved.failure);
     const { versionId, versionData } = resolved;
-    const version = { versionId, size: versionData.size, hash: versionData.hash, isText: versionData.isText };
+    const version = { versionId, size: versionData.size, hash: versionData.hash, isText: versionData.isText, metadata: versionData.metadata ?? {} };
     if (versionData.isText) version.text = versionData.text;
     return Promise.resolve({ code: 0, data: { object: objectMetaGet(objectId), version }, message: '' });
   };
@@ -174,6 +178,7 @@ export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
     objectMetaSet: readOnly,
     versionCheckout: readOnly,
     versionDelete: readOnly,
+    versionMetadataSet: readOnly,
     objectLockSet: readOnly,
     versionLockSet: readOnly,
     dependencyListGet,

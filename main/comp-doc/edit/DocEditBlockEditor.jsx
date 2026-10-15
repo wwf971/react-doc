@@ -12,7 +12,11 @@ import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
 //   a component block in one of the modes its component exposes
 //     -> the component itself, rendered as in the document (placement
 //        commentBlock, same data) but with config.isEdit = true and
-//        config.edit.modeId = the mode, so it renders its XxxEdit of that mode
+//        config.edit.modeId = the mode, so it renders its XxxEdit of that mode.
+//        a block of an isAssetOnly component is a reference into the asset
+//        store; rendered through it (CompAssetHost), the component edits
+//        the asset's data, reported with event.source.asset and saved into
+//        the asset (doc_page_impl_edit.md#asset-only-components)
 //   a block in the built-in mode 'source' (the lines of the block as written;
 //   the only mode of a block without a component, and of a component block
 //   whose data is a reference into the asset store, which is changed through
