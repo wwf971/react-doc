@@ -8,6 +8,7 @@ import { DocConfigStore } from './store/DocConfigStore.js';
 import { DocEditStore, editEventTypeList } from './store/DocEditStore.js';
 import { DocAssetStore } from './store/DocAssetStore.js';
 import { DocTagStore } from './store/DocTagStore.js';
+import { DocBlockPopupStore } from './store/DocBlockPopupStore.js';
 import { DocEventRouter } from './lib/doc-event.js';
 import { CompStateStore } from './store/CompStateStore.js';
 import { StoreContext, useDocStores } from './store/context.js';
@@ -18,6 +19,7 @@ import { DocSearchDialog } from '../../comp-doc/page/DocSearchDialog.jsx';
 import { DocSidebarFolder } from '../../comp-doc/side-panel/DocSidebarFolder.jsx';
 import { TagOverviewPopup } from '../../comp-doc/tag/TagOverviewPopup.jsx';
 import { AssetPanelPopup } from '../../comp-doc/asset/AssetPanelPopup.jsx';
+import { DocBlockPopup } from '../../comp-doc/popup/DocBlockPopup.jsx';
 import { SourceFilePrompt } from '../../comp-doc/source/SourceFilePrompt.jsx';
 import { DocLanguageProvider, useDocLanguage } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 import { MultiLangControl } from '../../comp-mdx/multi-lang/MultiLangControl.jsx';
@@ -85,6 +87,8 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // the edit store creates asset objects when a block's inline data is
     // moved into the asset store (doc_page_impl_asset.md)
     const editStore = new DocEditStore(sourceStore, docStore, configStore, { endpoint: config.edit?.endpoint, assetStore });
+    // a component block shown in a popup, in View or in Edit (doc_page_impl_popup.md)
+    const blockPopupStore = new DocBlockPopupStore({ docStore, editStore, sourceStore, assetStore });
     // the event layer (doc_page_impl_event.md): component reports are routed
     // to the domain that answers them; the stores never see onEvent callbacks
     const eventRouter = new DocEventRouter();
@@ -115,7 +119,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       typeList: sourceEventTypeList,
       handle: (event) => sourceFileStore.eventHandle(event),
     });
-    return { sourceStore, sourceFileStore, docStore, configStore, tagStore, compStateStore, editStore, assetStore, eventRouter, compById };
+    return { sourceStore, sourceFileStore, docStore, configStore, tagStore, compStateStore, editStore, assetStore, blockPopupStore, eventRouter, compById };
   });
   const framework = useMemo(() => makeFramework(stores.docStore), [stores]);
   const contextValue = useMemo(() => ({
@@ -132,7 +136,9 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     stores.docStore.init();
     stores.editStore.init();
     stores.assetStore.init();
+    stores.blockPopupStore.init();
     return () => {
+      stores.blockPopupStore.dispose();
       stores.assetStore.dispose();
       stores.editStore.dispose();
       stores.docStore.dispose();
@@ -209,6 +215,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
               <DocsShell />
               <TagOverviewPopup />
               <AssetPanelPopup />
+              <DocBlockPopup />
               <SourceFilePrompt />
               <DocSettingsPanel />
             </RootProvider>

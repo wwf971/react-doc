@@ -18,7 +18,7 @@ import './DocSettings.css';
 export const AssetStoreSettings = observer(function AssetStoreSettings() {
   const { assetStore } = useDocStores();
   if (!assetStore.isAvailable) {
-    return <p className="doc-settings-asset-note">The page has no asset store.</p>;
+    return <p className="doc-settings-asset-note">{assetStore.unavailableReason || 'The asset store is loading.'}</p>;
   }
   const isWritable = assetStore.isWritable;
   const isBusy = assetStore.folder.status === 'submitting';

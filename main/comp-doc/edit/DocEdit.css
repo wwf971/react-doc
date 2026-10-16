@@ -142,8 +142,16 @@
 
 /* ---------- body ---------- */
 
+/* the body is its own formatting context, so the outer margins of its first
+   and last block stay inside it instead of collapsing through the body. the
+   geometry lock (DocEditBlock) measures a block's gaps against the body's
+   content edges; a margin collapsed outside the body would be lost from the
+   measurement and the block would move up when its editor opens. flow-root
+   neither clips (an editor may extend over the next block, menus float) nor
+   changes how sibling blocks collapse their margins with each other. */
 .doc-edit-body {
   position: relative;
+  display: flow-root;
 }
 
 /* anchor of the frontmatter / whole-source panel: no height of its own */

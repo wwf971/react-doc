@@ -19,9 +19,19 @@ function excelUniverEngineGet(univerLoad) {
 }
 
 // One Univer instance in a div of the given height, holding one workbook.
-// The engine draws into the div itself (its own React root): React renders
-// nothing inside it. A different workbookText or isEditable disposes the
-// instance and mounts a new one.
+// The engine draws into a mount element of its own (its own React root),
+// which this component creates inside its div: React renders nothing inside
+// it. A different workbookText or isEditable retires the instance and mounts
+// a new one in a new mount element.
+//
+// retiring an instance: its listeners are disposed and its mount element is
+// taken out of the page at once, so the next instance never shares a
+// container with it; the engine itself is disposed after React has finished
+// the commit that retired it. Univer unmounts its own React root when it is
+// disposed, and doing that inside a React commit (an effect cleanup) makes
+// React warn about a synchronous unmount during rendering. each instance is
+// disposed through its own closure, never through a shared ref, so rapid
+// changes cannot dispose the instance that replaced it.
 //
 //   workbookText  the workbook as JSON text (already checked by the caller)
 //   isEditable    true: the toolbar, the formula bar, the sheet tabs and the
@@ -32,7 +42,7 @@ function excelUniverEngineGet(univerLoad) {
 //   isReadOnlyWarningShown  view mode: the engine's dialog saying the sheet
 //                 cannot be edited appears when the reader tries to (a double
 //                 click on a cell); false: the attempt does nothing
-//   height        px
+//   height        px, or any css height ('100%' fills a popup)
 //   univerLoad    config.univerLoad of the host
 //   onReady({ univerAPI, workbook, engineVersion })   once the workbook is shown
 //   onDataChange(workbookData)   edit mode: after a change of the data, the
@@ -48,6 +58,10 @@ export function ExcelUniverSheet({ workbookText, isEditable, isReadOnlyWarningSh
 
   useEffect(() => {
     const container = containerRef.current;
+    if (!container) return undefined;
+    const mountElement = document.createElement('div');
+    mountElement.className = 'doc-mdx-excel-univer-engine';
+    container.appendChild(mountElement);
     let isDisposed = false;
     let univer;
     const disposableList = [];
@@ -55,8 +69,8 @@ export function ExcelUniverSheet({ workbookText, isEditable, isReadOnlyWarningSh
 
     const mount = async () => {
       const engine = await excelUniverEngineGet(univerLoad);
-      if (isDisposed || !container) return;
-      const presetConfig = { container, disableAutoFocus: true };
+      if (isDisposed) return;
+      const presetConfig = { container: mountElement, disableAutoFocus: true };
       if (!isEditable) {
         presetConfig.header = false;
         presetConfig.toolbar = false;
@@ -106,13 +120,16 @@ export function ExcelUniverSheet({ workbookText, isEditable, isReadOnlyWarningSh
     return () => {
       isDisposed = true;
       for (const disposable of disposableList) disposable.dispose();
-      univer?.dispose();
+      mountElement.remove();
+      // a mount still loading the engine creates nothing (isDisposed); an
+      // instance created while its setup was awaited is disposed here too
+      const univerRetired = univer;
+      if (univerRetired) setTimeout(() => univerRetired.dispose(), 0);
     };
   }, [workbookText, isEditable, isReadOnlyWarningShown, univerLoad]);
 
   return (
-    <div className="doc-mdx-excel-univer-sheet" style={{ height }}>
-      <div ref={containerRef} className="doc-mdx-excel-univer-engine" />
+    <div ref={containerRef} className="doc-mdx-excel-univer-sheet" style={{ height }}>
       {message ? <p className="doc-mdx-excel-univer-message" role="alert">{message}</p> : null}
     </div>
   );

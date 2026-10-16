@@ -34,13 +34,15 @@ import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
 // every editor edits the block in its place and floats its controls
 // (doc_page_impl_edit.md#no-jitter-rule). it receives config.edit =
 // { session, block, format, sourcePath, label, modeId, viewRendered,
-// isSurfaceFloating } and reports through events (editDraftChange,
+// isSurfaceFloating, submitPrepareSet } and reports through events (editDraftChange,
 // editTextSetRequest, editSubmitRequest, editCancelRequest,
 // editFocusShiftRequest); the event layer routes them to
 // DocEditStore.eventHandle. the session draft is what a leave saves, so an
 // editor reports every change of its draft: text editors as { text }, a
 // component's own editor as { raw, props }, rebuilt into the block text by
-// the store.
+// the store. an editor whose draft is not complete until it acts (an open
+// cell editor) registers that act with submitPrepareSet(handler); every
+// save awaits it first (DocEditStore.sessionSubmitPrepareSet).
 //
 //   block         the block of a block session
 //   viewRendered  the block as the body rendered it, for editors that keep a
@@ -64,6 +66,7 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
       viewRendered,
       // the frontmatter and the whole file are not blocks of the body
       isSurfaceFloating: session.type === 'frontmatter' || session.type === 'document',
+      submitPrepareSet: (handler) => editStore.sessionSubmitPrepareSet(session, handler),
     },
   };
 
@@ -77,7 +80,12 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
           compDefinition={definition}
           compId={compId}
           compName={component.compName}
-          configRuntime={{ ...configEdit, instanceId: `edit:${path}:${block.index}`, blockIndex: block.index }}
+          configRuntime={{
+            ...configEdit,
+            instanceId: `edit:${path}:${block.index}`,
+            blockIndex: block.index,
+            sourceLine: component.markerLine,
+          }}
           input={{ lang: component.lang, propsAuthored: component.props ?? {}, raw: component.raw }}
           placement="commentBlock"
         />

@@ -206,12 +206,64 @@ export class AssetError extends Error {
 
 // ---------- the store config file ----------
 
+// the local asset store config.yaml names: asset.file, the store config
+// file, relative to config.yaml. undefined when config.yaml has no asset
+// section: the page has no asset store. a section that names the store in a
+// form that is not read (the former asset.folder) or not at all is an error
+// that says how to write it, never a silent "no store": the page would
+// otherwise find out only when a write fails.
+export function assetConfigOfConfigDocGet(configDoc: any, configDir: string): AssetStoreConfig | undefined {
+  const asset = configDoc?.asset;
+  if (asset === undefined || asset === null) return undefined;
+  if (typeof asset !== 'object' || Array.isArray(asset)) {
+    throw new Error(`[doc-source] config.yaml "asset" must be a mapping with "file", e.g. asset: { file: ./asset.yaml }${assetConfigMigrationText('./asset')}`);
+  }
+  if (asset.folder !== undefined) {
+    throw new Error(`[doc-source] config.yaml "asset.folder" is no longer read: the asset store is described by a config file of its own, named by "asset.file".${assetConfigMigrationText(String(asset.folder))}`);
+  }
+  const file = asset.file;
+  if (typeof file !== 'string' || !file.trim()) {
+    throw new Error(`[doc-source] config.yaml "asset" needs "file": the config file of the asset store.${assetConfigMigrationText('./asset')}`);
+  }
+  return assetConfigRead(path.resolve(configDir, file.trim()));
+}
+
+// how a store is configured, for the errors above
+function assetConfigMigrationText(folderPath: string): string {
+  return [
+    '',
+    'write in config.yaml:',
+    '  asset:',
+    '    file: ./asset.yaml',
+    'and in asset.yaml (paths are relative to asset.yaml):',
+    '  folderList:',
+    `    - path: ${folderPath}`,
+    '      isDefault: true',
+    'the object folders already on disk stay as they are; no id or data changes.',
+    'restart the development server afterwards: the asset api is installed when it starts.',
+  ].join('\n');
+}
+
 // asset.yaml: folderList [{ path, isDefault }], paths relative to the file.
-// a missing file is an empty store; without a default the first folder is it.
+// a missing file is an empty store, and a missing folder is created when the
+// first object is written to it; without a default the first folder is it.
+// a file that is not yaml, or whose folderList is not a list, is an error.
 export function assetConfigRead(fileAbs: string): AssetStoreConfig {
   let content: any = {};
-  if (fs.existsSync(fileAbs)) content = yamlParse(fs.readFileSync(fileAbs, 'utf-8')) ?? {};
-  const folderList = folderListNormalize(content?.folderList, path.dirname(fileAbs));
+  if (fs.existsSync(fileAbs)) {
+    try {
+      content = yamlParse(fs.readFileSync(fileAbs, 'utf-8')) ?? {};
+    } catch (error: any) {
+      throw new Error(`[doc-source] the asset store config ${fileAbs} is not valid yaml: ${String(error?.message ?? error)}`);
+    }
+  }
+  if (typeof content !== 'object' || Array.isArray(content)) {
+    throw new Error(`[doc-source] the asset store config ${fileAbs} must be a mapping with "folderList"`);
+  }
+  if (content.folderList !== undefined && !Array.isArray(content.folderList)) {
+    throw new Error(`[doc-source] "folderList" of the asset store config ${fileAbs} must be a list of { path, isDefault }`);
+  }
+  const folderList = folderListNormalize(content.folderList, path.dirname(fileAbs));
   return { file: fileAbs, folderList };
 }
 

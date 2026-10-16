@@ -1,10 +1,9 @@
 import { createRoot } from 'react-dom/client';
-import { ConfigPanel, Menu, SegmentedControl } from '@wwf971/react-comp-misc';
+import { ConfigPanel, Menu, PanelText, SegmentedControl } from '@wwf971/react-comp-misc';
 import * as docSource from 'virtual:doc-source';
 import { DocPageMdx } from './DocPageMdx.jsx';
 import { DemoCounter } from '../../../example_doc/comp-mdx/DemoCounter.jsx';
 import { StockTable, stockTableDefineOptions } from '../../../example_doc/comp-mdx/StockTable.jsx';
-import { TextPanelDemo } from '../../../example_doc/comp-mdx/TextPanelDemo.jsx';
 import { compDefine } from '../../comp-doc/registry/comp-registry.js';
 import {
   indexLanguageListGet,
@@ -57,7 +56,7 @@ createRoot(document.getElementById('root')).render(
       compConfigHost: {
         mermaidLoad: () => import('mermaid'),
         univerLoad: () => import('./univer-load.js'),
-        panelComponent: TextPanelDemo,
+        panelComponent: PanelText,
       },
       // the language selector and the page/part index switch both render
       // through this consumer-injected segmented control; the settings panel

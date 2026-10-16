@@ -56,12 +56,14 @@
 /* ---------- popup ---------- */
 
 /* wider while the preview pane is open; the two columns scroll on their own */
+.doc-asset-popup-backdrop {
+  z-index: 210;
+}
+
 .doc-asset-popup {
   width: min(1040px, calc(100vw - 32px));
   height: min(860px, calc(100vh - 32px));
   max-height: calc(100vh - 32px);
-  display: flex;
-  flex-direction: column;
 }
 
 .doc-asset-popup.is-preview-open {
@@ -69,9 +71,9 @@
 }
 
 .doc-asset-popup-body {
-  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+  padding: 0;
 }
 
 .doc-asset-popup-content {
@@ -81,10 +83,37 @@
 }
 
 .doc-asset-popup-main {
+  display: flex;
   flex: 1 1 0;
+  flex-direction: column;
   min-width: 0;
   overflow: auto;
   padding: 6px 12px 10px;
+}
+
+/* the panel is as tall as the popup, and the data text takes what the
+   sections above it leave, scrolling inside itself, so the popup itself
+   does not scroll. only when the sections above leave less than the text's
+   minimum (the event list is open) does the popup scroll. */
+.doc-asset-popup-main > .doc-asset-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.doc-asset-popup-main .doc-asset-section.is-data {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.doc-asset-popup-main .doc-asset-section.is-data > .doc-asset-data {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.doc-asset-popup-main .doc-asset-data > .doc-asset-text {
+  flex: 1 1 0;
+  min-height: 8rem;
+  max-height: none;
 }
 
 /* ---------- preview pane ---------- */

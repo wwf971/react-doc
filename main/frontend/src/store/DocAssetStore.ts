@@ -12,8 +12,10 @@ import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
 //
 //   backend        where the objects live: the asset api of the development
 //                  server, or the snapshot bundled into a build (read-only)
+//   backendKind    'api', 'snapshot', or 'none' (no asset store)
 //   isAvailable    the backend answered
 //   isWritable     the backend accepts writes
+//   statusMessage  why the status request failed, as the backend said it
 //   storeIdList    the stores the backend serves (the ids a reference may name)
 //   folderList     the folders of the local store; one is the default for new objects
 //   index          the object index: the metadata of every object, loaded at start
@@ -158,6 +160,7 @@ export class DocAssetStore {
   backend: ReturnType<typeof assetBackendApiCreate> | ReturnType<typeof assetBackendSnapshotCreate> | undefined;
   isAvailable = false;
   isWritable = false;
+  statusMessage = '';
   storeIdList: string[] = [];
   folderList: AssetFolderInfo[] = [];
   // the folder actions of the settings panel
@@ -222,9 +225,40 @@ export class DocAssetStore {
     runInAction(() => {
       this.isAvailable = result.code === 0;
       this.isWritable = result.code === 0 && result.data?.isWritable === true;
+      this.statusMessage = result.code === 0 ? '' : String(result.message || 'no answer');
       this.storeIdList = result.code === 0 && Array.isArray(result.data?.storeIdList) ? result.data.storeIdList : [];
       this.folderList = result.code === 0 && Array.isArray(result.data?.folderList) ? result.data.folderList : [];
     });
+  }
+
+  get backendKind(): 'api' | 'snapshot' | 'none' {
+    if (!this.backend) return 'none';
+    return this.backend.kind === 'api' ? 'api' : 'snapshot';
+  }
+
+  // why the page cannot read the store ('' when it can). the four cases are
+  // told apart, so a failure is not reported as a missing permission:
+  //   no store         the page got no asset endpoint and no snapshot: the
+  //                    config names no asset.file, or the development
+  //                    server was started before it did
+  //   status failed    the asset api did not answer; its message is kept
+  //   snapshot         a built page: readable, never writable
+  get unavailableReason(): string {
+    if (this.backendKind === 'none') {
+      return 'The page has no asset store: config.yaml names no asset.file, or the development server was started before it did (restart it).';
+    }
+    if (this.statusMessage) return `The asset api did not answer: ${this.statusMessage}`;
+    return '';
+  }
+
+  // why the page cannot write to the store ('' when it can)
+  get writeUnavailableReason(): string {
+    if (this.isWritable) return '';
+    const reason = this.unavailableReason;
+    if (reason) return reason;
+    if (this.backendKind === 'snapshot') return 'The asset store of a built page is a read-only snapshot.';
+    if (!this.isAvailable) return 'The asset store is still loading.';
+    return 'The asset api answered that the store is read-only.';
   }
 
   // the metadata of every object of the local store. objects already read
@@ -321,7 +355,7 @@ export class DocAssetStore {
 
   // the state of a reference, from what is loaded; refLoad() fills it
   refQuery(ref: AssetRef): AssetRefResult {
-    if (!this.backend) return { status: 'error', message: 'The page has no asset store.', versionId: '' };
+    if (!this.backend) return { status: 'error', message: this.unavailableReason, versionId: '' };
     if (this.storeIdList.length > 0 && !this.storeIdIs(ref.store)) {
       return { status: 'error', message: `unknown asset store: ${ref.store} (known: ${this.storeIdList.join(', ')})`, versionId: '' };
     }
@@ -498,8 +532,7 @@ export class DocAssetStore {
   // every write: the backend answers, the fresh object (and version) replace
   // the loaded ones, the caller gets { code, data, message }
   private async writeApply(store: string, request: () => Promise<any>, messageFailure: string): Promise<AssetResult> {
-    if (!this.backend) return { code: -1, message: 'The page has no asset store.' };
-    if (!this.isWritable) return { code: -1, message: 'The asset store is read-only.' };
+    if (!this.isWritable) return { code: -1, message: this.writeUnavailableReason };
     const result = await request();
     if (result.code !== 0) {
       return { code: result.code, message: result.code === -2 ? messageConflict : result.message || messageFailure };

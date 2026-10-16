@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { BlockPopupSurface } from '../../comp-doc/popup/BlockPopupSurface.jsx';
 import { ExcelUniverEdit } from './ExcelUniverEdit.jsx';
 import { ExcelUniverSheet } from './ExcelUniverSheet.jsx';
 import {
@@ -27,14 +28,31 @@ import './ExcelUniver.css';
 // (config.isEdit, set by the edit layer) ExcelUniverEdit edits the workbook
 // and the view. the engine is loaded by the host (config.univerLoad).
 //
+// both modes render inside BlockPopupSurface (doc_page_impl_popup.md): the
+// sheet can be opened in the block popup, where it fills the dialog and can
+// be switched between View and Edit. the outer box of the surface carries
+// the block's margins; the sheet's own box has none.
+//
 //   data.raw             the workbook as JSON (IWorkbookData)
 //   config.assetInfo     versionMetadata: { engine, engineVersion, view }
 export function ExcelUniver({ data = {}, config = {}, onEvent }) {
-  if (config.isEdit) return <ExcelUniverEdit data={data} config={config} onEvent={onEvent} />;
-  return <ExcelUniverView raw={data.raw} versionMetadata={config.assetInfo?.versionMetadata} univerLoad={config.univerLoad} />;
+  return (
+    <BlockPopupSurface config={config} title={config.assetInfo?.name || 'Spreadsheet'} className="doc-mdx-excel-univer-shell">
+      {({ isInPopup }) => (config.isEdit
+        ? <ExcelUniverEdit data={data} config={config} isInPopup={isInPopup} onEvent={onEvent} />
+        : (
+          <ExcelUniverView
+            raw={data.raw}
+            versionMetadata={config.assetInfo?.versionMetadata}
+            univerLoad={config.univerLoad}
+            isInPopup={isInPopup}
+          />
+        ))}
+    </BlockPopupSurface>
+  );
 }
 
-function ExcelUniverView({ raw, versionMetadata, univerLoad }) {
+function ExcelUniverView({ raw, versionMetadata, univerLoad, isInPopup }) {
   const view = excelUniverViewGet(versionMetadata);
   const shown = useMemo(() => {
     const parsed = excelUniverWorkbookParse(raw);
@@ -48,13 +66,13 @@ function ExcelUniverView({ raw, versionMetadata, univerLoad }) {
   }, [raw, view.sheetId, view.range]);
 
   return (
-    <div className="doc-mdx-excel-univer not-prose">
+    <div className={`doc-mdx-excel-univer not-prose${isInPopup ? ' is-popup' : ''}`}>
       {shown.workbookText ? (
         <ExcelUniverSheet
           workbookText={shown.workbookText}
           isEditable={false}
           isReadOnlyWarningShown={view.isReadOnlyWarningShown}
-          height={shown.height}
+          height={isInPopup ? '100%' : shown.height}
           univerLoad={univerLoad}
         />
       ) : null}

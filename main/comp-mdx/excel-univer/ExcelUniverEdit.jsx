@@ -23,6 +23,15 @@ import { ExcelUniverEditStore } from './ExcelUniverEditStore.js';
 // ExcelUniver declares), the document is not written
 // (doc_page_impl_edit.md#asset-only-components).
 //
+// before every save the cell being typed in is completed: the engine keeps
+// the text of an open cell editor out of the workbook until it is closed, so
+// the editor registers a step that closes it and reports the saved workbook
+// (config.edit.submitPrepareSet). a cell that cannot be completed (the
+// engine refuses its value) stops the save, and the session shows why.
+//
+// in the block popup (isInPopup) the sheet fills the dialog and the floating
+// panel is in the dialog's header (doc_page_impl_popup.md).
+//
 //   data.raw                  the workbook (JSON) of the asset's head
 //   config.assetInfo          versionMetadata: the view, the engine version
 //   config.edit.session       status / message of the pending save
@@ -31,9 +40,10 @@ import { ExcelUniverEditStore } from './ExcelUniverEditStore.js';
 //   editDraftChange { raw, versionMetadata }
 //   editSubmitRequest
 //   editCancelRequest
-export const ExcelUniverEdit = observer(function ExcelUniverEdit({ data = {}, config = {}, onEvent }) {
+export const ExcelUniverEdit = observer(function ExcelUniverEdit({ data = {}, config = {}, isInPopup = false, onEvent }) {
   const [store] = useState(() => new ExcelUniverEditStore({ raw: data.raw, versionMetadata: config.assetInfo?.versionMetadata }));
   const univerApiRef = useRef(null);
+  const workbookRef = useRef(null);
   const session = config.edit?.session ?? {};
   const isLocked = session.status === 'submitting';
   useEnginePopupMark();
@@ -43,9 +53,24 @@ export const ExcelUniverEdit = observer(function ExcelUniverEdit({ data = {}, co
     ? Math.max(excelUniverViewHeightGet(parsed.workbook, store.viewInitial), EDIT_HEIGHT_MIN)
     : undefined;
 
-  const draftReport = () => {
-    void onEvent?.('editDraftChange', { raw: store.rawDraft, versionMetadata: toJS(store.versionMetadata) });
-  };
+  const draftReport = () => onEvent?.('editDraftChange', { raw: store.rawDraft, versionMetadata: toJS(store.versionMetadata) });
+
+  const submitPrepareSet = config.edit?.submitPrepareSet;
+  useEffect(() => {
+    if (typeof submitPrepareSet !== 'function') return undefined;
+    return submitPrepareSet(async () => {
+      const workbook = workbookRef.current;
+      if (!workbook) return { code: 0, message: '' };
+      if (workbook.isCellEditing()) {
+        const isEnded = await workbook.endEditingAsync(true);
+        if (!isEnded) return { code: -1, message: 'The cell being edited was not completed: its value was refused.' };
+      }
+      store.rawSet(excelUniverWorkbookTextBuild(workbook.save()));
+      await draftReport();
+      return { code: 0, message: '' };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submitPrepareSet]);
   const submitRequest = () => {
     if (isLocked) return;
     void onEvent?.('editSubmitRequest');
@@ -62,7 +87,7 @@ export const ExcelUniverEdit = observer(function ExcelUniverEdit({ data = {}, co
   };
   const rangeCommit = (text) => {
     const sheetId = workbookActiveGet()?.getActiveSheet()?.getSheetId() ?? store.view.sheetId;
-    if (store.rangeSet(text, sheetId)) draftReport();
+    if (store.rangeSet(text, sheetId)) void draftReport();
   };
   const selectionUse = () => {
     const range = workbookActiveGet()?.getActiveRange();
@@ -70,11 +95,11 @@ export const ExcelUniverEdit = observer(function ExcelUniverEdit({ data = {}, co
       store.messageSet('select the cells view mode shows first');
       return;
     }
-    if (store.rangeSet(range.getA1Notation(), range.getSheetId())) draftReport();
+    if (store.rangeSet(range.getA1Notation(), range.getSheetId())) void draftReport();
   };
   const sheetWholeUse = () => {
     store.sheetWholeSet(workbookActiveGet()?.getActiveSheet()?.getSheetId() ?? '');
-    draftReport();
+    void draftReport();
   };
 
   // Escape and Ctrl/⌘ + Enter belong to the cell editor of the sheet
@@ -107,20 +132,21 @@ export const ExcelUniverEdit = observer(function ExcelUniverEdit({ data = {}, co
 
   return (
     <>
-      <div className="doc-mdx-excel-univer is-edit not-prose" onKeyDown={sheetKeyDownHandle}>
+      <div className={`doc-mdx-excel-univer is-edit not-prose${isInPopup ? ' is-popup' : ''}`} onKeyDown={sheetKeyDownHandle}>
         {parsed.workbook ? (
           <ExcelUniverSheet
             workbookText={store.workbookTextInitial}
             isEditable
-            height={height}
+            height={isInPopup ? '100%' : height}
             univerLoad={config.univerLoad}
-            onReady={({ univerAPI, engineVersion }) => {
+            onReady={({ univerAPI, workbook, engineVersion }) => {
               univerApiRef.current = univerAPI;
+              workbookRef.current = workbook;
               store.engineVersionSet(engineVersion);
             }}
             onDataChange={(workbookData) => {
               store.rawSet(excelUniverWorkbookTextBuild(workbookData));
-              draftReport();
+              void draftReport();
             }}
           />
         ) : (

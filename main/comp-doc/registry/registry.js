@@ -46,7 +46,6 @@ import { DocConfigDemo } from '../../../example_doc/comp-mdx/DocConfigDemo.jsx';
 import { SidePanelItemDemo } from '../../../example_doc/comp-mdx/SidePanelItemDemo.jsx';
 import { StockTable, stockTableDefineOptions } from '../../../example_doc/comp-mdx/StockTable.jsx';
 import { TagListAllDemo } from '../../../example_doc/comp-mdx/TagListAllDemo.jsx';
-import { TextPanelDemo } from '../../../example_doc/comp-mdx/TextPanelDemo.jsx';
 import { compDefine, compNativeDefine } from './comp-registry.js';
 import {
   accordionsExpose,
@@ -247,10 +246,8 @@ export const compById = {
     expose: tagListAllDemoExpose,
   }),
   'specific/DocConfigDemo': compDefine(DocConfigDemo, { placementList: ['mdx', 'commentBlock'], expose: docConfigDemoExpose }),
-  // demo-host binding: the popup panel implementation is host configuration,
-  // so SourceLink is registered here with the demo panel rather than in common/.
+  // the popup panel of SourceLink is the host's (compConfigHost.panelComponent)
   'specific/SourceLink': compDefine(SourceLink, {
-    dataBuild: sourceLinkDataBuild,
     placementList: ['mdx', 'commentBlock'],
     expose: sourceLinkExpose,
   }),
@@ -266,12 +263,3 @@ function markdownConfigBuild(input) {
   };
 }
 
-function sourceLinkDataBuild(input) {
-  return {
-    ...input,
-    config: {
-      ...input.config,
-      panelComponent: TextPanelDemo,
-    },
-  };
-}

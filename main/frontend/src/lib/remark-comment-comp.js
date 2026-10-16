@@ -133,6 +133,9 @@ export function remarkCommentComp(options = {}) {
               { type: 'mdxJsxAttribute', name: 'lang', value: nodeMarked.lang ?? '' },
               { type: 'mdxJsxAttribute', name: 'propsJson', value: JSON.stringify(props) },
               { type: 'mdxJsxAttribute', name: 'sourceOffset', value: String(node.position?.start?.offset ?? '') },
+              // the line of the marker comment: the block's identity across
+              // the reading and the edit view (doc_page_impl_popup.md#block-identity)
+              { type: 'mdxJsxAttribute', name: 'sourceLine', value: String(node.position?.start?.line ?? '') },
             ],
             children: [],
           };

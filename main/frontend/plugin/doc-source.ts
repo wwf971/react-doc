@@ -41,7 +41,7 @@ import {
 import { DOC_EDIT_ENDPOINT_NAME, docEditMiddlewareCreate } from './doc-edit-server.ts';
 import { DOC_ASSET_ENDPOINT_NAME, docAssetMiddlewareCreate } from './doc-asset-server.ts';
 import {
-  assetConfigRead, assetStoreCreate, objectIdFromDirName, type AssetSnapshot, type AssetStore, type AssetStoreConfig,
+  assetConfigOfConfigDocGet, assetConfigRead, assetStoreCreate, objectIdFromDirName, type AssetSnapshot, type AssetStore, type AssetStoreConfig,
 } from './doc-asset-store.ts';
 import { assetBlockTextExpand } from '../src/lib/doc-asset-ref.js';
 import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
@@ -226,6 +226,11 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       docEditEndpoint = isBuild ? '' : endpointBuild(viteConfig.base, DOC_EDIT_ENDPOINT_NAME);
       const configDocEarly = loadConfigDoc(configFile, options);
       pathsConfiguration = collectPathsConfiguration(configDocEarly);
+      // the asset section is checked here, before the endpoint is chosen: a
+      // wrong one stops the server with the migration instead of leaving the
+      // page without a store. the endpoint and the middleware
+      // (configureServer) are chosen once, so a store added to config.yaml
+      // later needs a restart of the server
       docAssetEndpoint = isBuild || !assetConfigGet(configDocEarly, configDir)
         ? ''
         : endpointBuild(viteConfig.base, DOC_ASSET_ENDPOINT_NAME);
@@ -857,11 +862,10 @@ function configurationBackupPathIs(pathsConfiguration: string[], filePath: strin
 }
 
 // the local asset store as config asset.file describes it now; undefined
-// when the config names no store
+// when the config names no store, an error when it names one wrongly
+// (assetConfigOfConfigDocGet)
 function assetConfigGet(configDoc: any, configDir: string): AssetStoreConfig | undefined {
-  const file = configDoc?.asset?.file;
-  if (typeof file !== 'string' || !file.trim()) return undefined;
-  return assetConfigRead(path.resolve(configDir, file.trim()));
+  return assetConfigOfConfigDocGet(configDoc, configDir);
 }
 
 // a file of the asset store: its config file (and the backup / temporary

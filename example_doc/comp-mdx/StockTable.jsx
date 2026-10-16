@@ -1,5 +1,6 @@
 import { ChartBar, TableIcon, TextCursorInput } from '../../main/frontend/UICommon.js';
 import { compIconDefine } from '../../main/comp-doc/registry/comp-icon.jsx';
+import { BlockPopupSurface } from '../../main/comp-doc/popup/BlockPopupSurface.jsx';
 import { StockTableEdit } from './StockTableEdit.jsx';
 import { isStockText, parseMarkdownTable, stockTextList } from './StockTableData.js';
 
@@ -12,8 +13,23 @@ import { isStockText, parseMarkdownTable, stockTextList } from './StockTableData
 // (the mode menu of the block in edit mode); one edit mode of its own,
 // 'cells' (StockTableEdit edits the cells in place; the markdown table as
 // written is the built-in 'source' mode); an icon drawn with
-// compIconDefine; and the source of a new block (sourceDefaultCreate).
+// compIconDefine; the source of a new block (sourceDefaultCreate); and the
+// block popup (doc_page_impl_popup.md): both modes render inside
+// BlockPopupSurface, so the table can be opened in a dialog and edited
+// there. the outer box of the surface carries the block's margins.
 export function StockTable({ data = {}, config = {}, onEvent }) {
+  return (
+    <BlockPopupSurface config={config} title={data.title || 'Stock table'} className="not-prose my-2">
+      {({ isInPopup }) => (
+        <div className={isInPopup ? 'px-3 py-2' : undefined}>
+          <StockTableBody data={data} config={config} onEvent={onEvent} />
+        </div>
+      )}
+    </BlockPopupSurface>
+  );
+}
+
+function StockTableBody({ data, config, onEvent }) {
   if (config.isEdit) return <StockTableEdit data={data} config={config} onEvent={onEvent} />;
   const { headers, rows } = parseMarkdownTable(data.raw ?? '');
   if (config.viewMode === 'summary') {
@@ -66,7 +82,7 @@ export function StockTableSummary({ title, headers, rows }) {
     if (text in countByText) countByText[text] += 1;
   }
   return (
-    <div className="not-prose my-2 text-sm">
+    <div className="not-prose text-sm">
       {title ? <p className="font-medium text-sm mb-1">{title}</p> : null}
       <div className="flex flex-row flex-wrap items-center gap-x-4 gap-y-1">
         {stockTextList.map((text) => (
@@ -88,7 +104,7 @@ export function StockTableSummary({ title, headers, rows }) {
 export function StockTableView({ title, headers, rows, cellRender, headerRender, titleRender, rowActionsRender }) {
   const isTitle = title !== undefined && title !== '';
   return (
-    <div className="not-prose my-2">
+    <div className="not-prose">
       {titleRender
         ? <p className="font-medium text-sm mb-1">{titleRender(title ?? '')}</p>
         : isTitle ? <p className="font-medium text-sm mb-1">{title}</p> : null}

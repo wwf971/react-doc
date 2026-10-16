@@ -1,10 +1,12 @@
 {
   "id": "workbook",
-  "name": "Quarterly sales",
   "sheetOrder": [
     "sales",
     "notes"
   ],
+  "name": "Quarterly sales",
+  "appVersion": "1.1.0",
+  "locale": "zhCN",
   "styles": {
     "header": {
       "bl": 1,
@@ -101,7 +103,8 @@
             "v": 140
           },
           "2": {
-            "v": 150
+            "v": 125,
+            "t": 2
           },
           "3": {
             "v": 145
@@ -179,7 +182,32 @@
             "v": 180
           }
         }
-      }
+      },
+      "tabColor": "",
+      "hidden": 0,
+      "zoomRatio": 1,
+      "freeze": {
+        "xSplit": 0,
+        "ySplit": 0,
+        "startRow": -1,
+        "startColumn": -1
+      },
+      "scrollTop": 0,
+      "scrollLeft": 0,
+      "defaultColumnWidth": 88,
+      "defaultRowHeight": 24,
+      "mergeData": [],
+      "rowData": {},
+      "showGridlines": 1,
+      "rowHeader": {
+        "width": 46,
+        "hidden": 0
+      },
+      "columnHeader": {
+        "height": 20,
+        "hidden": 0
+      },
+      "rightToLeft": 0
     },
     "notes": {
       "id": "notes",
@@ -192,7 +220,64 @@
             "v": "Q4 numbers are preliminary."
           }
         }
-      }
+      },
+      "tabColor": "",
+      "hidden": 0,
+      "zoomRatio": 1,
+      "freeze": {
+        "xSplit": 0,
+        "ySplit": 0,
+        "startRow": -1,
+        "startColumn": -1
+      },
+      "scrollTop": 0,
+      "scrollLeft": 0,
+      "defaultColumnWidth": 88,
+      "defaultRowHeight": 24,
+      "mergeData": [],
+      "rowData": {},
+      "columnData": {},
+      "showGridlines": 1,
+      "rowHeader": {
+        "width": 46,
+        "hidden": 0
+      },
+      "columnHeader": {
+        "height": 20,
+        "hidden": 0
+      },
+      "rightToLeft": 0
     }
+  },
+  "resources": [
+    {
+      "name": "SHEET_RANGE_PROTECTION_PLUGIN",
+      "data": ""
+    },
+    {
+      "name": "SHEET_AuthzIoMockService_PLUGIN",
+      "data": "{}"
+    },
+    {
+      "name": "SHEET_WORKSHEET_PROTECTION_PLUGIN",
+      "data": "{}"
+    },
+    {
+      "name": "SHEET_WORKSHEET_PROTECTION_POINT_PLUGIN",
+      "data": "{}"
+    },
+    {
+      "name": "SHEET_DEFINED_NAME_PLUGIN",
+      "data": "{}"
+    },
+    {
+      "name": "SHEET_RANGE_THEME_MODEL_PLUGIN",
+      "data": "{}"
+    }
+  ],
+  "calculationSettings": {
+    "iterativeCalculation": false,
+    "maxIterations": 100,
+    "maxChange": 0.001
   }
 }

@@ -38,7 +38,10 @@ import './DocEdit.css';
 // opens at the text nearest to where the block was clicked. only one block
 // of a document is in edit mode at a time (the store holds one session).
 // the session is left, saving the draft, when a pointer goes down outside
-// the block or Ctrl/⌘ + Enter is pressed in it; Escape cancels it.
+// the block or Ctrl/⌘ + Enter is pressed in it; Escape cancels it. while
+// the block popup is open (doc_page_impl_popup.md) the page behind it is
+// not reachable and a pointer going down anywhere leaves nothing: the popup
+// switches between View and Edit, and closing it keeps the session open.
 //
 // geometry lock: while the block is edited, the wrapper keeps the height and
 // the gaps to its neighbors that the block had in view mode (measured by
@@ -52,7 +55,7 @@ import './DocEdit.css';
 // blocks that render nothing visible (a comment, trailing component markers)
 // get a small floating chip, so they can be found and edited.
 export const DocEditBlock = observer(function DocEditBlock({ blockIndex, children }) {
-  const { editStore, eventRouter, onEvent: onEventPage } = useDocStores();
+  const { blockPopupStore, editStore, eventRouter, onEvent: onEventPage } = useDocStores();
   const { path, model, format } = useDocEditDoc();
   const elementRef = useRef(null);
   const anchorRef = useRef(null);
@@ -61,7 +64,7 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
   const block = model.blockList[index];
   const isEditing = Boolean(block) && editStore.sessionIs(path, 'block', index);
   const geometryLock = useGeometryLock(elementRef, editStore, path, index);
-  useEditOutsidePointer(elementRef, isEditing, () => void editStore.sessionLeave());
+  useEditOutsidePointer(elementRef, isEditing && !blockPopupStore.isOpen, () => void editStore.sessionLeave());
   useFloatHeightFollow(anchorRef, floatElement);
   const blockContextValue = useMemo(() => ({ path, blockIndex: index }), [path, index]);
   if (!block) return children;
@@ -126,7 +129,8 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
   };
 
   // keys not handled by a control of the editor: Escape cancels, Ctrl/⌘ +
-  // Enter leaves (saves). focus is released first so an inline value commits.
+  // Enter leaves (saves). focus is released first so an inline value commits,
+  // in the block or, while the editor is in the block popup, in the popup.
   // an open mode menu of the block takes Escape first: it closes, the
   // session stays.
   const keyDownHandle = (event) => {
@@ -143,6 +147,7 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       editFocusRelease(elementRef.current);
+      editFocusRelease(blockPopupStore.slotElement);
       void editStore.sessionLeave();
     }
   };

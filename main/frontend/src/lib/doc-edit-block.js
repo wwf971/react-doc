@@ -184,9 +184,12 @@ function positionPointGet(point) {
 //   frontmatter   { lineStart, lineEnd, text } or undefined
 //   blockList     [{ index, kind, nodeType, lineStart, lineEnd, text, depth?, component? }]
 //     depth       heading level of a heading block
-//     component   { compName, props, nodeType, lang, raw,
+//     component   { compName, props, nodeType, lang, markerLine, raw,
 //                   textBefore, markerText, textBetween, nodeText }
 //                 textBefore + markerText + textBetween + nodeText === text
+//                 markerLine: the line of the marker comment in the content
+//                 without frontmatter, as the reading view numbers it
+//                 (DocComp sourceLine)
 export function editDocModelBuild({ source, blockListCompiled }) {
   const { content } = splitFrontmatter(source);
   const prefix = source.slice(0, source.length - content.length);
@@ -232,6 +235,7 @@ function componentDetailBuild(componentCompiled, text, offsetBlock) {
     props: componentCompiled.props,
     nodeType: componentCompiled.nodeType,
     lang: componentCompiled.lang,
+    markerLine: componentCompiled.markerPositionStart.line,
     raw: componentCompiled.nodeType === 'code' ? fencedCodeValueGet(nodeText) : nodeText,
     textBefore: text.slice(0, markerStart),
     markerText: text.slice(markerStart, markerEnd),

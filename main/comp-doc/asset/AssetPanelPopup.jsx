@@ -40,6 +40,7 @@ export const AssetPanelPopup = observer(function AssetPanelPopup() {
         isCloseVisible: true,
         className: isPreviewOpen ? 'doc-asset-popup is-preview-open' : 'doc-asset-popup',
         bodyClassName: 'doc-asset-popup-body',
+        popupBackdropClassName: 'doc-asset-popup-backdrop',
       }}
       headerRightContent={(
         <button

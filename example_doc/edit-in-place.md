@@ -93,6 +93,8 @@ images:
 
 The edit mode **Cells** is the default: the title, the headers, and the cells are edited in the table; a status cell cycles through the stock states; rows get insert / remove icons. Adding a row or a column is in the floating bar.
 
+The table can also be edited in a popup: the button at its top right (shown when the pointer is over it) opens it in a dialog, in reading mode as well as here. **Edit** in the dialog's header opens the **Cells** editor there, with the add buttons and **Save** / **Cancel** in the header; **View** saves and shows the table again, **Cancel** drops the changes, and the dialog stays open either way. Closing the dialog puts the table back in the page as it is. `StockTable` uses the same popup as the spreadsheet ([Spreadsheet](mdx-usage/comp-excel-univer.md#popup)); a component takes part by rendering itself inside the page's popup surface.
+
 <!--renderComp=StockTable,title=Warehouse A-->
 ```
 | Product ID | Description | Stock Status |

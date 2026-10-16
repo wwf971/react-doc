@@ -379,7 +379,7 @@ const DataSection = observer(function DataSection({ object, panel, isWritable, i
   }
 
   return (
-    <section className="doc-asset-section">
+    <section className="doc-asset-section is-data">
       <p className="doc-asset-section-title">{title}</p>
       <div ref={editAreaRef} className="doc-asset-data">
         {edit || (stateVersion?.status === 'done' && stateVersion.isText) ? (

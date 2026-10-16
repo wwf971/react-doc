@@ -158,6 +158,16 @@ asset.yaml                    the store config: folderList [{ path, isDefault }]
 
 Which folders make up the store, and which one is the **default folder**, is the store's config file, named by `asset.file` of `config.yaml` (relative to the config file). Objects are created in the default folder; the other folders are read like it. An object is its folder, named `{objectId}--{name}` so that a person browsing the disk sees what each folder is (`w4okcncucnu--hero image`) while the store still works by id: the separator `--` is a string an id can never hold (ids are base36) and a name is refused when it holds it, so the id of a folder is what stands before the first `--`, and the folder needs no file read to be identified. The separator is valid in a folder name on every major operating system, and so is the name by the rules above. Finding object `w4okcncucnu` is finding the folder whose id part is that in each store folder, and listing the store is listing those folders; there is no index file to keep in sync. Renaming an object renames its folder. The first folder of the list wins when two folders hold the same id, which is a mistake the page cannot repair and reports by showing the first. Where the object was found (`folder`, `dirName`) travels with its metadata to the page and is not written into `object.yaml`.
 
+```yaml
+# config.yaml                      # asset.yaml (paths relative to asset.yaml)
+asset:                             folderList:
+  file: ./asset.yaml                 - path: ./asset
+                                       isDefault: true
+                                     - path: ./asset-archive
+```
+
+The plugin reads the `asset` section once, when the development server starts (`configResolved`), before it decides whether the page gets an asset api: without an `asset` section the page has no store; a section it cannot use stops the server with a message saying how to write it, rather than starting it without a store that the page would then report as not writable at the first save. A section is unusable when it is not a mapping with `file`, when it uses the former `asset.folder` (the store was once one folder named in `config.yaml`; the message shows the migration above, with the old folder as the default folder; the object folders stay as they are, no id or data changes), and when the store config file is not valid yaml or its `folderList` is not a list. A store config file that does not exist yet is an empty store, and a folder of the list that does not exist yet is created when the first object is written to it, so a new store needs no folder on disk to start. The endpoint and the middleware are chosen once (`configResolved`, `configureServer`), so a store added to `config.yaml` while the server runs takes effect after a restart of the server; a browser reload or a document's hot update does not install an api that was not installed at start.
+
 The folders are changed from the page: the **Asset store** tab of the settings panel ([config: the settings panel](doc_page_impl_config.md#user-level)) lists them with their object counts, marks the default and a folder that does not exist on disk, and on the development server sets the default, removes a folder (its files stay; its objects just leave the store), or adds one (created on disk when missing). The new path is an `EditValueInline`, the same field as a source path; leaving it commits: Enter, the Add folder button, or a click outside adds the path, and leaving it empty shows the placeholder again. The whole list is sent (`POST /folder/set`) and the server rewrites `asset.yaml`, so the change holds across page loads. The store config has its own file rather than a line in `config.yaml` because a change of `config.yaml` reloads the whole page, and adding a folder should not.
 
 There is one object file per object, and one metadata file per version that has metadata. Every rewrite of a file is protected the same way (`fileWriteSafe`): the current file is copied to `.bak`, the new content is written to `.tmp`, and the temporary file is renamed over the original, so an interrupted write leaves either the old file or the new one, and the previous content is one file away. The backups are recovery data, not history: the version files are the history, and the backups are excluded from version control (`.gitignore`). The demonstration store's default folder has its own `.gitignore` that lists the files of the example and ignores everything else, so trying the panel there (new versions, new objects, backups) leaves nothing to commit; changes of tracked files (an `object.yaml`, a version rewritten in place) still show, which an ignore file cannot hide, and `git restore` undoes them. Times are written in the project's time format (`20260520_23250530+09`).
@@ -261,7 +271,7 @@ init()
 
 So a reference reading `head` knows its version id as soon as the index is in, a reference by name resolves without a request of its own, every frame of a document resolves with one index request plus one request per distinct version, and a reference to an object that does not exist costs one request instead of a retry loop. The state the store holds:
 
-- `backend`, `isAvailable`, `isWritable`: the api backend when `config.asset.endpoint` is set, else the snapshot backend when `data.assetSnapshot` is set, else none; `isWritable` comes from `GET /status` and is false for a snapshot.
+- `backend`, `isAvailable`, `isWritable`, `statusMessage`: the api backend when `config.asset.endpoint` is set, else the snapshot backend when `data.assetSnapshot` is set, else none (`backendKind`: `api`, `snapshot`, `none`); `isWritable` comes from `GET /status` and is false for a snapshot; `statusMessage` is the backend's message when `GET /status` failed. Why the store cannot be read or written is told apart, never reduced to "not writable": `unavailableReason` (no store: no `asset.file`, or a server started before it was added; the status request failed, with the backend's message) and `writeUnavailableReason` (those, or a built page's read-only snapshot, or a store still loading). Every refusal of a write, here and in the edit layer (an asset-only block's edit modes, creating an asset-only block, moving data into the store), and the settings tab use these texts.
 - `storeIdList`, `folderList`: from `GET /status`; `index`: the state of the index load.
 - `objectById`: the metadata of every object, keyed by store and object id, with its loading or error state; `versionByKey`: the data of every version read so far (`isText`, `text`, `size`, `hash`), keyed by store, object id and version id. A reference reading `head` resolves through `objectById[…].versionIdHead`, so a checkout changes what every frame shows with one object update. `nameLookupByKey`: the names looked up that the index did not have, loading or missing; it is emptied when the index is read again, and an entry is dropped when an object of that name arrives, so a reference by name recovers as soon as the object exists.
 - `refObjectIdGet(ref)` is the id a reference means (its own, or its name's); `refLoad(ref)` reads what `refQuery(ref)` is missing and nothing else; `dataUrlGet(store, objectId, versionId)` is the url of a version's bytes.
@@ -313,16 +323,19 @@ The compile-time readers of component data (`languageListGetByComponent`, `struc
 
 ```text
 frontend/plugin/id-ms48.ts                 ms_48 ids: create, time of, validity
-frontend/plugin/doc-asset-store.ts         the file store: config file and folders, objects (id, name, folder
+frontend/plugin/doc-asset-store.ts         the file store: the asset section of config.yaml (checked, with the
+                                           migration of asset.folder), config file and folders, objects (id, name, folder
                                            name), versions, head, bytes and text, version metadata, save
                                            modes, events, backups, snapshot
 frontend/plugin/doc-asset-server.ts        the dev-server middleware
 frontend/plugin/doc-source.ts              asset.file, docAssetEndpoint / assetSnapshot / subscribeDocAsset
                                            exports, reference expansion for the scans, change events
+frontend/plugin/doc-asset-config.test.js   the asset section and what the server then exports and answers;
+                                           the reasons the page gives for a store it cannot write
 frontend/src/lib/doc-asset-ref.js          the reference: language, parse (by id or name), build, expansion
                                            in a document text
 frontend/src/lib/doc-asset-backend.js      api backend, snapshot backend (one interface)
-frontend/src/store/DocAssetStore.ts        backend, status and index, objects and versions, names,
+frontend/src/store/DocAssetStore.ts        backend, status and index, why the store cannot be read or written, objects and versions, names,
                                            refLoad / refQuery, writes, dependencies, folders, the panel and its preview
 frontend/src/store/DocEditStore.ts         blockAssetMoveConfirmSet / blockAssetMoveApply (with dependencies),
                                            dataReplaceApply, blockDependencyListGet, blockCreateAsAsset and

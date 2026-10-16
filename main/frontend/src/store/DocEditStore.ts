@@ -254,6 +254,9 @@ export class DocEditStore {
   sidePanelTextPending: { itemId: string; text: string } | undefined = undefined;
   // the leave in progress, so that a second leave request waits for it
   leavePromise: Promise<boolean> | undefined;
+  // what the editor of the open session does before its draft is saved
+  // (sessionSubmitPrepareSet)
+  submitPrepare: { session: EditSession; handler: () => Promise<EditResult | void> } | undefined;
   reactionDispose: (() => void) | undefined;
   reactionConfigDispose: (() => void) | undefined;
 
@@ -281,6 +284,7 @@ export class DocEditStore {
       sourceByPath: observable.shallow,
       compilePendingByPath: false,
       leavePromise: false,
+      submitPrepare: false,
       reactionDispose: false,
       reactionConfigDispose: false,
     });
@@ -702,7 +706,7 @@ export class DocEditStore {
       const reference = assetRefParse(block.component.raw);
       if (reference.message) disabledReason = reference.message;
       else if (reference.versionId !== 'head') disabledReason = `the reference reads version ${reference.versionId}, not the head; a save writes the head`;
-      else if (!this.assetStore?.isWritable) disabledReason = 'the asset store is not writable';
+      else if (!this.assetStore?.isWritable) disabledReason = this.assetWriteUnavailableReasonGet();
     }
     return modeList.map((mode) => {
       const isSource = mode.id === COMP_EDIT_MODE_SOURCE_ID;
@@ -712,6 +716,12 @@ export class DocEditStore {
         disabledReason: isSource ? '' : disabledReason,
       };
     });
+  }
+
+  // why the asset store cannot be written now: no store, a failed status
+  // request, a read-only snapshot (DocAssetStore.writeUnavailableReason)
+  private assetWriteUnavailableReasonGet(): string {
+    return this.assetStore ? this.assetStore.writeUnavailableReason : 'The page has no asset store.';
   }
 
   // the mode menu is offered where there is something to choose: a
@@ -846,7 +856,7 @@ export class DocEditStore {
   // answers.
   private async sessionAssetDraftSubmit(session: EditSession, assetDraft: EditAssetDraft): Promise<boolean> {
     if (!this.assetStore?.isWritable) {
-      this.sessionFail('The asset store is not writable.');
+      this.sessionFail(this.assetWriteUnavailableReasonGet());
       return false;
     }
     const block = this.docEditByPath[session.path]?.model?.blockList[session.blockIndex];
@@ -892,7 +902,7 @@ export class DocEditStore {
   async sessionCancel(): Promise<boolean> {
     const session = this.session;
     if (!session) return true;
-    if (session.status === 'submitting') return false;
+    if (session.status === 'submitting' || this.leavePromise) return false;
     if (session.type === 'block' && session.isCreated) {
       runInAction(() => {
         session.status = 'submitting';
@@ -932,10 +942,37 @@ export class DocEditStore {
     return this.leavePromise;
   }
 
+  // an editor that holds part of its draft outside the reported one (an
+  // engine's open cell editor) registers what completes it; every leave
+  // awaits it before the draft is read. the handler reports the completed
+  // draft as usual (editDraftChange) and resolves { code: 0 }, or a failure
+  // the session then shows, staying open. returns the unregistration.
+  sessionSubmitPrepareSet(session: EditSession, handler: () => Promise<EditResult | void>): () => void {
+    const submitPrepare = { session, handler };
+    this.submitPrepare = submitPrepare;
+    return () => {
+      if (this.submitPrepare === submitPrepare) this.submitPrepare = undefined;
+    };
+  }
+
   private async sessionSubmit(): Promise<boolean> {
     const session = this.session;
     if (!session) return false;
     if (session.status === 'submitting') return false;
+    const submitPrepare = this.submitPrepare?.session === session ? this.submitPrepare : undefined;
+    if (submitPrepare) {
+      let result: EditResult | void;
+      try {
+        result = await submitPrepare.handler();
+      } catch (error: any) {
+        result = { code: -1, message: String(error?.message ?? error) };
+      }
+      if (this.session !== session) return this.session === undefined;
+      if (result && result.code !== 0) {
+        this.sessionFail(result.message || 'The editor could not complete its change.');
+        return false;
+      }
+    }
     if (session.assetDraft) return this.sessionAssetDraftSubmit(session, session.assetDraft);
     const text = session.textDraft.replace(/\r\n/g, '\n');
     if (text === session.textInitial) {
@@ -1200,7 +1237,7 @@ export class DocEditStore {
       return false;
     }
     if (!this.assetStore?.isWritable) {
-      failSet(`${template.compName} keeps its data in the asset store, which is not writable here.`);
+      failSet(`${template.compName} keeps its data in the asset store, which cannot be written: ${this.assetWriteUnavailableReasonGet()}`);
       return false;
     }
     runInAction(() => {
@@ -1366,7 +1403,7 @@ export class DocEditStore {
       });
     };
     if (!this.assetStore?.isWritable) {
-      failSet('the asset store is not writable');
+      failSet(this.assetWriteUnavailableReasonGet());
       return false;
     }
     if (!this.blockAssetMoveIsAvailable(path, blockIndex)) {
@@ -1587,7 +1624,7 @@ export class DocEditStore {
 
     const asset = event.source.asset;
     if (asset?.isFromAsset) {
-      if (!this.assetStore?.isWritable) return { code: -1, message: 'the asset store is not writable' };
+      if (!this.assetStore?.isWritable) return { code: -1, message: this.assetWriteUnavailableReasonGet() };
       const result = await this.assetStore.objectUpdate(
         asset.store,
         asset.objectId,

@@ -1,8 +1,22 @@
-.doc-mdx-excel-univer {
+/* the outer box of the block (BlockPopupSurface) carries its margins, the
+   sheet's own box has none: it sits flush in the popup */
+.doc-mdx-excel-univer-shell {
   margin: 0.75rem 0;
+}
+
+.doc-mdx-excel-univer {
+  margin: 0;
   border: 1px solid var(--color-fd-border);
   border-radius: 2px;
   background: #fff;
+}
+
+/* in the block popup the sheet fills the dialog */
+.doc-mdx-excel-univer.is-popup {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
 }
 
 .doc-mdx-excel-univer-sheet {
