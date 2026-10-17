@@ -96,7 +96,7 @@ A few directions were tried before this one and are recorded so they are not rep
 - `blockModeMenu`: the one mode menu that is open, `{ path, blockIndex }` ([the mode menu](#the-mode-menu)).
 - `blockViewModeById`: the view mode chosen for a block, by `path#blockIndex`, for components that expose view modes; a block without an entry renders its component's default. Dropped for a document when its number of blocks changes, since the indices then name other blocks.
 - `blockTextPending`: the text of the last saved block until the document is recompiled, so the block shows what was saved instead of the old text meanwhile.
-- `sidePanelText` and `sidePanelTextPending`: the one side-panel label being edited, and the label just saved until the new configuration has rebuilt the side panel; see [Side panel: editing a label](doc_page_impl_side_panel.md#editing-a-label-in-place).
+- `sidePanelText` and `sidePanelTextPending`: the one side-panel label being edited, owned by the rendering of the label it was started from, and the label just saved until the new configuration has rebuilt the side panel; see [Side panel: editing a label](doc_page_impl_side_panel.md#editing-a-label-in-place).
 
 A reaction reads the current document whenever edit mode is on and the document or the manifest changes; navigating to another document leaves the open session first.
 

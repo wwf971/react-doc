@@ -189,7 +189,7 @@ const docsPageSlots = {
   footer: DocPageFooter,
   toc: {
     main: DocPageToc,
-    popover: TOCPopover,
+    popover: DocPageTocPopover,
     provider: TOCProvider,
   },
 };
@@ -214,6 +214,16 @@ function DocPageFooter({ className = '', ...props }) {
   return (
     <SidePanelItemSurfaceContext.Provider value="footer">
       <PageFooter {...props} className={`doc-page-footer${classSingleCard} ${className}`.trim()} />
+    </SidePanelItemSurfaceContext.Provider>
+  );
+}
+
+// the toc popover of a narrow page shows the current page's name from the
+// page tree in its trigger; it is a display of the label, not the side panel
+function DocPageTocPopover(props) {
+  return (
+    <SidePanelItemSurfaceContext.Provider value="tocPopover">
+      <TOCPopover {...props} />
     </SidePanelItemSurfaceContext.Provider>
   );
 }

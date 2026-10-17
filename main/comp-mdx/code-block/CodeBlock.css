@@ -137,11 +137,7 @@
 	white-space: nowrap;
 }
 
-.doc-code-block-compact-popup-backdrop {
-	z-index: 210;
-}
-
-.doc-code-block-compact-popup {
+.text-panel.is-popup.doc-code-block-compact-popup {
 	width: min(1100px, calc(100vw - 48px));
 	height: min(760px, calc(100vh - 48px));
 }
@@ -181,7 +177,7 @@
 	color: #dc2626;
 }
 
-.doc-code-block-compact-popup-body {
+.text-panel.is-popup .doc-code-block-compact-popup-body {
 	overflow: hidden;
 	padding: 0;
 }

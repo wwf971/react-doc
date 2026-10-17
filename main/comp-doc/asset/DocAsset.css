@@ -56,14 +56,12 @@
 /* ---------- popup ---------- */
 
 /* wider while the preview pane is open; the two columns scroll on their own */
-.doc-asset-popup-backdrop {
-  z-index: 210;
-}
-
 .doc-asset-popup {
   width: min(1040px, calc(100vw - 32px));
   height: min(860px, calc(100vh - 32px));
   max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
 }
 
 .doc-asset-popup.is-preview-open {
@@ -71,9 +69,9 @@
 }
 
 .doc-asset-popup-body {
+  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
-  padding: 0;
 }
 
 .doc-asset-popup-content {

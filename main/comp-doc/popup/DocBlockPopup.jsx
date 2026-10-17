@@ -92,7 +92,6 @@ export const DocBlockPopup = observer(function DocBlockPopup() {
         isExpanded: popup.isExpanded,
         className: `doc-block-popup ${EDIT_POPUP_CLASS}${popup.isExpanded ? ' is-expanded' : ''}`,
         bodyClassName: 'doc-block-popup-body',
-        popupBackdropClassName: 'doc-block-popup-backdrop',
       }}
       headerRightContent={headerRightContent}
       content={(

@@ -177,10 +177,22 @@ export type EditBlockAssetMove = {
   message: string;
 };
 
-// the one side-panel item whose label is being edited in place
+// the one side-panel item whose label is being edited in place. the same
+// item is rendered in several places at once (the side panel, the
+// breadcrumb, the footer cards, the toc popover, a mobile side panel next
+// to the desktop one); ownerId is the rendered label the edit was started
+// from (its instance id), and only that label shows the editor and may
+// finish the edit
 export type EditSidePanelText = {
   itemId: string;
+  ownerId: string;
   status: 'editing' | 'submitting' | 'error';
+  message: string;
+};
+
+// what one rendered label shows of the label edit of its item
+export type EditSidePanelTextState = {
+  status: '' | 'editing' | 'submitting' | 'error';
   message: string;
 };
 
@@ -249,6 +261,9 @@ export class DocEditStore {
   // is compiled again, so the saved block never flashes back to its old text
   blockTextPending: { path: string; blockIndex: number; text: string } | undefined = undefined;
   sidePanelText: EditSidePanelText | undefined = undefined;
+  // the rendered label whose request to start editing is waiting for the
+  // open block session to be left; a later request replaces it
+  sidePanelTextStartOwnerId: string | undefined = undefined;
   // the label an item was just saved as, shown until the side panel is built
   // from the new configuration, for the same reason as blockTextPending
   sidePanelTextPending: { itemId: string; text: string } | undefined = undefined;
@@ -284,6 +299,7 @@ export class DocEditStore {
       sourceByPath: observable.shallow,
       compilePendingByPath: false,
       leavePromise: false,
+      sidePanelTextStartOwnerId: false,
       submitPrepare: false,
       reactionDispose: false,
       reactionConfigDispose: false,
@@ -356,6 +372,7 @@ export class DocEditStore {
       this.blockAssetMoveClear();
       // a label still being typed is dropped: it was never saved
       if (this.sidePanelText?.status !== 'submitting') this.sidePanelText = undefined;
+      this.sidePanelTextStartOwnerId = undefined;
     });
     return true;
   }
@@ -1094,16 +1111,19 @@ export class DocEditStore {
     if (event.type.startsWith('sidePanelText')) {
       const itemId = String(event.source.itemId ?? '');
       if (!itemId) return { code: -1, message: `${event.type} needs the item id` };
+      // the rendered label that reported the event
+      const ownerId = String(event.source.instanceId ?? '');
+      if (!ownerId) return { code: -1, message: `${event.type} needs the instance id of the label` };
       if (event.type === 'sidePanelTextEditStartRequest') {
-        const isStarted = await this.sidePanelTextEditStart(itemId);
+        const isStarted = await this.sidePanelTextEditStart(itemId, ownerId);
         return isStarted ? { code: 0, message: '' } : { code: -1, message: 'the label of this item cannot be edited' };
       }
       if (event.type === 'sidePanelTextSubmitRequest') {
-        return this.sidePanelTextSubmit(itemId, String(event.data.text ?? ''));
+        return this.sidePanelTextSubmit(itemId, ownerId, String(event.data.text ?? ''));
       }
       if (event.type === 'sidePanelTextCancelRequest') {
-        this.sidePanelTextCancel(itemId);
-        return { code: 0, message: '' };
+        const isCanceled = this.sidePanelTextCancel(itemId, ownerId);
+        return isCanceled ? { code: 0, message: '' } : { code: -1, message: 'no label edit is open in this label' };
       }
       return undefined;
     }
@@ -1475,6 +1495,18 @@ export class DocEditStore {
     return this.sidePanelText?.itemId === itemId;
   }
 
+  // the label edit as one rendered label of the item shows it: the editor
+  // (editing / submitting) only in the label the edit was started from; a
+  // failed save in every label of the item that can be edited, so the edit
+  // can be retried from any of them; nothing in the others
+  sidePanelTextStateGet(itemId: string, ownerId: string, isLabelEditable: boolean): EditSidePanelTextState {
+    const edit = this.sidePanelText;
+    if (!edit || edit.itemId !== itemId) return { status: '', message: '' };
+    if (edit.ownerId === ownerId) return { status: edit.status, message: edit.message };
+    if (edit.status === 'error' && isLabelEditable) return { status: 'error', message: edit.message };
+    return { status: '', message: '' };
+  }
+
   // the label to show for an item: the one just saved, until the new
   // configuration arrives; undefined when the displayed label is current
   sidePanelTextPendingGet(itemId: string): string | undefined {
@@ -1482,32 +1514,53 @@ export class DocEditStore {
   }
 
   // editing a label is an edit action like any other: the open block
-  // session is left (saved) first
-  async sidePanelTextEditStart(itemId: string): Promise<boolean> {
+  // session is left (saved) first. a label being edited elsewhere (another
+  // item, or another rendering of the same item) is dropped, unsaved, for
+  // the new one; one being saved refuses. of two requests started while the
+  // session is being left, the later one opens.
+  async sidePanelTextEditStart(itemId: string, ownerId: string): Promise<boolean> {
     if (!this.sidePanelTextIsEditable(itemId)) return false;
     if (this.sidePanelText?.status === 'submitting') return false;
+    this.sidePanelTextStartOwnerId = ownerId;
     const isLeft = await this.sessionLeave();
-    if (!isLeft) return false;
+    const isRequestCurrent = this.sidePanelTextStartOwnerId === ownerId;
+    if (isRequestCurrent) this.sidePanelTextStartOwnerId = undefined;
+    if (!isLeft || !isRequestCurrent) return false;
+    if (!this.sidePanelTextIsEditable(itemId) || this.sidePanelText?.status === 'submitting') return false;
     runInAction(() => {
       this.insertMenu = undefined;
       this.deleteConfirm = undefined;
       this.blockMoveClear();
       this.blockAssetMoveClear();
-      this.sidePanelText = { itemId, status: 'editing', message: '' };
+      this.sidePanelText = { itemId, ownerId, status: 'editing', message: '' };
     });
     return true;
   }
 
-  sidePanelTextCancel(itemId: string) {
-    if (!this.sidePanelTextIs(itemId) || this.sidePanelText.status === 'submitting') return;
+  // only the label the edit was started from ends it
+  sidePanelTextCancel(itemId: string, ownerId: string): boolean {
+    const edit = this.sidePanelText;
+    if (!edit || edit.itemId !== itemId || edit.ownerId !== ownerId || edit.status === 'submitting') return false;
     this.sidePanelText = undefined;
+    return true;
   }
 
-  // writes the label; an unchanged or empty text only ends the editing
-  async sidePanelTextSubmit(itemId: string, text: string): Promise<EditResult> {
+  // a rendered label is gone (the mobile side panel closed, the layout
+  // changed, the tree was rebuilt): an edit it was showing is dropped
+  // unsaved, as is its waiting request to start one. a save in progress
+  // finishes; a failed save stays, shown by the other labels of the item.
+  sidePanelTextOwnerRelease(ownerId: string) {
+    if (this.sidePanelTextStartOwnerId === ownerId) this.sidePanelTextStartOwnerId = undefined;
+    if (this.sidePanelText?.ownerId === ownerId && this.sidePanelText.status === 'editing') this.sidePanelText = undefined;
+  }
+
+  // writes the label; an unchanged or empty text only ends the editing.
+  // only the label the edit was started from submits it: the blur of any
+  // other label, or of one already replaced, is refused
+  async sidePanelTextSubmit(itemId: string, ownerId: string, text: string): Promise<EditResult> {
     const edit = this.sidePanelText;
-    if (!edit || edit.itemId !== itemId || edit.status === 'submitting') {
-      return { code: -1, message: 'no label edit is open for this item' };
+    if (!edit || edit.itemId !== itemId || edit.ownerId !== ownerId || edit.status !== 'editing') {
+      return { code: -1, message: 'no label edit is open in this label' };
     }
     const outline = this.sidePanelOutlineGet(itemId);
     if (!outline?.textSource || !this.api) {
@@ -1517,7 +1570,7 @@ export class DocEditStore {
     const textShown = this.docStore.textDisplayGet(outline.textLocalized);
     if (textNext === '' || textNext === textShown.text) {
       runInAction(() => {
-        this.sidePanelText = undefined;
+        if (this.sidePanelText === edit) this.sidePanelText = undefined;
       });
       return { code: 0, message: '' };
     }

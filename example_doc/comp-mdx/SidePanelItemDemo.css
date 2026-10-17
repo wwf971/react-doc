@@ -1,0 +1,10 @@
+/* the sidebar link sizes every svg inside it ([&_svg]:size-4); the icon
+   before a source file's name keeps the size of the text */
+.doc-side-panel-item .doc-side-panel-item-demo-icon {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-inline-end: 0.25rem;
+  vertical-align: -1px;
+  color: var(--color-fd-muted-foreground);
+}

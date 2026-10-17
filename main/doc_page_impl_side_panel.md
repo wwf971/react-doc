@@ -235,8 +235,12 @@ Tags are resolved at render time rather than when the tree is built, because a l
 The renderer receives the unified `{ data, config, onEvent }` props:
 
 ```text
-data.text              display text (node text, page title, or folder name), always
-                       a string in the selected language
+data.text              the label (node text, page title, or folder name), always a
+                       plain string in the selected language; the text the label is
+                       edited as
+data.textDisplay       not given by the host: what a custom renderer wrapping
+                       SidePanelItem shows in place of data.text (icons, file names),
+                       never edited
 data.textLanguage      language of data.text, '' for a plain-string label
 data.textMessage       '' or the diagnostic of an invalid authored text
 data.kind              separator | folder | folder-file | file | panel | inline
@@ -251,15 +255,17 @@ data.tagList           resolved tags of the bound asset, ready to display, not y
 
 config.itemId          stable item id
 config.assetKey        asset the item is bound to, e.g. doc:/guide/a.md
-config.surface         sidebar | breadcrumb | footer
+config.surface         sidebar | breadcrumb | footer | tocPopover
 config.configGlobal    page-level config { key: value }, see doc_page_impl_config.md
 config.configService   config queries, including document-level values
 config.isTagOverviewAvailable   true when a clicked tag can open the tag overview
 config.tagService      tag queries, see doc_page_impl_tag.md#tag-service
 config.isTextEditable  edit mode, sidebar surface: the label may be edited in place
-config.textEditStatus  '' | editing | submitting | error, for this item
+config.textEditStatus  '' | editing | submitting | error, for this rendering of the label
 config.textEditMessage why the last save of the label failed
-config.instanceId, placement, compId, sourcePath
+config.instanceId      this rendering of the label, distinct for every rendering of the
+                       same item; the source of its events
+config.placement, compId, sourcePath
 
 onEvent('tagOverviewOpenRequest', { tagId })   ask to open the tag overview popup
 onEvent('sidePanelTextEditStartRequest')       start editing the label (see "Editing a label in place")
@@ -278,6 +284,8 @@ function SidePanelItemProject({ data, config, onEvent }) {
   return <SidePanelItem data={{ ...data, tagList }} config={config} onEvent={onEvent} />;
 }
 ```
+
+A renderer that decorates the name itself (an icon before it, the file name after it) passes the decoration as `data.textDisplay` and leaves `data.text` the plain name: the default renderer shows `data.textDisplay` outside editing and edits `data.text`, so a rename starts from the name, never from the decoration, and never from the text of the rendered element. The demonstration wrapper puts a file icon before the name of a non-Markdown document this way. A label whose `data.text` is not a string (an element, from a renderer written before `data.textDisplay`) is still displayed, without the edit button.
 
 Labels added this way are rendering decisions only, and the default renderer still filters them through `TagsDisplayAtSidePanelItemsList`. To give an asset a real tag that other components can query, declare it in source rules or side-panel YAML.
 
@@ -308,7 +316,7 @@ A custom renderer receives display-ready `data.text`, so wrapping `SidePanelItem
 
 ### Surfaces
 
-Fumadocs reuses the page-tree `name` in breadcrumbs and in the previous/next cards. Those surfaces wrap their content in `SidePanelItemSurfaceContext` with `breadcrumb` or `footer`; everything else is `sidebar`. The default renderer shows tags only on `sidebar`, keeping the other surfaces plain text. A custom renderer can make its own choice from `config.surface`.
+Fumadocs reuses the page-tree `name` in breadcrumbs, in the previous/next cards, and in the trigger of the toc popover of a narrow page (the current page's name). Those surfaces wrap their content in `SidePanelItemSurfaceContext` with `breadcrumb`, `footer` or `tocPopover` (`DocPageView`: `DocPageBreadcrumb`, `DocPageFooter`, `DocPageTocPopover`); everything else is `sidebar`. A new place that shows a page-tree name outside the side panel provides its own surface, or it counts as the side panel and offers editing. The default renderer shows tags only on `sidebar`, keeping the other surfaces plain text. A custom renderer can make its own choice from `config.surface`.
 
 ### Tag display
 
@@ -336,13 +344,16 @@ plugin (load time)         every node: textSource = { file, path }
                                    ["sidePanelById", "main", "tree", 0, "children", 1],
                                    ["sidePanelById", "main", "root"]
 page-tree.js               itemOutlineById[itemId]: textSource, isTextAuthored
-SidePanelItemHost          config.isTextEditable, textEditStatus, textEditMessage;
+SidePanelItemHost          config.instanceId: this rendering of the label (owner);
+                           config.isTextEditable, textEditStatus, textEditMessage;
                            data.text = the label just saved while the new tree is pending
 SidePanelItem              hover: [✎] after the label  ->  sidePanelTextEditStartRequest
                            the text span made contenteditable, Enter / blur
                            -> sidePanelTextSubmitRequest { text }, Escape -> ...CancelRequest
-event layer                edit route -> DocEditStore.eventHandle (source.itemId)
-DocEditStore               sidePanelText { itemId, status, message }, sidePanelTextPending
+event layer                edit route -> DocEditStore.eventHandle (source.itemId,
+                           source.instanceId = the owner)
+DocEditStore               sidePanelText { itemId, ownerId, status, message },
+                           sidePanelTextPending
                            POST {editEndpoint}/side-panel/text
                              { file, nodePath, language, text, textBase }
 plugin/doc-side-panel-text.ts   parsed yaml -> one line operation on the file
@@ -356,7 +367,17 @@ plugin                     write; report the new configuration as "doc-source-ch
 
 **No reload.** A side-panel file is configuration, and a change of configuration normally regenerates the manifest and reloads the page. A label written by the page is different: the plugin re-reads the configuration itself, invalidates the manifest module, and sends the new `configDoc` and `fileManifest` as the `doc-source-change` data event ([Saving without a reload](doc_page_impl_edit.md#saving-without-a-reload)); `DocStore.treeModel` recomputes from the new tree and the side panel re-renders in place. The watcher then reports the same file change; the plugin remembers the content hash it wrote and skips the reload while the file still has that content, so an edit made in an editor afterwards still reloads the page as before.
 
-**In the browser.** `DocEditStore.sidePanelText` is the one label being edited (`editing`, `submitting`, `error` with its message). Starting it is an edit action like any other: the open block session is left (saved) first. `SidePanelItemHost` hands the renderer `config.isTextEditable` (edit mode, sidebar surface, the item has a `textSource`) and the status; the default renderer shows a small edit button after the label while the row is hovered, and on click reports `sidePanelTextEditStartRequest`. The events are routed like component reports ([event layer](doc_page_impl_event.md)): the host application sees them first, then the edit route brings them to `DocEditStore.eventHandle`, which identifies the item by `event.source.itemId` and finds its `textSource`, its displayed translation and the authored text in `DocStore.treeModel.itemOutlineById`. An empty or unchanged text only ends the edit. After a successful write the item shows the saved text as `data.text` (`sidePanelTextPending`) until the new configuration has rebuilt the tree, so the label never flashes back to its old value. The rebuilt tree does not reach the sidebar itself: fumadocs keeps the page tree it received first as long as the root `$id` stays the same, and changing the id would remount the sidebar list and close the folders the reader opened. `SidePanelItemHost` therefore reads the label (`textLocalized`, `textMessage`) from the current `itemOutlineById` by its `itemId`, and the props of its element are only the fallback.
+**In the browser.** `DocEditStore.sidePanelText` is the one label being edited (`editing`, `submitting`, `error` with its message). Starting it is an edit action like any other: the open block session is left (saved) first. `SidePanelItemHost` hands the renderer `config.isTextEditable` (edit mode, sidebar surface, the item has a `textSource`) and the status of its own rendering (see **One editor** below); the default renderer shows a small edit button after the label while the row is hovered, and on click reports `sidePanelTextEditStartRequest`. The events are routed like component reports ([event layer](doc_page_impl_event.md)): the host application sees them first, then the edit route brings them to `DocEditStore.eventHandle`, which identifies the item by `event.source.itemId` and finds its `textSource`, its displayed translation and the authored text in `DocStore.treeModel.itemOutlineById`. An empty or unchanged text only ends the edit. After a successful write the item shows the saved text as `data.text` (`sidePanelTextPending`) until the new configuration has rebuilt the tree, so the label never flashes back to its old value. The rebuilt tree does not reach the sidebar itself: fumadocs keeps the page tree it received first as long as the root `$id` stays the same, and changing the id would remount the sidebar list and close the folders the reader opened. `SidePanelItemHost` therefore reads the label (`textLocalized`, `textMessage`) from the current `itemOutlineById` by its `itemId`, and the props of its element are only the fallback.
+
+**One editor.** The same item is rendered in several places at once: the sidebar, the breadcrumb, a previous/next card, the toc popover, and, on a narrow window, the mobile side panel next to the desktop one. Each rendering is a `SidePanelItemHost` with an instance id of its own (`side-panel-display:{itemId}:{react id}`, the `source.instanceId` of its events); the item id is the same for all of them and does not tell them apart. An editor that every rendering of the item mounted would take the focus from the one clicked, and its blur would submit the unchanged label and end the edit. So the edit belongs to the rendering it was started from: `sidePanelText.ownerId` is that rendering's instance id, and `sidePanelTextStateGet(itemId, ownerId, isTextEditable)` gives the editing and submitting status to that rendering alone. A failed save is shown by every editable rendering of the item, any of which can retry it; the others display the label, a name just saved included. The rules that follow from it:
+
+- A submit or a cancel is accepted only from the owner. The blur of another rendering, or of an editor already replaced, is refused and leaves the edit as it is.
+- A rendering on a display-only surface does not start an edit even when its renderer reports the request: `SidePanelItemHost` refuses it as the local handler of the event.
+- A new start (another item, or the same item from another rendering) drops the edit being typed, unsaved; a save in progress refuses it. Two starts that wait for the block session to be left: the later one opens.
+- A rendering that unmounts (the mobile side panel closes, the layout changes, the tree is rebuilt) releases what it owns (`sidePanelTextOwnerRelease`): the edit it was showing is dropped unsaved, its waiting start does not open; a save in progress finishes, and a failed save stays for the other renderings.
+- Leaving edit mode drops the edit being typed. Navigating does not end it by itself: the sidebar stays, and its editor with it.
+
+**Inside a link or a folder button.** The label is inside the sidebar link of its item or the button of its folder, which the side panel does not own. The edit button and the editor stop their pointer events. The editor also keeps the keys from them: a button activates on the key-up of Space and Enter, so the editor stops the key-up and prevents its default (Space has typed its space on key-down, and the folder does not toggle); Enter saves on key-down without following the link, Escape drops the edit on key-down; both stop there. Keys during IME composition are left to the composition, and paste inserts plain text.
 
 **No jitter.** Nothing moves when edit mode is toggled or when a label is edited. The edit button hangs off a zero-width inline anchor placed after the label and the tags, absolutely positioned, transparent until the row or the button itself is hovered: it takes no room, and the label host fills the row of the sidebar link (`flex: 1 1 auto`) so that hovering anywhere on the row shows it. It is styled like a button of the block toolbar (no frame, muted icon, accent background on hover; the icon size is set by class, because the sidebar link sizes every svg inside it) and it always takes the pointer, even while transparent, so a click on it never falls through to the link and navigates. The label is edited in its own span, made `contenteditable` (plain text), with an outline drawn outside its box: same element, same typography, same size. Enter and leaving the focus submit, Escape drops the edit; the button and the editable span stop their pointer events, so the sidebar link does not navigate and the folder does not toggle while a label is edited. While the write is pending the span is locked and dimmed; a failure shows the message as the label's hover title with a red outline, and the edit button is back so the edit can be retried.
 
@@ -381,7 +402,7 @@ frontend/src/lib/page-tree.js            tree conversion, routes, parts, tag and
 frontend/src/lib/side-panel-item.js      renderer choice and item data
 frontend/src/lib/text-localized.js       localized label parsing and selection, shared with indexes
 frontend/src/store/DocEditStore.ts       sidePanelText: the label being edited, the write
-comp-doc/side-panel/SidePanelItemHost.jsx  runtime context, surfaces, edit state of the label
+comp-doc/side-panel/SidePanelItemHost.jsx  runtime context, surfaces, edit state and owner of the label
 comp-doc/side-panel/SidePanelItem.jsx      default renderer (common/SidePanelItem), label editing
 comp-doc/side-panel/DocSidebarFolder.jsx   default folder gesture
 comp-mdx/tag/TagLabel.jsx, TagList.jsx     tag display

@@ -40,7 +40,6 @@ const SourceLinkRenderPopup = observer(function SourceLinkRenderPopup({ Panel, s
 				isCloseVisible: true,
 				className: 'doc-code-block-compact-popup doc-source-link-render-popup',
 				bodyClassName: 'doc-source-link-render-popup-body',
-				popupBackdropClassName: 'doc-source-link-render-popup-backdrop',
 			}}
 			content={(
 				<DocLanguageProvider language={docStore.languageSelected || compiled.language}>

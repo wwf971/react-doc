@@ -28,7 +28,7 @@ Later declarations of the same tag replace earlier ones; different tags are appe
 - **Main panel.** The tags of the current page appear next to the path bar above the title (`TagsDisplayAtMainPanelIsOn`). There the `test` tag of `sub/notes.md` is visible.
 - **Links.** A link can show the tags of its target (`TagsDisplayAtLink...`). See [Document Config](doc-config.md "tags:after").
 
-This page maps `SidePanelItem` to a small demo wrapper in `config.yaml`. The wrapper keeps the default rendering and adds a file-suffix label, such as `.py`, to non-Markdown documents. That label is a rendering decision only; it is not a tag, so it does not appear in the lists below.
+This page maps `SidePanelItem` to a small demo wrapper in `config.yaml`. The wrapper keeps the default rendering and, for non-Markdown documents, puts a file icon before the name and adds a file-suffix label, such as `.py`. Both are rendering decisions only: the suffix label is not a tag, so it does not appear in the lists below, and the icon is not part of the name: renaming `sample.py` in edit mode ([Side-panel labels](edit-in-place.md "Side-panel labels")) edits the plain name.
 
 ## Mentioning a tag in text
 

@@ -45,7 +45,6 @@ export const TagOverviewPopup = observer(function TagOverviewPopup() {
         isCloseVisible: true,
         className: 'doc-tag-overview-popup',
         bodyClassName: 'doc-tag-overview-popup-body',
-        popupBackdropClassName: 'doc-tag-overview-popup-backdrop',
       }}
       content={(
         <RegisteredComp

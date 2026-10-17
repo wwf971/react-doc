@@ -36,7 +36,6 @@ function CodeBlockCompactPopup({ Panel, sourceStore, store }) {
 				isCloseVisible: true,
 				className: 'doc-code-block-compact-popup',
 				bodyClassName: 'doc-code-block-compact-popup-body',
-				popupBackdropClassName: 'doc-code-block-compact-popup-backdrop',
 			}}
 			headerRightContent={(
 				<button
