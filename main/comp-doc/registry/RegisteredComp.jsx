@@ -138,7 +138,7 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
   // compConfig: the component's own keys resolved for this document
   // (doc_page_impl_config.md#component-level-config). assetInfo: where the
   // data came from, for a component declared isAssetAware
-  // (doc_page_impl_asset.md#component-awareness); CompAssetHost hands the
+  // (doc_page_impl_mdx_comp.md#component-awareness); CompAssetHost hands the
   // asset's info in configRuntime, so a plain block means inline data.
   // the block the component is in: given by the editor of a session, else
   // by the wrapper of the edit body; undefined in reading mode, where the

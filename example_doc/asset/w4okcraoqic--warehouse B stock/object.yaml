@@ -3,6 +3,8 @@ name: warehouse B stock
 lang: md
 contentType: text/markdown
 fileExt: md
+component:
+  name: StockTable
 versionIdHead: w4okcsly2p7
 isDeleted: false
 isLocked: false

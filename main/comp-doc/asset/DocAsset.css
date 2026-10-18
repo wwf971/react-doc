@@ -471,3 +471,57 @@
 .doc-asset-actions > a.doc-edit-action {
   text-decoration: none;
 }
+
+/* a link in a table cell: no margin before it */
+.doc-asset-link.is-inline {
+  margin-left: 0;
+}
+
+/* a small icon button (read again), right after the text it belongs to */
+.doc-asset-icon-button {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.25rem;
+  padding: 0.1rem;
+  border: 0;
+  border-radius: 2px;
+  background: none;
+  color: var(--color-fd-muted-foreground);
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.doc-asset-icon-button:hover:not(:disabled) {
+  color: var(--color-fd-foreground);
+  background: color-mix(in srgb, var(--color-fd-primary) 8%, var(--color-fd-background));
+}
+
+.doc-asset-icon-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* ---------- usage: the blocks that reference an object ---------- */
+
+.doc-asset-usage-place {
+  white-space: nowrap;
+}
+
+.doc-asset-usage-notes {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.doc-asset-usage-problem {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-asset-usage-empty {
+  margin: 0;
+}
+
+/* the uses column of the version table: head|pinned on the head row */
+.doc-asset-table .doc-asset-version-uses {
+  text-align: right;
+}

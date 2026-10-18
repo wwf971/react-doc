@@ -118,6 +118,23 @@ Markers must not be heading children. Fumadocs copies heading content into its b
 
 Raw `<span id="..." />` markers before a heading are deprecated. `remarkAnchor` still converts them in the same way and logs a deprecation warning naming the document. Such a marker needs a blank line before the heading; otherwise Markdown continues the raw HTML block onto the heading line and the heading disappears, which is reported as a separate warning.
 
+### Places in a document
+
+A list that points back into documents (the blocks that use an asset object, [Usage](doc_page_impl_asset.md#usage)) names a block by a **place** (`lib/doc-place.js`):
+
+```text
+{ docPath, sourceLine, fragment }
+  docPath     the source path of the document
+  sourceLine  the line of the block's marker comment, counted without the frontmatter: the block
+              identity of the page (Block identity, doc_page_impl_popup.md#block-identity)
+  fragment    the id of an Anchor marker right before the block's marker, '' when none
+
+navigation target (docPlaceTargetGet)   docPath#fragment, or docPath without a fragment
+written for a reader (docPlaceTextGet)  a.md#fragment, a.md:12, or a.md
+```
+
+The line identifies the block now and moves with every edit above it, so it is what a list compares and never a navigation target; the fragment is the stable part, and a link goes through `DocStore.navigate` with the ordinary target grammar. A block that other places point at should therefore declare an `Anchor` id, as a section does. A later identity (a block id kept across edits) would be one more key of the place.
+
 ### Heading selection
 
 Fumadocs wraps heading text in hash links. Releasing the pointer after selecting heading text can otherwise activate that link and move the heading unexpectedly. `DocPageMdx` tracks pointer movement and browser selection, then cancels only the heading-link click produced by a selection drag. Ordinary heading clicks and the copy-link button remain available.

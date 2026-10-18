@@ -1,0 +1,26 @@
+objectId: w4v9ulp8y4h
+name: removed banner
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+component:
+  name: Image
+versionIdHead: w4v9ulp8h0j
+isDeleted: false
+isLocked: false
+timeCreated: 20261024_03024764+09
+versionList:
+  - versionId: w4v9ulp8h0j
+    versionIdPrevList: []
+    time: 20261024_03024764+09
+    note: the data of an Image block deleted from asset-store.md
+    size: 189
+    hash: 39ea6859d588c109114afa7cc5477b270d1766ac
+    isLocked: false
+    dependencyList:
+      - type: source
+        path: ~example/mdx-usage/image/office-worker.svg
+eventList:
+  - eventType: create
+    time: 20261024_03024764+09
+    versionId: w4v9ulp8h0j

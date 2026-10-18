@@ -6,7 +6,7 @@ import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import { sizeTextGet } from './AssetPanel.jsx';
 import './DocAsset.css';
 
-// The preview pane of the asset panel (design: doc_page_impl_asset.md):
+// The preview pane of an asset panel (design: doc_page_impl_asset.md):
 // what the block the panel was opened from renders with the data as it is
 // in the panel now. While the head text is edited that is the draft, on
 // every keystroke, so the pane shows what a save would render as; otherwise
@@ -16,12 +16,12 @@ import './DocAsset.css';
 // data in place of the reference, so it sees what it would see there. A
 // panel not opened from a block has no renderer: an image is shown as an
 // image, anything else is only described.
-export const AssetPreview = observer(function AssetPreview() {
-  const { assetStore } = useDocStores();
-  const panel = assetStore.panel;
-  const object = assetStore.panelObject;
+//
+//   panel   the AssetPanelModel shown
+export const AssetPreview = observer(function AssetPreview({ panel }) {
+  const object = panel?.object;
   if (!panel || !object) return null;
-  const preview = assetStore.panelPreviewData;
+  const preview = panel.previewData;
   const block = panel.block;
 
   let subject;
@@ -72,9 +72,11 @@ const PreviewBody = observer(function PreviewBody({ object, panel, preview, bloc
     store: panel.store,
     objectId: object.objectId,
     name: object.name,
+    versionIdRef: panel.versionIdRef || 'head',
     versionId: preview.versionId,
     versionIdHead: object.versionIdHead,
     isHead: preview.versionId === object.versionIdHead,
+    hash: version.hash ?? '',
     saveMode: assetSaveModeGet(object),
     isLocked: object.isLocked,
     versionMetadata: version.metadata ?? {},

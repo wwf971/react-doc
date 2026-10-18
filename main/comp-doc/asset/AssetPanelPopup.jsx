@@ -8,7 +8,7 @@ import './DocAsset.css';
 
 // Popup with the asset panel of one object, opened from the toolbar of a
 // component block whose data comes from the asset store. Open state lives
-// in DocAssetStore (panel). The popup frame is the host's text panel
+// in DocAssetStore (panel, an AssetPanelModel). The popup frame is the host's text panel
 // component (config.compConfigHost.panelComponent), as for the tag
 // overview; its content is AssetPanel and, when the preview pane is open,
 // AssetPreview at its right. The side-panel button in the header (left of
@@ -30,7 +30,7 @@ export const AssetPanelPopup = observer(function AssetPanelPopup() {
   }, [isOpen, assetStore]);
 
   if (!isOpen) return null;
-  const object = assetStore.objectGet(panel.store, panel.objectId);
+  const object = panel.object;
   const isPreviewOpen = panel.isPreviewOpen;
   return (
     <Panel
@@ -55,9 +55,9 @@ export const AssetPanelPopup = observer(function AssetPanelPopup() {
       content={(
         <div className="doc-asset-popup-content">
           <div className="doc-asset-popup-main">
-            <AssetPanel />
+            <AssetPanel panel={panel} onNavigate={() => assetStore.panelClose()} />
           </div>
-          {isPreviewOpen ? <AssetPreview /> : null}
+          {isPreviewOpen ? <AssetPreview panel={panel} /> : null}
         </div>
       )}
       onEvent={(eventType) => {

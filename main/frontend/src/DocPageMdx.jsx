@@ -6,7 +6,7 @@ import { DocSourceFileStore, sourceEventTypeList } from './store/DocSourceFileSt
 import { DocStore } from './store/DocStore.js';
 import { DocConfigStore } from './store/DocConfigStore.js';
 import { DocEditStore, editEventTypeList } from './store/DocEditStore.js';
-import { DocAssetStore } from './store/DocAssetStore.js';
+import { DocAssetStore, assetEventTypeList } from './store/DocAssetStore.js';
 import { DocTagStore } from './store/DocTagStore.js';
 import { DocBlockPopupStore } from './store/DocBlockPopupStore.js';
 import { DocEventRouter } from './lib/doc-event.js';
@@ -79,10 +79,13 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     });
     const tagStore = new DocTagStore(sourceStore, docStore, configStore);
     const compStateStore = new CompStateStore();
+    // the manifest tells the asset store which documents changed, so it
+    // reads their asset references again (doc_page_impl_asset.md#usage)
     const assetStore = new DocAssetStore({
       endpoint: config.asset?.endpoint,
       snapshot: data.assetSnapshot,
       subscribe: config.asset?.subscribe,
+      manifestGet: () => sourceStore.fileManifest,
     });
     // the edit store creates asset objects when a block's inline data is
     // moved into the asset store (doc_page_impl_asset.md)
@@ -118,6 +121,11 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       name: 'source',
       typeList: sourceEventTypeList,
       handle: (event) => sourceFileStore.eventHandle(event),
+    });
+    eventRouter.routeAdd({
+      name: 'asset',
+      typeList: assetEventTypeList,
+      handle: (event) => assetStore.eventHandle(event),
     });
     return { sourceStore, sourceFileStore, docStore, configStore, tagStore, compStateStore, editStore, assetStore, blockPopupStore, eventRouter, compById };
   });

@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { ASSET_STORE_ID_LOCAL, AssetError, type AssetObjectKey, type AssetStore, type AssetVersionData } from './doc-asset-store.ts';
+import {
+  ASSET_STORE_ID_LOCAL, AssetError, type AssetObjectKey, type AssetStore, type AssetUsageDoc, type AssetVersionData,
+} from './doc-asset-store.ts';
 
 // Asset api of the development server (design: doc_page_impl_asset.md). Like
 // the edit api, it exists only while `vite` serves the page; a built page
@@ -14,8 +16,11 @@ import { ASSET_STORE_ID_LOCAL, AssetError, type AssetObjectKey, type AssetStore,
 //   GET  {endpoint}/dependency/list?store=&objectId=&versionId=   -> { versionId, dependencyList }   versionId default head
 //   GET  {endpoint}/dependent/list?store=&objectId=&versionId=    -> { dependentList }   the versions depending on the
 //                                                                    object (with versionId: on that version)
+//   GET  {endpoint}/usage/list?docPath=&docPath=               -> { docList: [{ docPath, contentHash, usageList }] }
+//                                     the asset references of the collected documents, read from disk now; with
+//                                     docPath (repeatable) only those documents (a document that is gone is absent)
 //   POST {endpoint}/object/create    { store, name, lang, contentType, fileExt, text | dataBase64, note, folder, dependencyList,
-//                                       saveMode, versionMetadata }  -> { object, version, isCreated }
+//                                       saveMode, versionMetadata, component }  -> { object, version, isCreated }
 //                                     isCreated false: an object of that name exists and is answered, nothing is created
 //   POST {endpoint}/object/update    { store, objectId, hashBase, text | dataBase64, mode, note, dependencyList, versionMetadata }
 //                                                                 -> { object, version }
@@ -27,7 +32,8 @@ import { ASSET_STORE_ID_LOCAL, AssetError, type AssetObjectKey, type AssetStore,
 //   POST {endpoint}/dependency/remove { store, objectId, versionId, dependency }      -> { object }
 //   POST {endpoint}/object/delete    { store, objectId }                                 -> { object }   (soft)
 //   POST {endpoint}/object/restore   { store, objectId }                                 -> { object }
-//   POST {endpoint}/object/meta/set  { store, objectId, name?, lang?, contentType?, saveMode? } -> { object }
+//   POST {endpoint}/object/meta/set  { store, objectId, name?, lang?, contentType?, saveMode?, component? } -> { object }
+//                                     component: { name }, or null to remove it
 //   POST {endpoint}/version/checkout { store, objectId, versionId }                      -> { object }   head moves
 //   POST {endpoint}/version/delete   { store, objectId, versionId }                      -> { object }
 //   POST {endpoint}/object/lock/set  { store, objectId, isLocked }                       -> { object }
@@ -39,7 +45,7 @@ import { ASSET_STORE_ID_LOCAL, AssetError, type AssetObjectKey, type AssetStore,
 //   -2  hashBase is not the hash of the head data (changed meanwhile)
 //   -3  store, object or version not found
 //
-// object:  { objectId, name, lang, contentType, fileExt, saveMode?, versionIdHead, isDeleted, isLocked,
+// object:  { objectId, name, lang, contentType, fileExt, component?, saveMode?, versionIdHead, isDeleted, isLocked,
 //            timeCreated, folder, dirName,
 //            versionList: [{ versionId, versionIdPrevList, time, note, size, hash, isLocked, dependencyList }],
 //            eventList: [{ eventType, time, versionId?, userId? }] }
@@ -53,8 +59,15 @@ export const DOC_ASSET_ENDPOINT_NAME = '__doc-asset';
 
 type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
 
-export function docAssetMiddlewareCreate(options: { endpoint: string; storeGet: () => AssetStore }): Middleware {
-  const { endpoint, storeGet } = options;
+// usageScan(docPathList): the asset references of the documents named, or
+// of every collected document when the list is empty; the documents are a
+// matter of the source layer, which the plugin passes in
+export function docAssetMiddlewareCreate(options: {
+  endpoint: string;
+  storeGet: () => AssetStore;
+  usageScan: (docPathList: string[]) => AssetUsageDoc[];
+}): Middleware {
+  const { endpoint, storeGet, usageScan } = options;
   return (req, res, next) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname !== endpoint && !url.pathname.startsWith(`${endpoint}/`)) {
@@ -79,6 +92,14 @@ export function docAssetMiddlewareCreate(options: { endpoint: string; storeGet: 
         res.setHeader('Content-Length', String(version.size));
         res.setHeader('Cache-Control', 'no-store');
         res.end(version.bytes);
+      } catch (error) {
+        failureSend(error);
+      }
+      return;
+    }
+    if (req.method === 'GET' && route === '/usage/list') {
+      try {
+        jsonSend(res, 200, { code: 0, data: { docList: usageScan(url.searchParams.getAll('docPath')) }, message: '' });
       } catch (error) {
         failureSend(error);
       }
@@ -135,6 +156,7 @@ async function routeHandle(req: IncomingMessage, route: string, url: URL, store:
         dependencyList: body?.dependencyList,
         saveMode: body?.saveMode,
         versionMetadata: body?.versionMetadata,
+        component: body?.component,
       });
       return { object: result.object, version: versionResponseBuild(result.version), isCreated: result.isCreated };
     }
@@ -172,6 +194,7 @@ async function routeHandle(req: IncomingMessage, route: string, url: URL, store:
           lang: body?.lang,
           contentType: body?.contentType,
           saveMode: body?.saveMode,
+          component: body?.component,
         }),
       };
     }

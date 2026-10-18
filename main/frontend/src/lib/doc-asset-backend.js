@@ -30,7 +30,10 @@
 //   dependencyAdd(store, objectId, versionId, dependency)           { object }
 //   dependencyRemove(store, objectId, versionId, dependency)        { object }
 //   objectDelete(store, objectId) / objectRestore(store, objectId)
-//   objectMetaSet(store, objectId, { name, lang, contentType, saveMode })
+//   objectMetaSet(store, objectId, { name, lang, contentType, saveMode, component })
+//   usageList(docPathList)                      { docList: [{ docPath, contentHash, usageList }] }
+//                                               the asset references of the documents (all when the
+//                                               list is empty; doc_page_impl_asset.md#usage)
 //   versionCheckout(store, objectId, versionId)
 //   versionDelete(store, objectId, versionId)
 //   objectLockSet(store, objectId, isLocked)
@@ -86,14 +89,19 @@ export function assetBackendApiCreate(endpoint) {
     dependencyAdd: (store, objectId, versionId, dependency) => requestPost('/dependency/add', { store, objectId, versionId, dependency }),
     dependencyRemove: (store, objectId, versionId, dependency) => requestPost('/dependency/remove', { store, objectId, versionId, dependency }),
     folderSet: (folderList) => requestPost('/folder/set', { folderList }),
+    usageList: (docPathList = []) => requestSend(
+      `/usage/list${docPathList.length > 0 ? `?${docPathList.map((docPath) => `docPath=${encodeURIComponent(docPath)}`).join('&')}` : ''}`,
+    ),
   };
 }
 
 // snapshot: { objectById: { [objectId]: { ...object, versionDataById:
-// { [versionId]: { size, hash, isText, text | dataBase64, metadata } } } } }, the
-// local store as it was at build time
+// { [versionId]: { size, hash, isText, text | dataBase64, metadata } } } } },
+// usageDocList }, the local store as it was at build time, with the asset
+// references of the documents of the build
 export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
   const objectById = snapshot?.objectById ?? {};
+  const usageDocList = Array.isArray(snapshot?.usageDocList) ? snapshot.usageDocList : [];
   const readOnly = () => Promise.resolve({ code: -1, data: null, message: 'the asset store of a built page is read-only' });
   const objectMetaGet = (objectId) => {
     const entry = objectById[objectId];
@@ -187,5 +195,10 @@ export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
     dependencyAdd: readOnly,
     dependencyRemove: readOnly,
     folderSet: readOnly,
+    usageList: (docPathList = []) => Promise.resolve({
+      code: 0,
+      data: { docList: docPathList.length > 0 ? usageDocList.filter((doc) => docPathList.includes(doc.docPath)) : usageDocList },
+      message: '',
+    }),
   };
 }

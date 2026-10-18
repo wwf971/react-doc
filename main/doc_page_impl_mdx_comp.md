@@ -14,7 +14,7 @@ document  <!--renderComp=FileTree,id=x-->  or  <FileTree .../>
 
 ## What a component exposes
 
-A definition says two kinds of things about a component. The first is how the registry boundary (`RegisteredComp`) treats it: where it may render (`placementList`), what it can be referenced as (`componentType`, `dataRefTypeList`), how its input is normalized (`dataBuild`), what it is told about its data (`isAssetAware`, `assetDependencyListGet`). The second is what the component tells the page about itself, for the page to offer to readers and authors: that it is read-only, in which ways it can be displayed and edited, what its icon is, how a new block of it starts, which config keys it has. These are the component's **exposure**, the `expose` option of `compDefine()`:
+A definition says two kinds of things about a component. The first is how the registry boundary (`RegisteredComp`) treats it: where it may render (`placementList`), what it can be referenced as (`componentType`, `dataRefTypeList`), how its input is normalized (`dataBuild`), what it is told about its data (`isAssetAware`, `assetDependencyListGet`; [Components and the asset store](#components-and-the-asset-store)). The second is what the component tells the page about itself, for the page to offer to readers and authors: that it is read-only, in which ways it can be displayed and edited, what its icon is, how a new block of it starts, which config keys it has. These are the component's **exposure**, the `expose` option of `compDefine()`:
 
 ```text
 compDefine(Xxx, {
@@ -303,6 +303,74 @@ While the referenced document is compiling, a neutral loading line replaces the 
 - Only comment-block components with an `id` can be referenced. MDX component properties are JavaScript expressions evaluated at render time, so they are not available before the referenced document is rendered.
 - References are resolved one level deep. If the referenced component itself has a `dataRef`, its data is delivered unchanged, including that `dataRef`; the host does not follow chains. Likewise, a referenced component whose data is an asset reference delivers the reference text, not the asset text: an asset-backed block is not a `dataRef` source, both documents should reference the store.
 - With `pruneSourceToSidePanel`, a statically authored `dataRef` keeps the referenced document in the deployed manifest without a side-panel item (see [Source pruning for deployment](doc_page_impl.md#source-pruning-for-deployment)). A `dataRef` written as an MDX expression is not discovered and is reported at build time.
+
+## Components and the asset store
+
+A component's data may live in the [asset store](doc_page_impl_asset.md) instead of the document: the block holds a reference in place of its data, and the runtime boundary resolves it to the text of the referenced version before the component sees its input ([Resolution](doc_page_impl_asset.md#resolution-the-runtime-boundary)). How much a component has to do with the store is its own choice, in three degrees:
+
+```text
+unaware      nothing declared (the default)    any component works with a reference block the day it is
+                                               registered, and never learns where its data came from
+aware        isAssetAware                      knows its data is an asset (config.assetInfo), replaces it
+             (assetDependencyListGet)          by request, asks whether it changed, declares what it depends on
+asset-only   meta.isAssetOnly, isAssetAware    its data is never inline: a block of it is always a reference,
+                                               and its own edit modes edit the object (#asset-only-and-not-in-doc)
+```
+
+The page and the files then keep a block and its object together as far as they can: the object records the component it is for, the page knows which blocks read which object, and it expects the two to come apart while it is not looking. Not every object is a component's data: the store is a general storage of versioned bytes ([Stores, objects, versions](doc_page_impl_asset.md#stores-objects-versions)), and an object may be an image file, notes, or the data of a tool that is not a block; the declarations below concern the objects that are, and the page reads nothing wrong into one that is not.
+
+### Component awareness
+
+Not knowing where the data came from is the right default, and the wrong answer for a component that writes its data back. An Image that receives a pasted image must put the new `src` somewhere: into the lines of the document when the data is inline, into the head of the object when the data is an asset; and it should say which it is about to do. So a component may opt in. A definition registered with `isAssetAware: true` (`compDefine`) receives `config.assetInfo` on every render:
+
+```text
+assetInfo
+  isFromAsset: false                         inline data (and the value in every other placement)
+  isFromAsset: true,                         data of an asset version, set by CompAssetHost:
+    store, objectId, name,                     the object
+    versionIdRef,                              what the reference asks for: 'head', or a pinned version id
+    versionId, versionIdHead, isHead,          the version read, and whether it is the head
+    hash,                                      the hash of the bytes read
+    saveMode, isLocked                         what a write to it would do, and whether it is allowed
+    versionMetadata                            the metadata of the version read, {} without
+                                               (doc_page_impl_asset.md#version-metadata)
+```
+
+The same information travels with the component's events as `source.asset`, so a store handling an event knows whether the block it concerns is a reference. A component that is not aware receives no `assetInfo` key and nothing changes for it.
+
+What the component does with the knowledge is one request, not a write of its own: it emits `dataReplaceRequest { raw }` with the complete new data text ([events of the edit layer](doc_page_impl_event.md)), and `DocEditStore.dataReplaceApply` decides by the block the component is rendered in (`config.blockIndex`, which the edit body gives every block through `DocEditBlockContext`): a reference block updates the object's head (`objectUpdate`, by its save mode, with the dependencies derived from the new data), an inline block is rewritten with the new data as its fenced content (`componentBlockTextBuild`, one block-replace operation). The component thus edits its data the same way in both cases and never calls the store or the edit api; `assetInfo` only lets it tell the author what will happen (`Image` writes "replaces the head of asset …" into its confirmation). The dependencies of an asset version come from the same definition: `assetDependencyListGet(data)` returns the paths the data names ([Dependencies](doc_page_impl_asset.md#dependencies)), the page resolves them against the document, and every write of the data (moving a block into the store, a data replacement) carries the list.
+
+### Changes made by others
+
+An object can change without the component doing anything: another block reading it saves, its panel moves the head, an editor rewrites a file. Every block reading the object re-renders with the change the page hears of (a write through the page replaces the loaded object; a change of the folder is pushed by the development server as `doc-asset-change`), so a component that only renders its data needs nothing. A component that holds something derived from its data (a draft, an engine instance) and wants to be sure before it acts reports `assetRefreshRequest` (no data, routed to the asset domain, `DocAssetStore.eventHandle`): the object is read again from the store, every block reading it re-renders with what was read, and the answer says what the component's reference resolves to now, `{ versionIdHead, versionId, hash, isChanged }`, `isChanged` comparing with what it read (`assetInfo.versionId`, `assetInfo.hash`). A component whose data is not an asset gets code -1.
+
+TODO: a subscription, where a component registers for the changes of its object and is told as they happen (a websocket-like feed) instead of asking. It needs the event layer to deliver events *to* components, a routing and subscription system of page events that does not exist yet ([event layer: subscriptions](doc_page_impl_event.md#extending-the-layer)); until then the re-render and the refresh request are the two ways.
+
+### The component an object is for
+
+An object made from a block's data records, in its metadata, the component it is data for: `component: { name }`, the tag name of the block ([Objects for components](doc_page_impl_asset.md#objects-for-components)). The page writes it when it creates an object for a block (**to asset**, an asset-only block from the insert menu), and the panel shows and changes it. It is a record for recovering what was lost, not a rule: when the block is gone, the declaration is what tells an orphan (the data of an Image whose block was deleted) from an object of another purpose, and says what block would read it again. Nothing checks it: a block of another component may read the object (the panel notes the difference), and a component is not held to objects that name it.
+
+The name is the one way to identify the component for now. A later form may be more rigorous: the registry id with a version of the component's data format, so that a reader can tell whether old data still fits, or an id of the component independent of the tag names a project registers it under. A further step is a **data contract** shared by several component types (an `Image` and a slot of an `ImageGrid` read the same mapping), declared by the object in place of one component.
+
+### Several blocks, one object
+
+Blocks may share an object: two `Image` blocks showing one picture at two sizes, a table pinned to a version beside the same table reading the head. That several component types share one object's data is the future option of a data contract (above); today sharing is between blocks of one component.
+
+The asset service therefore keeps a **usage index**: for every block whose data is a reference, where it is and what it reads ([Usage](doc_page_impl_asset.md#usage)). Where a block is uses the block identity of the page, the document and the line of its marker comment, with the `Anchor` id declared before the block when there is one; that is the place format of the navigation layer ([Places in a document](doc_page_impl_nav.md#places-in-a-document)), so a place is also a link. The index is read from every document when the page starts and follows the documents as they change; it can be behind, since not every change of a document reaches the page when it happens, and a document read again is right. From the index come the backlinks of an object in its asset panel (each block, whether it follows the head or is pinned, a link to it, and a read-again button that confirms it), the use counts in its version table, and the orphans.
+
+### What the page anticipates
+
+The page does not own the file system: documents and asset folders are files, changed by editors, git, and scripts, also while the page is not running, and nothing makes a change of a document and a change of an object one step. So the page expects the two ways a block and its data come apart, and shows them rather than preventing them:
+
+- **a block removed without its object**: the object still declares its component and no block references it, an **orphan**. Deleting a block whose data is an asset asks whether the object goes with it ([deleting a block](doc_page_impl_edit.md#floating-controls)); an object kept then, or left behind by a change outside the page, is listed in the settings panel's asset tab, where its panel opens.
+- **an object gone or broken under a block**: the reference names an object, a name, or a version the store does not have (a folder deleted or renamed, a version deleted). The block shows the error in place of the component, as every reference that cannot be resolved does, and the same tab lists these references.
+
+Two rules that could look natural are deliberately **not** modeled:
+
+- no policy on sharing: the page neither forbids several blocks from reading one object nor requires an object to have one block;
+- no owner: an object has no host block that owns it, decides for the other blocks, or goes away with it.
+
+Both would be rules the page could only keep while it is the one writing. A block copied by hand, a document restored by git, an object folder copied to another project would break them without the page knowing, and every rule would then need a handling of its violation, which the page cannot do on files it does not control. The declaration and the usage index record what is, and the decisions stay with the person, with the facts in front of them: the delete question names the object and the other blocks that use it.
 
 ## Text blocks and edit mode
 

@@ -41,9 +41,10 @@ import {
 import { DOC_EDIT_ENDPOINT_NAME, docEditMiddlewareCreate } from './doc-edit-server.ts';
 import { DOC_ASSET_ENDPOINT_NAME, docAssetMiddlewareCreate } from './doc-asset-server.ts';
 import {
-  assetConfigOfConfigDocGet, assetConfigRead, assetStoreCreate, objectIdFromDirName, type AssetSnapshot, type AssetStore, type AssetStoreConfig,
+  assetConfigOfConfigDocGet, assetConfigRead, assetStoreCreate, objectIdFromDirName,
+  type AssetSnapshot, type AssetStore, type AssetStoreConfig, type AssetUsageDoc,
 } from './doc-asset-store.ts';
-import { assetBlockTextExpand } from '../src/lib/doc-asset-ref.js';
+import { assetBlockTextExpand, assetUsageListScan } from '../src/lib/doc-asset-ref.js';
 import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
 import { textLocalizedGet } from '../src/lib/text-localized.js';
 
@@ -262,7 +263,11 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         : [];
       // the built page has no asset api: the store is bundled. the
       // development server answers the api, so nothing is bundled there.
-      const assetSnapshot = isBuild && assetStore ? assetStore.snapshotBuild() : null;
+      // the references of its documents travel with it, so a built page
+      // still knows which objects its blocks use (doc_page_impl_asset.md#usage)
+      const assetSnapshot = isBuild && assetStore
+        ? { ...assetStore.snapshotBuild(), usageDocList: assetUsageDocListScan(fileEntries, []) }
+        : null;
       return generateModuleCode(configDoc, fileEntries, dirEntries, attachmentList, isBuild, {
         docSourceEndpoint,
         docEditEndpoint,
@@ -410,6 +415,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         server.middlewares.use(docAssetMiddlewareCreate({
           endpoint: docAssetEndpoint,
           storeGet: () => assetStoreCreate(assetConfigGet(loadConfigDoc(configFile, options), configDir) ?? assetConfig!),
+          usageScan: (docPathList) => assetUsageDocListScan(fileEntryListGet(), docPathList),
         }));
         const assetFoldersWatch = () => {
           for (const folder of assetConfig!.folderList) server.watcher.add(folder.pathAbs);
@@ -859,6 +865,27 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
 // the backup the edit api keeps beside a configuration file it rewrote
 function configurationBackupPathIs(pathsConfiguration: string[], filePath: string): boolean {
   return pathsConfiguration.some((configurationPath) => filePath === `${configurationPath}.bak`);
+}
+
+// the asset references of the md/mdx documents among the entries, read from
+// disk now (doc_page_impl_asset.md#usage); docPathList names the documents
+// to read, every document when empty. contentHash is the hash the manifest
+// gives the file, so the page knows which documents changed since.
+function assetUsageDocListScan(entries: FileEntry[], docPathList: string[]): AssetUsageDoc[] {
+  const docPathSet = new Set(docPathList);
+  const docList: AssetUsageDoc[] = [];
+  for (const entry of entries) {
+    if (entry.ext !== 'md' && entry.ext !== 'mdx') continue;
+    if (docPathSet.size > 0 && !docPathSet.has(entry.internalPath)) continue;
+    if (!fs.existsSync(entry.absPath)) continue;
+    const content = fs.readFileSync(entry.absPath);
+    docList.push({
+      docPath: entry.internalPath,
+      contentHash: textContentHashGet(content),
+      usageList: assetUsageListScan(content.toString('utf-8'), entry.internalPath),
+    });
+  }
+  return docList;
 }
 
 // the local asset store as config asset.file describes it now; undefined

@@ -3,6 +3,8 @@ name: gallery
 lang: yaml
 contentType: text/yaml
 fileExt: yaml
+component:
+  name: ImageGrid
 versionIdHead: w4okcpzk5gp
 isDeleted: false
 isLocked: false

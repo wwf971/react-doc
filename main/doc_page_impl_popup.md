@@ -38,7 +38,7 @@ What the component declares beyond that is what it declares anyway: its edit mod
 
 ## Block identity
 
-The popup names its block by **document, marker line and component**: `{sourcePath}#{sourceLine}#{compId}`. `sourceLine` is the line of the block's marker comment in the content without frontmatter; `remarkCommentComp` gives it to `DocComp` (reading body and edit body alike), and the edit model has the same number as `component.markerLine` ([Block model](doc_page_impl_edit.md#block-model)), which the editor of a session passes on. Two references to the same asset, or two blocks with the same data, are different blocks. The block's index in the edit model is found from the marker line when it is needed (entering Edit), so the identity does not depend on the edit model being loaded.
+The popup names its block by **document, marker line and component**: `{sourcePath}#{sourceLine}#{compId}`. `sourceLine` is the line of the block's marker comment in the content without frontmatter; `remarkCommentComp` gives it to `DocComp` (reading body and edit body alike), and the edit model has the same number as `component.markerLine` ([Block model](doc_page_impl_edit.md#block-model)), which the editor of a session passes on. Two references to the same asset, or two blocks with the same data, are different blocks. The same identity, with an `Anchor` id when one is declared, is the place the usage index of the asset store names a block by ([Places in a document](doc_page_impl_nav.md#places-in-a-document)). The block's index in the edit model is found from the marker line when it is needed (entering Edit), so the identity does not depend on the edit model being loaded.
 
 ## The element that moves
 

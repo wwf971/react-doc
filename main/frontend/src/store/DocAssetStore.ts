@@ -1,14 +1,17 @@
-import { makeAutoObservable, observable, runInAction } from 'mobx';
+import { makeAutoObservable, observable, reaction, runInAction } from 'mobx';
 import { assetBackendApiCreate, assetBackendSnapshotCreate } from '../lib/doc-asset-backend.js';
 import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
+import { AssetPanelModel } from './AssetPanelModel.js';
 
 // Asset store of the page (design: doc_page_impl_asset.md). It holds what
 // the page knows of the asset objects: the index of every object of the
 // store (read once when the page starts), the data of the versions in use,
-// the folders of the local store, the one open asset panel, and every write
-// to the store. Components never see it: the runtime boundary
+// which blocks of the documents reference which object (the usage index),
+// the folders of the local store, the open asset panels, and every write
+// to the store. Components never call it: the runtime boundary
 // (CompAssetHost) asks it for the data of a reference and renders the
-// component with that data.
+// component with that data, and what a component asks of the store arrives
+// as an event (eventHandle).
 //
 //   backend        where the objects live: the asset api of the development
 //                  server, or the snapshot bundled into a build (read-only)
@@ -23,8 +26,16 @@ import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
 //   versionByKey   data of every version read so far, key `${store}/${objectId}#${versionId}`
 //   nameLookupByKey  the names looked up that the index did not have, key `${store}/${name}`:
 //                  the lookup in progress, or the failure
-//   panel          the one open asset panel: object, selected version, the
+//   usageIndex     the state of the usage index, read at start after the object index
+//   isUsageReading every document is being read again; the index stays shown meanwhile
+//   usageByDocPath the asset references of every document, as last read
+//                  (doc_page_impl_asset.md#usage): the content hash read, the
+//                  time, and every block whose data is a reference
+//   panel          the asset panel of the popup (AssetPanelModel): the object
+//                  opened from a block's toolbar, its selected version, the
 //                  text being edited, the pending confirmation, the preview
+//   settingsPanel  the asset panel of the object chosen in the settings
+//                  panel's asset tab, another AssetPanelModel
 //
 // a reference { store, objectId | name, versionId: 'head' | id } names its
 // object by id or by its name (unique in the store); a name resolves to the
@@ -33,8 +44,58 @@ import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
 // "head" shows. a change on disk reported by the development server
 // (subscribe) reloads the object and the versions in use, or the whole
 // index when the folders of the store changed.
+//
+// the usage index is the page's picture of the documents, not a record the
+// store keeps: documents change while the page is not running, and not
+// every change reaches it. it is read from the documents at start, read
+// again for every document whose content hash in the manifest changed, and
+// told of the changes the page makes itself (usageNotify); a panel reads a
+// document again on request to confirm what it says.
 
 export type AssetSaveMode = 'inPlace' | 'newVersion';
+
+// the component the data of an object is for, when it is a component's data
+// (doc_page_impl_asset.md#objects-for-components)
+export type AssetComponent = { name: string };
+
+// a place in a document (doc_page_impl_nav.md#places-in-a-document)
+export type DocPlace = { docPath: string; sourceLine: number; fragment: string };
+
+// one block of a document whose data is an asset reference, as read from
+// the document's text (assetUsageListScan of doc-asset-ref.js)
+export type AssetUsage = {
+  place: DocPlace;
+  compName: string;
+  componentId: string;
+  reference: { store: string; objectId: string; name: string; versionId: string; message: string };
+};
+
+// how many blocks read an object: following its head, and pinned to each version
+export type AssetUsageCount = { head: number; byVersionId: Record<string, number> };
+
+type AssetUsageDocState = { contentHash: string; timeRead: number; usageList: AssetUsage[] };
+
+// a change of the documents the page made itself, told to the usage index
+// before it reads the documents again. lines are lines of the content
+// without frontmatter (the sourceLine of a place); a change names the lines
+// of a block, so it covers the reference of that block whatever line of the
+// block its marker is on.
+//   remove     the block was deleted, its object kept
+//   move       the block moved, in its document or to another one
+//   docChange  the document changed in a way the caller does not describe
+export type AssetUsageChange =
+  | { type: 'remove'; docPath: string; lineStart: number; lineEnd: number }
+  | { type: 'move'; docPath: string; lineStart: number; lineEnd: number; docPathTo: string; lineStartTo: number }
+  | { type: 'docChange'; docPath: string };
+
+// the events of the asset domain (doc_page_impl_event.md): what a component
+// whose data is an asset asks of the store
+export const assetEventTypeList = ['assetRefreshRequest'];
+
+type DocEvent = { type: string; data: Record<string, any>; source: Record<string, any> };
+
+// an entry of the source manifest, as far as the usage index reads it
+type ManifestEntry = { internalPath: string; ext: string; contentHash?: string };
 
 // what the data of a version depends on (doc_page_impl_asset.md#dependencies)
 export type AssetDependency =
@@ -72,6 +133,7 @@ export type AssetObject = {
   lang: string;
   contentType: string;
   fileExt: string;
+  component?: AssetComponent;
   saveMode?: AssetSaveMode;
   versionIdHead: string;
   isDeleted: boolean;
@@ -122,36 +184,17 @@ export type AssetResult = { code: number; data?: any; message: string };
 export type AssetPoint = { clientX: number; clientY: number };
 
 // the block the panel was opened from: what renders the object's data, so
-// the panel can show what a save would render as
-export type AssetPanelBlock = { compName: string; propsAuthored: Record<string, any>; sourcePath: string };
+// the panel can show what a save would render as, and which of the
+// object's uses it is (its document and the line of its marker)
+export type AssetPanelBlock = { compName: string; propsAuthored: Record<string, any>; sourcePath: string; sourceLine: number };
 
-export type AssetPanel = {
-  store: string;
-  objectId: string;
-  // the version the block that opened the panel reads: 'head', an id, or ''
-  versionIdRef: string;
-  block: AssetPanelBlock | undefined;
-  // the preview pane beside the panel is open
-  isPreviewOpen: boolean;
-  // the event list of the object is unfolded
-  isEventListOpen: boolean;
-  // the version whose data is shown; '' when none is selected
-  versionIdSelected: string;
-  // the head text being edited; pointStart is where the text was clicked to
-  // start editing (the caret goes there)
-  edit: { textDraft: string; status: 'editing' | 'submitting' | 'error'; message: string; pointStart?: AssetPoint } | undefined;
-  confirm: { kind: 'versionDelete' | 'objectDelete'; versionId: string; status: 'confirming' | 'submitting' | 'error'; message: string } | undefined;
-  // a file being written as the head data
-  upload: { fileName: string; status: 'submitting' | 'error'; message: string } | undefined;
-  // state of the last head / name / save mode / restore action
-  status: 'idle' | 'submitting';
-  message: string;
-};
-
+// manifestGet: the source manifest (DocSourceStore.fileManifest); the usage
+// index reads a document again when its content hash there changes
 export type DocAssetStoreOptions = {
   endpoint?: string;
   snapshot?: any;
   subscribe?: (listener: (change: { objectId?: string; isStoreChanged?: boolean }) => void) => () => void;
+  manifestGet?: () => ManifestEntry[];
 };
 
 const messageConflict = 'The asset changed since it was loaded. It was reloaded; apply the change again.';
@@ -169,11 +212,20 @@ export class DocAssetStore {
   objectById: Record<string, AssetObjectState> = {};
   versionByKey: Record<string, AssetVersionState> = {};
   nameLookupByKey: Record<string, AssetNameLookupState> = {};
-  panel: AssetPanel | undefined = undefined;
+  usageIndex: { status: 'idle' | 'loading' | 'done' | 'error'; message: string } = { status: 'idle', message: '' };
+  usageByDocPath: Record<string, AssetUsageDocState> = {};
+  isUsageReading = false;
+  panel: AssetPanelModel | undefined = undefined;
+  settingsPanel: AssetPanelModel | undefined = undefined;
   // whether the preview pane was open when a panel was last shown
   isPanelPreviewOpenLast = false;
   subscribe: DocAssetStoreOptions['subscribe'];
   unsubscribe: (() => void) | undefined;
+  manifestGet: DocAssetStoreOptions['manifestGet'];
+  manifestReactionDispose: (() => void) | undefined;
+  // the content hash of every md/mdx document of the manifest last seen,
+  // so a document that left the manifest is read again (it may be gone)
+  manifestHashByDocPathLast = new Map<string, string>();
   // the load process at start (status, then index) while it runs
   startPromise: Promise<void> | undefined;
   indexPromise: Promise<void> | undefined;
@@ -183,26 +235,33 @@ export class DocAssetStore {
     if (options.endpoint) this.backend = assetBackendApiCreate(options.endpoint);
     else if (options.snapshot) this.backend = assetBackendSnapshotCreate(options.snapshot, ASSET_STORE_ID_LOCAL);
     this.subscribe = options.subscribe;
+    this.manifestGet = options.manifestGet;
     makeAutoObservable(this, {
       backend: false,
       subscribe: false,
       unsubscribe: false,
+      manifestGet: false,
+      manifestReactionDispose: false,
+      manifestHashByDocPathLast: false,
       startPromise: false,
       indexPromise: false,
       reloadTimerByObjectId: false,
       objectById: observable.shallow,
       versionByKey: observable.shallow,
+      usageByDocPath: observable.shallow,
     });
   }
 
   // the load process at start: the status of the backend (writable, stores,
   // folders), then the index of every object, so that a reference resolves
-  // its object without a request and only the version data is read
+  // its object without a request and only the version data is read, then
+  // the usage index (which blocks reference which object)
   init() {
     if (!this.backend) return;
     this.startPromise = this.statusLoad().then(() => this.indexLoad()).finally(() => {
       this.startPromise = undefined;
     });
+    void this.startPromise.then(() => this.usageLoad());
     this.unsubscribe = this.subscribe?.((change) => {
       if (change?.isStoreChanged) {
         void this.statusLoad().then(() => this.indexLoad());
@@ -210,11 +269,19 @@ export class DocAssetStore {
       }
       if (change?.objectId) this.objectReloadSchedule(ASSET_STORE_ID_LOCAL, change.objectId);
     });
+    if (this.manifestGet) {
+      this.manifestReactionDispose = reaction(
+        () => this.manifestGet!(),
+        (manifest) => this.usageManifestSync(manifest),
+      );
+    }
   }
 
   dispose() {
     this.unsubscribe?.();
     this.unsubscribe = undefined;
+    this.manifestReactionDispose?.();
+    this.manifestReactionDispose = undefined;
     for (const timer of this.reloadTimerByObjectId.values()) clearTimeout(timer);
     this.reloadTimerByObjectId.clear();
   }
@@ -501,6 +568,7 @@ export class DocAssetStore {
       if (key.startsWith(prefix)) delete this.versionByKey[key];
     }
     if (this.panel?.store === store && this.panel.objectId === objectId) this.panel = undefined;
+    if (this.settingsPanel?.store === store && this.settingsPanel.objectId === objectId) this.settingsPanel = undefined;
   }
 
   private versionAccept(
@@ -551,6 +619,7 @@ export class DocAssetStore {
   // dependencyList: what the data depends on (doc_page_impl_asset.md#dependencies)
   // saveMode: written into the object (absent: the store's default applies)
   // versionMetadata: the metadata of the first version
+  // component: the component the data is for, when it is a component's data
   objectCreate(input: {
     store: string;
     name?: string;
@@ -564,6 +633,7 @@ export class DocAssetStore {
     dependencyList?: AssetDependency[];
     saveMode?: AssetSaveMode;
     versionMetadata?: AssetVersionMetadata;
+    component?: AssetComponent;
   }): Promise<AssetResult> {
     return this.writeApply(input.store, () => this.backend!.objectCreate(input), 'The asset object was not created.');
   }
@@ -632,7 +702,12 @@ export class DocAssetStore {
     return this.writeApply(store, () => this.backend!.objectRestore(store, objectId), 'The asset object was not restored.');
   }
 
-  objectMetaSet(store: string, objectId: string, change: { name?: string; lang?: string; contentType?: string; saveMode?: AssetSaveMode | null }): Promise<AssetResult> {
+  // saveMode null and component null remove the key
+  objectMetaSet(
+    store: string,
+    objectId: string,
+    change: { name?: string; lang?: string; contentType?: string; saveMode?: AssetSaveMode | null; component?: AssetComponent | null },
+  ): Promise<AssetResult> {
     return this.writeApply(store, () => this.backend!.objectMetaSet(store, objectId, change), 'The asset object was not changed.');
   }
 
@@ -728,293 +803,257 @@ export class DocAssetStore {
     if (this.folder.status === 'error') this.folder = { status: 'idle', message: '' };
   }
 
-  // ---------- the asset panel ----------
+  // ---------- usage: which blocks reference which object (doc_page_impl_asset.md#usage) ----------
+
+  // every document's references, read at start (after the object index, so
+  // a reference by name resolves), and again on request (the settings
+  // panel); replaces what was known. a read again keeps the index shown
+  // until the answer replaces it (isUsageReading meanwhile).
+  async usageLoad(): Promise<void> {
+    if (!this.backend || !this.isAvailable || this.isUsageReading) return;
+    runInAction(() => {
+      this.isUsageReading = true;
+      if (this.usageIndex.status !== 'done') this.usageIndex = { status: 'loading', message: '' };
+    });
+    const result = await this.backend.usageList([]);
+    runInAction(() => {
+      this.isUsageReading = false;
+      if (result.code !== 0) {
+        this.usageIndex = { status: 'error', message: result.message || 'The documents were not read for their asset references.' };
+        return;
+      }
+      const usageByDocPath: Record<string, AssetUsageDocState> = {};
+      const timeRead = Date.now();
+      for (const doc of result.data?.docList ?? []) {
+        usageByDocPath[doc.docPath] = { contentHash: doc.contentHash, timeRead, usageList: doc.usageList ?? [] };
+      }
+      this.usageByDocPath = usageByDocPath;
+      this.usageIndex = { status: 'done', message: '' };
+    });
+    if (this.manifestGet) this.usageManifestSync(this.manifestGet());
+  }
+
+  // reads the references of some documents again; a document the answer
+  // does not have is gone (or no longer collected) and leaves the index
+  async usageDocListRead(docPathList: string[]): Promise<AssetResult> {
+    if (!this.backend || !this.isAvailable) return { code: -1, message: this.unavailableReason || 'The asset store is not available.' };
+    if (docPathList.length === 0) return { code: 0, message: '' };
+    const result = await this.backend.usageList(docPathList);
+    if (result.code !== 0) return { code: result.code, message: result.message || 'The documents were not read again.' };
+    runInAction(() => {
+      const docByPath = new Map<string, any>((result.data?.docList ?? []).map((doc: any) => [doc.docPath, doc]));
+      const timeRead = Date.now();
+      for (const docPath of docPathList) {
+        const doc = docByPath.get(docPath);
+        if (doc) this.usageByDocPath[docPath] = { contentHash: doc.contentHash, timeRead, usageList: doc.usageList ?? [] };
+        else delete this.usageByDocPath[docPath];
+      }
+    });
+    return { code: 0, message: '' };
+  }
+
+  // the manifest changed: the documents whose content hash differs from the
+  // one their references were read with (new documents included), and the
+  // documents that left the manifest since it was last seen, are read again
+  private usageManifestSync(manifest: ManifestEntry[] | undefined) {
+    if (this.usageIndex.status !== 'done' || !Array.isArray(manifest)) return;
+    const hashByDocPath = new Map<string, string>();
+    for (const entry of manifest) {
+      if (entry.ext === 'md' || entry.ext === 'mdx') hashByDocPath.set(entry.internalPath, entry.contentHash ?? '');
+    }
+    const docPathList: string[] = [];
+    for (const [docPath, contentHash] of hashByDocPath) {
+      if (this.usageByDocPath[docPath]?.contentHash !== contentHash) docPathList.push(docPath);
+    }
+    for (const docPath of this.manifestHashByDocPathLast.keys()) {
+      if (!hashByDocPath.has(docPath) && this.usageByDocPath[docPath]) docPathList.push(docPath);
+    }
+    this.manifestHashByDocPathLast = hashByDocPath;
+    void this.usageDocListRead(docPathList);
+  }
+
+  // what the page changed itself, applied at once; the documents concerned
+  // are then read again, which confirms it. the changes are applied against
+  // the index as it was before any of them, so a swap of two blocks is two
+  // moves that do not see each other.
+  usageNotify(changeList: AssetUsageChange[]): Promise<AssetResult> {
+    const docPathSet = new Set<string>();
+    const usageByDocPathNext: Record<string, AssetUsage[]> = {};
+    const usageListGetForDoc = (docPath: string) => {
+      if (!usageByDocPathNext[docPath]) usageByDocPathNext[docPath] = [...(this.usageByDocPath[docPath]?.usageList ?? [])];
+      return usageByDocPathNext[docPath];
+    };
+    const usageMovedList: { usage: AssetUsage; docPathTo: string; sourceLineTo: number }[] = [];
+    for (const change of changeList) {
+      docPathSet.add(change.docPath);
+      if (change.type === 'docChange') continue;
+      const usageListOld = this.usageByDocPath[change.docPath]?.usageList ?? [];
+      const usageListChanged = usageListOld.filter((usage) => usageIsInLines(usage, change.docPath, change.lineStart, change.lineEnd));
+      const usageListDoc = usageListGetForDoc(change.docPath);
+      for (const usage of usageListChanged) usageListDoc.splice(usageListDoc.indexOf(usage), 1);
+      if (change.type === 'move') {
+        docPathSet.add(change.docPathTo);
+        for (const usage of usageListChanged) {
+          usageMovedList.push({ usage, docPathTo: change.docPathTo, sourceLineTo: usage.place.sourceLine - change.lineStart + change.lineStartTo });
+        }
+      }
+    }
+    for (const { usage, docPathTo, sourceLineTo } of usageMovedList) {
+      usageListGetForDoc(docPathTo).push({ ...usage, place: { ...usage.place, docPath: docPathTo, sourceLine: sourceLineTo } });
+    }
+    for (const [docPath, usageList] of Object.entries(usageByDocPathNext)) {
+      usageList.sort((a, b) => a.place.sourceLine - b.place.sourceLine);
+      const state = this.usageByDocPath[docPath];
+      this.usageByDocPath[docPath] = { contentHash: state?.contentHash ?? '', timeRead: state?.timeRead ?? Date.now(), usageList };
+    }
+    return this.usageDocListRead([...docPathSet]);
+  }
+
+  // the object a use reads ('' when its reference is not valid, or names a
+  // name no object has)
+  usageObjectIdGet(usage: AssetUsage): string {
+    if (usage.reference.message) return '';
+    return usage.reference.objectId || this.objectIdGetByName(usage.reference.store, usage.reference.name);
+  }
+
+  // every use, keyed by the object it reads (`${store}/${objectId}`)
+  get usageListByObjectKey(): Map<string, AssetUsage[]> {
+    const usageListByKey = new Map<string, AssetUsage[]>();
+    for (const doc of Object.values(this.usageByDocPath)) {
+      for (const usage of doc.usageList) {
+        const objectId = this.usageObjectIdGet(usage);
+        if (!objectId) continue;
+        const key = objectKeyGet(usage.reference.store, objectId);
+        const usageList = usageListByKey.get(key) ?? [];
+        usageList.push(usage);
+        usageListByKey.set(key, usageList);
+      }
+    }
+    return usageListByKey;
+  }
+
+  usageListGet(store: string, objectId: string): AssetUsage[] {
+    return this.usageListByObjectKey.get(objectKeyGet(store, objectId)) ?? [];
+  }
+
+  usageCountGet(store: string, objectId: string): AssetUsageCount {
+    const count: AssetUsageCount = { head: 0, byVersionId: {} };
+    for (const usage of this.usageListGet(store, objectId)) {
+      if (usage.reference.versionId === 'head') count.head += 1;
+      else count.byVersionId[usage.reference.versionId] = (count.byVersionId[usage.reference.versionId] ?? 0) + 1;
+    }
+    return count;
+  }
+
+  // why a use does not resolve to data ('' when it does, or while the
+  // index is not read): the reference is not valid, names an unknown store
+  // or object, or a version the object does not have
+  usageProblemGet(usage: AssetUsage): string {
+    if (usage.reference.message) return usage.reference.message;
+    if (this.index.status !== 'done') return '';
+    if (this.storeIdList.length > 0 && !this.storeIdIs(usage.reference.store)) return `unknown asset store: ${usage.reference.store}`;
+    const objectId = this.usageObjectIdGet(usage);
+    if (!objectId) return `no object is named "${usage.reference.name}"`;
+    const object = this.objectGet(usage.reference.store, objectId);
+    if (!object) return `object ${objectId} is not in the store`;
+    if (usage.reference.versionId !== 'head' && !object.versionList.some((version) => version.versionId === usage.reference.versionId)) {
+      return `version ${usage.reference.versionId} is not in the object`;
+    }
+    return '';
+  }
+
+  // the uses whose data cannot be read: the block shows an error
+  get usageBrokenList(): AssetUsage[] {
+    const usageList: AssetUsage[] = [];
+    for (const doc of Object.values(this.usageByDocPath)) {
+      for (const usage of doc.usageList) if (this.usageProblemGet(usage)) usageList.push(usage);
+    }
+    return usageList;
+  }
+
+  // objects that are a component's data (they declare it) and that no block
+  // references: what was left behind when a block was removed without its
+  // data, or what lost its block outside the page. undetermined (empty)
+  // until the usage index is read.
+  get orphanObjectList(): AssetObject[] {
+    if (this.usageIndex.status !== 'done') return [];
+    return this.objectList.filter((object) => !object.isDeleted && object.component
+      && this.usageListGet(ASSET_STORE_ID_LOCAL, object.objectId).length === 0);
+  }
+
+  // objects no block references that declare no component: data of
+  // another purpose, or data from before the declaration existed
+  get unreferencedObjectList(): AssetObject[] {
+    if (this.usageIndex.status !== 'done') return [];
+    return this.objectList.filter((object) => !object.isDeleted && !object.component
+      && this.usageListGet(ASSET_STORE_ID_LOCAL, object.objectId).length === 0);
+  }
+
+  // ---------- the events of the asset domain ----------
+
+  // assetRefreshRequest: the object the component's data comes from
+  // (event.source.asset) is read again from the store, so a change written
+  // by another block or outside the page is seen now; the component
+  // re-renders with it like every block reading the object. the answer says
+  // whether the data the component reads changed: { versionIdHead, versionId,
+  // hash, isChanged }
+  async eventHandle(event: DocEvent): Promise<AssetResult | undefined> {
+    if (event.type !== 'assetRefreshRequest') return undefined;
+    const asset = event.source?.asset;
+    if (!asset?.isFromAsset) {
+      return { code: -1, message: 'assetRefreshRequest comes from a component whose data is not an asset (config.assetInfo.isFromAsset)' };
+    }
+    if (!this.backend) return { code: -1, message: this.unavailableReason };
+    await this.objectReload(asset.store, asset.objectId);
+    const object = this.objectGet(asset.store, asset.objectId);
+    if (!object) return { code: -1, message: `asset object ${asset.objectId} is no longer in the store` };
+    const versionId = asset.versionIdRef === 'head' ? object.versionIdHead : asset.versionId;
+    const version = this.versionGet(asset.store, asset.objectId, versionId);
+    return {
+      code: 0,
+      data: { versionIdHead: object.versionIdHead, versionId, hash: version?.hash ?? '', isChanged: versionId !== asset.versionId || version?.hash !== asset.hash },
+      message: '',
+    };
+  }
+
+  // ---------- the asset panels ----------
 
   get isPanelOpen(): boolean {
     return this.panel !== undefined;
   }
 
-  // opened from the toolbar of a block; versionIdRef is what that block
-  // reads, block what renders the data (for the preview). the preview pane
-  // stays open or closed from one panel to the next.
+  // the popup, opened from the toolbar of a block; versionIdRef is what that
+  // block reads, block what renders the data (for the preview) and where it
+  // is. the preview pane stays open or closed from one panel to the next.
   panelOpen(store: string, objectId: string, versionIdRef = '', block?: AssetPanelBlock) {
-    const versionIdSelected = this.refVersionIdGet({ store, objectId, versionId: versionIdRef || 'head' });
-    this.panel = {
-      store,
-      objectId,
-      versionIdRef,
-      block,
-      isPreviewOpen: this.isPanelPreviewOpenLast,
-      isEventListOpen: false,
-      versionIdSelected,
-      edit: undefined,
-      confirm: undefined,
-      upload: undefined,
-      status: 'idle',
-      message: '',
-    };
-    void this.refLoad({ store, objectId, versionId: 'head' });
-    if (versionIdSelected) void this.refLoad({ store, objectId, versionId: versionIdSelected });
+    this.panel = new AssetPanelModel(this, { store, objectId, versionIdRef, block, isPreviewOpen: this.isPanelPreviewOpenLast });
   }
 
   panelClose() {
-    if (this.panelIsBusy) return;
+    if (this.panel?.isBusy) return;
     this.panel = undefined;
   }
 
-  get panelObject(): AssetObject | undefined {
-    return this.panel ? this.objectGet(this.panel.store, this.panel.objectId) : undefined;
-  }
-
-  // the preview pane: what the block would render with the data as it is
-  // in the panel now (the draft while editing, else the selected version)
   panelPreviewToggle() {
     if (!this.panel) return;
     this.panel.isPreviewOpen = !this.panel.isPreviewOpen;
     this.isPanelPreviewOpenLast = this.panel.isPreviewOpen;
   }
 
-  panelEventListToggle() {
-    if (!this.panel) return;
-    this.panel.isEventListOpen = !this.panel.isEventListOpen;
-  }
-
-  // the data the preview renders: the draft while the head text is edited,
-  // else the data of the selected version. isDraft says which.
-  get panelPreviewData(): { versionId: string; isDraft: boolean; version: AssetVersionState | undefined; text: string } {
-    const panel = this.panel;
-    if (!panel) return { versionId: '', isDraft: false, version: undefined, text: '' };
-    if (panel.edit) {
-      const head = this.panelObject ? this.versionGet(panel.store, panel.objectId, this.panelObject.versionIdHead) : undefined;
-      return { versionId: this.panelObject?.versionIdHead ?? '', isDraft: true, version: head, text: panel.edit.textDraft };
+  // the object shown in the settings panel's asset tab; choosing the object
+  // shown closes it
+  settingsPanelToggle(store: string, objectId: string) {
+    if (this.settingsPanel?.isBusy) return;
+    if (this.settingsPanel?.store === store && this.settingsPanel.objectId === objectId) {
+      this.settingsPanel = undefined;
+      return;
     }
-    const version = panel.versionIdSelected ? this.versionGet(panel.store, panel.objectId, panel.versionIdSelected) : undefined;
-    return { versionId: panel.versionIdSelected, isDraft: false, version, text: version?.text ?? '' };
+    this.settingsPanel = new AssetPanelModel(this, { store, objectId });
   }
 
-  // a write of the panel is pending
-  get panelIsBusy(): boolean {
-    const panel = this.panel;
-    if (!panel) return false;
-    return panel.status === 'submitting'
-      || panel.edit?.status === 'submitting'
-      || panel.confirm?.status === 'submitting'
-      || panel.upload?.status === 'submitting';
-  }
-
-  // the versions of the panel's object, newest first (the store appends
-  // versions in creation order)
-  get panelVersionList(): AssetVersionMeta[] {
-    const object = this.panelObject;
-    if (!object) return [];
-    return [...object.versionList].reverse();
-  }
-
-  // the effective save mode of the panel's object: the written one, else in place
-  get panelSaveMode(): AssetSaveMode {
-    return assetSaveModeGet(this.panelObject);
-  }
-
-  // selecting the selected version again unselects it
-  panelVersionSelect(versionId: string) {
-    const panel = this.panel;
-    if (!panel || panel.edit) return;
-    panel.versionIdSelected = panel.versionIdSelected === versionId ? '' : versionId;
-    panel.confirm = undefined;
-    panel.message = '';
-    if (panel.versionIdSelected) void this.refLoad({ store: panel.store, objectId: panel.objectId, versionId });
-  }
-
-  // the text of the head becomes editable (the head only: an in-place save
-  // rewrites the head, a new version branches from it). pointStart: where
-  // the text was clicked; the caret is placed there.
-  panelEditStart(pointStart?: AssetPoint) {
-    const panel = this.panel;
-    const object = this.panelObject;
-    if (!panel || !object || object.isDeleted || object.isLocked || !this.isWritable) return;
-    const head = this.versionGet(panel.store, panel.objectId, object.versionIdHead);
-    if (head?.status !== 'done' || !head.isText) return;
-    panel.versionIdSelected = object.versionIdHead;
-    panel.confirm = undefined;
-    panel.edit = { textDraft: head.text ?? '', status: 'editing', message: '', pointStart };
-  }
-
-  panelEditCancel() {
-    if (!this.panel || this.panel.edit?.status === 'submitting') return;
-    this.panel.edit = undefined;
-  }
-
-  // the head version is locked: a save in place is refused, a new version is not
-  get panelIsHeadLocked(): boolean {
-    const object = this.panelObject;
-    return Boolean(object?.versionList.find((version) => version.versionId === object.versionIdHead)?.isLocked);
-  }
-
-  // the save a leave without a choice makes (a pointer down outside the
-  // text and its buttons): the object's save mode, a new version when that
-  // mode would rewrite a locked head
-  get panelSaveModeOnLeave(): AssetSaveMode {
-    return this.panelSaveMode === 'inPlace' && this.panelIsHeadLocked ? 'newVersion' : this.panelSaveMode;
-  }
-
-  // leaving the text without a choice: an unchanged draft just closes, a
-  // changed one is saved (panelSaveModeOnLeave), as a block of the document
-  // is saved when it is left; a failed save keeps the text open with its message
-  async panelEditLeave(): Promise<boolean> {
-    const panel = this.panel;
-    const edit = panel?.edit;
-    const object = this.panelObject;
-    if (!panel || !edit || !object || edit.status === 'submitting') return false;
-    const head = this.versionGet(panel.store, panel.objectId, object.versionIdHead);
-    if (edit.textDraft === (head?.text ?? '')) {
-      this.panelEditCancel();
-      return true;
-    }
-    return this.panelSave(this.panelSaveModeOnLeave);
-  }
-
-  panelDraftSet(text: string) {
-    const edit = this.panel?.edit;
-    if (!edit || edit.status === 'submitting') return;
-    edit.textDraft = text;
-    if (edit.status === 'error') {
-      edit.status = 'editing';
-      edit.message = '';
-    }
-  }
-
-  // saves the edited text: in place or as a new version when the mode is
-  // given (the panel offers both), else with the object's save mode
-  async panelSave(mode?: AssetSaveMode): Promise<boolean> {
-    const panel = this.panel;
-    const edit = panel?.edit;
-    if (!panel || !edit || edit.status === 'submitting') return false;
-    runInAction(() => {
-      edit.status = 'submitting';
-      edit.message = '';
-    });
-    const result = await this.objectUpdate(panel.store, panel.objectId, { text: edit.textDraft }, mode);
-    runInAction(() => {
-      if (result.code !== 0) {
-        edit.status = 'error';
-        edit.message = result.message;
-        return;
-      }
-      if (this.panel === panel) {
-        panel.edit = undefined;
-        panel.versionIdSelected = result.data?.version?.versionId ?? panel.versionIdSelected;
-      }
-    });
-    return result.code === 0;
-  }
-
-  // the bytes of a file become the head data (any file: text or not), with
-  // the object's save mode or the mode given
-  async panelUpload(file: File, mode?: AssetSaveMode): Promise<boolean> {
-    const panel = this.panel;
-    if (!panel || this.panelIsBusy) return false;
-    runInAction(() => {
-      panel.edit = undefined;
-      panel.confirm = undefined;
-      panel.upload = { fileName: file.name, status: 'submitting', message: '' };
-    });
-    const dataBase64 = await fileBase64Read(file);
-    const result = await this.objectUpdate(panel.store, panel.objectId, { dataBase64 }, mode, file.name);
-    runInAction(() => {
-      if (this.panel !== panel) return;
-      if (result.code !== 0) {
-        panel.upload = { fileName: file.name, status: 'error', message: result.message };
-        return;
-      }
-      panel.upload = undefined;
-      panel.versionIdSelected = result.data?.version?.versionId ?? panel.versionIdSelected;
-    });
-    return result.code === 0;
-  }
-
-  panelUploadMessageClear() {
-    if (this.panel?.upload?.status === 'error') this.panel.upload = undefined;
-  }
-
-  panelConfirmSet(kind: 'versionDelete' | 'objectDelete', versionId = '') {
-    const panel = this.panel;
-    if (!panel || panel.confirm?.status === 'submitting') return;
-    panel.edit = undefined;
-    panel.confirm = { kind, versionId, status: 'confirming', message: '' };
-  }
-
-  panelConfirmClear() {
-    if (!this.panel || this.panel.confirm?.status === 'submitting') return;
-    this.panel.confirm = undefined;
-  }
-
-  async panelConfirmApply(): Promise<boolean> {
-    const panel = this.panel;
-    const confirm = panel?.confirm;
-    if (!panel || !confirm || confirm.status === 'submitting') return false;
-    runInAction(() => {
-      confirm.status = 'submitting';
-      confirm.message = '';
-    });
-    const result = confirm.kind === 'versionDelete'
-      ? await this.versionDelete(panel.store, panel.objectId, confirm.versionId)
-      : await this.objectDelete(panel.store, panel.objectId);
-    runInAction(() => {
-      if (result.code !== 0) {
-        confirm.status = 'error';
-        confirm.message = result.message;
-        return;
-      }
-      if (this.panel !== panel) return;
-      panel.confirm = undefined;
-      const object = this.panelObject;
-      if (object && !object.versionList.some((version) => version.versionId === panel.versionIdSelected)) {
-        panel.versionIdSelected = '';
-      }
-    });
-    return result.code === 0;
-  }
-
-  // the head / name / save mode / restore actions of the panel share one status line
-  private async panelAction(request: (panel: AssetPanel) => Promise<AssetResult>): Promise<boolean> {
-    const panel = this.panel;
-    if (!panel || panel.status === 'submitting') return false;
-    runInAction(() => {
-      panel.status = 'submitting';
-      panel.message = '';
-    });
-    const result = await request(panel);
-    runInAction(() => {
-      panel.status = 'idle';
-      panel.message = result.code === 0 ? '' : result.message;
-    });
-    return result.code === 0;
-  }
-
-  panelHeadSet(versionId: string): Promise<boolean> {
-    return this.panelAction((panel) => this.versionCheckout(panel.store, panel.objectId, versionId));
-  }
-
-  panelNameSet(name: string): Promise<boolean> {
-    return this.panelAction((panel) => this.objectMetaSet(panel.store, panel.objectId, { name }));
-  }
-
-  // the save mode written into the object's metadata; null removes the key
-  // (the object then saves in place, the default)
-  panelSaveModeSet(saveMode: AssetSaveMode | null): Promise<boolean> {
-    return this.panelAction((panel) => this.objectMetaSet(panel.store, panel.objectId, { saveMode }));
-  }
-
-  panelObjectRestore(): Promise<boolean> {
-    return this.panelAction((panel) => this.objectRestore(panel.store, panel.objectId));
-  }
-
-  panelObjectLockSet(isLocked: boolean): Promise<boolean> {
-    return this.panelAction((panel) => this.objectLockSet(panel.store, panel.objectId, isLocked));
-  }
-
-  panelVersionLockSet(versionId: string, isLocked: boolean): Promise<boolean> {
-    return this.panelAction((panel) => this.versionLockSet(panel.store, panel.objectId, versionId, isLocked));
+  settingsPanelClose() {
+    if (this.settingsPanel?.isBusy) return;
+    this.settingsPanel = undefined;
   }
 }
 
@@ -1040,14 +1079,7 @@ function nameKeyGet(store: string, name: string): string {
   return `${store}/${name}`;
 }
 
-function fileBase64Read(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result ?? '');
-      resolve(dataUrl.slice(dataUrl.indexOf(',') + 1));
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
+// the lines of a place fall in the lines a change names
+function usageIsInLines(usage: AssetUsage, docPath: string, lineStart: number, lineEnd: number): boolean {
+  return usage.place.docPath === docPath && usage.place.sourceLine >= lineStart && usage.place.sourceLine <= lineEnd;
 }

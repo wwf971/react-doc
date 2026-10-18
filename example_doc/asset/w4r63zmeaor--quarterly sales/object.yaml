@@ -3,6 +3,8 @@ name: quarterly sales
 lang: json
 contentType: application/json
 fileExt: json
+component:
+  name: ExcelUniver
 saveMode: inPlace
 versionIdHead: w4r63zmf1ga
 isDeleted: false

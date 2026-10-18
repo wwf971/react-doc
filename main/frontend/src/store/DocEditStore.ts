@@ -2,7 +2,7 @@ import { makeAutoObservable, observable, reaction, runInAction } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import type { DocStore } from './DocStore.js';
 import type { DocConfigStore } from './DocConfigStore.js';
-import type { DocAssetStore } from './DocAssetStore.js';
+import type { AssetUsageChange, DocAssetStore } from './DocAssetStore.js';
 import { compileDoc } from '../lib/mdx-compile.js';
 import { docEditApiCreate } from '../lib/doc-edit-api.js';
 import { ASSET_REF_LANG, ASSET_STORE_ID_LOCAL, assetRefLangIs, assetRefParse, assetRefTextBuild } from '../lib/doc-asset-ref.js';
@@ -1272,6 +1272,7 @@ export class DocEditStore {
       text: template.assetSource.raw,
       note: `${template.compName} block created in ${path}`,
       saveMode: compMetaGet(definition).assetSaveMode,
+      component: { name: template.compName },
     });
     const objectId: string = resultCreate.data?.object?.objectId ?? '';
     if (resultCreate.code !== 0 || !objectId) {
@@ -1294,6 +1295,7 @@ export class DocEditStore {
       failSet(result.message);
       return false;
     }
+    void this.assetStore.usageNotify([{ type: 'docChange', docPath: path }]);
     const isStarted = await this.sessionBlockStart(path, menu.borderIndex, { isCreated: true, selectionInitial: 'all' });
     if (isStarted) {
       runInAction(() => {
@@ -1348,6 +1350,7 @@ export class DocEditStore {
       this.blockMove = { path, blockIndex, direction, status: 'submitting', message: '' };
       return this.blockMove!;
     });
+    const usageChangeList = blockSwapUsageChangeListBuild(model, indexUpper, path);
     const result = await this.operationApply(path, blockSwapOperationBuild(model, indexUpper), {
       messageFailure: 'The block was not moved.',
       onApplied: () => {
@@ -1361,6 +1364,7 @@ export class DocEditStore {
       });
       return false;
     }
+    void this.assetStore?.usageNotify(usageChangeList);
     return true;
   }
 
@@ -1450,6 +1454,7 @@ export class DocEditStore {
       note: `${block.component.compName} data moved from ${path}`,
       dependencyList: this.blockDependencyListGet(block, block.component.raw, path),
       saveMode: compMetaGet(this.blockDefinitionGet(path, blockIndex)).assetSaveMode,
+      component: { name: block.component.compName },
     });
     const objectId: string = resultCreate.data?.object?.objectId ?? '';
     if (resultCreate.code !== 0 || !objectId) {
@@ -1475,6 +1480,7 @@ export class DocEditStore {
       });
       return false;
     }
+    void this.assetStore.usageNotify([{ type: 'docChange', docPath: path }]);
     return true;
   }
 
@@ -1630,32 +1636,79 @@ export class DocEditStore {
     return this.deleteConfirm?.path === path && this.deleteConfirm.blockIndex === blockIndex;
   }
 
-  async blockDelete(path: string, blockIndex: number): Promise<boolean> {
+  // the asset object a component block's data comes from, when the block is
+  // a reference that resolves to one: what deleting the block may delete
+  // with it (doc_page_impl_asset.md#objects-for-components).
+  //   usageCountOther   the other blocks of the documents that reference it
+  blockAssetObjectGet(path: string, blockIndex: number): {
+    store: string; objectId: string; name: string; isDeleted: boolean; isLocked: boolean; usageCountOther: number;
+  } | undefined {
+    const component = this.docEditByPath[path]?.model?.blockList[blockIndex]?.component;
+    if (!component || !assetRefLangIs(component.lang) || !this.assetStore) return undefined;
+    const reference = assetRefParse(component.raw);
+    if (reference.message) return undefined;
+    const objectId = this.assetStore.refObjectIdGet(reference);
+    const object = objectId ? this.assetStore.objectGet(reference.store, objectId) : undefined;
+    if (!object) return undefined;
+    const usageCountOther = this.assetStore.usageListGet(reference.store, objectId)
+      .filter((usage) => !(usage.place.docPath === path && usage.place.sourceLine === component.markerLine))
+      .length;
+    return { store: reference.store, objectId, name: object.name, isDeleted: object.isDeleted, isLocked: object.isLocked, usageCountOther };
+  }
+
+  // deletes the confirmed block. isAssetDeleted: the asset object the
+  // block's data comes from is deleted with it (softly: the deletion mark,
+  // restorable in its panel). the object is marked first and the document
+  // written last, the write being the step that makes the deletion happen:
+  // when it fails, the mark is taken back and both are as they were. a
+  // block deleted without its object leaves the object to the store, where
+  // an object no block references any more shows as an orphan.
+  async blockDelete(path: string, blockIndex: number, options: { isAssetDeleted?: boolean } = {}): Promise<boolean> {
     const confirm = this.deleteConfirm;
     if (!confirm || confirm.path !== path || confirm.blockIndex !== blockIndex || confirm.status === 'submitting') {
       return false;
     }
+    const failSet = (message: string) => {
+      runInAction(() => {
+        confirm.status = 'error';
+        confirm.message = message;
+      });
+    };
     runInAction(() => {
       confirm.status = 'submitting';
       confirm.message = '';
     });
+    const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
+    const usageChange = blockUsageLinesGet(this.docEditByPath[path]?.model, block);
+    const assetObject = options.isAssetDeleted ? this.blockAssetObjectGet(path, blockIndex) : undefined;
+    const isAssetMarked = Boolean(assetObject && !assetObject.isDeleted);
+    if (options.isAssetDeleted && !assetObject) {
+      failSet('The asset object of the block is not known, so it was not deleted; the block was kept.');
+      return false;
+    }
+    if (isAssetMarked) {
+      const resultAsset = await this.assetStore!.objectDelete(assetObject!.store, assetObject!.objectId);
+      if (resultAsset.code !== 0) {
+        failSet(`The asset object was not deleted, so the block was kept: ${resultAsset.message}`);
+        return false;
+      }
+    }
     const result = await this.blockDeleteApply(path, blockIndex, () => {
       if (this.deleteConfirm === confirm) this.deleteConfirm = undefined;
     });
     if (result.code !== 0) {
-      runInAction(() => {
-        confirm.status = 'error';
-        confirm.message = result.message;
-      });
+      if (isAssetMarked) await this.assetStore!.objectRestore(assetObject!.store, assetObject!.objectId);
+      failSet(result.message);
       return false;
     }
+    if (usageChange) void this.assetStore?.usageNotify([{ type: 'remove', docPath: path, ...usageChange }]);
     return true;
   }
 
   // ---------- data replacement requested by a component ----------
 
   // a component asks for its data to be replaced with new text
-  // (dataReplaceRequest { raw, dependencyList? }; doc_page_impl_asset.md
+  // (dataReplaceRequest { raw, dependencyList? }; doc_page_impl_mdx_comp.md
   // #component-awareness). the block is named by event.source; when the
   // block's data is an asset (event.source.asset), the asset object is
   // updated in its save mode and the block is untouched; otherwise the
@@ -1740,6 +1793,29 @@ export class DocEditStore {
 
 function blockViewModeKeyBuild(path: string, blockIndex: number): string {
   return `${path}#${blockIndex}`;
+}
+
+// the lines of a block in the content without frontmatter, the lines the
+// usage index counts in (doc_page_impl_asset.md#usage); the model counts
+// lines of the whole file
+function blockUsageLinesGet(model: any, block: any): { lineStart: number; lineEnd: number } | undefined {
+  if (!block) return undefined;
+  const lineOffset = model?.frontmatter?.lineEnd ?? 0;
+  return { lineStart: block.lineStart - lineOffset, lineEnd: block.lineEnd - lineOffset };
+}
+
+// what swapping a block with the next one does to the places of the
+// references in them: the lower block moves to where the upper one started,
+// the upper one follows the lower one and the lines between them
+function blockSwapUsageChangeListBuild(model: any, indexUpper: number, path: string): AssetUsageChange[] {
+  const blockUpper = model.blockList[indexUpper];
+  const blockLower = model.blockList[indexUpper + 1];
+  const linesUpper = blockUsageLinesGet(model, blockUpper)!;
+  const linesLower = blockUsageLinesGet(model, blockLower)!;
+  return [
+    { type: 'move', docPath: path, ...linesLower, docPathTo: path, lineStartTo: linesUpper.lineStart },
+    { type: 'move', docPath: path, ...linesUpper, docPathTo: path, lineStartTo: linesUpper.lineStart + (blockLower.lineEnd - blockUpper.lineEnd) },
+  ];
 }
 
 // the block text an editor's event describes: { text } as is, { raw, props }

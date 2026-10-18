@@ -1,0 +1,6 @@
+src: ~example/mdx-usage/image/office-worker.svg
+alt: An office worker at a desk
+caption: The banner of a block that was deleted without its data
+displayMode: contain
+width: 320
+height: 240

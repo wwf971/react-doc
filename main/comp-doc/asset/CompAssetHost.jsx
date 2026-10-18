@@ -68,15 +68,19 @@ export const CompAssetHost = observer(function CompAssetHost({ input, registered
     );
   }
   // what a component declared isAssetAware learns about its data
-  // (doc_page_impl_asset.md#component-awareness)
+  // (doc_page_impl_mdx_comp.md#components-and-the-asset-store)
   const assetInfo = {
     isFromAsset: true,
     store: reference.store,
     objectId: result.object.objectId,
     name: result.object.name,
+    // what the reference asks for: 'head' follows the head, an id is pinned
+    versionIdRef: reference.versionId,
     versionId: result.versionId,
     versionIdHead: result.object.versionIdHead,
     isHead: result.versionId === result.object.versionIdHead,
+    // the hash of the bytes read, so a refresh can tell whether they changed
+    hash: result.version.hash ?? '',
     saveMode: assetSaveModeGet(result.object),
     isLocked: result.object.isLocked,
     // what the writer of the data said about it ({versionId}.metadata.yaml)

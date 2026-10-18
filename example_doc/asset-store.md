@@ -75,9 +75,26 @@ store: local
 objectId: w4okcraoqic
 ```
 
+## Blocks that use an object
+
+Several blocks may read one object, as the two tables above do. The block below reads the `hero image` of the first section again, at a smaller size, and carries an `Anchor` id (`hero-small`) before its marker:
+
+<!--renderComp=Anchor,id=hero-small-->
+<!--renderComp=Image,width=200,height=150-->
+```asset
+store: local
+name: hero image
+```
+
+The asset panel lists, under **used by**, every block of the documents that references the object: its component, its place (`asset-store.md#hero-small` for this block, a document and a line for a block without an id), and whether it follows the head or is pinned to a version; the block the panel was opened from is marked `this block`. A click on a place goes there. The list is what the page last read: it follows the page's own edits and every document whose content changed, but a document changed while nothing watched may differ, so the read-again button next to the title, and the one next to each place, read the documents again and say what was confirmed or changed. The version table counts the blocks in its **uses** column: on the head row `following | pinned` (here `2|0`), on another row the blocks pinned to it (the StockTable object shows `1|0` on its head and `1` on its first version).
+
+An object made from a block's data (**to asset**, or the insert menu of an asset-only component) records the component it is data for (`component: { name: Image }` in `object.yaml`); the panel shows it in the object section and lets it be changed. A block of another component may still read the object; its row says so.
+
+Deleting a block whose data is an asset object asks about the object too: **Delete block only** leaves the object in the store, **Delete block and asset** marks it deleted with the block (restorable in its panel; not offered while other blocks use it). An object left behind this way, or whose blocks were removed outside the page, is an **orphan**: the **Asset store** tab of the settings panel lists the orphans, the objects no block references that are not a component's data, and the references whose data cannot be read (the error blocks at the end of this page); a click on an object opens its asset panel there. This example has one orphan, `removed banner` (declared for `Image`), and one object that is no component's data at all, `style notes`.
+
 ## Moving inline data into the store
 
-A component block whose data is written inline can be moved into the store from its toolbar: the **to asset** button (an upload arrow, shown next to Edit for such a block) asks first, in the toolbar, like a deletion: **Move** or **Keep**. Confirmed, it creates an object in the default folder of the local store, with the block's language (and the save mode the component declares, if it declares one), and then rewrites the block as the reference to it by id. Rewriting the document is the last step, and only it makes the move happen: when it fails, the block keeps its inline data and works as before, and the message names the object that was already created. The object gets no name (a name means one object, so two Image blocks could not both be named after the component); give it one in its panel, and the folder of the object is renamed with it. Try it on the block below; the document on disk changes, as with any edit, and the new object appears in the asset panel of the block.
+A component block whose data is written inline can be moved into the store from its toolbar: the **to asset** button (an upload arrow, shown next to Edit for such a block) asks first, in the toolbar, like a deletion: **Move** or **Keep**. Confirmed, it creates an object in the default folder of the local store, with the block's language (and the save mode the component declares, if it declares one), and then rewrites the block as the reference to it by id. Rewriting the document is the last step, and only it makes the move happen: when it fails, the block keeps its inline data and works as before, and the message names the object that was already created. The object gets no name (a name means one object, so two Image blocks could not both be named after the component); give it one in its panel, and the folder of the object is renamed with it. It does record the component it is data for (see [Blocks that use an object](#blocks-that-use-an-object)). Try it on the block below; the document on disk changes, as with any edit, and the new object appears in the asset panel of the block.
 
 <!--renderComp=Image-->
 ```yaml
@@ -162,7 +179,7 @@ A component can also declare itself **asset-only**: its data is never written in
 
 ## What a component knows
 
-The component normally does not know where its data came from. A component that declares `isAssetAware` in its registry definition receives `config.assetInfo` beside its data: `{ isFromAsset: false }` for inline data, or, for data from the store, the store, object id and name, the version read, whether it is the head, the object's save mode, whether it is locked, and the version's metadata. `Image` and `ImageGrid` are asset-aware: when a paste is about to replace an image whose data is an asset, the confirmation says so and tells whether the paste adds a version or rewrites the head in place. A component that wants its data replaced reports `dataReplaceRequest` with the new text; the page then saves the asset (by its save mode) or rewrites the fenced block, whichever the data is, and the component stays the same in both cases.
+The component normally does not know where its data came from. A component that declares `isAssetAware` in its registry definition receives `config.assetInfo` beside its data: `{ isFromAsset: false }` for inline data, or, for data from the store, the store, object id and name, what the reference asks for (`head` or a version id) and the version read, whether it is the head, the hash of the data, the object's save mode, whether it is locked, and the version's metadata. `Image` and `ImageGrid` are asset-aware: when a paste is about to replace an image whose data is an asset, the confirmation says so and tells whether the paste adds a version or rewrites the head in place. A component that wants its data replaced reports `dataReplaceRequest` with the new text; the page then saves the asset (by its save mode) or rewrites the fenced block, whichever the data is, and the component stays the same in both cases. A component that wants to know whether another block, or something outside the page, changed the object reports `assetRefreshRequest`: the page reads the object again and answers whether the data the component reads changed.
 
 ## Errors
 

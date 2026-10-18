@@ -3,6 +3,8 @@ name: hero image
 lang: yaml
 contentType: text/yaml
 fileExt: yaml
+component:
+  name: Image
 saveMode: newVersion
 versionIdHead: w4okcoobv98
 isDeleted: false

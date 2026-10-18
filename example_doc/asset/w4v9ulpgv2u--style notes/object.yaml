@@ -1,0 +1,22 @@
+objectId: w4v9ulpgv2u
+name: style notes
+lang: md
+contentType: text/markdown
+fileExt: md
+versionIdHead: w4v9ulpgmtl
+isDeleted: false
+isLocked: false
+timeCreated: 20261024_03024764+09
+versionList:
+  - versionId: w4v9ulpgmtl
+    versionIdPrevList: []
+    time: 20261024_03024764+09
+    note: notes, not a component's data
+    size: 158
+    hash: b30f70fba8fcb69e6014d316b62bd6c7c51681cb
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261024_03024764+09
+    versionId: w4v9ulpgmtl

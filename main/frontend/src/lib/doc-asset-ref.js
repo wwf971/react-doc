@@ -1,4 +1,7 @@
 import { yamlParse } from './yaml.js';
+import { anchorCompNameIs } from '../../../comp-mdx/anchor/AnchorData.js';
+import { commentMarkerParse } from './remark-comment-comp.js';
+import { docPlaceBuild } from './doc-place.js';
 
 // An asset reference: a component's fenced block written in the language
 // "asset" instead of holding the data itself. The content is yaml that
@@ -88,6 +91,98 @@ export function assetBlockTextExpand(text, textGet) {
       `${indent}${fenceOut}`,
     ].join('\n');
   });
+}
+
+// ---------- the references a document makes (doc_page_impl_asset.md#usage) ----------
+
+// the frontmatter at the start of a document. lines are counted in the
+// content without it, as the compiled body counts them (splitFrontmatter of
+// mdx-compile.js, the sourceLine of DocComp): the same regex.
+const REGEX_FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
+const REGEX_FENCE_OPEN = /^([ \t]*)(`{3,}|~{3,})(.*)$/;
+// a marker comment standing alone on its line, or ending a line of text (a
+// component inside a list item, doc_page_impl_mdx_li.md)
+const REGEX_MARKER_AT_LINE_END = /(<!--[\s\S]*?-->)[ \t]*$/;
+
+// every component block of a document text whose data is an asset
+// reference, in document order:
+//
+//   { place: { docPath, sourceLine, fragment },   where the block is (doc_page_impl_nav.md#places-in-a-document)
+//     compName,                                     the tag name of its marker
+//     componentId,                                  the id prop of its marker ('' without)
+//     reference: { store, objectId, name, versionId, message } }   as written (assetRefParse)
+//
+// sourceLine is the line of the marker comment; fragment is the id an
+// Anchor marker right before it declares. a fence written in the language
+// asset without a component marker before it is a code block, not a use,
+// and fenced blocks inside other fenced blocks (an example in a ````markdown
+// block) are not looked into.
+export function assetUsageListScan(text, docPath) {
+  const content = String(text ?? '').replace(REGEX_FRONTMATTER, '');
+  const lineList = content.split(/\r?\n/);
+  const usageList = [];
+  let index = 0;
+  while (index < lineList.length) {
+    const fenceOpen = REGEX_FENCE_OPEN.exec(lineList[index]);
+    if (!fenceOpen) {
+      index += 1;
+      continue;
+    }
+    const [, indent, fence, info] = fenceOpen;
+    const indexClose = fenceCloseIndexFind(lineList, index + 1, fence);
+    if (assetRefLangIs(info.trim().split(/\s+/)[0])) {
+      const usage = usageBuild(lineList, index, indexClose, indent, docPath);
+      if (usage) usageList.push(usage);
+    }
+    index = indexClose + 1;
+  }
+  return usageList;
+}
+
+// the line of the closing fence of an opening fence, or the last line when
+// the block is not closed (it runs to the end of the document)
+function fenceCloseIndexFind(lineList, indexStart, fence) {
+  const regexClose = new RegExp(`^[ \\t]*${fence[0] === '`' ? '`' : '~'}{${fence.length},}[ \\t]*$`);
+  for (let index = indexStart; index < lineList.length; index += 1) {
+    if (regexClose.test(lineList[index])) return index;
+  }
+  return lineList.length - 1;
+}
+
+function usageBuild(lineList, indexFence, indexClose, indent, docPath) {
+  const indexMarker = lineIndexPreviousFind(lineList, indexFence);
+  if (indexMarker < 0) return undefined;
+  const markerMatch = REGEX_MARKER_AT_LINE_END.exec(lineList[indexMarker]);
+  const marker = markerMatch ? commentMarkerParse(markerMatch[1]) : undefined;
+  if (!marker || anchorCompNameIs(marker.compName)) return undefined;
+  const raw = lineList
+    .slice(indexFence + 1, indexClose)
+    .map((line) => line.slice(Math.min(indent.length, line.length - line.trimStart().length)))
+    .join('\n');
+  return {
+    place: docPlaceBuild({ docPath, sourceLine: indexMarker + 1, fragment: anchorIdBeforeGet(lineList, indexMarker) }),
+    compName: marker.compName,
+    componentId: String(marker.props.id ?? ''),
+    reference: assetRefParse(raw),
+  };
+}
+
+// the id an Anchor marker on the line before the marker declares ('' when none)
+function anchorIdBeforeGet(lineList, indexMarker) {
+  if (lineList[indexMarker].trim().startsWith('<!--') === false) return '';
+  const indexAnchor = lineIndexPreviousFind(lineList, indexMarker);
+  if (indexAnchor < 0) return '';
+  const marker = commentMarkerParse(lineList[indexAnchor].trim());
+  if (!marker || !anchorCompNameIs(marker.compName)) return '';
+  return String(marker.props.id ?? '').trim();
+}
+
+// the last line before index that is not blank, -1 when none
+function lineIndexPreviousFind(lineList, index) {
+  for (let indexLine = index - 1; indexLine >= 0; indexLine -= 1) {
+    if (lineList[indexLine].trim() !== '') return indexLine;
+  }
+  return -1;
 }
 
 function fenceRunGet(text, fenceChar, lengthMin) {

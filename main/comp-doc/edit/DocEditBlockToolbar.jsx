@@ -38,6 +38,9 @@ import './DocEdit.css';
 // "to asset" button instead: confirmed in the toolbar like a deletion, the
 // data becomes an object of the local store (in its default folder) and the
 // block is rewritten as the reference, the last step of the move.
+// deleting a block whose data is an asset object asks whether the object
+// goes too ("Delete block only" / "Delete block and asset"); kept, it is
+// listed as an orphan in the settings panel (doc_page_impl_asset.md#usage).
 //
 // entering the block, moving it and moving its data are operations of the
 // document, so they are reported as events (editBlockEnterRequest,
@@ -79,6 +82,8 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
   const isAssetMoveConfirmHere = editStore.blockAssetMoveConfirmIs(path, blockIndex);
   const isAssetMoveAvailable = editStore.blockAssetMoveIsAvailable(path, blockIndex);
   const isReadOnly = editStore.blockIsReadOnly(path, blockIndex);
+  // the asset object the block's data is: its deletion asks about it too
+  const assetObject = isConfirmHere ? editStore.blockAssetObjectGet(path, blockIndex) : undefined;
   // the pointer down that closes what is open only closes it: the click
   // that follows does not also enter the block it lands on; a click on a
   // control still works. entering takes another click.
@@ -129,6 +134,7 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
               compName: component.compName,
               propsAuthored: component.props ?? {},
               sourcePath: path,
+              sourceLine: component.markerLine,
             })}>
             <History aria-hidden="true" size={ICON_SIZE} strokeWidth={2} />
           </button>
@@ -174,12 +180,18 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
       </div>
       {isConfirmHere ? (
         <ToolbarConfirm
-          question="Delete this block?"
-          actionLabel="Delete"
+          question={deleteQuestionGet(assetObject)}
+          actionLabel={assetObject ? 'Delete block only' : 'Delete'}
           isDanger
           confirm={confirm}
           onConfirm={() => void editStore.blockDelete(path, blockIndex)}
           onCancel={() => editStore.deleteConfirmClear()}
+          actionExtra={assetObject ? {
+            label: 'Delete block and asset',
+            title: assetDeleteReasonGet(assetObject) || 'the asset object is marked deleted with the block; it can be restored in the asset panel',
+            isDisabled: Boolean(assetDeleteReasonGet(assetObject)),
+            onConfirm: () => void editStore.blockDelete(path, blockIndex, { isAssetDeleted: true }),
+          } : undefined}
         />
       ) : null}
       {isAssetMoveConfirmHere ? (
@@ -203,9 +215,29 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
   );
 });
 
+// the question of a deletion: for a block whose data is an asset object,
+// what the object is and who else reads it
+function deleteQuestionGet(assetObject) {
+  if (!assetObject) return 'Delete this block?';
+  const objectText = assetObject.name ? `"${assetObject.name}"` : assetObject.objectId;
+  if (assetObject.usageCountOther === 0) return `Delete this block? Its data is the asset object ${objectText}.`;
+  const blockText = assetObject.usageCountOther === 1 ? '1 other block' : `${assetObject.usageCountOther} other blocks`;
+  return `Delete this block? Its data is the asset object ${objectText}, also used by ${blockText}.`;
+}
+
+// why the asset object cannot go with the block ('' when it can)
+function assetDeleteReasonGet(assetObject) {
+  if (assetObject.isDeleted) return 'the asset object is already marked deleted';
+  if (assetObject.isLocked) return 'the asset object is locked';
+  if (assetObject.usageCountOther > 0) return 'other blocks use the asset object; delete it from its asset panel if that is meant';
+  return '';
+}
+
 // the confirmation of a block action, in the toolbar itself
-//   confirm  { status: 'confirming' | 'submitting' | 'error', message }
-function ToolbarConfirm({ question, actionLabel, isDanger, confirm, onConfirm, onCancel }) {
+//   confirm      { status: 'confirming' | 'submitting' | 'error', message }
+//   actionExtra  a second way to confirm, after the first:
+//                { label, title, isDisabled, onConfirm } (undefined: none)
+function ToolbarConfirm({ question, actionLabel, isDanger, confirm, onConfirm, onCancel, actionExtra }) {
   const isSubmitting = confirm.status === 'submitting';
   return (
     <div className={isDanger ? 'doc-edit-confirm' : 'doc-edit-confirm is-neutral'} role="alertdialog" aria-label={question}>
@@ -216,6 +248,18 @@ function ToolbarConfirm({ question, actionLabel, isDanger, confirm, onConfirm, o
           : <Check aria-hidden="true" size={11} strokeWidth={2.2} />}
         <span>{actionLabel}</span>
       </button>
+      {actionExtra ? (
+        <button
+          type="button"
+          className={isDanger ? 'is-danger' : 'is-primary'}
+          disabled={isSubmitting || actionExtra.isDisabled}
+          title={actionExtra.title}
+          onClick={actionExtra.onConfirm}
+        >
+          <Trash2 aria-hidden="true" size={11} strokeWidth={2.2} />
+          <span>{actionExtra.label}</span>
+        </button>
+      ) : null}
       <button type="button" disabled={isSubmitting} onClick={onCancel}>
         <X aria-hidden="true" size={11} strokeWidth={2.2} />
         <span>Keep</span>

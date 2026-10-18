@@ -26,7 +26,7 @@ import { timeTextGet } from '../src/lib/time-text.js';
 //       {versionId}.metadata.yaml.bak the previous metadata, before it was rewritten
 //
 // object.yaml:
-//   objectId, name, lang, contentType, fileExt, saveMode?, versionIdHead,
+//   objectId, name, lang, contentType, fileExt, component?, saveMode?, versionIdHead,
 //   isDeleted, isLocked, timeCreated,
 //   versionList: [{ versionId, versionIdPrevList, time, note, size, hash, isLocked, dependencyList }]
 //   eventList:   [{ eventType, time, versionId?, userId? }]
@@ -81,6 +81,12 @@ import { timeTextGet } from '../src/lib/time-text.js';
 // mapping, so a key may be missing: userId is reserved for a store that
 // knows who writes. times carry their zone (time-format.md).
 //
+// component says which component the data is for, when it is the data of a
+// component block: { name } (the tag name the page created it for). it is a
+// record for recovering an object no block references any more, not a rule:
+// the store does not check it and a block of another component may read the
+// object. absent for data that serves another purpose.
+//
 // saveMode says what a save of the head does when the caller names no mode:
 // inPlace (the head version is rewritten; the default when the key is not
 // written) or newVersion (a version is appended and becomes the head).
@@ -104,6 +110,10 @@ export const ASSET_DIR_SEPARATOR = '--';
 export const ASSET_NAME_LENGTH_MAX = 80;
 
 export type AssetSaveMode = 'inPlace' | 'newVersion';
+
+// the component the data of an object is for (doc_page_impl_asset.md#objects-for-components);
+// name only for now, an id and a version of the component are expected later
+export type AssetComponent = { name: string };
 
 export type AssetEventType =
   | 'create' | 'updateInPlace' | 'versionCreate' | 'checkout' | 'versionDelete' | 'metaSet' | 'delete' | 'restore'
@@ -152,6 +162,8 @@ export type AssetObjectMeta = {
   // media type of the data, as an object storage records it
   contentType: string;
   fileExt: string;
+  // the component the data is for; absent when it is not a component's data
+  component?: AssetComponent;
   saveMode?: AssetSaveMode;
   versionIdHead: string;
   isDeleted: boolean;
@@ -496,6 +508,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   //   dependencyList   what the data of the first version depends on (none when absent)
   //   saveMode         written into the object when given; absent: the key is not written
   //   versionMetadata  the metadata of the first version (none when absent)
+  //   component        { name }: the component the data is for; absent: not written
   function objectCreate(input: {
     name?: string;
     lang?: string;
@@ -507,10 +520,12 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     dependencyList?: unknown;
     saveMode?: unknown;
     versionMetadata?: unknown;
+    component?: unknown;
   }): { object: AssetObjectMeta; version: AssetVersionData; isCreated: boolean } {
     if (!Buffer.isBuffer(input.data)) throw new AssetError(-1, 'data is required');
     const dependencyList = dependencyListNormalize(input.dependencyList ?? []);
     const versionMetadata = versionMetadataNormalize(input.versionMetadata ?? {});
+    const component = componentNormalize(input.component ?? null);
     if (input.saveMode !== undefined && input.saveMode !== 'inPlace' && input.saveMode !== 'newVersion') {
       throw new AssetError(-1, `saveMode must be inPlace or newVersion, got ${String(input.saveMode)}`);
     }
@@ -545,6 +560,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       folder: folder.path,
       dirName: objectDirNameBuild(objectId, name),
     };
+    if (component) meta.component = component;
     if (input.saveMode === 'inPlace' || input.saveMode === 'newVersion') meta.saveMode = input.saveMode;
     fs.mkdirSync(objectDirGet(meta), { recursive: true });
     fileWriteSafe(versionPathGet(meta, versionId), input.data);
@@ -635,10 +651,10 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   // of the data files is decided at creation and kept, so nothing is renamed
   // for it; a new name renames the object's folder, and must not be the
   // name of another object. saveMode null removes the key (the object falls
-  // back to in place).
+  // back to in place); component null removes the component the data is for.
   function objectMetaSet(
     objectId: string,
-    change: { name?: string; lang?: string; contentType?: string; saveMode?: AssetSaveMode | null },
+    change: { name?: string; lang?: string; contentType?: string; saveMode?: AssetSaveMode | null; component?: unknown },
   ): AssetObjectMeta {
     const meta = objectGet(objectId);
     objectUnlockedCheck(meta);
@@ -661,6 +677,11 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       if (change.saveMode === null) delete meta.saveMode;
       else if (change.saveMode === 'inPlace' || change.saveMode === 'newVersion') meta.saveMode = change.saveMode;
       else throw new AssetError(-1, `saveMode must be inPlace or newVersion, got ${String(change.saveMode)}`);
+    }
+    if (change.component !== undefined) {
+      const component = componentNormalize(change.component);
+      if (component) meta.component = component;
+      else delete meta.component;
     }
     meta.eventList.push({ eventType: 'metaSet', time: timeTextGet() });
     objectMetaWrite(meta);
@@ -856,7 +877,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
 
   // the file keeps one key order whatever the order the keys were set in;
   // folder and dirName are where the object was found, not part of the
-  // object; saveMode is written only when it was set
+  // object; component and saveMode are written only when they were set
   function objectMetaWrite(meta: AssetObjectMeta) {
     const metaFile: Record<string, unknown> = {
       objectId: meta.objectId,
@@ -865,6 +886,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       contentType: meta.contentType,
       fileExt: meta.fileExt,
     };
+    if (meta.component !== undefined) metaFile.component = meta.component;
     if (meta.saveMode !== undefined) metaFile.saveMode = meta.saveMode;
     metaFile.versionIdHead = meta.versionIdHead;
     metaFile.isDeleted = meta.isDeleted;
@@ -913,8 +935,14 @@ export type AssetSnapshotVersion =
   | { size: number; hash: string; isText: true; text: string; metadata: AssetVersionMetadata }
   | { size: number; hash: string; isText: false; dataBase64: string; metadata: AssetVersionMetadata };
 
+// the asset references of one document (doc_page_impl_asset.md#usage):
+// usageList as assetUsageListScan of doc-asset-ref.js returns it
+export type AssetUsageDoc = { docPath: string; contentHash: string; usageList: unknown[] };
+
 export type AssetSnapshot = {
   objectById: Record<string, AssetObjectMeta & { versionDataById: Record<string, AssetSnapshotVersion> }>;
+  // the references of the documents of the build, added by the plugin
+  usageDocList?: AssetUsageDoc[];
 };
 
 // ---------- helpers ----------
@@ -1128,7 +1156,26 @@ function objectMetaNormalize(content: any, objectId: string, folder: string, dir
     dirName,
   };
   if (content?.saveMode === 'inPlace' || content?.saveMode === 'newVersion') meta.saveMode = content.saveMode;
+  // a component entry written by hand that is not { name } is ignored on read
+  try {
+    const component = componentNormalize(content?.component ?? null);
+    if (component) meta.component = component;
+  } catch {
+    // left out
+  }
   return meta;
+}
+
+// the component the data of an object is for: { name } with a name, or
+// undefined for null; anything else is a bad request
+export function componentNormalize(value: unknown): AssetComponent | undefined {
+  if (value === null) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AssetError(-1, 'component must be a mapping { name }, or null to remove it');
+  }
+  const name = String((value as { name?: unknown }).name ?? '').trim();
+  if (!name) throw new AssetError(-1, 'component needs a name (the tag name of the component)');
+  return { name };
 }
 
 function eventNormalize(item: any): AssetEvent | undefined {
