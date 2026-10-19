@@ -5,11 +5,12 @@ import { LoaderCircle, RotateCw, X } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { compIdBuiltinByName } from '../registry/comp-registry.js';
 import { AssetStoreSettings } from './AssetStoreSettings.jsx';
+import { ServiceSettings } from './ServiceSettings.jsx';
 import { SourcePathInput } from '../source/SourcePathInput.jsx';
 import './DocSettings.css';
 
 // The settings panel, rendered by the application's ConfigPanel
-// (config.components) with three tabs (subtab items):
+// (config.components) with four tabs (subtab items):
 //
 //   Config       every config key that is user settable, one item per key
 //   Component    the component-level keys
@@ -21,6 +22,10 @@ import './DocSettings.css';
 //   Asset store  the folders of the local asset store (AssetStoreSettings),
 //                written into the store's config file by the development
 //                server, so they are kept (doc_page_impl_asset.md).
+//   Services     the services of the page (ServiceSettings): system
+//                services, then the instances of the service backend as
+//                cards, the config dashboard of the one chosen, and the
+//                creation of an instance (doc_page_impl_service_instance.md).
 //
 // Config and Component carry a second tab line, one tab per config layer
 // (doc_page_impl_config.md#config-layers, DocConfigStore.layerList): Global
@@ -105,6 +110,12 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
       type: 'subtab',
       name: 'Asset store',
       children: [{ id: 'assetStoreFolders', type: 'custom', comp: AssetStoreSettings, isFullWidth: true }],
+    },
+    {
+      id: 'service',
+      type: 'subtab',
+      name: 'Services',
+      children: [{ id: 'serviceInstances', type: 'custom', comp: ServiceSettings, isFullWidth: true }],
     },
   ];
   // the layer line of both value tabs shows the same layer
@@ -205,7 +216,7 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
         <div className="doc-settings-head-main">
           <span className="doc-settings-title">Settings</span>
           {layerShown ? <LayerHead layer={layerShown} /> : (
-            <span className="doc-settings-note">the folders are written into the store&apos;s config file</span>
+            <span className="doc-settings-note">{tabNoteByTabId[configStore.settingsTabId] ?? ''}</span>
           )}
         </div>
         <button
@@ -229,6 +240,12 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
     document.body,
   );
 });
+
+// what the head says beside the title on a tab without config layers
+const tabNoteByTabId = {
+  assetStore: 'the folders are written into the store\'s config file',
+  service: 'the instances live in the service backend, in its instance folders',
+};
 
 // the head of a value tab: what the layer shown is, Reset when it can be
 // cleared, and the state of its last write

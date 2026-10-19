@@ -1,0 +1,13 @@
+# the instance folder of the demonstration service backend
+# (doc_page_impl_service_instance.md). trying the Services tab creates
+# instances here, and every instance keeps its data (notes.sqlite) in its own
+# folder. everything new is ignored; only the files listed below are part of
+# the example. to add an instance to the example on purpose, list its
+# service.yaml here (or `git add -f` it).
+
+*
+!*/
+!/.gitignore
+
+!/w4veemd7i36--example notes/service.yaml
+!/w4veemdrx8y--reading list/service.yaml

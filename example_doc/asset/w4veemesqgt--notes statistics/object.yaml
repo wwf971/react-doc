@@ -1,0 +1,25 @@
+objectId: w4veemesqgt
+name: notes statistics
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+component:
+  name: service/note-db/stat
+saveMode: inPlace
+versionIdHead: w4vfc1vlosy
+isDeleted: false
+isLocked: false
+timeCreated: 20261024_04520590+09
+versionList:
+  - versionId: w4vfc1vlosy
+    versionIdPrevList: []
+    time: 20261024_04520590+09
+    note: the statistics dashboard, bound to reading list
+    size: 33
+    hash: b99ac0dacd2d7672fb909925dc6ded87e1ee3436
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261024_04520590+09
+    versionId: w4vfc1vlosy

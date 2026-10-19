@@ -1,0 +1,25 @@
+objectId: w4vfc1twaj6
+name: dashboard of an unknown type
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+component:
+  name: service/sheet-db/default
+saveMode: inPlace
+versionIdHead: w4vfc1uhcec
+isDeleted: false
+isLocked: false
+timeCreated: 20261024_04520590+09
+versionList:
+  - versionId: w4vfc1uhcec
+    versionIdPrevList: []
+    time: 20261024_04520590+09
+    note: a dashboard of a service type the backend does not have
+    size: 24
+    hash: f01b12c3f94598910688bacb0dc5160e3b30c689
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261024_04520590+09
+    versionId: w4vfc1uhcec

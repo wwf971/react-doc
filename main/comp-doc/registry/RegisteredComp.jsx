@@ -2,6 +2,7 @@ import { useContext, useId } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from './comp-registry.js';
+import { compDefinitionGet } from './comp-definition.js';
 import { COMP_PLACEMENT_DOC_LIST, compMetaGet, compViewModeDefaultIdGet, compViewModeListGet } from './comp-expose.js';
 import { CompDataRefHost } from './CompDataRef.jsx';
 import { CompAssetHost, compInputIsAssetRef } from '../asset/CompAssetHost.jsx';
@@ -26,7 +27,7 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
   // the block of the edit body the component is rendered in, when it is
   const editBlock = useContext(DocEditBlockContext);
   const compIdResolved = compId ?? compIdResolve(sourceStore.configDoc, compName);
-  const definitionValue = compDefinition ?? compById[compIdResolved];
+  const definitionValue = compDefinition ?? compDefinitionGet(compById, compIdResolved);
   const definition = compDefinitionNormalize(definitionValue);
 
   // a fenced block in the language "asset" is a reference into the asset

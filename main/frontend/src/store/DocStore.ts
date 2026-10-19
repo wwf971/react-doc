@@ -3,6 +3,7 @@ import type { DocSourceStore } from './DocSourceStore.js';
 import { buildPageTreeModel } from '../lib/page-tree.js';
 import { textLocalizedGet } from '../lib/text-localized.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../../../comp-doc/registry/comp-registry.js';
+import { compDefinitionGet } from '../../../comp-doc/registry/comp-definition.js';
 
 // upper store layer: view state and navigation.
 // current doc, url sync, link dropdown state, search dialog state.
@@ -461,7 +462,7 @@ export class DocStore {
     if (result.status !== 'done') return result;
     const component = result.component;
     const compId = compIdResolve(this.sourceStore.configDoc, component.compName);
-    const definition = compDefinitionNormalize(this.compById[compId]);
+    const definition = compDefinitionNormalize(compDefinitionGet(this.compById, compId));
     if (!definition) {
       return {
         status: 'error',

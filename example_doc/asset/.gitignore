@@ -34,3 +34,14 @@
 
 !/w4v9ulpgv2u--style notes/object.yaml
 !/w4v9ulpgv2u--style notes/w4v9ulpgmtl.md
+
+# the dashboards of service-instance.md: their data is the instance they
+# show and their state, rewritten in place while they are used
+!/w4veeme6sff--notes dashboard/object.yaml
+!/w4veeme6sff--notes dashboard/w4vfc1v33ce.yaml
+!/w4veemesqgt--notes statistics/object.yaml
+!/w4veemesqgt--notes statistics/w4vfc1vlosy.yaml
+!/w4veemfcx8m--dashboard of a missing instance/object.yaml
+!/w4veemfcx8m--dashboard of a missing instance/w4vfc1w5hq0.yaml
+!/w4vfc1twaj6--dashboard of an unknown type/object.yaml
+!/w4vfc1twaj6--dashboard of an unknown type/w4vfc1uhcec.yaml

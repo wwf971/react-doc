@@ -13,7 +13,8 @@ vite plugin "doc-source"
      ├── executes source rules ──► file manifest (multi-root: ~rootId/relPath) + folder manifest
      │     each doc = lazy `?raw` import ──► dev: HMR reload on edit
      │                                       build: one lazy chunk per doc
-     ├── serves the dev-only apis: source (file bytes, file creation), edit (files), asset (the local asset store)
+     ├── serves the dev-only apis: source (file bytes, file creation), edit (files), asset (the local asset store),
+     │     service (forwarded to the service backend, a python program of its own)
      └── emits virtual module `virtual:doc-source` = { config, fileManifest, dirManifest, fileUrlByPath, assetSnapshot }
      ▼
 mobx stores (source of truth for rendering)
@@ -24,9 +25,10 @@ mobx stores (source of truth for rendering)
      ├── DocConfigStore: feature config, global and resolved per document, component-level keys, user overrides
      ├── DocEditStore: in-place editing (dev server only): sessions, block model, edit api
      ├── DocAssetStore: component data kept in the asset store: objects, versions, dependencies, the asset panel
+     ├── DocServiceStore: the service instances of the backend, their types, the dashboard modules
      └── DocBlockPopupStore: one component block shown in a popup, in View or Edit
      ▼
-DocEventRouter: component reports → host → local handler → domain route (navigation, tag, edit, source)
+DocEventRouter: component reports → host → local handler → domain route (navigation, tag, edit, asset, service, source)
      ▼
 <DocPageMdx/>  (embeddable component)
      ├── FrameworkProvider adapter: usePathname/useRouter/Link backed by DocStore
@@ -49,6 +51,8 @@ DocEventRouter: component reports → host → local handler → domain route (n
 **In-place editing, an additional layer.** On the development server a document can be edited from the page, one root-level block at a time; the server rewrites the file and the page reloads from it. The layer has its own store, its own compiled body (root blocks wrapped, each with a floating toolbar from a sticky anchor), and a component edit contract (`config.isEdit`, `XxxEdit.jsx` beside `Xxx.jsx`); the reading path is untouched and a built page has no edit mode. Specified in [doc_page_impl_edit.md](doc_page_impl_edit.md).
 
 **Component data in an asset store.** A component block can hold a reference (a fenced block in the language `asset`, yaml naming a store, an object by its unique name or its id, and a version or the head) in place of its data; the data lives in a store of versioned objects, modeled after an object storage (an object is metadata with a DAG history and a record of its events, a version is bytes, text or not), with a standard api (create, update in place or as a new version, checkout, delete, history). The one store today is the local store: one or more folders on disk (an object's folder is `{id}--{name}`), served by the development server and bundled read-only into a build. Every version records what its data depends on (a file of the source, another asset), so a build keeps the files and a deletion can know what it breaks. The runtime boundary resolves the reference before the component renders, so components never know unless they opt in (`isAssetAware`: where the data is and what a write to it does, and one `dataReplaceRequest` event that updates the object or rewrites the inline block); the block toolbar of edit mode opens the asset panel, with a preview pane that renders the data as it is edited. The page knows which blocks read which object (a usage index), so the panel lists an object's blocks and the settings panel the orphans; how components use the store is in [Components and the asset store](doc_page_impl_mdx_comp.md#components-and-the-asset-store). Specified in [doc_page_impl_asset.md](doc_page_impl_asset.md).
+
+**Service instances, shown through dashboards.** What a document shows is not always data: a service instance is a running thing with its own state (a sqlite database, a queue of jobs), run by the service backend, a Python program of its own that the development server forwards to (`{base}/__doc-service/*`); each instance is a folder `{id}--{name}` with its `service.yaml`, and answers one request at a time. A service type is a Python class that exposes its metadata, its apis (OpenRPC-compatible), its config, and its dashboards keyed by id (at least a `default` and a `config` one), and a federated module with the dashboards, which the page loads sharing its react. A dashboard is a component of the registry (`service/{typeId}/{dashboardId}`, `componentType: 'serviceDashboard'`), placed as an asset-only block whose object keeps the instance it shows and its own state; its frame always offers the choice of the instance and says what keeps it from showing (no backend, backend down, type, instance, module). The settings panel lists the instances in its Services tab. Specified in [doc_page_impl_service_instance.md](doc_page_impl_service_instance.md).
 
 **A component block in a popup.** A component opts into the block popup by rendering itself inside `BlockPopupSurface`: the reader opens the block in a dialog (the host's panel component), maximizes it, and switches it between View and Edit there, in reading mode as in edit mode. The page owns the dialog and its state, outside the document body, so the dialog stays while the body under it is replaced (reading body to edit body, view renderer to editor); the component's rendered element moves between the page and the dialog, so it keeps its state. Edit and View are the edit layer's session (open, leave = save, cancel = drop), with a step the editor completes its draft with before a save. Specified in [doc_page_impl_popup.md](doc_page_impl_popup.md).
 
@@ -75,6 +79,7 @@ Follows the data-driven pattern of `react-comp-misc` (`comp_design.md`) and the 
 - `DocConfigStore` (derived): the config model computed from `globalConfig`, the manifest, and the page tree, the reader's session overrides from the settings panel, plus the config service. See [Config system](doc_page_impl_config.md).
 - `DocEditStore` (edit layer, beside the reading stores): availability of the development-server edit api, the global edit mode, the document source as read from disk with its hash, the dedicated compile with block wrappers, the one open edit session, the open insert menu, and the pending deletion; every write goes through `operationApply`, and the events of editors arrive at `eventHandle`. It never writes to the reading stores; the file on disk is changed and reloads through the normal path. See [In-place editing](doc_page_impl_edit.md).
 - `DocAssetStore` (beside the reading stores): the backend of the asset store (the development-server api, or the snapshot bundled into a build), the index of its objects loaded at page start and the version data read so far, what a reference by id or by name resolves to (`refQuery` / `refLoad`), every write to the store (`writeApply`), the dependencies of versions, the folders of the local store, the usage index (which blocks read which object), and the asset panels (the popup with its preview, the settings tab's). See [Asset store](doc_page_impl_asset.md).
+- `DocServiceStore` (beside the reading stores): the service backend's status (polled), its types and instances, the dashboard module of each type, why a dashboard cannot show (`dashboardProblemGet`), the calls of the dashboards and the writes of their state (the `service` route of the event layer), and the Services tab of the settings panel. See [Service instances](doc_page_impl_service_instance.md#docservicestore).
 - `DocBlockPopupStore` (beside the edit layer): the one open block popup (the block's identity, title, maximized state, a placeholder height for the page), the surfaces of the page and which one the popup shows, the View / Edit mode derived from the edit session, and the change of mode in progress. See [Block popup](doc_page_impl_popup.md).
 
 Render components observe stores via context and submit change attempts through store APIs; no component talks to the file system or compiler directly.
@@ -214,7 +219,7 @@ compRegistry:
   StockTable: specific/StockTable   # project-specific components
 ```
 
-Config decides what doc authors can use; code decides what exists.
+Config decides what doc authors can use; code decides what exists. The dashboards of service types are the one exception to the mapping: their component id is their tag name (`service/{typeId}/{dashboardId}`), and every lookup of a definition by id (`compDefinitionGet`) falls back to them, because the types are known from the service backend at run time, not from the configuration ([Dashboards in the registry](doc_page_impl_service_instance.md#dashboards-in-the-registry)).
 
 All registered render components use the same top-level props: `{ data, config, onEvent }`. `data` contains semantic content, `config` contains operation state and runtime context, and `onEvent(eventType, eventData)` submits interaction requests, which the [event layer](doc_page_impl_event.md) routes and answers with `{ code, data, message }`. The internal shape of `data` and `config` remains component-specific. Components with meaningful mutable operation state can use `CompStateStore` or their own MobX store; simple components can remain stateless.
 
@@ -224,7 +229,7 @@ Multilingual component registration and authoring rules are specified in [doc_pa
 
 Component naming, compatibility names, and the component data reference (a component reusing the authored data of another component through `dataRef="{document target}#{component id}"`) are described in [MDX components](doc_page_impl_mdx_comp.md).
 
-One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; a comment-marked block in the language `asset` is a reference into the [asset store](doc_page_impl_asset.md), which the host resolves to the referenced text before normalizing; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, `sidePanelPanel`, `partIndex`, `indexSubtopic`, `tag`, `tagOverview`, `edit` (the default block editors of the edit layer), and the parts some components render through the registry: `fileDownloadIcon`, `tableCell`, `hierarchyRow`, and `hierarchyHeader` (see [Component names](doc_page_impl_mdx_comp.md#component-names)).
+One runtime host normalizes every registry invocation. Normal MDX attributes remain concise authoring syntax and are converted into `data`; comment-marked blocks add `raw` and `lang`; a comment-marked block in the language `asset` is a reference into the [asset store](doc_page_impl_asset.md), which the host resolves to the referenced text before normalizing; side-panel display and panel components receive their corresponding data. Runtime fields such as component id, instance id, placement, source path, and side-panel item id are supplied through `config`. The supported placements are `mdx`, `commentBlock`, `sidePanelDisplay`, `sidePanelPanel`, `partIndex`, `indexSubtopic`, `tag`, `tagOverview`, `edit` (the default block editors of the edit layer), `serviceSettings` (a service dashboard in the Services tab of the settings panel), and the parts some components render through the registry: `fileDownloadIcon`, `tableCell`, `hierarchyRow`, and `hierarchyHeader` (see [Component names](doc_page_impl_mdx_comp.md#component-names)).
 
 A few registry names are built in: the page renders with them even when `compRegistry` does not mention them, in comment form and in `.mdx`. `Anchor` resolves to `common/Anchor` and declares fragment ids for the node after it (see [Navigation design](doc_page_impl_nav.md#fragment-targets-titles-and-declared-ids)); `SidePanelItem` resolves to `common/SidePanelItem` and renders every side-panel label; `TagLabel` resolves to `common/TagLabel` and is the default look of tags; `Tag` resolves to `common/Tag` and renders a tag mentioned in document text; `TagOverview` resolves to `common/TagOverview` and renders the content of the tag overview popup; `Heading`, `Paragraph`, `List`, and `BlockSource` resolve to the default block editors of edit mode (see [In-place editing](doc_page_impl_edit.md#component-edit-mode)). Mapping such a name in `compRegistry` replaces the default everywhere, which is how an application provides its own side-panel item rendering. `compIdResolve()` in `comp-registry.js` is the single place that turns a name into a component id.
 
@@ -383,6 +388,10 @@ example_doc/             # root folder of the demonstration page
 ├── asset-store.md       # components reading their data from the asset store
 ├── asset.yaml           # the local asset store: its folders and the default one
 ├── asset/, asset-archive/ # folders of the store: one folder per object, {id}--{name} (object.yaml + version files)
+├── service-instance.md  # service dashboards; service-backend.yaml: the config of the service backend
+├── service-type/        # service types: note-db (service_type.py, dashboard/ the federated module's project)
+├── service/             # service instances: one folder per instance, {id}--{name} (service.yaml + its data)
+├── playground/          # a document for trying things out, ignored by git with everything in it
 ├── asset-file/image/    # a "referenced" source folder: where pasted images are created (nothing tracked)
 ├── comp-mdx/            # demo-specific components (not collected as documents); StockTable + StockTableEdit
 ├── mdx-usage/           # mdx component demonstrations (part with hosted index; its side-panel.yaml is a resource file)
@@ -402,22 +411,24 @@ main/
 │   ├── page/            # toolbar, navigation buttons, search dialog, loading skeleton
 │   ├── edit/            # edit layer: toggle and toolbar controls, edit body, block borders and hover button groups, insert menu, editor chooser, floating bar and in-place editing primitives
 │   ├── asset/           # asset store: the host resolving a reference, the loading/error stand-in, the asset panel popup and its preview
+│   ├── service/         # service dashboards: their registry definition, their data, the frame, shared parts
 │   ├── popup/           # block popup: the dialog of the page (DocBlockPopup) and the surface a component renders in (BlockPopupSurface)
-│   ├── settings/        # settings button and panel (user overrides of page and component config keys)
+│   ├── settings/        # settings button and panel (user overrides of page and component config keys, asset store, services)
 │   ├── source/          # source layer ui: SourcePathInput (path with completion), SourceFilePrompt (file location)
 │   └── mdx-render/      # MdxRenderer, DynamicCodeBlock
 ├── package.json         # delegates dev/build to frontend/
+├── service-backend/     # the service backend, a python program of its own (server.py, service_runtime.py, service_define.py)
 └── frontend/            # Vite app + embeddable component
-    ├── plugin/          # vite plugin: config load, the document entry and its yaml files (doc-entry.ts), rule scan and collect modes, source-step tags/config, source pruning, virtual module, watch, dev-only source api (in doc-source.ts), edit api (doc-edit-server.ts, doc-edit-lines.ts), the asset store and its api (doc-asset-store.ts, doc-asset-server.ts, id-ms48.ts)
+    ├── plugin/          # vite plugin: config load, the document entry and its yaml files (doc-entry.ts), rule scan and collect modes, source-step tags/config, source pruning, virtual module, watch, dev-only source api (in doc-source.ts), edit api (doc-edit-server.ts, doc-edit-lines.ts), the asset store and its api (doc-asset-store.ts, doc-asset-server.ts, id-ms48.ts), the service api forwarded to the backend (doc-service-server.ts)
     ├── UICommon.js      # package-local facade for shared visual components and icons
     ├── UICommonExternal.js # external UI-library exports used by the facade
     └── src/
         ├── DocPageMdx.jsx       # the embeddable doc page component
-        ├── store/               # DocSourceStore (lower) + DocSourceFileStore + DocStore (upper) + DocTagStore + DocConfigStore + DocEditStore + DocAssetStore + DocBlockPopupStore
-        └── lib/                 # mdx compile, nested Markdown renderer, doc-source-path (the path grammar), link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, doc-edit-* (block model, edit api client), doc-asset-* (reference, backends), doc-event (event router), framework adapter
+        ├── store/               # DocSourceStore (lower) + DocSourceFileStore + DocStore (upper) + DocTagStore + DocConfigStore + DocEditStore + DocAssetStore + DocServiceStore + DocBlockPopupStore
+        └── lib/                 # mdx compile, nested Markdown renderer, doc-source-path (the path grammar), link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, doc-edit-* (block model, edit api client), doc-asset-* (reference, backends), doc-service-* (backend client, federation loader), doc-event (event router), framework adapter
 ```
 
-Design documents: [source layer](doc_page_impl_source.md), [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [in-place editing](doc_page_impl_edit.md), [asset store](doc_page_impl_asset.md), [block popup](doc_page_impl_popup.md), [event layer](doc_page_impl_event.md), [package usage](doc_page_impl_detail.md).
+Design documents: [source layer](doc_page_impl_source.md), [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [in-place editing](doc_page_impl_edit.md), [asset store](doc_page_impl_asset.md), [service instances](doc_page_impl_service_instance.md), [block popup](doc_page_impl_popup.md), [event layer](doc_page_impl_event.md), [package usage](doc_page_impl_detail.md).
 
 Run `pnpm install` from the workspace root once, then `pnpm dev` from either this folder or `frontend/`. `pnpm build` produces one static deployable artifact (docs bundled as lazy chunks); any static file server works, no doc folders needed at runtime.
 

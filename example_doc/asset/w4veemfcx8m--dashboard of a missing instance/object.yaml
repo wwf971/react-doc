@@ -1,0 +1,25 @@
+objectId: w4veemfcx8m
+name: dashboard of a missing instance
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+component:
+  name: service/note-db/default
+saveMode: inPlace
+versionIdHead: w4vfc1w5hq0
+isDeleted: false
+isLocked: false
+timeCreated: 20261024_04520590+09
+versionList:
+  - versionId: w4vfc1w5hq0
+    versionIdPrevList: []
+    time: 20261024_04520590+09
+    note: bound to an instance no folder holds
+    size: 33
+    hash: f4acb17d2d1536c1f3b7e9bbbaba6ff255041610
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261024_04520590+09
+    versionId: w4vfc1w5hq0

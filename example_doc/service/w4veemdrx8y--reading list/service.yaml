@@ -1,0 +1,9 @@
+serviceId: w4veemdrx8y
+name: reading list
+typeId: note-db
+description: a second instance of the same type, to switch a dashboard to
+isEnabled: true
+timeCreated: 20261024_04333560+09
+config:
+  databaseFile: notes.sqlite
+  titleLengthMax: 60

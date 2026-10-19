@@ -14,8 +14,11 @@ import './DocEdit.css';
 //   [🔍 search blocks and components          ]
 //   Text        [¶ Paragraph] [H Heading] [≡ List] …
 //   Components  [▣ FileTree] [▣ Image] …   +12 more: search
+//   Services    [▦ Note DB · Notes] [▦ Note DB · Settings] …
 //
-// the rows list the basic blocks and the components marked isInsertCommon;
+// the rows list the basic blocks, the components marked isInsertCommon and
+// the dashboards of the service types the backend knows
+// (doc_page_impl_service_instance.md#creating-a-dashboard);
 // the search finds every entry by tag name, label and description, and its
 // results open in a dropdown floating over the rows, so the menu keeps its
 // height while the author types. matched text is highlighted. ArrowDown /
@@ -37,10 +40,11 @@ export const DocEditInsertMenu = observer(function DocEditInsertMenu() {
 });
 
 const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) {
-  const { compById, configStore, editStore, sourceStore } = useDocStores();
+  const { compById, configStore, editStore, serviceStore, sourceStore } = useDocStores();
   const { path, format } = useDocEditDoc();
   const [query, querySet] = useState('');
   const [indexActive, indexActiveSet] = useState(-1);
+  const serviceDashboardList = serviceStore.dashboardInsertList;
   const templateList = useMemo(
     () => editTemplateListBuild({
       configDoc: sourceStore.configDoc,
@@ -48,8 +52,9 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
       docPath: path,
       docFormat: format,
       compConfigGet: (compId) => configStore.compConfigGet(compId, path),
+      serviceDashboardList,
     }),
-    [compById, configStore, format, path, sourceStore.configDoc],
+    [compById, configStore, format, path, serviceDashboardList, sourceStore.configDoc],
   );
   const resultList = useMemo(() => templateSearch(templateList, query), [templateList, query]);
   const isSubmitting = menu.status === 'submitting';
@@ -57,6 +62,7 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
   const templateListText = templateList.filter((template) => template.group === 'text');
   const templateListCommon = templateList.filter((template) => template.group === 'component' && template.isCommon);
   const countComponentOther = templateList.filter((template) => template.group === 'component' && !template.isCommon).length;
+  const templateListService = templateList.filter((template) => template.group === 'service');
 
   const choose = (template) => {
     if (isSubmitting) return;
@@ -175,6 +181,12 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
           ) : null}
         </div>
       ) : null}
+      {templateListService.length > 0 ? (
+        <div className="doc-edit-insert-group" role="group" aria-label="Services">
+          <span className="doc-edit-insert-group-label">Services</span>
+          {templateListService.map(buttonRender)}
+        </div>
+      ) : null}
       {isSubmitting ? (
         <span className="doc-edit-insert-status" role="status">
           <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-edit-spin" />
@@ -189,15 +201,15 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
 });
 
 // the entries matching the query, case-insensitive, by where they match:
-// the name (tag name of a component, label of a text block) first, then
-// the label of a component, then the description
+// the name (tag name of a component or a dashboard, label of a text block)
+// first, then the label of a component, then the description
 function templateSearch(templateList, query) {
   const queryLower = query.trim().toLowerCase();
   if (queryLower === '') return [];
   const resultList = [];
   for (const template of templateList) {
-    const name = template.group === 'component' ? template.compName : template.label;
-    const label = template.group === 'component' && template.label !== template.compName ? template.label : '';
+    const name = template.group === 'text' ? template.label : template.compName;
+    const label = template.group !== 'text' && template.label !== template.compName ? template.label : '';
     let rank;
     if (name.toLowerCase().includes(queryLower)) rank = 0;
     else if (label.toLowerCase().includes(queryLower)) rank = 1;

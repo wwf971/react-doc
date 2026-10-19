@@ -1,0 +1,9 @@
+serviceId: w4veemd7i36
+name: example notes
+typeId: note-db
+description: the notes of the example doc (service-instance.md)
+isEnabled: true
+timeCreated: 20261024_04333559+09
+config:
+  databaseFile: notes.sqlite
+  titleLengthMax: 120

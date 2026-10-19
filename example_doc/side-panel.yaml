@@ -44,6 +44,14 @@ sidePanelById:
       - doc: ~example/asset-store.md
         text: Asset Store
         tags: [guide]
+      # stateful services run by the service backend, shown through dashboards
+      - doc: ~example/service-instance.md
+        text: Service Instances
+        tags: [guide]
+      # free to change: the playground and everything it creates are ignored
+      # by git, so a fresh checkout reports this document as missing
+      - doc: ~example/playground/playground.md
+        text: Playground
       - separator: MDX Usage
       # a side panel of a resource file (no entry of its own): the part's own
       # folder holds its tree and part index, this node only names it

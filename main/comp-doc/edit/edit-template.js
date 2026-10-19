@@ -8,6 +8,8 @@ import {
   TableIcon,
 } from '../../frontend/UICommon.js';
 import { compDefinitionNormalize, compIdBuiltinByName } from '../registry/comp-registry.js';
+import { compDefinitionGet } from '../registry/comp-definition.js';
+import { serviceDashboardCompIdBuild } from '../service/service-dashboard-define.js';
 import { compIconGet, compMetaGet, compSourceDefaultGet } from '../registry/comp-expose.js';
 import { componentTemplateTextBuild } from '../../frontend/src/lib/doc-edit-block.js';
 
@@ -45,10 +47,17 @@ const templateTextList = [
 // and writes a reference block to it (DocEditStore blockCreateAsAsset); its
 // text is the block as the data would be written inline, for the search.
 //
-// env: { configDoc, compById, docPath, docFormat: 'md' | 'mdx', compConfigGet(compId) }
-// -> [{ id, compName, label, description, text, icon, group: 'text' | 'component', isCommon,
+// The dashboards of the service types the backend knows are offered too
+// (group 'service', doc_page_impl_service_instance.md#creating-a-dashboard):
+// one entry per dashboard, under its component id service/{typeId}/{dashboardId}.
+// They are asset-only like any such component; the instance is chosen in
+// the dashboard once it is placed.
+//
+// env: { configDoc, compById, docPath, docFormat: 'md' | 'mdx', compConfigGet(compId),
+//        serviceDashboardList: [{ typeId, typeLabel, dashboardId, dashboardLabel, description }] }
+// -> [{ id, compName, label, description, text, icon, group: 'text' | 'component' | 'service', isCommon,
 //       isAssetOnly, assetSource? }]
-export function editTemplateListBuild({ configDoc, compById, docPath, docFormat, compConfigGet }) {
+export function editTemplateListBuild({ configDoc, compById, docPath, docFormat, compConfigGet, serviceDashboardList = [] }) {
   const templateListText = templateTextList.map((template) => ({
     id: template.id,
     compName: '',
@@ -68,7 +77,7 @@ export function editTemplateListBuild({ configDoc, compById, docPath, docFormat,
   const compIdDoneSet = new Set();
   for (const [compName, compId] of Object.entries(compIdByTag)) {
     if (compIdDoneSet.has(compId)) continue;
-    const definition = compDefinitionNormalize(compById[compId]);
+    const definition = compDefinitionNormalize(compDefinitionGet(compById, compId));
     if (!definition) continue;
     const meta = compMetaGet(definition);
     if (meta.isNotInDoc) continue;
@@ -94,7 +103,28 @@ export function editTemplateListBuild({ configDoc, compById, docPath, docFormat,
     });
   }
   templateListComponent.sort((a, b) => a.compName.localeCompare(b.compName));
-  return [...templateListText, ...templateListComponent];
+
+  const templateListService = [];
+  for (const dashboard of serviceDashboardList) {
+    const compName = serviceDashboardCompIdBuild(dashboard.typeId, dashboard.dashboardId);
+    const definition = compDefinitionNormalize(compDefinitionGet(compById, compName));
+    if (!definition) continue;
+    const source = sourceDefaultSafeGet(definition, { compName, docPath, docFormat, compConfig: {} });
+    if (!source) continue;
+    templateListService.push({
+      id: `service:${compName}`,
+      compName,
+      label: `${dashboard.typeLabel} · ${dashboard.dashboardLabel}`,
+      description: dashboard.description,
+      text: componentTemplateTextBuild(compName, source),
+      icon: compIconGet(definition),
+      group: 'service',
+      isCommon: true,
+      isAssetOnly: true,
+      assetSource: source,
+    });
+  }
+  return [...templateListText, ...templateListComponent, ...templateListService];
 }
 
 // a factory that throws or returns a wrong shape is a fault of that one

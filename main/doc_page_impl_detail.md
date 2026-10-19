@@ -29,6 +29,8 @@ In-place editing on the development server is enabled by passing the edit api ur
 
 The asset store ([Asset store](doc_page_impl_asset.md)) needs `asset.file` in `config.yaml`, naming the store's config file with its `folderList` ([the local store](doc_page_impl_asset.md#the-local-store-folders-fully-reflected)), and two more values of the virtual module: `data={{ ..., assetSnapshot }}` (the objects bundled into a build, `null` in development) and `config={{ ..., asset: { endpoint: docAssetEndpoint, subscribe: subscribeDocAsset } }}` (the asset api of the development server and its change feed, both inert in a build). The asset panel is framed by `config.compConfigHost.panelComponent`, like the tag overview; without it the frame shows the asset and has no button.
 
+Service instances ([Service instances](doc_page_impl_service_instance.md)) need `service.backend` in `config.yaml`, the address of the service backend (and optionally `service.backendConfigFile`, the backend's config, whose folders are then not documents), and the endpoint the virtual module exports: `config={{ ..., service: { endpoint: docServiceEndpoint } }}`. It is an empty string in a build, so a deployed page has no backend and its dashboards say so. The backend is a separate program (`python3 main/service-backend/server.py --config …`), started and stopped on its own.
+
 A host that embeds the page checks these when it takes a new version, because none of them fails at build time:
 
 - **Components it maps.** A component is used in documents by the name `compRegistry` maps to its id (`ExcelUniver: common/ExcelUniver`); importing the component does not register it.

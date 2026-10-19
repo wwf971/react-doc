@@ -1,0 +1,139 @@
+/* the dashboards of note-db. every class is prefixed note-db-: the styles
+   are loaded into the page, beside the page's own */
+
+.note-db {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+.note-db-toolbar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.note-db-search {
+  flex: 0 1 14rem;
+  min-width: 6rem;
+  padding: 1px 4px;
+  border: 1px solid var(--color-fd-border, #ccc);
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.note-db-button {
+  padding: 0 6px;
+  border: 1px solid var(--color-fd-border, #ccc);
+  border-radius: 3px;
+  background: var(--color-fd-secondary, #f4f4f4);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.note-db-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.note-db-icon {
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--color-fd-muted-foreground, #777);
+  font: inherit;
+  cursor: pointer;
+}
+
+.note-db-icon:hover {
+  color: inherit;
+}
+
+.note-db-muted {
+  color: var(--color-fd-muted-foreground, #777);
+  font-size: 0.8rem;
+}
+
+.note-db-error {
+  color: #c62828;
+  font-size: 0.8rem;
+}
+
+.note-db-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.note-db-note {
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+}
+
+.note-db-note:hover {
+  border-color: var(--color-fd-border, #ddd);
+}
+
+.note-db-note-editing {
+  border-color: var(--color-fd-primary, #2f6fbd);
+}
+
+.note-db-note-head {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.note-db-note-title {
+  font-weight: 600;
+  outline: none;
+}
+
+.note-db-note-body {
+  white-space: pre-wrap;
+  outline: none;
+  color: var(--color-fd-foreground, inherit);
+}
+
+.note-db-note-body:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-fd-muted-foreground, #999);
+}
+
+.note-db-ask {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 0.8rem;
+}
+
+.note-db-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 1px 8px;
+}
+
+.note-db-key {
+  color: var(--color-fd-muted-foreground, #777);
+}
+
+.note-db-code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+}
+
+.note-db-setting {
+  outline: none;
+}
+
+.note-db-setting[contenteditable='plaintext-only'] {
+  border-bottom: 1px solid var(--color-fd-primary, #2f6fbd);
+}

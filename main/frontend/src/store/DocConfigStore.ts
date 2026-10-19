@@ -37,8 +37,8 @@ export type ConfigDefine = {
   isUserSettable?: boolean;
 };
 
-export type SettingsTabId = 'config' | 'compConfig' | 'assetStore';
-const settingsTabIdList: SettingsTabId[] = ['config', 'compConfig', 'assetStore'];
+export type SettingsTabId = 'config' | 'compConfig' | 'assetStore' | 'service';
+const settingsTabIdList: SettingsTabId[] = ['config', 'compConfig', 'assetStore', 'service'];
 
 export class DocConfigStore {
   sourceStore: DocSourceStore;

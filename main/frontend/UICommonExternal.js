@@ -40,6 +40,7 @@ export {
   KeyRound,
   Languages,
   Laptop,
+  LayoutDashboard,
   LayoutList,
   Link as LinkIcon,
   List as ListIcon,

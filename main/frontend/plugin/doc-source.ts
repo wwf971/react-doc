@@ -40,6 +40,7 @@ import {
 } from './doc-source-dependency.ts';
 import { DOC_EDIT_ENDPOINT_NAME, docEditMiddlewareCreate } from './doc-edit-server.ts';
 import { DOC_ASSET_ENDPOINT_NAME, docAssetMiddlewareCreate } from './doc-asset-server.ts';
+import { DOC_SERVICE_ENDPOINT_NAME, docServiceMiddlewareCreate, serviceConfigGet, servicePathIs } from './doc-service-server.ts';
 import {
   assetConfigOfConfigDocGet, assetConfigRead, assetStoreCreate, objectIdFromDirName,
   type AssetSnapshot, type AssetStore, type AssetStoreConfig, type AssetUsageDoc,
@@ -61,6 +62,7 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 //   export const docSourceEndpoint = '/__doc-source' // '' in a build: no source api
 //   export const docEditEndpoint = '/__doc-edit'    // '' in a build: no edit api
 //   export const docAssetEndpoint = '/__doc-asset'  // '' in a build or without asset.file
+//   export const docServiceEndpoint = '/__doc-service' // '' in a build or without service.backend
 //   export const assetSnapshot = {...} | null       // the asset store, bundled in a build
 //   export function subscribeDocSource(listener)    // dev: the source data changed
 //   export function subscribeDocAsset(listener)     // dev: an object or the store's folders changed on disk
@@ -96,6 +98,9 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 // asset store, whose config file is named by config asset.file and whose
 // folders are listed in that file (doc_page_impl_asset.md). the store's
 // files are never part of the collected source, wherever they are placed.
+// it forwards the service api to the service backend of config
+// service.backend (doc-service-server.ts); the folders of the backend's
+// config file are not part of the source either.
 
 const MODULE_ID_DEFAULT = 'virtual:doc-source';
 export const DOC_SOURCE_ENDPOINT_NAME = '__doc-source';
@@ -162,6 +167,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
   let docSourceEndpoint = '';
   let docEditEndpoint = '';
   let docAssetEndpoint = '';
+  let docServiceEndpoint = '';
   // the configuration files of the page: config.yaml and its local layer,
   // the entry file of the document and every yaml file it reaches (included
   // side panels, source and tag files), and the tag file of config. a change
@@ -235,6 +241,10 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       docAssetEndpoint = isBuild || !assetConfigGet(configDocEarly, configDir)
         ? ''
         : endpointBuild(viteConfig.base, DOC_ASSET_ENDPOINT_NAME);
+      // the service section likewise; a built page has no backend to reach
+      docServiceEndpoint = isBuild || !serviceConfigGet(configDocEarly, configDir)
+        ? ''
+        : endpointBuild(viteConfig.base, DOC_SERVICE_ENDPOINT_NAME);
     },
 
     resolveId(id) {
@@ -272,6 +282,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         docSourceEndpoint,
         docEditEndpoint,
         docAssetEndpoint,
+        docServiceEndpoint,
         assetSnapshot,
         moduleId,
       });
@@ -442,9 +453,22 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         server.watcher.on('unlink', assetChangeSend);
       }
 
+      // the service api is the backend's; the plugin only forwards it. like
+      // the asset section, the service section is read once: a change of
+      // the backend's address or folders needs a restart of the server
+      const serviceConfig = serviceConfigGet(configDoc, configDir);
+      if (docServiceEndpoint && serviceConfig) {
+        server.middlewares.use(docServiceMiddlewareCreate({
+          endpoint: docServiceEndpoint,
+          backendUrlGet: () => serviceConfig.backendUrl,
+        }));
+      }
+
       const invalidateManifest = (filePath: string) => {
         // files of the asset store are not documents, even inside a source folder
         if (assetConfig && assetPathIs(assetConfig, filePath)) return;
+        // nor are the files of the service backend (a database, a built dashboard)
+        if (serviceConfig && servicePathIs(serviceConfig, filePath)) return;
         // the backup the edit api writes beside a configuration file is not a document
         if (configurationBackupPathIs(pathsConfiguration, filePath)) return;
         const isRelated = pathsWatched.some(
@@ -850,15 +874,18 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
 
   // the configuration files (config.yaml, the yaml files of the document),
   // their backups (the edit api keeps {file}.bak when it rewrites one) and
-  // the files of the asset store (doc_page_impl_asset.md) are never
+  // the files of the asset store (doc_page_impl_asset.md) and of the
+  // service backend (doc_page_impl_service_instance.md) are never
   // documents, even when they lie inside a source folder
   const pathsConfiguration = collectPathsConfiguration(configDoc);
   const configurationPathSet = new Set(pathsConfiguration);
   const assetConfig = assetConfigGet(configDoc, configDir);
+  const serviceConfig = serviceConfigGet(configDoc, configDir);
   return [...entryByPath.values()].filter((entry) => (
     !configurationPathSet.has(entry.absPath)
     && !configurationBackupPathIs(pathsConfiguration, entry.absPath)
     && (!assetConfig || !assetPathIs(assetConfig, entry.absPath))
+    && (!serviceConfig || !servicePathIs(serviceConfig, entry.absPath))
   ));
 }
 
@@ -971,7 +998,11 @@ export function scanSourceDirs(configDoc: any, configDir: string): DirEntry[] {
     }
   }
   const assetConfig = assetConfigGet(configDoc, configDir);
-  return [...dirByPath.values()].filter((dir) => !assetConfig || !assetPathIs(assetConfig, dir.absPath));
+  const serviceConfig = serviceConfigGet(configDoc, configDir);
+  return [...dirByPath.values()].filter((dir) => (
+    (!assetConfig || !assetPathIs(assetConfig, dir.absPath))
+    && (!serviceConfig || !servicePathIs(serviceConfig, dir.absPath))
+  ));
 }
 
 function makeEntry(rootId: string, relPath: string, absPath: string, collect: SourceCollectMode): FileEntry {
@@ -1223,6 +1254,7 @@ export function generateModuleCode(
     docSourceEndpoint: string;
     docEditEndpoint: string;
     docAssetEndpoint: string;
+    docServiceEndpoint?: string;
     assetSnapshot: AssetSnapshot | null;
     moduleId: string;
   },
@@ -1232,6 +1264,7 @@ export function generateModuleCode(
   lines.push(`export const docSourceEndpoint = ${JSON.stringify(services.docSourceEndpoint)};`);
   lines.push(`export const docEditEndpoint = ${JSON.stringify(services.docEditEndpoint)};`);
   lines.push(`export const docAssetEndpoint = ${JSON.stringify(services.docAssetEndpoint)};`);
+  lines.push(`export const docServiceEndpoint = ${JSON.stringify(services.docServiceEndpoint ?? '')};`);
   lines.push(`export const assetSnapshot = ${JSON.stringify(services.assetSnapshot)};`);
   // the bytes of the files components name: a build inlines them as data
   // urls, keyed by source path and by the spelling the reference used; in

@@ -7,6 +7,7 @@ import { compileDoc } from '../lib/mdx-compile.js';
 import { docEditApiCreate } from '../lib/doc-edit-api.js';
 import { ASSET_REF_LANG, ASSET_STORE_ID_LOCAL, assetRefLangIs, assetRefParse, assetRefTextBuild } from '../lib/doc-asset-ref.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../../../comp-doc/registry/comp-registry.js';
+import { compDefinitionGet } from '../../../comp-doc/registry/comp-definition.js';
 import {
   COMP_EDIT_MODE_SOURCE_ID,
   compEditModeListGet,
@@ -635,7 +636,7 @@ export class DocEditStore {
     const component = this.docEditByPath[path]?.model?.blockList[blockIndex]?.component;
     if (!component) return undefined;
     const compId = compIdResolve(this.sourceStore.configDoc, String(component.compName ?? ''));
-    return compDefinitionNormalize(this.docStore.compById[compId]);
+    return compDefinitionNormalize(compDefinitionGet(this.docStore.compById, compId));
   }
 
   // a component that declares itself read-only: nothing of the block can
@@ -1265,7 +1266,7 @@ export class DocEditStore {
       menu.message = '';
     });
     const compId = compIdResolve(this.sourceStore.configDoc, template.compName);
-    const definition = compDefinitionNormalize(this.docStore.compById[compId]);
+    const definition = compDefinitionNormalize(compDefinitionGet(this.docStore.compById, compId));
     const resultCreate = await this.assetStore.objectCreate({
       store: ASSET_STORE_ID_LOCAL,
       lang: template.assetSource.lang,
@@ -1760,7 +1761,7 @@ export class DocEditStore {
   private blockDependencyListGet(block: any, raw: string, path: string): any[] {
     const compName = String(block.component?.compName ?? '');
     const compId = compIdResolve(this.sourceStore.configDoc, compName);
-    const definition = compDefinitionNormalize(this.docStore.compById[compId]);
+    const definition = compDefinitionNormalize(compDefinitionGet(this.docStore.compById, compId));
     if (typeof definition?.assetDependencyListGet !== 'function') return [];
     const { data } = compInputNormalize(definition, { raw, lang: block.component.lang, propsAuthored: block.component.props ?? {} });
     const dependencyList: any[] = [];

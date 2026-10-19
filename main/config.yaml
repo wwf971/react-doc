@@ -31,6 +31,17 @@ variable:
 asset:
   file: ../example_doc/asset.yaml
 
+# the service instances: stateful services run by the service backend
+# (main/service-backend/server.py), a program of its own. the development
+# server forwards {base}/__doc-service/* to it; a page without the backend
+# shows "backend down" in every dashboard. backendConfigFile names the
+# backend's config file: the type and instance folders it lists are not
+# documents, and a change in them never reloads the page. a built page has
+# no backend. design: doc_page_impl_service_instance.md
+service:
+  backend: http://127.0.0.1:45190
+  backendConfigFile: ../example_doc/service-backend.yaml
+
 # tag definitions of the page (how each tag looks), merged over the ones the
 # entry and the documents it includes declare. which assets carry a tag is
 # declared in source rules and side-panel nodes. the demonstration declares

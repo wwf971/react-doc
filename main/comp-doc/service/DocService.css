@@ -1,0 +1,286 @@
+/* the service dashboards and the Services tab of the settings panel
+   (doc_page_impl_service_instance.md) */
+
+/* ---------- the frame of a dashboard ---------- */
+
+.doc-service-dashboard {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.doc-service-dashboard-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.4rem;
+  border-bottom: 1px solid var(--color-fd-border);
+  background: var(--color-fd-secondary, transparent);
+  font-size: 0.78rem;
+}
+
+.doc-service-dashboard-title {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.doc-service-dashboard-body {
+  padding: 0.35rem 0.5rem;
+}
+
+.doc-service-icon {
+  flex-shrink: 0;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-service-icon-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.1rem;
+  border: 0;
+  background: none;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+}
+
+.doc-service-icon-button:hover:not(:disabled) {
+  color: var(--color-fd-foreground);
+}
+
+.doc-service-icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.doc-service-instance-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.doc-service-select {
+  max-width: 14rem;
+  padding: 0 0.2rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  font: inherit;
+}
+
+.doc-service-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-service-status-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: #9ca3af;
+}
+
+.doc-service-status-dot[data-status='ready'] {
+  background: #16a34a;
+}
+
+.doc-service-status-dot[data-status='starting'],
+.doc-service-status-dot[data-status='loading'] {
+  background: #d97706;
+}
+
+.doc-service-status-dot[data-status='error'],
+.doc-service-status-dot[data-status='backend down'],
+.doc-service-status-dot[data-status='not found'] {
+  background: #dc2626;
+}
+
+.doc-service-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.8rem;
+}
+
+.doc-service-problem[data-kind='backendDown'],
+.doc-service-problem[data-kind='serviceNotFound'],
+.doc-service-problem[data-kind='typeNotFound'],
+.doc-service-problem[data-kind='typeError'],
+.doc-service-problem[data-kind='typeMismatch'],
+.doc-service-problem[data-kind='moduleError'] {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-service-error {
+  color: var(--color-fd-destructive, #dc2626);
+  font-size: 0.75rem;
+}
+
+.doc-service-spin {
+  animation: doc-service-spin 0.9s linear infinite;
+}
+
+@keyframes doc-service-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- the Services tab ---------- */
+
+.doc-service-settings {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.45rem;
+  /* the settings item holding the tab draws a border: keep the text off it */
+  padding: 0.4rem calc(0.5rem + 1px);
+}
+
+.doc-service-settings-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.doc-service-settings-title {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.doc-service-settings-muted {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.74rem;
+}
+
+/* near-square cards, one per instance, and the card that creates one */
+.doc-service-card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 6.5rem);
+  gap: 0.35rem;
+}
+
+.doc-service-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  height: 6rem;
+  padding: 0.25rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 4px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+.doc-service-card:hover {
+  background: var(--color-fd-accent);
+}
+
+.doc-service-card[aria-pressed='true'] {
+  border-color: var(--color-fd-primary);
+  box-shadow: inset 0 0 0 1px var(--color-fd-primary);
+}
+
+.doc-service-card-name {
+  display: -webkit-box;
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 0.76rem;
+  font-weight: 550;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.doc-service-card-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.68rem;
+}
+
+.doc-service-card-new {
+  border-style: dashed;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-service-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+}
+
+.doc-service-detail-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.05rem 0.6rem;
+  font-size: 0.76rem;
+}
+
+.doc-service-detail-key {
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-service-detail-code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.doc-service-create-name {
+  min-width: 8rem;
+  padding: 0 0.25rem;
+  border-bottom: 1px solid var(--color-fd-primary);
+  outline: none;
+}
+
+.doc-service-create-name:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-service-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  height: 1.35rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+
+.doc-service-button:hover:not(:disabled) {
+  background: var(--color-fd-accent);
+}
+
+.doc-service-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

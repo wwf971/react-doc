@@ -7,6 +7,7 @@ import { DocStore } from './store/DocStore.js';
 import { DocConfigStore } from './store/DocConfigStore.js';
 import { DocEditStore, editEventTypeList } from './store/DocEditStore.js';
 import { DocAssetStore, assetEventTypeList } from './store/DocAssetStore.js';
+import { DocServiceStore, serviceEventTypeList } from './store/DocServiceStore.js';
 import { DocTagStore } from './store/DocTagStore.js';
 import { DocBlockPopupStore } from './store/DocBlockPopupStore.js';
 import { DocEventRouter } from './lib/doc-event.js';
@@ -34,7 +35,8 @@ import './DocPageMdx.css';
 //   <DocPageMdx
 //     data={{ configDoc, fileManifest, dirManifest, fileUrlByPath, assetSnapshot }}
 //     config={{ routeMode: 'memory', compById, compConfigHost, configDefineList, link: { CompRender },
-//               source: { endpoint }, edit: { endpoint }, asset: { endpoint, subscribe } }}
+//               source: { endpoint }, edit: { endpoint }, asset: { endpoint, subscribe },
+//               service: { endpoint } }}
 //     onEvent={(eventType, eventData) => { ... }}
 //   />
 //
@@ -48,6 +50,9 @@ import './DocPageMdx.css';
 // config.asset.endpoint is the asset api of the development server
 // (docAssetEndpoint), config.asset.subscribe its change feed (subscribeDocAsset);
 // a built site reads data.assetSnapshot instead (doc_page_impl_asset.md).
+// config.service.endpoint is the service backend as the development server
+// forwards it (docServiceEndpoint); without it the dashboards of service
+// instances show that there is no backend (doc_page_impl_service_instance.md).
 
 export function DocPageMdx({ data, config = {}, onEvent }) {
   const languageAncestor = useDocLanguage();
@@ -92,6 +97,10 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     const editStore = new DocEditStore(sourceStore, docStore, configStore, { endpoint: config.edit?.endpoint, assetStore });
     // a component block shown in a popup, in View or in Edit (doc_page_impl_popup.md)
     const blockPopupStore = new DocBlockPopupStore({ docStore, editStore, sourceStore, assetStore });
+    // the service instances of the service backend; a dashboard block keeps
+    // its instance and its state in its asset object
+    // (doc_page_impl_service_instance.md)
+    const serviceStore = new DocServiceStore({ endpoint: config.service?.endpoint, assetStore });
     // the event layer (doc_page_impl_event.md): component reports are routed
     // to the domain that answers them; the stores never see onEvent callbacks
     const eventRouter = new DocEventRouter();
@@ -127,7 +136,12 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       typeList: assetEventTypeList,
       handle: (event) => assetStore.eventHandle(event),
     });
-    return { sourceStore, sourceFileStore, docStore, configStore, tagStore, compStateStore, editStore, assetStore, blockPopupStore, eventRouter, compById };
+    eventRouter.routeAdd({
+      name: 'service',
+      typeList: serviceEventTypeList,
+      handle: (event) => serviceStore.eventHandle(event),
+    });
+    return { sourceStore, sourceFileStore, docStore, configStore, tagStore, compStateStore, editStore, assetStore, blockPopupStore, serviceStore, eventRouter, compById };
   });
   const framework = useMemo(() => makeFramework(stores.docStore), [stores]);
   const contextValue = useMemo(() => ({
@@ -145,7 +159,9 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     stores.editStore.init();
     stores.assetStore.init();
     stores.blockPopupStore.init();
+    stores.serviceStore.init();
     return () => {
+      stores.serviceStore.dispose();
       stores.blockPopupStore.dispose();
       stores.assetStore.dispose();
       stores.editStore.dispose();

@@ -1,6 +1,7 @@
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve } from '../registry/comp-registry.js';
+import { compDefinitionGet } from '../registry/comp-definition.js';
 import { COMP_EDIT_MODE_SOURCE_ID } from '../registry/comp-expose.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import { useDocEditDoc } from './DocEditDocContext.js';
@@ -73,7 +74,7 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
   const component = session.type === 'block' ? block?.component : undefined;
   if (component && session.editModeId !== COMP_EDIT_MODE_SOURCE_ID) {
     const compId = compIdResolve(sourceStore.configDoc, component.compName);
-    const definition = compDefinitionNormalize(compById[compId]);
+    const definition = compDefinitionNormalize(compDefinitionGet(compById, compId));
     if (definition) {
       return (
         <RegisteredComp

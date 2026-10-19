@@ -1,0 +1,7 @@
+# the playground of the example doc: everything here is yours to change and
+# never part of the example. only this file is tracked, so the folder exists
+# in a fresh checkout (the side panel then reports playground.md as missing:
+# create it, from the page or by hand). the asset objects the playground
+# creates go to the default asset folder, whose .gitignore ignores new objects.
+*
+!/.gitignore

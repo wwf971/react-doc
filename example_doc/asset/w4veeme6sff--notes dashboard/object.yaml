@@ -1,0 +1,25 @@
+objectId: w4veeme6sff
+name: notes dashboard
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+component:
+  name: service/note-db/default
+saveMode: inPlace
+versionIdHead: w4vfc1v33ce
+isDeleted: false
+isLocked: false
+timeCreated: 20261024_04520590+09
+versionList:
+  - versionId: w4vfc1v33ce
+    versionIdPrevList: []
+    time: 20261024_04520590+09
+    note: the default dashboard of note-db, bound to example notes
+    size: 42
+    hash: ad16169427c322a74033b421948cb9beb8560299
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261024_04520590+09
+    versionId: w4vfc1v33ce
