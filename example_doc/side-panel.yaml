@@ -40,6 +40,25 @@ sidePanelById:
       - doc: ~example/edit-in-place.md
         text: In-place Editing
         tags: [guide]
+      # moving items in edit mode (In-place Editing, "Moving side-panel
+      # items"): the first items of this folder come from an included
+      # resource file, the last ones are written here, so an item can be
+      # moved from one file to the other. free to change.
+      - id: move-sandbox
+        text: Move Sandbox
+        include: ./side-panel-move/sandbox.yaml
+        children:
+          - id: move-local-c
+            text: Local C
+            doc: ~example/side-panel-move/local-c.md
+            children: []
+          - id: move-local-folder
+            text: Local Folder
+            children:
+              - id: move-local-d
+                text: Local D
+                inline:
+                  content: An inline page inside a folder of `side-panel.yaml`.
       # component data kept in the asset store; writable on the development server only
       - doc: ~example/asset-store.md
         text: Asset Store

@@ -1,4 +1,6 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
+import { observer } from 'mobx-react-lite';
+import { useDocStores } from '../../frontend/src/store/context.js';
 import {
   ChevronDown,
   Link,
@@ -19,7 +21,16 @@ const classNameLink = `${classNameItem} data-[active=true]:bg-fd-primary/10 data
 // Keeps navigation in the framework Link while owning only the folder gesture policy.
 // An inactive index label navigates without changing open state. A following click
 // sees the now-active label and toggles, so an ordinary double click still toggles.
-export function DocSidebarFolder({ item, children }) {
+//
+// fumadocs keeps whether a folder is open inside the folder row, and the
+// rows are by position: a side panel rendered again for a tree of another
+// shape (an item moved in edit mode) would start every folder over. the
+// open state is recorded by item id in DocSidePanelStore and a folder
+// starts from it; a folder the store opens (the new parent of a moved item,
+// a folder held under a dragged item) opens, as fumadocs opens a folder
+// whose defaultOpen turns true.
+export const DocSidebarFolder = observer(function DocSidebarFolder({ item, children }) {
+  const { sidePanelStore } = useDocStores();
   const path = useTreePath();
   const pathname = usePathname();
   const isActive = item.index?.url === pathname;
@@ -29,8 +40,9 @@ export function DocSidebarFolder({ item, children }) {
     <SidebarFolder
       collapsible={item.collapsible}
       active={isDescendantActive}
-      defaultOpen={item.defaultOpen}
+      defaultOpen={sidePanelStore.folderOpenGet(item.$id, item.defaultOpen ?? true)}
     >
+      <DocSidebarFolderOpenRecord itemId={item.$id} />
       {item.index ? (
         <DocSidebarFolderLink item={item} isActive={isActive} />
       ) : (
@@ -39,6 +51,15 @@ export function DocSidebarFolder({ item, children }) {
       <DocSidebarFolderContent>{children}</DocSidebarFolderContent>
     </SidebarFolder>
   );
+});
+
+function DocSidebarFolderOpenRecord({ itemId }) {
+  const { sidePanelStore } = useDocStores();
+  const folder = useFolder();
+  useEffect(() => {
+    if (folder.collapsible) sidePanelStore.folderOpenSet(itemId, folder.open);
+  }, [folder.collapsible, folder.open, itemId, sidePanelStore]);
+  return null;
 }
 
 function DocSidebarFolderLink({ item, isActive }) {

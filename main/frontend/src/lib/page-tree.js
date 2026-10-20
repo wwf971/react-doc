@@ -17,6 +17,7 @@ import { sourcePathBuild, sourcePathIsInside, sourcePathIsRooted, sourcePathNorm
 import { textLocalizedGet, textLocalizedParse } from './text-localized.js';
 import { tagSidePanelAssetKeyGet, tagSidePanelDeclare } from './doc-tag-side-panel.js';
 import { configSidePanelDeclareClose, configSidePanelDeclareOpen } from './doc-config-side-panel.js';
+import { sidePanelPlaceIndexBuild } from './side-panel-move.js';
 
 // Build both the fumadocs PageTree and the navigation indexes used by DocStore.
 // A configured leaf always gets its own route, so multiple sidebar items can
@@ -27,7 +28,11 @@ export function buildPageTreeModel(configDoc, fileManifest, compById = {}) {
   const children = Array.isArray(treeConfig)
     ? treeConfig.flatMap((node, index) => convertNode(node, [index], context))
     : autoChildren(fileManifest, context);
-  const treePage = { $id: 'root', name: configDoc.siteTitle ?? 'Docs', children };
+  // fumadocs keeps the tree it received first while the root $id stays the
+  // same, and renders the rows by their index: a tree of another shape (an
+  // item moved in edit mode) must come with another root $id, so the side
+  // panel is rendered again. a new label alone keeps the id.
+  const treePage = { $id: `root-${treeShapeKeyGet(children)}`, name: configDoc.siteTitle ?? 'Docs', children };
   const itemFirstDocByNodeId = indexFirstDocItems(treePage, context.itemByRoute);
   const itemAboveById = indexAboveDocItems(treePage, context.itemByRoute);
 
@@ -41,9 +46,27 @@ export function buildPageTreeModel(configDoc, fileManifest, compById = {}) {
     partById: context.partById,
     items: context.items,
     itemOutlineById: context.itemOutlineById,
+    // where every item is in the tree, for moving items (side-panel-move.js)
+    itemPlaceById: sidePanelPlaceIndexBuild(treePage, context.itemOutlineById),
     tagDeclarationList: context.tagDeclarationList,
     configDeclarationList: context.configDeclarationList,
   };
+}
+
+// the shape of the tree, the ids of its nodes nested, as a short hash
+function treeShapeKeyGet(nodeList) {
+  const textList = [];
+  const visit = (node) => {
+    textList.push(node.$id ?? '');
+    if (!Array.isArray(node.children)) return;
+    textList.push('(');
+    node.children.forEach(visit);
+    textList.push(')');
+  };
+  nodeList.forEach(visit);
+  let hash = 5381;
+  for (const char of textList.join(',')) hash = ((hash * 33) ^ char.charCodeAt(0)) >>> 0;
+  return hash.toString(36);
 }
 
 // Kept as a small backwards-compatible helper for callers that only need the tree.
@@ -64,10 +87,11 @@ function createBuildContext(configDoc, fileManifest, compById) {
     items: [],
     idUsed: new Set(),
     // item id -> { assetKey, kind, text, textLocalized, textSource,
-    // isTextAuthored } of every labeled item, including folders and
-    // separators. the tag overview reads the tree through it; the edit layer
-    // finds where a label is authored (textSource, annotated by the plugin;
-    // undefined for generated items).
+    // isTextAuthored, nodeForm, nodeSource, includeSource, isPartRoot } of
+    // every labeled item, including folders and separators. the tag overview
+    // reads the tree through it; the edit layer finds where a label is
+    // authored (textSource) and where the node is (nodeSource, includeSource),
+    // annotated by the plugin; undefined for generated items.
     itemOutlineById: new Map(),
     // side-panel step of the tag system, in tree order
     tagDeclarationList: [],
@@ -271,8 +295,24 @@ function itemNameCreate(node, label, context, options) {
     // the label is written in the side panel file (else it is a default such
     // as the document title, and an edit adds the "text")
     isTextAuthored: node.text !== undefined || node.separator !== undefined,
+    nodeForm: nodeFormGet(node),
+    nodeSource: node.nodeSource,
+    includeSource: node.includeSource,
+    isPartRoot: node.part !== undefined && node.part !== false && Boolean(node.id),
   });
   return sidePanelItemNameCreate(node, label, context, options);
+}
+
+// what a node is, as convertNodeByForm reads it; 'generated' for an item the
+// tree made itself (a file of a source folder), which has no node in a file
+function nodeFormGet(node) {
+  if (!node.nodeSource) return 'generated';
+  if (node.separator !== undefined) return 'separator';
+  if (node.doc !== undefined) return 'doc';
+  if (node.inline !== undefined) return 'inline';
+  if (node.panel !== undefined) return 'panel';
+  if (node.sourceRoot !== undefined || node.sourceFolder !== undefined) return 'sourceFolder';
+  return 'folder';
 }
 
 // label of one item: the authored "text" when present, else textDefault.

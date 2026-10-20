@@ -58,8 +58,12 @@ import {
 // every edit action first leaves the open session, so a draft is never lost
 // by starting something else.
 //
-// every change of the file goes through operationApply, the one place a
-// future history (undo/redo) records operations at.
+// every change of a document goes through operationApply. it, and every
+// other writer of the edit layer (the side-panel store moving an item), hand
+// what they changed to historyRecord: the files with their text before and
+// after. that list is where a future undo/redo starts from (an undo writes
+// textBefore back, refused when the file is no longer textAfter); nothing
+// reads it yet.
 //
 // the events of the edit domain (doc_page_impl_event.md) arrive at
 // eventHandle, routed there by the event layer.
@@ -219,6 +223,27 @@ export type EditDocState = {
 
 export type EditResult = { code: number; data?: any; message: string };
 
+// one change of the files, as historyRecord keeps it
+//   kind             what the change was: 'document' (an operation of
+//                    operationApply), 'sidePanelItemMove'
+//   fileChangeList   scope 'source': file is the internal path of a
+//                    document; 'sidePanel': the side-panel file, relative
+//                    to the config directory
+export type EditHistoryRecord = {
+  kind: string;
+  time: number;
+  fileChangeList: {
+    scope: 'source' | 'sidePanel';
+    file: string;
+    hashBefore: string;
+    hashAfter: string;
+    textBefore: string;
+    textAfter: string;
+  }[];
+};
+
+const historyRecordCountMax = 100;
+
 type DocEvent = { type: string; data: Record<string, any>; source: Record<string, any>; point?: EditPoint };
 
 // the event types the edit route of the event layer brings here: the
@@ -278,6 +303,8 @@ export class DocEditStore {
 
   // the asset store, for moving a block's inline data into it
   assetStore: DocAssetStore | undefined;
+  // the last changes of the files, oldest first (historyRecord); not observed
+  historyRecordList: EditHistoryRecord[] = [];
 
   constructor(
     sourceStore: DocSourceStore,
@@ -304,6 +331,7 @@ export class DocEditStore {
       submitPrepare: false,
       reactionDispose: false,
       reactionConfigDispose: false,
+      historyRecordList: false,
     });
   }
 
@@ -552,7 +580,7 @@ export class DocEditStore {
 
   // the one path every change of a document takes: the operation is sent
   // with the hash of the text it was built on, the new text is accepted and
-  // compiled. a history of the edit layer records operations here.
+  // compiled, and the change is recorded (historyRecord).
   //   messageFailure   what a failure other than a conflict is reported as
   //   onApplied        state to settle once the file is written, before the
   //                    new text is accepted (compiling it takes a moment)
@@ -570,9 +598,28 @@ export class DocEditStore {
     if (result.code !== 0) {
       return { code: result.code, message: result.code === -2 ? messageConflict : result.message || messageFailure };
     }
+    this.historyRecord({
+      kind: 'document',
+      time: Date.now(),
+      fileChangeList: [{
+        scope: 'source',
+        file: path,
+        hashBefore: source.hash,
+        hashAfter: result.data.hash,
+        textBefore: source.text ?? '',
+        textAfter: result.data.text,
+      }],
+    });
     if (onApplied) runInAction(onApplied);
     await this.sourceAccept(path, result.data.text, result.data.hash);
     return { code: 0, data: result.data, message: '' };
+  }
+
+  // keeps one change of the files for a future undo/redo (see the top)
+  historyRecord(record: EditHistoryRecord) {
+    if (record.fileChangeList.length === 0) return;
+    this.historyRecordList.push(record);
+    if (this.historyRecordList.length > historyRecordCountMax) this.historyRecordList.shift();
   }
 
   // ---------- sessions ----------

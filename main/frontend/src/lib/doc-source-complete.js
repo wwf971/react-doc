@@ -1,4 +1,4 @@
-import { sourcePathIsInside, sourcePathIsRooted, sourcePathNormalize, sourcePathParse } from './doc-source-path.js';
+import { sourcePathBuild, sourcePathIsInside, sourcePathIsRooted, sourcePathNormalize, sourcePathParse } from './doc-source-path.js';
 
 // Path completion of the source layer. Design: doc_page_impl_source.md#path-completion
 //
@@ -81,4 +81,65 @@ export function sourcePathCompleteList(text, spec, manifests) {
   }
   const typedLower = typed.toLowerCase();
   return candidateList.filter((candidate) => candidate.path.toLowerCase().includes(typedLower));
+}
+
+// the candidates of a spec as a tree, for browsing instead of typing: one
+// node per root (~rootId), the folders below it, the files in them. a folder
+// that only leads to candidates (the spec asks for files, or for paths
+// inside another folder) is a node too, but cannot be chosen (isDisabled).
+// the nodes are the ones of the tree view (comp-doc/source/SourceTreeSelect.jsx):
+//   { id: source path, label: last segment, kind: 'dir' | 'file',
+//     isDisabled, childList }
+// folders before files, each sorted by name.
+export function sourcePathTreeBuild(spec, manifests) {
+  const candidateList = sourcePathCandidateListBuild(spec, manifests);
+  const nodeByPath = new Map();
+  const nodeRootList = [];
+
+  const nodeDirEnsure = (path) => {
+    const nodeExisting = nodeByPath.get(path);
+    if (nodeExisting) return nodeExisting;
+    const parsed = sourcePathParse(path);
+    const node = {
+      id: path,
+      label: parsed && parsed.relPath === '' ? path : path.slice(path.lastIndexOf('/') + 1),
+      kind: 'dir',
+      isDisabled: true,
+      childList: [],
+    };
+    nodeByPath.set(path, node);
+    if (!parsed || parsed.relPath === '') {
+      nodeRootList.push(node);
+    } else {
+      const relPathParent = parsed.relPath.includes('/') ? parsed.relPath.slice(0, parsed.relPath.lastIndexOf('/')) : '';
+      nodeDirEnsure(sourcePathBuild(parsed.rootId, relPathParent)).childList.push(node);
+    }
+    return node;
+  };
+
+  for (const candidate of candidateList) {
+    if (candidate.kind === 'dir') {
+      nodeDirEnsure(candidate.path).isDisabled = false;
+      continue;
+    }
+    const indexSlash = candidate.path.lastIndexOf('/');
+    if (indexSlash < 0) continue;
+    nodeDirEnsure(candidate.path.slice(0, indexSlash)).childList.push({
+      id: candidate.path,
+      label: candidate.path.slice(indexSlash + 1),
+      kind: 'file',
+      isDisabled: false,
+      childList: [],
+    });
+  }
+
+  const nodeListSort = (nodeList) => {
+    nodeList.sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === 'dir' ? -1 : 1;
+      return a.label.localeCompare(b.label);
+    });
+    for (const node of nodeList) nodeListSort(node.childList);
+    return nodeList;
+  };
+  return nodeListSort(nodeRootList);
 }

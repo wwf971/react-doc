@@ -100,6 +100,7 @@ A build has no api. The bytes of the files that are used are bundled as data url
 | `fileUrlGet(reference, fromPath)` | the url the bytes of the file are read from (build map, or the `/data` route); undefined when unknown |
 | `dirListGet()` | the folders of the source |
 | `pathComplete(text, spec)` | the candidates `{ path, kind, entry }` that complete what is typed, filtered by the [specification](#path-completion): an empty text lists everything, a rooted text matches by prefix, another text anywhere in the path |
+| `pathTreeGet(spec)` | the same candidates as a tree, for browsing instead of typing ([browsing as a tree](#browsing-as-a-tree)) |
 | `fileNameUniqueGet(dirPath, name)` | a file name not used in the folder yet (`a.png`, `a-2.png`, ...) |
 
 `config.assetUrlGet`, which `Image`, `ImageGrid` and `DiagramMermaid` call with the references in their data, is `fileUrlGet` bound to the component's document by default (`RegisteredComp`); a host application may still hand its own through `compConfigHost.assetUrlGet`.
@@ -120,6 +121,12 @@ The logic lives in `lib/doc-source-complete.js`, apart from the store: `sourcePa
 
 The page renders completion with its own element, `SourcePathInput` (`comp-doc/source/`): an `EditValueInline` holding the path and a dropdown of the candidates from `pathComplete`, moved through with the arrow keys; it is not the browser's datalist. The dropdown is rendered into `document.body` at a fixed position under the text, not inside the field, because the field usually sits in a clipping container (every item of the settings panel hides its overflow) where a list placed inside would be cut off; it follows the text when the page scrolls. Leaving the field commits, including a click outside it; a click on a candidate takes it before the field is left. An empty field shows its placeholder. The settings panel uses it for `sourcePath` keys (the path ends at the right of the value column), the location prompt for the folder.
 
+### Browsing as a tree
+
+The same candidates can be chosen from a tree. `sourcePathTreeBuild(spec, manifests)` (`lib/doc-source-complete.js`, `pathTreeGet` of the service) arranges them as nodes `{ id, label, kind, isDisabled, childList }`: one node per root (`~rootId`), its folders, the files in them, folders first, each sorted by name. A folder that only leads to candidates (the specification asks for files, or for paths inside another folder) is a node too, and disabled.
+
+`SourceTreeSelect` (`comp-doc/source/`) renders such a tree and only selects: a node is chosen by a click or the arrow keys (ArrowRight / ArrowLeft open, close, or go to the child or parent; Enter activates), a disabled node opens but is never chosen and says why in its title, and what the chosen node means is the caller's. The node shape is not bound to the source: `kind` picks the icon (a folder, a separator, anything else a file) and `detail` is a muted note after the label, so another tree of the page can be shown the same way. The location prompt shows the folders of the source this way behind a browse button next to the folder field; the move picker of the side panel shows the items of the side panel ([moving an item](doc_page_impl_side_panel.md#moving-an-item)).
+
 ## Creating files
 
 A component that holds bytes to keep, such as an image pasted into `Image`, does not write them itself. It reports the request through the event layer, and the **source route** answers it from `DocSourceFileStore`:
@@ -129,7 +136,7 @@ fileCreateRequest { name, blob | text, dirPath, isLocationCustom }
   -> { code: 0, data: { path, entry } } | { code: -1, message }
 ```
 
-`dirPath` is the folder, a source path, usually from the component's own config (`Image` reads `compConfig.FileStoreDir`). `isLocationCustom: true`, or a `dirPath` that is not a source path, opens the **location prompt** (`SourceFilePrompt`): a floating panel at the pointer with the folder (a `SourcePathInput` completing the folders of the source), the file name, Create and Cancel. The prompt stays open while the file is written, shows a failure in place so another folder can be tried, and answers the request with a failure when dismissed. The name is made unique in the folder (`fileNameUniqueGet`) before the file is written; the answer carries the source path of the new file, which the component then puts into its data through the edit layer (`dataReplaceRequest`, see [component awareness](doc_page_impl_mdx_comp.md#component-awareness)).
+`dirPath` is the folder, a source path, usually from the component's own config (`Image` reads `compConfig.FileStoreDir`). `isLocationCustom: true`, or a `dirPath` that is not a source path, opens the **location prompt** (`SourceFilePrompt`): a floating panel at the pointer with the folder (a `SourcePathInput` completing the folders of the source, or picked from them as a tree behind the browse button), the file name, Create and Cancel. The prompt stays open while the file is written, shows a failure in place so another folder can be tried, and answers the request with a failure when dismissed. The name is made unique in the folder (`fileNameUniqueGet`) before the file is written; the answer carries the source path of the new file, which the component then puts into its data through the edit layer (`dataReplaceRequest`, see [component awareness](doc_page_impl_mdx_comp.md#component-awareness)).
 
 The two requests keep the component thin: it knows how to turn a clipboard into a file name and bytes, and how to write its own data with a new source; where the file goes, how it is written, and whether the data is a block of the document or a version of an asset are decided by the page.
 
@@ -139,9 +146,9 @@ The two requests keep the component thin: it knows how to turn a clipboard into 
 | --- | --- |
 | `lib/doc-source-path.js` | the source path grammar |
 | `lib/doc-target-resolve.js` | every spelling of a target resolved to source paths |
-| `lib/doc-source-complete.js` | path completion: the specification, the candidates, the narrowing |
+| `lib/doc-source-complete.js` | path completion: the specification, the candidates, the narrowing, the tree |
 | `plugin/doc-source.ts` | rules, collection, folder manifest, source api, module generation |
 | `plugin/doc-attachment.ts` | the files components name, the mime types, the data urls of a build |
 | `store/DocSourceStore.ts` | the source as the page reads it, the source service |
 | `store/DocSourceFileStore.ts` | file creation requests, the location prompt |
-| `comp-doc/source/SourcePathInput.jsx`, `SourceFilePrompt.jsx` | the path input with completion, the location prompt |
+| `comp-doc/source/SourcePathInput.jsx`, `SourceFilePrompt.jsx`, `SourceTreeSelect.jsx` | the path input with completion, the location prompt, the tree view |

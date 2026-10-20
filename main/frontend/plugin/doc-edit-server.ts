@@ -7,6 +7,7 @@ import {
   textHashGet,
   type LineOperation,
 } from './doc-edit-lines.ts';
+import { sidePanelMoveBuild, sidePanelMoveRequestIsValid } from './doc-side-panel-move.ts';
 import { sidePanelTextOperationBuild } from './doc-side-panel-text.ts';
 import { yamlValueGet, yamlValueSetOperationBuild, yamlValueTextBuild } from './doc-yaml-edit.ts';
 
@@ -20,6 +21,10 @@ import { yamlValueGet, yamlValueSetOperationBuild, yamlValueTextBuild } from './
 //        body { internalPath, hashBase, operation }   operation: doc-edit-lines.ts
 //   POST {endpoint}/side-panel/text        -> { code: 0, data: { file, fieldName, text } }
 //        body { file, nodePath, language, text, textBase }   doc-side-panel-text.ts
+//   POST {endpoint}/side-panel/move        -> { code: 0, data: { fileChangeList } }
+//        body { item, target, hashBaseByFile }   doc-side-panel-move.ts; one or
+//        two files, written together; fileChangeList [{ file, hashBefore,
+//        hashAfter, textBefore, textAfter }], empty when nothing moved
 //   POST {endpoint}/config/value           -> { code: 0, data: { file, keyPath, value } }
 //        body { keyPath, value, valueBase }   a value of config.yaml globalConfig / compConfig
 //                                             (doc_page_impl_config.md#config-layers)
@@ -27,7 +32,8 @@ import { yamlValueGet, yamlValueSetOperationBuild, yamlValueTextBuild } from './
 // every response is { code, data, message }. code 0 is success; negative codes:
 //   -1  bad request or unexpected failure
 //   -2  hashBase is not the hash of the file on disk (changed elsewhere), the
-//       side-panel label is no longer the one the edit started from, or the
+//       side-panel label is no longer the one the edit started from, a
+//       side-panel file of a move changed since the page loaded it, or the
 //       config value in the file is no longer the one the page displayed
 //   -3  the path is not an editable document of the collected source, the
 //       file is not a loaded side-panel file, or the page has no config file
@@ -52,9 +58,11 @@ export type DocEditSidePanelOptions = {
   configDir: string;
   // absolute paths of the side-panel files the configuration currently loads
   fileListGet: () => string[];
-  // called after a file was rewritten, with its new text, so the plugin can
-  // report the new configuration to the page as data
-  onFileWritten: (filePath: string, text: string) => void;
+  // called after files were rewritten, with their new texts, so the plugin
+  // can report the new configuration to the page as data, once. answers ''
+  // when the configuration loads, else why it does not (then nothing is
+  // reported)
+  onFileListWritten: (fileList: { filePath: string; text: string }[]) => string;
 };
 
 // the config value route: the files of the global config layer
@@ -160,6 +168,12 @@ async function routeHandle(
     return;
   }
 
+  if (req.method === 'POST' && route === '/side-panel/move') {
+    const body = await jsonBodyRead(req);
+    sidePanelMoveRouteHandle(res, body, options.sidePanel);
+    return;
+  }
+
   if (req.method === 'POST' && route === '/config/value') {
     const body = await jsonBodyRead(req);
     configValueRouteHandle(res, body, options.config);
@@ -255,9 +269,8 @@ function sidePanelTextRouteHandle(res: ServerResponse, body: any, sidePanel: Doc
     return;
   }
   const file = String(body?.file ?? '');
-  const filePath = path.resolve(sidePanel.configDir, file);
-  const isFileLoaded = file !== '' && sidePanel.fileListGet().some((loaded) => path.resolve(loaded) === filePath);
-  if (!isFileLoaded) {
+  const filePath = sidePanelFilePathGet(sidePanel, file);
+  if (!filePath) {
     jsonSend(res, 404, { code: -3, data: null, message: `not a side panel file of the configuration: ${file}` });
     return;
   }
@@ -274,8 +287,90 @@ function sidePanelTextRouteHandle(res: ServerResponse, body: any, sidePanel: Doc
   }
   const textNext = lineOperationApply(textCurrent, result.data.operation);
   fileWriteWithBackup(filePath, textNext);
-  sidePanel.onFileWritten(filePath, textNext);
+  sidePanel.onFileListWritten([{ filePath, text: textNext }]);
   jsonSend(res, 200, { code: 0, data: { file, fieldName: result.data.fieldName, text: body.text }, message: '' });
+}
+
+// moves one side-panel item into another place of its side panel, in its
+// file or into another one. both files must be files the configuration
+// loads, and both must still have the hash the page loaded them with
+// (hashBaseByFile, from configDoc.docEntry.fileHashByFile): the yaml
+// addresses of the request are only right for those texts. nothing is
+// written unless every file of the move can be; each written file is kept
+// as {file}.bak before. the answer names every file changed with its text
+// before and after, what a history of the page records to undo the move.
+function sidePanelMoveRouteHandle(res: ServerResponse, body: any, sidePanel: DocEditSidePanelOptions | undefined) {
+  if (!sidePanel) {
+    jsonSend(res, 404, { code: -3, data: null, message: 'the page has no side panel file' });
+    return;
+  }
+  const request = { item: body?.item, target: body?.target };
+  if (!sidePanelMoveRequestIsValid(request)) {
+    jsonSend(res, 400, { code: -1, data: null, message: 'request needs item { file, path } and target { file, listPath, index }' });
+    return;
+  }
+  const fileList = [...new Set([request.item.file, request.target.file])];
+  const textByFile: Record<string, string> = {};
+  const filePathByFile: Record<string, string> = {};
+  for (const file of fileList) {
+    const filePath = sidePanelFilePathGet(sidePanel, file);
+    if (!filePath) {
+      jsonSend(res, 404, { code: -3, data: null, message: `not a side panel file of the configuration: ${file}` });
+      return;
+    }
+    const text = fs.readFileSync(filePath, 'utf-8');
+    const hashBase = body?.hashBaseByFile?.[file];
+    if (typeof hashBase !== 'string' || hashBase !== textHashGet(text)) {
+      jsonSend(res, 409, {
+        code: -2,
+        data: null,
+        message: `${file} changed since the side panel was loaded; the item was not moved`,
+      });
+      return;
+    }
+    textByFile[file] = text;
+    filePathByFile[file] = filePath;
+  }
+  const result = sidePanelMoveBuild(textByFile, request);
+  if (result.code !== 0) {
+    jsonSend(res, 400, { code: -1, data: null, message: result.message });
+    return;
+  }
+  const fileChangeList = Object.entries(result.data.textAfterByFile).map(([file, textAfter]) => ({
+    file,
+    hashBefore: textHashGet(textByFile[file]),
+    hashAfter: textHashGet(textAfter),
+    textBefore: textByFile[file],
+    textAfter,
+  }));
+  for (const change of fileChangeList) fileWriteWithBackup(filePathByFile[change.file], change.textAfter);
+  if (fileChangeList.length > 0) {
+    const messageLoad = sidePanel.onFileListWritten(
+      fileChangeList.map((change) => ({ filePath: filePathByFile[change.file], text: change.textAfter })),
+    );
+    // valid yaml can still be a configuration that does not load (the item
+    // includes a side panel that would now include it): the files go back
+    if (messageLoad !== '') {
+      for (const change of fileChangeList) fs.writeFileSync(filePathByFile[change.file], change.textBefore, 'utf-8');
+      sidePanel.onFileListWritten(fileChangeList.map((change) => ({ filePath: filePathByFile[change.file], text: change.textBefore })));
+      jsonSend(res, 400, {
+        code: -1,
+        data: null,
+        message: `the configuration would not load after the move (${messageLoad}); the files were left as they were`,
+      });
+      return;
+    }
+  }
+  jsonSend(res, 200, { code: 0, data: { fileChangeList }, message: '' });
+}
+
+// the absolute path of a side-panel file named relative to the config
+// directory, when the configuration loads it
+function sidePanelFilePathGet(sidePanel: DocEditSidePanelOptions, file: string): string | undefined {
+  if (file === '') return undefined;
+  const filePath = path.resolve(sidePanel.configDir, file);
+  const isFileLoaded = sidePanel.fileListGet().some((loaded) => path.resolve(loaded) === filePath);
+  return isFileLoaded ? filePath : undefined;
 }
 
 function editableEntryGet(entryList: DocEditFileEntry[], internalPath: string): DocEditFileEntry | undefined {

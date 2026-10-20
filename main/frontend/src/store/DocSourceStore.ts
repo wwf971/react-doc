@@ -1,7 +1,7 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { compileDoc } from '../lib/mdx-compile.js';
 import { docTargetResolve } from '../lib/doc-target-resolve.js';
-import { sourcePathCompleteList } from '../lib/doc-source-complete.js';
+import { sourcePathCompleteList, sourcePathTreeBuild } from '../lib/doc-source-complete.js';
 import {
   sourcePathIsInside,
   sourcePathIsRooted,
@@ -137,6 +137,7 @@ export class DocSourceStore {
       fileUrlGet: (reference: string, fromPath: string) => this.fileUrlGet(reference, fromPath),
       dirListGet: () => this.dirManifest,
       pathComplete: (text: string, spec: SourcePathSpec) => this.pathComplete(text, spec),
+      pathTreeGet: (spec: SourcePathSpec) => this.pathTreeGet(spec),
       fileNameUniqueGet: (dirPath: string, name: string) => this.fileNameUniqueGet(dirPath, name),
     });
     // compile results hold React elements (toc titles) and component functions
@@ -478,6 +479,12 @@ export class DocSourceStore {
   // anywhere in the path (typing "image" finds ~example/mdx-usage/image).
   pathComplete(text: string, spec: SourcePathSpec = { kind: 'dir' }): SourcePathCandidate[] {
     return sourcePathCompleteList(text, spec, { fileManifest: this.fileManifest, dirManifest: this.dirManifest });
+  }
+
+  // the same candidates as a tree of nodes (lib/doc-source-complete.js
+  // sourcePathTreeBuild), for the tree view of comp-doc/source
+  pathTreeGet(spec: SourcePathSpec = { kind: 'dir' }): any[] {
+    return sourcePathTreeBuild(spec, { fileManifest: this.fileManifest, dirManifest: this.dirManifest });
   }
 
   // a file name not used in the folder yet: "a.png", then "a-2.png", "a-3.png"

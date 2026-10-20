@@ -55,6 +55,23 @@ export function docEditApiCreate(endpoint) {
       });
     },
 
+    // moves one side-panel item (with its subtree) to another place of a
+    // yaml list, in its file or another one (plugin/doc-side-panel-move.ts);
+    // answers { fileChangeList: [{ file, hashBefore, hashAfter, textBefore,
+    // textAfter }] }, empty when the item already is there
+    //   item             { file, path }: the item's nodeSource
+    //   target           { file, listPath, index }: the list and the index
+    //                    the item gets there (-1: the end)
+    //   hashBaseByFile   file -> the hash of the file the page was built
+    //                    from; refused with -2 when one changed
+    sidePanelItemMoveApply({ item, target, hashBaseByFile }) {
+      return requestSend('/side-panel/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item, target, hashBaseByFile }),
+      });
+    },
+
     // writes one value of the global config layer into config.yaml (or its
     // local layer, where the key is declared); answers { file, keyPath, value }
     //   keyPath     ['globalConfig', Key] or ['compConfig', CompName, Key]

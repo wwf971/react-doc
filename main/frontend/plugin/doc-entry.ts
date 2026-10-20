@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { textHashGet } from './doc-edit-lines.ts';
 
 // The entry of a document and the yaml files it reaches.
 // design: doc_page_impl_side_panel.md#the-document-entry
@@ -30,19 +31,36 @@ import { parse as parseYaml } from 'yaml';
 // its tag definitions are merged (a file loaded earlier wins), and every side
 // panel is resolved with its includes. the entry is loaded first, so its
 // rules come first, followed by the rules of included files in order of
-// appearance. every node of every side panel is annotated with textSource,
-// the file (relative to the config directory) and yaml address of the node
-// whose label it shows, for the edit layer (doc-side-panel-text.ts).
+// appearance. every node of every side panel is annotated for the edit layer
+// with the file (relative to the config directory) and yaml address of
+//   textSource     the node whose label it shows (doc-side-panel-text.ts):
+//                  the node itself, or the root of the side panel it includes
+//   nodeSource     the node itself, as an item of its list (doc-side-panel-move.ts)
+//   includeSource  a node with "include" only: the tree list of the included
+//                  side panel, and whether it is a sub document (another
+//                  document's entry file)
 
 export type SidePanelTextSource = {
   file: string;
   path: (string | number)[];
 };
 
+export type SidePanelIncludeSource = {
+  file: string;
+  // yaml address of the included side panel's "tree" list
+  path: (string | number)[];
+  // the included file is the entry of another document: a sub document
+  isDocEntry: boolean;
+  // the including node also has "children" of its own, after the included ones
+  isChildrenLocal: boolean;
+};
+
 export type SidePanelLoaded = {
   root?: Record<string, any>;
   // where the root's label is written, when the side panel has a root
   rootTextSource?: SidePanelTextSource;
+  // where the "tree" list is written
+  treeSource: SidePanelTextSource;
   tree: any[];
 };
 
@@ -64,11 +82,16 @@ export type DocEntryLoaded = {
   tagDefineById: Record<string, any>;
   // every yaml file read, absolute, the entry file first
   fileListLoaded: string[];
+  // the content hash (doc-edit-lines.ts textHashGet) of every document yaml
+  // file as it was loaded, by file relative to the config directory: an edit
+  // of a side panel's structure is refused when a file changed since
+  fileHashByFile: Record<string, string>;
 };
 
 type DocYamlFile = {
   filePath: string;
   content: Record<string, any>;
+  contentHash: string;
   isEntry: boolean;
   entry: DocEntryInfo;
   sidePanelIdList: string[];
@@ -125,6 +148,11 @@ export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWa
     ? undefined
     : context.sidePanelByKey.get(sidePanelKeyBuild(file.filePath, sidePanelId));
 
+  const fileHashByFile: Record<string, string> = {};
+  for (const fileLoaded of context.fileByPath.values()) {
+    fileHashByFile[fileRelativeGet(fileLoaded.filePath, configDir)] = fileLoaded.contentHash;
+  }
+
   return {
     entry: file.entry,
     sidePanelId,
@@ -133,6 +161,7 @@ export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWa
     sourceRuleList: context.sourceRuleList,
     tagDefineById: context.tagDefineById,
     fileListLoaded: context.fileListLoaded,
+    fileHashByFile,
   };
 }
 
@@ -145,7 +174,8 @@ function fileLoad(filePath: string, context: LoadContext): DocYamlFile {
   if (!fs.existsSync(filePathResolved)) {
     throw new Error(`[doc-source] document yaml file not found: ${filePathResolved}`);
   }
-  const content = readYaml(filePathResolved) ?? {};
+  const text = fs.readFileSync(filePathResolved, 'utf-8');
+  const content = parseYaml(text) ?? {};
   if (!mappingIs(content)) {
     throw new Error(`[doc-source] document yaml file must be a mapping: ${filePathResolved}`);
   }
@@ -154,6 +184,7 @@ function fileLoad(filePath: string, context: LoadContext): DocYamlFile {
   const file: DocYamlFile = {
     filePath: filePathResolved,
     content,
+    contentHash: textHashGet(text),
     isEntry: content.docEntry !== undefined && content.docEntry !== false,
     entry: entrySectionRead(content.docEntry, filePathResolved),
     sidePanelIdList: sidePanelIdListRead(content.sidePanelById, filePathResolved),
@@ -424,9 +455,10 @@ function sidePanelResourceLoad(
 
   const fileRelative = fileRelativeGet(file.filePath, context.configDir);
   const addressResource = ['sidePanelById', sidePanelId];
-  const tree = nodesLoad(declared.tree, file, context, chain, { file: fileRelative, path: [...addressResource, 'tree'] });
+  const treeSource = { file: fileRelative, path: [...addressResource, 'tree'] };
+  const tree = nodesLoad(declared.tree, file, context, chain, treeSource);
   const rootTextSource = root === undefined ? undefined : { file: fileRelative, path: [...addressResource, 'root'] };
-  return { root, rootTextSource, tree };
+  return { root, rootTextSource, treeSource, tree };
 }
 
 // addressList: file and yaml address of the list these nodes are read from
@@ -456,11 +488,21 @@ function nodesLoad(
     let childrenIncluded: any[] = [];
     let rootIncluded: Record<string, any> = {};
     let rootTextSourceIncluded: SidePanelTextSource | undefined;
+    let includeSource: SidePanelIncludeSource | undefined;
     if (include !== undefined) {
-      const included = sidePanelLoad(sidePanelRefParse(include, file, `"include" at ${placeNode}`), context, chain);
+      const ref = sidePanelRefParse(include, file, `"include" at ${placeNode}`);
+      const included = sidePanelLoad(ref, context, chain);
       childrenIncluded = included.tree;
       rootIncluded = included.root ?? {};
       rootTextSourceIncluded = included.rootTextSource;
+      // a sub document: the entry of another document, not a side panel of
+      // this file nor of a resource file
+      const isDocEntry = ref.file !== file.filePath && fileLoad(ref.file, context).isEntry;
+      includeSource = {
+        ...included.treeSource,
+        isDocEntry,
+        isChildrenLocal: Array.isArray(childrenLocal) && childrenLocal.length > 0,
+      };
     }
 
     const childrenLoaded = Array.isArray(childrenLocal)
@@ -476,6 +518,8 @@ function nodesLoad(
     // itself (a "text" would be added there)
     const isTextFromRoot = nodeResult.text === undefined && rootIncluded.text !== undefined;
     nodeMerged.textSource = isTextFromRoot && rootTextSourceIncluded ? rootTextSourceIncluded : addressNode;
+    nodeMerged.nodeSource = addressNode;
+    if (includeSource) nodeMerged.includeSource = includeSource;
     return nodeMerged;
   });
 }

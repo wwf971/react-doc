@@ -57,6 +57,7 @@ export {
   MessageSquare,
   MessageSquareDashed,
   Minus,
+  Move,
   Network,
   PanelRightClose,
   PanelRightOpen,

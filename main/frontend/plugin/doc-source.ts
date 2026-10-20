@@ -378,17 +378,26 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         },
       }));
       // a configuration file the page itself rewrote (a side-panel label, a
-      // config value), by content hash. the watcher reports that change
-      // too; when the file still has this content, the change was already
-      // reported as data and must not reload the page.
+      // side-panel item moved, a config value), by content hash. the watcher
+      // reports that change too; when the file still has this content, the
+      // change was already reported as data and must not reload the page.
+      // the files of one write (a move between two files) are reported once.
       const contentHashWrittenByPath = new Map<string, string>();
-      const configurationFileWritten = (filePath: string, text: string) => {
-        contentHashWrittenByPath.set(filePath, textContentHashGet(text));
-        const configDocUpdated = loadConfigDoc(configFile, options);
+      // answers '' when the configuration loads with the files written, else
+      // why it does not; nothing is reported to the page then
+      const configurationFileListWritten = (fileList: { filePath: string; text: string }[]): string => {
+        for (const { filePath, text } of fileList) contentHashWrittenByPath.set(filePath, textContentHashGet(text));
+        let configDocUpdated: any;
+        try {
+          configDocUpdated = loadConfigDoc(configFile, options);
+        } catch (error: any) {
+          return String(error?.message ?? error);
+        }
         pathsWatched = collectPathsToWatch(configDocUpdated, configDir);
         pathsConfiguration = collectPathsConfiguration(configDocUpdated);
         for (const p of pathsWatched) server.watcher.add(p);
         configDataSend(configDocUpdated);
+        return '';
       };
       const changeIsOwnWrite = (filePath: string): boolean => {
         const contentHashWritten = contentHashWrittenByPath.get(filePath);
@@ -405,13 +414,15 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         sidePanel: {
           configDir,
           fileListGet: () => collectDocYamlFiles(loadConfigDoc(configFile, options)),
-          onFileWritten: configurationFileWritten,
+          onFileListWritten: configurationFileListWritten,
         },
         // the global config layer (doc_page_impl_config.md#config-layers):
         // config.yaml and its local layer
         config: {
           fileList: [configFile, configLocalFileGet(configFile)],
-          onFileWritten: configurationFileWritten,
+          onFileWritten: (filePath, text) => {
+            configurationFileListWritten([{ filePath, text }]);
+          },
         },
       }));
 
@@ -729,6 +740,9 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
     ...config.docEntry,
     sidePanel: entryLoaded.sidePanelId,
     sidePanelIdList: entryLoaded.sidePanelIdList,
+    // the hash of every document yaml file the side panels were read from:
+    // a move of a side-panel item names the files it was built on
+    fileHashByFile: entryLoaded.fileHashByFile,
   };
   // every yaml file the entry reaches, for the edit api; not part of the
   // data sent to the page

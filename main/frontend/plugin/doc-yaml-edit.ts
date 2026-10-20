@@ -1,10 +1,23 @@
-import { isMap, isScalar, isSeq, parseDocument, stringify as yamlStringify, type Node, type Pair, type YAMLMap } from 'yaml';
+import {
+  isMap,
+  isScalar,
+  isSeq,
+  parseDocument,
+  stringify as yamlStringify,
+  type Document,
+  type Node,
+  type Pair,
+  type YAMLMap,
+  type YAMLSeq,
+} from 'yaml';
 import { textLineListGet, type LineOperation } from './doc-edit-lines.ts';
 
-// Changing one value of a yaml file in place, as a line operation
-// (doc-edit-lines.ts). Shared by every write of the page into a yaml file
-// it did not author: a side-panel label (doc-side-panel-text.ts), a config
-// value of config.yaml (doc-edit-server.ts, route config/value).
+// Changing a yaml file in place, as line operations (doc-edit-lines.ts).
+// Shared by every write of the page into a yaml file it did not author: a
+// side-panel label (doc-side-panel-text.ts), a config value of config.yaml
+// (doc-edit-server.ts, route config/value), an item of a side panel moved
+// within its list, into another list, or into another file
+// (doc-side-panel-move.ts).
 //
 // The file is never rebuilt from its parsed object: that would drop the
 // comments, requote what the author wrote, and reorder nothing predictably.
@@ -13,6 +26,16 @@ import { textLineListGet, type LineOperation } from './doc-edit-lines.ts';
 // around the new text, or new lines are inserted into the mapping that
 // should hold the key, and every other line of the file stays byte for
 // byte as it was.
+//
+// two levels of operations:
+//   a value     yamlValueSetOperationBuild, nodeReplaceBuild, linesInsertBuild:
+//               the lines of one scalar or one key
+//   an item     yamlSeqItemLinesGet, yamlSeqItemRemoveBuild, yamlSeqItemInsertBuild,
+//   of a list   yamlLinesIndentShift: the lines of one item of a block sequence,
+//               with the comments that belong to it, taken out of its list and
+//               put into another list at another indentation; the lists may be
+//               in two files. lineOperationListApply applies the operations
+//               of one file together.
 
 // ---------- a value, written as yaml text on one line ----------
 
@@ -159,7 +182,7 @@ export function yamlValueSetOperationBuild(source: string, keyPath: string[], va
       }
       if (isScalar(valueNode) && valueNodeIsEmpty(source, valueNode)) {
         // "key:" with nothing after it: the value goes on the key's line
-        return { code: 0, data: { operation: keyLineValueAppendBuild(source, pair.key, valueText) }, message: '' };
+        return { code: 0, data: { operation: keyLineValueSetBuild(source, pair.key, valueText) }, message: '' };
       }
       return { code: 0, data: { operation: nodeReplaceBuild(source, valueNode, valueText) }, message: '' };
     }
@@ -203,16 +226,245 @@ function valueNodeIsEmpty(source: string, node: Node): boolean {
   return source.slice(offsetStart, offsetEnd).trim() === '';
 }
 
-// "key:" alone on its line gets the value after the colon, keeping a comment
-function keyLineValueAppendBuild(source: string, keyNode: Node, valueText: string): LineOperation {
+// the line of "key: value" rebuilt with another value written on it (or
+// none: valueText ''), keeping what precedes the colon and a trailing
+// comment: "key:" alone gets its value, "key: []" loses it. for a value
+// written on the key's line only (a scalar, a flow collection): a block
+// value below the key is not touched.
+export function keyLineValueSetBuild(source: string, keyNode: Node, valueText: string): LineOperation {
   const lineIndex = lineIndexOfOffset(source, (keyNode.range as [number, number, number])[0]);
   const line = textLineListGet(source)[lineIndex];
   const indexColon = line.indexOf(':', nodeColumnGet(source, keyNode));
   const before = line.slice(0, indexColon + 1);
   const after = line.slice(indexColon + 1);
-  const indexComment = after.indexOf('#');
-  const comment = indexComment >= 0 ? ` ${after.slice(indexComment).trimEnd()}` : '';
-  return { action: 'replaceLines', lineStart: lineIndex + 1, lineEnd: lineIndex + 1, text: `${before} ${valueText}${comment}` };
+  const indexComment = after.search(/(^|\s)#/);
+  const comment = indexComment >= 0 ? ` ${after.slice(indexComment).trim()}` : '';
+  const value = valueText === '' ? '' : ` ${valueText}`;
+  return { action: 'replaceLines', lineStart: lineIndex + 1, lineEnd: lineIndex + 1, text: `${before}${value}${comment}` };
+}
+
+// ---------- an item of a block sequence ----------
+//
+// the lines of an item are the lines from its "-" to the end of its value,
+// with the comments that belong to it:
+//   - the comment lines right above the "-", at the column of the "-"
+//     (what the author wrote about the item), and
+//   - the comment lines right after its value, indented deeper than the "-"
+//     (still inside the item's body).
+// a blank line ends either run: a blank line separates, it belongs to no item.
+//
+//     # about a                 <- lines of item a
+//     - doc: a.md               <-
+//       text: A                 <-
+//       # inside a              <-
+//
+//     - doc: b.md
+
+export type YamlSeqItemLines = {
+  // 1-based, inclusive
+  lineStart: number;
+  lineEnd: number;
+  // the column of the item's "-"
+  column: number;
+};
+
+export type YamlEditResult<T> =
+  | { code: 0; data: T; message: '' }
+  | { code: -1; data: null; message: string };
+
+function resultFail(message: string): { code: -1; data: null; message: string } {
+  return { code: -1, data: null, message };
+}
+
+export function yamlSeqItemLinesGet(source: string, seq: YAMLSeq, index: number): YamlEditResult<YamlSeqItemLines> {
+  if (seq.flow) return resultFail('the list is written in flow form ([a, b]); write it over several lines first');
+  const item = seq.items[index] as Node | null | undefined;
+  if (!item || !Array.isArray(item.range)) return resultFail(`the list has no item ${index}`);
+  const lineList = textLineListGet(source);
+
+  // the "-" is the first character before the item's value, possibly on an
+  // earlier line ("-" alone, the value on the next line)
+  let offsetDash = (item.range as [number, number, number])[0] - 1;
+  while (offsetDash >= 0 && /\s/.test(source[offsetDash])) offsetDash--;
+  if (offsetDash < 0 || source[offsetDash] !== '-') {
+    return resultFail('the item is not written as "- ..." (a comment between the "-" and its value?)');
+  }
+  const lineIndexDash = lineIndexOfOffset(source, offsetDash);
+  const column = offsetDash - lineOffsetGet(source, lineIndexDash);
+  if (lineList[lineIndexDash].slice(0, column).trim() !== '') {
+    return resultFail('the item shares its line with other content ("- - x", "key: - x")');
+  }
+
+  let lineIndexStart = lineIndexDash;
+  while (lineIndexStart > 0 && lineIsCommentAt(lineList[lineIndexStart - 1], (indent) => indent === column)) {
+    lineIndexStart--;
+  }
+  let lineIndexEnd = lineIndexOfOffset(source, nodeEndOffsetGet(source, item));
+  const itemNext = seq.items[index + 1] as Node | undefined;
+  const lineIndexLimit = itemNext && Array.isArray(itemNext.range)
+    ? lineIndexOfOffset(source, (itemNext.range as [number, number, number])[0])
+    : lineList.length;
+  while (lineIndexEnd + 1 < lineIndexLimit && lineIsCommentAt(lineList[lineIndexEnd + 1], (indent) => indent > column)) {
+    lineIndexEnd++;
+  }
+  if (itemNext && lineIndexEnd >= lineIndexLimit) return resultFail('the item ends on the line of the next item');
+  return { code: 0, data: { lineStart: lineIndexStart + 1, lineEnd: lineIndexEnd + 1, column }, message: '' };
+}
+
+// a comment line ("  # ...") whose indentation the test accepts
+function lineIsCommentAt(line: string | undefined, isIndentAccepted: (indent: number) => boolean): boolean {
+  if (line === undefined) return false;
+  const indent = line.length - line.trimStart().length;
+  return line.trimStart().startsWith('#') && isIndentAccepted(indent);
+}
+
+// the lines moved delta columns to the right (a negative delta: to the left,
+// by at most the spaces a line starts with). blank lines stay empty.
+export function yamlLinesIndentShift(lineList: string[], delta: number): string[] {
+  return lineList.map((line) => {
+    if (line.trim() === '') return '';
+    if (delta >= 0) return `${' '.repeat(delta)}${line}`;
+    const indent = line.length - line.trimStart().length;
+    return line.slice(Math.min(indent, -delta));
+  });
+}
+
+// how far the file indents the "-" of a list below its key: 0 for
+//   tree:
+//   - doc: a
+// and 2 for "  - doc: a". the first block list with items tells; 2 when none does
+export function yamlSeqIndentOffsetGet(source: string, document: Document): number {
+  let offset: number | undefined;
+  const visit = (node: unknown) => {
+    if (offset !== undefined) return;
+    if (isMap(node)) {
+      for (const pair of node.items as Pair<Node, Node | null>[]) {
+        const value = pair.value;
+        if (isSeq(value) && !value.flow && value.items.length > 0 && Array.isArray(pair.key?.range)) {
+          const lines = yamlSeqItemLinesGet(source, value, 0);
+          if (lines.code === 0) {
+            offset = lines.data.column - nodeColumnGet(source, pair.key);
+            return;
+          }
+        }
+        visit(value);
+        if (offset !== undefined) return;
+      }
+    } else if (isSeq(node)) {
+      for (const item of node.items) visit(item);
+    }
+  };
+  visit(document.contents);
+  return offset !== undefined && offset >= 0 ? offset : 2;
+}
+
+// removing item index of the list at seqPath. a list that becomes empty is
+// written "key: []" on its key's line, so a folder stays a folder (and a
+// side panel keeps its "tree"). when the item stands between two blank
+// lines, one of them goes with it, so the gap stays one line.
+//   data.itemLines   where the item was, for the caller that moves it
+//   data.lineList    the item's lines, as they are in the file
+export function yamlSeqItemRemoveBuild(
+  source: string,
+  document: Document,
+  seqPath: (string | number)[],
+  index: number,
+): YamlEditResult<{ operationList: LineOperation[]; itemLines: YamlSeqItemLines; lineList: string[] }> {
+  const seq = document.getIn(seqPath, true);
+  if (!isSeq(seq)) return resultFail(`no list at ${JSON.stringify(seqPath)}`);
+  const itemLinesResult = yamlSeqItemLinesGet(source, seq, index);
+  if (itemLinesResult.code !== 0) return itemLinesResult;
+  const itemLines = itemLinesResult.data;
+  const lineListFile = textLineListGet(source);
+  const lineList = lineListFile.slice(itemLines.lineStart - 1, itemLines.lineEnd);
+
+  let lineEndRemoved = itemLines.lineEnd;
+  const lineBefore = lineListFile[itemLines.lineStart - 2];
+  const lineAfter = lineListFile[itemLines.lineEnd];
+  if (lineBefore !== undefined && lineBefore.trim() === '' && lineAfter !== undefined && lineAfter.trim() === '') {
+    lineEndRemoved++;
+  }
+  const operationList: LineOperation[] = [
+    { action: 'deleteLines', lineStart: itemLines.lineStart, lineEnd: lineEndRemoved },
+  ];
+  if (seq.items.length === 1) {
+    const keyNode = seqKeyNodeGet(document, seqPath);
+    if (!keyNode) return resultFail('the list becomes empty and is not the value of a key');
+    operationList.push(keyLineValueSetBuild(source, keyNode, '[]'));
+  }
+  return { code: 0, data: { operationList, itemLines, lineList }, message: '' };
+}
+
+// inserting an item, given as its lines with its "-" at column columnItem,
+// into the list at seqPath before its item index (-1, or the length of the
+// list: at its end). the lines are moved to the column of the list's items.
+// the list need not exist: when seqPath ends with a key of a block mapping
+// that has no such key, or whose value is empty ("children:") or an empty
+// flow list ("children: []"), the key gets the list, indented the way the
+// file indents its lists (yamlSeqIndentOffsetGet); index is then 0 or -1.
+export function yamlSeqItemInsertBuild(
+  source: string,
+  document: Document,
+  seqPath: (string | number)[],
+  index: number,
+  lineList: string[],
+  columnItem: number,
+): YamlEditResult<{ operationList: LineOperation[] }> {
+  const seq = document.getIn(seqPath, true);
+  if (isSeq(seq) && seq.items.length > 0) {
+    if (seq.flow) return resultFail('the list is written in flow form ([a, b]); write it over several lines first');
+    const indexAt = index < 0 ? seq.items.length : index;
+    if (indexAt > seq.items.length) return resultFail(`the list has ${seq.items.length} items, no place ${indexAt}`);
+    const itemFirst = yamlSeqItemLinesGet(source, seq, 0);
+    if (itemFirst.code !== 0) return itemFirst;
+    const itemAt = yamlSeqItemLinesGet(source, seq, Math.min(indexAt, seq.items.length - 1));
+    if (itemAt.code !== 0) return itemAt;
+    const lineAt = indexAt < seq.items.length ? itemAt.data.lineStart : itemAt.data.lineEnd + 1;
+    const lineListShifted = yamlLinesIndentShift(lineList, itemFirst.data.column - columnItem);
+    return { code: 0, data: { operationList: [linesInsertBuild(lineAt, lineListShifted)] }, message: '' };
+  }
+
+  if (index > 0) return resultFail(`the list is empty, no place ${index}`);
+  const key = seqPath[seqPath.length - 1];
+  const mapping = document.getIn(seqPath.slice(0, -1), true);
+  if (typeof key !== 'string' || !isMap(mapping)) return resultFail(`no mapping to hold "${String(key)}" at ${JSON.stringify(seqPath)}`);
+  if (mapping.flow) return resultFail('the item is written as a flow mapping ({ a: 1 }); write it over several lines first');
+  const pair = mapping.items.find((item) => isScalar(item.key) && String(item.key.value) === key) as Pair<Node, Node | null> | undefined;
+  const seqIndentOffset = yamlSeqIndentOffsetGet(source, document);
+
+  if (pair) {
+    const value = pair.value;
+    const isValueEmpty = value === null || (isScalar(value) && valueNodeIsEmpty(source, value));
+    const isValueListEmpty = isSeq(value) && value.items.length === 0;
+    if (!isValueEmpty && !isValueListEmpty) return resultFail(`"${key}" holds a value that is not a list`);
+    const lineIndexKey = lineIndexOfOffset(source, (pair.key.range as [number, number, number])[0]);
+    const columnKey = nodeColumnGet(source, pair.key);
+    const lineListShifted = yamlLinesIndentShift(lineList, columnKey + seqIndentOffset - columnItem);
+    const operationList: LineOperation[] = [];
+    if (isValueListEmpty) operationList.push(keyLineValueSetBuild(source, pair.key, ''));
+    operationList.push(linesInsertBuild(lineIndexKey + 2, lineListShifted));
+    return { code: 0, data: { operationList }, message: '' };
+  }
+
+  const pairFirst = mapping.items[0] as Pair<Node, Node | null> | undefined;
+  if (!pairFirst || !Array.isArray(pairFirst.key?.range)) return resultFail('the mapping has no key to align the list with');
+  const columnKey = nodeColumnGet(source, pairFirst.key);
+  const lineListShifted = yamlLinesIndentShift(lineList, columnKey + seqIndentOffset - columnItem);
+  const lineAt = lineAtAfterNodeGet(source, mapping);
+  return {
+    code: 0,
+    data: { operationList: [linesInsertBuild(lineAt, [`${' '.repeat(columnKey)}${yamlScalarTextBuild(key)}:`, ...lineListShifted])] },
+    message: '',
+  };
+}
+
+// the key a list is the value of, when it is one
+function seqKeyNodeGet(document: Document, seqPath: (string | number)[]): Node | undefined {
+  const key = seqPath[seqPath.length - 1];
+  const mapping = document.getIn(seqPath.slice(0, -1), true);
+  if (typeof key !== 'string' || !isMap(mapping)) return undefined;
+  const pair = mapping.items.find((item) => isScalar(item.key) && String(item.key.value) === key) as Pair<Node, Node | null> | undefined;
+  return pair && Array.isArray(pair.key?.range) ? pair.key : undefined;
 }
 
 // "a:", "  b:", "    c: value" for the path [a, b, c], from indent on

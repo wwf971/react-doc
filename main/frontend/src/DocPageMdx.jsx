@@ -10,6 +10,7 @@ import { DocAssetStore, assetEventTypeList } from './store/DocAssetStore.js';
 import { DocServiceStore, serviceEventTypeList } from './store/DocServiceStore.js';
 import { DocTagStore } from './store/DocTagStore.js';
 import { DocBlockPopupStore } from './store/DocBlockPopupStore.js';
+import { DocSidePanelStore, sidePanelEventTypeList } from './store/DocSidePanelStore.js';
 import { DocEventRouter } from './lib/doc-event.js';
 import { CompStateStore } from './store/CompStateStore.js';
 import { StoreContext, useDocStores } from './store/context.js';
@@ -22,6 +23,9 @@ import { TagOverviewPopup } from '../../comp-doc/tag/TagOverviewPopup.jsx';
 import { AssetPanelPopup } from '../../comp-doc/asset/AssetPanelPopup.jsx';
 import { DocBlockPopup } from '../../comp-doc/popup/DocBlockPopup.jsx';
 import { SourceFilePrompt } from '../../comp-doc/source/SourceFilePrompt.jsx';
+import { SidePanelMovePicker } from '../../comp-doc/side-panel/SidePanelMovePicker.jsx';
+import { SidePanelDragOverlay } from '../../comp-doc/side-panel/SidePanelDragOverlay.jsx';
+import { SidePanelItemContextMenu } from '../../comp-doc/side-panel/SidePanelItemContextMenu.jsx';
 import { DocLanguageProvider, useDocLanguage } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 import { MultiLangControl } from '../../comp-mdx/multi-lang/MultiLangControl.jsx';
 import { DocEditToggle } from '../../comp-doc/edit/DocEditToggle.jsx';
@@ -101,6 +105,9 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // its instance and its state in its asset object
     // (doc_page_impl_service_instance.md)
     const serviceStore = new DocServiceStore({ endpoint: config.service?.endpoint, assetStore });
+    // the side panel: folder open state, and moving items in edit mode
+    // (doc_page_impl_side_panel.md#moving-an-item)
+    const sidePanelStore = new DocSidePanelStore({ sourceStore, docStore, editStore });
     // the event layer (doc_page_impl_event.md): component reports are routed
     // to the domain that answers them; the stores never see onEvent callbacks
     const eventRouter = new DocEventRouter();
@@ -141,7 +148,26 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       typeList: serviceEventTypeList,
       handle: (event) => serviceStore.eventHandle(event),
     });
-    return { sourceStore, sourceFileStore, docStore, configStore, tagStore, compStateStore, editStore, assetStore, blockPopupStore, serviceStore, eventRouter, compById };
+    eventRouter.routeAdd({
+      name: 'sidePanel',
+      typeList: sidePanelEventTypeList,
+      handle: (event) => sidePanelStore.eventHandle(event),
+    });
+    return {
+      sourceStore,
+      sourceFileStore,
+      docStore,
+      configStore,
+      tagStore,
+      compStateStore,
+      editStore,
+      assetStore,
+      blockPopupStore,
+      serviceStore,
+      sidePanelStore,
+      eventRouter,
+      compById,
+    };
   });
   const framework = useMemo(() => makeFramework(stores.docStore), [stores]);
   const contextValue = useMemo(() => ({
@@ -241,6 +267,9 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
               <AssetPanelPopup />
               <DocBlockPopup />
               <SourceFilePrompt />
+              <SidePanelMovePicker />
+              <SidePanelDragOverlay />
+              <SidePanelItemContextMenu />
               <DocSettingsPanel />
             </RootProvider>
           </FrameworkProvider>

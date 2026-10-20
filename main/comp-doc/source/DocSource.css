@@ -92,6 +92,100 @@
   font-size: 0.7rem;
 }
 
+/* ---------- SourceTreeSelect ----------
+   rows as compact as the completion list; the selection is the accent
+   background with the primary text color, as the active sidebar item */
+
+.doc-source-tree {
+  max-height: 14rem;
+  padding: 2px 0;
+  overflow-y: auto;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-background);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  outline: none;
+}
+
+.doc-source-tree:focus-visible {
+  border-color: var(--color-fd-primary);
+}
+
+.doc-source-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding-block: 1px;
+  padding-inline-end: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.doc-source-tree-row:hover {
+  background: var(--color-fd-accent);
+}
+
+.doc-source-tree-row[data-selected] {
+  background: color-mix(in oklab, var(--color-fd-primary) 12%, transparent);
+  color: var(--color-fd-primary);
+}
+
+.doc-source-tree-row[data-disabled] {
+  color: var(--color-fd-muted-foreground);
+  cursor: default;
+}
+
+.doc-source-tree-row[data-disabled]:hover {
+  background: none;
+}
+
+.doc-source-tree-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: none;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+}
+
+.doc-source-tree-toggle:hover {
+  color: var(--color-fd-foreground);
+}
+
+.doc-source-tree-chevron {
+  transition: transform 80ms ease;
+}
+
+.doc-source-tree-chevron.is-expanded {
+  transform: rotate(90deg);
+}
+
+.doc-source-tree-icon {
+  flex: 0 0 auto;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-source-tree-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-source-tree-detail {
+  flex: 0 0 auto;
+  margin-inline-start: 4px;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.7rem;
+}
+
 /* ---------- SourceFilePrompt ---------- */
 
 .doc-source-prompt {
@@ -136,6 +230,37 @@
 .doc-source-prompt-row .doc-source-path-input .doc-edit-value {
   display: block;
   width: 100%;
+}
+
+/* the browse button after the folder, the size of the revert button */
+.doc-source-prompt-browse {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+  align-self: center;
+}
+
+.doc-source-prompt-browse:hover,
+.doc-source-prompt-browse:focus-visible,
+.doc-source-prompt-browse[aria-pressed='true'] {
+  border-color: var(--color-fd-border);
+  background: var(--color-fd-accent);
+  color: var(--color-fd-foreground);
+  outline: none;
+}
+
+.doc-source-prompt-tree {
+  margin-inline-start: calc(3rem + 6px);
+  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 .doc-source-prompt-actions {

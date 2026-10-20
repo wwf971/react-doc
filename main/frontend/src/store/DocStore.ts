@@ -289,10 +289,9 @@ export class DocStore {
   replaceSourceData(sourceData: { configDoc: any; fileManifest: any[] }) {
     const routePrevious = this.routeCurrentPath;
     const hashPrevious = this.docCurrentHash;
+    const itemPrevious = routePrevious ? this.routeResolve(routePrevious) : undefined;
     this.sourceStore.replaceSourceData(sourceData);
-    const routeNext = routePrevious && this.routeResolve(routePrevious)
-      ? routePrevious
-      : this.routeHome;
+    const routeNext = this.routeAfterReplaceGet(routePrevious, itemPrevious);
     // a source reload is not a navigation request: the reader keeps the
     // position in the document while its new text is compiled
     this.navigate(routeNext, hashPrevious, {
@@ -300,6 +299,20 @@ export class DocStore {
       isReplaceUrl: true,
       isRequestVersionKept: true,
     });
+  }
+
+  // the route kept over a source reload. an item without an explicit id has
+  // an id from its position in the tree: after the tree changed (an item
+  // moved), the same route can be another item; the reader then stays on
+  // the document they were reading, wherever its item is now.
+  private routeAfterReplaceGet(routePrevious: string, itemPrevious: any): string {
+    if (!routePrevious) return this.routeHome;
+    const itemNext = this.routeResolve(routePrevious);
+    const isSameItem = itemNext && (!itemPrevious?.docPath || itemNext.docPath === itemPrevious.docPath);
+    if (isSameItem) return routePrevious;
+    const routeDoc = itemPrevious?.docPath ? this.routeForDoc(itemPrevious.docPath) : '';
+    if (routeDoc) return routeDoc;
+    return itemNext ? routePrevious : this.routeHome;
   }
 
   replaceCompById(compById: Record<string, any>) {

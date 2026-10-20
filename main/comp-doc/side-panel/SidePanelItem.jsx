@@ -1,5 +1,5 @@
 import { isValidElement, useEffect, useRef } from 'react';
-import { Pencil } from '../../frontend/UICommon.js';
+import { Move, Pencil } from '../../frontend/UICommon.js';
 import { TagList } from '../../comp-mdx/tag/TagList.jsx';
 import './SidePanelItem.css';
 
@@ -28,12 +28,17 @@ import './SidePanelItem.css';
 //   config.textEditStatus    '' | editing | submitting | error, for this
 //                            rendering of the label (SidePanelItemHost)
 //   config.textEditMessage   why the last save failed
+//   config.isMovable         edit mode: the item can be moved (dragged by its
+//                            row, which the host handles, or placed through
+//                            the move picker)
 //
 // Events emitted:
 //   tagOverviewOpenRequest { tagId }      a tag was clicked
 //   sidePanelTextEditStartRequest         the edit button of the label was clicked
 //   sidePanelTextSubmitRequest { text }   the edited label (Enter, focus left)
 //   sidePanelTextCancelRequest            the edit was dropped (Escape)
+//   sidePanelItemMovePickerOpenRequest    the move button was clicked (with
+//                                         the pointer, where the picker opens)
 //
 // The label is always inside the .doc-side-panel-item host, with or without
 // tags. On the sidebar surface the host wraps long names onto more lines
@@ -45,8 +50,8 @@ import './SidePanelItem.css';
 // before data.textDisplay) is displayed, and cannot be edited.
 //
 // Editing happens in the text span itself, made contenteditable, so the row
-// keeps its size; the edit button sits in a zero-width anchor after the
-// label, styled like a block toolbar button, and is shown on hover, so
+// keeps its size; the edit and move buttons sit in a zero-width anchor after
+// the label, styled like block toolbar buttons, and are shown on hover, so
 // entering and leaving edit mode moves nothing. The label is inside the
 // sidebar link or folder button: both stop their pointer events from
 // reaching it, and the editor keeps its keys from activating it (Space types
@@ -60,6 +65,8 @@ export function SidePanelItem({ data = {}, config = {}, onEvent }) {
   const isTextEditFailed = textEditStatus === 'error';
   const isTextPlain = typeof data.text === 'string';
   const titleText = isTextInvalid ? data.textMessage : (isTextEditFailed ? config.textEditMessage : undefined);
+  const isEditButtonShown = config.isTextEditable === true && isTextPlain && !isTextEditing;
+  const isMoveButtonShown = config.isMovable === true && !isTextEditing;
   return (
     <span className="doc-side-panel-item" data-surface={config.surface ?? 'sidebar'}>
       {isTextEditing ? (
@@ -90,22 +97,42 @@ export function SidePanelItem({ data = {}, config = {}, onEvent }) {
           }}
         />
       ) : null}
-      {config.isTextEditable && isTextPlain && !isTextEditing ? (
+      {isEditButtonShown || isMoveButtonShown ? (
         <span className="doc-side-panel-item-edit">
-          <button
-            type="button"
-            className="doc-side-panel-item-edit-button"
-            title="Edit this label"
-            aria-label="Edit this label"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onEvent?.('sidePanelTextEditStartRequest');
-            }}
-          >
-            <Pencil aria-hidden="true" className="doc-side-panel-item-edit-icon" size={11} strokeWidth={2} />
-          </button>
+          <span className="doc-side-panel-item-edit-group">
+            {isEditButtonShown ? (
+              <button
+                type="button"
+                className="doc-side-panel-item-edit-button"
+                title="Edit this label"
+                aria-label="Edit this label"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onEvent?.('sidePanelTextEditStartRequest');
+                }}
+              >
+                <Pencil aria-hidden="true" className="doc-side-panel-item-edit-icon" size={11} strokeWidth={2} />
+              </button>
+            ) : null}
+            {isMoveButtonShown ? (
+              <button
+                type="button"
+                className="doc-side-panel-item-edit-button"
+                title="Move this item (or drag its row)"
+                aria-label="Move this item"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onEvent?.('sidePanelItemMovePickerOpenRequest', {}, { point: event });
+                }}
+              >
+                <Move aria-hidden="true" className="doc-side-panel-item-edit-icon" size={11} strokeWidth={2} />
+              </button>
+            ) : null}
+          </span>
         </span>
       ) : null}
     </span>

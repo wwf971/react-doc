@@ -46,12 +46,12 @@
   text-underline-offset: 3px;
 }
 
-/* the edit button hangs off a zero-width anchor right after the label, so it
-   takes no room in the row. it looks like a button of the block toolbar
-   (DocEdit.css .doc-edit-toolbar-actions): no frame of its own, the muted
-   icon, the accent background on hover. it is invisible until the row or
-   the button itself is hovered, but always takes the pointer, so the click
-   never falls through to the sidebar link below it. */
+/* the edit and move buttons hang off a zero-width anchor right after the
+   label, so they take no room in the row. they look like buttons of the
+   block toolbar (DocEdit.css .doc-edit-toolbar-actions): no frame of their
+   own, the muted icon, the accent background on hover. they are invisible
+   until the row or a button itself is hovered, but always take the pointer,
+   so the click never falls through to the sidebar link below them. */
 .doc-side-panel-item-edit {
   position: relative;
   display: inline-block;
@@ -60,10 +60,15 @@
   vertical-align: middle;
 }
 
-.doc-side-panel-item-edit-button {
+.doc-side-panel-item-edit-group {
   position: absolute;
   top: -9px;
   left: 5px;
+  display: inline-flex;
+  gap: 1px;
+}
+
+.doc-side-panel-item-edit-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -97,4 +102,267 @@
   background: var(--color-fd-accent);
   color: var(--color-fd-foreground);
   outline: none;
+}
+
+/* ---------- moving (edit mode, sidebar surface) ----------
+   the host wrapper takes no box: the row of fumadocs stays the row. a
+   movable row shows the grab cursor; the row being dragged is dimmed, and
+   while a drag goes on the whole page keeps the grabbing cursor and no row
+   reacts to hover */
+.doc-side-panel-item-host {
+  display: contents;
+}
+
+.doc-side-panel-item-host[data-movable] .doc-side-panel-item[data-surface='sidebar'] {
+  cursor: grab;
+}
+
+.doc-side-panel-item-host[data-dragged] .doc-side-panel-item {
+  opacity: 0.45;
+}
+
+body[data-side-panel-dragging] {
+  cursor: grabbing;
+  user-select: none;
+}
+
+body[data-side-panel-dragging] #nd-sidebar,
+body[data-side-panel-dragging] #nd-sidebar-mobile {
+  pointer-events: none;
+}
+
+/* the drop indicator and the label following the pointer, in a fixed layer
+   above the side panel (SidePanelDragOverlay) */
+.doc-side-panel-drop-line {
+  position: fixed;
+  z-index: 65;
+  border-radius: 1px;
+  background: var(--color-fd-primary);
+  pointer-events: none;
+}
+
+/* the dot at the start of the line marks the depth the item lands at */
+.doc-side-panel-drop-line::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -3px;
+  width: 6px;
+  height: 6px;
+  border: 1.5px solid var(--color-fd-primary);
+  border-radius: 50%;
+  background: var(--color-fd-background);
+}
+
+.doc-side-panel-drop-box {
+  position: fixed;
+  z-index: 65;
+  border: 1.5px solid var(--color-fd-primary);
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--color-fd-primary) 8%, transparent);
+  pointer-events: none;
+}
+
+.doc-side-panel-drop-line[data-blocked] {
+  background: var(--color-fd-muted-foreground);
+  opacity: 0.6;
+}
+
+.doc-side-panel-drop-line[data-blocked]::before {
+  border-color: var(--color-fd-muted-foreground);
+}
+
+.doc-side-panel-drop-box[data-blocked] {
+  border-color: var(--color-fd-muted-foreground);
+  border-style: dashed;
+  background: none;
+}
+
+.doc-side-panel-drag-ghost {
+  position: fixed;
+  z-index: 66;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 16rem;
+  padding: 2px 6px;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-popover, var(--color-fd-background));
+  color: var(--color-fd-popover-foreground, var(--color-fd-foreground));
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.12);
+  font-size: 0.78rem;
+  pointer-events: none;
+}
+
+.doc-side-panel-drag-ghost-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-side-panel-drag-ghost-reason {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+
+/* a move being saved, or why the last one failed, where the item was dropped */
+.doc-side-panel-move-notice {
+  position: fixed;
+  z-index: 66;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 20rem;
+  padding: 2px 6px;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-popover, var(--color-fd-background));
+  color: var(--color-fd-muted-foreground);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.12);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.doc-side-panel-move-notice[data-status='error'] {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+/* ---------- the move picker (SidePanelMovePicker) ----------
+   the look of the location prompt of the source layer (DocSource.css
+   .doc-source-prompt) */
+.doc-side-panel-move-picker {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(20rem, calc(100vw - 16px));
+  padding: 6px 8px;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-popover, var(--color-fd-background));
+  color: var(--color-fd-popover-foreground, var(--color-fd-foreground));
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.16);
+  font-size: 0.8rem;
+}
+
+/* the header is the drag handle, aside from the close button */
+.doc-side-panel-move-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: -6px -8px 0;
+  padding: 4px 6px 2px;
+  cursor: grab;
+  user-select: none;
+}
+
+.doc-side-panel-move-picker[data-dragging] .doc-side-panel-move-picker-head {
+  cursor: grabbing;
+}
+
+.doc-side-panel-move-picker-title {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+}
+
+.doc-side-panel-move-picker-close {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+}
+
+.doc-side-panel-move-picker-close:hover:not(:disabled),
+.doc-side-panel-move-picker-close:focus-visible:not(:disabled) {
+  background: var(--color-fd-accent);
+  color: var(--color-fd-foreground);
+  outline: none;
+}
+
+.doc-side-panel-move-picker-close:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.doc-side-panel-move-picker-title-text {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.doc-side-panel-move-picker-item {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-side-panel-move-picker-hint {
+  margin: 0;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+}
+
+.doc-side-panel-move-picker-tree {
+  max-height: 16rem;
+}
+
+.doc-side-panel-move-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.doc-side-panel-move-picker-button {
+  padding: 1px 8px;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-background);
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.doc-side-panel-move-picker-button:hover:not(:disabled),
+.doc-side-panel-move-picker-button:focus-visible:not(:disabled) {
+  background: var(--color-fd-accent);
+  outline: none;
+}
+
+.doc-side-panel-move-picker-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.doc-side-panel-move-picker-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+}
+
+.doc-side-panel-move-picker-message {
+  margin: 0;
+  color: var(--color-fd-destructive, #dc2626);
+  font-size: 0.72rem;
+  line-height: 1.3;
 }

@@ -130,7 +130,10 @@ function serverCreate(dir, plugin, { base = '/' } = {}) {
       sidePanel: {
         configDir: dir,
         fileListGet: () => [path.join(dir, 'side-panel.yaml')],
-        onFileWritten: (filePath, text) => sidePanelWrittenList.push({ filePath, text }),
+        onFileListWritten: (fileList) => {
+          sidePanelWrittenList.push(...fileList);
+          return '';
+        },
       },
     }),
   ];

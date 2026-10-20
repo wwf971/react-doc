@@ -63,6 +63,47 @@ export function lineOperationApply(textCurrent: string, operation: LineOperation
   return lineListNext.join(eol) + (isTrailingNewline ? eol : '');
 }
 
+// several operations built against the same text, applied together. their
+// line numbers are those of textCurrent, so a caller never shifts them for
+// one another. they must not overlap: a range (replaceLines, deleteLines)
+// shares no line with another range, and an insertion point lies before,
+// after, or at the start of a range, never inside it. insertions at the
+// same point keep the order of the list. replaceAll is not accepted here.
+//
+// applied from the bottom of the file up, so every operation still finds its
+// lines where it was built: at the same line, a range goes before an
+// insertion (the insertion then lands before what replaced the range).
+export function lineOperationListApply(textCurrent: string, operationList: LineOperation[]): string {
+  const entryList = operationList.map((operation, index) => {
+    if (operation.action === 'replaceAll') throw new Error('replaceAll cannot be combined with other operations');
+    const isInsert = operation.action === 'insertLines';
+    return {
+      operation,
+      index,
+      isInsert,
+      lineStart: isInsert ? operation.lineAt : operation.lineStart,
+      lineEnd: isInsert ? operation.lineAt - 1 : operation.lineEnd,
+    };
+  });
+  for (const entryA of entryList) {
+    for (const entryB of entryList) {
+      if (entryA === entryB || entryA.isInsert) continue;
+      const isOverlap = entryB.isInsert
+        ? entryB.lineStart > entryA.lineStart && entryB.lineStart <= entryA.lineEnd
+        : entryB.lineStart <= entryA.lineEnd && entryB.lineEnd >= entryA.lineStart;
+      if (isOverlap) throw new Error(`line operations overlap at lines ${entryA.lineStart}..${entryA.lineEnd}`);
+    }
+  }
+  const entryListOrdered = [...entryList].sort((entryA, entryB) => {
+    if (entryA.lineStart !== entryB.lineStart) return entryB.lineStart - entryA.lineStart;
+    if (entryA.isInsert !== entryB.isInsert) return entryA.isInsert ? 1 : -1;
+    return entryB.index - entryA.index;
+  });
+  let text = textCurrent;
+  for (const entry of entryListOrdered) text = lineOperationApply(text, entry.operation);
+  return text;
+}
+
 // lines of a replaceLines / insertLines text: every "\n" separates two lines,
 // so "a\n" is ["a", ""]; "" is [].
 export function operationLineListGet(text: string): string[] {
