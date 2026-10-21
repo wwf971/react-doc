@@ -3,10 +3,12 @@ import { compDefine } from '../registry/comp-registry.js';
 import { ServiceDashboardHost } from './ServiceDashboardHost.jsx';
 import { DASHBOARD_DATA_LANG, dashboardDataParse, dashboardDataTextBuild } from './service-dashboard-data.js';
 
-// The dashboards of service types as components of the registry (design:
+// The dashboards of service instances as components of the registry (design:
 // doc_page_impl_service_instance.md#dashboards-in-the-registry). A
-// dashboard's component id names it: service/{typeId}/{dashboardId}, and the
-// id is also its tag name in a document, so no compRegistry entry is needed:
+// dashboard's component id names it: service/{templateName}/{dashboardId},
+// the template the instances it may show were created from and the
+// dashboard of theirs, and the id is also its tag name in a document, so no
+// compRegistry entry is needed:
 //
 //   <!--renderComp=service/note-db/default-->
 //   ```asset
@@ -14,11 +16,11 @@ import { DASHBOARD_DATA_LANG, dashboardDataParse, dashboardDataTextBuild } from 
 //   objectId: w4veeme6sff
 //   ```
 //
-// The definition is built from the id alone, the same for every type: it
-// exists while the backend is down or the type is unknown, so the block
-// still renders its frame and says what is missing. What the type declares
-// (its label, its dashboards, its module) comes from the backend at render
-// time, through DocServiceStore.
+// The definition is built from the id alone, the same for every template:
+// it exists while the backend is down or the template is unknown, so the
+// block still renders its frame and says what is missing. What the instance
+// declares (its label, its dashboards, its module) comes from the backend at
+// render time, through DocServiceStore.
 //
 // A dashboard is asset-only and saves in place, the way ExcelUniver does: its
 // data is the instance it shows and its own state ({ serviceId, state },
@@ -36,15 +38,15 @@ const REGEX_DASHBOARD_COMP_ID = /^service\/([a-z0-9][a-z0-9_-]*)\/([a-z][a-zA-Z0
 
 const definitionByCompId = new Map();
 
-export function serviceDashboardCompIdBuild(typeId, dashboardId) {
-  return `${SERVICE_DASHBOARD_COMP_ID_PREFIX}${typeId}/${dashboardId}`;
+export function serviceDashboardCompIdBuild(templateName, dashboardId) {
+  return `${SERVICE_DASHBOARD_COMP_ID_PREFIX}${templateName}/${dashboardId}`;
 }
 
-// { typeId, dashboardId } of a dashboard's component id, or undefined
+// { templateName, dashboardId } of a dashboard's component id, or undefined
 export function serviceDashboardCompIdParse(compId) {
   const match = REGEX_DASHBOARD_COMP_ID.exec(String(compId ?? ''));
   if (!match) return undefined;
-  return { typeId: match[1], dashboardId: match[2] };
+  return { templateName: match[1], dashboardId: match[2] };
 }
 
 // the registry definition of a dashboard's component id; undefined for any
@@ -53,12 +55,12 @@ export function serviceDashboardDefinitionGet(compId) {
   const parsed = serviceDashboardCompIdParse(compId);
   if (!parsed) return undefined;
   if (!definitionByCompId.has(compId)) {
-    definitionByCompId.set(compId, serviceDashboardDefine(parsed.typeId, parsed.dashboardId));
+    definitionByCompId.set(compId, serviceDashboardDefine(parsed.templateName, parsed.dashboardId));
   }
   return definitionByCompId.get(compId);
 }
 
-function serviceDashboardDefine(typeId, dashboardId) {
+function serviceDashboardDefine(templateName, dashboardId) {
   return compDefine(ServiceDashboardHost, {
     componentType: SERVICE_DASHBOARD_COMPONENT_TYPE,
     placementList: ['commentBlock', SERVICE_DASHBOARD_PLACEMENT_SETTINGS],
@@ -71,15 +73,15 @@ function serviceDashboardDefine(typeId, dashboardId) {
           state: parsed.state,
           dataMessage: parsed.message,
         },
-        config: { serviceTypeId: typeId, serviceDashboardId: dashboardId },
+        config: { serviceTemplateName: templateName, serviceDashboardId: dashboardId },
       };
     },
     expose: {
       meta: {
-        label: `${typeId} · ${dashboardId}`,
-        description: `the dashboard ${dashboardId} of the service type ${typeId}`,
+        label: `${templateName} · ${dashboardId}`,
+        description: `the dashboard ${dashboardId} of the instances of the service template ${templateName}`,
         isServiceDashboard: true,
-        serviceTypeId: typeId,
+        serviceTemplateName: templateName,
         serviceDashboardId: dashboardId,
         isAssetOnly: true,
         assetSaveMode: 'inPlace',

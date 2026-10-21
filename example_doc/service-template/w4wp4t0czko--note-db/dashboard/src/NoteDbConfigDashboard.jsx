@@ -6,7 +6,8 @@ import { serviceApiCall, serviceJobRun } from './service-call.js';
 // queue of the instance (the apis called while it runs wait for it).
 //
 //   config.service.instance   the instance as the backend lists it: its
-//                             config is what service.yaml says
+//                             config and the template it was created from
+//                             are what its service.yaml says
 export function NoteDbConfigDashboard({ config = {}, onEvent }) {
   const instance = config.service?.instance;
   const [stat, setStat] = useState(null);
@@ -41,6 +42,11 @@ export function NoteDbConfigDashboard({ config = {}, onEvent }) {
       <div className="note-db-grid">
         <span className="note-db-key">instance</span>
         <span>{instance?.name} <span className="note-db-muted">({instance?.serviceId})</span></span>
+        <span className="note-db-key">created from</span>
+        <span>
+          {instance?.template?.name}{' '}
+          <span className="note-db-muted">(template {instance?.template?.templateId}, version {instance?.template?.versionId})</span>
+        </span>
         {Object.entries(instance?.config ?? {}).map(([key, value]) => (
           <ConfigRow key={key} name={key} value={value} />
         ))}

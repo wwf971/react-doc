@@ -1,14 +1,15 @@
 """note-db: notes kept in a sqlite database of the instance's folder.
 
-The example of a stateful service type (example_doc/service-instance.md).
-Every instance has its own notes.sqlite; the database is ignored by git.
+The example of a stateful service (example_doc/service-instance.md). This
+file is the template's; every instance created from the template runs its
+own copy, and keeps its own notes.sqlite (created by start(), ignored by git).
 """
 
 import os
 import sqlite3
 import time
 
-from service_define import ServiceError, ServiceType, api, param, returns
+from service_define import Service, ServiceError, api, param, returns
 from service_util import time_text_get
 
 NOTE_SCHEMA = {
@@ -23,7 +24,7 @@ NOTE_SCHEMA = {
 }
 
 
-class NoteDb(ServiceType):
+class NoteDb(Service):
     expose = {
         'meta': {
             'label': 'Note DB',
@@ -219,4 +220,4 @@ class NoteDb(ServiceType):
         return title
 
 
-SERVICE_TYPE = NoteDb
+SERVICE_CLASS = NoteDb

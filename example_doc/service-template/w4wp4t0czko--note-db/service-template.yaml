@@ -1,0 +1,12 @@
+templateId: w4wp4t0czko
+name: note-db
+description: notes kept in a sqlite database; every instance created from it keeps its own database
+timeCreated: 20261024_20044940+09
+versionId: w4wp4t0yp9u
+versionList:
+- versionId: w4wp4t0yp9u
+  time: 20261024_20044940+09
+  note: the note-db example
+config:
+  databaseFile: notes.sqlite
+  titleLengthMax: 120

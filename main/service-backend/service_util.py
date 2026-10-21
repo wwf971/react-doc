@@ -8,10 +8,15 @@ import time
 
 import yaml
 
-# the separator of a folder name {serviceId}--{name}, as for asset objects
-DIR_SEPARATOR = '--'
+# the separator of a template folder name {templateId}--{name}, as for asset objects
+TEMPLATE_DIR_SEPARATOR = '--'
+# the separator of an instance folder name {templateName}-inst-{serviceId}
+INSTANCE_DIR_SEPARATOR = '-inst-'
 NAME_LENGTH_MAX = 80
 REGEX_ID = re.compile(r'^[0-9a-z]+$')
+# a template name is also the middle of a dashboard's component id
+# (service/{templateName}/{dashboardId}), so it is kept to what an id may hold
+REGEX_TEMPLATE_NAME = re.compile(r'^[a-z0-9][a-z0-9_-]*$')
 _BASE36_DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz'
 
 
@@ -41,8 +46,8 @@ def time_text_get():
     return time.strftime('%Y%m%d_%H%M%S', local) + f'{centisecond:02d}' + zone_text
 
 
-def name_normalize(name_input):
-    """A name for a folder {serviceId}--{name}: the rules of asset object names.
+def instance_name_normalize(name_input):
+    """The name of an instance: a label kept in its service.yaml, not in its folder name.
 
     Raises ValueError with the reason.
     """
@@ -51,23 +56,48 @@ def name_normalize(name_input):
         raise ValueError('the name is empty')
     if len(name) > NAME_LENGTH_MAX:
         raise ValueError(f'the name is longer than {NAME_LENGTH_MAX} characters')
-    if DIR_SEPARATOR in name:
-        raise ValueError(f'the name cannot contain "{DIR_SEPARATOR}"')
-    if re.search(r'[/\\:*?"<>|\x00-\x1f]', name):
-        raise ValueError('the name cannot contain / \\ : * ? " < > | or control characters')
-    if name.endswith('.'):
-        raise ValueError('the name cannot end with a dot')
+    if re.search(r'[\x00-\x1f]', name):
+        raise ValueError('the name cannot contain control characters')
     return name
 
 
-def dir_name_split(dir_name):
-    """(serviceId, name) of a folder name, or None when it is not {id}--{name}."""
-    if DIR_SEPARATOR not in dir_name:
+def template_name_check(name):
+    """The reason a template name cannot be used, '' when it can."""
+    if not isinstance(name, str) or name == '':
+        return 'the template name is empty'
+    if len(name) > NAME_LENGTH_MAX:
+        return f'the template name is longer than {NAME_LENGTH_MAX} characters'
+    if not REGEX_TEMPLATE_NAME.match(name):
+        return 'a template name is lowercase letters, digits, - and _, starting with a letter or a digit'
+    if TEMPLATE_DIR_SEPARATOR in name:
+        return f'a template name cannot contain "{TEMPLATE_DIR_SEPARATOR}"'
+    return ''
+
+
+def template_dir_name_split(dir_name):
+    """(templateId, name) of a template folder name, or None when it is not {id}--{name}."""
+    if TEMPLATE_DIR_SEPARATOR not in dir_name:
         return None
-    service_id, name = dir_name.split(DIR_SEPARATOR, 1)
-    if not REGEX_ID.match(service_id) or name == '':
+    template_id, name = dir_name.split(TEMPLATE_DIR_SEPARATOR, 1)
+    if not REGEX_ID.match(template_id) or template_name_check(name) != '':
         return None
-    return service_id, name
+    return template_id, name
+
+
+def instance_dir_name_build(template_name, service_id):
+    return f'{template_name}{INSTANCE_DIR_SEPARATOR}{service_id}'
+
+
+def instance_dir_name_split(dir_name):
+    """(templateName, serviceId) of an instance folder name, or None when it is not
+    {templateName}-inst-{serviceId}. An id never holds a '-', so the id is what
+    follows the last separator."""
+    if INSTANCE_DIR_SEPARATOR not in dir_name:
+        return None
+    template_name, service_id = dir_name.rsplit(INSTANCE_DIR_SEPARATOR, 1)
+    if template_name == '' or not REGEX_ID.match(service_id):
+        return None
+    return template_name, service_id
 
 
 def yaml_read(path):

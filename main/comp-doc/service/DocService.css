@@ -112,9 +112,9 @@
 
 .doc-service-problem[data-kind='backendDown'],
 .doc-service-problem[data-kind='serviceNotFound'],
-.doc-service-problem[data-kind='typeNotFound'],
-.doc-service-problem[data-kind='typeError'],
-.doc-service-problem[data-kind='typeMismatch'],
+.doc-service-problem[data-kind='templateNotFound'],
+.doc-service-problem[data-kind='templateMismatch'],
+.doc-service-problem[data-kind='dashboardNotFound'],
 .doc-service-problem[data-kind='moduleError'] {
   color: var(--color-fd-destructive, #dc2626);
 }
@@ -164,6 +164,40 @@
 .doc-service-settings-muted {
   color: var(--color-fd-muted-foreground);
   font-size: 0.74rem;
+}
+
+/* the area of the templates and the area of the instances, apart */
+.doc-service-area {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--color-fd-border);
+}
+
+.doc-service-settings-subtitle {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--color-fd-muted-foreground);
+}
+
+/* a name that shows another card's detail */
+.doc-service-link {
+  margin-right: 0.4rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-fd-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.doc-service-link:hover {
+  text-decoration: underline;
+}
+
+.doc-service-detail-line {
+  display: block;
 }
 
 /* near-square cards, one per instance, and the card that creates one */

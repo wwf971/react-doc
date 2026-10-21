@@ -17,7 +17,7 @@ import './DocEdit.css';
 //   Services    [▦ Note DB · Notes] [▦ Note DB · Settings] …
 //
 // the rows list the basic blocks, the components marked isInsertCommon and
-// the dashboards of the service types the backend knows
+// the dashboards of the service templates the backend knows
 // (doc_page_impl_service_instance.md#creating-a-dashboard);
 // the search finds every entry by tag name, label and description, and its
 // results open in a dropdown floating over the rows, so the menu keeps its

@@ -43,6 +43,13 @@ CONTENT_TYPE_BY_EXT = {
 }
 
 
+def script_expose_get(script, label):
+    """The exposure of a loaded script; ServiceError -1 when it failed to load."""
+    if script.status != 'ready':
+        raise ServiceError(-1, f'the service.py of {label} failed to load: {script.message}')
+    return script.expose
+
+
 def handler_class_build(runtime):
 
     class ServiceRequestHandler(BaseHTTPRequestHandler):
@@ -80,6 +87,12 @@ def handler_class_build(runtime):
             self.end_headers()
             self.wfile.write(body)
 
+        def icon_send(self, dir_path, expose, label):
+            icon = (expose or {}).get('meta', {}).get('icon', '')
+            if icon == '':
+                raise ServiceError(-3, f'{label} has no icon')
+            self.file_send(dir_path, icon)
+
         def body_read(self):
             length = int(self.headers.get('Content-Length') or 0)
             if length > BODY_SIZE_MAX:
@@ -103,31 +116,43 @@ def handler_class_build(runtime):
             try:
                 if path == '/status':
                     self.response_send({'code': 0, 'data': runtime.status_get()})
-                elif path == '/type/list':
-                    self.response_send({'code': 0, 'data': runtime.type_list_get()})
-                elif path == '/type/openrpc':
-                    entry = runtime.type_get(query.get('typeId', ''))
-                    if entry.status != 'ready':
-                        raise ServiceError(-1, f'the service type {entry.type_id} failed to load: {entry.message}')
-                    self.response_send({'code': 0, 'data': openrpc_document_build(entry.type_id, entry.expose)})
-                elif path.startswith('/type/dashboard/'):
-                    type_id, _, relative_path = path[len('/type/dashboard/'):].partition('/')
-                    entry = runtime.type_get(unquote(type_id))
-                    if entry.status != 'ready':
-                        raise ServiceError(-1, f'the service type {entry.type_id} failed to load: {entry.message}')
-                    remote_dir = os.path.join(entry.dir_path, entry.expose['dashboardRemote']['dir'])
-                    self.file_send(remote_dir, unquote(relative_path))
-                elif path.startswith('/type/icon/'):
-                    entry = runtime.type_get(unquote(path[len('/type/icon/'):]))
-                    icon = (entry.expose or {}).get('meta', {}).get('icon', '')
-                    if icon == '':
-                        raise ServiceError(-3, f'the service type {entry.type_id} has no icon')
-                    self.file_send(entry.dir_path, icon)
+                elif path == '/template/list':
+                    self.response_send({'code': 0, 'data': runtime.template_list_get()})
+                elif path == '/template/get':
+                    template = runtime.template_get(query.get('templateId', ''))
+                    self.response_send({'code': 0, 'data': template.info_get()})
+                elif path == '/template/openrpc':
+                    template = runtime.template_get(query.get('templateId', ''))
+                    expose = script_expose_get(template.script, f'the template {template.name}')
+                    info_extra = {'x-templateId': template.template_id, 'x-templateName': template.name,
+                                  'x-templateVersionId': template.template_config.get('versionId', '')}
+                    self.response_send({'code': 0, 'data': openrpc_document_build(expose, info_extra)})
+                elif path.startswith('/template/icon/'):
+                    template = runtime.template_get(unquote(path[len('/template/icon/'):]))
+                    self.icon_send(template.dir_path, template.script.expose, f'the template {template.name}')
                 elif path == '/instance/list':
                     self.response_send({'code': 0, 'data': runtime.instance_list_get()})
                 elif path == '/instance/get':
                     instance = runtime.instance_get(query.get('serviceId', ''))
                     self.response_send({'code': 0, 'data': instance.info_get()})
+                elif path == '/instance/openrpc':
+                    instance = runtime.instance_get(query.get('serviceId', ''))
+                    expose = script_expose_get(instance.script, f'the instance {instance.service_id}')
+                    template_record = instance.service_config.get('template') or {}
+                    info_extra = {'x-serviceId': instance.service_id,
+                                  'x-templateId': template_record.get('templateId', ''),
+                                  'x-templateName': template_record.get('name', ''),
+                                  'x-templateVersionId': template_record.get('versionId', '')}
+                    self.response_send({'code': 0, 'data': openrpc_document_build(expose, info_extra)})
+                elif path.startswith('/instance/icon/'):
+                    instance = runtime.instance_get(unquote(path[len('/instance/icon/'):]))
+                    self.icon_send(instance.dir_path, instance.script.expose, f'the instance {instance.service_id}')
+                elif path.startswith('/instance/dashboard/'):
+                    service_id, _, relative_path = path[len('/instance/dashboard/'):].partition('/')
+                    instance = runtime.instance_get(unquote(service_id))
+                    expose = script_expose_get(instance.script, f'the instance {instance.service_id}')
+                    remote_dir = os.path.join(instance.dir_path, expose['dashboardRemote']['dir'])
+                    self.file_send(remote_dir, unquote(relative_path))
                 elif path == '/job/get':
                     self.response_send({'code': 0, 'data': runtime.job_get(query.get('serviceId', ''), query.get('jobId', ''))})
                 else:
@@ -142,7 +167,10 @@ def handler_class_build(runtime):
             try:
                 body = self.body_read()
                 if path == '/instance/create':
-                    data = runtime.instance_create(body.get('typeId', ''), body.get('name', ''), body.get('description', ''), body.get('config'))
+                    data = runtime.instance_create(body.get('templateId', ''), body.get('name', ''), body.get('description', ''), body.get('config'))
+                    self.response_send({'code': 0, 'data': data})
+                elif path == '/template/version/new':
+                    data = runtime.template_version_new(body.get('templateId', ''), body.get('note', ''))
                     self.response_send({'code': 0, 'data': data})
                 elif path == '/api/call':
                     self.response_send(runtime.api_call(body.get('serviceId', ''), body.get('api', ''), body.get('params')))
@@ -176,7 +204,7 @@ def main():
 
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
-    print(f'[service] {len(runtime.type_by_id)} types, {len(runtime.instance_by_id)} instances; listening on http://{host}:{port}')
+    print(f'[service] {len(runtime.template_by_id)} templates, {len(runtime.instance_by_id)} instances; listening on http://{host}:{port}')
     try:
         server.serve_forever()
     finally:

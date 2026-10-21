@@ -3,9 +3,10 @@ import { SERVICE_CODE_BACKEND_DOWN, serviceBackendApiCreate } from '../lib/doc-s
 import { remoteModuleLoad } from '../lib/doc-service-federation.js';
 import { dashboardDataTextBuild } from '../../../comp-doc/service/service-dashboard-data.js';
 
-// The service instances of the page (design: doc_page_impl_service_instance.md).
-// The services run in the service backend; this store knows what the
-// backend last said about them, loads the dashboard modules of the types,
+// The service templates and instances of the page (design:
+// doc_page_impl_service_instance.md). The services run in the service
+// backend; this store knows what the backend last said about them, creates
+// instances from templates, loads the dashboard modules of the instances,
 // tells a dashboard what keeps it from showing, and answers the events of
 // the dashboards (eventHandle):
 //
@@ -15,18 +16,23 @@ import { dashboardDataTextBuild } from '../../../comp-doc/service/service-dashbo
 //                     'down'     the development server answered that the backend cannot be reached
 //   backendMessage    why it is down, as the server said
 //   backendInfo       the backend's status (its folders, the problems of its scan)
-//   typeList          the service types: { typeId, status, message, folder, expose, dashboardBuild }
-//   instanceList      the instances: { serviceId, name, typeId, description, isEnabled, config,
-//                     status, message, folder, dirName, queueLength, apiRunning }
-//   moduleByTypeId    the dashboard module of each type: { status, module, message, entryUrl }
-//   settings          the Services tab of the settings panel: the instance chosen,
-//                     the creation of an instance, and the state of the config
-//                     dashboards shown there (in memory: a tab is no document)
+//   templateList      the templates: { templateId, name, description, versionId, versionList, config,
+//                     status, message, folder, dirName, expose, dashboardBuild }. listed, never run
+//   instanceList      the instances: { serviceId, name, description, isEnabled, template, config,
+//                     status, message, folder, dirName, expose, dashboardBuild, queueLength, apiRunning };
+//                     template is { templateId, name, versionId }, what the instance was created from
+//   moduleByServiceId the dashboard module of each instance (every instance serves its own copy):
+//                     { status, module, message, entryUrl }
+//   settings          the Services tab of the settings panel: the template and the instance
+//                     chosen, the creation of an instance and of a template version, and the
+//                     state of the config dashboards shown there (in memory: a tab is no document)
 //
-// a dashboard names what it shows by { typeId, dashboardId, serviceId }
-// (a DashboardRef): the type and the dashboard by its component id, the
-// instance by its data. dashboardProblemGet says why it cannot show, in
-// the order a reader can fix it.
+// a dashboard names what it shows by { templateName, dashboardId, serviceId }
+// (a DashboardRef): the template and the dashboard by its component id, the
+// instance by its data. the template name is matched against the name every
+// instance recorded when it was created, so a dashboard keeps working when its
+// template is renamed or removed. dashboardProblemGet says why it cannot
+// show, in the order a reader can fix it.
 
 export const serviceEventTypeList = [
   'serviceApiCallRequest',
@@ -45,21 +51,22 @@ const BACKEND_POLL_MS = 15000;
 
 export type ServiceResult = { code: number; data?: any; message: string };
 
-export type DashboardRef = { typeId: string; dashboardId: string; serviceId: string };
+export type DashboardRef = { templateName: string; dashboardId: string; serviceId: string };
 
 export type DashboardProblemKind =
   | 'backendNone'
   | 'loading'
   | 'backendDown'
-  | 'typeNotFound'
-  | 'typeError'
-  | 'dashboardNotFound'
+  | 'templateNotFound'
   | 'serviceNotBound'
   | 'serviceNotFound'
-  | 'typeMismatch'
+  | 'templateMismatch'
   | 'serviceNotReady'
+  | 'dashboardNotFound'
   | 'moduleNotBuilt'
   | 'moduleError';
+
+type PendingState = { status: 'idle' | 'submitting' | 'error'; message: string };
 
 export type DashboardProblem = { kind: DashboardProblemKind; message: string };
 
@@ -93,14 +100,16 @@ export class DocServiceStore {
   backendStatus: 'none' | 'loading' | 'up' | 'down' = 'none';
   backendMessage = '';
   backendInfo: any = null;
-  typeList: any[] = [];
+  templateList: any[] = [];
   instanceList: any[] = [];
   isRefreshing = false;
-  moduleByTypeId: Record<string, ModuleState> = {};
+  moduleByServiceId: Record<string, ModuleState> = {};
   settings = {
+    templateIdSelected: '',
     serviceIdSelected: '',
     stateByServiceId: {} as Record<string, any>,
-    create: { status: 'idle' as 'idle' | 'submitting' | 'error', message: '' },
+    create: { status: 'idle', message: '' } as PendingState,
+    versionNew: { status: 'idle', message: '' } as PendingState,
   };
   refreshPromise: Promise<void> | undefined;
   // the writes of each dashboard object, one after another: a write needs
@@ -123,8 +132,8 @@ export class DocServiceStore {
       writeChainByObjectKey: false,
       refreshTimer: false,
       isDisposed: false,
-      moduleByTypeId: observable.shallow,
-      typeList: observable.ref,
+      moduleByServiceId: observable.shallow,
+      templateList: observable.ref,
       instanceList: observable.ref,
       backendInfo: observable.ref,
     });
@@ -142,8 +151,8 @@ export class DocServiceStore {
 
   // ---------- the backend ----------
 
-  // the status, the types and the instances, asked again. the backend scans
-  // its folders on every listing, so an instance added by hand is seen here
+  // the status, the templates and the instances, asked again. the backend
+  // scans its folders on every listing, so a folder added by hand is seen here
   refresh(): Promise<void> {
     if (!this.backend) return Promise.resolve();
     if (this.refreshPromise) return this.refreshPromise;
@@ -154,16 +163,16 @@ export class DocServiceStore {
         runInAction(() => this.backendFailureAccept(resultStatus));
         return;
       }
-      const [resultType, resultInstance] = await Promise.all([this.backend!.typeList(), this.backend!.instanceList()]);
+      const [resultTemplate, resultInstance] = await Promise.all([this.backend!.templateList(), this.backend!.instanceList()]);
       runInAction(() => {
         this.backendInfo = resultStatus.data;
-        if (resultType.code !== 0 || resultInstance.code !== 0) {
-          this.backendFailureAccept(resultType.code !== 0 ? resultType : resultInstance);
+        if (resultTemplate.code !== 0 || resultInstance.code !== 0) {
+          this.backendFailureAccept(resultTemplate.code !== 0 ? resultTemplate : resultInstance);
           return;
         }
         this.backendStatus = 'up';
         this.backendMessage = '';
-        this.typeList = resultType.data;
+        this.templateList = resultTemplate.data;
         this.instanceList = resultInstance.data;
       });
     })().finally(() => {
@@ -201,60 +210,99 @@ export class DocServiceStore {
     return '';
   }
 
-  // ---------- types and instances ----------
+  // ---------- templates and instances ----------
 
-  typeGet(typeId: string): any {
-    return this.typeList.find((type) => type.typeId === typeId);
+  templateGet(templateId: string): any {
+    return this.templateList.find((template) => template.templateId === templateId);
+  }
+
+  templateGetByName(name: string): any {
+    return this.templateList.find((template) => template.name === name);
   }
 
   instanceGet(serviceId: string): any {
     return this.instanceList.find((instance) => instance.serviceId === serviceId);
   }
 
-  instanceListOfType(typeId: string): any[] {
-    return this.instanceList.filter((instance) => instance.typeId === typeId);
+  // the instances created from a template, by the id they recorded
+  instanceListOfTemplate(templateId: string): any[] {
+    return this.instanceList.filter((instance) => instance.template?.templateId === templateId);
   }
 
-  dashboardDefineGet(typeId: string, dashboardId: string): any {
-    return this.typeGet(typeId)?.expose?.dashboardList?.find((dashboard: any) => dashboard.id === dashboardId);
+  // the instances a dashboard service/{templateName}/… may show: those that
+  // recorded the template name when they were created, whether or not the
+  // template is still there
+  instanceListOfTemplateName(templateName: string): any[] {
+    return this.instanceList.filter((instance) => instance.template?.name === templateName);
   }
 
-  // the dashboard of a purpose (default, config): every type has exactly one of each
-  dashboardIdOfPurposeGet(typeId: string, purpose: 'default' | 'config'): string {
-    return this.typeGet(typeId)?.expose?.dashboardList?.find((dashboard: any) => dashboard.purpose === purpose)?.id ?? '';
+  // a dashboard an instance declares, from its own script
+  dashboardDefineGet(serviceId: string, dashboardId: string): any {
+    return this.instanceGet(serviceId)?.expose?.dashboardList?.find((dashboard: any) => dashboard.id === dashboardId);
   }
 
-  // every dashboard of the types that loaded, for the insert menu
-  // (edit-template.js): [{ typeId, typeLabel, dashboardId, dashboardLabel, description }]
+  // the dashboard of a purpose (default, config) of a script's exposure: every
+  // script has exactly one of each
+  dashboardIdOfPurposeGet(expose: any, purpose: 'default' | 'config'): string {
+    return expose?.dashboardList?.find((dashboard: any) => dashboard.purpose === purpose)?.id ?? '';
+  }
+
+  // every dashboard of the templates that can be used, for the insert menu
+  // (edit-template.js), then the dashboards of the instances whose template
+  // name no template has any more (the first such instance of each name):
+  // [{ templateName, label, dashboardId, dashboardLabel, description }]
   get dashboardInsertList(): any[] {
     const list: any[] = [];
-    for (const type of this.typeList) {
-      if (type.status !== 'ready') continue;
-      for (const dashboard of type.expose.dashboardList) {
+    const templateNameDoneSet = new Set<string>();
+    const exposeListAdd = (templateName: string, expose: any) => {
+      templateNameDoneSet.add(templateName);
+      for (const dashboard of expose.dashboardList) {
         list.push({
-          typeId: type.typeId,
-          typeLabel: type.expose.meta.label,
+          templateName,
+          label: expose.meta.label,
           dashboardId: dashboard.id,
           dashboardLabel: dashboard.label,
-          description: dashboard.description || type.expose.meta.description,
+          description: dashboard.description || expose.meta.description,
         });
       }
+    };
+    for (const template of this.templateList) {
+      if (template.status === 'ready') exposeListAdd(template.name, template.expose);
+    }
+    for (const instance of this.instanceList) {
+      const templateName = instance.template?.name;
+      if (!templateName || templateNameDoneSet.has(templateName) || !instance.expose) continue;
+      exposeListAdd(templateName, instance.expose);
     }
     return list;
   }
 
-  typeIconUrlGet(typeId: string): string {
-    if (!this.backend || !this.typeGet(typeId)?.expose?.meta?.icon) return '';
-    return this.backend.typeIconUrlGet(typeId);
+  templateIconUrlGet(templateId: string): string {
+    if (!this.backend || !this.templateGet(templateId)?.expose?.meta?.icon) return '';
+    return this.backend.templateIconUrlGet(templateId);
   }
 
-  async instanceCreate(input: { typeId: string; name: string; description?: string; config?: Record<string, any> }): Promise<ServiceResult> {
+  instanceIconUrlGet(serviceId: string): string {
+    if (!this.backend || !this.instanceGet(serviceId)?.expose?.meta?.icon) return '';
+    return this.backend.instanceIconUrlGet(serviceId);
+  }
+
+  // the icon of a dashboard: its instance's own, else its template's
+  dashboardIconUrlGet(templateName: string, serviceId: string): string {
+    if (this.instanceGet(serviceId)) return this.instanceIconUrlGet(serviceId);
+    const template = this.templateGetByName(templateName);
+    return template ? this.templateIconUrlGet(template.templateId) : '';
+  }
+
+  // a new instance from a template: the backend copies the template folder
+  // into a folder of the instance's own, and records the template in it
+  async instanceCreate(input: { templateId: string; name: string; description?: string; config?: Record<string, any> }): Promise<ServiceResult> {
     if (!this.backend) return { code: -1, message: this.unavailableReason };
     runInAction(() => {
       this.settings.create = { status: 'submitting', message: '' };
     });
     const result = await this.backend.instanceCreate({
-      typeId: input.typeId,
+      templateId: input.templateId,
       name: input.name,
       description: input.description ?? '',
       config: input.config ?? {},
@@ -271,6 +319,26 @@ export class DocServiceStore {
     return result;
   }
 
+  // a new version id of a template; the instances created before keep the one they recorded
+  async templateVersionNew(templateId: string, note: string): Promise<ServiceResult> {
+    if (!this.backend) return { code: -1, message: this.unavailableReason };
+    runInAction(() => {
+      this.settings.versionNew = { status: 'submitting', message: '' };
+    });
+    const result = await this.backend.templateVersionNew(templateId, note);
+    runInAction(() => {
+      if (result.code === SERVICE_CODE_BACKEND_DOWN) this.backendFailureAccept(result);
+      this.settings.versionNew = result.code === 0 ? { status: 'idle', message: '' } : { status: 'error', message: result.message };
+    });
+    if (result.code === 0) await this.refresh();
+    return result;
+  }
+
+  settingsTemplateSelect(templateId: string) {
+    this.settings.templateIdSelected = templateId;
+    this.settings.versionNew = { status: 'idle', message: '' };
+  }
+
   settingsServiceSelect(serviceId: string) {
     this.settings.serviceIdSelected = serviceId;
   }
@@ -281,73 +349,83 @@ export class DocServiceStore {
 
   // ---------- dashboard modules ----------
 
-  moduleStateGet(typeId: string): ModuleState | undefined {
-    return this.moduleByTypeId[typeId];
+  moduleStateGet(serviceId: string): ModuleState | undefined {
+    return this.moduleByServiceId[serviceId];
   }
 
-  // loads the dashboard module of a type once per build of it (the entry
-  // url carries the build time); nothing happens while it is not built
-  async moduleLoad(typeId: string): Promise<void> {
-    const type = this.typeGet(typeId);
-    if (!this.backend || !type || type.status !== 'ready' || !type.dashboardBuild?.isBuilt) return;
-    const remote = type.expose.dashboardRemote;
-    const entryUrl = `${this.backend.dashboardEntryUrlGet(typeId, remote.entry)}?t=${type.dashboardBuild.timeBuilt}`;
-    const stateCurrent = this.moduleByTypeId[typeId];
+  // loads the dashboard module of an instance once per build of it (the
+  // entry url carries the build time); nothing happens while it is not
+  // built. every instance has its own module, served from its own folder
+  async moduleLoad(serviceId: string): Promise<void> {
+    const instance = this.instanceGet(serviceId);
+    if (!this.backend || !instance?.expose || !instance.dashboardBuild?.isBuilt) return;
+    const remote = instance.expose.dashboardRemote;
+    const entryUrl = `${this.backend.dashboardEntryUrlGet(serviceId, remote.entry)}?t=${instance.dashboardBuild.timeBuilt}`;
+    const stateCurrent = this.moduleByServiceId[serviceId];
     if (stateCurrent?.entryUrl === entryUrl) return;
-    this.moduleByTypeId[typeId] = { status: 'loading', message: '', entryUrl };
+    this.moduleByServiceId[serviceId] = { status: 'loading', message: '', entryUrl };
     const result = await remoteModuleLoad(entryUrl, remote.module);
     runInAction(() => {
-      if (this.moduleByTypeId[typeId]?.entryUrl !== entryUrl) return;
-      this.moduleByTypeId[typeId] = result.code === 0
+      if (this.moduleByServiceId[serviceId]?.entryUrl !== entryUrl) return;
+      this.moduleByServiceId[serviceId] = result.code === 0
         ? { status: 'done', module: result.data, message: '', entryUrl }
         : { status: 'error', message: result.message, entryUrl };
     });
   }
 
-  // the component of a dashboard, once its module is loaded
-  dashboardComponentGet(typeId: string, dashboardId: string): any {
-    const exportName = this.dashboardDefineGet(typeId, dashboardId)?.export;
-    const moduleState = this.moduleByTypeId[typeId];
+  // the component of a dashboard of an instance, once its module is loaded
+  dashboardComponentGet(serviceId: string, dashboardId: string): any {
+    const exportName = this.dashboardDefineGet(serviceId, dashboardId)?.export;
+    const moduleState = this.moduleByServiceId[serviceId];
     if (!exportName || moduleState?.status !== 'done') return undefined;
     return moduleState.module?.[exportName];
   }
 
   // why a dashboard cannot show its instance (null when it can), in the
-  // order a reader can fix it: the backend, the type, the dashboard, the
-  // instance chosen, the instance itself, the dashboard module
+  // order a reader can fix it: the backend, the instance chosen, the
+  // instance itself (its template, its state, its script), the dashboard
+  // its script declares, its dashboard module
   dashboardProblemGet(ref: DashboardRef): DashboardProblem | null {
-    const { typeId, dashboardId, serviceId } = ref;
+    const { templateName, dashboardId, serviceId } = ref;
     if (this.backendStatus === 'none') return { kind: 'backendNone', message: this.unavailableReason };
     if (this.backendStatus === 'loading') return { kind: 'loading', message: 'asking the service backend…' };
     if (this.backendStatus === 'down') return { kind: 'backendDown', message: this.unavailableReason };
-    const type = this.typeGet(typeId);
-    if (!type) return { kind: 'typeNotFound', message: `The service type ${typeId} is not found: the backend has no folder ${typeId} in its type folders.` };
-    if (type.status !== 'ready') return { kind: 'typeError', message: `The service type ${typeId} failed to load: ${type.message}` };
-    if (!this.dashboardDefineGet(typeId, dashboardId)) {
-      const idList = (type.expose.dashboardList ?? []).map((dashboard: any) => dashboard.id).join(', ');
-      return { kind: 'dashboardNotFound', message: `The service type ${typeId} has no dashboard ${dashboardId} (it has: ${idList}).` };
+    if (!serviceId) {
+      if (!this.templateGetByName(templateName) && this.instanceListOfTemplateName(templateName).length === 0) {
+        return {
+          kind: 'templateNotFound',
+          message: `No service template is named ${templateName}, and no instance was created from one: there is no instance this dashboard can show.`,
+        };
+      }
+      return { kind: 'serviceNotBound', message: 'Choose the instance this dashboard shows.' };
     }
-    if (!serviceId) return { kind: 'serviceNotBound', message: 'Choose the instance this dashboard shows.' };
     const instance = this.instanceGet(serviceId);
     if (!instance) return { kind: 'serviceNotFound', message: `The service instance ${serviceId} is not found: its folder is gone, or it is in a folder the backend does not scan.` };
-    if (instance.typeId !== typeId) {
-      return { kind: 'typeMismatch', message: `The instance ${instance.name} is of the type ${instance.typeId}, not ${typeId}.` };
+    if (instance.template?.name !== templateName) {
+      return {
+        kind: 'templateMismatch',
+        message: `The instance ${instance.name} was created from the template ${instance.template?.name}, not ${templateName}.`,
+      };
     }
     if (instance.status !== 'ready') {
       return { kind: 'serviceNotReady', message: `The instance ${instance.name} is ${instance.status}${instance.message ? `: ${instance.message}` : ''}` };
     }
-    if (!type.dashboardBuild?.isBuilt) {
+    if (!this.dashboardDefineGet(serviceId, dashboardId)) {
+      const idList = (instance.expose?.dashboardList ?? []).map((dashboard: any) => dashboard.id).join(', ');
+      return { kind: 'dashboardNotFound', message: `The instance ${instance.name} has no dashboard ${dashboardId} (it has: ${idList}).` };
+    }
+    if (!instance.dashboardBuild?.isBuilt) {
       return {
         kind: 'moduleNotBuilt',
-        message: `The dashboards of ${typeId} are not built: build ${type.expose.dashboardRemote.dir} (vite build in the dashboard folder of the type).`,
+        message: `The dashboards of ${instance.name} are not built: build ${instance.folder}/${instance.dirName}/${instance.expose.dashboardRemote.dir} (vite build in the dashboard folder of the instance).`,
       };
     }
-    const moduleState = this.moduleByTypeId[typeId];
+    const moduleState = this.moduleByServiceId[serviceId];
     if (!moduleState || moduleState.status === 'loading') return { kind: 'loading', message: 'loading the dashboard…' };
     if (moduleState.status === 'error') return { kind: 'moduleError', message: moduleState.message };
-    if (!this.dashboardComponentGet(typeId, dashboardId)) {
-      const exportName = this.dashboardDefineGet(typeId, dashboardId).export;
-      return { kind: 'moduleError', message: `The dashboard module of ${typeId} has no export ${exportName}.` };
+    if (!this.dashboardComponentGet(serviceId, dashboardId)) {
+      const exportName = this.dashboardDefineGet(serviceId, dashboardId).export;
+      return { kind: 'moduleError', message: `The dashboard module of ${instance.name} has no export ${exportName}.` };
     }
     return null;
   }
@@ -418,7 +496,7 @@ export class DocServiceStore {
 
   // the events of a dashboard (doc_page_impl_service_instance.md#dashboard-events).
   // the frame of the dashboard (ServiceDashboardHost) adds data.dashboard,
-  // { typeId, dashboardId, serviceId, state }: what the block shows now. a
+  // { templateName, dashboardId, serviceId, state }: what the block shows now. a
   // call goes to that instance only; a dashboard cannot name another one.
   // the bind and the state are written into the block's asset object
   // (source.asset); a place that keeps them elsewhere (the Services tab)
@@ -430,7 +508,7 @@ export class DocServiceStore {
       return { code: 0, message: '' };
     }
     const dashboard = event.data?.dashboard;
-    if (!dashboard || typeof dashboard.typeId !== 'string') {
+    if (!dashboard || typeof dashboard.templateName !== 'string') {
       return { code: -1, message: `${event.type} comes from a component that is not a service dashboard` };
     }
     if (event.type === 'serviceApiCallRequest') {

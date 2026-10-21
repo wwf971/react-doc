@@ -1,7 +1,8 @@
-// Loads the dashboards of a service type: a federated module (design:
+// Loads the dashboards of a service instance: a federated module (design:
 // doc_page_impl_service_instance.md#dashboard-module), built by
-// @originjs/vite-plugin-federation and served by the service backend. The
-// page is the host; it is not built with the federation plugin, so it
+// @originjs/vite-plugin-federation and served by the service backend from
+// the instance's own folder. The page is the host; it is not built with the
+// federation plugin, so it
 // speaks the container contract itself:
 //
 //   const container = await import(remoteEntryUrl)   // { init, get }

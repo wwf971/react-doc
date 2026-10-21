@@ -7,11 +7,10 @@ import './DocService.css';
 // The pieces the dashboard frame (ServiceDashboardHost) and the Services
 // tab of the settings panel (ServiceSettings) both draw.
 
-// the icon of a service type: the file its meta.icon names, served by the
-// backend; the dashboard icon while the backend has none to give
-export const ServiceTypeIcon = observer(function ServiceTypeIcon({ typeId, size = 16 }) {
-  const { serviceStore } = useDocStores();
-  const iconUrl = serviceStore.typeIconUrlGet(typeId);
+// the icon of a template or of an instance: the file the meta.icon of its
+// script names, served by the backend (DocServiceStore templateIconUrlGet,
+// instanceIconUrlGet); the dashboard icon while there is none to give
+export function ServiceIcon({ iconUrl, size = 16 }) {
   const [urlFailed, urlFailedSet] = useState('');
   if (!iconUrl || urlFailed === iconUrl) {
     return <LayoutDashboard className="doc-service-icon" size={size} aria-hidden="true" />;
@@ -26,7 +25,7 @@ export const ServiceTypeIcon = observer(function ServiceTypeIcon({ typeId, size 
       onError={() => urlFailedSet(iconUrl)}
     />
   );
-});
+}
 
 // the state of the backend, or of one instance, as a dot and a word
 // ('ready', 'starting', 'disabled', 'error', 'down', 'no backend')
@@ -42,7 +41,7 @@ export function ServiceStatusDot({ status }) {
   return <span className="doc-service-status-dot" data-status={status} aria-hidden="true" />;
 }
 
-// the backend asked again: its types and instances
+// the backend asked again: its templates and instances
 export const ServiceRefreshButton = observer(function ServiceRefreshButton() {
   const { serviceStore } = useDocStores();
   const isRefreshing = serviceStore.isRefreshing;
@@ -60,14 +59,14 @@ export const ServiceRefreshButton = observer(function ServiceRefreshButton() {
   );
 });
 
-// the choice of the instance a dashboard shows: every instance of its type,
-// and the instance it is bound to when the backend does not know it (so
-// the choice says what the block holds). onSelect(serviceId) answers
-// { code, message }; a failure is shown beside the choice.
-export const ServiceInstanceSelect = observer(function ServiceInstanceSelect({ typeId, serviceId, disabledReason = '', onSelect }) {
+// the choice of the instance a dashboard shows: every instance created from
+// its template, and the instance it is bound to when the backend does not
+// know it (so the choice says what the block holds). onSelect(serviceId)
+// answers { code, message }; a failure is shown beside the choice.
+export const ServiceInstanceSelect = observer(function ServiceInstanceSelect({ templateName, serviceId, disabledReason = '', onSelect }) {
   const { serviceStore } = useDocStores();
   const [status, statusSet] = useState({ isSubmitting: false, message: '' });
-  const instanceList = serviceStore.instanceListOfType(typeId);
+  const instanceList = serviceStore.instanceListOfTemplateName(templateName);
   const isKnown = serviceId === '' || instanceList.some((instance) => instance.serviceId === serviceId);
   const isDisabled = Boolean(disabledReason) || status.isSubmitting;
 

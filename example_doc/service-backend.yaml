@@ -4,10 +4,10 @@ host: 127.0.0.1
 port: 45190
 # how long a sync api call is waited for, queue included, before -6
 apiWaitSecondMax: 120
-# folders holding the service types: {typeId}/service_type.py
-typeFolderList:
-  - path: ./service-type
-# folders holding the service instances: {serviceId}--{name}/service.yaml.
+# folders holding the service templates: {templateId}--{name}/service-template.yaml
+templateFolderList:
+  - path: ./service-template
+# folders holding the service instances: {templateName}-inst-{serviceId}/service.yaml.
 # a new instance is created in the default one
 instanceFolderList:
   - path: ./service

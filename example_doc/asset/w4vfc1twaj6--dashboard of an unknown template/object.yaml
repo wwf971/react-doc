@@ -1,5 +1,5 @@
 objectId: w4vfc1twaj6
-name: dashboard of an unknown type
+name: dashboard of an unknown template
 lang: yaml
 contentType: text/yaml
 fileExt: yaml
@@ -14,7 +14,7 @@ versionList:
   - versionId: w4vfc1uhcec
     versionIdPrevList: []
     time: 20261024_04520590+09
-    note: a dashboard of a service type the backend does not have
+    note: a dashboard of a service template the backend does not have
     size: 24
     hash: f01b12c3f94598910688bacb0dc5160e3b30c689
     isLocked: false

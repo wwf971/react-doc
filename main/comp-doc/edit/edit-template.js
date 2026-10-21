@@ -47,14 +47,14 @@ const templateTextList = [
 // and writes a reference block to it (DocEditStore blockCreateAsAsset); its
 // text is the block as the data would be written inline, for the search.
 //
-// The dashboards of the service types the backend knows are offered too
+// The dashboards of the service templates the backend knows are offered too
 // (group 'service', doc_page_impl_service_instance.md#creating-a-dashboard):
-// one entry per dashboard, under its component id service/{typeId}/{dashboardId}.
+// one entry per dashboard, under its component id service/{templateName}/{dashboardId}.
 // They are asset-only like any such component; the instance is chosen in
 // the dashboard once it is placed.
 //
 // env: { configDoc, compById, docPath, docFormat: 'md' | 'mdx', compConfigGet(compId),
-//        serviceDashboardList: [{ typeId, typeLabel, dashboardId, dashboardLabel, description }] }
+//        serviceDashboardList: [{ templateName, label, dashboardId, dashboardLabel, description }] }
 // -> [{ id, compName, label, description, text, icon, group: 'text' | 'component' | 'service', isCommon,
 //       isAssetOnly, assetSource? }]
 export function editTemplateListBuild({ configDoc, compById, docPath, docFormat, compConfigGet, serviceDashboardList = [] }) {
@@ -106,7 +106,7 @@ export function editTemplateListBuild({ configDoc, compById, docPath, docFormat,
 
   const templateListService = [];
   for (const dashboard of serviceDashboardList) {
-    const compName = serviceDashboardCompIdBuild(dashboard.typeId, dashboard.dashboardId);
+    const compName = serviceDashboardCompIdBuild(dashboard.templateName, dashboard.dashboardId);
     const definition = compDefinitionNormalize(compDefinitionGet(compById, compName));
     if (!definition) continue;
     const source = sourceDefaultSafeGet(definition, { compName, docPath, docFormat, compConfig: {} });
@@ -114,7 +114,7 @@ export function editTemplateListBuild({ configDoc, compById, docPath, docFormat,
     templateListService.push({
       id: `service:${compName}`,
       compName,
-      label: `${dashboard.typeLabel} · ${dashboard.dashboardLabel}`,
+      label: `${dashboard.label} · ${dashboard.dashboardLabel}`,
       description: dashboard.description,
       text: componentTemplateTextBuild(compName, source),
       icon: compIconGet(definition),

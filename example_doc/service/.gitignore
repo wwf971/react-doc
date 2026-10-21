@@ -1,13 +1,19 @@
 # the instance folder of the demonstration service backend
 # (doc_page_impl_service_instance.md). trying the Services tab creates
-# instances here, and every instance keeps its data (notes.sqlite) in its own
-# folder. everything new is ignored; only the files listed below are part of
-# the example. to add an instance to the example on purpose, list its
-# service.yaml here (or `git add -f` it).
+# instances here: each one a copy of its template with its own service.yaml,
+# and with its data (notes.sqlite) once it ran. everything new is ignored;
+# only the files of the two instances listed below are part of the example.
+# their data, their dashboard builds and installed dependencies stay ignored.
+# to add an instance to the example on purpose, list its folder here.
 
 *
 !*/
 !/.gitignore
 
-!/w4veemd7i36--example notes/service.yaml
-!/w4veemdrx8y--reading list/service.yaml
+!/note-db-inst-w4veemd7i36/**
+!/note-db-inst-w4veemdrx8y/**
+/*/*.sqlite
+/*/*.sqlite-journal
+/*/dashboard/dist/
+/*/dashboard/node_modules/
+/*/__pycache__/

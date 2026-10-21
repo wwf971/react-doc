@@ -1,13 +1,14 @@
-"""What a service type is and what it exposes.
+"""What the script of a service is and what it exposes.
 
-Design: doc_page_impl_service_instance.md#what-a-service-type-exposes
+Design: doc_page_impl_service_instance.md#what-a-service-script-exposes
 
-A service type is a Python class deriving from ServiceType, in the file
-service_type.py of its type folder, named by the module variable SERVICE_TYPE.
-The class says what it exposes in two places, both next to the code they
-describe:
+The script of a service is a Python class deriving from Service, in the file
+service.py of a template folder, and of every instance folder created from
+it (each instance runs its own copy), named by the module variable
+SERVICE_CLASS. The class says what it exposes in two places, both next to
+the code they describe:
 
-    class NoteDb(ServiceType):
+    class NoteDb(Service):
         expose = {
             'meta': {...},               label, description, author, version, ...
             'configDefineList': [...],   the shape of an instance's config
@@ -25,7 +26,7 @@ The method name is the name of the api on the wire, which is why api methods
 are written in camelCase like every other name the page sees.
 
 expose_build() normalizes both into one exposure, the way compExposeNormalize
-does for components: a wrong shape fails when the type is loaded, with the
+does for components: a wrong shape fails when the script is loaded, with the
 place of the mistake, not later in a dashboard.
 """
 
@@ -44,7 +45,7 @@ API_KIND_LIST = ['query', 'command']
 # asked for its state and result (GET /job/get)
 API_EXECUTION_LIST = ['sync', 'async']
 
-# default: the dashboard a document shows when it places the type.
+# default: the dashboard a document shows when it places the service.
 # config: the dashboard of the instance's settings (the Services tab).
 # other: any further dashboard, chosen by its id
 DASHBOARD_PURPOSE_LIST = ['default', 'config', 'other']
@@ -72,23 +73,25 @@ class ServiceError(Exception):
 
 
 class ServiceDefineError(Exception):
-    """A service type whose declaration cannot be used."""
+    """A service script whose declaration cannot be used."""
 
 
 class ServiceContext:
-    """What an instance of a type is given: its identity, its folder, its config.
+    """What a service instance is given: its identity, its folder, its config.
 
     service_id, name    the instance
-    dir_path            the instance's folder: its data lives here
-    type_dir_path       the type's folder
+    dir_path            the instance's folder: its own script and its data
+    template            the template it was created from, as recorded in its
+                        service.yaml: { templateId, name, versionId }. a
+                        record only: the instance never reads the template
     config              the instance's config, with the defaults of configDefineList
     """
 
-    def __init__(self, service_id, name, dir_path, type_dir_path, config):
+    def __init__(self, service_id, name, dir_path, template, config):
         self.service_id = service_id
         self.name = name
         self.dir_path = dir_path
-        self.type_dir_path = type_dir_path
+        self.template = template
         self.config = config
         # set by the runtime while an async job runs, so the api can report
         # its progress (job_progress_set); None otherwise
@@ -106,13 +109,15 @@ class ServiceContext:
         self.job_current.progress_message = str(message)
 
 
-class ServiceType:
-    """The base of every service type.
+class Service:
+    """The base of every service script.
 
-    An instance of the class is created for every service instance of the
-    type, in the instance's own worker thread, and every api of the instance
-    runs in that thread, one at a time: an implementation never sees two
-    calls at once and may keep a connection (sqlite) as a plain attribute.
+    Every service instance loads the service.py of its own folder, and one
+    object of its class is created in the instance's own worker thread;
+    every api of the instance runs in that thread, one at a time: an
+    implementation never sees two calls at once and may keep a connection
+    (sqlite) as a plain attribute. Two instances never share a module, so
+    module-level state is never shared either.
     """
 
     expose = {}
@@ -145,7 +150,7 @@ def returns(type, description='', schema=None):
 
 
 def api(kind='query', execution='sync', description='', params=(), result=None):
-    """Marks a method of a ServiceType as an api of the type."""
+    """Marks a method of a Service class as an api of the service."""
 
     def decorate(method):
         method.__service_api__ = {
@@ -162,27 +167,31 @@ def api(kind='query', execution='sync', description='', params=(), result=None):
 
 # ---------- the exposure ----------
 
-def expose_build(type_class, type_id, type_dir_path):
-    """The normalized exposure of a type class; raises ServiceDefineError."""
-    expose = getattr(type_class, 'expose', None)
+def expose_build(service_class, label, dir_path):
+    """The normalized exposure of a service class; raises ServiceDefineError.
+
+    label names the folder in the messages (a template, an instance);
+    dir_path is the folder holding the script, its icon and its dashboards.
+    """
+    expose = getattr(service_class, 'expose', None)
     if not isinstance(expose, dict):
-        raise ServiceDefineError(f'{type_id}: expose must be a mapping')
+        raise ServiceDefineError(f'{label}: expose must be a mapping')
     expose_other = {key: value for key, value in expose.items() if key not in EXPOSE_NAME_STANDARD_LIST}
     if 'apiList' in expose_other:
-        raise ServiceDefineError(f'{type_id}: apiList is not declared in expose; mark the methods with @api')
-    dashboard_list = _dashboard_list_normalize(expose.get('dashboardList'), type_id)
+        raise ServiceDefineError(f'{label}: apiList is not declared in expose; mark the methods with @api')
+    dashboard_list = _dashboard_list_normalize(expose.get('dashboardList'), label)
     return {
         **expose_other,
-        'meta': _meta_normalize(expose.get('meta'), type_id, type_dir_path),
-        'configDefineList': _config_define_list_normalize(expose.get('configDefineList'), type_id),
-        'apiList': _api_list_build(type_class, type_id),
+        'meta': _meta_normalize(expose.get('meta'), label, dir_path),
+        'configDefineList': _config_define_list_normalize(expose.get('configDefineList'), label),
+        'apiList': _api_list_build(service_class, label),
         'dashboardList': dashboard_list,
-        'dashboardRemote': _dashboard_remote_normalize(expose.get('dashboardRemote'), type_id, type_dir_path, dashboard_list),
+        'dashboardRemote': _dashboard_remote_normalize(expose.get('dashboardRemote'), label, dir_path, dashboard_list),
     }
 
 
-def _meta_normalize(meta, type_id, type_dir_path):
-    place = f'{type_id}: expose.meta'
+def _meta_normalize(meta, label, dir_path):
+    place = f'{label}: expose.meta'
     if not isinstance(meta, dict):
         raise ServiceDefineError(f'{place} must be a mapping')
     label = meta.get('label')
@@ -192,8 +201,8 @@ def _meta_normalize(meta, type_id, type_dir_path):
         if meta.get(key) is not None and not isinstance(meta.get(key), str):
             raise ServiceDefineError(f'{place}.{key} must be a string')
     icon = meta.get('icon') or ''
-    if icon and not os.path.isfile(os.path.join(type_dir_path, icon)):
-        raise ServiceDefineError(f'{place}.icon names {icon}, which is not a file of the type folder')
+    if icon and not os.path.isfile(os.path.join(dir_path, icon)):
+        raise ServiceDefineError(f'{place}.icon names {icon}, which is not a file of the folder')
     tag_list = meta.get('tagList', [])
     if not isinstance(tag_list, list) or not all(isinstance(tag, str) for tag in tag_list):
         raise ServiceDefineError(f'{place}.tagList must be a list of strings')
@@ -210,8 +219,8 @@ def _meta_normalize(meta, type_id, type_dir_path):
     }
 
 
-def _config_define_list_normalize(define_list, type_id):
-    place = f'{type_id}: expose.configDefineList'
+def _config_define_list_normalize(define_list, label):
+    place = f'{label}: expose.configDefineList'
     if define_list is None:
         return []
     if not isinstance(define_list, list):
@@ -237,14 +246,14 @@ def _config_define_list_normalize(define_list, type_id):
     return result
 
 
-def _api_list_build(type_class, type_id):
+def _api_list_build(service_class, label):
     api_list = []
-    for name in dir(type_class):
-        method = getattr(type_class, name, None)
+    for name in dir(service_class):
+        method = getattr(service_class, name, None)
         declared = getattr(method, '__service_api__', None)
         if declared is None:
             continue
-        place = f'{type_id}: api {name}'
+        place = f'{label}: api {name}'
         if not REGEX_API_NAME.match(name):
             raise ServiceDefineError(f'{place}: an api name is camelCase letters and digits')
         if declared['kind'] not in API_KIND_LIST:
@@ -289,8 +298,8 @@ def _result_normalize(item, place):
     return {'description': item.get('description', ''), 'schema': {**(item.get('schema') or {}), 'type': item['type']}}
 
 
-def _dashboard_list_normalize(dashboard_list, type_id):
-    place = f'{type_id}: expose.dashboardList'
+def _dashboard_list_normalize(dashboard_list, label):
+    place = f'{label}: expose.dashboardList'
     if not isinstance(dashboard_list, list) or len(dashboard_list) == 0:
         raise ServiceDefineError(f'{place} must list the dashboards, at least one of purpose default and one of purpose config')
     id_set = set()
@@ -326,16 +335,16 @@ def _dashboard_list_normalize(dashboard_list, type_id):
     return result
 
 
-def _dashboard_remote_normalize(remote, type_id, type_dir_path, dashboard_list):
-    place = f'{type_id}: expose.dashboardRemote'
+def _dashboard_remote_normalize(remote, label, dir_path, dashboard_list):
+    place = f'{label}: expose.dashboardRemote'
     if not isinstance(remote, dict):
         raise ServiceDefineError(f'{place} must be a mapping {{ dir, entry, container, module }}')
     for key in ['dir', 'entry', 'container', 'module']:
         if not isinstance(remote.get(key), str) or remote[key] == '':
             raise ServiceDefineError(f'{place}.{key} must be a non-empty string')
-    dir_abs = os.path.normpath(os.path.join(type_dir_path, remote['dir']))
-    if not dir_abs.startswith(os.path.normpath(type_dir_path) + os.sep):
-        raise ServiceDefineError(f'{place}.dir must be inside the type folder')
+    dir_abs = os.path.normpath(os.path.join(dir_path, remote['dir']))
+    if not dir_abs.startswith(os.path.normpath(dir_path) + os.sep):
+        raise ServiceDefineError(f'{place}.dir must be inside the folder')
     return {
         'dir': remote['dir'],
         'entry': remote['entry'],
@@ -344,11 +353,11 @@ def _dashboard_remote_normalize(remote, type_id, type_dir_path, dashboard_list):
     }
 
 
-def dashboard_remote_build_get(type_dir_path, remote):
+def dashboard_remote_build_get(dir_path, remote):
     """Whether the dashboard module is built, and when: read on every listing,
     since it is built while the backend runs. timeBuilt (the mtime of the
     entry, in ms) lets the page load a rebuilt module instead of its cache."""
-    entry_path = os.path.join(type_dir_path, remote['dir'], remote['entry'])
+    entry_path = os.path.join(dir_path, remote['dir'], remote['entry'])
     if not os.path.isfile(entry_path):
         return {'isBuilt': False, 'timeBuilt': 0}
     return {'isBuilt': True, 'timeBuilt': int(os.path.getmtime(entry_path) * 1000)}
@@ -406,8 +415,11 @@ def api_param_dict_build(api_define, params):
     return result
 
 
-def openrpc_document_build(type_id, expose):
-    """The apis of a type as an OpenRPC document (https://spec.open-rpc.org).
+def openrpc_document_build(expose, info_extra):
+    """The apis of a script as an OpenRPC document (https://spec.open-rpc.org).
+
+    info_extra: the extension keys of info naming whose script it is
+    (x-templateId, x-serviceId, ...).
 
     The exposure keeps the project's own names (paramList, isRequired, kind,
     execution); this is the same information in the standard form, for
@@ -434,7 +446,7 @@ def openrpc_document_build(type_id, expose):
             'title': expose['meta']['label'],
             'description': expose['meta']['description'],
             'version': expose['meta']['version'],
-            'x-typeId': type_id,
+            **info_extra,
         },
         'methods': method_list,
     }

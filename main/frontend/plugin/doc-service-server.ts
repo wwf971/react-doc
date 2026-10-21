@@ -17,7 +17,7 @@ import { readYaml } from './doc-entry.ts';
 //     backend: http://127.0.0.1:45190                  the backend's address
 //     backendConfigFile: ../example_doc/service-backend.yaml
 //                                                      optional: the backend's config file; its
-//                                                      type and instance folders are not documents
+//                                                      template and instance folders are not documents
 //
 // when the backend cannot be reached the answer is { code: -5 } (http 503),
 // the code the page reads as "backend down"; every other answer is the
@@ -55,12 +55,12 @@ export function serviceConfigGet(configDoc: any, configDir: string): ServiceConf
   return { backendUrl, backendConfigFile, folderPathAbsList: serviceFolderListRead(backendConfigFile) };
 }
 
-// the type and instance folders of the backend's config file
+// the template and instance folders of the backend's config file
 function serviceFolderListRead(backendConfigFile: string): string[] {
   if (!fs.existsSync(backendConfigFile)) return [];
   const backendConfig = readYaml(backendConfigFile) ?? {};
   const backendDir = path.dirname(backendConfigFile);
-  const folderList = [...(backendConfig.typeFolderList ?? []), ...(backendConfig.instanceFolderList ?? [])];
+  const folderList = [...(backendConfig.templateFolderList ?? []), ...(backendConfig.instanceFolderList ?? [])];
   return folderList
     .map((item: any) => (typeof item === 'string' ? item : item?.path))
     .filter((folderPath: any) => typeof folderPath === 'string' && folderPath !== '')
