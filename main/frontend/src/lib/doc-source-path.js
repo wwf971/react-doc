@@ -80,6 +80,12 @@ export function sourcePathRelativeResolve(dirPath, relPath) {
   return rest ? `${segRoot}/${rest}` : segRoot;
 }
 
+// the folders a path is inside, outermost first: '~a', '~a/b' for '~a/b/c'
+export function sourcePathAncestorListGet(value) {
+  const segList = sourcePathNormalize(value).split('/').filter(Boolean);
+  return segList.slice(0, -1).map((_, index) => segList.slice(0, index + 1).join('/'));
+}
+
 // the path is the folder, or lies inside it
 export function sourcePathIsInside(value, folderPath) {
   const text = sourcePathNormalize(value);

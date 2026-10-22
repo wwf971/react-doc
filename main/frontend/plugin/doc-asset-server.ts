@@ -61,7 +61,7 @@ type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) 
 
 // usageScan(docPathList): the asset references of the documents named, or
 // of every collected document when the list is empty; the documents are a
-// matter of the source layer, which the plugin passes in
+// matter of the doc page source service layer, which the plugin passes in
 export function docAssetMiddlewareCreate(options: {
   endpoint: string;
   storeGet: () => AssetStore;

@@ -1,4 +1,4 @@
-# the default folder of the demonstration asset store (doc_page_impl_asset.md).
+# the default folder of the demonstration local store of the asset service layer (doc_page_impl_asset.md).
 # trying the asset panel writes here: new versions, new objects, backups.
 # everything new is ignored; only the files listed below are part of the
 # example. to add an object or a version to the example on purpose, list its

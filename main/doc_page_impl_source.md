@@ -1,8 +1,8 @@
-<!-- Design of the doc page source layer. Overview: doc_page_impl.md -->
+<!-- Design of the doc page source service layer. Overview: doc_page_impl.md -->
 
-# Source layer
+# Doc Page Source Service Layer
 
-The source layer is everything the doc page knows about the files of a document: which files and folders form the source, how each is named, which of them are pages, how their bytes are reached, and how a file is created from the page. It is the ground the other layers stand on: documents and links ([navigation](doc_page_impl_nav.md)), tags and config declared per file ([tags](doc_page_impl_tag.md), [config](doc_page_impl_config.md)), the files the [asset store](doc_page_impl_asset.md) depends on, and the files components refer to or create ([MDX components](doc_page_impl_mdx_comp.md)).
+The **doc page source service layer** is everything the doc page knows about the files of a document: which files and folders form the source, how each is named, which of them are pages, how their bytes are reached, and how a file is created from the page. It is the ground the other layers stand on: documents and links ([navigation](doc_page_impl_nav.md)), tags and config declared per file ([tags](doc_page_impl_tag.md), [config](doc_page_impl_config.md)), the files the [asset service layer](doc_page_impl_asset.md) depends on, and the files components refer to or create ([MDX components](doc_page_impl_mdx_comp.md)).
 
 ```text
 entry yaml: source rules ──► vite plugin "doc-source" (build / dev)
@@ -89,9 +89,9 @@ A file the page creates joins the manifest at once: the plugin remembers the pat
 
 A build has no api. The bytes of the files that are used are bundled as data urls and exported as `fileUrlByPath`, keyed by source path (and by the spelling a document used, for a file found beside the document on disk but not collected): the binary files of the manifest that survive pruning, the files the attachment finders see components name (`collectComponentAttachmentsOnBuild`, see [Build-only component attachment collection](doc_page_impl.md#build-only-component-attachment-collection)), and the source files the asset versions depend on. `DocSourceStore.fileUrlGet` answers from this map in a build, and from the `/data` route in development, so a component never sees the difference.
 
-## The page side: DocSourceStore and the source service
+## The page side: DocSourceStore and the service object
 
-`DocSourceStore` holds the source as the page reads it: `configDoc`, `fileManifest`, `dirManifest`, the raw texts and compile results, the structured data for search. It receives the source api endpoint and `fileUrlByPath` from `DocPageMdx` (`config.source.endpoint`, `data.fileUrlByPath`). Beside the reading methods it offers the **source service**, a stable object handed to every registered component as `config.source`:
+`DocSourceStore` holds the source as the page reads it: `configDoc`, `fileManifest`, `dirManifest`, the raw texts and compile results, the structured data for search. It receives the source api endpoint and `fileUrlByPath` from `DocPageMdx` (`config.source.endpoint`, `data.fileUrlByPath`). Beside the reading methods it offers the **service object** of this layer, a stable object handed to every registered component as `config.source`:
 
 | Method | Meaning |
 | --- | --- |
@@ -125,7 +125,23 @@ The page renders completion with its own element, `SourcePathInput` (`comp-doc/s
 
 The same candidates can be chosen from a tree. `sourcePathTreeBuild(spec, manifests)` (`lib/doc-source-complete.js`, `pathTreeGet` of the service) arranges them as nodes `{ id, label, kind, isDisabled, childList }`: one node per root (`~rootId`), its folders, the files in them, folders first, each sorted by name. A folder that only leads to candidates (the specification asks for files, or for paths inside another folder) is a node too, and disabled.
 
-`SourceTreeSelect` (`comp-doc/source/`) renders such a tree and only selects: a node is chosen by a click or the arrow keys (ArrowRight / ArrowLeft open, close, or go to the child or parent; Enter activates), a disabled node opens but is never chosen and says why in its title, and what the chosen node means is the caller's. The node shape is not bound to the source: `kind` picks the icon (a folder, a separator, anything else a file) and `detail` is a muted note after the label, so another tree of the page can be shown the same way. The location prompt shows the folders of the source this way behind a browse button next to the folder field; the move picker of the side panel shows the items of the side panel ([moving an item](doc_page_impl_side_panel.md#moving-an-item)).
+`SourceTreeSelect` (`comp-doc/source/`) renders such a tree and only selects: a node is chosen by a click or the arrow keys (ArrowRight / ArrowLeft open, close, or go to the child or parent; Enter or a double click activates), a disabled node opens but is never chosen and says why in its title, and what the chosen node means is the caller's. The node shape is not bound to the source: `kind` picks the icon (a folder, a separator, anything else a file), `badge` is a small tag before the label (`badgeKind: 'component'` tints it), and `detail` is a muted note after the label, so another tree of the page can be shown the same way. The move picker of the side panel shows the items of the side panel ([moving an item](doc_page_impl_side_panel.md#moving-an-item)), the place picker of a paste or a copy the blocks of a document ([choosing where the blocks go](doc_page_impl_copy_paste.md#choosing-where-the-blocks-go)).
+
+A tree can be **searched**: given `searchText`, `SourceTreeSelect` shows only the nodes whose label holds every word of it (case-insensitive), with the folders that lead to them, open, and highlights the matched parts of each label (`<mark class="doc-source-tree-match">`, a yellow ground). The narrowing is `sourceTreeSearch(nodeList, text)` (`lib/doc-source-complete.js`): it returns the narrowed tree, every node kept carrying `labelMatchList` (the matched ranges of its label), and the folders to open. It works on the node shape, so any tree shown by `SourceTreeSelect` can be searched. Folders opened or closed while searching are forgotten when the search changes; an empty search shows the tree as it was browsed.
+
+### Choosing a path
+
+Typing and browsing are one field of the page: `SourcePathPicker` (`comp-doc/source/`) is the path with completion (`SourcePathInput`) above the same candidates as a tree (`SourceTreeSelect` over `pathTreeGet`), both read from one specification, so what can be typed is what can be browsed. It only shows and reports: `value` is the caller's, `onSelect(path)` comes from a committed text or a chosen node, `onActivate(path)` from a double click or Enter in the tree ("this one, go on"), and `message` is the caller's word on why the value cannot be used. The tree is always shown, or folded behind a browse button (`isTreeCollapsible`). Above the tree a search field narrows it by name ([searching a tree](#browsing-as-a-tree); `isTreeSearchable`, on by default): Enter or ArrowDown in it chooses the first match and moves into the tree, Escape clears it (and is not passed on to the dialog around the picker).
+
+```text
+[label] [~example/edit-in-place.md      ] [⌸]   ◄ browse button: isTreeCollapsible only
+[🔍 edit                                ×]       ◄ search: isTreeSearchable
+▾ 📁 ~example
+    🗎 [edit]-in-place.md                        ◄ the value, selected; the match highlighted
+message
+```
+
+Every place that asks for a path uses it with its specification: the location prompt of a new file a folder (`{ kind: 'dir' }`, tree folded), the copy / move dialog a document (`{ kind: 'file', extList: ['md', 'mdx'] }`, [copying and moving blocks](doc_page_impl_copy_paste.md#the-dialog)).
 
 ## Creating files
 
@@ -136,7 +152,7 @@ fileCreateRequest { name, blob | text, dirPath, isLocationCustom }
   -> { code: 0, data: { path, entry } } | { code: -1, message }
 ```
 
-`dirPath` is the folder, a source path, usually from the component's own config (`Image` reads `compConfig.FileStoreDir`). `isLocationCustom: true`, or a `dirPath` that is not a source path, opens the **location prompt** (`SourceFilePrompt`): a floating panel at the pointer with the folder (a `SourcePathInput` completing the folders of the source, or picked from them as a tree behind the browse button), the file name, Create and Cancel. The prompt stays open while the file is written, shows a failure in place so another folder can be tried, and answers the request with a failure when dismissed. The name is made unique in the folder (`fileNameUniqueGet`) before the file is written; the answer carries the source path of the new file, which the component then puts into its data through the edit layer (`dataReplaceRequest`, see [component awareness](doc_page_impl_mdx_comp.md#component-awareness)).
+`dirPath` is the folder, a source path, usually from the component's own config (`Image` reads `compConfig.FileStoreDir`). `isLocationCustom: true`, or a `dirPath` that is not a source path, opens the **location prompt** (`SourceFilePrompt`): a floating panel at the pointer with the folder (a [`SourcePathPicker`](#choosing-a-path) of the folders of the source, its tree behind the browse button), the file name, Create and Cancel. The prompt stays open while the file is written, shows a failure in place so another folder can be tried, and answers the request with a failure when dismissed. The name is made unique in the folder (`fileNameUniqueGet`) before the file is written; the answer carries the source path of the new file, which the component then puts into its data through the edit layer (`dataReplaceRequest`, see [component awareness](doc_page_impl_mdx_comp.md#component-awareness)).
 
 The two requests keep the component thin: it knows how to turn a clipboard into a file name and bytes, and how to write its own data with a new source; where the file goes, how it is written, and whether the data is a block of the document or a version of an asset are decided by the page.
 
@@ -146,9 +162,9 @@ The two requests keep the component thin: it knows how to turn a clipboard into 
 | --- | --- |
 | `lib/doc-source-path.js` | the source path grammar |
 | `lib/doc-target-resolve.js` | every spelling of a target resolved to source paths |
-| `lib/doc-source-complete.js` | path completion: the specification, the candidates, the narrowing, the tree |
+| `lib/doc-source-complete.js` | path completion: the specification, the candidates, the narrowing, the tree, searching a tree |
 | `plugin/doc-source.ts` | rules, collection, folder manifest, source api, module generation |
 | `plugin/doc-attachment.ts` | the files components name, the mime types, the data urls of a build |
-| `store/DocSourceStore.ts` | the source as the page reads it, the source service |
+| `store/DocSourceStore.ts` | the source as the page reads it, the service object (`config.source`) |
 | `store/DocSourceFileStore.ts` | file creation requests, the location prompt |
-| `comp-doc/source/SourcePathInput.jsx`, `SourceFilePrompt.jsx`, `SourceTreeSelect.jsx` | the path input with completion, the location prompt, the tree view |
+| `comp-doc/source/SourcePathInput.jsx`, `SourceTreeSelect.jsx`, `SourcePathPicker.jsx`, `SourceFilePrompt.jsx` | the path input with completion, the tree view, the two as one path picker, the location prompt |

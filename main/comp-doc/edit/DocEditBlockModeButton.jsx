@@ -21,7 +21,7 @@ import './DocEdit.css';
 // mode, reported as editBlockEnterRequest { editModeId } like the Edit
 // button, so the host application sees it. edit modes are greyed out when
 // editing is not available (isEditAvailable false, a write pending) or when
-// the entry itself cannot be chosen (the data is in the asset store); a
+// the entry itself cannot be chosen (the data is in the asset service layer); a
 // read-only component lists no edit mode and says so.
 //
 // the dropdown is the Menu of @wwf971/react-comp-misc, injected by the host

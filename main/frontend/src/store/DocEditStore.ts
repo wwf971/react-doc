@@ -18,6 +18,9 @@ import {
 import {
   blockDeleteOperationBuild,
   blockInsertOperationBuild,
+  blockListDeleteOperationListBuild,
+  blockListMoveOperationListBuild,
+  blockListTextGet,
   blockReplaceOperationBuild,
   blockSwapOperationBuild,
   componentBlockTextBuild,
@@ -34,6 +37,10 @@ import {
 //
 //   isAvailable       a development server answers the edit api
 //   isEditMode        the global toggle
+//   isBlockSelectMode the block selection mode (doc_page_impl_copy_paste.md
+//                     #selecting-blocks): the body of edit mode without its
+//                     controls, whose blocks are selected instead of edited;
+//                     never on together with isEditMode
 //   blockEnterMode    how a block enters its edit mode (config EditBlockEnterMode)
 //   sourceByPath      text + hash of a document as read from disk
 //   docEditByPath     the document compiled with block wrappers + its block model
@@ -46,7 +53,7 @@ import {
 //   blockMove         the one block being moved up or down (swapped with its
 //                     neighbor), or the failure of the last move
 //   blockAssetMove    the one block whose inline data waits for the
-//                     confirmation of its move into the asset store, is
+//                     confirmation of its move into the asset service layer, is
 //                     being moved, or the failure of the last such move
 //
 // a session ends in one of two ways:
@@ -104,7 +111,7 @@ export type EditSession = {
   // template), so the uncontrolled editing surface knows when to rewrite its DOM
   draftVersion: number;
   // the draft of the asset data, for a block whose data is a reference into
-  // the asset store, open in an edit mode of its component (an isAssetOnly
+  // the asset service layer, open in an edit mode of its component (an isAssetOnly
   // component): the component edits the asset, not the lines of the block.
   // a leave writes it into the asset object; undefined while unchanged
   assetDraft?: EditAssetDraft;
@@ -173,7 +180,7 @@ export type EditBlockMove = {
 };
 
 // the one component block whose inline data waits for the confirmation of
-// its move into the asset store, is being moved, or the failure of the last
+// its move into the asset service layer, is being moved, or the failure of the last
 // such move
 export type EditBlockAssetMove = {
   path: string;
@@ -225,7 +232,8 @@ export type EditResult = { code: number; data?: any; message: string };
 
 // one change of the files, as historyRecord keeps it
 //   kind             what the change was: 'document' (an operation of
-//                    operationApply), 'sidePanelItemMove'
+//                    operationApply), 'blockListMove' (blocks moved into
+//                    another document: both documents), 'sidePanelItemMove'
 //   fileChangeList   scope 'source': file is the internal path of a
 //                    document; 'sidePanel': the side-panel file, relative
 //                    to the config directory
@@ -273,6 +281,7 @@ export class DocEditStore {
   api: ReturnType<typeof docEditApiCreate> | undefined;
   isAvailable = false;
   isEditMode = false;
+  isBlockSelectMode = false;
   sourceByPath: Record<string, EditSource> = {};
   docEditByPath: Record<string, EditDocState> = {};
   compilePendingByPath: Record<string, { hash: string; promise: Promise<void> }> = {};
@@ -301,7 +310,7 @@ export class DocEditStore {
   reactionDispose: (() => void) | undefined;
   reactionConfigDispose: (() => void) | undefined;
 
-  // the asset store, for moving a block's inline data into it
+  // the asset service layer, for moving a block's inline data into it
   assetStore: DocAssetStore | undefined;
   // the last changes of the files, oldest first (historyRecord); not observed
   historyRecordList: EditHistoryRecord[] = [];
@@ -340,11 +349,11 @@ export class DocEditStore {
     void this.availabilityCheck();
     this.reactionDispose = reaction(
       () => ({
-        isEditMode: this.isEditMode,
+        isBodyEdit: this.isEditMode || this.isBlockSelectMode,
         path: this.docStore.docCurrentPath,
         fileManifest: this.sourceStore.fileManifest,
       }),
-      ({ isEditMode, path }) => {
+      ({ isBodyEdit, path }) => {
         // leaving the page is leaving the session: the draft is saved
         if (this.session && this.session.path !== path) void this.sessionLeave();
         runInAction(() => {
@@ -353,7 +362,7 @@ export class DocEditStore {
           if (this.blockMove && this.blockMove.path !== path) this.blockMove = undefined;
           if (this.blockAssetMove && this.blockAssetMove.path !== path) this.blockAssetMove = undefined;
         });
-        if (isEditMode && this.docIsEditable(path)) void this.docEditEnsure(path);
+        if (isBodyEdit && this.docIsEditable(path)) void this.docEditEnsure(path);
       },
       { fireImmediately: true },
     );
@@ -386,7 +395,8 @@ export class DocEditStore {
   }
 
   // switching edit mode off leaves the open session (saving it); when the
-  // save fails, edit mode stays on so the error can be seen
+  // save fails, edit mode stays on so the error can be seen. switching it on
+  // switches the block selection mode off.
   async editModeSet(isEditMode: boolean): Promise<boolean> {
     if (!this.isAvailable && isEditMode) return false;
     if (!isEditMode) {
@@ -395,6 +405,7 @@ export class DocEditStore {
     }
     runInAction(() => {
       this.isEditMode = isEditMode;
+      if (isEditMode) this.isBlockSelectMode = false;
       this.insertMenu = undefined;
       this.deleteConfirm = undefined;
       this.blockMove = undefined;
@@ -408,6 +419,21 @@ export class DocEditStore {
 
   editModeToggle(): Promise<boolean> {
     return this.editModeSet(!this.isEditMode);
+  }
+
+  // the block selection mode replaces edit mode: switching it on leaves edit
+  // mode first (saving the open session), and does nothing when that fails.
+  // what is selected is DocBlockSelectStore's.
+  async blockSelectModeSet(isBlockSelectMode: boolean): Promise<boolean> {
+    if (!this.isAvailable && isBlockSelectMode) return false;
+    if (isBlockSelectMode && this.isEditMode) {
+      const isLeft = await this.editModeSet(false);
+      if (!isLeft) return false;
+    }
+    runInAction(() => {
+      this.isBlockSelectMode = isBlockSelectMode;
+    });
+    return true;
   }
 
   // 'click':  a click anywhere on the block, as well as the Edit button (the default)
@@ -431,9 +457,10 @@ export class DocEditStore {
   }
 
   // the state DocPageView renders instead of the reading body: the compiled
-  // edit body, or the compile error so the document can still be repaired
+  // edit body, or the compile error so the document can still be repaired.
+  // the block selection mode selects the blocks of the same body.
   docEditActiveGet(path: string): EditDocState | undefined {
-    if (!this.isEditMode || !this.docIsEditable(path)) return undefined;
+    if (!(this.isEditMode || this.isBlockSelectMode) || !this.docIsEditable(path)) return undefined;
     return this.docEditByPath[path];
   }
 
@@ -581,13 +608,20 @@ export class DocEditStore {
   // the one path every change of a document takes: the operation is sent
   // with the hash of the text it was built on, the new text is accepted and
   // compiled, and the change is recorded (historyRecord).
+  //   operation        one line operation, or a list built on the same text
+  //                    (applied together)
   //   messageFailure   what a failure other than a conflict is reported as
   //   onApplied        state to settle once the file is written, before the
   //                    new text is accepted (compiling it takes a moment)
+  //   isHistoryRecorded  false: the caller records the change itself, with
+  //                    the change of another file of the same action
+  //                    (data.fileChange of the answer)
   private async operationApply(
     path: string,
     operation: any,
-    { messageFailure, onApplied }: { messageFailure: string; onApplied?: () => void },
+    { messageFailure, onApplied, isHistoryRecorded = true }: {
+      messageFailure: string; onApplied?: () => void; isHistoryRecorded?: boolean;
+    },
   ): Promise<EditResult> {
     if (!this.api) return { code: -1, message: 'The edit api is not available.' };
     const source = this.sourceByPath[path];
@@ -598,21 +632,18 @@ export class DocEditStore {
     if (result.code !== 0) {
       return { code: result.code, message: result.code === -2 ? messageConflict : result.message || messageFailure };
     }
-    this.historyRecord({
-      kind: 'document',
-      time: Date.now(),
-      fileChangeList: [{
-        scope: 'source',
-        file: path,
-        hashBefore: source.hash,
-        hashAfter: result.data.hash,
-        textBefore: source.text ?? '',
-        textAfter: result.data.text,
-      }],
-    });
+    const fileChange: EditHistoryRecord['fileChangeList'][number] = {
+      scope: 'source',
+      file: path,
+      hashBefore: source.hash,
+      hashAfter: result.data.hash,
+      textBefore: source.text ?? '',
+      textAfter: result.data.text,
+    };
+    if (isHistoryRecorded) this.historyRecord({ kind: 'document', time: Date.now(), fileChangeList: [fileChange] });
     if (onApplied) runInAction(onApplied);
     await this.sourceAccept(path, result.data.text, result.data.hash);
-    return { code: 0, data: result.data, message: '' };
+    return { code: 0, data: { ...result.data, fileChange }, message: '' };
   }
 
   // keeps one change of the files for a future undo/redo (see the top)
@@ -747,7 +778,7 @@ export class DocEditStore {
       ...mode,
       isDefault: mode.id === COMP_EDIT_MODE_SOURCE_ID,
       isDisabled: mode.id !== COMP_EDIT_MODE_SOURCE_ID,
-      disabledReason: mode.id !== COMP_EDIT_MODE_SOURCE_ID ? 'the data is in the asset store; edit it through the asset panel' : '',
+      disabledReason: mode.id !== COMP_EDIT_MODE_SOURCE_ID ? 'the data is in the asset service layer; edit it through the asset panel' : '',
     }));
     if (!isSourceListed && !compMetaGet(definition).isReadOnly) {
       modeListAsset.push({ ...compEditModeSource, isDefault: true, isDisabled: false, disabledReason: '' });
@@ -757,7 +788,7 @@ export class DocEditStore {
 
   // the edit modes of a block of an isAssetOnly component
   // (doc_page_impl_edit.md#asset-only-components): its data is only ever in
-  // the asset store, so the component's own modes edit the referenced asset
+  // the asset service layer, so the component's own modes edit the referenced asset
   // (the session's assetDraft) and are what the block opens in. the source
   // mode, when the component accepts it, is kept for the lines of the
   // block. a block with the data written inline cannot be edited in the
@@ -766,7 +797,7 @@ export class DocEditStore {
   private blockEditModeAssetOnlyListGet(block: any, definition: any, modeList: any[]): EditModeEntry[] {
     let disabledReason = '';
     if (!assetRefLangIs(block.component.lang)) {
-      disabledReason = 'the data must be in the asset store; move it there with "to asset" first';
+      disabledReason = 'the data must be in the asset service layer; move it there with "to asset" first';
     } else {
       const reference = assetRefParse(block.component.raw);
       if (reference.message) disabledReason = reference.message;
@@ -783,10 +814,10 @@ export class DocEditStore {
     });
   }
 
-  // why the asset store cannot be written now: no store, a failed status
+  // why the asset service layer cannot be written now: no store, a failed status
   // request, a read-only snapshot (DocAssetStore.writeUnavailableReason)
   private assetWriteUnavailableReasonGet(): string {
-    return this.assetStore ? this.assetStore.writeUnavailableReason : 'The page has no asset store.';
+    return this.assetStore ? this.assetStore.writeUnavailableReason : 'The page has no asset service layer.';
   }
 
   // the mode menu is offered where there is something to choose: a
@@ -984,7 +1015,7 @@ export class DocEditStore {
         return false;
       }
       // the object made for the block is referenced by nothing now; deleted
-      // softly, so it can still be restored from the asset store
+      // softly, so it can still be restored from the asset service layer
       if (session.assetObjectIdCreated && this.assetStore) {
         await this.assetStore.objectDelete(ASSET_STORE_ID_LOCAL, session.assetObjectIdCreated);
       }
@@ -1151,7 +1182,7 @@ export class DocEditStore {
       const isMovedToAsset = await this.blockAssetMoveApply(path, blockIndex);
       return isMovedToAsset
         ? { code: 0, message: '' }
-        : { code: -1, message: this.blockAssetMove?.message || 'the data was not moved into the asset store' };
+        : { code: -1, message: this.blockAssetMove?.message || 'the data was not moved into the asset service layer' };
     }
 
     if (event.type === 'dataReplaceRequest') return this.dataReplaceApply(event);
@@ -1280,9 +1311,152 @@ export class DocEditStore {
     return this.sessionBlockStart(path, menu.borderIndex, { isCreated: true, selectionInitial: 'all' });
   }
 
+  // writes a text of one or more blocks at border borderIndex of a document,
+  // the current one or another (a paste, doc_page_impl_copy_paste.md). the
+  // open session is left first; the document is read and compiled when it is
+  // not yet, so the border is one of the text the file has.
+  async blockListInsert(path: string, borderIndex: number, text: string): Promise<EditResult> {
+    if (!this.docIsEditable(path)) return { code: -1, message: 'This document cannot be edited.' };
+    const isLeft = await this.sessionLeave();
+    if (!isLeft) return { code: -1, message: this.session?.message || 'The open edit could not be saved.' };
+    const resultModel = await this.docModelForWriteGet(path);
+    if (resultModel.code !== 0) return resultModel;
+    const model = resultModel.data.model;
+    if (borderIndex < 0 || borderIndex > model.blockList.length) {
+      return { code: -1, message: 'The place is not in the document anymore.' };
+    }
+    const operation = blockInsertOperationBuild(model, borderIndex, text.replace(/\r\n/g, '\n'));
+    return this.operationApply(path, operation, { messageFailure: 'The blocks were not inserted.' });
+  }
+
+  // copies the blocks at blockIndexList of one document to border
+  // borderIndex of a document, the same one or another
+  // (doc_page_impl_copy_paste.md#copying-and-moving-blocks). sourceHash is
+  // the hash of the text the blocks were chosen in: when the document has
+  // changed since, its indices may name other blocks, and nothing is written.
+  async blockListCopy(
+    sourcePath: string, sourceHash: string, blockIndexList: number[], targetPath: string, borderIndex: number,
+  ): Promise<EditResult> {
+    const resultSource = await this.blockSourceGet(sourcePath, sourceHash);
+    if (resultSource.code !== 0) return resultSource;
+    const text = blockListTextGet(resultSource.data.model, blockIndexList);
+    if (text === '') return { code: -1, message: 'No block is chosen.' };
+    const result = await this.blockListInsert(targetPath, borderIndex, text);
+    if (result.code === 0) void this.assetStore?.usageNotify([{ type: 'docChange', docPath: targetPath }]);
+    return result;
+  }
+
+  // moves the blocks at blockIndexList of one document to border borderIndex
+  // of a document. in the same document it is one write: the blocks are
+  // taken out and put in at the border by operations applied together
+  // (blockListMoveOperationListBuild), and a move to where the blocks
+  // already are writes nothing. into another document it is two writes, the
+  // insertion first and the removal last, so a failure never loses the
+  // blocks: when the removal fails they are in both documents, and the
+  // answer says so. both writes are one record of the history.
+  async blockListMove(
+    sourcePath: string, sourceHash: string, blockIndexList: number[], targetPath: string, borderIndex: number,
+  ): Promise<EditResult> {
+    const isLeft = await this.sessionLeave();
+    if (!isLeft) return { code: -1, message: this.session?.message || 'The open edit could not be saved.' };
+    const resultSource = await this.blockSourceGet(sourcePath, sourceHash);
+    if (resultSource.code !== 0) return resultSource;
+    const modelSource = resultSource.data.model;
+    if (blockListTextGet(modelSource, blockIndexList) === '') return { code: -1, message: 'No block is chosen.' };
+
+    if (targetPath === sourcePath) {
+      if (borderIndex < 0 || borderIndex > modelSource.blockList.length) {
+        return { code: -1, message: 'The place is not in the document anymore.' };
+      }
+      const { operationList, isNoop } = blockListMoveOperationListBuild(modelSource, blockIndexList, borderIndex);
+      if (isNoop) return { code: 0, data: { isNoop: true }, message: 'The blocks already are there.' };
+      const result = await this.operationApply(sourcePath, operationList, { messageFailure: 'The blocks were not moved.' });
+      if (result.code === 0) void this.assetStore?.usageNotify([{ type: 'docChange', docPath: sourcePath }]);
+      return result;
+    }
+
+    if (!this.docIsEditable(targetPath)) return { code: -1, message: `${targetPath} cannot be edited.` };
+    const resultTarget = await this.docModelForWriteGet(targetPath);
+    if (resultTarget.code !== 0) return resultTarget;
+    const modelTarget = resultTarget.data.model;
+    if (borderIndex < 0 || borderIndex > modelTarget.blockList.length) {
+      return { code: -1, message: 'The place is not in the document anymore.' };
+    }
+    const resultInsert = await this.operationApply(
+      targetPath,
+      blockInsertOperationBuild(modelTarget, borderIndex, blockListTextGet(modelSource, blockIndexList)),
+      { messageFailure: `The blocks were not inserted into ${targetPath}.`, isHistoryRecorded: false },
+    );
+    if (resultInsert.code !== 0) return resultInsert;
+    const resultRemove = await this.operationApply(
+      sourcePath,
+      blockListDeleteOperationListBuild(modelSource, blockIndexList),
+      { messageFailure: `The blocks were not removed from ${sourcePath}.`, isHistoryRecorded: false },
+    );
+    this.historyRecord({
+      kind: 'blockListMove',
+      time: Date.now(),
+      fileChangeList: [resultInsert.data.fileChange, ...(resultRemove.code === 0 ? [resultRemove.data.fileChange] : [])],
+    });
+    void this.assetStore?.usageNotify([
+      { type: 'docChange', docPath: targetPath },
+      { type: 'docChange', docPath: sourcePath },
+    ]);
+    if (resultRemove.code !== 0) {
+      return { code: -1, message: `The blocks were copied into ${targetPath}, but they are still in ${sourcePath} as well: ${resultRemove.message}` };
+    }
+    return { code: 0, message: '' };
+  }
+
+  // deletes the blocks at blockIndexList of a document, chosen in the text
+  // of hash sourceHash (the block menu of block selection mode,
+  // doc_page_impl_copy_paste.md#selecting-blocks): one write, the runs of
+  // blocks taken out with their blank lines. asset objects the blocks
+  // reference are left to the asset service layer, as orphans when nothing else
+  // references them.
+  async blockListDelete(path: string, sourceHash: string, blockIndexList: number[]): Promise<EditResult> {
+    const isLeft = await this.sessionLeave();
+    if (!isLeft) return { code: -1, message: this.session?.message || 'The open edit could not be saved.' };
+    const resultSource = await this.blockSourceGet(path, sourceHash);
+    if (resultSource.code !== 0) return resultSource;
+    const model = resultSource.data.model;
+    if (blockListTextGet(model, blockIndexList) === '') return { code: -1, message: 'No block is chosen.' };
+    const result = await this.operationApply(path, blockListDeleteOperationListBuild(model, blockIndexList), {
+      messageFailure: 'The blocks were not deleted.',
+    });
+    if (result.code === 0) void this.assetStore?.usageNotify([{ type: 'docChange', docPath: path }]);
+    return result;
+  }
+
+  // the block model of a document for a write: read and compiled first when
+  // it is not yet; refused while it does not compile, or when its compiled
+  // text is not the text the edit layer last read
+  private async docModelForWriteGet(path: string): Promise<EditResult> {
+    if (!this.docEditByPath[path]) await this.docEditEnsure(path);
+    await this.compilePendingByPath[path]?.promise;
+    const state = this.docEditByPath[path];
+    if (state?.status === 'error') return { code: -1, message: `${path} does not compile; repair it first.` };
+    if (!state?.model || state.hash !== this.sourceByPath[path]?.hash) {
+      return { code: -1, message: `${path} is not loaded.` };
+    }
+    return { code: 0, data: state, message: '' };
+  }
+
+  // the document the copied or moved blocks come from, still at the text
+  // they were chosen in
+  private async blockSourceGet(sourcePath: string, sourceHash: string): Promise<EditResult> {
+    if (!this.docIsEditable(sourcePath)) return { code: -1, message: `${sourcePath} cannot be edited.` };
+    const resultModel = await this.docModelForWriteGet(sourcePath);
+    if (resultModel.code !== 0) return resultModel;
+    if (resultModel.data.hash !== sourceHash) {
+      return { code: -2, message: `${sourcePath} changed since the blocks were chosen; choose them again.` };
+    }
+    return resultModel;
+  }
+
   // a new block of an isAssetOnly component (doc_page_impl_edit.md#asset-only-components):
   // its starting data (template.assetSource, from the component's factory)
-  // becomes a new object of the local asset store, in the save mode the
+  // becomes a new object of the local store of the asset service layer, in the save mode the
   // component declares, then the block is written at the border of the open
   // insert menu as a reference to it, and opened in its default edit mode.
   // the document is written last: when that write fails, the object made
@@ -1305,7 +1479,7 @@ export class DocEditStore {
       return false;
     }
     if (!this.assetStore?.isWritable) {
-      failSet(`${template.compName} keeps its data in the asset store, which cannot be written: ${this.assetWriteUnavailableReasonGet()}`);
+      failSet(`${template.compName} keeps its data in the asset service layer, which cannot be written: ${this.assetWriteUnavailableReasonGet()}`);
       return false;
     }
     runInAction(() => {
@@ -1416,10 +1590,10 @@ export class DocEditStore {
     return true;
   }
 
-  // ---------- moving a block's data into the asset store ----------
+  // ---------- moving a block's data into the asset service layer ----------
 
   // a component block with its data written inline in a fenced block can
-  // move that data into the asset store (doc_page_impl_asset.md): a component
+  // move that data into the asset service layer (doc_page_impl_asset.md): a component
   // block with a reference already, or without a fenced block, cannot
   blockAssetMoveIsAvailable(path: string, blockIndex: number): boolean {
     if (!this.assetStore?.isWritable) return false;
@@ -1456,7 +1630,7 @@ export class DocEditStore {
     return this.blockAssetMoveIs(path, blockIndex) && this.blockAssetMove!.status !== 'error';
   }
 
-  // the inline data of the block becomes an object of the local asset store
+  // the inline data of the block becomes an object of the local store of the asset service layer
   // (in its default folder, with the block's language, in the save mode its
   // component declares), and the fenced block is rewritten as the reference
   // to that object by id (lang "asset"). the object gets no name: a name
@@ -1479,7 +1653,7 @@ export class DocEditStore {
       return false;
     }
     if (!this.blockAssetMoveIsAvailable(path, blockIndex)) {
-      failSet('only a component block with inline data in a fenced block can move it into the asset store');
+      failSet('only a component block with inline data in a fenced block can move it into the asset service layer');
       return false;
     }
     const isLeft = await this.sessionLeaveForIndexAction(path);
@@ -1524,7 +1698,7 @@ export class DocEditStore {
     if (result.code !== 0) {
       runInAction(() => {
         move.status = 'error';
-        move.message = `${result.message} The data is in the asset store as object ${objectId}.`;
+        move.message = `${result.message} The data is in the asset service layer as object ${objectId}.`;
       });
       return false;
     }

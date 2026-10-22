@@ -16,7 +16,7 @@ import { compIconDefault } from './comp-icon.jsx';
 //                  through an explicit control, the toolbar's Edit button or
 //                  the mode menu, never by a click on the block or a focus
 //                  shift, whatever EditBlockEnterMode is; default false),
-//                  isAssetOnly (its data lives in the asset store only and is
+//                  isAssetOnly (its data lives in the asset service layer only and is
 //                  never written inline in a document; default false),
 //                  isNotInDoc (it cannot be placed in a document: it renders
 //                  elsewhere, e.g. in the side panel; default false),
@@ -88,7 +88,7 @@ const ASSET_SAVE_MODE_LIST = ['inPlace', 'newVersion'];
 
 // the placements of a block written in a document by its author; a
 // component declared isNotInDoc is refused there, a component declared
-// isAssetOnly renders there only with data from the asset store
+// isAssetOnly renders there only with data from the asset service layer
 export const COMP_PLACEMENT_DOC_LIST = ['mdx', 'commentBlock'];
 
 export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate'];

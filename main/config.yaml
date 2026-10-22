@@ -22,7 +22,7 @@ variable:
   # the source that the entry collects as "referenced" (example source.yaml)
   imageFileStoreDirDefault: ~example/asset-file/image
 
-# the local asset store: versioned objects (text or binary) a component block
+# the local store of the asset service layer: versioned objects (text or binary) a component block
 # can reference instead of carrying its data inline (```asset blocks). the
 # file names the folders of the store and which one is the default; the
 # settings panel of the page rewrites it. served through the asset api on
@@ -102,7 +102,7 @@ compRegistry:
   DiagramText: common/DiagramText
   DiagramMermaid: common/DiagramMermaid
   DiagramER: common/DiagramER
-  # asset-only: its data is a workbook in the asset store, the block a reference to it
+  # asset-only: its data is a workbook in the asset service layer, the block a reference to it
   ExcelUniver: common/ExcelUniver
   Block: common/Block
   BlockSimple: common/BlockSimple
@@ -149,7 +149,7 @@ compRegistry:
 # files referenced by Image / ImageGrid / DiagramMermaid properties, the
 # binary files the source collects and the source files asset versions
 # depend on are bundled into a build and exported as fileUrlByPath, which
-# the source layer answers from (config.assetUrlGet of a component).
+# the doc page source service layer answers from (config.assetUrlGet of a component).
 # design: doc_page_impl_source.md#files-in-a-build
 collectComponentAttachmentsOnBuild: true
 

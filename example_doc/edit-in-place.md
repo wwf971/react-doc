@@ -11,14 +11,14 @@ In edit mode the page looks exactly as it reads: nothing moves when the toggle i
 
 - choose a view mode or an edit mode of the block (only on a component block that has modes to choose from; see [View modes and edit modes](#view-modes-and-edit-modes))
 - edit the block where it is
-- open the asset panel (only on a block whose data comes from the [asset store](asset-store.md)), or move the block's inline data into the store (only on a component block with a data block)
+- open the asset panel (only on a block whose data comes from the [asset service layer](asset-store.md)), or move the block's inline data into the store (only on a component block with a data block)
 - insert a new block above it
 - insert a new block below it
 - move the block up, swapping it with the block above
 - move the block down, swapping it with the block below
 - delete the block
 
-When the top of a long block is scrolled away, the toolbar stays at the top of what is visible of it. Only one block is in edit mode at a time. Leaving the block in any way that is not canceling saves it: click somewhere else, enter another block, press Ctrl/⌘ + Enter, or use **Save** in the small bar floating above the block. Escape or **Cancel** abandons the change. Deleting a block, and moving its data into the asset store, ask for confirmation in the same toolbar. The toolbar buttons **Frontmatter** and **Source** edit the frontmatter as one piece and the whole source file.
+When the top of a long block is scrolled away, the toolbar stays at the top of what is visible of it. Only one block is in edit mode at a time. Leaving the block in any way that is not canceling saves it: click somewhere else, enter another block, press Ctrl/⌘ + Enter, or use **Save** in the small bar floating above the block. Escape or **Cancel** abandons the change. Deleting a block, and moving its data into the asset service layer, ask for confirmation in the same toolbar. The toolbar buttons **Frontmatter** and **Source** edit the frontmatter as one piece and the whole source file.
 
 The move buttons are greyed out where there is nothing to swap with: up on the first block of the document, down on the last one. Try them on the three short paragraphs below; the blank line between two blocks stays where it is, only the blocks change places.
 
@@ -32,7 +32,7 @@ Third of three short paragraphs.
 
 Edit mode also reaches the side panel. Hover an item of the sidebar and a small pencil appears after its label; click it and the label becomes editable in its place: type, then press Enter or click elsewhere to save, Escape to drop the change. The new text is written into the yaml file the item comes from (`example_doc/side-panel.yaml`, or `mdx-usage/side-panel.yaml` for the items of the MDX Components folder), only on the line of that label: comments, order, and everything else in the file stay as they are, and the side panel updates without a reload. A document item whose label is its title (this page's own item, for example) gets a `text:` line added below its `doc:` line. The item of this page in the sidebar, `In-place Editing`, is a good one to try, as is the separator `Tests` and the two-language label of the `Component Panel` item below it, whose displayed translation is the one that is edited. Items generated from a source folder have no line to write and show no pencil.
 
-A label is edited only in the side panel. The same item can be shown at the same time in the breadcrumb, in a previous/next card below the page, and in the toc button of a narrow window; those stay as they are while its name is edited in the side panel. To see it, edit the label of `Asset Store`, the item after this page, in the sidebar: the Next card at the bottom of this page shows the same name and keeps showing it, unchanged, until the new name is saved. Typing a space in the label of a folder (`MDX Components`) types a space and leaves the folder open or closed as it was.
+A label is edited only in the side panel. The same item can be shown at the same time in the breadcrumb, in a previous/next card below the page, and in the toc button of a narrow window; those stay as they are while its name is edited in the side panel. To see it, edit the label of `Asset Service Layer`, the item after this page, in the sidebar: the Next card at the bottom of this page shows the same name and keeps showing it, unchanged, until the new name is saved. Typing a space in the label of a folder (`MDX Components`) types a space and leaves the folder open or closed as it was.
 
 ## Moving side-panel items
 
@@ -50,7 +50,7 @@ By default a click anywhere on a block enters it, and the caret lands on the sou
 
 ## Default editors
 
-Blocks without a component of their own are edited as source, in their own place and typography: this heading is edited as a heading, a paragraph as a paragraph, a code block in a monospace area. The block keeps the height it has when read: source that needs more lines than the rendered block extends over the block below, and the page does not move; the code block below shows it, its fences are two more lines. A few kinds add a control to the floating bar: this heading offers its level, the list below offers bullets or numbers.
+Blocks without a component of their own are edited as source, in their own place and typography: this heading is edited as a heading, a paragraph as a paragraph, a code block in a monospace area. The block keeps the height it has when read: source that needs more lines than the rendered block extends over the block below, and the page does not move; the code block below shows it, its fences are two more lines. A few kinds add a control to the floating bar: this heading offers its level, the list below offers bullets or numbers. Inside a block nothing moves either: the lines of the source stand where the rendered lines stood, so the list below keeps the gaps between its items when it is entered, and its second item, with inline code, keeps its line height.
 
 1. the first item of an ordered list
 2. the second item, with `inline code`
@@ -141,7 +141,7 @@ Choosing a view mode re-renders the block at once; the choice lasts for the page
 | #1104 | Footrest | Out of Stock |
 ```
 
-Edit modes are greyed out when they cannot be chosen now: while a save is pending, or on a block whose data is an asset, where only **Source** can be chosen ([below](#components-backed-by-the-asset-store)). The **Source** mode is built in and belongs to every block whose component does not refuse it; a component that has no editor of its own has only this mode, and shows no modes button.
+Edit modes are greyed out when they cannot be chosen now: while a save is pending, or on a block whose data is an asset, where only **Source** can be chosen ([below](#components-backed-by-the-asset-service-layer)). The **Source** mode is built in and belongs to every block whose component does not refuse it; a component that has no editor of its own has only this mode, and shows no modes button.
 
 ### Read-only components
 
@@ -160,14 +160,49 @@ Components that expose no edit mode are edited as source, like any other block. 
 +---------+      +---------+
 ```
 
-## Components backed by the asset store
+## Components backed by the asset service layer
 
-A component block whose code block is written in the language `asset` holds a reference into the asset store instead of its data (see [Asset Store](asset-store.md)). In edit mode such a block is edited as source, whatever its component declares: the block is the reference, and the editor shows the reference, labeled `Image (asset)`. The data belongs to the object and is changed through the asset panel, opened with the **asset** button that the toolbar of such a block shows next to Edit; the panel saves the head text in place or as a new version.
+A component block whose code block is written in the language `asset` holds a reference into the asset service layer instead of its data (see [Asset Service Layer](asset-store.md)). In edit mode such a block is edited as source, whatever its component declares: the block is the reference, and the editor shows the reference, labeled `Image (asset)`. The data belongs to the object and is changed through the asset panel, opened with the **asset** button that the toolbar of such a block shows next to Edit; the panel saves the head text in place or as a new version.
 
 <!--renderComp=Image-->
 ```asset
 objectId: w4laejhlzjh
 ```
+
+## Pasting blocks
+
+Markdown or MDX can be pasted into a document as blocks. In edit mode, copy the text below, click an empty part of the page (not into a block), and paste: a dialog opens instead of writing anything. The blocks go to the end of the document at first; when some text of the page is selected instead (a few words of this paragraph, or across several blocks), they go right after the last block the selection touches. On the left it lists the blocks the text makes in this document, each with a badge naming its kind (`Paragraph`, `List`, `Image`) and its source; the eye next to a badge shows the block rendered, as this page would render it. **Pasted text** opens the text itself for editing, and the blocks follow it. On the right, **Insert into** shows this document as a tree of its blocks: choose a block, then **Before** or **After**, or choose the document itself, then **Into, first** or **Into, last**. The document field takes any md / mdx document of the source, so the blocks can go into another one. **Insert** writes them there; Escape or **Cancel** writes nothing. The dialog can be moved by dragging the empty part of its header and resized by its edges and corners; the size it is left in is kept for the next time it opens. The insert menu of every block also has **Paste…** in its Text row, which opens the same dialog at that place with an empty text to paste into.
+
+````text
+A pasted paragraph with **bold** and `code`.
+
+- a pasted list
+- with two items
+
+<!--renderComp=Image-->
+```yaml
+src: mdx-usage/image/office-worker.svg
+alt: A pasted image
+width: 160
+height: 106
+```
+````
+
+## Copying and moving blocks
+
+Blocks already in a document can be copied or moved, here or into another document. The **Select** switch next to **Edit** turns on block selection mode (edit mode goes off; the page does not move). Click a block to select it, Ctrl / ⌘ + click to add or remove one, Shift + click to select every block up to the clicked one; Escape selects nothing. Try it on the three short paragraphs below.
+
+First of three short paragraphs: select it, then Shift + click the third one.
+
+Second of the three: Ctrl / ⌘ + click it to leave it out of the selection.
+
+Third of the three. Then right-click a selected block.
+
+Text selected in edit mode is not lost when the mode is switched on: the blocks the selection touched start selected.
+
+The right-click menu stays at the point of the block it was opened on: scroll the page while it is open and it moves with the block. It has **Copy Blocks To…** and **Move Blocks To…**. Both open the same dialog. On the left, the chosen blocks are listed one line each, checked; uncheck one to leave it out, **Sources** shows each block's source (and, with the eye, rendered), and **All blocks** lists every block of this document, so more can be checked. On the right, choose the document first (this one is chosen already; type another path, or pick it in the tree, which the search field above it narrows to the names holding what is typed, the matches highlighted: try `doc`, Enter takes the first match), then **Choose**, then the place in its tree, as for a paste; the arrow goes back to another document. **Copy here** and **Move here** are both there, whichever entry was chosen. Moving the blocks to where they already are is refused with the reason; a move into another document is written there first and removed here last. Like the dialog of a paste, it moves by its header and resizes by its edges.
+
+The same menu has **Duplicate Above** and **Duplicate Below**, which put a copy of the block right next to it; they are offered while one block is selected (greyed out for more). **Delete Blocks…** asks in the menu first, then deletes every selected block. Try them in the [Playground](playground/playground.md), which git ignores.
 
 ## Insert at the end
 

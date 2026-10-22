@@ -1,9 +1,11 @@
 import { observer } from 'mobx-react-lite';
 import { FilePenLine } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
+import { DocBlockSelectToggle } from '../block-select/DocBlockSelectToggle.jsx';
 import './DocEdit.css';
 
-// The global edit-mode switch. It exists only while a development server
+// The global edit-mode switch, and next to it the switch of block selection
+// mode (DocBlockSelectToggle). It exists only while a development server
 // answers the edit api (DocEditStore.isAvailable); built pages never show it.
 // Switching edit mode off leaves the open session, which saves its draft.
 export const DocEditToggle = observer(function DocEditToggle({ isCompact = false }) {
@@ -29,6 +31,7 @@ export const DocEditToggle = observer(function DocEditToggle({ isCompact = false
         <FilePenLine aria-hidden="true" size={15} strokeWidth={2} />
         {isCompact ? null : <span>{isEditMode ? 'Editing' : 'Edit'}</span>}
       </button>
+      <DocBlockSelectToggle isCompact={isCompact} />
     </div>
   );
 });

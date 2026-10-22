@@ -14,7 +14,7 @@ document  <!--renderComp=FileTree,id=x-->  or  <FileTree .../>
 
 ## What a component exposes
 
-A definition says two kinds of things about a component. The first is how the registry boundary (`RegisteredComp`) treats it: where it may render (`placementList`), what it can be referenced as (`componentType`, `dataRefTypeList`), how its input is normalized (`dataBuild`), what it is told about its data (`isAssetAware`, `assetDependencyListGet`; [Components and the asset store](#components-and-the-asset-store)). The second is what the component tells the page about itself, for the page to offer to readers and authors: that it is read-only, in which ways it can be displayed and edited, what its icon is, how a new block of it starts, which config keys it has. These are the component's **exposure**, the `expose` option of `compDefine()`:
+A definition says two kinds of things about a component. The first is how the registry boundary (`RegisteredComp`) treats it: where it may render (`placementList`), what it can be referenced as (`componentType`, `dataRefTypeList`), how its input is normalized (`dataBuild`), what it is told about its data (`isAssetAware`, `assetDependencyListGet`; [Components and the asset service layer](#components-and-the-asset-service-layer)). The second is what the component tells the page about itself, for the page to offer to readers and authors: that it is read-only, in which ways it can be displayed and edited, what its icon is, how a new block of it starts, which config keys it has. These are the component's **exposure**, the `expose` option of `compDefine()`:
 
 ```text
 compDefine(Xxx, {
@@ -49,7 +49,7 @@ Facts about the component that are not modes or drawings, as one object, so that
 | `isReadOnly` | `false` | nothing of a block of this component can be edited from the page: it has no edit mode at all, the toolbar's Edit button is greyed out, a click does not enter it, and the mode menu, when the block has one for its view modes, says so. For a component that displays what the page knows (every tag, the resolved config) and has no data of its own |
 | `isEditSourceAccepted` | `true` | the built-in `source` edit mode is offered for its blocks ([below](#view-modes-and-edit-modes)). `false` for a component whose source must not be edited by hand, when it declares edit modes of its own |
 | `isEditEnterButtonOnly` | `false` | a block of it enters edit mode only through an explicit control: the toolbar's Edit button, or an edit mode chosen in the mode menu. A click on the block does not enter it even when `EditBlockEnterMode` is `click`, and a focus shift from the neighbor block (the arrow keys) stops before it. For a component whose view takes clicks itself (selecting cells of a sheet), where entering by click would turn every interaction into an edit session |
-| `isAssetOnly` | `false` | its data lives in the asset store only and is never written inline in a document: a block of it is always an asset reference ([Asset-only and not-in-doc](#asset-only-and-not-in-doc)) |
+| `isAssetOnly` | `false` | its data lives in the asset service layer only and is never written inline in a document: a block of it is always an asset reference ([Asset-only and not-in-doc](#asset-only-and-not-in-doc)) |
 | `isNotInDoc` | `false` | it cannot be a block of a document at all, because it renders elsewhere (a side-panel item); the insert menu does not offer it and a block of it shows an error ([Asset-only and not-in-doc](#asset-only-and-not-in-doc)) |
 | `assetSaveMode` | — | `inPlace` or `newVersion`: the save mode an asset object gets when the page creates it for a block of this component (from the insert menu, or by **to asset**). Without it the object has no save mode, which saves in place ([Save modes](doc_page_impl_asset.md#save-modes)). Only the creation reads it; the object's own mode decides every later save |
 | `configDefineList` | `[]` | the shape of its component-level config: which keys exist, their types, defaults, descriptions. Only the shape; the values come from the config layers and the document levels, and reach the component as `config.compConfig` ([Component-level config](doc_page_impl_config.md#component-level-config)) |
@@ -67,7 +67,7 @@ RegisteredComp(placement, definition)
                                                        so this is the message, not "not allowed here"
   placement not in placementList  -> error, as for any component
   meta.isAssetOnly and the data is not from an asset (configRuntime.assetInfo.isFromAsset)
-      -> error: the data must be in the asset store; "to asset" moves it there
+      -> error: the data must be in the asset service layer; "to asset" moves it there
 ```
 
 **Not-in-doc** marks a component that is rendered by something other than a document: `SidePanelItem` (and its demo) draws the items of the side panel. The insert menu leaves such components out (`edit-template.js`).
@@ -222,7 +222,7 @@ maxHeight: 8rem
 
 In `.mdx`, the same reference is a property: `<FileTree dataRef="comp-file-tree.md#example-project-tree" />`. `dataRef` is always a component property (a comment key or an MDX attribute), never a key inside the YAML block, because the host resolves it before the component parses its own data.
 
-`dataRef` reuses data that is authored in some document. Data that belongs to no document, or that should have a history of its own, goes to the [asset store](doc_page_impl_asset.md) instead: the component block holds a reference (a fenced block in the language `asset`) in place of its data, and the host resolves it to the referenced version's text before the component sees its input. The two mechanisms are resolved by the same runtime boundary (`RegisteredComp`) and compose in one direction: an asset-backed component can carry a `dataRef`, since the reference is resolved first and the resolved text is normalized as authored data.
+`dataRef` reuses data that is authored in some document. Data that belongs to no document, or that should have a history of its own, goes to the [asset service layer](doc_page_impl_asset.md) instead: the component block holds a reference (a fenced block in the language `asset`) in place of its data, and the host resolves it to the referenced version's text before the component sees its input. The two mechanisms are resolved by the same runtime boundary (`RegisteredComp`) and compose in one direction: an asset-backed component can carry a `dataRef`, since the reference is resolved first and the resolved text is normalized as authored data.
 
 ### Reference grammar
 
@@ -306,9 +306,9 @@ While the referenced document is compiling, a neutral loading line replaces the 
 - References are resolved one level deep. If the referenced component itself has a `dataRef`, its data is delivered unchanged, including that `dataRef`; the host does not follow chains. Likewise, a referenced component whose data is an asset reference delivers the reference text, not the asset text: an asset-backed block is not a `dataRef` source, both documents should reference the store.
 - With `pruneSourceToSidePanel`, a statically authored `dataRef` keeps the referenced document in the deployed manifest without a side-panel item (see [Source pruning for deployment](doc_page_impl.md#source-pruning-for-deployment)). A `dataRef` written as an MDX expression is not discovered and is reported at build time.
 
-## Components and the asset store
+## Components and the asset service layer
 
-A component's data may live in the [asset store](doc_page_impl_asset.md) instead of the document: the block holds a reference in place of its data, and the runtime boundary resolves it to the text of the referenced version before the component sees its input ([Resolution](doc_page_impl_asset.md#resolution-the-runtime-boundary)). How much a component has to do with the store is its own choice, in three degrees:
+A component's data may live in the [asset service layer](doc_page_impl_asset.md) instead of the document: the block holds a reference in place of its data, and the runtime boundary resolves it to the text of the referenced version before the component sees its input ([Resolution](doc_page_impl_asset.md#resolution-the-runtime-boundary)). How much a component has to do with the store is its own choice, in three degrees:
 
 ```text
 unaware      nothing declared (the default)    any component works with a reference block the day it is
@@ -358,7 +358,7 @@ The name is the one way to identify the component for now. A later form may be m
 
 Blocks may share an object: two `Image` blocks showing one picture at two sizes, a table pinned to a version beside the same table reading the head. That several component types share one object's data is the future option of a data contract (above); today sharing is between blocks of one component.
 
-The asset service therefore keeps a **usage index**: for every block whose data is a reference, where it is and what it reads ([Usage](doc_page_impl_asset.md#usage)). Where a block is uses the block identity of the page, the document and the line of its marker comment, with the `Anchor` id declared before the block when there is one; that is the place format of the navigation layer ([Places in a document](doc_page_impl_nav.md#places-in-a-document)), so a place is also a link. The index is read from every document when the page starts and follows the documents as they change; it can be behind, since not every change of a document reaches the page when it happens, and a document read again is right. From the index come the backlinks of an object in its asset panel (each block, whether it follows the head or is pinned, a link to it, and a read-again button that confirms it), the use counts in its version table, and the orphans.
+The asset service layer therefore keeps a **usage index**: for every block whose data is a reference, where it is and what it reads ([Usage](doc_page_impl_asset.md#usage)). Where a block is uses the block identity of the page, the document and the line of its marker comment, with the `Anchor` id declared before the block when there is one; that is the place format of the navigation layer ([Places in a document](doc_page_impl_nav.md#places-in-a-document)), so a place is also a link. The index is read from every document when the page starts and follows the documents as they change; it can be behind, since not every change of a document reaches the page when it happens, and a document read again is right. From the index come the backlinks of an object in its asset panel (each block, whether it follows the head or is pinned, a link to it, and a read-again button that confirms it), the use counts in its version table, and the orphans.
 
 ### What the page anticipates
 
@@ -384,6 +384,7 @@ An editor, built-in or custom, in whichever of its modes, must not move the page
 - **The wrapper owns the geometry.** The editor does not set a height, a min-height, or outer margins on its root to fit its content; the wrapper carries the margins and the height of the view mode. Inner spacing (padding, the margins between children) stays as in view mode.
 - **The root paints a background.** The layer gives the root the page background so that, where it extends over the next block, it covers it; a root with a background of its own (a card, a code surface) keeps it, and a root that is transparent by design must not rely on seeing through to the page.
 - **No layout from editing state.** Showing a field, a message, or an action in response to the author must not change the height of the root; it floats, or it replaces a value in place (`EditValueInline` keeps the exact box of the text it replaces).
+- **The lines keep their rhythm (highly recommended).** Inside the block nothing should jump either: where the editor shows the same lines as the view (source text of a paragraph or a list, a caption, a cell), each line stays at the height it had in view mode. The view must not make a line taller than the line height (an inline element with a smaller font and the inherited line height does: inline code is marked `doc-code-inline` and set to `line-height: 1`), and gaps that the rendering puts between lines (between list items) are given to the matching source lines (`EditSourceSurface` in line mode, as `ListEdit` uses it). The details are rule 5 of [the no-jitter rule](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule).
 
 A component block that benefits from more room (a spreadsheet, a wide table) can also be opened in the page's block popup and edited there: the component renders both modes inside `BlockPopupSurface`, puts its margins on the surface's outer box instead of its own root, and fills the dialog when told `isInPopup` ([Block popup](doc_page_impl_popup.md#opting-in)). `ExcelUniver` and `StockTable` do.
 

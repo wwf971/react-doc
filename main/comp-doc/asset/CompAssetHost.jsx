@@ -6,7 +6,7 @@ import { assetSaveModeGet } from '../../frontend/src/store/DocAssetStore.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import { AssetFrame } from './AssetFrame.jsx';
 
-// The runtime boundary of a component whose data lives in the asset store
+// The runtime boundary of a component whose data lives in the asset service layer
 // (design: doc_page_impl_asset.md). RegisteredComp hands a comment-block
 // invocation here when its fenced block is written in the language "asset":
 // the block holds a reference { store, objectId | name, versionId }, not the data.
@@ -68,7 +68,7 @@ export const CompAssetHost = observer(function CompAssetHost({ input, registered
     );
   }
   // what a component declared isAssetAware learns about its data
-  // (doc_page_impl_mdx_comp.md#components-and-the-asset-store)
+  // (doc_page_impl_mdx_comp.md#components-and-the-asset-service-layer)
   const assetInfo = {
     isFromAsset: true,
     store: reference.store,

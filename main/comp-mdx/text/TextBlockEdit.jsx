@@ -4,6 +4,7 @@ import { EditActions } from '../../comp-doc/edit/EditActions.jsx';
 import { EditFloatingPanel } from '../../comp-doc/edit/EditFloatingPanel.jsx';
 import { EditSourceSurface } from '../../comp-doc/edit/EditSourceSurface.jsx';
 import { headingLevelGet } from './HeadingData.js';
+import { listLineSpaceListGet } from './ListData.js';
 import './text-block.css';
 
 // The editor shared by the default text components (Heading, Paragraph,
@@ -63,6 +64,8 @@ export const TextBlockEdit = observer(function TextBlockEdit({ data = {}, config
       text={textDraft}
       textVersion={draftVersion}
       selectionInitial={session.selectionInitial ?? 'end'}
+      // a list keeps the gaps between its items while its source is edited
+      lineSpaceListGet={kind === 'list' && !edit.isSurfaceFloating ? listLineSpaceListGet : undefined}
       isLocked={isLocked}
       ariaLabel={`${label} source`}
       onTextChange={(text) => void onEvent?.('editDraftChange', { text })}

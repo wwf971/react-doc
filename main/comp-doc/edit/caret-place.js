@@ -37,21 +37,31 @@ export function caretPlaceInitial(element, selectionInitial) {
 }
 
 // the caret inside the text of the element (not at the element boundary,
-// where the browser has no caret rectangle and arrow keys do not move it)
+// where the browser has no caret rectangle and arrow keys do not move it).
+// the text may be one text node or the text of line elements (a surface in
+// line mode); an empty line element holds a <br>, and the caret goes in front of it.
 export function caretPlaceAtEdge(element, edge) {
   const selection = window.getSelection?.();
   if (!selection) return;
   const range = document.createRange();
-  const textNode = edge === 'end' ? element.lastChild : element.firstChild;
-  if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-    range.setStart(textNode, edge === 'end' ? textNode.length : 0);
-    range.collapse(true);
-  } else {
-    range.selectNodeContents(element);
-    range.collapse(edge === 'start');
-  }
+  const node = edgeNodeGet(element, edge);
+  if (node.nodeType === Node.TEXT_NODE) range.setStart(node, edge === 'end' ? node.length : 0);
+  else range.setStart(node, 0);
+  range.collapse(true);
   selection.removeAllRanges();
   selection.addRange(range);
+}
+
+// the first or last text node of the element, or the deepest element at
+// that edge when it holds no text (an empty element, a line with a <br>)
+function edgeNodeGet(element, edge) {
+  let node = element;
+  while (node.nodeType === Node.ELEMENT_NODE && node.firstChild) {
+    const child = edge === 'end' ? node.lastChild : node.firstChild;
+    if (child.nodeName === 'BR') break;
+    node = child;
+  }
+  return node;
 }
 
 // the caret at the text position nearest to the point, which is first
@@ -131,11 +141,17 @@ export function caretRectGet(element) {
   return undefined;
 }
 
-// the line boxes of the element's text, top to bottom
+// the line boxes of the element's text, top to bottom. only text counts: a
+// range over line elements would also report the boxes of the elements
 function textRectListGet(element) {
-  const range = document.createRange();
-  range.selectNodeContents(element);
-  return [...range.getClientRects()].filter((rect) => rect.width > 0 || rect.height > 0);
+  const rectList = [];
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    rectList.push(...[...range.getClientRects()].filter((rect) => rect.width > 0 || rect.height > 0));
+  }
+  return rectList;
 }
 
 // the standard caretPositionFromPoint, or the WebKit caretRangeFromPoint

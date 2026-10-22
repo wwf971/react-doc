@@ -13,7 +13,7 @@ import { excelUniverWorkbookDefaultCreate, excelUniverWorkbookTextBuild } from '
 export const excelUniverExpose = {
   meta: {
     label: 'Spreadsheet',
-    description: 'An Excel-style spreadsheet drawn by Univer; its data lives in the asset store.',
+    description: 'An Excel-style spreadsheet drawn by Univer; its data lives in the asset service layer.',
     isAssetOnly: true,
     isEditSourceAccepted: false,
     isEditEnterButtonOnly: true,

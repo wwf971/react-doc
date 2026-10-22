@@ -1,0 +1,128 @@
+/* Block selection mode (doc_page_impl_copy_paste.md#selecting-blocks). like
+   edit mode it adds nothing to the flow: a hovered or selected block is
+   marked by an outline and a tint, which take no room. */
+
+.doc-edit-body[data-select-mode] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.doc-block-select-block {
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.doc-block-select-block:hover {
+  outline: 1px dashed color-mix(in srgb, var(--color-fd-primary) 45%, var(--color-fd-border));
+  outline-offset: 2px;
+}
+
+.doc-block-select-block[data-selected] {
+  outline: 1px solid var(--color-fd-primary);
+  outline-offset: 2px;
+  background: color-mix(in srgb, var(--color-fd-primary) 7%, transparent);
+}
+
+/* a block that renders nothing has no height: its chip carries the marks */
+.doc-block-select-block[data-invisible]:hover,
+.doc-block-select-block[data-invisible][data-selected] {
+  outline: none;
+  background: transparent;
+}
+
+.doc-block-select-block[data-selected] > .doc-edit-block-chip {
+  border-style: solid;
+  border-color: var(--color-fd-primary);
+  background: color-mix(in srgb, var(--color-fd-primary) 12%, var(--color-fd-background));
+  color: var(--color-fd-foreground);
+}
+
+/* ---------- the dialog: copying or moving blocks ---------- */
+
+/* the frame and the two columns are those of the paste review (DocPaste.css) */
+
+.doc-block-transfer-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.doc-block-transfer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1.3rem;
+  cursor: pointer;
+}
+
+.doc-block-transfer-chip[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border));
+  background: color-mix(in srgb, var(--color-fd-primary) 12%, var(--color-fd-background));
+  color: var(--color-fd-primary);
+}
+
+.doc-block-transfer-chip:hover:not(:disabled),
+.doc-block-transfer-chip:focus-visible:not(:disabled) {
+  color: var(--color-fd-foreground);
+  outline: none;
+}
+
+.doc-block-transfer-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.doc-block-transfer-doc {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.doc-block-transfer-doc-path {
+  overflow: hidden;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-block-transfer-doc-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---------- the right-click menu (DocBlockSelectMenu) ---------- */
+
+/* a rule between groups of entries: a container item of no height */
+.doc-block-select-menu .menu-core-item.is-container:has(.doc-block-select-menu-rule) {
+  height: 0;
+  margin: 0.15rem 0;
+  padding: 0;
+  border-top: 1px solid var(--color-fd-border);
+  overflow: hidden;
+}
+
+.doc-block-select-menu-note {
+  display: block;
+  max-width: 16rem;
+  color: var(--color-fd-muted-foreground);
+  line-height: 1.3;
+  white-space: normal;
+}
+
+.doc-block-select-menu-note[data-error] {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-block-select-menu .doc-edit-mode-item[data-danger] {
+  color: var(--color-fd-destructive, #dc2626);
+}

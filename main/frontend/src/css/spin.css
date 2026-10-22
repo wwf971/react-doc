@@ -1,0 +1,9 @@
+/* ---------- .doc-spin ----------
+   turns an icon (LoaderCircle, a refresh icon) while something runs */
+.doc-spin {
+  animation: doc-spin 0.9s linear infinite;
+}
+
+@keyframes doc-spin {
+  to { transform: rotate(360deg); }
+}

@@ -124,16 +124,6 @@
   font-size: 0.75rem;
 }
 
-.doc-service-spin {
-  animation: doc-service-spin 0.9s linear infinite;
-}
-
-@keyframes doc-service-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* ---------- the Services tab ---------- */
 
 .doc-service-settings {
@@ -296,25 +286,8 @@
   color: var(--color-fd-muted-foreground);
 }
 
+/* a .doc-button, a little narrower */
 .doc-service-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  height: 1.35rem;
   padding: 0 0.4rem;
-  border: 1px solid var(--color-fd-border);
-  border-radius: 2px;
-  background: var(--color-fd-background);
-  color: var(--color-fd-foreground);
-  cursor: pointer;
-  font-size: 0.72rem;
-}
-
-.doc-service-button:hover:not(:disabled) {
-  background: var(--color-fd-accent);
-}
-
-.doc-service-button:disabled {
-  opacity: 0.4;
-  cursor: default;
+  line-height: inherit;
 }

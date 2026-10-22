@@ -27,16 +27,16 @@ import { configDoc, fileManifest } from 'virtual:doc-source';
 
 In-place editing on the development server is enabled by passing the edit api url the virtual module exports: `config={{ ..., edit: { endpoint: docEditEndpoint } }}` with `import { docEditEndpoint } from 'virtual:doc-source'`. It is an empty string in a build, so the deployed page has no edit mode ([In-place editing](doc_page_impl_edit.md)).
 
-The asset store ([Asset store](doc_page_impl_asset.md)) needs `asset.file` in `config.yaml`, naming the store's config file with its `folderList` ([the local store](doc_page_impl_asset.md#the-local-store-folders-fully-reflected)), and two more values of the virtual module: `data={{ ..., assetSnapshot }}` (the objects bundled into a build, `null` in development) and `config={{ ..., asset: { endpoint: docAssetEndpoint, subscribe: subscribeDocAsset } }}` (the asset api of the development server and its change feed, both inert in a build). The asset panel is framed by `config.compConfigHost.panelComponent`, like the tag overview; without it the frame shows the asset and has no button.
+The asset service layer ([Asset service layer](doc_page_impl_asset.md)) needs `asset.file` in `config.yaml`, naming the store's config file with its `folderList` ([the local store](doc_page_impl_asset.md#the-local-store-folders-fully-reflected)), and two more values of the virtual module: `data={{ ..., assetSnapshot }}` (the objects bundled into a build, `null` in development) and `config={{ ..., asset: { endpoint: docAssetEndpoint, subscribe: subscribeDocAsset } }}` (the asset api of the development server and its change feed, both inert in a build). The asset panel is framed by `config.compConfigHost.panelComponent`, like the tag overview; without it the frame shows the asset and has no button.
 
 Service instances ([Service instances](doc_page_impl_service_instance.md)) need `service.backend` in `config.yaml`, the address of the service backend (and optionally `service.backendConfigFile`, the backend's config, whose folders are then not documents), and the endpoint the virtual module exports: `config={{ ..., service: { endpoint: docServiceEndpoint } }}`. It is an empty string in a build, so a deployed page has no backend and its dashboards say so. The backend is a separate program (`python3 main/service-backend/server.py --config …`), started and stopped on its own.
 
 A host that embeds the page checks these when it takes a new version, because none of them fails at build time:
 
 - **Components it maps.** A component is used in documents by the name `compRegistry` maps to its id (`ExcelUniver: common/ExcelUniver`); importing the component does not register it.
-- **Host settings of components.** `compConfigHost.univerLoad` for `ExcelUniver` (the Univer packages, preset, locale and css are dependencies of the host and are loaded lazily by it; `frontend/src/univer-load.js` is the reference loader), `mermaidLoad` for `DiagramMermaid`, `panelComponent` for the popups ([the panel contract](doc_page_impl.md#component-registry); its maximize fields for the [block popup](doc_page_impl_popup.md)).
+- **Host settings of components.** `compConfigHost.univerLoad` for `ExcelUniver` (the Univer packages, preset, locale and css are dependencies of the host and are loaded lazily by it; `frontend/src/univer-load.js` is the reference loader), `mermaidLoad` for `DiagramMermaid`, `panelComponent` for the popups ([the panel contract](doc_page_impl.md#the-panel-contract); its maximize fields for the [block popup](doc_page_impl_popup.md)).
 - **The asset section.** `asset.file` and the store's config file, as above; a former `asset.folder` stops the development server with the migration ([configuration](doc_page_impl_asset.md#the-local-store-folders-fully-reflected)).
-- **A restart after enabling the asset store.** The asset api is installed when the development server starts; a server started before `asset.file` was added keeps a page without a store until it is restarted.
+- **A restart after enabling the asset service layer.** The asset api is installed when the development server starts; a server started before `asset.file` was added keeps a page without a store until it is restarted.
 
 The Vite plugin is build-time infrastructure. `DocPageMdx` is a runtime render component. It fills its host and scrolls internally, so the host element needs a definite height (for a full-window page: `html, body, #root { height: 100%; }`); otherwise the side panel, local index, and floating controls do not stay in view. External source files are bundled into the output and are not read from the file system after deployment.
 
@@ -100,7 +100,7 @@ Host settings needed by package components are passed once through `config.compC
     compById,
     source: { endpoint: docSourceEndpoint },                   // file bytes, file creation (dev server)
     compConfigHost: {
-      // assetUrlGet is answered by the source layer by default (doc_page_impl_source.md)
+      // assetUrlGet is answered by the doc page source service layer by default (doc_page_impl_source.md)
       mermaidLoad: () => import('mermaid'),                    // DiagramMermaid
       univerLoad: () => import('./univer-load.js'),            // ExcelUniver: Univer engine, preset, css
       panelComponent: PanelText,                               // popup frame: tag overview, SourceLink

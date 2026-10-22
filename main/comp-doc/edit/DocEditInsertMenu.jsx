@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { LoaderCircle, Search } from '../../frontend/UICommon.js';
+import { ClipboardPaste, LoaderCircle, Search } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { useDocEditDoc } from './DocEditDocContext.js';
 import { editTemplateListBuild } from './edit-template.js';
@@ -31,6 +31,11 @@ import './DocEdit.css';
 // edit mode in its place (DocEditStore.blockCreate). an entry of an
 // isAssetOnly component creates its asset object first and writes a
 // reference block to it (DocEditStore.blockCreateAsAsset).
+//
+// Paste… at the end of the Text row opens the review of a paste
+// (doc_page_impl_copy_paste.md) for this border, with an empty text for the
+// author to paste Markdown / MDX into. it is shown when the host supplies
+// the panel component that frames the review.
 export const DocEditInsertMenu = observer(function DocEditInsertMenu() {
   const { editStore } = useDocStores();
   const menu = editStore.insertMenu;
@@ -40,7 +45,8 @@ export const DocEditInsertMenu = observer(function DocEditInsertMenu() {
 });
 
 const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) {
-  const { compById, configStore, editStore, serviceStore, sourceStore } = useDocStores();
+  const { compById, compConfigHost, configStore, editStore, pasteStore, serviceStore, sourceStore } = useDocStores();
+  const isPasteShown = Boolean(pasteStore && compConfigHost.panelComponent);
   const { path, format } = useDocEditDoc();
   const [query, querySet] = useState('');
   const [indexActive, indexActiveSet] = useState(-1);
@@ -171,6 +177,17 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
       <div className="doc-edit-insert-group" role="group" aria-label="Text">
         <span className="doc-edit-insert-group-label">Text</span>
         {templateListText.map(buttonRender)}
+        {isPasteShown ? (
+          <button
+            type="button"
+            disabled={isSubmitting}
+            title="Paste Markdown or MDX, review its blocks, then insert them"
+            onClick={() => void pasteStore.open({ borderIndex: menu.borderIndex })}
+          >
+            <ClipboardPaste size={12} aria-hidden="true" />
+            <span>Paste…</span>
+          </button>
+        ) : null}
       </div>
       {templateListCommon.length > 0 || countComponentOther > 0 ? (
         <div className="doc-edit-insert-group" role="group" aria-label="Components">

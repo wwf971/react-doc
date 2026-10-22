@@ -51,7 +51,7 @@ export class DocConfigStore {
   // the settings panel is open (a centered popup; see DocSettingsPanel)
   isSettingsOpen = false;
   // the tab of the settings panel that is shown: the config keys, the
-  // component-level keys, or the folders of the asset store
+  // component-level keys, or the folders of the asset service layer
   // (doc_page_impl_asset.md); kept while the panel is closed, so it opens
   // again where it was
   settingsTabId: SettingsTabId = 'config';

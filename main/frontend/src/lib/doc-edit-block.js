@@ -1,3 +1,6 @@
+import { createProcessor } from '@mdx-js/mdx';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import { commentMarkerParse } from './remark-comment-comp.js';
 import { splitFrontmatter } from './mdx-compile.js';
 import { anchorCompNameIs } from '../../../comp-mdx/anchor/AnchorData.js';
@@ -29,6 +32,10 @@ import { multiLangCompNameIs } from '../../../comp-mdx/multi-lang/MultiLangData.
 //   editDocModelBuild    maps those positions onto the complete file (the
 //                        frontmatter is stripped before parsing) and cuts the
 //                        text of every block
+//
+// editTextModelBuild gives the same model for a text that is not compiled as
+// a document (a pasted text, doc_page_impl_copy_paste.md): it is only parsed,
+// the way compileDoc parses a document of that format.
 
 export const BLOCK_WRAPPER_NAME = 'DocEditBlock';
 
@@ -224,6 +231,19 @@ export function editDocModelBuild({ source, blockListCompiled }) {
   return { lineList, lineCount: lineList.length, frontmatter, blockList };
 }
 
+// text: any md / mdx text with "\n" line endings; format: 'md' | 'mdx'.
+// throws when the text does not parse (invalid JSX in mdx).
+export function editTextModelBuild({ text, format }) {
+  const { content } = splitFrontmatter(text);
+  const processor = createProcessor({
+    format: format === 'mdx' ? 'mdx' : 'md',
+    remarkPlugins: [remarkGfm, remarkMath],
+  });
+  const tree = processor.parse(content);
+  const blockListCompiled = rootGroupListBuild(tree.children ?? []).map((group, index) => blockDescribe(group, index));
+  return editDocModelBuild({ source: text, blockListCompiled });
+}
+
 function componentDetailBuild(componentCompiled, text, offsetBlock) {
   const markerStart = componentCompiled.markerPositionStart.offset - offsetBlock;
   const markerEnd = componentCompiled.markerPositionEnd.offset - offsetBlock;
@@ -393,6 +413,93 @@ export function blockDeleteOperationBuild(model, index) {
   // last block: the blank lines before it go with it
   const lineEndBefore = blockList[index - 1]?.lineEnd ?? frontmatter?.lineEnd ?? 0;
   return { action: 'deleteLines', lineStart: lineEndBefore + 1, lineEnd: block.lineEnd };
+}
+
+// ---------- several blocks at once: copying and moving them ----------
+// (doc_page_impl_copy_paste.md#the-write-of-a-copy-or-a-move)
+
+// the text of the blocks at indexList, in document order, one blank line
+// between two of them: what a copy or a move inserts
+export function blockListTextGet(model, indexList) {
+  return indexListNormalize(model, indexList).map((index) => model.blockList[index].text).join('\n\n');
+}
+
+// the deleteLines operations that remove the blocks at indexList. adjacent
+// blocks are removed as one run with the blank lines between them; a run
+// takes the blank lines after it, or, when it reaches the end of the
+// document, the blank lines before it (as blockDeleteOperationBuild for one
+// block). the operations never overlap, so they are applied together.
+export function blockListDeleteOperationListBuild(model, indexList) {
+  return blockRunListGet(indexListNormalize(model, indexList)).map((run) => blockRunDeleteOperationBuild(model, run));
+}
+
+// the blocks at indexList moved to border borderIndex of the same document
+// (border b: before block b; the number of blocks: after the last one), as
+// operations applied together on the text they were built on: the runs
+// removed, and the blocks inserted next to the nearest block that stays.
+// the new order is: the blocks that stay before the border, the moved
+// blocks, the blocks that stay after it; a border between two moved blocks
+// is therefore a place like any other.
+//   -> { operationList, isNoop }; isNoop: the blocks already are there
+export function blockListMoveOperationListBuild(model, indexList, borderIndex) {
+  const { blockList } = model;
+  const indexListMoved = indexListNormalize(model, indexList);
+  const indexSetMoved = new Set(indexListMoved);
+  const indexListStay = blockList.map((block) => block.index).filter((index) => !indexSetMoved.has(index));
+  const indexListBefore = indexListStay.filter((index) => index < borderIndex);
+  const indexListAfter = indexListStay.filter((index) => index >= borderIndex);
+  const orderNext = [...indexListBefore, ...indexListMoved, ...indexListAfter];
+  const isNoop = indexListMoved.length === 0 || indexListStay.length === 0
+    || orderNext.every((index, position) => index === position);
+  if (isNoop) return { operationList: [], isNoop: true };
+
+  const lineListText = blockListTextGet(model, indexListMoved).split('\n');
+  const indexNext = indexListAfter[0];
+  // before the first block that stays after the border, one blank line after
+  // the moved blocks; else after the last block that stays, one blank line
+  // before them. neither point lies inside a removed run.
+  const operationInsert = indexNext !== undefined
+    ? { action: 'insertLines', lineAt: blockList[indexNext].lineStart, text: [...lineListText, ''].join('\n') }
+    : {
+        action: 'insertLines',
+        lineAt: blockList[indexListBefore[indexListBefore.length - 1]].lineEnd + 1,
+        text: ['', ...lineListText].join('\n'),
+      };
+  return {
+    operationList: [...blockListDeleteOperationListBuild(model, indexListMoved), operationInsert],
+    isNoop: false,
+  };
+}
+
+// the indices that name blocks of the model, sorted, without repetition
+function indexListNormalize(model, indexList) {
+  const blockCount = model.blockList.length;
+  return [...new Set(indexList)]
+    .filter((index) => Number.isInteger(index) && index >= 0 && index < blockCount)
+    .sort((a, b) => a - b);
+}
+
+// sorted indices as runs of adjacent blocks: [1, 2, 4] -> [[1, 2], [4]]
+function blockRunListGet(indexListSorted) {
+  const runList = [];
+  for (const index of indexListSorted) {
+    const runLast = runList[runList.length - 1];
+    if (runLast && runLast[runLast.length - 1] === index - 1) runLast.push(index);
+    else runList.push([index]);
+  }
+  return runList;
+}
+
+function blockRunDeleteOperationBuild(model, run) {
+  const { blockList, frontmatter } = model;
+  const blockFirst = blockList[run[0]];
+  const blockLast = blockList[run[run.length - 1]];
+  const blockNext = blockList[blockLast.index + 1];
+  if (blockNext) {
+    return { action: 'deleteLines', lineStart: blockFirst.lineStart, lineEnd: blockNext.lineStart - 1 };
+  }
+  const lineEndBefore = blockList[blockFirst.index - 1]?.lineEnd ?? frontmatter?.lineEnd ?? 0;
+  return { action: 'deleteLines', lineStart: lineEndBefore + 1, lineEnd: blockLast.lineEnd };
 }
 
 // ---------- text helpers ----------

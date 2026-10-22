@@ -7,6 +7,10 @@
 @import '@fontsource-variable/jetbrains-mono';
 /* fonts and layout of the markup rehype-katex generates for $...$ / $$...$$ */
 @import 'katex/dist/katex.min.css';
+/* the shared classes of the page UI (src/css/, doc_page_impl.md#shared-styles),
+   in their own cascade layer after the Tailwind layers: a rule of a component
+   stylesheet (no layer) always wins over a shared rule */
+@import './css/index.css' layer(doc-shared);
 @source '../../../third_party/shadcn';
 
 @theme {

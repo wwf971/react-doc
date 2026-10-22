@@ -1,7 +1,8 @@
 /* The stand-in of an asset-backed component while its data is loading or
    its reference fails, and the asset panel popup with its preview pane. The
-   panel reuses the control scale of the edit layer (DocEdit.css:
-   doc-edit-action, doc-edit-confirm, doc-edit-message, doc-edit-value). */
+   panel reuses the control scale of the edit layer (the shared .doc-button,
+   .doc-error, .doc-badge-outline; DocEdit.css: doc-edit-confirm,
+   doc-edit-value). */
 
 /* ---------- frame (loading / error only) ---------- */
 
@@ -274,7 +275,7 @@
   min-width: 2.6rem;
 }
 
-.doc-asset-version-badges > .doc-asset-badge + .doc-asset-badge {
+.doc-asset-version-badges > .doc-badge-outline + .doc-badge-outline {
   margin-left: 0.25rem;
 }
 
@@ -340,20 +341,6 @@
 .doc-asset-event-list td {
   height: 1.3rem;
   padding: 0 0.6rem 0 0;
-}
-
-.doc-asset-badge {
-  padding: 0 0.3rem;
-  border: 1px solid var(--color-fd-border);
-  border-radius: 2px;
-  color: var(--color-fd-muted-foreground);
-  font-size: 0.68rem;
-  line-height: 1.05rem;
-}
-
-.doc-asset-badge.is-head {
-  border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border));
-  color: var(--color-fd-primary);
 }
 
 /* the data text, shown and edited in the same element with the same box:
@@ -468,7 +455,7 @@
   background: var(--color-fd-card, var(--color-fd-background));
 }
 
-.doc-asset-actions > a.doc-edit-action {
+.doc-asset-actions > a.doc-button {
   text-decoration: none;
 }
 

@@ -75,22 +75,13 @@
   color: var(--color-fd-muted-foreground);
 }
 
-/* ---------- shared pieces ---------- */
+/* ---------- shared pieces ----------
+   the buttons, the spinner and the error text of the edit layer are the
+   shared classes of src/css/ (.doc-button, .doc-spin, .doc-error) */
 
-.doc-edit-spin {
-  animation: doc-edit-spin 0.9s linear infinite;
-}
-
-@keyframes doc-edit-spin {
-  to { transform: rotate(360deg); }
-}
-
+/* an error in an editor bar takes a line of its own */
 .doc-edit-message {
   flex-basis: 100%;
-  margin: 0;
-  color: var(--color-fd-destructive, #dc2626);
-  font-size: 0.72rem;
-  line-height: 1.3;
 }
 
 /* a group of exclusive choices (heading level, list type, display mode) or
@@ -656,7 +647,7 @@
 /* ---------- mode menu of a block ---------- */
 
 /* the modes button: in the toolbar's control group it is one of its
-   buttons; in the editor bar it is a doc-edit-action of the bar's scale */
+   buttons; in the editor bar it is a .doc-button of the bar's scale */
 .doc-edit-panel-row > .doc-edit-mode-button {
   padding: 0 0.3rem;
   color: var(--color-fd-muted-foreground);
@@ -829,39 +820,6 @@
   margin-left: auto;
 }
 
-.doc-edit-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  height: 1.35rem;
-  padding: 0 0.45rem;
-  border: 1px solid var(--color-fd-border);
-  border-radius: 2px;
-  background: var(--color-fd-background);
-  color: var(--color-fd-foreground);
-  cursor: pointer;
-  font-size: 0.72rem;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.doc-edit-action.is-primary {
-  border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border));
-  background: color-mix(in srgb, var(--color-fd-primary) 12%, var(--color-fd-background));
-  color: var(--color-fd-primary);
-}
-
-.doc-edit-action:hover:not(:disabled),
-.doc-edit-action:focus-visible:not(:disabled) {
-  background: var(--color-fd-accent);
-  outline: none;
-}
-
-.doc-edit-action:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
 /* ---------- editing surface: the block in its place ---------- */
 
 /* the block's own element made editable. a paragraph and a heading surface
@@ -888,6 +846,23 @@
 
 .doc-edit-surface[data-kind="list"] {
   margin: 1.25em 0;
+}
+
+/* a surface in line mode: one element per source line, with the space its
+   rendered counterpart has above it (comp-mdx/text/ListData.js
+   listLineSpaceListGet). the values are those of the prose typography of
+   the page: 0.5em between two items, 0.75em where a nested list starts or
+   ends, 1.25em (the paragraph margin) for the blank line of a loose list */
+.doc-edit-surface-line[data-space="item"] {
+  margin-top: 0.5em;
+}
+
+.doc-edit-surface-line[data-space="list"] {
+  margin-top: 0.75em;
+}
+
+.doc-edit-surface-line[data-space="blank"] {
+  height: 1.25em;
 }
 
 .doc-edit-surface[data-kind="blockquote"] {

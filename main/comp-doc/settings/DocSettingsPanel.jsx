@@ -19,9 +19,11 @@ import './DocSettings.css';
 //                written in documents. a key of type sourcePath is edited
 //                with SourcePathInput, completed from the folders / files of
 //                the source.
-//   Asset store  the folders of the local asset store (AssetStoreSettings),
-//                written into the store's config file by the development
-//                server, so they are kept (doc_page_impl_asset.md).
+//   Asset service
+//                the folders of the local store of the asset service layer
+//                (AssetStoreSettings), written into the store's config file
+//                by the development server, so they are kept
+//                (doc_page_impl_asset.md).
 //   Services     the services of the page (ServiceSettings): system
 //                services, then the instances of the service backend as
 //                cards, the config dashboard of the one chosen, and the
@@ -108,7 +110,7 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
     {
       id: 'assetStore',
       type: 'subtab',
-      name: 'Asset store',
+      name: 'Asset service',
       children: [{ id: 'assetStoreFolders', type: 'custom', comp: AssetStoreSettings, isFullWidth: true }],
     },
     {
@@ -348,7 +350,7 @@ function settingsValueToItem(define, value) {
 }
 
 // the panel item of a key of type sourcePath: the path with completion
-// from the source layer; the value is committed on blur / Enter / choice.
+// from the doc page source service layer; the value is committed on blur / Enter / choice.
 // after an edit, the revert button before the path writes the value the
 // item had before it was first edited (DocConfigStore.settingsValueOriginalByItemId)
 const SourcePathSettingsItem = observer(function SourcePathSettingsItem({ item, value, isDisabled, onValueChange, pathSpec }) {

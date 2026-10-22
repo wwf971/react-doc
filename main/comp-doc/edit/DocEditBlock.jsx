@@ -6,6 +6,7 @@ import { BlockRender } from '../../comp-mdx/text/BlockRender.jsx';
 import { DocEditBlockContext, DocEditBlockFloatContext, useDocEditDoc } from './DocEditDocContext.js';
 import { DocEditBlockToolbar } from './DocEditBlockToolbar.jsx';
 import { DocEditBlockEditor, blockLabelGet } from './DocEditBlockEditor.jsx';
+import { DocBlockSelectBlock } from '../block-select/DocBlockSelectBlock.jsx';
 import {
   EDIT_CLICK_OWN_SELECTOR,
   clickAfterPointerDownSuppress,
@@ -54,7 +55,17 @@ import './DocEdit.css';
 //
 // blocks that render nothing visible (a comment, trailing component markers)
 // get a small floating chip, so they can be found and edited.
+//
+// in block selection mode (doc_page_impl_copy_paste.md#selecting-blocks)
+// the same body shows, and every block is selectable instead of editable
+// (DocBlockSelectBlock).
 export const DocEditBlock = observer(function DocEditBlock({ blockIndex, children }) {
+  const { editStore } = useDocStores();
+  if (editStore.isBlockSelectMode) return <DocBlockSelectBlock blockIndex={blockIndex}>{children}</DocBlockSelectBlock>;
+  return <DocEditBlockEditable blockIndex={blockIndex}>{children}</DocEditBlockEditable>;
+});
+
+const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex, children }) {
   const { blockPopupStore, editStore, eventRouter, onEvent: onEventPage } = useDocStores();
   const { path, model, format } = useDocEditDoc();
   const elementRef = useRef(null);

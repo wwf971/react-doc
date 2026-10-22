@@ -1,9 +1,9 @@
 ---
-title: Asset Store
-description: A component block takes its data from a versioned object in the asset store instead of carrying it inline
+title: Asset Service Layer
+description: A component block takes its data from a versioned object in the asset service layer instead of carrying it inline
 ---
 
-A component is usually written as a comment marker followed by a code block holding its data. The data can also live in the **asset store**: versioned objects, each with its own history, kept in one or more folders on disk. The document then holds a short reference in place of the data, and the component renders exactly as if the data were written inline. The component does not know the difference; the page resolves the reference before the component sees its input.
+A component is usually written as a comment marker followed by a code block holding its data. The data can also live in the **asset service layer**: versioned objects, each with its own history, kept in one or more folders on disk. The document then holds a short reference in place of the data, and the component renders exactly as if the data were written inline. The component does not know the difference; the page resolves the reference before the component sees its input.
 
 An object is modeled after an object storage: a key with metadata, and under it versions, each a sequence of bytes. The store does not care whether the bytes are text; the page finds out when it reads them. A component block, which reads text, shows an error when the bytes of the version are not text.
 
@@ -90,7 +90,7 @@ The asset panel lists, under **used by**, every block of the documents that refe
 
 An object made from a block's data (**to asset**, or the insert menu of an asset-only component) records the component it is data for (`component: { name: Image }` in `object.yaml`); the panel shows it in the object section and lets it be changed. A block of another component may still read the object; its row says so.
 
-Deleting a block whose data is an asset object asks about the object too: **Delete block only** leaves the object in the store, **Delete block and asset** marks it deleted with the block (restorable in its panel; not offered while other blocks use it). An object left behind this way, or whose blocks were removed outside the page, is an **orphan**: the **Asset store** tab of the settings panel lists the orphans, the objects no block references that are not a component's data, and the references whose data cannot be read (the error blocks at the end of this page); a click on an object opens its asset panel there. This example has one orphan, `removed banner` (declared for `Image`), and one object that is no component's data at all, `style notes`.
+Deleting a block whose data is an asset object asks about the object too: **Delete block only** leaves the object in the store, **Delete block and asset** marks it deleted with the block (restorable in its panel; not offered while other blocks use it). An object left behind this way, or whose blocks were removed outside the page, is an **orphan**: the **Asset service** tab of the settings panel lists the orphans, the objects no block references that are not a component's data, and the references whose data cannot be read (the error blocks at the end of this page); a click on an object opens its asset panel there. This example has one orphan, `removed banner` (declared for `Image`), and one object that is no component's data at all, `style notes`.
 
 ## Moving inline data into the store
 
@@ -100,7 +100,7 @@ A component block whose data is written inline can be moved into the store from 
 ```yaml
 src: mdx-usage/image/robot-computer.svg
 alt: A robot operating a computer
-caption: Inline data, ready to be moved into the asset store
+caption: Inline data, ready to be moved into the asset service layer
 displayMode: contain
 width: 320
 height: 240
@@ -169,7 +169,7 @@ Every change is written to the object's folder `{folder}/{objectId}--{name}/` (t
 
 ## The folders of the store
 
-The local store is one store, but its objects may live in several folders: `example_doc/asset.yaml` lists them, relative to that file, and marks the default folder, where new objects are created. The page reads every folder at start and finds an object by its id or name in any of them. The **Asset store** tab of the settings panel (the gear in the side panel) shows the folders with the number of objects in each, and on the development server lets you set the default, remove a folder (its files stay on disk; its objects just leave the store), or add one; the change is written into `asset.yaml`, so it holds across page loads.
+The local store is one store, but its objects may live in several folders: `example_doc/asset.yaml` lists them, relative to that file, and marks the default folder, where new objects are created. The page reads every folder at start and finds an object by its id or name in any of them. The **Asset service** tab of the settings panel (the gear in the side panel) shows the folders with the number of objects in each, and on the development server lets you set the default, remove a folder (its files stay on disk; its objects just leave the store), or add one; the change is written into `asset.yaml`, so it holds across page loads.
 
 ## In edit mode
 

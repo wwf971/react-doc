@@ -61,7 +61,7 @@
   cursor: grabbing;
 }
 
-.doc-settings-head button {
+.doc-settings-head button:not(:disabled) {
   cursor: pointer;
 }
 
@@ -84,30 +84,9 @@
   font-size: 0.72rem;
 }
 
+/* a .doc-button, a little narrower */
 .doc-settings-head-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  height: 1.35rem;
   padding: 0 0.4rem;
-  border: 1px solid var(--color-fd-border);
-  border-radius: 2px;
-  background: var(--color-fd-background);
-  color: var(--color-fd-foreground);
-  cursor: pointer;
-  font-size: 0.72rem;
-  line-height: 1;
-}
-
-.doc-settings-head-button:hover:not(:disabled),
-.doc-settings-head-button:focus-visible:not(:disabled) {
-  background: var(--color-fd-accent);
-  outline: none;
-}
-
-.doc-settings-head-button:disabled {
-  opacity: 0.4;
-  cursor: default;
 }
 
 .doc-settings-close {
@@ -269,25 +248,6 @@
   display: inline-flex;
   gap: 0.25rem;
   min-width: 3rem;
-}
-
-.doc-settings-asset-badge {
-  padding: 0 0.3rem;
-  border: 1px solid var(--color-fd-border);
-  border-radius: 2px;
-  color: var(--color-fd-muted-foreground);
-  font-size: 0.68rem;
-  line-height: 1.05rem;
-}
-
-.doc-settings-asset-badge.is-default {
-  border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border));
-  color: var(--color-fd-primary);
-}
-
-.doc-settings-asset-badge.is-missing {
-  border-color: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 60%, var(--color-fd-border));
-  color: var(--color-fd-destructive, #dc2626);
 }
 
 .doc-settings-asset-count {

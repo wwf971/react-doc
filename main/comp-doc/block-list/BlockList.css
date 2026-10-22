@@ -1,0 +1,153 @@
+/* BlockListReview: the blocks, each a badge (.doc-badge), its toggle, and its source or rendering */
+.doc-block-list-review {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.doc-block-list-review-item {
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+}
+
+.doc-block-list-review-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.doc-block-list-review-toggle {
+  width: 18px;
+  height: 18px;
+}
+
+.doc-block-list-review-source {
+  overflow-x: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  font-variant-ligatures: none;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.doc-block-list-review-render {
+  max-width: none;
+  font-size: 0.875rem;
+}
+
+/* a block left out (unchecked) stays readable but steps back */
+.doc-block-list-review-item[data-unchecked] > :not(.doc-block-list-review-head),
+.doc-block-list-review-line[data-unchecked] > .doc-block-list-review-line-text {
+  opacity: 0.5;
+}
+
+.doc-block-list-review-check {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+}
+
+.doc-block-list-review-check[aria-checked="true"] {
+  color: var(--color-fd-primary);
+}
+
+.doc-block-list-review-check:hover:not(:disabled),
+.doc-block-list-review-check:focus-visible {
+  background: var(--color-fd-accent);
+  outline: none;
+}
+
+.doc-block-list-review-check:disabled {
+  cursor: default;
+}
+
+/* compact: one line per block, no frame around it */
+.doc-block-list-review[data-display="compact"] {
+  gap: 0;
+}
+
+.doc-block-list-review-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.doc-block-list-review-line[data-checkable] {
+  cursor: pointer;
+}
+
+.doc-block-list-review-line[data-checkable]:hover {
+  background: var(--color-fd-accent);
+}
+
+.doc-block-list-review-line .doc-badge {
+  flex: 0 0 auto;
+}
+
+.doc-block-list-review-line-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  font-variant-ligatures: none;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* BlockPlacePicker: in the look of the move picker of the side panel (SidePanelItem.css);
+   its buttons are .doc-button-dialog, its texts .doc-note / .doc-status / .doc-error */
+.doc-block-place-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 0.8rem;
+}
+
+.doc-block-place-picker-doc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.doc-block-place-picker-doc-label {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.doc-block-place-picker-doc-path {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.doc-block-place-picker-tree {
+  max-height: 20rem;
+}
+
+.doc-block-place-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+

@@ -15,8 +15,8 @@ const actionList = [
 // The move picker of a side-panel item (doc_page_impl_side_panel.md
 // #moving-an-item), opened by the move button of the item in edit mode.
 // Open state lives in DocSidePanelStore.picker. It floats where the pointer
-// was, like the location prompt of the source layer, and shows the side
-// panel as a tree (the tree view of the source layer, SourceTreeSelect):
+// was, like the location prompt of the doc page source service layer, and shows the side
+// panel as a tree (the tree view of that layer, SourceTreeSelect):
 // choosing an item there only selects it. what to do with it is one of the
 // action buttons: put the moved item before or after the chosen item, or
 // into it as its first or last child. a button the move is not allowed for

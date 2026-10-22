@@ -33,12 +33,16 @@ export function docEditApiCreate(endpoint) {
     },
 
     // applies one line operation (lib/doc-edit-block.js builds them) against
-    // the version identified by hashBase; answers the new { text, hash }
+    // the version identified by hashBase; answers the new { text, hash }.
+    // a list of operations built on the same text is applied together.
     sourceApply(internalPath, hashBase, operation) {
+      const body = Array.isArray(operation)
+        ? { internalPath, hashBase, operationList: operation }
+        : { internalPath, hashBase, operation };
       return requestSend('/source/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ internalPath, hashBase, operation }),
+        body: JSON.stringify(body),
       });
     },
 

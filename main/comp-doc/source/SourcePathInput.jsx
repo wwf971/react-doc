@@ -6,7 +6,7 @@ import { useDocStores } from '../../frontend/src/store/context.js';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
 import './DocSource.css';
 
-// A source path typed with completion from the source layer
+// A source path typed with completion from the doc page source service layer
 // (doc_page_impl_source.md#path-completion): the text is an EditValueInline
 // (so leaving it, including a click outside, commits, and an empty field
 // shows its placeholder) and, while it has focus, a dropdown with the

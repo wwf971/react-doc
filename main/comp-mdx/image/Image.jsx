@@ -190,7 +190,7 @@ const ImageRender = observer(function ImageRender({ data, config, onEvent, capti
 		return () => window.removeEventListener('keydown', keyDownHandle);
 	}, [store.isExpanded]);
 
-	// the file is written through the source layer, then the block (or the
+	// the file is written through the doc page source service layer, then the block (or the
 	// editor's draft) takes the new source
 	const pasteApply = async (file) => {
 		store.pastePendingSet(undefined);

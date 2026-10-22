@@ -23,6 +23,14 @@ import './DocEdit.css';
 //                       that point), { type: 'line', line: 'first' | 'last',
 //                       clientX } (entered from the neighbor block by a
 //                       focus shift: the caret keeps its x on the near line)
+//   lineSpaceListGet    optional: (lineList) => the space above every line
+//                       ('' none, or a name the stylesheet gives a gap,
+//                       e.g. ListData.js listLineSpaceListGet). with it the
+//                       surface is in line mode: every source line is an
+//                       element of its own, spaced like the line it stands
+//                       for in the rendered block, so entering the block does
+//                       not change its line rhythm (a list: the gaps between
+//                       its items)
 //   isLocked            no editing while a change request is pending
 //   onTextChange(text)  typed text
 //   onSubmitRequest()   Ctrl/Cmd + Enter
@@ -38,6 +46,7 @@ export function EditSourceSurface({
   text,
   textVersion = 0,
   selectionInitial = 'end',
+  lineSpaceListGet,
   isLocked = false,
   className = '',
   onTextChange,
@@ -51,7 +60,7 @@ export function EditSourceSurface({
   useLayoutEffect(() => {
     const element = elementRef.current;
     if (!element) return;
-    element.textContent = text;
+    surfaceContentWrite(element, text, lineSpaceListGet);
     // text set by code happens when the author is already working here
     if (textVersion > 0 && document.activeElement !== element) element.focus();
     caretPlaceAtEdge(element, 'end');
@@ -101,6 +110,14 @@ export function EditSourceSurface({
     document.execCommand('insertText', false, textPasted);
   };
 
+  // in line mode the lines are checked after every change: their spaces
+  // follow the new text, and a shape typing broke is built again. never
+  // during an IME composition, which owns the DOM until it ends
+  const textReport = (element, isComposing) => {
+    if (lineSpaceListGet && !isComposing) surfaceLineShapeKeep(element, lineSpaceListGet);
+    onTextChange?.(surfaceTextGet(element));
+  };
+
   return createElement(tag, {
     ref: elementRef,
     className: `doc-edit-surface${className ? ` ${className}` : ''}`,
@@ -112,8 +129,10 @@ export function EditSourceSurface({
     suppressContentEditableWarning: true,
     spellCheck: false,
     'data-kind': kind,
+    'data-lines': lineSpaceListGet ? '' : undefined,
     'data-locked': isLocked ? '' : undefined,
-    onInput: (event) => onTextChange?.(surfaceTextGet(event.currentTarget)),
+    onInput: (event) => textReport(event.currentTarget, event.nativeEvent?.isComposing === true),
+    onCompositionEnd: (event) => textReport(event.currentTarget, false),
     onKeyDown: keyDownHandle,
     onPaste: pasteHandle,
   });
@@ -121,9 +140,126 @@ export function EditSourceSurface({
 
 // innerText turns line breaks of the editable element into "\n" (the surface
 // is white-space: pre-wrap). an element whose content ends with a line break
-// reports one more "\n" than lines exist.
+// reports one more "\n" than lines exist. a surface in line mode is read
+// line by line instead (innerText would count an empty line twice).
 function surfaceTextGet(element) {
+  if (element.hasAttribute('data-lines')) return surfaceLineListRead(element).join('\n');
   return element.innerText.replace(/\n$/, '');
+}
+
+// ---------- line mode ----------
+//
+// one <div class="doc-edit-surface-line" data-space> per source line; an
+// empty line holds a <br> so that it has a height. the browser keeps this
+// shape while the author types: Enter (or a pasted line break) splits the
+// line element, copying its attributes, and Backspace at its start joins it
+// to the line before. only when the shape is lost (a line break inside a
+// line element, text right in the surface after everything was deleted)
+// are the lines built again, with the caret put back at the same place of
+// the text.
+
+function surfaceContentWrite(element, text, lineSpaceListGet) {
+  if (!lineSpaceListGet) {
+    element.textContent = text;
+    return;
+  }
+  const lineList = text.split('\n');
+  const spaceList = lineSpaceListGet(lineList);
+  element.replaceChildren(...lineList.map((line, index) => surfaceLineBuild(line, spaceList[index])));
+}
+
+function surfaceLineBuild(line, space) {
+  const lineElement = document.createElement('div');
+  lineElement.className = 'doc-edit-surface-line';
+  if (space) lineElement.dataset.space = space;
+  if (line === '') lineElement.appendChild(document.createElement('br'));
+  else lineElement.textContent = line;
+  return lineElement;
+}
+
+// the lines of a surface in line mode, or of a part of it (a fragment cloned
+// from a range). text that is not inside a line element is read as lines too.
+function surfaceLineListRead(container) {
+  const lineList = [];
+  let textLoose;
+  for (const node of container.childNodes) {
+    if (node.nodeName === 'DIV') {
+      if (textLoose !== undefined) lineList.push(...textLoose.split('\n'));
+      textLoose = undefined;
+      lineList.push(...node.textContent.split('\n'));
+    } else if (node.nodeName === 'BR') {
+      lineList.push(textLoose ?? '');
+      textLoose = undefined;
+    } else {
+      textLoose = (textLoose ?? '') + node.textContent;
+    }
+  }
+  if (textLoose !== undefined) lineList.push(...textLoose.split('\n'));
+  return lineList.length > 0 ? lineList : [''];
+}
+
+function surfaceLineShapeKeep(element, lineSpaceListGet) {
+  const lineList = surfaceLineListRead(element);
+  const spaceList = lineSpaceListGet(lineList);
+  const childList = [...element.childNodes];
+  const isShapeKept = childList.length === lineList.length
+    && childList.every((node) => node.nodeName === 'DIV' && !node.textContent.includes('\n'));
+  if (isShapeKept) {
+    childList.forEach((lineElement, index) => {
+      const space = spaceList[index] ?? '';
+      if ((lineElement.dataset.space ?? '') !== space) {
+        if (space) lineElement.dataset.space = space;
+        else delete lineElement.dataset.space;
+      }
+      if (lineElement.className !== 'doc-edit-surface-line') lineElement.className = 'doc-edit-surface-line';
+      if (lineElement.textContent === '' && !lineElement.querySelector('br')) {
+        lineElement.appendChild(document.createElement('br'));
+      }
+    });
+    return;
+  }
+  const offset = caretOffsetGet(element);
+  element.replaceChildren(...lineList.map((line, index) => surfaceLineBuild(line, spaceList[index])));
+  if (offset !== undefined) caretPlaceAtLineOffset(element, offset);
+}
+
+// where the caret is, as an offset into the text of the surface
+function caretOffsetGet(element) {
+  const textBefore = textBeforeCaretGet(element);
+  return textBefore === undefined ? undefined : textBefore.length;
+}
+
+// the text from the start of the surface to the caret
+function textBeforeCaretGet(element) {
+  const selection = window.getSelection?.();
+  if (!selection || selection.rangeCount === 0) return undefined;
+  const range = selection.getRangeAt(0);
+  if (!element.contains(range.endContainer)) return undefined;
+  const rangeBefore = document.createRange();
+  rangeBefore.selectNodeContents(element);
+  rangeBefore.setEnd(range.endContainer, range.endOffset);
+  if (!element.hasAttribute('data-lines')) return rangeBefore.toString();
+  return surfaceLineListRead(rangeBefore.cloneContents()).join('\n');
+}
+
+function caretPlaceAtLineOffset(element, offset) {
+  let offsetRest = offset;
+  for (const lineElement of element.children) {
+    const length = lineElement.textContent.length;
+    if (offsetRest <= length) {
+      const range = document.createRange();
+      const textNode = lineElement.firstChild;
+      if (textNode?.nodeType === Node.TEXT_NODE) range.setStart(textNode, offsetRest);
+      else range.setStart(lineElement, 0);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return;
+    }
+    offsetRest -= length + 1;
+  }
+  caretPlaceAtEdge(element, 'end');
 }
 
 // 'plaintext-only' where the browser knows it; 'true' otherwise (the paste
@@ -156,10 +292,7 @@ function caretIsAtEdgeLine(element, direction, rectCaret) {
     }
     return rectCaret.bottom > rectElement.bottom - parseFloat(style.paddingBottom) - halfLine;
   }
-  const rangeBefore = document.createRange();
-  rangeBefore.selectNodeContents(element);
-  rangeBefore.setEnd(range.startContainer, range.startOffset);
-  const textBefore = rangeBefore.toString();
+  const textBefore = textBeforeCaretGet(element) ?? '';
   if (direction === 'previous') return !textBefore.includes('\n');
   const textAfter = surfaceTextGet(element).slice(textBefore.length);
   return !textAfter.includes('\n');

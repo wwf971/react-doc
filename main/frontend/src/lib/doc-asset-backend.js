@@ -1,4 +1,4 @@
-// Backends of the asset store in the browser (design: doc_page_impl_asset.md).
+// Backends of the asset service layer in the browser (design: doc_page_impl_asset.md).
 // DocAssetStore talks to one backend; every backend answers the same calls
 // with { code, data, message } (code 0 success, negative failure), so the
 // store and the ui do not know where the objects live:
@@ -102,7 +102,7 @@ export function assetBackendApiCreate(endpoint) {
 export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
   const objectById = snapshot?.objectById ?? {};
   const usageDocList = Array.isArray(snapshot?.usageDocList) ? snapshot.usageDocList : [];
-  const readOnly = () => Promise.resolve({ code: -1, data: null, message: 'the asset store of a built page is read-only' });
+  const readOnly = () => Promise.resolve({ code: -1, data: null, message: 'the asset service layer of a built page is read-only' });
   const objectMetaGet = (objectId) => {
     const entry = objectById[objectId];
     if (!entry) return undefined;

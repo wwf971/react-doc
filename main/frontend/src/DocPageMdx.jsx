@@ -11,6 +11,9 @@ import { DocServiceStore, serviceEventTypeList } from './store/DocServiceStore.j
 import { DocTagStore } from './store/DocTagStore.js';
 import { DocBlockPopupStore } from './store/DocBlockPopupStore.js';
 import { DocSidePanelStore, sidePanelEventTypeList } from './store/DocSidePanelStore.js';
+import { DocPasteStore } from './store/DocPasteStore.js';
+import { DocBlockSelectStore } from './store/DocBlockSelectStore.js';
+import { DocPanelLayoutStore } from './store/DocPanelLayoutStore.js';
 import { DocEventRouter } from './lib/doc-event.js';
 import { CompStateStore } from './store/CompStateStore.js';
 import { StoreContext, useDocStores } from './store/context.js';
@@ -26,6 +29,9 @@ import { SourceFilePrompt } from '../../comp-doc/source/SourceFilePrompt.jsx';
 import { SidePanelMovePicker } from '../../comp-doc/side-panel/SidePanelMovePicker.jsx';
 import { SidePanelDragOverlay } from '../../comp-doc/side-panel/SidePanelDragOverlay.jsx';
 import { SidePanelItemContextMenu } from '../../comp-doc/side-panel/SidePanelItemContextMenu.jsx';
+import { DocPastePopup } from '../../comp-doc/paste/DocPastePopup.jsx';
+import { DocBlockSelectMenu } from '../../comp-doc/block-select/DocBlockSelectMenu.jsx';
+import { DocBlockTransferPopup } from '../../comp-doc/block-select/DocBlockTransferPopup.jsx';
 import { DocLanguageProvider, useDocLanguage } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
 import { MultiLangControl } from '../../comp-mdx/multi-lang/MultiLangControl.jsx';
 import { DocEditToggle } from '../../comp-doc/edit/DocEditToggle.jsx';
@@ -39,7 +45,7 @@ import './DocPageMdx.css';
 //   <DocPageMdx
 //     data={{ configDoc, fileManifest, dirManifest, fileUrlByPath, assetSnapshot }}
 //     config={{ routeMode: 'memory', compById, compConfigHost, configDefineList, link: { CompRender },
-//               source: { endpoint }, edit: { endpoint }, asset: { endpoint, subscribe },
+//               source: { endpoint }, edit: { endpoint, pasteTransformList }, asset: { endpoint, subscribe },
 //               service: { endpoint } }}
 //     onEvent={(eventType, eventData) => { ... }}
 //   />
@@ -51,6 +57,8 @@ import './DocPageMdx.css';
 // (doc_page_impl_source.md); in a build data.fileUrlByPath answers the bytes.
 // config.edit.endpoint is the edit api of the development server (the virtual
 // module exports it as docEditEndpoint); without it the page has no edit mode.
+// config.edit.pasteTransformList are the transforms a paste goes through
+// before it is shown as blocks (doc_page_impl_copy_paste.md#transforms).
 // config.asset.endpoint is the asset api of the development server
 // (docAssetEndpoint), config.asset.subscribe its change feed (subscribeDocAsset);
 // a built site reads data.assetSnapshot instead (doc_page_impl_asset.md).
@@ -71,7 +79,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       endpoint: config.source?.endpoint,
       fileUrlByPath: data.fileUrlByPath,
     });
-    // the file-creation service of the source layer (doc_page_impl_source.md)
+    // the file-creation service of the doc page source service layer (doc_page_impl_source.md)
     const sourceFileStore = new DocSourceFileStore(sourceStore);
     const docStore = new DocStore(sourceStore, {
       routeMode: config.routeMode ?? 'memory',
@@ -88,7 +96,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     });
     const tagStore = new DocTagStore(sourceStore, docStore, configStore);
     const compStateStore = new CompStateStore();
-    // the manifest tells the asset store which documents changed, so it
+    // the manifest tells the asset service layer which documents changed, so it
     // reads their asset references again (doc_page_impl_asset.md#usage)
     const assetStore = new DocAssetStore({
       endpoint: config.asset?.endpoint,
@@ -97,7 +105,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       manifestGet: () => sourceStore.fileManifest,
     });
     // the edit store creates asset objects when a block's inline data is
-    // moved into the asset store (doc_page_impl_asset.md)
+    // moved into the asset service layer (doc_page_impl_asset.md)
     const editStore = new DocEditStore(sourceStore, docStore, configStore, { endpoint: config.edit?.endpoint, assetStore });
     // a component block shown in a popup, in View or in Edit (doc_page_impl_popup.md)
     const blockPopupStore = new DocBlockPopupStore({ docStore, editStore, sourceStore, assetStore });
@@ -108,6 +116,18 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // the side panel: folder open state, and moving items in edit mode
     // (doc_page_impl_side_panel.md#moving-an-item)
     const sidePanelStore = new DocSidePanelStore({ sourceStore, docStore, editStore });
+    // blocks selected in block selection mode, then copied or moved, and
+    // the blocks the author is at in any mode with blocks
+    // (doc_page_impl_copy_paste.md#selecting-blocks)
+    const blockSelectStore = new DocBlockSelectStore({ editStore });
+    // a pasted Markdown / MDX text reviewed as blocks, then inserted after
+    // the blocks the author is at (doc_page_impl_copy_paste.md)
+    const pasteStore = new DocPasteStore({
+      sourceStore, docStore, editStore, blockSelectStore, transformList: config.edit?.pasteTransformList,
+    });
+    // the place and size of the dialogs framed by the host's panel
+    // component, moved and resized (doc_page_impl.md#the-panel-contract)
+    const panelLayoutStore = new DocPanelLayoutStore();
     // the event layer (doc_page_impl_event.md): component reports are routed
     // to the domain that answers them; the stores never see onEvent callbacks
     const eventRouter = new DocEventRouter();
@@ -165,6 +185,9 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       blockPopupStore,
       serviceStore,
       sidePanelStore,
+      pasteStore,
+      blockSelectStore,
+      panelLayoutStore,
       eventRouter,
       compById,
     };
@@ -270,6 +293,9 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
               <SidePanelMovePicker />
               <SidePanelDragOverlay />
               <SidePanelItemContextMenu />
+              <DocPastePopup />
+              <DocBlockSelectMenu />
+              <DocBlockTransferPopup />
               <DocSettingsPanel />
             </RootProvider>
           </FrameworkProvider>

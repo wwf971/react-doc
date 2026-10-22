@@ -54,7 +54,7 @@ export function assetRefParse(raw) {
   reference.name = String(content.name ?? '').trim();
   const versionIdText = String(content.versionId ?? 'head').trim();
   reference.versionId = versionIdText === '' ? 'head' : versionIdText;
-  if (!reference.store) return { ...reference, message: 'asset reference needs store (the id of the asset store, e.g. local)' };
+  if (!reference.store) return { ...reference, message: 'asset reference needs store (the id of a store of the asset service layer, e.g. local)' };
   if (!reference.objectId && !reference.name) return { ...reference, message: 'asset reference needs objectId or name' };
   if (reference.objectId && reference.name) return { ...reference, message: 'asset reference names the object by objectId or by name, not both' };
   return reference;

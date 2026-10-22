@@ -1,6 +1,6 @@
 import { sourcePathBuild, sourcePathIsInside, sourcePathIsRooted, sourcePathNormalize, sourcePathParse } from './doc-source-path.js';
 
-// Path completion of the source layer. Design: doc_page_impl_source.md#path-completion
+// Path completion of the doc page source service layer. Design: doc_page_impl_source.md#path-completion
 //
 // A source path specification says what a path may name, so completion
 // lists the right candidates. It is data: a config key of type sourcePath
@@ -142,4 +142,58 @@ export function sourcePathTreeBuild(spec, manifests) {
     return nodeList;
   };
   return nodeListSort(nodeRootList);
+}
+
+// Searching a tree for a text (doc_page_impl_source.md#browsing-as-a-tree):
+// the nodes whose label holds every word of the text (case-insensitive),
+// with the folders that lead to them, so a document can be found by a part
+// of its name without opening the folders by hand. any tree of the node
+// shape of sourcePathTreeBuild can be searched, not only the source.
+//
+//   -> { nodeList, idExpandedList, matchCount }
+//      nodeList        the tree narrowed to the matches and their ancestors;
+//                      every node kept carries labelMatchList, the [start,
+//                      end) ranges of its label that a word matched (empty
+//                      for an ancestor that only leads to a match)
+//      idExpandedList  the ancestors of the matches, to be shown open
+//      matchCount      the nodes that match
+//
+// an empty text matches nothing and returns the tree as it is.
+export function sourceTreeSearch(nodeList, text) {
+  const wordList = String(text ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (wordList.length === 0) return { nodeList, idExpandedList: [], matchCount: 0 };
+  const idExpandedList = [];
+  let matchCount = 0;
+  const visit = (node) => {
+    const childList = (node.childList ?? []).map(visit).filter(Boolean);
+    const labelMatchList = labelMatchListGet(String(node.label ?? ''), wordList);
+    if (labelMatchList.length > 0) matchCount += 1;
+    if (labelMatchList.length === 0 && childList.length === 0) return undefined;
+    if (childList.length > 0) idExpandedList.push(node.id);
+    return { ...node, childList, labelMatchList };
+  };
+  return { nodeList: nodeList.map(visit).filter(Boolean), idExpandedList, matchCount };
+}
+
+// the ranges of a label that the words match, merged and in order; empty
+// unless every word occurs in the label
+function labelMatchListGet(label, wordList) {
+  const labelLower = label.toLowerCase();
+  const rangeList = [];
+  for (const word of wordList) {
+    let index = labelLower.indexOf(word);
+    if (index < 0) return [];
+    while (index >= 0) {
+      rangeList.push([index, index + word.length]);
+      index = labelLower.indexOf(word, index + word.length);
+    }
+  }
+  rangeList.sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const range of rangeList) {
+    const last = merged[merged.length - 1];
+    if (last && range[0] <= last[1]) last[1] = Math.max(last[1], range[1]);
+    else merged.push([...range]);
+  }
+  return merged;
 }

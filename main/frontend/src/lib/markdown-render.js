@@ -7,6 +7,7 @@ import { toHast } from 'mdast-util-to-hast';
 import { toJsxRuntime } from 'hast-util-to-jsx-runtime';
 import { VFile } from 'vfile';
 import { remarkDocLink } from './remark-doc-link.js';
+import { rehypeCodeInline } from './rehype-code-inline.js';
 import {
   remarkContentSanitize,
   remarkInlineUnwrap,
@@ -73,6 +74,7 @@ export function markdownFragmentRender({ nodeList, transformList, components = {
     if (paragraph) treeHast = { type: 'root', children: paragraph.children };
   }
   rehypeKatex()(treeHast, file);
+  rehypeCodeInline()(treeHast);
   return toJsxRuntime(treeHast, {
     Fragment,
     jsx,

@@ -79,7 +79,7 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
       <CompError
         compId={compIdResolved}
         compName={compName}
-        message={`${compName ?? compIdResolved} keeps its data in the asset store only; move this block's data there with "to asset" in edit mode.`}
+        message={`${compName ?? compIdResolved} keeps its data in the asset service layer only; move this block's data there with "to asset" in edit mode.`}
         raw={input.raw}
       />
     );
@@ -130,7 +130,7 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
   const instanceId = configRuntime.instanceId
     ?? data.id
     ?? `${compIdResolved}:${sourcePath || 'page'}:${idFallback}`;
-  // the source layer resolves file references of the component relative to
+  // the doc page source service layer resolves file references of the component relative to
   // the document it is in (doc_page_impl_source.md); a host may still hand
   // its own assetUrlGet in compConfigHost
   const assetUrlGet = compConfigHost.assetUrlGet

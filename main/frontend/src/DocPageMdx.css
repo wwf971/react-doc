@@ -22,6 +22,14 @@
   -webkit-user-drag: none;
 }
 
+/* inline code (marked by lib/rehype-code-inline.js) is set smaller than the
+   text around it; with the inherited line height its box would reach out of
+   the line and make the line taller than the others. line-height does not
+   change what is painted (the background covers the font's own box). */
+.doc-code-inline {
+  line-height: 1;
+}
+
 .doc-page-mdx .doc-navigation-target {
   box-sizing: border-box;
   width: fit-content;

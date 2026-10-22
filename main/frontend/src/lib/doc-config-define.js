@@ -18,7 +18,7 @@
 //                    | sourcePath: a string naming a folder or file of the doc page
 //                      source (~rootId/...); pathSpec { kind: 'dir' | 'file', extList? }
 //                      says what it names, so the settings panel completes it from
-//                      the source layer (doc_page_impl_source.md)
+//                      the doc page source service layer (doc_page_impl_source.md)
 //
 // Component-level keys (doc_page_impl_config.md#component-level-config): a
 // registered component declares its own keys in its definition

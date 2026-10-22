@@ -9,7 +9,7 @@ import { docAssetMiddlewareCreate } from './doc-asset-server.ts';
 import { docSourcePlugin } from './doc-source.ts';
 import { DocAssetStore } from '../src/store/DocAssetStore.ts';
 
-// how config.yaml names the local asset store (doc_page_impl_asset.md#configuration):
+// how config.yaml names the local store of the asset service layer (doc_page_impl_asset.md#configuration):
 // what each form of the asset section makes of the asset api the
 // development server exports (docAssetEndpoint) and answers (/status).
 
@@ -124,7 +124,7 @@ test('a build has no asset api: the store is bundled read-only', async () => {
 
 test('the page tells no store from a failed status request', async () => {
   const assetStoreNone = new DocAssetStore({});
-  assert.match(assetStoreNone.writeUnavailableReason, /no asset store/);
+  assert.match(assetStoreNone.writeUnavailableReason, /no asset service layer/);
   assert.match(assetStoreNone.writeUnavailableReason, /restart/);
 
   const fetchOriginal = globalThis.fetch;

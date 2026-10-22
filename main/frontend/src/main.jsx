@@ -39,13 +39,13 @@ createRoot(document.getElementById('root')).render(
         'specific/DemoCounter': compDefine(DemoCounter),
         'specific/StockTable': compDefine(StockTable, stockTableDefineOptions),
       },
-      // the source layer (doc_page_impl_source.md): the source api of the
+      // the doc page source service layer (doc_page_impl_source.md): the source api of the
       // development server (file bytes, file creation); empty in a build
       source: { endpoint: docSource.docSourceEndpoint },
       // in-place editing, answered by the development server only; the
       // virtual module exports an empty endpoint in a build
       edit: { endpoint: docSource.docEditEndpoint },
-      // the asset store (doc_page_impl_asset.md): the asset api of the
+      // the asset service layer (doc_page_impl_asset.md): the asset api of the
       // development server and its change feed; both empty in a build
       asset: { endpoint: docSource.docAssetEndpoint, subscribe: docSource.subscribeDocAsset },
       // the service instances (doc_page_impl_service_instance.md): the
@@ -56,7 +56,7 @@ createRoot(document.getElementById('root')).render(
       // DiagramMermaid loads mermaid on first use, ExcelUniver the Univer
       // sheet engine, and the page frames popups such as the tag overview
       // with panelComponent. file references of Image/ImageGrid/DiagramMermaid
-      // are resolved by the source layer (config.assetUrlGet, default); a
+      // are resolved by the doc page source service layer (config.assetUrlGet, default); a
       // host may hand its own assetUrlGet here.
       compConfigHost: {
         mermaidLoad: () => import('mermaid'),

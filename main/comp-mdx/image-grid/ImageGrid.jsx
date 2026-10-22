@@ -6,7 +6,7 @@ import { ImageGridStore } from './ImageGridStore.js';
 import './ImageGrid.css';
 
 // A grid of Image. Each slot is an Image with the grid's config passed
-// down (source layer, component config, the block), so a slot takes a
+// down (doc page source service layer, component config, the block), so a slot takes a
 // pasted image like a standalone Image does: the Image under the pointer
 // handles the paste (image-grid-req.md#paste). The grid translates what a
 // slot reports: fileCreateRequest passes through unchanged; a slot's
@@ -84,7 +84,7 @@ export function ImageGridRender({ imageList, options = {}, slotRender }) {
 }
 
 // the config of one slot's Image: what the grid received from the page
-// (source layer, component config, the asset the data is, the block), and
+// (doc page source service layer, component config, the asset the data is, the block), and
 // the slot's own display values; a slot fills the width of its item
 export function imageSlotConfigBuild(config, image) {
 	return {

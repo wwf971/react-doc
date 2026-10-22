@@ -2,7 +2,7 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import type { DocSourceStore, SourceResult } from './DocSourceStore.js';
 import { sourcePathIsRooted, sourcePathNormalize } from '../lib/doc-source-path.js';
 
-// The file-creation service of the source layer as the page offers it to
+// The file-creation service of the doc page source service layer as the page offers it to
 // components (design: doc_page_impl_source.md#creating-files). A component
 // that holds bytes to keep (an image pasted into Image) reports
 // fileCreateRequest through the event layer; the source route brings it

@@ -7,7 +7,7 @@ import './FileDownload.css';
 
 // A file of the document source as a download card (data: FileDownloadData.js).
 // The file is resolved like the src of an Image (config.assetUrlGet, the
-// source layer by default). The icon is a registered component of placement
+// doc page source service layer by default). The icon is a registered component of placement
 // fileDownloadIcon: data.icon, else config.iconByExtension[extension] (a host
 // setting through compConfigHost), else config.iconFallback, by default
 // common/FileIcon.

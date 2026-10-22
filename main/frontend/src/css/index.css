@@ -1,0 +1,11 @@
+/* The shared classes of the page UI: buttons, badges, floating panels,
+   small texts, the spinner. style.css imports this file once, into the
+   cascade layer doc-shared (after the Tailwind layers), so a rule of a
+   component stylesheet (no layer) always wins over a shared rule. A
+   component class next to a shared class states only what is its own.
+   See doc_page_impl.md#shared-styles. */
+@import './button.css';
+@import './badge.css';
+@import './popover.css';
+@import './text.css';
+@import './spin.css';

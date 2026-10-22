@@ -20,7 +20,7 @@ import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
 //        the asset (doc_page_impl_edit.md#asset-only-components)
 //   a block in the built-in mode 'source' (the lines of the block as written;
 //   the only mode of a block without a component, and of a component block
-//   whose data is a reference into the asset store, which is changed through
+//   whose data is a reference into the asset service layer, which is changed through
 //   the asset panel, doc_page_impl_asset.md#edit-mode)
 //     -> the default editor of the block kind: the registered components
 //        Heading / Paragraph / List, or BlockSource for every other kind

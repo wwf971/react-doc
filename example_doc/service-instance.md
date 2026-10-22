@@ -51,7 +51,7 @@ store: local
 objectId: w4veeme6sff
 ```
 
-The block is a reference into the asset store, like any asset-only component: the object holds which instance the dashboard shows and the dashboard's own state, here the search it shows. A search is written into the object in place, so the document opens on the same search; choosing another instance rewrites the object the same way. A dashboard keeps its state there and nowhere else, whatever it is; the instance keeps its own state in its own folder.
+The block is a reference into the asset service layer, like any asset-only component: the object holds which instance the dashboard shows and the dashboard's own state, here the search it shows. A search is written into the object in place, so the document opens on the same search; choosing another instance rewrites the object the same way. A dashboard keeps its state there and nowhere else, whatever it is; the instance keeps its own state in its own folder.
 
 The component id `service/note-db/default` names the template by the name the instances recorded, not the template folder: the dashboard is the instance's own (from its own copy of `dashboard/`), and keeps working if the template is renamed or removed.
 

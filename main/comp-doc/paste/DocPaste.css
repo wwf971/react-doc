@@ -1,0 +1,131 @@
+.doc-paste-popup {
+  width: min(1040px, calc(100vw - 32px));
+  height: min(760px, calc(100vh - 32px));
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-paste-popup-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.doc-paste-popup-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  font-size: 0.8rem;
+}
+
+.doc-paste-popup-main {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.doc-paste-popup-blocks {
+  display: flex;
+  flex: 3 1 0;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow: auto;
+  padding: 6px 10px;
+}
+
+.doc-paste-popup-place {
+  display: flex;
+  flex: 2 1 0;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow: auto;
+  padding: 6px 10px;
+  border-left: 1px solid var(--color-fd-border);
+}
+
+.doc-paste-popup-section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.doc-paste-popup-section-title {
+  font-weight: 600;
+}
+
+.doc-paste-popup-source-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.doc-paste-popup-source-toggle:hover,
+.doc-paste-popup-source-toggle:focus-visible {
+  background: var(--color-fd-accent);
+  color: var(--color-fd-foreground);
+  outline: none;
+}
+
+.doc-paste-popup-source {
+  flex: 0 0 auto;
+  min-height: 4.5rem;
+  max-height: 16rem;
+  overflow: auto;
+  padding: 4px 6px;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  font-variant-ligatures: none;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.doc-paste-popup-footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--color-fd-border);
+}
+
+/* footer: the status (.doc-status) and the buttons (.doc-button-dialog) */
+.doc-paste-popup-status {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* a bit wider than a .doc-button-dialog; the main one is filled with the
+   primary color, so a hover darkens a button instead of tinting it */
+.doc-paste-popup-button {
+  padding: 2px 10px;
+}
+
+.doc-paste-popup-button[data-primary] {
+  border-color: var(--color-fd-primary);
+  background: var(--color-fd-primary);
+  color: var(--color-fd-primary-foreground);
+}
+
+.doc-paste-popup-button:hover:not(:disabled),
+.doc-paste-popup-button:focus-visible:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.doc-paste-popup-button:not([data-primary]):hover:not(:disabled),
+.doc-paste-popup-button:not([data-primary]):focus-visible:not(:disabled) {
+  background: var(--color-fd-background);
+}

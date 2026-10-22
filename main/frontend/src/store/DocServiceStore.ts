@@ -466,7 +466,7 @@ export class DocServiceStore {
       return `The block reads the version ${assetInfo.versionIdRef} of its asset, which is never changed; a reference to the head keeps the state.`;
     }
     if (assetInfo.isLocked) return 'The asset object of the dashboard is locked.';
-    if (!this.assetStore) return 'The page has no asset store.';
+    if (!this.assetStore) return 'The page has no asset service layer.';
     return this.assetStore.writeUnavailableReason;
   }
 

@@ -9,7 +9,7 @@ import './DocEdit.css';
 // blur commits. Clearing the text shows the placeholder again; a cleared
 // contenteditable often keeps a <br>, which is not :empty, so that <br> is
 // removed. Used by component editors (ImageEdit, StockTableEdit), by
-// SourcePathInput, and by the asset store's new-folder field.
+// SourcePathInput, and by the new-folder field of the Asset service tab.
 //
 //   value            current value
 //   placeholder      shown while the value is empty

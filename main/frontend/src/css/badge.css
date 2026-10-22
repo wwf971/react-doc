@@ -1,0 +1,39 @@
+/* ---------- .doc-badge ----------
+   the kind of a block before its label (Heading, List, a component name):
+   a muted filled tag; data-kind="component" in the primary tint. */
+.doc-badge {
+  padding: 0 5px;
+  border-radius: 2px;
+  background: var(--color-fd-muted);
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.doc-badge[data-kind="component"] {
+  background: color-mix(in srgb, var(--color-fd-primary) 14%, transparent);
+  color: var(--color-fd-primary);
+}
+
+/* ---------- .doc-badge-outline ----------
+   a state of an item in a list (head, default, missing): a framed tag
+   without fill. data-primary: a state to notice; data-error: a problem. */
+.doc-badge-outline {
+  padding: 0 0.3rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.68rem;
+  line-height: 1.05rem;
+}
+
+.doc-badge-outline[data-primary] {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border));
+  color: var(--color-fd-primary);
+}
+
+.doc-badge-outline[data-error] {
+  border-color: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 60%, var(--color-fd-border));
+  color: var(--color-fd-destructive, #dc2626);
+}

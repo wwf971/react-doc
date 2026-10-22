@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   lineOperationApply,
   lineOperationIsValid,
+  lineOperationListApply,
   textHashGet,
   type LineOperation,
 } from './doc-edit-lines.ts';
@@ -19,6 +20,8 @@ import { yamlValueGet, yamlValueSetOperationBuild, yamlValueTextBuild } from './
 //   GET  {endpoint}/source?path=~root/a.md -> { code: 0, data: { internalPath, text, hash } }
 //   POST {endpoint}/source/apply           -> { code: 0, data: { internalPath, text, hash } }
 //        body { internalPath, hashBase, operation }   operation: doc-edit-lines.ts
+//          or { internalPath, hashBase, operationList }  several operations built on
+//                                         the same text, applied together (moving blocks)
 //   POST {endpoint}/side-panel/text        -> { code: 0, data: { file, fieldName, text } }
 //        body { file, nodePath, language, text, textBase }   doc-side-panel-text.ts
 //   POST {endpoint}/side-panel/move        -> { code: 0, data: { fileChangeList } }
@@ -136,8 +139,12 @@ async function routeHandle(
       jsonSend(res, 404, { code: -3, data: null, message: `not an editable document of the source: ${internalPath}` });
       return;
     }
-    if (typeof body?.hashBase !== 'string' || !lineOperationIsValid(body?.operation)) {
-      jsonSend(res, 400, { code: -1, data: null, message: 'request needs hashBase and a valid line operation' });
+    const operationList = Array.isArray(body?.operationList) ? body.operationList : undefined;
+    const isOperationValid = operationList
+      ? operationList.length > 0 && operationList.every((operation: unknown) => lineOperationIsValid(operation))
+      : lineOperationIsValid(body?.operation);
+    if (typeof body?.hashBase !== 'string' || !isOperationValid) {
+      jsonSend(res, 400, { code: -1, data: null, message: 'request needs hashBase and a valid line operation (or a list of them)' });
       return;
     }
     const textCurrent = fs.readFileSync(entry.absPath, 'utf-8');
@@ -152,7 +159,9 @@ async function routeHandle(
     }
     let textNext: string;
     try {
-      textNext = lineOperationApply(textCurrent, body.operation as LineOperation);
+      textNext = operationList
+        ? lineOperationListApply(textCurrent, operationList as LineOperation[])
+        : lineOperationApply(textCurrent, body.operation as LineOperation);
     } catch (error: any) {
       jsonSend(res, 400, { code: -1, data: null, message: String(error?.message ?? error) });
       return;

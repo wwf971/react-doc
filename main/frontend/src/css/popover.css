@@ -1,0 +1,27 @@
+/* ---------- .doc-popover ----------
+   a panel floating over the page, at a place its component sets (top /
+   left): a completion list, a drag ghost, a notice. The component sets the
+   z-index, the size and the inside. */
+.doc-popover,
+.doc-popover-form {
+  position: fixed;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-popover, var(--color-fd-background));
+  color: var(--color-fd-popover-foreground, var(--color-fd-foreground));
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.12);
+}
+
+/* ---------- .doc-popover-form ----------
+   a small form floating over the page (the file location prompt, the move
+   picker of the side panel): a column of a title, fields and a row of
+   .doc-button-dialog, with a deeper shadow. The component sets the width. */
+.doc-popover-form {
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.16);
+  font-size: 0.8rem;
+}

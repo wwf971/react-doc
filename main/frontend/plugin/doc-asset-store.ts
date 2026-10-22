@@ -6,7 +6,7 @@ import { idMs48Create, idMs48Is } from './id-ms48.ts';
 import { sourcePathIsRooted, sourcePathNormalize } from '../src/lib/doc-source-path.js';
 import { timeTextGet } from '../src/lib/time-text.js';
 
-// The local asset store on disk (design: doc_page_impl_asset.md). A general
+// The local store of the asset service layer, on disk (design: doc_page_impl_asset.md). A general
 // store of objects with a version history, modeled after an object storage
 // (s3): an object is a key with metadata, a version is a sequence of bytes
 // under that key, and the store does not care whether the bytes are text.
@@ -218,9 +218,9 @@ export class AssetError extends Error {
 
 // ---------- the store config file ----------
 
-// the local asset store config.yaml names: asset.file, the store config
+// the local store of the asset service layer that config.yaml names: asset.file, the store config
 // file, relative to config.yaml. undefined when config.yaml has no asset
-// section: the page has no asset store. a section that names the store in a
+// section: the page has no asset service layer. a section that names the store in a
 // form that is not read (the former asset.folder) or not at all is an error
 // that says how to write it, never a silent "no store": the page would
 // otherwise find out only when a write fails.
@@ -231,11 +231,11 @@ export function assetConfigOfConfigDocGet(configDoc: any, configDir: string): As
     throw new Error(`[doc-source] config.yaml "asset" must be a mapping with "file", e.g. asset: { file: ./asset.yaml }${assetConfigMigrationText('./asset')}`);
   }
   if (asset.folder !== undefined) {
-    throw new Error(`[doc-source] config.yaml "asset.folder" is no longer read: the asset store is described by a config file of its own, named by "asset.file".${assetConfigMigrationText(String(asset.folder))}`);
+    throw new Error(`[doc-source] config.yaml "asset.folder" is no longer read: the local store of the asset service layer is described by a config file of its own, named by "asset.file".${assetConfigMigrationText(String(asset.folder))}`);
   }
   const file = asset.file;
   if (typeof file !== 'string' || !file.trim()) {
-    throw new Error(`[doc-source] config.yaml "asset" needs "file": the config file of the asset store.${assetConfigMigrationText('./asset')}`);
+    throw new Error(`[doc-source] config.yaml "asset" needs "file": the config file of the local store of the asset service layer.${assetConfigMigrationText('./asset')}`);
   }
   return assetConfigRead(path.resolve(configDir, file.trim()));
 }
@@ -266,14 +266,14 @@ export function assetConfigRead(fileAbs: string): AssetStoreConfig {
     try {
       content = yamlParse(fs.readFileSync(fileAbs, 'utf-8')) ?? {};
     } catch (error: any) {
-      throw new Error(`[doc-source] the asset store config ${fileAbs} is not valid yaml: ${String(error?.message ?? error)}`);
+      throw new Error(`[doc-source] the local store config ${fileAbs} is not valid yaml: ${String(error?.message ?? error)}`);
     }
   }
   if (typeof content !== 'object' || Array.isArray(content)) {
-    throw new Error(`[doc-source] the asset store config ${fileAbs} must be a mapping with "folderList"`);
+    throw new Error(`[doc-source] the local store config ${fileAbs} must be a mapping with "folderList"`);
   }
   if (content.folderList !== undefined && !Array.isArray(content.folderList)) {
-    throw new Error(`[doc-source] "folderList" of the asset store config ${fileAbs} must be a list of { path, isDefault }`);
+    throw new Error(`[doc-source] "folderList" of the local store config ${fileAbs} must be a list of { path, isDefault }`);
   }
   const folderList = folderListNormalize(content.folderList, path.dirname(fileAbs));
   return { file: fileAbs, folderList };
@@ -281,7 +281,7 @@ export function assetConfigRead(fileAbs: string): AssetStoreConfig {
 
 export function assetConfigWrite(fileAbs: string, folderListInput: { path: string; isDefault?: boolean }[]): AssetStoreConfig {
   const folderList = folderListNormalize(folderListInput, path.dirname(fileAbs));
-  if (folderList.length === 0) throw new AssetError(-1, 'the asset store needs at least one folder');
+  if (folderList.length === 0) throw new AssetError(-1, 'the local store needs at least one folder');
   const body = yamlStringify({
     folderList: folderList.map((folder) => (folder.isDefault ? { path: folder.path, isDefault: true } : { path: folder.path })),
   });
@@ -291,9 +291,10 @@ export function assetConfigWrite(fileAbs: string, folderListInput: { path: strin
 }
 
 const ASSET_CONFIG_HEADER = [
-  '# the local asset store (doc_page_impl_asset.md): the folders its objects',
+  '# the local store of the asset service layer (doc_page_impl_asset.md): the folders',
+  '# its objects',
   '# live in. a new object is created in the default folder. paths are relative',
-  '# to this file. rewritten by the settings panel of the page (Asset store tab).',
+  '# to this file. rewritten by the settings panel of the page (Asset service tab).',
   '',
 ].join('\n');
 
@@ -536,7 +537,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     }
     const folder = input.folder ? folderList.find((item) => item.path === input.folder) : folderDefault;
     if (!folder) {
-      throw new AssetError(-1, input.folder ? `asset folder not in the store: ${input.folder}` : 'the asset store has no folder');
+      throw new AssetError(-1, input.folder ? `asset folder not in the store: ${input.folder}` : 'the local store has no folder');
     }
     const lang = langNormalize(input.lang);
     fs.mkdirSync(folder.pathAbs, { recursive: true });

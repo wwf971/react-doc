@@ -47,22 +47,16 @@
   outline: none;
 }
 
-/* the completion list: rendered into document.body at a fixed position
-   under the text (SourcePathInput sets top / left / widths), above the
-   settings panel (z-index 60) and the location prompt */
+/* the completion list (a .doc-popover): rendered into document.body at a
+   fixed position under the text (SourcePathInput sets top / left / widths),
+   above the settings panel (z-index 60) and the location prompt */
 .doc-source-path-list {
-  position: fixed;
   z-index: 70;
   max-height: 14rem;
   margin: 0;
   padding: 2px 0;
   overflow-y: auto;
   list-style: none;
-  border: 1px solid var(--color-fd-border);
-  border-radius: 3px;
-  background: var(--color-fd-popover, var(--color-fd-background));
-  color: var(--color-fd-popover-foreground, var(--color-fd-foreground));
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.12);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.8rem;
   white-space: nowrap;
@@ -186,22 +180,141 @@
   font-size: 0.7rem;
 }
 
-/* ---------- SourceFilePrompt ---------- */
+/* the parts of a label a search matched */
+.doc-source-tree-match {
+  padding: 0;
+  border-radius: 1px;
+  background: #fde047;
+  color: #1c1917;
+}
 
-.doc-source-prompt {
-  position: fixed;
-  z-index: 60;
+.doc-source-tree-empty {
+  margin: 0;
+  padding: 2px 6px;
+  color: var(--color-fd-muted-foreground);
+}
+
+/* a tag before the label (the kind of a block): a .doc-badge, a step
+   smaller to fit the compact rows */
+.doc-source-tree-badge {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+/* ---------- SourcePathPicker ---------- */
+
+.doc-source-picker {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  width: min(22rem, calc(100vw - 16px));
-  padding: 6px 8px;
+  min-width: 0;
+}
+
+.doc-source-picker-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.doc-source-picker-label {
+  flex: 0 0 auto;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-source-picker-row .doc-source-path-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.doc-source-picker-row .doc-source-path-input .doc-edit-value {
+  display: block;
+  width: 100%;
+}
+
+/* the search field above the tree, as wide as the tree */
+.doc-source-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 1px 4px;
   border: 1px solid var(--color-fd-border);
   border-radius: 3px;
-  background: var(--color-fd-popover, var(--color-fd-background));
-  color: var(--color-fd-popover-foreground, var(--color-fd-foreground));
-  box-shadow: 0 6px 18px rgb(0 0 0 / 0.16);
-  font-size: 0.8rem;
+  background: var(--color-fd-background);
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-source-picker-search:focus-within {
+  border-color: var(--color-fd-primary);
+}
+
+.doc-source-picker-search > input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-fd-foreground);
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  outline: none;
+}
+
+.doc-source-picker-search > button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.doc-source-picker-search > button:hover {
+  color: var(--color-fd-foreground);
+}
+
+/* the browse button after the path, the size of the revert button */
+.doc-source-picker-browse {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+  align-self: center;
+}
+
+.doc-source-picker-browse:hover,
+.doc-source-picker-browse:focus-visible,
+.doc-source-picker-browse[aria-pressed='true'] {
+  border-color: var(--color-fd-border);
+  background: var(--color-fd-accent);
+  color: var(--color-fd-foreground);
+  outline: none;
+}
+
+.doc-source-picker-tree {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* ---------- SourceFilePrompt ----------
+   a .doc-popover-form; its buttons are .doc-button-dialog, its texts
+   .doc-status / .doc-error */
+
+.doc-source-prompt {
+  width: min(22rem, calc(100vw - 16px));
 }
 
 .doc-source-prompt-title {
@@ -221,46 +334,18 @@
   color: var(--color-fd-muted-foreground);
 }
 
-.doc-source-prompt-row .doc-source-path-input,
 .doc-source-prompt-row .doc-edit-value {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.doc-source-prompt-row .doc-source-path-input .doc-edit-value {
-  display: block;
-  width: 100%;
+/* the folder row of the prompt aligns its label with the name row */
+.doc-source-prompt .doc-source-picker-label {
+  flex-basis: 3rem;
 }
 
-/* the browse button after the folder, the size of the revert button */
-.doc-source-prompt-browse {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.2rem;
-  height: 1.2rem;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  background: none;
-  color: var(--color-fd-muted-foreground);
-  cursor: pointer;
-  align-self: center;
-}
-
-.doc-source-prompt-browse:hover,
-.doc-source-prompt-browse:focus-visible,
-.doc-source-prompt-browse[aria-pressed='true'] {
-  border-color: var(--color-fd-border);
-  background: var(--color-fd-accent);
-  color: var(--color-fd-foreground);
-  outline: none;
-}
-
-.doc-source-prompt-tree {
+.doc-source-prompt .doc-source-picker-tree {
   margin-inline-start: calc(3rem + 6px);
-  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 .doc-source-prompt-actions {
@@ -269,38 +354,11 @@
   gap: 4px;
 }
 
+/* the buttons keep the text size of the prompt */
 .doc-source-prompt-button {
-  padding: 1px 8px;
-  border: 1px solid var(--color-fd-border);
-  border-radius: 3px;
-  background: var(--color-fd-background);
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.doc-source-prompt-button:hover:not(:disabled),
-.doc-source-prompt-button:focus-visible:not(:disabled) {
-  background: var(--color-fd-accent);
-  outline: none;
+  font-size: inherit;
 }
 
 .doc-source-prompt-button:disabled {
   opacity: 0.6;
-  cursor: default;
-}
-
-.doc-source-prompt-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--color-fd-muted-foreground);
-  font-size: 0.72rem;
-}
-
-.doc-source-prompt-message {
-  margin: 0;
-  color: var(--color-fd-destructive, #dc2626);
-  font-size: 0.72rem;
-  line-height: 1.3;
 }

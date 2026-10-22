@@ -35,7 +35,7 @@ export { DocConfigStore } from './store/DocConfigStore.js';
 export { DocEditStore } from './store/DocEditStore.js';
 export { DocAssetStore } from './store/DocAssetStore.js';
 export { useDocStores } from './store/context.js';
-// the asset store (doc_page_impl_asset.md): the reference form in documents
+// the asset service layer (doc_page_impl_asset.md): the reference form in documents
 // and the browser backends over the asset api / a bundled snapshot
 export { ASSET_REF_LANG, assetRefLangIs, assetRefParse, assetBlockTextExpand } from './lib/doc-asset-ref.js';
 export { assetBackendApiCreate, assetBackendSnapshotCreate } from './lib/doc-asset-backend.js';
@@ -56,7 +56,7 @@ export { TagList } from '../../comp-mdx/tag/TagList.jsx';
 export { TagOverview } from '../../comp-mdx/tag/TagOverview.jsx';
 export { tagAssetKeyGet } from './lib/doc-tag-declare.js';
 export { configDefineListBuiltin } from './lib/doc-config-define.js';
-// the source layer (doc_page_impl_source.md): the source path grammar and
+// the doc page source service layer (doc_page_impl_source.md): the source path grammar and
 // the path input with completion
 export {
   SOURCE_ROOT_MARK,

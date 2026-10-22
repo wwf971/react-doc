@@ -59,9 +59,9 @@ sidePanelById:
                 text: Local D
                 inline:
                   content: An inline page inside a folder of `side-panel.yaml`.
-      # component data kept in the asset store; writable on the development server only
+      # component data kept in the asset service layer; writable on the development server only
       - doc: ~example/asset-store.md
-        text: Asset Store
+        text: Asset Service Layer
         tags: [guide]
       # stateful services run by the service backend, shown through dashboards
       - doc: ~example/service-instance.md

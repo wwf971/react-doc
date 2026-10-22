@@ -12,8 +12,8 @@ import { AssetUsageTable } from '../asset/AssetUsageTable.jsx';
 import '../edit/DocEdit.css';
 import './DocSettings.css';
 
-// The "Asset store" tab of the settings panel (design:
-// doc_page_impl_asset.md#the-local-store): the folders of the local store,
+// The "Asset service" tab of the settings panel (asset service layer) (design:
+// doc_page_impl_asset.md#the-local-store-folders-fully-reflected): the folders of the local store,
 // which one is the default (new objects are created there), and whether
 // each exists and how many objects it holds. Set default, Remove, and Add
 // change DocAssetStore.folderList; the store sends the whole list to the
@@ -26,7 +26,7 @@ import './DocSettings.css';
 export const AssetStoreSettings = observer(function AssetStoreSettings() {
   const { assetStore } = useDocStores();
   if (!assetStore.isAvailable) {
-    return <p className="doc-settings-asset-note">{assetStore.unavailableReason || 'The asset store is loading.'}</p>;
+    return <p className="doc-settings-asset-note">{assetStore.unavailableReason || 'The asset service layer is loading.'}</p>;
   }
   const isWritable = assetStore.isWritable;
   const isBusy = assetStore.folder.status === 'submitting';

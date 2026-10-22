@@ -73,7 +73,7 @@ function storesCreate({ modeList, isDocEditable = true } = {}) {
     },
   });
   const sourceStore = { configDoc: { compRegistry: { StockTable: 'specific/StockTable' } } };
-  const assetStore = { isWritable: false, writeUnavailableReason: 'The asset store of a built page is a read-only snapshot.' };
+  const assetStore = { isWritable: false, writeUnavailableReason: 'The asset service layer of a built page is a read-only snapshot.' };
   const popupStore = new DocBlockPopupStore({ docStore, editStore, sourceStore, assetStore });
   popupStore.init();
   return { docStore, editStore, popupStore };
@@ -156,7 +156,7 @@ test('Edit is not offered without an edit api, and disabled where nothing can be
   assert.deepEqual(readOnly.popupStore.editState, {
     isOffered: true,
     isEnabled: false,
-    reason: 'The asset store of a built page is a read-only snapshot.',
+    reason: 'The asset service layer of a built page is a read-only snapshot.',
   });
   assert.equal(await readOnly.popupStore.editEnter(), false);
 

@@ -38,7 +38,7 @@ What the component declares beyond that is what it declares anyway: its edit mod
 
 ## Block identity
 
-The popup names its block by **document, marker line and component**: `{sourcePath}#{sourceLine}#{compId}`. `sourceLine` is the line of the block's marker comment in the content without frontmatter; `remarkCommentComp` gives it to `DocComp` (reading body and edit body alike), and the edit model has the same number as `component.markerLine` ([Block model](doc_page_impl_edit.md#block-model)), which the editor of a session passes on. Two references to the same asset, or two blocks with the same data, are different blocks. The same identity, with an `Anchor` id when one is declared, is the place the usage index of the asset store names a block by ([Places in a document](doc_page_impl_nav.md#places-in-a-document)). The block's index in the edit model is found from the marker line when it is needed (entering Edit), so the identity does not depend on the edit model being loaded.
+The popup names its block by **document, marker line and component**: `{sourcePath}#{sourceLine}#{compId}`. `sourceLine` is the line of the block's marker comment in the content without frontmatter; `remarkCommentComp` gives it to `DocComp` (reading body and edit body alike), and the edit model has the same number as `component.markerLine` ([Block model](doc_page_impl_edit.md#block-model)), which the editor of a session passes on. Two references to the same asset, or two blocks with the same data, are different blocks. The same identity, with an `Anchor` id when one is declared, is the place the usage index of the asset service layer names a block by ([Places in a document](doc_page_impl_nav.md#places-in-a-document)). The block's index in the edit model is found from the marker line when it is needed (entering Edit), so the identity does not depend on the edit model being loaded.
 
 ## The element that moves
 
@@ -63,7 +63,7 @@ Edit is offered only where something can be written: without the edit api (a bui
 
 ## The dialog
 
-`DocBlockPopup` renders the host's panel component ([the panel contract](doc_page_impl.md#component-registry)) with the maximize button on and the block's title. The header holds, before the panel's own buttons, the floating bar of the block's editor (the surface points `DocEditBlockFloatContext` at a slot in the header while the block is in the dialog, so `EditFloatingPanel` renders there with the editor's controls and Save / Cancel), the message of a failed change of mode, and the View / Edit switch.
+`DocBlockPopup` renders the host's panel component ([the panel contract](doc_page_impl.md#the-panel-contract)) with the maximize button on and the block's title. The header holds, before the panel's own buttons, the floating bar of the block's editor (the surface points `DocEditBlockFloatContext` at a slot in the header while the block is in the dialog, so `EditFloatingPanel` renders there with the editor's controls and Save / Cancel), the message of a failed change of mode, and the View / Edit switch.
 
 The dialog belongs to the edit session of its block: it carries `doc-edit-popup`, and while a popup is open the edit body does not leave a session on a pointer going down outside the block, since the page behind the dialog cannot be reached. Escape closes the dialog in View; in Edit the block's editor takes it (Escape cancels the session, Ctrl/⌘ + Enter saves it), and a component's own use of a key (a cell editor's Escape) is never taken from it. Menus the component's engine portals to the body stay above the dialog.
 

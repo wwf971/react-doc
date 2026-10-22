@@ -32,7 +32,7 @@ import './DocEdit.css';
 // the toolbar; a deletion is confirmed in the toolbar itself. a pointer
 // going down outside the toolbar closes the menu, the confirmation or a
 // failure message. the asset button exists for a component block whose data
-// is a reference into the asset store (doc_page_impl_asset.md): it opens
+// is a reference into the asset service layer (doc_page_impl_asset.md): it opens
 // the asset panel of that object, the one place the panel is reached from.
 // a component block whose data is written inline in a fenced block has the
 // "to asset" button instead: confirmed in the toolbar like a deletion, the
@@ -52,7 +52,7 @@ import './DocEdit.css';
 //
 // the asset button carries the block (component name, marker props, this
 // document) to the panel, so its preview pane can render the data the way
-// the block does. a reference by name resolves through the asset store
+// the block does. a reference by name resolves through the asset service layer
 // index; until then the button is disabled.
 //
 //   blockIndex   the block the toolbar belongs to
@@ -141,7 +141,7 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
         ) : null}
         {isAssetMoveAvailable ? (
           <button type="button" disabled={isSubmitting} aria-pressed={isAssetMoveConfirmHere}
-            title="Move the inline data into the asset store" aria-label="Move the inline data into the asset store"
+            title="Move the inline data into the asset service layer" aria-label="Move the inline data into the asset service layer"
             onClick={() => void editStore.blockAssetMoveConfirmSet(path, blockIndex)}>
             <Upload aria-hidden="true" size={ICON_SIZE} strokeWidth={2} />
           </button>
@@ -196,7 +196,7 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
       ) : null}
       {isAssetMoveConfirmHere ? (
         <ToolbarConfirm
-          question="Move the data of this block into the asset store?"
+          question="Move the data of this block into the asset service layer?"
           actionLabel="Move"
           isDanger={false}
           confirm={assetMove}

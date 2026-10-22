@@ -126,7 +126,7 @@ export function attachmentImageGridFind(context: DocAttachmentFinderContext): st
 
 // textExpand(text): the document text as the finders see it; asset reference
 // blocks are expanded to the data they stand for (doc_page_impl_asset.md).
-// assetDependencyPathList: the source files the versions of the asset store
+// assetDependencyPathList: the source files the versions of the asset service layer
 // depend on (doc_page_impl_asset.md#dependencies); they are collected too.
 // a file of the source collected as "referenced" that a document reaches
 // (docEntryList holds the pruned manifest) is collected with them.

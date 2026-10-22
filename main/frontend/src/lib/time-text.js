@@ -1,5 +1,5 @@
 // time-format.md: 20260520_23250530+09. local time to 10 ms, then the zone
-// offset in whole hours. used by the asset store (event and version times)
+// offset in whole hours. used by the asset service layer (event and version times)
 // and for names made of a moment (a pasted image file).
 export function timeTextGet(date = new Date()) {
   const pad = (value, length = 2) => String(value).padStart(length, '0');

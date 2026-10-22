@@ -2,7 +2,7 @@
 
 # Service Templates and Instances: Design
 
-An asset is data: a versioned object that a component reads, which the page can copy, bundle into a build, and resolve before the component renders ([Asset Store](doc_page_impl_asset.md)). A **service instance** is a running thing with its own state: a database, a crawler, a queue of jobs, anything that answers requests and keeps something between them. Its state is not the document's and cannot be bundled; the document only places **dashboards** that show and work an instance. The distinction decides everything below:
+An asset is data: a versioned object that a component reads, which the page can copy, bundle into a build, and resolve before the component renders ([Asset service layer](doc_page_impl_asset.md)). A **service instance** is a running thing with its own state: a database, a crawler, a queue of jobs, anything that answers requests and keeps something between them. Its state is not the document's and cannot be bundled; the document only places **dashboards** that show and work an instance. The distinction decides everything below:
 
 | | asset object | service instance |
 | --- | --- | --- |
@@ -87,7 +87,7 @@ instanceFolderList:            # folders holding the instances: {templateName}-i
     isDefault: true            # where a new instance is created (the first folder when none says so)
 ```
 
-The two kinds of folders are kept apart, in folder lists of their own, and named the way the asset store names its object folders ([Names](doc_page_impl_asset.md#names)): the id is an ms48 id (base36 of the creation millisecond and 16 random bits) and a separator no id can hold tells the id from the name, so a folder is identified by its name alone and a person browsing the disk sees what it is.
+The two kinds of folders are kept apart, in folder lists of their own, and named the way the asset service layer names its object folders ([Names](doc_page_impl_asset.md#names)): the id is an ms48 id (base36 of the creation millisecond and 16 random bits) and a separator no id can hold tells the id from the name, so a folder is identified by its name alone and a person browsing the disk sees what it is.
 
 | | template folder | instance folder |
 | --- | --- | --- |
@@ -245,7 +245,7 @@ service:
   backendConfigFile: ../example_doc/service-backend.yaml # optional: the backend's config
 ```
 
-`backendConfigFile` is read for one reason: the template and instance folders it lists are not documents. The source rules skip them, and a change in them (a sqlite journal, a dashboard build) never reloads the page or regenerates the manifest, the same way the folders of the local asset store are excluded. The virtual module exports `docServiceEndpoint`, the url of the forwarded api during `vite`, and the empty string in a build or without a `service` section; the host passes it as `config.service.endpoint` of `DocPageMdx` ([Consumer setup](doc_page_impl_detail.md#consumer-setup)). Without an endpoint `DocServiceStore` has no backend (`backendStatus: 'none'`), and every dashboard says so.
+`backendConfigFile` is read for one reason: the template and instance folders it lists are not documents. The source rules skip them, and a change in them (a sqlite journal, a dashboard build) never reloads the page or regenerates the manifest, the same way the folders of the local store of the asset service layer are excluded. The virtual module exports `docServiceEndpoint`, the url of the forwarded api during `vite`, and the empty string in a build or without a `service` section; the host passes it as `config.service.endpoint` of `DocPageMdx` ([Consumer setup](doc_page_impl_detail.md#consumer-setup)). Without an endpoint `DocServiceStore` has no backend (`backendStatus: 'none'`), and every dashboard says so.
 
 ## DocServiceStore
 

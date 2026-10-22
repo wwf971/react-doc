@@ -26,7 +26,7 @@ export function pasteTargetIsText(target) {
 
 // image-20260101_12000000+09.png: the moment of the paste in the time
 // format of the project (lib/time-text.js), with the extension of the
-// pasted type; the source layer makes it unique in the folder
+// pasted type; the doc page source service layer makes it unique in the folder
 export function pastedFileNameBuild(file, timeNow = new Date()) {
 	const extByType = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg', 'image/bmp': 'bmp' };
 	const ext = extByType[file.type] ?? 'png';

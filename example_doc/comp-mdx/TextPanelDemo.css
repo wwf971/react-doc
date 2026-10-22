@@ -80,3 +80,58 @@
 	width: 100%;
 	height: 100%;
 }
+
+/* moving and resizing (config.isMovable / isResizable) */
+.doc-text-panel-demo {
+	position: relative;
+}
+
+.doc-text-panel-demo-header[data-movable] {
+	cursor: move;
+	touch-action: none;
+	user-select: none;
+}
+
+.doc-text-panel-demo-header[data-movable] :is(button, a, input, textarea, select) {
+	cursor: pointer;
+}
+
+.doc-text-panel-demo-resize {
+	position: absolute;
+	z-index: 2;
+	touch-action: none;
+}
+
+.doc-text-panel-demo-resize[data-edge='n'],
+.doc-text-panel-demo-resize[data-edge='s'] {
+	left: 8px;
+	right: 8px;
+	height: 5px;
+	cursor: ns-resize;
+}
+
+.doc-text-panel-demo-resize[data-edge='e'],
+.doc-text-panel-demo-resize[data-edge='w'] {
+	top: 8px;
+	bottom: 8px;
+	width: 5px;
+	cursor: ew-resize;
+}
+
+.doc-text-panel-demo-resize[data-edge='n'] { top: 0; }
+.doc-text-panel-demo-resize[data-edge='s'] { bottom: 0; }
+.doc-text-panel-demo-resize[data-edge='e'] { right: 0; }
+.doc-text-panel-demo-resize[data-edge='w'] { left: 0; }
+
+.doc-text-panel-demo-resize[data-edge='ne'],
+.doc-text-panel-demo-resize[data-edge='nw'],
+.doc-text-panel-demo-resize[data-edge='se'],
+.doc-text-panel-demo-resize[data-edge='sw'] {
+	width: 10px;
+	height: 10px;
+}
+
+.doc-text-panel-demo-resize[data-edge='ne'] { top: 0; right: 0; cursor: nesw-resize; }
+.doc-text-panel-demo-resize[data-edge='sw'] { bottom: 0; left: 0; cursor: nesw-resize; }
+.doc-text-panel-demo-resize[data-edge='nw'] { top: 0; left: 0; cursor: nwse-resize; }
+.doc-text-panel-demo-resize[data-edge='se'] { right: 0; bottom: 0; cursor: nwse-resize; }

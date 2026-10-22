@@ -14,6 +14,7 @@ import { parse as parseYaml } from 'yaml';
 import { remarkDocLink } from './remark-doc-link.js';
 import { remarkCommentComp } from './remark-comment-comp.js';
 import { remarkAnchor } from './remark-anchor.js';
+import { rehypeCodeInline } from './rehype-code-inline.js';
 import { assetRefLangIs } from './doc-asset-ref.js';
 import {
   multiLangCompNameIs,
@@ -41,7 +42,7 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
   const headingVariantsById = new Map();
   // languageList of an entry: languages of that one component, e.g. for the
   // language selector of a hosted part index. a block in the language
-  // "asset" holds a reference into the asset store, not the data
+  // "asset" holds a reference into the asset service layer, not the data
   // (doc_page_impl_asset.md): the component-specific readers of the data
   // do not run on it (the plugin expands references before compiling when
   // the data is wanted at build time).
@@ -103,6 +104,7 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
       // before rehypeCode: display math is a <pre><code class="language-math">,
       // which shiki would otherwise take as a code block in an unknown language.
       rehypeKatex,
+      rehypeCodeInline,
       [rehypeCode, config.rehypeCodeOptions],
       ...(config.rehypePlugins ?? []),
       rehypeToc,

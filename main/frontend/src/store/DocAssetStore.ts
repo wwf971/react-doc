@@ -3,7 +3,7 @@ import { assetBackendApiCreate, assetBackendSnapshotCreate } from '../lib/doc-as
 import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
 import { AssetPanelModel } from './AssetPanelModel.js';
 
-// Asset store of the page (design: doc_page_impl_asset.md). It holds what
+// The asset service layer of the page (design: doc_page_impl_asset.md). It holds what
 // the page knows of the asset objects: the index of every object of the
 // store (read once when the page starts), the data of the versions in use,
 // which blocks of the documents reference which object (the usage index),
@@ -15,7 +15,7 @@ import { AssetPanelModel } from './AssetPanelModel.js';
 //
 //   backend        where the objects live: the asset api of the development
 //                  server, or the snapshot bundled into a build (read-only)
-//   backendKind    'api', 'snapshot', or 'none' (no asset store)
+//   backendKind    'api', 'snapshot', or 'none' (no asset service layer)
 //   isAvailable    the backend answered
 //   isWritable     the backend accepts writes
 //   statusMessage  why the status request failed, as the backend said it
@@ -312,7 +312,7 @@ export class DocAssetStore {
   //   snapshot         a built page: readable, never writable
   get unavailableReason(): string {
     if (this.backendKind === 'none') {
-      return 'The page has no asset store: config.yaml names no asset.file, or the development server was started before it did (restart it).';
+      return 'The page has no asset service layer: config.yaml names no asset.file, or the development server was started before it did (restart it).';
     }
     if (this.statusMessage) return `The asset api did not answer: ${this.statusMessage}`;
     return '';
@@ -323,8 +323,8 @@ export class DocAssetStore {
     if (this.isWritable) return '';
     const reason = this.unavailableReason;
     if (reason) return reason;
-    if (this.backendKind === 'snapshot') return 'The asset store of a built page is a read-only snapshot.';
-    if (!this.isAvailable) return 'The asset store is still loading.';
+    if (this.backendKind === 'snapshot') return 'The asset service layer of a built page is a read-only snapshot.';
+    if (!this.isAvailable) return 'The asset service layer is still loading.';
     return 'The asset api answered that the store is read-only.';
   }
 
@@ -677,7 +677,7 @@ export class DocAssetStore {
   // the versions of the store depending on the object (versionId '' ) or on
   // one version of it; asked from the backend, since it needs every object
   async dependentListGet(store: string, objectId: string, versionId = ''): Promise<AssetResult> {
-    if (!this.backend) return { code: -1, message: 'The page has no asset store.' };
+    if (!this.backend) return { code: -1, message: 'The page has no asset service layer.' };
     const result = await this.backend.dependentListGet(store, objectId, versionId);
     return result.code === 0 ? { code: 0, data: result.data, message: '' } : { code: result.code, message: result.message };
   }
@@ -836,7 +836,7 @@ export class DocAssetStore {
   // reads the references of some documents again; a document the answer
   // does not have is gone (or no longer collected) and leaves the index
   async usageDocListRead(docPathList: string[]): Promise<AssetResult> {
-    if (!this.backend || !this.isAvailable) return { code: -1, message: this.unavailableReason || 'The asset store is not available.' };
+    if (!this.backend || !this.isAvailable) return { code: -1, message: this.unavailableReason || 'The asset service layer is not available.' };
     if (docPathList.length === 0) return { code: 0, message: '' };
     const result = await this.backend.usageList(docPathList);
     if (result.code !== 0) return { code: result.code, message: result.message || 'The documents were not read again.' };

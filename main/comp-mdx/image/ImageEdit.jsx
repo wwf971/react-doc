@@ -54,7 +54,7 @@ export const ImageEdit = observer(function ImageEdit({ data = {}, config = {}, o
     />
   );
 
-  // a pasted image (written as a file by the source layer, Image's paste
+  // a pasted image (written as a file by the doc page source service layer, Image's paste
   // flow) becomes the src of the draft, like a value typed in the panel
   const sourcePaste = (sourcePath) => draftChange(() => store.fieldSet('src', sourcePath));
 

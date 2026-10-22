@@ -75,7 +75,7 @@ const ObjectSection = observer(function ObjectSection({ object, panel, isWritabl
             : <span>{object.name || '(no name)'}</span>}
         </dd>
         <dt>component</dt>
-        <dd title="the component whose data the object is (doc_page_impl_mdx_comp.md#components-and-the-asset-store)">
+        <dd title="the component whose data the object is (doc_page_impl_mdx_comp.md#components-and-the-asset-service-layer)">
           {isChangeable
             ? <EditValueInline value={object.component?.name ?? ''} placeholder="(none)" className="doc-asset-mono" onCommit={(name) => panel.componentSet(name)} />
             : <span className="doc-asset-mono">{object.component?.name ?? '(none)'}</span>}

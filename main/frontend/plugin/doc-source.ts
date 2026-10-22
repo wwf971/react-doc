@@ -63,7 +63,7 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 //   export const docEditEndpoint = '/__doc-edit'    // '' in a build: no edit api
 //   export const docAssetEndpoint = '/__doc-asset'  // '' in a build or without asset.file
 //   export const docServiceEndpoint = '/__doc-service' // '' in a build or without service.backend
-//   export const assetSnapshot = {...} | null       // the asset store, bundled in a build
+//   export const assetSnapshot = {...} | null       // the asset service layer, bundled in a build
 //   export function subscribeDocSource(listener)    // dev: the source data changed
 //   export function subscribeDocAsset(listener)     // dev: an object or the store's folders changed on disk
 //
@@ -95,7 +95,7 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 // file creation; docSourceMiddlewareCreate), the edit api
 // (doc-edit-server.ts), so the page can rewrite root-level blocks of a
 // document in place, and the asset api (doc-asset-server.ts) over the local
-// asset store, whose config file is named by config asset.file and whose
+// store of the asset service layer, whose config file is named by config asset.file and whose
 // folders are listed in that file (doc_page_impl_asset.md). the store's
 // files are never part of the collected source, wherever they are placed.
 // it forwards the service api to the service backend of config
@@ -177,7 +177,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
   const moduleId = options.moduleId ?? MODULE_ID_DEFAULT;
   const moduleIdResolved = `\0${moduleId}`;
 
-  // the local asset store of config asset.file, or undefined without one;
+  // the local store of the asset service layer (config asset.file), or undefined without one;
   // created from the config file as it is now
   const assetStoreGet = (configDoc: any): AssetStore | undefined => {
     const assetConfig = assetConfigGet(configDoc, configDir);
@@ -476,7 +476,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       }
 
       const invalidateManifest = (filePath: string) => {
-        // files of the asset store are not documents, even inside a source folder
+        // files of the asset service layer are not documents, even inside a source folder
         if (assetConfig && assetPathIs(assetConfig, filePath)) return;
         // nor are the files of the service backend (a database, a built dashboard)
         if (serviceConfig && servicePathIs(serviceConfig, filePath)) return;
@@ -520,7 +520,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
 }
 
 // ---------- source api ----------
-// the source layer of the development server (doc_page_impl_source.md#the-source-api):
+// the doc page source service layer of the development server (doc_page_impl_source.md#the-source-api):
 //
 //   GET  {endpoint}/file?path=~root/a.md   the text of a collected file, plain utf-8, never
 //                                          cached. the development page loads every document
@@ -888,7 +888,7 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
 
   // the configuration files (config.yaml, the yaml files of the document),
   // their backups (the edit api keeps {file}.bak when it rewrites one) and
-  // the files of the asset store (doc_page_impl_asset.md) and of the
+  // the files of the asset service layer (doc_page_impl_asset.md) and of the
   // service backend (doc_page_impl_service_instance.md) are never
   // documents, even when they lie inside a source folder
   const pathsConfiguration = collectPathsConfiguration(configDoc);
@@ -929,14 +929,14 @@ function assetUsageDocListScan(entries: FileEntry[], docPathList: string[]): Ass
   return docList;
 }
 
-// the local asset store as config asset.file describes it now; undefined
+// the local store of the asset service layer as config asset.file describes it now; undefined
 // when the config names no store, an error when it names one wrongly
 // (assetConfigOfConfigDocGet)
 function assetConfigGet(configDoc: any, configDir: string): AssetStoreConfig | undefined {
   return assetConfigOfConfigDocGet(configDoc, configDir);
 }
 
-// a file of the asset store: its config file (and the backup / temporary
+// a file of the asset service layer: its config file (and the backup / temporary
 // file the store writes beside it), or anything inside one of its folders
 function assetPathIs(assetConfig: AssetStoreConfig, filePath: string): boolean {
   if (filePath === assetConfig.file || filePath === `${assetConfig.file}.bak` || filePath === `${assetConfig.file}.tmp`) return true;
@@ -1351,7 +1351,7 @@ export function generateModuleCode(
     lines.push('    sourceState.current = dataNext;');
     lines.push('    for (const listener of listenersDocSource) listener(dataNext);');
     lines.push('  });');
-    // the asset store changed on disk: listeners get { objectId, isStoreChanged }
+    // the asset service layer changed on disk: listeners get { objectId, isStoreChanged }
     lines.push("  import.meta.hot.on('doc-asset-change', (dataChange) => {");
     lines.push('    for (const listener of listenersDocAsset) listener(dataChange);');
     lines.push('  });');

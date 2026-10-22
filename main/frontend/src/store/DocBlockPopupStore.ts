@@ -247,7 +247,7 @@ export class DocBlockPopupStore {
     const assetInfo = popup.assetInfo;
     if (assetInfo?.isFromAsset) {
       let reason = '';
-      if (!this.stores.assetStore?.isWritable) reason = this.stores.assetStore?.writeUnavailableReason || 'The page has no asset store.';
+      if (!this.stores.assetStore?.isWritable) reason = this.stores.assetStore?.writeUnavailableReason || 'The page has no asset service layer.';
       else if (assetInfo.isLocked) reason = 'The asset is locked.';
       else if (assetInfo.isHead === false) reason = 'The block reads a version other than the head; a save writes the head.';
       return { isOffered: true, isEnabled: reason === '', reason };

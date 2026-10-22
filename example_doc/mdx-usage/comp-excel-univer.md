@@ -1,10 +1,10 @@
 ---
 title: Spreadsheet
-description: ExcelUniver shows an Excel-style spreadsheet drawn by Univer; its workbook lives in the asset store
+description: ExcelUniver shows an Excel-style spreadsheet drawn by Univer; its workbook lives in the asset service layer
 language: en
 ---
 
-`ExcelUniver` shows a spreadsheet in the document, drawn by the [Univer](https://univer.ai) engine: cells with values, formulas and styles, on one or more sheets. The workbook is kept in the [asset store](../asset-store.md) as JSON, and the block in the document only references it. The component is **asset-only**: its data is never written inline in the document.
+`ExcelUniver` shows a spreadsheet in the document, drawn by the [Univer](https://univer.ai) engine: cells with values, formulas and styles, on one or more sheets. The workbook is kept in the [asset service layer](../asset-store.md) as JSON, and the block in the document only references it. The component is **asset-only**: its data is never written inline in the document.
 
 ## Syntax
 
@@ -43,7 +43,7 @@ The button at the top right of the sheet (it appears when the pointer is over th
 - The header of the popup switches the spreadsheet between **View** and **Edit**, in reading mode as well: **Edit** puts the page into edit mode when it is not, and opens the spreadsheet editor in the popup, with the view range controls and **Save** / **Cancel** in the header.
 - **View** saves the spreadsheet first, including a cell still being typed in, and shows it in view mode again; **Save** does the same. **Cancel** drops the changes. All three keep the popup open; a save that fails keeps the editor, with the message in the header.
 - Closing the popup puts the spreadsheet back in the page as it is: an editor that is open stays open there, with its changes not yet saved.
-- The selection and changes not yet saved stay when the popup opens, is maximized, or closes. A built page offers only View, because its asset store is read-only.
+- The selection and changes not yet saved stay when the popup opens, is maximized, or closes. A built page offers only View, because its asset service layer is read-only.
 
 ## Version metadata
 
@@ -64,7 +64,7 @@ view:
 
 ## Asset-only and not-in-doc components
 
-Two properties of a component's metadata limit where it can be used. Both default to false. An **asset-only** component (`isAssetOnly`) keeps its data in the asset store only. Written inline, it shows an error instead, and its edit modes stay disabled until **to asset** has moved the data into the store:
+Two properties of a component's metadata limit where it can be used. Both default to false. An **asset-only** component (`isAssetOnly`) keeps its data in the asset service layer only. Written inline, it shows an error instead, and its edit modes stay disabled until **to asset** has moved the data into the store:
 
 <!--renderComp=ExcelUniver-->
 ```json

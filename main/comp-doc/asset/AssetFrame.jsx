@@ -2,7 +2,7 @@ import { observer } from 'mobx-react-lite';
 import { LoaderCircle } from '../../frontend/UICommon.js';
 import './DocAsset.css';
 
-// The place of a component whose data comes from the asset store while that
+// The place of a component whose data comes from the asset service layer while that
 // data is not there: a short loading line until the version is read, or the
 // error of a reference that cannot be resolved, with the reference text. Once
 // the data is read, the component renders alone, exactly as it would with

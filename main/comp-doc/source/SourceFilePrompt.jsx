@@ -1,36 +1,29 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
-import { FolderTreeIcon, LoaderCircle } from '../../frontend/UICommon.js';
+import { LoaderCircle } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
-import { SourcePathInput } from './SourcePathInput.jsx';
-import { SourceTreeSelect } from './SourceTreeSelect.jsx';
+import { SourcePathPicker } from './SourcePathPicker.jsx';
 import './DocSource.css';
 
 // The location prompt of file creation (doc_page_impl_source.md
 // #creating-files): where a file a component holds (a pasted image) is
 // written. Open state lives in DocSourceFileStore.prompt; the prompt
 // floats where the pointer was when the file was requested (or at the top
-// center of the page), with the folder (SourcePathInput, completed from
-// the folders of the source), the file name, Create and Cancel. the folder
-// can also be picked from the folders of the source as a tree
-// (SourceTreeSelect), shown by the browse button next to it. Escape
+// center of the page), with the folder (SourcePathPicker: typed with
+// completion from the folders of the source, or picked from them as a tree
+// behind its browse button), the file name, Create and Cancel. Escape
 // cancels; a pointer going down outside it cancels too.
 export const SourceFilePrompt = observer(function SourceFilePrompt() {
-  const { sourceFileStore, sourceStore } = useDocStores();
+  const { sourceFileStore } = useDocStores();
   const elementRef = useRef(null);
-  const [isTreeShown, isTreeShownSet] = useState(false);
   const prompt = sourceFileStore.prompt;
   const isOpen = prompt !== undefined;
 
   useEffect(() => {
-    if (!isOpen) isTreeShownSet(false);
-  }, [isOpen]);
-
-  useEffect(() => {
     if (!isOpen) return undefined;
     const keyDownHandle = (event) => {
-      if (event.key === 'Escape') sourceFileStore.promptCancel();
+      if (event.key === 'Escape' && !event.defaultPrevented) sourceFileStore.promptCancel();
     };
     const pointerDownHandle = (event) => {
       if (elementRef.current && !elementRef.current.contains(event.target)) sourceFileStore.promptCancel();
@@ -64,37 +57,16 @@ export const SourceFilePrompt = observer(function SourceFilePrompt() {
       }}
     >
       <p className="doc-source-prompt-title">Save file to</p>
-      <div className="doc-source-prompt-row">
-        <span className="doc-source-prompt-label">folder</span>
-        <SourcePathInput
-          value={prompt.dirPath}
-          spec={{ kind: 'dir' }}
-          placeholder="~rootId/folder"
-          isDisabled={isSubmitting}
-          onChange={(text) => sourceFileStore.promptDirPathSet(text)}
-          onCommit={(text) => sourceFileStore.promptDirPathSet(text)}
-        />
-        <button
-          type="button"
-          className="doc-source-prompt-browse"
-          title="Browse the folders of the source"
-          aria-label="Browse the folders of the source"
-          aria-pressed={isTreeShown}
-          disabled={isSubmitting}
-          onClick={() => isTreeShownSet(!isTreeShown)}
-        >
-          <FolderTreeIcon aria-hidden="true" size={12} strokeWidth={2} />
-        </button>
-      </div>
-      {isTreeShown ? (
-        <SourceTreeSelect
-          className="doc-source-prompt-tree"
-          nodeList={sourceStore.pathTreeGet({ kind: 'dir' })}
-          valueId={prompt.dirPath}
-          idExpandedInitialList={sourcePathAncestorListGet(prompt.dirPath)}
-          onSelect={(id) => sourceFileStore.promptDirPathSet(id)}
-        />
-      ) : null}
+      <SourcePathPicker
+        value={prompt.dirPath}
+        spec={{ kind: 'dir' }}
+        label="folder"
+        placeholder="~rootId/folder"
+        isDisabled={isSubmitting}
+        isTreeCollapsible
+        onChange={(text) => sourceFileStore.promptDirPathSet(text)}
+        onSelect={(path) => sourceFileStore.promptDirPathSet(path)}
+      />
       <label className="doc-source-prompt-row">
         <span className="doc-source-prompt-label">name</span>
         <EditValueInline
@@ -120,9 +92,3 @@ export const SourceFilePrompt = observer(function SourceFilePrompt() {
     </div>
   );
 });
-
-// '~a', '~a/b' for '~a/b/c': the folders a path is inside
-function sourcePathAncestorListGet(path) {
-  const segList = String(path ?? '').split('/').filter(Boolean);
-  return segList.slice(0, -1).map((_, index) => segList.slice(0, index + 1).join('/'));
-}

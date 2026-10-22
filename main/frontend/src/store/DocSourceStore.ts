@@ -10,7 +10,7 @@ import {
 } from '../lib/doc-source-path.js';
 import { multiLangSearchDataGet } from '../../../comp-mdx/multi-lang/MultiLangSearchData.js';
 
-// lower store layer: the source layer of the page (doc_page_impl_source.md).
+// lower store layer: the doc page source service layer of the page (doc_page_impl_source.md).
 // owns the doc source content: the manifest of files and folders, raw text,
 // compile cache, doc index, search data, and the services over the source:
 // file reference resolution and urls, path completion, file creation

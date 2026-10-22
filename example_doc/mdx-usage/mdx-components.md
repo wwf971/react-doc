@@ -202,7 +202,7 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`ExcelUniver` shows an Excel-style spreadsheet drawn by Univer, limited to a chosen range in view mode and fully editable in edit mode. Its workbook always lives in the asset store.
+`ExcelUniver` shows an Excel-style spreadsheet drawn by Univer, limited to a chosen range in view mode and fully editable in edit mode. Its workbook always lives in the asset service layer.
 
 `ExcelUniver` は Univer で描画した Excel 形式のスプレッドシートを表示します。表示モードでは選んだ範囲だけを表示し、編集モードではすべてを編集できます。ワークブックは常にアセットストアに保存されます。
 ```
