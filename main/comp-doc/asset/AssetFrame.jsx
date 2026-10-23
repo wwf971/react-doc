@@ -34,7 +34,7 @@ export const AssetFrame = observer(function AssetFrame({ label, reference, raw, 
         <div className="doc-asset-frame-title">
           <span className="doc-asset-frame-label">{label}</span>
           <span className="doc-asset-frame-object" title={objectText}>{objectText}</span>
-          <LoaderCircle size={12} className="doc-edit-spin" aria-label="loading" />
+          <LoaderCircle size={12} className="doc-spin" aria-label="loading" />
         </div>
       </div>
     );

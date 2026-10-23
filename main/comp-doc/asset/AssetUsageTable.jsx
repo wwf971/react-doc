@@ -69,7 +69,7 @@ export const AssetUsageTable = observer(function AssetUsageTable({
                     onClick={() => onDocRefresh(docPath)}
                   >
                     {isRefreshing
-                      ? <LoaderCircle size={11} className="doc-edit-spin" aria-hidden="true" />
+                      ? <LoaderCircle size={11} className="doc-spin" aria-hidden="true" />
                       : <RotateCw size={11} aria-hidden="true" />}
                   </button>
                 </td>
@@ -78,12 +78,12 @@ export const AssetUsageTable = observer(function AssetUsageTable({
                 ) : null}
                 <td>
                   {usage.reference.versionId === 'head'
-                    ? <span className="doc-asset-badge is-head" title="follows the head">head</span>
+                    ? <span className="doc-badge-outline" data-primary="" title="follows the head">head</span>
                     : <span className="doc-asset-mono" title="pinned to this version">{usage.reference.versionId}</span>}
                 </td>
                 <td>
                   <span className="doc-asset-usage-notes">
-                    {usageIsCurrent?.(usage) ? <span className="doc-asset-badge">this block</span> : null}
+                    {usageIsCurrent?.(usage) ? <span className="doc-badge-outline">this block</span> : null}
                     {isOtherComponent ? <span className="doc-asset-muted">the object is for {componentNameObject}</span> : null}
                     {problem ? <span className="doc-asset-usage-problem" title={problem}>{problem}</span> : null}
                   </span>

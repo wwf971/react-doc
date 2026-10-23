@@ -2,7 +2,7 @@ import { observer } from 'mobx-react-lite';
 import { ListChecks } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 
-// The switch of block selection mode (doc_page_impl_copy_paste.md#selecting-blocks),
+// The switch of block selection mode (doc_page_impl_block_ops.md#selecting-blocks),
 // a button next to the edit-mode switch, inside DocEditToggle. The two modes
 // are never on together: switching one on switches the other off.
 export const DocBlockSelectToggle = observer(function DocBlockSelectToggle({ isCompact = false }) {

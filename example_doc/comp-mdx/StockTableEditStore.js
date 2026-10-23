@@ -32,6 +32,10 @@ export class StockTableEditStore {
     this.rows.splice(indexAfter + 1, 0, this.headers.map(() => ''));
   }
 
+  rowListAppend(rows) {
+    this.rows.push(...rows.map((cells) => this.headers.map((_, index) => cells[index] ?? '')));
+  }
+
   rowRemove(indexRow) {
     this.rows.splice(indexRow, 1);
   }

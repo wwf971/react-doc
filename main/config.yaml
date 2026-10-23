@@ -37,7 +37,7 @@ asset:
 # shows "backend down" in every dashboard. backendConfigFile names the
 # backend's config file: the type and instance folders it lists are not
 # documents, and a change in them never reloads the page. a built page has
-# no backend. design: doc_page_impl_service_instance.md
+# no backend. design: doc_page_impl_service.md
 service:
   backend: http://127.0.0.1:45190
   backendConfigFile: ../example_doc/service-backend.yaml

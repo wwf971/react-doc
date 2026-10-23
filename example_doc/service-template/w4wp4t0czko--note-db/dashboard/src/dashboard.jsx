@@ -1,7 +1,7 @@
 // The module the page loads (container serviceNoteDb, module ./dashboard).
 // Every export named by expose.dashboardList[].export of service.py is
 // one dashboard component; the page renders it with { data, config, onEvent }
-// (doc_page_impl_service_instance.md#dashboard-props).
+// (doc_page_impl_service.md#dashboard-props).
 import noteDbCssText from './NoteDb.css?inline';
 
 // the module adds its own stylesheet: the federation plugin links an emitted

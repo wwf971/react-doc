@@ -1,6 +1,6 @@
 """The service runtime: finds the templates and the instances, creates instances, runs the apis.
 
-Design: doc_page_impl_service_instance.md#backend
+Design: doc_page_impl_service.md#backend
 
 - a template is a folder {templateFolder}/{templateId}--{name}/ holding
   service-template.yaml and service.py (with its icon and dashboards): the
@@ -14,6 +14,10 @@ Design: doc_page_impl_service_instance.md#backend
 - scan() is cheap and runs on every listing, so a folder added, removed or
   edited by hand is seen without a restart; an instance whose service.yaml
   or whose service.py changed is restarted
+- every call, from the page or from another instance, goes through
+  api_call: the target resolved to an instance, the caller authorized
+  (call_authorize), the params checked, then queued (or run at once, for an
+  api with isQueued False)
 """
 
 import importlib.util
@@ -28,6 +32,7 @@ import traceback
 
 from service_define import (
     Service,
+    ServiceCaller,
     ServiceContext,
     ServiceDefineError,
     ServiceError,
@@ -237,9 +242,12 @@ class ServiceTemplate:
 class ServiceTask:
     """One api call waiting in, or taken from, an instance's queue."""
 
-    def __init__(self, api_define, param_dict, job_id=''):
+    def __init__(self, service_id, api_define, param_dict, caller, job_id=''):
+        self.service_id = service_id
         self.api_define = api_define
         self.param_dict = param_dict
+        # the ServiceCaller: the api reads it as context.caller
+        self.caller = caller
         # '' for a sync call; the job id of an async one
         self.job_id = job_id
         self.status = 'queued'
@@ -259,6 +267,7 @@ class ServiceTask:
 
     def job_info_get(self):
         return {
+            'serviceId': self.service_id,
             'jobId': self.job_id,
             'api': self.api_define['name'],
             'status': self.status,
@@ -274,7 +283,7 @@ class ServiceTask:
 class ServiceInstance:
     """An instance folder, and, when it runs, its worker thread and queue."""
 
-    def __init__(self, service_id, dir_path, folder, dir_name, script):
+    def __init__(self, service_id, dir_path, folder, dir_name, script, runtime):
         self.service_id = service_id
         self.dir_path = dir_path
         self.folder = folder
@@ -283,6 +292,12 @@ class ServiceInstance:
         self.service_config = {}
         # the instance's own service.py; kept by the runtime across restarts
         self.script = script
+        # given to the context, for the calls of other instances
+        self.runtime = runtime
+        # the context and the object of the script's class, once start() succeeded:
+        # what a call with isQueued False runs on, in the caller's thread
+        self.context = None
+        self.implementation = None
         # the exposure the instance was started with: the apis it answers
         self.expose = None
         # what the instance was started from: a change restarts it
@@ -313,6 +328,7 @@ class ServiceInstance:
             dir_path=self.dir_path,
             template=service_config['template'],
             config=service_config['config'],
+            runtime=self.runtime,
         )
         self.thread = threading.Thread(
             target=self._worker_run,
@@ -340,6 +356,8 @@ class ServiceInstance:
         try:
             implementation = service_class(context)
             implementation.start()
+            self.context = context
+            self.implementation = implementation
             self.status = 'ready'
         except Exception as error:
             self.status = 'error'
@@ -366,28 +384,24 @@ class ServiceInstance:
                 traceback.print_exc()
 
     def _task_run(self, implementation, context, task):
-        api_name = task.api_define['name']
         task.status = 'running'
         task.time_started = time_text_get()
         self.task_running = task
-        context.job_current = task if task.job_id else None
-        try:
-            data = getattr(implementation, api_name)(**task.param_dict)
-            # a result the page cannot read is a failure of the api, not of the transport
-            json.dumps(data)
-            result = {'code': 0, 'data': data}
-        except ServiceError as error:
-            result = {'code': error.code, 'message': error.message}
-        except Exception as error:
-            traceback.print_exc()
-            result = {'code': -1, 'message': f'{api_name} failed: {type(error).__name__}: {error}'}
-        context.job_current = None
+        result = api_run(implementation, context, task.api_define['name'], task.param_dict,
+                         task.caller, task if task.job_id else None)
         self.task_running = None
         task.progress = 1.0
         task.finish(result)
         self._job_done(task)
 
     # ---------- calls ----------
+
+    def call_direct(self, api_define, param_dict, caller):
+        """An api with isQueued False, run at once in the caller's thread."""
+        implementation = self.implementation
+        if self.status != 'ready' or implementation is None:
+            return {'code': -4, 'message': f'the service {self.service_id} is not ready ({self.status}): {self.message}'}
+        return api_run(implementation, self.context, api_define['name'], param_dict, caller, None)
 
     def submit(self, task):
         if task.job_id:
@@ -432,6 +446,48 @@ class ServiceInstance:
             'queueLength': self.task_queue.qsize(),
             'apiRunning': task_running.api_define['name'] if task_running is not None else '',
         }
+
+
+def api_run(implementation, context, api_name, param_dict, caller, job):
+    """The formatted result of one api run in the current thread, the caller
+    and the job set in the context while it runs."""
+    previous = context.call_enter(caller, job)
+    try:
+        data = getattr(implementation, api_name)(**param_dict)
+        # a result the page cannot read is a failure of the api, not of the transport
+        json.dumps(data)
+        return {'code': 0, 'data': data}
+    except ServiceError as error:
+        return {'code': error.code, 'message': error.message}
+    except Exception as error:
+        traceback.print_exc()
+        return {'code': -1, 'message': f'{api_name} failed: {type(error).__name__}: {error}'}
+    finally:
+        context.call_exit(previous)
+
+
+def target_normalize(target):
+    """What a call names: { serviceId } or { templateId, versionId? }; raises ServiceError -1."""
+    if not isinstance(target, dict):
+        raise ServiceError(-1, 'a target is { serviceId } or { templateId, versionId? }')
+    key_unknown_list = [key for key in target if key not in ['serviceId', 'templateId', 'versionId']]
+    if key_unknown_list:
+        raise ServiceError(-1, f'a target has no key {", ".join(key_unknown_list)}; it is {{ serviceId }} or {{ templateId, versionId? }}')
+    result = {key: target.get(key) or '' for key in ['serviceId', 'templateId', 'versionId']}
+    if not all(isinstance(value, str) for value in result.values()):
+        raise ServiceError(-1, 'the ids of a target are strings')
+    if (result['serviceId'] == '') == (result['templateId'] == ''):
+        raise ServiceError(-1, 'a target names either serviceId or templateId')
+    if result['serviceId'] and result['versionId']:
+        raise ServiceError(-1, 'versionId goes with templateId, not with serviceId')
+    return result
+
+
+def target_label_get(target):
+    if target['serviceId']:
+        return f'the service {target["serviceId"]}'
+    version = f' at version {target["versionId"]}' if target['versionId'] else ''
+    return f'an instance of the template {target["templateId"]}{version}'
 
 
 def config_normalize(config, expose):
@@ -592,7 +648,7 @@ class ServiceRuntime:
             return
         if instance is not None:
             instance.stop()
-        instance = ServiceInstance(service_id, dir_path, folder, dir_name, script)
+        instance = ServiceInstance(service_id, dir_path, folder, dir_name, script, self)
         instance.signature = signature
         self.instance_by_id[service_id] = instance
         if error_message:
@@ -749,24 +805,99 @@ class ServiceRuntime:
             self.scan()
             return self.instance_by_id[service_id].info_get()
 
-    def api_call(self, service_id, api_name, params):
-        """A call of an api: the result of a sync api, the job of an async one."""
-        instance = self.instance_get(service_id)
+    # ---------- calls: from the page and between instances ----------
+
+    def api_call(self, target, api_name, params, caller):
+        """A call of an api: the result of a sync api, the job of an async one.
+
+        target   { serviceId } or { templateId, versionId? }: what the call names
+        caller   the ServiceCaller, as the runtime knows it: page for an http
+                 request, service for ServiceContext.service_call
+
+        Raises ServiceError for a call that cannot be made; the failure of
+        the api itself is its result.
+        """
+        instance = self.target_resolve(target, caller)
         if instance.status in ('error', 'disabled'):
-            raise ServiceError(-4, f'the service {service_id} is not ready ({instance.status}): {instance.message}')
+            raise ServiceError(-4, f'the service {instance.service_id} is not ready ({instance.status}): {instance.message}')
         api_define = next((item for item in instance.expose['apiList'] if item['name'] == api_name), None)
         if api_define is None:
-            raise ServiceError(-3, f'the service {instance.service_config.get("name", service_id)} has no api {api_name}')
+            raise ServiceError(-3, f'the service {instance.service_config.get("name", instance.service_id)} has no api {api_name}')
+        self.call_authorize(caller, instance, api_define)
         param_dict = api_param_dict_build(api_define, params)
+
+        if not api_define['isQueued']:
+            return instance.call_direct(api_define, param_dict, caller)
+        if instance.service_id in caller.chain:
+            raise ServiceError(-1, f'{api_name} of {instance.service_id} is refused: the call passed through it '
+                                   f'({" -> ".join(caller.chain)}), and its queue would wait for itself')
         if api_define['execution'] == 'async':
-            task = ServiceTask(api_define, param_dict, id_ms48_create(instance.job_id_is_used))
+            task = ServiceTask(instance.service_id, api_define, param_dict, caller, id_ms48_create(instance.job_id_is_used))
             instance.submit(task)
             return {'code': 0, 'data': task.job_info_get()}
-        task = ServiceTask(api_define, param_dict)
+        task = ServiceTask(instance.service_id, api_define, param_dict, caller)
         instance.submit(task)
         if not task.done_event.wait(self.api_wait_second_max):
             return {'code': -6, 'message': f'{api_name} did not finish in {self.api_wait_second_max:g} s; it is still queued or running'}
         return task.result
+
+    def target_resolve(self, target, caller=None):
+        """The instance a target names; ServiceError -1 for a bad target, -3 when none.
+
+        { serviceId }: that instance, whatever its state.
+        { templateId, versionId? }: the instances that recorded that template
+        (and version) when they were created, the caller itself left out (a
+        service asking for an instance of a template asks for another one);
+        a ready one first, the oldest first, so the same one answers while
+        nothing changes. One that is not ready is chosen only when none is,
+        so the call fails with its reason (-4).
+        """
+        target = target_normalize(target)
+        if target['serviceId']:
+            return self.instance_get(target['serviceId'])
+        caller_id_list = [caller.service_id, caller.dashboard_service_id] if caller is not None else []
+        candidate_list = self._instance_list_of_target(target, caller_id_list)
+        if len(candidate_list) == 0:
+            self.scan()
+            candidate_list = self._instance_list_of_target(target, caller_id_list)
+        if len(candidate_list) == 0:
+            raise ServiceError(-3, f'no service instance is {target_label_get(target)}')
+        candidate_list.sort(key=lambda instance: (instance.status != 'ready', instance.service_id))
+        return candidate_list[0]
+
+    def _instance_list_of_target(self, target, caller_id_list):
+        with self.lock:
+            result = []
+            for instance in self.instance_by_id.values():
+                record = instance.service_config.get('template') or {}
+                if instance.service_id in caller_id_list or record.get('templateId') != target['templateId']:
+                    continue
+                if target['versionId'] and record.get('versionId') != target['versionId']:
+                    continue
+                result.append(instance)
+            return result
+
+    def call_authorize(self, caller, instance, api_define):
+        """Whether the caller may call the api of the instance; raises ServiceError -2 when not.
+
+        The one place every call passes, from the page and from other
+        instances alike, after the target is resolved and before the call is
+        queued. It checks only what the api declares (callerKindList).
+
+        TODO authorization: the place for a policy of the backend: which
+        caller may call which instance and api (rules in the backend config,
+        or declared by the callee's script and kept per instance, the
+        consumer lists the connection templates keep by themselves today),
+        the end user behind a page request (a credential the backend takes
+        from the http request, never from params, carried by the caller to
+        every instance the call passes through), and the dashboards of the
+        page, whose identity (dashboard_service_id) is a claim of the page.
+        A target resolved by template would then skip the instances that
+        refuse the caller, and a job would be read by its caller only.
+        """
+        if caller.kind not in api_define['callerKindList']:
+            raise ServiceError(-2, f'{api_define["name"]} of {instance.service_id} is not answered to {caller.label_get()}: '
+                                   f'only to {", ".join(api_define["callerKindList"])}')
 
     def job_get(self, service_id, job_id):
         instance = self.instance_get(service_id)

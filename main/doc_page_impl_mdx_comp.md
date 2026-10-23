@@ -74,7 +74,7 @@ RegisteredComp(placement, definition)
 
 **Asset-only** marks a component whose data is too large or too opaque to be part of a document's text, and has a history of its own: a workbook. Its `sourceDefaultCreate` still returns `{ lang, raw }`, but that is the data of a new *asset object*, not of a fenced block; `{ text }` is refused as a wrong shape when the factory is called (`compSourceDefaultGet`), since it could only be written inline. The edit layer builds on this ([Asset-only components](doc_page_impl_edit.md#asset-only-components)): the insert menu creates the object and then writes the reference block; the component's own edit modes edit the referenced data and save into the object; the block's lines are the reference. An asset-only block whose data is inline anyway (written by hand) renders the error, and its declared edit modes are greyed out with the reason, while the toolbar's **to asset** stays available to repair it. An asset-only component declares `isAssetAware` too, since it needs the reference (and the version's metadata) to save.
 
-The dashboards of [service instances](doc_page_impl_service_instance.md#dashboards-in-the-registry) are asset-only components the page defines itself, one per `service/{templateName}/{dashboardId}` id (`componentType: 'serviceDashboard'`, `meta.isServiceDashboard`), found by `compDefinitionGet` without a `compRegistry` entry. Their object holds the instance a dashboard shows and the dashboard's own state, saved in place by the dashboard while it is read; they declare no edit mode and no `source` mode, since there is nothing of them to edit in a session.
+The dashboards of [service instances](doc_page_impl_service.md#dashboards-in-the-registry) are asset-only components the page defines itself, one per `service/{templateName}/{dashboardId}` id (`componentType: 'serviceDashboard'`, `meta.isServiceDashboard`), found by `compDefinitionGet` without a `compRegistry` entry. Their object holds the instance a dashboard shows and the dashboard's own state, saved in place by the dashboard while it is read; they declare no edit mode and no `source` mode, since there is nothing of them to edit in a session.
 
 ### Icons
 
@@ -151,6 +151,10 @@ returns
 ```
 
 The returned shape is checked when the factory is called; a factory that throws or returns a wrong shape is reported in the console and its component left out of the menu, so one faulty component does not take the menu with it. A component without a factory cannot be inserted from the menu, only written by hand: the components a document writes only inside another one (`Tab`, `Step`, `Accordion`, `File`, `Folder`), markers of the next node (`Anchor`), inline components (`Tag`, `DocLinkInline`), the parts other components render through the registry (`FileIcon`, the cells, rows and header controls of the hierarchies), and what is not document content (`SidePanelItem`, `TagLabel`, the editors of the edit layer). A component declared `isNotInDoc` is left out of the menu even with a factory.
+
+## Component styles
+
+A component family keeps its stylesheet in its folder (`Image.css`, `TableHierarchy.css`), imported by the component, with class names of its own. The controls of its editor and panels — buttons, badges, hints, error messages, spinners — use the shared classes of the page (`.doc-button`, `.doc-button-icon`, `.doc-error`, `.doc-spin`, ...) and add a class of their own only for what differs, such as a size; a look the component needs that another component already has becomes a shared class instead of a copy. The shared classes, where they live, and how they win over Tailwind and lose to a component's own rules: [Shared styles](doc_page_impl.md#shared-styles).
 
 ## Component names
 

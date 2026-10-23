@@ -64,7 +64,7 @@ export const ImageEdit = observer(function ImageEdit({ data = {}, config = {}, o
       <EditFloatingPanel
         label="Image"
         placement="below"
-        head={store.message ? <span className="doc-edit-message" role="alert">{store.message}</span> : null}
+        head={store.message ? <span className="doc-error doc-edit-message" role="alert">{store.message}</span> : null}
         actions={(
           <EditActions status={session.status} message={session.message} onSubmit={submitRequest} onCancel={cancelRequest} />
         )}

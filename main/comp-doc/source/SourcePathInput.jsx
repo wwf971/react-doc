@@ -215,7 +215,7 @@ export const SourcePathInput = observer(function SourcePathInput({
       {isListShown && listPosition ? createPortal(
         <ul
           ref={listRef}
-          className="doc-source-path-list not-prose"
+          className="doc-popover doc-source-path-list not-prose"
           role="listbox"
           style={{ top: listPosition.top, left: listPosition.left, minWidth: listPosition.minWidth, maxWidth: listPosition.maxWidth }}
         >

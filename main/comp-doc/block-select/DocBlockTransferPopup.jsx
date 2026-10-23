@@ -16,7 +16,7 @@ import './DocBlockSelect.css';
 const panelLayoutOption = { isMovable: true, isResizable: true, isSizeRemembered: true };
 
 // The dialog that copies or moves the selected blocks
-// (doc_page_impl_copy_paste.md#copying-and-moving-blocks), open while
+// (doc_page_impl_block_ops.md#copying-and-moving-blocks), open while
 // DocBlockSelectStore.transfer is set. The frame is the host's text panel
 // component (config.compConfigHost.panelComponent), with the two columns of
 // the paste review.
@@ -149,7 +149,7 @@ export const DocBlockTransferPopup = observer(function DocBlockTransferPopup() {
                   onCheckToggle={(blockId) => blockSelectStore.transferBlockCheckToggle(blockIndexFromId(blockId))}
                 />
               ) : (
-                <p className="doc-paste-popup-note" data-error="" role="alert">
+                <p className="doc-note" data-error="" role="alert">
                   The document changed since the blocks were chosen. Close this and choose them again.
                 </p>
               )}
@@ -164,22 +164,22 @@ export const DocBlockTransferPopup = observer(function DocBlockTransferPopup() {
             </section>
           </div>
           <div className="doc-paste-popup-footer">
-            <p className="doc-paste-popup-status" role={transfer.status === 'error' ? 'alert' : 'status'} data-error={transfer.status === 'error' ? '' : undefined}>
+            <p className="doc-status doc-paste-popup-status" role={transfer.status === 'error' ? 'alert' : 'status'} data-error={transfer.status === 'error' ? '' : undefined}>
               {isSubmitting ? (
                 <>
-                  <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-edit-spin" />
+                  <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-spin" />
                   <span>Writing…</span>
                 </>
               ) : statusText}
             </p>
-            <button type="button" className="doc-paste-popup-button" disabled={isSubmitting} onClick={() => blockSelectStore.transferClose()}>
+            <button type="button" className="doc-button-dialog doc-paste-popup-button" disabled={isSubmitting} onClick={() => blockSelectStore.transferClose()}>
               Cancel
             </button>
             {actionList.map((action) => (
               <button
                 key={action}
                 type="button"
-                className="doc-paste-popup-button"
+                className="doc-button-dialog doc-paste-popup-button"
                 data-primary={action === transfer.actionInitial ? '' : undefined}
                 disabled={reasonByAction[action] !== ''}
                 title={reasonByAction[action] || undefined}
@@ -218,7 +218,7 @@ const TransferTargetDoc = observer(function TransferTargetDoc({ isLocked }) {
       <div className="doc-block-transfer-doc-actions">
         <button
           type="button"
-          className="doc-paste-popup-button"
+          className="doc-button-dialog doc-paste-popup-button"
           data-primary=""
           disabled={isLocked || !isChoosable}
           title={isChoosable ? 'Choose the place in this document' : 'choose an md / mdx document'}

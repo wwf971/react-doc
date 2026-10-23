@@ -102,10 +102,31 @@
   border-top: 1px solid var(--color-fd-border);
 }
 
-/* footer: the status (.doc-status) and the buttons (.doc-button-dialog) */
+/* footer: the status (.doc-status) and the buttons (.doc-button-dialog).
+   the status is one line, cut with an ellipsis (the whole text in its
+   title), so a long reason never changes the height of the footer */
 .doc-paste-popup-status {
+  display: block;
   flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-paste-popup-status > svg {
+  display: inline-block;
+  margin-inline-end: 4px;
+  vertical-align: -2px;
+}
+
+/* paste into the component being edited, or as blocks */
+.doc-paste-popup-target {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--color-fd-border);
 }
 
 /* a bit wider than a .doc-button-dialog; the main one is filled with the

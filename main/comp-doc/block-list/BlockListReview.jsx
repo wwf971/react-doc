@@ -3,7 +3,7 @@ import { BlockRender } from '../../comp-mdx/text/BlockRender.jsx';
 import './BlockList.css';
 
 // A list of root-level blocks to look at before something is done with them
-// (doc_page_impl_copy_paste.md#general-components): every block starts with
+// (doc_page_impl_block_ops.md#general-components): every block starts with
 // a badge naming its kind. It shows and reports only: the blocks, which of
 // them are rendered and which are checked belong to the caller (a paste:
 // DocPasteStore.review; a copy or a move: DocBlockSelectStore.transfer).
@@ -65,7 +65,7 @@ export function BlockListReview({
               onClick={isCheckable ? () => checkToggle(block.id) : undefined}
             >
               {isCheckable ? <BlockCheck isChecked={isChecked} isLocked={isLocked} onToggle={() => checkToggle(block.id)} /> : null}
-              <span className="doc-block-list-review-badge" data-kind={block.kind}>{block.label}</span>
+              <span className="doc-badge" data-kind={block.kind}>{block.label}</span>
               <span className="doc-block-list-review-line-text">{blockLineTextGet(block.text)}</span>
             </div>
           );
@@ -88,10 +88,10 @@ export function BlockListReview({
           >
             <div className="doc-block-list-review-head">
               {isCheckable ? <BlockCheck isChecked={isChecked} isLocked={isLocked} onToggle={() => checkToggle(block.id)} /> : null}
-              <span className="doc-block-list-review-badge" data-kind={block.kind}>{block.label}</span>
+              <span className="doc-badge" data-kind={block.kind}>{block.label}</span>
               <button
                 type="button"
-                className="doc-block-list-review-toggle"
+                className="doc-button-icon doc-block-list-review-toggle"
                 aria-pressed={isRendered}
                 title={isRendered ? 'Show the source' : 'Show it rendered'}
                 aria-label={isRendered ? 'Show the source' : 'Show it rendered'}

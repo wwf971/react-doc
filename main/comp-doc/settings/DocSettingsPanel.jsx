@@ -27,7 +27,7 @@ import './DocSettings.css';
 //   Services     the services of the page (ServiceSettings): system
 //                services, then the instances of the service backend as
 //                cards, the config dashboard of the one chosen, and the
-//                creation of an instance (doc_page_impl_service_instance.md).
+//                creation of an instance (doc_page_impl_service.md).
 //
 // Config and Component carry a second tab line, one tab per config layer
 // (doc_page_impl_config.md#config-layers, DocConfigStore.layerList): Global
@@ -223,7 +223,7 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
         </div>
         <button
           type="button"
-          className="doc-settings-head-button doc-settings-close"
+          className="doc-button doc-settings-head-button doc-settings-close"
           title="Close"
           aria-label="Close settings"
           onClick={() => configStore.settingsOpenSet(false)}
@@ -258,7 +258,7 @@ const LayerHead = observer(function LayerHead({ layer }) {
       {layer.isClearable ? (
         <button
           type="button"
-          className="doc-settings-head-button"
+          className="doc-button doc-settings-head-button"
           disabled={!configStore.layerIsDeclaringAny(layer.id)}
           title={`Drop every value of the ${layer.define.label} layer`}
           aria-label={`Drop every value of the ${layer.define.label} layer`}
@@ -273,7 +273,7 @@ const LayerHead = observer(function LayerHead({ layer }) {
       </span>
       {layer.request.status === 'submitting' ? (
         <span className="doc-settings-note doc-settings-request" role="status">
-          <LoaderCircle aria-hidden="true" size={11} strokeWidth={2} className="doc-edit-spin" />
+          <LoaderCircle aria-hidden="true" size={11} strokeWidth={2} className="doc-spin" />
           <span>writing…</span>
         </span>
       ) : null}

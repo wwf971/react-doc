@@ -54,7 +54,7 @@ export const ServiceRefreshButton = observer(function ServiceRefreshButton() {
       disabled={isRefreshing || serviceStore.backendStatus === 'none'}
       onClick={() => void serviceStore.refresh()}
     >
-      <Icon size={12} aria-hidden="true" className={isRefreshing ? 'doc-service-spin' : undefined} />
+      <Icon size={12} aria-hidden="true" className={isRefreshing ? 'doc-spin' : undefined} />
     </button>
   );
 });
@@ -95,7 +95,7 @@ export const ServiceInstanceSelect = observer(function ServiceInstanceSelect({ t
         ))}
         {!isKnown ? <option value={serviceId}>{serviceId} (not found)</option> : null}
       </select>
-      {status.isSubmitting ? <LoaderCircle size={12} aria-hidden="true" className="doc-service-spin" /> : null}
+      {status.isSubmitting ? <LoaderCircle size={12} aria-hidden="true" className="doc-spin" /> : null}
       {status.message ? <span className="doc-service-error" role="alert">{status.message}</span> : null}
     </span>
   );
@@ -107,7 +107,7 @@ export function ServiceProblemNotice({ problem }) {
   const Icon = isLoading ? LoaderCircle : TriangleAlert;
   return (
     <div className="doc-service-problem" data-kind={problem.kind} role={isLoading ? 'status' : 'alert'}>
-      <Icon size={13} aria-hidden="true" className={isLoading ? 'doc-service-spin' : undefined} />
+      <Icon size={13} aria-hidden="true" className={isLoading ? 'doc-spin' : undefined} />
       <span>{problem.message}</span>
     </div>
   );

@@ -180,6 +180,32 @@
   font-size: 0.7rem;
 }
 
+/* where something will be put: a line on the border above / below a row
+   (insertMark), drawn over the rows, so it takes no room */
+.doc-source-tree-row[data-insert] {
+  position: relative;
+}
+
+.doc-source-tree-row[data-insert]::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  left: var(--doc-source-tree-indent, 2px);
+  right: 4px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-fd-primary);
+  pointer-events: none;
+}
+
+.doc-source-tree-row[data-insert='before']::after {
+  top: -1px;
+}
+
+.doc-source-tree-row[data-insert='after']::after {
+  bottom: -1px;
+}
+
 /* the parts of a label a search matched */
 .doc-source-tree-match {
   padding: 0;

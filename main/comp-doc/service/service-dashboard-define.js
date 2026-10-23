@@ -4,7 +4,7 @@ import { ServiceDashboardHost } from './ServiceDashboardHost.jsx';
 import { DASHBOARD_DATA_LANG, dashboardDataParse, dashboardDataTextBuild } from './service-dashboard-data.js';
 
 // The dashboards of service instances as components of the registry (design:
-// doc_page_impl_service_instance.md#dashboards-in-the-registry). A
+// doc_page_impl_service.md#dashboards-in-the-registry). A
 // dashboard's component id names it: service/{templateName}/{dashboardId},
 // the template the instances it may show were created from and the
 // dashboard of theirs, and the id is also its tag name in a document, so no

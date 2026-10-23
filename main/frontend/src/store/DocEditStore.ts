@@ -37,7 +37,7 @@ import {
 //
 //   isAvailable       a development server answers the edit api
 //   isEditMode        the global toggle
-//   isBlockSelectMode the block selection mode (doc_page_impl_copy_paste.md
+//   isBlockSelectMode the block selection mode (doc_page_impl_block_ops.md
 //                     #selecting-blocks): the body of edit mode without its
 //                     controls, whose blocks are selected instead of edited;
 //                     never on together with isEditMode
@@ -92,6 +92,13 @@ export type EditSelectionInitial =
   | { type: 'line'; line: 'first' | 'last'; clientX: number };
 
 export type EditPoint = { clientX: number; clientY: number };
+
+// an editor taking events from the page (sessionReceiverSet)
+export type EditSessionReceiver = {
+  session: EditSession;
+  handler: (event: { type: string; data: Record<string, any> }) => Promise<EditResult | void> | EditResult | void;
+  typeList: string[];
+};
 
 export type EditSession = {
   type: EditSessionType;
@@ -307,6 +314,9 @@ export class DocEditStore {
   // what the editor of the open session does before its draft is saved
   // (sessionSubmitPrepareSet)
   submitPrepare: { session: EditSession; handler: () => Promise<EditResult | void> } | undefined;
+  // what the editor of the open session takes from the page
+  // (sessionReceiverSet): the event types it receives and its handler
+  sessionReceiver: EditSessionReceiver | undefined = undefined;
   reactionDispose: (() => void) | undefined;
   reactionConfigDispose: (() => void) | undefined;
 
@@ -338,6 +348,7 @@ export class DocEditStore {
       leavePromise: false,
       sidePanelTextStartOwnerId: false,
       submitPrepare: false,
+      sessionReceiver: observable.ref,
       reactionDispose: false,
       reactionConfigDispose: false,
       historyRecordList: false,
@@ -1051,6 +1062,48 @@ export class DocEditStore {
     };
   }
 
+  // the page to the editor of the open session: an editor that can take
+  // something from the page (a text pasted into the component being edited,
+  // doc_page_impl_block_ops.md#pasting-into-the-component-being-edited)
+  // registers a receiver for the event types it takes; the page sends an
+  // event with sessionEventSend and the editor accepts ({ code: 0 }) or
+  // refuses with the reason ({ code: -1, message }). one receiver per
+  // session; returns the unregistration.
+  sessionReceiverSet(
+    session: EditSession,
+    handler: EditSessionReceiver['handler'],
+    { typeList = [] }: { typeList?: string[] } = {},
+  ): () => void {
+    const receiver: EditSessionReceiver = { session, handler, typeList: [...typeList] };
+    this.sessionReceiver = receiver;
+    return () => runInAction(() => {
+      if (this.sessionReceiver === receiver) this.sessionReceiver = undefined;
+    });
+  }
+
+  // the editor of the open session takes events of this type
+  sessionReceives(type: string): boolean {
+    const receiver = this.sessionReceiver;
+    return Boolean(receiver && receiver.session === this.session && receiver.typeList.includes(type));
+  }
+
+  // an event of the page sent to the editor of the open session; its answer,
+  // or a refusal when no editor takes the type. a handler that throws or
+  // answers nothing refuses
+  async sessionEventSend(type: string, data: Record<string, any> = {}): Promise<EditResult> {
+    const receiver = this.sessionReceiver;
+    if (!receiver || !this.sessionReceives(type)) {
+      return { code: -1, message: 'The component being edited does not take this.' };
+    }
+    try {
+      const result = (await receiver.handler({ type, data })) as EditResult | undefined;
+      if (result && result.code === 0) return { code: 0, data: result.data, message: '' };
+      return { code: -1, message: result?.message || 'The component being edited refused it.' };
+    } catch (error) {
+      return { code: -1, message: `The component being edited failed: ${(error as Error)?.message ?? error}` };
+    }
+  }
+
   private async sessionSubmit(): Promise<boolean> {
     const session = this.session;
     if (!session) return false;
@@ -1312,7 +1365,7 @@ export class DocEditStore {
   }
 
   // writes a text of one or more blocks at border borderIndex of a document,
-  // the current one or another (a paste, doc_page_impl_copy_paste.md). the
+  // the current one or another (a paste, doc_page_impl_block_ops.md). the
   // open session is left first; the document is read and compiled when it is
   // not yet, so the border is one of the text the file has.
   async blockListInsert(path: string, borderIndex: number, text: string): Promise<EditResult> {
@@ -1331,7 +1384,7 @@ export class DocEditStore {
 
   // copies the blocks at blockIndexList of one document to border
   // borderIndex of a document, the same one or another
-  // (doc_page_impl_copy_paste.md#copying-and-moving-blocks). sourceHash is
+  // (doc_page_impl_block_ops.md#copying-and-moving-blocks). sourceHash is
   // the hash of the text the blocks were chosen in: when the document has
   // changed since, its indices may name other blocks, and nothing is written.
   async blockListCopy(
@@ -1410,7 +1463,7 @@ export class DocEditStore {
 
   // deletes the blocks at blockIndexList of a document, chosen in the text
   // of hash sourceHash (the block menu of block selection mode,
-  // doc_page_impl_copy_paste.md#selecting-blocks): one write, the runs of
+  // doc_page_impl_block_ops.md#selecting-blocks): one write, the runs of
   // blocks taken out with their blank lines. asset objects the blocks
   // reference are left to the asset service layer, as orphans when nothing else
   // references them.
@@ -1547,8 +1600,9 @@ export class DocEditStore {
   // swaps the block with its neighbor in `direction`: one replaceLines
   // operation over the lines of the two blocks and the lines between them,
   // so the file keeps its line count and the blank lines that separate the
-  // blocks. requested through the event layer (editBlockMoveRequest).
-  private async blockMoveApply(path: string, blockIndex: number, direction: EditBlockMoveDirection): Promise<boolean> {
+  // blocks. requested through the event layer (editBlockMoveRequest) by the
+  // toolbar of the block, and by the menu of block selection mode.
+  async blockMoveApply(path: string, blockIndex: number, direction: EditBlockMoveDirection): Promise<boolean> {
     if (this.blockMove?.status === 'submitting') return false;
     if (!this.blockMoveIsAvailable(path, blockIndex, direction)) {
       runInAction(() => {

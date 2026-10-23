@@ -118,7 +118,7 @@ export const DocEditBlockModeButton = observer(function DocEditBlockModeButton({
       <button
         ref={buttonRef}
         type="button"
-        className={size === 'panel' ? 'doc-edit-action doc-edit-mode-button' : 'doc-edit-mode-button'}
+        className={size === 'panel' ? 'doc-button doc-edit-mode-button' : 'doc-edit-mode-button'}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         title="View mode / edit mode of this block"

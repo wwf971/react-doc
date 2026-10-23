@@ -52,7 +52,7 @@ export const DocBlockPopup = observer(function DocBlockPopup() {
     <span className="doc-block-popup-head not-prose">
       <span ref={floatRefSet} className="doc-block-popup-float" />
       {popup.message ? <span className="doc-block-popup-message" role="alert">{popup.message}</span> : null}
-      {isBusy ? <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-edit-spin" /> : null}
+      {isBusy ? <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-spin" /> : null}
       {editState.isOffered ? (
         <span className="doc-edit-segment" role="group" aria-label="Mode">
           <button

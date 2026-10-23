@@ -1,4 +1,4 @@
-# the service backend of the example doc (doc_page_impl_service_instance.md#backend-config)
+# the service backend of the example doc (doc_page_impl_service.md#backend-config)
 #   python3 main/service-backend/server.py --config example_doc/service-backend.yaml
 host: 127.0.0.1
 port: 45190

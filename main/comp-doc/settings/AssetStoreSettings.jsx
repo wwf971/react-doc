@@ -42,15 +42,15 @@ export const AssetStoreSettings = observer(function AssetStoreSettings() {
           <li key={folder.path} className="doc-settings-asset-folder" data-missing={folder.isExists ? undefined : ''}>
             <span className="doc-settings-asset-path" title={folder.pathAbs}>{folder.path}</span>
             <span className="doc-settings-asset-flags">
-              {folder.isDefault ? <span className="doc-settings-asset-badge is-default">default</span> : null}
-              {folder.isExists ? null : <span className="doc-settings-asset-badge is-missing">missing</span>}
+              {folder.isDefault ? <span className="doc-badge-outline" data-primary="">default</span> : null}
+              {folder.isExists ? null : <span className="doc-badge-outline" data-error="">missing</span>}
             </span>
             <span className="doc-settings-asset-count">{folder.objectCount} object{folder.objectCount === 1 ? '' : 's'}</span>
             {isWritable ? (
               <span className="doc-settings-asset-actions">
                 <button
                   type="button"
-                  className="doc-settings-head-button"
+                  className="doc-button doc-settings-head-button"
                   disabled={isBusy || folder.isDefault}
                   title={folder.isDefault ? 'this is the default folder' : 'new objects are created in this folder'}
                   onClick={() => void assetStore.folderDefaultSet(folder.path)}
@@ -60,7 +60,7 @@ export const AssetStoreSettings = observer(function AssetStoreSettings() {
                 </button>
                 <button
                   type="button"
-                  className="doc-settings-head-button"
+                  className="doc-button doc-settings-head-button"
                   disabled={isBusy || folderList.length <= 1}
                   title={folderList.length <= 1 ? 'the last folder cannot be removed' : 'the folder is no longer scanned; its files are kept'}
                   onClick={() => void assetStore.folderRemove(folder.path)}
@@ -75,7 +75,7 @@ export const AssetStoreSettings = observer(function AssetStoreSettings() {
         {isWritable ? <FolderAddRow isBusy={isBusy} /> : null}
       </ul>
       {assetStore.folder.status === 'error' ? (
-        <p className="doc-edit-message">
+        <p className="doc-error doc-edit-message">
           {assetStore.folder.message}
           <button type="button" className="doc-settings-asset-link" onClick={() => assetStore.folderMessageClear()}>dismiss</button>
         </p>
@@ -126,11 +126,11 @@ const AssetOrphanArea = observer(function AssetOrphanArea() {
           onClick={() => void assetStore.usageLoad()}
         >
           {assetStore.isUsageReading
-            ? <LoaderCircle size={11} className="doc-edit-spin" aria-hidden="true" />
+            ? <LoaderCircle size={11} className="doc-spin" aria-hidden="true" />
             : <RotateCw size={11} aria-hidden="true" />}
         </button>
       </p>
-      {usageIndex.status === 'error' ? <p className="doc-edit-message">{usageIndex.message}</p> : null}
+      {usageIndex.status === 'error' ? <p className="doc-error doc-edit-message">{usageIndex.message}</p> : null}
       {usageIndex.status === 'done' ? (
         <>
           <p className="doc-settings-asset-note">
@@ -155,11 +155,11 @@ const AssetOrphanArea = observer(function AssetOrphanArea() {
               onNavigate={usageNavigate}
             />
           ) : <p className="doc-settings-asset-note">None.</p>}
-          {navigateMessage ? <p className="doc-edit-message">{navigateMessage}</p> : null}
+          {navigateMessage ? <p className="doc-error doc-edit-message">{navigateMessage}</p> : null}
         </>
       ) : null}
       {usageIndex.status === 'loading' || usageIndex.status === 'idle' ? (
-        <p className="doc-settings-asset-note"><LoaderCircle size={11} className="doc-edit-spin" aria-hidden="true" /> reading the documents</p>
+        <p className="doc-settings-asset-note"><LoaderCircle size={11} className="doc-spin" aria-hidden="true" /> reading the documents</p>
       ) : null}
       {settingsPanel ? (
         <div className="doc-settings-asset-detail">
@@ -203,9 +203,9 @@ const FolderAddRow = observer(function FolderAddRow({ isBusy }) {
         aria-label="Path of the folder to add"
         onCommit={(text) => void add(text)}
       />
-      <button type="button" className="doc-settings-head-button" disabled={isBusy} title="adds the folder and scans it" onClick={() => void add()}>
+      <button type="button" className="doc-button doc-settings-head-button" disabled={isBusy} title="adds the folder and scans it" onClick={() => void add()}>
         {isBusy
-          ? <LoaderCircle aria-hidden="true" size={11} strokeWidth={2} className="doc-edit-spin" />
+          ? <LoaderCircle aria-hidden="true" size={11} strokeWidth={2} className="doc-spin" />
           : <Plus aria-hidden="true" size={11} strokeWidth={2} />}
         <span>Add folder</span>
       </button>

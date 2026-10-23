@@ -131,7 +131,7 @@ export const SourcePathPicker = observer(function SourcePathPicker({
           }}
         />
       ) : null}
-      {message ? <p className="doc-source-picker-message" role="alert">{message}</p> : null}
+      {message ? <p className="doc-error" role="alert">{message}</p> : null}
     </div>
   );
 });

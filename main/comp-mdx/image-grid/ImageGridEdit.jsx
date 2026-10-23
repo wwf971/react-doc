@@ -89,7 +89,7 @@ export const ImageGridEdit = observer(function ImageGridEdit({ data = {}, config
 					<>
 						<button
 							type="button"
-							className="doc-edit-action"
+							className="doc-button"
 							disabled={isLocked}
 							onClick={() => draftChange(() => store.imageAdd())}
 						>
@@ -107,7 +107,7 @@ export const ImageGridEdit = observer(function ImageGridEdit({ data = {}, config
 								/>
 							</label>
 						))}
-						{store.message ? <span className="doc-edit-message" role="alert">{store.message}</span> : null}
+						{store.message ? <span className="doc-error doc-edit-message" role="alert">{store.message}</span> : null}
 					</>
 				)}
 				actions={(

@@ -162,14 +162,14 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
           title="Move this block up" aria-label="Move this block up"
           onClick={() => blockEventDispatch('editBlockMoveRequest', { direction: 'up' })}>
           {isMoveHere && move.status === 'submitting' && move.direction === 'up'
-            ? <LoaderCircle aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} className="doc-edit-spin" />
+            ? <LoaderCircle aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} className="doc-spin" />
             : <ChevronUp aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} />}
         </button>
         <button type="button" disabled={isSubmitting || !editStore.blockMoveIsAvailable(path, blockIndex, 'down')}
           title="Move this block down" aria-label="Move this block down"
           onClick={() => blockEventDispatch('editBlockMoveRequest', { direction: 'down' })}>
           {isMoveHere && move.status === 'submitting' && move.direction === 'down'
-            ? <LoaderCircle aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} className="doc-edit-spin" />
+            ? <LoaderCircle aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} className="doc-spin" />
             : <ChevronDown aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} />}
         </button>
         <button type="button" disabled={isSubmitting} aria-pressed={isConfirmHere}
@@ -205,10 +205,10 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
         />
       ) : null}
       {isMoveHere && move.status === 'error' ? (
-        <span className="doc-edit-message doc-edit-toolbar-message" role="alert">{move.message}</span>
+        <span className="doc-error doc-edit-message doc-edit-toolbar-message" role="alert">{move.message}</span>
       ) : null}
       {isAssetMoveHere && assetMove.status === 'error' ? (
-        <span className="doc-edit-message doc-edit-toolbar-message" role="alert">{assetMove.message}</span>
+        <span className="doc-error doc-edit-message doc-edit-toolbar-message" role="alert">{assetMove.message}</span>
       ) : null}
       {isMenuHere ? <DocEditInsertMenu /> : null}
     </div>
@@ -244,7 +244,7 @@ function ToolbarConfirm({ question, actionLabel, isDanger, confirm, onConfirm, o
       <span>{question}</span>
       <button type="button" className={isDanger ? 'is-danger' : 'is-primary'} disabled={isSubmitting} onClick={onConfirm}>
         {isSubmitting
-          ? <LoaderCircle aria-hidden="true" size={11} strokeWidth={2.2} className="doc-edit-spin" />
+          ? <LoaderCircle aria-hidden="true" size={11} strokeWidth={2.2} className="doc-spin" />
           : <Check aria-hidden="true" size={11} strokeWidth={2.2} />}
         <span>{actionLabel}</span>
       </button>
@@ -265,7 +265,7 @@ function ToolbarConfirm({ question, actionLabel, isDanger, confirm, onConfirm, o
         <span>Keep</span>
       </button>
       {confirm.status === 'error' && confirm.message ? (
-        <span className="doc-edit-message" role="alert">{confirm.message}</span>
+        <span className="doc-error doc-edit-message" role="alert">{confirm.message}</span>
       ) : null}
     </div>
   );

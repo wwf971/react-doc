@@ -34,7 +34,7 @@ import { multiLangCompNameIs } from '../../../comp-mdx/multi-lang/MultiLangData.
 //                        text of every block
 //
 // editTextModelBuild gives the same model for a text that is not compiled as
-// a document (a pasted text, doc_page_impl_copy_paste.md): it is only parsed,
+// a document (a pasted text, doc_page_impl_block_ops.md): it is only parsed,
 // the way compileDoc parses a document of that format.
 
 export const BLOCK_WRAPPER_NAME = 'DocEditBlock';
@@ -416,7 +416,7 @@ export function blockDeleteOperationBuild(model, index) {
 }
 
 // ---------- several blocks at once: copying and moving them ----------
-// (doc_page_impl_copy_paste.md#the-write-of-a-copy-or-a-move)
+// (doc_page_impl_block_ops.md#the-write-of-a-copy-or-a-move)
 
 // the text of the blocks at indexList, in document order, one blank line
 // between two of them: what a copy or a move inserts

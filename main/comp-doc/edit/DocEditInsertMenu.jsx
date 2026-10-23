@@ -18,7 +18,7 @@ import './DocEdit.css';
 //
 // the rows list the basic blocks, the components marked isInsertCommon and
 // the dashboards of the service templates the backend knows
-// (doc_page_impl_service_instance.md#creating-a-dashboard);
+// (doc_page_impl_service.md#creating-a-dashboard);
 // the search finds every entry by tag name, label and description, and its
 // results open in a dropdown floating over the rows, so the menu keeps its
 // height while the author types. matched text is highlighted. ArrowDown /
@@ -33,7 +33,7 @@ import './DocEdit.css';
 // reference block to it (DocEditStore.blockCreateAsAsset).
 //
 // Paste… at the end of the Text row opens the review of a paste
-// (doc_page_impl_copy_paste.md) for this border, with an empty text for the
+// (doc_page_impl_block_ops.md) for this border, with an empty text for the
 // author to paste Markdown / MDX into. it is shown when the host supplies
 // the panel component that frames the review.
 export const DocEditInsertMenu = observer(function DocEditInsertMenu() {
@@ -206,12 +206,12 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
       ) : null}
       {isSubmitting ? (
         <span className="doc-edit-insert-status" role="status">
-          <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-edit-spin" />
+          <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-spin" />
           <span>Creating the block…</span>
         </span>
       ) : null}
       {menu.status === 'error' && menu.message ? (
-        <span className="doc-edit-message" role="alert">{menu.message}</span>
+        <span className="doc-error doc-edit-message" role="alert">{menu.message}</span>
       ) : null}
     </div>
   );

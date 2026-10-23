@@ -56,7 +56,7 @@ import './DocEdit.css';
 // blocks that render nothing visible (a comment, trailing component markers)
 // get a small floating chip, so they can be found and edited.
 //
-// in block selection mode (doc_page_impl_copy_paste.md#selecting-blocks)
+// in block selection mode (doc_page_impl_block_ops.md#selecting-blocks)
 // the same body shows, and every block is selectable instead of editable
 // (DocBlockSelectBlock).
 export const DocEditBlock = observer(function DocEditBlock({ blockIndex, children }) {

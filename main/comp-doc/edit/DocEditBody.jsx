@@ -22,12 +22,12 @@ import './DocEdit.css';
 // DocEditDocControls) float their editor at the top of the body.
 //
 // a text pasted on the page while nothing editable has focus is not lost:
-// it opens the review of a paste (doc_page_impl_copy_paste.md), which
+// it opens the review of a paste (doc_page_impl_block_ops.md), which
 // inserts it as blocks. a paste into a field, a block's editor or a dialog
 // stays theirs.
 //
 // block selection mode shows this same body, its blocks selectable instead
-// of editable (DocEditBlock, doc_page_impl_copy_paste.md#selecting-blocks).
+// of editable (DocEditBlock, doc_page_impl_block_ops.md#selecting-blocks).
 // in edit mode the body tells which blocks a text selection touches
 // (DocBlockSelectStore.textSelectionSet), so what acts "here" knows them: a
 // paste goes after them.

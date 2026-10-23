@@ -49,7 +49,7 @@ export const DocEditDocControls = observer(function DocEditDocControls() {
       </button>
       {editStore.docEditIsStale(path) ? (
         <span className="doc-edit-stale" role="status" title="A newer source is being compiled">
-          <LoaderCircle aria-hidden="true" size={13} strokeWidth={2.2} className="doc-edit-spin" />
+          <LoaderCircle aria-hidden="true" size={13} strokeWidth={2.2} className="doc-spin" />
         </span>
       ) : null}
     </div>

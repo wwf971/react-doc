@@ -1,21 +1,25 @@
 import { LoaderCircle } from '../../frontend/UICommon.js';
-import { blockPlacePositionList, BLOCK_PLACE_NODE_DOC } from '../../frontend/src/lib/doc-block-place.js';
+import { blockPlaceNodeListMark, blockPlacePositionList, BLOCK_PLACE_NODE_DOC } from '../../frontend/src/lib/doc-block-place.js';
 import { SourcePathInput } from '../source/SourcePathInput.jsx';
 import { SourceTreeSelect } from '../source/SourceTreeSelect.jsx';
 import './BlockList.css';
 
-// Where blocks go in a document (doc_page_impl_copy_paste.md#choosing-where-the-blocks-go),
+// Where blocks go in a document (doc_page_impl_block_ops.md#choosing-where-the-blocks-go),
 // in the look of the move picker of the side panel: the document (a source
 // path with completion, any md / mdx document), the document as a tree
 // (SourceTreeSelect: the document, its blocks below it), and the positions
 // next to or inside the chosen node. A position the chosen node does not
-// allow is disabled and says why on hover. It shows and reports only; the
+// allow is disabled and says why on hover. The border the chosen place
+// puts the blocks at is drawn as a line between two rows of the tree
+// (blockPlaceNodeListMark). It shows and reports only; the
 // place belongs to the caller (lib/doc-block-place.js says what a place is).
 //
 //   Document  ~example/edit-in-place.md
 //   ▾ 🗎 edit-in-place.md
 //       ¶ What edit mode shows       Heading
 //       ¶ First of three short …     Paragraph   ◄ chosen
+//     ─────────────────────────────              ◄ the border the blocks go to
+//       ¶ Second of the three …      Paragraph
 //   [Before] [After] [Into, first] [Into, last]
 //   The blocks go after “First of three short …”.
 //
@@ -59,12 +63,12 @@ export function BlockPlacePicker({
           />
         </div>
       ) : null}
-      {docMessage ? <p className="doc-block-place-picker-message" role="alert">{docMessage}</p> : null}
+      {docMessage ? <p className="doc-error" role="alert">{docMessage}</p> : null}
       {nodeList ? (
         <SourceTreeSelect
           key={docPath}
           className="doc-block-place-picker-tree"
-          nodeList={nodeList}
+          nodeList={blockPlaceNodeListMark(nodeList, place, (positionReasonGet?.(place.position) ?? '') === '')}
           valueId={place.nodeId}
           idExpandedInitialList={[BLOCK_PLACE_NODE_DOC]}
           onSelect={(nodeId) => {
@@ -72,8 +76,8 @@ export function BlockPlacePicker({
           }}
         />
       ) : (
-        <p className="doc-block-place-picker-status" role="status">
-          <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-edit-spin" />
+        <p className="doc-status" role="status">
+          <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-spin" />
           <span>Reading the document…</span>
         </p>
       )}
@@ -85,7 +89,7 @@ export function BlockPlacePicker({
             <button
               key={item.position}
               type="button"
-              className="doc-block-place-picker-button"
+              className="doc-button-dialog"
               aria-pressed={isChosen}
               disabled={isLocked || reason !== ''}
               title={reason || undefined}
@@ -96,7 +100,7 @@ export function BlockPlacePicker({
           );
         })}
       </div>
-      <p className="doc-block-place-picker-hint">
+      <p className="doc-note">
         {placeText ? `The blocks go ${placeText}.` : 'Choose a block or the document, then where the blocks go next to it.'}
       </p>
     </div>

@@ -47,9 +47,9 @@ const PreviewBody = observer(function PreviewBody({ object, panel, preview, bloc
   if (!preview.versionId) return <p className="doc-asset-muted">Select a version, or edit the head, to see what it renders as.</p>;
   const version = preview.version;
   if (!version || version.status === 'loading') {
-    return <p className="doc-asset-panel-status"><LoaderCircle size={12} className="doc-edit-spin" aria-hidden="true" /> loading</p>;
+    return <p className="doc-asset-panel-status"><LoaderCircle size={12} className="doc-spin" aria-hidden="true" /> loading</p>;
   }
-  if (version.status === 'error') return <p className="doc-edit-message">{version.message}</p>;
+  if (version.status === 'error') return <p className="doc-error doc-edit-message">{version.message}</p>;
   if (!version.isText) {
     const url = assetStore.dataUrlGet(panel.store, object.objectId, preview.versionId);
     if (object.contentType.startsWith('image/')) {

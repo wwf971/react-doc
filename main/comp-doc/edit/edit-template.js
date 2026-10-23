@@ -48,7 +48,7 @@ const templateTextList = [
 // text is the block as the data would be written inline, for the search.
 //
 // The dashboards of the service templates the backend knows are offered too
-// (group 'service', doc_page_impl_service_instance.md#creating-a-dashboard):
+// (group 'service', doc_page_impl_service.md#creating-a-dashboard):
 // one entry per dashboard, under its component id service/{templateName}/{dashboardId}.
 // They are asset-only like any such component; the instance is chosen in
 // the dashboard once it is placed.

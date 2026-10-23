@@ -120,13 +120,13 @@ export const ExcelUniverEdit = observer(function ExcelUniverEdit({ data = {}, co
         onCommit={rangeCommit}
       />
       <span className="doc-mdx-excel-univer-edit-muted">on {sheetNameGet(store.view.sheetId)}</span>
-      <button type="button" className="doc-edit-action" disabled={isLocked} title="the selected cells become the range view mode shows" onClick={selectionUse}>
+      <button type="button" className="doc-button" disabled={isLocked} title="the selected cells become the range view mode shows" onClick={selectionUse}>
         <Scan aria-hidden="true" size={11} /> Use selection
       </button>
-      <button type="button" className="doc-edit-action" disabled={isLocked} title="view mode shows the active sheet whole" onClick={sheetWholeUse}>
+      <button type="button" className="doc-button" disabled={isLocked} title="view mode shows the active sheet whole" onClick={sheetWholeUse}>
         <Expand aria-hidden="true" size={11} /> Whole sheet
       </button>
-      {store.message ? <span className="doc-edit-message" role="alert">{store.message}</span> : null}
+      {store.message ? <span className="doc-error doc-edit-message" role="alert">{store.message}</span> : null}
     </span>
   );
 

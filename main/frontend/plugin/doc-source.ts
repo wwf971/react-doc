@@ -889,7 +889,7 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
   // the configuration files (config.yaml, the yaml files of the document),
   // their backups (the edit api keeps {file}.bak when it rewrites one) and
   // the files of the asset service layer (doc_page_impl_asset.md) and of the
-  // service backend (doc_page_impl_service_instance.md) are never
+  // service backend (doc_page_impl_service.md) are never
   // documents, even when they lie inside a source folder
   const pathsConfiguration = collectPathsConfiguration(configDoc);
   const configurationPathSet = new Set(pathsConfiguration);

@@ -58,13 +58,13 @@ import './DocPageMdx.css';
 // config.edit.endpoint is the edit api of the development server (the virtual
 // module exports it as docEditEndpoint); without it the page has no edit mode.
 // config.edit.pasteTransformList are the transforms a paste goes through
-// before it is shown as blocks (doc_page_impl_copy_paste.md#transforms).
+// before it is shown as blocks (doc_page_impl_block_ops.md#transforms).
 // config.asset.endpoint is the asset api of the development server
 // (docAssetEndpoint), config.asset.subscribe its change feed (subscribeDocAsset);
 // a built site reads data.assetSnapshot instead (doc_page_impl_asset.md).
 // config.service.endpoint is the service backend as the development server
 // forwards it (docServiceEndpoint); without it the dashboards of service
-// instances show that there is no backend (doc_page_impl_service_instance.md).
+// instances show that there is no backend (doc_page_impl_service.md).
 
 export function DocPageMdx({ data, config = {}, onEvent }) {
   const languageAncestor = useDocLanguage();
@@ -111,17 +111,17 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     const blockPopupStore = new DocBlockPopupStore({ docStore, editStore, sourceStore, assetStore });
     // the service instances of the service backend; a dashboard block keeps
     // its instance and its state in its asset object
-    // (doc_page_impl_service_instance.md)
+    // (doc_page_impl_service.md)
     const serviceStore = new DocServiceStore({ endpoint: config.service?.endpoint, assetStore });
     // the side panel: folder open state, and moving items in edit mode
     // (doc_page_impl_side_panel.md#moving-an-item)
     const sidePanelStore = new DocSidePanelStore({ sourceStore, docStore, editStore });
     // blocks selected in block selection mode, then copied or moved, and
     // the blocks the author is at in any mode with blocks
-    // (doc_page_impl_copy_paste.md#selecting-blocks)
+    // (doc_page_impl_block_ops.md#selecting-blocks)
     const blockSelectStore = new DocBlockSelectStore({ editStore });
     // a pasted Markdown / MDX text reviewed as blocks, then inserted after
-    // the blocks the author is at (doc_page_impl_copy_paste.md)
+    // the blocks the author is at (doc_page_impl_block_ops.md)
     const pasteStore = new DocPasteStore({
       sourceStore, docStore, editStore, blockSelectStore, transformList: config.edit?.pasteTransformList,
     });

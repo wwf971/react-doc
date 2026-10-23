@@ -1,21 +1,25 @@
 import { useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
-import { ArrowDown, ArrowUp, Copy, LoaderCircle, Move, Trash2 } from '../../frontend/UICommon.js';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Copy, LoaderCircle, Move, Trash2 } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { clickAfterPointerDownSuppress } from '../edit/use-edit-outside-pointer.js';
 import '../edit/DocEdit.css';
 import './DocBlockSelect.css';
 
 // The right-click menu of the selected blocks
-// (doc_page_impl_copy_paste.md#selecting-blocks). Open state lives in
+// (doc_page_impl_block_ops.md#selecting-blocks). Open state lives in
 // DocBlockSelectStore.contextMenu, set by DocBlockSelectBlock; the menu is
 // the Menu of @wwf971/react-comp-misc injected as config.components.Menu,
 // at the point of the click, styled like the mode menu of a block.
 //   Copy Blocks To…        the dialog that copies or moves them, Copy first
 //   Move Blocks To…        the same dialog, Move first
 //   ─────
-//   Duplicate Above        a copy of the block right above / below it; one
-//   Duplicate Below        selected block only (greyed out otherwise)
+//   Duplicate Above        a copy of the block right above / below it
+//   Duplicate Below
+//   Move Up                the block swapped with its neighbor, as the
+//   Move Down              move buttons of the block's toolbar in edit mode
+//                          (duplicate and move: one selected block only,
+//                          greyed out with the reason otherwise)
 //   ─────
 //   Delete Blocks…         asks in the menu itself: Delete · Cancel
 //
@@ -51,7 +55,7 @@ export const DocBlockSelectMenu = observer(function DocBlockSelectMenu() {
   const isSubmitting = menu.status === 'submitting';
   const items = menu.step === 'deleteConfirm'
     ? deleteConfirmItemListBuild(count, isSubmitting)
-    : actionItemListBuild(countText, blockSelectStore.duplicateDisabledReason, isSubmitting);
+    : actionItemListBuild(countText, blockSelectStore, isSubmitting);
   if (menu.status === 'error') {
     items.push({ id: 'message', isContainer: true, comp: MenuNote, compProps: { text: menu.message, isError: true } });
   }
@@ -60,6 +64,8 @@ export const DocBlockSelectMenu = observer(function DocBlockSelectMenu() {
     if (entryId === 'copy' || entryId === 'move') blockSelectStore.transferOpen(entryId);
     else if (entryId === 'duplicateAbove') void blockSelectStore.selectionDuplicate('above');
     else if (entryId === 'duplicateBelow') void blockSelectStore.selectionDuplicate('below');
+    else if (entryId === 'moveUp') void blockSelectStore.selectionMove('up');
+    else if (entryId === 'moveDown') void blockSelectStore.selectionMove('down');
     else if (entryId === 'delete') blockSelectStore.contextMenuStepSet('deleteConfirm');
     else if (entryId === 'deleteConfirm') void blockSelectStore.selectionDelete();
     else if (entryId === 'deleteCancel') blockSelectStore.contextMenuStepSet('actions');
@@ -98,7 +104,8 @@ export const DocBlockSelectMenu = observer(function DocBlockSelectMenu() {
   );
 });
 
-function actionItemListBuild(countText, duplicateDisabledReason, isSubmitting) {
+function actionItemListBuild(countText, blockSelectStore, isSubmitting) {
+  const duplicateDisabledReason = blockSelectStore.blockSingleActionDisabledReason;
   const itemBuild = (id, Icon, text, title, reason = '', isDanger = false) => ({
     id,
     isDisabled: isSubmitting || reason !== '',
@@ -111,6 +118,8 @@ function actionItemListBuild(countText, duplicateDisabledReason, isSubmitting) {
     { id: 'rule-duplicate', isContainer: true, comp: MenuRule },
     itemBuild('duplicateAbove', ArrowUp, 'Duplicate Above', 'Insert a copy of the block right above it', duplicateDisabledReason),
     itemBuild('duplicateBelow', ArrowDown, 'Duplicate Below', 'Insert a copy of the block right below it', duplicateDisabledReason),
+    itemBuild('moveUp', ChevronUp, 'Move Up', 'Swap the block with the one above it', blockSelectStore.blockMoveDisabledReasonGet('up')),
+    itemBuild('moveDown', ChevronDown, 'Move Down', 'Swap the block with the one below it', blockSelectStore.blockMoveDisabledReasonGet('down')),
     { id: 'rule-delete', isContainer: true, comp: MenuRule },
     itemBuild('delete', Trash2, 'Delete Blocks…', `Delete ${countText} from the document`, '', true),
   ];
@@ -144,7 +153,7 @@ function ContextMenuItem({ Icon, text, title, isDanger = false, isBusy = false }
     <span className="doc-edit-mode-item" title={title} data-danger={isDanger ? '' : undefined}>
       <span className="doc-edit-mode-item-icon">
         {isBusy
-          ? <LoaderCircle size={13} aria-hidden="true" className="doc-edit-spin" />
+          ? <LoaderCircle size={13} aria-hidden="true" className="doc-spin" />
           : Icon ? <Icon size={13} aria-hidden="true" /> : null}
       </span>
       <span className="doc-edit-mode-item-label">{text}</span>

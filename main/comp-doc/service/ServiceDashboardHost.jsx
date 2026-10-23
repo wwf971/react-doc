@@ -12,7 +12,7 @@ import {
 import './DocService.css';
 
 // The frame of every service dashboard (design:
-// doc_page_impl_service_instance.md#the-dashboard-frame): the registry
+// doc_page_impl_service.md#the-dashboard-frame): the registry
 // renders it for a component id service/{templateName}/{dashboardId}
 // (service-dashboard-define.js), and it renders the dashboard from the
 // federated module of the instance it is bound to (every instance serves its

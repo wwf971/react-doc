@@ -45,7 +45,7 @@ export const SourceFilePrompt = observer(function SourceFilePrompt() {
   return (
     <div
       ref={elementRef}
-      className="doc-source-prompt not-prose"
+      className="doc-popover-form doc-source-prompt not-prose"
       role="dialog"
       aria-label="Save the file to a folder of the source"
       style={style}
@@ -77,17 +77,17 @@ export const SourceFilePrompt = observer(function SourceFilePrompt() {
         />
       </label>
       <div className="doc-source-prompt-actions">
-        <button type="button" className="doc-source-prompt-button" disabled={isSubmitting} onClick={() => sourceFileStore.promptConfirm()}>Create</button>
-        <button type="button" className="doc-source-prompt-button" disabled={isSubmitting} onClick={() => sourceFileStore.promptCancel()}>Cancel</button>
+        <button type="button" className="doc-button-dialog doc-source-prompt-button" disabled={isSubmitting} onClick={() => sourceFileStore.promptConfirm()}>Create</button>
+        <button type="button" className="doc-button-dialog doc-source-prompt-button" disabled={isSubmitting} onClick={() => sourceFileStore.promptCancel()}>Cancel</button>
         {isSubmitting ? (
-          <span className="doc-source-prompt-status" role="status">
-            <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-edit-spin" />
+          <span className="doc-status" role="status">
+            <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-spin" />
             <span>Creating the file…</span>
           </span>
         ) : null}
       </div>
       {prompt.status === 'error' && prompt.message ? (
-        <p className="doc-source-prompt-message" role="alert">{prompt.message}</p>
+        <p className="doc-error" role="alert">{prompt.message}</p>
       ) : null}
     </div>
   );

@@ -38,8 +38,8 @@ export const AssetPanel = observer(function AssetPanel({ panel, sectionList = AS
     return (
       <div className="doc-asset-panel">
         {stateObject?.status === 'error'
-          ? <p className="doc-edit-message">{stateObject.message}</p>
-          : <p className="doc-asset-panel-status"><LoaderCircle size={12} className="doc-edit-spin" aria-hidden="true" /> loading</p>}
+          ? <p className="doc-error doc-edit-message">{stateObject.message}</p>
+          : <p className="doc-asset-panel-status"><LoaderCircle size={12} className="doc-spin" aria-hidden="true" /> loading</p>}
       </div>
     );
   }
@@ -120,7 +120,7 @@ const ObjectSection = observer(function ObjectSection({ object, panel, isWritabl
         <div className="doc-asset-actions">
           <button
             type="button"
-            className="doc-edit-action"
+            className="doc-button"
             disabled={isBusy}
             title={object.isLocked ? 'allows changes of the object again' : 'no change of the object (data, versions, head, metadata, deletion) until it is unlocked'}
             onClick={() => panel.objectLockSet(!object.isLocked)}
@@ -129,13 +129,13 @@ const ObjectSection = observer(function ObjectSection({ object, panel, isWritabl
             {object.isLocked ? ' Unlock object' : ' Lock object'}
           </button>
           {object.isDeleted ? (
-            <button type="button" className="doc-edit-action" disabled={isBusy || object.isLocked} onClick={() => panel.objectRestore()}>
+            <button type="button" className="doc-button" disabled={isBusy || object.isLocked} onClick={() => panel.objectRestore()}>
               Restore object
             </button>
           ) : (
             <button
               type="button"
-              className="doc-edit-action"
+              className="doc-button"
               disabled={isBusy || object.isLocked}
               title={object.isLocked ? 'the object is locked' : ''}
               onClick={() => panel.confirmSet('objectDelete')}
@@ -151,10 +151,10 @@ const ObjectSection = observer(function ObjectSection({ object, panel, isWritabl
               panel={panel}
             />
           ) : null}
-          {panel.status === 'submitting' ? <LoaderCircle size={12} className="doc-edit-spin" aria-label="working" /> : null}
+          {panel.status === 'submitting' ? <LoaderCircle size={12} className="doc-spin" aria-label="working" /> : null}
         </div>
       ) : null}
-      {panel.message ? <p className="doc-edit-message">{panel.message}</p> : null}
+      {panel.message ? <p className="doc-error doc-edit-message">{panel.message}</p> : null}
     </section>
   );
 });
@@ -239,9 +239,9 @@ const UsageSection = observer(function UsageSection({ object, panel, onNavigate 
 
   let note = null;
   if (usageIndex.status === 'loading' || usageIndex.status === 'idle') {
-    note = <p className="doc-asset-panel-status"><LoaderCircle size={12} className="doc-edit-spin" aria-hidden="true" /> reading the documents</p>;
+    note = <p className="doc-asset-panel-status"><LoaderCircle size={12} className="doc-spin" aria-hidden="true" /> reading the documents</p>;
   } else if (usageIndex.status === 'error') {
-    note = <p className="doc-edit-message">{usageIndex.message}</p>;
+    note = <p className="doc-error doc-edit-message">{usageIndex.message}</p>;
   } else if (usageList.length === 0) {
     note = (
       <p className="doc-asset-muted doc-asset-usage-empty">
@@ -265,7 +265,7 @@ const UsageSection = observer(function UsageSection({ object, panel, onNavigate 
           onClick={() => void panel.usageRefreshRun('')}
         >
           {isRefreshing && usageRefresh.docPath === ''
-            ? <LoaderCircle size={11} className="doc-edit-spin" aria-hidden="true" />
+            ? <LoaderCircle size={11} className="doc-spin" aria-hidden="true" />
             : <RotateCw size={11} aria-hidden="true" />}
         </button>
         {usageRefresh && usageRefresh.status !== 'submitting' ? (
@@ -286,7 +286,7 @@ const UsageSection = observer(function UsageSection({ object, panel, onNavigate 
           onNavigate={usageNavigate}
         />
       ) : null}
-      {panel.usageNavigateMessage ? <p className="doc-edit-message">{panel.usageNavigateMessage}</p> : null}
+      {panel.usageNavigateMessage ? <p className="doc-error doc-edit-message">{panel.usageNavigateMessage}</p> : null}
     </section>
   );
 });
@@ -348,8 +348,8 @@ const VersionSection = observer(function VersionSection({ object, panel, isWrita
                 >
                   <td className="doc-asset-mono doc-asset-version-id">{version.versionId}</td>
                   <td className="doc-asset-version-badges">
-                    {isHead ? <span className="doc-asset-badge is-head">head</span> : null}
-                    {isRead && panel.versionIdRef ? <span className="doc-asset-badge">read here</span> : null}
+                    {isHead ? <span className="doc-badge-outline" data-primary="">head</span> : null}
+                    {isRead && panel.versionIdRef ? <span className="doc-badge-outline">read here</span> : null}
                   </td>
                   <td className="doc-asset-version-lock" title={version.isLocked ? 'locked: not rewritten in place, not deleted' : undefined}>
                     {version.isLocked ? <Lock size={11} aria-label="locked" /> : null}
@@ -393,7 +393,7 @@ const VersionSection = observer(function VersionSection({ object, panel, isWrita
           <span className="doc-asset-mono doc-asset-muted">{versionSelected.versionId}</span>
           <button
             type="button"
-            className="doc-edit-action"
+            className="doc-button"
             disabled={isBusy || isHeadSelected || isObjectLocked}
             title={isObjectLocked ? 'the object is locked' : ''}
             onClick={() => panel.headSet(versionSelected.versionId)}
@@ -402,7 +402,7 @@ const VersionSection = observer(function VersionSection({ object, panel, isWrita
           </button>
           <button
             type="button"
-            className="doc-edit-action"
+            className="doc-button"
             disabled={isBusy || isObjectLocked}
             title={isObjectLocked ? 'the object is locked' : (versionSelected.isLocked ? 'allows rewriting and deleting this version again' : 'the version cannot be rewritten in place or deleted until it is unlocked')}
             onClick={() => panel.versionLockSet(versionSelected.versionId, !versionSelected.isLocked)}
@@ -412,7 +412,7 @@ const VersionSection = observer(function VersionSection({ object, panel, isWrita
           </button>
           <button
             type="button"
-            className="doc-edit-action"
+            className="doc-button"
             disabled={isBusy || Boolean(deleteReason)}
             title={deleteReason}
             onClick={() => panel.confirmSet('versionDelete', versionSelected.versionId)}
@@ -515,9 +515,9 @@ const DataSection = observer(function DataSection({ object, panel, isWritable, i
         ) : stateVersion?.status === 'done' ? (
           <BinaryInfo object={object} panel={panel} versionId={versionId} stateVersion={stateVersion} />
         ) : stateVersion?.status === 'error' ? (
-          <p className="doc-edit-message">{stateVersion.message}</p>
+          <p className="doc-error doc-edit-message">{stateVersion.message}</p>
         ) : (
-          <p className="doc-asset-panel-status"><LoaderCircle size={12} className="doc-edit-spin" aria-hidden="true" /> loading</p>
+          <p className="doc-asset-panel-status"><LoaderCircle size={12} className="doc-spin" aria-hidden="true" /> loading</p>
         )}
         {isChangeable ? (
           <div className="doc-asset-actions">
@@ -525,7 +525,8 @@ const DataSection = observer(function DataSection({ object, panel, isWritable, i
               <>
                 <button
                   type="button"
-                  className={saveMode === 'inPlace' ? 'doc-edit-action is-primary' : 'doc-edit-action'}
+                  className="doc-button"
+                  data-primary={saveMode === 'inPlace' ? '' : undefined}
                   disabled={isBusy || isHeadLocked}
                   title={isHeadLocked ? 'the head version is locked; save as a new version' : 'the head version keeps its id; its previous bytes are kept as a backup file'}
                   onClick={() => panel.save('inPlace')}
@@ -534,23 +535,24 @@ const DataSection = observer(function DataSection({ object, panel, isWritable, i
                 </button>
                 <button
                   type="button"
-                  className={saveMode === 'newVersion' ? 'doc-edit-action is-primary' : 'doc-edit-action'}
+                  className="doc-button"
+                  data-primary={saveMode === 'newVersion' ? '' : undefined}
                   disabled={isBusy}
                   title="a new version made from the head becomes the head"
                   onClick={() => panel.save('newVersion')}
                 >
                   <Check size={11} aria-hidden="true" /> Save as new version
                 </button>
-                <button type="button" className="doc-edit-action" disabled={isBusy} onClick={() => panel.editCancel()}>
+                <button type="button" className="doc-button" disabled={isBusy} onClick={() => panel.editCancel()}>
                   <X size={11} aria-hidden="true" /> Cancel
                 </button>
-                {edit.status === 'submitting' ? <LoaderCircle size={12} className="doc-edit-spin" aria-label="saving" /> : null}
+                {edit.status === 'submitting' ? <LoaderCircle size={12} className="doc-spin" aria-label="saving" /> : null}
               </>
             ) : (
               <>
                 <button
                   type="button"
-                  className="doc-edit-action"
+                  className="doc-button"
                   disabled={isBusy || !isEditable}
                   title={isEditable ? 'edits the head text' : editReason}
                   onClick={() => panel.editStart()}
@@ -559,7 +561,7 @@ const DataSection = observer(function DataSection({ object, panel, isWritable, i
                 </button>
                 <button
                   type="button"
-                  className="doc-edit-action"
+                  className="doc-button"
                   disabled={isBusy || isUploadBlocked}
                   title={isUploadBlocked ? editReason : `a file becomes the head data (${saveMode === 'newVersion' ? 'as a new version' : 'in place'}, by the save mode)`}
                   onClick={() => fileInputRef.current?.click()}
@@ -579,16 +581,16 @@ const DataSection = observer(function DataSection({ object, panel, isWritable, i
                 />
                 {editReason ? <span className="doc-asset-muted doc-asset-actions-note">{editReason}</span> : null}
                 {upload?.status === 'submitting' ? (
-                  <span className="doc-asset-panel-status"><LoaderCircle size={12} className="doc-edit-spin" aria-hidden="true" /> uploading {upload.fileName}</span>
+                  <span className="doc-asset-panel-status"><LoaderCircle size={12} className="doc-spin" aria-hidden="true" /> uploading {upload.fileName}</span>
                 ) : null}
               </>
             )}
           </div>
         ) : null}
-        {edit?.status === 'error' ? <p className="doc-edit-message">{edit.message}</p> : null}
+        {edit?.status === 'error' ? <p className="doc-error doc-edit-message">{edit.message}</p> : null}
       </div>
       {upload?.status === 'error' ? (
-        <p className="doc-edit-message">
+        <p className="doc-error doc-edit-message">
           {upload.fileName}: {upload.message}
           <button type="button" className="doc-asset-link" onClick={() => panel.uploadMessageClear()}>dismiss</button>
         </p>
@@ -615,7 +617,7 @@ const BinaryInfo = observer(function BinaryInfo({ object, panel, versionId, stat
       </dl>
       {isImage ? <img className="doc-asset-binary-preview" src={url} alt={object.name || object.objectId} /> : null}
       <div className="doc-asset-actions">
-        <a className="doc-edit-action" href={url} download={`${object.objectId}.${versionId}.${object.fileExt}`}>
+        <a className="doc-button" href={url} download={`${object.objectId}.${versionId}.${object.fileExt}`}>
           <Download size={11} aria-hidden="true" /> Download
         </a>
       </div>
@@ -702,14 +704,14 @@ const ConfirmInline = observer(function ConfirmInline({ label, panel }) {
       <span className="doc-edit-confirm" role="alertdialog" aria-label={label}>
         <span>{label}</span>
         <button type="button" className="is-danger" disabled={isSubmitting} onClick={() => panel.confirmApply()}>
-          {isSubmitting ? <LoaderCircle size={11} className="doc-edit-spin" aria-hidden="true" /> : <Trash2 size={11} aria-hidden="true" />}
+          {isSubmitting ? <LoaderCircle size={11} className="doc-spin" aria-hidden="true" /> : <Trash2 size={11} aria-hidden="true" />}
           Delete
         </button>
         <button type="button" disabled={isSubmitting} onClick={() => panel.confirmClear()}>
           <X size={11} aria-hidden="true" /> Cancel
         </button>
       </span>
-      {confirm.status === 'error' ? <span className="doc-edit-message">{confirm.message}</span> : null}
+      {confirm.status === 'error' ? <span className="doc-error doc-edit-message">{confirm.message}</span> : null}
     </>
   );
 });

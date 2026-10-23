@@ -2,11 +2,14 @@ templateId: w4wp4t0czko
 name: note-db
 description: notes kept in a sqlite database; every instance created from it keeps its own database
 timeCreated: 20261024_20044940+09
-versionId: w4wp4t0yp9u
+versionId: w4zemzv9vyq
 versionList:
 - versionId: w4wp4t0yp9u
   time: 20261024_20044940+09
   note: the note-db example
+- versionId: w4zemzv9vyq
+  time: 20261026_04280058+09
+  note: 'noteImport and the other instance in the stat dashboard: calls between services'
 config:
   databaseFile: notes.sqlite
   titleLengthMax: 120

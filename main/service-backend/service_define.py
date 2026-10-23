@@ -1,6 +1,6 @@
 """What the script of a service is and what it exposes.
 
-Design: doc_page_impl_service_instance.md#what-a-service-script-exposes
+Design: doc_page_impl_service.md#what-a-service-script-exposes
 
 The script of a service is a Python class deriving from Service, in the file
 service.py of a template folder, and of every instance folder created from
@@ -32,6 +32,7 @@ place of the mistake, not later in a dashboard.
 
 import os
 import re
+import threading
 
 # the types a parameter or a result may have: the type names of JSON Schema,
 # plus 'any' for a value the type does not describe
@@ -44,6 +45,11 @@ API_KIND_LIST = ['query', 'command']
 # answered at once with a job, which runs in the instance's queue; the job is
 # asked for its state and result (GET /job/get)
 API_EXECUTION_LIST = ['sync', 'async']
+
+# who a call comes from, as the runtime knows it. page: an http request (the
+# page through the development server, or any http client of the backend).
+# service: another service instance, through ServiceContext.service_call
+CALLER_KIND_LIST = ['page', 'service']
 
 # default: the dashboard a document shows when it places the service.
 # config: the dashboard of the instance's settings (the Services tab).
@@ -63,7 +69,8 @@ _VALUE_NONE = object()
 class ServiceError(Exception):
     """An api refusing or failing with a code of the formatted response.
 
-    -1 bad request or failure, -3 something the request names is not found.
+    -1 bad request or failure, -2 the caller may not call it, -3 something
+    the request names is not found.
     """
 
     def __init__(self, code, message):
@@ -76,8 +83,40 @@ class ServiceDefineError(Exception):
     """A service script whose declaration cannot be used."""
 
 
+class ServiceCaller:
+    """Who a call comes from, as the runtime knows it: never what a request says it is.
+
+    kind                  page (an http request) or service (another instance)
+    service_id            the calling instance; '' for page
+    dashboard_service_id  for page: the instance whose dashboard asked, '' for
+                          none. a claim of the page, not checked: every
+                          dashboard runs in the same page
+    chain                 the instances the call passed through, the caller
+                          included (page -> A -> B: B is called with (A,)).
+                          a queued api of an instance already in the chain is
+                          refused: its queue waits for this call, a deadlock
+    """
+
+    def __init__(self, kind, service_id='', dashboard_service_id='', chain=()):
+        self.kind = kind
+        self.service_id = service_id
+        self.dashboard_service_id = dashboard_service_id
+        self.chain = tuple(chain)
+
+    def info_get(self):
+        return {'kind': self.kind, 'serviceId': self.service_id, 'dashboardServiceId': self.dashboard_service_id}
+
+    def label_get(self):
+        if self.kind == 'service':
+            return f'the service {self.service_id}'
+        if self.dashboard_service_id:
+            return f'the page (a dashboard of {self.dashboard_service_id})'
+        return 'the page'
+
+
 class ServiceContext:
-    """What a service instance is given: its identity, its folder, its config.
+    """What a service instance is given: its identity, its folder, its config,
+    who calls it, and the way to call other instances.
 
     service_id, name    the instance
     dir_path            the instance's folder: its own script and its data
@@ -85,17 +124,43 @@ class ServiceContext:
                         service.yaml: { templateId, name, versionId }. a
                         record only: the instance never reads the template
     config              the instance's config, with the defaults of configDefineList
+    caller              the ServiceCaller of the api being run in this thread;
+                        None outside an api (start, stop, a thread of its own)
+    service_call, service_job_get, service_resolve
+                        calls of the apis of other instances, as this instance
     """
 
-    def __init__(self, service_id, name, dir_path, template, config):
+    def __init__(self, service_id, name, dir_path, template, config, runtime=None):
         self.service_id = service_id
         self.name = name
         self.dir_path = dir_path
         self.template = template
         self.config = config
-        # set by the runtime while an async job runs, so the api can report
-        # its progress (job_progress_set); None otherwise
-        self.job_current = None
+        # the runtime, for the calls of other instances (api_call, job_get, target_resolve)
+        self._runtime = runtime
+        # the caller and the job of the api being run, per thread: a queued
+        # api runs in the instance's worker thread, an api with isQueued
+        # False in the thread of its caller, both at once
+        self._local = threading.local()
+
+    @property
+    def caller(self):
+        return getattr(self._local, 'caller', None)
+
+    @property
+    def job_current(self):
+        """The async job being run in this thread, so the api can report its progress; None otherwise."""
+        return getattr(self._local, 'job', None)
+
+    def call_enter(self, caller, job):
+        """Set by the runtime around every api it runs; answers what call_exit restores."""
+        previous = (self.caller, self.job_current)
+        self._local.caller = caller
+        self._local.job = job
+        return previous
+
+    def call_exit(self, previous):
+        self._local.caller, self._local.job = previous
 
     def path_get(self, name):
         """A file of the instance's folder."""
@@ -103,10 +168,42 @@ class ServiceContext:
 
     def job_progress_set(self, fraction, message=''):
         """The progress of the async job being run, 0..1, with a short text."""
-        if self.job_current is None:
+        job = self.job_current
+        if job is None:
             return
-        self.job_current.progress = max(0.0, min(1.0, float(fraction)))
-        self.job_current.progress_message = str(message)
+        job.progress = max(0.0, min(1.0, float(fraction)))
+        job.progress_message = str(message)
+
+    # ---------- calls of other instances ----------
+
+    def service_call(self, target, api, params=None):
+        """Calls an api of another instance, as this instance: what a sync api
+        returned, the job of an async one; raises ServiceError with the call's
+        code when it fails.
+
+        target is { serviceId } (that instance) or { templateId, versionId? }
+        (an instance created from that template, at that version; this
+        instance itself is never chosen). The callee reads this instance as
+        its context.caller. A sync call waits apiWaitSecondMax at most.
+        """
+        result = self._runtime.api_call(target, api, params, self._caller_self_get())
+        if result['code'] != 0:
+            raise ServiceError(result['code'], result.get('message', ''))
+        return result['data']
+
+    def service_job_get(self, service_id, job_id):
+        """The job of an async call (its serviceId and jobId); raises ServiceError."""
+        return self._runtime.job_get(service_id, job_id)
+
+    def service_resolve(self, target):
+        """The instance a call of target would go to, as listed ({ serviceId,
+        name, template, status, expose, … }); raises ServiceError -3 when none."""
+        return self._runtime.target_resolve(target, self._caller_self_get()).info_get()
+
+    def _caller_self_get(self):
+        caller_current = self.caller
+        chain = caller_current.chain if caller_current is not None else ()
+        return ServiceCaller('service', service_id=self.service_id, chain=chain + (self.service_id,))
 
 
 class Service:
@@ -149,8 +246,20 @@ def returns(type, description='', schema=None):
     return {'type': type, 'description': description, 'schema': schema}
 
 
-def api(kind='query', execution='sync', description='', params=(), result=None):
-    """Marks a method of a Service class as an api of the service."""
+def api(kind='query', execution='sync', description='', params=(), result=None,
+        callerKindList=None, isQueued=True):
+    """Marks a method of a Service class as an api of the service.
+
+    callerKindList  who may call it: page, service, or both (None, the default).
+                    ['service']: an api for other instances only, never answered
+                    to the page (credentials, a principal)
+    isQueued        True: run in the instance's queue, one api at a time.
+                    False: run at once in the thread of the caller (an http
+                    request, the calling instance), beside whatever the queue
+                    runs: the method guards the state it touches with locks.
+                    for a sync api that must not wait behind the queue, or
+                    that other instances call often
+    """
 
     def decorate(method):
         method.__service_api__ = {
@@ -159,6 +268,8 @@ def api(kind='query', execution='sync', description='', params=(), result=None):
             'description': description,
             'params': list(params),
             'result': result,
+            'callerKindList': list(callerKindList) if callerKindList is not None else list(CALLER_KIND_LIST),
+            'isQueued': isQueued,
         }
         return method
 
@@ -260,10 +371,19 @@ def _api_list_build(service_class, label):
             raise ServiceDefineError(f'{place}: kind must be one of {", ".join(API_KIND_LIST)}')
         if declared['execution'] not in API_EXECUTION_LIST:
             raise ServiceDefineError(f'{place}: execution must be one of {", ".join(API_EXECUTION_LIST)}')
+        caller_kind_list = declared['callerKindList']
+        if len(caller_kind_list) == 0 or not all(item in CALLER_KIND_LIST for item in caller_kind_list):
+            raise ServiceDefineError(f'{place}: callerKindList must list some of {", ".join(CALLER_KIND_LIST)}')
+        if not isinstance(declared['isQueued'], bool):
+            raise ServiceDefineError(f'{place}: isQueued must be true or false')
+        if declared['execution'] == 'async' and not declared['isQueued']:
+            raise ServiceDefineError(f'{place}: an async api runs as a job of the queue; isQueued cannot be false')
         api_list.append({
             'name': name,
             'kind': declared['kind'],
             'execution': declared['execution'],
+            'callerKindList': caller_kind_list,
+            'isQueued': declared['isQueued'],
             'description': declared['description'],
             'paramList': [_param_normalize(item, f'{place} param {index}') for index, item in enumerate(declared['params'])],
             'result': _result_normalize(declared['result'], f'{place} result'),
@@ -422,7 +542,7 @@ def openrpc_document_build(expose, info_extra):
     (x-templateId, x-serviceId, ...).
 
     The exposure keeps the project's own names (paramList, isRequired, kind,
-    execution); this is the same information in the standard form, for
+    execution, callerKindList, isQueued); this is the same information in the standard form, for
     tools that read OpenRPC.
     """
     method_list = []
@@ -439,6 +559,8 @@ def openrpc_document_build(expose, info_extra):
             'paramStructure': 'by-name',
             'x-kind': item['kind'],
             'x-execution': item['execution'],
+            'x-callerKindList': item['callerKindList'],
+            'x-isQueued': item['isQueued'],
         })
     return {
         'openrpc': '1.3.2',

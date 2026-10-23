@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Plus, Trash2 } from '../../main/frontend/UICommon.js';
 import { EditActions } from '../../main/comp-doc/edit/EditActions.jsx';
 import { EditFloatingPanel } from '../../main/comp-doc/edit/EditFloatingPanel.jsx';
 import { EditValueInline } from '../../main/comp-doc/edit/EditValueInline.jsx';
 import { StockTableView } from './StockTable.jsx';
-import { markdownTableBuild, stockTextList } from './StockTableData.js';
+import { markdownTableBuild, pasteRowListParse, stockTextList } from './StockTableData.js';
 import { StockTableEditStore } from './StockTableEditStore.js';
 import './StockTableEdit.css';
 
@@ -26,6 +26,13 @@ import './StockTableEdit.css';
 //   editDraftChange { raw, props }
 //   editSubmitRequest
 //   editCancelRequest
+//
+// a text pasted into the table while it is edited (the page's paste
+// dialog, "Into StockTable": pasteRequest { text }, received through
+// config.edit.receiverSet) becomes rows added at the end: one per line, the
+// cells separated by tabs or written as a markdown table row. a text that
+// is not rows, or a row with more cells than the table has columns, is
+// refused with the reason, and the dialog stays open.
 export const StockTableEdit = observer(function StockTableEdit({ data = {}, config = {}, onEvent }) {
   const [store] = useState(() => new StockTableEditStore(data));
   const session = config.edit?.session ?? {};
@@ -40,6 +47,20 @@ export const StockTableEdit = observer(function StockTableEdit({ data = {}, conf
       props: { title: store.title },
     });
   };
+  const receiverSet = config.edit?.receiverSet;
+  useEffect(() => {
+    if (typeof receiverSet !== 'function') return undefined;
+    return receiverSet((event) => {
+      if (event.type !== 'pasteRequest') return { code: -1, message: `StockTable does not take ${event.type}` };
+      const result = pasteRowListParse(event.data.text, store.headers.length);
+      if (result.code !== 0) return result;
+      draftChange(() => store.rowListAppend(result.data.rows));
+      return { code: 0, message: '' };
+    }, { typeList: ['pasteRequest'] });
+    // draftChange reads the store, which lives as long as the editor
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [receiverSet, store]);
+
   const cancel = () => {
     if (isLocked) return;
     void onEvent?.('editCancelRequest');
@@ -78,8 +99,10 @@ export const StockTableEdit = observer(function StockTableEdit({ data = {}, conf
     <>
       <StockTableView
         title={store.title}
-        headers={store.headers}
-        rows={store.rows}
+        // copies read in this observer, so a row or a cell added to the
+        // store renders (the view is a plain component)
+        headers={[...store.headers]}
+        rows={store.rows.map((cells) => [...cells])}
         titleRender={(title) => (
           <EditValueInline
             value={title}

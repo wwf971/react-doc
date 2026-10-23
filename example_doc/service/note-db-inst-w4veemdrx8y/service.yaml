@@ -6,7 +6,7 @@ timeCreated: 20261024_04333560+09
 template:
   templateId: w4wp4t0czko
   name: note-db
-  versionId: w4wp4t0yp9u
+  versionId: w4zemzv9vyq
 config:
   databaseFile: notes.sqlite
   titleLengthMax: 60

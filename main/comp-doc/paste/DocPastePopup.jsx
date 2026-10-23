@@ -14,7 +14,7 @@ import './DocPaste.css';
 // is kept for its next opening (DocPanelLayoutStore)
 const panelLayoutOption = { isMovable: true, isResizable: true, isSizeRemembered: true };
 
-// The review of a paste (doc_page_impl_copy_paste.md#the-review-dialog),
+// The review of a paste (doc_page_impl_block_ops.md#the-review-dialog),
 // open while DocPasteStore.review is set. The frame is the host's text panel
 // component (config.compConfigHost.panelComponent), as for the asset panel.
 //
@@ -67,36 +67,31 @@ export const DocPastePopup = observer(function DocPastePopup() {
     return transform?.label || id;
   });
   const insertDisabledReason = pasteStore.insertDisabledReason;
+  const isInPlace = review.target === 'inPlace';
+  const inPlaceLabel = pasteStore.inPlaceLabel || 'the component';
+  const isTargetSwitchShown = isInPlace || pasteStore.inPlaceIsAvailable;
+  const statusText = isSubmitting ? '' : (review.message || insertDisabledReason);
 
   return (
     <Panel
-      data={{ title: 'Paste as blocks' }}
+      data={{ title: isInPlace ? `Paste into ${inPlaceLabel}` : 'Paste as blocks' }}
       config={{
         isPopup: true,
         isCloseVisible: true,
         ...panelLayout.config,
-        className: 'doc-paste-popup',
+        // doc-edit-popup: a pointer going down in the dialog does not leave
+        // the session of the component a paste in place goes into
+        className: 'doc-paste-popup doc-edit-popup',
         bodyClassName: 'doc-paste-popup-body',
       }}
       content={(
         <div className="doc-paste-popup-content">
           <div className="doc-paste-popup-main">
-            <section className="doc-paste-popup-blocks" aria-label="The blocks to insert">
-              <div className="doc-paste-popup-section-head">
-                <span className="doc-paste-popup-section-title">Blocks ({result.blockList.length})</span>
-                <button
-                  type="button"
-                  className="doc-paste-popup-source-toggle"
-                  aria-expanded={review.isSourceOpen}
-                  onClick={() => pasteStore.sourceToggle()}
-                >
-                  {review.isSourceOpen
-                    ? <ChevronDown aria-hidden="true" size={12} strokeWidth={2} />
-                    : <ChevronRight aria-hidden="true" size={12} strokeWidth={2} />}
-                  <span>Pasted text</span>
-                </button>
-              </div>
-              {review.isSourceOpen ? (
+            {isInPlace ? (
+              <section className="doc-paste-popup-blocks" aria-label="The text to paste">
+                <div className="doc-paste-popup-section-head">
+                  <span className="doc-paste-popup-section-title">Pasted text</span>
+                </div>
                 <EditSourceSurface
                   className="doc-paste-popup-source"
                   text={review.text}
@@ -107,66 +102,132 @@ export const DocPastePopup = observer(function DocPastePopup() {
                   onSubmitRequest={() => void pasteStore.insertApply()}
                   onCancelRequest={() => pasteStore.close()}
                 />
+              </section>
+            ) : (
+              <section className="doc-paste-popup-blocks" aria-label="The blocks to insert">
+                <div className="doc-paste-popup-section-head">
+                  <span className="doc-paste-popup-section-title">Blocks ({result.blockList.length})</span>
+                  <button
+                    type="button"
+                    className="doc-paste-popup-source-toggle"
+                    aria-expanded={review.isSourceOpen}
+                    onClick={() => pasteStore.sourceToggle()}
+                  >
+                    {review.isSourceOpen
+                      ? <ChevronDown aria-hidden="true" size={12} strokeWidth={2} />
+                      : <ChevronRight aria-hidden="true" size={12} strokeWidth={2} />}
+                    <span>Pasted text</span>
+                  </button>
+                </div>
+                {review.isSourceOpen ? (
+                  <EditSourceSurface
+                    className="doc-paste-popup-source"
+                    text={review.text}
+                    textVersion={review.textVersion}
+                    isLocked={isSubmitting}
+                    ariaLabel="Pasted text"
+                    onTextChange={(text) => pasteStore.textSet(text)}
+                    onSubmitRequest={() => void pasteStore.insertApply()}
+                    onCancelRequest={() => pasteStore.close()}
+                  />
+                ) : null}
+                {transformLabelList.length > 0 ? (
+                  <p className="doc-note">Changed by: {transformLabelList.join(', ')}</p>
+                ) : null}
+                {result.messageList.map((message) => (
+                  <p key={message} className="doc-note" data-error={result.isError ? '' : undefined} role={result.isError ? 'alert' : undefined}>
+                    {message}
+                  </p>
+                ))}
+                {blockListShown.length > 0 ? (
+                  <BlockListReview
+                    blockList={blockListShown}
+                    isRenderedById={review.isRenderedById}
+                    format={pasteStore.placeFormat}
+                    sourcePath={docPath}
+                    onRenderToggle={(blockId) => pasteStore.blockRenderedToggle(blockId)}
+                  />
+                ) : result.isError ? null : (
+                  <p className="doc-note">Paste Markdown or MDX into the pasted text to see its blocks.</p>
+                )}
+              </section>
+            )}
+            <section className="doc-paste-popup-place" aria-label={isInPlace ? 'Where the text goes' : 'Where the blocks go'}>
+              {isTargetSwitchShown ? (
+                <div className="doc-paste-popup-target" role="group" aria-label="Paste as">
+                  <button
+                    type="button"
+                    className="doc-button-dialog"
+                    aria-pressed={isInPlace}
+                    disabled={isSubmitting || !pasteStore.inPlaceIsAvailable}
+                    title={`The ${inPlaceLabel} being edited takes the text into its draft`}
+                    onClick={() => pasteStore.targetSet('inPlace')}
+                  >
+                    Into {inPlaceLabel}
+                  </button>
+                  <button
+                    type="button"
+                    className="doc-button-dialog"
+                    aria-pressed={!isInPlace}
+                    disabled={isSubmitting}
+                    title="The text becomes blocks of a document"
+                    onClick={() => pasteStore.targetSet('blocks')}
+                  >
+                    As blocks
+                  </button>
+                </div>
               ) : null}
-              {transformLabelList.length > 0 ? (
-                <p className="doc-paste-popup-note">Changed by: {transformLabelList.join(', ')}</p>
-              ) : null}
-              {result.messageList.map((message) => (
-                <p key={message} className="doc-paste-popup-note" data-error={result.isError ? '' : undefined} role={result.isError ? 'alert' : undefined}>
-                  {message}
-                </p>
-              ))}
-              {blockListShown.length > 0 ? (
-                <BlockListReview
-                  blockList={blockListShown}
-                  isRenderedById={review.isRenderedById}
-                  format={pasteStore.placeFormat}
-                  sourcePath={docPath}
-                  onRenderToggle={(blockId) => pasteStore.blockRenderedToggle(blockId)}
-                />
-              ) : result.isError ? null : (
-                <p className="doc-paste-popup-note">Paste Markdown or MDX into the pasted text to see its blocks.</p>
-              )}
-            </section>
-            <section className="doc-paste-popup-place" aria-label="Where the blocks go">
               <div className="doc-paste-popup-section-head">
-                <span className="doc-paste-popup-section-title">Insert into</span>
+                <span className="doc-paste-popup-section-title">{isInPlace ? 'Into' : 'Insert into'}</span>
               </div>
-              <BlockPlacePicker
-                docPath={docPath}
-                docMessage={review.placeMessage}
-                nodeList={nodeList}
-                place={review.place}
-                placeText={placeBlockList ? blockPlaceTextGet(review.place, placeBlockList) : ''}
-                positionReasonGet={(position) => pasteStore.placePositionReasonGet(position)}
-                isLocked={isSubmitting}
-                onDocCommit={(path) => void pasteStore.placeDocSet(path)}
-                onNodeSelect={(nodeId) => pasteStore.placeNodeSet(nodeId)}
-                onPositionSelect={(position) => pasteStore.placePositionSet(position)}
-              />
+              {isInPlace ? (
+                <p className="doc-note">
+                  The text goes to the {inPlaceLabel} being edited. It decides what to do with it: it takes
+                  the text into its draft (saved when its editing ends), or refuses with the reason, and
+                  this dialog stays open.
+                </p>
+              ) : (
+                <BlockPlacePicker
+                  docPath={docPath}
+                  docMessage={review.placeMessage}
+                  nodeList={nodeList}
+                  place={review.place}
+                  placeText={placeBlockList ? blockPlaceTextGet(review.place, placeBlockList) : ''}
+                  positionReasonGet={(position) => pasteStore.placePositionReasonGet(position)}
+                  isLocked={isSubmitting}
+                  onDocCommit={(path) => void pasteStore.placeDocSet(path)}
+                  onNodeSelect={(nodeId) => pasteStore.placeNodeSet(nodeId)}
+                  onPositionSelect={(position) => pasteStore.placePositionSet(position)}
+                />
+              )}
             </section>
           </div>
           <div className="doc-paste-popup-footer">
-            <p className="doc-paste-popup-status" role={review.status === 'error' ? 'alert' : 'status'} data-error={review.status === 'error' ? '' : undefined}>
+            <p
+              className="doc-status doc-paste-popup-status"
+              role={review.status === 'error' ? 'alert' : 'status'}
+              data-error={review.status === 'error' ? '' : undefined}
+              title={statusText || undefined}
+            >
               {isSubmitting ? (
                 <>
-                  <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-edit-spin" />
-                  <span>Inserting…</span>
+                  <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-spin" />
+                  <span>{isInPlace ? 'Pasting…' : 'Inserting…'}</span>
                 </>
-              ) : (review.message || insertDisabledReason)}
+              ) : statusText}
             </p>
-            <button type="button" className="doc-paste-popup-button" disabled={isSubmitting} onClick={() => pasteStore.close()}>
+            <button type="button" className="doc-button-dialog doc-paste-popup-button" disabled={isSubmitting} onClick={() => pasteStore.close()}>
               Cancel
             </button>
             <button
               type="button"
-              className="doc-paste-popup-button"
+              className="doc-button-dialog doc-paste-popup-button"
               data-primary=""
               disabled={insertDisabledReason !== ''}
               title={insertDisabledReason || undefined}
               onClick={() => void pasteStore.insertApply()}
             >
-              Insert
+              {isInPlace ? `Paste into ${inPlaceLabel}` : 'Insert'}
             </button>
           </div>
         </div>

@@ -35,7 +35,7 @@ import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
 // every editor edits the block in its place and floats its controls
 // (doc_page_impl_edit.md#no-jitter-rule). it receives config.edit =
 // { session, block, format, sourcePath, label, modeId, viewRendered,
-// isSurfaceFloating, submitPrepareSet } and reports through events (editDraftChange,
+// isSurfaceFloating, submitPrepareSet, receiverSet } and reports through events (editDraftChange,
 // editTextSetRequest, editSubmitRequest, editCancelRequest,
 // editFocusShiftRequest); the event layer routes them to
 // DocEditStore.eventHandle. the session draft is what a leave saves, so an
@@ -43,7 +43,10 @@ import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
 // component's own editor as { raw, props }, rebuilt into the block text by
 // the store. an editor whose draft is not complete until it acts (an open
 // cell editor) registers that act with submitPrepareSet(handler); every
-// save awaits it first (DocEditStore.sessionSubmitPrepareSet).
+// save awaits it first (DocEditStore.sessionSubmitPrepareSet). an editor
+// that takes events from the page (a text pasted into it: pasteRequest)
+// registers a receiver with receiverSet(handler, { typeList }) and answers
+// each event { code: 0 } or { code: -1, message } (sessionReceiverSet).
 //
 //   block         the block of a block session
 //   viewRendered  the block as the body rendered it, for editors that keep a
@@ -68,6 +71,7 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
       // the frontmatter and the whole file are not blocks of the body
       isSurfaceFloating: session.type === 'frontmatter' || session.type === 'document',
       submitPrepareSet: (handler) => editStore.sessionSubmitPrepareSet(session, handler),
+      receiverSet: (handler, option) => editStore.sessionReceiverSet(session, handler, option),
     },
   };
 

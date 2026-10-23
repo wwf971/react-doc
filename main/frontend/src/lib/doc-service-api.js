@@ -1,11 +1,12 @@
 // The client of the service backend in the browser (design:
-// doc_page_impl_service_instance.md#backend-api). The page reaches the
+// doc_page_impl_service.md#backend-api). The page reaches the
 // backend through the development server, which forwards {endpoint}/* to
 // it unchanged (plugin/doc-service-server.ts). Every call answers
 // { code, data, message }:
 //
 //    0  success
 //   -1  bad request, or the api failed (its message says why)
+//   -2  the caller may not call the api (an api answered to services only)
 //   -3  the template, instance, api or job is not found
 //   -4  the instance is not ready (disabled, its config or its script failed)
 //   -5  the backend cannot be reached (answered by the plugin, or here when
@@ -20,12 +21,17 @@
 //                                               status, message, folder, dirName, expose, dashboardBuild,
 //                                               queueLength, apiRunning }]
 //   instanceCreate({ templateId, name, description, config })   the instance created from the template
-//   apiCall(serviceId, api, params)          a sync api: its result; an async api: its job
-//   jobGet(serviceId, jobId)                 { jobId, api, status, progress, progressMessage, result, ... }
+//   apiCall(target, api, params, dashboardServiceId)
+//                                            a sync api: its result; an async api: its job. target is
+//                                            { serviceId } or { templateId, versionId? }; dashboardServiceId
+//                                            the instance whose dashboard asks ('' for none)
+//   instanceResolve(target, dashboardServiceId)  the instance a call of target goes to, as listed
+//   jobGet(serviceId, jobId)                 { serviceId, jobId, api, status, progress, progressMessage, result, ... }
 //   templateIconUrlGet(templateId)           the url of a template's icon
 //   instanceIconUrlGet(serviceId)            the url of an instance's icon (its own copy)
 //   dashboardEntryUrlGet(serviceId, entry)   the url of the remote entry of an instance's dashboards
 
+export const SERVICE_CODE_NOT_ALLOWED = -2;
 export const SERVICE_CODE_NOT_FOUND = -3;
 export const SERVICE_CODE_NOT_READY = -4;
 export const SERVICE_CODE_BACKEND_DOWN = -5;
@@ -58,7 +64,14 @@ export function serviceBackendApiCreate(endpoint) {
     templateVersionNew: (templateId, note) => requestPost('/template/version/new', { templateId, note }),
     instanceList: () => requestSend('/instance/list'),
     instanceCreate: ({ templateId, name, description, config }) => requestPost('/instance/create', { templateId, name, description, config }),
-    apiCall: (serviceId, api, params) => requestPost('/api/call', { serviceId, api, params: params ?? {} }),
+    apiCall: (target, api, params, dashboardServiceId) => requestPost('/api/call', { target, api, params: params ?? {}, dashboardServiceId }),
+    instanceResolve: (target, dashboardServiceId) => {
+      const queryText = Object.entries({ ...target, dashboardServiceId })
+        .filter(([, value]) => value)
+        .map(([key, value]) => `${key}=${query(value)}`)
+        .join('&');
+      return requestSend(`/instance/resolve?${queryText}`);
+    },
     jobGet: (serviceId, jobId) => requestSend(`/job/get?serviceId=${query(serviceId)}&jobId=${query(jobId)}`),
     templateIconUrlGet: (templateId) => `${endpointNormalized}/template/icon/${query(templateId)}`,
     instanceIconUrlGet: (serviceId) => `${endpointNormalized}/instance/icon/${query(serviceId)}`,

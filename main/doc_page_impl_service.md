@@ -17,7 +17,7 @@ A service exists in two forms, modeled as two different things:
 - A **service template** is the initial state of a service: a folder with a script (`service.py`, a Python class with the apis), the dashboards (a federated module), an icon, and the initial config, and no data. A template is listed, never run. It plays the part of a project scaffold, not of a class: it is what an instance is created from, not what keeps defining it.
 - A **service instance** is a running service: a folder of its own holding a **copy** of everything its template held when it was created, its config, and its data. It is run by the **service backend**, a program of its own (`main/service-backend/server.py`) that the page reaches through the development server. **An instance is always created from a template**, records which one, and never reads the template again.
 
-The backend and the page work alone: the backend answers any http client without the page, and the page without the backend shows in every dashboard that the backend is down.
+The backend and the page work alone: the backend answers any http client without the page, and the page without the backend shows in every dashboard that the backend is down. Services also use one another: a connection to an outside system or an authentication provider is an instance that other instances, and the dashboards of any instance, call by its id or by its template ([Calls between services](#calls-between-services)).
 
 ```text
 browser                                    development server (vite)        service backend (python)
@@ -28,8 +28,10 @@ DocServiceStore                            plugin/doc-service-server.ts     serv
   │    federation container (shared react)   { code: -5 } (http 503)
   ├─ eventHandle (route "service")
   │    serviceApiCallRequest ── POST ─────────────────────────────────────► /api/call ──► the instance's queue
-  │    serviceJobGetRequest                                                 /job/get        one worker thread:
-  │    serviceBindRequest ─┐                                                                one api at a time
+  │      (its own instance, or a target)                                    /job/get        one worker thread:
+  │    serviceJobGetRequest, serviceResolveRequest                          /instance/resolve  one api at a time
+  │    serviceBindRequest ─┐                                                     ▲
+  │                        │                       another instance: context.service_call (the same path)
   │    dashboardStateSetRequest ─► DocAssetStore.objectUpdate (in place)
   └─ dashboardProblemGet: why a dashboard cannot show
 
@@ -64,7 +66,7 @@ python3 main/service-backend/server.py --config example_doc/service-backend.yaml
 
 `ServiceRuntime` (`service_runtime.py`) finds the templates and the instances, creates instances, and runs the apis. **`scan()` is cheap and runs on every listing**: the `service.py` of every folder, template or instance, is a `ServiceScript` loaded again when the file changed (by mtime, through `importlib`, into a module named after its folder, so two folders never share a module); a template is read again when its `service-template.yaml` changed; an instance is restarted when its folder, its `service.yaml`, or its own `service.py` changed (its signature), and a folder that is gone stops its instance. A folder added, removed, or edited by hand is therefore seen at the next listing, without restarting the backend. A template is only read: its script is loaded for what it exposes (shown in the Services tab, checked before an instance is created from it), and nothing of it runs.
 
-**One request at a time per instance.** Every running instance has one worker thread and one queue. The thread creates the class of the instance's own script with the instance's context, calls `start()`, then takes the calls in the order they came; a call waits behind the ones before it, whatever its kind. An implementation never sees two calls at once and may keep a connection (sqlite) as a plain attribute. A sync call is answered when its api is done, queue included, or after `apiWaitSecondMax` with code -6 (the call stays queued and still runs); an async call is answered at once with its job, which runs in the same queue. Stopping puts a sentinel in the queue: the call being run finishes, the ones still waiting are answered -4.
+**One request at a time per instance.** Every running instance has one worker thread and one queue. The thread creates the class of the instance's own script with the instance's context, calls `start()`, then takes the calls in the order they came; a call waits behind the ones before it, whatever its kind and whoever sent it (the page or another instance). An implementation never sees two calls at once and may keep a connection (sqlite) as a plain attribute. An api declared `isQueued=False` is the one exception: it runs at once in the caller's thread and guards its own state ([What an api says about its callers](#what-an-api-says-about-its-callers)). A sync call is answered when its api is done, queue included, or after `apiWaitSecondMax` with code -6 (the call stays queued and still runs); an async call is answered at once with its job, which runs in the same queue. Stopping puts a sentinel in the queue: the call being run finishes, the ones still waiting are answered -4.
 
 | instance status | meaning |
 | --- | --- |
@@ -147,12 +149,13 @@ A built dashboard module (`dashboard/dist/`) is copied with the rest, so an inst
 
 ### Backend api
 
-Every answer is `{ code, data?, message? }` with an http status that follows the code: 0 → 200, -1 → 400, -3 → 404, -4 → 409, -6 → 504. The development server adds -5 (503) when it cannot reach the backend ([The Vite plugin](#the-vite-plugin)).
+Every answer is `{ code, data?, message? }` with an http status that follows the code: 0 → 200, -1 → 400, -2 → 403, -3 → 404, -4 → 409, -6 → 504. The development server adds -5 (503) when it cannot reach the backend ([The Vite plugin](#the-vite-plugin)).
 
 | code | meaning |
 | --- | --- |
 | 0 | done |
 | -1 | bad request, or the api failed (an exception: its type and message) |
+| -2 | the caller may not call it: an api answered to services only, or a service refusing its caller |
 | -3 | not found: the template, the instance, the api, the job |
 | -4 | the instance is not ready (starting failed, disabled, stopped) |
 | -5 | the backend cannot be reached (the development server's answer) |
@@ -173,14 +176,17 @@ GET  /instance/list                           [{ serviceId, name, description, i
                                                  message, folder, dirName, expose, dashboardBuild,
                                                  queueLength, apiRunning }]                       (scans)
 GET  /instance/get?serviceId=
+GET  /instance/resolve?serviceId= | templateId=&versionId=  [&dashboardServiceId=]
+                                              the instance a call of that target goes to (Targets)
 GET  /instance/openrpc?serviceId=             the apis of the instance's own script as an OpenRPC document
 GET  /instance/icon/{serviceId}               the instance's own icon
 GET  /instance/dashboard/{serviceId}/{path}   a file of the instance's dashboardRemote.dir (no path outside it)
 POST /instance/create  { templateId, name, description?, config? }   a copy of the template (Creating an
                                                 instance); the answer is the new instance
-POST /api/call         { serviceId, api, params }                sync: { code: 0, data: what the api returned }
-                                                                 async: { code: 0, data: job }
-GET  /job/get?serviceId=&jobId=               job: { jobId, api, status: queued | running | done, progress (0..1),
+POST /api/call         { target, api, params, dashboardServiceId? }   sync: { code: 0, data: what the api returned }
+                       target: { serviceId } | { templateId, versionId? };   async: { code: 0, data: job }
+                       { serviceId, api, params } is the short form of target { serviceId }
+GET  /job/get?serviceId=&jobId=               job: { serviceId, jobId, api, status: queued | running | done, progress (0..1),
                                                 progressMessage, timeQueued, timeStarted, timeDone,
                                                 result: the call's own { code, data, message } once done }
 ```
@@ -223,16 +229,118 @@ class NoteDb(Service):
 SERVICE_CLASS = NoteDb
 ```
 
-The object of the class is given a `ServiceContext`: `service_id`, `name`, `dir_path` (the instance's folder: its script and its data), `template` (the record of `service.yaml`, for information), `config`, `path_get(name)` and `job_progress_set(fraction, message)`.
+The object of the class is given a `ServiceContext`: `service_id`, `name`, `dir_path` (the instance's folder: its script and its data), `template` (the record of `service.yaml`, for information), `config`, `path_get(name)` and `job_progress_set(fraction, message)`; and for the calls between instances, `caller` (who calls the api being run) and `service_call`, `service_resolve`, `service_job_get` ([Calls between services](#calls-between-services)).
 
 - **`meta`**: `label` is required; `description`, `author`, `version` (the script's own version for people, default `0.0.0`; not the template's version id), `license`, `homepage`, `icon` (a file of the folder, served at `/template/icon/{templateId}` and `/instance/icon/{serviceId}`), and `tagList` are optional. Other keys are kept.
 - **`configDefineList`**: the shape of an instance's `config`, `[{ key, type: string | integer | number | boolean, default, description }]`. The backend fills the defaults and checks the types of every instance's config and of every template's initial config.
-- **apis**: the methods marked `@api(kind, execution, description, params, result)`. They are not listed in `expose`; the decorator is the declaration, next to the code, and `apiList` is built from it (a script that writes `apiList` in `expose` fails to load). The method name is the api name on the wire, so api methods are camelCase like every other name the page sees. `kind` is `query` (reads the state) or `command` (changes it); `execution` is `sync` (answered when done) or `async` (answered with a job; the api reports progress with `self.context.job_progress_set(fraction, message)`). `param(name, type, description, default, isRequired, schema)` and `returns(type, description, schema)` use the type names of JSON Schema (`string`, `integer`, `number`, `boolean`, `object`, `array`, `null`) plus `any`; a parameter without a default is required. The backend checks every call against them (an unknown parameter, a missing required one, a value of the wrong type: -1) before the call is queued. An api refuses with `raise ServiceError(code, message)`; any other exception is -1 with its type and message, and a result that is not JSON is a failure of the api.
+- **apis**: the methods marked `@api(kind, execution, description, params, result)`. They are not listed in `expose`; the decorator is the declaration, next to the code, and `apiList` is built from it (a script that writes `apiList` in `expose` fails to load). The method name is the api name on the wire, so api methods are camelCase like every other name the page sees. `kind` is `query` (reads the state) or `command` (changes it); `execution` is `sync` (answered when done) or `async` (answered with a job; the api reports progress with `self.context.job_progress_set(fraction, message)`); `callerKindList` (who may call it: `page`, `service`) and `isQueued` (whether it waits in the queue) are for the calls between services ([What an api says about its callers](#what-an-api-says-about-its-callers)). `param(name, type, description, default, isRequired, schema)` and `returns(type, description, schema)` use the type names of JSON Schema (`string`, `integer`, `number`, `boolean`, `object`, `array`, `null`) plus `any`; a parameter without a default is required. The backend checks every call against them (an unknown parameter, a missing required one, a value of the wrong type: -1) before the call is queued. An api refuses with `raise ServiceError(code, message)`; any other exception is -1 with its type and message, and a result that is not JSON is a failure of the api.
 - **`dashboardList`**: the dashboards, keyed by `id` (a lowercase letter, then letters, digits, `-`), each `{ id, purpose, label, description, export, heightMin }`. `purpose` is `default` (what a document shows when it places the service), `config` (the instance's settings, shown in the [Services tab](#the-services-tab)), or `other`; **a script has exactly one dashboard of purpose `default` and one of purpose `config`**, and any number of others. `export` names the dashboard's export in the module, `heightMin` (a css length) is the room the frame keeps for it while it loads.
 - **`dashboardRemote`**: where the federated module of the dashboards is: `dir` (inside the folder), `entry`, `container` (the federation name), `module` (the exposed module). Whether it is built is read on every listing (`dashboardBuild { isBuilt, timeBuilt }`, the mtime of the entry), since dashboards are built while the backend runs.
 - **anything else** a script wants to expose is kept as written under its own key (`sqliteTableList`): the page shows it nowhere, a tool or a dashboard may read it from the `expose` of the instance.
 
-The normalized `apiList` keeps the project's names (`paramList`, `isRequired`, `kind`, `execution`), the same way component exposures do. The same information in a standard form is **OpenRPC** 1.3.2 (`GET /instance/openrpc?serviceId=`, `GET /template/openrpc?templateId=`, `openrpc_document_build`): one method per api, `params` by name with their JSON Schema, `result`, the two properties OpenRPC has no field for as extensions, `x-kind` and `x-execution`, and whose script it is in `info` (`x-serviceId`, `x-templateId`, `x-templateName`, `x-templateVersionId`). A client that speaks OpenRPC reads an instance's apis from there; the page reads the exposure.
+The normalized `apiList` keeps the project's names (`paramList`, `isRequired`, `kind`, `execution`, `callerKindList`, `isQueued`), the same way component exposures do. The same information in a standard form is **OpenRPC** 1.3.2 (`GET /instance/openrpc?serviceId=`, `GET /template/openrpc?templateId=`, `openrpc_document_build`): one method per api, `params` by name with their JSON Schema, `result`, the properties OpenRPC has no field for as extensions, `x-kind`, `x-execution`, `x-callerKindList` and `x-isQueued`, and whose script it is in `info` (`x-serviceId`, `x-templateId`, `x-templateName`, `x-templateVersionId`). A client that speaks OpenRPC reads an instance's apis from there; the page reads the exposure.
+
+## Calls between services
+
+Some services exist to serve others. A **connection** (`aws-connection`, `postgres-connection`, `google-drive`) holds the sign-in and the secrets of an outside system, and the services allowed to use it get what they need through it without holding a secret of their own; an **authentication provider** (`cognito-auth`) verifies the users of an application for the services that serve them. Instances call one another, and a dashboard may call any instance, not only its own. Every call, whoever sends it, names a **target** and is made by a **caller**:
+
+```text
+caller: who calls, set by the backend               target: what the call names            the instance that answers
+  page      an http request (POST /api/call),          { serviceId }               ──►  that instance
+            + dashboardServiceId: whose dashboard      { templateId }              ──►  an instance created from that template,
+  service   an instance: self.context.service_call     { templateId, versionId }  ──►  (at that version), never the caller itself
+```
+
+### Targets
+
+A target names either one instance or any instance of a template:
+
+| target | the instance that answers |
+| --- | --- |
+| `{ serviceId }` | that instance, whatever its state (one not ready answers -4) |
+| `{ templateId }` | an instance that recorded that template when it was created |
+| `{ templateId, versionId }` | an instance created from that template at that version |
+
+A template target is matched against what every instance recorded in its `service.yaml`, like a dashboard's template name ([Dashboards in the registry](#dashboards-in-the-registry)), so it keeps working when the template folder is renamed or gone. **The caller itself is never chosen**, neither the calling instance nor the instance whose dashboard asks: asking for "an instance of the template" is asking for another one. Among the candidates a `ready` one comes first, then the oldest (by id), so the same instance answers while nothing changes; when none is ready the first is still chosen, so the call fails with its reason (-4), and when there is none the call is -3. A service that must use one particular instance among several keeps its id in its config (`noteServiceId: ''`, empty meaning "by template"), and the reader chooses it there.
+
+### The caller
+
+The backend sets the caller; a request never says who it is:
+
+- **`page`**: every http request, from the page through the development server or from any other http client. The page adds `dashboardServiceId`, the instance whose dashboard asks; it is kept, not verified (every dashboard runs in the one page).
+- **`service`**: a call made by an instance with `self.context.service_call`; its `service_id` is that instance's.
+
+The callee reads it as `self.context.caller` (`kind`, `service_id`, `dashboard_service_id`) while its api runs: a connection answers the consumers it allows by the id the backend gives, never by an id in the params. `caller` is `None` outside an api (`start()`, a thread of the service's own).
+
+### From a service
+
+```python
+class NoteDb(Service):
+    @api(kind='command', params=[param('sourceServiceId', 'string', '…', default='')], …)
+    def noteImport(self, sourceServiceId=''):
+        target = {'serviceId': sourceServiceId} if sourceServiceId else {'templateId': self.context.template['templateId']}
+        source = self.context.service_resolve(target)                  # the instance, as listed: { serviceId, name, … }
+        note_list = self.context.service_call({'serviceId': source['serviceId']}, 'noteList', {'limit': 50})['noteList']
+        …
+
+credentials = self.context.service_call({'templateId': 'w4wsn192rpt'}, 'credentialsGet')     # aws-connection
+job = self.context.service_call(target, 'reindex')                       # an async api: its job
+self.context.service_job_get(job['serviceId'], job['jobId'])
+```
+
+`service_call` answers what a sync api returned, or the job of an async one, and raises `ServiceError` with the call's own code and message when it fails; an api that lets it raise fails with them. A call between instances takes the same path as a call of the page, `api_call` in `service_runtime.py`:
+
+```text
+api_call(target, api, params, caller)
+  -> target_resolve(target, caller)            the instance; -1 a bad target, -3 none
+  -> not ready: -4; no such api: -3
+  -> call_authorize(caller, instance, api)     -2 when refused (Authorization)
+  -> params checked against the api            -1
+  -> isQueued false: run now, in the caller's thread
+     else the instance is in the call's chain: -1 (its queue would wait for itself)
+     else queued: a sync call waits apiWaitSecondMax at most (-6), an async call answers its job
+```
+
+**Queues and cycles.** An api that calls another instance holds its own queue until the answer comes: the queue of A waits for B's. If the call came back (A → B → A, or A calling itself), A's queue would wait for itself until the call times out. The caller carries the chain of instances the call passed through, and a queued api of an instance already in it is refused at once (-1) instead.
+
+### What an api says about its callers
+
+Two options of `@api`, checked when the script is loaded like the others:
+
+- **`callerKindList`**: who may call it, `['page', 'service']` by default. `['service']` is an api for other instances only, never answered to the page, for what must not reach a browser: credentials, a verified user. A caller of another kind is refused with -2.
+- **`isQueued`**: `True` by default. `False` runs the api at once in the caller's thread (the http request's, or the calling instance's), beside whatever the queue runs: for an api many callers use and that must not wait behind a long one (a sign-in that waits for the user, a long statement). The method guards what it touches with locks; `context.caller` and the current job are per thread, so two calls running at once do not see each other's. An async api is always queued (it is a job of the queue), and an unqueued api is never refused as a cycle, since it waits for no queue.
+
+The example templates meant to serve others use them this way; each decides by itself which callers it serves (a consumer list kept in its own folder, managed in its config dashboard, where a refused caller is listed to be allowed with one click):
+
+| template | what it serves to other instances | how the caller is checked |
+| --- | --- | --- |
+| `aws-connection` | `credentialsGet`: services only, unqueued | its consumer list |
+| `postgres-connection` | `consumerCall(method, params)`: services only, unqueued (the statements run side by side on its pool) | its consumer list, with an access mode each |
+| `google-drive` | its file apis (`consumerApiList` in its exposure), queued | its consumer list, read-only or read-write each; the page only manages the connection |
+| `cognito-auth` | `principalResolve`, `principalRequire`: services only, unqueued | any service; the credential given is what is verified |
+
+### From a dashboard
+
+A dashboard calls as the page, through the same events as for its own instance ([Dashboard events](#dashboard-events)), and adds a target to name another one:
+
+```js
+// another instance of the template: which one, then its apis by id
+const peer = await onEvent('serviceResolveRequest', { target: { templateId } });
+const stat = await onEvent('serviceApiCallRequest', { api: 'statGet', params: {}, target: { serviceId: peer.data.serviceId } });
+// a job belongs to the instance that runs it
+await onEvent('serviceJobGetRequest', { jobId: job.jobId, serviceId: job.serviceId });
+```
+
+The page sends the dashboard's instance as `dashboardServiceId`, so a template target never resolves to it. An api answered to services only is refused to a dashboard (-2), whichever instance the dashboard belongs to: a dashboard that needs one asks its own instance, whose api makes the call as a service (the stat dashboard of `note-db` reads another instance itself, and asks its own instance's `noteImport` to copy from it).
+
+### Authorization
+
+What is checked today is what an api declares (`callerKindList`) and what a service checks by itself (the consumer lists of the connection templates). Every call, from the page and from instances alike, passes one function after its target is resolved and before it is queued, **`ServiceRuntime.call_authorize(caller, instance, api_define)`**, which answers -2 when it refuses; it is where a policy of the backend goes. **TODO**:
+
+- **A policy of the backend**: which caller may call which instance and api, kept in the backend config or declared by the callee's script and recorded per instance, so the consumer lists the templates keep by themselves become one mechanism, shown in one place of the Services tab.
+- **The end user behind a call**: a page request is the page, not a user. A credential (a session of `cognito-auth`) would be taken by the backend from the http request, never from params, and carried by the caller to every instance the call passes through, so a service can ask who the user is without being handed a session id by its caller.
+- **The dashboards' identity**: `dashboardServiceId` is a claim of the page; all dashboards share one page, so a dashboard calling as another cannot be told apart until the page signs what each dashboard sends.
+- **Resolution and jobs**: a target by template would skip the instances that refuse the caller, and a job would be read by its caller only (today, by anyone who knows its id).
 
 ## The Vite plugin
 
@@ -350,15 +458,16 @@ The frame wraps the dashboard's `onEvent`: every report carries `data.dashboard 
 
 | event | data | answer |
 | --- | --- | --- |
-| `serviceApiCallRequest` | `{ api, params }` | a sync api: the call's own result, `{ code: 0, data }` or its failure; an async api: `{ code: 0, data: job }` |
-| `serviceJobGetRequest` | `{ jobId }` | `{ code: 0, data: job }` (status, progress, the result once done) |
+| `serviceApiCallRequest` | `{ api, params, target? }` | a sync api: the call's own result, `{ code: 0, data }` or its failure; an async api: `{ code: 0, data: job }`. without `target`, the dashboard's own instance ([From a dashboard](#from-a-dashboard)) |
+| `serviceJobGetRequest` | `{ jobId, serviceId? }` | `{ code: 0, data: job }` (status, progress, the result once done); `serviceId` names the instance of a job that is not the dashboard's own (`job.serviceId`) |
+| `serviceResolveRequest` | `{ target }` | `{ code: 0, data: instance }`: the instance a call of the target goes to, as listed |
 | `dashboardStateSetRequest` | `{ state }` | the state written into the block's asset object, the instance kept |
 | `serviceBindRequest` | `{ serviceId }` | the block bound to the instance (reported by the frame), the state kept |
 | `serviceRefreshRequest` | | the backend asked again |
 
 ### Calling the apis
 
-**A dashboard calls the apis of its own instance and of no other**: a call goes to `data.dashboard.serviceId`, which the frame adds, so a dashboard cannot name another instance, and it never knows the url of the backend. The example's helpers (`note-db/dashboard/src/service-call.js`) show the whole contract in three functions:
+**A dashboard calls the apis of its own instance unless it names another**: a call without a target goes to `data.dashboard.serviceId`, which the frame adds, so a dashboard never names its own instance, and it never knows the url of the backend; a call with a target goes to the instance it names ([From a dashboard](#from-a-dashboard)). The example's helpers (`note-db/dashboard/src/service-call.js`) show the whole contract in a few functions:
 
 ```js
 const result = await onEvent('serviceApiCallRequest', { api: 'noteList', params: { query } });
@@ -366,7 +475,7 @@ if (result.code !== 0) { /* -1 failed, -3 no such api, -4 not ready, -5 backend 
 
 // an async api: the job, then the job asked for until it is done (serviceJobRun)
 const started = await onEvent('serviceApiCallRequest', { api: 'reindex', params: {} });
-const job = await onEvent('serviceJobGetRequest', { jobId: started.data.jobId });   // every 300 ms
+const job = await onEvent('serviceJobGetRequest', { jobId: started.data.jobId, serviceId: started.data.serviceId });   // every 300 ms
 // job.data.status === 'done' -> job.data.result is the call's own { code, data, message }
 
 await onEvent('dashboardStateSetRequest', { state: { ...data.state, query } });
@@ -374,7 +483,7 @@ await onEvent('dashboardStateSetRequest', { state: { ...data.state, query } });
 
 ### Dashboard conventions
 
-- **The frame owns the instance.** A dashboard never offers a choice of instance or reads one from its state; it shows the one in `config.service.serviceId`, and is mounted anew for another.
+- **The frame owns the instance.** A dashboard never offers a choice of its own instance or reads one from its state; it shows the one in `config.service.serviceId`, and is mounted anew for another. The other instances it uses are named by targets, by template unless the reader must choose one.
 - **Every call can fail.** A dashboard shows the message of a failed call where the call was asked for, keeps what it showed, and does not retry by itself; -5 needs no message of its own, the head already says it.
 - **Local state goes into `dashboardStateSetRequest`**, and only what should be there when the document is opened again; what the instance keeps is asked from the instance. A dashboard that cannot write (`config.state.isWritable` false) still works, without remembering.
 - **The ui follows the page's rules**: compact, contenteditable for text that switches to edit mode, confirmations in place (no browser dialogs), no layout jump while loading (`heightMin`).
@@ -428,7 +537,7 @@ In edit mode the insert menu has a row **Services**: every dashboard of every te
 
 ## Example and playground
 
-The example template is `note-db` (`example_doc/service-template/w4wp4t0czko--note-db/`): notes in a sqlite database of each instance's folder, with the dashboards `default` (list, search, add, edit in place, delete with an in-place confirmation; the search is the dashboard's state), `config` (the instance's config and the template it was created from, the database's numbers, a setting, and `reindex`, an async api slowed down to three seconds that shows the queue), and `stat`. Two instances created from it are part of the example (`example_doc/service/note-db-inst-*`, each with its own copy of the script and the dashboards; the ignore file of the folder keeps their files and ignores their databases, their builds, and every new instance). [Service Instances](../example_doc/service-instance.md) places four dashboards: two bound to the instances, one bound to an instance no folder holds, one of a template the backend does not have. Its asset objects are tracked, so using them changes them in place (`git restore example_doc/asset` undoes that).
+The example template is `note-db` (`example_doc/service-template/w4wp4t0czko--note-db/`): notes in a sqlite database of each instance's folder, with the dashboards `default` (list, search, add, edit in place, delete with an in-place confirmation; the search is the dashboard's state), `config` (the instance's config and the template it was created from, the database's numbers, a setting, and `reindex`, an async api slowed down to three seconds that shows the queue), and `stat`, which also shows the calls between services: it resolves another instance of the template, reads its numbers, and asks its own instance's `noteImport` to copy its notes, which calls the other instance as a service. The templates `aws-connection`, `google-drive`, `cognito-auth` and `postgres-connection` are services meant to serve others ([What an api says about its callers](#what-an-api-says-about-its-callers)); they need accounts of their own, and the example has no instance of them. Two instances created from it are part of the example (`example_doc/service/note-db-inst-*`, each with its own copy of the script and the dashboards; the ignore file of the folder keeps their files and ignores their databases, their builds, and every new instance). [Service Instances](../example_doc/service-instance.md) places four dashboards: two bound to the instances, one bound to an instance no folder holds, one of a template the backend does not have. Its asset objects are tracked, so using them changes them in place (`git restore example_doc/asset` undoes that).
 
 [Playground](../example_doc/playground/playground.md) is a document for trying things out, services and assets alike; its folder is ignored by git with everything in it, so the committed repository shows it as missing until it is created.
 
@@ -437,10 +546,11 @@ The example template is `note-db` (`example_doc/service-template/w4wp4t0czko--no
 ```text
 service-backend/server.py              the http server: routes, codes → http status, static files of an instance or a template, shutdown
 service-backend/service_runtime.py     ServiceRuntime: config, scan, ServiceScript (a folder's service.py, reloaded
-                                       by mtime), ServiceTemplate, ServiceInstance (worker thread + queue, jobs),
-                                       instance_create (the copy), template_version_new, api_call
-service-backend/service_define.py      Service, ServiceContext, ServiceError, @api, param, returns,
-                                       expose_build (normalize + check), call checking, OpenRPC
+                                       by mtime), ServiceTemplate, ServiceInstance (worker thread + queue, jobs,
+                                       unqueued calls), instance_create (the copy), template_version_new, api_call,
+                                       target_resolve, call_authorize (the authorization TODO)
+service-backend/service_define.py      Service, ServiceContext (caller, service_call), ServiceCaller, ServiceError,
+                                       @api, param, returns, expose_build (normalize + check), call checking, OpenRPC
 service-backend/service_util.py        ms48 ids, time text, names ({templateId}--{name}, {templateName}-inst-{serviceId}),
                                        yaml read / atomic write
 frontend/plugin/doc-service-server.ts  the service section of config.yaml, the forwarding middleware (-5 when down),
@@ -463,8 +573,9 @@ comp-doc/settings/ServiceSettings.jsx  the Services tab: backend line, the templ
                                        detail with its origin, config dashboard)
 comp-doc/edit/edit-template.js         the Services entries of the insert menu
 example_doc/service-backend.yaml       the example's backend config
-example_doc/service-template/          the example's template: w4wp4t0czko--note-db/ (service-template.yaml, service.py,
-                                       icon.svg, dashboard/ the federated module's project)
+example_doc/service-template/          the example's templates: w4wp4t0czko--note-db/ (service-template.yaml, service.py,
+                                       icon.svg, dashboard/ the federated module's project); the connections and
+                                       the authentication provider that serve other services
 example_doc/service/                   the example's instances: note-db-inst-{serviceId}/, each a copy of the template
 example_doc/service-instance.md        the demonstration document; playground/ the ignored playground
 ```
@@ -476,5 +587,7 @@ What the present model leaves for later, in the order it would matter:
 - **A rigorous origin.** An instance records its template by id, name, and version id, which a person can change or reuse. The record is meant to grow a **content hash** of the template files at the version (computed when a version is recorded, so the backend also notices files changed without a new version) and a **digital signature** of the template's author over it, so an instance can prove what it was created from, and a template from elsewhere can be trusted or refused.
 - **Comparing and updating from a template.** With the hash, the Services tab can say which files of an instance differ from its template's version, and from the template's current version; `Update from template` (copying chosen files again, the data kept) and `Recreate` would be explicit steps, never a template change reaching instances by itself. Where a newer script needs another shape of data, the update carries a migration of the instance's state.
 - **Templates from instances.** Saving an instance (its script and dashboards, not its data) as a new template, a fork with its own id and versions.
+- **Authorization of the calls.** A policy of the backend in `call_authorize`, the end user carried with a call, the dashboards' identity ([Authorization](#authorization)).
+- **Calls from any component.** Only dashboards send `serviceApiCallRequest`; a component of the registry that is not a dashboard could call an instance by a target too, as the page.
 - **Execution isolation.** Instances share one process today; a template could declare how its instances run (the shared process, a worker, a process of their own, outside the backend), for scripts that are not trusted or that need resources of their own.
 - **Backup of an instance.** An instance folder is complete, so a backup is a copy of it; a snapshot that names its template's version (and hash) with its config and data is what restoring needs, on another backend as well.

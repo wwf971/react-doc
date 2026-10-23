@@ -1,5 +1,5 @@
 // A place in a document where blocks go (design:
-// doc_page_impl_copy_paste.md#choosing-where-the-blocks-go), said as the
+// doc_page_impl_block_ops.md#choosing-where-the-blocks-go), said as the
 // author sees it in a tree of the document: next to a node, or inside it.
 //
 //   { docPath, nodeId, position }
@@ -90,6 +90,40 @@ export function blockPlaceNodeListBuild({ docLabel, blockList, labelGet, detailG
       kind: 'block',
     })),
   }];
+}
+
+// the tree of a place marked with the border the blocks go to, for a line
+// drawn between two rows (SourceTreeSelect insertMark): the chosen node
+// gets 'before' / 'after'; inside a node, its first child 'before'
+// (insideFirst) or its last child 'after' (insideLast). a node without
+// children, or a place a node does not take (isPlaceValid false), marks
+// nothing. the nodes are copied where marked; the others stay as they were.
+export function blockPlaceNodeListMark(nodeList, place, isPlaceValid = true) {
+  if (!isPlaceValid || !place?.nodeId) return nodeList;
+  const markOf = (node) => {
+    if (node.id !== place.nodeId) return undefined;
+    if (place.position === 'before' || place.position === 'after') return { id: node.id, mark: place.position };
+    const childList = node.childList ?? [];
+    if (childList.length === 0) return undefined;
+    return place.position === 'insideFirst'
+      ? { id: childList[0].id, mark: 'before' }
+      : { id: childList[childList.length - 1].id, mark: 'after' };
+  };
+  const find = (list) => {
+    for (const node of list) {
+      const found = markOf(node) ?? find(node.childList ?? []);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  const target = find(nodeList);
+  if (!target) return nodeList;
+  const visit = (node) => {
+    const childList = node.childList ? node.childList.map(visit) : node.childList;
+    if (node.id === target.id) return { ...node, childList, insertMark: target.mark };
+    return childList === node.childList ? node : { ...node, childList };
+  };
+  return nodeList.map(visit);
 }
 
 // how a place reads for the author: "after “Third of three…”", "at the end of the document"

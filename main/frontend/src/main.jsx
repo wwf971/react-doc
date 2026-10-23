@@ -48,7 +48,7 @@ createRoot(document.getElementById('root')).render(
       // the asset service layer (doc_page_impl_asset.md): the asset api of the
       // development server and its change feed; both empty in a build
       asset: { endpoint: docSource.docAssetEndpoint, subscribe: docSource.subscribeDocAsset },
-      // the service instances (doc_page_impl_service_instance.md): the
+      // the service instances (doc_page_impl_service.md): the
       // service backend, reached through the development server; empty in
       // a build, where every dashboard shows that there is no backend
       service: { endpoint: docSource.docServiceEndpoint },

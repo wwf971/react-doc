@@ -202,6 +202,40 @@ class NoteDb(Service):
         self.connection.execute('VACUUM')
         return {'sizeBefore': size_before, 'sizeAfter': os.path.getsize(self.database_path)}
 
+    # ---------- other instances ----------
+
+    @api(kind='command',
+         description='copies the newest notes of another note-db instance into this one: the instance sourceServiceId, '
+                     'or, when it is empty, another instance created from the same template. a note whose title and '
+                     'body are already here is skipped',
+         params=[
+             param('sourceServiceId', 'string', "the instance to copy from; '' for another instance of the template", default=''),
+             param('limit', 'integer', 'how many of its newest notes at most', default=50),
+         ],
+         result=returns('object', '{ source: { serviceId, name }, importedCount, skippedCount }'))
+    def noteImport(self, sourceServiceId='', limit=50):
+        # by id, or by template: the runtime chooses an instance of the template, never this one
+        target = {'serviceId': sourceServiceId} if sourceServiceId else {'templateId': self.context.template['templateId']}
+        source = self.context.service_resolve(target)
+        # the source answers in its own queue, and reads this instance as its caller
+        note_list = self.context.service_call({'serviceId': source['serviceId']}, 'noteList', {'limit': limit})['noteList']
+        imported_count = 0
+        for note in reversed(note_list):
+            row = self.connection.execute('SELECT 1 FROM note WHERE title = ? AND body = ?', [note['title'], note['body']]).fetchone()
+            if row is not None:
+                continue
+            self.connection.execute(
+                'INSERT INTO note (title, body, timeCreated, timeUpdated) VALUES (?, ?, ?, ?)',
+                [note['title'], note['body'], note['timeCreated'], time_text_get()],
+            )
+            imported_count += 1
+        self.connection.commit()
+        return {
+            'source': {'serviceId': source['serviceId'], 'name': source['name']},
+            'importedCount': imported_count,
+            'skippedCount': len(note_list) - imported_count,
+        }
+
     # ---------- helpers ----------
 
     def _note_get(self, note_id):

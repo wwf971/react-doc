@@ -5,13 +5,13 @@ import { blockPlaceBuild, blockPlaceNodeChange, blockPlaceResolve } from '../lib
 import { blockListMoveOperationListBuild } from '../lib/doc-edit-block.js';
 
 // Selecting the blocks of a document, and copying or moving them to a place
-// of a document (design: doc_page_impl_copy_paste.md#selecting-blocks).
+// of a document (design: doc_page_impl_block_ops.md#selecting-blocks).
 // The mode itself is DocEditStore.isBlockSelectMode, never on together with
 // edit mode; it shows the body of edit mode, whose blocks are selected here
 // instead of edited.
 //
 // It is also where the page knows which blocks the author is at, in any
-// mode with blocks (blockIndexListCurrentGet, doc_page_impl_copy_paste.md
+// mode with blocks (blockIndexListCurrentGet, doc_page_impl_block_ops.md
 // #the-blocks-the-author-is-at): the selection of the mode, the block of an
 // open session, or the blocks a text selection touches in edit mode. a
 // feature that acts "here" asks for them (a paste goes after them; the mode
@@ -258,23 +258,50 @@ export class DocBlockSelectStore {
     menu.message = '';
   }
 
-  // why the selected block cannot be duplicated, '' when it can: one block
-  // at a time for now
-  get duplicateDisabledReason(): string {
+  // why an action on one block (duplicate, move) is not possible on the
+  // selection, '' when it is: one block at a time for now
+  get blockSingleActionDisabledReason(): string {
     const count = this.selectionIndexListGet(this.selection?.path ?? '').length;
     if (count === 0) return 'select a block first';
-    if (count > 1) return 'only one block can be duplicated at a time';
+    if (count > 1) return 'only one block at a time';
+    return '';
+  }
+
+  // why the one selected block cannot move up / down, '' when it can
+  blockMoveDisabledReasonGet(direction: 'up' | 'down'): string {
+    const reason = this.blockSingleActionDisabledReason;
+    if (reason !== '') return reason;
+    const path = this.selection!.path;
+    const blockIndex = this.selectionIndexListGet(path)[0];
+    if (!this.editStore.blockMoveIsAvailable(path, blockIndex, direction)) {
+      return direction === 'up' ? 'it is the first block' : 'it is the last block';
+    }
     return '';
   }
 
   // a copy of the one selected block, right above or below it
   async selectionDuplicate(side: 'above' | 'below'): Promise<boolean> {
-    if (this.duplicateDisabledReason !== '') return false;
+    if (this.blockSingleActionDisabledReason !== '') return false;
     const { path, hash } = this.selection!;
     const blockIndex = this.selectionIndexListGet(path)[0];
     return this.contextMenuWrite(() => this.editStore.blockListCopy(
       path, hash, [blockIndex], path, side === 'above' ? blockIndex : blockIndex + 1,
     ));
+  }
+
+  // the one selected block swapped with its neighbor above / below: the
+  // same write as the move buttons of the block's toolbar in edit mode
+  // (DocEditStore.blockMoveApply)
+  async selectionMove(direction: 'up' | 'down'): Promise<boolean> {
+    if (this.blockMoveDisabledReasonGet(direction) !== '') return false;
+    const path = this.selection!.path;
+    const blockIndex = this.selectionIndexListGet(path)[0];
+    return this.contextMenuWrite(async () => {
+      const isMoved = await this.editStore.blockMoveApply(path, blockIndex, direction);
+      const message = this.editStore.blockMove?.message || 'The block was not moved.';
+      this.editStore.blockMoveClear();
+      return isMoved ? { code: 0, message: '' } : { code: -1, message };
+    });
   }
 
   // the selected blocks deleted (after the menu's confirmation step)

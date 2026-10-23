@@ -93,6 +93,29 @@ An instance answers one request at a time; a request waits until the ones before
 
 Since an instance runs its own `service.py`, changing it is changing that instance only: edit the title check in `example_doc/service/note-db-inst-w4veemdrx8y/service.py` and only `reading list` is restarted (at the next listing) with the new code; `example notes` and the template are as they were. Rebuilding one instance's `dashboard/` changes that instance's dashboards only.
 
+## One instance calling another
+
+Some services exist to serve others: a connection to AWS, PostgreSQL or Google Drive, a provider that signs users in. A call names either one instance, `{ serviceId }`, or any instance created from a template, `{ templateId }` (optionally `versionId` too); asked by template, the backend never picks the instance that asks.
+
+The statistics dashboard above shows it on its second line. It asks for *another instance of its template* (bound to `reading list`, it gets `example notes`), reads that instance's numbers by its id, and **Import its notes** asks `reading list` to copy them. `noteImport` is an api of `reading list` that calls `noteList` of `example notes` itself, as a service:
+
+```python
+target = {'serviceId': sourceServiceId} if sourceServiceId else {'templateId': self.context.template['templateId']}
+source = self.context.service_resolve(target)
+note_list = self.context.service_call({'serviceId': source['serviceId']}, 'noteList', {'limit': limit})['noteList']
+```
+
+Importing again copies nothing: the notes are already there. An instance cannot import from itself: the call would come back to its own queue, which waits for the call to finish, so the backend refuses it at once.
+
+The same calls over http, as any client of the backend makes them:
+
+````bash
+curl -s -XPOST localhost:45190/api/call -d '{"target": {"templateId": "w4wp4t0czko"}, "api": "statGet"}'
+curl -s 'localhost:45190/instance/resolve?templateId=w4wp4t0czko'
+````
+
+An api may be answered to other instances only: `credentialsGet` of `aws-connection` gives AWS credentials to the services the connection allows, and is refused to the page (code -2), so the credentials never reach a browser. The callee knows its caller from the backend (`self.context.caller`), never from what a request says. The other connection templates (`google-drive`, `postgres-connection`, `cognito-auth`) serve other services the same way; they need accounts of their own, so the example has no instance of them.
+
 ## The Services tab
 
 The settings panel (the gear in the side panel) has a **Services** tab with two areas:
@@ -106,4 +129,4 @@ Creating an instance copies the template folder (not its `service-template.yaml`
 
 In edit mode the insert menu has a **Services** row: every dashboard of every template the backend knows. A new dashboard is an asset object bound to no instance; choose the instance in its head. The playground is the place to try it (it is ignored by git).
 
-The design (the backend, templates and instances, what a script exposes, the props of a dashboard, its events) is `main/doc_page_impl_service_instance.md`.
+The design (the backend, templates and instances, what a script exposes, the calls between services, the props of a dashboard, its events) is `main/doc_page_impl_service.md`.

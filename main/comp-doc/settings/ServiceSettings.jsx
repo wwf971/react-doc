@@ -17,7 +17,7 @@ import '../service/DocService.css';
 import './DocSettings.css';
 
 // The "Services" tab of the settings panel (design:
-// doc_page_impl_service_instance.md#the-services-tab):
+// doc_page_impl_service.md#the-services-tab):
 //
 //   service backend ● up · 1 template · 2 instances ↻
 //   Service templates     [card] …
@@ -204,7 +204,7 @@ const TemplateDetail = observer(function TemplateDetail({ template }) {
         <div className="doc-service-settings-line">
           <button
             type="button"
-            className="doc-service-button"
+            className="doc-button doc-service-button"
             disabled={template.status !== 'ready'}
             title={template.status === 'ready' ? 'create an instance: a copy of this template, with its own folder' : `the template cannot be used: ${template.message}`}
             onClick={() => isCreateOpenSet(true)}
@@ -256,11 +256,11 @@ const TemplateVersionRow = observer(function TemplateVersionRow({ template }) {
             aria-label="note of the new version"
             onCommit={() => {}}
           />
-          <button type="button" className="doc-service-button" disabled={isSubmitting} onClick={() => void create()}>
-            {isSubmitting ? <LoaderCircle size={11} aria-hidden="true" className="doc-service-spin" /> : null}
+          <button type="button" className="doc-button doc-service-button" disabled={isSubmitting} onClick={() => void create()}>
+            {isSubmitting ? <LoaderCircle size={11} aria-hidden="true" className="doc-spin" /> : null}
             <span>New version</span>
           </button>
-          <button type="button" className="doc-service-button" disabled={isSubmitting} onClick={() => isOpenSet(false)}>Cancel</button>
+          <button type="button" className="doc-button doc-service-button" disabled={isSubmitting} onClick={() => isOpenSet(false)}>Cancel</button>
         </>
       )}
       {versionNew.status === 'error' ? <span className="doc-service-error" role="alert">{versionNew.message}</span> : null}
@@ -485,11 +485,11 @@ const InstanceCreate = observer(function InstanceCreate({ templateIdInitial, isT
         the template's folder is copied into {template?.name}-inst-&#123;serviceId&#125; (its script, its dashboards, its config), and the instance records the template it came from.
       </div>
       <div className="doc-service-settings-line">
-        <button type="button" className="doc-service-button" disabled={isSubmitting || templateId === ''} onClick={() => void create()}>
-          {isSubmitting ? <LoaderCircle size={11} aria-hidden="true" className="doc-service-spin" /> : <Plus size={11} aria-hidden="true" />}
+        <button type="button" className="doc-button doc-service-button" disabled={isSubmitting || templateId === ''} onClick={() => void create()}>
+          {isSubmitting ? <LoaderCircle size={11} aria-hidden="true" className="doc-spin" /> : <Plus size={11} aria-hidden="true" />}
           <span>Create</span>
         </button>
-        <button type="button" className="doc-service-button" disabled={isSubmitting} onClick={onDone}>Cancel</button>
+        <button type="button" className="doc-button doc-service-button" disabled={isSubmitting} onClick={onDone}>Cancel</button>
         {serviceStore.settings.create.status === 'error'
           ? <span className="doc-service-error" role="alert">{serviceStore.settings.create.message}</span>
           : null}

@@ -1,6 +1,6 @@
 import { editTextModelBuild } from './doc-edit-block.js';
 
-// The pipeline of a paste (design: doc_page_impl_copy_paste.md): the text
+// The pipeline of a paste (design: doc_page_impl_block_ops.md): the text
 // an author pastes becomes the list of root-level blocks it would be in the
 // document it goes to, after the transforms the host application supplies.
 //

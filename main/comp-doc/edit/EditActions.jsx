@@ -26,24 +26,24 @@ export function EditActions({
       <span className="doc-edit-actions" role="group" aria-label="Edit actions">
         <button
           type="button"
-          className="doc-edit-action is-primary"
+          className="doc-button" data-primary=""
           disabled={isSubmitting || isSubmitDisabled}
           title={`${labelSubmit} (Ctrl/⌘ + Enter)`}
           onClick={() => onSubmit?.()}
         >
           {isSubmitting
-            ? <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-edit-spin" />
+            ? <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-spin" />
             : <Check aria-hidden="true" size={12} strokeWidth={2.2} />}
           <span>{labelSubmit}</span>
         </button>
-        <button type="button" className="doc-edit-action" disabled={isSubmitting} title="Cancel (Esc)" onClick={() => onCancel?.()}>
+        <button type="button" className="doc-button" disabled={isSubmitting} title="Cancel (Esc)" onClick={() => onCancel?.()}>
           <X aria-hidden="true" size={12} strokeWidth={2.2} />
           <span>Cancel</span>
         </button>
         {children}
       </span>
       {status === 'error' && message ? (
-        <span className="doc-edit-message" role="alert">{message}</span>
+        <span className="doc-error doc-edit-message" role="alert">{message}</span>
       ) : null}
     </>
   );

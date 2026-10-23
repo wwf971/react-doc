@@ -103,7 +103,7 @@ export function SidePanelItem({ data = {}, config = {}, onEvent }) {
             {isEditButtonShown ? (
               <button
                 type="button"
-                className="doc-side-panel-item-edit-button"
+                className="doc-button-icon doc-side-panel-item-edit-button"
                 title="Edit this label"
                 aria-label="Edit this label"
                 onPointerDown={(event) => event.stopPropagation()}
@@ -119,7 +119,7 @@ export function SidePanelItem({ data = {}, config = {}, onEvent }) {
             {isMoveButtonShown ? (
               <button
                 type="button"
-                className="doc-side-panel-item-edit-button"
+                className="doc-button-icon doc-side-panel-item-edit-button"
                 title="Move this item (or drag its row)"
                 aria-label="Move this item"
                 onPointerDown={(event) => event.stopPropagation()}

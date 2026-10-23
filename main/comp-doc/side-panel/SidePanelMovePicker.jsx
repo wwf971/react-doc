@@ -133,7 +133,7 @@ export const SidePanelMovePicker = observer(function SidePanelMovePicker() {
   return (
     <div
       ref={elementRef}
-      className="doc-side-panel-move-picker not-prose"
+      className="doc-popover-form doc-side-panel-move-picker not-prose"
       role="dialog"
       aria-label="Move a side panel item"
       data-dragging={isDragging ? '' : undefined}
@@ -146,7 +146,7 @@ export const SidePanelMovePicker = observer(function SidePanelMovePicker() {
         </p>
         <button
           type="button"
-          className="doc-side-panel-move-picker-close"
+          className="doc-button-icon doc-side-panel-move-picker-close"
           title={isSubmitting ? 'the move is being written' : 'Close'}
           aria-label="Close"
           disabled={isSubmitting}
@@ -173,7 +173,7 @@ export const SidePanelMovePicker = observer(function SidePanelMovePicker() {
               <button
                 key={action.position}
                 type="button"
-                className="doc-side-panel-move-picker-button"
+                className="doc-button-dialog"
                 disabled={isSubmitting || reason !== ''}
                 title={reason || undefined}
                 onClick={() => moveRequest(action.position)}
@@ -183,17 +183,17 @@ export const SidePanelMovePicker = observer(function SidePanelMovePicker() {
             );
           })}
           {isSubmitting ? (
-            <span className="doc-side-panel-move-picker-status" role="status">
-              <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-edit-spin" />
+            <span className="doc-status" role="status">
+              <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-spin" />
               <span>Moving…</span>
             </span>
           ) : null}
         </div>
       ) : (
-        <p className="doc-side-panel-move-picker-hint">Choose an item, then where to put the moved item next to it.</p>
+        <p className="doc-note">Choose an item, then where to put the moved item next to it.</p>
       )}
       {move?.status === 'error' ? (
-        <p className="doc-side-panel-move-picker-message" role="alert">{move.message}</p>
+        <p className="doc-error" role="alert">{move.message}</p>
       ) : null}
     </div>
   );

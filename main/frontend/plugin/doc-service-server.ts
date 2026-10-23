@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readYaml } from './doc-entry.ts';
 
 // The service api of the development server (design:
-// doc_page_impl_service_instance.md#the-vite-plugin). The services run in a
+// doc_page_impl_service.md#the-vite-plugin). The services run in a
 // backend of their own (main/service-backend/server.py); the plugin only
 // forwards {endpoint}/* to it unchanged, so the page reaches the backend on
 // its own origin and the backend needs no CORS. Both work alone: the page

@@ -4,7 +4,7 @@ import { remoteModuleLoad } from '../lib/doc-service-federation.js';
 import { dashboardDataTextBuild } from '../../../comp-doc/service/service-dashboard-data.js';
 
 // The service templates and instances of the page (design:
-// doc_page_impl_service_instance.md). The services run in the service
+// doc_page_impl_service.md). The services run in the service
 // backend; this store knows what the backend last said about them, creates
 // instances from templates, loads the dashboard modules of the instances,
 // tells a dashboard what keeps it from showing, and answers the events of
@@ -37,6 +37,7 @@ import { dashboardDataTextBuild } from '../../../comp-doc/service/service-dashbo
 export const serviceEventTypeList = [
   'serviceApiCallRequest',
   'serviceJobGetRequest',
+  'serviceResolveRequest',
   'serviceBindRequest',
   'dashboardStateSetRequest',
   'serviceRefreshRequest',
@@ -52,6 +53,10 @@ const BACKEND_POLL_MS = 15000;
 export type ServiceResult = { code: number; data?: any; message: string };
 
 export type DashboardRef = { templateName: string; dashboardId: string; serviceId: string };
+
+// what a call names: an instance, or any instance created from a template
+// (at a version); the backend resolves it, never to the asking dashboard's own
+export type ServiceTarget = { serviceId: string } | { templateId: string; versionId?: string };
 
 export type DashboardProblemKind =
   | 'backendNone'
@@ -432,10 +437,18 @@ export class DocServiceStore {
 
   // ---------- calls ----------
 
-  async apiCall(serviceId: string, api: string, params: Record<string, any> | undefined): Promise<ServiceResult> {
+  // a call of an api of the instance target names; dashboardServiceId is the
+  // instance whose dashboard asks, the caller as the backend records it
+  async apiCall(target: ServiceTarget, api: string, params: Record<string, any> | undefined, dashboardServiceId = ''): Promise<ServiceResult> {
     if (!this.backend) return { code: -1, message: this.unavailableReason };
-    if (!serviceId) return { code: -1, message: 'The dashboard is not bound to an instance.' };
-    const result = await this.backend.apiCall(serviceId, api, params);
+    const result = await this.backend.apiCall(target, api, params, dashboardServiceId);
+    this.callResultAccept(result);
+    return result;
+  }
+
+  async instanceResolve(target: ServiceTarget, dashboardServiceId = ''): Promise<ServiceResult> {
+    if (!this.backend) return { code: -1, message: this.unavailableReason };
+    const result = await this.backend.instanceResolve(target, dashboardServiceId);
     this.callResultAccept(result);
     return result;
   }
@@ -494,11 +507,12 @@ export class DocServiceStore {
 
   // ---------- events ----------
 
-  // the events of a dashboard (doc_page_impl_service_instance.md#dashboard-events).
+  // the events of a dashboard (doc_page_impl_service.md#dashboard-events).
   // the frame of the dashboard (ServiceDashboardHost) adds data.dashboard,
   // { templateName, dashboardId, serviceId, state }: what the block shows now. a
-  // call goes to that instance only; a dashboard cannot name another one.
-  // the bind and the state are written into the block's asset object
+  // call goes to that instance, or to the one data.target names
+  // (doc_page_impl_service.md#calls-between-services), the dashboard's
+  // instance sent as the caller. the bind and the state are written into the block's asset object
   // (source.asset); a place that keeps them elsewhere (the Services tab)
   // answers them first, as the local handler.
   async eventHandle(event: DocEvent): Promise<ServiceResult | undefined> {
@@ -511,12 +525,17 @@ export class DocServiceStore {
     if (!dashboard || typeof dashboard.templateName !== 'string') {
       return { code: -1, message: `${event.type} comes from a component that is not a service dashboard` };
     }
-    if (event.type === 'serviceApiCallRequest') {
+    if (event.type === 'serviceApiCallRequest' || event.type === 'serviceResolveRequest') {
+      const target = event.data.target ?? { serviceId: dashboard.serviceId };
+      if (!target || typeof target !== 'object') return { code: -1, message: `the target of ${event.type} is { serviceId } or { templateId, versionId? }` };
+      if (!event.data.target && !dashboard.serviceId) return { code: -1, message: 'The dashboard is not bound to an instance.' };
+      if (event.type === 'serviceResolveRequest') return this.instanceResolve(target, dashboard.serviceId);
       if (typeof event.data.api !== 'string' || event.data.api === '') return { code: -1, message: 'serviceApiCallRequest needs api' };
-      return this.apiCall(dashboard.serviceId, event.data.api, event.data.params);
+      return this.apiCall(target, event.data.api, event.data.params, dashboard.serviceId);
     }
     if (event.type === 'serviceJobGetRequest') {
-      return this.jobGet(dashboard.serviceId, String(event.data.jobId ?? ''));
+      // a job of another instance names it (the serviceId of the job)
+      return this.jobGet(String(event.data.serviceId || dashboard.serviceId), String(event.data.jobId ?? ''));
     }
     if (event.type === 'serviceBindRequest') {
       return this.dashboardDataWrite(event.source?.asset, { serviceId: String(event.data.serviceId ?? ''), state: dashboard.state ?? {} });

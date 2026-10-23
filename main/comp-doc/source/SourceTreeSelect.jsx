@@ -9,12 +9,16 @@ import './DocSource.css';
 // (the move picker) or a document with its blocks (the place picker of a
 // paste). It only shows and selects: what a selected node means is the caller's.
 //
-//   nodeList              [{ id, label, detail?, badge?, badgeKind?, kind?, isDisabled?, title?, childList? }]
+//   nodeList              [{ id, label, detail?, badge?, badgeKind?, kind?, isDisabled?, title?, insertMark?, childList? }]
 //                         kind picks the icon: dir | folder (a folder),
 //                         separator, block (a block of a document),
 //                         anything else a file. badge is a tag before the
 //                         label (the kind of a block: [Paragraph]), badgeKind
-//                         'component' colors it like a component's
+//                         'component' colors it like a component's.
+//                         insertMark 'before' | 'after' draws a line on the
+//                         border above / below the row: where something
+//                         will be put (the place picker of blocks); the
+//                         line takes no room
 //   valueId               the selected node ('' none)
 //   idExpandedInitialList the nodes open at first; the others are closed
 //   searchText            optional: only the nodes whose label holds every
@@ -131,8 +135,9 @@ export function SourceTreeSelect({
             data-row-index={index}
             data-selected={isSelected || undefined}
             data-disabled={node.isDisabled || undefined}
+            data-insert={node.insertMark || undefined}
             title={node.title || undefined}
-            style={{ paddingInlineStart: `${2 + row.depth * 12}px` }}
+            style={{ paddingInlineStart: `${2 + row.depth * 12}px`, '--doc-source-tree-indent': `${2 + row.depth * 12}px` }}
             onClick={() => rowSelect(row)}
             onDoubleClick={() => {
               if (!node.isDisabled) onActivate?.(node.id, node);
@@ -160,7 +165,7 @@ export function SourceTreeSelect({
               <span className="doc-source-tree-toggle" aria-hidden="true" />
             )}
             <NodeIcon kind={node.kind} isExpanded={isExpanded} />
-            {node.badge ? <span className="doc-source-tree-badge" data-kind={node.badgeKind || undefined}>{node.badge}</span> : null}
+            {node.badge ? <span className="doc-badge doc-source-tree-badge" data-kind={node.badgeKind || undefined}>{node.badge}</span> : null}
             <span className="doc-source-tree-label">
               <LabelMatched label={String(node.label ?? '')} matchList={node.labelMatchList} />
             </span>

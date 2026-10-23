@@ -1,5 +1,5 @@
 # the instance folder of the demonstration service backend
-# (doc_page_impl_service_instance.md). trying the Services tab creates
+# (doc_page_impl_service.md). trying the Services tab creates
 # instances here: each one a copy of its template with its own service.yaml,
 # and with its data (notes.sqlite) once it ran. everything new is ignored;
 # only the files of the two instances listed below are part of the example.

@@ -70,7 +70,7 @@ const SidePanelDragView = observer(function SidePanelDragView({ drag }) {
         />
       ) : null}
       <div
-        className="doc-side-panel-drag-ghost"
+        className="doc-popover doc-side-panel-drag-ghost"
         style={{ left: `${drag.point.clientX + 12}px`, top: `${drag.point.clientY + 10}px` }}
       >
         <span className="doc-side-panel-drag-ghost-label">{drag.label}</span>
@@ -88,14 +88,14 @@ const SidePanelMoveNotice = observer(function SidePanelMoveNotice({ move }) {
   };
   return (
     <div
-      className="doc-side-panel-move-notice"
+      className="doc-popover doc-side-panel-move-notice"
       data-status={move.status}
       role={move.status === 'error' ? 'alert' : 'status'}
       style={style}
     >
       {move.status === 'submitting' ? (
         <>
-          <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-edit-spin" />
+          <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-spin" />
           <span>Moving the item…</span>
         </>
       ) : (

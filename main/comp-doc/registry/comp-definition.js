@@ -3,7 +3,7 @@ import { serviceDashboardDefinitionGet } from '../service/service-dashboard-defi
 // The registry definition a component id names: the one compById holds,
 // else the one the id names by itself. The dashboards of service instances
 // are not in compById: their id service/{templateName}/{dashboardId} builds
-// their definition (doc_page_impl_service_instance.md#dashboards-in-the-registry),
+// their definition (doc_page_impl_service.md#dashboards-in-the-registry),
 // so a template the backend adds later needs no registration. The value is
 // what compById would hold; compDefinitionNormalize reads it.
 //

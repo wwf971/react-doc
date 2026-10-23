@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import federation from '@originjs/vite-plugin-federation';
 
 // The dashboards of note-db, built as one federated module
-// (doc_page_impl_service_instance.md#dashboard-module). The service backend
+// (doc_page_impl_service.md#dashboard-module). The service backend
 // serves dist/ (expose.dashboardRemote of service.py names it), and the
 // doc page loads dist/remoteEntry.js. container and module here must be the
 // ones dashboardRemote declares.

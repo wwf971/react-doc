@@ -2,7 +2,7 @@
 
     python3 server.py --config ../../example_doc/service-backend.yaml [--port 45190] [--host 127.0.0.1]
 
-Design: doc_page_impl_service_instance.md#backend
+Design: doc_page_impl_service.md#backend
 
 It runs on its own; the doc page reaches it through the vite plugin, which
 forwards /__doc-service/* here unchanged. Every answer is
@@ -26,12 +26,12 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from service_define import ServiceError, openrpc_document_build  # noqa: E402
+from service_define import ServiceCaller, ServiceError, openrpc_document_build  # noqa: E402
 from service_runtime import ServiceRuntime  # noqa: E402
 
 BODY_SIZE_MAX = 16 * 1024 * 1024
 
-STATUS_BY_CODE = {0: 200, -1: 400, -3: 404, -4: 409, -6: 504}
+STATUS_BY_CODE = {0: 200, -1: 400, -2: 403, -3: 404, -4: 409, -6: 504}
 
 CONTENT_TYPE_BY_EXT = {
     '.js': 'text/javascript; charset=utf-8',
@@ -93,6 +93,11 @@ def handler_class_build(runtime):
                 raise ServiceError(-3, f'{label} has no icon')
             self.file_send(dir_path, icon)
 
+        def page_caller_get(self, value_get):
+            """The caller of an http request: always the page. a request cannot
+            say it is a service; the dashboard it names is kept as a claim."""
+            return ServiceCaller('page', dashboard_service_id=str(value_get('dashboardServiceId') or ''))
+
         def body_read(self):
             length = int(self.headers.get('Content-Length') or 0)
             if length > BODY_SIZE_MAX:
@@ -135,6 +140,10 @@ def handler_class_build(runtime):
                 elif path == '/instance/get':
                     instance = runtime.instance_get(query.get('serviceId', ''))
                     self.response_send({'code': 0, 'data': instance.info_get()})
+                elif path == '/instance/resolve':
+                    target = {key: query[key] for key in ['serviceId', 'templateId', 'versionId'] if key in query}
+                    instance = runtime.target_resolve(target, self.page_caller_get(query.get))
+                    self.response_send({'code': 0, 'data': instance.info_get()})
                 elif path == '/instance/openrpc':
                     instance = runtime.instance_get(query.get('serviceId', ''))
                     expose = script_expose_get(instance.script, f'the instance {instance.service_id}')
@@ -173,7 +182,9 @@ def handler_class_build(runtime):
                     data = runtime.template_version_new(body.get('templateId', ''), body.get('note', ''))
                     self.response_send({'code': 0, 'data': data})
                 elif path == '/api/call':
-                    self.response_send(runtime.api_call(body.get('serviceId', ''), body.get('api', ''), body.get('params')))
+                    # target, or serviceId alone: the short form of target { serviceId }
+                    target = body.get('target') if body.get('target') is not None else {'serviceId': body.get('serviceId', '')}
+                    self.response_send(runtime.api_call(target, body.get('api', ''), body.get('params'), self.page_caller_get(body.get)))
                 else:
                     self.response_send({'code': -3, 'message': f'POST {path} is not an endpoint'})
             except ServiceError as error:
