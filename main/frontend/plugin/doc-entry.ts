@@ -6,9 +6,11 @@ import { textHashGet } from './doc-edit-lines.ts';
 // The entry of a document and the yaml files it reaches.
 // design: doc_page_impl_side_panel.md#the-document-entry
 //
-// every document has one entry file, named by config docEntry.file and by
-// convention called xxx-entry.yaml. the entry file and every yaml file it
-// reaches share one grammar, the document yaml file:
+// every document has one entry file, named by config docEntry.file, or
+// found in the doc page folder named by config docEntry.dir
+// (docEntryFileFind: .doc-page/entry.yaml by convention, design:
+// doc_page_impl_dir.md). the entry file and every yaml file it reaches share
+// one grammar, the document yaml file:
 //
 //   docEntry:                # marks the file as the entry of a document;
 //     title: ...             #   true, or a mapping with optional page values
@@ -16,20 +18,30 @@ import { textHashGet } from './doc-edit-lines.ts';
 //     homeItem: ...
 //   source:                  # optional: rules | { rules } | { file }
 //   tag:                     # optional: { defineById } | { file }
+//   config:                  # optional: the doc page config layer
+//                            #   { Key: value, compConfig } | { file } | a list of both
+//   asset:                   # optional, an entry only: the asset store config of the doc
+//                            #   page, { file: ./asset.yaml } | false (no store); absent:
+//                            #   asset.yaml beside the entry (doc_page_impl_asset.md)
 //   sidePanelDefault: main   # optional when the file declares one side panel
 //   sidePanelById:
 //     main: { root?, tree }          # a side panel resource
 //     other: { file?, sidePanel? }   # a reference to a side panel declared elsewhere
 //
-// a side-panel reference names one side panel. a string is a file path and
-// means the default side panel of that file; a mapping names the file (the
+// a reference to a document entry (docEntry.dir, an "include" path) may name
+// the folder of a doc page instead of its entry file.
+//
+// a side-panel reference names one side panel. a string is a file path (or
+// the folder of a doc page: its entry) and means the default side panel of
+// that file; a mapping names the file (the
 // file holding the reference when absent) and the side panel id (that file's
 // default when absent). the "include" property of a tree node and the alias
 // values of sidePanelById are references.
 //
 // loading a file loads everything in it: its source rules are appended once,
-// its tag definitions are merged (a file loaded earlier wins), and every side
-// panel is resolved with its includes. the entry is loaded first, so its
+// its tag definitions are merged (a file loaded earlier wins), its config
+// declarations are recorded, and every side panel is resolved with its
+// includes. the entry is loaded first, so its
 // rules come first, followed by the rules of included files in order of
 // appearance. every node of every side panel is annotated for the edit layer
 // with the file (relative to the config directory) and yaml address of
@@ -70,6 +82,36 @@ export type DocEntryInfo = {
   homeItem?: string;
 };
 
+// one config declaration of the doc page config layer
+// (doc_page_impl_config.md#the-doc-page-layer): a mapping of config keys
+// written in a document yaml file or a config file
+export type ConfigDeclaration = {
+  // file and yaml address, as one text: "{file}#{path}"
+  id: string;
+  // relative to the config directory
+  file: string;
+  // yaml address of the mapping in the file, e.g. ['config'] or ['config', 1]
+  path: (string | number)[];
+  config: Record<string, any>;
+  // the entry of the document the declaration belongs to, relative to the
+  // config directory
+  entryFile: string;
+};
+
+// one doc page the page loads: its own, and every one it includes (by entry
+// file or by folder), in order of first loading. what the asset service
+// layer needs to find the store config of each (doc_page_impl_asset.md#the-local-store-folders-fully-reflected)
+export type DocPageLoaded = {
+  // absolute
+  entryFile: string;
+  // the folder of the doc page: the parent of .doc-page/, or the entry's folder
+  dirPage: string;
+  // the root ids the source rules of the doc page's own files declare
+  rootIdList: string[];
+  // "asset" of the entry as written: undefined (the convention), false, or { file }
+  asset: undefined | false | { file: string };
+};
+
 export type DocEntryLoaded = {
   entry: DocEntryInfo;
   // the side panel shown by the page: config docEntry.sidePanel, or the
@@ -80,6 +122,14 @@ export type DocEntryLoaded = {
   // every rule, paths relative to the config directory
   sourceRuleList: any[];
   tagDefineById: Record<string, any>;
+  // the doc page config layer: every config declaration, in stack order
+  // (a later one wins): the documents included last first, the entry's own
+  // document last; within one document in the order read
+  configDeclarationList: ConfigDeclaration[];
+  // the variables the config files declare, in the same order merged
+  variableByName: Record<string, string>;
+  // the doc pages loaded, the page's own first
+  docPageList: DocPageLoaded[];
   // every yaml file read, absolute, the entry file first
   fileListLoaded: string[];
   // the content hash (doc-edit-lines.ts textHashGet) of every document yaml
@@ -93,6 +143,9 @@ type DocYamlFile = {
   content: Record<string, any>;
   contentHash: string;
   isEntry: boolean;
+  // the entry of the document this file belongs to: the file itself for an
+  // entry, else the entry of the file that first reached it
+  entryOwner: string;
   entry: DocEntryInfo;
   sidePanelIdList: string[];
   // '' when the file declares no side panel, or several without sidePanelDefault
@@ -102,6 +155,7 @@ type DocYamlFile = {
 type SidePanelRef = {
   file: string; // absolute
   sidePanelId: string; // '' for the default side panel of the file
+  entryOwner: string; // the entry of the file holding the reference
 };
 
 type LoadContext = {
@@ -111,10 +165,60 @@ type LoadContext = {
   fileListLoaded: string[];
   sourceRuleList: any[];
   tagDefineById: Record<string, any>;
+  // the entries reached, in order of first loading
+  entryFileList: string[];
+  docPageByEntryFile: Map<string, DocPageLoaded>;
+  configDeclarationList: ConfigDeclaration[];
+  variableDeclarationList: { entryOwner: string; variableByName: Record<string, string> }[];
+  // config files being read, for cycles
+  configFileChain: string[];
 };
 
-const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'sidePanelDefault', 'sidePanelById'];
+const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'sidePanelDefault', 'sidePanelById'];
+const CONFIG_FILE_KEY_LIST = ['config', 'variable'];
 const ENTRY_FILE_SUFFIX = '-entry.yaml';
+const ENTRY_FILE_NAME = 'entry.yaml';
+
+// the folder of a doc page that holds its metadata files: the entry, the
+// files it names (source, tag, side panels, config) and the configs of the
+// services of the page. never part of the collected source.
+// design: doc_page_impl_dir.md
+export const DOC_PAGE_META_DIR_NAME = '.doc-page';
+
+// the entry file of a doc page given by its folder, first match:
+//   {dir}/.doc-page/entry.yaml, {dir}/.doc-page/xxx-entry.yaml (the only one),
+//   {dir}/entry.yaml,           {dir}/xxx-entry.yaml           (the only one)
+export function docEntryFileFind(dirPath: string): string {
+  const dirResolved = path.resolve(dirPath);
+  if (!fs.existsSync(dirResolved) || !fs.statSync(dirResolved).isDirectory()) {
+    throw new Error(`[doc-source] doc page folder not found: ${dirResolved}`);
+  }
+  for (const dirSeek of [path.join(dirResolved, DOC_PAGE_META_DIR_NAME), dirResolved]) {
+    if (!fs.existsSync(dirSeek) || !fs.statSync(dirSeek).isDirectory()) continue;
+    const fileEntry = path.join(dirSeek, ENTRY_FILE_NAME);
+    if (fs.existsSync(fileEntry)) return fileEntry;
+    const nameList = fs.readdirSync(dirSeek).filter((name) => name.endsWith(ENTRY_FILE_SUFFIX)).sort();
+    if (nameList.length === 1) return path.join(dirSeek, nameList[0]);
+    if (nameList.length > 1) {
+      throw new Error(
+        `[doc-source] several entry files in ${dirSeek} (${nameList.join(', ')}); name one, or keep one as ${ENTRY_FILE_NAME}`,
+      );
+    }
+  }
+  throw new Error(
+    `[doc-source] no entry file in the doc page folder ${dirResolved}: expected ${DOC_PAGE_META_DIR_NAME}/${ENTRY_FILE_NAME}`
+      + ` (or xxx${ENTRY_FILE_SUFFIX} there, or either in the folder itself)`,
+  );
+}
+
+// a path naming an entry: the file itself, or the entry found in a folder
+function entryPathResolve(filePath: string): string {
+  const filePathResolved = path.resolve(filePath);
+  if (fs.existsSync(filePathResolved) && fs.statSync(filePathResolved).isDirectory()) {
+    return docEntryFileFind(filePathResolved);
+  }
+  return filePathResolved;
+}
 
 export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWanted = ''): DocEntryLoaded {
   const context: LoadContext = {
@@ -124,8 +228,13 @@ export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWa
     fileListLoaded: [],
     sourceRuleList: [],
     tagDefineById: {},
+    entryFileList: [],
+    docPageByEntryFile: new Map(),
+    configDeclarationList: [],
+    variableDeclarationList: [],
+    configFileChain: [],
   };
-  const file = fileLoad(entryFile, context);
+  const file = fileLoad(entryPathResolve(entryFile), context, '');
   if (!file.isEntry) {
     throw new Error(
       `[doc-source] the file named by config docEntry.file is not an entry: it must declare "docEntry": ${file.filePath}`,
@@ -153,6 +262,19 @@ export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWa
     fileHashByFile[fileRelativeGet(fileLoaded.filePath, configDir)] = fileLoaded.contentHash;
   }
 
+  // the doc page config layer: the documents included last first, so the
+  // entry of the page decides over what it includes (as for tags)
+  const configDeclarationList: ConfigDeclaration[] = [];
+  const variableByName: Record<string, string> = {};
+  for (const entryOwner of [...context.entryFileList].reverse()) {
+    for (const declaration of context.configDeclarationList) {
+      if (declaration.entryFile === fileRelativeGet(entryOwner, configDir)) configDeclarationList.push(declaration);
+    }
+    for (const declaration of context.variableDeclarationList) {
+      if (declaration.entryOwner === entryOwner) Object.assign(variableByName, declaration.variableByName);
+    }
+  }
+
   return {
     entry: file.entry,
     sidePanelId,
@@ -160,6 +282,9 @@ export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWa
     sidePanel,
     sourceRuleList: context.sourceRuleList,
     tagDefineById: context.tagDefineById,
+    configDeclarationList,
+    variableByName,
+    docPageList: context.entryFileList.map((entryFile) => context.docPageByEntryFile.get(entryFile)!),
     fileListLoaded: context.fileListLoaded,
     fileHashByFile,
   };
@@ -167,7 +292,8 @@ export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWa
 
 // ---------- files ----------
 
-function fileLoad(filePath: string, context: LoadContext): DocYamlFile {
+// entryOwnerFrom: the entry of the file that reaches this one ('' for the entry of the page)
+function fileLoad(filePath: string, context: LoadContext, entryOwnerFrom: string): DocYamlFile {
   const filePathResolved = path.resolve(filePath);
   const fileLoaded = context.fileByPath.get(filePathResolved);
   if (fileLoaded) return fileLoaded;
@@ -181,28 +307,46 @@ function fileLoad(filePath: string, context: LoadContext): DocYamlFile {
   }
   fileKeysValidate(content, filePathResolved);
 
+  const isEntry = content.docEntry !== undefined && content.docEntry !== false;
   const file: DocYamlFile = {
     filePath: filePathResolved,
     content,
     contentHash: textHashGet(text),
-    isEntry: content.docEntry !== undefined && content.docEntry !== false,
+    isEntry,
+    entryOwner: isEntry || entryOwnerFrom === '' ? filePathResolved : entryOwnerFrom,
     entry: entrySectionRead(content.docEntry, filePathResolved),
     sidePanelIdList: sidePanelIdListRead(content.sidePanelById, filePathResolved),
     sidePanelIdDefault: '',
   };
   file.sidePanelIdDefault = sidePanelIdDefaultRead(file);
-  if (file.isEntry && !file.filePath.endsWith(ENTRY_FILE_SUFFIX)) {
-    console.warn(`[doc-source] an entry file is named xxx${ENTRY_FILE_SUFFIX} by convention: ${file.filePath}`);
+  if (file.isEntry && !file.filePath.endsWith(ENTRY_FILE_SUFFIX) && path.basename(file.filePath) !== ENTRY_FILE_NAME) {
+    console.warn(
+      `[doc-source] an entry file is named ${DOC_PAGE_META_DIR_NAME}/${ENTRY_FILE_NAME} (or xxx${ENTRY_FILE_SUFFIX}) by convention: ${file.filePath}`,
+    );
   }
   // registered before its side panels load, so a side panel of another file
   // that includes a side panel of this one finds the file
   context.fileByPath.set(filePathResolved, file);
   context.fileListLoaded.push(filePathResolved);
+  if (file.isEntry) {
+    context.entryFileList.push(filePathResolved);
+    context.docPageByEntryFile.set(filePathResolved, {
+      entryFile: filePathResolved,
+      dirPage: docPageDirGet(filePathResolved),
+      rootIdList: [],
+      asset: assetSectionRead(content.asset, filePathResolved),
+    });
+  } else if (content.asset !== undefined) {
+    throw new Error(
+      `[doc-source] "asset" belongs to the entry of a doc page, not to a resource file: ${filePathResolved}`,
+    );
+  }
 
   sourceSectionLoad(content.source, file, context);
   tagSectionLoad(content.tag, file, context);
+  configSectionLoad(content.config, file.filePath, ['config'], file.entryOwner, context);
   for (const sidePanelId of file.sidePanelIdList) {
-    sidePanelLoad({ file: filePathResolved, sidePanelId }, context, []);
+    sidePanelLoad({ file: filePathResolved, sidePanelId, entryOwner: file.entryOwner }, context, []);
   }
   return file;
 }
@@ -302,6 +446,34 @@ function sourceSectionLoad(source: any, file: DocYamlFile, context: LoadContext)
     }
   }
   context.sourceRuleList.push(...sourceRulesRebase(ruleList, ruleDir, context.configDir));
+  // the roots this doc page declares: where its asset folders are named
+  const docPage = context.docPageByEntryFile.get(file.entryOwner);
+  for (const rule of ruleList) {
+    if ((rule?.action !== 'addFolder' && rule?.action !== 'addFile') || !docPage) continue;
+    const rootId = rule.rootId ?? path.basename(path.resolve(ruleDir, String(rule.path ?? '')));
+    if (!docPage.rootIdList.includes(rootId)) docPage.rootIdList.push(rootId);
+  }
+}
+
+// ---------- asset section ----------
+// the asset store config of a doc page (doc_page_impl_asset.md): { file },
+// relative to the entry, or false for none. absent: asset.yaml beside the
+// entry, read when it exists (asset store config defaults otherwise)
+
+function assetSectionRead(asset: any, filePath: string): DocPageLoaded['asset'] {
+  if (asset === undefined || asset === null) return undefined;
+  if (asset === false) return false;
+  if (mappingIs(asset) && typeof asset.file === 'string' && asset.file.trim() !== '' && Object.keys(asset).length === 1) {
+    return { file: asset.file.trim() };
+  }
+  throw new Error(`[doc-source] "asset" of an entry is { file: ./asset.yaml } or false: ${filePath}`);
+}
+
+// the folder of a doc page from its entry: the parent of .doc-page/, or the
+// folder of the entry
+export function docPageDirGet(entryFile: string): string {
+  const dirEntry = path.dirname(entryFile);
+  return path.basename(dirEntry) === DOC_PAGE_META_DIR_NAME ? path.dirname(dirEntry) : dirEntry;
 }
 
 function sourceRulesRebase(rules: any[], fileDir: string, configDir: string): any[] {
@@ -345,6 +517,98 @@ function tagSectionLoad(tag: any, file: DocYamlFile, context: LoadContext) {
   }
 }
 
+// ---------- config section ----------
+// the doc page config layer (doc_page_impl_config.md#the-doc-page-layer).
+// "config" of a document yaml file, or of a config file, is one of
+//   { Key: value, compConfig: {...} }   one declaration, written in place
+//   { file: ./config.yaml }             a config file: { config?, variable? }
+//   [ item, item, ... ]                 several, each one of the two above
+// declarations are recorded in the order read; a config file is read where
+// it is named. a config file holds "config" (the same forms, its paths
+// relative to it) and "variable", ${name} values used by any declaration.
+
+function configSectionLoad(
+  config: any,
+  filePath: string,
+  address: (string | number)[],
+  entryOwner: string,
+  context: LoadContext,
+) {
+  if (config === undefined || config === null) return;
+  const place = `${filePath} ${address.join('.')}`;
+  if (Array.isArray(config)) {
+    config.forEach((item, index) => {
+      if (!mappingIs(item)) {
+        throw new Error(`[doc-source] an item of "config" must be a mapping of keys or { file }: ${place}[${index}]`);
+      }
+      configItemLoad(item, filePath, [...address, index], entryOwner, context);
+    });
+    return;
+  }
+  if (!mappingIs(config)) {
+    throw new Error(`[doc-source] "config" must be a mapping of keys, { file }, or a list of them: ${place}`);
+  }
+  configItemLoad(config, filePath, address, entryOwner, context);
+}
+
+function configItemLoad(
+  item: Record<string, any>,
+  filePath: string,
+  address: (string | number)[],
+  entryOwner: string,
+  context: LoadContext,
+) {
+  if (item.file === undefined) {
+    const file = fileRelativeGet(filePath, context.configDir);
+    context.configDeclarationList.push({
+      id: `${file}#${address.join('.')}`,
+      file,
+      path: address,
+      config: item,
+      entryFile: fileRelativeGet(entryOwner, context.configDir),
+    });
+    return;
+  }
+  const place = `${filePath} ${address.join('.')}`;
+  const keyListOther = Object.keys(item).filter((key) => key !== 'file');
+  if (keyListOther.length > 0) {
+    throw new Error(
+      `[doc-source] a config file reference holds "file" only (found ${keyListOther.join(', ')});`
+        + ` write the keys in the file, or in another item of a "config" list: ${place}`,
+    );
+  }
+  if (typeof item.file !== 'string' || !item.file.trim()) {
+    throw new Error(`[doc-source] "file" of a config reference must be a path: ${place}`);
+  }
+  const configFile = path.resolve(path.dirname(filePath), item.file);
+  if (!fs.existsSync(configFile)) {
+    throw new Error(`[doc-source] config file not found: ${configFile} (named in ${place})`);
+  }
+  if (context.configFileChain.includes(configFile)) {
+    throw new Error(`[doc-source] config file cycle: ${[...context.configFileChain, configFile].join(' -> ')}`);
+  }
+  const content = readYaml(configFile) ?? {};
+  if (!mappingIs(content)) throw new Error(`[doc-source] a config file must be a mapping: ${configFile}`);
+  for (const key of Object.keys(content)) {
+    if (!CONFIG_FILE_KEY_LIST.includes(key)) {
+      throw new Error(
+        `[doc-source] unknown key "${key}" in a config file (known: ${CONFIG_FILE_KEY_LIST.join(', ')}): ${configFile}`,
+      );
+    }
+  }
+  if (!context.fileListLoaded.includes(configFile)) context.fileListLoaded.push(configFile);
+  if (content.variable !== undefined) {
+    if (!mappingIs(content.variable)) throw new Error(`[doc-source] "variable" must be a mapping: ${configFile}`);
+    context.variableDeclarationList.push({ entryOwner, variableByName: content.variable });
+  }
+  context.configFileChain.push(configFile);
+  try {
+    configSectionLoad(content.config, configFile, ['config'], entryOwner, context);
+  } finally {
+    context.configFileChain.pop();
+  }
+}
+
 // ---------- side panels ----------
 
 function sidePanelKeyBuild(filePath: string, sidePanelId: string): string {
@@ -353,7 +617,7 @@ function sidePanelKeyBuild(filePath: string, sidePanelId: string): string {
 
 // chain: the side panels being loaded, outermost first, as keys
 function sidePanelLoad(ref: SidePanelRef, context: LoadContext, chain: string[]): SidePanelLoaded {
-  const file = fileLoad(ref.file, context);
+  const file = fileLoad(ref.file, context, ref.entryOwner);
   const sidePanelId = ref.sidePanelId !== '' ? ref.sidePanelId : sidePanelIdDefaultGet(file, 'a reference');
   const key = sidePanelKeyBuild(file.filePath, sidePanelId);
   const sidePanelLoaded = context.sidePanelByKey.get(key);
@@ -395,7 +659,7 @@ function sidePanelRefParse(value: any, fileFrom: DocYamlFile, place: string): Si
     if (!value.trim()) {
       throw new Error(`[doc-source] ${place}: a side panel reference must not be empty: ${fileFrom.filePath}`);
     }
-    return { file: path.resolve(fileDir, value), sidePanelId: '' };
+    return { file: entryPathResolve(path.resolve(fileDir, value)), sidePanelId: '', entryOwner: fileFrom.entryOwner };
   }
   if (!mappingIs(value)) {
     throw new Error(
@@ -417,8 +681,9 @@ function sidePanelRefParse(value: any, fileFrom: DocYamlFile, place: string): Si
     throw new Error(`[doc-source] ${place}: "sidePanel" of a side panel reference must be an id: ${fileFrom.filePath}`);
   }
   return {
-    file: value.file === undefined ? fileFrom.filePath : path.resolve(fileDir, value.file),
+    file: value.file === undefined ? fileFrom.filePath : entryPathResolve(path.resolve(fileDir, value.file)),
     sidePanelId: value.sidePanel ?? '',
+    entryOwner: fileFrom.entryOwner,
   };
 }
 
@@ -497,7 +762,7 @@ function nodesLoad(
       rootTextSourceIncluded = included.rootTextSource;
       // a sub document: the entry of another document, not a side panel of
       // this file nor of a resource file
-      const isDocEntry = ref.file !== file.filePath && fileLoad(ref.file, context).isEntry;
+      const isDocEntry = ref.file !== file.filePath && fileLoad(ref.file, context, ref.entryOwner).isEntry;
       includeSource = {
         ...included.treeSource,
         isDocEntry,

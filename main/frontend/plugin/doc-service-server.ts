@@ -15,7 +15,7 @@ import { readYaml } from './doc-entry.ts';
 // config.yaml:
 //   service:
 //     backend: http://127.0.0.1:45190                  the backend's address
-//     backendConfigFile: ../example_doc/service-backend.yaml
+//     backendConfigFile: ../example_doc/.doc-page/service-backend.yaml
 //                                                      optional: the backend's config file; its
 //                                                      template and instance folders are not documents
 //

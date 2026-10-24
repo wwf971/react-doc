@@ -1,5 +1,5 @@
 # The page side panel of the demonstration document, declared as the side
-# panel "main" of this file and named by example-entry.yaml. A side panel is
+# panel "main" of this file and named by entry.yaml. A side panel is
 # a free tree, not required to mirror the file tree. node forms:
 #   - doc: /rootId/xx/a.md     page (text overrides the doc title)
 #   - sourceRoot: rootId       generated tree for a complete source root
@@ -37,16 +37,16 @@ sidePanelById:
         config:
           TagsDisplayAtLinkPosition: before
       # the edit layer playground; editable on the development server only
-      - doc: ~example/edit-in-place.md
-        text: In-place Editing
+      - doc: ~example/mdx-doc-edit-in-place.md
+        text: MDX Document In-place Editing
         tags: [guide]
-      # moving items in edit mode (In-place Editing, "Moving side-panel
+      # moving items in edit mode (MDX Document In-place Editing, "Moving side-panel
       # items"): the first items of this folder come from an included
       # resource file, the last ones are written here, so an item can be
       # moved from one file to the other. free to change.
       - id: move-sandbox
         text: Move Sandbox
-        include: ./side-panel-move/sandbox.yaml
+        include: ./side-panel-move-sandbox.yaml
         children:
           - id: move-local-c
             text: Local C
@@ -67,6 +67,10 @@ sidePanelById:
       - doc: ~example/service-instance.md
         text: Service Instances
         tags: [guide]
+      # what a component keeps between renders and across its unmount
+      - doc: ~example/comp-state.md
+        text: Component State
+        tags: [guide]
       # free to change: the playground and everything it creates are ignored
       # by git, so a fresh checkout reports this document as missing
       - doc: ~example/playground/playground.md
@@ -77,13 +81,13 @@ sidePanelById:
       - id: mdx-usage
         text: MDX Components
         tags: [part]
-        include: ./mdx-usage/side-panel.yaml
+        include: ./side-panel-mdx-usage.yaml
       - separator: Sub Document
       # the default side panel of a self-contained document: its entry file
       # brings its own source rules and tag definitions; its "root" labels and
       # binds this node. the same entry can be config.yaml docEntry.file.
       - id: sub-doc
-        include: ./sub-doc/sub-doc-entry.yaml
+        include: ../sub-doc
       - separator: Tests
       - id: component-panel-demo
         # a language mapping: the translation of the document language is shown.

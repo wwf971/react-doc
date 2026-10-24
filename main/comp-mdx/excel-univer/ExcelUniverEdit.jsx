@@ -32,16 +32,37 @@ import { ExcelUniverEditStore } from './ExcelUniverEditStore.js';
 // in the block popup (isInPopup) the sheet fills the dialog and the floating
 // panel is in the dialog's header (doc_page_impl_popup.md).
 //
+// the draft (ExcelUniverEditStore) is kept in the block's state object of
+// the component state service layer while the session lasts (state.value.draft,
+// doc_page_impl_mdx_comp_state.md): another mount of the same object (a
+// second block reading it) renders the draft as it is edited. the draft is
+// taken out when the editor unmounts, which is when the session has ended
+// (saved or canceled); an editor mounted while a draft is there (a session
+// open elsewhere on the object) continues that draft.
+//
 //   data.raw                  the workbook (JSON) of the asset's head
 //   config.assetInfo          versionMetadata: the view, the engine version
 //   config.edit.session       status / message of the pending save
+//   state                     the block's state object (ExcelUniver holds it)
+//   selection, onSelectionChange   the active sheet and selected cells kept
+//                             in the state, restored by the engine
 //
 // events (handled by the edit layer):
 //   editDraftChange { raw, versionMetadata }
 //   editSubmitRequest
 //   editCancelRequest
-export const ExcelUniverEdit = observer(function ExcelUniverEdit({ data = {}, config = {}, isInPopup = false, onEvent }) {
-  const [store] = useState(() => new ExcelUniverEditStore({ raw: data.raw, versionMetadata: config.assetInfo?.versionMetadata }));
+export const ExcelUniverEdit = observer(function ExcelUniverEdit({
+  data = {}, config = {}, state, selection, onSelectionChange, isInPopup = false, onEvent,
+}) {
+  const [store] = useState(() => state?.value.draft
+    ?? new ExcelUniverEditStore({ raw: data.raw, versionMetadata: config.assetInfo?.versionMetadata }));
+  useEffect(() => {
+    if (!state) return undefined;
+    state.patch({ draft: store });
+    return () => {
+      if (state.value.draft === store) state.patch({ draft: undefined });
+    };
+  }, [state, store]);
   const univerApiRef = useRef(null);
   const workbookRef = useRef(null);
   const session = config.edit?.session ?? {};
@@ -139,6 +160,8 @@ export const ExcelUniverEdit = observer(function ExcelUniverEdit({ data = {}, co
             isEditable
             height={isInPopup ? '100%' : height}
             univerLoad={config.univerLoad}
+            selectionInitial={selection}
+            onSelectionChange={onSelectionChange}
             onReady={({ univerAPI, workbook, engineVersion }) => {
               univerApiRef.current = univerAPI;
               workbookRef.current = workbook;

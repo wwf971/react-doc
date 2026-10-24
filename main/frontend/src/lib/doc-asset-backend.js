@@ -38,7 +38,8 @@
 //   versionDelete(store, objectId, versionId)
 //   objectLockSet(store, objectId, isLocked)
 //   versionLockSet(store, objectId, versionId, isLocked)
-//   folderSet(folderList)                       { folderList }   the folders of the local store
+//   folderSet(configFile, folderList, folderDefault)  the folders of one doc page (~rootId/path),
+//                                               written into its asset store config
 
 export function assetBackendApiCreate(endpoint) {
   const endpointNormalized = String(endpoint ?? '').replace(/\/+$/, '');
@@ -88,7 +89,7 @@ export function assetBackendApiCreate(endpoint) {
     dependencyListSet: (store, objectId, versionId, dependencyList) => requestPost('/dependency/set', { store, objectId, versionId, dependencyList }),
     dependencyAdd: (store, objectId, versionId, dependency) => requestPost('/dependency/add', { store, objectId, versionId, dependency }),
     dependencyRemove: (store, objectId, versionId, dependency) => requestPost('/dependency/remove', { store, objectId, versionId, dependency }),
-    folderSet: (folderList) => requestPost('/folder/set', { folderList }),
+    folderSet: (configFile, folderList, folderDefault) => requestPost('/folder/set', { configFile, folderList, folderDefault }),
     usageList: (docPathList = []) => requestSend(
       `/usage/list${docPathList.length > 0 ? `?${docPathList.map((docPath) => `docPath=${encodeURIComponent(docPath)}`).join('&')}` : ''}`,
     ),

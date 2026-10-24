@@ -1,101 +1,224 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
+import type { DocEnvStore } from './DocEnvStore.js';
 import { docEditApiCreate } from '../lib/doc-edit-api.js';
-import { compIdBuiltinByName, compIdResolve } from '../../../comp-doc/registry/comp-registry.js';
 
 // The config layers as the page reads and writes them. Design:
 // doc_page_impl_config.md#config-layers
 //
 // A layer definition (lib/doc-config-define.js configLayerDefineList) says
 // that a layer exists and how it is stored; a layer object here holds its
-// values and knows how to change them. Every layer offers the same surface,
-// so the settings panel and the config model treat them alike:
+// values and knows how to change them. A layer is a stack of declarations,
+// mappings of config keys written in one place each (one for the default
+// and the client layer, several for the doc page layer); later declarations
+// win. Every layer offers the same surface, so the settings panel and the
+// config model treat them alike:
 //
-//   config          { Key: value } the page keys the layer declares
-//   compConfig      { Comp: { Key: value } } the component keys it declares,
-//                   Comp being a tag name (a yaml layer) or a component id
-//                   (isCompKeyedById: a layer the page writes itself)
-//   isWritable      values can be set now (the file layer: a development
-//                   server answers the edit api); disabledReason says why not
-//   isClearable     every value of the layer can be dropped at once (Reset)
-//   request         the state of the last write: submitting, or an error
-//                   with its message, shown by the settings panel
-//   valueSet / compValueSet / clear   the writes; each answers { code, message }
+//   declarationList  the declarations in stack order: { id, label, file, path,
+//                    config, compConfig, isWritable }
+//   config           { Key: value } the page keys the layer declares, merged
+//   compConfig       { Comp: { Key: value } } the component keys, merged; Comp
+//                    is a tag name (a yaml layer) or a component id
+//                    (isCompKeyedById: a layer the page keeps itself)
+//   isWritable       values can be set now; disabledReason says why not
+//   isKeyAddable     keys can be added and removed from the page (a layer the
+//                    page keeps itself); otherwise only declared keys change
+//   isDeclarationViewOffered   the layer is edited per declaration: the
+//                    settings panel shows it merged (display only) and, in its
+//                    edit mode, every declaration side by side
+//   isClearable      the layer can be dropped at once (clear)
+//   request          the state of the last write: submitting, or an error
+//                    with its message, shown by the settings panel
+//   valueSet / compValueSet            a key of the layer as a whole, for a
+//                    layer of one declaration (refused by a layer edited per
+//                    declaration)
+//   declarationValueSet / declarationCompValueSet   a key of one declaration
+//   valueRemove / compValueRemove / clear
+//   each write answers { code, message }
 //
-// storage 'file'     ConfigLayerFile: config.yaml globalConfig / compConfig,
-//                    read from configDoc, written through the edit api
-//                    (POST config/value), which rewrites the file in place
-//                    and keeps a backup; the new configuration comes back as
-//                    data (doc-source-change), and until it does the layer
-//                    shows the value it just wrote
-// storage 'browser'  ConfigLayerBrowser: localStorage of this browser, one
-//                    entry per layer and page
+// storage 'package'   ConfigLayerPackage: config.yaml configDefault (with its
+//                     local layer config.0.yaml), read from configDoc; the
+//                     default config of the doc page package, never written
+// storage 'docEntry'  ConfigLayerDocEntry: the config declarations of the doc
+//                     page (configDoc.docEntry.configDeclarationList), written
+//                     where the environment offers editing (DocEnvStore "edit")
+//                     through the edit api (POST config/value), which rewrites
+//                     the one value in place and keeps a backup; the new
+//                     configuration comes back as data (doc-source-change), and
+//                     until it does the layer shows the value it just wrote
+// storage 'browser'   ConfigLayerBrowser: localStorage of this browser, one
+//                     entry per layer and page
 
 export type ConfigLayerDefine = {
   id: string;
   label: string;
-  storage: 'file' | 'browser';
+  storage: 'package' | 'docEntry' | 'browser';
   isAboveDocLevels: boolean;
+  isEveryKeyDeclared?: boolean;
   description: string;
 };
 
 export type ConfigLayerResult = { code: number; message: string };
 export type ConfigLayerRequest = { status: 'idle' | 'submitting' | 'error'; message: string };
 
+export type ConfigLayerDeclaration = {
+  id: string;
+  // where it is written, as the settings panel names it
+  label: string;
+  // relative to the config directory; '' when not kept in a file
+  file: string;
+  // yaml address of the declared mapping in the file
+  path: (string | number)[];
+  config: Record<string, any>;
+  compConfig: Record<string, Record<string, any>>;
+  isWritable: boolean;
+};
+
 export interface ConfigLayer {
   readonly define: ConfigLayerDefine;
   readonly id: string;
   readonly isCompKeyedById: boolean;
   readonly isWritable: boolean;
+  readonly isKeyAddable: boolean;
+  readonly isDeclarationViewOffered: boolean;
   readonly isClearable: boolean;
   readonly disabledReason: string;
+  readonly declarationList: ConfigLayerDeclaration[];
   readonly config: Record<string, any>;
   readonly compConfig: Record<string, Record<string, any>>;
   readonly request: ConfigLayerRequest;
   valueSet(key: string, value: any): Promise<ConfigLayerResult>;
   compValueSet(compId: string, key: string, value: any): Promise<ConfigLayerResult>;
+  declarationValueSet(declarationId: string, key: string, value: any): Promise<ConfigLayerResult>;
+  // compKey: the component as the declaration names it (tag name or id)
+  declarationCompValueSet(declarationId: string, compKey: string, key: string, value: any): Promise<ConfigLayerResult>;
+  valueRemove(key: string): Promise<ConfigLayerResult>;
+  compValueRemove(compId: string, key: string): Promise<ConfigLayerResult>;
   clear(): Promise<ConfigLayerResult>;
   requestMessageClear(): void;
 }
 
 export type ConfigLayerOptions = {
   sourceStore: DocSourceStore;
-  // the edit api of the development server; '' without one
-  editEndpoint: string;
+  // the environment of the page: whether files can be written, and the edit api
+  envStore: Pick<DocEnvStore, 'isCapable' | 'reasonGet' | 'endpointGet'>;
 };
 
 // the layer object of a definition, by its storage
 export function configLayerCreate(define: ConfigLayerDefine, options: ConfigLayerOptions): ConfigLayer {
-  if (define.storage === 'file') return new ConfigLayerFile(define, options);
+  if (define.storage === 'package') return new ConfigLayerPackage(define, options);
+  if (define.storage === 'docEntry') return new ConfigLayerDocEntry(define, options);
   if (define.storage === 'browser') return new ConfigLayerBrowser(define, options);
   throw new Error(`[doc-config] unknown storage "${String((define as any).storage)}" of config layer "${define.id}"`);
 }
 
-// ---------- storage 'file': config.yaml ----------
+const RESULT_REFUSED = (message: string): Promise<ConfigLayerResult> => Promise.resolve({ code: -1, message });
+const RESULT_OK: ConfigLayerResult = { code: 0, message: '' };
 
-type ConfigLayerFilePending = {
-  // the configuration the values were written against; once the source
-  // store holds another one, the written values are in it
-  configDoc: any;
-  config: Record<string, any>;
-  compConfig: Record<string, Record<string, any>>;
-};
+// ---------- storage 'package': config.yaml configDefault ----------
 
-export class ConfigLayerFile implements ConfigLayer {
+export class ConfigLayerPackage implements ConfigLayer {
   readonly define: ConfigLayerDefine;
   readonly isCompKeyedById = false;
+  readonly isWritable = false;
+  readonly isKeyAddable = false;
+  readonly isDeclarationViewOffered = false;
   readonly isClearable = false;
+  readonly request: ConfigLayerRequest = { status: 'idle', message: '' };
+  readonly disabledReason = 'The default config comes with the doc page package (config.yaml configDefault); it is not changed from the page.';
   sourceStore: DocSourceStore;
-  api: ReturnType<typeof docEditApiCreate> | undefined;
-  request: ConfigLayerRequest = { status: 'idle', message: '' };
-  pending: ConfigLayerFilePending | undefined = undefined;
 
   constructor(define: ConfigLayerDefine, options: ConfigLayerOptions) {
     this.define = define;
     this.sourceStore = options.sourceStore;
-    this.api = options.editEndpoint ? docEditApiCreate(options.editEndpoint) : undefined;
+    makeAutoObservable(this, { define: false, sourceStore: false, request: false });
+  }
+
+  get id(): string {
+    return this.define.id;
+  }
+
+  get declarationList(): ConfigLayerDeclaration[] {
+    const configDefault = mappingGet(this.sourceStore.configDoc?.configDefault);
+    return [{
+      id: 'configDefault',
+      label: 'config.yaml configDefault',
+      file: '',
+      path: ['configDefault'],
+      ...configSplit(configDefault),
+      isWritable: false,
+    }];
+  }
+
+  get config(): Record<string, any> {
+    return this.declarationList[0].config;
+  }
+
+  get compConfig(): Record<string, Record<string, any>> {
+    return this.declarationList[0].compConfig;
+  }
+
+  valueSet(): Promise<ConfigLayerResult> {
+    return RESULT_REFUSED(this.disabledReason);
+  }
+
+  compValueSet(): Promise<ConfigLayerResult> {
+    return RESULT_REFUSED(this.disabledReason);
+  }
+
+  declarationValueSet(): Promise<ConfigLayerResult> {
+    return RESULT_REFUSED(this.disabledReason);
+  }
+
+  declarationCompValueSet(): Promise<ConfigLayerResult> {
+    return RESULT_REFUSED(this.disabledReason);
+  }
+
+  valueRemove(): Promise<ConfigLayerResult> {
+    return RESULT_REFUSED(this.disabledReason);
+  }
+
+  compValueRemove(): Promise<ConfigLayerResult> {
+    return RESULT_REFUSED(this.disabledReason);
+  }
+
+  clear(): Promise<ConfigLayerResult> {
+    return RESULT_REFUSED(this.disabledReason);
+  }
+
+  requestMessageClear(): void {}
+}
+
+// ---------- storage 'docEntry': the config declarations of the doc page ----------
+
+type ConfigLayerDocEntryPending = {
+  // the configuration the values were written against; once the source
+  // store holds another one, the written values are in it
+  configDoc: any;
+  // declarationId -> what was written into it
+  byDeclarationId: Record<string, { config: Record<string, any>; compConfig: Record<string, Record<string, any>> }>;
+};
+
+export class ConfigLayerDocEntry implements ConfigLayer {
+  readonly define: ConfigLayerDefine;
+  readonly isCompKeyedById = false;
+  readonly isKeyAddable = false;
+  readonly isDeclarationViewOffered = true;
+  readonly isClearable = false;
+  sourceStore: DocSourceStore;
+  envStore: ConfigLayerOptions['envStore'];
+  api: ReturnType<typeof docEditApiCreate> | undefined;
+  request: ConfigLayerRequest = { status: 'idle', message: '' };
+  pending: ConfigLayerDocEntryPending | undefined = undefined;
+
+  constructor(define: ConfigLayerDefine, options: ConfigLayerOptions) {
+    this.define = define;
+    this.sourceStore = options.sourceStore;
+    this.envStore = options.envStore;
+    const endpoint = options.envStore.endpointGet('edit');
+    this.api = endpoint ? docEditApiCreate(endpoint) : undefined;
     // pending holds a configDoc, which must stay a plain reference
-    makeAutoObservable(this, { define: false, sourceStore: false, api: false, pending: observable.ref });
+    makeAutoObservable(this, { define: false, sourceStore: false, envStore: false, api: false, pending: observable.ref });
   }
 
   get id(): string {
@@ -103,82 +226,116 @@ export class ConfigLayerFile implements ConfigLayer {
   }
 
   get isWritable(): boolean {
-    return this.api !== undefined;
+    return this.envStore.isCapable('edit');
   }
 
   get disabledReason(): string {
-    return this.isWritable ? '' : 'config.yaml is written by the development server only; this build cannot change it.';
+    return this.envStore.reasonGet('edit');
   }
 
-  // the values as config.yaml declares them (variables not expanded), with
+  // the declarations as the files hold them (variables not expanded), with
   // what was just written while the new configuration is on its way
-  get config(): Record<string, any> {
-    const declared = mappingGet(this.sourceStore.configDoc?.globalConfig);
+  get declarationList(): ConfigLayerDeclaration[] {
+    const declaredList = this.sourceStore.configDoc?.docEntry?.configDeclarationList;
+    if (!Array.isArray(declaredList)) return [];
     const pending = this.pendingCurrentGet();
-    return pending ? { ...declared, ...pending.config } : declared;
+    const dirPage = docPageDirGet(this.sourceStore.configDoc?.docEntry?.file);
+    return declaredList.map((declared: any) => {
+      const { config, compConfig } = configSplit(mappingGet(declared.config));
+      const pendingOne = pending?.byDeclarationId[declared.id];
+      const compConfigResult = { ...compConfig };
+      for (const [compKey, configPending] of Object.entries(pendingOne?.compConfig ?? {})) {
+        compConfigResult[compKey] = { ...mappingGet(compConfig[compKey]), ...configPending };
+      }
+      return {
+        id: String(declared.id),
+        label: `${fileLabelGet(String(declared.file), dirPage)} › ${(declared.path ?? []).join('.')}`,
+        file: String(declared.file),
+        path: Array.isArray(declared.path) ? declared.path : [],
+        config: { ...config, ...(pendingOne?.config ?? {}) },
+        compConfig: compConfigResult,
+        isWritable: this.isWritable,
+      };
+    });
+  }
+
+  get config(): Record<string, any> {
+    return Object.assign({}, ...this.declarationList.map((declaration) => declaration.config));
   }
 
   get compConfig(): Record<string, Record<string, any>> {
-    const declared = mappingGet(this.sourceStore.configDoc?.compConfig);
-    const pending = this.pendingCurrentGet();
-    if (!pending) return declared;
-    const result: Record<string, Record<string, any>> = { ...declared };
-    for (const [compName, configPending] of Object.entries(pending.compConfig)) {
-      result[compName] = { ...mappingGet(declared[compName]), ...configPending };
+    const result: Record<string, Record<string, any>> = {};
+    for (const declaration of this.declarationList) {
+      for (const [compKey, config] of Object.entries(declaration.compConfig)) {
+        result[compKey] = { ...(result[compKey] ?? {}), ...mappingGet(config) };
+      }
     }
     return result;
   }
 
-  valueSet(key: string, value: any): Promise<ConfigLayerResult> {
-    // the value is already there, or on its way: nothing to write (a field
-    // may commit the same text twice, on the choice and on the blur after it)
-    if (valueIsSame(this.config[key], value)) return Promise.resolve({ code: 0, message: '' });
-    const valueBase = mappingGet(this.sourceStore.configDoc?.globalConfig)[key] ?? null;
-    return this.write(['globalConfig', key], value, valueBase, (pending) => ({
-      ...pending,
-      config: { ...pending.config, [key]: value },
+  // a key may be declared by several declarations: the one to write is
+  // chosen in the edit mode of the settings panel, never guessed here
+  valueSet(key: string): Promise<ConfigLayerResult> {
+    return RESULT_REFUSED(`${key} is written into one declaration of the doc page; choose it in the edit mode`);
+  }
+
+  compValueSet(_compId: string, key: string): Promise<ConfigLayerResult> {
+    return RESULT_REFUSED(`${key} is written into one declaration of the doc page; choose it in the edit mode`);
+  }
+
+  declarationValueSet(declarationId: string, key: string, value: any): Promise<ConfigLayerResult> {
+    const declaration = this.declarationList.find((one) => one.id === declarationId);
+    if (!declaration) return RESULT_REFUSED(`unknown config declaration ${declarationId}`);
+    if (!(key in declaration.config)) return RESULT_REFUSED(`${key} is not declared in ${declaration.label}`);
+    if (valueIsSame(declaration.config[key], value)) return Promise.resolve(RESULT_OK);
+    const valueBase = this.declaredValueGet(declarationId, [key]);
+    return this.write(declaration, [key], value, valueBase, (pendingOne) => ({
+      ...pendingOne,
+      config: { ...pendingOne.config, [key]: value },
     }));
   }
 
-  compValueSet(compId: string, key: string, value: any): Promise<ConfigLayerResult> {
-    const compName = this.compNameGet(compId);
-    if (compName === undefined) {
-      return Promise.resolve({ code: -1, message: `no tag name of compRegistry maps to ${compId}; the key cannot be written` });
+  declarationCompValueSet(declarationId: string, compKey: string, key: string, value: any): Promise<ConfigLayerResult> {
+    const declaration = this.declarationList.find((one) => one.id === declarationId);
+    if (!declaration) return RESULT_REFUSED(`unknown config declaration ${declarationId}`);
+    if (!(key in mappingGet(declaration.compConfig[compKey]))) {
+      return RESULT_REFUSED(`${compKey}.${key} is not declared in ${declaration.label}`);
     }
-    if (valueIsSame(this.compConfig[compName]?.[key], value)) return Promise.resolve({ code: 0, message: '' });
-    const valueBase = mappingGet(mappingGet(this.sourceStore.configDoc?.compConfig)[compName])[key] ?? null;
-    return this.write(['compConfig', compName, key], value, valueBase, (pending) => ({
-      ...pending,
-      compConfig: { ...pending.compConfig, [compName]: { ...(pending.compConfig[compName] ?? {}), [key]: value } },
+    if (valueIsSame(declaration.compConfig[compKey][key], value)) return Promise.resolve(RESULT_OK);
+    const valueBase = this.declaredValueGet(declarationId, [COMP_CONFIG_KEY, compKey, key]);
+    return this.write(declaration, [COMP_CONFIG_KEY, compKey, key], value, valueBase, (pendingOne) => ({
+      ...pendingOne,
+      compConfig: { ...pendingOne.compConfig, [compKey]: { ...(pendingOne.compConfig[compKey] ?? {}), [key]: value } },
     }));
+  }
+
+  // TODO: adding and removing keys, and adding declarations, from the page
+  valueRemove(): Promise<ConfigLayerResult> {
+    return RESULT_REFUSED('keys of the doc page are removed in its files');
+  }
+
+  compValueRemove(): Promise<ConfigLayerResult> {
+    return RESULT_REFUSED('keys of the doc page are removed in its files');
   }
 
   clear(): Promise<ConfigLayerResult> {
-    return Promise.resolve({ code: -1, message: 'config.yaml is not cleared from the page; remove the keys in the file' });
+    return RESULT_REFUSED('the doc page config is not cleared from the page');
   }
 
   requestMessageClear(): void {
     if (this.request.status === 'error') this.request = { status: 'idle', message: '' };
   }
 
-  // the tag name a component key is written under in config.yaml: the name
-  // compConfig already uses for the component, else the first name of
-  // compRegistry (or a built-in name) that maps to it
-  compNameGet(compId: string): string | undefined {
-    const configDoc = this.sourceStore.configDoc;
-    for (const compName of Object.keys(mappingGet(configDoc?.compConfig))) {
-      if (compIdResolve(configDoc, compName) === compId) return compName;
-    }
-    for (const [compName, compIdMapped] of Object.entries(mappingGet(configDoc?.compRegistry))) {
-      if (compIdMapped === compId) return compName;
-    }
-    for (const [compName, compIdMapped] of Object.entries(compIdBuiltinByName)) {
-      if (compIdMapped === compId && compIdResolve(configDoc, compName) === compId) return compName;
-    }
-    return undefined;
+  // the value the file declares, as the configuration reported it: the base
+  // the server checks the write against
+  private declaredValueGet(declarationId: string, keyPath: string[]): any {
+    const declaredList = this.sourceStore.configDoc?.docEntry?.configDeclarationList ?? [];
+    let value: any = declaredList.find((declared: any) => declared.id === declarationId)?.config;
+    for (const key of keyPath) value = mappingGet(value)[key];
+    return value ?? null;
   }
 
-  private pendingCurrentGet(): ConfigLayerFilePending | undefined {
+  private pendingCurrentGet(): ConfigLayerDocEntryPending | undefined {
     if (!this.pending) return undefined;
     // the configuration was reported again: it holds the written values now
     if (this.pending.configDoc !== this.sourceStore.configDoc) return undefined;
@@ -186,12 +343,16 @@ export class ConfigLayerFile implements ConfigLayer {
   }
 
   // one write through the edit api; on success the value is recorded as
-  // pending (pendingWith builds the new pending from the current one)
+  // pending (pendingWith builds the declaration's new pending from its current one)
   private async write(
-    keyPath: string[],
+    declaration: ConfigLayerDeclaration,
+    keyPathInside: string[],
     value: any,
     valueBase: any,
-    pendingWith: (pending: ConfigLayerFilePending) => ConfigLayerFilePending,
+    pendingWith: (pendingOne: { config: Record<string, any>; compConfig: Record<string, Record<string, any>> }) => {
+      config: Record<string, any>;
+      compConfig: Record<string, Record<string, any>>;
+    },
   ): Promise<ConfigLayerResult> {
     if (!this.api) return { code: -1, message: this.disabledReason };
     if (this.request.status === 'submitting') return { code: -1, message: 'a value is being written; wait for it' };
@@ -199,15 +360,24 @@ export class ConfigLayerFile implements ConfigLayer {
       this.request = { status: 'submitting', message: '' };
     });
     const configDocBefore = this.sourceStore.configDoc;
-    const result = await this.api.configValueApply({ keyPath, value, valueBase });
+    const result = await this.api.configValueApply({
+      file: declaration.file,
+      keyPath: [...declaration.path, ...keyPathInside],
+      value,
+      valueBase,
+    });
     runInAction(() => {
       if (result.code !== 0) {
         this.request = { status: 'error', message: result.message || 'The value was not written.' };
         return;
       }
       this.request = { status: 'idle', message: '' };
-      const pendingCurrent = this.pendingCurrentGet() ?? { configDoc: configDocBefore, config: {}, compConfig: {} };
-      this.pending = pendingWith(pendingCurrent);
+      const pendingCurrent = this.pendingCurrentGet() ?? { configDoc: configDocBefore, byDeclarationId: {} };
+      const pendingOne = pendingCurrent.byDeclarationId[declaration.id] ?? { config: {}, compConfig: {} };
+      this.pending = {
+        ...pendingCurrent,
+        byDeclarationId: { ...pendingCurrent.byDeclarationId, [declaration.id]: pendingWith(pendingOne) },
+      };
     });
     return { code: result.code, message: result.message ?? '' };
   }
@@ -220,9 +390,13 @@ type ConfigLayerBrowserStored = {
   compConfig: Record<string, Record<string, any>>;
 };
 
+const DECLARATION_ID_BROWSER = 'browser';
+
 export class ConfigLayerBrowser implements ConfigLayer {
   readonly define: ConfigLayerDefine;
   readonly isCompKeyedById = true;
+  readonly isKeyAddable = true;
+  readonly isDeclarationViewOffered = false;
   readonly isClearable = true;
   readonly isWritable = true;
   readonly disabledReason = '';
@@ -245,23 +419,59 @@ export class ConfigLayerBrowser implements ConfigLayer {
     return this.define.id;
   }
 
+  get declarationList(): ConfigLayerDeclaration[] {
+    return [{
+      id: DECLARATION_ID_BROWSER,
+      label: 'this browser',
+      file: '',
+      path: [],
+      config: this.config,
+      compConfig: this.compConfig,
+      isWritable: true,
+    }];
+  }
+
   valueSet(key: string, value: any): Promise<ConfigLayerResult> {
     this.config = { ...this.config, [key]: value };
     this.save();
-    return Promise.resolve({ code: 0, message: '' });
+    return Promise.resolve(RESULT_OK);
   }
 
   compValueSet(compId: string, key: string, value: any): Promise<ConfigLayerResult> {
     this.compConfig = { ...this.compConfig, [compId]: { ...(this.compConfig[compId] ?? {}), [key]: value } };
     this.save();
-    return Promise.resolve({ code: 0, message: '' });
+    return Promise.resolve(RESULT_OK);
   }
 
+  declarationValueSet(_declarationId: string, key: string, value: any): Promise<ConfigLayerResult> {
+    return this.valueSet(key, value);
+  }
+
+  declarationCompValueSet(_declarationId: string, compKey: string, key: string, value: any): Promise<ConfigLayerResult> {
+    return this.compValueSet(compKey, key, value);
+  }
+
+  valueRemove(key: string): Promise<ConfigLayerResult> {
+    const { [key]: _removed, ...config } = this.config;
+    this.config = config;
+    this.save();
+    return Promise.resolve(RESULT_OK);
+  }
+
+  compValueRemove(compId: string, key: string): Promise<ConfigLayerResult> {
+    const { [key]: _removed, ...configComp } = this.compConfig[compId] ?? {};
+    const { [compId]: _compRemoved, ...compConfig } = this.compConfig;
+    this.compConfig = Object.keys(configComp).length > 0 ? { ...compConfig, [compId]: configComp } : compConfig;
+    this.save();
+    return Promise.resolve(RESULT_OK);
+  }
+
+  // "clear cache": every value dropped and the storage entry removed
   clear(): Promise<ConfigLayerResult> {
     this.config = {};
     this.compConfig = {};
     this.save();
-    return Promise.resolve({ code: 0, message: '' });
+    return Promise.resolve(RESULT_OK);
   }
 
   requestMessageClear(): void {}
@@ -310,6 +520,34 @@ function storedRead(storageKey: string): ConfigLayerBrowserStored {
   } catch {
     return empty;
   }
+}
+
+const COMP_CONFIG_KEY = 'compConfig';
+
+// the folder of the doc page, from its entry file (relative to the config
+// directory): the parent of .doc-page/ (doc_page_impl_dir.md), or the
+// entry's own folder
+function docPageDirGet(entryFile: unknown): string {
+  if (typeof entryFile !== 'string') return '';
+  const segList = entryFile.split('/').slice(0, -1);
+  if (segList[segList.length - 1] === '.doc-page') segList.pop();
+  return segList.length > 0 ? `${segList.join('/')}/` : '';
+}
+
+// a declaration's file as the settings panel names it: relative to the
+// folder of the doc page when inside it
+function fileLabelGet(file: string, dirPage: string): string {
+  return dirPage !== '' && file.startsWith(dirPage) ? file.slice(dirPage.length) : file;
+}
+
+// a declared config mapping split into its page keys and its component keys
+function configSplit(configDeclared: Record<string, any>): ConfigLayerBrowserStored {
+  const { [COMP_CONFIG_KEY]: compConfigDeclared, ...config } = configDeclared;
+  const compConfig: Record<string, Record<string, any>> = {};
+  for (const [compKey, configComp] of Object.entries(mappingGet(compConfigDeclared))) {
+    compConfig[compKey] = mappingGet(configComp);
+  }
+  return { config, compConfig };
 }
 
 // a plain mapping, or {} for anything else

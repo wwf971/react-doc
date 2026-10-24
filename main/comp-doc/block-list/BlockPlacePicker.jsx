@@ -14,8 +14,8 @@ import './BlockList.css';
 // (blockPlaceNodeListMark). It shows and reports only; the
 // place belongs to the caller (lib/doc-block-place.js says what a place is).
 //
-//   Document  ~example/edit-in-place.md
-//   ▾ 🗎 edit-in-place.md
+//   Document  ~example/mdx-doc-edit-in-place.md
+//   ▾ 🗎 mdx-doc-edit-in-place.md
 //       ¶ What edit mode shows       Heading
 //       ¶ First of three short …     Paragraph   ◄ chosen
 //     ─────────────────────────────              ◄ the border the blocks go to

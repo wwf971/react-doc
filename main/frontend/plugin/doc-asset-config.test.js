@@ -4,36 +4,63 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { assetConfigOfConfigDocGet, assetStoreCreate } from './doc-asset-store.ts';
+import { assetStoreCreate } from './doc-asset-store.ts';
+import { yamlStringListSetBuild } from './doc-yaml-edit.ts';
+import { lineOperationListApply } from './doc-edit-lines.ts';
 import { docAssetMiddlewareCreate } from './doc-asset-server.ts';
-import { docSourcePlugin } from './doc-source.ts';
+import { docAssetConfigLoad, docSourcePlugin } from './doc-source.ts';
 import { DocAssetStore } from '../src/store/DocAssetStore.ts';
 
-// how config.yaml names the local store of the asset service layer (doc_page_impl_asset.md#configuration):
-// what each form of the asset section makes of the asset api the
-// development server exports (docAssetEndpoint) and answers (/status).
+// where the folders of the asset service layer come from
+// (doc_page_impl_asset.md#the-local-store-folders-fully-reflected): every
+// doc page the page loads, by its asset store config (.doc-page/asset.yaml),
+// or its default folder; included doc pages bring theirs.
 
-function fixtureCreate(configAssetLines, assetYaml) {
+// a doc page folder "page" (root "docs") including the doc page folder
+// "page/sub" (root "sub") by its folder. assetYamlByPage: the text of
+// .doc-page/asset.yaml of "page" / "sub", absent for none
+function fixtureCreate({ assetYamlByPage = {}, configLineList = [] } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-asset-config-'));
-  fs.mkdirSync(path.join(dir, 'docs'));
-  fs.writeFileSync(path.join(dir, 'docs', 'a.md'), '# A\n');
-  fs.writeFileSync(path.join(dir, 'fixture-entry.yaml'), [
+  const pageDir = path.join(dir, 'page');
+  const subDir = path.join(pageDir, 'sub');
+  fs.mkdirSync(path.join(pageDir, '.doc-page'), { recursive: true });
+  fs.mkdirSync(path.join(subDir, '.doc-page'), { recursive: true });
+  fs.writeFileSync(path.join(pageDir, 'a.md'), '# A\n');
+  fs.writeFileSync(path.join(subDir, 'b.md'), '# B\n');
+  fs.writeFileSync(path.join(pageDir, '.doc-page', 'entry.yaml'), [
     'docEntry:',
     '  title: Fixture',
     'source:',
     '  - action: addFolder',
     '    rootId: docs',
-    '    path: docs',
+    '    path: ..',
     '    collect: recursive',
+    '  - action: removeByPath',
+    '    pattern: "~docs/sub/**"',
+    'sidePanelById:',
+    '  main:',
+    '    tree:',
+    '      - doc: ~docs/a.md',
+    '      - id: sub',
+    '        include: ../sub',
     '',
   ].join('\n'));
-  fs.writeFileSync(path.join(dir, 'config.yaml'), [
-    'docEntry:',
-    '  file: ./fixture-entry.yaml',
-    ...configAssetLines,
+  fs.writeFileSync(path.join(subDir, '.doc-page', 'entry.yaml'), [
+    'docEntry: true',
+    'source:',
+    '  - action: addFolder',
+    '    rootId: sub',
+    '    path: ..',
+    '    collect: recursive',
+    'sidePanelById:',
+    '  main:',
+    '    tree:',
+    '      - doc: ~sub/b.md',
     '',
   ].join('\n'));
-  if (assetYaml !== undefined) fs.writeFileSync(path.join(dir, 'asset.yaml'), assetYaml);
+  if (assetYamlByPage.page !== undefined) fs.writeFileSync(path.join(pageDir, '.doc-page', 'asset.yaml'), assetYamlByPage.page);
+  if (assetYamlByPage.sub !== undefined) fs.writeFileSync(path.join(subDir, '.doc-page', 'asset.yaml'), assetYamlByPage.sub);
+  fs.writeFileSync(path.join(dir, 'config.yaml'), ['docEntry:', '  dir: ./page', ...configLineList, ''].join('\n'));
   return dir;
 }
 
@@ -63,54 +90,126 @@ function requestRun(middleware, url) {
   });
 }
 
-test('no asset section: no store, no asset api', () => {
-  const dir = fixtureCreate([]);
-  assert.equal(assetConfigOfConfigDocGet({}, dir), undefined);
-  assert.equal(exportGet(pluginCreate(dir), 'docAssetEndpoint'), '');
+// the asset api middleware as the plugin mounts it, against the files now
+function middlewareCreate(plugin, dir) {
+  const endpoint = exportGet(plugin, 'docAssetEndpoint');
+  return docAssetMiddlewareCreate({
+    endpoint,
+    storeGet: () => assetStoreCreate(docAssetConfigLoad(path.join(dir, 'config.yaml'))),
+    rootAbsPathByIdGet: () => new Map([['docs', path.join(dir, 'page')], ['sub', path.join(dir, 'page', 'sub')]]),
+    usageScan: () => [],
+  });
+}
+
+function requestPost(middleware, url, body) {
+  return new Promise((resolve) => {
+    const req = new EventEmitter();
+    req.method = 'POST';
+    req.url = url;
+    const res = {
+      statusCode: 200,
+      setHeader: () => {},
+      end: (text) => resolve({ status: res.statusCode, body: JSON.parse(String(text)) }),
+    };
+    middleware(req, res, () => resolve({ status: -1, body: undefined }));
+    process.nextTick(() => {
+      req.emit('data', Buffer.from(JSON.stringify(body)));
+      req.emit('end');
+    });
+  });
+}
+
+test('without asset.yaml every doc page has its default folder, the included one too', async () => {
+  const dir = fixtureCreate();
+  const plugin = pluginCreate(dir);
+  assert.equal(exportGet(plugin, 'docAssetEndpoint'), '/__doc-asset');
+  const result = await requestRun(middlewareCreate(plugin, dir), '/__doc-asset/status');
+  assert.equal(result.body.code, 0);
+  assert.deepEqual(
+    result.body.data.folderList.map((folder) => [folder.path, folder.isDefault, folder.isExists, folder.docEntryFile]),
+    [['~docs/asset', true, false, 'page/.doc-page/entry.yaml'], ['~sub/asset', false, false, 'page/sub/.doc-page/entry.yaml']],
+  );
+  assert.deepEqual(result.body.data.docPageList.map((docPage) => [docPage.configFileRelative, docPage.isConfigFileExists]), [
+    ['page/.doc-page/asset.yaml', false], ['page/sub/.doc-page/asset.yaml', false],
+  ]);
+  // nothing is created by reading
+  assert.equal(fs.existsSync(path.join(dir, 'page', 'asset')), false);
 });
 
-test('the former asset.folder stops the server with the migration', () => {
-  const dir = fixtureCreate(['asset:', '  folder: ./asset']);
+test('asset.yaml names folders by source path; a folder not named so is left out and reported', async () => {
+  const dir = fixtureCreate({
+    assetYamlByPage: {
+      page: 'folderList:\n  - ~docs/store/a\n  - ../relative\n  - ~nope/x\n  - ~docs/store/b\nfolderDefault: ~docs/store/b\n',
+    },
+  });
+  const plugin = pluginCreate(dir);
+  const result = await requestRun(middlewareCreate(plugin, dir), '/__doc-asset/status');
+  assert.deepEqual(result.body.data.folderList.map((folder) => [folder.path, folder.isDefault]), [
+    ['~docs/store/a', false], ['~docs/store/b', true], ['~sub/asset', false],
+  ]);
+  const problemList = result.body.data.docPageList[0].problemList;
+  assert.equal(problemList.length, 2);
+  assert.match(problemList[0], /not a source path/);
+  assert.match(problemList[1], /no source rule declares the root "nope"/);
+  // the folders of the store are never documents
+  fs.mkdirSync(path.join(dir, 'page', 'store', 'a'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'page', 'store', 'a', 'x.md'), '# X\n');
+  assert.ok(!plugin.load('\0virtual:doc-source').includes('~docs/store/a/x.md'));
+});
+
+test('config.yaml "asset" is refused with the doc page form', () => {
+  const dir = fixtureCreate({ configLineList: ['asset:', '  file: ./asset.yaml'] });
   assert.throws(() => pluginCreate(dir), (error) => {
-    assert.match(error.message, /asset\.folder/);
-    assert.match(error.message, /file: \.\/asset\.yaml/);
-    assert.match(error.message, /- path: \.\/asset/);
-    assert.match(error.message, /restart/);
+    assert.match(error.message, /config\.yaml "asset" is no longer read/);
+    assert.match(error.message, /~rootId\/asset/);
     return true;
   });
 });
 
-test('an asset section without file is an error, not "no store"', () => {
-  assert.throws(() => assetConfigOfConfigDocGet({ asset: {} }, os.tmpdir()), /needs "file"/);
-  assert.throws(() => assetConfigOfConfigDocGet({ asset: './asset.yaml' }, os.tmpdir()), /must be a mapping/);
-});
-
-test('a store config file that cannot be read is an error', () => {
-  const dirYaml = fixtureCreate(['asset:', '  file: ./asset.yaml'], 'folderList: [\n');
-  assert.throws(() => pluginCreate(dirYaml), /not valid yaml/);
-  const dirList = fixtureCreate(['asset:', '  file: ./asset.yaml'], 'folderList: ./asset\n');
-  assert.throws(() => pluginCreate(dirList), /must be a list/);
-});
-
-test('asset.file with a default folder not created yet: the api answers writable', async () => {
-  const dir = fixtureCreate(['asset:', '  file: ./asset.yaml'], 'folderList:\n  - path: ./asset\n    isDefault: true\n');
+test('folder/set writes one doc page\'s file in place, or creates it', async () => {
+  const pageYaml = '# my folders\nfolderList:\n  - ~docs/asset   # main\n  - ~docs/old\nfolderDefault: ~docs/asset\n';
+  const dir = fixtureCreate({ assetYamlByPage: { page: pageYaml } });
   const plugin = pluginCreate(dir);
-  const endpoint = exportGet(plugin, 'docAssetEndpoint');
-  assert.equal(endpoint, '/__doc-asset');
+  const middleware = middlewareCreate(plugin, dir);
+  const written = await requestPost(middleware, '/__doc-asset/folder/set', {
+    configFile: 'page/.doc-page/asset.yaml', folderList: ['~docs/asset', '~docs/new'], folderDefault: '~docs/new',
+  });
+  assert.equal(written.body.code, 0);
+  assert.equal(
+    fs.readFileSync(path.join(dir, 'page', '.doc-page', 'asset.yaml'), 'utf-8'),
+    '# my folders\nfolderList:\n  - ~docs/asset   # main\n  - ~docs/new\nfolderDefault: ~docs/new\n',
+  );
+  assert.equal(fs.existsSync(path.join(dir, 'page', 'new')), true);
+  assert.equal(fs.readFileSync(path.join(dir, 'page', '.doc-page', 'asset.yaml.bak'), 'utf-8'), pageYaml);
 
-  const assetConfig = assetConfigOfConfigDocGet({ asset: { file: './asset.yaml' } }, dir);
-  const middleware = docAssetMiddlewareCreate({ endpoint, storeGet: () => assetStoreCreate(assetConfig) });
-  const result = await requestRun(middleware, `${endpoint}/status`);
-  assert.equal(result.status, 200);
-  assert.equal(result.body.code, 0);
-  assert.equal(result.body.data.isWritable, true);
-  assert.deepEqual(result.body.data.folderList.map((folder) => [folder.path, folder.isDefault, folder.isExists]), [['./asset', true, false]]);
-  assert.equal(fs.existsSync(path.join(dir, 'asset')), false);
+  // the included doc page has no file yet: it is created
+  const created = await requestPost(middleware, '/__doc-asset/folder/set', {
+    configFile: 'page/sub/.doc-page/asset.yaml', folderList: ['~sub/asset', '~sub/more'],
+  });
+  assert.equal(created.body.code, 0);
+  const textCreated = fs.readFileSync(path.join(dir, 'page', 'sub', '.doc-page', 'asset.yaml'), 'utf-8');
+  assert.match(textCreated, /folderList:\n {2}- ~sub\/asset\n {2}- ~sub\/more\nfolderDefault: ~sub\/asset\n/);
+
+  // refused: an unknown root, a file that is no doc page's
+  const refused = await requestPost(middleware, '/__doc-asset/folder/set', { configFile: 'page/.doc-page/asset.yaml', folderList: ['~nope/a'] });
+  assert.equal(refused.body.code, -1);
+  const unknown = await requestPost(middleware, '/__doc-asset/folder/set', { configFile: 'other.yaml', folderList: ['~docs/a'] });
+  assert.equal(unknown.body.code, -3);
+});
+
+test('a new object goes to the default folder of the doc page of its document', async () => {
+  const dir = fixtureCreate();
+  const plugin = pluginCreate(dir);
+  const middleware = middlewareCreate(plugin, dir);
+  const inSub = await requestPost(middleware, '/__doc-asset/object/create', { store: 'local', text: 'x', lang: 'json', docPath: '~sub/b.md' });
+  assert.equal(inSub.body.code, 0);
+  assert.equal(inSub.body.data.object.folder, '~sub/asset');
+  const inPage = await requestPost(middleware, '/__doc-asset/object/create', { store: 'local', text: 'y', lang: 'json' });
+  assert.equal(inPage.body.data.object.folder, '~docs/asset');
 });
 
 test('a build has no asset api: the store is bundled read-only', async () => {
-  const dir = fixtureCreate(['asset:', '  file: ./asset.yaml'], 'folderList:\n  - path: ./asset\n    isDefault: true\n');
-  const plugin = pluginCreate(dir, 'build');
+  const plugin = pluginCreate(fixtureCreate(), 'build');
   assert.equal(exportGet(plugin, 'docAssetEndpoint'), '');
   const snapshot = exportGet(plugin, 'assetSnapshot');
   assert.notEqual(snapshot, null);
@@ -118,8 +217,23 @@ test('a build has no asset api: the store is bundled read-only', async () => {
   const assetStore = new DocAssetStore({ snapshot });
   await assetStore.statusLoad();
   assert.equal(assetStore.isAvailable, true);
-  assert.equal(assetStore.unavailableReason, '');
   assert.match(assetStore.writeUnavailableReason, /read-only snapshot/);
+});
+
+test('yamlStringListSetBuild keeps the comments of the entries it keeps', () => {
+  const source = 'a:\n  # first\n  - x   # x\n  - y\n  # about z\n  - z\nb: 1\n';
+  const apply = (list) => {
+    const result = yamlStringListSetBuild(source, ['a'], list);
+    assert.equal(result.code, 0, result.message);
+    return lineOperationListApply(source, result.data.operationList);
+  };
+  assert.equal(apply(['x', 'Y', 'z']), 'a:\n  # first\n  - x   # x\n  - Y\n  # about z\n  - z\nb: 1\n');
+  assert.equal(apply(['x', 'y']), 'a:\n  # first\n  - x   # x\n  - y\nb: 1\n');
+  assert.equal(apply(['x', 'y', 'z', 'w']), 'a:\n  # first\n  - x   # x\n  - y\n  # about z\n  - z\n  - w\nb: 1\n');
+  assert.equal(yamlStringListSetBuild(source, ['a'], []).code, -1);
+  // a flow list stays one value
+  const flow = yamlStringListSetBuild('a: [x, y]\n', ['a'], ['x']);
+  assert.equal(lineOperationListApply('a: [x, y]\n', flow.data.operationList), 'a: [x]\n');
 });
 
 test('the page tells no store from a failed status request', async () => {

@@ -1,8 +1,0 @@
-# the local store of the asset service layer (design: doc_page_impl_asset.md): the folders its
-# objects live in, relative to this file. new objects are created in the
-# default folder. the settings panel of the page (tab "Asset service") rewrites
-# this file when a folder is added, removed, or made the default.
-folderList:
-  - path: ./asset
-    isDefault: true
-  - path: ./asset-archive

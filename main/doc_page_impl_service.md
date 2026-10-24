@@ -61,7 +61,7 @@ Copying the files isolates the folders, not the execution: instances still run i
 The backend is the Python standard library's `ThreadingHTTPServer` and PyYAML (`main/service-backend/requirements.txt`), nothing else: a script brings its own dependencies. It is started with its config file and stopped with Ctrl+C (SIGINT, SIGTERM), which lets every instance finish the api it runs and call `stop()`:
 
 ```text
-python3 main/service-backend/server.py --config example_doc/service-backend.yaml [--port 45190] [--host 127.0.0.1]
+python3 main/service-backend/server.py --config example_doc/.doc-page/service-backend.yaml [--port 45190] [--host 127.0.0.1]
 ```
 
 `ServiceRuntime` (`service_runtime.py`) finds the templates and the instances, creates instances, and runs the apis. **`scan()` is cheap and runs on every listing**: the `service.py` of every folder, template or instance, is a `ServiceScript` loaded again when the file changed (by mtime, through `importlib`, into a module named after its folder, so two folders never share a module); a template is read again when its `service-template.yaml` changed; an instance is restarted when its folder, its `service.yaml`, or its own `service.py` changed (its signature), and a folder that is gone stops its instance. A folder added, removed, or edited by hand is therefore seen at the next listing, without restarting the backend. A template is only read: its script is loaded for what it exposes (shown in the Services tab, checked before an instance is created from it), and nothing of it runs.
@@ -78,14 +78,14 @@ python3 main/service-backend/server.py --config example_doc/service-backend.yaml
 ### Backend config
 
 ```yaml
-# example_doc/service-backend.yaml (paths relative to this file)
+# example_doc/.doc-page/service-backend.yaml (paths relative to this file: ../ is the doc page folder)
 host: 127.0.0.1
 port: 45190
 apiWaitSecondMax: 120          # how long a sync call is waited for, queue included, before -6
 templateFolderList:            # folders holding the templates: {templateId}--{name}/service-template.yaml
-  - path: ./service-template
+  - path: ../service-template
 instanceFolderList:            # folders holding the instances: {templateName}-inst-{serviceId}/service.yaml
-  - path: ./service
+  - path: ../service
     isDefault: true            # where a new instance is created (the first folder when none says so)
 ```
 
@@ -350,7 +350,7 @@ The page reaches the backend through the development server, never directly. `pl
 # config.yaml
 service:
   backend: http://127.0.0.1:45190                       # the backend's address
-  backendConfigFile: ../example_doc/service-backend.yaml # optional: the backend's config
+  backendConfigFile: ../example_doc/.doc-page/service-backend.yaml # optional: the backend's config
 ```
 
 `backendConfigFile` is read for one reason: the template and instance folders it lists are not documents. The source rules skip them, and a change in them (a sqlite journal, a dashboard build) never reloads the page or regenerates the manifest, the same way the folders of the local store of the asset service layer are excluded. The virtual module exports `docServiceEndpoint`, the url of the forwarded api during `vite`, and the empty string in a build or without a `service` section; the host passes it as `config.service.endpoint` of `DocPageMdx` ([Consumer setup](doc_page_impl_detail.md#consumer-setup)). Without an endpoint `DocServiceStore` has no backend (`backendStatus: 'none'`), and every dashboard says so.
@@ -572,7 +572,7 @@ comp-doc/settings/ServiceSettings.jsx  the Services tab: backend line, the templ
                                        New instance), the instance area (system, custom, creation from a template,
                                        detail with its origin, config dashboard)
 comp-doc/edit/edit-template.js         the Services entries of the insert menu
-example_doc/service-backend.yaml       the example's backend config
+example_doc/.doc-page/service-backend.yaml   the example's backend config
 example_doc/service-template/          the example's templates: w4wp4t0czko--note-db/ (service-template.yaml, service.py,
                                        icon.svg, dashboard/ the federated module's project); the connections and
                                        the authentication provider that serve other services

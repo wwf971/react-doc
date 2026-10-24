@@ -1,0 +1,10 @@
+# the asset store config of the demonstration doc page (design:
+# doc_page_impl_asset.md): the folders its asset objects live in, as source
+# paths (~rootId/path) of its roots. a new object of one of its documents is
+# created in folderDefault. found here by convention (.doc-page/asset.yaml
+# beside the entry); the settings panel of the page (tab "Asset service")
+# rewrites the two values in place.
+folderList:
+  - ~example/asset
+  - ~example/asset-archive
+folderDefault: ~example/asset

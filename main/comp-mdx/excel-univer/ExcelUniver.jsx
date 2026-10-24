@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
+import { observer } from 'mobx-react-lite';
 import { BlockPopupSurface } from '../../comp-doc/popup/BlockPopupSurface.jsx';
+import { useCompState } from '../../comp-doc/registry/use-comp-state.js';
 import { ExcelUniverEdit } from './ExcelUniverEdit.jsx';
 import { ExcelUniverSheet } from './ExcelUniverSheet.jsx';
 import {
@@ -33,26 +35,57 @@ import './ExcelUniver.css';
 // be switched between View and Edit. the outer box of the surface carries
 // the block's margins; the sheet's own box has none.
 //
+// what the component keeps beyond its data lives in its state object of the
+// component state service layer (doc_page_impl_mdx_comp_state.md), keyed by
+// the asset object, so it survives the block's unmount and is shared by
+// every block reading the object:
+//
+//   state.value.engine   { sheetId, range }: the active sheet and the selected
+//                        cells, in view and in edit mode; restored by the next
+//                        engine instance (another document and back, View /
+//                        Edit, the popup)
+//   state.value.draft    the ExcelUniverEditStore of the editor while a
+//                        session is open on the object: a second block
+//                        reading the same object shows the draft as it is
+//                        edited, and the range typed in the editor's panel
+//
 //   data.raw             the workbook as JSON (IWorkbookData)
 //   config.assetInfo     versionMetadata: { engine, engineVersion, view }
-export function ExcelUniver({ data = {}, config = {}, onEvent }) {
+export const ExcelUniver = observer(function ExcelUniver({ data = {}, config = {}, onEvent }) {
+  const state = useCompState(config, () => ({ engine: { sheetId: '', range: '' }, draft: undefined }));
+  const draft = state.value.draft;
+  const engine = state.value.engine ?? {};
+  const selection = { sheetId: engine.sheetId ?? '', range: engine.range ?? '' };
+  const selectionChange = (selectionNext) => state.patch({ engine: selectionNext });
   return (
     <BlockPopupSurface config={config} title={config.assetInfo?.name || 'Spreadsheet'} className="doc-mdx-excel-univer-shell">
       {({ isInPopup }) => (config.isEdit
-        ? <ExcelUniverEdit data={data} config={config} isInPopup={isInPopup} onEvent={onEvent} />
+        ? (
+          <ExcelUniverEdit
+            data={data}
+            config={config}
+            state={state}
+            selection={selection}
+            onSelectionChange={selectionChange}
+            isInPopup={isInPopup}
+            onEvent={onEvent}
+          />
+        )
         : (
           <ExcelUniverView
-            raw={data.raw}
-            versionMetadata={config.assetInfo?.versionMetadata}
+            raw={draft ? draft.rawDraft : data.raw}
+            versionMetadata={draft ? draft.versionMetadata : config.assetInfo?.versionMetadata}
+            selection={selection}
+            onSelectionChange={selectionChange}
             univerLoad={config.univerLoad}
             isInPopup={isInPopup}
           />
         ))}
     </BlockPopupSurface>
   );
-}
+});
 
-function ExcelUniverView({ raw, versionMetadata, univerLoad, isInPopup }) {
+function ExcelUniverView({ raw, versionMetadata, selection, onSelectionChange, univerLoad, isInPopup }) {
   const view = excelUniverViewGet(versionMetadata);
   const shown = useMemo(() => {
     const parsed = excelUniverWorkbookParse(raw);
@@ -74,6 +107,8 @@ function ExcelUniverView({ raw, versionMetadata, univerLoad, isInPopup }) {
           isReadOnlyWarningShown={view.isReadOnlyWarningShown}
           height={isInPopup ? '100%' : shown.height}
           univerLoad={univerLoad}
+          selectionInitial={selection}
+          onSelectionChange={onSelectionChange}
         />
       ) : null}
       {shown.message ? <p className="doc-mdx-excel-univer-message" role="alert">{shown.message}</p> : null}

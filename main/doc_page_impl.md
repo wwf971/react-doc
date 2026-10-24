@@ -2,14 +2,14 @@
 
 # Document Page: Design
 
-This project renders local md/mdx folders as a doc website. The whole doc page is one embeddable React component (`DocPageMdx`), built with Vite, driven by mobx stores — no Next.js, no router framework. Everything is configured by `config.yaml` (+ local override `config.0.yaml`): which document the page shows (its entry file), how page features behave (globally and per document), and which custom components docs can use. The document itself is described by its entry file, `xxx-entry.yaml`: which folders/files form its source, which side panels arrange them, which tags its documents carry.
+This project renders local md/mdx folders as a doc website. The whole doc page is one embeddable React component (`DocPageMdx`), built with Vite, driven by mobx stores — no Next.js, no router framework. The package is configured by `config.yaml` (+ local override `config.0.yaml`): which doc page it shows, the default behavior of page features, and which custom components docs can use. The doc page itself is a self-contained folder whose metadata sits in its `.doc-page/` folder ([The doc page folder](doc_page_impl_dir.md)), described by its entry file, `.doc-page/entry.yaml`: which folders/files form its source, which side panels arrange them, which tags its documents carry, and its own config.
 
 ```text
-config.yaml (overlay config.0.yaml) ──► docEntry.file: the entry of the document
+config.yaml (overlay config.0.yaml) ──► docEntry.dir: the doc page folder (its .doc-page/entry.yaml), or docEntry.file
      │  read at dev/build time by a small vite plugin
      ▼
 vite plugin "doc-source"
-     ├── loads the entry and every yaml file it reaches: source rules, side panels, tags
+     ├── loads the entry and every yaml file it reaches: source rules, side panels, tags, config declarations
      ├── executes source rules ──► file manifest (multi-root: ~rootId/relPath) + folder manifest
      │     each doc = lazy `?raw` import ──► dev: HMR reload on edit
      │                                       build: one lazy chunk per doc
@@ -18,12 +18,13 @@ vite plugin "doc-source"
      └── emits virtual module `virtual:doc-source` = { config, fileManifest, dirManifest, fileUrlByPath, assetSnapshot }
      ▼
 mobx stores (source of truth for rendering)
+     ├── DocEnvStore: the environment (development server, static build) and what it allows; every other store asks it
      ├── DocSourceStore (lower): manifest, raw/compile caches, doc index, search data, the service object of the doc page source service layer
      ├── DocSourceFileStore: files created from the page (pasted images), the location prompt
      ├── DocStore (upper): side-panel tree, current doc, navigation, link dropdown, url sync
      ├── DocTagStore: tags resolved from source rules + side-panel tree, tag queries
-     ├── DocConfigStore: feature config, global and resolved per document, component-level keys, user overrides
-     ├── DocEditStore: in-place editing (dev server only): sessions, block model, edit api
+     ├── DocConfigStore: feature config: the layers (package default, doc page, client), resolved per document, component-level keys
+     ├── DocEditStore: MDX document in-place editing (dev server only): sessions, block model, edit api
      ├── DocAssetStore: component data kept in the asset service layer: objects, versions, dependencies, the asset panel
      ├── DocServiceStore: the service instances of the backend, their types, the dashboard modules
      └── DocBlockPopupStore: one component block shown in a popup, in View or Edit
@@ -48,7 +49,7 @@ DocEventRouter: component reports → host → local handler → domain route (n
 
 **Multilingual content.** Language inheritance, document-wide selection, headings, paragraphs, lists, degradation behavior, and file naming are specified in [doc_page_impl_multi-lang.md](doc_page_impl_multi-lang.md).
 
-**In-place editing, an additional layer.** On the development server a document can be edited from the page, one root-level block at a time; the server rewrites the file and the page reloads from it. The layer has its own store, its own compiled body (root blocks wrapped, each with a floating toolbar from a sticky anchor), and a component edit contract (`config.isEdit`, `XxxEdit.jsx` beside `Xxx.jsx`); the reading path is untouched and a built page has no edit mode. Specified in [doc_page_impl_edit.md](doc_page_impl_edit.md).
+**MDX document in-place editing, an additional layer.** On the development server a document can be edited from the page, one root-level block at a time (and side-panel items are renamed and moved in place through the same layer); the server rewrites the file and the page reloads from it. The layer has its own store, its own compiled body (root blocks wrapped, each with a floating toolbar from a sticky anchor), and a component edit contract (`config.isEdit`, `XxxEdit.jsx` beside `Xxx.jsx`); the reading path is untouched and a built page has no edit mode. Specified in [doc_page_impl_edit.md](doc_page_impl_edit.md).
 
 **Component data in the asset service layer.** The **asset service layer** keeps component data outside the document. A component block can hold a reference (a fenced block in the language `asset`, yaml naming a store, an object by its unique name or its id, and a version or the head) in place of its data; the data lives in a store of versioned objects, modeled after an object storage (an object is metadata with a DAG history and a record of its events, a version is bytes, text or not), with a standard api (create, update in place or as a new version, checkout, delete, history). The one store today is the local store: one or more folders on disk (an object's folder is `{id}--{name}`), served by the development server and bundled read-only into a build. Every version records what its data depends on (a file of the source, another asset), so a build keeps the files and a deletion can know what it breaks. The runtime boundary resolves the reference before the component renders, so components never know unless they opt in (`isAssetAware`: where the data is and what a write to it does, and one `dataReplaceRequest` event that updates the object or rewrites the inline block); the block toolbar of edit mode opens the asset panel, with a preview pane that renders the data as it is edited. The page knows which blocks read which object (a usage index), so the panel lists an object's blocks and the settings panel the orphans; how components use the layer is in [Components and the asset service layer](doc_page_impl_mdx_comp.md#components-and-the-asset-service-layer). Specified in [doc_page_impl_asset.md](doc_page_impl_asset.md).
 
@@ -62,7 +63,7 @@ DocEventRouter: component reports → host → local handler → domain route (n
 
 **One event layer between components and stores.** A registered component reports through `onEvent` and never calls a store; `DocEventRouter` turns the report into an event with its source, lets the host application and the rendering place answer first, then routes it to the domain that owns the type (navigation, tags, editing). Every answer is `{ code, data, message }`. Specified in [doc_page_impl_event.md](doc_page_impl_event.md).
 
-**Doc collection via vite plugin.** The plugin reads the two-layer config, loads the document entry it names and every yaml file the entry reaches (collecting their source rules, side panels, and tag definitions), executes the source rules, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any loaded yaml file invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
+**Doc collection via vite plugin.** The plugin reads the two-layer config, loads the document entry it names (or finds in the doc page folder it names) and every yaml file the entry reaches (collecting their source rules, side panels, tag definitions, and config declarations), executes the source rules, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any loaded yaml file invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
 
 **An explicit doc page source service layer.** The files and folders of the document are one layer, the **doc page source service layer**, with one grammar and one api: every file is named by its source path `~rootId/relPath`, every folder rule says how it collects (`recursive`, `direct`, or `referenced`: collectable, bundled only when used), the development server serves file bytes and creates files, and the page offers the source to components as a service (resolution, urls, path completion, file creation through the event layer). Specified in [Doc page source service layer](doc_page_impl_source.md).
 
@@ -76,11 +77,12 @@ Ordinary fenced JSON is rendered by the default Fumadocs/Shiki pipeline. A comme
 
 Follows the data-driven pattern of `react-comp-misc` (`comp_design.md`) and the two-layer split of `example_doc/frontend-store.md`, adapted to a readonly local source (no websocket/lock layer needed here):
 
+- `DocEnvStore` (beneath all): the environment the page runs in and the capabilities it offers; see [The environment](#the-environment).
 - `DocSourceStore` (lower, content): `fileManifest`, `dirManifest`, `configDoc`, `rawByPath`, `compiledByPath` (status/Body/toc/error), `targetsByName` (doc index for link resolution), `structuredDataByPath` (search), and the service object of the doc page source service layer handed to components (`config.source`: `fileResolve`, `fileUrlGet`, `pathComplete`, `fileCreate`). API: `loadDoc(path)`, `resolveLink(target, fromPath)`, `searchDocs(query)`. See [Doc page source service layer](doc_page_impl_source.md).
 - `DocSourceFileStore` (doc page source service layer, beside it): the file-creation requests of components (`fileCreateRequest`, the source route of the event layer) and the one open location prompt.
 - `DocStore` (upper, view): `docCurrentPath`, `isDocLoading`, `linkDropdownOpenId` (which link's candidate-dropdown is open; one at a time, closes on outside click), page tree (computed), route mode + url sync. API: `navigate(path, hash)`, `navigationBack()`, `navigationUp()`, `navigationForward()`, `init()`.
 - `DocTagStore` (derived): the tag model computed from the manifest and the page tree, plus the tag service used by renderers and the open state of the tag overview popup. See [Tag system](doc_page_impl_tag.md).
-- `DocConfigStore` (derived): the config model computed from `globalConfig`, the manifest, and the page tree, the reader's session overrides from the settings panel, plus the config service. See [Config system](doc_page_impl_config.md).
+- `DocConfigStore` (derived): the config model computed from the config layers (the package's `configDefault`, the doc page's declarations, the reader's values in the browser), the manifest, and the page tree, the writes of the settings panel into a layer, plus the config service. See [Config system](doc_page_impl_config.md).
 - `DocEditStore` (edit layer, beside the reading stores): availability of the development-server edit api, the global edit mode, the document source as read from disk with its hash, the dedicated compile with block wrappers, the one open edit session, the open insert menu, and the pending deletion; every write goes through `operationApply`, and the events of editors arrive at `eventHandle`. It never writes to the reading stores; the file on disk is changed and reloads through the normal path. See [In-place editing](doc_page_impl_edit.md).
 - `DocAssetStore` (beside the reading stores): the backend of the asset service layer (the development-server api, or the snapshot bundled into a build), the index of its objects loaded at page start and the version data read so far, what a reference by id or by name resolves to (`refQuery` / `refLoad`), every write to the store (`writeApply`), the dependencies of versions, the folders of the local store, the usage index (which blocks read which object), and the asset panels (the popup with its preview, the settings tab's). See [Asset service layer](doc_page_impl_asset.md).
 - `DocServiceStore` (beside the reading stores): the service backend's status (polled), its types and instances, the dashboard module of each type, why a dashboard cannot show (`dashboardProblemGet`), the calls of the dashboards and the writes of their state (the `service` route of the event layer), and the Services tab of the settings panel. See [Service instances](doc_page_impl_service.md#docservicestore).
@@ -88,20 +90,43 @@ Follows the data-driven pattern of `react-comp-misc` (`comp_design.md`) and the 
 - `DocPasteStore` (beside the edit layer): the one open review of a paste (as blocks or into the component being edited; the pasted text, the place the blocks go, which blocks are shown rendered), the pipeline result derived from it, and the insert, written through `DocEditStore.blockListInsert`, or the hand-over to the editor of the session (`DocEditStore.sessionEventSend`). See [Block-level operations](doc_page_impl_block_ops.md).
 - `DocBlockSelectStore` (beside the edit layer): the blocks selected in block selection mode (`DocEditStore.isBlockSelectMode`), their right-click menu (duplicate, move, delete), and the one open copy / move dialog (the checked blocks, the target document and place), written through `DocEditStore.blockListCopy` / `blockListMove` / `blockListDelete`; and the blocks the author is at in any mode with blocks (the selection, the open session's block, the blocks a text selection touches), which a paste is placed after. See [Copying and moving blocks](doc_page_impl_block_ops.md#copying-and-moving-blocks).
 - `DocPanelLayoutStore`: where the dialogs framed by the host's panel component were moved and resized, and the sizes they remember ([the panel contract](#the-panel-contract)).
+- `DocCompStateStore` (the component state service layer): what a component keeps beyond its data while it is on the page (a selection, a draft being edited, a count), one state object per block, keyed by the block's most stable identity (its asset object, its id, its place), held by every mount of the block and kept while none is mounted, so a block is as it was left when the reader comes back and the same block shown twice shows one state. See [Component state service layer](doc_page_impl_mdx_comp_state.md).
 
 Render components observe stores via context and submit change attempts through store APIs; no component talks to the file system or compiler directly.
 
+## The environment
+
+Much of the page depends on where it runs: a document can be edited, a file created, the asset api or the service backend reached only when a development server answers. One store answers all of these questions, `DocEnvStore`, so no store or component decides it from an endpoint, a build flag or `import.meta.env` of its own:
+
+```text
+virtual module docEnv { kind }  +  the endpoints DocPageMdx is given
+        ▼
+DocEnvStore   kind          viteDevServer | staticBuild   (lib/doc-env.js: one entry per kind, more can be added)
+              isCapable(c)  sourceWrite  files created in the source
+                            edit         documents and doc page yaml written in place (edit mode, side panel, config)
+                            asset        the asset api (else the snapshot bundled into a build)
+                            service      the service backend
+                            devWarning   hints for the integrator in the console
+              reasonGet(c)  why not, one wording everywhere
+              endpointGet(api)   '' when the kind does not offer the api
+        ▼
+DocSourceStore.isWritable, DocEditStore.isAvailable, the doc page config layer, the endpoints of
+DocAssetStore / DocServiceStore, the settings panel, registered components (config.env)
+```
+
+A kind offers a set of capabilities; a capability that needs an api is on only when the api is configured too, and editing only once the edit api has answered that it writes (`init`, the one probe of the page). `vite` serving the page is `viteDevServer`; a built site, including `vite preview`, is `staticBuild`. The plugin exports the kind as `docEnv`; a host rendering `DocPageMdx` without it gets the kind inferred from the endpoints it passes. A new environment, say a page served by a backend of its own, is one more kind with its capabilities. Whether a service that is offered is up (the asset store answers, the service backend runs) is the state of that service, kept by its own store.
+
 ## The document entry
 
-`config.yaml` names the document the page shows through its entry file:
+`config.yaml` names the doc page the page shows, by its folder or by its entry file:
 
 ```yaml
 docEntry:
-  file: ../example_doc/example-entry.yaml
+  dir: ../example_doc      # the entry is found in it: .doc-page/entry.yaml  (or file: <entry file>)
   # sidePanel: compact     # optional: one of the entry's side panels instead of its default
 ```
 
-The entry is a YAML file marked by a `docEntry` section and named `xxx-entry.yaml` by convention. It declares the document's `source` rules, its `tag` definitions, and its side panels (`sidePanelById`), each section inline or in a file of its own; a side panel includes the side panel of another entry, so a document is composed of self-contained documents, each of which can also be the entry of a deployment. The entry supplies `siteTitle`, `homeDoc`, and `homeItem` when `config.yaml` sets none. The grammar, the loading order, and the inclusion forms are specified in [The document entry](doc_page_impl_side_panel.md#the-document-entry).
+The entry is a YAML file marked by a `docEntry` section, kept as `.doc-page/entry.yaml` in the doc page folder by convention. It declares the document's `source` rules, its `tag` definitions, its `config`, and its side panels (`sidePanelById`), each section inline or, as recommended, in a file of its own beside it; a side panel includes the side panel of another entry (named by its file or its folder), so a document is composed of self-contained documents, each of which can also be the entry of a deployment. The entry supplies `siteTitle`, `homeDoc`, and `homeItem` when `config.yaml` sets none. The grammar, the loading order, and the inclusion forms are specified in [The document entry](doc_page_impl_side_panel.md#the-document-entry); the folder layout and how a folder leads to its entry in [The doc page folder](doc_page_impl_dir.md).
 
 ## Source rules
 
@@ -126,7 +151,7 @@ source:
     pattern: "~example/private/**"
 ```
 
-The rules of the entry come first; the rules of every included document follow in order of appearance (see [Loading](doc_page_impl_side_panel.md#loading)). The yaml files of the document and `config.yaml` are never collected.
+The rules of the entry come first; the rules of every included document follow in order of appearance (see [Loading](doc_page_impl_side_panel.md#loading)). The yaml files of the document, any `.doc-page/` folder, and `config.yaml` are never collected.
 
 Paths are relative to the file holding the rules. Every collected file is named by its **source path** `~rootId/relPath` (the root id marked by `~`, then the path from the root folder), so same-name root folders never clash; the same name is used in links, side panels, component data, urls and apis. A folder rule must declare how it **collects**: `recursive` (every file below is a page), `direct` (the files right in the folder are pages), or `referenced` (the files are collectable, not pages: they are served when something names them and kept in a build only when used, which is how a folder of images or of files the page creates belongs to the source). A root id names one folder; a later rule with the same id refines a folder inside it. `addFile` after a remove rule re-adds a single file (the "remove folder except one file" case in the requirement). The grammar, the collect modes and the folder manifest are specified in [Doc page source service layer](doc_page_impl_source.md#source-rules-and-collection).
 
@@ -228,7 +253,7 @@ compRegistry:
 
 Config decides what doc authors can use; code decides what exists. The dashboards of service instances are the one exception to the mapping: their component id is their tag name (`service/{templateName}/{dashboardId}`), and every lookup of a definition by id (`compDefinitionGet`) falls back to them, because the templates and instances are known from the service backend at run time, not from the configuration ([Dashboards in the registry](doc_page_impl_service.md#dashboards-in-the-registry)).
 
-All registered render components use the same top-level props: `{ data, config, onEvent }`. `data` contains semantic content, `config` contains operation state and runtime context, and `onEvent(eventType, eventData)` submits interaction requests, which the [event layer](doc_page_impl_event.md) routes and answers with `{ code, data, message }`. The internal shape of `data` and `config` remains component-specific. Components with meaningful mutable operation state can use `CompStateStore` or their own MobX store; simple components can remain stateless.
+All registered render components use the same top-level props: `{ data, config, onEvent }`. `data` contains semantic content, `config` contains operation state and runtime context, and `onEvent(eventType, eventData)` submits interaction requests, which the [event layer](doc_page_impl_event.md) routes and answers with `{ code, data, message }`. The internal shape of `data` and `config` remains component-specific. What a component keeps beyond its data while it is shown (a selection, a draft, a count) goes into its state object of the [component state service layer](doc_page_impl_mdx_comp_state.md) (`useCompState`), which outlives the component's mount and is shared by every rendering of the same block; the operation state of a single rendering may stay in a MobX store of its own, and simple components remain stateless.
 
 Registry values are component definitions created with `compDefine()`. A definition provides `CompRender`, can also provide supported placements and an input converter, and carries what the component exposes about itself (`expose`: its metadata and config shape, its icon, its view modes and edit modes, its edit template; [What a component exposes](doc_page_impl_mdx_comp.md#what-a-component-exposes)). Fumadocs-native components use adapters created with `compNativeDefine()`, so their framework-specific props do not become the public contract for project components.
 
@@ -248,7 +273,7 @@ Some components need settings only the host application can supply, such as a Me
 
 What a panel component receives and asks for is [the panel contract](#the-panel-contract).
 
-Beside the host settings, `RegisteredComp` gives every component what the page layers know for it: `config.assetUrlGet`, the resolver from authored file references to urls, bound to the component's document by the [doc page source service layer](doc_page_impl_source.md#the-page-side-docsourcestore-and-the-service-object) (a host may override it in `compConfigHost`); `config.source`, the service object of the doc page source service layer; `config.compConfig`, the component's own [component-level config](doc_page_impl_config.md#component-level-config) resolved for the document; `config.blockIndex`, the block of the edit body the component is rendered in (undefined in reading mode); `config.sourceLine`, for a comment-marked block, the line of its marker comment (the block's identity in reading and in edit mode, [Block identity](doc_page_impl_popup.md#block-identity)); `config.viewMode`, for a component that exposes view modes, the one to render ([View modes and edit modes](doc_page_impl_mdx_comp.md#view-modes-and-edit-modes)); and, for a component declared `isAssetAware`, `config.assetInfo` ([component awareness](doc_page_impl_mdx_comp.md#component-awareness)).
+Beside the host settings, `RegisteredComp` gives every component what the page layers know for it: `config.assetUrlGet`, the resolver from authored file references to urls, bound to the component's document by the [doc page source service layer](doc_page_impl_source.md#the-page-side-docsourcestore-and-the-service-object) (a host may override it in `compConfigHost`); `config.env`, the [environment](#the-environment) of the page (`kindGet()`, `isCapable(capability)`, `reasonGet(capability)`), which a component asks before it offers something only a development server can do; `config.source`, the service object of the doc page source service layer; `config.compConfig`, the component's own [component-level config](doc_page_impl_config.md#component-level-config) resolved for the document; `config.blockIndex`, the block of the edit body the component is rendered in (undefined in reading mode); `config.sourceLine`, for a comment-marked block, the line of its marker comment (the block's identity in reading and in edit mode, [Block identity](doc_page_impl_popup.md#block-identity)); `config.viewMode`, for a component that exposes view modes, the one to render ([View modes and edit modes](doc_page_impl_mdx_comp.md#view-modes-and-edit-modes)); `config.stateKey`, the key of the component's state object in the [component state service layer](doc_page_impl_mdx_comp_state.md#the-key), chosen from the block's asset object, id, place or instance; and, for a component declared `isAssetAware`, `config.assetInfo` ([component awareness](doc_page_impl_mdx_comp.md#component-awareness)).
 
 Components that display authored Markdown inside themselves (`BlockSimple`, `BlockMdx`, `Block`, `MultiLang`) receive the package `MdxRenderer` through their registry definitions, so they do not depend on the compile pipeline directly. `MdxRenderer` is the shared Markdown boundary (`lib/markdown-render.js`): the component decides what is shown, and the renderer decides what the Markdown means, the same way as the main document body.
 
@@ -297,19 +322,19 @@ For the resolution steps, declaration syntax, definitions, display places, the o
 
 ## Config
 
-Features of the page, such as where tags are displayed, are switched by config keys. Every key has a definition in code (value type, default, scope) and a page-level value in `globalConfig` of `config.yaml`. Keys of one feature share a prefix, and switches end with `IsOn`, for example `TagsDisplayAtLinkIsOn`.
+Features of the page, such as where tags are displayed, are switched by config keys. Every key has a definition in code (value type, default, scope). Keys of one feature share a prefix, and switches end with `IsOn`, for example `TagsDisplayAtLinkIsOn`.
 
-A document-level key can also be set for single documents. Its value is resolved through a fixed order of levels, and a later level wins key by key:
+Page-level values come from **config layers**, a stack that can take more layers: the **default** layer the package provides (`configDefault` of `config.yaml`, never changed from the page), the **doc page** layer the doc page declares (`config` of its entry and the files it reaches, edited in place on the development server), and the **client** layer of the reader's browser. A document-level key can also be set for single documents. Its value is resolved through a fixed order of levels, and a later level wins key by key:
 
 ```text
-default  <  global (config.yaml)  <  source rules  <  side-panel items  <  document frontmatter
+default (package)  <  doc page  <  source rules  <  side-panel items  <  document frontmatter  <  client (browser)
 ```
 
-`DocConfigStore` resolves these levels and answers queries such as "value of this key for this document" through the config service, so renderers never read the levels themselves. Applications can add their own keys.
+`DocConfigStore` resolves these levels and answers queries such as "value of this key for this document" through the config service, so renderers never read the levels themselves. The settings panel shows one tab per layer listing what that layer declares, not a full set of keys. Applications can add their own keys.
 
-A registered component can declare keys of its own (`compDefine` `expose.meta.configDefineList`); they are resolved through the same levels under a `compConfig` mapping keyed by the component's tag name, kept apart from the page keys in `config.yaml` and in the settings panel (tab **Component**), and handed to the component as `config.compConfig`. A string value at any level may use `${name}` variables declared in `config.yaml` `variable`; a key of type `sourcePath` is edited with completion from the doc page source service layer.
+A registered component can declare keys of its own (`compDefine` `expose.meta.configDefineList`); they are resolved through the same levels under a `compConfig` mapping keyed by the component's tag name, kept apart from the page keys in every declaration and in the settings panel (tab **Component**), and handed to the component as `config.compConfig`. A string value at any level may use `${name}` variables declared in `variable` of `config.yaml` or of a config file of the doc page; a key of type `sourcePath` is edited with completion from the doc page source service layer.
 
-For the key list, naming rules, declaration syntax of each level, component-level keys, variables, and the config service, refer to [Config system](doc_page_impl_config.md).
+For the layers, the key list, naming rules, declaration syntax of each level, component-level keys, variables, and the config service, refer to [Config system](doc_page_impl_config.md).
 
 ## Semantic parts and hosted indexes
 
@@ -396,27 +421,26 @@ The search dialog UI comes from fumadocs-ui (composable `SearchDialog` parts plu
 ## Project Folder Structure
 
 ```text
-example_doc/             # root folder of the demonstration page
-├── example-entry.yaml   # the entry of the document, named by config docEntry.file: its source,
-│                        #   tag and side panels, each kept in its own file below
-├── source.yaml          # ordered source rules (entry: source.file)
-├── side-panel.yaml      # the page side panel (entry: sidePanelById.main), as a resource file
-├── tag.yaml             # tag definitions (entry: tag.file)
-├── sub-doc/             # a self-contained sub document: its own entry (sub-doc-entry.yaml) with
-│                        #   source, tag and side panel; included by the page, deployable alone
+example_doc/             # the demonstration doc page, laid out as a doc page folder (doc_page_impl_dir.md)
+├── .doc-page/           # its metadata, never collected: entry.yaml (named by config docEntry.dir) naming
+│                        #   source.yaml, tag.yaml, config.yaml and side-panel.yaml; the side panels of
+│                        #   parts (side-panel-mdx-usage.yaml, side-panel-move-sandbox.yaml); asset.yaml,
+│                        #   the local store of the asset service layer; service-backend.yaml
+├── sub-doc/             # a self-contained sub document: a doc page folder of its own (sub-doc/.doc-page/entry.yaml,
+│                        #   source, tag, config and side panel inline); included by its folder, deployable alone
 ├── side-panel-tag.md    # tag demonstration; doc-config.md: config demonstration
 ├── comp-custom-list-el.md # components as list elements: rules and examples
-├── edit-in-place.md     # edit-mode playground (editable on the development server)
+├── mdx-doc-edit-in-place.md     # edit-mode playground (editable on the development server)
 ├── asset-store.md       # components reading their data from the asset service layer
-├── asset.yaml           # the local store of the asset service layer: its folders and the default one
 ├── asset/, asset-archive/ # folders of the store: one folder per object, {id}--{name} (object.yaml + version files)
-├── service-instance.md  # service dashboards; service-backend.yaml: the config of the service backend
+├── service-instance.md  # service dashboards; .doc-page/service-backend.yaml: the config of the service backend
+├── comp-state.md        # the component state service layer: counts that stay, two blocks sharing one state, the states listed
 ├── service-template/    # service templates: {templateId}--{name} (service-template.yaml, service.py, dashboard/)
 ├── service/             # service instances: {templateName}-inst-{serviceId}, each a copy of its template (service.yaml + its data)
 ├── playground/          # a document for trying things out, ignored by git with everything in it
 ├── asset-file/image/    # a "referenced" source folder: where pasted images are created (nothing tracked)
 ├── comp-mdx/            # demo-specific components (not collected as documents); StockTable + StockTableEdit
-├── mdx-usage/           # mdx component demonstrations (part with hosted index; its side-panel.yaml is a resource file)
+├── mdx-usage/           # mdx component demonstrations (part with hosted index; its side panel is .doc-page/side-panel-mdx-usage.yaml)
 └── link-nav/            # link usage guide (sections by title / Anchor id), link and non-md display test docs
 main/
 ├── config.yaml          # example config (tracked), actually runnable
@@ -451,11 +475,11 @@ main/
         ├── DocPageMdx.jsx       # the embeddable doc page component
         ├── style.css            # the package stylesheet: Tailwind, the fumadocs theme, fonts, and css/
         ├── css/                 # shared classes of the page UI: buttons, badges, floating panels, small texts, spinner (see Shared styles)
-        ├── store/               # DocSourceStore (lower) + DocSourceFileStore + DocStore (upper) + DocTagStore + DocConfigStore + DocEditStore + DocAssetStore + DocServiceStore + DocBlockPopupStore
-        └── lib/                 # mdx compile, nested Markdown renderer, doc-source-path (the path grammar), link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, doc-edit-* (block model, edit api client), doc-asset-* (reference, backends), doc-service-* (backend client, federation loader), doc-event (event router), framework adapter
+        ├── store/               # DocEnvStore + DocSourceStore (lower) + DocSourceFileStore + DocStore (upper) + DocTagStore + DocConfigStore + DocEditStore + DocAssetStore + DocServiceStore + DocBlockPopupStore + DocCompStateStore
+        └── lib/                 # mdx compile, nested Markdown renderer, doc-source-path (the path grammar), link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, doc-edit-* (block model, edit api client), doc-asset-* (reference, backends), doc-comp-state (state keys, line shifts), doc-service-* (backend client, federation loader), doc-event (event router), framework adapter
 ```
 
-Design documents: [doc page source service layer](doc_page_impl_source.md), [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [in-place editing](doc_page_impl_edit.md), [copy, move and paste](doc_page_impl_block_ops.md), [asset service layer](doc_page_impl_asset.md), [service instances](doc_page_impl_service.md), [block popup](doc_page_impl_popup.md), [event layer](doc_page_impl_event.md), [package usage](doc_page_impl_detail.md).
+Design documents: [doc page source service layer](doc_page_impl_source.md), [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [MDX document in-place editing](doc_page_impl_edit.md), [copy, move and paste](doc_page_impl_block_ops.md), [asset service layer](doc_page_impl_asset.md), [component state service layer](doc_page_impl_mdx_comp_state.md), [service instances](doc_page_impl_service.md), [block popup](doc_page_impl_popup.md), [event layer](doc_page_impl_event.md), [package usage](doc_page_impl_detail.md).
 
 Run `pnpm install` from the workspace root once, then `pnpm dev` from either this folder or `frontend/`. `pnpm build` produces one static deployable artifact (docs bundled as lazy chunks); any static file server works, no doc folders needed at runtime.
 

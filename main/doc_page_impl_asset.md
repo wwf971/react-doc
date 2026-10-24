@@ -22,7 +22,7 @@ versionId: head                        │ { text, lang } of the version        
                                        versions, head, data, events, save mode, upload,
                                        the blocks using the object (usage index ◄── GET {endpoint}/usage/list)
                                        └─ AssetPreview: the block rendered with the data as it is now
-                                     settings panel, tab "Asset service": the folders; orphans,
+                                     settings panel, tab "Asset service": the folders by doc page; orphans,
                                        unreferenced objects, broken references, the panel of one
 
 build: the plugin expands every reference for its own scans and bundles
@@ -146,7 +146,7 @@ An object that is a component's data says so in its metadata: `component: { name
 The local store is one store with one id, but on disk it is one or more **folders**, and the folders are the store: every object, version, and piece of metadata is a file in one of them, readable without the page, and the page holds nothing the folders do not. Copying a folder copies its objects; a git checkout of a folder changes the store.
 
 ```text
-asset.yaml                    the store config: folderList [{ path, isDefault }], paths relative to this file
+.doc-page/asset.yaml          the asset store config of one doc page: folderList [~rootId/path], folderDefault
 {folder}/
 └── {objectId}--{name}/       one folder per object: its id, the separator, its name
     │                         ({objectId} alone for an object without a name)
@@ -163,35 +163,53 @@ asset.yaml                    the store config: folderList [{ path, isDefault }]
     └── {versionId}.metadata.yaml.bak  the previous metadata of a version
 ```
 
-Which folders make up the store, and which one is the **default folder**, is the store's config file, named by `asset.file` of `config.yaml` (relative to the config file). Objects are created in the default folder; the other folders are read like it. An object is its folder, named `{objectId}--{name}` so that a person browsing the disk sees what each folder is (`w4okcncucnu--hero image`) while the store still works by id: the separator `--` is a string an id can never hold (ids are base36) and a name is refused when it holds it, so the id of a folder is what stands before the first `--`, and the folder needs no file read to be identified. The separator is valid in a folder name on every major operating system, and so is the name by the rules above. Finding object `w4okcncucnu` is finding the folder whose id part is that in each store folder, and listing the store is listing those folders; there is no index file to keep in sync. Renaming an object renames its folder. The first folder of the list wins when two folders hold the same id, which is a mistake the page cannot repair and reports by showing the first. Where the object was found (`folder`, `dirName`) travels with its metadata to the page and is not written into `object.yaml`.
+Which folders make up the store, and which one is the **default folder**, is declared by the doc pages the page loads ([below](#which-folders-a-doc-page-declares)). Objects are created in a default folder; the other folders are read like it. An object is its folder, named `{objectId}--{name}` so that a person browsing the disk sees what each folder is (`w4okcncucnu--hero image`) while the store still works by id: the separator `--` is a string an id can never hold (ids are base36) and a name is refused when it holds it, so the id of a folder is what stands before the first `--`, and the folder needs no file read to be identified. The separator is valid in a folder name on every major operating system, and so is the name by the rules above. Finding object `w4okcncucnu` is finding the folder whose id part is that in each store folder, and listing the store is listing those folders; there is no index file to keep in sync. Renaming an object renames its folder. The first folder of the list wins when two folders hold the same id, which is a mistake the page cannot repair and reports by showing the first. Where the object was found (`folder`, `dirName`) travels with its metadata to the page and is not written into `object.yaml`.
 
-```yaml
-# config.yaml                      # asset.yaml (paths relative to asset.yaml)
-asset:                             folderList:
-  file: ./asset.yaml                 - path: ./asset
-                                       isDefault: true
-                                     - path: ./asset-archive
+### Which folders a doc page declares
+
+The folders belong to doc pages, not to the package: a doc page carries its asset objects with it, like its documents, so including a doc page in another, or deploying it alone, brings its objects along. Every doc page the page loads, its own and every one it includes (by entry file or by folder, [including](doc_page_impl_side_panel.md#including-other-side-panels)), has an **asset store config**, and the store is all of them:
+
+```text
+where the config is      "asset: { file }" of the doc page's entry, relative to the entry;
+                         absent: asset.yaml beside the entry (.doc-page/asset.yaml, the convention);
+                         "asset: false": the doc page has no asset folders
+the config file          folderList   the folders, as source paths ~rootId/path
+                         folderDefault one of them: where objects of this doc page's documents are created
+                                       (the first folder when absent)
+no config file           the default folders, ASSET_FOLDER_DEFAULT_LIST relative to the doc page folder
+                         (asset/), named by the doc page's root that holds that folder
+the store                the folders of every doc page, the page's own first, then the included ones
+                         in loading order; a folder named twice belongs to the first doc page
+default folder           of the store: the page's own doc page's; of a new object: the default folder of
+                         the doc page whose roots hold the document it is created from (docPath)
 ```
 
-The plugin reads the `asset` section once, when the development server starts (`configResolved`), before it decides whether the page gets an asset api: without an `asset` section the page has no store; a section it cannot use stops the server with a message saying how to write it, rather than starting it without a store that the page would then report as not writable at the first save. A section is unusable when it is not a mapping with `file`, when it uses the former `asset.folder` (the store was once one folder named in `config.yaml`; the message shows the migration above, with the old folder as the default folder; the object folders stay as they are, no id or data changes), and when the store config file is not valid yaml or its `folderList` is not a list. A store config file that does not exist yet is an empty store, and a folder of the list that does not exist yet is created when the first object is written to it, so a new store needs no folder on disk to start. The endpoint and the middleware are chosen once (`configResolved`, `configureServer`), so a store added to `config.yaml` while the server runs takes effect after a restart of the server; a browser reload or a document's hot update does not install an api that was not installed at start.
+```yaml
+# my-doc/.doc-page/asset.yaml
+folderList:
+  - ~my-doc/asset
+  - ~my-doc/asset-archive
+folderDefault: ~my-doc/asset
+```
 
-The folders are changed from the page: the **Asset service** tab of the settings panel ([config: the settings panel](doc_page_impl_config.md#user-level)) lists them with their object counts, marks the default and a folder that does not exist on disk, and on the development server sets the default, removes a folder (its files stay; its objects just leave the store), or adds one (created on disk when missing). The new path is an `EditValueInline`, the same field as a source path; leaving it commits: Enter, the Add folder button, or a click outside adds the path, and leaving it empty shows the placeholder again. The whole list is sent (`POST /folder/set`) and the server rewrites `asset.yaml`, so the change holds across page loads. The store config has its own file rather than a line in `config.yaml` because a change of `config.yaml` reloads the whole page, and adding a folder should not.
+**A folder is always named by a source path**, relative to a root of the page's source rules (`~rootId/path`, [source paths](doc_page_impl_source.md#source-paths)), never by a path relative to the config file: a doc page may declare several roots, and a source path says which one a folder is in, means the same in every file of every doc page, and survives moving the config file. A path that is not a source path, names a root no source rule declares, or names a whole root is left out of the store and reported in the console and in the settings tab (`problemList` of the doc page); the rest of the config is read. The former form `[{ path, isDefault }]` is still read for its paths and default. A folder that does not exist yet is an empty folder of the store and is created when the first object is written to it, so a doc page without any asset needs nothing on disk; reading never creates anything. The asset folders and the config files are never documents, wherever they lie ([source scan](doc_page_impl_source.md#source-rules-and-collection)).
 
-There is one object file per object, and one metadata file per version that has metadata. Every rewrite of a file is protected the same way (`fileWriteSafe`): the current file is copied to `.bak`, the new content is written to `.tmp`, and the temporary file is renamed over the original, so an interrupted write leaves either the old file or the new one, and the previous content is one file away. The backups are recovery data, not history: the version files are the history, and the backups are excluded from version control (`.gitignore`). The demonstration store's default folder has its own `.gitignore` that lists the files of the example and ignores everything else, so trying the panel there (new versions, new objects, backups) leaves nothing to commit; changes of tracked files (an `object.yaml`, a version rewritten in place) still show, which an ignore file cannot hide, and `git restore` undoes them. Times are written in the project's time format (`20260520_23250530+09`).
+`config.yaml` does not name a store any more: its former `asset` section stops the server with the doc page form. The asset api is installed when the development server starts, for a page with at least one doc page that has not declared `asset: false`; the folders themselves are read again for every request, so a config file changed on disk, by the page or an editor, takes effect at once and is reported to the page as a store change (`doc-asset-change`, `isStoreChanged`). A config file that does not parse stops the read with a message naming it; while the server runs, the last valid store is kept.
 
-A folder may lie inside a source folder (the example keeps `example_doc/asset` and `example_doc/asset-archive` beside the documents); the plugin never collects the store's files as documents (the config file and its backup included) and never invalidates the manifest for a change in them.
+The folders are changed from the page: the **Asset service** tab of the settings panel ([config: the settings panel](doc_page_impl_config.md#settings-panel)) shows one group per doc page, its folders as a string list item of the config panel (an entry edited in place, removed, or added in the last row) and its default folder as a choice, then each folder with its object count, a folder missing on disk marked. A path typed there gets a warning while it is typed when it is not a source path of a known root, or names a folder that does not exist yet (`DocAssetStore.folderPathWarningGet`); the warning has a place of its own, so it never moves the field. On the development server a change is sent for that doc page only (`POST /folder/set { configFile, folderList, folderDefault }`): the server checks every path against the roots, writes the two values into the doc page's config file in place ([YAML utilities](doc_page_impl_yaml_utils.md): an entry that stays keeps its comments), keeps the previous file as `.bak`, creates the file when the doc page had none, and creates the folders on disk. A removed folder's files stay; its objects just leave the store. The store config has its own file rather than a line in `config.yaml` because a change of `config.yaml` reloads the whole page, and adding a folder should not.
 
-## The standard api
+### The store api
 
 The file store (`plugin/doc-asset-store.ts`, `assetStoreCreate(config)`) is the api; the development server exposes it over http, and the page talks to it through a backend with the same method set. Every failure is an `AssetError` with a code: -1 bad request, -2 the data changed since it was read, -3 not found.
 
 | method                                                     | effect                                                                     |
 | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `folderInfoList()` / `folderSet(folderList)`               | the folders with their state; the whole list rewritten (`asset.yaml`)      |
+| `folderInfoList()` / `docPageInfoList()`                   | the folders with their state and doc page; the doc pages with their config |
+| `folderSet({ configFile, folderList, folderDefault }, rootAbsPathById)` | the folders of one doc page written into its config file, in place |
 | `objectList()`                                             | metadata of every object of every folder, deleted ones included            |
 | `objectGet(objectId)` / `objectGetByName(name)` / `objectFind({ objectId, name })` | metadata of one object, by id, by name, or by whichever the key has |
 | `versionDataGet(objectId, versionId = 'head')` / `versionDataGetOf(meta, versionId)` | `{ versionId, bytes, size, hash, isText, text?, metadata }` of one version |
-| `objectCreate({ name, lang, contentType, fileExt, component, saveMode, data, note, folder, dependencyList, versionMetadata })` | a new object with its first version, in the default folder unless one is named, with its component and save mode when given; `{ object, version, isCreated }`, the existing object and `isCreated: false` when the name is taken |
+| `objectCreate({ name, lang, contentType, fileExt, component, saveMode, data, note, folder, docPath, dependencyList, versionMetadata })` | a new object with its first version, in the folder named, else the default folder of the doc page of `docPath`, else the store's, with its component and save mode when given; `{ object, version, isCreated }`, the existing object and `isCreated: false` when the name is taken |
 | `objectUpdate({ objectId, hashBase, data, mode, note, dependencyList, versionMetadata })` | the head data; `mode` `inPlace` or `newVersion`, the object's save mode when absent; `dependencyList` and `versionMetadata` absent keep those of the version written over or made from |
 | `versionMetadataSet(objectId, versionId, metadata)`        | the metadata of one version replaced ([Version metadata](#version-metadata)); `{ object, version }` |
 | `dependencyListGet(objectId, versionId = 'head')` / `dependencyListSet(objectId, versionId, list)` / `dependencyAdd(…, dependency)` / `dependencyRemove(…, dependency)` | the dependencies of one version ([Dependencies](#dependencies)) |
@@ -329,7 +347,7 @@ The button asks first, in the toolbar, like a deletion (`Move the data of this b
 
 ## Build
 
-A build has no development server, so the plugin does two things at build time with the store of `asset.file`:
+A build has no development server, so the plugin does these things at build time with the store of the doc pages:
 
 - its own scans of document text see the data, not the reference: `assetBlockTextExpand` replaces every `asset` block whose version is text with the data block of that version (`{lang}` fence, the text) before the attachment finder collects image references ([build-only attachment collection](doc_page_impl.md#build-only-component-attachment-collection)) and before source pruning follows component dependencies ([source pruning](doc_page_impl.md#source-pruning-for-deployment)). The documents themselves are not rewritten; the page resolves at run time as in development.
 - the source files the versions of the live objects depend on (`dependencySourcePathList()`) are kept by source pruning and bundled into `fileUrlByPath` like a file a document names ([collection for a build](doc_page_impl_source.md#files-in-a-build)), so an Image asset whose image sits in a `referenced` folder still shows in the built page.
@@ -354,7 +372,8 @@ frontend/plugin/doc-asset-store.ts         the file store: the asset section of 
                                            name), versions, head, bytes and text, version metadata, save
                                            modes, events, backups, snapshot
 frontend/plugin/doc-asset-server.ts        the dev-server middleware (with GET /usage/list)
-frontend/plugin/doc-source.ts              asset.file, docAssetEndpoint / assetSnapshot / subscribeDocAsset
+frontend/plugin/doc-entry.ts               the doc pages loaded (docPageList): entry, folder, roots, "asset" section
+frontend/plugin/doc-source.ts              the store of the doc pages, docAssetEndpoint / assetSnapshot / subscribeDocAsset
                                            exports, reference expansion for the scans, change events, the
                                            usage scan of the documents (assetUsageDocListScan)
 frontend/plugin/doc-asset-config.test.js   the asset section and what the server then exports and answers;
@@ -378,13 +397,14 @@ comp-doc/registry/RegisteredComp.jsx       the asset branch of the runtime bound
 comp-doc/registry/comp-registry.js         compDefine: isAssetAware, assetDependencyListGet
 comp-doc/asset/                            CompAssetHost, AssetFrame, AssetPanel, AssetPreview, AssetPanelPopup,
                                            AssetUsageTable, AssetObjectTable, DocAsset.css
-comp-doc/settings/AssetStoreSettings.jsx   the "Asset service" tab of the settings panel: the folders; orphans,
+comp-doc/settings/AssetStoreSettings.jsx   the "Asset service" tab of the settings panel: the folders by doc page; orphans,
                                            unreferenced objects, broken references, the panel of one object
 comp-doc/edit/DocEditBlockToolbar.jsx      the asset button of a reference block, the to-asset button of an inline block,
                                            the deletion with or without the object
 comp-doc/edit/DocEditBlockEditor.jsx       asset-backed blocks are edited as source (except asset-only components)
 comp-mdx/excel-univer/                     ExcelUniver: an asset-only component using version metadata
-example_doc/asset.yaml                     the store config of the demonstration store
+example_doc/.doc-page/asset.yaml           the asset store config of the demonstration doc page (its sub document
+                                           has none and uses its default folder, ~sub-doc/asset)
 example_doc/asset/, asset-archive/         the folders of the demonstration store
 example_doc/asset-store.md                 demonstration document (dependencies, version metadata, blocks sharing an
                                            object, backlinks, orphans, what a component knows)

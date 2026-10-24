@@ -7,6 +7,7 @@ import { COMP_PLACEMENT_DOC_LIST, compMetaGet, compViewModeDefaultIdGet, compVie
 import { CompDataRefHost } from './CompDataRef.jsx';
 import { CompAssetHost, compInputIsAssetRef } from '../asset/CompAssetHost.jsx';
 import { DocEditBlockContext } from '../edit/DocEditDocContext.js';
+import { compStateKeyBuild } from '../../frontend/src/lib/doc-comp-state.js';
 
 // One runtime boundary for every component resolved through compRegistry.
 // Registered render components always receive { data, config, onEvent }.
@@ -22,7 +23,7 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
     onEventRuntime,
     placement,
   } = props;
-  const { compById, compConfigHost, configStore, docStore, editStore, eventRouter, onEvent: onEventPage, sourceStore } = useDocStores();
+  const { compById, compConfigHost, configStore, docStore, editStore, envStore, eventRouter, onEvent: onEventPage, sourceStore } = useDocStores();
   const idFallback = useId();
   // the block of the edit body the component is rendered in, when it is
   const editBlock = useContext(DocEditBlockContext);
@@ -152,8 +153,26 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
   const viewMode = compViewModeListGet(definition).length > 0
     ? (blockIndex !== undefined ? editStore?.blockViewModeGet(sourcePath, blockIndex) : undefined) ?? compViewModeDefaultIdGet(definition)
     : undefined;
+  // the key of the component's state object in the component state service
+  // layer (doc_page_impl_mdx_comp_state.md): the asset object its data comes
+  // from, else the block's id, else its place, else this mount. what the
+  // component keeps between renders and across its unmount is found by it
+  // (useCompState), and every mount of the same block shares it. only a
+  // block of a document, or an editor given its document, is keyed by a
+  // document: a side-panel panel or a tag overview is not tied to the
+  // document that happens to be current.
+  const stateKey = compStateKeyBuild({
+    assetInfo: configRuntime.assetInfo,
+    docPath: isPlacementDoc || configRuntime.sourcePath !== undefined ? sourcePath : '',
+    id: data.id,
+    sourceLine: configRuntime.sourceLine,
+    instanceId,
+  });
   const config = {
     assetUrlGet,
+    // the environment of the page: env.isCapable('edit'), env.reasonGet(...),
+    // env.kindGet() (doc_page_impl.md#the-environment)
+    env: envStore.envService,
     source: sourceStore.sourceService,
     ...compConfigHost,
     ...configBuilt,
@@ -166,6 +185,7 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
     instanceId,
     placement,
     sourcePath,
+    stateKey,
   };
 
   // every report of the component becomes one event of the event layer

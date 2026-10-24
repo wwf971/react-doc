@@ -9,7 +9,7 @@ import {
 // serves the local store; every object route names the store it means
 // (store=local), the way a reference does.
 //
-//   GET  {endpoint}/status                                   -> { isWritable: true, storeIdList, folderList }
+//   GET  {endpoint}/status                                   -> { isWritable: true, storeIdList, folderList, docPageList }
 //   GET  {endpoint}/object/list?store=                        -> { objectList }
 //   GET  {endpoint}/object/get?store=&objectId=|name=&versionId=  -> { object, version }   versionId default head
 //   GET  {endpoint}/object/data?store=&objectId=|name=&versionId= -> the bytes of the version, with their content type
@@ -19,7 +19,7 @@ import {
 //   GET  {endpoint}/usage/list?docPath=&docPath=               -> { docList: [{ docPath, contentHash, usageList }] }
 //                                     the asset references of the collected documents, read from disk now; with
 //                                     docPath (repeatable) only those documents (a document that is gone is absent)
-//   POST {endpoint}/object/create    { store, name, lang, contentType, fileExt, text | dataBase64, note, folder, dependencyList,
+//   POST {endpoint}/object/create    { store, name, lang, contentType, fileExt, text | dataBase64, note, folder | docPath, dependencyList,
 //                                       saveMode, versionMetadata, component }  -> { object, version, isCreated }
 //                                     isCreated false: an object of that name exists and is answered, nothing is created
 //   POST {endpoint}/object/update    { store, objectId, hashBase, text | dataBase64, mode, note, dependencyList, versionMetadata }
@@ -38,7 +38,8 @@ import {
 //   POST {endpoint}/version/delete   { store, objectId, versionId }                      -> { object }
 //   POST {endpoint}/object/lock/set  { store, objectId, isLocked }                       -> { object }
 //   POST {endpoint}/version/lock/set { store, objectId, versionId, isLocked }            -> { object }
-//   POST {endpoint}/folder/set       { folderList: [{ path, isDefault }] }               -> { folderList }
+//   POST {endpoint}/folder/set       { configFile, folderList: [~rootId/path], folderDefault } -> { ok }
+//                                     the folders of one doc page, written into its asset store config in place
 //
 // every json response is { code, data, message }. code 0 is success; negative codes:
 //   -1  bad request or unexpected failure
@@ -53,7 +54,8 @@ import {
 // dependent:  { objectId, versionId, dependency }
 // version: { versionId, size, hash, isText, text?, metadata }   text only when the bytes are utf-8 text;
 //          metadata: the mapping of {versionId}.metadata.yaml, {} when the version has none
-// folder:  { path, pathAbs, isDefault, isExists, objectCount }
+// folder:  { path (~rootId/path), pathAbs, isDefault, docEntryFile, isExists, objectCount }
+// docPage: { entryFile, configFileRelative, isConfigFileExists, folderList, folderDefault, rootIdList, problemList }
 
 export const DOC_ASSET_ENDPOINT_NAME = '__doc-asset';
 
@@ -62,12 +64,15 @@ type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) 
 // usageScan(docPathList): the asset references of the documents named, or
 // of every collected document when the list is empty; the documents are a
 // matter of the doc page source service layer, which the plugin passes in
+// rootAbsPathByIdGet: the roots of the source rules, which name the asset
+// folders (~rootId/path)
 export function docAssetMiddlewareCreate(options: {
   endpoint: string;
   storeGet: () => AssetStore;
+  rootAbsPathByIdGet: () => Map<string, string>;
   usageScan: (docPathList: string[]) => AssetUsageDoc[];
 }): Middleware {
-  const { endpoint, storeGet, usageScan } = options;
+  const { endpoint, storeGet, rootAbsPathByIdGet, usageScan } = options;
   return (req, res, next) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname !== endpoint && !url.pathname.startsWith(`${endpoint}/`)) {
@@ -105,7 +110,7 @@ export function docAssetMiddlewareCreate(options: {
       }
       return;
     }
-    void routeHandle(req, route, url, storeGet())
+    void routeHandle(req, route, url, storeGet(), rootAbsPathByIdGet)
       .then((data) => jsonSend(res, 200, { code: 0, data, message: '' }))
       .catch(failureSend);
   };
@@ -114,10 +119,18 @@ export function docAssetMiddlewareCreate(options: {
 const statusByCode: Record<number, number> = { [-1]: 400, [-2]: 409, [-3]: 404 };
 
 // the data of the answer, or an AssetError
-async function routeHandle(req: IncomingMessage, route: string, url: URL, store: AssetStore): Promise<any> {
+async function routeHandle(
+  req: IncomingMessage,
+  route: string,
+  url: URL,
+  store: AssetStore,
+  rootAbsPathByIdGet: () => Map<string, string>,
+): Promise<any> {
   const method = req.method ?? 'GET';
   if (method === 'GET') {
-    if (route === '/status') return { isWritable: true, storeIdList: [ASSET_STORE_ID_LOCAL], folderList: store.folderInfoList() };
+    if (route === '/status') {
+      return { isWritable: true, storeIdList: [ASSET_STORE_ID_LOCAL], folderList: store.folderInfoList(), docPageList: store.docPageInfoList() };
+    }
     if (route === '/object/list') {
       storeIdCheck(url.searchParams.get('store'));
       return { objectList: store.objectList() };
@@ -139,8 +152,15 @@ async function routeHandle(req: IncomingMessage, route: string, url: URL, store:
   if (method === 'POST') {
     const body = await jsonBodyRead(req);
     if (route === '/folder/set') {
-      if (!Array.isArray(body?.folderList)) throw new AssetError(-1, 'folderList is required');
-      return { folderList: store.folderSet(body.folderList) };
+      if (typeof body?.configFile !== 'string' || !Array.isArray(body?.folderList)) {
+        throw new AssetError(-1, 'configFile and folderList are required');
+      }
+      store.folderSet(
+        { configFile: body.configFile, folderList: body.folderList, folderDefault: body.folderDefault },
+        rootAbsPathByIdGet(),
+      );
+      // the store as the file says now
+      return { ok: true };
     }
     storeIdCheck(body?.store);
     const objectId = String(body?.objectId ?? '');
@@ -153,6 +173,7 @@ async function routeHandle(req: IncomingMessage, route: string, url: URL, store:
         data: bodyDataGet(body),
         note: body?.note,
         folder: body?.folder ? String(body.folder) : undefined,
+        docPath: body?.docPath ? String(body.docPath) : undefined,
         dependencyList: body?.dependencyList,
         saveMode: body?.saveMode,
         versionMetadata: body?.versionMetadata,

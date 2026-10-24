@@ -25,9 +25,9 @@ import { configDoc, fileManifest } from 'virtual:doc-source';
 />;
 ```
 
-In-place editing on the development server is enabled by passing the edit api url the virtual module exports: `config={{ ..., edit: { endpoint: docEditEndpoint } }}` with `import { docEditEndpoint } from 'virtual:doc-source'`. It is an empty string in a build, so the deployed page has no edit mode ([In-place editing](doc_page_impl_edit.md)).
+MDX document in-place editing on the development server is enabled by passing the edit api url the virtual module exports: `config={{ ..., edit: { endpoint: docEditEndpoint } }}` with `import { docEditEndpoint } from 'virtual:doc-source'`. It is an empty string in a build, so the deployed page has no edit mode ([In-place editing](doc_page_impl_edit.md)).
 
-The asset service layer ([Asset service layer](doc_page_impl_asset.md)) needs `asset.file` in `config.yaml`, naming the store's config file with its `folderList` ([the local store](doc_page_impl_asset.md#the-local-store-folders-fully-reflected)), and two more values of the virtual module: `data={{ ..., assetSnapshot }}` (the objects bundled into a build, `null` in development) and `config={{ ..., asset: { endpoint: docAssetEndpoint, subscribe: subscribeDocAsset } }}` (the asset api of the development server and its change feed, both inert in a build). The asset panel is framed by `config.compConfigHost.panelComponent`, like the tag overview; without it the frame shows the asset and has no button.
+The asset service layer ([Asset service layer](doc_page_impl_asset.md)) is configured by each doc page, in `.doc-page/asset.yaml` beside its entry (or its default folder `asset/` without the file, [which folders a doc page declares](doc_page_impl_asset.md#which-folders-a-doc-page-declares)), and needs two more values of the virtual module: `data={{ ..., assetSnapshot }}` (the objects bundled into a build, `null` in development) and `config={{ ..., asset: { endpoint: docAssetEndpoint, subscribe: subscribeDocAsset } }}` (the asset api of the development server and its change feed, both inert in a build). The asset panel is framed by `config.compConfigHost.panelComponent`, like the tag overview; without it the frame shows the asset and has no button.
 
 Service instances ([Service instances](doc_page_impl_service.md)) need `service.backend` in `config.yaml`, the address of the service backend (and optionally `service.backendConfigFile`, the backend's config, whose folders are then not documents), and the endpoint the virtual module exports: `config={{ ..., service: { endpoint: docServiceEndpoint } }}`. It is an empty string in a build, so a deployed page has no backend and its dashboards say so. The backend is a separate program (`python3 main/service-backend/server.py --config …`), started and stopped on its own.
 
@@ -35,36 +35,38 @@ A host that embeds the page checks these when it takes a new version, because no
 
 - **Components it maps.** A component is used in documents by the name `compRegistry` maps to its id (`ExcelUniver: common/ExcelUniver`); importing the component does not register it.
 - **Host settings of components.** `compConfigHost.univerLoad` for `ExcelUniver` (the Univer packages, preset, locale and css are dependencies of the host and are loaded lazily by it; `frontend/src/univer-load.js` is the reference loader), `mermaidLoad` for `DiagramMermaid`, `panelComponent` for the popups ([the panel contract](doc_page_impl.md#the-panel-contract); its maximize fields for the [block popup](doc_page_impl_popup.md)).
-- **The asset section.** `asset.file` and the store's config file, as above; a former `asset.folder` stops the development server with the migration ([configuration](doc_page_impl_asset.md#the-local-store-folders-fully-reflected)).
-- **A restart after enabling the asset service layer.** The asset api is installed when the development server starts; a server started before `asset.file` was added keeps a page without a store until it is restarted.
+- **The asset folders.** Each doc page's `.doc-page/asset.yaml`, its folders named by source path; a former `asset` section of `config.yaml` stops the development server with the doc page form ([which folders a doc page declares](doc_page_impl_asset.md#which-folders-a-doc-page-declares)).
+- **A restart after enabling the asset service layer.** The asset api is installed when the development server starts; a server started while every doc page declared `asset: false` keeps a page without a store until it is restarted.
 
 The Vite plugin is build-time infrastructure. `DocPageMdx` is a runtime render component. It fills its host and scrolls internally, so the host element needs a definite height (for a full-window page: `html, body, #root { height: 100%; }`); otherwise the side panel, local index, and floating controls do not stay in view. External source files are bundled into the output and are not read from the file system after deployment.
 
 ## Configuration composition
 
-`config.yaml` holds the settings of the page and names the document it shows through the document's entry file:
+`config.yaml` holds the settings of the page and names the doc page it shows, by its folder:
 
 ```yaml
 # config.yaml
 docEntry:
-  file: ./doc/guide-entry.yaml
+  dir: ./guide                  # the entry is found as guide/.doc-page/entry.yaml
 ```
 
 ```yaml
-# doc/guide-entry.yaml
+# guide/.doc-page/entry.yaml
 docEntry:
   title: Guide
-  homeDoc: /guide/overview.md
+  homeDoc: ~guide/overview.md
 source:
   file: ./source.yaml           # or the rule list inline
 tag:
   file: ./tag.yaml              # or defineById inline
+config:
+  file: ./config.yaml           # or the keys inline, or a list of both
 sidePanelById:
   main:
     file: ./side-panel.yaml     # or { root?, tree } inline
 ```
 
-The entry (named `xxx-entry.yaml` by convention) declares the source rules, the tag definitions, and the side panels of the document; each section can stay inline or move to a file of its own, and a side-panel node includes the side panel of another entry through `include`, so a document is composed of self-contained documents that are each deployable alone by naming their entry in `config.yaml`. The grammar is specified in [The document entry](doc_page_impl_side_panel.md#the-document-entry); the side-panel tree format (documents, virtual folders, source folders, component panels, separators, inclusions, tags) and the side-panel item renderer in the rest of [Side panel design](doc_page_impl_side_panel.md). Tags and tag definitions are described in [Tag system](doc_page_impl_tag.md). Feature switches (`globalConfig`, and per-document `config` in source rules, side-panel nodes, and frontmatter) are described in [Config system](doc_page_impl_config.md); an application adds its own keys through `DocPageMdx` `config.configDefineList`.
+The entry (`.doc-page/entry.yaml` in the doc page folder by convention, see [The doc page folder](doc_page_impl_dir.md); `config.yaml` can name the folder as `docEntry.dir` instead of the file) declares the source rules, the tag definitions, the config, and the side panels of the document; each section can stay inline or move to a file of its own, and a side-panel node includes the side panel of another entry through `include`, so a document is composed of self-contained documents that are each deployable alone by naming their entry in `config.yaml`. The grammar is specified in [The document entry](doc_page_impl_side_panel.md#the-document-entry); the side-panel tree format (documents, virtual folders, source folders, component panels, separators, inclusions, tags) and the side-panel item renderer in the rest of [Side panel design](doc_page_impl_side_panel.md). Tags and tag definitions are described in [Tag system](doc_page_impl_tag.md). Feature switches (the config layers: `configDefault` of `config.yaml`, `config` of the entry, the reader's browser; and per-document `config` in source rules, side-panel nodes, and frontmatter) are described in [Config system](doc_page_impl_config.md); an application adds its own keys through `DocPageMdx` `config.configDefineList`.
 
 A valid source file that has no side-panel binding produces a visible navigation warning. `homeItem` selects the initial leaf by id; `homeDoc` remains supported and resolves through the same binding index.
 

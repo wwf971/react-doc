@@ -20,7 +20,8 @@ import { AssetPanelModel } from './AssetPanelModel.js';
 //   isWritable     the backend accepts writes
 //   statusMessage  why the status request failed, as the backend said it
 //   storeIdList    the stores the backend serves (the ids a reference may name)
-//   folderList     the folders of the local store; one is the default for new objects
+//   folderList     the folders of the local store, each named by one doc page; one is the default
+//   docPageList    the doc pages the page loads, with their asset store config
 //   index          the object index: the metadata of every object, loaded at start
 //   objectById     metadata of every object known, key `${store}/${objectId}`
 //   versionByKey   data of every version read so far, key `${store}/${objectId}#${versionId}`
@@ -147,7 +148,26 @@ export type AssetObject = {
   dirName: string;
 };
 
-export type AssetFolderInfo = { path: string; pathAbs: string; isDefault: boolean; isExists: boolean; objectCount: number };
+// a folder of the store: its source path (~rootId/path), the doc page that names it
+export type AssetFolderInfo = {
+  path: string;
+  pathAbs: string;
+  isDefault: boolean;
+  docEntryFile: string;
+  isExists: boolean;
+  objectCount: number;
+};
+
+// the asset store config of one doc page the page loads (its own first)
+export type AssetDocPageInfo = {
+  entryFile: string;
+  configFileRelative: string;
+  isConfigFileExists: boolean;
+  folderList: string[];
+  folderDefault: string;
+  rootIdList: string[];
+  problemList: string[];
+};
 
 // the object by id, or by name when objectId is ''
 export type AssetRef = { store: string; objectId: string; name?: string; versionId: string };
@@ -206,6 +226,7 @@ export class DocAssetStore {
   statusMessage = '';
   storeIdList: string[] = [];
   folderList: AssetFolderInfo[] = [];
+  docPageList: AssetDocPageInfo[] = [];
   // the folder actions of the settings panel
   folder: { status: 'idle' | 'submitting' | 'error'; message: string } = { status: 'idle', message: '' };
   index: { status: 'idle' | 'loading' | 'done' | 'error'; message: string } = { status: 'idle', message: '' };
@@ -295,6 +316,7 @@ export class DocAssetStore {
       this.statusMessage = result.code === 0 ? '' : String(result.message || 'no answer');
       this.storeIdList = result.code === 0 && Array.isArray(result.data?.storeIdList) ? result.data.storeIdList : [];
       this.folderList = result.code === 0 && Array.isArray(result.data?.folderList) ? result.data.folderList : [];
+      this.docPageList = result.code === 0 && Array.isArray(result.data?.docPageList) ? result.data.docPageList : [];
     });
   }
 
@@ -612,8 +634,9 @@ export class DocAssetStore {
     return { code: 0, data: result.data, message: '' };
   }
 
-  // a new object with its first version, in the default folder of the store
-  // unless a folder is named; data: { object, version, isCreated }. a name
+  // a new object with its first version, in the folder named, else in the
+  // default folder of the doc page of docPath (the document it is made
+  // from), else in the default folder of the store; data: { object, version, isCreated }. a name
   // an object of the store has answers that object and creates nothing
   // (isCreated false).
   // dependencyList: what the data depends on (doc_page_impl_asset.md#dependencies)
@@ -630,6 +653,7 @@ export class DocAssetStore {
     dataBase64?: string;
     note?: string;
     folder?: string;
+    docPath?: string;
     dependencyList?: AssetDependency[];
     saveMode?: AssetSaveMode;
     versionMetadata?: AssetVersionMetadata;
@@ -737,66 +761,57 @@ export class DocAssetStore {
   }
 
   // ---------- the folders of the local store (settings panel) ----------
+  // every doc page the page loads names its own folders (its asset store
+  // config); the settings panel edits the folders of one doc page at a time
 
   get folderDefault(): AssetFolderInfo | undefined {
     return this.folderList.find((folder) => folder.isDefault);
   }
 
-  // the whole list is written: asset.yaml is rewritten by the server, and
-  // the index is read again because the set of objects changed with it
-  private async folderListApply(folderListNext: { path: string; isDefault: boolean }[]): Promise<boolean> {
+  // the folders of one doc page, with their state
+  folderListOfDocPageGet(entryFile: string): AssetFolderInfo[] {
+    return this.folderList.filter((folder) => folder.docEntryFile === entryFile);
+  }
+
+  // why a folder path cannot be an asset folder of this page ('' when it
+  // can, or when nothing is known): checked while it is typed, from what the
+  // page knows (the roots of the source), so it is cheap and synchronous
+  folderPathWarningGet(pathText: string, rootIdList: string[]): string {
+    const text = String(pathText ?? '').trim();
+    const match = /^~([^/]+)(\/.+)?$/.exec(text);
+    if (!match) return 'name an asset folder by its source path: ~rootId/path';
+    if (!rootIdList.includes(match[1])) return `no root "${match[1]}" (roots: ${rootIdList.join(', ') || 'none'})`;
+    if (!match[2]) return 'a whole root cannot be an asset folder';
+    const folder = this.folderList.find((item) => item.path === text);
+    if (folder && !folder.isExists) return `${text} does not exist yet; it is created when the first object is written to it`;
+    return '';
+  }
+
+  // the folders and default folder of one doc page written into its asset
+  // store config (the server rewrites the file in place), then the store
+  // read again: the set of objects changed with the folders
+  async docPageFolderSet(configFile: string, folderList: string[], folderDefault: string): Promise<boolean> {
     if (!this.backend || !this.isWritable || this.folder.status === 'submitting') return false;
+    if (folderList.length === 0) {
+      runInAction(() => {
+        this.folder = { status: 'error', message: 'A doc page with an asset store needs at least one folder.' };
+      });
+      return false;
+    }
     runInAction(() => {
       this.folder = { status: 'submitting', message: '' };
     });
-    const result = await this.backend.folderSet(folderListNext);
+    const result = await this.backend.folderSet(configFile, folderList, folderDefault);
     runInAction(() => {
-      if (result.code !== 0) {
-        this.folder = { status: 'error', message: result.message || 'The folders were not changed.' };
-        return;
-      }
-      this.folder = { status: 'idle', message: '' };
-      if (Array.isArray(result.data?.folderList)) this.folderList = result.data.folderList;
+      this.folder = result.code === 0
+        ? { status: 'idle', message: '' }
+        : { status: 'error', message: result.message || 'The folders were not changed.' };
     });
-    if (result.code === 0) await this.indexLoad();
+    if (result.code === 0) {
+      await this.statusLoad();
+      await this.indexLoad();
+    }
     return result.code === 0;
-  }
-
-  folderAdd(pathText: string): Promise<boolean> {
-    const pathTrimmed = String(pathText ?? '').trim();
-    if (!pathTrimmed) return Promise.resolve(false);
-    if (this.folderList.some((folder) => folder.path === pathTrimmed)) {
-      runInAction(() => {
-        this.folder = { status: 'error', message: `${pathTrimmed} is already a folder of the store.` };
-      });
-      return Promise.resolve(false);
-    }
-    return this.folderListApply([
-      ...this.folderList.map((folder) => ({ path: folder.path, isDefault: folder.isDefault })),
-      { path: pathTrimmed, isDefault: this.folderList.length === 0 },
-    ]);
-  }
-
-  // the objects in a removed folder stay on disk; they only leave the store
-  folderRemove(pathText: string): Promise<boolean> {
-    const folderListRest = this.folderList.filter((folder) => folder.path !== pathText);
-    if (folderListRest.length === this.folderList.length) return Promise.resolve(false);
-    if (folderListRest.length === 0) {
-      runInAction(() => {
-        this.folder = { status: 'error', message: 'The store needs at least one folder.' };
-      });
-      return Promise.resolve(false);
-    }
-    const isDefaultKept = folderListRest.some((folder) => folder.isDefault);
-    return this.folderListApply(folderListRest.map((folder, index) => ({
-      path: folder.path,
-      isDefault: isDefaultKept ? folder.isDefault : index === 0,
-    })));
-  }
-
-  folderDefaultSet(pathText: string): Promise<boolean> {
-    if (!this.folderList.some((folder) => folder.path === pathText)) return Promise.resolve(false);
-    return this.folderListApply(this.folderList.map((folder) => ({ path: folder.path, isDefault: folder.path === pathText })));
   }
 
   folderMessageClear() {

@@ -24,7 +24,7 @@ every item label = SidePanelItemHost
 
 ## The document entry
 
-A document is described by one YAML file, its **entry**, named by `docEntry.file` in `config.yaml`. The entry declares everything that makes the document a whole: the source rules that collect its files, the definitions of its tags, and its side panels. A document is therefore self-contained: another document includes it by naming its entry, and a deployment shows it alone by naming the same entry in its `config.yaml`. The entry file carries the marker `docEntry`, and its name ends with `-entry.yaml` by convention (`example-entry.yaml`, `sub-doc-entry.yaml`); the loader warns about an entry named otherwise.
+A document is described by one YAML file, its **entry**, named in `config.yaml` by `docEntry.file`, or found in the doc page folder named by `docEntry.dir`. The entry declares everything that makes the document a whole: the source rules that collect its files, the definitions of its tags, its config, and its side panels. A document is therefore self-contained: another document includes it by naming its entry (or its folder), and a deployment shows it alone by naming the same in its `config.yaml`. The entry file carries the marker `docEntry`; by convention it is `.doc-page/entry.yaml` in the doc page folder, with the files it names beside it ([The doc page folder](doc_page_impl_dir.md)), or a file named `xxx-entry.yaml`; the loader warns about an entry named otherwise.
 
 Source rules decide which files exist. A side panel is a way of picking things from that collected source and arranging them as a tree: documents, source folders, component panels, virtual folders. It is a resource, not a unique page setting: a document declares as many side panels as it needs, each addressed by an id, and a node of any side panel includes another one, of the same file or of another document. The included side panel's `tree` becomes the node's children and its `root` configures the node. A part's side panel, or a whole sub document, is thus an independent resource that a larger side panel includes.
 
@@ -43,6 +43,10 @@ source:                        # optional: a rule list, { rules: [...] }, or { f
     collect: recursive         # recursive | direct | referenced (doc_page_impl_source.md)
 tag:                           # optional: { defineById: {...} } or { file: ./tag.yaml }
   file: ./tag.yaml
+config:                        # optional: the doc page config layer, { Key: value }, { file }, or a list of both
+  - file: ./config.yaml        #   (doc_page_impl_config.md#the-doc-page-layer)
+asset:                         # optional, an entry only: { file: ./asset.yaml } or false; absent: asset.yaml
+  file: ./asset.yaml           #   beside the entry (doc_page_impl_asset.md#which-folders-a-doc-page-declares)
 sidePanelDefault: main         # optional when the file declares exactly one side panel
 sidePanelById:
   main:                        # a side panel: { root?, tree }
@@ -51,7 +55,7 @@ sidePanelById:
     tree:
       - doc: ~guide/setup.md
       - id: reference
-        include: ./reference/reference-entry.yaml   # a side panel of another document
+        include: ../reference                      # a side panel of another document, by its folder
   compact:                     # a side panel declared in another file, by reference
     file: ./panels.yaml
     sidePanel: compact
@@ -59,7 +63,7 @@ sidePanelById:
 
 Any other top-level key is an error naming the file, as are the former forms (a top-level `tree` or `root`, a `sidePanel` section, `childrenFile` on a node), so that a file of the old format fails with the hint it needs.
 
-A **side-panel reference** names one side panel. A string is a file path, relative to the file holding the reference, and means the default side panel of that file. A mapping `{ file?, sidePanel? }` names the file (the file holding the reference when absent) and the side panel id (the file's default when absent). The default side panel of a file is `sidePanelDefault`, or the only side panel it declares; a reference that needs the default of a file declaring several without `sidePanelDefault` is an error. References appear as the `include` property of a tree node, as an alias value of `sidePanelById`, and, without `file`, as `docEntry.sidePanel` in `config.yaml`.
+A **side-panel reference** names one side panel. A string is a file path, relative to the file holding the reference, and means the default side panel of that file; the path of a folder means the entry found in that doc page folder ([finding the entry](doc_page_impl_dir.md#finding-the-entry-from-a-folder)). A mapping `{ file?, sidePanel? }` names the file (the file holding the reference when absent) and the side panel id (the file's default when absent). The default side panel of a file is `sidePanelDefault`, or the only side panel it declares; a reference that needs the default of a file declaring several without `sidePanelDefault` is an error. References appear as the `include` property of a tree node, as an alias value of `sidePanelById`, and, without `file`, as `docEntry.sidePanel` in `config.yaml`.
 
 ### Loading
 
@@ -71,6 +75,9 @@ file loaded (doc-entry.ts fileLoad)
                appended to the rules of the page
   -> "tag":    definitions merged; a tag already defined by a file loaded earlier
                keeps that definition, so the entry decides over what it includes
+  -> "config": declarations recorded for the doc page config layer, a config file
+               read where it is named; the declarations of an included document
+               are stacked below those of the including one
   -> every side panel of sidePanelById: tree expanded, "include" references resolved
      by loading the referenced file (its source and tag come along) and taking
      the referenced side panel; a side panel is loaded once and shared
@@ -81,21 +88,21 @@ source rules of the page =
     order, tree depth-first
 ```
 
-Rule paths are relative to the file that contains them. Every rule form is available, including tag and config steps. Because rules run in this order, a removal rule of the entry does not affect files that an included document adds later. The yaml files of the document (the entry, every file it reaches, its source and tag files) and `config.yaml` itself are configuration and are never collected as documents, whatever the rules say; no rule needs to exclude them. An item excluded through `excludeSidePanelItemIds` does not remove the source rules of the file it included.
+Rule paths are relative to the file that contains them. Every rule form is available, including tag and config steps. Because rules run in this order, a removal rule of the entry does not affect files that an included document adds later. The yaml files of the document (the entry, every file it reaches, its source, tag and config files), anything in a `.doc-page/` folder, and `config.yaml` itself are configuration and are never collected as documents, whatever the rules say; no rule needs to exclude them. An item excluded through `excludeSidePanelItemIds` does not remove the source rules of the file it included.
 
 A cycle of inclusions is detected per side panel, not per file: two side panels of one file may include each other's siblings, but a side panel that reaches itself is an error naming the chain. Every file read is watched by the development server; when an inclusion is added while the server runs, editing the containing YAML refreshes the watch set.
 
 ### What the page receives
 
-`config.yaml` names the entry and, optionally, which of its side panels the page shows:
+`config.yaml` names the entry, or the doc page folder it is found in, and, optionally, which of its side panels the page shows:
 
 ```yaml
 docEntry:
-  file: ../docs/guide-entry.yaml
+  dir: ../docs/guide            # or  file: ../docs/guide/.doc-page/entry.yaml
   sidePanel: compact            # optional: a side panel of the entry other than its default
 ```
 
-The loader fills `configDoc` with what runtime code reads today: `source` (every rule), `sidePanel.tree` (the selected side panel, every inclusion inlined, every node annotated with where it is written: `textSource`, `nodeSource` and, on a node with `include`, `includeSource`; see [Editing a label in place](#editing-a-label-in-place) and [Moving an item](#moving-an-item)), `tag.defineById` (the entry's definitions, then the `tag` of `config.yaml` over them), and `siteTitle` / `homeDoc` / `homeItem` from the entry when `config.yaml` sets none. `configDoc.docEntry` carries the resolved side panel id, `sidePanelIdList`, and `fileHashByFile`: the content hash of every document yaml file as it was loaded, by its path relative to the config directory, so a write from the page can be refused when a file changed since. Runtime code receives only this inlined shape, so a change of the file grammar stays in the loader (`plugin/doc-entry.ts`). The same side panel used in two places (a sub document included by the page side panel and by a compact one) is one loaded resource.
+The loader fills `configDoc` with what runtime code reads today: `source` (every rule), `sidePanel.tree` (the selected side panel, every inclusion inlined, every node annotated with where it is written: `textSource`, `nodeSource` and, on a node with `include`, `includeSource`; see [Editing a label in place](#editing-a-label-in-place) and [Moving an item](#moving-an-item)), `tag.defineById` (the entry's definitions, then the `tag` of `config.yaml` over them), and `siteTitle` / `homeDoc` / `homeItem` from the entry when `config.yaml` sets none. `configDoc.docEntry` carries the entry file (`file`, also when a folder was named), the resolved side panel id, `sidePanelIdList`, `configDeclarationList` (the declarations of the doc page config layer, in stack order, see [Config system](doc_page_impl_config.md#the-doc-page-layer)), and `fileHashByFile`: the content hash of every document yaml file as it was loaded, by its path relative to the config directory, so a write from the page can be refused when a file changed since. Runtime code receives only this inlined shape, so a change of the file grammar stays in the loader (`plugin/doc-entry.ts`). The same side panel used in two places (a sub document included by the page side panel and by a compact one) is one loaded resource.
 
 ## Tree format
 
@@ -340,7 +347,7 @@ When `config.isTagOverviewAvailable` is true, the tags are clickable. A click em
 
 ## Editing a label in place
 
-In edit mode ([In-place Editing](doc_page_impl_edit.md)) the label of an item can be changed from the side panel, and the change is written into the yaml file the label comes from. It is available on the development server only, like every edit, on the `sidebar` surface, and for items that exist as a node in a side-panel file: items generated from a source folder have no label to write. The default renderer implements it; a custom renderer that wraps `SidePanelItem` gets it, one that renders its own markup does not (it may implement it from the same `config` and events).
+In edit mode ([MDX document in-place editing](doc_page_impl_edit.md)) the label of an item can be changed from the side panel, and the change is written into the yaml file the label comes from. It is available on the development server only, like every edit, on the `sidebar` surface, and for items that exist as a node in a side-panel file: items generated from a source folder have no label to write. The default renderer implements it; a custom renderer that wraps `SidePanelItem` gets it, one that renders its own markup does not (it may implement it from the same `config` and events).
 
 ```text
 plugin (load time)         every node: textSource = { file, path }

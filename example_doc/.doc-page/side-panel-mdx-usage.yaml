@@ -1,9 +1,9 @@
-# Side panel of the "MDX Components" part, included from ../side-panel.yaml
-# through "include". This is a resource file, not an entry: the part is not
-# a document of its own (its files belong to the "example" root), so the file
-# only declares a side panel. "root" configures the including node itself: it
-# binds the part root document and declares the hosted part index authored
-# inside it.
+# Side panel of the "MDX Components" part (the documents in mdx-usage/),
+# included from side-panel.yaml through "include". This is a resource file,
+# not an entry: the part is not a document of its own (its files belong to
+# the "example" root), so the file only declares a side panel. "root"
+# configures the including node itself: it binds the part root document and
+# declares the hosted part index authored inside it.
 sidePanelById:
   main:
     root:

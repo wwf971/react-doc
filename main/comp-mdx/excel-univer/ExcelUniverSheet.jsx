@@ -44,17 +44,31 @@ function excelUniverEngineGet(univerLoad) {
 //                 click on a cell); false: the attempt does nothing
 //   height        px, or any css height ('100%' fills a popup)
 //   univerLoad    config.univerLoad of the host
+//   selectionInitial  { sheetId, range }: the sheet made active and the cells
+//                 selected once the workbook is shown (the state the last
+//                 instance left, doc_page_impl_mdx_comp_state.md); a sheet or
+//                 a range the workbook does not have is ignored
+//   onSelectionChange({ sheetId, range })   the active sheet or the selected
+//                 cells changed (the engine's own events; silent on an engine
+//                 without them)
 //   onReady({ univerAPI, workbook, engineVersion })   once the workbook is shown
 //   onDataChange(workbookData)   edit mode: after a change of the data, the
 //                 workbook as the engine saves it (one call per task, however
 //                 many mutations the change was made of)
-export function ExcelUniverSheet({ workbookText, isEditable, isReadOnlyWarningShown = false, height, univerLoad, onReady, onDataChange }) {
+export function ExcelUniverSheet({
+  workbookText, isEditable, isReadOnlyWarningShown = false, height, univerLoad, selectionInitial, onSelectionChange, onReady, onDataChange,
+}) {
   const containerRef = useRef(null);
   const [message, messageSet] = useState('');
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
   const onDataChangeRef = useRef(onDataChange);
   onDataChangeRef.current = onDataChange;
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
+  // read once, when the instance mounts
+  const selectionInitialRef = useRef(selectionInitial);
+  selectionInitialRef.current = selectionInitial;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -111,6 +125,17 @@ export function ExcelUniverSheet({ workbookText, isEditable, isReadOnlyWarningSh
           if (excelUniverCommandIsDataChange(event, engine.CommandType)) event.cancel = true;
         }));
       }
+      // the sheet and the cells the last instance left: made active again,
+      // then every change of them is reported (the restore reports too)
+      selectionRestore(workbook, selectionInitialRef.current);
+      const selectionReport = () => {
+        const selection = selectionGet(workbook);
+        if (selection && !isDisposed) onSelectionChangeRef.current?.(selection);
+      };
+      for (const eventName of ['SelectionChanged', 'ActiveSheetChanged']) {
+        const eventId = univerAPI.Event?.[eventName];
+        if (eventId !== undefined) disposableList.push(univerAPI.addEvent(eventId, selectionReport));
+      }
       onReadyRef.current?.({ univerAPI, workbook, engineVersion: engine.univerVersion });
     };
 
@@ -133,4 +158,32 @@ export function ExcelUniverSheet({ workbookText, isEditable, isReadOnlyWarningSh
       {message ? <p className="doc-mdx-excel-univer-message" role="alert">{message}</p> : null}
     </div>
   );
+}
+
+// the active sheet and the selected cells of the workbook, { sheetId, range }
+// (A1 notation, '' when nothing is selected); undefined when the facade
+// cannot say
+function selectionGet(workbook) {
+  try {
+    const sheet = workbook.getActiveSheet();
+    if (!sheet) return undefined;
+    const range = workbook.getActiveRange();
+    return { sheetId: sheet.getSheetId(), range: range ? range.getA1Notation() : '' };
+  } catch {
+    return undefined;
+  }
+}
+
+// makes the sheet active and selects the range, as far as the workbook has
+// them; anything the engine refuses is left as it is
+function selectionRestore(workbook, selection) {
+  if (!selection?.sheetId) return;
+  try {
+    const sheet = workbook.getSheetBySheetId(selection.sheetId);
+    if (!sheet) return;
+    workbook.setActiveSheet(sheet);
+    if (selection.range) sheet.getRange(selection.range).activate();
+  } catch (error) {
+    console.warn('ExcelUniver: the selection was not restored', error);
+  }
 }

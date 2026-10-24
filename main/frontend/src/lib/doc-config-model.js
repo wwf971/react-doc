@@ -1,4 +1,4 @@
-import { COMP_CONFIG_KEY, configDeclaredIs, configValueNormalize, variableExpand } from './doc-config-define.js';
+import { CONFIG_LEVEL_DEFAULT, COMP_CONFIG_KEY, configDeclaredIs, configValueNormalize, variableExpand } from './doc-config-define.js';
 
 // Resolves every config declaration of the doc page into one config model.
 // Design: doc_page_impl_config.md
@@ -6,7 +6,8 @@ import { COMP_CONFIG_KEY, configDeclaredIs, configValueNormalize, variableExpand
 // value of key K for document D, later levels win:
 //   1. default        definition valueDefault
 //   2. layers below   the config layers with isAboveDocLevels false, in order
-//                     (global: configDoc.globalConfig.K)
+//                     (default: configDoc.configDefault.K; docPage: the config
+//                     declarations of the doc page entry, merged)
 //   3. source         source rules that collected D, in rule order   (manifest entry.configSource)
 //   4. side panel     side-panel nodes binding D or a folder above D, in tree order
 //   5. doc            frontmatter "config" of D                     (manifest entry.configFrontmatter)
@@ -39,7 +40,8 @@ import { COMP_CONFIG_KEY, configDeclaredIs, configValueNormalize, variableExpand
 //   configGlobal                key -> value, every layer (levels 1, 2 and 6)
 //   levelGlobalByKey            key -> level
 //   configByLayerId             layerId -> { valueByKey, levelByKey }, the layers up to and
-//                               including this one: what the settings panel shows on its tab
+//                               including this one (the settings panel lists a layer that
+//                               declares every key, the default layer, from it)
 //   configByDocPath             docPath -> { valueByKey, levelByKey }, levels 1-6
 //   configPartIndexByPartId     partId -> { key: value }, only the keys declared
 //   compConfigGlobalByCompId    compId -> { valueByKey, levelByKey }, every layer
@@ -69,7 +71,7 @@ export function configModelBuild({
   const levelGlobalByKey = {};
   for (const [key, define] of configDefineByKey) {
     configGlobal[key] = define.valueDefault;
-    levelGlobalByKey[key] = 'default';
+    levelGlobalByKey[key] = CONFIG_LEVEL_DEFAULT;
   }
   const configResolvedGlobal = { valueByKey: configGlobal, levelByKey: levelGlobalByKey };
   const compConfigGlobalByCompId = compConfigResolvedBuild(compConfigDefineByCompId);
@@ -85,7 +87,7 @@ export function configModelBuild({
   const configResolvedBase = { valueByKey: {}, levelByKey: {} };
   for (const [key, define] of configDefineByKey) {
     configResolvedBase.valueByKey[key] = define.valueDefault;
-    configResolvedBase.levelByKey[key] = 'default';
+    configResolvedBase.levelByKey[key] = CONFIG_LEVEL_DEFAULT;
   }
   const compConfigBaseByCompId = compConfigResolvedBuild(compConfigDefineByCompId);
   for (const layer of layerListBelow) {
@@ -200,7 +202,7 @@ function configLevelApply(configResolved, configDeclared, { configDefineByKey, v
       continue;
     }
     if (define.scope === 'page' && !isLayer) {
-      console.warn(`[doc-config] "${key}" is a page-level key; set it in a config layer (globalConfig), not in ${originText}`);
+      console.warn(`[doc-config] "${key}" is a page-level key; set it in a config layer (the config of the doc page entry), not in ${originText}`);
       continue;
     }
     const { isValid, value } = configValueNormalize(define, variableExpand(valueDeclared, variableByName, originText));
@@ -223,7 +225,7 @@ function compConfigResolvedBuild(compConfigDefineByCompId) {
     const levelByKey = {};
     for (const [key, define] of defineByKey) {
       valueByKey[key] = define.valueDefault;
-      levelByKey[key] = 'default';
+      levelByKey[key] = CONFIG_LEVEL_DEFAULT;
     }
     result.set(compId, { valueByKey, levelByKey });
   }
@@ -273,4 +275,33 @@ function compConfigOneApply(configResolved, configDeclared, defineByKey, { varia
     configResolved.valueByKey[key] = value;
     configResolved.levelByKey[key] = level;
   }
+}
+
+// ----- one declaration, key by key -----
+
+// a declared mapping checked key by key, as the settings panel lists a layer
+// or one declaration of it: what is declared, not a full set of keys.
+//   defineByKey     the page key definitions, or the keys of one component
+//   isPageScopeOk   page-level keys are accepted (a config layer)
+// -> [{ key, valueDeclared, value, isValid, message }] in declaration order;
+//    value has its variables expanded, message says why a key is not used.
+//    compConfig is left out: check each component's mapping on its own.
+export function configDeclaredCheck(configDeclared, { defineByKey, variableByName = {}, isPageScopeOk = true }) {
+  if (!configDeclaredIs(configDeclared)) return [];
+  const result = [];
+  for (const [key, valueDeclared] of Object.entries(configDeclared)) {
+    if (key === COMP_CONFIG_KEY) continue;
+    const define = defineByKey.get(key);
+    if (!define) {
+      result.push({ key, valueDeclared, value: valueDeclared, isValid: false, message: 'unknown key' });
+      continue;
+    }
+    if (define.scope === 'page' && !isPageScopeOk) {
+      result.push({ key, valueDeclared, value: valueDeclared, isValid: false, message: 'page-level key, ignored here' });
+      continue;
+    }
+    const { isValid, value } = configValueNormalize(define, variableExpand(valueDeclared, variableByName, '', true));
+    result.push({ key, valueDeclared, value, isValid, message: isValid ? '' : 'invalid value' });
+  }
+  return result;
 }

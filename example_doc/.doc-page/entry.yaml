@@ -1,0 +1,52 @@
+# Entry of the demonstration doc page. config.yaml names the doc page by its
+# folder (docEntry.dir: ../example_doc), and the page finds this file as
+# .doc-page/entry.yaml: the metadata files of a doc page are kept in its
+# .doc-page/ folder, apart from its documents (design: doc_page_impl_dir.md).
+# An entry declares everything that makes up the doc page: its source rules,
+# its tag definitions, its config, and its side panels. Here each of them is
+# kept in its own file next to this one, so the entry mostly names them.
+# design: doc_page_impl_side_panel.md#the-document-entry
+docEntry:
+  title: React Doc Test          # siteTitle, when config.yaml sets none
+  homeDoc: ~example/doc.md       # document opened at start, when config.yaml sets none
+
+# source rules: a rule list, { rules }, or { file }. paths are relative to the
+# file holding the rules. the .doc-page/ folder is never collected.
+source:
+  file: ./source.yaml
+
+# tag definitions: { defineById } or { file }. definitions of an included
+# document are merged below these.
+tag:
+  file: ./tag.yaml
+
+# the doc page config layer: values of config keys for this doc page, over
+# the package defaults (config.yaml configDefault). a mapping of keys, a
+# config file { file }, or a list of both; declarations are stacked in the
+# order read, a later one wins. the settings panel shows them on its
+# "Doc page" tab, and edits a value in place on the development server.
+# design: doc_page_impl_config.md#the-doc-page-layer
+config:
+  - file: ./config.yaml
+  # a declaration written in place, after the file, so it wins over it
+  - TagsDisplayAtLinkPosition: after
+
+# the side panels of this document. the page shows the default one
+# (config.yaml docEntry.sidePanel picks another); a node of any side panel
+# includes one of them through "include". a value is a side panel
+# { root?, tree } or a reference to one declared in another file.
+sidePanelDefault: main
+sidePanelById:
+  # the page side panel, written in its own file
+  main:
+    file: ./side-panel.yaml
+  # a second side panel of the same document: a short list for a reduced
+  # deployment. config.yaml "docEntry: { sidePanel: compact }" shows it.
+  compact:
+    tree:
+      - doc: ~example/doc.md
+        text: Document Model
+      - id: sub-doc-compact
+        include: ../sub-doc          # a doc page given by its folder: its entry is found in it
+      - doc: ~req/doc_page_req.md
+        text: Requirement

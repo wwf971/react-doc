@@ -1,9 +1,12 @@
+import type { DocEnvStore } from './DocEnvStore.js';
 import { makeAutoObservable, observable, reaction, runInAction } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import type { DocStore } from './DocStore.js';
 import type { DocConfigStore } from './DocConfigStore.js';
 import type { AssetUsageChange, DocAssetStore } from './DocAssetStore.js';
+import type { DocCompStateStore } from './DocCompStateStore.js';
 import { compileDoc } from '../lib/mdx-compile.js';
+import { lineShiftListGet } from '../lib/doc-comp-state.js';
 import { docEditApiCreate } from '../lib/doc-edit-api.js';
 import { ASSET_REF_LANG, ASSET_STORE_ID_LOCAL, assetRefLangIs, assetRefParse, assetRefTextBuild } from '../lib/doc-asset-ref.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../../../comp-doc/registry/comp-registry.js';
@@ -35,7 +38,8 @@ import {
 // of truth, the development server rewrites it, and the ordinary HMR path
 // brings the new text back into DocSourceStore.
 //
-//   isAvailable       a development server answers the edit api
+//   isAvailable       the environment offers editing (DocEnvStore "edit": a
+//                     development server answers the edit api)
 //   isEditMode        the global toggle
 //   isBlockSelectMode the block selection mode (doc_page_impl_block_ops.md
 //                     #selecting-blocks): the body of edit mode without its
@@ -286,7 +290,8 @@ export class DocEditStore {
   docStore: DocStore;
   configStore: DocConfigStore;
   api: ReturnType<typeof docEditApiCreate> | undefined;
-  isAvailable = false;
+  // the environment of the page; only isCapable / endpointGet are used
+  envStore: Pick<DocEnvStore, 'isCapable' | 'endpointGet'>;
   isEditMode = false;
   isBlockSelectMode = false;
   sourceByPath: Record<string, EditSource> = {};
@@ -322,6 +327,9 @@ export class DocEditStore {
 
   // the asset service layer, for moving a block's inline data into it
   assetStore: DocAssetStore | undefined;
+  // the component state service layer: the states keyed by the lines of a
+  // document follow the lines every write moves (doc_page_impl_mdx_comp_state.md)
+  compStateStore: DocCompStateStore | undefined;
   // the last changes of the files, oldest first (historyRecord); not observed
   historyRecordList: EditHistoryRecord[] = [];
 
@@ -329,15 +337,20 @@ export class DocEditStore {
     sourceStore: DocSourceStore,
     docStore: DocStore,
     configStore: DocConfigStore,
-    options?: { endpoint?: string; assetStore?: DocAssetStore },
+    options?: { envStore?: Pick<DocEnvStore, 'isCapable' | 'endpointGet'>; assetStore?: DocAssetStore; compStateStore?: DocCompStateStore },
   ) {
     this.sourceStore = sourceStore;
+    this.envStore = options?.envStore ?? sourceStore.envStore;
     this.docStore = docStore;
     this.configStore = configStore;
     this.assetStore = options?.assetStore;
-    this.api = options?.endpoint ? docEditApiCreate(options.endpoint) : undefined;
+    this.compStateStore = options?.compStateStore;
+    const endpoint = this.envStore.endpointGet('edit');
+    this.api = endpoint ? docEditApiCreate(endpoint) : undefined;
     makeAutoObservable(this, {
       api: false,
+      envStore: false,
+      compStateStore: false,
       assetStore: false,
       configStore: false,
       docStore: false,
@@ -357,7 +370,6 @@ export class DocEditStore {
 
   init() {
     if (!this.api) return;
-    void this.availabilityCheck();
     this.reactionDispose = reaction(
       () => ({
         isBodyEdit: this.isEditMode || this.isBlockSelectMode,
@@ -397,12 +409,8 @@ export class DocEditStore {
 
   // ---------- availability and mode ----------
 
-  async availabilityCheck(): Promise<void> {
-    if (!this.api) return;
-    const result = await this.api.statusGet();
-    runInAction(() => {
-      this.isAvailable = result.code === 0 && result.data?.isWritable === true;
-    });
+  get isAvailable(): boolean {
+    return this.envStore.isCapable('edit');
   }
 
   // switching edit mode off leaves the open session (saving it); when the
@@ -627,11 +635,20 @@ export class DocEditStore {
   //   isHistoryRecorded  false: the caller records the change itself, with
   //                    the change of another file of the same action
   //                    (data.fileChange of the answer)
+  //   stateRemapList   how the marker lines of blocks move, when the
+  //                    operation alone does not say (a swap of two blocks);
+  //                    else it is derived from the operation (lineShiftListGet).
+  //                    the component state service layer re-keys the states
+  //                    of the moved lines before the new text is compiled, so
+  //                    the body rendered from it finds them under the new lines
   private async operationApply(
     path: string,
     operation: any,
-    { messageFailure, onApplied, isHistoryRecorded = true }: {
-      messageFailure: string; onApplied?: () => void; isHistoryRecorded?: boolean;
+    { messageFailure, onApplied, isHistoryRecorded = true, stateRemapList }: {
+      messageFailure: string;
+      onApplied?: () => void;
+      isHistoryRecorded?: boolean;
+      stateRemapList?: { lineFrom: number; lineTo: number | undefined }[];
     },
   ): Promise<EditResult> {
     if (!this.api) return { code: -1, message: 'The edit api is not available.' };
@@ -652,6 +669,14 @@ export class DocEditStore {
       textAfter: result.data.text,
     };
     if (isHistoryRecorded) this.historyRecord({ kind: 'document', time: Date.now(), fileChangeList: [fileChange] });
+    if (this.compStateStore) {
+      if (stateRemapList) {
+        this.compStateStore.docLineRemap(path, stateRemapList);
+      } else {
+        const frontmatterLineEnd = this.docEditByPath[path]?.model?.frontmatter?.lineEnd ?? 0;
+        this.compStateStore.docLineShift(path, lineShiftListGet(operation, frontmatterLineEnd));
+      }
+    }
     if (onApplied) runInAction(onApplied);
     await this.sourceAccept(path, result.data.text, result.data.hash);
     return { code: 0, data: { ...result.data, fileChange }, message: '' };
@@ -1546,6 +1571,7 @@ export class DocEditStore {
       lang: template.assetSource.lang,
       text: template.assetSource.raw,
       note: `${template.compName} block created in ${path}`,
+      docPath: path,
       saveMode: compMetaGet(definition).assetSaveMode,
       component: { name: template.compName },
     });
@@ -1629,6 +1655,9 @@ export class DocEditStore {
     const usageChangeList = blockSwapUsageChangeListBuild(model, indexUpper, path);
     const result = await this.operationApply(path, blockSwapOperationBuild(model, indexUpper), {
       messageFailure: 'The block was not moved.',
+      // the operation rewrites the lines of both blocks; the states keyed by
+      // their marker lines exchange places with them
+      stateRemapList: blockSwapStateRemapListBuild(model, indexUpper),
       onApplied: () => {
         if (this.blockMove === move) this.blockMove = undefined;
       },
@@ -1728,6 +1757,7 @@ export class DocEditStore {
       lang: block.component.lang,
       text: block.component.raw,
       note: `${block.component.compName} data moved from ${path}`,
+      docPath: path,
       dependencyList: this.blockDependencyListGet(block, block.component.raw, path),
       saveMode: compMetaGet(this.blockDefinitionGet(path, blockIndex)).assetSaveMode,
       component: { name: block.component.compName },
@@ -2092,6 +2122,23 @@ function blockSwapUsageChangeListBuild(model: any, indexUpper: number, path: str
     { type: 'move', docPath: path, ...linesLower, docPathTo: path, lineStartTo: linesUpper.lineStart },
     { type: 'move', docPath: path, ...linesUpper, docPathTo: path, lineStartTo: linesUpper.lineStart + (blockLower.lineEnd - blockUpper.lineEnd) },
   ];
+}
+
+// where the marker lines of two swapped component blocks go: the lower block
+// moves up to the upper one's start, the upper one down by the lower one's
+// length (the same arithmetic as the usage changes above), in the lines
+// counted without the frontmatter (component.markerLine)
+function blockSwapStateRemapListBuild(model: any, indexUpper: number): { lineFrom: number; lineTo: number }[] {
+  const blockUpper = model.blockList[indexUpper];
+  const blockLower = model.blockList[indexUpper + 1];
+  const remapList: { lineFrom: number; lineTo: number }[] = [];
+  if (blockLower.component?.markerLine) {
+    remapList.push({ lineFrom: blockLower.component.markerLine, lineTo: blockLower.component.markerLine + (blockUpper.lineStart - blockLower.lineStart) });
+  }
+  if (blockUpper.component?.markerLine) {
+    remapList.push({ lineFrom: blockUpper.component.markerLine, lineTo: blockUpper.component.markerLine + (blockLower.lineEnd - blockUpper.lineEnd) });
+  }
+  return remapList;
 }
 
 // the block text an editor's event describes: { text } as is, { raw, props }

@@ -16,8 +16,8 @@ import './DocSource.css';
 // a folder (kind dir), anything. It only shows and reports; the value
 // belongs to the caller.
 //
-//   [label] [~example/edit-in-place.md      ] [⌸]   ◄ browse button: isTreeCollapsible only
-//   [🔍 edit                              ×]        ◄ searching the tree: isTreeSearchable
+//   [label] [~example/mdx-doc-edit-in-place.md] [⌸]   ◄ browse button: isTreeCollapsible only
+//   [🔍 edit                                ×]        ◄ searching the tree: isTreeSearchable
 //   ▾ 📁 ~example
 //       🗎 [edit]-in-place.md                       ◄ the value, selected; the match highlighted
 //   message                                         ◄ the caller's, e.g. why the value cannot be used

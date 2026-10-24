@@ -3,19 +3,24 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 import { idMs48Create, idMs48Is } from './id-ms48.ts';
-import { sourcePathIsRooted, sourcePathNormalize } from '../src/lib/doc-source-path.js';
+import { sourcePathIsRooted, sourcePathNormalize, sourcePathParse } from '../src/lib/doc-source-path.js';
+import { lineOperationApply, lineOperationListApply } from './doc-edit-lines.ts';
+import { yamlScalarTextBuild, yamlStringListSetBuild, yamlValueSetOperationBuild } from './doc-yaml-edit.ts';
 import { timeTextGet } from '../src/lib/time-text.js';
 
 // The local store of the asset service layer, on disk (design: doc_page_impl_asset.md). A general
 // store of objects with a version history, modeled after an object storage
 // (s3): an object is a key with metadata, a version is a sequence of bytes
 // under that key, and the store does not care whether the bytes are text.
-// There is one local store; its objects live in one or more folders, named
-// in the store's config file (config.yaml asset.file -> asset.yaml), and a
-// new object is created in the default folder. Everything is a file: the
-// folders and their files are the whole state.
+// There is one local store; its objects live in the folders of the doc
+// pages the page loads (its own and the ones it includes), each doc page
+// naming its folders in its asset store config file (.doc-page/asset.yaml
+// beside its entry by convention), and a new object is created in the
+// default folder of the doc page of the document it is created from.
+// Everything is a file: the folders and their files are the whole state.
 //
-//   asset.yaml                        the store config: folderList [{ path, isDefault }]
+//   .doc-page/asset.yaml              the asset store config of one doc page:
+//                                     folderList [~rootId/path], folderDefault
 //   {folder}/
 //     {objectId}--{name}/             one folder per object: its id (ms_48), and its name
 //       object.yaml                   when it has one, after the separator "--"
@@ -191,18 +196,50 @@ export type AssetVersionData = {
 };
 
 export type AssetFolder = {
-  // as written in asset.yaml (relative to it, or absolute)
+  // the source path that names it (~rootId/path), as asset.yaml writes it:
+  // its identity in the store and in object metadata
   path: string;
   pathAbs: string;
+  // the default folder of the store: the default folder of the page's own doc page
   isDefault: boolean;
+  // the doc page that names it: its entry, relative to the config directory
+  docEntryFile: string;
 };
 
 export type AssetFolderInfo = AssetFolder & { isExists: boolean; objectCount: number };
 
+// the asset store config of one doc page
+export type AssetDocPage = {
+  // its entry, relative to the config directory
+  entryFile: string;
+  // its asset store config file, absolute, and relative to the config directory
+  configFile: string;
+  configFileRelative: string;
+  // the file exists; without it the doc page uses the default folders
+  isConfigFileExists: boolean;
+  // its folders, as source paths, in its order; its default folder ('' for none)
+  folderList: string[];
+  folderDefault: string;
+  // the root ids of the doc page: a document of one of them creates its
+  // objects in this doc page's default folder
+  rootIdList: string[];
+  // what was wrong with its config (a folder not named by a source path, an
+  // unknown root): those folders are left out, the rest is read
+  problemList: string[];
+};
+
 export type AssetStoreConfig = {
-  // absolute path of asset.yaml
-  file: string;
+  docPageList: AssetDocPage[];
+  // every folder of every doc page, the page's own first, each once
   folderList: AssetFolder[];
+};
+
+// what the store config reader needs of a doc page (plugin/doc-entry.ts DocPageLoaded)
+export type AssetDocPageInput = {
+  entryFile: string;
+  dirPage: string;
+  rootIdList: string[];
+  asset: undefined | false | { file: string };
 };
 
 // what names an object: its id, or its name
@@ -216,103 +253,197 @@ export class AssetError extends Error {
   }
 }
 
-// ---------- the store config file ----------
+// ---------- the store config files ----------
+//
+// every doc page the page loads has its own asset store config; the store
+// is all of them (doc_page_impl_asset.md#the-local-store-folders-fully-reflected):
+//
+//   where      the entry's "asset: { file }", relative to the entry; absent:
+//              asset.yaml beside the entry (.doc-page/asset.yaml); "asset: false":
+//              the doc page has no folders
+//   folders    folderList of that file: source paths (~rootId/path), resolved
+//              against the roots of the page's source rules; folderDefault
+//              names one of them (the first otherwise)
+//   no file    the default folders: ASSET_FOLDER_DEFAULT_LIST, relative to the
+//              folder of the doc page, named by the root of the doc page that
+//              holds that folder. a folder that does not exist is created when
+//              the first object is written to it
+//
+// a folder named by two doc pages belongs to the first (the page's own
+// first, then the included ones in loading order).
 
-// the local store of the asset service layer that config.yaml names: asset.file, the store config
-// file, relative to config.yaml. undefined when config.yaml has no asset
-// section: the page has no asset service layer. a section that names the store in a
-// form that is not read (the former asset.folder) or not at all is an error
-// that says how to write it, never a silent "no store": the page would
-// otherwise find out only when a write fails.
-export function assetConfigOfConfigDocGet(configDoc: any, configDir: string): AssetStoreConfig | undefined {
-  const asset = configDoc?.asset;
-  if (asset === undefined || asset === null) return undefined;
-  if (typeof asset !== 'object' || Array.isArray(asset)) {
-    throw new Error(`[doc-source] config.yaml "asset" must be a mapping with "file", e.g. asset: { file: ./asset.yaml }${assetConfigMigrationText('./asset')}`);
-  }
-  if (asset.folder !== undefined) {
-    throw new Error(`[doc-source] config.yaml "asset.folder" is no longer read: the local store of the asset service layer is described by a config file of its own, named by "asset.file".${assetConfigMigrationText(String(asset.folder))}`);
-  }
-  const file = asset.file;
-  if (typeof file !== 'string' || !file.trim()) {
-    throw new Error(`[doc-source] config.yaml "asset" needs "file": the config file of the local store of the asset service layer.${assetConfigMigrationText('./asset')}`);
-  }
-  return assetConfigRead(path.resolve(configDir, file.trim()));
+export const ASSET_CONFIG_FILE_NAME = 'asset.yaml';
+// the default folders of a doc page without an asset store config file,
+// relative to the doc page folder; the first is the default folder
+export const ASSET_FOLDER_DEFAULT_LIST = ['asset'];
+
+// config.yaml no longer names the store: a doc page does
+export function assetConfigFormerReject(configDoc: any, configFile: string) {
+  if (configDoc?.asset === undefined) return;
+  throw new Error([
+    `[doc-source] config.yaml "asset" is no longer read: every doc page names its own asset folders,`,
+    `in .doc-page/asset.yaml beside its entry (or the file its entry names with "asset: { file }"),`,
+    'as source paths:',
+    '  folderList:',
+    '    - ~rootId/asset',
+    '  folderDefault: ~rootId/asset',
+    `without the file the doc page uses ${ASSET_FOLDER_DEFAULT_LIST.join(', ')} of its folder. (${configFile})`,
+  ].join('\n'));
 }
 
-// how a store is configured, for the errors above
-function assetConfigMigrationText(folderPath: string): string {
+export function assetConfigOfDocPageListGet(
+  docPageInputList: AssetDocPageInput[],
+  rootAbsPathById: Map<string, string>,
+  configDir: string,
+): AssetStoreConfig {
+  const docPageList: AssetDocPage[] = [];
+  const folderList: AssetFolder[] = [];
+  for (const docPageInput of docPageInputList) {
+    if (docPageInput.asset === false) continue;
+    const docPage = assetDocPageRead(docPageInput, rootAbsPathById, configDir);
+    for (const folderPath of docPage.folderList) {
+      const pathAbs = sourcePathAbsGet(folderPath, rootAbsPathById);
+      if (!pathAbs) continue;
+      const folderSame = folderList.find((folder) => folder.pathAbs === pathAbs);
+      if (folderSame) {
+        if (folderSame.docEntryFile !== docPage.entryFile) {
+          docPage.problemList.push(`${folderPath} is a folder of ${folderSame.docEntryFile} already`);
+        }
+        continue;
+      }
+      folderList.push({ path: folderPath, pathAbs, isDefault: false, docEntryFile: docPage.entryFile });
+    }
+    for (const problem of docPage.problemList) console.warn(`[doc-asset] ${docPage.configFileRelative}: ${problem}`);
+    docPageList.push(docPage);
+  }
+  const docPageOwn = docPageList[0];
+  const folderDefault = folderList.find((folder) => folder.path === docPageOwn?.folderDefault) ?? folderList[0];
+  if (folderDefault) folderDefault.isDefault = true;
+  return { docPageList, folderList };
+}
+
+// the asset store config of one doc page: its file when it exists, its
+// default folders otherwise
+function assetDocPageRead(input: AssetDocPageInput, rootAbsPathById: Map<string, string>, configDir: string): AssetDocPage {
+  const dirEntry = path.dirname(input.entryFile);
+  const configFile = input.asset ? path.resolve(dirEntry, input.asset.file) : path.join(dirEntry, ASSET_CONFIG_FILE_NAME);
+  const docPage: AssetDocPage = {
+    entryFile: pathRelativeGet(input.entryFile, configDir),
+    configFile,
+    configFileRelative: pathRelativeGet(configFile, configDir),
+    isConfigFileExists: fs.existsSync(configFile),
+    folderList: [],
+    folderDefault: '',
+    rootIdList: [...input.rootIdList],
+    problemList: [],
+  };
+  if (!docPage.isConfigFileExists) {
+    docPage.folderList = assetFolderDefaultListGet(input, rootAbsPathById);
+    if (docPage.folderList.length === 0) {
+      docPage.problemList.push(`no root of the doc page holds its folder ${input.dirPage}; it has no default asset folder`);
+    }
+    docPage.folderDefault = docPage.folderList[0] ?? '';
+    return docPage;
+  }
+  let content: any;
+  try {
+    content = yamlParse(fs.readFileSync(configFile, 'utf-8')) ?? {};
+  } catch (error: any) {
+    throw new Error(`[doc-source] the asset store config ${configFile} is not valid yaml: ${String(error?.message ?? error)}`);
+  }
+  if (typeof content !== 'object' || Array.isArray(content)) {
+    throw new Error(`[doc-source] the asset store config ${configFile} must be a mapping with "folderList"`);
+  }
+  if (content.folderList !== undefined && !Array.isArray(content.folderList)) {
+    throw new Error(`[doc-source] "folderList" of the asset store config ${configFile} must be a list of source paths (~rootId/path)`);
+  }
+  for (const item of content.folderList ?? []) {
+    // the former form { path, isDefault } is still read
+    const pathText = sourcePathNormalize(typeof item === 'string' ? item : String(item?.path ?? ''));
+    if (pathText === '') continue;
+    const problem = assetFolderPathProblemGet(pathText, rootAbsPathById);
+    if (problem) {
+      docPage.problemList.push(problem);
+      continue;
+    }
+    if (docPage.folderList.includes(pathText)) continue;
+    docPage.folderList.push(pathText);
+    if (typeof item === 'object' && item?.isDefault === true && docPage.folderDefault === '') docPage.folderDefault = pathText;
+  }
+  if (typeof content.folderDefault === 'string' && content.folderDefault.trim() !== '') {
+    const folderDefault = sourcePathNormalize(content.folderDefault);
+    if (docPage.folderList.includes(folderDefault)) docPage.folderDefault = folderDefault;
+    else docPage.problemList.push(`folderDefault ${folderDefault} is not in folderList`);
+  }
+  if (docPage.folderDefault === '') docPage.folderDefault = docPage.folderList[0] ?? '';
+  return docPage;
+}
+
+// the default folders of a doc page as source paths: each folder of
+// ASSET_FOLDER_DEFAULT_LIST in the doc page folder, named by the doc page's
+// first root that holds it
+function assetFolderDefaultListGet(input: AssetDocPageInput, rootAbsPathById: Map<string, string>): string[] {
+  const result: string[] = [];
+  for (const folderName of ASSET_FOLDER_DEFAULT_LIST) {
+    const folderAbs = path.join(input.dirPage, folderName);
+    for (const rootId of input.rootIdList) {
+      const rootAbs = rootAbsPathById.get(rootId);
+      if (!rootAbs) continue;
+      const relative = path.relative(rootAbs, folderAbs);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
+      result.push(`~${rootId}/${relative.split(path.sep).join('/')}`);
+      break;
+    }
+  }
+  return result;
+}
+
+// why a folder of asset.yaml cannot be used; '' when it can
+export function assetFolderPathProblemGet(pathText: string, rootAbsPathById: Map<string, string>): string {
+  const parsed = sourcePathParse(pathText);
+  if (!parsed) {
+    return `${pathText} is not a source path; name an asset folder as ~rootId/path, relative to a root of the doc page`;
+  }
+  if (!rootAbsPathById.has(parsed.rootId)) {
+    return `${pathText}: no source rule declares the root "${parsed.rootId}" (roots: ${[...rootAbsPathById.keys()].join(', ') || 'none'})`;
+  }
+  if (parsed.relPath === '') return `${pathText} is a whole root; an asset folder is a folder inside a root`;
+  return '';
+}
+
+function sourcePathAbsGet(pathText: string, rootAbsPathById: Map<string, string>): string {
+  const parsed = sourcePathParse(pathText);
+  const rootAbs = parsed ? rootAbsPathById.get(parsed.rootId) : undefined;
+  return parsed && rootAbs ? path.join(rootAbs, ...parsed.relPath.split('/')) : '';
+}
+
+function pathRelativeGet(filePath: string, configDir: string): string {
+  return path.relative(configDir, filePath).split(path.sep).join('/');
+}
+
+// the text of a new asset store config file
+export function assetConfigTextBuild(folderList: string[], folderDefault: string): string {
   return [
+    '# the asset store config of this doc page (doc_page_impl_asset.md): the folders',
+    '# its asset objects live in, as source paths (~rootId/path). a new object of a',
+    '# document of this doc page is created in folderDefault. rewritten in place by',
+    '# the settings panel of the page (Asset service tab).',
+    'folderList:',
+    ...folderList.map((folderPath) => `  - ${yamlScalarTextBuild(folderPath)}`),
+    `folderDefault: ${yamlScalarTextBuild(folderDefault)}`,
     '',
-    'write in config.yaml:',
-    '  asset:',
-    '    file: ./asset.yaml',
-    'and in asset.yaml (paths are relative to asset.yaml):',
-    '  folderList:',
-    `    - path: ${folderPath}`,
-    '      isDefault: true',
-    'the object folders already on disk stay as they are; no id or data changes.',
-    'restart the development server afterwards: the asset api is installed when it starts.',
   ].join('\n');
 }
 
-// asset.yaml: folderList [{ path, isDefault }], paths relative to the file.
-// a missing file is an empty store, and a missing folder is created when the
-// first object is written to it; without a default the first folder is it.
-// a file that is not yaml, or whose folderList is not a list, is an error.
-export function assetConfigRead(fileAbs: string): AssetStoreConfig {
-  let content: any = {};
-  if (fs.existsSync(fileAbs)) {
-    try {
-      content = yamlParse(fs.readFileSync(fileAbs, 'utf-8')) ?? {};
-    } catch (error: any) {
-      throw new Error(`[doc-source] the local store config ${fileAbs} is not valid yaml: ${String(error?.message ?? error)}`);
-    }
-  }
-  if (typeof content !== 'object' || Array.isArray(content)) {
-    throw new Error(`[doc-source] the local store config ${fileAbs} must be a mapping with "folderList"`);
-  }
-  if (content.folderList !== undefined && !Array.isArray(content.folderList)) {
-    throw new Error(`[doc-source] "folderList" of the local store config ${fileAbs} must be a list of { path, isDefault }`);
-  }
-  const folderList = folderListNormalize(content.folderList, path.dirname(fileAbs));
-  return { file: fileAbs, folderList };
-}
-
-export function assetConfigWrite(fileAbs: string, folderListInput: { path: string; isDefault?: boolean }[]): AssetStoreConfig {
-  const folderList = folderListNormalize(folderListInput, path.dirname(fileAbs));
-  if (folderList.length === 0) throw new AssetError(-1, 'the local store needs at least one folder');
-  const body = yamlStringify({
-    folderList: folderList.map((folder) => (folder.isDefault ? { path: folder.path, isDefault: true } : { path: folder.path })),
-  });
-  fs.mkdirSync(path.dirname(fileAbs), { recursive: true });
-  fileWriteSafe(fileAbs, `${ASSET_CONFIG_HEADER}${body}`);
-  return { file: fileAbs, folderList };
-}
-
-const ASSET_CONFIG_HEADER = [
-  '# the local store of the asset service layer (doc_page_impl_asset.md): the folders',
-  '# its objects',
-  '# live in. a new object is created in the default folder. paths are relative',
-  '# to this file. rewritten by the settings panel of the page (Asset service tab).',
-  '',
-].join('\n');
-
-function folderListNormalize(listRaw: unknown, dirBase: string): AssetFolder[] {
-  const folderList: AssetFolder[] = [];
-  for (const item of Array.isArray(listRaw) ? listRaw : []) {
-    const pathText = typeof item === 'string' ? item : String(item?.path ?? '');
-    const pathTrimmed = pathText.trim();
-    if (!pathTrimmed) continue;
-    const pathAbs = path.resolve(dirBase, pathTrimmed);
-    if (folderList.some((folder) => folder.pathAbs === pathAbs)) continue;
-    folderList.push({ path: pathTrimmed, pathAbs, isDefault: typeof item === 'object' && item?.isDefault === true });
-  }
-  const indexDefault = folderList.findIndex((folder) => folder.isDefault);
-  folderList.forEach((folder, index) => {
-    folder.isDefault = index === (indexDefault === -1 ? 0 : indexDefault);
-  });
-  return folderList;
+// the new text of an asset store config file: its folders and default
+// folder written in place (doc-yaml-edit.ts), the rest of the file as it was
+export function assetConfigTextApply(text: string, folderList: string[], folderDefault: string): string {
+  const listResult = yamlStringListSetBuild(text, ['folderList'], folderList);
+  if (listResult.code !== 0) throw new AssetError(-1, `folderList: ${listResult.message}`);
+  const textList = lineOperationListApply(text, listResult.data.operationList);
+  const defaultResult = yamlValueSetOperationBuild(textList, ['folderDefault'], yamlScalarTextBuild(folderDefault));
+  if (defaultResult.code !== 0) throw new AssetError(-1, `folderDefault: ${defaultResult.message}`);
+  return lineOperationApply(textList, defaultResult.data.operation);
 }
 
 // ---------- the folder name of an object ----------
@@ -390,13 +521,54 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     }));
   }
 
-  // rewrites asset.yaml and creates a folder of the list that does not exist
-  // yet (a folder added from the page is meant to receive objects); the next
-  // store created from the config sees the new folders
-  function folderSet(folderListInput: { path: string; isDefault?: boolean }[]): AssetFolderInfo[] {
-    const configNext = assetConfigWrite(config.file, folderListInput);
-    for (const folder of configNext.folderList) fs.mkdirSync(folder.pathAbs, { recursive: true });
-    return assetStoreCreate(configNext).folderInfoList();
+  // the doc pages and their folders, as the settings panel shows them
+  function docPageInfoList(): Omit<AssetDocPage, 'configFile'>[] {
+    return config.docPageList.map(({ configFile: _configFile, ...docPage }) => docPage);
+  }
+
+  // the folders of one doc page rewritten in its asset store config file, in
+  // place (a file that does not exist yet is created); the folders are
+  // created on disk (a folder added from the page is meant to receive
+  // objects). rootAbsPathById: the roots of the page, to check the paths.
+  // the store created from the config read again sees the new folders.
+  function folderSet(
+    input: { configFile: string; folderList: string[]; folderDefault?: string },
+    rootAbsPathById: Map<string, string>,
+  ): void {
+    const docPage = config.docPageList.find((item) => item.configFileRelative === input.configFile);
+    if (!docPage) throw new AssetError(-3, `not the asset store config of a doc page of this page: ${input.configFile}`);
+    const folderListNext: string[] = [];
+    for (const item of input.folderList) {
+      const pathText = sourcePathNormalize(String(item ?? ''));
+      if (pathText === '' || folderListNext.includes(pathText)) continue;
+      const problem = assetFolderPathProblemGet(pathText, rootAbsPathById);
+      if (problem) throw new AssetError(-1, problem);
+      folderListNext.push(pathText);
+    }
+    if (folderListNext.length === 0) throw new AssetError(-1, 'a doc page with an asset store needs at least one folder');
+    const folderDefaultInput = sourcePathNormalize(input.folderDefault ?? docPage.folderDefault);
+    const folderDefault = folderListNext.includes(folderDefaultInput) ? folderDefaultInput : folderListNext[0];
+    const textNext = docPage.isConfigFileExists
+      ? assetConfigTextApply(fs.readFileSync(docPage.configFile, 'utf-8'), folderListNext, folderDefault)
+      : assetConfigTextBuild(folderListNext, folderDefault);
+    if (docPage.isConfigFileExists) fs.copyFileSync(docPage.configFile, `${docPage.configFile}.bak`);
+    fs.mkdirSync(path.dirname(docPage.configFile), { recursive: true });
+    fileWriteSafe(docPage.configFile, textNext);
+    for (const folderPath of folderListNext) {
+      const pathAbs = sourcePathAbsGet(folderPath, rootAbsPathById);
+      if (pathAbs) fs.mkdirSync(pathAbs, { recursive: true });
+    }
+  }
+
+  // the folder a new object goes to: the one named, else the default folder
+  // of the doc page whose roots hold the document it is created from, else
+  // the default folder of the store
+  function folderForCreateGet(folderPath: string | undefined, docPath: string | undefined): AssetFolder | undefined {
+    if (folderPath) return folderList.find((item) => item.path === folderPath);
+    const rootId = sourcePathParse(docPath ?? '')?.rootId;
+    const docPage = rootId ? config.docPageList.find((item) => item.rootIdList.includes(rootId)) : undefined;
+    const folderOfDocPage = docPage ? folderList.find((item) => item.path === docPage.folderDefault) : undefined;
+    return folderOfDocPage ?? folderDefault;
   }
 
   // ---------- reading ----------
@@ -505,7 +677,9 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   // a new object with its first version. when the name is the name of an
   // object of the store, that object is returned (isCreated false) and
   // nothing is written: a name means one object.
-  //   folder           the folder the object is created in (as written in asset.yaml); the default folder when absent
+  //   folder           the folder the object is created in (its source path, as in asset.yaml)
+  //   docPath          absent folder: the document the object is created from; the object goes
+  //                    to the default folder of that document's doc page (the store's default otherwise)
   //   dependencyList   what the data of the first version depends on (none when absent)
   //   saveMode         written into the object when given; absent: the key is not written
   //   versionMetadata  the metadata of the first version (none when absent)
@@ -518,6 +692,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     data: Buffer;
     note?: string;
     folder?: string;
+    docPath?: string;
     dependencyList?: unknown;
     saveMode?: unknown;
     versionMetadata?: unknown;
@@ -535,7 +710,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       const metaExisting = objectList().find((item) => item.name === name);
       if (metaExisting) return { object: metaExisting, version: versionDataGetOf(metaExisting, 'head'), isCreated: false };
     }
-    const folder = input.folder ? folderList.find((item) => item.path === input.folder) : folderDefault;
+    const folder = folderForCreateGet(input.folder, input.docPath);
     if (!folder) {
       throw new AssetError(-1, input.folder ? `asset folder not in the store: ${input.folder}` : 'the local store has no folder');
     }
@@ -902,6 +1077,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     config,
     folderList,
     folderInfoList,
+    docPageInfoList,
     folderSet,
     objectList,
     objectGet,

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isCSSRequest, type EnvironmentModuleNode, type Plugin } from 'vite';
-import { docEntryLoad, readYaml } from './doc-entry.ts';
+import { DOC_PAGE_META_DIR_NAME, docEntryFileFind, docEntryLoad, readYaml } from './doc-entry.ts';
 import {
   attachmentDataUrlGet,
   attachmentExtIsBinary,
@@ -42,7 +42,7 @@ import { DOC_EDIT_ENDPOINT_NAME, docEditMiddlewareCreate } from './doc-edit-serv
 import { DOC_ASSET_ENDPOINT_NAME, docAssetMiddlewareCreate } from './doc-asset-server.ts';
 import { DOC_SERVICE_ENDPOINT_NAME, docServiceMiddlewareCreate, serviceConfigGet, servicePathIs } from './doc-service-server.ts';
 import {
-  assetConfigOfConfigDocGet, assetConfigRead, assetStoreCreate, objectIdFromDirName,
+  assetConfigFormerReject, assetConfigOfDocPageListGet, assetStoreCreate, objectIdFromDirName,
   type AssetSnapshot, type AssetStore, type AssetStoreConfig, type AssetUsageDoc,
 } from './doc-asset-store.ts';
 import { assetBlockTextExpand, assetUsageListScan } from '../src/lib/doc-asset-ref.js';
@@ -59,6 +59,7 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 //                                contentHash, tagList, configSource, configFrontmatter, load }]
 //   export let dirManifest = [{ rootId, relPath, internalPath, collect }]   // the folders of the source
 //   export const fileUrlByPath = {...}              // source path -> url of the file's bytes (build: data url)
+//   export const docEnv = { kind }                   // 'viteDevServer' | 'staticBuild' (DocEnvStore)
 //   export const docSourceEndpoint = '/__doc-source' // '' in a build: no source api
 //   export const docEditEndpoint = '/__doc-edit'    // '' in a build: no edit api
 //   export const docAssetEndpoint = '/__doc-asset'  // '' in a build or without asset.file
@@ -416,13 +417,12 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
           fileListGet: () => collectDocYamlFiles(loadConfigDoc(configFile, options)),
           onFileListWritten: configurationFileListWritten,
         },
-        // the global config layer (doc_page_impl_config.md#config-layers):
-        // config.yaml and its local layer
+        // the doc page config layer (doc_page_impl_config.md#the-doc-page-layer):
+        // the config declarations of the entry and the files it reaches
         config: {
-          fileList: [configFile, configLocalFileGet(configFile)],
-          onFileWritten: (filePath, text) => {
-            configurationFileListWritten([{ filePath, text }]);
-          },
+          configDir,
+          declarationListGet: () => loadConfigDoc(configFile, options).docEntry.configDeclarationList,
+          onFileListWritten: configurationFileListWritten,
         },
       }));
 
@@ -433,21 +433,31 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       // when the folder list changed
       let assetConfig = assetConfigGet(configDoc, configDir);
       if (docAssetEndpoint && assetConfig) {
-        const assetConfigFile = assetConfig.file;
+        // the store as the files say now: read again for every request
+        const assetConfigCurrentGet = () => assetConfigGet(loadConfigDoc(configFile, options), configDir) ?? assetConfig!;
         server.middlewares.use(docAssetMiddlewareCreate({
           endpoint: docAssetEndpoint,
-          storeGet: () => assetStoreCreate(assetConfigGet(loadConfigDoc(configFile, options), configDir) ?? assetConfig!),
+          storeGet: () => assetStoreCreate(assetConfigCurrentGet()),
+          rootAbsPathByIdGet: () => sourceRootAbsPathByIdGet(loadConfigDoc(configFile, options), configDir),
           usageScan: (docPathList) => assetUsageDocListScan(fileEntryListGet(), docPathList),
         }));
-        const assetFoldersWatch = () => {
+        // the config file of every doc page (watched whether it exists or
+        // not: one created from the page is seen) and every folder
+        const assetWatch = () => {
+          for (const docPage of assetConfig!.docPageList) server.watcher.add(docPage.configFile);
           for (const folder of assetConfig!.folderList) server.watcher.add(folder.pathAbs);
         };
-        server.watcher.add(assetConfigFile);
-        assetFoldersWatch();
+        assetWatch();
         const assetChangeSend = (filePath: string) => {
-          if (filePath === assetConfigFile) {
-            assetConfig = assetConfigRead(assetConfigFile);
-            assetFoldersWatch();
+          if (assetConfig!.docPageList.some((docPage) => docPage.configFile === filePath)) {
+            try {
+              assetConfig = assetConfigCurrentGet();
+            } catch (error: any) {
+              // keep the last valid store while a config file is being edited
+              console.warn(String(error?.message ?? error));
+              return;
+            }
+            assetWatch();
             server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { objectId: '', isStoreChanged: true } });
             return;
           }
@@ -720,9 +730,13 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
   const configLocal = readYaml(configLocalFile) ?? {};
   const config = mergeDeep(configBase, configLocal);
   configFormerKeysReject(config, configFile);
-  if (typeof config.docEntry?.file !== 'string' || !config.docEntry.file.trim()) {
+  assetConfigFormerReject(config, configFile);
+  const isEntryFileGiven = typeof config.docEntry?.file === 'string' && config.docEntry.file.trim() !== '';
+  const isEntryDirGiven = typeof config.docEntry?.dir === 'string' && config.docEntry.dir.trim() !== '';
+  if (isEntryFileGiven === isEntryDirGiven) {
     throw new Error(
-      `[doc-source] config "docEntry.file" must name the entry file of the document (xxx-entry.yaml): ${configFile}`,
+      `[doc-source] config "docEntry" must name either "dir", the folder of the doc page (its entry is found in`
+        + ` ${DOC_PAGE_META_DIR_NAME}/), or "file", the entry file itself: ${configFile}`,
     );
   }
   if (config.docEntry.sidePanel !== undefined && typeof config.docEntry.sidePanel !== 'string') {
@@ -730,20 +744,35 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
   }
 
   // the document entry: its source rules, its page side panel inlined (so the
-  // browser side never touches the file system), its tag definitions.
-  // design: doc_page_impl_side_panel.md#the-document-entry
-  const entryFile = path.resolve(configDir, config.docEntry.file);
+  // browser side never touches the file system), its tag definitions, its
+  // config declarations. given as a folder, the entry is found in it
+  // (doc_page_impl_dir.md). design: doc_page_impl_side_panel.md#the-document-entry
+  const entryFile = isEntryDirGiven
+    ? docEntryFileFind(path.resolve(configDir, config.docEntry.dir))
+    : path.resolve(configDir, config.docEntry.file);
   const entryLoaded = docEntryLoad(entryFile, configDir, config.docEntry.sidePanel ?? '');
   config.source = entryLoaded.sourceRuleList;
   config.sidePanel = { ...(config.sidePanel ?? {}), tree: entryLoaded.sidePanel?.tree };
   config.docEntry = {
     ...config.docEntry,
+    // the entry file, relative to the config directory, also when a folder was given
+    file: path.relative(configDir, entryFile).split(path.sep).join('/'),
     sidePanel: entryLoaded.sidePanelId,
     sidePanelIdList: entryLoaded.sidePanelIdList,
     // the hash of every document yaml file the side panels were read from:
     // a move of a side-panel item names the files it was built on
     fileHashByFile: entryLoaded.fileHashByFile,
+    // the doc page config layer (doc_page_impl_config.md#the-doc-page-layer):
+    // every config declaration of the entry and the files it reaches, in stack order
+    configDeclarationList: entryLoaded.configDeclarationList,
   };
+  // variables of the doc page config files over those of config.yaml
+  if (Object.keys(entryLoaded.variableByName).length > 0) {
+    const variableBase = config.variable && typeof config.variable === 'object' && !Array.isArray(config.variable)
+      ? config.variable
+      : {};
+    config.variable = { ...variableBase, ...entryLoaded.variableByName };
+  }
   // every yaml file the entry reaches, for the edit api; not part of the
   // data sent to the page
   Object.defineProperty(config.docEntry, 'fileListLoaded', {
@@ -752,6 +781,12 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
   });
   // page values the entry supplies when config.yaml does not set them, so
   // that a document used as the entry of another deployment brings its own
+  // the doc pages loaded, for the asset service layer: absolute paths, not
+  // part of the data sent to the page
+  Object.defineProperty(config.docEntry, 'docPageList', {
+    enumerable: false,
+    value: entryLoaded.docPageList,
+  });
   config.siteTitle ??= entryLoaded.entry.title;
   config.homeDoc ??= entryLoaded.entry.homeDoc;
   config.homeItem ??= entryLoaded.entry.homeItem;
@@ -791,8 +826,18 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
 }
 
 // the keys of the former configuration, which named the source rules and the
-// side-panel file from config itself; both are declared by the entry now
+// side-panel file from config itself (both are declared by the entry now),
+// and wrote the page values of the config keys as "globalConfig" and
+// "compConfig" (now "configDefault", the default config layer, with its
+// component keys under configDefault.compConfig)
 function configFormerKeysReject(config: any, configFile: string) {
+  if (config.globalConfig !== undefined || config.compConfig !== undefined) {
+    throw new Error(
+      `[doc-source] config "globalConfig" / "compConfig" are not read any more: write the default values as`
+        + ` "configDefault" ({ Key: value, compConfig: { Comp: { Key: value } } }); values of one doc page belong`
+        + ` to the "config" of its entry (doc_page_impl_config.md#config-layers): ${configFile}`,
+    );
+  }
   if (config.source !== undefined) {
     throw new Error(
       `[doc-source] config "source" is not read any more: declare the source rules in the entry file`
@@ -929,17 +974,40 @@ function assetUsageDocListScan(entries: FileEntry[], docPathList: string[]): Ass
   return docList;
 }
 
-// the local store of the asset service layer as config asset.file describes it now; undefined
-// when the config names no store, an error when it names one wrongly
-// (assetConfigOfConfigDocGet)
+// the local store of the asset service layer as the doc pages the page
+// loads describe it now (doc_page_impl_asset.md#the-local-store-folders-fully-reflected):
+// the asset store config of each, its folders resolved against the roots
+// of the source rules; undefined when no doc page has a store (asset: false)
 function assetConfigGet(configDoc: any, configDir: string): AssetStoreConfig | undefined {
-  return assetConfigOfConfigDocGet(configDoc, configDir);
+  const docPageList = configDoc.docEntry?.docPageList;
+  if (!Array.isArray(docPageList)) return undefined;
+  const assetConfig = assetConfigOfDocPageListGet(docPageList, sourceRootAbsPathByIdGet(configDoc, configDir), configDir);
+  return assetConfig.docPageList.length > 0 ? assetConfig : undefined;
 }
 
-// a file of the asset service layer: its config file (and the backup / temporary
-// file the store writes beside it), or anything inside one of its folders
+// the local store as the configuration file and the doc pages it reaches
+// describe it now (for a tool or a test that has no plugin instance)
+export function docAssetConfigLoad(configFile: string): AssetStoreConfig | undefined {
+  return assetConfigGet(loadConfigDoc(configFile), path.dirname(configFile));
+}
+
+// root id -> the folder of the root, from the source rules
+function sourceRootAbsPathByIdGet(configDoc: any, configDir: string): Map<string, string> {
+  const rootAbsPathById = new Map<string, string>();
+  for (const root of sourceRootListGet(configDoc, configDir)) {
+    if (!rootAbsPathById.has(root.rootId)) rootAbsPathById.set(root.rootId, root.rootAbsPath);
+  }
+  return rootAbsPathById;
+}
+
+// a file of the asset service layer: an asset store config file of a doc
+// page (and the backup / temporary file written beside it), or anything
+// inside one of its folders
 function assetPathIs(assetConfig: AssetStoreConfig, filePath: string): boolean {
-  if (filePath === assetConfig.file || filePath === `${assetConfig.file}.bak` || filePath === `${assetConfig.file}.tmp`) return true;
+  const isConfigFile = assetConfig.docPageList.some(({ configFile }) => (
+    filePath === configFile || filePath === `${configFile}.bak` || filePath === `${configFile}.tmp`
+  ));
+  if (isConfigFile) return true;
   return assetConfig.folderList.some((folder) => pathIsInside(filePath, folder.pathAbs));
 }
 
@@ -1033,7 +1101,8 @@ function makeEntry(rootId: string, relPath: string, absPath: string, collect: So
   };
 }
 
-const dirNameSkipSet = new Set(['.git', 'node_modules']);
+// the metadata folder of a doc page (doc_page_impl_dir.md) is never source
+const dirNameSkipSet = new Set(['.git', 'node_modules', DOC_PAGE_META_DIR_NAME]);
 
 function walkFiles(dirAbs: string, isRecursive: boolean): string[] {
   const result: string[] = [];
@@ -1275,6 +1344,8 @@ export function generateModuleCode(
 ): string {
   const lines: string[] = [];
   lines.push(`export let configDoc = ${JSON.stringify(configDoc)};`);
+  // the environment the page runs in (doc_page_impl.md#the-environment)
+  lines.push(`export const docEnv = ${JSON.stringify({ kind: isBuild ? 'staticBuild' : 'viteDevServer' })};`);
   lines.push(`export const docSourceEndpoint = ${JSON.stringify(services.docSourceEndpoint)};`);
   lines.push(`export const docEditEndpoint = ${JSON.stringify(services.docEditEndpoint)};`);
   lines.push(`export const docAssetEndpoint = ${JSON.stringify(services.docAssetEndpoint)};`);

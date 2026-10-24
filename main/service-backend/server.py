@@ -1,6 +1,6 @@
 """The service backend: an http server answering the service apis.
 
-    python3 server.py --config ../../example_doc/service-backend.yaml [--port 45190] [--host 127.0.0.1]
+    python3 server.py --config ../../example_doc/.doc-page/service-backend.yaml [--port 45190] [--host 127.0.0.1]
 
 Design: doc_page_impl_service.md#backend
 

@@ -1,24 +1,39 @@
 import { observer } from 'mobx-react-lite';
-import { useDocStores } from '../../main/frontend/src/store/context.js';
+import { useCompState } from '../../main/comp-doc/registry/use-comp-state.js';
 
-// project-specific demo component: interactive counter whose state lives in
-// CompStateStore (data-driven, not hidden in local component state).
-// doc authors can pass a stable id, so the count survives doc re-render:
-//   <DemoCounter id="counter-a" label="clicks" />
+// Demonstration component: a counter whose count lives in the component
+// state service layer (doc_page_impl_mdx_comp_state.md), not in local
+// component state. The count is kept while the block is not rendered
+// (another document and back) and shared by every rendering of the same
+// block. The key of the state is the block's: its id prop when it has one
+// (`id=counter-a`, so the state follows the block through every edit), else
+// its place in the document.
+//
+//   <!--renderComp=DemoCounter,id=counter-a,label=clicks-->
+//   ```text
+//   (what a plain Markdown viewer shows)
+//   ```
+//
+//   data.label    the word shown before the count
+//   config        stateKey (the key the page chose), instanceId
+//
+// the host application may take the change over (countChangeRequest with
+// the next count, answered with code 0); otherwise the counter counts itself.
 export const DemoCounter = observer(function DemoCounter({ data = {}, config = {}, onEvent }) {
-  const { compStateStore } = useDocStores();
-  const idState = config.instanceId;
-  const state = compStateStore.getState(idState, { count: 0 });
+  const state = useCompState(config, { count: 0 });
 
   const countIncreaseRequest = async () => {
-    const count = state.count + 1;
+    const count = state.value.count + 1;
     const result = await onEvent?.('countChangeRequest', { count });
-    if (!result?.isHandled) compStateStore.patchState(idState, { count });
+    if (result?.code !== 0) state.patch({ count });
   };
 
   return (
-    <span className="not-prose inline-flex items-center gap-1.5 border border-fd-border rounded-sm px-1.5 py-0.5 text-sm align-middle">
-      <span>{data.label ?? 'count'}: {state.count}</span>
+    <span
+      className="not-prose inline-flex items-center gap-1.5 border border-fd-border rounded-sm px-1.5 py-0.5 text-sm align-middle"
+      title={`state key: ${state.key}`}
+    >
+      <span>{data.label ?? 'count'}: {state.value.count}</span>
       <span
         role="button"
         className="cursor-pointer select-none px-1.5 rounded-sm bg-fd-primary text-fd-primary-foreground hover:opacity-80"

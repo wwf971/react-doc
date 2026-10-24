@@ -1,14 +1,14 @@
 # the service backend of the example doc (doc_page_impl_service.md#backend-config)
-#   python3 main/service-backend/server.py --config example_doc/service-backend.yaml
+#   python3 main/service-backend/server.py --config example_doc/.doc-page/service-backend.yaml
 host: 127.0.0.1
 port: 45190
 # how long a sync api call is waited for, queue included, before -6
 apiWaitSecondMax: 120
 # folders holding the service templates: {templateId}--{name}/service-template.yaml
 templateFolderList:
-  - path: ./service-template
+  - path: ../service-template
 # folders holding the service instances: {templateName}-inst-{serviceId}/service.yaml.
 # a new instance is created in the default one
 instanceFolderList:
-  - path: ./service
+  - path: ../service
     isDefault: true

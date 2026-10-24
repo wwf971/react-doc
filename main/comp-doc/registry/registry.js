@@ -46,6 +46,7 @@ import { DocConfigDemo } from '../../../example_doc/comp-mdx/DocConfigDemo.jsx';
 import { SidePanelItemDemo } from '../../../example_doc/comp-mdx/SidePanelItemDemo.jsx';
 import { StockTable, stockTableDefineOptions } from '../../../example_doc/comp-mdx/StockTable.jsx';
 import { TagListAllDemo } from '../../../example_doc/comp-mdx/TagListAllDemo.jsx';
+import { CompStateListDemo } from '../../../example_doc/comp-mdx/CompStateListDemo.jsx';
 import { TextPanelDemo } from '../../../example_doc/comp-mdx/TextPanelDemo.jsx';
 import { compDefine, compNativeDefine } from './comp-registry.js';
 import {
@@ -56,6 +57,7 @@ import {
   blockSimpleExpose,
   calloutExpose,
   demoCounterExpose,
+  compStateListDemoExpose,
   diagramERExpose,
   diagramMermaidExpose,
   diagramTextExpose,
@@ -242,6 +244,8 @@ export const compById = {
   }),
   // a component with nothing to edit declares itself read-only: no edit
   // mode, no Edit button (doc_page_impl_mdx_comp.md#what-a-component-exposes)
+  // what the component state service layer holds; read-only like the tag list
+  'specific/CompStateListDemo': compDefine(CompStateListDemo, { expose: compStateListDemoExpose }),
   'specific/TagListAllDemo': compDefine(TagListAllDemo, {
     placementList: ['mdx', 'commentBlock'],
     expose: tagListAllDemoExpose,

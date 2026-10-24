@@ -18,10 +18,10 @@ pip install -r main/service-backend/requirements.txt
 for dir in example_doc/service-template/*--note-db/dashboard example_doc/service/note-db-inst-*/dashboard; do
   (cd "$dir" && npm install && npm run build)
 done
-python3 main/service-backend/server.py --config example_doc/service-backend.yaml
+python3 main/service-backend/server.py --config example_doc/.doc-page/service-backend.yaml
 ````
 
-The backend listens on port 45190 (`example_doc/service-backend.yaml`); `config.yaml` names it under `service.backend`. It reads two kinds of folders:
+The backend listens on port 45190 (`example_doc/.doc-page/service-backend.yaml`); `config.yaml` names it under `service.backend`. It reads two kinds of folders:
 
 | | template | instance |
 | --- | --- | --- |

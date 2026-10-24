@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
-import { Undo2 } from '../../frontend/UICommon.js';
+import { TriangleAlert, Undo2 } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
 import './DocSource.css';
@@ -32,6 +32,11 @@ import './DocSource.css';
 //   valueRevert      a value an earlier edit replaced (optional); with
 //                    onRevert, a revert button before the path writes it back
 //   onRevert()       write valueRevert back
+//   isMissingWarned  a warning icon before the path when the text shown (also
+//                    while typing) names nothing of the kind of spec in the
+//                    source (DocSourceStore.pathMissingWarningGet). the icon's
+//                    place is always kept, so the field never moves when the
+//                    warning comes and goes
 //
 // the revert button sits before the path and has two meanings. while the
 // path is being edited and its text differs from the value it had when the
@@ -48,6 +53,7 @@ export const SourcePathInput = observer(function SourcePathInput({
   onCommit,
   valueRevert,
   onRevert,
+  isMissingWarned = false,
 }) {
   const { sourceStore } = useDocStores();
   const elementRef = useRef(null);
@@ -171,8 +177,22 @@ export const SourcePathInput = observer(function SourcePathInput({
     }
   };
 
+  const warningText = isMissingWarned ? sourceStore.pathMissingWarningGet(isFocused ? typed : valueText, spec) : '';
+
   return (
     <span className={`doc-source-path-input${className ? ` ${className}` : ''}`}>
+      {isMissingWarned ? (
+        <span
+          className="doc-source-path-warning"
+          data-shown={warningText ? '' : undefined}
+          title={warningText || undefined}
+          role={warningText ? 'img' : undefined}
+          aria-label={warningText || undefined}
+          aria-hidden={warningText ? undefined : 'true'}
+        >
+          <TriangleAlert size={12} strokeWidth={2} aria-hidden="true" />
+        </span>
+      ) : null}
       {isRevertShown ? (
         <button
           ref={revertRef}

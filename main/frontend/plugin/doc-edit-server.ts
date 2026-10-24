@@ -29,8 +29,8 @@ import { yamlValueGet, yamlValueSetOperationBuild, yamlValueTextBuild } from './
 //        two files, written together; fileChangeList [{ file, hashBefore,
 //        hashAfter, textBefore, textAfter }], empty when nothing moved
 //   POST {endpoint}/config/value           -> { code: 0, data: { file, keyPath, value } }
-//        body { keyPath, value, valueBase }   a value of config.yaml globalConfig / compConfig
-//                                             (doc_page_impl_config.md#config-layers)
+//        body { file, keyPath, value, valueBase }   a value of one config declaration of
+//                                             the doc page (doc_page_impl_config.md#the-doc-page-layer)
 //
 // every response is { code, data, message }. code 0 is success; negative codes:
 //   -1  bad request or unexpected failure
@@ -39,13 +39,14 @@ import { yamlValueGet, yamlValueSetOperationBuild, yamlValueTextBuild } from './
 //       side-panel file of a move changed since the page loaded it, or the
 //       config value in the file is no longer the one the page displayed
 //   -3  the path is not an editable document of the collected source, the
-//       file is not a loaded side-panel file, or the page has no config file
+//       file is not a loaded side-panel file, or the key path is not inside a
+//       config declaration the configuration loads
 //
 // only md/mdx files of the current file manifest can be read or written, so
 // the source rules of config.yaml also bound what the page may edit. only
 // the side-panel files the configuration loads can have a label rewritten;
-// only the config key sections of config.yaml (and its local layer) can
-// receive a value. every yaml file is edited in place (doc-yaml-edit.ts),
+// only an existing key of a config declaration of the doc page can receive
+// a value (config.yaml, the default layer, is never written from the page). every yaml file is edited in place (doc-yaml-edit.ts),
 // and a backup of the previous content is kept beside it as {file}.bak.
 
 export const DOC_EDIT_ENDPOINT_NAME = '__doc-edit';
@@ -68,13 +69,14 @@ export type DocEditSidePanelOptions = {
   onFileListWritten: (fileList: { filePath: string; text: string }[]) => string;
 };
 
-// the config value route: the files of the global config layer
+// the config value route: the config declarations of the doc page
 export type DocEditConfigOptions = {
-  // config.yaml, then its local layer (config.0.yaml, which may not exist).
-  // a key is written where it is declared: the local layer when that file
-  // declares it, otherwise config.yaml
-  fileList: string[];
-  onFileWritten: (filePath: string, text: string) => void;
+  configDir: string;
+  // the declarations the configuration loads now: file relative to the
+  // config directory, yaml address of the declared mapping
+  declarationListGet: () => { file: string; path: (string | number)[] }[];
+  // as DocEditSidePanelOptions.onFileListWritten
+  onFileListWritten: (fileList: { filePath: string; text: string }[]) => string;
 };
 
 export type DocEditMiddlewareOptions = {
@@ -84,9 +86,9 @@ export type DocEditMiddlewareOptions = {
   config?: DocEditConfigOptions;
 };
 
-// the sections of config.yaml the config/value route may write, with the
-// depth of a value below them: globalConfig.Key, compConfig.Name.Key
-const configKeyPathDepthBySection: Record<string, number> = { globalConfig: 2, compConfig: 3 };
+// what follows the address of a declaration in a config/value key path:
+// [Key] or [compConfig, CompName, Key]
+const COMP_CONFIG_KEY = 'compConfig';
 
 type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
 
@@ -192,23 +194,36 @@ async function routeHandle(
   jsonSend(res, 404, { code: -1, data: null, message: `unknown edit api route: ${req.method} ${route}` });
 }
 
-// writes one value of the global config layer into config.yaml, or into its
-// local layer when that file declares the key (the local layer overrides
-// config.yaml key by key, so writing config.yaml would change nothing).
-//   keyPath     ['globalConfig', Key] or ['compConfig', CompName, Key]
+// writes one value of a config declaration of the doc page in place.
+//   file        the file of the declaration, relative to the config directory
+//   keyPath     the yaml address of the declaration, then [Key] or
+//               [compConfig, CompName, Key]; the key must be declared already
+//               (a new key, or a new declaration, is not written from the page)
 //   value       null, boolean, number, string, or a list of strings
 //   valueBase   the value the page displayed for the key, as the file
-//               declares it (undefined: the key was not declared); when
-//               the file says otherwise now, the write is refused (-2)
+//               declares it; when the file says otherwise now, the write is
+//               refused (-2)
 // the previous file is kept as {file}.bak before the write.
 function configValueRouteHandle(res: ServerResponse, body: any, config: DocEditConfigOptions | undefined) {
   if (!config) {
-    jsonSend(res, 404, { code: -3, data: null, message: 'the page has no config file to write' });
+    jsonSend(res, 404, { code: -3, data: null, message: 'the page has no config declaration to write' });
     return;
   }
+  const file = String(body?.file ?? '');
   const keyPath = body?.keyPath;
-  if (!configKeyPathIsValid(keyPath)) {
-    jsonSend(res, 400, { code: -1, data: null, message: 'keyPath must be [globalConfig, Key] or [compConfig, CompName, Key]' });
+  if (!Array.isArray(keyPath) || !keyPath.every((step) => (typeof step === 'string' && step.trim() !== '') || Number.isInteger(step))) {
+    jsonSend(res, 400, { code: -1, data: null, message: 'keyPath must be a list of keys and list indexes' });
+    return;
+  }
+  const declaration = config.declarationListGet().find((declarationOne) => (
+    declarationOne.file === file && configKeyPathIsInside(keyPath, declarationOne.path)
+  ));
+  if (!declaration) {
+    jsonSend(res, 404, {
+      code: -3,
+      data: null,
+      message: `${keyPath.join('.')} of ${file} is not a key of a config declaration the doc page loads`,
+    });
     return;
   }
   const valueText = yamlValueTextBuild(body?.value);
@@ -216,50 +231,49 @@ function configValueRouteHandle(res: ServerResponse, body: any, config: DocEditC
     jsonSend(res, 400, { code: -1, data: null, message: 'value must be null, a boolean, a number, a string, or a list of strings' });
     return;
   }
-  const filePath = configFileForKeyPathGet(config.fileList, keyPath);
-  if (!filePath) {
-    jsonSend(res, 404, { code: -3, data: null, message: 'the config file does not exist' });
+  const filePath = path.resolve(config.configDir, file);
+  const textCurrent = fs.readFileSync(filePath, 'utf-8');
+  const valueCurrent = yamlValueGet(textCurrent, keyPath);
+  if (valueCurrent === undefined) {
+    jsonSend(res, 404, { code: -3, data: null, message: `${keyPath.join('.')} is not declared in ${file}; keys are added in the file` });
     return;
   }
-  const textCurrent = fs.readFileSync(filePath, 'utf-8');
-  if ('valueBase' in (body ?? {})) {
-    const valueCurrent = yamlValueGet(textCurrent, keyPath);
-    if (JSON.stringify(valueCurrent ?? null) !== JSON.stringify(body.valueBase ?? null)) {
-      jsonSend(res, 409, {
-        code: -2,
-        data: { file: filePath, keyPath, value: valueCurrent },
-        message: `the value of ${keyPath.join('.')} changed in ${path.basename(filePath)} since it was displayed; the edit was not applied`,
-      });
-      return;
-    }
+  if ('valueBase' in (body ?? {}) && JSON.stringify(valueCurrent ?? null) !== JSON.stringify(body.valueBase ?? null)) {
+    jsonSend(res, 409, {
+      code: -2,
+      data: { file, keyPath, value: valueCurrent },
+      message: `the value of ${keyPath.join('.')} changed in ${file} since it was displayed; the edit was not applied`,
+    });
+    return;
   }
   const result = yamlValueSetOperationBuild(textCurrent, keyPath, valueText);
   if (result.code !== 0) {
-    jsonSend(res, 400, { code: -1, data: null, message: `${path.basename(filePath)}: ${result.message}` });
+    jsonSend(res, 400, { code: -1, data: null, message: `${file}: ${result.message}` });
     return;
   }
   const textNext = lineOperationApply(textCurrent, result.data.operation);
   fileWriteWithBackup(filePath, textNext);
-  config.onFileWritten(filePath, textNext);
-  jsonSend(res, 200, { code: 0, data: { file: filePath, keyPath, value: body.value }, message: '' });
-}
-
-function configKeyPathIsValid(keyPath: unknown): keyPath is string[] {
-  if (!Array.isArray(keyPath) || keyPath.length === 0) return false;
-  if (!keyPath.every((step) => typeof step === 'string' && step.trim() !== '')) return false;
-  const depth = configKeyPathDepthBySection[keyPath[0]];
-  return depth !== undefined && keyPath.length === depth;
-}
-
-// the file of the layer that declares the key: the last file of the list
-// (the local layer) that exists and holds the key, else the first file (config.yaml)
-function configFileForKeyPathGet(fileList: string[], keyPath: string[]): string | undefined {
-  for (const filePath of [...fileList].reverse()) {
-    if (!fs.existsSync(filePath)) continue;
-    if (yamlValueGet(fs.readFileSync(filePath, 'utf-8'), keyPath) !== undefined) return filePath;
+  const messageLoad = config.onFileListWritten([{ filePath, text: textNext }]);
+  if (messageLoad !== '') {
+    fs.writeFileSync(filePath, textCurrent, 'utf-8');
+    jsonSend(res, 400, {
+      code: -1,
+      data: null,
+      message: `the configuration would not load after the edit (${messageLoad}); the file was left as it was`,
+    });
+    return;
   }
-  const fileBase = fileList[0];
-  return fileBase && fs.existsSync(fileBase) ? fileBase : undefined;
+  jsonSend(res, 200, { code: 0, data: { file, keyPath, value: body.value }, message: '' });
+}
+
+// keyPath is a key of the declaration at declarationPath: [...declarationPath, Key]
+// or [...declarationPath, compConfig, CompName, Key]
+function configKeyPathIsInside(keyPath: (string | number)[], declarationPath: (string | number)[]): boolean {
+  if (!declarationPath.every((step, index) => keyPath[index] === step)) return false;
+  const rest = keyPath.slice(declarationPath.length);
+  if (!rest.every((step) => typeof step === 'string')) return false;
+  if (rest.length === 1) return rest[0] !== COMP_CONFIG_KEY;
+  return rest.length === 3 && rest[0] === COMP_CONFIG_KEY;
 }
 
 // the previous content is kept as {file}.bak, then the file is rewritten

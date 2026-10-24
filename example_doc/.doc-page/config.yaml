@@ -1,0 +1,35 @@
+# Config file of the demonstration doc page, named by entry.yaml (config).
+# It holds declarations of the doc page config layer, over the defaults the
+# package declares in config.yaml (configDefault). documents still refine
+# document-level keys (source rules, side-panel items, frontmatter), and the
+# reader's values in the browser (client layer) win over all of them.
+# design: doc_page_impl_config.md#the-doc-page-layer
+#
+# a config file holds "config" (a mapping of keys, { file }, or a list of
+# both, paths relative to this file) and "variable".
+
+# variables: ${name} in any string value of a config declaration (any layer,
+# source rules, side-panel items, frontmatter) is replaced by the value here.
+# these are added to the variables of config.yaml and win over them.
+# design: doc_page_impl_config.md#variables
+variable:
+  # where Image / ImageGrid write a pasted image: a folder of the source that
+  # the entry collects as "referenced" (source.yaml)
+  imageFileStoreDirDefault: ~example/asset-file/image
+
+config:
+  # page level. tag ids shown on side-panel items; remove the key to show all.
+  # "test" is left out, so it shows next to the path bar but not in the side
+  # panel. "file-ext" is the label added by the demo SidePanelItem renderer.
+  TagsDisplayAtSidePanelItemsList: [part, guide, reference, code, draft, sub, file-ext]
+  # page level, default false: a tag on a side-panel item opens the overview
+  # too. on here so the demo can show it; off, a click on the item navigates
+  TagsOverviewPopupAtSidePanelItemIsOn: true
+  TagsDisplayAtLinkPosition: before         # replaced by the declaration after this file in entry.yaml
+  # component-level keys, by the component's tag name
+  # (doc_page_impl_config.md#component-level-config)
+  compConfig:
+    Image:
+      FileStoreDir: ${imageFileStoreDirDefault}   # the folder a pasted image is written to
+    ImageGrid:
+      FileStoreDir: ${imageFileStoreDirDefault}

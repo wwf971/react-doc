@@ -3,6 +3,7 @@ import {
   FoldersIcon,
   FolderTreeIcon,
   Hash,
+  History,
   Languages,
   LayoutList,
   LinkIcon,
@@ -233,9 +234,21 @@ export const tagOverviewExpose = {
 // ---------- demonstration components (example_doc/comp-mdx/) ----------
 
 export const demoCounterExpose = {
-  meta: { label: 'Counter (demo)', description: 'A counter whose state lives in the component state store.' },
+  meta: { label: 'Counter (demo)', description: 'A counter whose count lives in the component state service layer.' },
   icon: Hash,
-  sourceDefaultCreate: mdxOnlySourceCreate((compName) => `<${compName} id="counter" label="clicks" />`),
+  sourceDefaultCreate: () => ({
+    lang: 'text',
+    raw: 'A counter; a plain Markdown viewer shows this text in its place.',
+    props: { id: 'counter', label: 'clicks' },
+  }),
+};
+
+// what the component state service layer holds now; read from the store,
+// nothing to edit (doc_page_impl_mdx_comp_state.md)
+export const compStateListDemoExpose = {
+  meta: { isReadOnly: true, label: 'Component states (demo)', description: 'Every state object the component state service layer holds now.' },
+  icon: History,
+  sourceDefaultCreate: () => ({ lang: 'text', raw: 'The states of the components of the page; replaced by the CompStateListDemo component.' }),
 };
 
 // the link points to the document it is written in until the author changes it

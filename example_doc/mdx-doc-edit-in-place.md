@@ -1,9 +1,9 @@
 ---
-title: In-place Editing
+title: MDX Document In-place Editing
 description: Edit the blocks of this document from the page itself while the development server is running
 ---
 
-This page is a playground for the edit layer. Open it on the local development server, switch **Edit** on in the toolbar, and change the blocks below; every change is written to `example_doc/edit-in-place.md` and the page picks the new text up from the file without reloading: the scroll position, the part index, and the state of every other component stay as they are. On a built site the toggle does not exist and the page is read-only.
+This page is a playground for MDX document in-place editing (the edit layer). Side-panel items are edited in place by the same layer: renaming a label and moving an item, shown further below. Open it on the local development server, switch **Edit** on in the toolbar, and change the blocks below; every change is written to `example_doc/mdx-doc-edit-in-place.md` and the page picks the new text up from the file without reloading: the scroll position, the part index, and the state of every other component stay as they are. On a built site the toggle does not exist and the page is read-only.
 
 ## What edit mode shows
 
@@ -40,7 +40,7 @@ Items of the side panel can be moved in edit mode too, with everything below the
 
 Right-clicking an item of the sidebar in edit mode opens a small menu with **Rename** and **Move…**: the same as the pencil and the move button. Right-click another item while it is open and the menu moves there; an entry that does not apply (Rename on an item generated from a source folder) is greyed out and says why on hover.
 
-The `Move Sandbox` folder below this page is the place to try it. Its first two items come from `side-panel-move/sandbox.yaml`, included by the folder, and the last two are written under the folder in `side-panel.yaml`; moving `Local C` up before `Included A` takes its lines out of one file and writes them into the other, comments and indentation adjusted, the rest of both files untouched. Dropping `Included B` on the middle of `Local C` makes `Local C` a folder. The side panel updates without a reload and keeps its open folders.
+The `Move Sandbox` folder below this page is the place to try it. Its first two items come from `.doc-page/side-panel-move-sandbox.yaml`, included by the folder, and the last two are written under the folder in `.doc-page/side-panel.yaml`; moving `Local C` up before `Included A` takes its lines out of one file and writes them into the other, comments and indentation adjusted, the rest of both files untouched. Dropping `Included B` on the middle of `Local C` makes `Local C` a folder. The side panel updates without a reload and keeps its open folders.
 
 Some moves are refused, and the grey indicator (or the disabled button in the picker) says why on hover: an item stays inside its part (the items of `MDX Components`) and inside its sub document (`Sub Document`), and nothing from outside goes into them; separators, component panels and inline pages hold no items; items generated from a source folder are not written in any file and cannot be moved.
 

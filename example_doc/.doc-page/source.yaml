@@ -1,7 +1,7 @@
-# Ordered source rules, named by example-entry.yaml (source.file). Paths are
-# relative to this file. example_doc is the root folder of the demonstration
-# page; the yaml files of the document (the entry, this file, the side-panel
-# and tag files) live here too and are never collected, so no rule excludes them.
+# Ordered source rules, named by entry.yaml (source.file). Paths are relative
+# to this file, so the doc page folder, example_doc, is "..". The metadata
+# files of the doc page (the entry, this file, the side-panel, tag and config
+# files) live in .doc-page/, which is never collected, so no rule excludes it.
 #
 # every collected file is named by its source path ~rootId/path-in-root
 # (design: doc_page_impl_source.md#source-paths). an addFolder rule says how
@@ -16,23 +16,23 @@
 rules:
   - action: addFolder
     rootId: example
-    path: .
+    path: ..
     collect: recursive
   - action: addFile
     rootId: req
-    path: ../main/doc_page_req.md
+    path: ../../main/doc_page_req.md
     tags: [reference]           # tags every file this rule collects
   # the images of the demonstration: referenced files, bundled into a build
   # only when a document or an asset version uses them
   - action: addFolder
     rootId: example
-    path: ./mdx-usage/image
+    path: ../mdx-usage/image
     collect: referenced
   # the files the page itself creates: images pasted into Image / ImageGrid
-  # (config.yaml variable imageFileStoreDirDefault names this folder)
+  # (variable imageFileStoreDirDefault of config.yaml in this folder names it)
   - action: addFolder
     rootId: example
-    path: ./asset-file/image
+    path: ../asset-file/image
     collect: referenced
   - action: removeByName
     pattern: "*.pyc"

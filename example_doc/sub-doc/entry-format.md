@@ -6,7 +6,7 @@ language: en
 
 ## One grammar for every yaml file
 
-Every document has one entry file, named `xxx-entry.yaml` by convention and marked by a `docEntry` section. The entry and every yaml file it reaches share the same sections; a file without `docEntry` is a resource file that only holds declarations for others. This document's entry is the complete, inline form:
+Every document has one entry file, marked by a `docEntry` section and kept as `.doc-page/entry.yaml` in the folder of the doc page by convention. The entry and every yaml file it reaches share the same sections; a file without `docEntry` is a resource file that only holds declarations for others. This document's entry is the complete, inline form:
 
 ```yaml
 docEntry:
@@ -15,11 +15,13 @@ docEntry:
 source:                          # rules | { rules } | { file }
   - action: addFolder
     rootId: sub-doc              # files are named ~sub-doc/path-in-folder
-    path: .
+    path: ..                     # relative to this file: the folder sub-doc/
     collect: recursive           # recursive | direct | referenced
 tag:                             # { defineById } | { file }
   defineById:
     sub: { text: Sub }
+config:                          # { Key: value } | { file } | a list of both
+  TagsDisplayAtLinkIsOn: false
 sidePanelById:                   # the side panels of the document
   main:
     root: { doc: ~sub-doc/sub-doc.md, text: Sub Document, tags: [sub] }
@@ -30,9 +32,9 @@ sidePanelById:                   # the side panels of the document
 
 ## Splitting the declaration
 
-Each section can live in its own file, which the entry names. The demonstration page's `example-entry.yaml` does exactly this: `source: { file: ./source.yaml }`, `tag: { file: ./tag.yaml }`, and a side panel declared as a reference, `main: { file: ./side-panel.yaml }`, to a resource file whose `sidePanelById.main` holds the tree.
+Each section can live in its own file, which the entry names, and this is the recommended form for a doc page of any size. The demonstration page's `.doc-page/entry.yaml` does exactly this: `source: { file: ./source.yaml }`, `tag: { file: ./tag.yaml }`, `config: [{ file: ./config.yaml }, ...]`, and a side panel declared as a reference, `main: { file: ./side-panel.yaml }`, to a resource file whose `sidePanelById.main` holds the tree. All of them sit beside the entry in `.doc-page/`.
 
-Paths are relative to the file that holds them, and the yaml files of a document are never collected as documents, whatever the source rules say.
+Paths are relative to the file that holds them, and the yaml files of a document are never collected as documents, whatever the source rules say; neither is anything in a `.doc-page/` folder.
 
 ## Several side panels
 

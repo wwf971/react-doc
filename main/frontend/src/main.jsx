@@ -33,6 +33,9 @@ createRoot(document.getElementById('root')).render(
     config={{
       language: 'en',
       routeMode: 'query',
+      // the environment the page runs in (doc_page_impl.md#the-environment):
+      // the vite development server, or a static build
+      env: docSource.docEnv,
       // host components, as registry definitions so they receive
       // { data, config, onEvent } like every registered component
       compById: {

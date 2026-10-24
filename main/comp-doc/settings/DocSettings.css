@@ -316,3 +316,167 @@
   cursor: pointer;
   text-decoration: underline;
 }
+
+/* ---------- the config layers: declared keys ---------- */
+
+/* a key the layer cannot use: unknown, or an invalid value */
+.doc-settings-level.is-error {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+/* removes a key from a layer that takes keys (Client) */
+.doc-settings-item-remove {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  padding: 0.05rem;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+}
+
+.doc-settings-item-remove:hover,
+.doc-settings-item-remove:focus-visible {
+  background: var(--color-fd-accent);
+  color: var(--color-fd-foreground);
+  outline: none;
+}
+
+/* a value shown, not edited: the Result tab, a key the layer cannot use */
+.doc-settings-value-text {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.doc-settings-key-add-select {
+  max-width: 18rem;
+  padding: 0 0.2rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  font: inherit;
+}
+
+.doc-settings-head-button[aria-pressed='true'] {
+  border-color: var(--color-fd-primary);
+  color: var(--color-fd-primary);
+}
+
+/* ---------- the edit mode of the doc page layer: declarations side by side ---------- */
+
+.doc-settings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+/* scrolls horizontally only when the columns do not fit: the rows are as
+   wide as their content, at least as wide as the area */
+.doc-settings-grid-scroll {
+  overflow: auto;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+}
+
+/* every row has the same columns: the key, then one per declaration */
+.doc-settings-grid-row {
+  display: grid;
+  grid-template-columns: 14rem repeat(var(--doc-settings-grid-col-count, 1), minmax(10rem, 12rem));
+  width: max-content;
+  min-width: 100%;
+  min-width: -moz-available;
+  min-width: -webkit-fill-available;
+  min-height: 1.85rem;
+  border-top: 1px solid var(--color-fd-border);
+}
+
+.doc-settings-grid-row:first-child {
+  border-top: 0;
+}
+
+.doc-settings-grid-row.is-head {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+}
+
+.doc-settings-grid-row.is-group {
+  font-weight: 550;
+}
+
+/* the key column stays in place when the declarations scroll */
+.doc-settings-grid-key {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 0.5rem;
+  border-right: 1px solid var(--color-fd-border);
+  background: var(--color-fd-background);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.74rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-settings-grid-row.is-head .doc-settings-grid-key,
+.doc-settings-grid-row.is-group .doc-settings-grid-key {
+  font-family: inherit;
+}
+
+.doc-settings-grid-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: 0.15rem 0.5rem;
+  border-left: 2px solid transparent;
+  overflow: hidden;
+}
+
+/* the value the layer takes */
+.doc-settings-grid-cell.is-deciding {
+  border-left-color: var(--color-fd-primary);
+  background: var(--color-fd-accent);
+}
+
+.doc-settings-grid-order {
+  flex-shrink: 0;
+  color: var(--color-fd-muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.doc-settings-grid-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-settings-grid-empty {
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-settings-grid-value {
+  min-width: 2rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.doc-settings-value-text.is-error {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+/* a problem of a doc page's asset store config, as one row of its folders */
+.doc-settings-asset-folder.doc-settings-asset-problem {
+  grid-template-columns: 1fr;
+  font-size: 0.72rem;
+}

@@ -423,11 +423,13 @@ The metadata reaches the component as `config.assetInfo.versionMetadata` ([Versi
 
 **Popup.** Both modes render inside `BlockPopupSurface` ([Block popup](doc_page_impl_popup.md)): the sheet opens in a dialog, maximizes, and switches between View and Edit there, with the view-range panel and Save / Cancel in the dialog's header. The same engine instance moves into the dialog and back, so the selection and an unsaved draft stay. The outer box of the block (`.doc-mdx-excel-univer-shell`) carries the block's margins and the sheet's own box has none, so the sheet sits flush in the dialog and the geometry lock of an edit session measures the block from the outer box; in the dialog the sheet fills it (height `100%`).
 
+**State.** What the component keeps beyond the workbook lives in its state object of the [component state service layer](doc_page_impl_mdx_comp_state.md), keyed by the asset object, so it outlives the engine instance and is shared by every block reading the object: `engine`, the active sheet and the selected cells, reported by the engine's events in both modes and restored by the next instance (after another document, a switch between View and Edit, a new version of the data); and `draft`, the editor's draft store while a session is open on the object, which a second block reading the same object renders as it is edited, workbook and view range alike ([Drafts and sharing](doc_page_impl_mdx_comp_state.md#drafts-and-sharing)). The editor puts the draft there when it mounts and takes it out when it unmounts, which is when the session has ended; what is saved still goes into the asset object.
+
 ```text
 ExcelUniver.jsx           the popup surface; routes to ExcelUniverView (view) or ExcelUniverEdit (config.isEdit)
 ExcelUniverSheet.jsx      one Univer instance on a workbook text, in its own mount element; view guard or
-                          change reports; retirement outside the commit
-ExcelUniverEdit.jsx       the sheet editor and the view-range panel
+                          change reports; the selection restored and reported; retirement outside the commit
+ExcelUniverEdit.jsx       the sheet editor and the view-range panel; the draft put into the block's state
 ExcelUniverEditStore.js   the draft: workbook text, view, metadata to save
 ExcelUniverData.js        parsing, ranges, metadata, the view workbook and its height (pure)
 excel-univer-expose.js    meta, icon, edit mode, the default workbook

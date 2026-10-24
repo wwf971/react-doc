@@ -388,3 +388,19 @@
 .doc-source-prompt-button:disabled {
   opacity: 0.6;
 }
+
+/* the warning before a path that names nothing in the source: its place is
+   kept whether it is shown or not, so typing never moves the path */
+.doc-source-path-warning {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  width: 12px;
+  color: #d97706;
+  visibility: hidden;
+}
+
+.doc-source-path-warning[data-shown] {
+  visibility: visible;
+  cursor: help;
+}

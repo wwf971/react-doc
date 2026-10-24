@@ -1,11 +1,13 @@
 # doc system config (example layer; local overrides go to config.0.yaml)
 
-# the document this page shows: its entry file (xxx-entry.yaml), which
-# declares the source rules, the tag definitions and the side panels of the
-# document. "sidePanel" names one of its side panels instead of its default.
-# design: doc_page_impl_side_panel.md#the-document-entry
+# the doc page this page shows, by its folder: the entry is found in its
+# .doc-page/ folder (.doc-page/entry.yaml), which declares the source rules,
+# the tag definitions, the config and the side panels of the document.
+# "file: <entry file>" names the entry itself instead. "sidePanel" names one
+# of its side panels instead of its default.
+# design: doc_page_impl_dir.md, doc_page_impl_side_panel.md#the-document-entry
 docEntry:
-  file: ../example_doc/example-entry.yaml
+  dir: ../example_doc
   # sidePanel: compact
 
 # page values. when absent, the entry's "docEntry" mapping supplies them
@@ -14,22 +16,22 @@ docEntry:
 # siteTitle: React Doc Test
 # homeDoc: ~example/doc.md       # source path: ~{rootId}/relative/path (doc_page_impl_source.md)
 
-# variables: ${name} in any string value of this file, of the entry's
-# config declarations and of frontmatter "config" is replaced by the value
-# here. design: doc_page_impl_config.md#variables
-variable:
-  # where Image / ImageGrid write a pasted image by default: a folder of
-  # the source that the entry collects as "referenced" (example source.yaml)
-  imageFileStoreDirDefault: ~example/asset-file/image
+# variables: ${name} in any string value of a config declaration (this
+# file's configDefault, the doc page config, source rules, side-panel items,
+# frontmatter "config") is replaced by the value here. a config file of the
+# doc page declares variables of its own, which win over these; the
+# demonstration declares its variables there (example_doc/.doc-page/config.yaml).
+# design: doc_page_impl_config.md#variables
+# variable:
+#   name: value
 
-# the local store of the asset service layer: versioned objects (text or binary) a component block
-# can reference instead of carrying its data inline (```asset blocks). the
-# file names the folders of the store and which one is the default; the
-# settings panel of the page rewrites it. served through the asset api on
-# the development server, bundled as a read-only snapshot into a build.
+# the asset service layer (versioned objects a component block can reference
+# instead of carrying its data inline, ```asset blocks) is configured by each
+# doc page, not here: .doc-page/asset.yaml beside its entry names its folders
+# (example_doc/.doc-page/asset.yaml); without it a doc page uses the folder
+# asset/ of its folder. served through the asset api on the development
+# server, bundled as a read-only snapshot into a build.
 # design: doc_page_impl_asset.md
-asset:
-  file: ../example_doc/asset.yaml
 
 # the service instances: stateful services run by the service backend
 # (main/service-backend/server.py), a program of its own. the development
@@ -40,7 +42,7 @@ asset:
 # no backend. design: doc_page_impl_service.md
 service:
   backend: http://127.0.0.1:45190
-  backendConfigFile: ../example_doc/service-backend.yaml
+  backendConfigFile: ../example_doc/.doc-page/service-backend.yaml
 
 # tag definitions of the page (how each tag looks), merged over the ones the
 # entry and the documents it includes declare. which assets carry a tag is
@@ -50,36 +52,27 @@ service:
 #   defineById: { ... }
 # design: doc_page_impl_tag.md
 
-# page-level values of the config keys. keys of one feature share a prefix.
-# document-level keys can be overridden per document by source rules,
-# side-panel nodes and frontmatter "config". design: doc_page_impl_config.md
-globalConfig:
+# the default config layer: the values of the config keys this package
+# provides, over the built-in defaults of the key definitions. the settings
+# panel shows them greyed out and never writes them; a doc page sets its own
+# values in the "config" of its entry (the doc page layer, above this one).
+# keys of one feature share a prefix. document-level keys can be refined per
+# document by source rules, side-panel nodes and frontmatter "config".
+# component-level keys (the keys a registered component declares for itself,
+# compDefine configDefineList) go under "compConfig", by the component's tag
+# name. design: doc_page_impl_config.md#config-layers
+configDefault:
   TagsDisplayAtMainPanelIsOn: true          # document level
   TagsDisplayAtSidePanelItemIsOn: true      # page level
-  # page level. tag ids shown on side-panel items; remove the key to show all.
-  # "test" is left out, so it shows next to the path bar but not in the side
-  # panel. "file-ext" is the label added by the demo SidePanelItem renderer.
-  TagsDisplayAtSidePanelItemsList: [part, guide, reference, code, draft, sub, file-ext]
   TagsDisplayAtLinkIsOn: false              # document level
   TagsDisplayAtLinkPosition: after          # document level: before | after
   TagsOverviewPopupIsOn: true               # page level
-  # page level, default false: a tag on a side-panel item opens the overview
-  # too. on here so the demo can show it; off, a click on the item navigates
-  TagsOverviewPopupAtSidePanelItemIsOn: true
-
-# component-level config: the keys a registered component declares for
-# itself (compDefine configDefineList), set by the component's tag name.
-# overridden per document the same way as document-level keys, under a
-# "compConfig" mapping of a source rule, a side-panel node or frontmatter
-# "config"; the settings panel shows them on its Component tab.
-# design: doc_page_impl_config.md#component-level-config
-compConfig:
-  Image:
-    FileStoreDir: ${imageFileStoreDirDefault}   # the folder a pasted image is written to
-    PasteReplaceConfirmIsOn: true               # ask before a paste replaces an existing image
-  ImageGrid:
-    FileStoreDir: ${imageFileStoreDirDefault}
-    PasteReplaceConfirmIsOn: true
+  TagsOverviewPopupAtSidePanelItemIsOn: false   # page level
+  compConfig:
+    Image:
+      PasteReplaceConfirmIsOn: true         # ask before a paste replaces an existing image
+    ImageGrid:
+      PasteReplaceConfirmIsOn: true
 
 # tag name usable in docs -> component id in comp-doc/registry/registry.js
 compRegistry:
@@ -144,6 +137,7 @@ compRegistry:
   DemoCounter: specific/DemoCounter
   SourceLink: specific/SourceLink
   TagListAllDemo: specific/TagListAllDemo
+  CompStateListDemo: specific/CompStateListDemo
   DocConfigDemo: specific/DocConfigDemo
 
 # files referenced by Image / ImageGrid / DiagramMermaid properties, the

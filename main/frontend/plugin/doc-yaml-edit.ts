@@ -6,6 +6,7 @@ import {
   stringify as yamlStringify,
   type Document,
   type Node,
+  type Scalar,
   type Pair,
   type YAMLMap,
   type YAMLSeq,
@@ -14,8 +15,8 @@ import { textLineListGet, type LineOperation } from './doc-edit-lines.ts';
 
 // Changing a yaml file in place, as line operations (doc-edit-lines.ts).
 // Shared by every write of the page into a yaml file it did not author: a
-// side-panel label (doc-side-panel-text.ts), a config value of config.yaml
-// (doc-edit-server.ts, route config/value), an item of a side panel moved
+// side-panel label (doc-side-panel-text.ts), a value of a config declaration
+// of the doc page (doc-edit-server.ts, route config/value), an item of a side panel moved
 // within its list, into another list, or into another file
 // (doc-side-panel-move.ts).
 //
@@ -145,10 +146,14 @@ export type YamlValueSetResult =
 //   mappings on the way are missing              they are added too, nested
 //   a mapping on the way is written empty        ("compConfig:" alone) its
 //                                                lines are added below it
+// a number in keyPath steps into an item of a block list: ['config', 1, 'Key']
+// is the key "Key" of the second item of the list "config". the item must
+// exist and be a block mapping; items are never added.
 // refused: a file that does not parse or whose root is not a block mapping,
-// a key path through a flow mapping ({ a: 1 }) or through a value that is
-// not a mapping, a key that holds a mapping itself.
-export function yamlValueSetOperationBuild(source: string, keyPath: string[], valueText: string): YamlValueSetResult {
+// a key path through a flow mapping ({ a: 1 }) or a flow list, through a
+// value that is not a mapping, a missing list item, a key that holds a
+// mapping itself.
+export function yamlValueSetOperationBuild(source: string, keyPath: (string | number)[], valueText: string): YamlValueSetResult {
   if (keyPath.length === 0) return { code: -1, data: null, message: 'the key path is empty' };
   const document = parseDocument(source);
   if (document.errors.length > 0) {
@@ -164,13 +169,20 @@ export function yamlValueSetOperationBuild(source: string, keyPath: string[], va
     const key = keyPath[index];
     const isLast = index === keyPath.length - 1;
     const pathText = keyPath.slice(0, index + 1).join('.');
+    if (typeof key === 'number') {
+      return { code: -1, data: null, message: `"${pathText}": a list item is named where a key is expected` };
+    }
     const pair = mapping.items.find((item) => isScalar(item.key) && String(item.key.value) === key) as Pair<Node, Node | null> | undefined;
 
     if (!pair) {
       // the rest of the path is new: nested lines at the end of this mapping
+      const keyListRest = keyPath.slice(index);
+      if (keyListRest.some((step) => typeof step === 'number')) {
+        return { code: -1, data: null, message: `"${pathText}" is missing; list items are not added` };
+      }
       const indent = mappingChildIndentGet(source, mapping, indentUnit);
       const lineAt = mappingEndLineAtGet(source, mapping);
-      const lineList = pathLineListBuild(keyPath.slice(index), valueText, indent, indentUnit);
+      const lineList = pathLineListBuild(keyListRest as string[], valueText, indent, indentUnit);
       return { code: 0, data: { operation: linesInsertBuild(lineAt, lineList) }, message: '' };
     }
 
@@ -194,11 +206,36 @@ export function yamlValueSetOperationBuild(source: string, keyPath: string[], va
       mapping = valueNode;
       continue;
     }
+    if (isSeq(valueNode) && typeof keyPath[index + 1] === 'number') {
+      // a list on the way: the item it names is the next mapping
+      const itemIndex = keyPath[index + 1] as number;
+      const pathTextItem = keyPath.slice(0, index + 2).join('.');
+      if (valueNode.flow) {
+        return { code: -1, data: null, message: `"${pathText}" is written as a flow list; write it over several lines first` };
+      }
+      const item = valueNode.items[itemIndex];
+      if (!isMap(item)) {
+        return { code: -1, data: null, message: `"${pathTextItem}" is not a mapping item of the list` };
+      }
+      if (item.flow) {
+        return { code: -1, data: null, message: `"${pathTextItem}" is written as a flow mapping; write it over several lines first` };
+      }
+      if (index + 1 === keyPath.length - 1) {
+        return { code: -1, data: null, message: `"${pathTextItem}" holds a mapping, not a value` };
+      }
+      mapping = item;
+      index += 1;
+      continue;
+    }
     if (isScalar(valueNode) && valueNodeIsEmpty(source, valueNode)) {
       // "compConfig:" written without a value: the nested lines go right below
+      const keyListRest = keyPath.slice(index + 1);
+      if (keyListRest.some((step) => typeof step === 'number')) {
+        return { code: -1, data: null, message: `"${pathText}" is empty; list items are not added` };
+      }
       const indent = nodeColumnGet(source, pair.key) + indentUnit;
       const lineAt = lineAtAfterNodeGet(source, pair.key);
-      const lineList = pathLineListBuild(keyPath.slice(index + 1), valueText, indent, indentUnit);
+      const lineList = pathLineListBuild(keyListRest as string[], valueText, indent, indentUnit);
       return { code: 0, data: { operation: linesInsertBuild(lineAt, lineList) }, message: '' };
     }
     return { code: -1, data: null, message: `"${pathText}" is not a mapping` };
@@ -207,8 +244,8 @@ export function yamlValueSetOperationBuild(source: string, keyPath: string[], va
 }
 
 // the value at keyPath as plain data, undefined when the path is not there
-// or the file does not parse
-export function yamlValueGet(source: string, keyPath: string[]): unknown {
+// or the file does not parse. a number in keyPath names a list item
+export function yamlValueGet(source: string, keyPath: (string | number)[]): unknown {
   const document = parseDocument(source);
   if (document.errors.length > 0) return undefined;
   if (!document.hasIn(keyPath)) return undefined;
@@ -506,4 +543,58 @@ function indentUnitGet(source: string, root: YAMLMap): number {
     if (unit > 0) return unit;
   }
   return 2;
+}
+
+// ---------- a list of strings ----------
+
+// the operations that make the list at keyPath hold valueList (strings),
+// keeping the author's comments: item by item, an entry that changed is
+// rewritten in place (nodeReplaceBuild, its trailing comment kept), extra
+// entries are appended as "- x" lines at the column of the list, entries
+// past the new end are deleted with the comment lines that belong to them.
+// a missing key, an empty "key:" or a flow list ([a, b]) is written as one
+// value (yamlValueSetOperationBuild: a flow list), and so is a list of
+// anything but plain strings. the operations are built against source;
+// apply them together (lineOperationListApply).
+export function yamlStringListSetBuild(
+  source: string,
+  keyPath: (string | number)[],
+  valueList: string[],
+): YamlEditResult<{ operationList: LineOperation[] }> {
+  if (valueList.length === 0) return resultFail('the list would be empty; an empty list is not written from the page');
+  const document = parseDocument(source);
+  if (document.errors.length > 0) return resultFail(`the file does not parse: ${document.errors[0].message}`);
+  const node = document.hasIn(keyPath) ? document.getIn(keyPath, true) : undefined;
+  const isBlockStringList = isSeq(node) && !node.flow && node.items.length > 0
+    && node.items.every((item) => isScalar(item) && typeof item.value === 'string');
+  if (!isBlockStringList) {
+    const valueText = yamlValueTextBuild(valueList);
+    if (valueText === undefined) return resultFail('the list is not a list of strings');
+    const result = yamlValueSetOperationBuild(source, keyPath, valueText);
+    if (result.code !== 0) return resultFail(result.message);
+    return { code: 0, data: { operationList: [result.data.operation] }, message: '' };
+  }
+  const seq = node as YAMLSeq;
+  const itemList = seq.items as Scalar[];
+  const operationList: LineOperation[] = [];
+  const countKept = Math.min(itemList.length, valueList.length);
+  for (let index = 0; index < countKept; index++) {
+    if (itemList[index].value === valueList[index]) continue;
+    operationList.push(nodeReplaceBuild(source, itemList[index], yamlScalarTextBuild(valueList[index])));
+  }
+  if (valueList.length > itemList.length) {
+    const itemLast = yamlSeqItemLinesGet(source, seq, itemList.length - 1);
+    if (itemLast.code !== 0) return itemLast;
+    const indent = ' '.repeat(itemLast.data.column);
+    operationList.push(linesInsertBuild(
+      itemLast.data.lineEnd + 1,
+      valueList.slice(itemList.length).map((value) => `${indent}- ${yamlScalarTextBuild(value)}`),
+    ));
+  }
+  for (let index = valueList.length; index < itemList.length; index++) {
+    const lines = yamlSeqItemLinesGet(source, seq, index);
+    if (lines.code !== 0) return lines;
+    operationList.push({ action: 'deleteLines', lineStart: lines.data.lineStart, lineEnd: lines.data.lineEnd });
+  }
+  return { code: 0, data: { operationList }, message: '' };
 }

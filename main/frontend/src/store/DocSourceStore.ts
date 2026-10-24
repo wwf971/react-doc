@@ -1,4 +1,5 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
+import { DocEnvStore } from './DocEnvStore.js';
 import { compileDoc } from '../lib/mdx-compile.js';
 import { docTargetResolve } from '../lib/doc-target-resolve.js';
 import { sourcePathCompleteList, sourcePathTreeBuild } from '../lib/doc-source-complete.js';
@@ -102,8 +103,11 @@ export class DocSourceStore {
   dirManifest: DirEntry[];
   compileConfig: any;
   linkResolve: any;
-  // the source api of the development server ('' in a build: the source is
-  // read-only, and the bytes of a file come from fileUrlByPath)
+  // the environment of the page (DocEnvStore): whether files can be created
+  envStore: DocEnvStore;
+  // the source api of the development server, as the environment offers it
+  // ('' in a build: the source is read-only, and the bytes of a file come
+  // from fileUrlByPath)
   sourceEndpoint: string;
   // source path (or the spelling a document used) -> url of the file's bytes,
   // as the vite plugin collected them (fileUrlByPath of the virtual module)
@@ -122,14 +126,16 @@ export class DocSourceStore {
 
   constructor(
     sourceData: SourceData,
-    options?: { compile?: any; linkResolve?: any; endpoint?: string; fileUrlByPath?: Record<string, string> },
+    options?: { compile?: any; linkResolve?: any; envStore?: DocEnvStore; endpoint?: string; fileUrlByPath?: Record<string, string> },
   ) {
     this.configDoc = sourceData.configDoc;
     this.fileManifest = sourceData.fileManifest;
     this.dirManifest = sourceData.dirManifest ?? [];
     this.compileConfig = options?.compile ?? {};
     this.linkResolve = options?.linkResolve;
-    this.sourceEndpoint = String(options?.endpoint ?? '').replace(/\/+$/, '');
+    // a store made without the page's environment (a test) infers one from its endpoint
+    this.envStore = options?.envStore ?? new DocEnvStore({ endpointByApi: { source: options?.endpoint } });
+    this.sourceEndpoint = this.envStore.endpointGet('source').replace(/\/+$/, '');
     this.fileUrlByPath = options?.fileUrlByPath ?? {};
     this.sourceService = Object.freeze({
       isWritable: () => this.isWritable,
@@ -152,6 +158,7 @@ export class DocSourceStore {
       dirManifest: observable.ref,
       compileConfig: false,
       linkResolve: false,
+      envStore: false,
       sourceEndpoint: false,
       fileUrlByPath: false,
       sourceService: false,
@@ -159,9 +166,9 @@ export class DocSourceStore {
     });
   }
 
-  // the source api answers (development server): files can be created
+  // files can be created: the environment offers it (development server)
   get isWritable(): boolean {
-    return this.sourceEndpoint !== '';
+    return this.envStore.isCapable('sourceWrite');
   }
 
   versionGet(path: string): number {
@@ -463,6 +470,21 @@ export class DocSourceStore {
       if (this.sourceEndpoint) return `${this.sourceEndpoint}/data?path=${encodeURIComponent(entry.internalPath)}`;
     }
     return this.fileUrlByPath[text.replace(/^\.\//, '')];
+  }
+
+  // why a path typed for spec names nothing in the source ('' when it names
+  // something, or is empty): a folder of the folder manifest for kind dir,
+  // a file of the manifest for kind file, either for any. synchronous and
+  // cheap, so a field can ask it on every keystroke
+  pathMissingWarningGet(text: string, spec: SourcePathSpec = { kind: 'dir' }): string {
+    const pathText = String(text ?? '').trim().replace(/\/+$/, '');
+    if (pathText === '') return '';
+    if (!pathText.startsWith('~')) return `${pathText} is not a source path (~rootId/path)`;
+    const isDir = this.dirManifest.some((dir) => dir.internalPath === pathText);
+    const isFile = this.fileManifest.some((entry) => entry.internalPath === pathText);
+    if (spec.kind === 'dir') return isDir ? '' : `no folder ${pathText} in the source${isFile ? ' (it is a file)' : ''}`;
+    if (spec.kind === 'file') return isFile ? '' : `no file ${pathText} in the source${isDir ? ' (it is a folder)' : ''}`;
+    return isDir || isFile ? '' : `${pathText} is not in the source`;
   }
 
   // ---------- folders: completion ----------

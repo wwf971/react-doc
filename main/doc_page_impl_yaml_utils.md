@@ -1,6 +1,6 @@
 # YAML Utilities: Editing a YAML File in Place
 
-The page writes into yaml files it did not author: side-panel files, `config.yaml`. This document is the reference for every such write: the principles, the utilities that implement them (`frontend/plugin/doc-yaml-edit.ts` on top of the line operations of `frontend/plugin/doc-edit-lines.ts`), and where they are used. A new write into a yaml file is built with these utilities, and a utility that is missing is added to `doc-yaml-edit.ts`, general, not inside the feature that needs it.
+The page writes into yaml files it did not author: side-panel files, the config files of a doc page. This document is the reference for every such write: the principles, the utilities that implement them (`frontend/plugin/doc-yaml-edit.ts` on top of the line operations of `frontend/plugin/doc-edit-lines.ts`), and where they are used. A new write into a yaml file is built with these utilities, and a utility that is missing is added to `doc-yaml-edit.ts`, general, not inside the feature that needs it.
 
 ## Principles of a write
 
@@ -90,7 +90,7 @@ All functions are pure. The ones that can refuse answer `{ code, data, message }
 | `nodeReplaceBuild(source, node, text)` | `replaceLines` over the lines of a node: what precedes it on its first line + `text` + what follows it on its last line (a trailing comment). a value over several lines becomes one line |
 | `linesInsertBuild(lineAt, lineList)` | `insertLines` of ready lines (already indented) before line `lineAt` |
 | `keyLineValueSetBuild(source, keyNode, valueText)` | the line of `key: value` with another value on it, or none (`''`), keeping the key and a trailing comment: `children:` gets `[]`, `children: []` loses it. a block value below the key is not touched |
-| `yamlValueSetOperationBuild(source, keyPath, valueText)` | the one operation that gives `keyPath` the value: an existing scalar or list is rebuilt in place; a missing key is a new line at the end of its mapping, with the missing mappings on the way, indented like the file. refused: a file that does not parse or is not a block mapping, a path through a flow mapping or a non-mapping, a key holding a mapping |
+| `yamlValueSetOperationBuild(source, keyPath, valueText)` | the one operation that gives `keyPath` the value: an existing scalar or list is rebuilt in place; a missing key is a new line at the end of its mapping, with the missing mappings on the way, indented like the file. a number in `keyPath` steps into an existing item of a block list (`['config', 1, 'Key']`); items are never added. refused: a file that does not parse or is not a block mapping, a path through a flow mapping, a flow list or a non-mapping, a missing list item, a key holding a mapping |
 | `yamlValueGet(source, keyPath)` | the value at `keyPath` as plain data (`undefined` when absent or the file does not parse), for the base check |
 
 ```ts
@@ -128,6 +128,12 @@ The lines of an item are those from its `-` to the end of its value, with the co
 
 `seqPath` is a path for `document.getIn`, e.g. `['sidePanelById', 'main', 'tree', 0, 'children']`.
 
+### A list of strings
+
+| function | does |
+| --- | --- |
+| `yamlStringListSetBuild(source, keyPath, valueList)` | `data.operationList` making a block list of strings hold `valueList`, entry by entry: a changed entry rewritten in place (its trailing comment kept), new entries appended as `- x` lines at the list's column, entries past the new end deleted with their comment lines; entries that stay keep their comments. a missing key or a flow list is written as one value (a flow list). refused: an empty list, a file that does not parse |
+
 ```ts
 // move item 1 of tree to the end of the children of item 3, in one file
 const document = parseDocument(source);
@@ -146,18 +152,19 @@ Both builders work on the same `source` and `document`; across two files, the re
 
 ## Where it is used
 
-All yaml writes go through the edit api of the development server (`plugin/doc-edit-server.ts`, [Edit api and line operations](doc_page_impl_edit.md#edit-api-and-line-operations)); the browser calls it through `lib/doc-edit-api.js`.
+All yaml writes go through an api of the development server: the edit api (`plugin/doc-edit-server.ts`, [Edit api and line operations](doc_page_impl_edit.md#edit-api-and-line-operations), called through `lib/doc-edit-api.js`), and, for the asset folders, the asset api (`plugin/doc-asset-server.ts`).
 
 | write | route | built by | utilities |
 | --- | --- | --- | --- |
 | the label of a side-panel item ([editing a label](doc_page_impl_side_panel.md#editing-a-label-in-place)) | `POST side-panel/text` | `sidePanelTextOperationBuild` (`plugin/doc-side-panel-text.ts`) | `nodeReplaceBuild` + `yamlScalarTextBuild` for an existing `text` / `separator`; `linesInsertBuild` at `lineAtAfterNodeGet`, indented at `nodeColumnGet`, for a document item labeled by its title |
 | a side-panel item moved with its subtree ([moving an item](doc_page_impl_side_panel.md#moving-an-item)) | `POST side-panel/move` | `sidePanelMoveBuild` (`plugin/doc-side-panel-move.ts`) | `yamlSeqItemRemoveBuild`, `yamlSeqItemInsertBuild`, `lineOperationListApply`; for another file, the `include` paths of the item rebased with `nodeReplaceBuild` + `yamlScalarTextBuild` |
-| one value of the global config layer ([config layers](doc_page_impl_config.md#config-layers)) | `POST config/value` | the route itself | `yamlValueTextBuild`, `yamlValueGet` (base check and which of `config.yaml`, `config.0.yaml` declares the key), `yamlValueSetOperationBuild`, `lineOperationApply` |
+| the asset folders of one doc page ([which folders a doc page declares](doc_page_impl_asset.md#which-folders-a-doc-page-declares)) | `POST /__doc-asset/folder/set` | `assetConfigTextApply` (`plugin/doc-asset-store.ts`) | `yamlStringListSetBuild` for `folderList`, `yamlValueSetOperationBuild` + `yamlScalarTextBuild` for `folderDefault`, `lineOperationListApply`; a file that does not exist yet is created from a template (`assetConfigTextBuild`) |
+| one value of a config declaration of the doc page ([the doc page layer](doc_page_impl_config.md#the-doc-page-layer)) | `POST config/value` | the route itself | `yamlValueTextBuild`, `yamlValueGet` (the key is declared, and the base check), `yamlValueSetOperationBuild`, `lineOperationApply` |
 
 What each route checks:
 
 - *side-panel/text*: the request names the node by its yaml path (`nodeSource`, annotated on the side-panel tree by `plugin/doc-entry.ts`) and the label it started from (`textBase`); a different label in the file is code -2; a `text` line is not added to a node in flow form; the language of a translated label must match how the file writes it (a string or a language mapping).
 - *side-panel/move*: every file named must be a side-panel file the configuration loads (-3) with the hash the page built its side panel from (`hashBaseByFile`, from `fileHashByFile` of `doc-entry.ts`), else -2 for the whole move; every resulting text is parsed again before anything is written; after writing, the configuration is loaded once and the files are written back when it does not load.
-- *config/value*: `valueBase` against `yamlValueGet` of the file, -2 when different.
+- *config/value*: the file and key path must be a key of a declaration the configuration loads (-3), already declared (-3); `valueBase` against `yamlValueGet` of the file, -2 when different; after writing, the configuration is loaded once and the file is written back when it does not load.
 
 Every route writes through `fileWriteWithBackup`. The written files are then reported to the source plugin (`onFileListWritten`, `configurationFileListWritten` in `plugin/doc-source.ts`), which recognizes the write as the server's own by its content hash, so the page does not reload: the new configuration reaches the page as a `doc-source-change` data event.

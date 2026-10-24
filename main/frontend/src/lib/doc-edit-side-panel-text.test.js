@@ -32,7 +32,9 @@ function storeCreate({ applyResult = { code: 0, message: '' } } = {}) {
     treeModel: { itemOutlineById: new Map([[ITEM_ID, outline]]) },
     textDisplayGet: (textLocalized) => ({ text: textLocalized, language: '' }),
   };
-  const store = new DocEditStore(sourceStore, docStore, {});
+  // an environment that offers editing, without an api: the test sets one
+  const envStore = { isCapable: () => true, endpointGet: () => '' };
+  const store = new DocEditStore(sourceStore, docStore, {}, { envStore });
   const applyList = [];
   store.api = {
     async sidePanelTextApply(request) {
@@ -41,7 +43,6 @@ function storeCreate({ applyResult = { code: 0, message: '' } } = {}) {
     },
   };
   runInAction(() => {
-    store.isAvailable = true;
     store.isEditMode = true;
   });
   return { applyList, store };

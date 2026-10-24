@@ -5,12 +5,13 @@
 // and at which levels it can be declared:
 //   scope 'page'   one value for the whole page, declared in the config layers only
 //   scope 'doc'    resolved per document: the layers below the document levels
-//                  < source < side panel < document < the layers above them
+//                  (default, doc page) < source < side panel < document < the
+//                  layers above them (client)
 //
-// Values are chosen in YAML, or by the reader in the settings panel (written
-// into one of the config layers, configLayerDefineList); definitions live
-// in code. An application adds its own keys through DocPageMdx
-// config.configDefineList.
+// Values are chosen in YAML, or in the settings panel (written into one of
+// the config layers, configLayerDefineList); definitions live in code. The
+// default of a definition is part of the default layer. An application adds
+// its own keys through DocPageMdx config.configDefineList.
 //
 //   description      one line shown in the settings panel
 //   isUserSettable   false hides the key from the settings panel (default true)
@@ -30,7 +31,8 @@
 //       FileStoreDir: ${imageFileStoreDirDefault}
 //
 // Variables: a string value may hold ${name}; the name is replaced by the
-// value of config.yaml "variable" (variableExpand) at every level.
+// value of config.yaml "variable", or of "variable" in a config file of the
+// doc page (variableExpand), at every level.
 //
 // Key naming: keys of one feature share one prefix, and a switch ends with IsOn.
 //   TagsDisplayAtMainPanel...   tags next to the path bar of the main panel
@@ -107,46 +109,69 @@ export const configDefineListBuiltin = [
   },
 ];
 
-// The config layers (doc_page_impl_config.md#config-layers): the places a
-// page-level value is kept, each with its own persistence, stacked in this
-// order. The settings panel shows one tab per layer and writes into the
-// layer shown. A layer holds page keys and component keys alike.
+// The config layers (doc_page_impl_config.md#config-layers): page-wide
+// stacks of config declarations, each layer with its own storage, stacked in
+// this order. The settings panel shows one tab per layer, listing what the
+// layer declares (not a full set of keys), and writes into the layer shown.
+// A layer holds page keys and component keys alike.
 //   id                 the level name of a value decided by the layer
 //   label              the tab of the settings panel
-//   storage            how the layer keeps its values:
-//                        'file'      config.yaml of the page (globalConfig, compConfig),
-//                                    rewritten in place by the development server
+//   storage            where the layer's declarations are kept, and so how
+//                      it is read and written (store/doc-config-layer.ts):
+//                        'package'   config.yaml of the doc page package
+//                                    (configDefault); never written from the page
+//                        'docEntry'  the "config" declarations of the entry of the
+//                                    doc page and of the files it reaches, written
+//                                    in place by the development server
 //                        'browser'   the browser's localStorage, for this page
 //   isAboveDocLevels   the layer is applied after the document levels (source,
 //                      side panel, frontmatter), so it wins over what documents
 //                      declare; false: before them, so documents refine it
+//   isEveryKeyDeclared the layer declares every key: the definition defaults
+//                      are part of it (the default layer)
 //   description        shown in the head of the settings panel
-// another layer is one more entry here, with a storage the store knows how
-// to read and write (store/doc-config-layer.ts).
+// another layer is one more entry here, at its place in the stack, with a
+// storage the store knows how to read and write.
 export const configLayerDefineList = [
   {
-    id: 'global',
-    label: 'Global',
-    storage: 'file',
+    id: 'default',
+    label: 'Default',
+    storage: 'package',
     isAboveDocLevels: false,
-    description: 'config.yaml of the page; documents may refine a value',
+    isEveryKeyDeclared: true,
+    description: 'provided by the doc page package: config.yaml configDefault over the built-in defaults',
+  },
+  {
+    id: 'docPage',
+    label: 'Doc page',
+    storage: 'docEntry',
+    isAboveDocLevels: false,
+    isEveryKeyDeclared: false,
+    description: 'declared by the doc page: its entry and the files it reaches; documents may refine a value',
   },
   {
     id: 'client',
     label: 'Client',
     storage: 'browser',
     isAboveDocLevels: true,
+    isEveryKeyDeclared: false,
     description: 'kept in this browser for this page; wins over what documents declare',
   },
 ];
 
-// the levels a value can be decided by, in resolution order: the default,
-// the layers below the document levels, the document levels, the layers above
+// the levels a value can be decided by, in resolution order: the definition
+// default (the default layer, when there is one), the layers below the
+// document levels, the document levels, the layers above
 export function configLevelListBuild(layerDefineList = configLayerDefineList) {
   const layerIdListBelow = layerDefineList.filter((define) => !define.isAboveDocLevels).map((define) => define.id);
   const layerIdListAbove = layerDefineList.filter((define) => define.isAboveDocLevels).map((define) => define.id);
-  return ['default', ...layerIdListBelow, 'source', 'sidePanel', 'doc', ...layerIdListAbove];
+  const levelListDefault = layerIdListBelow.includes(CONFIG_LEVEL_DEFAULT) ? [] : [CONFIG_LEVEL_DEFAULT];
+  return [...levelListDefault, ...layerIdListBelow, 'source', 'sidePanel', 'doc', ...layerIdListAbove];
 }
+
+// the level of a definition default; the default layer has the same id, so
+// a value of config.yaml configDefault and a built-in default are one level
+export const CONFIG_LEVEL_DEFAULT = 'default';
 
 // later entries with the same key replace earlier ones
 export function configDefineByKeyBuild(configDefineListExtra = []) {
@@ -196,12 +221,13 @@ export function compConfigDefineByCompIdBuild(compById = {}) {
 export const COMP_CONFIG_KEY = 'compConfig';
 
 // ${name} in a string replaced by variableByName[name]; an unknown name is
-// left as written and reported. other value types pass through.
-export function variableExpand(value, variableByName = {}, originText = '') {
+// left as written and reported (unless isQuiet: the settings panel checks
+// declarations on every render). other value types pass through.
+export function variableExpand(value, variableByName = {}, originText = '', isQuiet = false) {
   if (typeof value !== 'string' || !value.includes('${')) return value;
   return value.replace(/\$\{([\w.-]+)\}/g, (matchText, name) => {
     if (Object.prototype.hasOwnProperty.call(variableByName, name)) return String(variableByName[name]);
-    console.warn(`[doc-config] unknown variable ${matchText}${originText ? ` in ${originText}` : ''}`);
+    if (!isQuiet) console.warn(`[doc-config] unknown variable ${matchText}${originText ? ` in ${originText}` : ''}`);
     return matchText;
   });
 }

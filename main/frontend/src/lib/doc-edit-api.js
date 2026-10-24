@@ -76,17 +76,19 @@ export function docEditApiCreate(endpoint) {
       });
     },
 
-    // writes one value of the global config layer into config.yaml (or its
-    // local layer, where the key is declared); answers { file, keyPath, value }
-    //   keyPath     ['globalConfig', Key] or ['compConfig', CompName, Key]
+    // writes one value of a config declaration of the doc page, in place;
+    // answers { file, keyPath, value }
+    //   file        the file of the declaration, relative to the config directory
+    //   keyPath     the yaml address of the declaration, then [Key] or
+    //               ['compConfig', CompName, Key]; the key must be declared
     //   value       null, boolean, number, string, or a list of strings
-    //   valueBase   the value the file declared when the page displayed it
-    //               (undefined: not declared); refused with -2 when it changed
-    configValueApply({ keyPath, value, valueBase }) {
+    //   valueBase   the value the file declared when the page displayed it;
+    //               refused with -2 when it changed
+    configValueApply({ file, keyPath, value, valueBase }) {
       return requestSend('/config/value', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyPath, value, valueBase }),
+        body: JSON.stringify({ file, keyPath, value, valueBase }),
       });
     },
   };

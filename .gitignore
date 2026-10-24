@@ -19,11 +19,11 @@ ai-dev*
 # its own .gitignore, which keeps out everything not listed in it.
 example_doc/asset-archive/**/*.bak
 example_doc/asset-archive/**/*.tmp
-example_doc/asset.yaml.bak
-example_doc/asset.yaml.tmp
+example_doc/.doc-page/asset.yaml.bak
+example_doc/.doc-page/asset.yaml.tmp
 # backups the edit api keeps beside a configuration yaml file it rewrote
-# (doc_page_impl_edit.md): config.yaml values, side-panel labels
+# (doc_page_impl_edit.md): doc page config values, side-panel labels
 main/config*.yaml.bak
-example_doc/*.yaml.bak
+**/.doc-page/*.yaml.bak
 
 update-*.md
