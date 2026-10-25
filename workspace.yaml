@@ -1,0 +1,34 @@
+# The workspace of the demonstration: what the development server serves and
+# what a deployment builds. config.yaml names this file (workspace.file).
+# design: doc_page_impl_source.md#the-workspace
+#
+# a workspace is a list of root-level doc pages, in side-panel order. each is
+# named by its folder ("dir": the entry is found in its .doc-page/ folder)
+# or by its entry file ("file"), under an alias unique in the workspace: the
+# name its files carry in the full source path form, ~alias:root/path. a
+# doc page a root doc page includes through its side panels joins the
+# workspace under the alias that include gives it, and is one doc page
+# however often it is mentioned (a root-level mention decides its alias).
+# with one root doc page the page shows that doc page's side panel; with
+# several, one section per doc page: its alias as a muted heading, its side
+# panel below. "sidePanel" picks one of a doc page's side panels instead of
+# its default. paths are relative to this file, at the root of the project.
+# the Workspace tab of the settings panel edits this file in place, and
+# mounts further doc pages for as long as the development server runs.
+#
+# the sub document of the demonstration (example_doc/sub-doc) is not listed
+# here: the demonstration doc page includes it under the alias "sub"
+# (example_doc/.doc-page/side-panel.yaml). listing it here as well would
+# show it a second time, as a section of its own.
+docPageList:
+  - alias: example
+    dir: ./example_doc
+    # sidePanel: compact
+  # a second root doc page: the side panel shows a section for each
+  - alias: second
+    dir: ./example_doc/second-doc
+
+# page values over those of the first doc page's entry (docEntry.title /
+# homeDoc / homeItem); left to the entry here
+# title: React Doc Test
+# homeDoc: ~example:example/doc.md

@@ -57,7 +57,7 @@ export function BlockPlacePicker({
             className="doc-block-place-picker-doc-path"
             value={docPath}
             spec={{ kind: 'file', extList: ['md', 'mdx'] }}
-            placeholder="~root/path/to/doc.md"
+            placeholder="~page:root/path/to/doc.md"
             isDisabled={isLocked}
             onCommit={(path) => onDocCommit?.(path)}
           />

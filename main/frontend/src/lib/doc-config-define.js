@@ -17,7 +17,7 @@
 //   isUserSettable   false hides the key from the settings panel (default true)
 //   type             boolean | string | number | enum (valueList) | stringList | any
 //                    | sourcePath: a string naming a folder or file of the doc page
-//                      source (~rootId/...); pathSpec { kind: 'dir' | 'file', extList? }
+//                      source (~root/... or ~page:root/...); pathSpec { kind: 'dir' | 'file', extList? }
 //                      says what it names, so the settings panel completes it from
 //                      the doc page source service layer (doc_page_impl_source.md)
 //

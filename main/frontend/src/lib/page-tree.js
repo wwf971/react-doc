@@ -2,18 +2,23 @@
 //
 // preferred: custom tree from side panel yaml (config.sidePanel.tree), whose
 // structure is free and need not mirror the file tree. nodes:
-//   - doc: ~rootId/xx/a.md   (page; text overrides the doc title)
-//   - sourceRoot: rootId     (generated tree for one complete source root)
-//   - sourceFolder: ~rootId/xx (generated tree for one source folder)
+//   - doc: ~root/xx/a.md     (page; text overrides the doc title; a name or a
+//                             suffix resolves in the node's doc page first)
+//   - sourceFolder: ~root/xx (generated tree for one source folder; the loader
+//                             turned sourceRoot: root into the root's folder)
 //   - text + children        (folder)
 //   - separator: Some Text
+// every node carries docPageAlias, the doc page it is written in (set by the
+// loader, plugin/doc-entry.ts), and its source paths in the full form
+// ~page:root/... (doc_page_impl_source.md#source-paths).
 // every node may also declare "tags" (doc_page_impl_tag.md) and "config"
 // (doc_page_impl_config.md), and every item label is created by
 // sidePanelItemNameCreate (doc_page_impl_side_panel.md). "text" is a string or a
 // language mapping (text-localized.js).
 
 import { sidePanelItemNameCreate } from './side-panel-item.js';
-import { sourcePathBuild, sourcePathIsInside, sourcePathIsRooted, sourcePathNormalize } from './doc-source-path.js';
+import { sourcePathBuild, sourcePathFullGet, sourcePathIsInside, sourcePathIsRooted, sourcePathNormalize } from './doc-source-path.js';
+import { docTargetResolve, sourceIndexBuild } from './doc-target-resolve.js';
 import { textLocalizedGet, textLocalizedParse } from './text-localized.js';
 import { tagSidePanelAssetKeyGet, tagSidePanelDeclare } from './doc-tag-side-panel.js';
 import { configSidePanelDeclareClose, configSidePanelDeclareOpen } from './doc-config-side-panel.js';
@@ -79,6 +84,7 @@ function createBuildContext(configDoc, fileManifest, compById) {
     compById,
     configDoc,
     entryByPath: new Map(fileManifest.map((entry) => [entry.internalPath, entry])),
+    sourceIndex: sourceIndexBuild(fileManifest),
     fileManifest,
     itemById: new Map(),
     itemByRoute: new Map(),
@@ -131,7 +137,7 @@ function convertNodeByForm(node, position, context, partIdParent) {
     }];
   }
   if (node.doc !== undefined) {
-    const entries = resolveDocEntries(String(node.doc), context);
+    const entries = resolveDocEntries(String(node.doc), context, node.docPageAlias);
     if (entries.length === 0) {
       console.warn(`[page-tree] side panel doc not in source: ${node.doc}`);
       return [Array.isArray(node.children)
@@ -164,6 +170,9 @@ function convertNodeByForm(node, position, context, partIdParent) {
       }),
       collapsible: node.collapsible !== false,
       defaultOpen: node.defaultOpen ?? true,
+      // a root doc page of a workspace of several (plugin/doc-entry.ts):
+      // drawn as a section under its alias, not as a folder
+      ...(node.docPageSection ? { docPageSection: node.docPageSection } : {}),
       children: node.children.flatMap((child, index) => (
         convertNode(child, [...position, index], context, partId)
       )),
@@ -173,29 +182,33 @@ function convertNodeByForm(node, position, context, partIdParent) {
   return [];
 }
 
+// without a side panel: one folder per root (~page:root), labeled by the
+// root alias, or by page:root when the workspace holds several doc pages
 function autoChildren(fileManifest, context) {
-  const entriesByRootId = new Map();
+  const entriesByRootPath = new Map();
   for (const entry of fileManifest) {
     if (entry.collect === 'referenced') continue;
-    const entries = entriesByRootId.get(entry.rootId) ?? [];
+    const pathRoot = sourcePathBuild(entry.rootAlias, '', entry.docPageAlias);
+    const entries = entriesByRootPath.get(pathRoot) ?? [];
     entries.push({ ...entry, relPathTree: entry.relPath });
-    entriesByRootId.set(entry.rootId, entries);
+    entriesByRootPath.set(pathRoot, entries);
   }
+  const docPageAliasSet = new Set(fileManifest.map((entry) => entry.docPageAlias));
 
   const result = [];
   let indexRoot = 0;
-  for (const [rootId, entries] of entriesByRootId) {
+  for (const [pathRoot, entries] of entriesByRootPath) {
     const position = [indexRoot++];
     if (entries.length === 1 && !entries[0].relPathTree.includes('/')) {
       result.push(registerDocItem({}, entries, position, context, ''));
       continue;
     }
-    const id = uniqueId(`root-${rootId}`, context);
-    const pathRoot = sourcePathBuild(rootId);
+    const id = uniqueId(`root-${pathRoot.slice(1)}`, context);
+    const labelRoot = docPageAliasSet.size > 1 ? pathRoot.slice(1) : entries[0].rootAlias;
     result.push({
       $id: id,
       type: 'folder',
-      name: itemNameCreate({}, itemTextResolve({}, rootId, id), context, {
+      name: itemNameCreate({}, itemTextResolve({}, labelRoot, id), context, {
         assetKey: tagSidePanelAssetKeyGet({ folderPath: pathRoot }),
         dataItem: { kind: 'folder', sourcePath: pathRoot },
         itemId: id,
@@ -358,11 +371,13 @@ function itemTagDeclare(node, binding, context) {
 }
 
 function convertSourceFolder(node, position, context, partId) {
+  // a local folder path is one of the node's doc page (the loader wrote
+  // the full form already; a host building its own tree may not)
   const pathFolder = node.sourceFolder !== undefined
-    ? sourcePathNormalize(String(node.sourceFolder))
-    : sourcePathBuild(String(node.sourceRoot));
+    ? sourcePathFullGet(sourcePathNormalize(String(node.sourceFolder)), node.docPageAlias ?? '')
+    : sourcePathBuild(String(node.sourceRoot), '', node.docPageAlias ?? '');
   if (!sourcePathIsRooted(pathFolder)) {
-    console.warn(`[page-tree] side panel sourceFolder must be a source path (~rootId/dir): ${pathFolder}`);
+    console.warn(`[page-tree] side panel sourceFolder must be a source path (~root/dir): ${pathFolder}`);
     return [];
   }
   // files of a folder collected for reference only are not pages
@@ -593,16 +608,13 @@ function registerItem(item, context) {
   context.itemIdsByDocPath.set(item.docPath, ids);
 }
 
-function resolveDocEntries(reference, context) {
-  if (sourcePathIsRooted(reference)) {
-    const entry = context.entryByPath.get(sourcePathNormalize(reference));
-    return entry ? [entry] : [];
-  }
-  if (reference.includes('/')) {
-    const suffix = `/${reference.replace(/^\.\//, '')}`;
-    return context.fileManifest.filter((entry) => entry.internalPath.endsWith(suffix));
-  }
-  return context.fileManifest.filter((entry) => entry.name === reference);
+// the files a "doc" value names (lib/doc-target-resolve.js): a source path
+// (local to the node's doc page), a suffix or a name; of the node's doc page
+// when it has them, else of any doc page (several: the first is shown, the
+// rest are candidates)
+function resolveDocEntries(reference, context, docPageAlias) {
+  const { entryList } = docTargetResolve(reference.replace(/^\.\//, ''), '', context.sourceIndex, { docPageAlias: docPageAlias ?? '' });
+  return entryList;
 }
 
 function itemRoute(id) {

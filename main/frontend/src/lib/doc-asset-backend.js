@@ -38,7 +38,7 @@
 //   versionDelete(store, objectId, versionId)
 //   objectLockSet(store, objectId, isLocked)
 //   versionLockSet(store, objectId, versionId, isLocked)
-//   folderSet(configFile, folderList, folderDefault)  the folders of one doc page (~rootId/path),
+//   folderSet(configFile, folderList, folderDefault)  the folders of one doc page (~root/path, or ~page:root/path),
 //                                               written into its asset store config
 
 export function assetBackendApiCreate(endpoint) {

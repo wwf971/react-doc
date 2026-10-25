@@ -38,7 +38,7 @@ import {
 //   POST {endpoint}/version/delete   { store, objectId, versionId }                      -> { object }
 //   POST {endpoint}/object/lock/set  { store, objectId, isLocked }                       -> { object }
 //   POST {endpoint}/version/lock/set { store, objectId, versionId, isLocked }            -> { object }
-//   POST {endpoint}/folder/set       { configFile, folderList: [~rootId/path], folderDefault } -> { ok }
+//   POST {endpoint}/folder/set       { configFile, folderList: [~root/path | ~page:root/path], folderDefault } -> { ok }
 //                                     the folders of one doc page, written into its asset store config in place
 //
 // every json response is { code, data, message }. code 0 is success; negative codes:
@@ -54,8 +54,8 @@ import {
 // dependent:  { objectId, versionId, dependency }
 // version: { versionId, size, hash, isText, text?, metadata }   text only when the bytes are utf-8 text;
 //          metadata: the mapping of {versionId}.metadata.yaml, {} when the version has none
-// folder:  { path (~rootId/path), pathAbs, isDefault, docEntryFile, isExists, objectCount }
-// docPage: { entryFile, configFileRelative, isConfigFileExists, folderList, folderDefault, rootIdList, problemList }
+// folder:  { path (~page:root/path), pathAbs, isDefault, docEntryFile, isExists, objectCount }
+// docPage: { alias, entryFile, configFileRelative, isConfigFileExists, folderList, folderDefault, rootPathList, problemList }
 
 export const DOC_ASSET_ENDPOINT_NAME = '__doc-asset';
 
@@ -64,15 +64,15 @@ type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) 
 // usageScan(docPathList): the asset references of the documents named, or
 // of every collected document when the list is empty; the documents are a
 // matter of the doc page source service layer, which the plugin passes in
-// rootAbsPathByIdGet: the roots of the source rules, which name the asset
-// folders (~rootId/path)
+// rootAbsPathByPathGet: the roots of the source rules by their full path
+// (~page:root), which name the asset folders
 export function docAssetMiddlewareCreate(options: {
   endpoint: string;
   storeGet: () => AssetStore;
-  rootAbsPathByIdGet: () => Map<string, string>;
+  rootAbsPathByPathGet: () => Map<string, string>;
   usageScan: (docPathList: string[]) => AssetUsageDoc[];
 }): Middleware {
-  const { endpoint, storeGet, rootAbsPathByIdGet, usageScan } = options;
+  const { endpoint, storeGet, rootAbsPathByPathGet, usageScan } = options;
   return (req, res, next) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname !== endpoint && !url.pathname.startsWith(`${endpoint}/`)) {
@@ -110,7 +110,7 @@ export function docAssetMiddlewareCreate(options: {
       }
       return;
     }
-    void routeHandle(req, route, url, storeGet(), rootAbsPathByIdGet)
+    void routeHandle(req, route, url, storeGet(), rootAbsPathByPathGet)
       .then((data) => jsonSend(res, 200, { code: 0, data, message: '' }))
       .catch(failureSend);
   };
@@ -124,7 +124,7 @@ async function routeHandle(
   route: string,
   url: URL,
   store: AssetStore,
-  rootAbsPathByIdGet: () => Map<string, string>,
+  rootAbsPathByPathGet: () => Map<string, string>,
 ): Promise<any> {
   const method = req.method ?? 'GET';
   if (method === 'GET') {
@@ -157,7 +157,7 @@ async function routeHandle(
       }
       store.folderSet(
         { configFile: body.configFile, folderList: body.folderList, folderDefault: body.folderDefault },
-        rootAbsPathByIdGet(),
+        rootAbsPathByPathGet(),
       );
       // the store as the file says now
       return { ok: true };

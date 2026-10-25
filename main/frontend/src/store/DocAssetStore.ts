@@ -1,6 +1,7 @@
 import { makeAutoObservable, observable, reaction, runInAction } from 'mobx';
 import { assetBackendApiCreate, assetBackendSnapshotCreate } from '../lib/doc-asset-backend.js';
 import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
+import { sourcePathBuild, sourcePathFullGet, sourcePathParse } from '../lib/doc-source-path.js';
 import { AssetPanelModel } from './AssetPanelModel.js';
 
 // The asset service layer of the page (design: doc_page_impl_asset.md). It holds what
@@ -148,7 +149,7 @@ export type AssetObject = {
   dirName: string;
 };
 
-// a folder of the store: its source path (~rootId/path), the doc page that names it
+// a folder of the store: its full source path (~page:root/path), the doc page that names it
 export type AssetFolderInfo = {
   path: string;
   pathAbs: string;
@@ -165,7 +166,9 @@ export type AssetDocPageInfo = {
   isConfigFileExists: boolean;
   folderList: string[];
   folderDefault: string;
-  rootIdList: string[];
+  // the alias of the doc page and the full paths of its roots (~alias:root)
+  alias: string;
+  rootPathList: string[];
   problemList: string[];
 };
 
@@ -776,12 +779,16 @@ export class DocAssetStore {
   // why a folder path cannot be an asset folder of this page ('' when it
   // can, or when nothing is known): checked while it is typed, from what the
   // page knows (the roots of the source), so it is cheap and synchronous
-  folderPathWarningGet(pathText: string, rootIdList: string[]): string {
-    const text = String(pathText ?? '').trim();
-    const match = /^~([^/]+)(\/.+)?$/.exec(text);
-    if (!match) return 'name an asset folder by its source path: ~rootId/path';
-    if (!rootIdList.includes(match[1])) return `no root "${match[1]}" (roots: ${rootIdList.join(', ') || 'none'})`;
-    if (!match[2]) return 'a whole root cannot be an asset folder';
+  // docPageAlias: the doc page whose folders are edited, so that its roots
+  // can be written in the local form (~root/path)
+  folderPathWarningGet(pathText: string, docPageAlias: string): string {
+    const text = sourcePathFullGet(String(pathText ?? '').trim(), docPageAlias);
+    const parsed = sourcePathParse(text);
+    if (!parsed) return 'name an asset folder by its source path: ~root/path';
+    const rootPath = sourcePathBuild(parsed.rootAlias, '', parsed.docPageAlias);
+    const rootPathList = this.docPageList.flatMap((item) => item.rootPathList);
+    if (!rootPathList.includes(rootPath)) return `no root ${rootPath} (roots: ${rootPathList.join(', ') || 'none'})`;
+    if (parsed.relPath === '') return 'a whole root cannot be an asset folder';
     const folder = this.folderList.find((item) => item.path === text);
     if (folder && !folder.isExists) return `${text} does not exist yet; it is created when the first object is written to it`;
     return '';

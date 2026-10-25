@@ -19,7 +19,7 @@ export function makeFramework(docStore) {
   }
 
   function LinkAdapter({ href = '', prefetch: _prefetch, children, onClick, ...props }) {
-    // an item route (/__doc-item/...), a source path (~rootId/...), or a browser href
+    // an item route (/__doc-item/...), a source path (~page:root/...), or a browser href
     const isDocHref = href.startsWith('/') || sourcePathIsRooted(href) || href.startsWith('?doc=');
     if (!isDocHref) {
       return (
@@ -54,7 +54,7 @@ export function makeFramework(docStore) {
   };
 }
 
-// accepts both source paths '~rootId/a.md#hash' and browser hrefs '?doc=...'
+// accepts both source paths '~page:root/a.md#hash' and browser hrefs '?doc=...'
 function fromBrowserHref(url) {
   if (!url.startsWith('?') && !url.includes('?doc=')) return url;
   const indexQuery = url.indexOf('?');

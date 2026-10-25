@@ -233,7 +233,7 @@ In `.mdx`, the same reference is a property: `<FileTree dataRef="comp-file-tree.
 ```text
 dataRef = {document target}#{component id}
 
-~root/a.md#tree        exact source path
+~root/a.md#tree        source path (~page:root/... in another doc page)
 ./a.md#tree, ../a.md   relative to the referencing document
 xx/a.md#tree           path suffix
 a.md#tree              file name

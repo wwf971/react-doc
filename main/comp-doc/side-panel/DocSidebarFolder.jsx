@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
+import { DocSidePanelSection } from './DocSidePanelSection.jsx';
 import {
   ChevronDown,
   Link,
@@ -30,6 +31,11 @@ const classNameLink = `${classNameItem} data-[active=true]:bg-fd-primary/10 data
 // a folder held under a dragged item) opens, as fumadocs opens a folder
 // whose defaultOpen turns true.
 export const DocSidebarFolder = observer(function DocSidebarFolder({ item, children }) {
+  if (item.docPageSection) return <DocSidePanelSection item={item}>{children}</DocSidePanelSection>;
+  return <DocSidebarFolderTree item={item}>{children}</DocSidebarFolderTree>;
+});
+
+const DocSidebarFolderTree = observer(function DocSidebarFolderTree({ item, children }) {
   const { sidePanelStore } = useDocStores();
   const path = useTreePath();
   const pathname = usePathname();

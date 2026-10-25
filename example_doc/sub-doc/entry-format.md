@@ -11,10 +11,10 @@ Every document has one entry file, marked by a `docEntry` section and kept as `.
 ```yaml
 docEntry:
   title: Sub Document            # siteTitle when config.yaml sets none
-  homeDoc: ~sub-doc/sub-doc.md   # homeDoc / homeItem when config.yaml sets none
+  homeDoc: ~sub-doc/sub-doc.md   # homeDoc / homeItem when the workspace sets none
 source:                          # rules | { rules } | { file }
   - action: addFolder
-    rootId: sub-doc              # files are named ~sub-doc/path-in-folder
+    alias: sub-doc               # the root: files are named ~sub-doc/path-in-folder
     path: ..                     # relative to this file: the folder sub-doc/
     collect: recursive           # recursive | direct | referenced
 tag:                             # { defineById } | { file }
@@ -35,6 +35,10 @@ sidePanelById:                   # the side panels of the document
 Each section can live in its own file, which the entry names, and this is the recommended form for a doc page of any size. The demonstration page's `.doc-page/entry.yaml` does exactly this: `source: { file: ./source.yaml }`, `tag: { file: ./tag.yaml }`, `config: [{ file: ./config.yaml }, ...]`, and a side panel declared as a reference, `main: { file: ./side-panel.yaml }`, to a resource file whose `sidePanelById.main` holds the tree. All of them sit beside the entry in `.doc-page/`.
 
 Paths are relative to the file that holds them, and the yaml files of a document are never collected as documents, whatever the source rules say; neither is anything in a `.doc-page/` folder.
+
+## Roots and their aliases
+
+Every `addFolder` / `addFile` rule declares a **root** of the doc page under an **alias**, and the files below it are named `~alias/path-in-root`. The alias is a name of the doc page's choosing, not the folder name: the folder `sub-doc/` could be renamed without touching a single `~sub-doc/...` reference, and two folders of the same name can both be roots under different aliases. Without `alias`, the folder name stands in; two different folders under one alias are an error when the page loads. Inside this doc page the short form is enough. From another doc page of the same workspace, the file is `~sub:sub-doc/path`: the alias this doc page has in the workspace first, as [Workspace and Aliases](workspace.md) shows.
 
 ## Several side panels
 

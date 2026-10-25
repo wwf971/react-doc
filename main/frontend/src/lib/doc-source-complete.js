@@ -12,7 +12,9 @@ import { sourcePathBuild, sourcePathIsInside, sourcePathIsRooted, sourcePathNorm
 //               'any'   both
 //   extList     files only: extensions a file must have, without the dot,
 //               case-insensitive (['png', 'svg']); absent: any file
-//   rootIdList  only paths of these roots (['example']); absent: every root
+//   rootList    only paths of these roots, each a root alias (['example']: that
+//               root of any doc page) or the full path of a root ('~example:example');
+//               absent: every root
 //   dirPath     only paths inside this folder (a source path); absent: anywhere
 //   isMatch     a further rule, for callers in code: (candidate) => boolean
 //
@@ -30,10 +32,10 @@ export function sourcePathSpecNormalize(spec) {
   const extList = Array.isArray(spec?.extList)
     ? spec.extList.map((ext) => String(ext).toLowerCase().replace(/^\./, '')).filter((ext) => ext !== '')
     : [];
-  const rootIdList = Array.isArray(spec?.rootIdList) ? spec.rootIdList.map((rootId) => String(rootId)) : [];
+  const rootList = Array.isArray(spec?.rootList) ? spec.rootList.map((root) => String(root)) : [];
   const dirPath = typeof spec?.dirPath === 'string' && spec.dirPath.trim() !== '' ? sourcePathNormalize(spec.dirPath) : '';
   const isMatch = typeof spec?.isMatch === 'function' ? spec.isMatch : undefined;
-  return { kind, extList, rootIdList, dirPath, isMatch };
+  return { kind, extList, rootList, dirPath, isMatch };
 }
 
 // every candidate the spec allows, before any text is typed
@@ -58,9 +60,11 @@ function candidateIsAllowed(candidate, spec) {
     const ext = String(candidate.entry.ext ?? '').toLowerCase();
     if (!spec.extList.includes(ext)) return false;
   }
-  if (spec.rootIdList.length > 0) {
-    const rootId = sourcePathParse(candidate.path)?.rootId ?? '';
-    if (!spec.rootIdList.includes(rootId)) return false;
+  if (spec.rootList.length > 0) {
+    const parsed = sourcePathParse(candidate.path);
+    const rootAlias = parsed?.rootAlias ?? '';
+    const rootPath = parsed ? sourcePathBuild(parsed.rootAlias, '', parsed.docPageAlias) : '';
+    if (!spec.rootList.includes(rootAlias) && !spec.rootList.includes(rootPath)) return false;
   }
   if (spec.dirPath !== '' && !sourcePathIsInside(candidate.path, spec.dirPath)) return false;
   if (spec.isMatch && !spec.isMatch(candidate)) return false;
@@ -84,7 +88,7 @@ export function sourcePathCompleteList(text, spec, manifests) {
 }
 
 // the candidates of a spec as a tree, for browsing instead of typing: one
-// node per root (~rootId), the folders below it, the files in them. a folder
+// node per root (~page:root), the folders below it, the files in them. a folder
 // that only leads to candidates (the spec asks for files, or for paths
 // inside another folder) is a node too, but cannot be chosen (isDisabled).
 // the nodes are the ones of the tree view (comp-doc/source/SourceTreeSelect.jsx):
@@ -112,7 +116,7 @@ export function sourcePathTreeBuild(spec, manifests) {
       nodeRootList.push(node);
     } else {
       const relPathParent = parsed.relPath.includes('/') ? parsed.relPath.slice(0, parsed.relPath.lastIndexOf('/')) : '';
-      nodeDirEnsure(sourcePathBuild(parsed.rootId, relPathParent)).childList.push(node);
+      nodeDirEnsure(sourcePathBuild(parsed.rootAlias, relPathParent, parsed.docPageAlias)).childList.push(node);
     }
     return node;
   };

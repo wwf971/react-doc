@@ -59,7 +59,7 @@ export function configSourceRuleApply(
     return;
   }
   const isByPath = rule.action === 'setConfigByPath';
-  // a ByPath pattern is a glob over the whole source path (~rootId/...)
+  // a ByPath pattern is a glob over the whole source path (~page:root/..., the loader made the pattern full)
   const regex = globToRegex(rule.pattern);
   for (const entry of entries) {
     if (!regex.test(isByPath ? entry.internalPath : entry.name)) continue;

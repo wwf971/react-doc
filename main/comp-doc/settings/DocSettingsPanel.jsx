@@ -4,14 +4,15 @@ import { observer } from 'mobx-react-lite';
 import { LoaderCircle, Pencil, RotateCw, X } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { SETTINGS_RESULT_ID } from '../../frontend/src/store/DocConfigStore.ts';
-import { AssetStoreSettings } from './AssetStoreSettings.jsx';
+import { assetStoreItemListBuild } from './AssetStoreSettings.jsx';
 import { ServiceSettings } from './ServiceSettings.jsx';
+import { WorkspaceSettings } from './WorkspaceSettings.jsx';
 import { SourcePathInput } from '../source/SourcePathInput.jsx';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
 import './DocSettings.css';
 
 // The settings panel, rendered by the application's ConfigPanel
-// (config.components) with four tabs (subtab items):
+// (config.components) with five tabs (subtab items):
 //
 //   Config       the page config keys
 //   Component    the component-level keys
@@ -21,14 +22,18 @@ import './DocSettings.css';
 //                SourcePathInput, completed from the folders / files of the
 //                source.
 //   Asset service
-//                the folders of the local store of the asset service layer
-//                (AssetStoreSettings), written into the store's config file
-//                by the development server, so they are kept
-//                (doc_page_impl_asset.md).
+//                the folders of the local store of the asset service layer,
+//                a group of items per doc page (assetStoreItemListBuild),
+//                written into its asset store config by the development
+//                server, so they are kept (doc_page_impl_asset.md).
 //   Services     the services of the page (ServiceSettings): system
 //                services, then the instances of the service backend as
 //                cards, the config dashboard of the one chosen, and the
 //                creation of an instance (doc_page_impl_service.md).
+//   Workspace    the workspace and its doc pages as a graph
+//                (WorkspaceSettings, doc_page_impl_source.md#the-workspace-tab):
+//                which doc page includes which under what alias, and the
+//                alias conflicts.
 //
 // Config and Component carry a second tab line, one tab per config layer
 // (doc_page_impl_config.md#config-layers, DocConfigStore.layerList), then
@@ -71,12 +76,16 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const [dragOffset, dragOffsetSet] = useState(dragOffsetRef.current);
   const [isDragging, isDraggingSet] = useState(false);
+  // the asset item whose change is being written (or failed): it shows the
+  // request state
+  const [assetRequestItemPathText, assetRequestItemPathTextSet] = useState('');
 
   // the flat data of the panel holds every item of every tab; what a change
   // of an item writes is kept beside it, by item id
   const data = {};
   const writeByItemId = new Map();
   const context = { configStore, stores, data, writeByItemId };
+  const assetTab = assetStoreItemListBuild({ stores, data, writeByItemId, assetRequestItemPathText });
   const layerTabListConfig = [];
   const layerTabListComp = [];
   for (const layer of configStore.layerList) {
@@ -93,13 +102,19 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
       id: 'assetStore',
       type: 'subtab',
       name: 'Asset service',
-      children: [{ id: 'assetStoreFolders', type: 'custom', comp: AssetStoreSettings, isFullWidth: true }],
+      children: assetTab.itemList,
     },
     {
       id: 'service',
       type: 'subtab',
       name: 'Services',
       children: [{ id: 'serviceInstances', type: 'custom', comp: ServiceSettings, isFullWidth: true }],
+    },
+    {
+      id: 'workspace',
+      type: 'subtab',
+      name: 'Workspace',
+      children: [{ id: 'workspaceGraph', type: 'custom', comp: WorkspaceSettings, isFullWidth: true }],
     },
   ];
   // the layer line of both value tabs shows the same layer
@@ -118,6 +133,7 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
     if (eventType !== 'valueChangeAttempt') return undefined;
     const write = writeByItemId.get(eventData.valueId);
     if (!write) return { code: -1, message: `settings item ${eventData.valueId} is not written from the panel` };
+    if (write.isAsset) assetRequestItemPathTextSet(eventData.itemPathText);
     const request = write.valueSet(settingsValueFromItem(write.define, eventData.value));
     settingsEditRecord(eventData.valueId, write.define, eventData.value, request);
     return { code: 0 };
@@ -191,9 +207,7 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
         <div className="doc-settings-head-main">
           <span className="doc-settings-title">Settings</span>
           {layerShown ? <LayerHead layer={layerShown} /> : (
-            <span className="doc-settings-note">
-              {isResultShown ? resultNote : tabNoteByTabId[configStore.settingsTabId] ?? ''}
-            </span>
+            <HeadNote text={isResultShown ? resultNote : tabNoteByTabId[configStore.settingsTabId] ?? ''} />
           )}
         </div>
         <button
@@ -209,7 +223,14 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
       <div className="doc-settings-body">
         <ConfigPanel
           data={data}
-          config={{ compPath: panelPath, items: itemList, activeSubtabId: configStore.settingsTabId, operationStateByPath }}
+          config={{
+            compPath: panelPath,
+            items: itemList,
+            activeSubtabId: configStore.settingsTabId,
+            operationStateByPath,
+            requestStateByPath: assetTab.requestStateByPath,
+            onRequestDismiss: () => stores.assetStore.folderMessageClear(),
+          }}
           onEvent={eventHandle}
         />
       </div>
@@ -571,14 +592,17 @@ const GridCellEditor = observer(function GridCellEditor({ layer, row, cell, onCo
     );
   }
   if (define.type === 'sourcePath') {
+    // a local path in a declaration of a doc page is a root of that doc page
+    const docPageAlias = layer.declarationList.find((declaration) => declaration.id === cell.declarationId)?.docPageAlias ?? '';
     return (
       <SourcePathInput
         value={item.valueDeclared ?? ''}
         spec={define.pathSpec ?? { kind: 'dir' }}
-        placeholder="~rootId/dir"
+        placeholder="~page:root/dir"
         isDisabled={isLocked}
         onCommit={(text) => void onCommit(text)}
         isMissingWarned
+        docPageAlias={docPageAlias}
       />
     );
   }
@@ -595,8 +619,9 @@ const GridCellEditor = observer(function GridCellEditor({ layer, row, cell, onCo
 
 // what the head says beside the title on a tab without config layers
 const tabNoteByTabId = {
-  assetStore: 'the folders are written into the store\'s config file',
+  assetStore: 'each doc page\'s folders are written into its .doc-page/asset.yaml',
   service: 'the instances live in the service backend, in its instance folders',
+  workspace: 'the doc pages the page serves, and which includes which under what alias',
 };
 
 // what the head says on the Result tab
@@ -636,9 +661,7 @@ const LayerHead = observer(function LayerHead({ layer }) {
           <span>{layer.isWritable ? 'Edit' : 'Declarations'}</span>
         </button>
       ) : null}
-      <span className="doc-settings-note">
-        {layer.define.label}: {layer.isWritable ? layer.define.description : layer.disabledReason}
-      </span>
+      <HeadNote text={`${layer.define.label}: ${layer.isWritable ? layer.define.description : layer.disabledReason}`} />
       {layer.request.status === 'submitting' ? (
         <span className="doc-settings-note doc-settings-request" role="status">
           <LoaderCircle aria-hidden="true" size={11} strokeWidth={2} className="doc-spin" />
@@ -646,14 +669,20 @@ const LayerHead = observer(function LayerHead({ layer }) {
         </span>
       ) : null}
       {layer.request.status === 'error' ? (
-        <span className="doc-settings-note doc-settings-request is-error" role="alert">
-          {layer.request.message}
+        <span className="doc-settings-note doc-settings-request is-error" role="alert" title={layer.request.message}>
+          <span className="doc-settings-head-text">{layer.request.message}</span>
           <button type="button" className="doc-settings-asset-link" onClick={() => layer.requestMessageClear()}>dismiss</button>
         </span>
       ) : null}
     </>
   );
 });
+
+// the note of the head: one line, cut with an ellipsis, the whole text as
+// its tooltip, so the head keeps one height whatever tab is shown
+function HeadNote({ text }) {
+  return <span className="doc-settings-note doc-settings-head-text" title={text}>{text}</span>;
+}
 
 // why a key cannot be set in the current environment; '' when it can
 function itemDisabledReasonGet(key, { envStore }) {
@@ -689,7 +718,7 @@ const SourcePathSettingsItem = observer(function SourcePathSettingsItem({ item, 
     <SourcePathInput
       value={value}
       spec={pathSpec}
-      placeholder={pathSpec?.kind === 'file' ? '~rootId/dir/file' : '~rootId/dir'}
+      placeholder={pathSpec?.kind === 'file' ? '~page:root/dir/file' : '~page:root/dir'}
       isDisabled={isDisabled}
       onCommit={(text) => onValueChange(text)}
       valueRevert={valueOriginal}

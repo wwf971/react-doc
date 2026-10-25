@@ -1,20 +1,29 @@
 # doc system config (example layer; local overrides go to config.0.yaml)
 
-# the doc page this page shows, by its folder: the entry is found in its
-# .doc-page/ folder (.doc-page/entry.yaml), which declares the source rules,
-# the tag definitions, the config and the side panels of the document.
-# "file: <entry file>" names the entry itself instead. "sidePanel" names one
-# of its side panels instead of its default.
-# design: doc_page_impl_dir.md, doc_page_impl_side_panel.md#the-document-entry
-docEntry:
-  dir: ../example_doc
-  # sidePanel: compact
+# the workspace this page serves: its root-level doc pages, each under an
+# alias unique in the workspace, in a workspace file (workspace.yaml at the
+# root of the project, beside main/ and example_doc/). a doc page is a self-contained folder whose entry is found in
+# its .doc-page/ folder (.doc-page/entry.yaml) and declares the source
+# rules, the tag definitions, the config and the side panels of the doc
+# page; one doc page includes others through its side panels.
+# design: doc_page_impl_source.md#the-workspace, doc_page_impl_dir.md
+workspace:
+  file: ../workspace.yaml
+# one doc page alone is a virtual workspace holding it: name it here
+# instead ("dir", its folder, or "file", its entry; "alias" its name in the
+# workspace, the folder name when absent; "sidePanel" one of its side panels)
+# docEntry:
+#   dir: ../example_doc
+#   alias: example
+#   sidePanel: compact
 
-# page values. when absent, the entry's "docEntry" mapping supplies them
-# (title, homeDoc, homeItem), so another document deploys by changing
-# docEntry.file alone; the demonstration leaves them to the entry.
+# page values. when absent, the workspace file, else the "docEntry" mapping
+# of its first doc page, supplies them (title, homeDoc, homeItem), so
+# another workspace deploys by changing workspace.file alone; the
+# demonstration leaves them to the entry.
 # siteTitle: React Doc Test
-# homeDoc: ~example/doc.md       # source path: ~{rootId}/relative/path (doc_page_impl_source.md)
+# homeDoc: ~example:example/doc.md   # a full source path ~{docPageAlias}:{rootAlias}/path, or
+#                                    # ~{rootAlias}/path of the first doc page (doc_page_impl_source.md)
 
 # variables: ${name} in any string value of a config declaration (this
 # file's configDefault, the doc page config, source rules, side-panel items,

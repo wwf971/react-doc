@@ -2,17 +2,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { textHashGet } from './doc-edit-lines.ts';
+import { sourceAliasIsValid, sourcePathFullGet, sourcePathIsRooted } from '../src/lib/doc-source-path.js';
+import { excludePatternTextListRead } from './doc-source-exclude.ts';
 
-// The entry of a document and the yaml files it reaches.
-// design: doc_page_impl_side_panel.md#the-document-entry
+// The workspace, its doc pages, the entry of each and the yaml files it reaches.
+// design: doc_page_impl_source.md#the-workspace, doc_page_impl_side_panel.md#the-document-entry
 //
-// every document has one entry file, named by config docEntry.file, or
-// found in the doc page folder named by config docEntry.dir
-// (docEntryFileFind: .doc-page/entry.yaml by convention, design:
-// doc_page_impl_dir.md). the entry file and every yaml file it reaches share
-// one grammar, the document yaml file:
+// a workspace is what one deployment (or the development server) serves:
+// a list of root-level doc pages, each with an alias unique in the
+// workspace. config.yaml names it ("workspace", docWorkspaceLoad), or names
+// one doc page ("docEntry"): a virtual workspace holding that doc page
+// alone (docEntryLoad). every doc page has one entry file, named directly
+// or found in the doc page folder (docEntryFileFind: .doc-page/entry.yaml
+// by convention, design: doc_page_impl_dir.md). the entry file and every
+// yaml file it reaches share one grammar, the document yaml file:
 //
-//   docEntry:                # marks the file as the entry of a document;
+//   docEntry:                # marks the file as the entry of a doc page;
 //     title: ...             #   true, or a mapping with optional page values
 //     homeDoc: ...           #   used when config.yaml does not set them
 //     homeItem: ...
@@ -28,23 +33,33 @@ import { textHashGet } from './doc-edit-lines.ts';
 //     main: { root?, tree }          # a side panel resource
 //     other: { file?, sidePanel? }   # a reference to a side panel declared elsewhere
 //
-// a reference to a document entry (docEntry.dir, an "include" path) may name
-// the folder of a doc page instead of its entry file.
+// a reference to a doc page (a workspace item, docEntry.dir, an "include"
+// path) may name the folder of the doc page instead of its entry file.
 //
 // a side-panel reference names one side panel. a string is a file path (or
 // the folder of a doc page: its entry) and means the default side panel of
-// that file; a mapping names the file (the
-// file holding the reference when absent) and the side panel id (that file's
-// default when absent). the "include" property of a tree node and the alias
+// that file; a mapping names the file ("file" or "dir"; the file holding
+// the reference when absent), the side panel id ("sidePanel", that file's
+// default when absent) and, when the file is the entry of another doc
+// page, the alias that doc page gets in the workspace ("alias"; its folder
+// name when absent). the "include" property of a tree node and the alias
 // values of sidePanelById are references.
 //
-// loading a file loads everything in it: its source rules are appended once,
-// its tag definitions are merged (a file loaded earlier wins), its config
-// declarations are recorded, and every side panel is resolved with its
-// includes. the entry is loaded first, so its
-// rules come first, followed by the rules of included files in order of
-// appearance. every node of every side panel is annotated for the edit layer
-// with the file (relative to the config directory) and yaml address of
+// a doc page is one thing however often it is reached (its entry file is
+// its identity): its files load once, its alias is the one of its first
+// mention, root-level mentions first; a later mention with another alias
+// is reported (warningList) and ignored. two doc pages with one alias, and
+// two roots of one doc page with one alias, are errors.
+//
+// loading a file loads everything in it: its source rules are appended once
+// (each carrying the alias of its doc page), its tag definitions are merged
+// (a file loaded earlier wins), its config declarations are recorded, and
+// every side panel is resolved with its includes. the entry is loaded
+// first, so its rules come first, followed by the rules of included files
+// in order of appearance. every node of every side panel is annotated for
+// the page with docPageAlias (the doc page it is written in, so a local
+// path in it resolves there) and for the edit layer with the file
+// (relative to the config directory) and yaml address of
 //   textSource     the node whose label it shows (doc-side-panel-text.ts):
 //                  the node itself, or the root of the side panel it includes
 //   nodeSource     the node itself, as an item of its list (doc-side-panel-move.ts)
@@ -63,6 +78,8 @@ export type SidePanelIncludeSource = {
   path: (string | number)[];
   // the included file is the entry of another document: a sub document
   isDocEntry: boolean;
+  // the alias of the included doc page (isDocEntry only)
+  docPageAlias?: string;
   // the including node also has "children" of its own, after the included ones
   isChildrenLocal: boolean;
 };
@@ -94,42 +111,128 @@ export type ConfigDeclaration = {
   path: (string | number)[];
   config: Record<string, any>;
   // the entry of the document the declaration belongs to, relative to the
-  // config directory
+  // config directory, and its alias
   entryFile: string;
+  docPageAlias: string;
 };
 
-// one doc page the page loads: its own, and every one it includes (by entry
-// file or by folder), in order of first loading. what the asset service
-// layer needs to find the store config of each (doc_page_impl_asset.md#the-local-store-folders-fully-reflected)
+// a root of a doc page: an add rule of its source rules
+export type DocPageRoot = {
+  alias: string;
+  // the folder of the root (for addFile, the folder of the file), absolute
+  path: string;
+  // the path the rule names, absolute
+  pathRule: string;
+  kind: 'folder' | 'file';
+};
+
+// where a doc page is mentioned: the workspace (fromEntryFile '') or a
+// reference in a file of another doc page
+export type DocPageMention = {
+  alias: string;
+  isAliasGiven: boolean;
+  // the entry of the doc page the mention is written in, absolute; '' for
+  // the workspace
+  fromEntryFile: string;
+  // the file holding the mention, absolute ('' for the workspace), and the
+  // place in it, for messages
+  file: string;
+  place: string;
+};
+
+// one doc page the workspace loads: a root-level one, and every one
+// reached through includes, in order of first loading
 export type DocPageLoaded = {
+  // the alias of the doc page, unique in the workspace
+  alias: string;
   // absolute
   entryFile: string;
   // the folder of the doc page: the parent of .doc-page/, or the entry's folder
   dirPage: string;
-  // the root ids the source rules of the doc page's own files declare
-  rootIdList: string[];
+  title: string;
+  // named by the workspace (or the only doc page of a virtual one)
+  isRoot: boolean;
+  // mounted from the settings panel for as long as the development server
+  // runs, not written in any file (a root doc page)
+  isTemporary: boolean;
+  rootList: DocPageRoot[];
+  mentionList: DocPageMention[];
   // "asset" of the entry as written: undefined (the convention), false, or { file }
   asset: undefined | false | { file: string };
 };
 
-export type DocEntryLoaded = {
+// a doc page of the workspace as the page receives it (paths relative to
+// the config directory, no absolute path)
+export type DocPageInfo = {
+  alias: string;
+  entryFile: string;
+  dirPage: string;
+  title: string;
+  isRoot: boolean;
+  isTemporary: boolean;
+  rootList: { alias: string; path: string; kind: 'folder' | 'file' }[];
+  mentionList: { alias: string; isAliasGiven: boolean; fromAlias: string; file: string; place: string }[];
+};
+
+// the workspace as the page receives it (configDoc.workspace)
+export type DocWorkspaceInfo = {
+  // config.yaml named one doc page (docEntry), not a workspace
+  isVirtual: boolean;
+  title: string;
+  // the workspace file, relative to the config directory ('' when the
+  // workspace is written in config.yaml or is virtual), its content hash,
+  // and its items as written there (paths relative to the file), for the
+  // Workspace tab to edit (doc-workspace-edit.ts)
+  file: string;
+  fileHash: string;
+  itemList: { alias?: string; dir?: string; file?: string; sidePanel?: string }[];
+  // the folder relative paths of the workspace are read from, absolute: the
+  // workspace file's, else the config directory. the os path completion of
+  // the Workspace tab starts there
+  dirBaseAbs: string;
+  docPageList: DocPageInfo[];
+  // every mention as an edge: from the workspace ('') or a doc page, to a doc page
+  includeList: { fromAlias: string; toAlias: string; alias: string; isAliasGiven: boolean; file: string; place: string }[];
+  warningList: string[];
+};
+
+// what config.yaml says about the workspace, normalized
+export type DocWorkspaceSpec = {
+  isVirtual: boolean;
+  title?: string;
+  homeDoc?: string;
+  homeItem?: string;
+  // isTemporary: mounted from the settings panel, after the doc pages written
+  docPageList: { alias?: string; dir?: string; file?: string; sidePanel?: string; isTemporary?: boolean }[];
+  // the file the spec was read from, absolute, when it is a workspace file;
+  // its content hash and its items as written
+  file?: string;
+  fileHash?: string;
+  itemListWritten?: { alias?: string; dir?: string; file?: string; sidePanel?: string }[];
+  // the folder the paths of the items are relative to, absolute
+  dirBase?: string;
+};
+
+export type DocWorkspaceLoaded = {
+  // page values: the workspace's, else the first root doc page's
   entry: DocEntryInfo;
-  // the side panel shown by the page: config docEntry.sidePanel, or the
-  // entry's default. '' when the entry declares no side panel at all.
+  // the first root doc page's entry file, absolute, and the side panel shown
+  entryFile: string;
   sidePanelId: string;
   sidePanelIdList: string[];
   sidePanel: SidePanelLoaded | undefined;
-  // every rule, paths relative to the config directory
+  // every rule, paths relative to the config directory, each with docPageAlias
   sourceRuleList: any[];
   tagDefineById: Record<string, any>;
   // the doc page config layer: every config declaration, in stack order
-  // (a later one wins): the documents included last first, the entry's own
-  // document last; within one document in the order read
+  // (a later one wins): the documents included last first, the root doc
+  // pages last (the first root last); within one document in the order read
   configDeclarationList: ConfigDeclaration[];
   // the variables the config files declare, in the same order merged
   variableByName: Record<string, string>;
-  // the doc pages loaded, the page's own first
+  // the doc pages loaded, the root ones first
   docPageList: DocPageLoaded[];
+  workspace: DocWorkspaceInfo;
   // every yaml file read, absolute, the entry file first
   fileListLoaded: string[];
   // the content hash (doc-edit-lines.ts textHashGet) of every document yaml
@@ -137,6 +240,9 @@ export type DocEntryLoaded = {
   // of a side panel's structure is refused when a file changed since
   fileHashByFile: Record<string, string>;
 };
+
+// the shape docEntryLoad returned before workspaces; kept as the same type
+export type DocEntryLoaded = DocWorkspaceLoaded;
 
 type DocYamlFile = {
   filePath: string;
@@ -156,6 +262,11 @@ type SidePanelRef = {
   file: string; // absolute
   sidePanelId: string; // '' for the default side panel of the file
   entryOwner: string; // the entry of the file holding the reference
+  // the alias given to the doc page the file is the entry of ('' when none given)
+  alias: string;
+  // where the reference is written, for the mention of the doc page
+  fileFrom: string;
+  place: string;
 };
 
 type LoadContext = {
@@ -172,10 +283,12 @@ type LoadContext = {
   variableDeclarationList: { entryOwner: string; variableByName: Record<string, string> }[];
   // config files being read, for cycles
   configFileChain: string[];
+  warningList: string[];
 };
 
 const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'sidePanelDefault', 'sidePanelById'];
 const CONFIG_FILE_KEY_LIST = ['config', 'variable'];
+const WORKSPACE_FILE_KEY_LIST = ['title', 'homeDoc', 'homeItem', 'docPageList'];
 const ENTRY_FILE_SUFFIX = '-entry.yaml';
 const ENTRY_FILE_NAME = 'entry.yaml';
 
@@ -220,7 +333,121 @@ function entryPathResolve(filePath: string): string {
   return filePathResolved;
 }
 
-export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWanted = ''): DocEntryLoaded {
+// the folder of a doc page from its entry: the parent of .doc-page/, or the
+// folder of the entry
+export function docPageDirGet(entryFile: string): string {
+  const dirEntry = path.dirname(entryFile);
+  return path.basename(dirEntry) === DOC_PAGE_META_DIR_NAME ? path.dirname(dirEntry) : dirEntry;
+}
+
+// the alias a doc page gets when none is given: the name of its folder
+export function docPageAliasDefaultGet(entryFile: string): string {
+  return path.basename(docPageDirGet(entryFile));
+}
+
+// ---------- the workspace ----------
+
+// the workspace file (design: doc_page_impl_source.md#the-workspace-file):
+//   title: ...               # optional page values, over those of the first doc page
+//   homeDoc: ~page:root/a.md
+//   homeItem: ...
+//   docPageList:             # the root-level doc pages, in side-panel order
+//     - alias: guide         # unique in the workspace; the folder name when absent
+//       dir: ../guide        # the doc page folder, or "file": its entry file
+//       sidePanel: main      # optional: the side panel shown for it
+export function docWorkspaceSpecRead(workspace: any, configDir: string, configFile: string): DocWorkspaceSpec {
+  let content = workspace;
+  let fileWorkspace: string | undefined;
+  let fileHash: string | undefined;
+  let dirBase = configDir;
+  const placeConfig = `config "workspace" (${configFile})`;
+  if (!mappingIs(content)) throw new Error(`[doc-source] ${placeConfig} must be { file } or { docPageList, title?, homeDoc?, homeItem? }`);
+  if (content.file !== undefined) {
+    if (typeof content.file !== 'string' || !content.file.trim() || Object.keys(content).length !== 1) {
+      throw new Error(`[doc-source] ${placeConfig}: "file" names the workspace file and stands alone`);
+    }
+    fileWorkspace = path.resolve(configDir, content.file);
+    content = readYaml(fileWorkspace);
+    if (content !== undefined) fileHash = textHashGet(fs.readFileSync(fileWorkspace, 'utf-8'));
+    if (content === undefined) throw new Error(`[doc-source] workspace file not found: ${fileWorkspace}`);
+    if (!mappingIs(content)) throw new Error(`[doc-source] the workspace file must be a mapping: ${fileWorkspace}`);
+    dirBase = path.dirname(fileWorkspace);
+  }
+  const place = fileWorkspace ?? placeConfig;
+  for (const key of Object.keys(content)) {
+    if (!WORKSPACE_FILE_KEY_LIST.includes(key)) {
+      throw new Error(`[doc-source] unknown key "${key}" in the workspace (known: ${WORKSPACE_FILE_KEY_LIST.join(', ')}): ${place}`);
+    }
+  }
+  if (!Array.isArray(content.docPageList) || content.docPageList.length === 0) {
+    throw new Error(`[doc-source] the workspace needs "docPageList", a list of its root-level doc pages: ${place}`);
+  }
+  const spec: DocWorkspaceSpec = {
+    isVirtual: false,
+    docPageList: [],
+    file: fileWorkspace,
+    fileHash,
+    dirBase,
+    // the items as written: the strings of each, for the Workspace tab
+    itemListWritten: content.docPageList.map((item: any) => {
+      const written: Record<string, string> = {};
+      for (const key of ['alias', 'dir', 'file', 'sidePanel']) {
+        if (typeof item?.[key] === 'string') written[key] = item[key];
+      }
+      return written;
+    }),
+  };
+  for (const key of ['title', 'homeDoc', 'homeItem'] as const) {
+    if (content[key] === undefined) continue;
+    if (typeof content[key] !== 'string') throw new Error(`[doc-source] workspace "${key}" must be a string: ${place}`);
+    spec[key] = content[key];
+  }
+  content.docPageList.forEach((item: any, index: number) => {
+    spec.docPageList.push(docPageSpecRead(item, dirBase, `${place} docPageList[${index}]`));
+  });
+  return spec;
+}
+
+// one doc page named by the workspace or by config docEntry: { alias?, dir | file, sidePanel? }
+export function docPageSpecRead(item: any, dirBase: string, place: string): DocWorkspaceSpec['docPageList'][number] {
+  if (!mappingIs(item)) throw new Error(`[doc-source] ${place}: a doc page is { alias?, dir | file, sidePanel? }`);
+  for (const key of Object.keys(item)) {
+    if (!['alias', 'dir', 'file', 'sidePanel'].includes(key)) {
+      throw new Error(`[doc-source] ${place}: unknown key "${key}" of a doc page (known: alias, dir, file, sidePanel)`);
+    }
+  }
+  const isFileGiven = typeof item.file === 'string' && item.file.trim() !== '';
+  const isDirGiven = typeof item.dir === 'string' && item.dir.trim() !== '';
+  if (isFileGiven === isDirGiven) {
+    throw new Error(
+      `[doc-source] ${place}: a doc page names either "dir", its folder (the entry is found in ${DOC_PAGE_META_DIR_NAME}/),`
+        + ' or "file", its entry file',
+    );
+  }
+  if (item.sidePanel !== undefined && typeof item.sidePanel !== 'string') {
+    throw new Error(`[doc-source] ${place}: "sidePanel" must be a side panel id`);
+  }
+  if (item.alias !== undefined && !sourceAliasIsValid(item.alias)) {
+    throw new Error(`[doc-source] ${place}: "alias" must be one word (letters, digits, "_", "-", "."): ${JSON.stringify(item.alias)}`);
+  }
+  return {
+    alias: item.alias,
+    dir: isDirGiven ? path.resolve(dirBase, item.dir) : undefined,
+    file: isFileGiven ? path.resolve(dirBase, item.file) : undefined,
+    sidePanel: item.sidePanel,
+  };
+}
+
+// one doc page as the workspace: what config docEntry names (the former
+// form, kept): a virtual workspace holding it alone
+export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWanted = '', alias?: string): DocEntryLoaded {
+  return docWorkspaceLoad({
+    isVirtual: true,
+    docPageList: [{ alias, file: path.resolve(entryFile), sidePanel: sidePanelIdWanted || undefined }],
+  }, configDir);
+}
+
+export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): DocWorkspaceLoaded {
   const context: LoadContext = {
     configDir,
     fileByPath: new Map(),
@@ -233,37 +460,90 @@ export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWa
     configDeclarationList: [],
     variableDeclarationList: [],
     configFileChain: [],
+    warningList: [],
   };
-  const file = fileLoad(entryPathResolve(entryFile), context, '');
-  if (!file.isEntry) {
-    throw new Error(
-      `[doc-source] the file named by config docEntry.file is not an entry: it must declare "docEntry": ${file.filePath}`,
-    );
-  }
+  const placeWorkspace = spec.file ?? (spec.isVirtual ? 'config docEntry' : 'config workspace');
 
-  let sidePanelId = '';
-  if (sidePanelIdWanted !== '') {
-    if (!file.sidePanelIdList.includes(sidePanelIdWanted)) {
+  // the root-level doc pages are registered before anything loads, so their
+  // aliases win over the ones an include gives
+  const entryFileRootList: string[] = [];
+  spec.docPageList.forEach((item, index) => {
+    const entryFile = entryPathResolve(item.dir ?? item.file ?? '');
+    let place = spec.isVirtual ? placeWorkspace : `${placeWorkspace} docPageList[${index}]`;
+    if (item.isTemporary) place = 'a temporary mount (settings panel, Workspace tab)';
+    if (entryFileRootList.includes(entryFile)) {
+      throw new Error(`[doc-source] ${place} names a doc page the workspace holds already: ${entryFile}`);
+    }
+    entryFileRootList.push(entryFile);
+    const docPage = docPageRegister(entryFile, {
+      alias: item.alias ?? docPageAliasDefaultGet(entryFile),
+      isAliasGiven: item.alias !== undefined,
+      fromEntryFile: '',
+      file: item.isTemporary ? '' : spec.file ?? '',
+      place,
+    }, true, context);
+    docPage.isTemporary = item.isTemporary === true;
+  });
+
+  // load every root doc page; the first one's files come first
+  const fileRootList = entryFileRootList.map((entryFile) => fileLoad(entryFile, context, '', undefined));
+  fileRootList.forEach((file, index) => {
+    if (!file.isEntry) {
+      throw new Error(`[doc-source] the file named by ${placeWorkspace} is not an entry: it must declare "docEntry": ${file.filePath}`);
+    }
+    const sidePanelIdWanted = spec.docPageList[index].sidePanel ?? '';
+    if (sidePanelIdWanted !== '' && !file.sidePanelIdList.includes(sidePanelIdWanted)) {
       throw new Error(
-        `[doc-source] config docEntry.sidePanel names "${sidePanelIdWanted}", which the entry does not declare`
+        `[doc-source] ${placeWorkspace} names the side panel "${sidePanelIdWanted}", which the entry does not declare`
           + ` (declared: ${file.sidePanelIdList.join(', ') || 'none'}): ${file.filePath}`,
       );
     }
-    sidePanelId = sidePanelIdWanted;
-  } else if (file.sidePanelIdList.length > 0) {
-    sidePanelId = sidePanelIdDefaultGet(file, 'config docEntry');
+  });
+
+  // the side panel shown: of one root doc page, its own; of several, one
+  // section per root doc page holding its side panel: the alias as a muted
+  // heading above the tree (docPageSection, drawn by DocSidebarFolder), not
+  // a folder of the tree
+  const sidePanelOfRoot = (file: DocYamlFile, index: number): { id: string; sidePanel: SidePanelLoaded | undefined } => {
+    const sidePanelIdWanted = spec.docPageList[index].sidePanel ?? '';
+    let id = '';
+    if (sidePanelIdWanted !== '') id = sidePanelIdWanted;
+    else if (file.sidePanelIdList.length > 0) id = sidePanelIdDefaultGet(file, placeWorkspace);
+    return { id, sidePanel: id === '' ? undefined : context.sidePanelByKey.get(sidePanelKeyBuild(file.filePath, id)) };
+  };
+  const fileFirst = fileRootList[0];
+  const { id: sidePanelId, sidePanel: sidePanelFirst } = sidePanelOfRoot(fileFirst, 0);
+  let sidePanel = sidePanelFirst;
+  if (fileRootList.length > 1) {
+    const tree = fileRootList.map((file, index) => {
+      const docPage = context.docPageByEntryFile.get(file.filePath)!;
+      const { sidePanel: sidePanelRoot } = sidePanelOfRoot(file, index);
+      // the root properties that reach the documents (tags, config) are
+      // kept; the label and the bound document are the alias heading's
+      const { doc: _doc, text: _text, ...root } = rootPropsFullGet(sidePanelRoot?.root ?? {}, docPage.alias);
+      const node: Record<string, any> = {
+        ...root,
+        id: `doc-page-${docPage.alias}`,
+        text: docPage.alias,
+        children: sidePanelRoot?.tree ?? [],
+        docPageAlias: docPage.alias,
+        docPageSection: { alias: docPage.alias, title: docPage.title, isTemporary: docPage.isTemporary, isFirst: index === 0 },
+      };
+      if (sidePanelRoot) {
+        node.includeSource = { ...sidePanelRoot.treeSource, isDocEntry: true, docPageAlias: docPage.alias, isChildrenLocal: false };
+      }
+      return node;
+    });
+    sidePanel = { treeSource: { file: '', path: [] }, tree };
   }
-  const sidePanel = sidePanelId === ''
-    ? undefined
-    : context.sidePanelByKey.get(sidePanelKeyBuild(file.filePath, sidePanelId));
 
   const fileHashByFile: Record<string, string> = {};
   for (const fileLoaded of context.fileByPath.values()) {
     fileHashByFile[fileRelativeGet(fileLoaded.filePath, configDir)] = fileLoaded.contentHash;
   }
 
-  // the doc page config layer: the documents included last first, so the
-  // entry of the page decides over what it includes (as for tags)
+  // the doc page config layer: the documents included last first, so a
+  // root doc page decides over what it includes (as for tags)
   const configDeclarationList: ConfigDeclaration[] = [];
   const variableByName: Record<string, string> = {};
   for (const entryOwner of [...context.entryFileList].reverse()) {
@@ -275,28 +555,138 @@ export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWa
     }
   }
 
+  const docPageList = context.entryFileList.map((entryFile) => context.docPageByEntryFile.get(entryFile)!);
+  const docPageFirst = docPageList[0];
+  const entry: DocEntryInfo = {
+    title: spec.title ?? fileFirst.entry.title,
+    homeDoc: spec.homeDoc !== undefined
+      ? sourcePathFullGet(spec.homeDoc, docPageFirst.alias)
+      : fileFirst.entry.homeDoc === undefined ? undefined : sourcePathFullGet(fileFirst.entry.homeDoc, docPageFirst.alias),
+    homeItem: spec.homeItem ?? fileFirst.entry.homeItem,
+  };
+  for (const warning of context.warningList) console.warn(`[doc-source] ${warning}`);
+
   return {
-    entry: file.entry,
+    entry,
+    entryFile: fileFirst.filePath,
     sidePanelId,
-    sidePanelIdList: file.sidePanelIdList,
+    sidePanelIdList: fileFirst.sidePanelIdList,
     sidePanel,
     sourceRuleList: context.sourceRuleList,
     tagDefineById: context.tagDefineById,
     configDeclarationList,
     variableByName,
-    docPageList: context.entryFileList.map((entryFile) => context.docPageByEntryFile.get(entryFile)!),
+    docPageList,
+    workspace: workspaceInfoBuild(spec, docPageList, entry.title ?? '', context),
     fileListLoaded: context.fileListLoaded,
     fileHashByFile,
   };
 }
 
+// the workspace as data for the page: the doc pages, every mention as an
+// edge, the warnings
+function workspaceInfoBuild(spec: DocWorkspaceSpec, docPageList: DocPageLoaded[], title: string, context: LoadContext): DocWorkspaceInfo {
+  const aliasOfEntry = (entryFile: string) => (entryFile === '' ? '' : context.docPageByEntryFile.get(entryFile)?.alias ?? '');
+  const relative = (filePath: string) => (filePath === '' ? '' : fileRelativeGet(filePath, context.configDir));
+  const docPageInfoList: DocPageInfo[] = docPageList.map((docPage) => ({
+    alias: docPage.alias,
+    entryFile: relative(docPage.entryFile),
+    dirPage: relative(docPage.dirPage) || '.',
+    title: docPage.title,
+    isRoot: docPage.isRoot,
+    isTemporary: docPage.isTemporary,
+    rootList: docPage.rootList.map((root) => ({ alias: root.alias, path: relative(root.pathRule) || '.', kind: root.kind })),
+    mentionList: docPage.mentionList.map((mention) => ({
+      alias: mention.alias,
+      isAliasGiven: mention.isAliasGiven,
+      fromAlias: aliasOfEntry(mention.fromEntryFile),
+      file: relative(mention.file),
+      place: mention.place,
+    })),
+  }));
+  const includeList: DocWorkspaceInfo['includeList'] = [];
+  for (const docPage of docPageInfoList) {
+    for (const mention of docPage.mentionList) {
+      includeList.push({ fromAlias: mention.fromAlias, toAlias: docPage.alias, alias: mention.alias, isAliasGiven: mention.isAliasGiven, file: mention.file, place: mention.place });
+    }
+  }
+  return {
+    isVirtual: spec.isVirtual,
+    title,
+    file: spec.file ? relative(spec.file) : '',
+    fileHash: spec.fileHash ?? '',
+    itemList: spec.itemListWritten ?? [],
+    dirBaseAbs: spec.dirBase ?? context.configDir,
+    docPageList: docPageInfoList,
+    includeList,
+    warningList: [...context.warningList],
+  };
+}
+
+// ---------- doc pages ----------
+
+// a doc page mentioned: registered at its first mention with that alias; a
+// later mention adds itself, and its alias is checked against the one kept
+function docPageRegister(entryFile: string, mention: DocPageMention, isRoot: boolean, context: LoadContext): DocPageLoaded {
+  const docPageExisting = context.docPageByEntryFile.get(entryFile);
+  if (docPageExisting) {
+    docPageExisting.mentionList.push(mention);
+    if (mention.alias !== docPageExisting.alias) {
+      const mentionFirst = docPageExisting.mentionList[0];
+      context.warningList.push(
+        `the doc page ${fileRelativeGet(entryFile, context.configDir)} is mentioned as "${mention.alias}" at ${mentionPlaceGet(mention, context)},`
+          + ` but is "${docPageExisting.alias}" already (${mentionPlaceGet(mentionFirst, context)}); "${docPageExisting.alias}" is used`,
+      );
+    }
+    return docPageExisting;
+  }
+  if (!sourceAliasIsValid(mention.alias)) {
+    throw new Error(`[doc-source] ${mentionPlaceGet(mention, context)}: the alias of a doc page must be one word (letters, digits, "_", "-", "."): ${JSON.stringify(mention.alias)}`);
+  }
+  for (const docPageOther of context.docPageByEntryFile.values()) {
+    if (docPageOther.alias !== mention.alias) continue;
+    throw new Error(
+      `[doc-source] ${mentionPlaceGet(mention, context)}: the alias "${mention.alias}" names the doc page ${fileRelativeGet(docPageOther.entryFile, context.configDir)} already`
+        + ` (${mentionPlaceGet(docPageOther.mentionList[0], context)}); give ${fileRelativeGet(entryFile, context.configDir)} another alias`,
+    );
+  }
+  const docPage: DocPageLoaded = {
+    alias: mention.alias,
+    entryFile,
+    dirPage: docPageDirGet(entryFile),
+    title: '',
+    isRoot,
+    isTemporary: false,
+    rootList: [],
+    mentionList: [mention],
+    asset: undefined,
+  };
+  context.docPageByEntryFile.set(entryFile, docPage);
+  return docPage;
+}
+
+// where a mention is written, for a message: "{file} {place}"
+function mentionPlaceGet(mention: DocPageMention, context: LoadContext): string {
+  return mention.file === '' ? mention.place : `${fileRelativeGet(mention.file, context.configDir)} ${mention.place}`;
+}
+
+// the alias of the doc page a file belongs to
+function docPageAliasOfFile(file: DocYamlFile, context: LoadContext): string {
+  return context.docPageByEntryFile.get(file.entryOwner)?.alias ?? '';
+}
+
 // ---------- files ----------
 
-// entryOwnerFrom: the entry of the file that reaches this one ('' for the entry of the page)
-function fileLoad(filePath: string, context: LoadContext, entryOwnerFrom: string): DocYamlFile {
+// entryOwnerFrom: the entry of the file that reaches this one ('' for a root
+// entry); mention: how the file is mentioned, when the reference may name
+// the entry of another doc page
+function fileLoad(filePath: string, context: LoadContext, entryOwnerFrom: string, mention: DocPageMention | undefined): DocYamlFile {
   const filePathResolved = path.resolve(filePath);
   const fileLoaded = context.fileByPath.get(filePathResolved);
-  if (fileLoaded) return fileLoaded;
+  if (fileLoaded) {
+    if (fileLoaded.isEntry && mention) docPageRegister(filePathResolved, mention, false, context);
+    return fileLoaded;
+  }
   if (!fs.existsSync(filePathResolved)) {
     throw new Error(`[doc-source] document yaml file not found: ${filePathResolved}`);
   }
@@ -329,16 +719,24 @@ function fileLoad(filePath: string, context: LoadContext, entryOwnerFrom: string
   context.fileByPath.set(filePathResolved, file);
   context.fileListLoaded.push(filePathResolved);
   if (file.isEntry) {
+    let docPage = context.docPageByEntryFile.get(filePathResolved);
+    if (!docPage && !mention) {
+      throw new Error(`[doc-source] the entry of a doc page is reached without a reference naming it: ${filePathResolved}`);
+    }
+    // a root doc page reached by an include before it loaded: the include
+    // is one more mention of it
+    if (!docPage) docPage = docPageRegister(filePathResolved, mention!, false, context);
+    else if (mention) docPageRegister(filePathResolved, mention, false, context);
     context.entryFileList.push(filePathResolved);
-    context.docPageByEntryFile.set(filePathResolved, {
-      entryFile: filePathResolved,
-      dirPage: docPageDirGet(filePathResolved),
-      rootIdList: [],
-      asset: assetSectionRead(content.asset, filePathResolved),
-    });
+    docPage.title = file.entry.title ?? '';
+    docPage.asset = assetSectionRead(content.asset, filePathResolved);
   } else if (content.asset !== undefined) {
     throw new Error(
       `[doc-source] "asset" belongs to the entry of a doc page, not to a resource file: ${filePathResolved}`,
+    );
+  } else if (mention?.isAliasGiven) {
+    throw new Error(
+      `[doc-source] ${mentionPlaceGet(mention, context)}: "alias" is for the entry of another doc page, and ${filePathResolved} is not an entry`,
     );
   }
 
@@ -346,7 +744,7 @@ function fileLoad(filePath: string, context: LoadContext, entryOwnerFrom: string
   tagSectionLoad(content.tag, file, context);
   configSectionLoad(content.config, file.filePath, ['config'], file.entryOwner, context);
   for (const sidePanelId of file.sidePanelIdList) {
-    sidePanelLoad({ file: filePathResolved, sidePanelId, entryOwner: file.entryOwner }, context, []);
+    sidePanelLoad({ file: filePathResolved, sidePanelId, entryOwner: file.entryOwner, alias: '', fileFrom: filePathResolved, place: `sidePanelById.${sidePanelId}` }, context, []);
   }
   return file;
 }
@@ -419,11 +817,16 @@ function sidePanelIdDefaultGet(file: DocYamlFile, place: string): string {
 // ---------- source section ----------
 // rules | { rules } | { file }. rule paths are written relative to the file
 // holding the rules; the scan reads them relative to the config directory.
+// every add rule declares a root by its alias ("alias"; the folder name when
+// absent): the first rule with an alias fixes its folder, a later one with
+// the same alias names a folder inside it; two different folders with one
+// alias are an error. every rule carries the alias of its doc page.
 
 function sourceSectionLoad(source: any, file: DocYamlFile, context: LoadContext) {
   if (source === undefined) return;
   let ruleList: any;
   let ruleDir = path.dirname(file.filePath);
+  let placeRules = file.filePath;
   if (mappingIs(source) && source.file !== undefined) {
     if (typeof source.file !== 'string' || !source.file.trim()) {
       throw new Error(`[doc-source] "source.file" must be a path: ${file.filePath}`);
@@ -435,6 +838,7 @@ function sourceSectionLoad(source: any, file: DocYamlFile, context: LoadContext)
     const sourceContent = readYaml(sourceFile);
     ruleList = Array.isArray(sourceContent) ? sourceContent : sourceContent?.rules;
     ruleDir = path.dirname(sourceFile);
+    placeRules = sourceFile;
     context.fileListLoaded.push(sourceFile);
     if (!Array.isArray(ruleList)) {
       throw new Error(`[doc-source] source file must be a rule list or contain "rules": ${sourceFile}`);
@@ -445,14 +849,51 @@ function sourceSectionLoad(source: any, file: DocYamlFile, context: LoadContext)
       throw new Error(`[doc-source] "source" must be a rule list, { rules }, or { file }: ${file.filePath}`);
     }
   }
-  context.sourceRuleList.push(...sourceRulesRebase(ruleList, ruleDir, context.configDir));
-  // the roots this doc page declares: where its asset folders are named
   const docPage = context.docPageByEntryFile.get(file.entryOwner);
-  for (const rule of ruleList) {
-    if ((rule?.action !== 'addFolder' && rule?.action !== 'addFile') || !docPage) continue;
-    const rootId = rule.rootId ?? path.basename(path.resolve(ruleDir, String(rule.path ?? '')));
-    if (!docPage.rootIdList.includes(rootId)) docPage.rootIdList.push(rootId);
-  }
+  const docPageAlias = docPage?.alias ?? '';
+  const ruleListRebased = ruleList.map((rule: any, index: number) => {
+    if (!mappingIs(rule)) throw new Error(`[doc-source] a source rule must be a mapping: ${placeRules} rules[${index}]`);
+    if (rule.action !== 'addFolder' && rule.action !== 'addFile') return { ...rule, docPageAlias };
+    if (typeof rule.path !== 'string' || !rule.path.trim()) {
+      throw new Error(`[doc-source] ${rule.action} needs "path": ${placeRules} rules[${index}]`);
+    }
+    const pathAbsolute = path.resolve(ruleDir, rule.path);
+    const { rootId, alias: aliasGiven, ...ruleRest } = rule;
+    if (rootId !== undefined && aliasGiven === undefined) {
+      console.warn(`[doc-source] "rootId" of a source rule is now "alias" (the same meaning): ${placeRules} rules[${index}]`);
+    }
+    const kind = rule.action === 'addFile' ? 'file' : 'folder';
+    const pathRoot = kind === 'file' ? path.dirname(pathAbsolute) : pathAbsolute;
+    // the alias: as given, else the name of the root folder
+    const alias = String(aliasGiven ?? rootId ?? path.basename(pathRoot));
+    if (!sourceAliasIsValid(alias)) {
+      throw new Error(`[doc-source] the alias of a root must be one word (letters, digits, "_", "-", "."): ${JSON.stringify(alias)} at ${placeRules} rules[${index}]`);
+    }
+    if (docPage) {
+      const rootSame = docPage.rootList.find((root) => root.alias === alias);
+      if (rootSame && !pathIsInside(pathRoot, rootSame.path)) {
+        throw new Error(
+          `[doc-source] two roots of the doc page "${docPageAlias}" share the alias "${alias}": ${rootSame.path} and ${pathRoot}`
+            + ` (${placeRules} rules[${index}]); give one of them another alias`,
+        );
+      }
+      if (!rootSame) docPage.rootList.push({ alias, path: pathRoot, pathRule: pathAbsolute, kind });
+    }
+    const ruleLoaded: Record<string, any> = { ...ruleRest, alias, path: path.relative(context.configDir, pathAbsolute) || '.', docPageAlias };
+    // the files and folders the rule does not collect, like a .gitignore
+    // (doc-source-exclude.ts): checked here, kept as a list of patterns
+    if (rule.exclude !== undefined) {
+      if (kind === 'file') throw new Error(`[doc-source] "exclude" belongs to an addFolder rule: ${placeRules} rules[${index}]`);
+      ruleLoaded.exclude = excludePatternTextListRead(rule.exclude, `${placeRules} rules[${index}]`);
+    }
+    return ruleLoaded;
+  });
+  context.sourceRuleList.push(...ruleListRebased);
+}
+
+function pathIsInside(filePath: string, folder: string): boolean {
+  const relative = path.relative(folder, filePath);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 // ---------- asset section ----------
@@ -467,21 +908,6 @@ function assetSectionRead(asset: any, filePath: string): DocPageLoaded['asset'] 
     return { file: asset.file.trim() };
   }
   throw new Error(`[doc-source] "asset" of an entry is { file: ./asset.yaml } or false: ${filePath}`);
-}
-
-// the folder of a doc page from its entry: the parent of .doc-page/, or the
-// folder of the entry
-export function docPageDirGet(entryFile: string): string {
-  const dirEntry = path.dirname(entryFile);
-  return path.basename(dirEntry) === DOC_PAGE_META_DIR_NAME ? path.dirname(dirEntry) : dirEntry;
-}
-
-function sourceRulesRebase(rules: any[], fileDir: string, configDir: string): any[] {
-  return rules.map((rule) => {
-    if ((rule.action !== 'addFolder' && rule.action !== 'addFile') || !rule.path) return rule;
-    const pathAbsolute = path.resolve(fileDir, rule.path);
-    return { ...rule, path: path.relative(configDir, pathAbsolute) || '.' };
-  });
 }
 
 // ---------- tag section ----------
@@ -566,6 +992,7 @@ function configItemLoad(
       path: address,
       config: item,
       entryFile: fileRelativeGet(entryOwner, context.configDir),
+      docPageAlias: context.docPageByEntryFile.get(entryOwner)?.alias ?? '',
     });
     return;
   }
@@ -615,9 +1042,23 @@ function sidePanelKeyBuild(filePath: string, sidePanelId: string): string {
   return `${filePath}#${sidePanelId}`;
 }
 
+// the mention a reference makes of the doc page its file is the entry of
+function mentionOfRef(ref: SidePanelRef): DocPageMention {
+  return {
+    alias: ref.alias || docPageAliasDefaultGet(ref.file),
+    isAliasGiven: ref.alias !== '',
+    fromEntryFile: ref.entryOwner,
+    file: ref.fileFrom,
+    place: ref.place,
+  };
+}
+
 // chain: the side panels being loaded, outermost first, as keys
 function sidePanelLoad(ref: SidePanelRef, context: LoadContext, chain: string[]): SidePanelLoaded {
-  const file = fileLoad(ref.file, context, ref.entryOwner);
+  // a reference to the entry of another doc page mentions that doc page;
+  // a file of a doc page naming its own entry does not
+  const isMention = ref.file !== ref.fileFrom && ref.file !== ref.entryOwner;
+  const file = fileLoad(ref.file, context, ref.entryOwner, isMention ? mentionOfRef(ref) : undefined);
   const sidePanelId = ref.sidePanelId !== '' ? ref.sidePanelId : sidePanelIdDefaultGet(file, 'a reference');
   const key = sidePanelKeyBuild(file.filePath, sidePanelId);
   const sidePanelLoaded = context.sidePanelByKey.get(key);
@@ -647,7 +1088,7 @@ function sidePanelLoad(ref: SidePanelRef, context: LoadContext, chain: string[])
 }
 
 // a value of sidePanelById is a resource ({ root?, tree }) or a reference
-// (a string, or { file?, sidePanel? })
+// (a string, or { file?, dir?, sidePanel?, alias? })
 function sidePanelDeclaredIsReference(declared: any): boolean {
   if (typeof declared === 'string') return true;
   return mappingIs(declared) && declared.tree === undefined && declared.root === undefined;
@@ -655,35 +1096,53 @@ function sidePanelDeclaredIsReference(declared: any): boolean {
 
 function sidePanelRefParse(value: any, fileFrom: DocYamlFile, place: string): SidePanelRef {
   const fileDir = path.dirname(fileFrom.filePath);
+  const refBase = { entryOwner: fileFrom.entryOwner, fileFrom: fileFrom.filePath, place };
   if (typeof value === 'string') {
     if (!value.trim()) {
       throw new Error(`[doc-source] ${place}: a side panel reference must not be empty: ${fileFrom.filePath}`);
     }
-    return { file: entryPathResolve(path.resolve(fileDir, value)), sidePanelId: '', entryOwner: fileFrom.entryOwner };
+    return { ...refBase, file: entryPathResolve(path.resolve(fileDir, value)), sidePanelId: '', alias: '' };
   }
   if (!mappingIs(value)) {
     throw new Error(
-      `[doc-source] ${place}: a side panel reference is a file path or { file?, sidePanel? }: ${fileFrom.filePath}`,
+      `[doc-source] ${place}: a side panel reference is a file path or { file | dir, sidePanel?, alias? }: ${fileFrom.filePath}`,
     );
   }
   for (const key of Object.keys(value)) {
-    if (key !== 'file' && key !== 'sidePanel') {
+    if (!['file', 'dir', 'sidePanel', 'alias'].includes(key)) {
       throw new Error(`[doc-source] ${place}: unknown key "${key}" in a side panel reference: ${fileFrom.filePath}`);
     }
   }
-  if (value.file === undefined && value.sidePanel === undefined) {
-    throw new Error(`[doc-source] ${place}: a side panel reference needs "file" or "sidePanel": ${fileFrom.filePath}`);
+  if (value.file !== undefined && value.dir !== undefined) {
+    throw new Error(`[doc-source] ${place}: a side panel reference names "file" or "dir", not both: ${fileFrom.filePath}`);
   }
-  if (value.file !== undefined && (typeof value.file !== 'string' || !value.file.trim())) {
-    throw new Error(`[doc-source] ${place}: "file" of a side panel reference must be a path: ${fileFrom.filePath}`);
+  const pathGiven = value.file ?? value.dir;
+  if (pathGiven === undefined && value.sidePanel === undefined) {
+    throw new Error(`[doc-source] ${place}: a side panel reference needs "file", "dir" or "sidePanel": ${fileFrom.filePath}`);
+  }
+  if (pathGiven !== undefined && (typeof pathGiven !== 'string' || !pathGiven.trim())) {
+    throw new Error(`[doc-source] ${place}: "file" / "dir" of a side panel reference must be a path: ${fileFrom.filePath}`);
   }
   if (value.sidePanel !== undefined && (typeof value.sidePanel !== 'string' || !value.sidePanel.trim())) {
     throw new Error(`[doc-source] ${place}: "sidePanel" of a side panel reference must be an id: ${fileFrom.filePath}`);
   }
+  if (value.alias !== undefined && !sourceAliasIsValid(value.alias)) {
+    throw new Error(`[doc-source] ${place}: "alias" of a side panel reference must be one word (letters, digits, "_", "-", "."): ${fileFrom.filePath}`);
+  }
+  if (value.alias !== undefined && pathGiven === undefined) {
+    throw new Error(`[doc-source] ${place}: "alias" goes with "file" / "dir", the entry of another doc page: ${fileFrom.filePath}`);
+  }
+  if (value.dir !== undefined) {
+    const dirResolved = path.resolve(fileDir, value.dir);
+    if (!fs.existsSync(dirResolved) || !fs.statSync(dirResolved).isDirectory()) {
+      throw new Error(`[doc-source] ${place}: "dir" must name the folder of a doc page: ${dirResolved} (${fileFrom.filePath})`);
+    }
+  }
   return {
-    file: value.file === undefined ? fileFrom.filePath : entryPathResolve(path.resolve(fileDir, value.file)),
+    ...refBase,
+    file: pathGiven === undefined ? fileFrom.filePath : entryPathResolve(path.resolve(fileDir, pathGiven)),
     sidePanelId: value.sidePanel ?? '',
-    entryOwner: fileFrom.entryOwner,
+    alias: value.alias ?? '',
   };
 }
 
@@ -723,7 +1182,26 @@ function sidePanelResourceLoad(
   const treeSource = { file: fileRelative, path: [...addressResource, 'tree'] };
   const tree = nodesLoad(declared.tree, file, context, chain, treeSource);
   const rootTextSource = root === undefined ? undefined : { file: fileRelative, path: [...addressResource, 'root'] };
-  return { root, rootTextSource, treeSource, tree };
+  // the root's paths are written in its own doc page: made full here, since
+  // the root is merged onto a node of another doc page
+  return { root: root === undefined ? undefined : rootPropsFullGet(root, docPageAliasOfFile(file, context)), rootTextSource, treeSource, tree };
+}
+
+// the keys of a side-panel node that hold a source path
+const NODE_PATH_KEY_LIST = ['doc', 'sourceFolder'];
+
+// a node's local source paths in the full form of its doc page; sourceRoot
+// (a root alias) becomes the folder of that root
+function rootPropsFullGet(node: Record<string, any>, docPageAlias: string): Record<string, any> {
+  const result = { ...node };
+  for (const key of NODE_PATH_KEY_LIST) {
+    if (typeof result[key] === 'string' && sourcePathIsRooted(result[key])) result[key] = sourcePathFullGet(result[key], docPageAlias);
+  }
+  if (result.sourceRoot !== undefined && result.sourceFolder === undefined) {
+    const { sourceRoot, ...rest } = result;
+    return { ...rest, sourceFolder: sourcePathFullGet(`~${String(sourceRoot)}`, docPageAlias) };
+  }
+  return result;
 }
 
 // addressList: file and yaml address of the list these nodes are read from
@@ -734,6 +1212,7 @@ function nodesLoad(
   chain: string[],
   addressList: SidePanelTextSource,
 ): any[] {
+  const docPageAlias = docPageAliasOfFile(file, context);
   return nodes.map((node, index) => {
     if (!mappingIs(node)) return node;
     const placeNode = `${file.filePath} ${addressList.path.join('.')}[${index}]`;
@@ -755,26 +1234,30 @@ function nodesLoad(
     let rootTextSourceIncluded: SidePanelTextSource | undefined;
     let includeSource: SidePanelIncludeSource | undefined;
     if (include !== undefined) {
-      const ref = sidePanelRefParse(include, file, `"include" at ${placeNode}`);
+      const ref = sidePanelRefParse(include, file, `"include" at ${addressList.path.join('.')}[${index}]`);
       const included = sidePanelLoad(ref, context, chain);
       childrenIncluded = included.tree;
       rootIncluded = included.root ?? {};
       rootTextSourceIncluded = included.rootTextSource;
       // a sub document: the entry of another document, not a side panel of
       // this file nor of a resource file
-      const isDocEntry = ref.file !== file.filePath && fileLoad(ref.file, context, ref.entryOwner).isEntry;
+      const fileIncluded = ref.file !== file.filePath ? context.fileByPath.get(ref.file) : undefined;
+      const isDocEntry = fileIncluded?.isEntry === true;
       includeSource = {
         ...included.treeSource,
         isDocEntry,
         isChildrenLocal: Array.isArray(childrenLocal) && childrenLocal.length > 0,
       };
+      if (isDocEntry) includeSource.docPageAlias = context.docPageByEntryFile.get(ref.file)?.alias ?? '';
     }
 
     const childrenLoaded = Array.isArray(childrenLocal)
       ? nodesLoad(childrenLocal, file, context, chain, { ...addressNode, path: [...addressNode.path, 'children'] })
       : [];
-    // the included root applies to this node; explicit local properties win
-    const nodeMerged = { ...rootIncluded, ...nodeResult };
+    // the included root applies to this node; explicit local properties win.
+    // the node's own paths are local to this file's doc page, the root's
+    // were made full when its side panel loaded
+    const nodeMerged = { ...rootIncluded, ...rootPropsFullGet(nodeResult, docPageAlias) };
     if (include !== undefined || childrenLocal !== undefined) {
       nodeMerged.children = [...childrenIncluded, ...childrenLoaded];
     }
@@ -784,6 +1267,7 @@ function nodesLoad(
     const isTextFromRoot = nodeResult.text === undefined && rootIncluded.text !== undefined;
     nodeMerged.textSource = isTextFromRoot && rootTextSourceIncluded ? rootTextSourceIncluded : addressNode;
     nodeMerged.nodeSource = addressNode;
+    nodeMerged.docPageAlias = docPageAlias;
     if (includeSource) nodeMerged.includeSource = includeSource;
     return nodeMerged;
   });

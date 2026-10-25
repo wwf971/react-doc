@@ -12,8 +12,8 @@
 // normalized tag: { id, data }
 
 // an asset is anything a tag can be attached to.
-//   doc     collected source file, id = source path  (~rootId/a.md)
-//   folder  source folder,         id = source path  (~rootId/sub)
+//   doc     collected source file, id = source path  (~page:root/a.md)
+//   folder  source folder,         id = source path  (~page:root/sub)
 //   item    side-panel item that is bound to neither, id = item id
 export const tagAssetTypeList = ['doc', 'folder', 'item'];
 

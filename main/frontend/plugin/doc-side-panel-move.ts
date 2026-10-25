@@ -159,7 +159,7 @@ function itemLineListRebase(
   return textLineListGet(block);
 }
 
-// an include is a path (a string), or { file?, sidePanel? }
+// an include is a path (a string), or { file? | dir?, sidePanel?, alias? }
 function includeRebase(
   value: Node,
   fileFrom: string,
@@ -171,7 +171,7 @@ function includeRebase(
     return;
   }
   if (!isMap(value)) return;
-  const fileNode = value.get('file', true);
+  const fileNode = value.get('file', true) ?? value.get('dir', true);
   if (isScalar(fileNode) && typeof fileNode.value === 'string' && Array.isArray(fileNode.range)) {
     replacementAdd(fileNode, yamlScalarTextBuild(includePathRebase(fileNode.value, fileFrom, fileTo)));
     return;

@@ -1,9 +1,18 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isCSSRequest, type EnvironmentModuleNode, type Plugin } from 'vite';
-import { DOC_PAGE_META_DIR_NAME, docEntryFileFind, docEntryLoad, readYaml } from './doc-entry.ts';
+import {
+  DOC_PAGE_META_DIR_NAME,
+  docEntryFileFind,
+  docPageSpecRead,
+  docWorkspaceLoad,
+  docWorkspaceSpecRead,
+  readYaml,
+  type DocWorkspaceSpec,
+} from './doc-entry.ts';
 import {
   attachmentDataUrlGet,
   attachmentExtIsBinary,
@@ -15,10 +24,12 @@ import {
 } from './doc-attachment.ts';
 import {
   sourcePathBuild,
+  sourcePathFullGet,
   sourcePathIsInside,
   sourcePathIsRooted,
   sourcePathNormalize,
   sourcePathParse,
+  sourcePathPatternFullGet,
 } from '../src/lib/doc-source-path.js';
 import {
   tagSourceAddRuleApply,
@@ -39,6 +50,7 @@ import {
   type DocSourceDependencyCollect,
 } from './doc-source-dependency.ts';
 import { DOC_EDIT_ENDPOINT_NAME, docEditMiddlewareCreate } from './doc-edit-server.ts';
+import { excludeMatcherBuild, type ExcludeMatcher } from './doc-source-exclude.ts';
 import { DOC_ASSET_ENDPOINT_NAME, docAssetMiddlewareCreate } from './doc-asset-server.ts';
 import { DOC_SERVICE_ENDPOINT_NAME, docServiceMiddlewareCreate, serviceConfigGet, servicePathIs } from './doc-service-server.ts';
 import {
@@ -50,14 +62,17 @@ import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolv
 import { textLocalizedGet } from '../src/lib/text-localized.js';
 
 // vite plugin "doc-source" (design: doc_page_impl_source.md).
-// reads two-layer yaml config, executes source rules against the file system,
-// and exposes the result as virtual module `virtual:doc-source`:
+// reads two-layer yaml config, loads the workspace (config "workspace", or
+// the one doc page of config "docEntry" as a virtual workspace), executes
+// the source rules of its doc pages against the file system, and exposes
+// the result as virtual module `virtual:doc-source`:
 //
-//   export let configDoc = {...}        // merged config (the document entry loaded: source rules,
-//                                       //   the page side panel inlined, tag definitions merged)
-//   export let fileManifest = [{ rootId, relPath, name, ext, title, internalPath, collect,
-//                                contentHash, tagList, configSource, configFrontmatter, load }]
-//   export let dirManifest = [{ rootId, relPath, internalPath, collect }]   // the folders of the source
+//   export let configDoc = {...}        // merged config (the workspace loaded: source rules,
+//                                       //   the page side panel inlined, tag definitions merged,
+//                                       //   "workspace": its doc pages and their includes)
+//   export let fileManifest = [{ docPageAlias, rootAlias, relPath, name, ext, title, internalPath,
+//                                collect, contentHash, tagList, configSource, configFrontmatter, load }]
+//   export let dirManifest = [{ docPageAlias, rootAlias, relPath, internalPath, collect }]   // the folders of the source
 //   export const fileUrlByPath = {...}              // source path -> url of the file's bytes (build: data url)
 //   export const docEnv = { kind }                   // 'viteDevServer' | 'staticBuild' (DocEnvStore)
 //   export const docSourceEndpoint = '/__doc-source' // '' in a build: no source api
@@ -68,7 +83,10 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 //   export function subscribeDocSource(listener)    // dev: the source data changed
 //   export function subscribeDocAsset(listener)     // dev: an object or the store's folders changed on disk
 //
-// every file is named by its source path ~rootId/relPath (doc-source-path.js).
+// every file is named by its source path, in the full form
+// ~docPageAlias:rootAlias/relPath (doc-source-path.js); a rule of a doc page
+// writes the local form ~rootAlias/..., which is made full with the alias
+// of that doc page (rule.docPageAlias, set by the loader).
 // an addFolder rule says how its folder is collected (rule.collect):
 //   recursive   every file in the folder and its subfolders is a document
 //   direct      the files right in the folder are documents
@@ -77,9 +95,10 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 //               image an Image block names, a dependency of an asset version)
 // a referenced file is in the manifest with collect "referenced"; it is not
 // a page of the side panel, and a build keeps it only when it is used.
-// a root id names one folder: the first add rule with the id fixes it; a
-// later rule with the same id names a folder inside it and sets the
-// collect mode of that part (a file collected twice takes the later rule).
+// a root alias names one folder of its doc page: the first add rule with
+// the alias fixes it; a later rule with the same alias names a folder
+// inside it and sets the collect mode of that part (a file collected twice
+// takes the later rule).
 //
 // document text is data, not code. in a build every document becomes a lazy
 // `?raw` import, one chunk per document. during development the text is read
@@ -122,12 +141,13 @@ export type SourceCollectMode = 'recursive' | 'direct' | 'referenced';
 const sourceCollectModeList: SourceCollectMode[] = ['recursive', 'direct', 'referenced'];
 
 export type FileEntry = {
-  rootId: string;
+  docPageAlias: string;
+  rootAlias: string;
   relPath: string; // path inside root, the file name for a root file
   name: string;
   ext: string;
   absPath: string;
-  internalPath: string; // the source path ~{rootId}/relPath (doc-source-path.js)
+  internalPath: string; // the full source path ~{docPageAlias}:{rootAlias}/relPath (doc-source-path.js)
   collect: SourceCollectMode; // 'referenced': part of the page only when used
   tagList?: any[]; // tags declared by source rules, see doc-tag-source.ts
   configSource?: Record<string, any>; // config declared by source rules, see doc-config-source.ts
@@ -137,20 +157,25 @@ export type FileEntry = {
 // referenced) every folder below it. the page lists them (a location to
 // create a file in) without the file system.
 export type DirEntry = {
-  rootId: string;
+  docPageAlias: string;
+  rootAlias: string;
   relPath: string; // '' for the folder of the rule
   absPath: string;
-  internalPath: string; // ~{rootId} or ~{rootId}/relPath
+  internalPath: string; // ~{docPageAlias}:{rootAlias} or ~{docPageAlias}:{rootAlias}/relPath
   collect: SourceCollectMode;
 };
 
 // the folder or file of an add rule, as the source api resolves paths
-// what one add rule collects. a root id names one folder on disk
-// (rootAbsPath): the first rule with the id fixes it, and a later rule with
-// the same id collects a folder inside it (with its own collect mode), so
-// the source paths of both are ~rootId/<path from the root folder>.
+// what one add rule collects. a root alias names one folder on disk
+// (rootAbsPath) in its doc page: the first rule with the alias fixes it, and
+// a later rule with the same alias collects a folder inside it (with its
+// own collect mode), so the source paths of both are
+// ~docPageAlias:rootAlias/<path from the root folder>.
 export type SourceRoot = {
-  rootId: string;
+  docPageAlias: string;
+  rootAlias: string;
+  // the full source path of the root: ~docPageAlias:rootAlias
+  rootPath: string;
   // the folder (or file) the rule names
   absPath: string;
   // the folder of the root id, which source paths are relative to
@@ -369,6 +394,22 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       // a file the page created through the source api: the watcher reports
       // the addition too, and must report it as data, not reload the page
       const pathsCreatedByPage = new Set<string>();
+      // the configuration changed without a file write (a temporary doc
+      // page mounted): watched again and reported as data
+      const configurationReload = (): string => {
+        let configDocUpdated: any;
+        try {
+          configDocUpdated = loadConfigDoc(configFile, options);
+        } catch (error: any) {
+          return String(error?.message ?? error);
+        }
+        pathsWatched = collectPathsToWatch(configDocUpdated, configDir);
+        pathsConfiguration = collectPathsConfiguration(configDocUpdated);
+        for (const p of pathsWatched) server.watcher.add(p);
+        configDataSend(configDocUpdated);
+        return '';
+      };
+      const workspaceDirBaseGet = () => loadConfigDoc(configFile, options).workspace.dirBaseAbs ?? configDir;
       server.middlewares.use(docSourceMiddlewareCreate({
         endpoint: docSourceEndpoint,
         fileEntryListGet,
@@ -376,6 +417,59 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         onFileCreated: (filePath) => {
           pathsCreatedByPage.add(filePath);
           configDataSend(loadConfigDoc(configFile, options));
+        },
+        workspace: {
+          dirBaseGet: workspaceDirBaseGet,
+          // { kind: 'dir' | 'file', path, alias?, sidePanel? }: the doc page
+          // joins the workspace when the configuration loads with it
+          mount: (body) => {
+            const kind = body?.kind === 'file' ? 'file' : body?.kind === 'dir' ? 'dir' : '';
+            const pathText = String(body?.path ?? '').trim();
+            if (!kind || pathText === '') return { code: -1, data: null, message: 'a mount names "kind" (dir | file) and "path"' };
+            const pathAbs = osPathResolve(pathText, workspaceDirBaseGet());
+            let entryFile = pathAbs;
+            try {
+              if (kind === 'dir') entryFile = docEntryFileFind(pathAbs);
+              else if (!fs.statSync(pathAbs).isFile()) return { code: -1, data: null, message: `not a file: ${pathAbs}` };
+            } catch (error: any) {
+              return { code: -3, data: null, message: String(error?.message ?? error).replace(/^\[doc-source\] /, '') };
+            }
+            const alias = String(body?.alias ?? '').trim();
+            const sidePanel = String(body?.sidePanel ?? '').trim();
+            const mount: WorkspaceMount = { [kind]: pathAbs };
+            if (alias) mount.alias = alias;
+            if (sidePanel) mount.sidePanel = sidePanel;
+            const mountList = [...workspaceMountListGet(configFile)];
+            workspaceMountListByConfigFile.set(configFile, [...mountList, mount]);
+            fileEntryListCached = undefined;
+            const messageLoad = configurationReload();
+            if (messageLoad !== '') {
+              workspaceMountListByConfigFile.set(configFile, mountList);
+              fileEntryListCached = undefined;
+              return { code: -1, data: null, message: messageLoad.replace(/^\[doc-source\] /, '') };
+            }
+            const docPage = loadConfigDoc(configFile, options).docEntry.docPageList
+              .find((item: any) => item.isTemporary && item.entryFile === entryFile);
+            return { code: 0, data: { alias: docPage?.alias ?? '' }, message: '' };
+          },
+          // { alias }: a temporary doc page leaves the workspace
+          unmount: (body) => {
+            const alias = String(body?.alias ?? '');
+            const docPage = loadConfigDoc(configFile, options).docEntry.docPageList
+              .find((item: any) => item.isTemporary && item.alias === alias);
+            if (!docPage) return { code: -3, data: null, message: `no temporary doc page has the alias "${alias}"` };
+            const mountList = workspaceMountListGet(configFile);
+            workspaceMountListByConfigFile.set(configFile, mountList.filter((mount) => (
+              entryPathOfMount(mount) !== docPage.entryFile
+            )));
+            fileEntryListCached = undefined;
+            const messageLoad = configurationReload();
+            if (messageLoad !== '') {
+              workspaceMountListByConfigFile.set(configFile, mountList);
+              return { code: -1, data: null, message: messageLoad };
+            }
+            return { code: 0, data: { alias }, message: '' };
+          },
         },
       }));
       // a configuration file the page itself rewrote (a side-panel label, a
@@ -424,6 +518,14 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
           declarationListGet: () => loadConfigDoc(configFile, options).docEntry.configDeclarationList,
           onFileListWritten: configurationFileListWritten,
         },
+        // the workspace file (doc_page_impl_source.md#editing-the-workspace-file)
+        workspace: {
+          fileGet: () => {
+            const { file } = loadConfigDoc(configFile, options).workspace;
+            return file ? path.resolve(configDir, file) : '';
+          },
+          onFileListWritten: configurationFileListWritten,
+        },
       }));
 
       // the asset api works on the store as its config file says now; a
@@ -438,7 +540,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         server.middlewares.use(docAssetMiddlewareCreate({
           endpoint: docAssetEndpoint,
           storeGet: () => assetStoreCreate(assetConfigCurrentGet()),
-          rootAbsPathByIdGet: () => sourceRootAbsPathByIdGet(loadConfigDoc(configFile, options), configDir),
+          rootAbsPathByPathGet: () => sourceRootAbsPathByPathGet(loadConfigDoc(configFile, options), configDir),
           usageScan: (docPathList) => assetUsageDocListScan(fileEntryListGet(), docPathList),
         }));
         // the config file of every doc page (watched whether it exists or
@@ -532,32 +634,40 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
 // ---------- source api ----------
 // the doc page source service layer of the development server (doc_page_impl_source.md#the-source-api):
 //
-//   GET  {endpoint}/file?path=~root/a.md   the text of a collected file, plain utf-8, never
+//   GET  {endpoint}/file?path=~page:root/a.md   the text of a collected file, plain utf-8, never
 //                                          cached. the development page loads every document
 //                                          through it instead of importing the file as a module.
-//   GET  {endpoint}/data?path=~root/x.png  the bytes of a collected file with their media type
+//   GET  {endpoint}/data?path=~page:root/x.png  the bytes of a collected file with their media type
 //                                          (an image an Image block names)
 //   POST {endpoint}/file/create            { dirPath, name, text | dataBase64, isOverwrite? }
 //                                          -> { code, data: { path, entry }, message }
 //                                          writes a file into a folder of the source. dirPath is a
-//                                          source path (~root or ~root/dir) inside the folder of an
+//                                          source path (~page:root or ~page:root/dir) inside the folder of an
 //                                          addFolder rule; the folders on the way are created. codes:
 //                                          -1 bad request, -2 the file exists (isOverwrite false),
 //                                          -3 the folder is not in the source
 //
 // only source paths resolve; a query is never used as a file path. the folder
 // of a "direct" rule accepts files right in it only; "recursive" and
-// "referenced" folders accept any folder below.
+// "referenced" folders accept any folder below. a local path (~root/dir)
+// names the root of whichever doc page has it, when exactly one does.
 
 type SourceMiddlewareOptions = {
   endpoint: string;
   fileEntryListGet: () => FileEntry[];
   sourceRootListGet: () => SourceRoot[];
   onFileCreated: (filePath: string) => void;
+  // the folder a relative path typed in the page is read from (os/list,
+  // workspace/mount); the temporary doc pages, mounted and unmounted
+  workspace?: {
+    dirBaseGet: () => string;
+    mount: (body: any) => { code: number; data: any; message: string };
+    unmount: (body: any) => { code: number; data: any; message: string };
+  };
 };
 
 export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
-  const { endpoint, fileEntryListGet, sourceRootListGet, onFileCreated } = options;
+  const { endpoint, fileEntryListGet, sourceRootListGet, onFileCreated, workspace } = options;
   const textSend = (res: ServerResponse, statusCode: number, text: string) => {
     res.statusCode = statusCode;
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -571,12 +681,37 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
   return (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const route = url.pathname.startsWith(`${endpoint}/`) ? url.pathname.slice(endpoint.length) : '';
-    if (route !== '/file' && route !== '/data' && route !== '/file/create') {
+    const isWorkspaceRoute = route === '/os/list' || route === '/workspace/mount' || route === '/workspace/unmount';
+    if (route !== '/file' && route !== '/data' && route !== '/file/create' && !isWorkspaceRoute) {
       next();
       return;
     }
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    if (isWorkspaceRoute) {
+      if (!workspace) {
+        jsonSend(res, 404, { code: -3, data: null, message: 'the server has no workspace routes' });
+        return;
+      }
+      if (route === '/os/list') {
+        const result = osDirList(url.searchParams.get('path') ?? '', workspace.dirBaseGet());
+        jsonSend(res, statusByCode[result.code] ?? 400, result);
+        return;
+      }
+      if (req.method !== 'POST') {
+        res.setHeader('Allow', 'POST');
+        jsonSend(res, 405, { code: -1, data: null, message: `${route.slice(1)} answers POST only` });
+        return;
+      }
+      void jsonBodyRead(req)
+        .then((body) => {
+          const result = route === '/workspace/mount' ? workspace.mount(body) : workspace.unmount(body);
+          jsonSend(res, statusByCode[result.code] ?? 400, result);
+        })
+        .catch((error) => jsonSend(res, 400, { code: -1, data: null, message: String(error?.message ?? error) }));
+      return;
+    }
 
     if (route === '/file/create') {
       if (req.method !== 'POST') {
@@ -644,7 +779,7 @@ export function sourceFileCreate(
 ): { code: number; data: any; message: string } {
   const dirPath = sourcePathNormalize(body?.dirPath ?? '');
   const name = String(body?.name ?? '').trim();
-  if (!sourcePathIsRooted(dirPath)) return { code: -1, data: null, message: `dirPath must be a source path (~rootId/dir): ${dirPath}` };
+  if (!sourcePathIsRooted(dirPath)) return { code: -1, data: null, message: `dirPath must be a source path (~page:root/dir or ~root/dir): ${dirPath}` };
   if (!name || name.includes('/') || name.includes('\\') || name === '.' || name === '..') {
     return { code: -1, data: null, message: `name must be a file name without a folder: ${name}` };
   }
@@ -654,8 +789,17 @@ export function sourceFileCreate(
   else return { code: -1, data: null, message: 'text or dataBase64 is required' };
 
   const parsed = sourcePathParse(dirPath)!;
-  const rootRuleList = sourceRootList.filter((item) => item.kind === 'folder' && item.rootId === parsed.rootId);
-  if (rootRuleList.length === 0) return { code: -3, data: null, message: `no source folder has the root ${parsed.rootId}` };
+  // a local path names the root in whichever doc page has it, when one does
+  const docPageAliasList = [...new Set(sourceRootList
+    .filter((item) => item.rootAlias === parsed.rootAlias && (parsed.docPageAlias === '' || item.docPageAlias === parsed.docPageAlias))
+    .map((item) => item.docPageAlias))];
+  if (docPageAliasList.length > 1) {
+    return { code: -1, data: null, message: `${dirPath} names a root of several doc pages (${docPageAliasList.join(', ')}); write ~docPageAlias:${parsed.rootAlias}/...` };
+  }
+  const rootRuleList = sourceRootList.filter((item) => (
+    item.kind === 'folder' && item.rootAlias === parsed.rootAlias && item.docPageAlias === docPageAliasList[0]
+  ));
+  if (rootRuleList.length === 0) return { code: -3, data: null, message: `no source folder has the root ${sourcePathBuild(parsed.rootAlias, '', parsed.docPageAlias)}` };
   const dirAbs = path.resolve(rootRuleList[0].rootAbsPath, ...parsed.relPath.split('/').filter(Boolean));
   if (!pathIsInside(dirAbs, rootRuleList[0].rootAbsPath)) return { code: -1, data: null, message: `dirPath leaves its root: ${dirPath}` };
   // the folder must be collected by a folder rule: inside a recursive or
@@ -667,12 +811,12 @@ export function sourceFileCreate(
   const fileAbs = path.join(dirAbs, name);
   const relPath = path.relative(root.rootAbsPath, fileAbs);
   if (fs.existsSync(fileAbs) && body?.isOverwrite !== true) {
-    return { code: -2, data: null, message: `the file exists: ${sourcePathBuild(parsed.rootId, relPath)}` };
+    return { code: -2, data: null, message: `the file exists: ${sourcePathBuild(parsed.rootAlias, relPath, root.docPageAlias)}` };
   }
   fs.mkdirSync(dirAbs, { recursive: true });
   fs.writeFileSync(fileAbs, data);
   const entryExisting = fileEntryList.find((item) => item.absPath === fileAbs);
-  const entry = entryExisting ?? makeEntry(parsed.rootId, relPath, fileAbs, root.collect);
+  const entry = entryExisting ?? makeEntry(root.docPageAlias, parsed.rootAlias, relPath, fileAbs, root.collect);
   return { code: 0, data: { path: entry.internalPath, entry }, message: '' };
 }
 
@@ -694,6 +838,71 @@ function jsonBodyRead(req: IncomingMessage): Promise<any> {
     });
     req.on('error', reject);
   });
+}
+
+// ---------- temporary doc pages ----------
+// a doc page mounted from the Workspace tab of the settings panel: a root
+// doc page of the workspace for as long as this development server runs,
+// written in no file (doc_page_impl_source.md#temporary-doc-pages). by
+// config file, so every load of the configuration sees them.
+
+type WorkspaceMount = { alias?: string; dir?: string; file?: string; sidePanel?: string };
+const workspaceMountListByConfigFile = new Map<string, WorkspaceMount[]>();
+
+function workspaceMountListGet(configFile: string): WorkspaceMount[] {
+  return workspaceMountListByConfigFile.get(configFile) ?? [];
+}
+
+// the entry file a mount names, absolute
+function entryPathOfMount(mount: WorkspaceMount): string {
+  try {
+    return mount.dir ? docEntryFileFind(mount.dir) : path.resolve(mount.file ?? '');
+  } catch {
+    return '';
+  }
+}
+
+// a path typed in the page, absolute: "~/" is the home folder, a relative
+// path is read from dirBase (the workspace file's folder)
+export function osPathResolve(text: string, dirBase: string): string {
+  const textTrimmed = String(text ?? '').trim();
+  if (textTrimmed === '~' || textTrimmed.startsWith('~/')) return path.join(os.homedir(), textTrimmed.slice(1));
+  return path.resolve(dirBase, textTrimmed);
+}
+
+// GET os/list: the entries of one folder of the file system, for the
+// completion of a path typed in the page (lib/doc-os-path-complete.js).
+// folders first, then files, by name; a folder holding a doc page entry
+// (.doc-page/entry.yaml) is marked. at most OS_LIST_LIMIT entries.
+const OS_LIST_LIMIT = 400;
+
+export function osDirList(text: string, dirBase: string): { code: number; data: any; message: string } {
+  const dirAbs = osPathResolve(text === '' ? '.' : text, dirBase);
+  let itemList: fs.Dirent[];
+  try {
+    if (!fs.statSync(dirAbs).isDirectory()) return { code: -3, data: null, message: `not a folder: ${dirAbs}` };
+    itemList = fs.readdirSync(dirAbs, { withFileTypes: true });
+  } catch (error: any) {
+    return { code: -3, data: null, message: `the folder cannot be read: ${dirAbs} (${error?.code ?? error?.message ?? error})` };
+  }
+  const entryList: { name: string; kind: 'dir' | 'file'; isDocPage: boolean }[] = [];
+  for (const item of itemList) {
+    let isDir = item.isDirectory();
+    if (item.isSymbolicLink()) {
+      try {
+        isDir = fs.statSync(path.join(dirAbs, item.name)).isDirectory();
+      } catch {
+        continue;
+      }
+    } else if (!isDir && !item.isFile()) continue;
+    entryList.push({ name: item.name, kind: isDir ? 'dir' : 'file', isDocPage: false });
+  }
+  entryList.sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'dir' ? -1 : 1));
+  const entryListKept = entryList.slice(0, OS_LIST_LIMIT);
+  for (const entry of entryListKept) {
+    if (entry.kind === 'dir') entry.isDocPage = fs.existsSync(path.join(dirAbs, entry.name, DOC_PAGE_META_DIR_NAME, 'entry.yaml'));
+  }
+  return { code: 0, data: { dirPath: dirAbs, entryList: entryListKept, isTruncated: entryList.length > OS_LIST_LIMIT }, message: '' };
 }
 
 // ---------- config ----------
@@ -731,32 +940,39 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
   const config = mergeDeep(configBase, configLocal);
   configFormerKeysReject(config, configFile);
   assetConfigFormerReject(config, configFile);
-  const isEntryFileGiven = typeof config.docEntry?.file === 'string' && config.docEntry.file.trim() !== '';
-  const isEntryDirGiven = typeof config.docEntry?.dir === 'string' && config.docEntry.dir.trim() !== '';
-  if (isEntryFileGiven === isEntryDirGiven) {
+  // the workspace (doc_page_impl_source.md#the-workspace): config "workspace"
+  // names it (a workspace file, or its doc pages in place); config "docEntry"
+  // names one doc page, which the page serves as a virtual workspace
+  // holding it alone. exactly one of the two.
+  const isWorkspaceGiven = config.workspace !== undefined;
+  const isEntryGiven = config.docEntry !== undefined;
+  if (isWorkspaceGiven === isEntryGiven) {
     throw new Error(
-      `[doc-source] config "docEntry" must name either "dir", the folder of the doc page (its entry is found in`
-        + ` ${DOC_PAGE_META_DIR_NAME}/), or "file", the entry file itself: ${configFile}`,
+      `[doc-source] config names either "workspace" ({ file } or { docPageList }) or "docEntry" (one doc page: "dir",`
+        + ` its folder with its entry in ${DOC_PAGE_META_DIR_NAME}/, or "file", its entry file; "alias", "sidePanel" optional): ${configFile}`,
     );
   }
-  if (config.docEntry.sidePanel !== undefined && typeof config.docEntry.sidePanel !== 'string') {
-    throw new Error(`[doc-source] config "docEntry.sidePanel" must be a side panel id: ${configFile}`);
-  }
+  const workspaceSpec: DocWorkspaceSpec = isWorkspaceGiven
+    ? docWorkspaceSpecRead(config.workspace, configDir, configFile)
+    : { isVirtual: true, docPageList: [docPageSpecRead(config.docEntry, configDir, `config "docEntry" (${configFile})`)] };
+  // the doc pages mounted from the settings panel while this development
+  // server runs, after the ones written (doc_page_impl_source.md#temporary-doc-pages)
+  for (const mount of workspaceMountListGet(configFile)) workspaceSpec.docPageList.push({ ...mount, isTemporary: true });
 
-  // the document entry: its source rules, its page side panel inlined (so the
-  // browser side never touches the file system), its tag definitions, its
-  // config declarations. given as a folder, the entry is found in it
-  // (doc_page_impl_dir.md). design: doc_page_impl_side_panel.md#the-document-entry
-  const entryFile = isEntryDirGiven
-    ? docEntryFileFind(path.resolve(configDir, config.docEntry.dir))
-    : path.resolve(configDir, config.docEntry.file);
-  const entryLoaded = docEntryLoad(entryFile, configDir, config.docEntry.sidePanel ?? '');
+  // the workspace loaded: the source rules of its doc pages, the page side
+  // panel inlined (so the browser side never touches the file system), tag
+  // definitions, config declarations, and the doc pages with their
+  // includes. design: doc_page_impl_side_panel.md#the-document-entry
+  const entryLoaded = docWorkspaceLoad(workspaceSpec, configDir);
+  const entryFile = entryLoaded.entryFile;
   config.source = entryLoaded.sourceRuleList;
   config.sidePanel = { ...(config.sidePanel ?? {}), tree: entryLoaded.sidePanel?.tree };
+  config.workspace = entryLoaded.workspace;
   config.docEntry = {
-    ...config.docEntry,
-    // the entry file, relative to the config directory, also when a folder was given
+    // the first root doc page: its entry file, relative to the config
+    // directory, also when a folder was given, and its alias
     file: path.relative(configDir, entryFile).split(path.sep).join('/'),
+    alias: entryLoaded.docPageList[0].alias,
     sidePanel: entryLoaded.sidePanelId,
     sidePanelIdList: entryLoaded.sidePanelIdList,
     // the hash of every document yaml file the side panels were read from:
@@ -773,22 +989,24 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
       : {};
     config.variable = { ...variableBase, ...entryLoaded.variableByName };
   }
-  // every yaml file the entry reaches, for the edit api; not part of the
-  // data sent to the page
+  // every yaml file the workspace reaches, for the edit api; not part of
+  // the data sent to the page
   Object.defineProperty(config.docEntry, 'fileListLoaded', {
     enumerable: false,
     value: entryLoaded.fileListLoaded,
   });
-  // page values the entry supplies when config.yaml does not set them, so
-  // that a document used as the entry of another deployment brings its own
   // the doc pages loaded, for the asset service layer: absolute paths, not
   // part of the data sent to the page
   Object.defineProperty(config.docEntry, 'docPageList', {
     enumerable: false,
     value: entryLoaded.docPageList,
   });
+  // page values the workspace or its first doc page supplies when
+  // config.yaml does not set them, so that a doc page used in another
+  // deployment brings its own. a home document written in config.yaml is a
+  // full source path, or a local path of the first doc page
   config.siteTitle ??= entryLoaded.entry.title;
-  config.homeDoc ??= entryLoaded.entry.homeDoc;
+  config.homeDoc = config.homeDoc === undefined ? entryLoaded.entry.homeDoc : sourcePathFullGet(config.homeDoc, config.docEntry.alias);
   config.homeItem ??= entryLoaded.entry.homeItem;
 
   // tag definitions: the entry's (its own over what it includes), then the
@@ -820,6 +1038,7 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
   // reloads the page when one changes; the scan never collects them as
   // documents. not part of the data sent to the page.
   const fileListConfiguration = [configFile, configLocalFile, ...entryLoaded.fileListLoaded];
+  if (workspaceSpec.file) fileListConfiguration.push(workspaceSpec.file);
   if (config.tag.file) fileListConfiguration.push(path.resolve(configDir, config.tag.file));
   Object.defineProperty(config, 'fileListConfiguration', { enumerable: false, value: fileListConfiguration });
   return config;
@@ -891,27 +1110,28 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
     }
   };
 
-  const rootAbsPathById = new Map<string, string>();
-  for (const [ruleIndex, rule] of configDoc.source.entries()) {
+  const rootAbsPathByPath = new Map<string, string>();
+  for (const [ruleIndex, ruleRead] of configDoc.source.entries()) {
+    const rule = ruleWithFullPattern(ruleRead);
     if (rule.action === 'addFolder') {
-      const root = sourceRootOfRule(rule, configDir, rootAbsPathById);
+      const root = sourceRootOfRule(rule, configDir, rootAbsPathByPath);
       if (!fs.existsSync(root.absPath)) {
         console.warn(`[doc-source] addFolder: not found: ${root.absPath}`);
         continue;
       }
-      for (const fileAbs of walkFiles(root.absPath, root.collect !== 'direct')) {
-        const entry = makeEntry(root.rootId, path.relative(root.rootAbsPath, fileAbs), fileAbs, root.collect);
+      for (const fileAbs of walkFiles(root.absPath, root.collect !== 'direct', excludeMatcherOfRule(rule))) {
+        const entry = makeEntry(root.docPageAlias, root.rootAlias, path.relative(root.rootAbsPath, fileAbs), fileAbs, root.collect);
         tagSourceAddRuleApply(entry, rule, ruleIndex);
         configSourceAddRuleApply(entry, rule, ruleIndex);
         entryAdd(entry);
       }
     } else if (rule.action === 'addFile') {
-      const root = sourceRootOfRule(rule, configDir, rootAbsPathById);
+      const root = sourceRootOfRule(rule, configDir, rootAbsPathByPath);
       if (!fs.existsSync(root.absPath)) {
         console.warn(`[doc-source] addFile: not found: ${root.absPath}`);
         continue;
       }
-      const entry = makeEntry(root.rootId, path.relative(root.rootAbsPath, root.absPath), root.absPath, root.collect);
+      const entry = makeEntry(root.docPageAlias, root.rootAlias, path.relative(root.rootAbsPath, root.absPath), root.absPath, root.collect);
       tagSourceAddRuleApply(entry, rule, ruleIndex);
       configSourceAddRuleApply(entry, rule, ruleIndex);
       entryAdd(entry);
@@ -919,7 +1139,7 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
       const regex = globToRegex(rule.pattern);
       entryRemoveIf((e) => regex.test(e.name));
     } else if (rule.action === 'removeByPath') {
-      // a glob over the whole source path (~rootId/...)
+      // a glob over the whole source path (~docPageAlias:rootAlias/...)
       const regex = globToRegex(rule.pattern);
       entryRemoveIf((e) => regex.test(e.internalPath));
     } else if (tagSourceRuleIs(rule)) {
@@ -981,7 +1201,7 @@ function assetUsageDocListScan(entries: FileEntry[], docPathList: string[]): Ass
 function assetConfigGet(configDoc: any, configDir: string): AssetStoreConfig | undefined {
   const docPageList = configDoc.docEntry?.docPageList;
   if (!Array.isArray(docPageList)) return undefined;
-  const assetConfig = assetConfigOfDocPageListGet(docPageList, sourceRootAbsPathByIdGet(configDoc, configDir), configDir);
+  const assetConfig = assetConfigOfDocPageListGet(docPageList, sourceRootAbsPathByPathGet(configDoc, configDir), configDir);
   return assetConfig.docPageList.length > 0 ? assetConfig : undefined;
 }
 
@@ -991,13 +1211,13 @@ export function docAssetConfigLoad(configFile: string): AssetStoreConfig | undef
   return assetConfigGet(loadConfigDoc(configFile), path.dirname(configFile));
 }
 
-// root id -> the folder of the root, from the source rules
-function sourceRootAbsPathByIdGet(configDoc: any, configDir: string): Map<string, string> {
-  const rootAbsPathById = new Map<string, string>();
+// the full path of a root (~docPageAlias:rootAlias) -> its folder, from the source rules
+function sourceRootAbsPathByPathGet(configDoc: any, configDir: string): Map<string, string> {
+  const rootAbsPathByPath = new Map<string, string>();
   for (const root of sourceRootListGet(configDoc, configDir)) {
-    if (!rootAbsPathById.has(root.rootId)) rootAbsPathById.set(root.rootId, root.rootAbsPath);
+    if (!rootAbsPathByPath.has(root.rootPath)) rootAbsPathByPath.set(root.rootPath, root.rootAbsPath);
   }
-  return rootAbsPathById;
+  return rootAbsPathByPath;
 }
 
 // a file of the asset service layer: an asset store config file of a doc
@@ -1016,15 +1236,27 @@ function pathIsInside(filePath: string, folder: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
+// a rule whose "pattern" is a glob over source paths, written in its doc
+// page in the local form: the glob in the full form of that doc page
+function ruleWithFullPattern(rule: any): any {
+  const isByPath = rule?.action === 'removeByPath' || rule?.action === 'addTagByPath' || rule?.action === 'setConfigByPath';
+  if (!isByPath || typeof rule.pattern !== 'string') return rule;
+  return { ...rule, pattern: sourcePathPatternFullGet(rule.pattern, rule.docPageAlias ?? '') };
+}
+
 // the root an add rule declares. an addFolder rule must say how it collects
 // (collect: recursive | direct | referenced); a file of addFile is a
-// document. rootAbsPathById remembers the folder of every root id seen so
-// far: the first rule with an id fixes it (for addFile, the folder of the
-// file), a later rule with the same id must name a folder inside it.
-function sourceRootOfRule(rule: any, configDir: string, rootAbsPathById: Map<string, string>): SourceRoot {
+// document. rootAbsPathByPath remembers the folder of every root (by its
+// full path ~docPageAlias:rootAlias) seen so far: the first rule with an
+// alias fixes it (for addFile, the folder of the file), a later rule with
+// the same alias must name a folder inside it. a rule read without the
+// loader (a test, a host) may still write "rootId" for its alias.
+function sourceRootOfRule(rule: any, configDir: string, rootAbsPathByPath: Map<string, string>): SourceRoot {
   const absPath = path.resolve(configDir, rule.path);
-  const rootId: string = rule.rootId ?? path.basename(absPath);
   const kind = rule.action === 'addFile' ? 'file' : 'folder';
+  const rootAlias: string = String(rule.alias ?? rule.rootId ?? path.basename(kind === 'file' ? path.dirname(absPath) : absPath));
+  const docPageAlias: string = String(rule.docPageAlias ?? '');
+  const rootPath = sourcePathBuild(rootAlias, '', docPageAlias);
   let collect: SourceCollectMode = 'direct';
   if (kind === 'folder') {
     if (!sourceCollectModeList.includes(rule.collect)) {
@@ -1036,23 +1268,23 @@ function sourceRootOfRule(rule: any, configDir: string, rootAbsPathById: Map<str
     collect = rule.collect;
   }
   const rootAbsPathOwn = kind === 'file' ? path.dirname(absPath) : absPath;
-  const rootAbsPath = rootAbsPathById.get(rootId) ?? rootAbsPathOwn;
+  const rootAbsPath = rootAbsPathByPath.get(rootPath) ?? rootAbsPathOwn;
   if (!pathIsInside(rootAbsPathOwn, rootAbsPath)) {
     throw new Error(
-      `[doc-source] ${rule.action} "${rule.path}": root "${rootId}" is the folder ${rootAbsPath};`
-      + ' a later rule with the same rootId must name a path inside it',
+      `[doc-source] ${rule.action} "${rule.path}": the root ${rootPath} is the folder ${rootAbsPath};`
+      + ' a later rule with the same alias must name a path inside it',
     );
   }
-  rootAbsPathById.set(rootId, rootAbsPath);
-  return { rootId, absPath, rootAbsPath, kind, collect };
+  rootAbsPathByPath.set(rootPath, rootAbsPath);
+  return { docPageAlias, rootAlias, rootPath, absPath, rootAbsPath, kind, collect };
 }
 
 // the roots of every add rule, in rule order
 export function sourceRootListGet(configDoc: any, configDir: string): SourceRoot[] {
-  const rootAbsPathById = new Map<string, string>();
+  const rootAbsPathByPath = new Map<string, string>();
   return (configDoc.source as any[])
     .filter((rule) => rule.action === 'addFolder' || rule.action === 'addFile')
-    .map((rule) => sourceRootOfRule(rule, configDir, rootAbsPathById));
+    .map((rule) => sourceRootOfRule(rule, configDir, rootAbsPathByPath));
 }
 
 // the folders of the source: for every addFolder rule its folder, and for a
@@ -1061,16 +1293,17 @@ export function sourceRootListGet(configDoc: any, configDir: string): SourceRoot
 // inside ~root/sub and the folder itself).
 export function scanSourceDirs(configDoc: any, configDir: string): DirEntry[] {
   const dirByPath = new Map<string, DirEntry>();
-  const rootAbsPathById = new Map<string, string>();
-  for (const rule of configDoc.source as any[]) {
+  const rootAbsPathByPath = new Map<string, string>();
+  for (const ruleRead of configDoc.source as any[]) {
+    const rule = ruleWithFullPattern(ruleRead);
     if (rule.action === 'addFolder' || rule.action === 'addFile') {
-      const root = sourceRootOfRule(rule, configDir, rootAbsPathById);
+      const root = sourceRootOfRule(rule, configDir, rootAbsPathByPath);
       if (root.kind === 'file' || !fs.existsSync(root.absPath)) continue;
-      const dirAbsList = root.collect === 'direct' ? [root.absPath] : [root.absPath, ...walkDirs(root.absPath)];
+      const dirAbsList = root.collect === 'direct' ? [root.absPath] : [root.absPath, ...walkDirs(root.absPath, excludeMatcherOfRule(rule))];
       for (const dirAbs of dirAbsList) {
         const relPath = path.relative(root.rootAbsPath, dirAbs).split(path.sep).join('/');
-        const internalPath = sourcePathBuild(root.rootId, relPath);
-        dirByPath.set(internalPath, { rootId: root.rootId, relPath, absPath: dirAbs, internalPath, collect: root.collect });
+        const internalPath = sourcePathBuild(root.rootAlias, relPath, root.docPageAlias);
+        dirByPath.set(internalPath, { docPageAlias: root.docPageAlias, rootAlias: root.rootAlias, relPath, absPath: dirAbs, internalPath, collect: root.collect });
       }
     } else if (rule.action === 'removeByPath') {
       const regex = globToRegex(rule.pattern);
@@ -1087,16 +1320,17 @@ export function scanSourceDirs(configDoc: any, configDir: string): DirEntry[] {
   ));
 }
 
-function makeEntry(rootId: string, relPath: string, absPath: string, collect: SourceCollectMode): FileEntry {
+function makeEntry(docPageAlias: string, rootAlias: string, relPath: string, absPath: string, collect: SourceCollectMode): FileEntry {
   const relSlash = relPath.split(path.sep).join('/');
   const name = path.basename(absPath);
   return {
-    rootId,
+    docPageAlias,
+    rootAlias,
     relPath: relSlash,
     name,
     ext: path.extname(name).slice(1).toLowerCase(),
     absPath,
-    internalPath: sourcePathBuild(rootId, relSlash),
+    internalPath: sourcePathBuild(rootAlias, relSlash, docPageAlias),
     collect,
   };
 }
@@ -1104,26 +1338,39 @@ function makeEntry(rootId: string, relPath: string, absPath: string, collect: So
 // the metadata folder of a doc page (doc_page_impl_dir.md) is never source
 const dirNameSkipSet = new Set(['.git', 'node_modules', DOC_PAGE_META_DIR_NAME]);
 
-function walkFiles(dirAbs: string, isRecursive: boolean): string[] {
+// the "exclude" patterns of an addFolder rule (doc-source-exclude.ts), or
+// undefined without any
+function excludeMatcherOfRule(rule: any): ExcludeMatcher | undefined {
+  return Array.isArray(rule.exclude) && rule.exclude.length > 0 ? excludeMatcherBuild(rule.exclude) : undefined;
+}
+
+// the files below dirAbs. an excluded folder is not entered, so nothing
+// inside it can be collected again (as in git); relDir is the path of
+// dirAbs from the rule's folder
+function walkFiles(dirAbs: string, isRecursive: boolean, exclude?: ExcludeMatcher, relDir = ''): string[] {
   const result: string[] = [];
   for (const item of fs.readdirSync(dirAbs, { withFileTypes: true })) {
     if (dirNameSkipSet.has(item.name)) continue;
     const itemAbs = path.join(dirAbs, item.name);
+    const relPath = relDir === '' ? item.name : `${relDir}/${item.name}`;
     if (item.isDirectory()) {
-      if (isRecursive) result.push(...walkFiles(itemAbs, true));
+      if (!isRecursive || exclude?.isExcluded(relPath, true)) continue;
+      result.push(...walkFiles(itemAbs, true, exclude, relPath));
     } else if (item.isFile()) {
-      result.push(itemAbs);
+      if (!exclude?.isExcluded(relPath, false)) result.push(itemAbs);
     }
   }
   return result;
 }
 
-function walkDirs(dirAbs: string): string[] {
+function walkDirs(dirAbs: string, exclude?: ExcludeMatcher, relDir = ''): string[] {
   const result: string[] = [];
   for (const item of fs.readdirSync(dirAbs, { withFileTypes: true })) {
     if (!item.isDirectory() || dirNameSkipSet.has(item.name)) continue;
+    const relPath = relDir === '' ? item.name : `${relDir}/${item.name}`;
+    if (exclude?.isExcluded(relPath, true)) continue;
     const itemAbs = path.join(dirAbs, item.name);
-    result.push(itemAbs, ...walkDirs(itemAbs));
+    result.push(itemAbs, ...walkDirs(itemAbs, exclude, relPath));
   }
   return result;
 }
@@ -1194,7 +1441,7 @@ export function pruneSourceToSidePanel(
   const visit = (nodes: any[]) => {
     for (const node of nodes) {
       if (node?.doc !== undefined) {
-        for (const entry of resolveSourceReference(String(node.doc), entries)) entryRetain(entry);
+        for (const entry of resolveSourceReference(String(node.doc), node.docPageAlias, sourceIndex)) entryRetain(entry);
       }
       if (node?.sourceFolder !== undefined || node?.sourceRoot !== undefined) {
         for (const entry of sourceFolderEntryListGet(node, entries)) entryRetain(entry);
@@ -1218,7 +1465,7 @@ export function pruneSourceToSidePanel(
           + ' Files referenced by retained documents are now discovered automatically; remove the list.',
         );
         for (const reference of node.sourceDependencies.map(String)) {
-          const entryList = resolveSourceReference(reference, entries);
+          const entryList = resolveSourceReference(reference, node.docPageAlias, sourceIndex);
           if (entryList.length === 0) {
             console.warn(`[doc-source] sourceDependencies entry not in the collected source: ${reference}`);
           }
@@ -1239,8 +1486,9 @@ export function pruneSourceToSidePanel(
 }
 
 // same rules as at runtime: documents and assets through docTargetResolve
-// (DocSourceStore.resolveLink), source targets as exact internal paths
-// (SourceLink).
+// (DocSourceStore.resolveLink), source targets as source paths (SourceLink),
+// local to the document that names them. every match is retained: a build
+// cannot know which the reader will pick.
 function dependencyEntryListGet(
   dependency: DocSourceDependency,
   sourceIndex: any,
@@ -1248,16 +1496,18 @@ function dependencyEntryListGet(
 ): FileEntry[] {
   const declared = `${sourceLabel}: ${dependency.construct} "${dependency.target}"`;
   if (dependency.kind === 'source') {
-    const entry = sourceIndex.entryByInternalPath.get(sourcePathNormalize(dependency.target));
-    if (!entry) {
+    const entryList = sourcePathIsRooted(dependency.target)
+      ? (docTargetResolve(dependency.target, dependency.sourcePath, sourceIndex, { isLocalFirst: false }) as { entryList: FileEntry[] }).entryList
+      : [];
+    if (entryList.length === 0) {
       console.warn(
-        `[doc-source] ${declared} is not an exact source path (~rootId/...) of the collected source;`
+        `[doc-source] ${declared} is not a source path (~root/... or ~page:root/...) of the collected source;`
         + ' nothing was retained for it.',
       );
     }
-    return entry ? [entry] : [];
+    return entryList;
   }
-  const { entryList } = docTargetResolve(dependency.target, dependency.sourcePath, sourceIndex) as {
+  const { entryList } = docTargetResolve(dependency.target, dependency.sourcePath, sourceIndex, { isLocalFirst: false }) as {
     entryList: FileEntry[];
   };
   if (entryList.length === 0 && dependency.kind === 'document') {
@@ -1272,27 +1522,22 @@ function dependencyEntryListGet(
   return entryList;
 }
 
-// matches page-tree.js convertSourceFolder: the pages of a source folder;
-// files collected for reference only are not pages
+// matches page-tree.js convertSourceFolder: the pages of a source folder
+// (the loader wrote it in the full form of the node's doc page); files
+// collected for reference only are not pages
 function sourceFolderEntryListGet(node: any, entries: FileEntry[]): FileEntry[] {
   const pathFolder = node.sourceFolder !== undefined
-    ? sourcePathNormalize(String(node.sourceFolder))
-    : sourcePathBuild(String(node.sourceRoot));
+    ? sourcePathFullGet(sourcePathNormalize(String(node.sourceFolder)), node.docPageAlias ?? '')
+    : sourcePathBuild(String(node.sourceRoot), '', node.docPageAlias ?? '');
   if (!sourcePathIsRooted(pathFolder)) return [];
   return entries.filter((entry) => entry.collect !== 'referenced' && sourcePathIsInside(entry.internalPath, pathFolder));
 }
 
-// matches page-tree.js resolveDocEntries
-function resolveSourceReference(reference: string, entries: FileEntry[]): FileEntry[] {
-  if (sourcePathIsRooted(reference)) {
-    const pathWanted = sourcePathNormalize(reference);
-    return entries.filter((entry) => entry.internalPath === pathWanted);
-  }
-  if (reference.includes('/')) {
-    const suffix = `/${reference.replace(/^\.\//, '')}`;
-    return entries.filter((entry) => entry.internalPath.endsWith(suffix));
-  }
-  return entries.filter((entry) => entry.name === reference);
+// matches page-tree.js resolveDocEntries: the item's doc page first, every
+// match otherwise (the page shows them as candidates; a build keeps them)
+function resolveSourceReference(reference: string, docPageAlias: string | undefined, sourceIndex: any): FileEntry[] {
+  const { entryList } = docTargetResolve(reference.replace(/^\.\//, ''), '', sourceIndex, { docPageAlias: docPageAlias ?? '' }) as { entryList: FileEntry[] };
+  return entryList;
 }
 
 // ---------- module generation ----------
@@ -1305,7 +1550,8 @@ export function fileMetadataBuild(entry: FileEntry) {
   const content = fs.readFileSync(entry.absPath);
   const text = entry.ext === 'md' || entry.ext === 'mdx' ? content.toString('utf-8') : '';
   return {
-    rootId: entry.rootId,
+    docPageAlias: entry.docPageAlias,
+    rootAlias: entry.rootAlias,
     relPath: entry.relPath,
     name: entry.name,
     ext: entry.ext,
@@ -1320,7 +1566,7 @@ export function fileMetadataBuild(entry: FileEntry) {
 }
 
 export function dirMetadataBuild(dir: DirEntry) {
-  return { rootId: dir.rootId, relPath: dir.relPath, internalPath: dir.internalPath, collect: dir.collect };
+  return { docPageAlias: dir.docPageAlias, rootAlias: dir.rootAlias, relPath: dir.relPath, internalPath: dir.internalPath, collect: dir.collect };
 }
 
 function textContentHashGet(content: string | Buffer): string {

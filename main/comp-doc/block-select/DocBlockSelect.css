@@ -89,7 +89,6 @@
 
 .doc-block-transfer-doc-path {
   overflow: hidden;
-  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.72rem;
   text-overflow: ellipsis;
   white-space: nowrap;

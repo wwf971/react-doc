@@ -6,16 +6,20 @@ language: en
 
 ## The include node
 
-A folder node of any side panel includes a side panel declared elsewhere through `include`. The reference is a file path, meaning the default side panel of that file, or a mapping that names the file and the side panel. The path of another doc page may be its folder: the page finds the entry in it (`.doc-page/entry.yaml`):
+A folder node of any side panel includes a side panel declared elsewhere through `include`. The reference is a file path, meaning the default side panel of that file, or a mapping that names the file and the side panel. The path of another doc page may be its folder: the page finds the entry in it (`.doc-page/entry.yaml`). When the file is the entry of another doc page, the reference also gives that doc page its **alias** in the workspace:
 
 ```yaml
 - id: sub-doc
-  include: ../sub-doc                              # default side panel of the doc page's entry
+  include: { dir: ../sub-doc, alias: sub }         # a doc page by its folder, as "sub"
 
 - id: sub-doc
   include:
     file: ../sub-doc/.doc-page/entry.yaml          # the entry file itself
     sidePanel: main                                # one side panel of it
+    alias: sub
+
+- id: sub-doc
+  include: ../sub-doc                              # no alias: the folder name, "sub-doc"
 
 - id: other
   include:
@@ -32,8 +36,9 @@ Loading a yaml file loads everything in it, once:
 - Its tag definitions are merged below the definitions of the including file, so the including document decides when both define the same tag.
 - Its config declarations join the doc page config layer below those of the including document, which decides when both set a key.
 - Its other side panels become available for inclusion.
+- The doc page joins the workspace under the alias of the include, and its asset folders come along.
 
-Including the same side panel from two places, as the `main` and `compact` side panels of the demonstration entry do, reads the file once.
+Including the same side panel from two places, as the `main` and `compact` side panels of the demonstration entry do, reads the file once: a doc page is one thing however often it is mentioned, identified by its entry file. Its alias is the one of its first mention, a root-level mention of the workspace file first; a later mention under another alias is reported as a warning (the **Workspace** tab of the settings panel lists it, with the mention drawn as a dashed edge) and ignored. Two different doc pages under one alias stop the page from loading.
 
 ## Editing labels
 

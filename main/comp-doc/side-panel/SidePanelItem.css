@@ -262,3 +262,134 @@ body[data-side-panel-dragging] #nd-sidebar-mobile {
   gap: 4px;
 }
 
+
+/* ---------- doc page sections (DocSidePanelSection) ----------
+   a workspace of several root doc pages: one section per doc page, its
+   alias as a muted heading in the type of the sidebar separators, its tree
+   below at the tree's own depth. the toolbar above the first heading holds
+   icon buttons shaped like the sidebar rows (rounded, the accent on hover). */
+.doc-side-panel-section + .doc-side-panel-section {
+  margin-top: 0.9rem;
+}
+
+.doc-side-panel-section-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 0 0.35rem;
+  padding: 0 0.25rem 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--color-fd-border);
+}
+
+.doc-side-panel-section-toolbar-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.doc-side-panel-section-tool {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md, 0.375rem);
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+}
+
+.doc-side-panel-section-tool svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.doc-side-panel-section-tool:hover:not(:disabled),
+.doc-side-panel-section-tool:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--color-fd-accent) 70%, transparent);
+  color: var(--color-fd-accent-foreground);
+  outline: none;
+}
+
+.doc-side-panel-section-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.doc-side-panel-section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  min-height: 1.75rem;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: var(--radius-md, 0.375rem);
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+  font-size: 0.8rem;
+  text-align: start;
+  transition: background-color 0.12s, color 0.12s;
+}
+
+.doc-side-panel-section-head:hover,
+.doc-side-panel-section-head:focus-visible {
+  background: color-mix(in srgb, var(--color-fd-accent) 50%, transparent);
+  color: var(--color-fd-foreground);
+  outline: none;
+}
+
+.doc-side-panel-section-alias {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  opacity: 0.85;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-side-panel-section-badge {
+  flex: 0 0 auto;
+  padding: 0 0.3rem;
+  border: 1px solid color-mix(in srgb, #d97706 45%, var(--color-fd-border));
+  border-radius: 999px;
+  color: #b45309;
+  font-size: 0.62rem;
+  line-height: 1.1rem;
+}
+
+.doc-side-panel-section-chevron {
+  flex: 0 0 auto;
+  width: 0.85rem;
+  height: 0.85rem;
+  margin-inline-start: auto;
+  opacity: 0;
+  transition: transform 0.15s, opacity 0.12s;
+}
+
+.doc-side-panel-section-head:hover .doc-side-panel-section-chevron,
+.doc-side-panel-section-head:focus-visible .doc-side-panel-section-chevron,
+.doc-side-panel-section:not([data-open]) .doc-side-panel-section-chevron {
+  opacity: 1;
+}
+
+.doc-side-panel-section:not([data-open]) .doc-side-panel-section-chevron {
+  transform: rotate(-90deg);
+}
+
+.doc-side-panel-section-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding-top: 0.125rem;
+}

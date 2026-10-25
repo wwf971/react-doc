@@ -8,7 +8,7 @@ import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolv
 // lane icons of a diagram, a FileDownload): their bytes travel with the
 // built page as data urls (doc_page_impl_source.md#files-in-a-build).
 // a reference resolves like every file reference of the page: a source path
-// (~rootId/...), a path relative to the document, a suffix, a file name
+// (~root/... or ~page:root/...), a path relative to the document, a suffix, a file name
 // (doc-target-resolve.js); a file outside the collected source is still
 // found on disk relative to the document or the config folder.
 

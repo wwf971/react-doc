@@ -61,7 +61,7 @@ export const SourceFilePrompt = observer(function SourceFilePrompt() {
         value={prompt.dirPath}
         spec={{ kind: 'dir' }}
         label="folder"
-        placeholder="~rootId/folder"
+        placeholder="~page:root/folder"
         isDisabled={isSubmitting}
         isTreeCollapsible
         onChange={(text) => sourceFileStore.promptDirPathSet(text)}

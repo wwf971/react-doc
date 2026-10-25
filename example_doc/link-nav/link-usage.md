@@ -22,7 +22,7 @@ Each of these forms becomes a navigable link, in `.md` and `.mdx`:
 [[database.md]]                       wiki-style link
 ```
 
-The target can be a file name, a path relative to the current document (`./sub/notes.md`), or a source path (`~example/database.md`, the root id after `~`). When a file name matches several documents, the link shows a list to choose from. More forms are collected in [Link Test Cases](links.mdx).
+The target can be a file name, a path relative to the current document (`./sub/notes.md`), or a source path (`~example/database.md`: the alias of a root of this doc page after `~`, then the path inside it). A file name or a path suffix is looked up in this document's own doc page first; only when it has no such file do the other doc pages of the workspace answer. A document of another doc page is named in the full form, the doc page's alias first: `~sub:sub-doc/sub-doc.md` opens [the sub document](~sub:sub-doc/sub-doc.md). When a file name matches several documents, the link shows a list to choose from. More forms are collected in [Link Test Cases](links.mdx).
 
 ## Linking to a section
 

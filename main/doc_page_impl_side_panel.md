@@ -24,7 +24,7 @@ every item label = SidePanelItemHost
 
 ## The document entry
 
-A document is described by one YAML file, its **entry**, named in `config.yaml` by `docEntry.file`, or found in the doc page folder named by `docEntry.dir`. The entry declares everything that makes the document a whole: the source rules that collect its files, the definitions of its tags, its config, and its side panels. A document is therefore self-contained: another document includes it by naming its entry (or its folder), and a deployment shows it alone by naming the same in its `config.yaml`. The entry file carries the marker `docEntry`; by convention it is `.doc-page/entry.yaml` in the doc page folder, with the files it names beside it ([The doc page folder](doc_page_impl_dir.md)), or a file named `xxx-entry.yaml`; the loader warns about an entry named otherwise.
+A document is described by one YAML file, its **entry**, named by a workspace file as a root-level doc page, by `config.yaml` as the one doc page of a virtual workspace (`docEntry.file`, or `docEntry.dir`, the doc page folder the entry is found in), or by an include ([the workspace](doc_page_impl_source.md#the-workspace)). The entry declares everything that makes the document a whole: the source rules that collect its files, the definitions of its tags, its config, and its side panels. A document is therefore self-contained: another document includes it by naming its entry (or its folder) under an alias, and a deployment shows it alone by naming the same in its workspace. The entry file carries the marker `docEntry`; by convention it is `.doc-page/entry.yaml` in the doc page folder, with the files it names beside it ([The doc page folder](doc_page_impl_dir.md)), or a file named `xxx-entry.yaml`; the loader warns about an entry named otherwise.
 
 Source rules decide which files exist. A side panel is a way of picking things from that collected source and arranging them as a tree: documents, source folders, component panels, virtual folders. It is a resource, not a unique page setting: a document declares as many side panels as it needs, each addressed by an id, and a node of any side panel includes another one, of the same file or of another document. The included side panel's `tree` becomes the node's children and its `root` configures the node. A part's side panel, or a whole sub document, is thus an independent resource that a larger side panel includes.
 
@@ -35,10 +35,10 @@ The entry and every YAML file it reaches share one grammar, the document yaml fi
 ```yaml
 docEntry:                      # marks the file as the entry of a document: true, or a mapping
   title: Guide                 #   siteTitle, when config.yaml sets none
-  homeDoc: ~guide/overview.md  #   homeDoc / homeItem, when config.yaml sets none
+  homeDoc: ~guide/overview.md  #   homeDoc / homeItem, when config.yaml and the workspace set none
 source:                        # optional: a rule list, { rules: [...] }, or { file: ./source.yaml }
   - action: addFolder
-    rootId: guide
+    alias: guide               # the root, ~guide/... (doc_page_impl_source.md#source-paths)
     path: .                    # relative to the file holding the rules
     collect: recursive         # recursive | direct | referenced (doc_page_impl_source.md)
 tag:                           # optional: { defineById: {...} } or { file: ./tag.yaml }
@@ -55,7 +55,7 @@ sidePanelById:
     tree:
       - doc: ~guide/setup.md
       - id: reference
-        include: ../reference                      # a side panel of another document, by its folder
+        include: { dir: ../reference, alias: ref } # another doc page, by its folder, aliased "ref" in the workspace
   compact:                     # a side panel declared in another file, by reference
     file: ./panels.yaml
     sidePanel: compact
@@ -63,15 +63,20 @@ sidePanelById:
 
 Any other top-level key is an error naming the file, as are the former forms (a top-level `tree` or `root`, a `sidePanel` section, `childrenFile` on a node), so that a file of the old format fails with the hint it needs.
 
-A **side-panel reference** names one side panel. A string is a file path, relative to the file holding the reference, and means the default side panel of that file; the path of a folder means the entry found in that doc page folder ([finding the entry](doc_page_impl_dir.md#finding-the-entry-from-a-folder)). A mapping `{ file?, sidePanel? }` names the file (the file holding the reference when absent) and the side panel id (the file's default when absent). The default side panel of a file is `sidePanelDefault`, or the only side panel it declares; a reference that needs the default of a file declaring several without `sidePanelDefault` is an error. References appear as the `include` property of a tree node, as an alias value of `sidePanelById`, and, without `file`, as `docEntry.sidePanel` in `config.yaml`.
+A **side-panel reference** names one side panel. A string is a file path, relative to the file holding the reference, and means the default side panel of that file; the path of a folder means the entry found in that doc page folder ([finding the entry](doc_page_impl_dir.md#finding-the-entry-from-a-folder)). A mapping `{ file? | dir?, sidePanel?, alias? }` names the file (`file`, or `dir` for a doc page folder; the file holding the reference when absent) and the side panel id (the file's default when absent); when the file is the entry of another doc page, `alias` is the name that doc page gets in the workspace (its folder name when absent, [doc pages reached by includes](doc_page_impl_source.md#doc-pages-reached-by-includes)), and `alias` on a reference to anything else is an error. The default side panel of a file is `sidePanelDefault`, or the only side panel it declares; a reference that needs the default of a file declaring several without `sidePanelDefault` is an error. References appear as the `include` property of a tree node and as an alias value of `sidePanelById`.
 
 ### Loading
 
-Loading a file loads everything in it, once, and the entry is loaded first:
+Loading a file loads everything in it, once, and the entries of the root-level doc pages are loaded first, in workspace order:
 
 ```text
 file loaded (doc-entry.ts fileLoad)
-  -> "source": rules rebased from the file holding them to the config directory,
+  -> an entry: the doc page registered under the alias of the reference that reached it
+               (a root-level doc page keeps the alias of the workspace); mentioned again,
+               it only records the mention
+  -> "source": rules rebased from the file holding them to the config directory, each
+               root under its alias (the folder name when absent; a second folder under
+               one alias is an error), each rule marked with the doc page's alias,
                appended to the rules of the page
   -> "tag":    definitions merged; a tag already defined by a file loaded earlier
                keeps that definition, so the entry decides over what it includes
@@ -80,10 +85,13 @@ file loaded (doc-entry.ts fileLoad)
                are stacked below those of the including one
   -> every side panel of sidePanelById: tree expanded, "include" references resolved
      by loading the referenced file (its source and tag come along) and taking
-     the referenced side panel; a side panel is loaded once and shared
+     the referenced side panel; a side panel is loaded once and shared; every node
+     marked with the doc page it is written in (docPageAlias) and its source paths
+     (doc, sourceFolder; sourceRoot becomes a sourceFolder) written in the full form
+     of that doc page, the root of an included side panel likewise
 
 source rules of the page =
-  "source" of the entry
+  "source" of each root-level entry, in workspace order
   + "source" of each file reached, in order of appearance: sidePanelById in key
     order, tree depth-first
 ```
@@ -94,15 +102,16 @@ A cycle of inclusions is detected per side panel, not per file: two side panels 
 
 ### What the page receives
 
-`config.yaml` names the entry, or the doc page folder it is found in, and, optionally, which of its side panels the page shows:
+`config.yaml` names a workspace file, or one entry (or the doc page folder it is found in) with, optionally, its alias and which of its side panels the page shows ([the workspace](doc_page_impl_source.md#the-workspace)):
 
 ```yaml
 docEntry:
   dir: ../docs/guide            # or  file: ../docs/guide/.doc-page/entry.yaml
+  alias: guide                  # optional: its alias in the (virtual) workspace; the folder name when absent
   sidePanel: compact            # optional: a side panel of the entry other than its default
 ```
 
-The loader fills `configDoc` with what runtime code reads today: `source` (every rule), `sidePanel.tree` (the selected side panel, every inclusion inlined, every node annotated with where it is written: `textSource`, `nodeSource` and, on a node with `include`, `includeSource`; see [Editing a label in place](#editing-a-label-in-place) and [Moving an item](#moving-an-item)), `tag.defineById` (the entry's definitions, then the `tag` of `config.yaml` over them), and `siteTitle` / `homeDoc` / `homeItem` from the entry when `config.yaml` sets none. `configDoc.docEntry` carries the entry file (`file`, also when a folder was named), the resolved side panel id, `sidePanelIdList`, `configDeclarationList` (the declarations of the doc page config layer, in stack order, see [Config system](doc_page_impl_config.md#the-doc-page-layer)), and `fileHashByFile`: the content hash of every document yaml file as it was loaded, by its path relative to the config directory, so a write from the page can be refused when a file changed since. Runtime code receives only this inlined shape, so a change of the file grammar stays in the loader (`plugin/doc-entry.ts`). The same side panel used in two places (a sub document included by the page side panel and by a compact one) is one loaded resource.
+The loader fills `configDoc` with what runtime code reads today: `source` (every rule, each with its `alias` and `docPageAlias`), `sidePanel.tree` (the side panel shown: of one root doc page its own, of several one section per doc page, [a workspace of several doc pages](#a-workspace-of-several-doc-pages); every inclusion inlined, every node annotated with its doc page, `docPageAlias`, and with where it is written: `textSource`, `nodeSource` and, on a node with `include`, `includeSource` with the `docPageAlias` of an included doc page; see [Editing a label in place](#editing-a-label-in-place) and [Moving an item](#moving-an-item)), `tag.defineById` (the entries' definitions, then the `tag` of `config.yaml` over them), `workspace` (the doc pages and their mentions, [what the page receives](doc_page_impl_source.md#what-the-page-receives)), and `siteTitle` / `homeDoc` / `homeItem` from the workspace or the first entry when `config.yaml` sets none. `configDoc.docEntry` carries the first root doc page's entry file (`file`, also when a folder was named) and `alias`, the resolved side panel id, `sidePanelIdList`, `configDeclarationList` (the declarations of the doc page config layer, in stack order, see [Config system](doc_page_impl_config.md#the-doc-page-layer)), and `fileHashByFile`: the content hash of every document yaml file as it was loaded, by its path relative to the config directory, so a write from the page can be refused when a file changed since. Runtime code receives only this inlined shape, so a change of the file grammar stays in the loader (`plugin/doc-entry.ts`). The same side panel used in two places (a sub document included by the page side panel and by a compact one) is one loaded resource, and the doc page it belongs to is one doc page of the workspace.
 
 ## Tree format
 
@@ -137,7 +146,7 @@ Node forms:
 
 - `doc`: a document item. With `children` it becomes a folder bound to that document.
 - `text` + `children`: a virtual folder unrelated to the disk layout.
-- `sourceFolder`: the generated tree below any source folder (`~rootId/dir`); files of a `referenced` folder are not pages and are left out. `sourceRoot: rootId` is a shorthand for a complete root. Without `text` or `display`, the generated children are placed directly in the parent.
+- `sourceFolder`: the generated tree below any source folder (`~root/dir`, a root of the doc page the node is written in); files of a `referenced` folder are not pages and are left out. `sourceRoot: root` is a shorthand for a complete root. Without `text` or `display`, the generated children are placed directly in the parent.
 - `panel.component` + `panel.data`: a leaf whose main panel is rendered by a registered component. It receives the unified `{ data, config, onEvent }` props, with the item and runtime metadata in `config`.
 - `separator`: a visual separator.
 
@@ -145,7 +154,7 @@ Every node can set a stable `id`, a custom `text`, a custom `display` component,
 
 ## Selecting documents
 
-A `doc` value is an exact source path (`~rootId/...`), a path suffix, or a file name. When a suffix or name matches several files, the first match in source order is used and the document page shows a warning listing every match. A `doc` that matches nothing stays in the tree as a missing-document item, which shows a clear error instead of disappearing.
+A `doc` value is a source path (`~root/...`, a root of the node's doc page; `~page:root/...` for any doc page of the workspace), a path suffix, or a file name; a suffix or a name is looked up in the node's doc page first ([target resolution](doc_page_impl_nav.md#link-recognition-and-target-resolution)). When a suffix or name matches several files, the first match in source order is used and the document page shows a warning listing every match. A `doc` that matches nothing stays in the tree as a missing-document item, which shows a clear error instead of disappearing.
 
 ## Including other side panels
 
@@ -155,7 +164,7 @@ A folder node includes another side panel through `include`, a [side-panel refer
 # guide-entry.yaml, side panel "main"
 tree:
   - id: codeapp-development
-    include: ./codeapp/codeapp-entry.yaml          # a self-contained sub document
+    include: { file: ./codeapp/codeapp-entry.yaml, alias: codeapp }   # a self-contained sub document, aliased
   - id: appendix
     text: Appendix
     include: { file: ./panels.yaml, sidePanel: appendix }
@@ -168,7 +177,7 @@ tree:
 # codeapp/codeapp-entry.yaml
 docEntry: true
 source:
-  - { action: addFolder, rootId: codeapp-dev, path: ., collect: recursive }
+  - { action: addFolder, alias: codeapp-dev, path: ., collect: recursive }
 sidePanelById:
   main:
     root:                    # properties of the including node itself
@@ -459,15 +468,32 @@ Document items and folders bound to documents receive stable item routes, while 
 
 The default folder gesture (an inactive label navigates, the active label toggles, the chevron only toggles) lives in `DocSidebarFolder`. Consumers replace it through runtime `config.sidePanel.components.Folder` without replacing route resolution or history. See [Indexed-folder interaction](doc_page_impl_nav.md#indexed-folder-interaction).
 
+## A workspace of several doc pages
+
+A workspace with one root doc page shows that doc page's side panel, as if it were served alone. With several (written in the workspace file or [mounted for now](doc_page_impl_source.md#temporary-doc-pages)), the side panel shows them one after the other, each as a **section**: the alias of the doc page as a muted heading, then its own side panel at the depth of the tree's root, so its items look as they do alone. The workspace only arranges the side panels; a doc page's tree stays in its entry.
+
+```text
+WORKSPACE                 [⇕] [⇳]      ◄ toolbar: unfold all, fold all (more actions join here)
+example                          ⌄     ◄ the alias, muted; a click folds the section
+  Example Docs
+  Document Model
+  ...
+second  (temporary)              ⌄
+  Workspace Sections
+```
+
+The loader makes a node per root doc page with `docPageSection` `{ alias, title, isTemporary, isFirst }`, its children the doc page's tree; the root properties of that side panel that reach the documents (`tags`, `config`) stay on it, its label and bound document do not (the alias is the heading). `page-tree.js` keeps the mark on the folder it builds, and `DocSidebarFolder` hands such a folder to `DocSidePanelSection` (`comp-doc/side-panel/`), which renders no fumadocs folder (a folder would count as a level and indent the items). A section folds like a folder, its open state kept in `DocSidePanelStore.folderOpenById` by its item id (`doc-page-{alias}`); the first section carries the toolbar above its heading, whose buttons are `sectionOpenAllSet(true | false)`, each disabled when there is nothing to change. The items of a section move, are renamed and dragged as anywhere else.
+
 ## Implementation files
 
 ```text
-frontend/plugin/doc-entry.ts             load the entry and every document yaml file it reaches:
-                                         side panels and their includes, "source" and "tag"
-                                         sections, textSource / nodeSource / includeSource
+frontend/plugin/doc-entry.ts             load the workspace: its doc pages (aliases, mentions), the
+                                         entries and every document yaml file they reach: side
+                                         panels and their includes, "source" and "tag" sections,
+                                         docPageAlias / textSource / nodeSource / includeSource
                                          annotation, file hashes
-frontend/plugin/doc-source.ts            config.yaml docEntry -> configDoc, watch the loaded
-                                         files, report a label write or a move as data
+frontend/plugin/doc-source.ts            config.yaml workspace / docEntry -> configDoc, watch the
+                                         loaded files, report a label write or a move as data
 frontend/plugin/doc-side-panel-text.ts   a label change as one line operation of its yaml file
 frontend/plugin/doc-side-panel-move.ts   a move as line operations of one or two yaml files
 frontend/plugin/doc-yaml-edit.ts         the in-place yaml edit they are built on (node ranges ->
@@ -489,5 +515,6 @@ comp-doc/side-panel/SidePanelDragOverlay.jsx  drop indicator, ghost label, move 
 comp-doc/side-panel/SidePanelMovePicker.jsx   the move picker
 comp-doc/side-panel/SidePanelItemContextMenu.jsx  right-click menu of an item: Rename, Move…
 comp-doc/side-panel/DocSidebarFolder.jsx   default folder gesture, open state by item id
+comp-doc/side-panel/DocSidePanelSection.jsx  a root doc page of a workspace of several: heading, toolbar
 comp-mdx/tag/TagLabel.jsx, TagList.jsx     tag display
 ```

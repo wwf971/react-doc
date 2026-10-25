@@ -46,6 +46,18 @@ export function docEditApiCreate(endpoint) {
       });
     },
 
+    // one change of the workspace file (plugin/doc-workspace-edit.ts);
+    // answers { hash } of the file written
+    //   request    { action: 'itemFieldSet' | 'itemPathSet' | 'itemAdd' | 'itemRemove' | 'itemMove' | 'titleSet', ... }
+    //   hashBase   configDoc.workspace.fileHash, the version the page shows
+    workspaceEdit(request, hashBase) {
+      return requestSend('/workspace/edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request, hashBase }),
+      });
+    },
+
     // rewrites the label of one side-panel item in its yaml file
     // (plugin/doc-side-panel-text.ts); answers { file, fieldName, text }
     //   file, nodePath   the item's textSource, annotated by the plugin

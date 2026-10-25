@@ -35,13 +35,13 @@ function fixtureCreate() {
     '  title: Fixture',
     'source:',
     '  - action: addFolder',
-    '    rootId: docs',
+    '    alias: docs',
     '    path: docs',
     '    collect: recursive',
     '  # a yaml file of the document is configuration, never a document,',
     '  # whatever the rules say',
     '  - action: addFile',
-    '    rootId: cfg',
+    '    alias: cfg',
     '    path: ./side-panel.yaml',
     'sidePanelById:',
     '  main:',
@@ -68,6 +68,7 @@ function fixtureCreate() {
   fs.writeFileSync(path.join(dir, 'config.yaml'), [
     'docEntry:',
     '  file: ./fixture-entry.yaml',
+    '  alias: fx',
     '',
   ].join('\n'));
   return dir;
@@ -117,7 +118,7 @@ function serverCreate(dir, plugin, { base = '/' } = {}) {
     const manifest = /export let fileManifest = \[\n([\s\S]*?)\n\];/.exec(code)[1];
     return [...manifest.matchAll(/\{ \.\.\.(\{.*?\}), load: /g)].map((match) => {
       const metadata = JSON.parse(match[1]);
-      return { ...metadata, absPath: path.join(dir, metadata.rootId, metadata.relPath) };
+      return { ...metadata, absPath: path.join(dir, metadata.rootAlias, metadata.relPath) };
     });
   };
   const baseEndpoint = base.replace(/\/+$/, '');
@@ -189,25 +190,25 @@ test('source endpoint serves the current text of collected files as plain text, 
   const plugin = pluginCreate(dir, { base: '/docs-site/' });
   const server = serverCreate(dir, plugin, { base: '/docs-site/' });
 
-  const first = await server.request({ url: '/docs-site/__doc-source/file?path=~docs%2Fa.md' });
+  const first = await server.request({ url: '/docs-site/__doc-source/file?path=~fx%3Adocs%2Fa.md' });
   assert.equal(first.status, 200);
   assert.equal(first.text, '# A\n\nfirst\n');
   assert.equal(first.headers['content-type'], 'text/plain; charset=utf-8');
   assert.equal(first.headers['cache-control'], 'no-store');
 
   fs.writeFileSync(path.join(dir, 'docs', 'a.md'), '# A\n\nchanged\n');
-  const second = await server.request({ url: '/docs-site/__doc-source/file?path=~docs%2Fa.md' });
+  const second = await server.request({ url: '/docs-site/__doc-source/file?path=~fx%3Adocs%2Fa.md' });
   assert.equal(second.text, '# A\n\nchanged\n');
 
-  const unknown = await server.request({ url: '/docs-site/__doc-source/file?path=~docs%2Fnone.md' });
+  const unknown = await server.request({ url: '/docs-site/__doc-source/file?path=~fx%3Adocs%2Fnone.md' });
   assert.equal(unknown.status, 404);
   const traversal = await server.request({ url: '/docs-site/__doc-source/file?path=..%2Fconfig.yaml' });
   assert.equal(traversal.status, 404);
-  const method = await server.request({ method: 'POST', url: '/docs-site/__doc-source/file?path=~docs%2Fa.md' });
+  const method = await server.request({ method: 'POST', url: '/docs-site/__doc-source/file?path=~fx%3Adocs%2Fa.md' });
   assert.equal(method.status, 405);
   assert.equal(method.headers.allow, 'GET');
   // below the base path only
-  const outsideBase = await server.request({ url: '/__doc-source/file?path=~docs%2Fa.md' });
+  const outsideBase = await server.request({ url: '/__doc-source/file?path=~fx%3Adocs%2Fa.md' });
   assert.equal(outsideBase.status, 404);
   assert.match(outsideBase.text, /spa fallback/);
 });
@@ -275,7 +276,8 @@ test('emitted client replays the latest data, ignores other module ids, and load
 
 function manifestBuild(textByPath) {
   return Object.entries(textByPath).map(([internalPath, text]) => ({
-    rootId: 'docs',
+    docPageAlias: '',
+    rootAlias: 'docs',
     relPath: internalPath.slice('~docs/'.length),
     name: path.basename(internalPath),
     ext: 'md',
@@ -423,7 +425,7 @@ test('side-panel label operation quotes what yaml needs quoted and collapses a b
 
 test('production module generation keeps raw imports and no-op subscriptions', () => {
   const entry = {
-    rootId: 'docs', relPath: 'a.md', name: 'a.md', ext: 'md', internalPath: '~docs/a.md', collect: 'recursive',
+    docPageAlias: '', rootAlias: 'docs', relPath: 'a.md', name: 'a.md', ext: 'md', internalPath: '~docs/a.md', collect: 'recursive',
     absPath: path.join(fixtureCreate(), 'docs', 'a.md'),
   };
   const code = generateModuleCode({}, [entry], [], [], true, {

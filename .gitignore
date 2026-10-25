@@ -24,6 +24,7 @@ example_doc/.doc-page/asset.yaml.tmp
 # backups the edit api keeps beside a configuration yaml file it rewrote
 # (doc_page_impl_edit.md): doc page config values, side-panel labels
 main/config*.yaml.bak
+/workspace.yaml.bak
 **/.doc-page/*.yaml.bak
 
 update-*.md

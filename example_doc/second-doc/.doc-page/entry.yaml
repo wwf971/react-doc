@@ -1,0 +1,24 @@
+# Entry of the second root-level doc page of the demonstration workspace
+# (workspace.yaml at the project root lists it beside "example"). With two
+# root doc pages the page side panel shows one section per doc page: its
+# alias as a muted heading, its own side panel below. A self-contained doc
+# page like the sub document; the demonstration doc page does not include
+# it, and its folder is excluded from the root "example"
+# (example_doc/.doc-page/source.yaml, exclude: second-doc/).
+docEntry:
+  title: Second Doc Page
+  homeDoc: ~second-doc/second-doc.md
+
+source:
+  - action: addFolder
+    alias: second-doc            # written ~second-doc/... inside this doc page
+    path: ..
+    collect: recursive
+
+sidePanelById:
+  main:
+    tree:
+      - doc: ~second-doc/second-doc.md
+        text: Workspace Sections
+      - doc: ~second-doc/workspace-edit.md
+        text: Editing the Workspace

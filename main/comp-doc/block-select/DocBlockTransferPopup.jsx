@@ -209,7 +209,7 @@ const TransferTargetDoc = observer(function TransferTargetDoc({ isLocked }) {
       <SourcePathPicker
         value={transfer.targetDocPath}
         spec={{ kind: 'file', extList: ['md', 'mdx'] }}
-        placeholder="~root/path/to/doc.md"
+        placeholder="~page:root/path/to/doc.md"
         message={transfer.targetDocMessage}
         isDisabled={isLocked}
         onSelect={(path) => blockSelectStore.transferTargetDocSelect(path)}

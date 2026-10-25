@@ -9,7 +9,6 @@
   gap: 0.2rem;
   min-width: 8rem;
   max-width: 100%;
-  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.8rem;
 }
 
@@ -57,7 +56,6 @@
   padding: 2px 0;
   overflow-y: auto;
   list-style: none;
-  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.8rem;
   white-space: nowrap;
 }
@@ -84,6 +82,33 @@
   flex: 0 0 auto;
   color: var(--color-fd-muted-foreground);
   font-size: 0.7rem;
+}
+
+/* ---------- OsPathInput ----------
+   the same list as the source path completion; an icon before each name,
+   and a muted row while the folder is listed or cannot be */
+.doc-os-path-option {
+  align-items: center;
+}
+
+.doc-os-path-option-icon {
+  flex: 0 0 auto;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-os-path-status {
+  align-items: center;
+  color: var(--color-fd-muted-foreground);
+  cursor: default;
+}
+
+.doc-os-path-status:hover {
+  background: transparent;
+}
+
+.doc-os-path-status.is-error {
+  color: var(--color-fd-destructive, #dc2626);
+  white-space: normal;
 }
 
 /* ---------- SourceTreeSelect ----------
@@ -332,7 +357,6 @@
 }
 
 .doc-source-picker-tree {
-  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 /* ---------- SourceFilePrompt ----------

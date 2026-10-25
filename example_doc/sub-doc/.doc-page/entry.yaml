@@ -2,17 +2,18 @@
 # sub-doc/ with its metadata in sub-doc/.doc-page/. Everything about it is
 # declared in this file: its source (the folder, as the root "sub-doc"), its
 # tag, its config, and its side panel. The side panels of the demonstration
-# page include it by its folder (include: ../sub-doc), which brings these
-# source rules, tag definitions and config into the page as well. config.yaml
-# can name the folder as docEntry.dir instead, and the sub document deploys
-# on its own.
+# page include it by its folder under the alias "sub"
+# (include: { dir: ../sub-doc, alias: sub }), which brings these source
+# rules, tag definitions and config into the page as well; from there its
+# files are ~sub:sub-doc/... . A workspace file can name the folder as a
+# root doc page instead, and the sub document deploys on its own.
 docEntry:
   title: Sub Document
   homeDoc: ~sub-doc/sub-doc.md
 
 source:
   - action: addFolder
-    rootId: sub-doc
+    alias: sub-doc               # written ~sub-doc/... inside this doc page
     path: ..
     collect: recursive
 
@@ -42,3 +43,8 @@ sidePanelById:
     tree:
       - doc: ~sub-doc/entry-format.md
       - doc: ~sub-doc/including.md
+      - doc: ~sub-doc/workspace.md
+      # a third notes.md of the workspace (link-nav/ has two): from a
+      # document of this doc page, "notes.md" means this one
+      - doc: notes.md
+        text: Notes (sub document)

@@ -3,51 +3,57 @@
 # files of the doc page (the entry, this file, the side-panel, tag and config
 # files) live in .doc-page/, which is never collected, so no rule excludes it.
 #
-# every collected file is named by its source path ~rootId/path-in-root
-# (design: doc_page_impl_source.md#source-paths). an addFolder rule says how
-# it collects (collect):
+# every add rule declares a root folder of this doc page under an alias, and
+# every collected file is named by its source path ~alias/path-in-root
+# (design: doc_page_impl_source.md#source-paths). the alias, not the folder
+# name, is what documents write: the folder can be renamed, and two folders
+# of one name can both be roots. without "alias" the folder name is used;
+# two different folders under one alias are an error. inside this doc page
+# the local form ~alias/... is enough; from another doc page of the
+# workspace the file is ~example:alias/... (the doc page's own alias first).
+# an addFolder rule says how it collects (collect):
 #   recursive   every file below the folder is a document
 #   direct      the files right in the folder are documents
 #   referenced  the files are collectable, not documents: they are part of the
 #               page only when used (an image an Image block names, a file an
 #               asset version depends on)
-# a root id names one folder; a later rule with the same root id refines how
-# a folder inside it is collected.
+# a later rule with the alias of a root refines how a folder inside it is
+# collected.
 rules:
   - action: addFolder
-    rootId: example
+    alias: example              # the folder example_doc, written ~example/...
     path: ..
     collect: recursive
+    # what this rule does not collect, written like a .gitignore: patterns
+    # over the path from the rule's folder, the last match decides
+    # (design: doc_page_impl_source.md#excluding-files-and-folders)
+    exclude:
+      - "*.pyc"                 # a name: at any depth
+      - .DS_Store
+      - .gitignore
+      # the sub document and the second root doc page declare their own
+      # source rules in their entries; a trailing "/": folders only
+      - sub-doc/
+      - second-doc/
+      # demo component implementations beside the demonstration docs are
+      # code, not document content; a leading "/": only this folder's own
+      - /comp-mdx/
   - action: addFile
-    rootId: req
+    alias: req                  # the folder main/, written ~req/...
     path: ../../main/doc_page_req.md
     tags: [reference]           # tags every file this rule collects
   # the images of the demonstration: referenced files, bundled into a build
   # only when a document or an asset version uses them
   - action: addFolder
-    rootId: example
+    alias: example
     path: ../mdx-usage/image
     collect: referenced
   # the files the page itself creates: images pasted into Image / ImageGrid
   # (variable imageFileStoreDirDefault of config.yaml in this folder names it)
   - action: addFolder
-    rootId: example
+    alias: example
     path: ../asset-file/image
     collect: referenced
-  - action: removeByName
-    pattern: "*.pyc"
-  - action: removeByName
-    pattern: ".DS_Store"
-  - action: removeByPath
-    pattern: "**/.gitignore"
-  # the sub document declares its own source rules in its entry file; its
-  # folder is not part of the "example" root
-  - action: removeByPath
-    pattern: "~example/sub-doc/**"
-  # demo component implementations beside the demonstration docs are code,
-  # not document content
-  - action: removeByPath
-    pattern: "~example/comp-mdx/**"
   # tag steps apply to the files collected so far
   - action: addTagByPath
     pattern: "~example/link-nav/**"

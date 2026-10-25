@@ -14,8 +14,10 @@
 # design: doc_page_impl_config.md#variables
 variable:
   # where Image / ImageGrid write a pasted image: a folder of the source that
-  # the entry collects as "referenced" (source.yaml)
-  imageFileStoreDirDefault: ~example/asset-file/image
+  # the entry collects as "referenced" (source.yaml). a path of a config
+  # value is written in the full form ~docPageAlias:rootAlias/path, exact
+  # whichever doc page of the workspace reads the value
+  imageFileStoreDirDefault: ~example:example/asset-file/image
 
 config:
   # page level. tag ids shown on side-panel items; remove the key to show all.

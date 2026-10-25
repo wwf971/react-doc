@@ -44,13 +44,13 @@ export type ConfigDefine = {
   scope: 'page' | 'doc';
   valueList?: any[];
   // type 'sourcePath': what the path names, for completion (lib/doc-source-complete.js)
-  pathSpec?: { kind: 'dir' | 'file' | 'any'; extList?: string[]; rootIdList?: string[]; dirPath?: string };
+  pathSpec?: { kind: 'dir' | 'file' | 'any'; extList?: string[]; rootList?: string[]; dirPath?: string };
   description?: string;
   isUserSettable?: boolean;
 };
 
-export type SettingsTabId = 'config' | 'compConfig' | 'assetStore' | 'service';
-const settingsTabIdList: SettingsTabId[] = ['config', 'compConfig', 'assetStore', 'service'];
+export type SettingsTabId = 'config' | 'compConfig' | 'assetStore' | 'service' | 'workspace';
+const settingsTabIdList: SettingsTabId[] = ['config', 'compConfig', 'assetStore', 'service', 'workspace'];
 
 // the tab after the layer tabs: the values in effect. no layer has this id.
 export const SETTINGS_RESULT_ID = 'result';

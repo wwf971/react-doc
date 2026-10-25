@@ -24,7 +24,7 @@ import './DocSource.css';
 //
 //   value            the current path
 //   spec             what the path names (lib/doc-source-complete.js):
-//                    { kind: 'dir' | 'file' | 'any', extList?, rootIdList?, dirPath?, isMatch? }
+//                    { kind: 'dir' | 'file' | 'any', extList?, rootList?, dirPath?, isMatch? }
 //   placeholder      shown while empty
 //   isDisabled       read-only
 //   onChange(text)   every edit of the text (optional)
@@ -37,6 +37,12 @@ import './DocSource.css';
 //                    source (DocSourceStore.pathMissingWarningGet). the icon's
 //                    place is always kept, so the field never moves when the
 //                    warning comes and goes
+//
+// a path is shown and committed in the full form ~page:root/path
+// (doc_page_impl_source.md#source-paths): a workspace holds several doc
+// pages, and the form is exact wherever the value is read. a value written
+// in the local form ~root/path (a doc page's own file may) is shown in the
+// full form of docPageAlias, and is written again only when edited.
 //
 // the revert button sits before the path and has two meanings. while the
 // path is being edited and its text differs from the value it had when the
@@ -54,6 +60,9 @@ export const SourcePathInput = observer(function SourcePathInput({
   valueRevert,
   onRevert,
   isMissingWarned = false,
+  // the doc page a local path (~root/dir) typed here belongs to; the main
+  // doc page of the workspace when absent
+  docPageAlias = '',
 }) {
   const { sourceStore } = useDocStores();
   const elementRef = useRef(null);
@@ -64,7 +73,10 @@ export const SourcePathInput = observer(function SourcePathInput({
   const [typed, typedSet] = useState('');
   const [indexActive, indexActiveSet] = useState(-1);
   const [listPosition, listPositionSet] = useState(null);
-  const valueText = value === undefined || value === null ? '' : String(value);
+  const valueText = value === undefined || value === null ? '' : sourceStore.pathFullGet(String(value), '', docPageAlias);
+  const valueRevertText = valueRevert === undefined || valueRevert === null ? valueRevert : sourceStore.pathFullGet(String(valueRevert), '', docPageAlias);
+  // what is typed, in the full form when it names a root
+  const textFullGet = (text) => sourceStore.pathFullGet(text, '', docPageAlias);
 
   const candidateList = isOpen ? sourceStore.pathComplete(typed, spec).slice(0, 40) : [];
   const isListShown = isOpen && candidateList.length > 0;
@@ -72,7 +84,7 @@ export const SourcePathInput = observer(function SourcePathInput({
   const isKindShown = spec.kind === 'any';
   const isTextChanged = isFocused && typed !== valueText;
   const isValueRevertable = !isTextChanged && onRevert !== undefined
-    && valueRevert !== undefined && String(valueRevert ?? '') !== valueText;
+    && valueRevertText !== undefined && String(valueRevertText ?? '') !== valueText;
   const isRevertShown = !isDisabled && (isTextChanged || isValueRevertable);
 
   // the list follows the text: placed when it opens, and again when the
@@ -100,7 +112,8 @@ export const SourcePathInput = observer(function SourcePathInput({
 
   const commit = (text) => {
     close();
-    if (text !== valueText) onCommit?.(text);
+    const textFull = textFullGet(text);
+    if (textFull !== valueText) onCommit?.(textFull);
   };
 
   const choose = (candidate) => {
@@ -177,7 +190,7 @@ export const SourcePathInput = observer(function SourcePathInput({
     }
   };
 
-  const warningText = isMissingWarned ? sourceStore.pathMissingWarningGet(isFocused ? typed : valueText, spec) : '';
+  const warningText = isMissingWarned ? sourceStore.pathMissingWarningGet(isFocused ? typed : valueText, spec, docPageAlias) : '';
 
   return (
     <span className={`doc-source-path-input${className ? ` ${className}` : ''}`}>
@@ -198,7 +211,7 @@ export const SourcePathInput = observer(function SourcePathInput({
           ref={revertRef}
           type="button"
           className="doc-source-path-revert"
-          title={isTextChanged ? `Reset the text to ${valueText || '(empty)'}` : `Revert to ${valueRevert || '(empty)'}`}
+          title={isTextChanged ? `Reset the text to ${valueText || '(empty)'}` : `Revert to ${valueRevertText || '(empty)'}`}
           aria-label={isTextChanged ? 'Reset the text' : 'Revert to the previous value'}
           // the field keeps the focus: a text reset stays in edit mode
           onPointerDown={(event) => event.preventDefault()}
@@ -227,7 +240,8 @@ export const SourcePathInput = observer(function SourcePathInput({
           close();
         }}
         onCommit={(text) => {
-          if (text !== valueText) onCommit?.(text);
+          const textFull = textFullGet(text);
+          if (textFull !== valueText) onCommit?.(textFull);
         }}
         onInput={inputHandle}
         onKeyDown={keyDownHandle}

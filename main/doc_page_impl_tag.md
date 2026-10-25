@@ -7,8 +7,8 @@ A tag is a short label such as "Guide" or "Chapter" attached to a document, a so
 ## Core concepts
 
 - **Asset**: anything a tag can be attached to, identified by an asset key.
-  - `doc:~rootId/a.md`: a collected source file (its source path).
-  - `folder:~rootId/sub`: a source folder.
+  - `doc:~page:root/a.md`: a collected source file (its full source path).
+  - `folder:~page:root/sub`: a source folder.
   - `item:{itemId}`: a side-panel item bound to neither, such as a virtual folder, a component panel, or a missing document.
 - **Tag**: `{ id, data }`. The id is the identity; `data` carries per-attachment values, such as a different display text.
 - **Declaration**: "these tags belong to this asset", written in source rules or side-panel YAML.
@@ -64,7 +64,7 @@ Source rules (`source.yaml`):
 ```yaml
 rules:
   - action: addFolder
-    rootId: guide
+    alias: guide
     path: ./guide
     collect: recursive
     tags: [guide]             # every file collected by this rule

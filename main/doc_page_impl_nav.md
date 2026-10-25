@@ -16,13 +16,14 @@ link / side-panel item / component / history control
 
 ## Routes and navigation state
 
-The current location has three related identities:
+The current location has three related identities, and one derived from them:
 
 - `routeCurrentPath`: stable route of the selected side-panel item.
-- `docCurrentPath`: source document rendered by that item.
+- `docCurrentPath`: source document rendered by that item, as its full source path `~page:root/...` ([source paths](doc_page_impl_source.md#source-paths)).
 - `docCurrentHash`: optional place inside the document.
+- `docPageCurrentAlias`: the doc page the current document belongs to, read from its path; the *local* doc page of everything resolved while it is shown.
 
-Side-panel item identity remains separate from source identity because the same source can appear in more than one semantic location. `DocStore.navigate()` resolves the requested route or source path to one side-panel item before changing any current-location state. A source document that is not represented in the side panel is not directly navigable.
+Side-panel item identity remains separate from source identity because the same source can appear in more than one semantic location. `DocStore.navigate()` resolves the requested route or source path to one side-panel item before changing any current-location state. A source document that is not represented in the side panel is not directly navigable. The navigation always holds a document by its full path, so a document of an included doc page and a document of the including one with the same root and name are two locations; a path in the local form given to `navigate()` (an older url, a link written in the page itself) is taken as one of the current doc page when it has the document, else of the doc page that has it (`docPathFullGet`).
 
 Every successful request increments `navigationRequestVersion`, including a request for the already-current route and fragment. Path and hash values alone cannot represent that repeated request. After updating the complete location, `DocStore.navigate()` updates history, synchronizes the browser URL in query mode, and publishes one immutable navigation snapshot. An invalid target leaves the current snapshot unchanged and reports through the navigation-error path.
 
@@ -39,19 +40,24 @@ Two route modes share this boundary:
 - inline code that looks like a Markdown file name or path, such as `` `a.md` ``;
 - Obsidian-style references such as `[[a.md]]`.
 
-`DocLink` resolves targets at render time:
+`DocLink` resolves targets at render time, against the collected source of the whole workspace, with the **local doc page first**: the doc page of the document the link is written in (read from the document's full path) answers before any other doc page does, so a name that exists in the local doc page and in an included one never asks.
 
 ```text
-target form                resolution
-~rootId/xx/a.md            exact source path (doc_page_impl_source.md#source-paths)
-./sub/a.md, ../a.md        path relative to the source document
-a.md                       file-name lookup
-														 ├─ one match  -> navigate
-														 ├─ many       -> choose from a candidate list
-														 └─ none       -> show a broken link
+target form                resolution (lib/doc-target-resolve.js)
+~page:root/xx/a.md         full source path: exact, wherever it is written
+~root/xx/a.md              local source path: the root of the local doc page; when it has no such
+                           root, the one doc page of the workspace that has it (several: candidates)
+./sub/a.md, ../a.md        path relative to the source document, in the same doc page
+xx/a.md                    path suffix: the matches of the local doc page when there are any,
+a.md                       file name:   else the matches of every doc page
+                             ├─ one match  -> navigate
+                             ├─ many       -> choose from a candidate list (each with its doc page)
+                             └─ none       -> show a broken link
 ```
 
-A target can append a fragment, for example `~rootId/xx/a.md#configuration` or `a.md#Configuration`; the fragment is an id or a heading title (see [Fragment targets](#fragment-targets-titles-and-declared-ids)). `DocStore.docTargetResolve()` resolves `@first/` targets through the side-panel tree and every other form through `DocSourceStore.resolveLink()`, which separates the source path from the fragment and resolves the path. `DocLink` then submits the resolved side-panel route and fragment to `DocStore.navigate()`. Component data references use the same resolver for their document part; see [MDX components](doc_page_impl_mdx_comp.md#component-data-reference).
+A target can append a fragment, for example `~page:root/xx/a.md#configuration` or `a.md#Configuration`; the fragment is an id or a heading title (see [Fragment targets](#fragment-targets-titles-and-declared-ids)). `DocStore.docTargetResolve()` resolves `@first/` targets through the side-panel tree and every other form through `DocSourceStore.resolveLink()`, which separates the source path from the fragment and resolves the path through `docTargetResolve(target, fromPath, sourceIndex)`; every candidate carries its `docPageAlias`. `DocLink` then submits the resolved side-panel route and fragment to `DocStore.navigate()`. Component data references use the same resolver for their document part; see [MDX components](doc_page_impl_mdx_comp.md#component-data-reference). The same function resolves the `doc` of a side-panel node (its doc page is the one its file belongs to, `docPageAlias` on the node) and the links the build-time scan follows, so the three never disagree; the build keeps every match of an ambiguous target, since it cannot know which the reader picks.
+
+The internal representation therefore keeps, for every document and every resolved target, which doc page it belongs to: the full path says it, `fromPath` says it for a reference, and the local doc page is preferred at every step. A reference that needs another doc page writes it: `~sub:sub-doc/a.md` from anywhere, or a bare name or local path that the local doc page does not have, which then falls back to the rest of the workspace. The design is the same for every consumer of a path: image sources and other component references (`fileResolve`), config values of type `sourcePath` (resolved from the declaration's doc page), file creation (`dirPath` of a request is a root of the document's doc page), asset folders (declared in a doc page's own terms, kept in the full form).
 
 Resolution happens during rendering rather than compilation. Moving a source file therefore updates the document index without invalidating otherwise reusable compiled content.
 
@@ -175,7 +181,7 @@ A hosted part index can observe navigation without receiving `DocStore`. The hos
 
 ```text
 navigation.getSnapshot()
-	-> { requestVersion, route, itemId, docPath, hash }
+	-> { requestVersion, route, itemId, docPath, docPageAlias, hash }
 
 navigation.subscribe(listener)
 	-> unsubscribe

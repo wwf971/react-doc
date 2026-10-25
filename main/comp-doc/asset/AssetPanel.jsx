@@ -85,7 +85,7 @@ const ObjectSection = observer(function ObjectSection({ object, panel, isWritabl
         <dt>type</dt>
         <dd className="doc-asset-mono">{object.contentType}</dd>
         <dt>folder</dt>
-        <dd className="doc-asset-mono">{object.folder} / {object.dirName}</dd>
+        <dd>{object.folder} / {object.dirName}</dd>
         <dt>head</dt>
         <dd className="doc-asset-mono">{object.versionIdHead}</dd>
         <dt>created</dt>

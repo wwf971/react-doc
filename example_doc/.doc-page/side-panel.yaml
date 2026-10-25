@@ -83,11 +83,14 @@ sidePanelById:
         tags: [part]
         include: ./side-panel-mdx-usage.yaml
       - separator: Sub Document
-      # the default side panel of a self-contained document: its entry file
-      # brings its own source rules and tag definitions; its "root" labels and
-      # binds this node. the same entry can be config.yaml docEntry.file.
+      # the default side panel of a self-contained doc page, given by its
+      # folder: its entry file brings its own source rules, tag definitions
+      # and config; its "root" labels and binds this node. "alias" is the
+      # name the doc page gets in the workspace (its files are
+      # ~sub:sub-doc/... from here; the folder name would be used without
+      # it). the same folder can be a root doc page of a workspace file.
       - id: sub-doc
-        include: ../sub-doc
+        include: { dir: ../sub-doc, alias: sub }
       - separator: Tests
       - id: component-panel-demo
         # a language mapping: the translation of the document language is shown.

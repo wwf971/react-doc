@@ -12,128 +12,182 @@ import '../edit/DocEdit.css';
 import './DocSettings.css';
 
 // The "Asset service" tab of the settings panel (asset service layer) (design:
-// doc_page_impl_asset.md#the-local-store-folders-fully-reflected): the
-// folders of the local store, by doc page. Every doc page the page loads
-// (its own first, then the ones it includes) names its asset folders in its
-// asset store config (.doc-page/asset.yaml beside its entry), as source
-// paths; a doc page without that file uses its default folder. For each
-// doc page a ConfigPanel (the injected one) shows its folders as a string
-// list and its default folder; a change is written into that doc page's
-// file in place by the development server, which creates the file when the
-// doc page has none yet. A path that is not a folder of a root, or a folder
-// that does not exist yet, gets a warning while it is typed. Below the
-// folders: the orphan objects, the objects nothing references and the
-// broken references (AssetOrphanArea). A built page lists and changes
-// nothing. Rendered by the settings panel's ConfigPanel as a custom
-// full-width item; it reads the stores itself.
-export const AssetStoreSettings = observer(function AssetStoreSettings() {
-  const { assetStore } = useDocStores();
+// doc_page_impl_asset.md#the-local-store-folders-fully-reflected), built as
+// items of the settings panel's ConfigPanel, so it reads like the other tabs:
+//
+//   example_doc [this page]                          group, one per doc page
+//   folders in .doc-page/asset.yaml                  (its own first, then the
+//     Folders          [~example/asset   ] Remove    ones it includes)
+//                      [~root/path       ] Add       stringList
+//     Default folder   [~example/asset ▾]            select
+//     On disk          ~example/asset  store default  13 objects
+//   Objects and references ⟳                         group: AssetOrphanArea
+//
+// Every doc page names its asset folders in its asset store config
+// (.doc-page/asset.yaml beside its entry), as source paths; a doc page
+// without that file uses its default folder. A change is written into that
+// doc page's file in place by the development server (writeByItemId of the
+// panel, as for the config keys), which creates the file when the doc page
+// has none yet; while it is written the item shows the panel's request
+// state. A path that is not a folder of a root, or a folder that does not
+// exist yet, gets a warning while it is typed. A built page lists and
+// changes nothing.
+export function assetStoreItemListBuild({ stores, data, writeByItemId, assetRequestItemPathText }) {
+  const { assetStore } = stores;
   if (!assetStore.isAvailable) {
-    return <p className="doc-settings-asset-note">{assetStore.unavailableReason || 'The asset service layer is loading.'}</p>;
+    return {
+      itemList: [{ id: 'assetUnavailable', type: 'custom', comp: AssetUnavailableNote, isFullWidth: true }],
+      requestStateByPath: {},
+    };
   }
+  const isLocked = !assetStore.isWritable || assetStore.folder.status === 'submitting';
+  const lockedReason = assetStore.isWritable ? 'a change is being written' : assetStore.writeUnavailableReason;
+
+  const itemList = assetStore.docPageList.map((docPage, index) => {
+    const groupId = `docPage${index}`;
+    const folderListId = `${groupId}FolderList`;
+    const folderDefaultId = `${groupId}FolderDefault`;
+    data[folderListId] = docPage.folderList;
+    data[folderDefaultId] = docPage.folderDefault;
+    const valueSetOf = (valueId) => (value) => assetStore.docPageFolderSet(
+      docPage.configFileRelative,
+      valueId === folderListId ? value : docPage.folderList,
+      valueId === folderDefaultId ? value : docPage.folderDefault,
+    );
+    writeByItemId.set(folderListId, { define: { type: 'assetFolder' }, valueSet: valueSetOf(folderListId), isAsset: true });
+    writeByItemId.set(folderDefaultId, { define: { type: 'assetFolder' }, valueSet: valueSetOf(folderDefaultId), isAsset: true });
+    return {
+      id: groupId,
+      type: 'group',
+      label: <DocPageGroupLabel docPage={docPage} isPageOwn={index === 0} />,
+      description: docPageGroupDescriptionGet(docPage),
+      children: [
+        {
+          id: folderListId,
+          type: 'stringList',
+          label: 'Folders',
+          description: 'source paths in the full form, ~page:root/path',
+          placeholder: '~page:root/path',
+          valueWarningGet: (text) => assetStore.folderPathWarningGet(text, docPage.alias),
+          isDisabled: isLocked,
+          disabledReason: lockedReason,
+        },
+        {
+          id: folderDefaultId,
+          type: 'select',
+          label: 'Default folder',
+          description: 'where its new objects go',
+          options: docPage.folderList,
+          isDisabled: isLocked || docPage.folderList.length < 2,
+          disabledReason: docPage.folderList.length < 2 ? 'the only folder is the default' : lockedReason,
+        },
+        {
+          id: `${groupId}OnDisk`,
+          type: 'custom',
+          label: 'On disk',
+          description: 'objects per folder',
+          comp: DocPageFolderState,
+          compProps: { entryFile: docPage.entryFile, problemList: docPage.problemList },
+        },
+      ],
+    };
+  });
+  itemList.push({
+    id: 'assetObjects',
+    type: 'group',
+    label: <AssetObjectsGroupLabel />,
+    description: 'objects nothing uses, and references whose data cannot be read',
+    children: [{ id: 'assetOrphan', type: 'custom', comp: AssetOrphanArea, isFullWidth: true }],
+  });
+
+  // the change being written, or the one that failed, shows on the item
+  // that sent it
+  const requestStateByPath = {};
+  if (assetRequestItemPathText && assetStore.folder.status === 'submitting') {
+    requestStateByPath[assetRequestItemPathText] = { status: 'pending' };
+  } else if (assetRequestItemPathText && assetStore.folder.status === 'error') {
+    requestStateByPath[assetRequestItemPathText] = { status: 'error', message: assetStore.folder.message };
+  }
+  return { itemList, requestStateByPath };
+}
+
+const AssetUnavailableNote = observer(function AssetUnavailableNote() {
+  const { assetStore } = useDocStores();
+  return <p className="doc-settings-asset-note">{assetStore.unavailableReason || 'The asset service layer is loading.'}</p>;
+});
+
+// the alias of a doc page and whether it is the page's own or an included one
+function DocPageGroupLabel({ docPage, isPageOwn }) {
   return (
-    <div className="doc-settings-asset">
-      <p className="doc-settings-asset-note">
-        The asset folders of each doc page, named by source path (~rootId/path). A new object goes to the default folder of the doc page of its document.
-        {assetStore.isWritable ? '' : ' This build cannot change them.'}
-      </p>
-      {assetStore.docPageList.map((docPage, index) => (
-        <DocPageFolderPanel key={docPage.entryFile} docPage={docPage} isPageOwn={index === 0} />
+    <span className="doc-settings-asset-group-label" title={docPage.entryFile}>
+      {docPage.alias}
+      <span className="doc-badge-outline" data-primary={isPageOwn ? '' : undefined}>{isPageOwn ? 'this page' : 'included'}</span>
+    </span>
+  );
+}
+
+// where the folders of a doc page are written
+function docPageGroupDescriptionGet(docPage) {
+  const docPageDir = docPageDirTextGet(docPage.entryFile);
+  const configFileName = docPage.configFileRelative.startsWith(`${docPageDir}/`)
+    ? docPage.configFileRelative.slice(docPageDir.length + 1)
+    : docPage.configFileRelative;
+  return docPage.isConfigFileExists
+    ? `folders written in ${configFileName}`
+    : `no ${configFileName} yet: its default folder is used, and the file is created on the first change`;
+}
+
+// what each folder of a doc page holds on disk, then what is wrong with its
+// config
+//
+//   ~example/asset  [store default]  13 objects
+//   ~example/asset-archive           1 object
+const DocPageFolderState = observer(function DocPageFolderState({ entryFile, problemList }) {
+  const { assetStore } = useDocStores();
+  return (
+    <div className="doc-settings-asset-state">
+      {assetStore.folderListOfDocPageGet(entryFile).map((folder) => (
+        <span key={folder.path} className="doc-settings-asset-state-folder" title={folder.pathAbs}>
+          <span className="doc-settings-asset-path">{folder.path}</span>
+          {folder.isDefault ? <span className="doc-badge-outline" data-primary="">store default</span> : null}
+          {folder.isExists ? null : <span className="doc-badge-outline" data-error="">not on disk</span>}
+          <span className="doc-settings-asset-count">{folder.objectCount} object{folder.objectCount === 1 ? '' : 's'}</span>
+        </span>
       ))}
-      {assetStore.folder.status === 'error' ? (
-        <p className="doc-error doc-edit-message">
-          {assetStore.folder.message}
-          <button type="button" className="doc-settings-asset-link" onClick={() => assetStore.folderMessageClear()}>dismiss</button>
-        </p>
-      ) : null}
-      <AssetOrphanArea />
+      {problemList.map((problem) => <span key={problem} className="doc-error doc-settings-asset-problem">{problem}</span>)}
     </div>
   );
 });
 
-// the folders of one doc page as config items: a string list (each path
-// with a warning slot) and the default folder, then what is on disk
-const DocPageFolderPanel = observer(function DocPageFolderPanel({ docPage, isPageOwn }) {
-  const { assetStore, componentConfig } = useDocStores();
-  const ConfigPanel = componentConfig.ConfigPanel;
-  const rootIdList = [...new Set(assetStore.docPageList.flatMap((item) => item.rootIdList))];
-  const isLocked = !assetStore.isWritable || assetStore.folder.status === 'submitting';
-  const folderInfoList = assetStore.folderListOfDocPageGet(docPage.entryFile);
-  const source = docPage.isConfigFileExists
-    ? docPage.configFileRelative
-    : `no ${docPage.configFileRelative}: the default folder (created with the file on the first change)`;
-  const itemList = [{
-    id: `assetDocPage:${docPage.entryFile}`,
-    type: 'group',
-    label: `${docPage.entryFile}${isPageOwn ? ' (this page)' : ' (included)'}`,
-    children: [
-      {
-        id: 'folderList',
-        type: 'stringList',
-        label: 'Folders',
-        description: source,
-        placeholder: '~rootId/path',
-        valueWarningGet: (text) => assetStore.folderPathWarningGet(text, rootIdList),
-        isDisabled: isLocked,
-        disabledReason: assetStore.isWritable ? 'a change is being written' : assetStore.writeUnavailableReason,
-      },
-      {
-        id: 'folderDefault',
-        type: 'select',
-        label: 'Default folder',
-        description: 'new objects of the documents of this doc page are created here',
-        options: docPage.folderList,
-        isDisabled: isLocked || docPage.folderList.length < 2,
-        disabledReason: docPage.folderList.length < 2 ? 'the only folder is the default' : 'a change is being written',
-      },
-      {
-        id: 'folderState',
-        type: 'custom',
-        comp: FolderStateList,
-        isFullWidth: true,
-        compProps: { folderInfoList, problemList: docPage.problemList },
-      },
-    ],
-  }];
-  if (!ConfigPanel) return null;
+// the group title of the objects: "Read again" reads every document again,
+// for what changed while the page did not watch
+const AssetObjectsGroupLabel = observer(function AssetObjectsGroupLabel() {
+  const { assetStore } = useDocStores();
   return (
-    <ConfigPanel
-      data={{ folderList: docPage.folderList, folderDefault: docPage.folderDefault }}
-      config={{ compPath: ['assetDocPage', docPage.entryFile], items: itemList, missingItemStrategy: 'ignore' }}
-      onEvent={(eventType, eventData) => {
-        if (eventType !== 'valueChangeAttempt') return undefined;
-        const folderList = eventData.valueId === 'folderList' ? eventData.value : docPage.folderList;
-        const folderDefault = eventData.valueId === 'folderDefault' ? eventData.value : docPage.folderDefault;
-        void assetStore.docPageFolderSet(docPage.configFileRelative, folderList, folderDefault);
-        return { code: 0 };
-      }}
-    />
+    <span className="doc-settings-asset-group-label">
+      Objects and references
+      <button
+        type="button"
+        className="doc-asset-icon-button"
+        disabled={assetStore.isUsageReading}
+        title="reads every document again for its asset references"
+        aria-label="read every document again"
+        onClick={() => void assetStore.usageLoad()}
+      >
+        {assetStore.isUsageReading
+          ? <LoaderCircle size={11} className="doc-spin" aria-hidden="true" />
+          : <RotateCw size={11} aria-hidden="true" />}
+      </button>
+    </span>
   );
 });
 
-// each folder of a doc page as it is on disk: its object count, missing
-// ones marked; then what was wrong with the doc page's config
-function FolderStateList({ folderInfoList, problemList }) {
-  return (
-    <ul className="doc-settings-asset-list">
-      {folderInfoList.map((folder) => (
-        <li key={folder.path} className="doc-settings-asset-folder" data-missing={folder.isExists ? undefined : ''}>
-          <span className="doc-settings-asset-path" title={folder.pathAbs}>{folder.path}</span>
-          <span className="doc-settings-asset-flags">
-            {folder.isDefault ? <span className="doc-badge-outline" data-primary="">store default</span> : null}
-            {folder.isExists ? null : <span className="doc-badge-outline" data-error="">missing</span>}
-          </span>
-          <span className="doc-settings-asset-count">{folder.objectCount} object{folder.objectCount === 1 ? '' : 's'}</span>
-          <span />
-        </li>
-      ))}
-      {problemList.map((problem) => (
-        <li key={problem} className="doc-settings-asset-folder doc-settings-asset-problem">
-          <span className="doc-error">{problem}</span>
-        </li>
-      ))}
-    </ul>
-  );
+// the folder of a doc page from its entry, as the settings tab names it:
+// the parent of .doc-page/, relative to the config directory
+function docPageDirTextGet(entryFile) {
+  const segList = String(entryFile).split('/').slice(0, -1);
+  if (segList[segList.length - 1] === '.doc-page') segList.pop();
+  return segList.join('/');
 }
 
 // what the usage index finds wrong between the documents and the store
@@ -143,8 +197,7 @@ function FolderStateList({ folderInfoList, problemList }) {
 // declaration), and references whose data cannot be read. a click on an
 // object shows its asset panel below the lists (DocAssetStore.settingsPanel,
 // the same AssetPanel as the popup's); a click on it again, or a pointer
-// going down outside the area, closes it. "Read again" reads every document
-// again, for what changed while the page did not watch.
+// going down outside the area, closes it.
 const AssetOrphanArea = observer(function AssetOrphanArea() {
   const { assetStore, configStore, docStore } = useDocStores();
   const areaRef = useRef(null);
@@ -166,21 +219,6 @@ const AssetOrphanArea = observer(function AssetOrphanArea() {
 
   return (
     <div ref={areaRef} className="doc-settings-asset-orphan">
-      <p className="doc-settings-asset-title">
-        Objects and references
-        <button
-          type="button"
-          className="doc-asset-icon-button"
-          disabled={assetStore.isUsageReading}
-          title="reads every document again for its asset references"
-          aria-label="read every document again"
-          onClick={() => void assetStore.usageLoad()}
-        >
-          {assetStore.isUsageReading
-            ? <LoaderCircle size={11} className="doc-spin" aria-hidden="true" />
-            : <RotateCw size={11} aria-hidden="true" />}
-        </button>
-      </p>
       {usageIndex.status === 'error' ? <p className="doc-error doc-edit-message">{usageIndex.message}</p> : null}
       {usageIndex.status === 'done' ? (
         <>

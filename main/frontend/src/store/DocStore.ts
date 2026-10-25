@@ -24,6 +24,8 @@ type NavigationSnapshot = {
   route: string;
   itemId: string;
   docPath: string;
+  // the doc page the document belongs to ('' for an inline item)
+  docPageAlias: string;
   hash: string;
 };
 type NavigationRuntime = {
@@ -67,6 +69,7 @@ export class DocStore {
     route: '',
     itemId: '',
     docPath: '',
+    docPageAlias: '',
     hash: '',
   });
   navigationRuntime: NavigationRuntime;
@@ -109,6 +112,14 @@ export class DocStore {
 
   get contentCurrentPath(): string {
     return this.itemCurrent?.type === 'inline' ? this.routeCurrentPath : this.docCurrentPath;
+  }
+
+  // the doc page the current document belongs to (its alias in the
+  // workspace, doc_page_impl_source.md#the-workspace); '' for an inline
+  // item or before navigation. the local doc page of a link written in the
+  // page itself (the search, the toolbar), where no document says
+  get docPageCurrentAlias(): string {
+    return this.sourceStore.docPageAliasOfPath(this.docCurrentPath);
   }
 
   get languageListCurrent(): string[] {
@@ -523,8 +534,10 @@ export class DocStore {
     }
   };
 
-  // target can be a sidebar item route or a source path '~rootId/xx/a.md'. A document path
-  // resolves to the first matching sidebar item in tree order.
+  // target can be a sidebar item route or a source path '~page:root/xx/a.md'
+  // (a local path ~root/xx/a.md is one of the current doc page, else of
+  // the only doc page with that root). A document path resolves to the
+  // first matching sidebar item in tree order.
   navigate(target: string, hashExtra?: string, options?: {
     historyMode?: NavigationHistoryMode;
     isReplaceUrl?: boolean;
@@ -620,7 +633,7 @@ export class DocStore {
   }
 
   routeForDoc(internalPath: string): string {
-    const itemId = this.treeModel.itemIdsByDocPath.get(internalPath)?.[0];
+    const itemId = this.treeModel.itemIdsByDocPath.get(this.docPathFullGet(internalPath))?.[0];
     return itemId ? this.treeModel.itemById.get(itemId)?.route ?? '' : '';
   }
 
@@ -647,8 +660,18 @@ export class DocStore {
     }
     const itemDirect = this.treeModel.itemByRoute.get(path);
     if (itemDirect) return itemDirect;
-    const itemId = this.treeModel.itemIdsByDocPath.get(path)?.[0];
+    const itemId = this.treeModel.itemIdsByDocPath.get(this.docPathFullGet(path))?.[0];
     return itemId ? this.treeModel.itemById.get(itemId) : undefined;
+  }
+
+  // a document path as the navigation knows it: a local source path (an
+  // older url, a link written in the page) in the full form of the current
+  // doc page when it has the document, else of the doc page that has it
+  docPathFullGet(path: string): string {
+    const pathFull = this.sourceStore.pathFullGet(path, this.docCurrentPath);
+    if (this.treeModel.itemIdsByDocPath.has(pathFull)) return pathFull;
+    const pathAny = this.sourceStore.pathFullGet(path);
+    return this.treeModel.itemIdsByDocPath.has(pathAny) ? pathAny : pathFull;
   }
 
   toBrowserHref(internalPath: string): string {
@@ -744,6 +767,7 @@ export class DocStore {
       route: this.routeCurrentPath,
       itemId: this.itemCurrentId,
       docPath: this.docCurrentPath,
+      docPageAlias: this.docPageCurrentAlias,
       hash: this.docCurrentHash,
     });
     this.navigationSnapshotCurrent = snapshot;

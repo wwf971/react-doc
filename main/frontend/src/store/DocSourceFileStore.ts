@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { DocSourceStore, SourceResult } from './DocSourceStore.js';
-import { sourcePathIsRooted, sourcePathNormalize } from '../lib/doc-source-path.js';
+import { sourcePathIsRooted } from '../lib/doc-source-path.js';
 
 // The file-creation service of the doc page source service layer as the page offers it to
 // components (design: doc_page_impl_source.md#creating-files). A component
@@ -11,7 +11,9 @@ import { sourcePathIsRooted, sourcePathNormalize } from '../lib/doc-source-path.
 //   fileCreateRequest { name, blob | text, dirPath, isLocationCustom }
 //     name              the file name wanted; made unique in the folder
 //     dirPath           the folder, a source path; a component takes it
-//                       from its component-level config (FileStoreDir)
+//                       from its component-level config (FileStoreDir). a
+//                       local path (~root/dir) is a root of the doc page of
+//                       the document the request comes from (source.sourcePath)
 //     isLocationCustom  true: the person chooses the folder (and may
 //                       rename the file) in the location prompt first
 //     -> { code: 0, data: { path, entry } } | { code: -1, message }
@@ -55,10 +57,10 @@ export class DocSourceFileStore {
   // the handler the source route of the event layer calls
   async eventHandle(event: DocEvent): Promise<SourceResult | undefined> {
     if (event.type !== 'fileCreateRequest') return undefined;
-    return this.fileCreateRequestHandle(event.data, event.point);
+    return this.fileCreateRequestHandle(event.data, event.point, String(event.source?.sourcePath ?? ''));
   }
 
-  async fileCreateRequestHandle(data: FileCreateRequestData, point?: SourcePoint): Promise<SourceResult> {
+  async fileCreateRequestHandle(data: FileCreateRequestData, point?: SourcePoint, fromPath = ''): Promise<SourceResult> {
     if (!this.sourceStore.isWritable) {
       return { code: -1, message: 'The source is read-only: files are created through the development server only.' };
     }
@@ -67,7 +69,7 @@ export class DocSourceFileStore {
     if (!(data.blob instanceof Blob) && typeof data.text !== 'string') {
       return { code: -1, message: 'fileCreateRequest needs the content: blob or text.' };
     }
-    const dirPath = sourcePathNormalize(String(data.dirPath ?? ''));
+    const dirPath = this.sourceStore.pathFullGet(String(data.dirPath ?? ''), fromPath);
     const isPromptNeeded = data.isLocationCustom === true || !sourcePathIsRooted(dirPath);
     if (!isPromptNeeded) return this.fileCreateApply({ dirPath, name }, data);
 

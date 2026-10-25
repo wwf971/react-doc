@@ -123,6 +123,28 @@ export class DocSidePanelStore {
     this.folderOpenById[itemId] = isOpen;
   }
 
+  // ---------- doc page sections ----------
+  // a workspace of several root doc pages shows one section per doc page
+  // (plugin/doc-entry.ts docPageSection); a section folds like a folder,
+  // its open state kept in folderOpenById under its item id
+
+  get sectionItemIdList(): string[] {
+    const childList: any[] = (this.docStore.treePage as any)?.children ?? [];
+    return childList.filter((node) => node?.docPageSection).map((node) => String(node.$id));
+  }
+
+  get sectionIsAnyClosed(): boolean {
+    return this.sectionItemIdList.some((itemId) => !this.folderOpenGet(itemId, true));
+  }
+
+  get sectionIsAnyOpen(): boolean {
+    return this.sectionItemIdList.some((itemId) => this.folderOpenGet(itemId, true));
+  }
+
+  sectionOpenAllSet(isOpen: boolean) {
+    for (const itemId of this.sectionItemIdList) this.folderOpenSet(itemId, isOpen);
+  }
+
   // ---------- what can move where ----------
 
   // items move in edit mode, with a development server writing the files

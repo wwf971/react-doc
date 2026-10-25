@@ -4,7 +4,7 @@
 //
 //   { docPath, sourceLine, fragment }
 //
-//   docPath     the source path of the document (~rootId/xx/a.md)
+//   docPath     the source path of the document (~page:root/xx/a.md, the full form)
 //   sourceLine  the line of the block's marker comment, counted in the content
 //               without frontmatter: the block identity the page uses
 //               elsewhere (DocComp sourceLine, the edit model's markerLine).

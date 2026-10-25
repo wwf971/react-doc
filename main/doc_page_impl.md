@@ -10,7 +10,7 @@ config.yaml (overlay config.0.yaml) ──► docEntry.dir: the doc page folder 
      ▼
 vite plugin "doc-source"
      ├── loads the entry and every yaml file it reaches: source rules, side panels, tags, config declarations
-     ├── executes source rules ──► file manifest (multi-root: ~rootId/relPath) + folder manifest
+     ├── executes source rules ──► file manifest (multi-root: ~page:root/relPath) + folder manifest
      │     each doc = lazy `?raw` import ──► dev: HMR reload on edit
      │                                       build: one lazy chunk per doc
      ├── serves the dev-only apis: source (file bytes, file creation), edit (files), asset (the local store of the asset service layer),
@@ -65,7 +65,7 @@ DocEventRouter: component reports → host → local handler → domain route (n
 
 **Doc collection via vite plugin.** The plugin reads the two-layer config, loads the document entry it names (or finds in the doc page folder it names) and every yaml file the entry reaches (collecting their source rules, side panels, tag definitions, and config declarations), executes the source rules, and generates a virtual module where every doc file is a lazy `?raw` import. Vite then gives both dev-time freshness (editing a doc reloads it; adding/removing files or editing config or any loaded yaml file invalidates the manifest) and production bundling (docs are code-split into per-doc lazy chunks inside one deployable artifact).
 
-**An explicit doc page source service layer.** The files and folders of the document are one layer, the **doc page source service layer**, with one grammar and one api: every file is named by its source path `~rootId/relPath`, every folder rule says how it collects (`recursive`, `direct`, or `referenced`: collectable, bundled only when used), the development server serves file bytes and creates files, and the page offers the source to components as a service (resolution, urls, path completion, file creation through the event layer). Specified in [Doc page source service layer](doc_page_impl_source.md).
+**An explicit doc page source service layer.** The files and folders of the document are one layer, the **doc page source service layer**, with one grammar and one api: every file is named by its source path (`~alias/relPath` inside its doc page, `~docPageAlias:alias/relPath` in the workspace, aliases rather than folder names), every folder rule says how it collects (`recursive`, `direct`, or `referenced`: collectable, bundled only when used), the development server serves file bytes and creates files, and the page offers the source to components as a service (resolution, urls, path completion, file creation through the event layer). Specified in [Doc page source service layer](doc_page_impl_source.md).
 
 ## Can we keep fumadocs default components while owning link logic? YES
 
@@ -116,17 +116,21 @@ DocAssetStore / DocServiceStore, the settings panel, registered components (conf
 
 A kind offers a set of capabilities; a capability that needs an api is on only when the api is configured too, and editing only once the edit api has answered that it writes (`init`, the one probe of the page). `vite` serving the page is `viteDevServer`; a built site, including `vite preview`, is `staticBuild`. The plugin exports the kind as `docEnv`; a host rendering `DocPageMdx` without it gets the kind inferred from the endpoints it passes. A new environment, say a page served by a backend of its own, is one more kind with its capabilities. Whether a service that is offered is up (the asset store answers, the service backend runs) is the state of that service, kept by its own store.
 
-## The document entry
+## The workspace and the document entry
 
-`config.yaml` names the doc page the page shows, by its folder or by its entry file:
+`config.yaml` names what the page serves: a **workspace**, the root-level doc pages of one deployment, or one doc page, which the page serves as a virtual workspace holding it alone:
 
 ```yaml
+workspace:
+  file: ../workspace.yaml  # docPageList: [{ alias, dir | file, sidePanel? }], title?, homeDoc?, homeItem?
+# or
 docEntry:
   dir: ../example_doc      # the entry is found in it: .doc-page/entry.yaml  (or file: <entry file>)
+  alias: example           # optional: the doc page's alias; the folder name when absent
   # sidePanel: compact     # optional: one of the entry's side panels instead of its default
 ```
 
-The entry is a YAML file marked by a `docEntry` section, kept as `.doc-page/entry.yaml` in the doc page folder by convention. It declares the document's `source` rules, its `tag` definitions, its `config`, and its side panels (`sidePanelById`), each section inline or, as recommended, in a file of its own beside it; a side panel includes the side panel of another entry (named by its file or its folder), so a document is composed of self-contained documents, each of which can also be the entry of a deployment. The entry supplies `siteTitle`, `homeDoc`, and `homeItem` when `config.yaml` sets none. The grammar, the loading order, and the inclusion forms are specified in [The document entry](doc_page_impl_side_panel.md#the-document-entry); the folder layout and how a folder leads to its entry in [The doc page folder](doc_page_impl_dir.md).
+A doc page is a self-contained folder, and every doc page of the workspace has an **alias**, unique in it. The entry is a YAML file marked by a `docEntry` section, kept as `.doc-page/entry.yaml` in the doc page folder by convention. It declares the document's `source` rules, its `tag` definitions, its `config`, and its side panels (`sidePanelById`), each section inline or, as recommended, in a file of its own beside it; a side panel includes the side panel of another doc page (named by its file or its folder, with the alias that doc page gets), so a document is composed of self-contained doc pages, each of which can also be deployed alone. A doc page reached from several places is one doc page of the workspace. The entry supplies `siteTitle`, `homeDoc`, and `homeItem` when `config.yaml` and the workspace set none. The concepts and the workspace file are specified in [Doc page source service layer](doc_page_impl_source.md#the-concepts); the grammar of the entry, the loading order, and the inclusion forms in [The document entry](doc_page_impl_side_panel.md#the-document-entry); the folder layout and how a folder leads to its entry in [The doc page folder](doc_page_impl_dir.md).
 
 ## Source rules
 
@@ -135,25 +139,25 @@ The entry is a YAML file marked by a `docEntry` section, kept as `.doc-page/entr
 ```yaml
 source:
   - action: addFolder      # a folder becomes one root; collect says how (required)
-    rootId: example
+    alias: example         # the root's alias (the folder name when absent)
     path: .
     collect: recursive     # recursive | direct | referenced
   - action: addFile        # one file becomes one root
-    rootId: req
+    alias: req
     path: ../main/doc_page_req.md
   - action: addFolder      # the same root, a folder inside it collected differently
-    rootId: example
+    alias: example
     path: ./mdx-usage/image
     collect: referenced    # collectable: part of the page only when used, never a page
   - action: removeByName   # glob against file name
     pattern: "*.pyc"
-  - action: removeByPath   # glob against the source path ~rootId/relative/path
+  - action: removeByPath   # glob against the source path ~alias/relative/path
     pattern: "~example/private/**"
 ```
 
-The rules of the entry come first; the rules of every included document follow in order of appearance (see [Loading](doc_page_impl_side_panel.md#loading)). The yaml files of the document, any `.doc-page/` folder, and `config.yaml` are never collected.
+The rules of the root-level entries come first; the rules of every included doc page follow in order of appearance (see [Loading](doc_page_impl_side_panel.md#loading)). The yaml files of the document, any `.doc-page/` folder, and `config.yaml` are never collected.
 
-Paths are relative to the file holding the rules. Every collected file is named by its **source path** `~rootId/relPath` (the root id marked by `~`, then the path from the root folder), so same-name root folders never clash; the same name is used in links, side panels, component data, urls and apis. A folder rule must declare how it **collects**: `recursive` (every file below is a page), `direct` (the files right in the folder are pages), or `referenced` (the files are collectable, not pages: they are served when something names them and kept in a build only when used, which is how a folder of images or of files the page creates belongs to the source). A root id names one folder; a later rule with the same id refines a folder inside it. `addFile` after a remove rule re-adds a single file (the "remove folder except one file" case in the requirement). The grammar, the collect modes and the folder manifest are specified in [Doc page source service layer](doc_page_impl_source.md#source-rules-and-collection).
+Paths are relative to the file holding the rules. Every collected file is named by its **source path**: `~alias/relPath` inside its doc page (the root's alias marked by `~`, then the path from the root folder), `~docPageAlias:alias/relPath` in the workspace, so same-name folders never clash, inside a doc page or across doc pages, and a folder can be renamed without touching a reference; the same name is used in links, side panels, component data, urls and apis. A folder rule must declare how it **collects**: `recursive` (every file below is a page), `direct` (the files right in the folder are pages), or `referenced` (the files are collectable, not pages: they are served when something names them and kept in a build only when used, which is how a folder of images or of files the page creates belongs to the source). A root alias names one folder; a later rule with the same alias refines a folder inside it. `addFile` after a remove rule re-adds a single file (the "remove folder except one file" case in the requirement). The grammar, the collect modes and the folder manifest are specified in [Doc page source service layer](doc_page_impl_source.md#source-rules-and-collection).
 
 Rules can also attach tags and document config. `tags` / `config` on an add rule apply to every file it collects. `addTagByPath` / `addTagByName` and `setConfigByPath` / `setConfigByName` apply to the files collected so far. See [Tag system](doc_page_impl_tag.md#declaring-tags) and [Config system](doc_page_impl_config.md#declaring-document-config).
 
@@ -163,7 +167,7 @@ Source paths may point outside the application project. Use `addFile` for one ex
 
 ```yaml
 - action: addFile
-  rootId: external-guide
+  alias: external-guide
   path: ../../shared-docs/guide.md
 ```
 

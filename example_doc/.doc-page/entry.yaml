@@ -1,14 +1,15 @@
-# Entry of the demonstration doc page. config.yaml names the doc page by its
-# folder (docEntry.dir: ../example_doc), and the page finds this file as
-# .doc-page/entry.yaml: the metadata files of a doc page are kept in its
-# .doc-page/ folder, apart from its documents (design: doc_page_impl_dir.md).
+# Entry of the demonstration doc page. The workspace file of the deployment
+# (workspace.yaml at the project root) names the doc page by its folder under the alias
+# "example", and the page finds this file as .doc-page/entry.yaml: the
+# metadata files of a doc page are kept in its .doc-page/ folder, apart from
+# its documents (design: doc_page_impl_dir.md, doc_page_impl_source.md#the-workspace).
 # An entry declares everything that makes up the doc page: its source rules,
 # its tag definitions, its config, and its side panels. Here each of them is
 # kept in its own file next to this one, so the entry mostly names them.
 # design: doc_page_impl_side_panel.md#the-document-entry
 docEntry:
   title: React Doc Test          # siteTitle, when config.yaml sets none
-  homeDoc: ~example/doc.md       # document opened at start, when config.yaml sets none
+  homeDoc: ~example/doc.md       # document opened at start, when the workspace sets none
 
 # source rules: a rule list, { rules }, or { file }. paths are relative to the
 # file holding the rules. the .doc-page/ folder is never collected.
@@ -47,6 +48,8 @@ sidePanelById:
       - doc: ~example/doc.md
         text: Document Model
       - id: sub-doc-compact
-        include: ../sub-doc          # a doc page given by its folder: its entry is found in it
+        # the same doc page as in side-panel.yaml: one doc page of the
+        # workspace, so it is mentioned under the same alias
+        include: { dir: ../sub-doc, alias: sub }
       - doc: ~req/doc_page_req.md
         text: Requirement

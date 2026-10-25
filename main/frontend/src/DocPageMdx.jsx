@@ -15,6 +15,7 @@ import { DocSidePanelStore, sidePanelEventTypeList } from './store/DocSidePanelS
 import { DocPasteStore } from './store/DocPasteStore.js';
 import { DocBlockSelectStore } from './store/DocBlockSelectStore.js';
 import { DocPanelLayoutStore } from './store/DocPanelLayoutStore.js';
+import { DocWorkspaceStore } from './store/DocWorkspaceStore.js';
 import { DocEventRouter } from './lib/doc-event.js';
 import { DocCompStateStore } from './store/DocCompStateStore.js';
 import { StoreContext, useDocStores } from './store/context.js';
@@ -149,6 +150,9 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // the place and size of the dialogs framed by the host's panel
     // component, moved and resized (doc_page_impl.md#the-panel-contract)
     const panelLayoutStore = new DocPanelLayoutStore();
+    // the workspace and its doc pages as the Workspace tab of the settings
+    // panel shows them (doc_page_impl_source.md#the-workspace-tab)
+    const workspaceStore = new DocWorkspaceStore({ sourceStore });
     // the event layer (doc_page_impl_event.md): component reports are routed
     // to the domain that answers them; the stores never see onEvent callbacks
     const eventRouter = new DocEventRouter();
@@ -198,6 +202,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       envStore,
       sourceStore,
       sourceFileStore,
+      workspaceStore,
       docStore,
       configStore,
       tagStore,

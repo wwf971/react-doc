@@ -11,6 +11,7 @@ import {
 import { sidePanelMoveBuild, sidePanelMoveRequestIsValid } from './doc-side-panel-move.ts';
 import { sidePanelTextOperationBuild } from './doc-side-panel-text.ts';
 import { yamlValueGet, yamlValueSetOperationBuild, yamlValueTextBuild } from './doc-yaml-edit.ts';
+import { workspaceEditBuild } from './doc-workspace-edit.ts';
 
 // Edit api of the development server. It exists only while `vite` serves the
 // page: a built page has no server behind it and shows no edit controls.
@@ -31,6 +32,9 @@ import { yamlValueGet, yamlValueSetOperationBuild, yamlValueTextBuild } from './
 //   POST {endpoint}/config/value           -> { code: 0, data: { file, keyPath, value } }
 //        body { file, keyPath, value, valueBase }   a value of one config declaration of
 //                                             the doc page (doc_page_impl_config.md#the-doc-page-layer)
+//   POST {endpoint}/workspace/edit         -> { code: 0, data: { file, hash } }
+//        body { request, hashBase }   one change of the workspace file (doc-workspace-edit.ts);
+//                                     hashBase: the hash the page read it with
 //
 // every response is { code, data, message }. code 0 is success; negative codes:
 //   -1  bad request or unexpected failure
@@ -79,11 +83,20 @@ export type DocEditConfigOptions = {
   onFileListWritten: (fileList: { filePath: string; text: string }[]) => string;
 };
 
+// the workspace file route: the file config.yaml names (workspace.file)
+export type DocEditWorkspaceOptions = {
+  // absolute; '' when the workspace is not a file of its own
+  fileGet: () => string;
+  // as DocEditSidePanelOptions.onFileListWritten
+  onFileListWritten: (fileList: { filePath: string; text: string }[]) => string;
+};
+
 export type DocEditMiddlewareOptions = {
   endpoint: string;
   fileEntryListGet: () => DocEditFileEntry[];
   sidePanel?: DocEditSidePanelOptions;
   config?: DocEditConfigOptions;
+  workspace?: DocEditWorkspaceOptions;
 };
 
 // what follows the address of a declaration in a config/value key path:
@@ -191,7 +204,50 @@ async function routeHandle(
     return;
   }
 
+  if (req.method === 'POST' && route === '/workspace/edit') {
+    const body = await jsonBodyRead(req);
+    workspaceEditRouteHandle(res, body, options.workspace);
+    return;
+  }
+
   jsonSend(res, 404, { code: -1, data: null, message: `unknown edit api route: ${req.method} ${route}` });
+}
+
+// one change of the workspace file, built in place by doc-workspace-edit.ts.
+// the file must be the one the hash names (-2 otherwise); the
+// configuration must load after the write, else the file is written back.
+function workspaceEditRouteHandle(res: ServerResponse, body: any, workspace: DocEditWorkspaceOptions | undefined) {
+  const filePath = workspace?.fileGet() ?? '';
+  if (!workspace || filePath === '' || !fs.existsSync(filePath)) {
+    jsonSend(res, 404, { code: -3, data: null, message: 'the workspace is not a file of its own (config.yaml workspace.file); nothing to edit' });
+    return;
+  }
+  const textCurrent = fs.readFileSync(filePath, 'utf-8');
+  if (typeof body?.hashBase === 'string' && body.hashBase !== textHashGet(textCurrent)) {
+    jsonSend(res, 409, { code: -2, data: null, message: 'the workspace file changed since the page read it; the edit was not applied' });
+    return;
+  }
+  const result = workspaceEditBuild(textCurrent, body?.request);
+  if (result.code !== 0) {
+    jsonSend(res, 400, { code: -1, data: null, message: result.message });
+    return;
+  }
+  if (result.data.text === textCurrent) {
+    jsonSend(res, 200, { code: 0, data: { hash: textHashGet(textCurrent) }, message: '' });
+    return;
+  }
+  fileWriteWithBackup(filePath, result.data.text);
+  const messageLoad = workspace.onFileListWritten([{ filePath, text: result.data.text }]);
+  if (messageLoad !== '') {
+    fs.writeFileSync(filePath, textCurrent, 'utf-8');
+    jsonSend(res, 400, {
+      code: -1,
+      data: null,
+      message: `the workspace would not load after the edit (${messageLoad.replace(/^\[doc-source\] /, '')}); the file was left as it was`,
+    });
+    return;
+  }
+  jsonSend(res, 200, { code: 0, data: { hash: textHashGet(result.data.text) }, message: '' });
 }
 
 // writes one value of a config declaration of the doc page in place.

@@ -1,9 +1,13 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { DocEnvStore } from './DocEnvStore.js';
 import { compileDoc } from '../lib/mdx-compile.js';
-import { docTargetResolve } from '../lib/doc-target-resolve.js';
+import { docTargetResolve, sourceIndexBuild } from '../lib/doc-target-resolve.js';
+import { OsPathCompleter } from '../lib/doc-os-path-complete.js';
 import { sourcePathCompleteList, sourcePathTreeBuild } from '../lib/doc-source-complete.js';
 import {
+  sourcePathDirGet,
+  sourcePathDocPageAliasGet,
+  sourcePathFullGet,
   sourcePathIsInside,
   sourcePathIsRooted,
   sourcePathNameGet,
@@ -21,11 +25,14 @@ import { multiLangSearchDataGet } from '../../../comp-mdx/multi-lang/MultiLangSe
 export type SourceCollectMode = 'recursive' | 'direct' | 'referenced';
 
 export type FileEntry = {
-  rootId: string;
+  // the doc page and the root the file belongs to (doc_page_impl_source.md#source-paths)
+  docPageAlias: string;
+  rootAlias: string;
   relPath: string;
   name: string;
   ext: string;
   title: string;
+  // the full source path ~docPageAlias:rootAlias/relPath: the identity of the file
   internalPath: string;
   // how the file was collected; 'referenced' files are not pages
   collect?: SourceCollectMode;
@@ -40,7 +47,8 @@ export type FileEntry = {
 
 // a folder of the source: the folder of an addFolder rule or one below it
 export type DirEntry = {
-  rootId: string;
+  docPageAlias: string;
+  rootAlias: string;
   relPath: string;
   internalPath: string;
   collect: SourceCollectMode;
@@ -59,7 +67,8 @@ export type SourceResult = { code: number; data?: any; message: string };
 export type SourcePathSpec = {
   kind: 'dir' | 'file' | 'any';
   extList?: string[];
-  rootIdList?: string[];
+  // root aliases, or full root paths (~page:root)
+  rootList?: string[];
   dirPath?: string;
   isMatch?: (candidate: SourcePathCandidate) => boolean;
 };
@@ -95,6 +104,19 @@ export type LinkTarget = {
   internalPath: string;
   title: string;
   name: string;
+  // the doc page the target belongs to
+  docPageAlias: string;
+};
+
+// a doc page of the workspace as the page knows it (configDoc.workspace)
+export type DocPageInfo = {
+  alias: string;
+  entryFile: string;
+  dirPage: string;
+  title: string;
+  isRoot: boolean;
+  rootList: { alias: string; path: string; kind: 'folder' | 'file' }[];
+  mentionList: { alias: string; isAliasGiven: boolean; fromAlias: string; file: string; place: string }[];
 };
 
 export class DocSourceStore {
@@ -123,6 +145,9 @@ export class DocSourceStore {
   versionByPath: Record<string, number> = {};
   // stable service object handed to registered components (config.source)
   sourceService: Readonly<Record<string, (...args: any[]) => any>>;
+  // completion of a path of the file system the development server runs on
+  // (lib/doc-os-path-complete.js, the source api os/list); undefined in a build
+  osPathCompleter: OsPathCompleter | undefined;
 
   constructor(
     sourceData: SourceData,
@@ -137,6 +162,17 @@ export class DocSourceStore {
     this.envStore = options?.envStore ?? new DocEnvStore({ endpointByApi: { source: options?.endpoint } });
     this.sourceEndpoint = this.envStore.endpointGet('source').replace(/\/+$/, '');
     this.fileUrlByPath = options?.fileUrlByPath ?? {};
+    this.osPathCompleter = this.sourceEndpoint
+      ? new OsPathCompleter({
+          fetchList: async (dirText: string) => {
+            const response = await fetch(`${this.sourceEndpoint}/os/list?path=${encodeURIComponent(dirText)}`, { cache: 'no-store' });
+            const payload = await response.json().catch(() => undefined);
+            return payload && typeof payload.code === 'number'
+              ? payload
+              : { code: -1, data: null, message: `the source api answered ${response.status} without a result` };
+          },
+        })
+      : undefined;
     this.sourceService = Object.freeze({
       isWritable: () => this.isWritable,
       fileResolve: (reference: string, fromPath: string) => this.fileResolve(reference, fromPath),
@@ -162,6 +198,7 @@ export class DocSourceStore {
       sourceEndpoint: false,
       fileUrlByPath: false,
       sourceService: false,
+      osPathCompleter: false,
       versionByPath: false,
     });
   }
@@ -186,13 +223,60 @@ export class DocSourceStore {
   }
 
   get targetsByName(): Map<string, FileEntry[]> {
-    const result = new Map<string, FileEntry[]>();
-    for (const entry of this.fileManifest) {
-      const list = result.get(entry.name) ?? [];
-      list.push(entry);
-      result.set(entry.name, list);
+    return this.sourceIndex.entryListByName;
+  }
+
+  // the indexes a target is resolved with (lib/doc-target-resolve.js): by
+  // full path, by local path (the same ~root/rel in several doc pages), by name
+  get sourceIndex(): { entryList: FileEntry[]; entryByInternalPath: Map<string, FileEntry>; entryListByLocalPath: Map<string, FileEntry[]>; entryListByName: Map<string, FileEntry[]> } {
+    return sourceIndexBuild(this.fileManifest);
+  }
+
+  // ---------- the workspace ----------
+
+  // the doc pages of the workspace, the root ones first (configDoc.workspace,
+  // doc_page_impl_source.md#the-workspace); a host that builds its own
+  // manifest may give none
+  get docPageList(): DocPageInfo[] {
+    const docPageList = this.configDoc?.workspace?.docPageList;
+    return Array.isArray(docPageList) ? docPageList : [];
+  }
+
+  docPageGet(alias: string): DocPageInfo | undefined {
+    return this.docPageList.find((docPage) => docPage.alias === alias);
+  }
+
+  // the main doc page: the first root doc page of the workspace, whose
+  // roots a local path written in the page itself (a config value in the
+  // settings panel) is taken from
+  get docPageAliasMain(): string {
+    return String(this.configDoc?.docEntry?.alias ?? this.docPageList[0]?.alias ?? '');
+  }
+
+  // the doc page a file belongs to, from its full source path
+  docPageAliasOfPath(internalPath: string): string {
+    return sourcePathDocPageAliasGet(internalPath);
+  }
+
+  // a source path in its full form: a local path is taken as one of the doc
+  // page of fromPath (or of docPageAlias); without either, as one of the
+  // only doc page that has the root, when one does
+  pathFullGet(pathText: string, fromPath = '', docPageAlias = ''): string {
+    const text = sourcePathNormalize(pathText);
+    if (!sourcePathIsRooted(text)) return text;
+    const aliasLocal = sourcePathDocPageAliasGet(fromPath) || docPageAlias;
+    if (aliasLocal) return sourcePathFullGet(text, aliasLocal);
+    // the main doc page when it has the root
+    const pathMain = sourcePathFullGet(text, this.docPageAliasMain);
+    if (this.docPageAliasMain && this.dirManifest.some((dir) => dir.internalPath === pathMain || dir.internalPath === sourcePathDirGet(pathMain))) {
+      return pathMain;
     }
-    return result;
+    const entryList = this.sourceIndex.entryListByLocalPath.get(text) ?? [];
+    const aliasList = [...new Set(entryList.map((entry) => entry.docPageAlias))];
+    if (aliasList.length === 1) return sourcePathFullGet(text, aliasList[0]);
+    const dirList = this.dirManifest.filter((dir) => sourcePathFullGet(text, dir.docPageAlias) === dir.internalPath);
+    const dirAliasList = [...new Set(dirList.map((dir) => dir.docPageAlias))];
+    return dirAliasList.length === 1 ? sourcePathFullGet(text, dirAliasList[0]) : text;
   }
 
   // new source data (the development server reports a changed file, or the
@@ -428,16 +512,13 @@ export class DocSourceStore {
       });
       if (result) return result;
     }
-    const { entryList: candidates, hash } = docTargetResolve(target, fromPath, {
-      entryList: this.fileManifest,
-      entryByInternalPath: this.entryByInternalPath,
-      entryListByName: this.targetsByName,
-    }) as { entryList: FileEntry[]; hash: string };
+    const { entryList: candidates, hash } = docTargetResolve(target, fromPath, this.sourceIndex) as { entryList: FileEntry[]; hash: string };
 
     const targets = candidates.map((e) => ({
       internalPath: e.internalPath,
       title: e.title,
       name: e.name,
+      docPageAlias: e.docPageAlias,
     }));
     return { targets, hash };
   }
@@ -448,11 +529,7 @@ export class DocSourceStore {
   // fromPath, a suffix, a name: doc-target-resolve.js); undefined when none
   // or several match
   fileResolve(reference: string, fromPath = ''): FileEntry | undefined {
-    const { entryList } = docTargetResolve(reference, fromPath, {
-      entryList: this.fileManifest,
-      entryByInternalPath: this.entryByInternalPath,
-      entryListByName: this.targetsByName,
-    }) as { entryList: FileEntry[] };
+    const { entryList } = docTargetResolve(reference, fromPath, this.sourceIndex) as { entryList: FileEntry[] };
     return entryList.length === 1 ? entryList[0] : undefined;
   }
 
@@ -474,12 +551,15 @@ export class DocSourceStore {
 
   // why a path typed for spec names nothing in the source ('' when it names
   // something, or is empty): a folder of the folder manifest for kind dir,
-  // a file of the manifest for kind file, either for any. synchronous and
-  // cheap, so a field can ask it on every keystroke
-  pathMissingWarningGet(text: string, spec: SourcePathSpec = { kind: 'dir' }): string {
-    const pathText = String(text ?? '').trim().replace(/\/+$/, '');
-    if (pathText === '') return '';
-    if (!pathText.startsWith('~')) return `${pathText} is not a source path (~rootId/path)`;
+  // a file of the manifest for kind file, either for any. a local path
+  // (~root/dir) is one of the doc page docPageAlias, else of the main doc
+  // page when it has the root, else of the only doc page with that root.
+  // synchronous and cheap, so a field can ask it on every keystroke
+  pathMissingWarningGet(text: string, spec: SourcePathSpec = { kind: 'dir' }, docPageAlias = ''): string {
+    const pathTyped = String(text ?? '').trim().replace(/\/+$/, '');
+    if (pathTyped === '') return '';
+    if (!pathTyped.startsWith('~')) return `${pathTyped} is not a source path (~root/path)`;
+    const pathText = this.pathFullGet(pathTyped, '', docPageAlias);
     const isDir = this.dirManifest.some((dir) => dir.internalPath === pathText);
     const isFile = this.fileManifest.some((entry) => entry.internalPath === pathText);
     if (spec.kind === 'dir') return isDir ? '' : `no folder ${pathText} in the source${isFile ? ' (it is a file)' : ''}`;
@@ -535,8 +615,8 @@ export class DocSourceStore {
   //   { code: 0, data: { path, entry } } | { code: -1 | -2 (exists) | -3 (folder not in the source), message }
   async fileCreate(input: { dirPath: string; name: string; text?: string; blob?: Blob; isOverwrite?: boolean }): Promise<SourceResult> {
     if (!this.isWritable) return { code: -1, message: 'The source is read-only: files are created through the development server only.' };
-    const dirPath = sourcePathNormalize(input.dirPath);
-    if (!sourcePathIsRooted(dirPath)) return { code: -1, message: `The folder must be a source path (~rootId/dir): ${dirPath}` };
+    const dirPath = this.pathFullGet(input.dirPath);
+    if (!sourcePathIsRooted(dirPath)) return { code: -1, message: `The folder must be a source path (~root/dir): ${dirPath}` };
     const body: Record<string, unknown> = { dirPath, name: input.name, isOverwrite: input.isOverwrite === true };
     if (input.blob) body.dataBase64 = await blobBase64Get(input.blob);
     else body.text = String(input.text ?? '');

@@ -69,6 +69,8 @@ export type ConfigLayerDeclaration = {
   file: string;
   // yaml address of the declared mapping in the file
   path: (string | number)[];
+  // the doc page the declaration belongs to ('' for a layer of the page itself)
+  docPageAlias?: string;
   config: Record<string, any>;
   compConfig: Record<string, Record<string, any>>;
   isWritable: boolean;
@@ -252,6 +254,7 @@ export class ConfigLayerDocEntry implements ConfigLayer {
         label: `${fileLabelGet(String(declared.file), dirPage)} › ${(declared.path ?? []).join('.')}`,
         file: String(declared.file),
         path: Array.isArray(declared.path) ? declared.path : [],
+        docPageAlias: String(declared.docPageAlias ?? ''),
         config: { ...config, ...(pendingOne?.config ?? {}) },
         compConfig: compConfigResult,
         isWritable: this.isWritable,

@@ -128,6 +128,18 @@ The lines of an item are those from its `-` to the end of its value, with the co
 
 `seqPath` is a path for `document.getIn`, e.g. `['sidePanelById', 'main', 'tree', 0, 'children']`.
 
+### A key of a mapping
+
+| function | does |
+| --- | --- |
+| `yamlMapKeyRemoveBuild(source, document, keyPath)` | `data.operationList` removing one key with its value: from its line (with the comment lines right above it at its column) to the end of its value (with the comment lines after it, indented deeper). a key that starts an item of a list (`- alias: a`) hands the `- ` to the next line of the item, so the item stays one item. refused: a missing key, a flow mapping, the only key of its mapping |
+
+```yaml
+- alias: a          - dir: ../a
+  dir: ../a    ->     sidePanel: main
+  sidePanel: main
+```
+
 ### A list of strings
 
 | function | does |
@@ -160,11 +172,13 @@ All yaml writes go through an api of the development server: the edit api (`plug
 | a side-panel item moved with its subtree ([moving an item](doc_page_impl_side_panel.md#moving-an-item)) | `POST side-panel/move` | `sidePanelMoveBuild` (`plugin/doc-side-panel-move.ts`) | `yamlSeqItemRemoveBuild`, `yamlSeqItemInsertBuild`, `lineOperationListApply`; for another file, the `include` paths of the item rebased with `nodeReplaceBuild` + `yamlScalarTextBuild` |
 | the asset folders of one doc page ([which folders a doc page declares](doc_page_impl_asset.md#which-folders-a-doc-page-declares)) | `POST /__doc-asset/folder/set` | `assetConfigTextApply` (`plugin/doc-asset-store.ts`) | `yamlStringListSetBuild` for `folderList`, `yamlValueSetOperationBuild` + `yamlScalarTextBuild` for `folderDefault`, `lineOperationListApply`; a file that does not exist yet is created from a template (`assetConfigTextBuild`) |
 | one value of a config declaration of the doc page ([the doc page layer](doc_page_impl_config.md#the-doc-page-layer)) | `POST config/value` | the route itself | `yamlValueTextBuild`, `yamlValueGet` (the key is declared, and the base check), `yamlValueSetOperationBuild`, `lineOperationApply` |
+| the doc pages of the workspace file ([editing the workspace file](doc_page_impl_source.md#editing-the-workspace-file)) | `POST workspace/edit` | `workspaceEditBuild` (`plugin/doc-workspace-edit.ts`) | `yamlValueSetOperationBuild` + `yamlScalarTextBuild` for a field, `yamlMapKeyRemoveBuild` for a field emptied, `nodeReplaceBuild` for `dir` ↔ `file`, `yamlSeqItemInsertBuild` / `yamlSeqItemRemoveBuild` to add, remove and move an item, `lineOperationListApply` |
 
 What each route checks:
 
 - *side-panel/text*: the request names the node by its yaml path (`nodeSource`, annotated on the side-panel tree by `plugin/doc-entry.ts`) and the label it started from (`textBase`); a different label in the file is code -2; a `text` line is not added to a node in flow form; the language of a translated label must match how the file writes it (a string or a language mapping).
 - *side-panel/move*: every file named must be a side-panel file the configuration loads (-3) with the hash the page built its side panel from (`hashBaseByFile`, from `fileHashByFile` of `doc-entry.ts`), else -2 for the whole move; every resulting text is parsed again before anything is written; after writing, the configuration is loaded once and the files are written back when it does not load.
+- *workspace/edit*: the file is the workspace file `config.yaml` names; `hashBase` against its hash (-2); the result must still parse with a non-empty `docPageList`; after writing, the configuration is loaded once and the file is written back when it does not load.
 - *config/value*: the file and key path must be a key of a declaration the configuration loads (-3), already declared (-3); `valueBase` against `yamlValueGet` of the file, -2 when different; after writing, the configuration is loaded once and the file is written back when it does not load.
 
 Every route writes through `fileWriteWithBackup`. The written files are then reported to the source plugin (`onFileListWritten`, `configurationFileListWritten` in `plugin/doc-source.ts`), which recognizes the write as the server's own by its content hash, so the page does not reload: the new configuration reaches the page as a `doc-source-change` data event.

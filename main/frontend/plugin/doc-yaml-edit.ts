@@ -495,6 +495,64 @@ export function yamlSeqItemInsertBuild(
   };
 }
 
+// removing one key of a block mapping with its value: from the key's line
+// (and the comment lines right above it, at its column) to the end of its
+// value (and the comment lines after it, indented deeper). a key that
+// starts an item of a list ("- alias: a") hands the "- " to the next line
+// of the item, so the item stays one item:
+//   - alias: a          - dir: ../a
+//     dir: ../a    ->     sidePanel: main
+//     sidePanel: main
+// refused: a missing key, a flow mapping, the only key of its mapping (the
+// mapping would be empty), a file that does not parse.
+export function yamlMapKeyRemoveBuild(
+  source: string,
+  document: Document,
+  keyPath: (string | number)[],
+): YamlEditResult<{ operationList: LineOperation[] }> {
+  if (document.errors.length > 0) return resultFail(`the file does not parse: ${document.errors[0].message}`);
+  const key = keyPath[keyPath.length - 1];
+  const mapping = keyPath.length === 1 ? document.contents : document.getIn(keyPath.slice(0, -1), true);
+  if (typeof key !== 'string' || !isMap(mapping)) return resultFail(`no mapping holds "${String(key)}" at ${JSON.stringify(keyPath)}`);
+  if (mapping.flow) return resultFail('the mapping is written in flow form ({ a: 1 }); write it over several lines first');
+  const pairIndex = mapping.items.findIndex((item) => isScalar(item.key) && String(item.key.value) === key);
+  if (pairIndex < 0) return resultFail(`"${keyPath.join('.')}" is not in the file`);
+  if (mapping.items.length === 1) return resultFail(`"${keyPath.join('.')}" is the only key of its mapping, which would be empty`);
+  const pair = mapping.items[pairIndex] as Pair<Node, Node | null>;
+  if (!Array.isArray(pair.key?.range)) return resultFail(`"${keyPath.join('.')}" has no position in the file`);
+  const lineList = textLineListGet(source);
+  const column = nodeColumnGet(source, pair.key);
+  const lineIndexKey = lineIndexOfOffset(source, (pair.key.range as [number, number, number])[0]);
+  let lineIndexEnd = lineIndexOfOffset(source, nodeEndOffsetGet(source, (pair.value && Array.isArray(pair.value.range)) ? pair.value : pair.key));
+  const pairNext = mapping.items[pairIndex + 1] as Pair<Node, Node | null> | undefined;
+  const lineIndexLimit = pairNext && Array.isArray(pairNext.key?.range)
+    ? lineIndexOfOffset(source, (pairNext.key.range as [number, number, number])[0])
+    : lineList.length;
+  while (lineIndexEnd + 1 < lineIndexLimit && lineIsCommentAt(lineList[lineIndexEnd + 1], (indent) => indent > column)) {
+    lineIndexEnd++;
+  }
+  const prefix = lineList[lineIndexKey].slice(0, column);
+  if (prefix.trim() === '') {
+    let lineIndexStart = lineIndexKey;
+    while (lineIndexStart > 0 && lineIsCommentAt(lineList[lineIndexStart - 1], (indent) => indent === column)) lineIndexStart--;
+    return { code: 0, data: { operationList: [{ action: 'deleteLines', lineStart: lineIndexStart + 1, lineEnd: lineIndexEnd + 1 }] }, message: '' };
+  }
+  // the key shares its line with "- ": the next line of the item takes it
+  let lineIndexNext = lineIndexEnd + 1;
+  while (lineIndexNext < lineList.length && lineList[lineIndexNext].trim() === '') lineIndexNext++;
+  const lineNext = lineList[lineIndexNext];
+  if (lineNext === undefined || lineNext.slice(0, column).trim() !== '' || lineNext.length <= column) {
+    return resultFail(`the item of "${keyPath.join('.')}" has no line after it at the column of its keys`);
+  }
+  return {
+    code: 0,
+    data: {
+      operationList: [{ action: 'replaceLines', lineStart: lineIndexKey + 1, lineEnd: lineIndexNext + 1, text: `${prefix}${lineNext.slice(column)}` }],
+    },
+    message: '',
+  };
+}
+
 // the key a list is the value of, when it is one
 function seqKeyNodeGet(document: Document, seqPath: (string | number)[]): Node | undefined {
   const key = seqPath[seqPath.length - 1];

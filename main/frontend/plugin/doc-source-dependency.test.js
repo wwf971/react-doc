@@ -110,7 +110,8 @@ function sourceBuild(fileByRelPath) {
     fs.writeFileSync(absPath, text);
     const name = path.basename(relPath);
     return {
-      rootId: 'docs',
+      docPageAlias: '',
+      rootAlias: 'docs',
       relPath,
       name,
       ext: path.extname(name).slice(1),
@@ -170,7 +171,7 @@ test('an unresolved local target is reported', (context) => {
   assert.deepEqual(prunedPathListGet(entryList, [{ doc: 'a.md' }]), ['~docs/a.md']);
   const messageList = warn.mock.calls.map((call) => call.arguments[0]);
   assert.ok(messageList.some((message) => /~docs\/a\.md: link "\.\/gone\.md" is not in the collected source/.test(message)));
-  assert.ok(messageList.some((message) => /"scripts\/run\.ps1" is not an exact source path/.test(message)));
+  assert.ok(messageList.some((message) => /"scripts\/run\.ps1" is not a source path/.test(message)));
 });
 
 test('legacy sourceDependencies are still retained, with a deprecation warning', (context) => {
