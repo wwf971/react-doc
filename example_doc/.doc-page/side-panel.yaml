@@ -67,6 +67,10 @@ sidePanelById:
       - doc: ~example/service-instance.md
         text: Service Instances
         tags: [guide]
+      # app services keeping their state in infra services, both run by the
+      # kernel of the service backend
+      - doc: ~example/service-kernel.md
+        tags: [guide]
       # what a component keeps between renders and across its unmount
       - doc: ~example/comp-state.md
         text: Component State

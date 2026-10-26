@@ -20,12 +20,12 @@ import {
   multiLangCompNameIs,
   multiLangLanguageListGet,
   multiLangStructuredDataGet,
-} from '../../../comp-mdx/multi-lang/MultiLangData.js';
+} from '../../../../built-in/comp-mdx/multi-lang/MultiLangData.js';
 import {
   multiLangRemarkHeading,
   multiLangRemarkHeadingCollect,
-} from '../../../comp-mdx/multi-lang/MultiLangRemarkHeading.js';
-import { MultiLangHeadingText } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
+} from '../../../../built-in/comp-mdx/multi-lang/MultiLangRemarkHeading.js';
+import { MultiLangHeadingText } from '../../../../built-in/comp-mdx/multi-lang/MultiLangEntry.jsx';
 
 // compiles one doc in the browser.
 // mdxPreset() applies the fumadocs defaults (gfm, heading anchors + toc export,

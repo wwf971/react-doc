@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite';
+import { SlidersHorizontal } from '../../main/frontend/UICommon.js';
 import { useDocStores } from '../../main/frontend/src/store/context.js';
 
 // Demo component: every config key resolved for one document, with the level
@@ -35,3 +36,16 @@ export const DocConfigDemo = observer(function DocConfigDemo({ data = {}, config
     </div>
   );
 });
+
+// mounted by comp.yaml of this folder (tag DocConfigDemo)
+export const docConfigDemoDefineOptions = {
+  placementList: ['mdx', 'commentBlock'],
+  expose: {
+    meta: { label: 'Document config (demo)', description: 'The resolved config of the document.' },
+    icon: SlidersHorizontal,
+    sourceDefaultCreate: () => ({
+      lang: 'text',
+      raw: 'Resolved config of this document; replaced by the DocConfigDemo component.',
+    }),
+  },
+};

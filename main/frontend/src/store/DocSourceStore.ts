@@ -13,7 +13,7 @@ import {
   sourcePathNameGet,
   sourcePathNormalize,
 } from '../lib/doc-source-path.js';
-import { multiLangSearchDataGet } from '../../../comp-mdx/multi-lang/MultiLangSearchData.js';
+import { multiLangSearchDataGet } from '../../../../built-in/comp-mdx/multi-lang/MultiLangSearchData.js';
 
 // lower store layer: the doc page source service layer of the page (doc_page_impl_source.md).
 // owns the doc source content: the manifest of files and folders, raw text,

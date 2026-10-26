@@ -18,6 +18,10 @@ import { compIconDefault } from './comp-icon.jsx';
 //                  shift, whatever EditBlockEnterMode is; default false),
 //                  isAssetOnly (its data lives in the asset service layer only and is
 //                  never written inline in a document; default false),
+//                  isEditAssetAccepted (its own edit modes also edit the data
+//                  of a block that is an asset reference, as an asset draft,
+//                  where otherwise only the source mode is offered for it;
+//                  inline data is edited as usual; default false),
 //                  isNotInDoc (it cannot be placed in a document: it renders
 //                  elsewhere, e.g. in the side panel; default false),
 //                  assetSaveMode (inPlace | newVersion: the save mode written
@@ -79,6 +83,7 @@ const metaDefault = Object.freeze({
   isInsertCommon: false,
   isEditEnterButtonOnly: false,
   isAssetOnly: false,
+  isEditAssetAccepted: false,
   isNotInDoc: false,
   assetSaveMode: undefined,
   configDefineList: [],
@@ -134,6 +139,7 @@ function metaNormalize(meta) {
     isInsertCommon: meta.isInsertCommon === true,
     isEditEnterButtonOnly: meta.isEditEnterButtonOnly === true,
     isAssetOnly: meta.isAssetOnly === true,
+    isEditAssetAccepted: meta.isEditAssetAccepted === true,
     isNotInDoc: meta.isNotInDoc === true,
     assetSaveMode: meta.assetSaveMode,
     configDefineList: meta.configDefineList ?? [],

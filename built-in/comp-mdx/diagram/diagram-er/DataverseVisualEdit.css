@@ -1,0 +1,372 @@
+/* The visual editor of the Dataverse cards (DataverseVisualEdit.jsx). Its
+   buttons and texts are the shared classes of the edit layer
+   (.doc-button-dialog, .doc-button-icon, .doc-note, .doc-error, the
+   .doc-edit-panel bar); this file only lays out what is its own, and adapts
+   the host's text control (.editable-value-*) to a cell and to a field. */
+
+.doc-vis-edit-message {
+	display: block;
+	margin: 0.25rem 0;
+}
+
+/* ---------- bar ---------- */
+
+.doc-vis-dirty {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+	color: var(--color-fd-muted-foreground);
+	white-space: nowrap;
+}
+
+.doc-vis-dirty.is-dirty {
+	color: var(--color-fd-foreground);
+}
+
+.doc-vis-dirty.is-dirty::before {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: #d97706;
+	content: '';
+}
+
+.doc-vis-save-target {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+	padding-left: 0.4rem;
+	border-left: 1px solid var(--color-fd-border);
+	color: var(--color-fd-muted-foreground);
+	white-space: nowrap;
+}
+
+/* ---------- card in the editor ---------- */
+
+.doc-er-table.is-editable .doc-er-table-column {
+	cursor: pointer;
+}
+
+.doc-er-table.is-editable .doc-er-table-column:hover:not(.is-focused) {
+	background: color-mix(in srgb, var(--color-fd-primary) 4%, transparent);
+}
+
+.doc-er-table.is-focused {
+	outline: 2px solid var(--color-fd-primary);
+	outline-offset: 1px;
+}
+
+.doc-er-table-column.is-focused {
+	background: color-mix(in srgb, var(--color-fd-primary) 9%, var(--color-fd-background));
+	box-shadow: inset 3px 0 var(--color-fd-primary);
+}
+
+.doc-er-table.is-editable:focus-visible,
+.doc-er-table-column:focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--color-fd-primary) 60%, transparent);
+	outline-offset: -2px;
+}
+
+/* a value of a cell: the text of the read view, clickable. no padding and
+   no minimum height of its own, so the row keeps its height */
+.doc-vis-cell-value {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+	margin: 0;
+	padding: 0 2px;
+	border: 0;
+	border-radius: 2px;
+	background: none;
+	color: inherit;
+	font: inherit;
+	line-height: inherit;
+	letter-spacing: inherit;
+	text-align: inherit;
+	overflow-wrap: anywhere;
+	cursor: text;
+}
+
+.doc-vis-cell-value:hover:not(:disabled),
+.doc-vis-cell-value:focus-visible {
+	background: color-mix(in srgb, var(--color-fd-primary) 10%, transparent);
+	outline: none;
+}
+
+.doc-vis-cell-value:disabled {
+	cursor: default;
+}
+
+/* Key and Type pick from a menu: the chevron appears on the row being
+   pointed at or selected, so a card at rest reads like the read view */
+.doc-vis-value-menu.is-cell {
+	position: relative;
+	display: block;
+	cursor: pointer;
+}
+
+/* the text wraps as in the read view; the chevron lies over the cell's
+   padding, so it takes no room from the text */
+.doc-vis-value-menu.is-cell > svg {
+	position: absolute;
+	top: 50%;
+	right: -0.4rem;
+	opacity: 0;
+	pointer-events: none;
+	transform: translateY(-50%);
+	transition: opacity 80ms ease;
+}
+
+.doc-er-table-column:hover .doc-vis-value-menu.is-cell > svg,
+.doc-er-table-column.is-focused .doc-vis-value-menu.is-cell > svg,
+.doc-vis-value-menu.is-cell[aria-expanded='true'] > svg {
+	opacity: 0.7;
+}
+
+/* ---------- the host's text control ---------- */
+
+.doc-vis-text {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+}
+
+.doc-vis-text .editable-value-container .value-text-viewport .editable-value-text {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 100%;
+	min-height: 1.5rem;
+	padding: 3px 6px;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 2px;
+	background: var(--color-fd-background);
+	color: var(--color-fd-foreground);
+	font-size: 0.72rem;
+	line-height: 1.3;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.doc-vis-text .editable-value-container .value-text-viewport .editable-value-text.editing {
+	border-color: var(--color-fd-primary);
+	box-shadow: none;
+}
+
+.doc-vis-text.is-multiline .editable-value-container .value-text-viewport .editable-value-text {
+	min-height: 3.4rem;
+}
+
+/* in a cell the control takes the place of the text: same font, same line
+   height, no padding; the frame is an outline, which takes no room */
+.doc-vis-text.is-cell .editable-value-container .value-text-viewport .editable-value-text {
+	min-height: 0;
+	padding: 0 2px;
+	border: 0;
+	outline: 1.5px solid var(--color-fd-primary);
+	outline-offset: 1px;
+	font: inherit;
+	line-height: inherit;
+}
+
+/* ---------- settings of the selected row or table ---------- */
+
+.doc-vis-focus-panel.doc-edit-panel {
+	position: fixed;
+	z-index: 1500;
+	box-sizing: border-box;
+	width: 300px;
+	max-width: calc(100vw - 16px);
+	max-height: calc(100vh - 16px);
+	padding: 0.35rem 0.5rem 0.5rem;
+	overflow: auto;
+}
+
+.doc-vis-focus-head strong {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.doc-vis-focus-panel .doc-edit-panel-body {
+	display: grid;
+	gap: 0.4rem;
+	padding-top: 0.45rem;
+}
+
+.doc-vis-field {
+	display: grid;
+	grid-template-columns: 5.2rem minmax(0, 1fr);
+	gap: 0.5rem;
+	align-items: center;
+}
+
+.doc-vis-field-label {
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-vis-choice-group {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.2rem;
+}
+
+.doc-vis-handle-option {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 1.9rem;
+	height: 1.35rem;
+	padding: 0 0.3rem;
+}
+
+.doc-vis-handles-both {
+	display: inline-flex;
+	margin: 0 -2px;
+}
+
+.doc-vis-value-menu.doc-button-dialog {
+	display: inline-flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.3rem;
+	box-sizing: border-box;
+	min-width: 0;
+	max-width: 100%;
+	height: 1.35rem;
+	white-space: nowrap;
+}
+
+.doc-vis-field .doc-vis-value-menu.doc-button-dialog {
+	width: 100%;
+}
+
+.doc-vis-value-menu > span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.doc-vis-value-menu > svg {
+	flex-shrink: 0;
+}
+
+.doc-vis-check {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
+
+.doc-vis-check:disabled {
+	cursor: default;
+	opacity: 0.55;
+}
+
+.doc-vis-checkbox {
+	display: grid;
+	place-items: center;
+	box-sizing: border-box;
+	width: 14px;
+	height: 14px;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 3px;
+	background: var(--color-fd-background);
+}
+
+.doc-vis-check[aria-checked='false'] .doc-vis-checkbox svg {
+	visibility: hidden;
+}
+
+.doc-vis-check[aria-checked='true'] .doc-vis-checkbox {
+	border-color: var(--color-fd-primary);
+	background: var(--color-fd-primary);
+	color: var(--color-fd-primary-foreground);
+}
+
+.doc-vis-position-options {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+
+/* ---------- menus ---------- */
+
+.doc-vis-menu-value {
+	display: grid;
+	grid-template-columns: 12px 1fr;
+	gap: 6px;
+	align-items: center;
+}
+
+/* the type picker is one container item of the host's Menu: a panel, not a
+   highlighted row */
+.doc-vis-menu .menu-core-item.is-container,
+.doc-vis-menu .menu-core-item.is-container:hover {
+	padding: 0;
+	background: transparent;
+	cursor: default;
+}
+
+.doc-vis-picker {
+	box-sizing: border-box;
+	width: 260px;
+	max-width: calc(100vw - 32px);
+	padding: 6px;
+	font-size: 0.75rem;
+	text-align: left;
+}
+
+.doc-vis-picker-search {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.doc-vis-picker-search > svg {
+	flex-shrink: 0;
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-vis-picker-caption {
+	margin: 6px 2px 3px;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.68rem;
+}
+
+.doc-vis-picker-results {
+	display: grid;
+	gap: 1px;
+	max-height: 13rem;
+	overflow-y: auto;
+}
+
+.doc-vis-picker-option {
+	display: grid;
+	grid-template-columns: 12px 1fr;
+	gap: 6px;
+	align-items: center;
+	padding: 3px 6px;
+	border: 0;
+	border-radius: 2px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.doc-vis-picker-option[aria-selected='true'] {
+	background: var(--color-fd-accent);
+}

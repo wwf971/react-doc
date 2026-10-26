@@ -1,14 +1,32 @@
 # the service backend of the example doc (doc_page_impl_service.md#backend-config)
 #   python3 main/service-backend/server.py --config example_doc/.doc-page/service-backend.yaml
+# started by the development server itself (config.yaml service.launch).
+# host and port: where the backend listens, and the one place they are
+# written: the development server reads them here to forward to it
 host: 127.0.0.1
 port: 45190
 # how long a sync api call is waited for, queue included, before -6
 apiWaitSecondMax: 120
-# folders holding the service templates: {templateId}--{name}/service-template.yaml
-templateFolderList:
-  - path: ../service-template
-# folders holding the service instances: {templateName}-inst-{serviceId}/service.yaml.
-# a new instance is created in the default one
-instanceFolderList:
-  - path: ../service
+# the kernel's own tick: a scan and a reconcile (provisioning, routes,
+# health, the log flushed) every this many seconds, without the page asking
+reconcileIntervalSecond: 10
+# every record of the kernel log on stderr (warn and error always)
+isLogVerbose: false
+# the built-in folder of the package (its app and infra templates), found by
+# the backend beside itself when absent; false: none
+# builtIn: ../../built-in
+# the doc pages whose service folders the registry reads: by convention
+# service-template-app/, service-template-infra/, service-app/ and
+# service-infra/ of the doc page folder, or those its .doc-page/service.yaml
+# names. the page syncs the doc pages it loaded as well (temporary mounts).
+# the default one is where an instance is created when no doc page is named,
+# and where the kernel provisions an infra instance the kernel itself needs
+docPageList:
+  - dir: ..
+    alias: example
     isDefault: true
+# further folders, outside any doc page (kind app when absent):
+# templateFolderList:
+#   - { path: ../service-template-app, kind: app }
+# instanceFolderList:
+#   - { path: ../service-app, kind: app, isDefault: true }

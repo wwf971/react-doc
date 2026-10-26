@@ -2,52 +2,45 @@ import { Accordion, Accordions, Callout, File, Files, Folder, Step, Steps, Tab, 
 import { DocLinkInline } from '../link/DocLink.jsx';
 import { MdxRenderer } from '../mdx-render/MdxRenderer.jsx';
 import { SidePanelItem } from '../side-panel/SidePanelItem.jsx';
-import { Anchor } from '../../comp-mdx/anchor/Anchor.jsx';
-import { Block } from '../../comp-mdx/block-simple/Block.jsx';
-import { BlockMdx } from '../../comp-mdx/block-mdx/BlockMdx.jsx';
-import { BlockQA } from '../../comp-mdx/block-qa/BlockQA.jsx';
-import { BlockSimple } from '../../comp-mdx/block-simple/BlockSimple.jsx';
-import { DiagramMermaid } from '../../comp-mdx/diagram-mermaid/DiagramMermaid.jsx';
-import { DiagramText } from '../../comp-mdx/diagram-ascii/DiagramText.jsx';
-import { DiagramER } from '../../comp-mdx/diagram-er/DiagramER.jsx';
-import { ExcelUniver } from '../../comp-mdx/excel-univer/ExcelUniver.jsx';
-import { excelUniverExpose } from '../../comp-mdx/excel-univer/excel-univer-expose.js';
-import { FileDownload } from '../../comp-mdx/file-download/FileDownload.jsx';
-import { fileDownloadAssetDependencyListGet } from '../../comp-mdx/file-download/FileDownloadData.js';
-import { FileIcon as FileDownloadIcon } from '../../comp-mdx/file-download/FileIcon.jsx';
-import { FileTree } from '../../comp-mdx/file-tree/FileTree.jsx';
-import { Image } from '../../comp-mdx/image/Image.jsx';
-import { imageExpose } from '../../comp-mdx/image/image-expose.js';
-import { imageAssetDependencyListGet } from '../../comp-mdx/image/image-paste.js';
-import { ImageGrid } from '../../comp-mdx/image-grid/ImageGrid.jsx';
-import { imageGridExpose } from '../../comp-mdx/image-grid/image-grid-expose.js';
-import { imageGridAssetDependencyListGet } from '../../comp-mdx/image-grid/ImageGridStore.js';
-import { Index } from '../../comp-mdx/index/Index.jsx';
-import { ListHierarchy } from '../../comp-mdx/list-hierarchy/ListHierarchy.jsx';
-import { ListSupportedToolsRow } from '../../comp-mdx/list-hierarchy/ListSupportedToolsRow.jsx';
-import { ListToolsControls } from '../../comp-mdx/list-hierarchy/ListToolsControls.jsx';
-import { MultiLang } from '../../comp-mdx/multi-lang/MultiLangEntry.jsx';
-import { ProxyConnectionDiagram } from '../../comp-mdx/proxy-connection-diagram/ProxyConnectionDiagram.jsx';
-import { SourceLink } from '../../comp-mdx/source-link/SourceLink.jsx';
-import { SwitchView } from '../../comp-mdx/switch-view/SwitchView.jsx';
-import { TableCapabilityCell } from '../../comp-mdx/table-hierarchy/TableCapabilityCell.jsx';
-import { TableHierarchy } from '../../comp-mdx/table-hierarchy/TableHierarchy.jsx';
-import { TextInfoCell } from '../../comp-mdx/table-hierarchy/TextInfoCell.jsx';
-import { Tag } from '../../comp-mdx/tag/Tag.jsx';
-import { TagLabel } from '../../comp-mdx/tag/TagLabel.jsx';
-import { TagOverview } from '../../comp-mdx/tag/TagOverview.jsx';
-import { BlockSource } from '../../comp-mdx/text/BlockSource.jsx';
-import { Heading } from '../../comp-mdx/text/Heading.jsx';
-import { List } from '../../comp-mdx/text/List.jsx';
-import { Paragraph } from '../../comp-mdx/text/Paragraph.jsx';
-// demo-specific components live beside the demonstration documents
-import { DemoCounter } from '../../../example_doc/comp-mdx/DemoCounter.jsx';
-import { DocConfigDemo } from '../../../example_doc/comp-mdx/DocConfigDemo.jsx';
-import { SidePanelItemDemo } from '../../../example_doc/comp-mdx/SidePanelItemDemo.jsx';
-import { StockTable, stockTableDefineOptions } from '../../../example_doc/comp-mdx/StockTable.jsx';
-import { TagListAllDemo } from '../../../example_doc/comp-mdx/TagListAllDemo.jsx';
-import { CompStateListDemo } from '../../../example_doc/comp-mdx/CompStateListDemo.jsx';
-import { TextPanelDemo } from '../../../example_doc/comp-mdx/TextPanelDemo.jsx';
+import { Anchor } from '../../../built-in/comp-mdx/anchor/Anchor.jsx';
+import { Block } from '../../../built-in/comp-mdx/block/block-simple/Block.jsx';
+import { BlockMdx } from '../../../built-in/comp-mdx/block/block-mdx/BlockMdx.jsx';
+import { BlockQA } from '../../../built-in/comp-mdx/block/block-qa/BlockQA.jsx';
+import { BlockSimple } from '../../../built-in/comp-mdx/block/block-simple/BlockSimple.jsx';
+import { DiagramMermaid } from '../../../built-in/comp-mdx/diagram/diagram-mermaid/DiagramMermaid.jsx';
+import { DiagramText } from '../../../built-in/comp-mdx/diagram/diagram-ascii/DiagramText.jsx';
+import { DiagramER } from '../../../built-in/comp-mdx/diagram/diagram-er/DiagramER.jsx';
+import { diagramDataverseEntityExpose, diagramERExpose } from '../../../built-in/comp-mdx/diagram/diagram-er/diagram-er-expose.js';
+import { DiagramDataverseEntity } from '../../../built-in/comp-mdx/diagram/diagram-db-tabe/DiagramDataverseEntity.jsx';
+import { ExcelUniver } from '../../../built-in/comp-mdx/media/excel-univer/ExcelUniver.jsx';
+import { excelUniverExpose } from '../../../built-in/comp-mdx/media/excel-univer/excel-univer-expose.js';
+import { FileDownload } from '../../../built-in/comp-mdx/media/file-download/FileDownload.jsx';
+import { fileDownloadAssetDependencyListGet } from '../../../built-in/comp-mdx/media/file-download/FileDownloadData.js';
+import { FileIcon as FileDownloadIcon } from '../../../built-in/comp-mdx/media/file-download/FileIcon.jsx';
+import { FileTree } from '../../../built-in/comp-mdx/hierarchy/file-tree/FileTree.jsx';
+import { Image } from '../../../built-in/comp-mdx/media/image/image/Image.jsx';
+import { imageExpose } from '../../../built-in/comp-mdx/media/image/image/image-expose.js';
+import { imageAssetDependencyListGet } from '../../../built-in/comp-mdx/media/image/image/image-paste.js';
+import { ImageGrid } from '../../../built-in/comp-mdx/media/image/image-grid/ImageGrid.jsx';
+import { imageGridExpose } from '../../../built-in/comp-mdx/media/image/image-grid/image-grid-expose.js';
+import { imageGridAssetDependencyListGet } from '../../../built-in/comp-mdx/media/image/image-grid/ImageGridStore.js';
+import { Index } from '../../../built-in/comp-mdx/index/Index.jsx';
+import { ListHierarchy } from '../../../built-in/comp-mdx/hierarchy/list-hierarchy/ListHierarchy.jsx';
+import { ListSupportedToolsRow } from '../../../built-in/comp-mdx/hierarchy/list-hierarchy/ListSupportedToolsRow.jsx';
+import { ListToolsControls } from '../../../built-in/comp-mdx/hierarchy/list-hierarchy/ListToolsControls.jsx';
+import { MultiLang } from '../../../built-in/comp-mdx/multi-lang/MultiLangEntry.jsx';
+import { ProxyConnectionDiagram } from '../../../built-in/comp-mdx/diagram/proxy-connection-diagram/ProxyConnectionDiagram.jsx';
+import { SwitchView } from '../../../built-in/comp-mdx/switch-view/SwitchView.jsx';
+import { TableCapabilityCell } from '../../../built-in/comp-mdx/hierarchy/table-hierarchy/TableCapabilityCell.jsx';
+import { TableHierarchy } from '../../../built-in/comp-mdx/hierarchy/table-hierarchy/TableHierarchy.jsx';
+import { TextInfoCell } from '../../../built-in/comp-mdx/hierarchy/table-hierarchy/TextInfoCell.jsx';
+import { Tag } from '../../../built-in/comp-mdx/tag/Tag.jsx';
+import { TagLabel } from '../../../built-in/comp-mdx/tag/TagLabel.jsx';
+import { TagOverview } from '../../../built-in/comp-mdx/tag/TagOverview.jsx';
+import { BlockSource } from '../../../built-in/comp-mdx/text/BlockSource.jsx';
+import { Heading } from '../../../built-in/comp-mdx/text/Heading.jsx';
+import { List } from '../../../built-in/comp-mdx/text/List.jsx';
+import { Paragraph } from '../../../built-in/comp-mdx/text/Paragraph.jsx';
 import { compDefine, compNativeDefine } from './comp-registry.js';
 import {
   accordionsExpose,
@@ -56,12 +49,8 @@ import {
   blockQAExpose,
   blockSimpleExpose,
   calloutExpose,
-  demoCounterExpose,
-  compStateListDemoExpose,
-  diagramERExpose,
   diagramMermaidExpose,
   diagramTextExpose,
-  docConfigDemoExpose,
   fileDownloadExpose,
   fileIconExpose,
   fileTreeExpose,
@@ -72,13 +61,11 @@ import {
   listToolsControlsExpose,
   multiLangExpose,
   proxyConnectionDiagramExpose,
-  sourceLinkExpose,
   stepsExpose,
   switchViewExpose,
   tableCapabilityCellExpose,
   tableHierarchyExpose,
   tabsExpose,
-  tagListAllDemoExpose,
   tagOverviewExpose,
   textInfoCellExpose,
 } from './registry-expose.js';
@@ -125,8 +112,12 @@ const compDiagramText = compDefine(DiagramText, { placementList: ['commentBlock'
 // mermaid itself is not a package dependency: the host app supplies
 // config.mermaidLoad through DocPageMdx config.compConfigHost.
 const compDiagramMermaid = compDefine(DiagramMermaid, { placementList: ['mdx', 'commentBlock'], expose: diagramMermaidExpose });
-// the ER diagram draws with @xyflow/react, a dependency of the package
-const compDiagramER = compDefine(DiagramER, { placementList: ['mdx', 'commentBlock'], expose: diagramERExpose });
+// the ER diagram draws with @xyflow/react, a dependency of the package. it
+// and the standalone Dataverse table card share a visual edit mode
+// (diagram-er-expose.js) that also edits the data of an asset reference, so
+// both learn whether their data is an asset (isAssetAware)
+const compDiagramER = compDefine(DiagramER, { placementList: ['mdx', 'commentBlock'], isAssetAware: true, expose: diagramERExpose });
+const compDiagramDataverseEntity = compDefine(DiagramDataverseEntity, { placementList: ['mdx', 'commentBlock'], isAssetAware: true, expose: diagramDataverseEntityExpose });
 // a spreadsheet drawn by Univer, which is not a package dependency either:
 // the host supplies config.univerLoad. it is asset-only (excel-univer-expose.js),
 // so it is a comment block whose fenced block is an asset reference, and it
@@ -169,8 +160,13 @@ const compTableHierarchy = compDefine(TableHierarchy, { placementList: ['comment
 const compListHierarchy = compDefine(ListHierarchy, { placementList: ['commentBlock'], expose: listHierarchyExpose });
 const compSwitchView = compDefine(SwitchView, { placementList: ['commentBlock'], expose: switchViewExpose });
 
-// all components that docs may use. what is actually exposed to doc authors
-// (and under which tag name) is decided by compRegistry in config.yaml.
+// all components the package registers. what is actually exposed to doc
+// authors (and under which tag name) is decided by compRegistry in
+// config.yaml. a doc page brings components of its own in its component
+// folders (comp-mdx/comp.yaml), mounted by the vite plugin
+// (doc_page_impl_mdx_comp.md#components-of-a-doc-page): the demonstration
+// components of example_doc/comp-mdx/ and SourceLink, bound to the
+// demonstration's popup panel there, are not registered here.
 export const compById = {
   // relatively common components, re-exported from the fumadocs default theme
   'common/Tabs': compNativeDefine(Tabs, { placementList: ['mdx'], expose: tabsExpose }),
@@ -194,6 +190,7 @@ export const compById = {
   'common/DiagramText': compDiagramText,
   'common/DiagramMermaid': compDiagramMermaid,
   'common/DiagramER': compDiagramER,
+  'common/DiagramDataverseEntity': compDiagramDataverseEntity,
   'common/ExcelUniver': compExcelUniver,
   'common/Block': compBlock,
   'common/BlockSimple': compBlockSimple,
@@ -236,28 +233,6 @@ export const compById = {
   'common/DocImageGrid': compImageGrid,
   'common/DocDiagramText': compDiagramText,
   'common/DocDiagramMermaid': compDiagramMermaid,
-  'specific/DemoCounter': compDefine(DemoCounter, { expose: demoCounterExpose }),
-  'specific/StockTable': compDefine(StockTable, stockTableDefineOptions),
-  'specific/SidePanelItemDemo': compDefine(SidePanelItemDemo, {
-    placementList: ['sidePanelDisplay'],
-    expose: { meta: { label: 'Side panel item demo', isNotInDoc: true } },
-  }),
-  // a component with nothing to edit declares itself read-only: no edit
-  // mode, no Edit button (doc_page_impl_mdx_comp.md#what-a-component-exposes)
-  // what the component state service layer holds; read-only like the tag list
-  'specific/CompStateListDemo': compDefine(CompStateListDemo, { expose: compStateListDemoExpose }),
-  'specific/TagListAllDemo': compDefine(TagListAllDemo, {
-    placementList: ['mdx', 'commentBlock'],
-    expose: tagListAllDemoExpose,
-  }),
-  'specific/DocConfigDemo': compDefine(DocConfigDemo, { placementList: ['mdx', 'commentBlock'], expose: docConfigDemoExpose }),
-  // demo-host binding: the popup panel implementation is host configuration,
-  // so SourceLink is registered here with the demo panel rather than in common/.
-  'specific/SourceLink': compDefine(SourceLink, {
-    dataBuild: sourceLinkDataBuild,
-    placementList: ['mdx', 'commentBlock'],
-    expose: sourceLinkExpose,
-  }),
 };
 
 function markdownConfigBuild(input) {
@@ -266,16 +241,6 @@ function markdownConfigBuild(input) {
     config: {
       ...input.config,
       MdxRenderer,
-    },
-  };
-}
-
-function sourceLinkDataBuild(input) {
-  return {
-    ...input,
-    config: {
-      ...input.config,
-      panelComponent: TextPanelDemo,
     },
   };
 }

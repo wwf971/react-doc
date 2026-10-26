@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite';
+import { History } from '../../main/frontend/UICommon.js';
 import { useDocStores } from '../../main/frontend/src/store/context.js';
 import { timeTextGet } from '../../main/frontend/src/lib/time-text.js';
 
@@ -55,3 +56,14 @@ function entryTextGet(entry) {
   if (name && name !== 'Object') return `[${name}]`;
   return JSON.stringify(entry);
 }
+
+// a component with nothing to edit declares itself read-only: no edit
+// mode, no Edit button (doc_page_impl_mdx_comp.md#what-a-component-exposes).
+// mounted by comp.yaml of this folder (tag CompStateListDemo)
+export const compStateListDemoDefineOptions = {
+  expose: {
+    meta: { isReadOnly: true, label: 'Component states (demo)', description: 'Every state object the component state service layer holds now.' },
+    icon: History,
+    sourceDefaultCreate: () => ({ lang: 'text', raw: 'The states of the components of the page; replaced by the CompStateListDemo component.' }),
+  },
+};

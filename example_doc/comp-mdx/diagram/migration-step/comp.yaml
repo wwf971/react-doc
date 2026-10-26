@@ -1,0 +1,7 @@
+# a node renderer of DiagramER (placement visualizationNode), the demonstration
+# of a registered component drawing a node of a diagram
+# (built-in/comp-mdx/diagram/diagram-er/comp_db_vis.md#internal-and-registered-renderers)
+tagName: MigrationStep
+id: specific/MigrationStep
+entry: ./MigrationStep.jsx
+defineOptionsExport: migrationStepDefineOptions

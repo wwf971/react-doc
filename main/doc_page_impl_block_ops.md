@@ -310,6 +310,6 @@ comp-doc/edit/DocEditBody.jsx           the paste on the page; the blocks a text
 comp-doc/edit/DocEditBlock.jsx          editable or selectable, by the mode
 comp-doc/edit/DocEditBlockToolbar.jsx   the operations on one block in edit mode
 comp-doc/edit/DocEditInsertMenu.jsx     Paste… in the Text row
-example_doc/comp-mdx/StockTableEdit.jsx a component taking a paste (pasteRequest)
+example_doc/comp-mdx/table/stock-table/StockTableEdit.jsx a component taking a paste (pasteRequest)
 example_doc/mdx-doc-edit-in-place.md            "Pasting blocks", "Copying and moving blocks": texts and blocks to try
 ```

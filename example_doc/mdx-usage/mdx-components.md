@@ -68,6 +68,11 @@ subtopics:
           en: Markdown block
           jp: Markdown ブロック
         target: ~example/mdx-usage/comp-block.md#block-mdx
+      - id: block-qa
+        title:
+          en: Questions and answers
+          jp: 質問と回答
+        target: ~example/mdx-usage/comp-block-qa.md
   - id: images
     title:
       en: Images
@@ -98,6 +103,41 @@ subtopics:
           en: Mermaid diagram
           jp: Mermaid 図表
         target: ~example/mdx-usage/comp-diagram.md#diagram-mermaid
+      - id: proxy-connection-diagram
+        title:
+          en: Interactive diagram
+          jp: インタラクティブ図
+        target: ~example/mdx-usage/comp-diagram.md#proxy-connection-diagram
+  - id: data-diagrams
+    title:
+      en: Data diagrams
+      jp: データ図
+    items:
+      - id: diagram-er
+        title:
+          en: ER diagram
+          jp: ER 図
+        target: ~example/mdx-usage/comp-diagram-er.md#diagram-er-dataverse
+      - id: diagram-er-flow
+        title:
+          en: Operators and custom nodes
+          jp: 処理ノードと独自ノード
+        target: ~example/mdx-usage/comp-diagram-er.md#diagram-er-flow
+      - id: diagram-er-layout
+        title:
+          en: Layout and viewport
+          jp: 配置とビューポート
+        target: ~example/mdx-usage/comp-diagram-er.md#diagram-er-layout
+      - id: diagram-dataverse-entity
+        title:
+          en: Dataverse table card
+          jp: Dataverse テーブルカード
+        target: ~example/mdx-usage/comp-diagram-er.md#diagram-dataverse-entity
+      - id: diagram-er-edit
+        title:
+          en: Visual editing
+          jp: 視覚的な編集
+        target: ~example/mdx-usage/comp-diagram-er.md#diagram-er-edit
   - id: spreadsheets
     title:
       en: Spreadsheets
@@ -108,6 +148,26 @@ subtopics:
           en: Spreadsheet (Univer)
           jp: スプレッドシート（Univer）
         target: ~example/mdx-usage/comp-excel-univer.md
+  - id: hierarchies
+    title:
+      en: Hierarchies and views
+      jp: 階層とビュー
+    items:
+      - id: table-hierarchy
+        title:
+          en: Hierarchy table
+          jp: 階層テーブル
+        target: ~example/mdx-usage/comp-hierarchy.md#table-hierarchy
+      - id: list-hierarchy
+        title:
+          en: Hierarchy list
+          jp: 階層リスト
+        target: ~example/mdx-usage/comp-hierarchy.md#list-hierarchy
+      - id: switch-view
+        title:
+          en: Switchable views
+          jp: 表示の切り替え
+        target: ~example/mdx-usage/comp-hierarchy.md#switch-view
   - id: files
     title:
       en: Files
@@ -172,6 +232,7 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 ```
 
 - [Blocks](comp-block.md)
+- [Questions and answers](comp-block-qa.md)
 
 <!--renderComp=MultiLang-->
 ## {en: "Images", jp: "画像"}
@@ -198,6 +259,18 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 - [Text and Mermaid diagrams](comp-diagram.md)
 
 <!--renderComp=MultiLang-->
+## {en: "Data Diagrams", jp: "データ図"}
+
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
+```markdown
+`DiagramER` draws Dataverse tables, global choices, processing steps, and registered components as nodes on a canvas, joined by connections between named handles. `DiagramDataverseEntity` shows one table card in the flow of the document. Both are edited visually in place, on inline YAML or on data in the asset service layer.
+
+`DiagramER` は、Dataverse のテーブル、グローバル選択肢、処理ステップ、登録済みコンポーネントをキャンバス上のノードとして描き、名前付きハンドル間の接続線で結びます。`DiagramDataverseEntity` はテーブルカードを一枚、文書の流れの中に表示します。どちらも、インラインの YAML でもアセットサービス層のデータでも、その場で視覚的に編集できます。
+```
+
+- [Data diagrams](comp-diagram-er.md)
+
+<!--renderComp=MultiLang-->
 ## {en: "Spreadsheets", jp: "スプレッドシート"}
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
@@ -208,6 +281,18 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 ```
 
 - [Spreadsheet](comp-excel-univer.md)
+
+<!--renderComp=MultiLang-->
+## {en: "Hierarchies and Views", jp: "階層とビュー"}
+
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
+```markdown
+`TableHierarchy` and `ListHierarchy` show rows grouped at any depth, with registered components for cells and rows. `SwitchView` shows the same data through several of them, chosen by tabs.
+
+`TableHierarchy` と `ListHierarchy` は、任意の深さでグループ化した行を、セルや行に登録済みコンポーネントを使って表示します。`SwitchView` は、同じデータをそれらの複数の表示でタブ切り替えします。
+```
+
+- [Hierarchies and switchable views](comp-hierarchy.md)
 
 <!--renderComp=MultiLang-->
 ## {en: "Files", jp: "ファイル"}

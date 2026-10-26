@@ -932,3 +932,14 @@
   flex: 0 0 auto;
   white-space: nowrap;
 }
+
+/* a tab holding only a centered notice (Services without a backend): the
+   wrappers of ConfigPanel between the tab's scrolling content and the
+   notice fill the tab's height, so the notice sits in its middle */
+.doc-settings-panel .doc-settings-body > * > *:last-child:has(.doc-service-settings[data-centered]),
+.doc-settings-panel .doc-settings-body > * > *:last-child :has(.doc-service-settings[data-centered]) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+}

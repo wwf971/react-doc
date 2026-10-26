@@ -31,7 +31,7 @@ from service_runtime import ServiceRuntime  # noqa: E402
 
 BODY_SIZE_MAX = 16 * 1024 * 1024
 
-STATUS_BY_CODE = {0: 200, -1: 400, -2: 403, -3: 404, -4: 409, -6: 504}
+STATUS_BY_CODE = {0: 200, -1: 400, -2: 403, -3: 404, -4: 409, -6: 504, -7: 424}
 
 CONTENT_TYPE_BY_EXT = {
     '.js': 'text/javascript; charset=utf-8',
@@ -56,7 +56,8 @@ def handler_class_build(runtime):
         server_version = 'DocServiceBackend/1'
 
         def log_message(self, format_text, *args):
-            sys.stderr.write(f'[service] {self.command} {self.path} {format_text % args}\n')
+            if runtime.kernel_log.is_verbose:
+                sys.stderr.write(f'[service] {self.command} {self.path} {format_text % args}\n')
 
         # ---------- answers ----------
 
@@ -121,6 +122,12 @@ def handler_class_build(runtime):
             try:
                 if path == '/status':
                     self.response_send({'code': 0, 'data': runtime.status_get()})
+                elif path == '/registry':
+                    self.response_send({'code': 0, 'data': runtime.registry_get()})
+                elif path == '/infra/list':
+                    self.response_send({'code': 0, 'data': runtime.infra_list_get()})
+                elif path == '/log/recent':
+                    self.response_send({'code': 0, 'data': runtime.kernel_log.recent_get(int(query.get('limit', '200')))})
                 elif path == '/template/list':
                     self.response_send({'code': 0, 'data': runtime.template_list_get()})
                 elif path == '/template/get':
@@ -141,7 +148,7 @@ def handler_class_build(runtime):
                     instance = runtime.instance_get(query.get('serviceId', ''))
                     self.response_send({'code': 0, 'data': instance.info_get()})
                 elif path == '/instance/resolve':
-                    target = {key: query[key] for key in ['serviceId', 'templateId', 'versionId'] if key in query}
+                    target = {key: query[key] for key in ['serviceId', 'templateId', 'versionId', 'infra'] if key in query}
                     instance = runtime.target_resolve(target, self.page_caller_get(query.get))
                     self.response_send({'code': 0, 'data': instance.info_get()})
                 elif path == '/instance/openrpc':
@@ -160,6 +167,8 @@ def handler_class_build(runtime):
                     service_id, _, relative_path = path[len('/instance/dashboard/'):].partition('/')
                     instance = runtime.instance_get(unquote(service_id))
                     expose = script_expose_get(instance.script, f'the instance {instance.service_id}')
+                    if expose['dashboardRemote'] is None:
+                        raise ServiceError(-3, f'the instance {instance.service_id} has no dashboards')
                     remote_dir = os.path.join(instance.dir_path, expose['dashboardRemote']['dir'])
                     self.file_send(remote_dir, unquote(relative_path))
                 elif path == '/job/get':
@@ -176,7 +185,24 @@ def handler_class_build(runtime):
             try:
                 body = self.body_read()
                 if path == '/instance/create':
-                    data = runtime.instance_create(body.get('templateId', ''), body.get('name', ''), body.get('description', ''), body.get('config'))
+                    data = runtime.instance_create(body.get('templateId', ''), body.get('name', ''), body.get('description', ''),
+                                                   body.get('config'), str(body.get('docPageAlias') or ''))
+                    self.response_send({'code': 0, 'data': data})
+                elif path == '/instance/dependency/set':
+                    data = runtime.instance_dependency_set(body.get('serviceId', ''), body.get('dependencyList'),
+                                                           body.get('isDependencyDynamicAllowed'))
+                    self.response_send({'code': 0, 'data': data})
+                elif path == '/instance/enable':
+                    data = runtime.instance_enable_set(body.get('serviceId', ''), body.get('isEnabled', True) is not False)
+                    self.response_send({'code': 0, 'data': data})
+                elif path == '/instance/delete':
+                    data = runtime.instance_delete(body.get('serviceId', ''))
+                    self.response_send({'code': 0, 'data': data})
+                elif path == '/infra/route':
+                    data = runtime.infra_route_set(body.get('name', ''), str(body.get('serviceId') or ''))
+                    self.response_send({'code': 0, 'data': data})
+                elif path == '/registry/docpage/sync':
+                    data = runtime.docpage_sync(body.get('docPageList') or [])
                     self.response_send({'code': 0, 'data': data})
                 elif path == '/template/version/new':
                     data = runtime.template_version_new(body.get('templateId', ''), body.get('note', ''))
@@ -206,6 +232,7 @@ def main():
     host = args.host or runtime.host
     port = args.port or runtime.port
     runtime.scan()
+    runtime.reconcile_thread_start()
 
     server = ThreadingHTTPServer((host, port), handler_class_build(runtime))
     server.daemon_threads = True

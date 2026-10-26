@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
-import { BlockRender } from '../../comp-mdx/text/BlockRender.jsx';
+import { BlockRender } from '../../../built-in/comp-mdx/text/BlockRender.jsx';
 import { DocEditBlockContext, DocEditBlockFloatContext, useDocEditDoc } from './DocEditDocContext.js';
 import { DocEditBlockToolbar } from './DocEditBlockToolbar.jsx';
 import { DocEditBlockEditor, blockLabelGet } from './DocEditBlockEditor.jsx';

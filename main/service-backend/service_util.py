@@ -46,6 +46,16 @@ def time_text_get():
     return time.strftime('%Y%m%d_%H%M%S', local) + f'{centisecond:02d}' + zone_text
 
 
+def time_iso_get():
+    """2026-10-29T12:34:56.789+09:00: the time of a log record, sortable as text."""
+    now = time.time()
+    local = time.localtime(now)
+    millisecond = int((now % 1) * 1000)
+    zone_minute = round(local.tm_gmtoff / 60)
+    zone_text = f'{"-" if zone_minute < 0 else "+"}{abs(zone_minute) // 60:02d}:{abs(zone_minute) % 60:02d}'
+    return time.strftime('%Y-%m-%dT%H:%M:%S', local) + f'.{millisecond:03d}' + zone_text
+
+
 def instance_name_normalize(name_input):
     """The name of an instance: a label kept in its service.yaml, not in its folder name.
 
@@ -113,6 +123,23 @@ def yaml_write(path, value):
     try:
         with os.fdopen(file_descriptor, 'w', encoding='utf-8') as file:
             file.write(text)
+        os.replace(path_temp, path)
+    except BaseException:
+        if os.path.exists(path_temp):
+            os.remove(path_temp)
+        raise
+
+
+def yaml_write_commented(path, value, comment_text):
+    """yaml_write with a comment block on top (the file the kernel writes for
+    itself, so a reader of the disk knows what it is)."""
+    text = yaml.safe_dump(value, allow_unicode=True, sort_keys=False)
+    comment = ''.join(f'# {line}\n' if line else '#\n' for line in comment_text.strip('\n').split('\n'))
+    dir_path = os.path.dirname(path)
+    file_descriptor, path_temp = tempfile.mkstemp(dir=dir_path, prefix='.tmp-', suffix='.yaml')
+    try:
+        with os.fdopen(file_descriptor, 'w', encoding='utf-8') as file:
+            file.write(comment + text)
         os.replace(path_temp, path)
     except BaseException:
         if os.path.exists(path_temp):

@@ -1,0 +1,37 @@
+objectId: w55j4vdm1uw
+name: todos dashboard
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+component:
+  name: service/todo-list/default
+saveMode: inPlace
+versionIdHead: w55j4vefjq0
+isDeleted: false
+isLocked: false
+timeCreated: 20261029_05450000+09
+versionList:
+  - versionId: w55j4vefjq0
+    versionIdPrevList: []
+    time: 20261029_05450000+09
+    note: dashboard state
+    size: 44
+    hash: 38824918614b70ec5049df2c32d72dfde9ea4d79
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261029_05450000+09
+    versionId: w55j4vefjq0
+  - eventType: updateInPlace
+    time: 20261029_05503315+09
+    versionId: w55j4vefjq0
+  - eventType: updateInPlace
+    time: 20261029_05503427+09
+    versionId: w55j4vefjq0
+  - eventType: updateInPlace
+    time: 20261029_05514263+09
+    versionId: w55j4vefjq0
+  - eventType: updateInPlace
+    time: 20261029_05514377+09
+    versionId: w55j4vefjq0

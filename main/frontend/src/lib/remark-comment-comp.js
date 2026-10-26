@@ -1,5 +1,5 @@
 import { visit } from 'unist-util-visit';
-import { anchorCompNameIs } from '../../../comp-mdx/anchor/AnchorData.js';
+import { anchorCompNameIs } from '../../../../built-in/comp-mdx/anchor/AnchorData.js';
 
 // graceful-degradation stipulation from the requirement:
 //

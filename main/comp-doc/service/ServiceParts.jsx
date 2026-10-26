@@ -28,7 +28,8 @@ export function ServiceIcon({ iconUrl, size = 16 }) {
 }
 
 // the state of the backend, or of one instance, as a dot and a word
-// ('ready', 'starting', 'disabled', 'error', 'down', 'no backend')
+// ('ready', 'starting', 'waiting', 'disabled', 'error', 'backend down',
+// 'no backend'; waiting: a required infra service is not available yet)
 export function serviceStatusTextGet(serviceStore, instance) {
   if (serviceStore.backendStatus === 'none') return 'no backend';
   if (serviceStore.backendStatus === 'down') return 'backend down';
@@ -37,8 +38,24 @@ export function serviceStatusTextGet(serviceStore, instance) {
   return instance.status;
 }
 
-export function ServiceStatusDot({ status }) {
-  return <span className="doc-service-status-dot" data-status={status} aria-hidden="true" />;
+export function ServiceStatusDot({ status, title }) {
+  return <span className="doc-service-status-dot" data-status={status} title={title} aria-hidden={title ? undefined : 'true'} />;
+}
+
+// the health of an instance as the kernel sees it (its lifecycle, its
+// dependencies, what the script reports): healthy, degraded, unhealthy;
+// the message as the tooltip
+export function ServiceHealthDot({ health, message }) {
+  if (!health) return null;
+  return (
+    <span
+      className="doc-service-health-dot"
+      data-health={health}
+      title={message ? `${health}: ${message}` : health}
+      role="img"
+      aria-label={message ? `${health}: ${message}` : health}
+    />
+  );
 }
 
 // the backend asked again: its templates and instances

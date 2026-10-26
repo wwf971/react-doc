@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite';
+import { Hash } from '../../main/frontend/UICommon.js';
 import { useCompState } from '../../main/comp-doc/registry/use-comp-state.js';
 
 // Demonstration component: a counter whose count lives in the component
@@ -19,6 +20,9 @@ import { useCompState } from '../../main/comp-doc/registry/use-comp-state.js';
 //
 // the host application may take the change over (countChangeRequest with
 // the next count, answered with code 0); otherwise the counter counts itself.
+//
+// mounted by comp.yaml of this folder (tag DemoCounter), with the options
+// below (doc_page_impl_mdx_comp.md#components-of-a-doc-page)
 export const DemoCounter = observer(function DemoCounter({ data = {}, config = {}, onEvent }) {
   const state = useCompState(config, { count: 0 });
 
@@ -44,3 +48,17 @@ export const DemoCounter = observer(function DemoCounter({ data = {}, config = {
     </span>
   );
 });
+
+// what the component exposes (doc_page_impl_mdx_comp.md#what-a-component-exposes):
+// its name and icon for the insert menu, the source of a new block
+export const demoCounterDefineOptions = {
+  expose: {
+    meta: { label: 'Counter (demo)', description: 'A counter whose count lives in the component state service layer.' },
+    icon: Hash,
+    sourceDefaultCreate: () => ({
+      lang: 'text',
+      raw: 'A counter; a plain Markdown viewer shows this text in its place.',
+      props: { id: 'counter', label: 'clicks' },
+    }),
+  },
+};

@@ -1,0 +1,17 @@
+serviceId: w55j3ztn3rq
+name: example todos
+description: the todos of the example doc (service-kernel.md)
+kind: app
+isEnabled: true
+timeCreated: 20261029_05414849+09
+template:
+  templateId: w55iiudjq5y
+  name: todo-list
+  versionId: w55iiudjq61
+dependencyList:
+- name: sqlite
+  isRequired: true
+  onUnavailable: report
+isDependencyDynamicAllowed: false
+config:
+  titleLengthMax: 200

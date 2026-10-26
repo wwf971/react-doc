@@ -1,0 +1,212 @@
+/* the dashboards of todo-list. every class is prefixed todo-list-: the
+   styles are loaded into the page, beside the page's own */
+
+.todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+.todo-list-toolbar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.todo-list-input {
+  flex: 1 1 10rem;
+  min-width: 6rem;
+  padding: 1px 4px;
+  border: 1px solid var(--color-fd-border, #ccc);
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.todo-list-input-note {
+  flex: 0 1 16rem;
+}
+
+.todo-list-button {
+  padding: 0 6px;
+  border: 1px solid var(--color-fd-border, #ccc);
+  border-radius: 3px;
+  background: var(--color-fd-secondary, #f4f4f4);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.todo-list-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.todo-list-icon {
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--color-fd-muted-foreground, #777);
+  font: inherit;
+  cursor: pointer;
+}
+
+.todo-list-icon:hover {
+  color: inherit;
+}
+
+.todo-list-muted {
+  color: var(--color-fd-muted-foreground, #777);
+  font-size: 0.8rem;
+}
+
+.todo-list-error {
+  color: #c62828;
+  font-size: 0.8rem;
+}
+
+/* the filter: all / open / done, one chosen */
+.todo-list-filter {
+  display: inline-flex;
+  border: 1px solid var(--color-fd-border, #ccc);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.todo-list-filter button {
+  padding: 0 6px;
+  border: none;
+  background: none;
+  color: var(--color-fd-muted-foreground, #777);
+  font: inherit;
+  cursor: pointer;
+}
+
+.todo-list-filter button + button {
+  border-left: 1px solid var(--color-fd-border, #ccc);
+}
+
+.todo-list-filter button.todo-list-filter-on {
+  background: var(--color-fd-secondary, #f4f4f4);
+  color: inherit;
+}
+
+.todo-list-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.todo-list-todo {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+}
+
+.todo-list-todo:hover {
+  border-color: var(--color-fd-border, #ddd);
+}
+
+.todo-list-todo-editing {
+  border-color: var(--color-fd-primary, #2f6fbd);
+}
+
+.todo-list-check {
+  margin: 0 2px 0 0;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.todo-list-title {
+  flex: 1 1 8rem;
+  min-width: 4rem;
+  outline: none;
+}
+
+.todo-list-title-done {
+  color: var(--color-fd-muted-foreground, #777);
+  text-decoration: line-through;
+}
+
+.todo-list-ask {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 0.8rem;
+}
+
+/* the storage dashboard: key / value rows, the version table */
+.todo-list-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 1px 8px;
+}
+
+.todo-list-key {
+  color: var(--color-fd-muted-foreground, #777);
+}
+
+.todo-list-code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+}
+
+.todo-list-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 3px;
+  border-radius: 50%;
+  background: #9e9e9e;
+  vertical-align: 0;
+}
+
+.todo-list-dot-ok { background: #2e7d32; }
+.todo-list-dot-warn { background: #ef6c00; }
+.todo-list-dot-bad { background: #c62828; }
+
+.todo-list-table {
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.todo-list-table th,
+.todo-list-table td {
+  padding: 1px 8px 1px 0;
+  text-align: left;
+  vertical-align: baseline;
+  border-bottom: 1px solid var(--color-fd-border, #e5e5e5);
+}
+
+.todo-list-table th {
+  font-weight: 500;
+  color: var(--color-fd-muted-foreground, #777);
+}
+
+.todo-list-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* a version with its confirmation open below it: no line between the two */
+.todo-list-table tr.todo-list-row-open td {
+  border-bottom: none;
+}
+
+.todo-list-table td.todo-list-cell-action {
+  white-space: nowrap;
+}
+
+.todo-list-section {
+  margin-top: 2px;
+  font-weight: 600;
+}

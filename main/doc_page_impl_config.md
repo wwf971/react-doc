@@ -197,7 +197,7 @@ settings panel, tab of layer L ──► DocConfigStore.layerValueSet / layerDec
             configModelBuild({ ..., layerList })  recomputes  configGlobal / configByDocPath / configPartIndexByPartId
 ```
 
-A key can be listed but not changeable at the moment: the panel marks the item disabled and says why in its tooltip. `EditBlockEnterMode` is disabled with "editing is available on the development server only" when the page has no edit api, so a built page lists the key but cannot change it; a key whose feature is absent for a similar reason follows the same form. The panel itself is a `ConfigPanel` of `@wwf971/react-comp-misc`, which the application injects through `config.components.ConfigPanel` of `DocPageMdx` (as it injects `SegmentedControl` for the local index); without it the settings button renders nothing. `isHidden`, `isDisabled`, and `disabledReason` on a panel item are the panel's own item properties; the layer tab line is a nested level of `subtab` items, its active tab given through `operationStateByPath`.
+A key can be listed but not changeable at the moment: the panel marks the item disabled and says why in its tooltip. `EditBlockEnterMode` is disabled with "editing is available on the development server only" when the page has no edit api, so a built page lists the key but cannot change it; a key whose feature is absent for a similar reason follows the same form. The panel itself is a `ConfigPanel` of `@wwf971/react-comp-misc`, which the application injects through `config.components.ConfigPanel` of `DocPageMdx` (as it injects `SegmentedControl` for the local index, and `PathBar` for the path of the Services tab); without it the settings button renders nothing. `isHidden`, `isDisabled`, and `disabledReason` on a panel item are the panel's own item properties; the layer tab line is a nested level of `subtab` items, its active tab given through `operationStateByPath`.
 
 Store api of the layers:
 
@@ -469,7 +469,7 @@ frontend/plugin/doc-edit-server.ts         POST config/value: one value of a doc
 frontend/plugin/doc-yaml-edit.ts           the in-place yaml edit shared with the side-panel text edit
 comp-doc/registry/comp-registry.js         compDefine expose: what a component declares about itself
 comp-doc/registry/comp-expose.js           the standard names of the exposure, meta.configDefineList among them
-comp-mdx/image/image-paste.js              imageConfigDefineList, the keys shared by Image and ImageGrid
+comp-mdx/media/image/image/image-paste.js              imageConfigDefineList, the keys shared by Image and ImageGrid
 comp-doc/registry/RegisteredComp.jsx       config.compConfig of every rendered component
 comp-doc/settings/                         DocSettingsButton (sidebar header), DocSettingsPanel (centered popup of fixed
                                            height; the close button dismisses it; tabs Config / Component / Asset service / Services /

@@ -1,0 +1,7 @@
+{
+  "name": "@wwf971/react-doc-built-in",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "What the react-doc package ships beside its page: the built-in document components (comp-mdx/) and the built-in service templates. Not a workspace package; this file marks the folder's .js modules as ES modules."
+}

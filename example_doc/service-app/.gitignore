@@ -1,0 +1,27 @@
+# the app instance folder of the demonstration doc page
+# (doc_page_impl_service.md). trying the Services tab creates app
+# instances here: each one a copy of its template with its own service.yaml,
+# and with its data (notes.sqlite) once it ran, when it keeps any of its own
+# (an app service keeps it in an infra service instead). everything new is
+# ignored; only the files of the instances listed below are part of the
+# example.
+# their data, their dashboard builds, installed dependencies and the record
+# the kernel keeps of them (service-record.yaml) stay ignored.
+# to add an instance to the example on purpose, list its folder here.
+
+*
+!*/
+!/.gitignore
+
+!/note-db-inst-w4veemd7i36/**
+!/note-db-inst-w4veemdrx8y/**
+# the todo-list instance of service-kernel.md: an app service whose data is
+# a database of the sqlite infra instance (example_doc/service-infra/, ignored)
+!/todo-list-inst-w55j3ztn3rq/**
+/*/*.sqlite
+/*/*.sqlite-journal
+/*/service-record.yaml
+/*/dashboard/dist/
+/*/dashboard/node_modules/
+/*/dashboard/package-lock.json
+/*/__pycache__/

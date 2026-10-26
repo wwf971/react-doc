@@ -48,8 +48,12 @@ doc page folder
 │   │                         of other side panels, of this file or of another doc page (which joins the workspace)
 │   ├── tag definitions       how each tag looks (doc_page_impl_tag.md)
 │   ├── config declarations   the doc page config layer (doc_page_impl_config.md#the-doc-page-layer)
-│   └── asset folders         .doc-page/asset.yaml, or asset/ by default (doc_page_impl_asset.md)
-└── documents, images, the folders the rules name
+│   ├── asset folders         .doc-page/asset.yaml, or asset/ by default (doc_page_impl_asset.md)
+│   ├── service folders       .doc-page/service.yaml, or service-template-app/, service-template-infra/,
+│   │                         service-app/, service-infra/ by default (doc_page_impl_service.md)
+│   └── component folders     .doc-page/comp.yaml, or comp-mdx/ by default
+│                             (doc_page_impl_mdx_comp.md#components-of-a-doc-page)
+└── documents, images, the folders the rules name; the asset, service and component folders
 ```
 
 A **root** is a mount point, not a folder name: the source path of a file starts with the root's alias, never with the name of the folder on disk. A **workspace** is the top container: it lists its root-level doc pages (with one, it is the doc page's own side panel the page shows; with several, one section per doc page), it de-duplicates a doc page reached from several places, and it is the scope in which a doc page alias is unique. A single doc page named by `config.yaml` is a **virtual workspace** holding that doc page alone, so the single-document form is the multi-document form with one entry.
@@ -144,6 +148,10 @@ A pattern is matched against the path from the rule's folder (not the source pat
 
 `exclude` keeps a rule's folder clean of what never belongs to the source (build output, caches, another doc page's folder); the remove rules remain for removing, by source path or by name, what the rules so far collected, across rules and roots.
 
+### The folders a doc page keeps out by convention
+
+Some folders of a doc page are never documents whatever rule collects the folder around them, so no `exclude` pattern is needed for them ([the doc page folder](doc_page_impl_dir.md)): the metadata folder `.doc-page/` (the configuration files, their `.bak` backups); the asset folders (`.doc-page/asset.yaml`, or `asset/`, [asset service layer](doc_page_impl_asset.md)); the service folders (`.doc-page/service.yaml` with `templateFolderList` / `instanceFolderList`, paths relative to the file, `kind` app by default, or the four convention folders `service-template-app/`, `service-template-infra/`, `service-app/`, `service-infra/`; the entry may say `service: { file }` or `service: false`; `plugin/doc-service-server.ts`, read the same way by the backend) together with the plain folders of the backend config `config.yaml` names; and the component folders (`.doc-page/comp.yaml` `folderList`, or `comp-mdx/`; `comp: { file }` / `comp: false`; `plugin/doc-comp-config.ts`, [components of a doc page](doc_page_impl_mdx_comp.md#components-of-a-doc-page)). Every doc page the page loads brings its own, included ones and temporary mounts too. The scan, the folder manifest and the file watcher apply one set (`sourceExcludeGet` in `plugin/doc-source.ts`): a file of these folders is not collected, not listed, and a change in it never reloads the page (an asset object written, a database of a service instance, a dashboard rebuilt, a component module, which vite's own hot module replacement handles); the config files themselves and the component manifests are configuration, whose change regenerates the manifest of the page.
+
 A file entry of the manifest is `{ docPageAlias, rootAlias, relPath, name, ext, internalPath, collect, title, contentHash, tagList, configSource, configFrontmatter, load }`; `internalPath` is the full source path. The **folder manifest** (`dirManifest`) lists the folders of the source, `{ docPageAlias, rootAlias, relPath, internalPath, collect }`: for every `addFolder` rule its folder and, for a recursive or referenced rule, every folder below it, minus what `removeByPath` rules cover. It is what path completion offers and where files can be created.
 
 ## The workspace
@@ -207,7 +215,7 @@ workspace
   warningList      the alias conflicts, as the console reports them
 ```
 
-`configDoc.docEntry` still carries what runtime code reads of the first root doc page: its entry `file` and `alias`, the side panel shown, `sidePanelIdList`, `configDeclarationList` (each declaration with its `docPageAlias`) and `fileHashByFile`. Every side-panel node carries `docPageAlias`, the doc page it is written in, with its `doc` / `sourceFolder` paths already in the full form, and a node including a doc page has `includeSource.docPageAlias`. The plugin keeps the loaded doc pages (`docPageList`, absolute, not sent to the page) for the asset service layer, which names every folder in the full form.
+`configDoc.docEntry` still carries what runtime code reads of the first root doc page: its entry `file` and `alias`, the side panel shown, `sidePanelIdList`, `configDeclarationList` (each declaration with its `docPageAlias`) and `fileHashByFile`. Every side-panel node carries `docPageAlias`, the doc page it is written in, with its `doc` / `sourceFolder` paths already in the full form, and a node including a doc page has `includeSource.docPageAlias`. The plugin keeps the loaded doc pages (`docPageList`, absolute, not sent to the page, each with its entry's `asset`, `service` and `comp` sections as written) for the asset service layer, which names every folder in the full form, for the service folders and the sync route of the service backend, and for the components of the doc pages (`compConfig`, their mounts; `configDoc.compRegistry` carries their tag names).
 
 ### The Workspace tab
 
@@ -271,6 +279,8 @@ The development server answers `{base}/__doc-source` (exported as `docSourceEndp
 | `POST /workspace/mount`, `/workspace/unmount` | [temporary doc pages](#temporary-doc-pages) |
 
 A file the page creates joins the manifest at once: the plugin remembers the path it just wrote, and when the file watcher reports the new file, the source data is sent to the page without a full reload (`doc-source-change`), so the page keeps its state and the new entry appears. Every path in the api is a source path, the full form; a folder in the local form is accepted for creation when exactly one doc page has the root. A folder is accepted for creation only when a folder rule of the same root collects it (inside a recursive or referenced folder, or the folder of a direct rule itself).
+
+The development server also tells the service backend which doc pages the page has loaded: `POST {base}/__doc-service/registry/docpage/sync` is answered by the plugin itself, under the forwarded service api ([the Vite plugin](doc_page_impl_service.md#the-vite-plugin)). The request body is ignored; the plugin builds `{ docPageList: [{ alias, dir, serviceFile }] }` from the workspace as it is loaded at request time (root doc pages, included ones and temporary mounts; a doc page with `service: false` is left out), `dir` the absolute doc page folder and `serviceFile` the absolute service config file when the entry names one or `.doc-page/service.yaml` exists, `''` otherwise, forwards it to the backend's route of the same name and answers the backend's answer (`{ code: -5 }`, http 503, when the backend is down). `DocServiceStore` calls it when the backend comes up and after the workspace changes, so the backend's registry follows the Workspace tab.
 
 ## Files in a build
 
@@ -357,7 +367,9 @@ The two requests keep the component thin: it knows how to turn a clipboard into 
 | `plugin/doc-source-exclude.ts` | the `exclude` patterns of an addFolder rule |
 | `plugin/doc-workspace-edit.ts` | a change of the workspace file as line operations |
 | `plugin/doc-entry.ts` | the workspace and its doc pages: `docWorkspaceLoad`, `docEntryLoad` (a virtual workspace), aliases, mentions, root aliases of the rules |
-| `plugin/doc-source.ts` | `config.yaml` workspace / docEntry, temporary doc pages, rules, collection, folder manifest, source api (os listing, mounts), module generation |
+| `plugin/doc-source.ts` | `config.yaml` workspace / docEntry, temporary doc pages, rules, collection, the folders kept out by convention, folder manifest, source api (os listing, mounts), module generation (the component mounts included) |
+| `plugin/doc-service-server.ts` | the service folders of a doc page (`SERVICE_CONFIG_FILE_NAME`, `SERVICE_FOLDER_DEFAULT_LIST`), the forwarded service api and its sync route |
+| `plugin/doc-comp-config.ts` | the component folders of a doc page (`COMP_CONFIG_FILE_NAME`, `COMP_FOLDER_DEFAULT_LIST`) and their `comp.yaml` manifests |
 | `plugin/doc-attachment.ts` | the files components name, the mime types, the data urls of a build |
 | `store/DocSourceStore.ts` | the source as the page reads it, the doc pages, the service object (`config.source`) |
 | `store/DocSourceFileStore.ts` | file creation requests, the location prompt |

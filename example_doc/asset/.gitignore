@@ -45,3 +45,10 @@
 !/w4veemfcx8m--dashboard of a missing instance/w4vfc1w5hq0.yaml
 !/w4vfc1twaj6--dashboard of an unknown template/object.yaml
 !/w4vfc1twaj6--dashboard of an unknown template/w4vfc1uhcec.yaml
+
+# the dashboards of service-kernel.md: the todos of an app service and the
+# storage (the sqlite infra service) they live in
+!/w55j4vdm1uw--todos dashboard/object.yaml
+!/w55j4vdm1uw--todos dashboard/w55j4vefjq0.yaml
+!/w55j4vfa50k--todos storage/object.yaml
+!/w55j4vfa50k--todos storage/w55j4vg6ufb.yaml

@@ -46,12 +46,18 @@ workspace:
 # (main/service-backend/server.py), a program of its own. the development
 # server forwards {base}/__doc-service/* to it; a page without the backend
 # shows "backend down" in every dashboard. backendConfigFile names the
-# backend's config file: the type and instance folders it lists are not
-# documents, and a change in them never reloads the page. a built page has
-# no backend. design: doc_page_impl_service.md
+# backend's config file: its host and port are where the backend listens
+# and where the development server forwards (the port is written there
+# alone), and the type and instance folders it lists are not documents, a
+# change in them never reloads the page. launch: the development server
+# (pnpm run dev) starts the backend with that file, unless one answers at
+# its address already, and stops it on exit ("python" names the
+# interpreter, python3 when absent). "backend: http://host:port" names
+# another address over the file's. a built page has no backend.
+# design: doc_page_impl_service.md
 service:
-  backend: http://127.0.0.1:45190
   backendConfigFile: ../example_doc/.doc-page/service-backend.yaml
+  launch: true
 
 # tag definitions of the page (how each tag looks), merged over the ones the
 # entry and the documents it includes declare. which assets carry a tag is
@@ -104,6 +110,7 @@ compRegistry:
   DiagramText: common/DiagramText
   DiagramMermaid: common/DiagramMermaid
   DiagramER: common/DiagramER
+  DiagramDataverseEntity: common/DiagramDataverseEntity
   # asset-only: its data is a workbook in the asset service layer, the block a reference to it
   ExcelUniver: common/ExcelUniver
   Block: common/Block
@@ -139,15 +146,13 @@ compRegistry:
   TagLabel: common/TagLabel
   # built-in name of the tag overview (popup content and document component)
   TagOverview: common/TagOverview
-  # built-in name of the side-panel item renderer. without this entry the page
-  # uses common/SidePanelItem; the demo replaces it with a wrapper of it.
-  SidePanelItem: specific/SidePanelItemDemo
-  StockTable: specific/StockTable
-  DemoCounter: specific/DemoCounter
-  SourceLink: specific/SourceLink
-  TagListAllDemo: specific/TagListAllDemo
-  CompStateListDemo: specific/CompStateListDemo
-  DocConfigDemo: specific/DocConfigDemo
+  # the components of a doc page are not mapped here: the doc page declares
+  # them in the manifest of its component folder (example_doc/comp-mdx/comp.yaml:
+  # StockTable, DemoCounter, SourceLink, TagListAllDemo, CompStateListDemo,
+  # DocConfigDemo, and the built-in name SidePanelItem replaced by the demo
+  # renderer), and the plugin adds their tag names to this mapping, over an
+  # entry of the same name written here
+  # (doc_page_impl_mdx_comp.md#components-of-a-doc-page)
 
 # files referenced by Image / ImageGrid / DiagramMermaid properties, the
 # binary files the source collects and the source files asset versions

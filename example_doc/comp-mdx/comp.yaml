@@ -1,0 +1,41 @@
+# The components of the demonstration doc page (design:
+# doc_page_impl_mdx_comp.md#components-of-a-doc-page). This folder is a
+# component folder of the doc page by convention (comp-mdx/ of the doc page
+# folder; .doc-page/comp.yaml would name other folders), so it is never
+# collected as documents, and the vite plugin reads this manifest, imports
+# every module named here and mounts the components into the registry of
+# the page. Components may be grouped in folders by function, a group in
+# another, each with a manifest of its own: this one lists the components at
+# the top of the folder; panel/comp.yaml the panels of the demonstration,
+# table/stock-table/comp.yaml a component of a group in a group
+# (doc_page_impl_dir.md#groups-in-a-component-or-template-folder).
+#
+# every entry:
+#   tagName              the tag documents write; a built-in name (SidePanelItem)
+#                        replaces the default, and a doc page's tag name wins
+#                        over compRegistry of config.yaml for that name
+#   id                   the registry id; default {docPageAlias}/{tagName}. kept
+#                        as specific/... here, the ids the documents, the tests and
+#                        the build-time link collector (SourceLink) know
+#   entry                the module, relative to this file
+#   export               its export (default: the tag name): a compDefine()
+#                        definition, or a React component
+#   defineOptionsExport  an export of the same module with the options of
+#                        compDefine(Comp, options) for a plain component
+compList:
+  - tagName: DemoCounter
+    id: specific/DemoCounter
+    entry: ./DemoCounter.jsx
+    defineOptionsExport: demoCounterDefineOptions
+  - tagName: TagListAllDemo
+    id: specific/TagListAllDemo
+    entry: ./TagListAllDemo.jsx
+    defineOptionsExport: tagListAllDemoDefineOptions
+  - tagName: CompStateListDemo
+    id: specific/CompStateListDemo
+    entry: ./CompStateListDemo.jsx
+    defineOptionsExport: compStateListDemoDefineOptions
+  - tagName: DocConfigDemo
+    id: specific/DocConfigDemo
+    entry: ./DocConfigDemo.jsx
+    defineOptionsExport: docConfigDemoDefineOptions

@@ -413,11 +413,11 @@ comp-mdx/text/                         Heading/Paragraph/List/BlockSource (+ Xxx
 comp-doc/registry/comp-expose.js       what a component exposes: its modes, the built-in source mode, its icon
                                        (or the default one), the source of a new block
 comp-doc/registry/registry-expose.js   the exposures of the package's components without an editor
-comp-mdx/image/ImageEdit.jsx           component edit mode demonstration, mode `fields` (+ ImageEditStore)
-comp-mdx/image-grid/ImageGridEdit.jsx  mode `images`: paste into slots, add / remove slots (+ ImageGridEditStore)
-comp-mdx/excel-univer/ExcelUniverEdit.jsx  mode `sheet` of an asset-only component: edits the object's data
+comp-mdx/media/image/image/ImageEdit.jsx           component edit mode demonstration, mode `fields` (+ ImageEditStore)
+comp-mdx/media/image/image-grid/ImageGridEdit.jsx  mode `images`: paste into slots, add / remove slots (+ ImageGridEditStore)
+comp-mdx/media/excel-univer/ExcelUniverEdit.jsx  mode `sheet` of an asset-only component: edits the object's data
                                        and the version metadata (+ ExcelUniverEditStore); completes an open
                                        cell before a save (submitPrepareSet)
-example_doc/comp-mdx/StockTableEdit.jsx  host component edit mode demonstration, mode `cells`
+example_doc/comp-mdx/table/stock-table/StockTableEdit.jsx  host component edit mode demonstration, mode `cells`
 example_doc/mdx-doc-edit-in-place.md           playground document
 ```

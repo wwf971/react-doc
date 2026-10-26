@@ -24,7 +24,7 @@ import { DocEditBody } from '../../comp-doc/edit/DocEditBody.jsx';
 import { RegisteredComp } from '../../comp-doc/registry/RegisteredComp.jsx';
 import { compIdResolve } from '../../comp-doc/registry/comp-registry.js';
 import { SidePanelItemSurfaceContext } from '../../comp-doc/side-panel/SidePanelItemHost.jsx';
-import { DocLanguageProvider } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
+import { DocLanguageProvider } from '../../../built-in/comp-mdx/multi-lang/MultiLangContext.jsx';
 import './DocPageView.css';
 
 // renders the current doc: loading / error / compiled body.

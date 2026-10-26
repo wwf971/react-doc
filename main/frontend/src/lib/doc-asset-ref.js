@@ -1,5 +1,5 @@
 import { yamlParse } from './yaml.js';
-import { anchorCompNameIs } from '../../../comp-mdx/anchor/AnchorData.js';
+import { anchorCompNameIs } from '../../../../built-in/comp-mdx/anchor/AnchorData.js';
 import { commentMarkerParse } from './remark-comment-comp.js';
 import { docPlaceBuild } from './doc-place.js';
 

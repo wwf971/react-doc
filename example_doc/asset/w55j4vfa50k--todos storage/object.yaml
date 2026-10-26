@@ -1,0 +1,25 @@
+objectId: w55j4vfa50k
+name: todos storage
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+component:
+  name: service/todo-list/config
+saveMode: inPlace
+versionIdHead: w55j4vg6ufb
+isDeleted: false
+isLocked: false
+timeCreated: 20261029_05450000+09
+versionList:
+  - versionId: w55j4vg6ufb
+    versionIdPrevList: []
+    time: 20261029_05450000+09
+    note: the storage dashboard of todo-list, bound to example todos
+    size: 33
+    hash: 5bdbbc8ee5035f675ddf253d1e4ad797a6142332
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261029_05450000+09
+    versionId: w55j4vg6ufb

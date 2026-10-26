@@ -425,33 +425,40 @@ The search dialog UI comes from fumadocs-ui (composable `SearchDialog` parts plu
 ## Project Folder Structure
 
 ```text
+built-in/                  # what the package ships beside the page, laid out like the managed folders of a doc page (doc_page_impl_dir.md#the-built-in-folder)
+├── comp-mdx/            # the package's components, available in every document (FileTree, Index, MultiLang, Tag, Anchor, ...)
+│   ├── text/            # headings, paragraphs, lists of the document body + their default editors, BlockRender
+│   └── image/           # Image + ImageEdit: component edit mode, empty state and paste (image-paste.js)
+├── service-template-app/    # the app service templates every backend knows: w4wp4t0czko--note-db/ (service-template.yaml, service.py, dashboard/)
+└── service-template-infra/  # the infra service templates: logging and sqlite (provisioned by the kernel), the connections, cognito-auth
 example_doc/             # the demonstration doc page, laid out as a doc page folder (doc_page_impl_dir.md)
-├── .doc-page/           # its metadata, never collected: entry.yaml (named by config docEntry.dir) naming
+├── .doc-page/           # its metadata, never collected: entry.yaml (named by workspace.yaml) naming
 │                        #   source.yaml, tag.yaml, config.yaml and side-panel.yaml; the side panels of
 │                        #   parts (side-panel-mdx-usage.yaml, side-panel-move-sandbox.yaml); asset.yaml,
-│                        #   the local store of the asset service layer; service-backend.yaml
+│                        #   the local store of the asset service layer; service-backend.yaml, the config of the service backend
 ├── sub-doc/             # a self-contained sub document: a doc page folder of its own (sub-doc/.doc-page/entry.yaml,
 │                        #   source, tag, config and side panel inline); included by its folder, deployable alone
+├── second-doc/          # a second root doc page of the workspace
 ├── side-panel-tag.md    # tag demonstration; doc-config.md: config demonstration
 ├── comp-custom-list-el.md # components as list elements: rules and examples
 ├── mdx-doc-edit-in-place.md     # edit-mode playground (editable on the development server)
 ├── asset-store.md       # components reading their data from the asset service layer
 ├── asset/, asset-archive/ # folders of the store: one folder per object, {id}--{name} (object.yaml + version files)
-├── service-instance.md  # service dashboards; .doc-page/service-backend.yaml: the config of the service backend
+├── service-instance.md  # service templates, instances and dashboards (note-db)
+├── service-kernel.md    # app and infra services, the service runtime kernel, storage and logs (todo-list)
 ├── comp-state.md        # the component state service layer: counts that stay, two blocks sharing one state, the states listed
-├── service-template/    # service templates: {templateId}--{name} (service-template.yaml, service.py, dashboard/)
-├── service/             # service instances: {templateName}-inst-{serviceId}, each a copy of its template (service.yaml + its data)
+├── comp-mdx/            # the doc page's own components, mounted by their comp.yaml (StockTable + StockTableEdit, the demo renderers)
+├── service-template-app/    # the doc page's own app template: w55iiudjq5y--todo-list/ (a stateless app service on the sqlite infra)
+├── service-app/         # its app instances: {templateName}-inst-{serviceId}, each a copy of its template (service.yaml + its own script and dashboards)
+├── service-infra/       # its infra instances: what the service runtime kernel provisions (sqlite, logging); ignored by git
 ├── playground/          # a document for trying things out, ignored by git with everything in it
 ├── asset-file/image/    # a "referenced" source folder: where pasted images are created (nothing tracked)
-├── comp-mdx/            # demo-specific components (not collected as documents); StockTable + StockTableEdit
 ├── mdx-usage/           # mdx component demonstrations (part with hosted index; its side panel is .doc-page/side-panel-mdx-usage.yaml)
 └── link-nav/            # link usage guide (sections by title / Anchor id), link and non-md display test docs
+workspace.yaml           # the workspace of the demonstration: its root-level doc pages (example, second)
 main/
 ├── config.yaml          # example config (tracked), actually runnable
 ├── config.0.yaml        # local override (untracked), entries overlay config.yaml
-├── comp-mdx/            # components available in documents (FileTree, Index, MultiLang, Tag, Anchor, ...)
-│   ├── text/            # headings, paragraphs, lists of the document body + their default editors, BlockRender
-│   └── image/           # Image + ImageEdit: component edit mode, empty state and paste (image-paste.js)
 ├── comp-doc/            # components of the page itself, one folder per feature
 │   ├── registry/        # compById (registry.js), compDefine, RegisteredComp, DocComp, data references, build-time dependency extractors
 │   ├── link/            # DocLink, LinkDocRender, LinkWarning
@@ -463,16 +470,16 @@ main/
 │   ├── asset/           # asset service layer: the host resolving a reference, the loading/error stand-in, the asset panel popup and its preview
 │   ├── service/         # service dashboards: their registry definition, their data, the frame, shared parts
 │   ├── popup/           # block popup: the dialog of the page (DocBlockPopup) and the surface a component renders in (BlockPopupSurface)
-│   ├── settings/        # settings button and panel (user overrides of page and component config keys, asset service layer, services)
+│   ├── settings/        # settings button and panel (user overrides of page and component config keys, asset service layer, services, workspace)
 │   ├── source/          # doc page source service layer ui: SourcePathInput (path with completion), SourceTreeSelect, SourcePathPicker (the two as one), SourceFilePrompt (file location)
 │   ├── paste/           # the review of a paste
 │   ├── block-select/    # block selection mode: its switch, the selectable block, the menu, the copy / move dialog
 │   ├── block-list/      # BlockListReview, BlockPlacePicker: a list of blocks, a place for blocks
 │   └── mdx-render/      # MdxRenderer, DynamicCodeBlock
 ├── package.json         # delegates dev/build to frontend/
-├── service-backend/     # the service backend, a python program of its own (server.py, service_runtime.py, service_define.py)
+├── service-backend/     # the service backend, a python program of its own: server.py, service_runtime.py (the kernel and the registry), service_kernel.py, service_define.py
 └── frontend/            # Vite app + embeddable component
-    ├── plugin/          # vite plugin: config load, the document entry and its yaml files (doc-entry.ts), rule scan and collect modes, source-step tags/config, source pruning, virtual module, watch, dev-only source api (in doc-source.ts), edit api (doc-edit-server.ts, doc-edit-lines.ts), the asset service layer and its api (doc-asset-store.ts, doc-asset-server.ts, id-ms48.ts), the service api forwarded to the backend (doc-service-server.ts)
+    ├── plugin/          # vite plugin: config load, the document entry and its yaml files (doc-entry.ts), rule scan and collect modes, source-step tags/config, source pruning, virtual module (the components of the doc pages mounted), watch, dev-only source api (in doc-source.ts), edit api (doc-edit-server.ts, doc-edit-lines.ts), the asset service layer and its api (doc-asset-store.ts, doc-asset-server.ts, id-ms48.ts), the service api forwarded to the backend and the doc page sync (doc-service-server.ts)
     ├── UICommon.js      # package-local facade for shared visual components and icons
     ├── UICommonExternal.js # external UI-library exports used by the facade
     └── src/
@@ -483,7 +490,7 @@ main/
         └── lib/                 # mdx compile, nested Markdown renderer, doc-source-path (the path grammar), link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, doc-edit-* (block model, edit api client), doc-asset-* (reference, backends), doc-comp-state (state keys, line shifts), doc-service-* (backend client, federation loader), doc-event (event router), framework adapter
 ```
 
-Design documents: [doc page source service layer](doc_page_impl_source.md), [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [MDX document in-place editing](doc_page_impl_edit.md), [copy, move and paste](doc_page_impl_block_ops.md), [asset service layer](doc_page_impl_asset.md), [component state service layer](doc_page_impl_mdx_comp_state.md), [service instances](doc_page_impl_service.md), [block popup](doc_page_impl_popup.md), [event layer](doc_page_impl_event.md), [package usage](doc_page_impl_detail.md).
+Design documents: [doc page source service layer](doc_page_impl_source.md), [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [MDX document in-place editing](doc_page_impl_edit.md), [copy, move and paste](doc_page_impl_block_ops.md), [asset service layer](doc_page_impl_asset.md), [component state service layer](doc_page_impl_mdx_comp_state.md), [services](doc_page_impl_service.md), [block popup](doc_page_impl_popup.md), [event layer](doc_page_impl_event.md), [package usage](doc_page_impl_detail.md).
 
 Run `pnpm install` from the workspace root once, then `pnpm dev` from either this folder or `frontend/`. `pnpm build` produces one static deployable artifact (docs bundled as lazy chunks); any static file server works, no doc folders needed at runtime.
 

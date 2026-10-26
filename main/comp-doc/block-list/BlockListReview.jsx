@@ -1,5 +1,5 @@
 import { CodeIcon, Eye, Square, SquareCheck } from '../../frontend/UICommon.js';
-import { BlockRender } from '../../comp-mdx/text/BlockRender.jsx';
+import { BlockRender } from '../../../built-in/comp-mdx/text/BlockRender.jsx';
 import './BlockList.css';
 
 // A list of root-level blocks to look at before something is done with them

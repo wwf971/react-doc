@@ -1,0 +1,7 @@
+# a component in a group in a group (comp-mdx/table/stock-table/): the
+# table components of the demonstration would gather in table/, each in a
+# folder of its own with its manifest. one entry: a mapping without compList
+tagName: StockTable
+id: specific/StockTable
+entry: ./StockTable.jsx
+defineOptionsExport: stockTableDefineOptions

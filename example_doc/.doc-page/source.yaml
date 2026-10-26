@@ -35,9 +35,9 @@ rules:
       # source rules in their entries; a trailing "/": folders only
       - sub-doc/
       - second-doc/
-      # demo component implementations beside the demonstration docs are
-      # code, not document content; a leading "/": only this folder's own
-      - /comp-mdx/
+      # no pattern for comp-mdx/ (the components of this doc page) nor for
+      # the asset and service folders: the doc page folder convention keeps
+      # them out of the source (doc_page_impl_source.md#the-folders-a-doc-page-keeps-out-by-convention)
   - action: addFile
     alias: req                  # the folder main/, written ~req/...
     path: ../../main/doc_page_req.md

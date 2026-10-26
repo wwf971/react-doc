@@ -9,10 +9,10 @@ import {
   compIdResolve,
 } from '../../../comp-doc/registry/comp-registry.js';
 import { RegisteredComp } from '../../../comp-doc/registry/RegisteredComp.jsx';
-import { MultiLangHeadingText } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
-import { headingTagCreate } from '../../../comp-mdx/text/Heading.jsx';
-import { listTagCreate } from '../../../comp-mdx/text/List.jsx';
-import { ParagraphTag } from '../../../comp-mdx/text/Paragraph.jsx';
+import { MultiLangHeadingText } from '../../../../built-in/comp-mdx/multi-lang/MultiLangEntry.jsx';
+import { headingTagCreate } from '../../../../built-in/comp-mdx/text/Heading.jsx';
+import { listTagCreate } from '../../../../built-in/comp-mdx/text/List.jsx';
+import { ParagraphTag } from '../../../../built-in/comp-mdx/text/Paragraph.jsx';
 
 // component mapping used when rendering compiled docs.
 // fumadocs defaults stay untouched (headings, code blocks, callout, ...);

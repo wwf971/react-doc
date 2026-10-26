@@ -12,7 +12,11 @@ the code they describe:
         expose = {
             'meta': {...},               label, description, author, version, ...
             'configDefineList': [...],   the shape of an instance's config
-            'dashboardList': [...],      the dashboards, keyed by id
+            'dependencyList': [...],     the infra services it uses, by name (the initial list of an instance)
+            'infra': {...},              an infra service: the name it provides, its storage type
+            'execution': {...},          passive (apis only) or resident (a run() thread of its own)
+            'lifecycle': {...},          the timeout of the lifecycle hooks
+            'dashboardList': [...],      the dashboards, keyed by id (optional)
             'dashboardRemote': {...},    where the federated module of the dashboards is
             'anythingElse': ...,         kept as written (non-standard names)
         }
@@ -48,8 +52,27 @@ API_EXECUTION_LIST = ['sync', 'async']
 
 # who a call comes from, as the runtime knows it. page: an http request (the
 # page through the development server, or any http client of the backend).
-# service: another service instance, through ServiceContext.service_call
-CALLER_KIND_LIST = ['page', 'service']
+# service: another service instance, through ServiceContext.service_call.
+# kernel: the service runtime kernel itself (its log records, its checks)
+CALLER_KIND_LIST = ['page', 'service', 'kernel']
+
+# the two kinds of services (doc_page_impl_service.md#app-services-and-infra-services):
+# app: serves documents and dashboards, keeps its state in infra services.
+# infra: serves other services (storage, logging, connections), reached by name
+SERVICE_KIND_LIST = ['app', 'infra']
+
+# what an instance does when an infra service it depends on is unavailable:
+# report: the dependency is reported in its health, a call of the infra fails (-7)
+# reject: moreover, every call of the instance is refused (-7) while a required one is unavailable
+DEPENDENCY_POLICY_LIST = ['report', 'reject']
+
+# passive: the instance only answers apis. resident: it also runs run(stop_event)
+# in a thread of its own, started after start() and stopped before stop()
+EXECUTION_MODE_LIST = ['passive', 'resident']
+
+# the lifecycle hooks a script may implement, in the order they are called
+HOOK_NAME_LIST = ['onCreate', 'onStart', 'onStop', 'onDestroy']
+HOOK_TIMEOUT_SECOND_DEFAULT = 30
 
 # default: the dashboard a document shows when it places the service.
 # config: the dashboard of the instance's settings (the Services tab).
@@ -58,10 +81,18 @@ DASHBOARD_PURPOSE_LIST = ['default', 'config', 'other']
 
 CONFIG_TYPE_LIST = ['string', 'integer', 'number', 'boolean']
 
-EXPOSE_NAME_STANDARD_LIST = ['meta', 'configDefineList', 'dashboardList', 'dashboardRemote']
+# the storage a infra service exposes to its consumers: the kind of store, the
+# shape of its history, the operations it has (doc_page_impl_service.md#storage-infra-services)
+STORAGE_VERSIONING_LIST = ['none', 'linear']
+STORAGE_OPERATION_LIST = ['versionCreate', 'versionList', 'checkout', 'versionDelete', 'export', 'backup']
+
+EXPOSE_NAME_STANDARD_LIST = ['meta', 'configDefineList', 'dependencyList', 'infra', 'execution', 'lifecycle',
+                             'dashboardList', 'dashboardRemote']
 
 REGEX_DASHBOARD_ID = re.compile(r'^[a-z][a-zA-Z0-9-]*$')
 REGEX_API_NAME = re.compile(r'^[a-z][a-zA-Z0-9]*$')
+# an infra service name: what a dependency names (doc_page_impl_service.md#naming-a-service)
+REGEX_INFRA_NAME = re.compile(r'^[a-z][a-z0-9_-]*$')
 
 _VALUE_NONE = object()
 
@@ -70,7 +101,8 @@ class ServiceError(Exception):
     """An api refusing or failing with a code of the formatted response.
 
     -1 bad request or failure, -2 the caller may not call it, -3 something
-    the request names is not found.
+    the request names is not found, -4 the instance is not ready, -7 an infra
+    service the call depends on is unavailable.
     """
 
     def __init__(self, code, message):
@@ -86,8 +118,8 @@ class ServiceDefineError(Exception):
 class ServiceCaller:
     """Who a call comes from, as the runtime knows it: never what a request says it is.
 
-    kind                  page (an http request) or service (another instance)
-    service_id            the calling instance; '' for page
+    kind                  page (an http request), service (another instance) or kernel
+    service_id            the calling instance; '' for page and kernel
     dashboard_service_id  for page: the instance whose dashboard asked, '' for
                           none. a claim of the page, not checked: every
                           dashboard runs in the same page
@@ -106,42 +138,99 @@ class ServiceCaller:
     def info_get(self):
         return {'kind': self.kind, 'serviceId': self.service_id, 'dashboardServiceId': self.dashboard_service_id}
 
+    def principal_get(self):
+        """The principal of a log record written by this caller."""
+        if self.kind == 'service':
+            return {'kind': 'service', 'id': self.service_id}
+        if self.kind == 'kernel':
+            return {'kind': 'kernel', 'id': ''}
+        return {'kind': 'page', 'id': self.dashboard_service_id}
+
     def label_get(self):
         if self.kind == 'service':
             return f'the service {self.service_id}'
+        if self.kind == 'kernel':
+            return 'the kernel'
         if self.dashboard_service_id:
             return f'the page (a dashboard of {self.dashboard_service_id})'
         return 'the page'
 
 
+class InfraClient:
+    """An infra service as an instance uses it: by name, routed by the kernel
+    to the current instance providing that name (doc_page_impl_service.md#using-an-infra-service).
+
+        db = self.context.infra('sqlite')
+        db.query(sql='SELECT 1')          # any api of the infra: a keyword call
+        db.call('query', {'sql': '...'})  # the same, as a mapping
+        db.resolve()                       # the instance the calls go to, as listed
+        db.is_available()                  # whether a ready instance provides it
+    """
+
+    def __init__(self, context, name):
+        self.context = context
+        self.name = name
+
+    def call(self, api, params=None):
+        return self.context.service_call({'infra': self.name}, api, params)
+
+    def resolve(self):
+        return self.context.service_resolve({'infra': self.name})
+
+    def is_available(self):
+        try:
+            return self.resolve().get('status') == 'ready'
+        except ServiceError:
+            return False
+
+    def __getattr__(self, api):
+        if api.startswith('_'):
+            raise AttributeError(api)
+        return lambda **params: self.call(api, params)
+
+
 class ServiceContext:
     """What a service instance is given: its identity, its folder, its config,
-    who calls it, and the way to call other instances.
+    who calls it, the infra services it uses, and the way to call other instances.
 
     service_id, name    the instance
+    kind                app or infra
     dir_path            the instance's folder: its own script and its data
     template            the template it was created from, as recorded in its
                         service.yaml: { templateId, name, versionId }. a
                         record only: the instance never reads the template
     config              the instance's config, with the defaults of configDefineList
+    dependency_list     the infra services the instance uses, normalized
+                        [{ name, isRequired, onUnavailable }]
     caller              the ServiceCaller of the api being run in this thread;
-                        None outside an api (start, stop, a thread of its own)
+                        None outside an api (start, stop, run, a thread of its own)
+    infra(name)         an InfraClient of an infra service of dependency_list
+    infra_require(name) adds an infra service to dependency_list at runtime, when allowed
+    log(...)            a log record of this instance, through the kernel into the logging infra
+    health_set(...)     what the instance says of its own health
     service_call, service_job_get, service_resolve
                         calls of the apis of other instances, as this instance
     """
 
-    def __init__(self, service_id, name, dir_path, template, config, runtime=None):
+    def __init__(self, service_id, name, dir_path, template, config, runtime=None, kind='app',
+                 dependency_list=(), is_dependency_dynamic_allowed=False):
         self.service_id = service_id
         self.name = name
+        self.kind = kind
         self.dir_path = dir_path
         self.template = template
         self.config = config
+        self.dependency_list = [dict(item) for item in dependency_list]
+        self.is_dependency_dynamic_allowed = is_dependency_dynamic_allowed
         # the runtime, for the calls of other instances (api_call, job_get, target_resolve)
         self._runtime = runtime
         # the caller and the job of the api being run, per thread: a queued
         # api runs in the instance's worker thread, an api with isQueued
         # False in the thread of its caller, both at once
         self._local = threading.local()
+        # what the instance reports of itself (health_set): '' means nothing reported
+        self.health_reported = ''
+        self.health_reported_message = ''
 
     @property
     def caller(self):
@@ -174,6 +263,54 @@ class ServiceContext:
         job.progress = max(0.0, min(1.0, float(fraction)))
         job.progress_message = str(message)
 
+    # ---------- infra services ----------
+
+    def dependency_name_list_get(self):
+        return [item['name'] for item in self.dependency_list]
+
+    def infra(self, name):
+        """An infra service the instance uses, by name. The name must be in its
+        dependency list; when the instance may add dependencies at runtime
+        (isDependencyDynamicAllowed), a name not yet there is added."""
+        if name not in self.dependency_name_list_get():
+            self.infra_require(name)
+        return InfraClient(self, name)
+
+    def infra_require(self, name, is_required=False, on_unavailable='report'):
+        """Adds an infra service to the dependency list of the instance, written
+        back to its service.yaml; raises ServiceError -2 when the instance may
+        not (isDependencyDynamicAllowed false in its service.yaml)."""
+        if name in self.dependency_name_list_get():
+            return
+        if not self.is_dependency_dynamic_allowed:
+            raise ServiceError(-2, f'{self.service_id} may not add the infra service {name} at runtime: it is not in its '
+                                   f'dependencyList and isDependencyDynamicAllowed is false in its service.yaml')
+        item = dependency_item_normalize({'name': name, 'isRequired': is_required, 'onUnavailable': on_unavailable},
+                                         f'instance {self.service_id}: infra_require')
+        self.dependency_list.append(item)
+        if self._runtime is not None:
+            self._runtime.instance_dependency_added(self.service_id, item)
+
+    # ---------- logging and health ----------
+
+    def log(self, level, feature, message, data=None):
+        """A log record of this instance: level (debug, info, warn, error), the
+        feature of the instance it belongs to, a message, and data (json). It
+        goes through the kernel into the logging infra service when there is
+        one, to stderr otherwise."""
+        if self._runtime is None:
+            return
+        self._runtime.kernel_log.write(level, feature, message, data, {'kind': 'service', 'id': self.service_id})
+
+    def health_set(self, health, message=''):
+        """What the instance says of its own health: 'healthy', 'degraded' or
+        'unhealthy' (or '' to say nothing), with a message. The kernel combines
+        it with what it sees itself (the lifecycle state, the dependencies)."""
+        if health not in ('', 'healthy', 'degraded', 'unhealthy'):
+            raise ValueError("health is '', healthy, degraded or unhealthy")
+        self.health_reported = health
+        self.health_reported_message = str(message or '')
+
     # ---------- calls of other instances ----------
 
     def service_call(self, target, api, params=None):
@@ -181,10 +318,12 @@ class ServiceContext:
         returned, the job of an async one; raises ServiceError with the call's
         code when it fails.
 
-        target is { serviceId } (that instance) or { templateId, versionId? }
+        target is { serviceId } (that instance), { templateId, versionId? }
         (an instance created from that template, at that version; this
-        instance itself is never chosen). The callee reads this instance as
-        its context.caller. A sync call waits apiWaitSecondMax at most.
+        instance itself is never chosen), or { infra: name } (the current
+        instance of that infra service; the name must be in the dependency
+        list). The callee reads this instance as its context.caller. A sync
+        call waits apiWaitSecondMax at most.
         """
         result = self._runtime.api_call(target, api, params, self._caller_self_get())
         if result['code'] != 0:
@@ -215,6 +354,18 @@ class Service:
     implementation never sees two calls at once and may keep a connection
     (sqlite) as a plain attribute. Two instances never share a module, so
     module-level state is never shared either.
+
+    The lifecycle hooks (doc_page_impl_service.md#lifecycle-and-hooks), each
+    run with the timeout of expose.lifecycle.hookTimeoutSecond:
+      on_create   once in the life of the instance, the first time it starts
+      start       every time the instance starts (after on_create the first time)
+      run         a resident instance only (expose.execution.mode): a thread of
+                  its own, started after start(); it returns when stop_event is set
+      stop        every time the instance stops
+      on_destroy  once, when the instance is deleted (after stop)
+    An app instance is meant to keep no state of its own: what it keeps goes
+    into an infra service (self.context.infra('sqlite')), so that the instance
+    can be recreated, and the data kept, backed up and restored by the infra.
     """
 
     expose = {}
@@ -222,11 +373,22 @@ class Service:
     def __init__(self, context):
         self.context = context
 
+    def on_create(self):
+        """Called once, before the first start() of the instance: create what the
+        instance needs once (a schema in its storage). Must be safe to run again."""
+
     def start(self):
         """Called once before the first api: open the data, create it when new."""
 
+    def run(self, stop_event):
+        """A resident instance's own loop; returns when stop_event is set."""
+
     def stop(self):
         """Called once when the instance stops: close what start opened."""
+
+    def on_destroy(self):
+        """Called once when the instance is deleted, after stop(): what its data
+        in infra services should become (kept by default: nothing to do)."""
 
 
 def param(name, type, description='', default=_VALUE_NONE, isRequired=None, schema=None):
@@ -250,7 +412,7 @@ def api(kind='query', execution='sync', description='', params=(), result=None,
         callerKindList=None, isQueued=True):
     """Marks a method of a Service class as an api of the service.
 
-    callerKindList  who may call it: page, service, or both (None, the default).
+    callerKindList  who may call it: page, service, kernel (None: all three).
                     ['service']: an api for other instances only, never answered
                     to the page (credentials, a principal)
     isQueued        True: run in the instance's queue, one api at a time.
@@ -291,14 +453,25 @@ def expose_build(service_class, label, dir_path):
     if 'apiList' in expose_other:
         raise ServiceDefineError(f'{label}: apiList is not declared in expose; mark the methods with @api')
     dashboard_list = _dashboard_list_normalize(expose.get('dashboardList'), label)
+    hook_list = [name for name, method in HOOK_METHOD_BY_NAME.items() if getattr(service_class, method) is not getattr(Service, method)]
     return {
         **expose_other,
         'meta': _meta_normalize(expose.get('meta'), label, dir_path),
         'configDefineList': _config_define_list_normalize(expose.get('configDefineList'), label),
+        'dependencyList': dependency_list_normalize(expose.get('dependencyList'), f'{label}: expose.dependencyList'),
+        'infra': _infra_normalize(expose.get('infra'), label),
+        'execution': _execution_normalize(expose.get('execution'), label),
+        'lifecycle': _lifecycle_normalize(expose.get('lifecycle'), label),
+        # the hooks the script implements (the methods it overrides), for information
+        'hookList': hook_list,
         'apiList': _api_list_build(service_class, label),
         'dashboardList': dashboard_list,
         'dashboardRemote': _dashboard_remote_normalize(expose.get('dashboardRemote'), label, dir_path, dashboard_list),
     }
+
+
+# the hook names of the exposure and the methods of Service they are
+HOOK_METHOD_BY_NAME = {'onCreate': 'on_create', 'onStart': 'start', 'run': 'run', 'onStop': 'stop', 'onDestroy': 'on_destroy'}
 
 
 def _meta_normalize(meta, label, dir_path):
@@ -355,6 +528,90 @@ def _config_define_list_normalize(define_list, label):
             'description': define.get('description', ''),
         })
     return result
+
+
+def dependency_item_normalize(item, place):
+    """One entry of a dependency list: a name, or { name, isRequired?, onUnavailable? }.
+    Raises ServiceDefineError."""
+    if isinstance(item, str):
+        item = {'name': item}
+    if not isinstance(item, dict) or not isinstance(item.get('name'), str):
+        raise ServiceDefineError(f'{place}: an entry is an infra service name, or {{ name, isRequired?, onUnavailable? }}')
+    name = item['name']
+    if not REGEX_INFRA_NAME.match(name):
+        raise ServiceDefineError(f'{place}: the infra service name {name!r} is lowercase letters, digits, - and _, starting with a letter')
+    is_required = item.get('isRequired', True)
+    if not isinstance(is_required, bool):
+        raise ServiceDefineError(f'{place}: isRequired of {name} must be true or false')
+    on_unavailable = item.get('onUnavailable', 'report')
+    if on_unavailable not in DEPENDENCY_POLICY_LIST:
+        raise ServiceDefineError(f'{place}: onUnavailable of {name} must be one of {", ".join(DEPENDENCY_POLICY_LIST)}')
+    return {'name': name, 'isRequired': is_required, 'onUnavailable': on_unavailable}
+
+
+def dependency_list_normalize(dependency_list, place):
+    """A dependency list normalized: [{ name, isRequired, onUnavailable }], names unique.
+    Raises ServiceDefineError."""
+    if dependency_list is None:
+        return []
+    if not isinstance(dependency_list, list):
+        raise ServiceDefineError(f'{place} must be a list of infra service names')
+    result = []
+    for index, item in enumerate(dependency_list):
+        normalized = dependency_item_normalize(item, f'{place}[{index}]')
+        if any(existing['name'] == normalized['name'] for existing in result):
+            raise ServiceDefineError(f'{place} names {normalized["name"]} twice')
+        result.append(normalized)
+    return result
+
+
+def _infra_normalize(infra, label):
+    """expose.infra of an infra service: { name?, storage? }; None for an app service."""
+    place = f'{label}: expose.infra'
+    if infra is None:
+        return None
+    if not isinstance(infra, dict):
+        raise ServiceDefineError(f'{place} must be a mapping {{ name?, storage? }}')
+    name = infra.get('name', '')
+    if not isinstance(name, str) or (name != '' and not REGEX_INFRA_NAME.match(name)):
+        raise ServiceDefineError(f'{place}.name is lowercase letters, digits, - and _, starting with a letter')
+    storage = infra.get('storage')
+    if storage is not None:
+        if not isinstance(storage, dict) or not isinstance(storage.get('type'), str) or storage['type'] == '':
+            raise ServiceDefineError(f'{place}.storage must be {{ type, versioning?, operationList? }}')
+        versioning = storage.get('versioning', 'none')
+        if versioning not in STORAGE_VERSIONING_LIST:
+            raise ServiceDefineError(f'{place}.storage.versioning must be one of {", ".join(STORAGE_VERSIONING_LIST)}')
+        operation_list = storage.get('operationList', [])
+        if not isinstance(operation_list, list) or not all(item in STORAGE_OPERATION_LIST for item in operation_list):
+            raise ServiceDefineError(f'{place}.storage.operationList must list some of {", ".join(STORAGE_OPERATION_LIST)}')
+        storage = {**storage, 'type': storage['type'], 'versioning': versioning, 'operationList': operation_list,
+                   'description': str(storage.get('description', ''))}
+    return {**infra, 'name': name, 'storage': storage}
+
+
+def _execution_normalize(execution, label):
+    place = f'{label}: expose.execution'
+    if execution is None:
+        return {'mode': 'passive'}
+    if not isinstance(execution, dict):
+        raise ServiceDefineError(f'{place} must be a mapping {{ mode }}')
+    mode = execution.get('mode', 'passive')
+    if mode not in EXECUTION_MODE_LIST:
+        raise ServiceDefineError(f'{place}.mode must be one of {", ".join(EXECUTION_MODE_LIST)}')
+    return {**execution, 'mode': mode}
+
+
+def _lifecycle_normalize(lifecycle, label):
+    place = f'{label}: expose.lifecycle'
+    if lifecycle is None:
+        return {'hookTimeoutSecond': HOOK_TIMEOUT_SECOND_DEFAULT}
+    if not isinstance(lifecycle, dict):
+        raise ServiceDefineError(f'{place} must be a mapping {{ hookTimeoutSecond }}')
+    timeout = lifecycle.get('hookTimeoutSecond', HOOK_TIMEOUT_SECOND_DEFAULT)
+    if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
+        raise ServiceDefineError(f'{place}.hookTimeoutSecond must be a positive number')
+    return {**lifecycle, 'hookTimeoutSecond': float(timeout)}
 
 
 def _api_list_build(service_class, label):
@@ -419,9 +676,13 @@ def _result_normalize(item, place):
 
 
 def _dashboard_list_normalize(dashboard_list, label):
+    """The dashboards of a script; [] for a script without any (an infra
+    service that is worked from the Services tab alone)."""
     place = f'{label}: expose.dashboardList'
-    if not isinstance(dashboard_list, list) or len(dashboard_list) == 0:
-        raise ServiceDefineError(f'{place} must list the dashboards, at least one of purpose default and one of purpose config')
+    if dashboard_list is None:
+        return []
+    if not isinstance(dashboard_list, list):
+        raise ServiceDefineError(f'{place} must be a list of dashboards, or absent')
     id_set = set()
     result = []
     for index, dashboard in enumerate(dashboard_list):
@@ -448,15 +709,20 @@ def _dashboard_list_normalize(dashboard_list, label):
             'export': export_name,
             'heightMin': dashboard.get('heightMin', ''),
         })
-    for purpose in ['default', 'config']:
-        count = len([dashboard for dashboard in result if dashboard['purpose'] == purpose])
-        if count != 1:
-            raise ServiceDefineError(f'{place} must have exactly one dashboard of purpose {purpose} (has {count})')
+    if len(result) > 0:
+        for purpose in ['default', 'config']:
+            count = len([dashboard for dashboard in result if dashboard['purpose'] == purpose])
+            if count != 1:
+                raise ServiceDefineError(f'{place} must have exactly one dashboard of purpose {purpose} (has {count})')
     return result
 
 
 def _dashboard_remote_normalize(remote, label, dir_path, dashboard_list):
     place = f'{label}: expose.dashboardRemote'
+    if len(dashboard_list) == 0:
+        if remote is not None:
+            raise ServiceDefineError(f'{place} goes with dashboardList; the script declares no dashboard')
+        return None
     if not isinstance(remote, dict):
         raise ServiceDefineError(f'{place} must be a mapping {{ dir, entry, container, module }}')
     for key in ['dir', 'entry', 'container', 'module']:
@@ -476,7 +742,10 @@ def _dashboard_remote_normalize(remote, label, dir_path, dashboard_list):
 def dashboard_remote_build_get(dir_path, remote):
     """Whether the dashboard module is built, and when: read on every listing,
     since it is built while the backend runs. timeBuilt (the mtime of the
-    entry, in ms) lets the page load a rebuilt module instead of its cache."""
+    entry, in ms) lets the page load a rebuilt module instead of its cache.
+    None for a script without dashboards."""
+    if remote is None:
+        return None
     entry_path = os.path.join(dir_path, remote['dir'], remote['entry'])
     if not os.path.isfile(entry_path):
         return {'isBuilt': False, 'timeBuilt': 0}

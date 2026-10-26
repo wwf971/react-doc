@@ -1,0 +1,18 @@
+# the panels of the demonstration: a group of the component folder
+# (comp-mdx/panel/), its manifest beside them. TextPanelDemo is host
+# configuration (compConfigHost.panelComponent, imported by main.jsx), not
+# a document component, so it is not listed.
+compList:
+  # the built-in name of the side-panel item renderer: without this entry the
+  # page uses common/SidePanelItem; the demo replaces it with a wrapper of it
+  - tagName: SidePanelItem
+    id: specific/SidePanelItemDemo
+    entry: ./SidePanelItemDemo.jsx
+    export: SidePanelItemDemo
+    defineOptionsExport: sidePanelItemDemoDefineOptions
+  # a package component (built-in/comp-mdx/source-link/) bound to the popup
+  # panel of this demonstration, see SourceLinkDemo.js
+  - tagName: SourceLink
+    id: specific/SourceLink
+    entry: ./SourceLinkDemo.js
+    defineOptionsExport: sourceLinkDefineOptions

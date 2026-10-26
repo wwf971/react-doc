@@ -1,6 +1,6 @@
 ---
 title: Diagrams
-description: DiagramText aligns plain-text box diagrams; DiagramMermaid renders Mermaid sources
+description: DiagramText aligns plain-text box diagrams; DiagramMermaid renders Mermaid sources; ProxyConnectionDiagram is a fixed interactive diagram
 language: en
 ---
 
@@ -117,61 +117,9 @@ sequenceDiagram
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`DiagramER` draws tables, their columns, and the relationships between them from YAML. Tables can be dragged; the toolbar copies the YAML or opens the diagram enlarged. In edit mode, the insert menu offers it as `DiagramER` with a starting diagram of two tables.
+`DiagramER` draws tables, other nodes, and the connections between them from YAML, and `DiagramDataverseEntity` shows one table card without a canvas. Both have their own page with every option and their visual editing: [Data diagrams](comp-diagram-er.md).
 
-`DiagramER` は、YAML からテーブル、列、テーブル間のリレーションを描画します。テーブルはドラッグで移動できます。ツールバーから YAML をコピーしたり、拡大表示したりできます。編集モードでは、挿入メニューに `DiagramER` として表示され、二つのテーブルからなる図で始まります。
-```
-
-<!--renderComp=MultiLang-->
-### {en: "Syntax", jp: "構文"}
-
-````markdown
-<!--renderComp=DiagramER,title=Orders,height=420-->
-```yaml
-tables:
-  - id: customer
-    name: customer
-    nameLogical: Customer
-    columns:
-      - { id: id, name: id, type: uuid, key: PK }
-      - { id: name, name: name, type: text }
-  - id: order
-    name: order
-    nameLogical: Order
-    columns:
-      - { id: id, name: id, type: uuid, key: PK }
-      - { id: customerId, name: customer_id, type: uuid, key: FK }
-relationships:
-  - id: orderCustomer
-    label: places
-    source: { tableId: customer, columnId: id }
-    target: { tableId: order, columnId: customerId }
-```
-````
-
-<!--renderComp=MultiLang-->
-### {en: "Display example", jp: "表示例"}
-
-<!--renderComp=DiagramER,title=Orders,height=420-->
-```yaml
-tables:
-  - id: customer
-    name: customer
-    nameLogical: Customer
-    columns:
-      - { id: id, name: id, type: uuid, key: PK }
-      - { id: name, name: name, type: text }
-  - id: order
-    name: order
-    nameLogical: Order
-    columns:
-      - { id: id, name: id, type: uuid, key: PK }
-      - { id: customerId, name: customer_id, type: uuid, key: FK }
-relationships:
-  - id: orderCustomer
-    label: places
-    source: { tableId: customer, columnId: id }
-    target: { tableId: order, columnId: customerId }
+`DiagramER` は YAML からテーブルやその他のノードと、その間の接続線を描き、`DiagramDataverseEntity` はテーブルカードを一枚キャンバスなしで表示します。すべての指定方法と視覚的な編集は専用のページにまとめています：[データ図](comp-diagram-er.md)。
 ```
 
 <!--renderComp=Anchor,id=proxy-connection-diagram-->

@@ -3,8 +3,8 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { commentMarkerParse } from './remark-comment-comp.js';
 import { splitFrontmatter } from './mdx-compile.js';
-import { anchorCompNameIs } from '../../../comp-mdx/anchor/AnchorData.js';
-import { multiLangCompNameIs } from '../../../comp-mdx/multi-lang/MultiLangData.js';
+import { anchorCompNameIs } from '../../../../built-in/comp-mdx/anchor/AnchorData.js';
+import { multiLangCompNameIs } from '../../../../built-in/comp-mdx/multi-lang/MultiLangData.js';
 
 // The block model of the edit layer (design: doc_page_impl_edit.md).
 //

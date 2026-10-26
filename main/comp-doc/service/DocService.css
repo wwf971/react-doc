@@ -96,6 +96,35 @@
   background: #d97706;
 }
 
+/* waiting: not started yet, a required infra service is not available */
+.doc-service-status-dot[data-status='waiting'] {
+  background: #2563eb;
+}
+
+/* the health of an instance: a ring, apart from the lifecycle dot */
+.doc-service-health-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 2px solid #9ca3af;
+  border-radius: 50%;
+  background: transparent;
+  cursor: help;
+}
+
+.doc-service-health-dot[data-health='healthy'] {
+  border-color: #16a34a;
+}
+
+.doc-service-health-dot[data-health='degraded'] {
+  border-color: #d97706;
+}
+
+.doc-service-health-dot[data-health='unhealthy'] {
+  border-color: #dc2626;
+}
+
 .doc-service-status-dot[data-status='error'],
 .doc-service-status-dot[data-status='backend down'],
 .doc-service-status-dot[data-status='not found'] {
@@ -136,6 +165,56 @@
   padding: 0.4rem calc(0.5rem + 1px);
 }
 
+/* without a backend the tab holds only a notice, in its middle */
+.doc-service-settings[data-centered] {
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+}
+
+/* ---------- .doc-service-notice ----------
+   why the tab has nothing to show: a bordered box with a title line, the
+   message, a hint and an action. data-error: the backend is down, in the
+   destructive tint. */
+.doc-service-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-width: 30rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 4px;
+  background: var(--color-fd-muted);
+  font-size: 0.78rem;
+}
+
+.doc-service-notice[data-error] {
+  border-color: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 45%, var(--color-fd-border));
+  background: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 6%, var(--color-fd-background));
+}
+
+.doc-service-notice-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.doc-service-notice[data-error] .doc-service-notice-title {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-service-notice-message {
+  overflow-wrap: anywhere;
+}
+
+.doc-service-notice-hint {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.74rem;
+  overflow-wrap: anywhere;
+}
+
 .doc-service-settings-line {
   display: flex;
   flex-wrap: wrap;
@@ -163,6 +242,112 @@
   gap: 0.35rem;
   padding-top: 0.35rem;
   border-top: 1px solid var(--color-fd-border);
+}
+
+/* ---------- the path of the view shown ----------
+   the PathBar the host injects (react-comp-misc), in the tokens of the
+   page; or the plain links without one. the refresh beside it */
+.doc-service-path-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.doc-service-path {
+  flex: 1;
+  min-width: 0;
+}
+
+.doc-service-path .pathbar-container {
+  border-color: var(--color-fd-border);
+  border-radius: 4px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  font-family: inherit;
+  font-size: 0.76rem;
+}
+
+.doc-service-path .pathbar-container:hover {
+  border-color: var(--color-fd-border);
+}
+
+.doc-service-path .pathbar-segment {
+  padding: 1px 5px;
+  color: var(--color-fd-foreground);
+}
+
+/* the first segment goes back to the overview; the last is where the tab is */
+.doc-service-path .pathbar-segment:first-child {
+  color: var(--color-fd-primary);
+}
+
+.doc-service-path .pathbar-segment:hover {
+  background: var(--color-fd-accent);
+  color: var(--color-fd-primary);
+}
+
+.doc-service-path .pathbar-separator {
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-service-path-plain {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  font-size: 0.76rem;
+}
+
+/* ---------- the overview: groups of cards ---------- */
+.doc-service-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--color-fd-border);
+}
+
+.doc-service-overview[data-flat] {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.doc-service-overview > .doc-service-error {
+  align-self: flex-start;
+}
+
+/* the icon of a system card (server status, infra routes, logs): the size
+   of a service icon */
+.doc-service-card-icon {
+  display: inline-flex;
+  color: var(--color-fd-muted-foreground);
+}
+
+/* ---------- the view of one thing: its head ---------- */
+.doc-service-view-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding-bottom: 0.15rem;
+}
+
+.doc-service-view-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* a folder or file path in a detail: the text font, wrapping anywhere */
+.doc-service-path-text {
+  font-size: 0.74rem;
+  overflow-wrap: anywhere;
+}
+
+/* lines of a detail value one under another (the doc pages, the problems) */
+.doc-service-detail-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
 }
 
 .doc-service-settings-subtitle {
@@ -197,14 +382,20 @@
   gap: 0.35rem;
 }
 
+/* a card (ServiceCard): five slots, icon, name, group, badges, status, in
+   five rows of the card list's grid (subgrid). the rows are as tall as the
+   tallest slot of the row of cards, so a name on two lines, a group path, or
+   a wrapped badge line moves the slots of every card of the row alike, and
+   an empty slot keeps its height: the slots of neighbouring cards always
+   line up. each slot keeps its place inside its row (icon at the bottom,
+   name centered, status at the top) */
 .doc-service-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.15rem;
-  height: 6rem;
-  padding: 0.25rem;
+  display: grid;
+  grid-row: span 5;
+  grid-template-rows: subgrid;
+  row-gap: 0.15rem;
+  justify-items: center;
+  padding: 0.45rem 0.25rem;
   border: 1px solid var(--color-fd-border);
   border-radius: 4px;
   background: var(--color-fd-background);
@@ -212,6 +403,20 @@
   font: inherit;
   text-align: center;
   cursor: pointer;
+}
+
+.doc-service-card > .doc-service-card-icon {
+  align-self: end;
+}
+
+.doc-service-card > .doc-service-card-name {
+  align-self: center;
+}
+
+.doc-service-card > .doc-service-card-group,
+.doc-service-card > .doc-service-card-badge-list,
+.doc-service-card > .doc-service-card-type {
+  align-self: start;
 }
 
 .doc-service-card:hover {
@@ -241,6 +446,13 @@
   gap: 0.2rem;
   color: var(--color-fd-muted-foreground);
   font-size: 0.68rem;
+}
+
+.doc-service-card-group {
+  max-width: 100%;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.68rem;
+  line-height: 1.15;
 }
 
 .doc-service-card-new {
@@ -290,4 +502,229 @@
 .doc-service-button {
   padding: 0 0.4rem;
   line-height: inherit;
+}
+
+/* ---------- the groups of cards, the badges of a card ---------- */
+
+/* a group (App / Infra) of an area: its subtitle and its cards */
+.doc-service-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* the kind / origin of a card, under its name: small badges in one line */
+.doc-service-card-badge-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.15rem;
+  max-width: 100%;
+}
+
+.doc-service-card .doc-badge-outline {
+  padding: 0 0.2rem;
+  font-size: 0.6rem;
+  line-height: 0.9rem;
+}
+
+/* the status line of a card: the lifecycle dot, the health ring, a word */
+.doc-service-card-type[data-status='waiting'] {
+  color: #2563eb;
+}
+
+/* ---------- the tables of the tab (infra routes, dependencies, hooks, logs) ---------- */
+
+/* a compact table: a grid of rows under a head row, each column sized by
+   the table (--doc-service-table-columns); a text column (minmax(…, fr))
+   wraps, and a table whose fixed columns do not fit scrolls sideways
+   rather than growing the panel */
+.doc-service-table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+}
+
+.doc-service-table {
+  display: grid;
+  grid-template-columns: var(--doc-service-table-columns, 1fr);
+  width: 100%;
+  font-size: 0.72rem;
+}
+
+.doc-service-table-row {
+  display: contents;
+}
+
+.doc-service-table-row > * {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+  min-height: 1.5rem;
+  padding: 0.1rem 0.35rem;
+  border-top: 1px solid var(--color-fd-border);
+  overflow-wrap: anywhere;
+}
+
+.doc-service-table-row.is-head > * {
+  border-top: 0;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.doc-service-table-row[aria-current='true'] > * {
+  background: color-mix(in srgb, var(--color-fd-primary) 8%, transparent);
+}
+
+.doc-service-table-row > .doc-service-table-cell-nowrap {
+  white-space: nowrap;
+}
+
+/* a badge in a cell never breaks inside its word; a link (a name) breaks
+   at a hyphen only, and starts at the cell's left like the texts */
+.doc-service-table-row .doc-badge-outline {
+  white-space: nowrap;
+}
+
+.doc-service-table-row .doc-service-link {
+  margin-right: 0.3rem;
+  overflow-wrap: normal;
+  text-align: left;
+}
+
+.doc-service-table-row > .doc-service-table-cell-code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.68rem;
+}
+
+/* a cell that holds the whole text of a log message: wraps, aligned top */
+.doc-service-table-row > .doc-service-table-cell-text {
+  display: block;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  white-space: pre-wrap;
+}
+
+.doc-service-table-empty {
+  padding: 0.3rem 0.45rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+}
+
+/* a line of the tab that is a word and a badge, without wrapping each */
+.doc-service-inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* the level of a log record */
+.doc-service-log-level[data-level='warn'] {
+  color: #d97706;
+  font-weight: 600;
+}
+
+.doc-service-log-level[data-level='error'] {
+  color: var(--color-fd-destructive, #dc2626);
+  font-weight: 600;
+}
+
+.doc-service-log-level[data-level='debug'] {
+  color: var(--color-fd-muted-foreground);
+}
+
+/* the data of a log record: folded into one line, the whole as a tooltip */
+.doc-service-log-data {
+  overflow: hidden;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-fd-muted-foreground);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* the filters of the log area: labelled selects and a text box in one line */
+.doc-service-log-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
+
+.doc-service-log-filter label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+}
+
+.doc-service-log-text {
+  width: 9rem;
+  padding: 0 0.25rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  font: inherit;
+  font-size: 0.72rem;
+}
+
+.doc-service-log-limit {
+  width: 3.5rem;
+}
+
+/* the records keep their room while a query runs, so the area does not jump */
+.doc-service-log-body {
+  min-height: 6rem;
+}
+
+/* the actions of the lifecycle row, and the in-place confirmation of a delete */
+.doc-service-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--color-fd-destructive, #dc2626) 50%, var(--color-fd-border));
+  border-radius: 2px;
+}
+
+/* the editor of the dependencies: one row per name, the add row below */
+.doc-service-dependency-add {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.doc-service-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.doc-service-check input {
+  margin: 0;
+}
+
+/* the doc pages the kernel mounted, under the backend line */
+.doc-service-docpage-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+  font-size: 0.72rem;
 }

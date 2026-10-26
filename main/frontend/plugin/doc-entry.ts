@@ -28,6 +28,12 @@ import { excludePatternTextListRead } from './doc-source-exclude.ts';
 //   asset:                   # optional, an entry only: the asset store config of the doc
 //                            #   page, { file: ./asset.yaml } | false (no store); absent:
 //                            #   asset.yaml beside the entry (doc_page_impl_asset.md)
+//   service:                 # optional, an entry only: the service folders of the doc page,
+//                            #   { file: ./service.yaml } | false (none); absent: service.yaml
+//                            #   beside the entry, else the convention folders (doc-service-server.ts)
+//   comp:                    # optional, an entry only: the component folders of the doc page,
+//                            #   { file: ./comp.yaml } | false (none); absent: comp.yaml beside
+//                            #   the entry, else comp-mdx/ of the doc page (doc-comp-config.ts)
 //   sidePanelDefault: main   # optional when the file declares one side panel
 //   sidePanelById:
 //     main: { root?, tree }          # a side panel resource
@@ -157,9 +163,17 @@ export type DocPageLoaded = {
   isTemporary: boolean;
   rootList: DocPageRoot[];
   mentionList: DocPageMention[];
-  // "asset" of the entry as written: undefined (the convention), false, or { file }
-  asset: undefined | false | { file: string };
+  // "asset", "service" and "comp" of the entry as written: undefined (the
+  // convention), false (none), or { file } (relative to the entry)
+  asset: EntryFileSection;
+  service: EntryFileSection;
+  comp: EntryFileSection;
 };
+
+// a section of the entry that names a config file of the doc page, or
+// switches the feature off: undefined (the convention file beside the
+// entry, or the defaults without it), false (none), { file } (another file)
+export type EntryFileSection = undefined | false | { file: string };
 
 // a doc page of the workspace as the page receives it (paths relative to
 // the config directory, no absolute path)
@@ -286,7 +300,10 @@ type LoadContext = {
   warningList: string[];
 };
 
-const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'sidePanelDefault', 'sidePanelById'];
+const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'service', 'comp', 'sidePanelDefault', 'sidePanelById'];
+// the sections an entry alone may hold: each names a config file of the doc
+// page (or switches the feature off), found beside the entry by convention
+const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'service', 'comp'] as const;
 const CONFIG_FILE_KEY_LIST = ['config', 'variable'];
 const WORKSPACE_FILE_KEY_LIST = ['title', 'homeDoc', 'homeItem', 'docPageList'];
 const ENTRY_FILE_SUFFIX = '-entry.yaml';
@@ -660,6 +677,8 @@ function docPageRegister(entryFile: string, mention: DocPageMention, isRoot: boo
     rootList: [],
     mentionList: [mention],
     asset: undefined,
+    service: undefined,
+    comp: undefined,
   };
   context.docPageByEntryFile.set(entryFile, docPage);
   return docPage;
@@ -729,10 +748,11 @@ function fileLoad(filePath: string, context: LoadContext, entryOwnerFrom: string
     else if (mention) docPageRegister(filePathResolved, mention, false, context);
     context.entryFileList.push(filePathResolved);
     docPage.title = file.entry.title ?? '';
-    docPage.asset = assetSectionRead(content.asset, filePathResolved);
-  } else if (content.asset !== undefined) {
+    for (const key of ENTRY_FILE_SECTION_KEY_LIST) docPage[key] = entryFileSectionRead(content[key], key, filePathResolved);
+  } else if (ENTRY_FILE_SECTION_KEY_LIST.some((key) => content[key] !== undefined)) {
+    const key = ENTRY_FILE_SECTION_KEY_LIST.find((keyItem) => content[keyItem] !== undefined);
     throw new Error(
-      `[doc-source] "asset" belongs to the entry of a doc page, not to a resource file: ${filePathResolved}`,
+      `[doc-source] "${key}" belongs to the entry of a doc page, not to a resource file: ${filePathResolved}`,
     );
   } else if (mention?.isAliasGiven) {
     throw new Error(
@@ -896,18 +916,21 @@ function pathIsInside(filePath: string, folder: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-// ---------- asset section ----------
-// the asset store config of a doc page (doc_page_impl_asset.md): { file },
-// relative to the entry, or false for none. absent: asset.yaml beside the
-// entry, read when it exists (asset store config defaults otherwise)
+// ---------- asset, service and comp sections ----------
+// the config files of the doc page that are found beside the entry by
+// convention: the asset store config (doc_page_impl_asset.md), the service
+// folders (doc_page_impl_service.md) and the component folders
+// (doc_page_impl_mdx_comp.md#components-of-a-doc-page). each is { file },
+// relative to the entry, or false for none. absent: {key}.yaml beside the
+// entry, read when it exists, the defaults of the feature otherwise
 
-function assetSectionRead(asset: any, filePath: string): DocPageLoaded['asset'] {
-  if (asset === undefined || asset === null) return undefined;
-  if (asset === false) return false;
-  if (mappingIs(asset) && typeof asset.file === 'string' && asset.file.trim() !== '' && Object.keys(asset).length === 1) {
-    return { file: asset.file.trim() };
+function entryFileSectionRead(value: any, key: string, filePath: string): EntryFileSection {
+  if (value === undefined || value === null) return undefined;
+  if (value === false) return false;
+  if (mappingIs(value) && typeof value.file === 'string' && value.file.trim() !== '' && Object.keys(value).length === 1) {
+    return { file: value.file.trim() };
   }
-  throw new Error(`[doc-source] "asset" of an entry is { file: ./asset.yaml } or false: ${filePath}`);
+  throw new Error(`[doc-source] "${key}" of an entry is { file: ./${key}.yaml } or false: ${filePath}`);
 }
 
 // ---------- tag section ----------

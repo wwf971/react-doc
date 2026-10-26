@@ -1,0 +1,10 @@
+# the infra instance folder of the demonstration doc page (doc_page_impl_service.md):
+# where the service runtime kernel provisions the infra instances the example
+# requires (logging for the kernel, sqlite for the todo-list instance), and
+# where an infra instance is created from the Services tab. a provisioned
+# instance is state, not part of the example: everything here is ignored, so
+# a fresh checkout provisions its own. only this file is tracked, so the
+# folder exists. to add an infra instance to the example on purpose, list
+# its folder here (the way service-app/.gitignore does).
+*
+!/.gitignore

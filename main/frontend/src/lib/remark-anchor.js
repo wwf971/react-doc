@@ -1,5 +1,5 @@
 import { visit } from 'unist-util-visit';
-import { anchorAliasListParse, anchorCompNameIs } from '../../../comp-mdx/anchor/AnchorData.js';
+import { anchorAliasListParse, anchorCompNameIs } from '../../../../built-in/comp-mdx/anchor/AnchorData.js';
 import { commentMarkerParse } from './remark-comment-comp.js';
 
 // Gives a place in a document stable fragment ids, so links such as

@@ -799,7 +799,8 @@ export class DocEditStore {
   // editor would edit the asset's text and not the lines of this block
   // (doc_page_impl_asset.md#edit-mode). any other block: the source mode.
   // a component declared isAssetOnly is the other way round
-  // (blockEditModeAssetOnlyListGet).
+  // (blockEditModeAssetOnlyListGet), and so is the reference of a component
+  // declared isEditAssetAccepted: its modes edit the referenced data.
   blockEditModeListGet(path: string, blockIndex: number): EditModeEntry[] {
     const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
     if (!block) return [];
@@ -807,7 +808,8 @@ export class DocEditStore {
     const definition = this.blockDefinitionGet(path, blockIndex);
     const isAssetRef = assetRefLangIs(block.component.lang);
     const modeList = compEditModeListGet(definition);
-    if (compMetaGet(definition).isAssetOnly) return this.blockEditModeAssetOnlyListGet(block, definition, modeList);
+    const meta = compMetaGet(definition);
+    if (meta.isAssetOnly || (meta.isEditAssetAccepted && isAssetRef)) return this.blockEditModeAssetOnlyListGet(block, definition, modeList);
     if (!isAssetRef) return modeList.map((mode) => ({ ...mode, isDisabled: false, disabledReason: '' }));
     const isSourceListed = modeList.some((mode) => mode.id === COMP_EDIT_MODE_SOURCE_ID);
     const modeListAsset = modeList.map((mode) => ({
@@ -822,7 +824,8 @@ export class DocEditStore {
     return modeListAsset;
   }
 
-  // the edit modes of a block of an isAssetOnly component
+  // the edit modes of a block of an isAssetOnly component, or of the asset
+  // reference of an isEditAssetAccepted one
   // (doc_page_impl_edit.md#asset-only-components): its data is only ever in
   // the asset service layer, so the component's own modes edit the referenced asset
   // (the session's assetDraft) and are what the block opens in. the source
@@ -957,18 +960,42 @@ export class DocEditStore {
 
   // a draft event of the open block session is about asset data when the
   // component rendered the data of a reference (event.source.asset) in one
-  // of its own edit modes: the block is an isAssetOnly component's
-  // (blockEditModeAssetOnlyListGet enables nothing else)
+  // of its own edit modes: the block is an isAssetOnly or isEditAssetAccepted
+  // component's (blockEditModeAssetOnlyListGet enables nothing else)
   private sessionAssetDraftIsFor(event: DocEvent): boolean {
     const session = this.session;
     if (!session || session.type !== 'block' || session.editModeId === COMP_EDIT_MODE_SOURCE_ID) return false;
     return Boolean(event.source.asset?.isFromAsset);
   }
 
-  // { raw, versionMetadata? } of the component's editor
+  // { raw, lang?, versionMetadata?, isDirty?, saveTarget? } of the component's
+  // editor. the draft goes to one place only, so a change of mind never
+  // leaves the other one written:
+  //   isDirty: false         the data is as it was; a leave writes nothing
+  //   saveTarget: 'inline'   the data is written into the block in place of
+  //                          the reference; the asset object is not touched
+  //   otherwise              the asset object (the block keeps its reference)
+  // both fields are compared strictly, so an editor that reports neither
+  // keeps saving to the asset.
   private sessionAssetDraftSet(event: DocEvent) {
     const session = this.session;
     if (!session || session.status === 'submitting') return;
+    if (event.data.isDirty === false) {
+      session.assetDraft = undefined;
+      this.sessionDraftSet(session.textInitial);
+      return;
+    }
+    if (event.data.saveTarget === 'inline') {
+      const block = this.docEditByPath[session.path]?.model?.blockList[session.blockIndex];
+      if (!block?.component) return;
+      session.assetDraft = undefined;
+      this.sessionDraftSet(componentBlockTextBuild(block, {
+        raw: String(event.data.raw ?? ''),
+        lang: String(event.data.lang ?? 'yaml'),
+      }));
+      return;
+    }
+    session.textDraft = session.textInitial;
     const asset = event.source.asset;
     const versionMetadata = event.data.versionMetadata;
     session.assetDraft = {

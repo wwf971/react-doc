@@ -167,7 +167,7 @@ comp-doc/registry/RegisteredComp.jsx        config.stateKey (compStateKeyBuild)
 frontend/src/store/DocEditStore.ts          operationApply tells the layer the line shifts of every write;
                                             blockMoveApply the mapping of a swap (stateRemapList)
 frontend/src/DocPageMdx.jsx                 the store beside the others; init / dispose
-comp-mdx/excel-univer/                      ExcelUniver: engine selection and the shared draft in the state;
+comp-mdx/media/excel-univer/                      ExcelUniver: engine selection and the shared draft in the state;
                                             ExcelUniverSheet restores and reports the selection
 example_doc/comp-mdx/DemoCounter.jsx        a count in the state (keyed by id or by place)
 example_doc/comp-mdx/CompStateListDemo.jsx  the states the layer holds, listed

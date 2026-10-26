@@ -20,6 +20,7 @@ sidePanelById:
       - doc: ~example/mdx-usage/comp-block.md
       - doc: ~example/mdx-usage/comp-image.md
       - doc: ~example/mdx-usage/comp-diagram.md
+      - doc: ~example/mdx-usage/comp-diagram-er.md
       - doc: ~example/mdx-usage/comp-excel-univer.md
       - doc: ~example/mdx-usage/comp-file-tree.md
       - doc: ~example/mdx-usage/comp-file-download.md

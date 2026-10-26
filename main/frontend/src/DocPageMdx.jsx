@@ -34,18 +34,19 @@ import { SidePanelItemContextMenu } from '../../comp-doc/side-panel/SidePanelIte
 import { DocPastePopup } from '../../comp-doc/paste/DocPastePopup.jsx';
 import { DocBlockSelectMenu } from '../../comp-doc/block-select/DocBlockSelectMenu.jsx';
 import { DocBlockTransferPopup } from '../../comp-doc/block-select/DocBlockTransferPopup.jsx';
-import { DocLanguageProvider, useDocLanguage } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
-import { MultiLangControl } from '../../comp-mdx/multi-lang/MultiLangControl.jsx';
+import { DocLanguageProvider, useDocLanguage } from '../../../built-in/comp-mdx/multi-lang/MultiLangContext.jsx';
+import { MultiLangControl } from '../../../built-in/comp-mdx/multi-lang/MultiLangControl.jsx';
 import { DocEditToggle } from '../../comp-doc/edit/DocEditToggle.jsx';
 import { DocSettingsButton } from '../../comp-doc/settings/DocSettingsButton.jsx';
 import { DocSettingsPanel } from '../../comp-doc/settings/DocSettingsPanel.jsx';
 import { compById as compByIdDefault } from '../../comp-doc/registry/registry.js';
+import { compMountByIdBuild } from '../../comp-doc/registry/comp-mount.js';
 import './DocPageMdx.css';
 
 // Embeddable MD/MDX document page.
 //
 //   <DocPageMdx
-//     data={{ configDoc, fileManifest, dirManifest, fileUrlByPath, assetSnapshot }}
+//     data={{ configDoc, fileManifest, dirManifest, fileUrlByPath, assetSnapshot, compMountList }}
 //     config={{ routeMode: 'memory', compById, compConfigHost, configDefineList, link: { CompRender },
 //               source: { endpoint }, edit: { endpoint, pasteTransformList }, asset: { endpoint, subscribe },
 //               service: { endpoint } }}
@@ -72,6 +73,10 @@ import './DocPageMdx.css';
 // config.service.endpoint is the service backend as the development server
 // forwards it (docServiceEndpoint); without it the dashboards of service
 // instances show that there is no backend (doc_page_impl_service.md).
+// data.compMountList is the components of the doc pages as the plugin
+// mounted them (docCompMountList, doc_page_impl_mdx_comp.md#components-of-a-doc-page):
+// their definitions join the registry between the package's and the host's
+// config.compById, and their tag names are in configDoc.compRegistry already.
 
 export function DocPageMdx({ data, config = {}, onEvent }) {
   const languageAncestor = useDocLanguage();
@@ -79,7 +84,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
   const pageElementRef = useRef(null);
   const headingPointerRef = useRef(null);
   const [stores] = useState(() => {
-    const compById = { ...compByIdDefault, ...(config.compById ?? {}) };
+    const compById = compByIdBuild(data.compMountList, config.compById);
     // the environment of the page: how it is served, and so what it allows.
     // every store asks it, not an endpoint or a build flag of its own
     const envStore = new DocEnvStore({
@@ -131,10 +136,11 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     const editStore = new DocEditStore(sourceStore, docStore, configStore, { envStore, assetStore, compStateStore });
     // a component block shown in a popup, in View or in Edit (doc_page_impl_popup.md)
     const blockPopupStore = new DocBlockPopupStore({ docStore, editStore, sourceStore, assetStore });
-    // the service instances of the service backend; a dashboard block keeps
-    // its instance and its state in its asset object
+    // the services of the service backend; a dashboard block keeps its
+    // instance and its state in its asset object. the source store tells it
+    // the doc pages loaded, synced into the kernel's registry
     // (doc_page_impl_service.md)
-    const serviceStore = new DocServiceStore({ endpoint: envStore.endpointGet('service'), assetStore });
+    const serviceStore = new DocServiceStore({ endpoint: envStore.endpointGet('service'), assetStore, sourceStore });
     // the side panel: folder open state, and moving items in edit mode
     // (doc_page_impl_side_panel.md#moving-an-item)
     const sidePanelStore = new DocSidePanelStore({ sourceStore, docStore, editStore });
@@ -249,11 +255,8 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
   }, [stores]);
 
   useEffect(() => {
-    stores.docStore.replaceCompById({
-      ...compByIdDefault,
-      ...(config.compById ?? {}),
-    });
-  }, [config.compById, stores]);
+    stores.docStore.replaceCompById(compByIdBuild(data.compMountList, config.compById));
+  }, [data.compMountList, config.compById, stores]);
 
   useEffect(() => {
     stores.docStore.setLanguagePage(languagePage);
@@ -384,4 +387,10 @@ function DocPageLayoutContainer({ children, ...props }) {
       </nav>
     </DocsLayoutContainer>
   );
+}
+
+// the registry of the page: the package's definitions, the components of
+// the doc pages mounted over them, the host's own over both
+function compByIdBuild(compMountList, compByIdHost) {
+  return { ...compByIdDefault, ...compMountByIdBuild(compMountList), ...(compByIdHost ?? {}) };
 }

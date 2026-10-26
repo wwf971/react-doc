@@ -2,22 +2,16 @@ import {
   ChevronsDownUp,
   FoldersIcon,
   FolderTreeIcon,
-  Hash,
-  History,
   Languages,
   LayoutList,
-  LinkIcon,
   ListOrdered,
   ListTree,
   MessageSquare,
   PanelTop,
   ScrollText,
-  SlidersHorizontal,
   SquareCode,
-  TagIcon,
   TagsIcon,
   TextQuote,
-  Waypoints,
   Workflow,
   CircleHelp,
   FileDown,
@@ -33,7 +27,8 @@ import {
 // What the components registered in registry.js expose about themselves
 // (compDefine expose, doc_page_impl_mdx_comp.md#what-a-component-exposes),
 // for those whose exposure is not kept beside the component (Image,
-// ImageGrid, StockTable keep theirs in their folders). Each one names
+// ImageGrid keep theirs in their folders; a component of a doc page keeps
+// its define options beside itself, example_doc/comp-mdx/). Each one names
 // itself for the insert menu and its search, draws an icon, and creates
 // the source of a new block for the document it goes to
 // (sourceDefaultCreate(env), env = { compName, docPath, docFormat, compConfig }).
@@ -164,37 +159,6 @@ export const diagramMermaidExpose = {
   sourceDefaultCreate: () => ({ lang: 'mermaid', raw: 'flowchart LR\n  A[Start] --> B[End]' }),
 };
 
-// two tables and one relationship between them: the smallest diagram that
-// shows every part of the format (tables, columns, keys, a relationship)
-export const diagramERExpose = {
-  meta: { label: 'ER diagram', description: 'Tables, their columns and the relationships between them, drawn as an entity-relationship diagram.' },
-  icon: Waypoints,
-  sourceDefaultCreate: () => ({
-    lang: 'yaml',
-    raw: [
-      'tables:',
-      '  - id: customer',
-      '    name: customer',
-      '    nameLogical: Customer',
-      '    columns:',
-      '      - { id: id, name: id, type: uuid, key: PK }',
-      '      - { id: name, name: name, type: text }',
-      '  - id: order',
-      '    name: order',
-      '    nameLogical: Order',
-      '    position: { x: 520, y: 0 }',
-      '    columns:',
-      '      - { id: id, name: id, type: uuid, key: PK }',
-      '      - { id: customerId, name: customer_id, type: uuid, key: FK }',
-      'relationships:',
-      '  - id: orderCustomer',
-      '    label: places',
-      '    source: { tableId: customer, columnId: id }',
-      '    target: { tableId: order, columnId: customerId }',
-    ].join('\n'),
-  }),
-};
-
 // BlockSimple marks the quote after it, not a fenced block
 export const blockSimpleExpose = {
   meta: { label: 'Block', description: 'A titled box around a quote: info, warning, tip.', isInsertCommon: true },
@@ -229,51 +193,6 @@ export const tagOverviewExpose = {
   meta: { label: 'Tag overview', description: 'The documents and assets carrying one tag.' },
   icon: TagsIcon,
   sourceDefaultCreate: () => ({ lang: 'text', raw: 'Overview of one tag; replaced by the TagOverview component.', props: { tagId: 'tag-id' } }),
-};
-
-// ---------- demonstration components (example_doc/comp-mdx/) ----------
-
-export const demoCounterExpose = {
-  meta: { label: 'Counter (demo)', description: 'A counter whose count lives in the component state service layer.' },
-  icon: Hash,
-  sourceDefaultCreate: () => ({
-    lang: 'text',
-    raw: 'A counter; a plain Markdown viewer shows this text in its place.',
-    props: { id: 'counter', label: 'clicks' },
-  }),
-};
-
-// what the component state service layer holds now; read from the store,
-// nothing to edit (doc_page_impl_mdx_comp_state.md)
-export const compStateListDemoExpose = {
-  meta: { isReadOnly: true, label: 'Component states (demo)', description: 'Every state object the component state service layer holds now.' },
-  icon: History,
-  sourceDefaultCreate: () => ({ lang: 'text', raw: 'The states of the components of the page; replaced by the CompStateListDemo component.' }),
-};
-
-// the link points to the document it is written in until the author changes it
-export const sourceLinkExpose = {
-  meta: { label: 'Source link', description: 'A link that shows a source file in a popup.' },
-  icon: LinkIcon,
-  sourceDefaultCreate: ({ docPath }) => ({ lang: 'text', raw: docPath }),
-};
-
-export const tagListAllDemoExpose = {
-  meta: { isReadOnly: true, label: 'All tags (demo)', description: 'Every tag the page knows; read from the tag service, nothing to edit.' },
-  icon: TagIcon,
-  sourceDefaultCreate: () => ({
-    lang: 'text',
-    raw: 'Every tag of the page; replaced by the TagListAllDemo component.',
-  }),
-};
-
-export const docConfigDemoExpose = {
-  meta: { label: 'Document config (demo)', description: 'The resolved config of the document.' },
-  icon: SlidersHorizontal,
-  sourceDefaultCreate: () => ({
-    lang: 'text',
-    raw: 'Resolved config of this document; replaced by the DocConfigDemo component.',
-  }),
 };
 
 // ---------- Q&A, downloads, hierarchies, switchable views ----------

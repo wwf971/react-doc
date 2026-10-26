@@ -403,7 +403,7 @@ comp-doc/settings/AssetStoreSettings.jsx   the "Asset service" tab of the settin
 comp-doc/edit/DocEditBlockToolbar.jsx      the asset button of a reference block, the to-asset button of an inline block,
                                            the deletion with or without the object
 comp-doc/edit/DocEditBlockEditor.jsx       asset-backed blocks are edited as source (except asset-only components)
-comp-mdx/excel-univer/                     ExcelUniver: an asset-only component using version metadata
+comp-mdx/media/excel-univer/                     ExcelUniver: an asset-only component using version metadata
 example_doc/.doc-page/asset.yaml           the asset store config of the demonstration doc page (its sub document
                                            has none and uses its default folder, ~sub:sub-doc/asset in the store)
 example_doc/asset/, asset-archive/         the folders of the demonstration store

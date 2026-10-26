@@ -4,7 +4,7 @@ import { observer } from 'mobx-react-lite';
 import { PageToc } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
-import { DocLanguageProvider } from '../../comp-mdx/multi-lang/MultiLangContext.jsx';
+import { DocLanguageProvider } from '../../../built-in/comp-mdx/multi-lang/MultiLangContext.jsx';
 import './DocPageToc.css';
 
 const DocPageToc = observer(function DocPageToc(props) {

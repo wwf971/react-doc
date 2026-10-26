@@ -1,0 +1,12 @@
+templateId: w55iiudjq5y
+name: todo-list
+description: a stateless app service; its todos live in the sqlite infra service, versioned and checked out from there
+kind: app
+timeCreated: 20261029_12000000+09
+versionId: w55iiudjq61
+versionList:
+- versionId: w55iiudjq61
+  time: 20261029_12000000+09
+  note: the todo-list example, an app service on the sqlite infra service
+config:
+  titleLengthMax: 200

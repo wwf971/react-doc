@@ -1,6 +1,7 @@
 import { observer } from 'mobx-react-lite';
+import { TagIcon } from '../../main/frontend/UICommon.js';
 import { useDocStores } from '../../main/frontend/src/store/context.js';
-import { TagList } from '../../main/comp-mdx/tag/TagList.jsx';
+import { TagList } from '../../built-in/comp-mdx/tag/TagList.jsx';
 
 // Demo component: every tag known to the page, and the assets bound to it,
 // read from the tag service (DocTagStore).
@@ -37,3 +38,17 @@ export const TagListAllDemo = observer(function TagListAllDemo() {
     </div>
   );
 });
+
+// read from the tag service, nothing to edit: read-only. mounted by
+// comp.yaml of this folder (tag TagListAllDemo)
+export const tagListAllDemoDefineOptions = {
+  placementList: ['mdx', 'commentBlock'],
+  expose: {
+    meta: { isReadOnly: true, label: 'All tags (demo)', description: 'Every tag the page knows; read from the tag service, nothing to edit.' },
+    icon: TagIcon,
+    sourceDefaultCreate: () => ({
+      lang: 'text',
+      raw: 'Every tag of the page; replaced by the TagListAllDemo component.',
+    }),
+  },
+};

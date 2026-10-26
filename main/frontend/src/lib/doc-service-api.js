@@ -7,24 +7,39 @@
 //    0  success
 //   -1  bad request, or the api failed (its message says why)
 //   -2  the caller may not call the api (an api answered to services only)
-//   -3  the template, instance, api or job is not found
-//   -4  the instance is not ready (disabled, its config or its script failed)
+//   -3  the template, instance, infra name, api or job is not found
+//   -4  the instance is not ready (disabled, waiting, its config or its script failed)
 //   -5  the backend cannot be reached (answered by the plugin, or here when
 //       the development server itself does not answer)
 //   -6  a sync api did not finish in time; it is still queued or running
+//   -7  an infra service the call depends on is unavailable (no instance
+//       provides the name, the instance providing it is not ready, or a
+//       required dependency of the called instance is unavailable and its
+//       onUnavailable is reject)
 //
-//   statusGet()                              { timeStarted, templateCount, instanceCount, scanProblemList, ... }
-//   templateList()                           [{ templateId, name, description, versionId, versionList, config,
-//                                               status, message, folder, dirName, expose, dashboardBuild }]
+//   statusGet()                              { timeStarted, templateCount, instanceCount, scanProblemList, kernel, ... }
+//   registryGet()                            { templateList, instanceList, infraList, status }: everything in one call
+//   infraList()                              [{ name, serviceId, status, isRouteExplicit, providerList, consumerList, templateList, storage }]
+//   logRecent(limit)                         the kernel's own log buffer: [{ time, level, principal, feature, message, data }]
+//   templateList()                           [{ templateId, name, kind, provision, infraName, origin, description, versionId, versionList,
+//                                               config, status, message, folder, dirName, expose, dashboardBuild }]
 //   templateVersionNew(templateId, note)     the template with a new version id
-//   instanceList()                           [{ serviceId, name, description, isEnabled, template, config,
-//                                               status, message, folder, dirName, expose, dashboardBuild,
+//   instanceList()                           [{ serviceId, name, kind, origin, provision, description, isEnabled, template, config,
+//                                               dependencyList, dependencyStatusList, isDependencyDynamicAllowed, infraName,
+//                                               status, message, health, healthMessage, executionMode, isResidentRunning,
+//                                               hookRecordList, timeCreateHook, folder, dirName, expose, dashboardBuild,
 //                                               queueLength, apiRunning }]
-//   instanceCreate({ templateId, name, description, config })   the instance created from the template
+//   instanceCreate({ templateId, name, description, config, docPageAlias })   the instance created from the template
+//   instanceDependencySet(serviceId, dependencyList, isDependencyDynamicAllowed)   the instance, restarted
+//   instanceEnableSet(serviceId, isEnabled)  the instance
+//   instanceDelete(serviceId)                { serviceId, folderDeleted }
+//   infraRouteSet(name, serviceId)           the infra entry; serviceId '' goes back to the default route
+//   docPageSync()                            the kernel's doc page list; the body is filled by the development
+//                                            server with the doc pages the page loaded
 //   apiCall(target, api, params, dashboardServiceId)
 //                                            a sync api: its result; an async api: its job. target is
-//                                            { serviceId } or { templateId, versionId? }; dashboardServiceId
-//                                            the instance whose dashboard asks ('' for none)
+//                                            { serviceId }, { templateId, versionId? } or { infra: name };
+//                                            dashboardServiceId the instance whose dashboard asks ('' for none)
 //   instanceResolve(target, dashboardServiceId)  the instance a call of target goes to, as listed
 //   jobGet(serviceId, jobId)                 { serviceId, jobId, api, status, progress, progressMessage, result, ... }
 //   templateIconUrlGet(templateId)           the url of a template's icon
@@ -35,6 +50,8 @@ export const SERVICE_CODE_NOT_ALLOWED = -2;
 export const SERVICE_CODE_NOT_FOUND = -3;
 export const SERVICE_CODE_NOT_READY = -4;
 export const SERVICE_CODE_BACKEND_DOWN = -5;
+export const SERVICE_CODE_TIMEOUT = -6;
+export const SERVICE_CODE_INFRA_UNAVAILABLE = -7;
 
 export function serviceBackendApiCreate(endpoint) {
   const endpointNormalized = String(endpoint ?? '').replace(/\/+$/, '');
@@ -60,10 +77,28 @@ export function serviceBackendApiCreate(endpoint) {
 
   return {
     statusGet: () => requestSend('/status'),
+    registryGet: () => requestSend('/registry'),
+    infraList: () => requestSend('/infra/list'),
+    logRecent: (limit = 200) => requestSend(`/log/recent?limit=${query(limit)}`),
     templateList: () => requestSend('/template/list'),
     templateVersionNew: (templateId, note) => requestPost('/template/version/new', { templateId, note }),
     instanceList: () => requestSend('/instance/list'),
-    instanceCreate: ({ templateId, name, description, config }) => requestPost('/instance/create', { templateId, name, description, config }),
+    instanceCreate: ({ templateId, name, description, config, docPageAlias }) => requestPost('/instance/create', {
+      templateId,
+      name,
+      description,
+      config,
+      ...(docPageAlias ? { docPageAlias } : {}),
+    }),
+    instanceDependencySet: (serviceId, dependencyList, isDependencyDynamicAllowed) => requestPost('/instance/dependency/set', {
+      serviceId,
+      dependencyList,
+      ...(typeof isDependencyDynamicAllowed === 'boolean' ? { isDependencyDynamicAllowed } : {}),
+    }),
+    instanceEnableSet: (serviceId, isEnabled) => requestPost('/instance/enable', { serviceId, isEnabled }),
+    instanceDelete: (serviceId) => requestPost('/instance/delete', { serviceId }),
+    infraRouteSet: (name, serviceId) => requestPost('/infra/route', { name, serviceId: serviceId ?? '' }),
+    docPageSync: () => requestPost('/registry/docpage/sync', {}),
     apiCall: (target, api, params, dashboardServiceId) => requestPost('/api/call', { target, api, params: params ?? {}, dashboardServiceId }),
     instanceResolve: (target, dashboardServiceId) => {
       const queryText = Object.entries({ ...target, dashboardServiceId })

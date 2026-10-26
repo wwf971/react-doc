@@ -10,6 +10,9 @@ export async function resolve(specifier, context, nextResolve) {
     || specifier === 'react-dom'
     || specifier.startsWith('react/')
     || specifier.startsWith('react-dom/')
+    // the diagram store of built-in/ reads React Flow's node changes; it is a
+    // dependency of the frontend, not found from beside built-in/
+    || specifier === '@xyflow/react'
   ) {
     return nextResolve(specifier, { ...context, parentURL: reactParentURL });
   }

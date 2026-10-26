@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { DocLanguageProvider } from '../../../comp-mdx/multi-lang/MultiLangContext.jsx';
-import { MultiLangHeadingText } from '../../../comp-mdx/multi-lang/MultiLangEntry.jsx';
+import { DocLanguageProvider } from '../../../../built-in/comp-mdx/multi-lang/MultiLangContext.jsx';
+import { MultiLangHeadingText } from '../../../../built-in/comp-mdx/multi-lang/MultiLangEntry.jsx';
 import { compileDoc } from './mdx-compile.js';
 
 const headingTagList = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'];

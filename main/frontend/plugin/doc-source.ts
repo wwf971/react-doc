@@ -52,7 +52,14 @@ import {
 import { DOC_EDIT_ENDPOINT_NAME, docEditMiddlewareCreate } from './doc-edit-server.ts';
 import { excludeMatcherBuild, type ExcludeMatcher } from './doc-source-exclude.ts';
 import { DOC_ASSET_ENDPOINT_NAME, docAssetMiddlewareCreate } from './doc-asset-server.ts';
-import { DOC_SERVICE_ENDPOINT_NAME, docServiceMiddlewareCreate, serviceConfigGet, servicePathIs } from './doc-service-server.ts';
+import {
+  DOC_SERVICE_ENDPOINT_NAME, docServiceMiddlewareCreate, serviceBackendLaunch, serviceConfigGet, serviceFolderSetGet, servicePathIs,
+  serviceConfigFileGet, serviceSyncDocPageListBuild, type ServiceFolderSet,
+} from './doc-service-server.ts';
+import {
+  compConfigOfDocPageListGet, compConfigurationFileListGet, compFolderListGet, compManifestPathIs, compPathIs,
+  type CompConfig, type CompMount,
+} from './doc-comp-config.ts';
 import {
   assetConfigFormerReject, assetConfigOfDocPageListGet, assetStoreCreate, objectIdFromDirName,
   type AssetSnapshot, type AssetStore, type AssetStoreConfig, type AssetUsageDoc,
@@ -78,8 +85,10 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 //   export const docSourceEndpoint = '/__doc-source' // '' in a build: no source api
 //   export const docEditEndpoint = '/__doc-edit'    // '' in a build: no edit api
 //   export const docAssetEndpoint = '/__doc-asset'  // '' in a build or without asset.file
-//   export const docServiceEndpoint = '/__doc-service' // '' in a build or without service.backend
+//   export const docServiceEndpoint = '/__doc-service' // '' in a build or without config service
 //   export const assetSnapshot = {...} | null       // the asset service layer, bundled in a build
+//   export const docCompMountList = [{ docPageAlias, tagName, id, export, defineOptionsExport, entryFile, module }]
+//                                                   // the components of the loaded doc pages, their modules imported
 //   export function subscribeDocSource(listener)    // dev: the source data changed
 //   export function subscribeDocAsset(listener)     // dev: an object or the store's folders changed on disk
 //
@@ -118,9 +127,20 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 // store of the asset service layer, whose config file is named by config asset.file and whose
 // folders are listed in that file (doc_page_impl_asset.md). the store's
 // files are never part of the collected source, wherever they are placed.
-// it forwards the service api to the service backend of config
-// service.backend (doc-service-server.ts); the folders of the backend's
-// config file are not part of the source either.
+// it forwards the service api to the service backend of config service
+// (doc-service-server.ts: the address its backendConfigFile says, which it
+// starts with service.launch); the folders of the backend's config file
+// are not part of the source either.
+//
+// a doc page folder also holds, by convention, what is never a document
+// whatever rule collects the folder around it (sourceExcludeGet): the
+// metadata folder .doc-page/, the asset folders (doc-asset-store.ts), the
+// service folders (doc-service-server.ts) and the component folders
+// (doc-comp-config.ts). the components of the component folders are
+// mounted into the component registry of the page: the virtual module
+// imports every module a comp.yaml manifest names and exports the mounts as
+// docCompMountList, and the tag names they declare are written into
+// configDoc.compRegistry over those of config.yaml.
 
 const MODULE_ID_DEFAULT = 'virtual:doc-source';
 export const DOC_SOURCE_ENDPOINT_NAME = '__doc-source';
@@ -311,6 +331,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         docServiceEndpoint,
         assetSnapshot,
         moduleId,
+        compMountList: compConfigGet(configDoc).mountList,
       });
     },
 
@@ -394,6 +415,13 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       // a file the page created through the source api: the watcher reports
       // the addition too, and must report it as data, not reload the page
       const pathsCreatedByPage = new Set<string>();
+      // the files that are never documents, as the doc pages loaded now
+      // declare them (the service and component folders follow a mount);
+      // declared below the middlewares, refreshed with every configuration load
+      let sourceExclude: SourceExclude | undefined;
+      const sourceExcludeSet = (configDocUpdated: any) => {
+        sourceExclude = sourceExcludeGet(configDocUpdated, configDir);
+      };
       // the configuration changed without a file write (a temporary doc
       // page mounted): watched again and reported as data
       const configurationReload = (): string => {
@@ -405,6 +433,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         }
         pathsWatched = collectPathsToWatch(configDocUpdated, configDir);
         pathsConfiguration = collectPathsConfiguration(configDocUpdated);
+        sourceExcludeSet(configDocUpdated);
         for (const p of pathsWatched) server.watcher.add(p);
         configDataSend(configDocUpdated);
         return '';
@@ -490,6 +519,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         }
         pathsWatched = collectPathsToWatch(configDocUpdated, configDir);
         pathsConfiguration = collectPathsConfiguration(configDocUpdated);
+        sourceExcludeSet(configDocUpdated);
         for (const p of pathsWatched) server.watcher.add(p);
         configDataSend(configDocUpdated);
         return '';
@@ -578,20 +608,29 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
 
       // the service api is the backend's; the plugin only forwards it. like
       // the asset section, the service section is read once: a change of
-      // the backend's address or folders needs a restart of the server
+      // the backend's address or folders needs a restart of the server.
+      // the sync route is the plugin's own: the doc pages loaded now.
+      // with service.launch the server starts the backend as well
       const serviceConfig = serviceConfigGet(configDoc, configDir);
       if (docServiceEndpoint && serviceConfig) {
         server.middlewares.use(docServiceMiddlewareCreate({
           endpoint: docServiceEndpoint,
           backendUrlGet: () => serviceConfig.backendUrl,
+          docPageListGet: () => serviceSyncDocPageListBuild(loadConfigDoc(configFile, options).docEntry.docPageList),
         }));
+        if (serviceConfig.isLaunch) void serviceBackendLaunch(serviceConfig);
       }
 
+      sourceExcludeSet(configDoc);
       const invalidateManifest = (filePath: string) => {
-        // files of the asset service layer are not documents, even inside a source folder
-        if (assetConfig && assetPathIs(assetConfig, filePath)) return;
-        // nor are the files of the service backend (a database, a built dashboard)
-        if (serviceConfig && servicePathIs(serviceConfig, filePath)) return;
+        // a comp config file or a manifest of a component folder is
+        // configuration: the mounts change with it
+        if (!compManifestPathIs(sourceExclude!.compConfig, filePath)) {
+          // files of the asset service layer, of the service layer (a
+          // database, a built dashboard) and of the component folders (code,
+          // with vite's own hmr) are not documents, even inside a source folder
+          if (sourceExcludePathIs(sourceExclude!, filePath)) return;
+        }
         // the backup the edit api writes beside a configuration file is not a document
         if (configurationBackupPathIs(pathsConfiguration, filePath)) return;
         const isRelated = pathsWatched.some(
@@ -605,6 +644,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
           const configDocUpdated = loadConfigDoc(configFile, options);
           pathsWatched = collectPathsToWatch(configDocUpdated, configDir);
           pathsConfiguration = collectPathsConfiguration(configDocUpdated);
+          sourceExcludeSet(configDocUpdated);
           for (const p of pathsWatched) server.watcher.add(p);
         } catch {
           // Keep the last valid watch set while an edited config is incomplete.
@@ -995,12 +1035,25 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
     enumerable: false,
     value: entryLoaded.fileListLoaded,
   });
-  // the doc pages loaded, for the asset service layer: absolute paths, not
-  // part of the data sent to the page
+  // the doc pages loaded, for the asset service layer, the service layer
+  // and the components of the doc pages: absolute paths, not part of the
+  // data sent to the page
   Object.defineProperty(config.docEntry, 'docPageList', {
     enumerable: false,
     value: entryLoaded.docPageList,
   });
+  // the components of the doc pages (doc_page_impl_mdx_comp.md#components-of-a-doc-page):
+  // their modules are imported by the virtual module, and the tag names
+  // they declare are compRegistry entries, over those of config.yaml: a doc
+  // page's own tag names win for that name
+  const compConfig = compConfigOfDocPageListGet(entryLoaded.docPageList, configDir);
+  Object.defineProperty(config.docEntry, 'compConfig', { enumerable: false, value: compConfig });
+  if (compConfig.mountList.length > 0) {
+    config.compRegistry = {
+      ...(config.compRegistry && typeof config.compRegistry === 'object' ? config.compRegistry : {}),
+      ...Object.fromEntries(compConfig.mountList.map((mount) => [mount.tagName, mount.id])),
+    };
+  }
   // page values the workspace or its first doc page supplies when
   // config.yaml does not set them, so that a doc page used in another
   // deployment brings its own. a home document written in config.yaml is a
@@ -1040,6 +1093,13 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
   const fileListConfiguration = [configFile, configLocalFile, ...entryLoaded.fileListLoaded];
   if (workspaceSpec.file) fileListConfiguration.push(workspaceSpec.file);
   if (config.tag.file) fileListConfiguration.push(path.resolve(configDir, config.tag.file));
+  // the service config file of every doc page (the service folders follow
+  // it), its comp config file and the manifests of its component folders
+  // (the mounts follow them); watched whether they exist or not
+  for (const docPage of entryLoaded.docPageList) {
+    if (docPage.service !== false) fileListConfiguration.push(serviceConfigFileGet(docPage));
+  }
+  fileListConfiguration.push(...compConfigurationFileListGet(compConfig));
   Object.defineProperty(config, 'fileListConfiguration', { enumerable: false, value: fileListConfiguration });
   return config;
 }
@@ -1153,19 +1213,47 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
 
   // the configuration files (config.yaml, the yaml files of the document),
   // their backups (the edit api keeps {file}.bak when it rewrites one) and
-  // the files of the asset service layer (doc_page_impl_asset.md) and of the
-  // service backend (doc_page_impl_service.md) are never
+  // the files of the asset service layer (doc_page_impl_asset.md), of the
+  // service layer (doc_page_impl_service.md) and of the component folders
+  // (doc_page_impl_mdx_comp.md#components-of-a-doc-page) are never
   // documents, even when they lie inside a source folder
   const pathsConfiguration = collectPathsConfiguration(configDoc);
   const configurationPathSet = new Set(pathsConfiguration);
-  const assetConfig = assetConfigGet(configDoc, configDir);
-  const serviceConfig = serviceConfigGet(configDoc, configDir);
+  const sourceExclude = sourceExcludeGet(configDoc, configDir);
   return [...entryByPath.values()].filter((entry) => (
     !configurationPathSet.has(entry.absPath)
     && !configurationBackupPathIs(pathsConfiguration, entry.absPath)
-    && (!assetConfig || !assetPathIs(assetConfig, entry.absPath))
-    && (!serviceConfig || !servicePathIs(serviceConfig, entry.absPath))
+    && !sourceExcludePathIs(sourceExclude, entry.absPath)
   ));
+}
+
+// what is never a document whatever rule collects the folder around it: the
+// asset folders, the service folders and files, the component folders of
+// the doc pages the page loads, and the plain folders of the backend config
+type SourceExclude = {
+  assetConfig: AssetStoreConfig | undefined;
+  serviceFolderSet: ServiceFolderSet;
+  compConfig: CompConfig;
+};
+
+function sourceExcludeGet(configDoc: any, configDir: string): SourceExclude {
+  const docPageList = Array.isArray(configDoc.docEntry?.docPageList) ? configDoc.docEntry.docPageList : [];
+  return {
+    assetConfig: assetConfigGet(configDoc, configDir),
+    serviceFolderSet: serviceFolderSetGet(serviceConfigGet(configDoc, configDir), docPageList),
+    compConfig: compConfigGet(configDoc),
+  };
+}
+
+function sourceExcludePathIs(exclude: SourceExclude, filePath: string): boolean {
+  return (exclude.assetConfig !== undefined && assetPathIs(exclude.assetConfig, filePath))
+    || servicePathIs(exclude.serviceFolderSet, filePath)
+    || compPathIs(exclude.compConfig, filePath);
+}
+
+// the components of the doc pages, as loadConfigDoc read them
+function compConfigGet(configDoc: any): CompConfig {
+  return configDoc.docEntry?.compConfig ?? { docPageList: [], mountList: [] };
 }
 
 // the backup the edit api keeps beside a configuration file it rewrote
@@ -1312,12 +1400,8 @@ export function scanSourceDirs(configDoc: any, configDir: string): DirEntry[] {
       }
     }
   }
-  const assetConfig = assetConfigGet(configDoc, configDir);
-  const serviceConfig = serviceConfigGet(configDoc, configDir);
-  return [...dirByPath.values()].filter((dir) => (
-    (!assetConfig || !assetPathIs(assetConfig, dir.absPath))
-    && (!serviceConfig || !servicePathIs(serviceConfig, dir.absPath))
-  ));
+  const sourceExclude = sourceExcludeGet(configDoc, configDir);
+  return [...dirByPath.values()].filter((dir) => !sourceExcludePathIs(sourceExclude, dir.absPath));
 }
 
 function makeEntry(docPageAlias: string, rootAlias: string, relPath: string, absPath: string, collect: SourceCollectMode): FileEntry {
@@ -1586,10 +1670,28 @@ export function generateModuleCode(
     docServiceEndpoint?: string;
     assetSnapshot: AssetSnapshot | null;
     moduleId: string;
+    compMountList?: CompMount[];
   },
 ): string {
   const lines: string[] = [];
+  // the components of the doc pages: every module a manifest names is a
+  // static import (bundled by a build, hot-replaced by vite in development),
+  // and the mounts carry their module (doc_page_impl_mdx_comp.md#components-of-a-doc-page)
+  const compMountList = services.compMountList ?? [];
+  const moduleNameByEntryFile = new Map<string, string>();
+  for (const mount of compMountList) {
+    if (moduleNameByEntryFile.has(mount.entryFile)) continue;
+    const moduleName = `docCompModule${moduleNameByEntryFile.size}`;
+    moduleNameByEntryFile.set(mount.entryFile, moduleName);
+    lines.push(`import * as ${moduleName} from ${JSON.stringify(normalizeSlashPath(mount.entryFile))};`);
+  }
   lines.push(`export let configDoc = ${JSON.stringify(configDoc)};`);
+  lines.push('export const docCompMountList = [');
+  for (const mount of compMountList) {
+    const { manifestFile: _manifestFile, ...mountData } = mount;
+    lines.push(`  { ...${JSON.stringify({ ...mountData, entryFile: normalizeSlashPath(mount.entryFile) })}, module: ${moduleNameByEntryFile.get(mount.entryFile)} },`);
+  }
+  lines.push('];');
   // the environment the page runs in (doc_page_impl.md#the-environment)
   lines.push(`export const docEnv = ${JSON.stringify({ kind: isBuild ? 'staticBuild' : 'viteDevServer' })};`);
   lines.push(`export const docSourceEndpoint = ${JSON.stringify(services.docSourceEndpoint)};`);
@@ -1749,9 +1851,16 @@ function collectPathsToWatch(configDoc: any, configDir: string): string[] {
       result.push(fs.existsSync(filePath) ? filePath : path.dirname(filePath));
     }
   }
+  // the component folders of the doc pages: a manifest added or removed
+  // there changes the mounts (they usually lie inside a root already)
+  for (const folder of compFolderListGet(compConfigGet(configDoc))) {
+    if (fs.existsSync(folder)) result.push(folder);
+  }
   return result;
 }
 
+// the folders vite may serve files from: the source roots and the
+// component folders of the doc pages (their modules are imported)
 function collectSourceRoots(configDoc: any, configDir: string): string[] {
   const result = new Set<string>([configDir]);
   for (const rule of configDoc.source) {
@@ -1761,5 +1870,6 @@ function collectSourceRoots(configDoc: any, configDir: string): string[] {
       result.add(path.dirname(path.resolve(configDir, rule.path)));
     }
   }
+  for (const folder of compFolderListGet(compConfigGet(configDoc))) result.add(folder);
   return [...result];
 }
