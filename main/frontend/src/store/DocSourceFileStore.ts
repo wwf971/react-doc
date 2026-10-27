@@ -1,6 +1,6 @@
-import { makeAutoObservable, runInAction } from 'mobx';
+import { makeAutoObservable, observable, runInAction } from 'mobx';
 import type { DocSourceStore, SourceResult } from './DocSourceStore.js';
-import { sourcePathIsRooted } from '../lib/doc-source-path.js';
+import { sourcePathIsRooted, sourcePathNormalize } from '../lib/doc-source-path.js';
 
 // The file-creation service of the doc page source service layer as the page offers it to
 // components (design: doc_page_impl_source.md#creating-files). A component
@@ -8,7 +8,7 @@ import { sourcePathIsRooted } from '../lib/doc-source-path.js';
 // fileCreateRequest through the event layer; the source route brings it
 // here:
 //
-//   fileCreateRequest { name, blob | text, dirPath, isLocationCustom }
+//   fileCreateRequest { name, blob | text, dirPath, isLocationCustom, anchorElement? }
 //     name              the file name wanted; made unique in the folder
 //     dirPath           the folder, a source path; a component takes it
 //                       from its component-level config (FileStoreDir). a
@@ -16,12 +16,21 @@ import { sourcePathIsRooted } from '../lib/doc-source-path.js';
 //                       the document the request comes from (source.sourcePath)
 //     isLocationCustom  true: the person chooses the folder (and may
 //                       rename the file) in the location prompt first
+//     anchorElement     optional: the element of the component the file is
+//                       for (the figure of an Image). the location prompt is
+//                       placed in it, so it scrolls with the component instead
+//                       of staying where the pointer was. browser state only:
+//                       never part of the write request
 //     -> { code: 0, data: { path, entry } } | { code: -1, message }
 //
 // prompt: the one location prompt that is open (SourceFilePrompt renders
 // it). it stays open while the file is created, so a failure is shown in
 // it and another folder can be tried; dismissing it answers the request
-// with a failure.
+// with a failure. the prompt belongs to the editor of the component that
+// asked for the file: using it (and the folder suggestions it opens) is not
+// a click outside that editor (SourceFilePrompt carries the edit-popup
+// marker, use-edit-outside-pointer.js), so the draft the file is for stays
+// active until the path reaches it.
 
 type SourcePoint = { clientX: number; clientY: number };
 
@@ -32,14 +41,17 @@ export type SourceFilePrompt = {
   name: string;
   status: 'open' | 'submitting' | 'error';
   message: string;
-  // where the pointer was when the request was made (the prompt opens there)
+  // where the pointer was when the request was made (the prompt opens there
+  // when it has no anchor)
   point?: SourcePoint;
+  // the element the prompt is placed in, when the request gave one
+  anchorElement?: HTMLElement;
   // settles the pending wait of the request: the chosen location, or
   // undefined when the prompt is dismissed
   resolve: (location: SourceLocation | undefined) => void;
 };
 
-type FileCreateRequestData = { name?: string; blob?: Blob; text?: string; dirPath?: string; isLocationCustom?: boolean };
+type FileCreateRequestData = { name?: string; blob?: Blob; text?: string; dirPath?: string; isLocationCustom?: boolean; anchorElement?: HTMLElement };
 
 type DocEvent = { type: string; data: Record<string, any>; source: Record<string, any>; point?: SourcePoint };
 
@@ -51,7 +63,9 @@ export class DocSourceFileStore {
 
   constructor(sourceStore: DocSourceStore) {
     this.sourceStore = sourceStore;
-    makeAutoObservable(this, { sourceStore: false });
+    // the prompt's fields are observable, what they hold is not: the anchor
+    // element stays the element the request gave
+    makeAutoObservable(this, { sourceStore: false, prompt: observable.shallow });
   }
 
   // the handler the source route of the event layer calls
@@ -75,7 +89,7 @@ export class DocSourceFileStore {
 
     // the person chooses the location; a failed creation keeps the prompt
     // open with the message, and a new confirmation tries again
-    this.promptOpen(dirPath, name, point);
+    this.promptOpen(dirPath, name, point, data.anchorElement);
     while (this.prompt) {
       const location = await this.promptLocationAwait();
       if (!location) return { code: -1, message: 'The file was not created: no folder was chosen.' };
@@ -93,6 +107,8 @@ export class DocSourceFileStore {
     return { code: -1, message: 'The file was not created: the prompt was dismissed.' };
   }
 
+  // only the fields of the write request: nothing else of the event data
+  // (the anchor element) reaches the file service
   private fileCreateApply(location: SourceLocation, data: FileCreateRequestData): Promise<SourceResult> {
     const nameUnique = this.sourceStore.fileNameUniqueGet(location.dirPath, location.name);
     return this.sourceStore.fileCreate({ dirPath: location.dirPath, name: nameUnique, blob: data.blob, text: data.text });
@@ -100,7 +116,7 @@ export class DocSourceFileStore {
 
   // ---------- the location prompt ----------
 
-  private promptOpen(dirPath: string, name: string, point?: SourcePoint): void {
+  private promptOpen(dirPath: string, name: string, point?: SourcePoint, anchorElement?: HTMLElement): void {
     this.prompt?.resolve(undefined);
     this.prompt = {
       dirPath: dirPath || this.sourceStore.dirListWritable[0]?.internalPath || '',
@@ -108,6 +124,7 @@ export class DocSourceFileStore {
       status: 'open',
       message: '',
       point,
+      anchorElement,
       resolve: () => {},
     };
   }

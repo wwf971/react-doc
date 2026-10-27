@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
-import { ArrowLeft, ArrowRight, Minus, ChevronDown, Check, X, Lock, LockOpen, Search } from '../../../../main/frontend/UICommon.js';
+import { ArrowLeft, ArrowRight, Minus, ChevronDown, Check, X, Lock, LockOpen, Search, Plus, Trash2 } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve } from '../../../../main/comp-doc/registry/comp-registry.js';
 import { EditActions } from '../../../../main/comp-doc/edit/EditActions.jsx';
 import { EditFloatingPanel } from '../../../../main/comp-doc/edit/EditFloatingPanel.jsx';
-import { DataverseEditStore, dataverseKeyList, dataverseTypeList } from './DataverseEditStore.js';
+import { DataverseEditStore, dataverseKeyList, dataverseTypeList, resourceFieldsGet } from './DataverseEditStore.js';
 import './DataverseVisualEdit.css';
 
 export const DataverseVisualEdit = observer(function DataverseVisualEdit({ data, config, onEvent, kind, renderContent }) {
@@ -22,6 +22,7 @@ export const DataverseVisualEdit = observer(function DataverseVisualEdit({ data,
 	});
 	const anchor = useRef(null);
 	const canvas = useRef(null);
+	const root = useRef(null);
 	const session = config.edit?.session ?? {};
 	const isLocked = session.status === 'submitting';
 	const { store } = result;
@@ -56,7 +57,7 @@ export const DataverseVisualEdit = observer(function DataverseVisualEdit({ data,
 		} else if (event.key === 'Escape' && store && (store.cell || store.focus)) {
 			event.preventDefault();
 			event.stopPropagation();
-			if (store.cell) change(() => store.cellCancel());
+			if (store.cell) editor?.cancelCell();
 			else editor?.clearFocus();
 		} else if (event.key === 'Escape') {
 			event.stopPropagation();
@@ -65,20 +66,27 @@ export const DataverseVisualEdit = observer(function DataverseVisualEdit({ data,
 	const editor = store && isAllowed ? {
 		store, isLocked, change, canvas,
 		focus: (nodeId, rowId, element) => { anchor.current = element; store.focusSet(nodeId, rowId); },
-		clearFocus: () => { document.activeElement?.blur(); anchor.current = null; store.focusSet(null); },
+		focusConnection: connectionId => { anchor.current = root.current; store.connectionFocusSet(connectionId); },
+		cancelCell: () => { change(() => store.cellCancel()); root.current?.focus({ preventScroll: true }); },
+		clearFocus: () => { anchor.current = null; store.focusSet(null); root.current?.focus({ preventScroll: true }); },
 	} : undefined;
-	return <div className={`doc-vis-edit${editor ? ' is-active' : ''}`} onKeyDown={keyDown} onClick={event => {
+	return <div ref={root} tabIndex={-1} className={`doc-vis-edit${editor ? ' is-active' : ''}`} onKeyDown={keyDown} onClick={event => {
 		if (event.target === event.currentTarget || event.target.classList.contains('doc-vis-card-static')) editor?.clearFocus();
 	}}>
 		{result.message || reasonRefused ? <div role="alert" className="doc-edit-message doc-vis-edit-message">{result.message || reasonRefused}</div> : null}
 		{store ? renderContent({ data: { ...data, source: store.rawDraft, raw: store.rawDraft }, editor }) : null}
 		<EditFloatingPanel label={kind === 'diagram' ? 'Diagram' : 'Table'} head={store ? <>
 			<span className={`doc-vis-dirty${store.isDirty ? ' is-dirty' : ''}`} role="status">{store.isDirty ? 'Unsaved changes' : 'No changes'}</span>
+			{kind === 'diagram' && editor ? <>
+				<ValueMenu label="Add node" value="" values={['power-automate', 'business-rule']} valueLabels={{ '': 'Add node', 'power-automate': 'Power Automate', 'business-rule': 'Business rule' }} isLocked={isLocked} onChange={value => change(() => store.nodeAdd(value))} />
+				<button type="button" className="doc-button-icon" title="Add connection" aria-label="Add connection" disabled={isLocked} onClick={() => { change(() => { if (store.connectionAdd()) editor.focusConnection(store.connections.at(-1).id); }); }}><Plus size={14} /></button>
+				{store.connections.length ? <ValueMenu label="Edit connection" value="" values={store.connections.map(connection => connection.id)} valueLabels={{ '': 'Connections', ...Object.fromEntries(store.connections.map(connection => [connection.id, connection.label?.text || connection.id])) }} isLocked={isLocked} onChange={value => { if (value) editor.focusConnection(value); }} /> : null}
+			</> : null}
 			{isFromAsset ? <span className="doc-vis-save-target">
 				<span>Save to</span>
 				<ValueMenu label="Save to" value={store.saveTarget} values={['asset', 'inline']} valueLabels={saveTargetLabels} isLocked={isLocked || !isAllowed} onChange={value => change(() => store.saveTargetSet(value))} />
 			</span> : null}
-		</> : null} actions={<EditActions status={session.status} message={session.message} titleCancel="Cancel" isSubmitDisabled={!store || !isAllowed} onSubmit={submit} onCancel={cancel} />} />
+		</> : null} actions={<EditActions status={session.status} message={session.message || store?.message} titleCancel="Cancel" isSubmitDisabled={!store || !isAllowed} onSubmit={submit} onCancel={cancel} />} />
 		{editor && store.focus ? <FocusPanel editor={editor} anchor={anchor} onKeyDown={keyDown} /> : null}
 	</div>;
 });
@@ -117,7 +125,22 @@ const FocusPanel = observer(function FocusPanel({ editor, anchor, onKeyDown }) {
 	}, [anchor]);
 	const node = store.nodeFocused;
 	const row = store.rowFocused;
+	const connection = store.connectionFocused;
+	if (connection) return createPortal(<section ref={panelRef} className="doc-edit-popup doc-edit-panel doc-vis-focus-panel not-prose" style={{ ...position, visibility: position ? 'visible' : 'hidden' }} aria-label="Connection settings" onKeyDown={onKeyDown}>
+		<div className="doc-edit-panel-row doc-vis-focus-head"><strong>{connection.id}</strong><button type="button" className="doc-button-icon" title="Close settings" aria-label="Close settings" onClick={editor.clearFocus}><X size={13} /></button></div>
+		<div className="doc-edit-panel-body">
+			<label className="doc-vis-field"><span className="doc-vis-field-label">Relationship</span><TextValue key={connection.id} label="Relationship" value={connection.label?.text ?? ''} isLocked={isLocked} onChange={value => change(() => store.connectionSet(connection.id, 'label', value))} /></label>
+			{['source', 'target'].map(role => {
+				const endpoints = store.nodes.flatMap(item => (item.handles ?? []).filter(handle => handle.direction === 'both' || handle.direction === (role === 'source' ? 'out' : 'in')).map(handle => ({ nodeId: item.id, handleId: handle.id })));
+				const values = endpoints.map(endpoint => JSON.stringify(endpoint));
+				const labels = Object.fromEntries(endpoints.map(endpoint => [JSON.stringify(endpoint), `${store.nodes.find(item => item.id === endpoint.nodeId)?.data.name || endpoint.nodeId} / ${endpoint.handleId}`]));
+				return <div key={role} className="doc-vis-field"><span className="doc-vis-field-label">{role}</span><ValueMenu label={role} value={JSON.stringify(connection[role])} values={values} valueLabels={labels} isLocked={isLocked} onChange={value => change(() => store.connectionSet(connection.id, role, JSON.parse(value)))} /></div>;
+			})}
+			<button type="button" className="doc-button-dialog" disabled={isLocked} onClick={() => change(() => store.connectionRemove(connection.id))}><Trash2 size={13} /> Remove connection</button>
+		</div>
+	</section>, document.body);
 	if (!node) return null;
+	const fieldsResource = resourceFieldsGet(node.renderer.type);
 	const item = row ?? node.data;
 	const field = (name, label, isMultiline = false) => (
 		<label className="doc-vis-field">
@@ -134,9 +157,8 @@ const FocusPanel = observer(function FocusPanel({ editor, anchor, onKeyDown }) {
 			<button type="button" className="doc-button-icon" aria-label="Close settings" title="Close settings (Esc)" onClick={editor.clearFocus}><X size={13} /></button>
 		</div>
 		<div className="doc-edit-panel-body">
-			{field('name', 'Name')}
-			{field('nameLogical', 'Logical name')}
-			{row ? <>
+			{fieldsResource ? (row ? <>{field('name', 'Property')}{field('value', 'Value', true)}</> : fieldsResource.filter(item => item.id !== 'description').map(item => item.values ? <div className="doc-vis-field" key={item.id}><span className="doc-vis-field-label">{item.label}</span><ValueMenu label={item.label} value={node.data[item.id] ?? item.defaultValue ?? ''} values={item.values} isLocked={isLocked} onChange={value => change(() => store.fieldSet(node.id, null, item.id, value))} /></div> : <div key={item.id}>{field(item.id, item.label, item.isMultiline)}</div>)) : <>{field('name', 'Name')}{field('nameLogical', 'Logical name')}</>}
+			{row && !fieldsResource ? <>
 				<div className="doc-vis-field">
 					<span className="doc-vis-field-label">Key</span>
 					<span className="doc-vis-choice-group" role="group" aria-label="Key">
@@ -166,6 +188,12 @@ const FocusPanel = observer(function FocusPanel({ editor, anchor, onKeyDown }) {
 				</span>
 			</div> : null}
 			{field('description', 'Description', true)}
+			{fieldsResource ? <div className="doc-edit-panel-row">
+				{row ? <button type="button" className="doc-button-dialog" disabled={isLocked} onClick={() => change(() => store.propertyRemove(node.id, row.id))}><Trash2 size={13} /> Remove property</button> : <>
+					<button type="button" className="doc-button-dialog" disabled={isLocked} onClick={() => change(() => store.propertyAdd(node.id))}><Plus size={13} /> Add property</button>
+					<button type="button" className="doc-button-icon" title="Remove node" aria-label="Remove node" disabled={isLocked} onClick={() => change(() => store.nodeRemove(node.id))}><Trash2 size={13} /></button>
+				</>}
+			</div> : null}
 			{store.message ? <span role="alert" className="doc-error">{store.message}</span> : null}
 		</div>
 	</section>, document.body);
@@ -188,23 +216,23 @@ function CheckValue({ label, isChecked, isLocked, onChange }) {
 // it in place. Key and Type pick from a fixed set (the host's Menu), the
 // others are typed. the cell keeps the height of the read view, so the card
 // does not move when a cell starts or ends editing
-export const DataverseCell = observer(function DataverseCell({ editor, nodeId, rowId = null, field, value, children, className = '' }) {
+export const DataverseCell = observer(function DataverseCell({ editor, nodeId, rowId = null, field, value, values, children, className = '' }) {
 	const root = useRef(null);
 	if (!editor) return <span className={className}>{children ?? value}</span>;
 	const { store, change, isLocked, focus } = editor;
 	const cell = store.cell;
 	const isEditing = cell?.nodeId === nodeId && cell?.rowId === rowId && cell?.field === field;
 	const start = () => {
-		focus(nodeId, rowId, root.current.closest('.doc-er-table-column') ?? root.current.closest('.doc-er-table'));
+		focus(nodeId, rowId, root.current.closest('.doc-er-table-column, .doc-resource-property') ?? root.current.closest('.doc-er-table'));
 		store.cellStart(nodeId, rowId, field);
 	};
-	const options = field === 'key' ? dataverseKeyList : field === 'type' ? dataverseTypeList : null;
+	const options = values ?? (field === 'key' ? dataverseKeyList : field === 'type' ? dataverseTypeList : null);
 	return <span ref={root} className={`${className} doc-vis-cell${isEditing ? ' is-editing' : ''}`}>
 		{options ? <ValueMenu label={`Edit ${field}`} value={value ?? ''} values={options} isCell isLocked={isLocked} onOpen={start} onChange={next => { change(() => store.fieldSet(nodeId, rowId, field, next)); store.cellEnd(); }} /> : isEditing ? <TextValue
 			label={`Edit ${field}`} value={value ?? ''} isLocked={isLocked} isEditing isCell
 			onChange={next => change(() => store.fieldSet(nodeId, rowId, field, next))}
 			onEnd={() => { if (store.cell?.nodeId === nodeId && store.cell?.rowId === rowId && store.cell?.field === field) store.cellEnd(); }}
-			onCancel={() => change(() => store.cellCancel())}
+			onCancel={editor.cancelCell}
 		/> : <button type="button" className="doc-vis-cell-value nodrag" aria-label={`Edit ${field}`} disabled={isLocked} onClick={event => { event.stopPropagation(); start(); }}>{children ?? value ?? ' '}</button>}
 	</span>;
 });

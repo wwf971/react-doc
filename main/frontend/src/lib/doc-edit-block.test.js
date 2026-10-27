@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { makeAutoObservable, runInAction, toJS } from 'mobx';
 import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import {
@@ -13,6 +14,9 @@ import {
   remarkEditBlock,
 } from './doc-edit-block.js';
 import { splitFrontmatter } from './mdx-compile.js';
+import { docEditApiCreate } from './doc-edit-api.js';
+import { compDefine } from '../../../comp-doc/registry/comp-registry.js';
+import { DocEditStore } from '../store/DocEditStore.ts';
 
 const sourceDemo = [
   '---',
@@ -178,3 +182,231 @@ function modelBuild(source) {
   remarkEditBlock({ onBlockList: (blockList) => { blockListCompiled = blockList; } })(tree);
   return editDocModelBuild({ source, blockListCompiled });
 }
+
+// ---------- deleting a block with the files its component offers ----------
+// (doc_page_impl_block_ops.md#deleting-blocks): the capability is a compDefine
+// option, the store lists and checks the choice, the api client sends it
+
+const PATH_DOC = '~docs/page.md';
+const HASH_DOC = 'hash-1';
+
+const sourceFiles = [
+  '# Files',
+  '',
+  '<!--renderComp=PhotoSet-->',
+  '```yaml',
+  'files: [dog.png, remote.png, dog.png, notes.pdf, locked.gif]',
+  '```',
+  '',
+  '<!--renderComp=Image-->',
+  '```yaml',
+  'src: dog.png',
+  '```',
+  '',
+  '<!--renderComp=PhotoSet-->',
+  '```asset',
+  'store: local',
+  'objectId: w1',
+  '```',
+  '',
+].join('\n');
+
+// a component of a third party that offers files with its block: every
+// file its data names, a reason of its own for one of them
+function photoSetDefinitionCreate(receivedList = []) {
+  return compDefine(function PhotoSet() { return null; }, {
+    placementList: ['commentBlock'],
+    assetDependencyListGet: () => [],
+    deleteFileListGet: (data) => {
+      receivedList.push(data);
+      const fileList = /files: \[(.*)\]/.exec(String(data.raw ?? ''))?.[1].split(',').map((item) => item.trim()) ?? [];
+      return fileList.map((path) => ({ path, reason: path.endsWith('.gif') ? 'kept by the component' : '' }));
+    },
+  });
+}
+
+// the store over a fake source (fileResolve knows two files), a fake
+// registry, and the real api client over a captured fetch
+function deleteStoreCreate({ compById, assetStore, apply = { code: 0, data: { text: '# Files\n', hash: HASH_DOC }, message: '' } } = {}) {
+  const requestList = [];
+  const fetchBefore = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    requestList.push({ url, body: JSON.parse(init.body) });
+    return { status: 200, json: async () => apply };
+  };
+  const entryByReference = new Map([
+    ['dog.png', { internalPath: '~docs/dog.png' }],
+    ['notes.pdf', { internalPath: '~docs/notes.pdf' }],
+    ['locked.gif', { internalPath: '~docs/locked.gif' }],
+  ]);
+  const sourceStore = makeAutoObservable({
+    configDoc: { compRegistry: { PhotoSet: 'custom/PhotoSet', Image: 'common/Image' } },
+    entryByInternalPath: new Map(),
+    fileResolve: (reference) => entryByReference.get(reference),
+  });
+  const docStore = { compById, docCurrentPath: PATH_DOC };
+  const envStore = { isCapable: () => true, endpointGet: () => '' };
+  const store = new DocEditStore(sourceStore, docStore, {}, { envStore, assetStore });
+  store.api = docEditApiCreate('/__doc-edit');
+  runInAction(() => {
+    store.isEditMode = true;
+    store.sourceByPath[PATH_DOC] = { status: 'done', text: sourceFiles, hash: HASH_DOC };
+    store.docEditByPath[PATH_DOC] = { status: 'done', hash: HASH_DOC, model: modelBuild(sourceFiles) };
+  });
+  const restore = () => { globalThis.fetch = fetchBefore; };
+  // the files are listed after the confirmation opens; one turn is enough
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  return { store, requestList, restore, settle };
+}
+
+test('compDefine keeps deleteFileListGet, and dependencies alone do not offer files', () => {
+  const definition = photoSetDefinitionCreate();
+  assert.equal(typeof definition.deleteFileListGet, 'function');
+  const withDependencies = compDefine(function Plain() { return null; }, { assetDependencyListGet: () => [{ type: 'source', path: 'a.png' }] });
+  assert.equal(withDependencies.deleteFileListGet, undefined);
+});
+
+test('a component with the capability lists its files once, resolved, nothing chosen', async () => {
+  const receivedList = [];
+  const { store, restore, settle } = deleteStoreCreate({ compById: { 'custom/PhotoSet': photoSetDefinitionCreate(receivedList) } });
+  try {
+    assert.equal(await store.deleteConfirmSet(PATH_DOC, 1), true);
+    await settle();
+    assert.equal(store.deleteConfirm.isFileLoading, false);
+    assert.equal(receivedList[0].lang, 'yaml', 'the inline language reaches the component');
+    assert.deepEqual(toJS(store.deleteConfirm.fileList), [
+      { path: '~docs/dog.png', isDeletable: true, reason: '' },
+      { path: 'remote.png', isDeletable: false, reason: 'not a file of the collected source' },
+      { path: '~docs/notes.pdf', isDeletable: true, reason: '' },
+      { path: '~docs/locked.gif', isDeletable: false, reason: 'kept by the component' },
+    ]);
+    assert.deepEqual(store.deleteConfirm.filePathDeleteList, []);
+  } finally {
+    restore();
+  }
+});
+
+test('only listed deletable files can be chosen; the chosen subset reaches the request body', async () => {
+  const { store, requestList, restore, settle } = deleteStoreCreate({ compById: { 'custom/PhotoSet': photoSetDefinitionCreate() } });
+  try {
+    await store.deleteConfirmSet(PATH_DOC, 1);
+    await settle();
+    store.deleteFileSelectedSet('remote.png', true);
+    store.deleteFileSelectedSet('~docs/locked.gif', true);
+    store.deleteFileSelectedSet('~docs/unlisted.png', true);
+    assert.deepEqual(store.deleteConfirm.filePathDeleteList, []);
+    store.deleteFileSelectedSet('~docs/notes.pdf', true);
+    store.deleteFileSelectedSet('~docs/dog.png', true);
+    store.deleteFileSelectedSet('~docs/notes.pdf', false);
+    assert.deepEqual(store.deleteConfirm.filePathDeleteList, ['~docs/dog.png']);
+    assert.equal(await store.blockDelete(PATH_DOC, 1), true);
+    assert.equal(requestList.length, 1);
+    assert.equal(requestList[0].url, '/__doc-edit/source/apply');
+    assert.deepEqual(requestList[0].body, {
+      internalPath: PATH_DOC,
+      hashBase: HASH_DOC,
+      operation: { action: 'deleteLines', lineStart: 3, lineEnd: 7 },
+      filePathDeleteList: ['~docs/dog.png'],
+    });
+    assert.equal(store.deleteConfirm, undefined);
+  } finally {
+    restore();
+  }
+});
+
+test('an emptied choice sends no file list, and a block without the capability never does', async () => {
+  const compById = { 'custom/PhotoSet': photoSetDefinitionCreate(), 'common/Image': compDefine(function Image() { return null; }, { assetDependencyListGet: () => [{ type: 'source', path: 'dog.png' }] }) };
+  const { store, requestList, restore, settle } = deleteStoreCreate({ compById });
+  try {
+    await store.deleteConfirmSet(PATH_DOC, 1);
+    await settle();
+    store.deleteFileSelectedSet('~docs/dog.png', true);
+    store.deleteFileSelectionClear();
+    assert.deepEqual(store.deleteConfirm.filePathDeleteList, []);
+    await store.blockDelete(PATH_DOC, 1);
+    assert.equal('filePathDeleteList' in requestList[0].body, false);
+
+    await store.deleteConfirmSet(PATH_DOC, 2);
+    await settle();
+    assert.equal(store.deleteConfirm.fileList, undefined, 'dependencies alone offer nothing');
+    await store.blockDelete(PATH_DOC, 2);
+    assert.equal('filePathDeleteList' in requestList[1].body, false);
+  } finally {
+    restore();
+  }
+});
+
+test('a failed deletion keeps the confirmation, its files and its choice', async () => {
+  const { store, restore, settle } = deleteStoreCreate({
+    compById: { 'custom/PhotoSet': photoSetDefinitionCreate() },
+    apply: { code: -1, data: null, message: 'disk full' },
+  });
+  try {
+    await store.deleteConfirmSet(PATH_DOC, 1);
+    await settle();
+    store.deleteFileSelectedSet('~docs/dog.png', true);
+    assert.equal(await store.blockDelete(PATH_DOC, 1), false);
+    assert.equal(store.deleteConfirm.status, 'error');
+    assert.equal(store.deleteConfirm.message, 'disk full');
+    assert.equal(store.deleteConfirm.fileList.length, 4);
+    assert.deepEqual(store.deleteConfirm.filePathDeleteList, ['~docs/dog.png']);
+    store.deleteFileSelectedSet('~docs/notes.pdf', true);
+    assert.deepEqual(store.deleteConfirm.filePathDeleteList, ['~docs/dog.png', '~docs/notes.pdf']);
+  } finally {
+    restore();
+  }
+});
+
+// a reference block: the files come from the text of the asset version,
+// read through the asset service layer, which takes time
+function assetStoreCreate() {
+  let resolveLoad;
+  const loadPromise = new Promise((resolve) => { resolveLoad = resolve; });
+  const assetStore = {
+    isWritable: true,
+    writeUnavailableReason: '',
+    refObjectIdGet: (ref) => ref.objectId,
+    objectGet: () => ({ name: 'photos', isDeleted: false, isLocked: false, versionIdHead: 'v1' }),
+    usageListGet: () => [],
+    refLoad: () => loadPromise,
+    refQuery: () => ({ status: 'done', message: '', versionId: 'v1', version: { text: 'files: [dog.png, notes.pdf]' } }),
+    loadSettle: () => resolveLoad(),
+  };
+  return assetStore;
+}
+
+test('the files of a reference block come from its asset version', async () => {
+  const receivedList = [];
+  const assetStore = assetStoreCreate();
+  const { store, restore, settle } = deleteStoreCreate({ compById: { 'custom/PhotoSet': photoSetDefinitionCreate(receivedList) }, assetStore });
+  try {
+    await store.deleteConfirmSet(PATH_DOC, 3);
+    assert.equal(store.deleteConfirm.isFileLoading, true);
+    assert.deepEqual(toJS(store.deleteConfirm.fileList), []);
+    assetStore.loadSettle();
+    await settle();
+    assert.equal(store.deleteConfirm.isFileLoading, false);
+    assert.equal(receivedList[0].raw, 'files: [dog.png, notes.pdf]');
+    assert.deepEqual(toJS(store.deleteConfirm.fileList).map((file) => file.path), ['~docs/dog.png', '~docs/notes.pdf']);
+  } finally {
+    restore();
+  }
+});
+
+test('a confirmation closed while its files are listed is never filled', async () => {
+  const assetStore = assetStoreCreate();
+  const { store, restore, settle } = deleteStoreCreate({ compById: { 'custom/PhotoSet': photoSetDefinitionCreate() }, assetStore });
+  try {
+    await store.deleteConfirmSet(PATH_DOC, 3);
+    const confirmFirst = store.deleteConfirm;
+    store.deleteConfirmClear();
+    assetStore.loadSettle();
+    await settle();
+    assert.deepEqual(toJS(confirmFirst.fileList), []);
+    assert.equal(confirmFirst.isFileLoading, true, 'a closed confirmation is left as it was');
+    assert.equal(store.deleteConfirm, undefined);
+  } finally {
+    restore();
+  }
+});
+

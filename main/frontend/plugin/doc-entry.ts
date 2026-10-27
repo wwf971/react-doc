@@ -4,6 +4,7 @@ import { parse as parseYaml } from 'yaml';
 import { textHashGet } from './doc-edit-lines.ts';
 import { sourceAliasIsValid, sourcePathFullGet, sourcePathIsRooted } from '../src/lib/doc-source-path.js';
 import { excludePatternTextListRead } from './doc-source-exclude.ts';
+import { sidePanelEffectiveGet, sidePanelRootHiddenApply } from './doc-sidebar-effective.ts';
 
 // The workspace, its doc pages, the entry of each and the yaml files it reaches.
 // design: doc_page_impl_source.md#the-workspace, doc_page_impl_side_panel.md#the-document-entry
@@ -199,7 +200,7 @@ export type DocWorkspaceInfo = {
   // Workspace tab to edit (doc-workspace-edit.ts)
   file: string;
   fileHash: string;
-  itemList: { alias?: string; dir?: string; file?: string; sidePanel?: string }[];
+  itemList: { alias?: string; dir?: string; file?: string; sidePanel?: string; isRootVisible?: boolean }[];
   // the folder relative paths of the workspace are read from, absolute: the
   // workspace file's, else the config directory. the os path completion of
   // the Workspace tab starts there
@@ -216,13 +217,15 @@ export type DocWorkspaceSpec = {
   title?: string;
   homeDoc?: string;
   homeItem?: string;
-  // isTemporary: mounted from the settings panel, after the doc pages written
-  docPageList: { alias?: string; dir?: string; file?: string; sidePanel?: string; isTemporary?: boolean }[];
+  // isTemporary: mounted from the settings panel, after the doc pages written.
+  // isRootVisible false: the sole wrapper item of the side panel shown
+  // for the doc page is not drawn as a row (doc-sidebar-effective.ts)
+  docPageList: { alias?: string; dir?: string; file?: string; sidePanel?: string; isRootVisible?: boolean; isTemporary?: boolean }[];
   // the file the spec was read from, absolute, when it is a workspace file;
   // its content hash and its items as written
   file?: string;
   fileHash?: string;
-  itemListWritten?: { alias?: string; dir?: string; file?: string; sidePanel?: string }[];
+  itemListWritten?: { alias?: string; dir?: string; file?: string; sidePanel?: string; isRootVisible?: boolean }[];
   // the folder the paths of the items are relative to, absolute
   dirBase?: string;
 };
@@ -372,6 +375,7 @@ export function docPageAliasDefaultGet(entryFile: string): string {
 //     - alias: guide         # unique in the workspace; the folder name when absent
 //       dir: ../guide        # the doc page folder, or "file": its entry file
 //       sidePanel: main      # optional: the side panel shown for it
+//       isRootVisible: false # optional: its sole wrapper item shows its children only
 export function docWorkspaceSpecRead(workspace: any, configDir: string, configFile: string): DocWorkspaceSpec {
   let content = workspace;
   let fileWorkspace: string | undefined;
@@ -407,10 +411,11 @@ export function docWorkspaceSpecRead(workspace: any, configDir: string, configFi
     dirBase,
     // the items as written: the strings of each, for the Workspace tab
     itemListWritten: content.docPageList.map((item: any) => {
-      const written: Record<string, string> = {};
+      const written: Record<string, string | boolean> = {};
       for (const key of ['alias', 'dir', 'file', 'sidePanel']) {
         if (typeof item?.[key] === 'string') written[key] = item[key];
       }
+      if (typeof item?.isRootVisible === 'boolean') written.isRootVisible = item.isRootVisible;
       return written;
     }),
   };
@@ -425,13 +430,19 @@ export function docWorkspaceSpecRead(workspace: any, configDir: string, configFi
   return spec;
 }
 
-// one doc page named by the workspace or by config docEntry: { alias?, dir | file, sidePanel? }
+// one doc page named by the workspace or by config docEntry:
+// { alias?, dir | file, sidePanel?, isRootVisible? }
 export function docPageSpecRead(item: any, dirBase: string, place: string): DocWorkspaceSpec['docPageList'][number] {
-  if (!mappingIs(item)) throw new Error(`[doc-source] ${place}: a doc page is { alias?, dir | file, sidePanel? }`);
+  if (!mappingIs(item)) throw new Error(`[doc-source] ${place}: a doc page is { alias?, dir | file, sidePanel?, isRootVisible? }`);
   for (const key of Object.keys(item)) {
-    if (!['alias', 'dir', 'file', 'sidePanel'].includes(key)) {
-      throw new Error(`[doc-source] ${place}: unknown key "${key}" of a doc page (known: alias, dir, file, sidePanel)`);
+    if (!['alias', 'dir', 'file', 'sidePanel', 'isRootVisible'].includes(key)) {
+      throw new Error(`[doc-source] ${place}: unknown key "${key}" of a doc page (known: alias, dir, file, sidePanel, isRootVisible)`);
     }
+  }
+  if (item.isRootVisible !== undefined && typeof item.isRootVisible !== 'boolean') {
+    throw new Error(
+      `[doc-source] ${place}: "isRootVisible" must be a yaml boolean, true or false (not the text ${JSON.stringify(item.isRootVisible)})`,
+    );
   }
   const isFileGiven = typeof item.file === 'string' && item.file.trim() !== '';
   const isDirGiven = typeof item.dir === 'string' && item.dir.trim() !== '';
@@ -452,15 +463,16 @@ export function docPageSpecRead(item: any, dirBase: string, place: string): DocW
     dir: isDirGiven ? path.resolve(dirBase, item.dir) : undefined,
     file: isFileGiven ? path.resolve(dirBase, item.file) : undefined,
     sidePanel: item.sidePanel,
+    isRootVisible: item.isRootVisible,
   };
 }
 
 // one doc page as the workspace: what config docEntry names (the former
 // form, kept): a virtual workspace holding it alone
-export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWanted = '', alias?: string): DocEntryLoaded {
+export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWanted = '', alias?: string, isRootVisible?: boolean): DocEntryLoaded {
   return docWorkspaceLoad({
     isVirtual: true,
-    docPageList: [{ alias, file: path.resolve(entryFile), sidePanel: sidePanelIdWanted || undefined }],
+    docPageList: [{ alias, file: path.resolve(entryFile), sidePanel: sidePanelIdWanted || undefined, isRootVisible }],
   }, configDir);
 }
 
@@ -528,9 +540,21 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
     else if (file.sidePanelIdList.length > 0) id = sidePanelIdDefaultGet(file, placeWorkspace);
     return { id, sidePanel: id === '' ? undefined : context.sidePanelByKey.get(sidePanelKeyBuild(file.filePath, id)) };
   };
+  //
+  // the tree shown is then projected (doc-sidebar-effective.ts): a doc page
+  // has one effective occurrence (its mount, else the first include reached;
+  // later includes are shielded with their subtree), and a mount with
+  // isRootVisible false shows the children of its sole wrapper item without
+  // the wrapper's row. the cached side panels are not touched: the
+  // projection clones what it keeps.
+  const aliasRootList = entryFileRootList.map((entryFile) => context.docPageByEntryFile.get(entryFile)!.alias);
+  const treeOfRootGet = (sidePanelRoot: SidePanelLoaded | undefined, index: number): any[] => {
+    const tree = sidePanelRoot?.tree ?? [];
+    return spec.docPageList[index].isRootVisible === false ? sidePanelRootHiddenApply(tree) : tree;
+  };
   const fileFirst = fileRootList[0];
   const { id: sidePanelId, sidePanel: sidePanelFirst } = sidePanelOfRoot(fileFirst, 0);
-  let sidePanel = sidePanelFirst;
+  let sidePanel: SidePanelLoaded | undefined;
   if (fileRootList.length > 1) {
     const tree = fileRootList.map((file, index) => {
       const docPage = context.docPageByEntryFile.get(file.filePath)!;
@@ -542,7 +566,7 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
         ...root,
         id: `doc-page-${docPage.alias}`,
         text: docPage.alias,
-        children: sidePanelRoot?.tree ?? [],
+        children: treeOfRootGet(sidePanelRoot, index),
         docPageAlias: docPage.alias,
         docPageSection: { alias: docPage.alias, title: docPage.title, isTemporary: docPage.isTemporary, isFirst: index === 0 },
       };
@@ -551,7 +575,9 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
       }
       return node;
     });
-    sidePanel = { treeSource: { file: '', path: [] }, tree };
+    sidePanel = { treeSource: { file: '', path: [] }, tree: sidePanelEffectiveGet(tree, aliasRootList) };
+  } else if (sidePanelFirst) {
+    sidePanel = { ...sidePanelFirst, tree: sidePanelEffectiveGet(treeOfRootGet(sidePanelFirst, 0), aliasRootList) };
   }
 
   const fileHashByFile: Record<string, string> = {};

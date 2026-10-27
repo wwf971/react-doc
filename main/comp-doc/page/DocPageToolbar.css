@@ -1,8 +1,22 @@
-.doc-page-toolbar {
+.doc-page-toolbar-frame {
+  min-width: 0;
+  margin-bottom: 0.25rem;
+}
+
+/* the track inside ScrollHorizontal, or the toolbar itself when it wraps */
+.doc-page-toolbar,
+.doc-page-toolbar-frame .doc-page-toolbar {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
+}
+
+.doc-page-toolbar > * {
+  flex-shrink: 0;
+}
+
+.doc-page-toolbar.is-wrap {
+  flex-wrap: wrap;
   margin-bottom: 0.25rem;
-  overflow-x: auto;
 }

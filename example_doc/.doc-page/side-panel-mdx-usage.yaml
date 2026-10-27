@@ -21,10 +21,12 @@ sidePanelById:
       - doc: ~example/mdx-usage/comp-image.md
       - doc: ~example/mdx-usage/comp-diagram.md
       - doc: ~example/mdx-usage/comp-diagram-er.md
+      - doc: ~example/mdx-usage/comp-powerplatform.md
       - doc: ~example/mdx-usage/comp-excel-univer.md
       - doc: ~example/mdx-usage/comp-file-tree.md
       - doc: ~example/mdx-usage/comp-file-download.md
       - doc: ~example/mdx-usage/comp-block-qa.md
       - doc: ~example/mdx-usage/comp-hierarchy.md
+      - doc: ~example/mdx-usage/comp-test-case-table.md
       - doc: ~example/mdx-usage/comp-data-ref.md
       - doc: ~example/mdx-usage/comp-mdx-native.mdx

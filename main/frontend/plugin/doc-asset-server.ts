@@ -1,7 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   ASSET_STORE_ID_LOCAL, AssetError, type AssetObjectKey, type AssetStore, type AssetUsageDoc, type AssetVersionData,
+  textDecodeTry,
 } from './doc-asset-store.ts';
+import { testCaseAssetResultSet, testCaseAssetWriteCheck } from '../../../built-in/comp-mdx/test-case-table/TestCaseTableApi.js';
 
 // Asset api of the development server (design: doc_page_impl_asset.md). Like
 // the edit api, it exists only while `vite` serves the page; a built page
@@ -26,6 +28,15 @@ import {
 //                                                                 -> { object, version }
 //                                     mode: inPlace | newVersion; absent: the object's saveMode
 //                                     dependencyList, versionMetadata absent: those of the version written over / made from are kept
+//                                     a text of a TestCaseTable whose result history differs from the head's is
+//                                     refused (-1): the history is managed, written by /test-case/result/set only
+//   POST {endpoint}/test-case/result/set { store, objectId, hashBase, docPath, caseId, testerId, operator, result,
+//                                       timeTimezone?, evidence?, versionId? } -> { object, version }
+//                                     one result appended to the history of a TestCaseTable object
+//                                     (comp-mdx/test-case-table/TestCaseTableApi.js): the time and the id of the
+//                                     entry are made here, evidence must name one md/mdx document of the doc page of
+//                                     docPath (the document the block is in), and the write is the normal head
+//                                     update (hashBase, locks, save mode); versionId other than head is refused
 //   POST {endpoint}/version/metadata/set { store, objectId, versionId, versionMetadata } -> { object, version }
 //   POST {endpoint}/dependency/set    { store, objectId, versionId, dependencyList }  -> { object }
 //   POST {endpoint}/dependency/add    { store, objectId, versionId, dependency }      -> { object }
@@ -66,13 +77,17 @@ type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) 
 // matter of the doc page source service layer, which the plugin passes in
 // rootAbsPathByPathGet: the roots of the source rules by their full path
 // (~page:root), which name the asset folders
+// fileEntryListGet: the collected files of the source ({ internalPath, name,
+// ... }), what a document reference of a request (the evidence of a test
+// result) is resolved against; absent: no reference resolves
 export function docAssetMiddlewareCreate(options: {
   endpoint: string;
   storeGet: () => AssetStore;
   rootAbsPathByPathGet: () => Map<string, string>;
   usageScan: (docPathList: string[]) => AssetUsageDoc[];
+  fileEntryListGet?: () => { internalPath: string; name: string }[];
 }): Middleware {
-  const { endpoint, storeGet, rootAbsPathByPathGet, usageScan } = options;
+  const { endpoint, storeGet, rootAbsPathByPathGet, usageScan, fileEntryListGet } = options;
   return (req, res, next) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname !== endpoint && !url.pathname.startsWith(`${endpoint}/`)) {
@@ -110,7 +125,7 @@ export function docAssetMiddlewareCreate(options: {
       }
       return;
     }
-    void routeHandle(req, route, url, storeGet(), rootAbsPathByPathGet)
+    void routeHandle(req, route, url, storeGet(), rootAbsPathByPathGet, fileEntryListGet)
       .then((data) => jsonSend(res, 200, { code: 0, data, message: '' }))
       .catch(failureSend);
   };
@@ -125,6 +140,7 @@ async function routeHandle(
   url: URL,
   store: AssetStore,
   rootAbsPathByPathGet: () => Map<string, string>,
+  fileEntryListGet?: () => { internalPath: string; name: string }[],
 ): Promise<any> {
   const method = req.method ?? 'GET';
   if (method === 'GET') {
@@ -182,15 +198,39 @@ async function routeHandle(
       return { object: result.object, version: versionResponseBuild(result.version), isCreated: result.isCreated };
     }
     if (route === '/object/update') {
+      const data = bodyDataGet(body);
+      testCaseHistoryGuard(store, objectId, data);
       const result = store.objectUpdate({
         objectId,
         hashBase: body?.hashBase,
-        data: bodyDataGet(body),
+        data,
         mode: body?.mode,
         note: body?.note,
         dependencyList: body?.dependencyList,
         versionMetadata: body?.versionMetadata,
       });
+      return { object: result.object, version: versionResponseBuild(result.version) };
+    }
+    if (route === '/test-case/result/set') {
+      let result;
+      try {
+        result = testCaseAssetResultSet(store, {
+          objectId,
+          hashBase: body?.hashBase,
+          docPath: String(body?.docPath ?? ''),
+          caseId: String(body?.caseId ?? ''),
+          testerId: String(body?.testerId ?? ''),
+          operator: body?.operator,
+          result: body?.result,
+          timeTimezone: body?.timeTimezone,
+          evidence: body?.evidence,
+          versionId: body?.versionId,
+        }, fileEntryListGet?.() ?? []);
+      } catch (error) {
+        // what the data refuses is a bad request; the store's own errors keep their code
+        if (error instanceof AssetError) throw error;
+        throw new AssetError(-1, String((error as any)?.message ?? error));
+      }
       return { object: result.object, version: versionResponseBuild(result.version) };
     }
     if (route === '/version/metadata/set') {
@@ -227,6 +267,20 @@ async function routeHandle(
     }
   }
   throw new AssetError(-1, `unknown asset api route: ${method} ${route}`);
+}
+
+// the generic head write may not rewrite the result history of a
+// TestCaseTable object (comp-mdx/test-case-table/comp_test_case_table.md):
+// the history is appended through /test-case/result/set, with an operator
+// and a time of the server. a structural edit that keeps the history passes
+function testCaseHistoryGuard(store: AssetStore, objectId: string, data: Buffer) {
+  const head = store.versionDataGetOf(store.objectGet(objectId), 'head');
+  const textNext = textDecodeTry(data);
+  try {
+    testCaseAssetWriteCheck(head.isText ? head.text ?? '' : '', textNext ?? '');
+  } catch (error) {
+    throw new AssetError(-1, String((error as any)?.message ?? error));
+  }
 }
 
 // the api serves the local store only; a reference into another store is not found here

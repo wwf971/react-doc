@@ -262,9 +262,40 @@ Waypoints are absolute diagram coordinates. Moving a node updates the line's end
 
 A custom edge uses the unified registry's `visualizationEdge` placement and `expose.visualizationEdge` metadata. Optional `routeValidate(route)` throws for unsupported routing data; without it, non-null route data is rejected. `data` is passed as component content. `config.visualization` supplies `connectionId`, the resolved `connection`, `source` and `target` with `{ x, y, side }`, resolved `markerStart`/`markerEnd`, `isEdit: false`, and React Flow's `BaseEdge`. The renderer returns SVG content inside the edge group and can use `BaseEdge` for a wide interaction path. It cannot bypass endpoint validation or write files itself. Selection, reconnection, and field-edit controls belong to the planned edit mode.
 
+## Power Platform Resource Nodes
+
+`DiagramPowerAutomate` and `DiagramBusinessRule` use the same renderer and
+version-1 graph as `DiagramER`, with different insertion starters. A diagram
+may mix their nodes with Dataverse tables, choices, operators, and registered
+renderers. These are design models, not executable workflow definitions.
+
+| Renderer type | Node data |
+| --- | --- |
+| `power-automate` | `name`, `kind` (`trigger`, `action`, `condition`, `scope`, `loop`, `terminate`), `connector`, `operation`, `expression`, `description`, `properties` |
+| `business-rule` | `name`, `kind` (`condition`, `action`), `table`, `scope` (`Entity`, `All Forms`, `Specific Form`), `action`, `expression`, `description`, `properties` |
+
+Business-rule actions are `setValue`, `setRequired`, `setVisibility`,
+`setEnabled`, `showError`, or `recommendation`; the empty action is accepted
+for a condition. Property rows are `{ id, name, value, description? }`, all
+text. Quote numeric/boolean-looking values. Unknown authored data is retained;
+invalid enum values and duplicate property IDs are rejected. Anchors are
+`header`, `body`, and `property/<id>`; handles and connections use the existing
+direction, side, endpoint, and label rules. No runtime execution order is
+inferred from card placement: label branches and run-after conditions explicitly.
+
+Files for each resource share a prefix: `PowerAutomateNode*` and
+`BusinessRuleNode*` contain its renderer, fields/validation, and starter source.
+`ResourceNodeCard` shares the table-card visual language and text/menu controls.
+The YAML draft remains in `DataverseEditStore`, including node/property
+addition/removal and connection endpoint/label changes. Connected nodes and
+properties cannot be removed until their connections are removed or reassigned.
+Use Source mode for custom handles, line styles, and other graph fields not
+exposed in the visual controls. See [Power Platform diagrams](../../../../example_doc/mdx-usage/comp-powerplatform.md)
+for complete examples and design-specific caveats.
+
 ## Card Editing
 
-`visual` requires writable, unlocked asset data at its head version. Inline YAML remains readable and source-editable; `meta.isEditAssetOnly` enables this restriction without the stronger `isAssetOnly` display restriction. Both diagram and fixed-card views share the editor.
+`visual` edits inline YAML and, with `meta.isEditAssetAccepted: true`, writable, unlocked asset data at its head version. The flag opts the component's own modes into asset editing; it does not restrict inline editing or display. Older or locked asset versions cannot be visually edited. Both diagram and fixed-card views share the editor, alongside source editing. The former `isEditAssetOnly` flag is no longer used.
 
 | State | Responsibility |
 | --- | --- |
@@ -277,7 +308,9 @@ A custom edge uses the unified registry's `visualizationEdge` placement and `exp
 
 DOM anchors and nearby panel position belong to the view, not semantic focus. Fixed-set cells use the host's Menu, never HTML select. Accepted changes report `editDraftChange` to the in-memory session, not a storage API. Save and non-canceling exits persist the latest draft; Cancel discards it. Clean/reverted drafts do not write. Controls are disabled while submitting.
 
-Row handles support none, left, right, or both. Moving a side preserves IDs and connections. Removing a connected handle is refused. Fixed cards retain handle configuration for reuse in diagrams without drawing connections. Dataverse cards expose `header`; choice references use its left edge at offset 0.5. Node creation, line creation/reconnection, and resizing remain outside this editing slice.
+Escape first restores the active cell, then clears the row or table selection. It never saves or cancels the block session, even when nothing is selected. Use Save (or Ctrl/Command + Enter) to submit and Cancel to discard. For an asset-backed block, **Save to > Inline YAML** replaces the reference with the draft without writing the asset; the default **Asset object** target follows the object's save policy and leaves the document unchanged.
+
+Row handles support none, left, right, or both. Moving a side preserves IDs and connections. Removing a connected handle is refused. Fixed cards retain handle configuration for reuse in diagrams without drawing connections. Dataverse cards expose `header`; choice references use its left edge at offset 0.5. Resource nodes and connections can be added through the floating toolbar; connection labels and endpoints are edited through its Connections menu. Drag-to-connect, node resizing, and creation of other renderer types remain source-editing operations.
 
 The table settings panel's **Use current position** captures the current canvas coordinates in `position`. While selected, dragging updates those coordinates in the draft. Clearing it returns the node to `auto`; temporary movement is not saved. The adjacent lock captures the position and sets `isPositionLocked`, preventing dragging in both edit and read views. Unlocking retains the remembered coordinates and permits dragging again. These changes follow the same Save/Cancel behavior as cell edits.
 

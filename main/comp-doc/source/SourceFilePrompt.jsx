@@ -1,19 +1,29 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
 import { LoaderCircle } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
+import { EDIT_POPUP_CLASS } from '../edit/use-edit-outside-pointer.js';
 import { SourcePathPicker } from './SourcePathPicker.jsx';
 import './DocSource.css';
 
 // The location prompt of file creation (doc_page_impl_source.md
 // #creating-files): where a file a component holds (a pasted image) is
-// written. Open state lives in DocSourceFileStore.prompt; the prompt
-// floats where the pointer was when the file was requested (or at the top
-// center of the page), with the folder (SourcePathPicker: typed with
-// completion from the folders of the source, or picked from them as a tree
-// behind its browse button), the file name, Create and Cancel. Escape
-// cancels; a pointer going down outside it cancels too.
+// written. Open state lives in DocSourceFileStore.prompt. the prompt is
+// placed in the element the request anchored it to (the figure of the
+// Image: it then scrolls with the image, in a scrolling container and on
+// the page alike), else it floats where the pointer was when the file was
+// requested (or at the top center of the page). it holds the folder
+// (SourcePathPicker: typed with completion from the folders of the source,
+// or picked from them as a tree behind its browse button), the file name,
+// Create and Cancel. Escape cancels; a pointer going down outside it
+// cancels too, except in the folder suggestions, which SourcePathInput
+// renders into the body: choosing one is part of the same operation.
+//
+// the prompt is part of the editor of the component that asked for the
+// file (the edit-popup marker, use-edit-outside-pointer.js): a pointer in
+// it does not leave that editor, whose draft the created path is for.
 export const SourceFilePrompt = observer(function SourceFilePrompt() {
   const { sourceFileStore } = useDocStores();
   const elementRef = useRef(null);
@@ -26,7 +36,10 @@ export const SourceFilePrompt = observer(function SourceFilePrompt() {
       if (event.key === 'Escape' && !event.defaultPrevented) sourceFileStore.promptCancel();
     };
     const pointerDownHandle = (event) => {
-      if (elementRef.current && !elementRef.current.contains(event.target)) sourceFileStore.promptCancel();
+      if (!elementRef.current || elementRef.current.contains(event.target)) return;
+      // the folder suggestions are rendered into the body, outside the dialog
+      if (event.target instanceof Element && event.target.closest('.doc-source-path-list')) return;
+      sourceFileStore.promptCancel();
     };
     window.addEventListener('keydown', keyDownHandle);
     window.addEventListener('pointerdown', pointerDownHandle, true);
@@ -38,14 +51,20 @@ export const SourceFilePrompt = observer(function SourceFilePrompt() {
 
   if (!isOpen) return null;
   const isSubmitting = prompt.status === 'submitting';
-  const style = prompt.point
-    ? { left: `${Math.min(prompt.point.clientX, window.innerWidth - 360)}px`, top: `${Math.min(prompt.point.clientY, window.innerHeight - 160)}px` }
-    : { left: '50%', top: '4rem', transform: 'translateX(-50%)' };
+  // anchored: absolute in the anchor (a positioned element), a little
+  // inside its top left corner, never wider than it. the position is not
+  // recomputed on scroll: the anchor carries the prompt
+  const isAnchored = Boolean(prompt.anchorElement);
+  const style = isAnchored
+    ? { position: 'absolute', left: '8px', top: '8px', maxWidth: 'calc(100% - 16px)' }
+    : prompt.point
+      ? { left: `${Math.min(prompt.point.clientX, window.innerWidth - 360)}px`, top: `${Math.min(prompt.point.clientY, window.innerHeight - 160)}px` }
+      : { left: '50%', top: '4rem', transform: 'translateX(-50%)' };
 
-  return (
+  const content = (
     <div
       ref={elementRef}
-      className="doc-popover-form doc-source-prompt not-prose"
+      className={`doc-popover-form doc-source-prompt not-prose ${EDIT_POPUP_CLASS}`}
       role="dialog"
       aria-label="Save the file to a folder of the source"
       style={style}
@@ -91,4 +110,5 @@ export const SourceFilePrompt = observer(function SourceFilePrompt() {
       ) : null}
     </div>
   );
+  return isAnchored ? createPortal(content, prompt.anchorElement) : content;
 });

@@ -10,6 +10,7 @@ import { lineOperationListApply } from './doc-edit-lines.ts';
 import { docAssetMiddlewareCreate } from './doc-asset-server.ts';
 import { docAssetConfigLoad, docSourcePlugin } from './doc-source.ts';
 import { DocAssetStore } from '../src/store/DocAssetStore.ts';
+import { testCaseSourceDefaultCreate, testCaseTableParse } from '../../../built-in/comp-mdx/test-case-table/TestCaseTableData.js';
 
 // where the folders of the asset service layer come from
 // (doc_page_impl_asset.md#the-local-store-folders-fully-reflected): every
@@ -90,7 +91,8 @@ function requestRun(middleware, url) {
   });
 }
 
-// the asset api middleware as the plugin mounts it, against the files now
+// the asset api middleware as the plugin mounts it, against the files now;
+// the collected documents of the fixture, as far as a reference resolves
 function middlewareCreate(plugin, dir) {
   const endpoint = exportGet(plugin, 'docAssetEndpoint');
   return docAssetMiddlewareCreate({
@@ -98,6 +100,11 @@ function middlewareCreate(plugin, dir) {
     storeGet: () => assetStoreCreate(docAssetConfigLoad(path.join(dir, 'config.yaml'))),
     rootAbsPathByPathGet: () => new Map([['~page:docs', path.join(dir, 'page')], ['~sub:sub', path.join(dir, 'page', 'sub')]]),
     usageScan: () => [],
+    fileEntryListGet: () => [
+      { internalPath: '~page:docs/a.md', name: 'a.md' },
+      { internalPath: '~page:docs/evidence.md', name: 'evidence.md' },
+      { internalPath: '~sub:sub/b.md', name: 'b.md' },
+    ],
   });
 }
 
@@ -252,4 +259,149 @@ test('the page tells no store from a failed status request', async () => {
   } finally {
     globalThis.fetch = fetchOriginal;
   }
+});
+
+// ---------- the managed result history of a TestCaseTable ----------
+// (comp-mdx/test-case-table/comp_test_case_table.md): the dedicated route
+// records with an operator and the server's time, the generic head write
+// keeps the history
+
+test('a result is recorded on the head through /test-case/result/set, with its evidence as a dependency', async () => {
+  const dir = fixtureCreate();
+  const plugin = pluginCreate(dir);
+  const middleware = middlewareCreate(plugin, dir);
+  const created = await requestPost(middleware, '/__doc-asset/object/create', {
+    store: 'local', lang: 'yaml', text: testCaseSourceDefaultCreate().raw, docPath: '~page:docs/a.md', component: { name: 'TestCaseTable' },
+  });
+  assert.equal(created.body.code, 0);
+  const { objectId } = created.body.data.object;
+  const hashFirst = created.body.data.version.hash;
+  const record = {
+    store: 'local', objectId, hashBase: hashFirst, docPath: '~page:docs/a.md',
+    caseId: 'case-1', testerId: 'reviewer', operator: 'Test operator', result: 'OK', timeTimezone: 540, evidence: 'evidence.md',
+  };
+  const timeBefore = Date.now();
+  const recorded = await requestPost(middleware, '/__doc-asset/test-case/result/set', record);
+  assert.equal(recorded.body.code, 0, recorded.body.message);
+  const history = testCaseTableParse(recorded.body.data.version.text).results['case-1'].reviewer;
+  assert.equal(history.length, 1);
+  assert.equal(history[0].result, 'OK');
+  assert.equal(history[0].operator, 'Test operator');
+  assert.equal(history[0].evidence, '~page:docs/evidence.md');
+  assert.ok(history[0].time >= timeBefore && history[0].time <= Date.now());
+  assert.deepEqual(recorded.body.data.object.versionList[0].dependencyList, [{ type: 'source', path: '~page:docs/evidence.md' }]);
+  assert.notEqual(recorded.body.data.version.hash, hashFirst);
+
+  // the record is based on the hash the cell was opened with: a stale one is a conflict
+  const stale = await requestPost(middleware, '/__doc-asset/test-case/result/set', record);
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.code, -2);
+  // the next record of the same cell is based on the version written; a cleared result keeps the history
+  const hashSecond = recorded.body.data.version.hash;
+  const cleared = await requestPost(middleware, '/__doc-asset/test-case/result/set', { ...record, hashBase: hashSecond, result: null, evidence: undefined });
+  assert.equal(cleared.body.code, 0, cleared.body.message);
+  assert.deepEqual(testCaseTableParse(cleared.body.data.version.text).results['case-1'].reviewer.map((entry) => entry.result), ['OK', null]);
+  // the dependency of the first record stays with the version
+  assert.deepEqual(cleared.body.data.object.versionList[0].dependencyList, [{ type: 'source', path: '~page:docs/evidence.md' }]);
+
+  // what the data refuses is a bad request
+  const hashThird = cleared.body.data.version.hash;
+  for (const [change, pattern] of [
+    [{ operator: ' ' }, /operator/],
+    [{ versionId: 'w4r63zmf1ga' }, /pinned/],
+    [{ evidence: 'nope.md' }, /Evidence/],
+    [{ evidence: 'b.md' }, /Evidence/],
+    [{ docPath: '~page:docs/missing.md' }, /docPath/],
+    [{ caseId: 'basic' }, /Unknown/],
+  ]) {
+    const refused = await requestPost(middleware, '/__doc-asset/test-case/result/set', { ...record, hashBase: hashThird, evidence: undefined, ...change });
+    assert.equal(refused.status, 400, JSON.stringify(change));
+    assert.equal(refused.body.code, -1);
+    assert.match(refused.body.message, pattern);
+  }
+  const unchanged = await requestRun(middleware, `/__doc-asset/object/get?store=local&objectId=${objectId}&versionId=head`);
+  assert.equal(unchanged.body.data.version.hash, hashThird);
+});
+
+test('the generic head write keeps the result history of a TestCaseTable; a structural edit passes', async () => {
+  const dir = fixtureCreate();
+  const plugin = pluginCreate(dir);
+  const middleware = middlewareCreate(plugin, dir);
+  const created = await requestPost(middleware, '/__doc-asset/object/create', {
+    store: 'local', lang: 'yaml', text: testCaseSourceDefaultCreate().raw, docPath: '~page:docs/a.md',
+  });
+  const { objectId } = created.body.data.object;
+  const recorded = await requestPost(middleware, '/__doc-asset/test-case/result/set', {
+    store: 'local', objectId, hashBase: created.body.data.version.hash, docPath: '~page:docs/a.md',
+    caseId: 'case-1', testerId: 'reviewer', operator: 'Test operator', result: 'NG',
+  });
+  assert.equal(recorded.body.code, 0, recorded.body.message);
+  const textRecorded = recorded.body.data.version.text;
+  const hashRecorded = recorded.body.data.version.hash;
+
+  const rewritten = await requestPost(middleware, '/__doc-asset/object/update', {
+    store: 'local', objectId, hashBase: hashRecorded, text: textRecorded.replace('result: NG', 'result: OK'),
+  });
+  assert.equal(rewritten.status, 400);
+  assert.match(rewritten.body.message, /managed/);
+  const removed = await requestPost(middleware, '/__doc-asset/object/update', {
+    store: 'local', objectId, hashBase: hashRecorded, text: testCaseSourceDefaultCreate().raw,
+  });
+  assert.equal(removed.body.code, -1);
+  const structural = await requestPost(middleware, '/__doc-asset/object/update', {
+    store: 'local', objectId, hashBase: hashRecorded, text: textRecorded.replace('label: Initial display', 'label: First display'),
+  });
+  assert.equal(structural.body.code, 0, structural.body.message);
+  assert.deepEqual(testCaseTableParse(structural.body.data.version.text).results['case-1'].reviewer.map((entry) => entry.result), ['NG']);
+  // another kind of object is written as before
+  const other = await requestPost(middleware, '/__doc-asset/object/create', { store: 'local', lang: 'json', text: '{"a":1}' });
+  const otherUpdated = await requestPost(middleware, '/__doc-asset/object/update', {
+    store: 'local', objectId: other.body.data.object.objectId, hashBase: other.body.data.version.hash, text: '{"a":2}',
+  });
+  assert.equal(otherUpdated.body.code, 0);
+});
+
+test('assetTestCaseResultRequest goes to the backend with the hash the cell was opened with, at the head only', async () => {
+  const assetStore = new DocAssetStore({ endpoint: '/__doc-asset' });
+  const callList = [];
+  assetStore.backend = {
+    ...assetStore.backend,
+    testCaseResultSet: (input) => {
+      callList.push(input);
+      return Promise.resolve({ code: 0, data: { version: { hash: 'h3' } }, message: '' });
+    },
+  };
+  assetStore.isWritable = true;
+  const source = { sourcePath: '~page:docs/a.md', asset: { isFromAsset: true, store: 'local', objectId: 'o1', versionIdRef: 'head', versionId: 'v1', hash: 'h2' } };
+  const data = { caseId: 'case-1', testerId: 'reviewer', result: 'OK', operator: 'Test operator', evidence: 'evidence.md', timeTimezone: 540, hashBase: 'h1' };
+  const result = await assetStore.eventHandle({ type: 'assetTestCaseResultRequest', data, source });
+  assert.equal(result.code, 0);
+  assert.equal(result.data.version.hash, 'h3');
+  assert.equal(callList.length, 1);
+  assert.equal(callList[0].hashBase, 'h1');
+  assert.equal(callList[0].docPath, '~page:docs/a.md');
+  assert.equal(callList[0].objectId, 'o1');
+  assert.equal(callList[0].versionId, 'head');
+  assert.equal(callList[0].evidence, 'evidence.md');
+  // without a hash of its own the request is based on what the component read
+  await assetStore.eventHandle({ type: 'assetTestCaseResultRequest', data: { ...data, hashBase: undefined }, source });
+  assert.equal(callList[1].hashBase, 'h2');
+  // a pinned reference and inline data record nothing
+  const pinned = await assetStore.eventHandle({ type: 'assetTestCaseResultRequest', data, source: { ...source, asset: { ...source.asset, versionIdRef: 'v1' } } });
+  assert.equal(pinned.code, -1);
+  assert.match(pinned.message, /not the head/);
+  const inline = await assetStore.eventHandle({ type: 'assetTestCaseResultRequest', data, source: { sourcePath: '~page:docs/a.md', asset: { isFromAsset: false } } });
+  assert.equal(inline.code, -1);
+  assert.equal(callList.length, 2);
+  // a conflict reads the object again
+  const reloadList = [];
+  assetStore.backend.testCaseResultSet = () => Promise.resolve({ code: -2, data: null, message: 'changed' });
+  assetStore.backend.objectGet = (store, objectId) => {
+    reloadList.push(objectId);
+    return Promise.resolve({ code: -3, data: null, message: 'gone' });
+  };
+  const conflict = await assetStore.eventHandle({ type: 'assetTestCaseResultRequest', data, source });
+  assert.equal(conflict.code, -2);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(reloadList, ['o1']);
 });

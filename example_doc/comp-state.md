@@ -31,12 +31,6 @@ store: local
 name: quarterly sales
 ```
 
-<!--renderComp=ExcelUniver-->
-```asset
-store: local
-name: quarterly sales
-```
-
 The draft is in the state only while the editor is open; what is saved is still written into the asset object when the session ends, as for every asset-only component. The state is not a place for anything that must survive a reload of the page.
 
 ## What the layer holds

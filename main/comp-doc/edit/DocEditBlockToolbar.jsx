@@ -41,6 +41,12 @@ import './DocEdit.css';
 // deleting a block whose data is an asset object asks whether the object
 // goes too ("Delete block only" / "Delete block and asset"); kept, it is
 // listed as an orphan in the settings panel (doc_page_impl_asset.md#usage).
+// deleting a block of a component that offers files with its deletion
+// (compDefine deleteFileListGet: an Image offers its image) lists them in
+// the confirmation (FileDeleteChoices), every file unchecked; the checked
+// ones go with the block, moved to a backup beside them by the server
+// (doc_page_impl_block_ops.md#deleting-blocks). the toolbar knows no
+// component: it shows what the store listed (deleteConfirm.fileList).
 //
 // entering the block, moving it and moving its data are operations of the
 // document, so they are reported as events (editBlockEnterRequest,
@@ -180,19 +186,22 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
       </div>
       {isConfirmHere ? (
         <ToolbarConfirm
-          question={deleteQuestionGet(assetObject)}
-          actionLabel={assetObject ? 'Delete block only' : 'Delete'}
+          question={deleteQuestionGet(assetObject, confirm)}
+          actionLabel={deleteActionLabelGet(assetObject, confirm, false)}
           isDanger
           confirm={confirm}
+          isActionLocked={Boolean(confirm.isFileLoading)}
           onConfirm={() => void editStore.blockDelete(path, blockIndex)}
           onCancel={() => editStore.deleteConfirmClear()}
           actionExtra={assetObject ? {
-            label: 'Delete block and asset',
+            label: deleteActionLabelGet(assetObject, confirm, true),
             title: assetDeleteReasonGet(assetObject) || 'the asset object is marked deleted with the block; it can be restored in the asset panel',
             isDisabled: Boolean(assetDeleteReasonGet(assetObject)),
             onConfirm: () => void editStore.blockDelete(path, blockIndex, { isAssetDeleted: true }),
           } : undefined}
-        />
+        >
+          {confirm.fileList ? <FileDeleteChoices /> : null}
+        </ToolbarConfirm>
       ) : null}
       {isAssetMoveConfirmHere ? (
         <ToolbarConfirm
@@ -216,14 +225,96 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
 });
 
 // the question of a deletion: for a block whose data is an asset object,
-// what the object is and who else reads it
-function deleteQuestionGet(assetObject) {
-  if (!assetObject) return 'Delete this block?';
+// what the object is and who else reads it; for a block whose component
+// offers files, whether they go too
+function deleteQuestionGet(assetObject, confirm) {
+  const questionFile = confirm?.fileList ? ' Also delete any referenced files?' : '';
+  if (!assetObject) return `Delete this block?${questionFile}`;
   const objectText = assetObject.name ? `"${assetObject.name}"` : assetObject.objectId;
-  if (assetObject.usageCountOther === 0) return `Delete this block? Its data is the asset object ${objectText}.`;
+  if (assetObject.usageCountOther === 0) return `Delete this block? Its data is the asset object ${objectText}.${questionFile}`;
   const blockText = assetObject.usageCountOther === 1 ? '1 other block' : `${assetObject.usageCountOther} other blocks`;
-  return `Delete this block? Its data is the asset object ${objectText}, also used by ${blockText}.`;
+  return `Delete this block? Its data is the asset object ${objectText}, also used by ${blockText}.${questionFile}`;
 }
+
+// the label of the two delete actions says what goes: the block alone,
+// with its asset object, with the chosen files, or both
+function deleteActionLabelGet(assetObject, confirm, isAssetDeleted) {
+  const fileCount = confirm?.filePathDeleteList?.length ?? 0;
+  if (isAssetDeleted) return fileCount > 0 ? 'Delete block, data asset and selected files' : 'Delete block and asset';
+  if (fileCount > 0) return 'Delete block and selected files';
+  return assetObject || confirm?.fileList ? 'Delete block only' : 'Delete';
+}
+
+// the files a component offered with the deletion of its block, as
+// checkbox rows (buttons, so Space / Enter work without a form field):
+// read from deleteConfirm.fileList, chosen into deleteConfirm.filePathDeleteList.
+// a file that cannot be chosen says why; "Uncheck all" keeps every file;
+// the warning about shared use and backups shows once something is chosen
+const FileDeleteChoices = observer(function FileDeleteChoices() {
+  const { editStore } = useDocStores();
+  const confirm = editStore.deleteConfirm;
+  if (!confirm?.fileList) return null;
+  const isBusy = confirm.status === 'submitting' || Boolean(confirm.isFileLoading);
+  const pathSelectedSet = new Set(confirm.filePathDeleteList ?? []);
+  return (
+    <div className="doc-edit-file-delete" role="group" aria-label="Files to delete">
+      {confirm.isFileLoading ? (
+        <span className="doc-status" role="status">
+          <LoaderCircle aria-hidden="true" size={11} strokeWidth={2.2} className="doc-spin" />
+          <span>Listing the files of the block…</span>
+        </span>
+      ) : confirm.fileMessage ? (
+        <span className="doc-error doc-edit-file-delete-note" role="alert">{confirm.fileMessage} The files are kept.</span>
+      ) : confirm.fileList.length === 0 ? (
+        <span className="doc-edit-file-delete-note">The block names no file to delete.</span>
+      ) : (
+        <div className="doc-edit-file-delete-list">
+          {confirm.fileList.map((file) => {
+            const isChecked = pathSelectedSet.has(file.path);
+            return (
+              <button
+                key={file.path}
+                type="button"
+                role="checkbox"
+                className="doc-edit-file-option"
+                aria-checked={isChecked}
+                aria-label={file.path}
+                title={file.reason || file.path}
+                disabled={isBusy || !file.isDeletable}
+                onClick={() => editStore.deleteFileSelectedSet(file.path, !isChecked)}
+              >
+                <span className="doc-edit-file-check" aria-hidden="true">
+                  {isChecked ? <Check size={11} strokeWidth={2.4} /> : null}
+                </span>
+                <span className="doc-edit-file-option-text">
+                  <span className="doc-edit-file-option-path">{file.path}</span>
+                  {file.reason ? <small className="doc-edit-file-option-reason">{file.reason}</small> : null}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {confirm.fileList.length > 0 ? (
+        <div className="doc-edit-file-delete-foot">
+          <button
+            type="button"
+            disabled={isBusy || pathSelectedSet.size === 0}
+            title="Keep every file; the block is still deleted"
+            onClick={() => editStore.deleteFileSelectionClear()}
+          >
+            <span>Uncheck all</span>
+          </button>
+          {pathSelectedSet.size > 0 ? (
+            <span className="doc-edit-file-delete-note">
+              Other blocks or documents may still use a chosen file; it is moved to a hidden backup beside it, not erased.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+});
 
 // why the asset object cannot go with the block ('' when it can)
 function assetDeleteReasonGet(assetObject) {
@@ -234,15 +325,20 @@ function assetDeleteReasonGet(assetObject) {
 }
 
 // the confirmation of a block action, in the toolbar itself
-//   confirm      { status: 'confirming' | 'submitting' | 'error', message }
-//   actionExtra  a second way to confirm, after the first:
-//                { label, title, isDisabled, onConfirm } (undefined: none)
-function ToolbarConfirm({ question, actionLabel, isDanger, confirm, onConfirm, onCancel, actionExtra }) {
+//   confirm        { status: 'confirming' | 'submitting' | 'error', message }
+//   actionExtra    a second way to confirm, after the first:
+//                  { label, title, isDisabled, onConfirm } (undefined: none)
+//   isActionLocked the actions wait (the files of the block are being
+//                  listed); cancel stays possible
+//   children       what the question is followed by (the file choices)
+function ToolbarConfirm({ question, actionLabel, isDanger, confirm, onConfirm, onCancel, actionExtra, isActionLocked = false, children }) {
   const isSubmitting = confirm.status === 'submitting';
+  const isActionDisabled = isSubmitting || isActionLocked;
   return (
     <div className={isDanger ? 'doc-edit-confirm' : 'doc-edit-confirm is-neutral'} role="alertdialog" aria-label={question}>
       <span>{question}</span>
-      <button type="button" className={isDanger ? 'is-danger' : 'is-primary'} disabled={isSubmitting} onClick={onConfirm}>
+      {children}
+      <button type="button" className={isDanger ? 'is-danger' : 'is-primary'} disabled={isActionDisabled} onClick={onConfirm}>
         {isSubmitting
           ? <LoaderCircle aria-hidden="true" size={11} strokeWidth={2.2} className="doc-spin" />
           : <Check aria-hidden="true" size={11} strokeWidth={2.2} />}
@@ -252,7 +348,7 @@ function ToolbarConfirm({ question, actionLabel, isDanger, confirm, onConfirm, o
         <button
           type="button"
           className={isDanger ? 'is-danger' : 'is-primary'}
-          disabled={isSubmitting || actionExtra.isDisabled}
+          disabled={isActionDisabled || actionExtra.isDisabled}
           title={actionExtra.title}
           onClick={actionExtra.onConfirm}
         >

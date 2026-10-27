@@ -1,0 +1,157 @@
+/* TestCaseTable: the confirmation cells of the hierarchy table and the
+   popup of one cell (its form and its history). the controls are the
+   shared ones (css/button.css, text.css, badge.css). */
+
+/* ---------- the confirmation cell ----------
+   a button filling the cell: the current result and the length of the
+   history. the cell keeps its height whatever the result says. */
+.test-case-confirm {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  min-height: 1.9rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-muted-foreground);
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.test-case-confirm:hover:not(:disabled),
+.test-case-confirm:focus-visible:not(:disabled) {
+  background: var(--color-fd-accent);
+  outline: none;
+}
+
+.test-case-confirm:disabled {
+  cursor: default;
+}
+
+.test-case-confirm[data-result='OK'] {
+  color: var(--color-fd-primary);
+  font-weight: 600;
+}
+
+.test-case-confirm[data-result='NG'] {
+  color: var(--color-fd-destructive, #dc2626);
+  font-weight: 600;
+}
+
+.test-case-confirm-result {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.test-case-confirm-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+/* ---------- the popup ----------
+   framed by the host's panel; sized here, within the window */
+.text-panel.is-popup.test-case-popup {
+  width: min(36rem, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+}
+
+.text-panel.is-popup .test-case-popup-body {
+  overflow: auto;
+  padding: 0;
+}
+
+.test-case-popup-content {
+  display: grid;
+  gap: 0.9rem;
+  min-width: 0;
+  padding: 0.9rem 1rem;
+  font-size: 0.85rem;
+}
+
+.test-case-form {
+  display: grid;
+  gap: 0.55rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--color-fd-border);
+}
+
+.test-case-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.test-case-form-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* a field: the label on its own line, the value in the shared inline
+   field; the grid keeps the row's height while the field is empty */
+.test-case-form-field {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.test-case-form-label {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+}
+
+.test-case-form-field .doc-edit-value,
+.test-case-form-field .doc-source-path-input {
+  min-height: 1.5rem;
+}
+
+.test-case-history {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.test-case-history-card {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--color-fd-border);
+  border-inline-start-width: 3px;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+
+.test-case-history-card[data-result='OK'] {
+  border-inline-start-color: var(--color-fd-primary);
+}
+
+.test-case-history-card[data-result='NG'] {
+  border-inline-start-color: var(--color-fd-destructive, #dc2626);
+}
+
+.test-case-history-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.test-case-history-head time {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.test-case-history-operator {
+  font-size: 0.82rem;
+}

@@ -174,6 +174,7 @@ const ImageRender = observer(function ImageRender({ data, config, onEvent, capti
 	const titleId = useId();
 	const width = sizeCssGet(config.width ?? data.width ?? data.maxWidth) ?? '100%';
 	const height = sizeCssGet(config.height ?? data.height) ?? 'auto';
+	const elementRef = useRef(null);
 	const pointLastRef = useRef(undefined);
 	const pasteHandleRef = useRef(null);
 	const isSourceWritable = Boolean(config.source?.isWritable?.());
@@ -200,6 +201,7 @@ const ImageRender = observer(function ImageRender({ data, config, onEvent, capti
 			blob: file,
 			dirPath: fileStoreDir,
 			isLocationCustom: store.isLocationCustom,
+			anchorElement: elementRef.current,
 		}, { point: pointLastRef.current });
 		if (resultFile?.code !== 0) {
 			store.pasteStatusSet('error', resultFile?.message || 'The pasted image was not written as a file.');
@@ -245,6 +247,7 @@ const ImageRender = observer(function ImageRender({ data, config, onEvent, capti
 	}, [store.isHovered, isPasteAvailable]);
 
 	const pointerProps = {
+		ref: elementRef,
 		onPointerEnter: () => store.hoveredSet(true),
 		onPointerLeave: () => store.hoveredSet(false),
 		onPointerMove: (event) => { pointLastRef.current = { clientX: event.clientX, clientY: event.clientY }; },

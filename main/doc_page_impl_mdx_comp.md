@@ -14,16 +14,16 @@ document  <!--renderComp=FileTree,id=x-->  or  <FileTree .../>
 
 ## What a component exposes
 
-A definition says two kinds of things about a component. The first is how the registry boundary (`RegisteredComp`) treats it: where it may render (`placementList`), what it can be referenced as (`componentType`, `dataRefTypeList`), how its input is normalized (`dataBuild`), what it is told about its data (`isAssetAware`, `assetDependencyListGet`; [Components and the asset service layer](#components-and-the-asset-service-layer)). The second is what the component tells the page about itself, for the page to offer to readers and authors: that it is read-only, in which ways it can be displayed and edited, what its icon is, how a new block of it starts, which config keys it has. These are the component's **exposure**, the `expose` option of `compDefine()`:
+A definition says two kinds of things about a component. The first is how the registry boundary (`RegisteredComp`) treats it: where it may render (`placementList`), what it can be referenced as (`componentType`, `dataRefTypeList`), how its input is normalized (`dataBuild`), what it is told about its data (`isAssetAware`, `assetDependencyListGet`; [Components and the asset service layer](#components-and-the-asset-service-layer)), and which of the files its data names it offers for deletion with a block of it (`deleteFileListGet(data) -> [{ path, reason? }]`, an opt-in capability the edit layer asks for without knowing the component: [Deleting blocks](doc_page_impl_block_ops.md#deleting-blocks); `Image` and `ImageGrid` offer their image files). The second is what the component tells the page about itself, for the page to offer to readers and authors: that it is read-only, in which ways it can be displayed and edited, what its icon is, how a new block of it starts, which config keys it has. These are the component's **exposure**, the `expose` option of `compDefine()`:
 
 ```text
 compDefine(Xxx, {
   placementList, componentType, dataRefTypeList, dataBuild,     how the registry boundary treats it
-  isAssetAware, assetDependencyListGet,
+  isAssetAware, assetDependencyListGet, deleteFileListGet,
   expose: {                                                     what it tells the page about itself
     meta:          { label, description, isReadOnly, isEditSourceAccepted, isInsertCommon,
-                     isEditEnterButtonOnly, isAssetOnly, isNotInDoc, assetSaveMode,
-                     configDefineList, ... }
+                     isEditEnterButtonOnly, isAssetOnly, isEditAssetAccepted, isNotInDoc,
+                     assetSaveMode, configDefineList, ... }
     icon:          a component drawing the icon of Xxx at any size
     viewModeList:  [{ id, label, description, icon, isDefault }]   the ways its data is displayed
     editModeList:  [{ id, label, description, icon, isDefault }]   the ways its data is edited in place
@@ -50,6 +50,7 @@ Facts about the component that are not modes or drawings, as one object, so that
 | `isEditSourceAccepted` | `true` | the built-in `source` edit mode is offered for its blocks ([below](#view-modes-and-edit-modes)). `false` for a component whose source must not be edited by hand, when it declares edit modes of its own |
 | `isEditEnterButtonOnly` | `false` | a block of it enters edit mode only through an explicit control: the toolbar's Edit button, or an edit mode chosen in the mode menu. A click on the block does not enter it even when `EditBlockEnterMode` is `click`, and a focus shift from the neighbor block (the arrow keys) stops before it. For a component whose view takes clicks itself (selecting cells of a sheet), where entering by click would turn every interaction into an edit session |
 | `isAssetOnly` | `false` | its data lives in the asset service layer only and is never written inline in a document: a block of it is always an asset reference ([Asset-only and not-in-doc](#asset-only-and-not-in-doc)) |
+| `isEditAssetAccepted` | `false` | its own edit modes also edit the data of an asset reference, at the head of an object in a writable store, saving into the object ([Asset-backed component drafts](doc_page_impl_edit.md#asset-backed-component-drafts)). An opt-in, not a restriction: inline data stays displayed, edited and inserted as before. Without it (and without `isAssetOnly`) a block whose data is an asset is edited as source only. The component declares `isAssetAware` too, to receive the reference and the version's metadata. `DiagramER` and `DiagramDataverseEntity` declare it |
 | `isNotInDoc` | `false` | it cannot be a block of a document at all, because it renders elsewhere (a side-panel item); the insert menu does not offer it and a block of it shows an error ([Asset-only and not-in-doc](#asset-only-and-not-in-doc)) |
 | `assetSaveMode` | — | `inPlace` or `newVersion`: the save mode an asset object gets when the page creates it for a block of this component (from the insert menu, or by **to asset**). Without it the object has no save mode, which saves in place ([Save modes](doc_page_impl_asset.md#save-modes)). Only the creation reads it; the object's own mode decides every later save |
 | `configDefineList` | `[]` | the shape of its component-level config: which keys exist, their types, defaults, descriptions. Only the shape; the values come from the config layers and the document levels, and reach the component as `config.compConfig` ([Component-level config](doc_page_impl_config.md#component-level-config)) |
@@ -111,6 +112,10 @@ a block without a component      -> 'source' only
 a block whose data is an asset   -> 'source' only; the declared modes are listed greyed out,
                                     since the lines of the block are the reference and the data
                                     is edited through the asset panel (doc_page_impl_asset.md#edit-mode)
+  … unless X.meta.isEditAssetAccepted
+                                 -> the declared modes, editing the referenced data, when the block
+                                    reads the head of an object in a writable store; greyed out with
+                                    the reason otherwise (a pinned version, a read-only store)
 a block of an asset-only X       -> the declared modes, editing the referenced data, when the block
                                     reads the head of an object in a writable store; greyed out with
                                     the reason otherwise (inline data, a pinned version, a read-only
@@ -123,7 +128,7 @@ A session of the edit layer is therefore always *a block in one edit mode* (`ses
 
 The menu is offered where there is something to choose: a component block with more than one view mode or more than one edit mode. Its entries are greyed out when they cannot be chosen now (a write is pending, the data is an asset), each with its reason as its tooltip; a read-only component lists no edit mode and says so. The dropdown is the `Menu` of `@wwf971/react-comp-misc`, which the host injects as `config.components.Menu` like the settings panel; without it the button is not rendered.
 
-Among the components of this folder, `Image` exposes the edit mode `fields` ([Text blocks and edit mode](#text-blocks-and-edit-mode)) and `ImageGrid` the edit mode `images`: a grid clicked in edit mode takes pastes into its slots and adds or removes slots, and its yaml is the built-in `source` mode one entry away, instead of the yaml being what a click shows. The demo `StockTable` of `example_doc/` exposes two view modes (`table`, `summary`) and the edit mode `cells`; the demo `TagListAllDemo` is read-only.
+Among the components of this folder, `Image` exposes the edit mode `fields` ([Text blocks and edit mode](#text-blocks-and-edit-mode)) and `ImageGrid` the edit mode `images`: a grid clicked in edit mode takes pastes into its slots and adds or removes slots, and its yaml is the built-in `source` mode one entry away, instead of the yaml being what a click shows. `DiagramER` and `DiagramDataverseEntity` expose `visual` beside `source` (`diagram-er-expose.js`, which also holds their starters), with `isEditAssetAccepted` and `isEditEnterButtonOnly`: the cells, settings and handles of the cards, and the nodes and connections of a diagram, are edited on the canvas, for inline yaml and for an unlocked asset head alike; a pinned reference or a read-only store greys the mode out. The interaction contract of that editor (cells, Escape in two steps, the save target) is **Card Editing** in [comp_db_vis.md](../built-in/comp-mdx/diagram/diagram-er/comp_db_vis.md#card-editing). `DiagramPowerAutomate` and `DiagramBusinessRule` are `DiagramER` registered twice more with other starters and labels ([Power Platform Resource Nodes](../built-in/comp-mdx/diagram/diagram-er/comp_db_vis.md#power-platform-resource-nodes)): a design of a flow of Power Automate steps, of a Dataverse business rule, drawn as cards of the same graph; both are listed in `registry-source-dependency.js` with the diagram's dependency collector. The demo `StockTable` of `example_doc/` exposes two view modes (`table`, `summary`) and the edit mode `cells`; the demo `TagListAllDemo` is read-only.
 
 ### Default source
 
@@ -169,7 +174,8 @@ Component and file names carry no `Doc` prefix: inside a document every componen
 | `ImageGrid` | `image-grid/` | `DocImageGrid` |
 | `DiagramText` | `diagram-ascii/` | `DocDiagramText` |
 | `DiagramMermaid` | `diagram-mermaid/` | `DocDiagramMermaid` |
-| `DiagramER` | `diagram-er/` | `DocDiagramER` |
+| `DiagramER`, `DiagramPowerAutomate`, `DiagramBusinessRule` | `diagram-er/` | `DocDiagramER` |
+| `DiagramDataverseEntity` | `diagram-db-tabe/` | |
 | `ExcelUniver` | `excel-univer/` | |
 | `BlockSimple`, `Block` | `block-simple/` | |
 | `BlockMdx` | `block-mdx/` | |
@@ -178,6 +184,7 @@ Component and file names carry no `Doc` prefix: inside a document every componen
 | `BlockQA` | `block-qa/` | |
 | `FileDownload`, `FileIcon` | `file-download/` | |
 | `TableHierarchy`, `TextInfoCell`, `TableCapabilityCell` | `table-hierarchy/` | |
+| `TestCaseTable` | `test-case-table/` | |
 | `ListHierarchy`, `ListSupportedToolsRow`, `ListToolsControls` | `list-hierarchy/` | |
 | `SwitchView` | `switch-view/` | |
 | `ProxyConnectionDiagram` | `proxy-connection-diagram/` (with `diagram-interactive/`) | |
@@ -193,7 +200,7 @@ Some components render their parts through the registry rather than importing th
 | `hierarchyRow` | a row of `ListHierarchy` (`rowComponent`) | `ListSupportedToolsRow` |
 | `hierarchyHeader` | the header controls of both hierarchies (`headerRight`) | `ListToolsControls` |
 
-`SwitchView` shows the same data through several block components, one per view, rendered in the placement `commentBlock`. Its build-time collector hands every view to the collector of its component, so links in views that are not shown are still discovered; `BlockQA` collects its Markdown questions and answers. `FileDownload` names its file as the dependency of an asset made from its data, like the `src` of an `Image`. `ProxyConnectionDiagram` is a fixed diagram, not driven by data: the text of its block is only what a plain Markdown viewer shows. The usage of each component is described beside it (`comp_block_qa.md`, `comp_table_hierarchy.md`, `comp_list_hierarchy.md`, `comp_switch_view.md`).
+`SwitchView` shows the same data through several block components, one per view, rendered in the placement `commentBlock`. Its build-time collector hands every view to the collector of its component, so links in views that are not shown are still discovered; `BlockQA` collects its Markdown questions and answers. `TestCaseTable` is a test specification drawn by the view of `TableHierarchy` (`TableHierarchyView`, with a `cellRender` for its confirmation cells), so grouping and the registered cells are the hierarchy's; its collector names the evidence document of every recorded result (`comp_test_case_table.md`). `FileDownload` names its file as the dependency of an asset made from its data, like the `src` of an `Image`. `ProxyConnectionDiagram` is a fixed diagram, not driven by data: the text of its block is only what a plain Markdown viewer shows. The usage of each component is described beside it (`comp_block_qa.md`, `comp_table_hierarchy.md`, `comp_list_hierarchy.md`, `comp_switch_view.md`).
 
 Some components read host settings from `config`, supplied by the application through `DocPageMdx` `config.compConfigHost` (see [Component registry](doc_page_impl.md#component-registry)): `Image`, `ImageGrid` and `FileDownload` resolve `src` through `assetUrlGet`, `DiagramMermaid` loads Mermaid through `mermaidLoad` and resolves lane icons through `assetUrlGet`, and `ExcelUniver` loads Univer through `univerLoad`. The block components, `BlockQA` and `MultiLang` receive the shared `MdxRenderer` from their package registry definitions, so nested Markdown has the link, math and component behavior of the document body.
 
@@ -372,6 +379,8 @@ assetInfo
 The same information travels with the component's events as `source.asset`, so a store handling an event knows whether the block it concerns is a reference. A component that is not aware receives no `assetInfo` key and nothing changes for it.
 
 What the component does with the knowledge is one request, not a write of its own: it emits `dataReplaceRequest { raw }` with the complete new data text ([events of the edit layer](doc_page_impl_event.md)), and `DocEditStore.dataReplaceApply` decides by the block the component is rendered in (`config.blockIndex`, which the edit body gives every block through `DocEditBlockContext`): a reference block updates the object's head (`objectUpdate`, by its save mode, with the dependencies derived from the new data), an inline block is rewritten with the new data as its fenced content (`componentBlockTextBuild`, one block-replace operation). The component thus edits its data the same way in both cases and never calls the store or the edit api; `assetInfo` only lets it tell the author what will happen (`Image` writes "replaces the head of asset …" into its confirmation). The dependencies of an asset version come from the same definition: `assetDependencyListGet(data)` returns the paths the data names ([Dependencies](doc_page_impl_asset.md#dependencies)), the page resolves them against the document, and every write of the data (moving a block into the store, a data replacement) carries the list.
+
+A component whose data has a **managed part** goes one step further: it does not hand over the whole new text, because part of it must not be written by hand. `TestCaseTable` keeps the result history of its cells that way (`comp-mdx/test-case-table/comp_test_case_table.md`): a result is a record with an operator, a time and an evidence document, appended and never edited, so the component reports `assetTestCaseResultRequest { caseId, testerId, result, operator, evidence?, timeTimezone, hashBase }` and the asset domain records it on the object through a route of its own, where the server writes the time and the id and resolves the evidence against the document ([the store api](doc_page_impl_asset.md#the-store-api)). Such a request is asset-only by nature (the record needs an object to live on; inline data cannot record), it is based on the hash the component read (`hashBase`, so a record by somebody else meanwhile is a conflict shown rather than written over), and the generic head write refuses a text that changes the managed part, so the asset panel's editor cannot rewrite it either. The document is never written for it.
 
 ### Changes made by others
 

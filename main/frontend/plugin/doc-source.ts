@@ -572,6 +572,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
           storeGet: () => assetStoreCreate(assetConfigCurrentGet()),
           rootAbsPathByPathGet: () => sourceRootAbsPathByPathGet(loadConfigDoc(configFile, options), configDir),
           usageScan: (docPathList) => assetUsageDocListScan(fileEntryListGet(), docPathList),
+          fileEntryListGet,
         }));
         // the config file of every doc page (watched whether it exists or
         // not: one created from the page is seen) and every folder

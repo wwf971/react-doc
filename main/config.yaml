@@ -111,6 +111,9 @@ compRegistry:
   DiagramMermaid: common/DiagramMermaid
   DiagramER: common/DiagramER
   DiagramDataverseEntity: common/DiagramDataverseEntity
+  # Power Platform design diagrams: DiagramER with a flow / business rule starter
+  DiagramPowerAutomate: common/DiagramPowerAutomate
+  DiagramBusinessRule: common/DiagramBusinessRule
   # asset-only: its data is a workbook in the asset service layer, the block a reference to it
   ExcelUniver: common/ExcelUniver
   Block: common/Block
@@ -120,6 +123,8 @@ compRegistry:
   FileDownload: common/FileDownload
   FileIcon: common/FileIcon              # the default icon of FileDownload (placement fileDownloadIcon)
   TableHierarchy: common/TableHierarchy
+  # a test specification table on the hierarchy view, its results recorded on its asset
+  TestCaseTable: common/TestCaseTable
   ListHierarchy: common/ListHierarchy
   SwitchView: common/SwitchView
   # parts of the hierarchies: cells (tableCell), rows (hierarchyRow), header controls (hierarchyHeader)

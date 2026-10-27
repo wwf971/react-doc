@@ -12,6 +12,14 @@ import { compExposeNormalize } from './comp-expose.js';
 //   assetDependencyListGet(data) -> [{ type, path | objectId }] the source files
 //                     and assets the component's data refers to; recorded as the
 //                     dependencies of an asset created from the data
+//   deleteFileListGet(data) -> [{ path, reason? }] optional: the source files
+//                     the component offers to delete with its block (the
+//                     image an Image names). synchronous, writes nothing;
+//                     a path is a source reference relative to the document,
+//                     a nonempty reason says why that file cannot be chosen.
+//                     a component without it gets ordinary block deletion,
+//                     whatever assetDependencyListGet names
+//                     (doc_page_impl_block_ops.md#deleting-blocks)
 //   expose            what the component tells the page about itself
 //                     (comp-expose.js): meta (read-only, the source edit mode,
 //                     the shape of its config, ...), icon, viewModeList,
@@ -34,6 +42,7 @@ export function compDefine(CompRender, options = {}) {
     placementList: options.placementList,
     isAssetAware: options.isAssetAware === true,
     assetDependencyListGet: options.assetDependencyListGet,
+    deleteFileListGet: options.deleteFileListGet,
     expose: compExposeNormalize(options.expose),
   };
 }

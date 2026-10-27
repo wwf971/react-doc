@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { docEntryFileFind, docEntryLoad, docWorkspaceLoad } from './doc-entry.ts';
+import { docEntryFileFind, docEntryLoad, docWorkspaceLoad, docWorkspaceSpecRead } from './doc-entry.ts';
 import { docEditMiddlewareCreate } from './doc-edit-server.ts';
 import { lineOperationApply } from './doc-edit-lines.ts';
 import { yamlValueSetOperationBuild } from './doc-yaml-edit.ts';
@@ -217,9 +217,10 @@ test('a doc page is one thing however often it is reached: the root-level alias 
   assert.deepEqual(loaded.workspace.includeList.map((include) => [include.fromAlias, include.toAlias, include.alias]), [
     ['', 'guide', 'guide'], ['', 'extra', 'extra'], ['guide', 'extra', 'sub'],
   ]);
-  // several root doc pages: one section each, under its alias, holding its side panel; paths in the full form
+  // several root doc pages: one section each, under its alias, holding its side panel; paths in the full form.
+  // the include of extra under guide is shielded: a root doc page is shown at its mount only
   assert.deepEqual(loaded.sidePanel.tree.map((node) => [node.id, node.text, node.docPageAlias, node.children.length]), [
-    ['doc-page-guide', 'guide', 'guide', 2], ['doc-page-extra', 'extra', 'extra', 1],
+    ['doc-page-guide', 'guide', 'guide', 1], ['doc-page-extra', 'extra', 'extra', 1],
   ]);
   assert.deepEqual(loaded.sidePanel.tree.map((node) => node.docPageSection), [
     { alias: 'guide', title: 'Guide', isTemporary: false, isFirst: true },
@@ -256,4 +257,128 @@ test('an include gives the doc page its alias; two doc pages with one alias, or 
   const loadedDefault = docEntryLoad(path.join(dir, 'guide'), dir);
   assert.equal(loadedDefault.sourceRuleList[0].alias, 'guide');
   assert.deepEqual(loadedDefault.docPageList[0].rootList.map((root) => root.alias), ['guide']);
+});
+
+// ---------- the side panel shown: one effective occurrence per doc page, the root row hidden ----------
+// (plugin/doc-sidebar-effective.ts, doc_page_impl_side_panel.md#a-workspace-of-several-doc-pages)
+
+function deepFreeze(value) {
+  if (value && typeof value === 'object') {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}
+
+test('a doc page mounted at the root and included as well is shown once: the mount; mentions, rules and edges stay', () => {
+  const dir = fixtureCreate();
+  const loaded = docWorkspaceLoad(workspaceSpecGet(dir, [{ alias: 'guide', dir: 'guide' }, { alias: 'sub', dir: 'sub' }]), dir);
+  // the include of sub under guide is shielded, with its subtree
+  assert.deepEqual(loaded.sidePanel.tree.map((node) => [node.id, node.children.map((child) => child.id ?? child.doc)]), [
+    ['doc-page-guide', ['~guide:guide/a.md']], ['doc-page-sub', ['~sub:sub/b.md']],
+  ]);
+  // whatever the order of the workspace
+  const loadedReversed = docWorkspaceLoad(workspaceSpecGet(dir, [{ alias: 'sub', dir: 'sub' }, { alias: 'guide', dir: 'guide' }]), dir);
+  assert.deepEqual(loadedReversed.sidePanel.tree.map((node) => node.children.map((child) => child.id ?? child.doc)), [['~sub:sub/b.md'], ['~guide:guide/a.md']]);
+  // the doc page is still mentioned twice; its rules, tags and config are loaded once, as before
+  assert.equal(loaded.docPageList.find((docPage) => docPage.alias === 'sub').mentionList.length, 2);
+  assert.deepEqual(loaded.workspace.includeList.map((include) => [include.fromAlias, include.toAlias]), [['', 'guide'], ['', 'sub'], ['guide', 'sub']]);
+  assert.deepEqual(loaded.sourceRuleList.map((rule) => rule.docPageAlias), ['guide', 'sub']);
+  assert.equal(loaded.configDeclarationList.length, 3);
+  // served alone, guide still shows the sub document it includes
+  const loadedAlone = docEntryLoad(path.join(dir, 'guide'), dir);
+  assert.deepEqual(loadedAlone.sidePanel.tree.map((node) => node.id ?? node.doc), ['~guide:guide/a.md', 'sub']);
+  assert.equal(loadedAlone.sidePanel.tree[1].children[0].doc, '~sub:sub/b.md');
+});
+
+test('a doc page included twice is shown at its first include; a same-page include is never shielded', () => {
+  const dir = fixtureCreate();
+  const entryFile = path.join(dir, 'guide/.doc-page/entry.yaml');
+  const text = fs.readFileSync(entryFile, 'utf-8');
+  // a resource file of guide (not an entry), included before the sub document, which is included twice
+  fs.writeFileSync(path.join(dir, 'guide/.doc-page/part.yaml'), 'sidePanelById:\n  main:\n    tree:\n      - doc: ~guide/a.md\n        text: Part A\n');
+  fs.writeFileSync(entryFile, text.replace(
+    '      - id: sub\n        include: ../../sub\n',
+    '      - id: part\n        include: ./part.yaml\n      - id: sub\n        include: ../../sub\n        children:\n          - doc: ~guide/a.md\n            text: Local under sub\n      - id: sub-again\n        text: Sub again\n        include: ../../sub\n',
+  ));
+  const loaded = docEntryLoad(path.join(dir, 'guide'), dir);
+  assert.deepEqual(loaded.sidePanel.tree.map((node) => node.id ?? node.doc), ['~guide:guide/a.md', 'part', 'sub']);
+  assert.equal(loaded.sidePanel.tree[1].includeSource.isDocEntry, false);
+  assert.deepEqual(loaded.sidePanel.tree[2].children.map((child) => child.text ?? child.doc), ['~sub:sub/b.md', 'Local under sub']);
+  // the shielded include is still a mention of the doc page
+  assert.equal(loaded.docPageList.find((docPage) => docPage.alias === 'sub').mentionList.length, 2);
+});
+
+test('the projection is pure: a frozen tree is not mutated, sections are never shielded', async () => {
+  const { sidePanelEffectiveGet, sidePanelRootHiddenApply } = await import('./doc-sidebar-effective.ts');
+  const include = (id, alias, docPageAlias, children = []) => ({ id, docPageAlias, includeSource: { file: '', path: [], isDocEntry: true, docPageAlias: alias, isChildrenLocal: false }, children });
+  const tree = deepFreeze([
+    { id: 'doc-page-a', docPageAlias: 'a', docPageSection: { alias: 'a' }, includeSource: { file: '', path: [], isDocEntry: true, docPageAlias: 'a', isChildrenLocal: false }, children: [
+      include('b-first', 'b', 'a', [{ doc: '~b:b/x.md', docPageAlias: 'b' }]),
+      include('b-again', 'b', 'a', [{ doc: '~b:b/x.md', docPageAlias: 'b' }]),
+      include('own', 'a', 'a', [{ doc: '~a:a/y.md', docPageAlias: 'a' }]),
+      { id: 'resource', docPageAlias: 'a', includeSource: { file: '', path: [], isDocEntry: false, isChildrenLocal: false }, children: [] },
+      include('c', 'c', 'a', [include('b-deep', 'b', 'c')]),
+      include('root-a-again', 'a', 'c'),
+    ] },
+  ]);
+  const result = sidePanelEffectiveGet(tree, ['a']);
+  assert.deepEqual(result[0].children.map((node) => node.id), ['b-first', 'own', 'resource', 'c']);
+  assert.deepEqual(result[0].children[3].children, []);
+  assert.equal(tree[0].children.length, 6);
+  // the root row hidden: one wrapper item only; a leaf, several roots, an empty folder, a separator are left
+  const wrapper = deepFreeze([{ id: 'wrap', text: 'All', children: [{ doc: 'a.md' }] }]);
+  assert.equal(sidePanelRootHiddenApply(wrapper)[0].isSidebarRootHidden, true);
+  assert.equal(wrapper[0].isSidebarRootHidden, undefined);
+  for (const treeKept of [[{ doc: 'a.md' }], [{ id: 'x', children: [{ doc: 'a.md' }] }, { doc: 'b.md' }], [{ id: 'x', children: [] }], [{ separator: 'S' }], [{ sourceFolder: '~a/dir', children: [{ doc: 'a.md' }] }]]) {
+    assert.equal(sidePanelRootHiddenApply(treeKept), treeKept);
+  }
+});
+
+test('isRootVisible false marks the sole wrapper item of a mount; the semantic node and its values stay', () => {
+  const dir = fixtureCreate();
+  const entryFile = path.join(dir, 'guide/.doc-page/entry.yaml');
+  const text = fs.readFileSync(entryFile, 'utf-8');
+  fs.writeFileSync(entryFile, text.replace(
+    '    tree:\n      - doc: ~guide/a.md\n      - id: sub\n        include: ../../sub\n',
+    '    tree:\n      - id: wrap\n        text: Guide\n        tags: [part]\n        part: true\n        children:\n          - doc: ~guide/a.md\n          - id: sub\n            include: ../../sub\n',
+  ));
+  const loaded = docWorkspaceLoad(workspaceSpecGet(dir, [{ alias: 'guide', dir: 'guide', isRootVisible: false }, { alias: 'sub', dir: 'sub' }]), dir);
+  const wrap = loaded.sidePanel.tree[0].children[0];
+  assert.equal(loaded.sidePanel.tree[0].children.length, 1);
+  assert.equal(wrap.isSidebarRootHidden, true);
+  assert.equal(wrap.id, 'wrap');
+  assert.equal(wrap.part, true);
+  assert.deepEqual(wrap.tags, ['part']);
+  assert.deepEqual(wrap.nodeSource, { file: 'guide/.doc-page/entry.yaml', path: ['sidePanelById', 'main', 'tree', 0] });
+  // the include of sub inside the wrapper is shielded: sub is a root
+  assert.deepEqual(wrap.children.map((child) => child.doc), ['~guide:guide/a.md']);
+  // written in a workspace file, the boolean reaches the page with the items as written
+  fs.writeFileSync(path.join(dir, 'workspace.yaml'), 'docPageList:\n  - alias: guide\n    dir: ./guide\n    isRootVisible: false\n  - alias: sub\n    dir: ./sub\n');
+  const loadedFile = docWorkspaceLoad(docWorkspaceSpecRead({ file: './workspace.yaml' }, dir, 'config.yaml'), dir);
+  assert.deepEqual(loadedFile.workspace.itemList, [{ alias: 'guide', dir: './guide', isRootVisible: false }, { alias: 'sub', dir: './sub' }]);
+  assert.equal(loadedFile.sidePanel.tree[0].children[0].isSidebarRootHidden, true);
+  fs.writeFileSync(path.join(dir, 'workspace.yaml'), 'docPageList:\n  - alias: guide\n    dir: ./guide\n    isRootVisible: "false"\n');
+  assert.throws(() => docWorkspaceSpecRead({ file: './workspace.yaml' }, dir, 'config.yaml'), /"isRootVisible" must be a yaml boolean/);
+  // the mount of sub: a leaf only, nothing to hide; omitted or true: as before
+  const loadedLeaf = docWorkspaceLoad(workspaceSpecGet(dir, [{ alias: 'guide', dir: 'guide' }, { alias: 'sub', dir: 'sub', isRootVisible: false }]), dir);
+  assert.equal(loadedLeaf.sidePanel.tree[0].children[0].isSidebarRootHidden, undefined);
+  assert.equal(loadedLeaf.sidePanel.tree[1].children[0].isSidebarRootHidden, undefined);
+  // a virtual workspace (config docEntry) takes the option too
+  const loadedVirtual = docEntryLoad(path.join(dir, 'guide'), dir, '', undefined, false);
+  assert.equal(loadedVirtual.sidePanel.tree[0].isSidebarRootHidden, true);
+  assert.equal(loadedVirtual.sidePanel.tree[0].children.length, 2);
+  assert.equal(docEntryLoad(path.join(dir, 'guide'), dir).sidePanel.tree[0].isSidebarRootHidden, undefined);
+  // several roots: unchanged
+  fs.writeFileSync(entryFile, text);
+  const loadedRoots = docWorkspaceLoad(workspaceSpecGet(dir, [{ alias: 'guide', dir: 'guide', isRootVisible: false }, { alias: 'sub', dir: 'sub' }]), dir);
+  assert.deepEqual(loadedRoots.sidePanel.tree[0].children.map((node) => node.isSidebarRootHidden), [undefined]);
+});
+
+test('isRootVisible must be a yaml boolean, not text', async () => {
+  const { docPageSpecRead } = await import('./doc-entry.ts');
+  assert.throws(() => docPageSpecRead({ dir: './guide', isRootVisible: 'false' }, '/tmp', 'workspace'), /"isRootVisible" must be a yaml boolean/);
+  assert.throws(() => docPageSpecRead({ dir: './guide', isRootVisible: 0 }, '/tmp', 'workspace'), /"isRootVisible" must be a yaml boolean/);
+  assert.equal(docPageSpecRead({ dir: './guide', isRootVisible: false }, '/tmp', 'workspace').isRootVisible, false);
+  assert.equal(docPageSpecRead({ dir: './guide' }, '/tmp', 'workspace').isRootVisible, undefined);
 });

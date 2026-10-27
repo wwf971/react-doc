@@ -484,6 +484,25 @@ second  (temporary)              ⌄
 
 The loader makes a node per root doc page with `docPageSection` `{ alias, title, isTemporary, isFirst }`, its children the doc page's tree; the root properties of that side panel that reach the documents (`tags`, `config`) stay on it, its label and bound document do not (the alias is the heading). `page-tree.js` keeps the mark on the folder it builds, and `DocSidebarFolder` hands such a folder to `DocSidePanelSection` (`comp-doc/side-panel/`), which renders no fumadocs folder (a folder would count as a level and indent the items). A section folds like a folder, its open state kept in `DocSidePanelStore.folderOpenById` by its item id (`doc-page-{alias}`); the first section carries the toolbar above its heading, whose buttons are `sectionOpenAllSet(true | false)`, each disabled when there is nothing to change. The items of a section move, are renamed and dragged as anywhere else.
 
+### One effective occurrence per doc page
+
+A doc page is [one thing however often it is reached](doc_page_impl_source.md#doc-pages-reached-by-includes), and its side panel is shown **once**. A root doc page of the workspace that another doc page includes as well (the wiki of a project lists its sub projects, and the workspace mounts them as roots too) is shown at its mount only, whatever the order of the workspace or the side panel chosen; a doc page without a mount is shown at the first include reached, traversing the roots in their configured order and the children in authored order. Every later include of the doc page is *shielded*: the node holding it leaves the tree shown with its whole subtree, local children of that node included (independent local navigation belongs in a separate item). Only an include of **another** doc page's entry is a repeated mount (`includeSource.isDocEntry` with a `docPageAlias` other than the node's own): a resource include, and a reference to another side panel of the same doc page, are never shielded, and the section nodes are the mounts themselves. Served alone, the wiki still shows the sub projects it includes.
+
+Shielding is a projection of the side panel shown (`sidePanelEffectiveGet`, `plugin/doc-sidebar-effective.ts`), applied in `docWorkspaceLoad` once the trees of the roots are assembled, for a workspace of several doc pages and for one root whose side panel includes another root; it clones what it keeps, so the cached side panel resources are untouched. What the workspace holds does not change: the shielded include is still a mention of the doc page, its rules, tags, config, aliases, services and assets are loaded as before, and the Workspace graph keeps every edge. The entry of a doc page shielded in one workspace needs no change.
+
+### The root row hidden
+
+A doc page whose side panel is one wrapper item (a folder, or a document with children, holding everything) would show that single row under the section heading, and the reader would open it first. The workspace mount option `isRootVisible: false` ([the workspace file](doc_page_impl_source.md#the-workspace-file); a per-mount checkbox "root row" in the Workspace tab) shows the wrapper's children directly under the heading:
+
+```text
+main-project                     ⌄     ◄ the section heading
+  業務フロー                             ◄ the children of the sole wrapper item, its row not drawn
+  データ仕様
+  システム構成
+```
+
+The option belongs to the mount, not to the reusable entry, and is read as a yaml boolean only (`"false"`, the text, is refused). It hides one sole wrapper item with children and nothing else: several roots, a leaf, an empty folder, a separator keep their display, so no content ever disappears. It is not a flatten: the wrapper stays in the semantic tree, marked `isSidebarRootHidden` by the loader (`sidePanelRootHiddenApply`), with its item id, bound document, tags, config, part, breadcrumb and home targets, and its `textSource` / `nodeSource` for editing. `page-tree.js` keeps the mark on the folder it builds and counts it in the render key of the tree, so toggling the option re-renders the side panel at once while the item ids stay. `DocSidebarFolder` draws such a folder as its children only, without a row and without a folder level; its remembered open state is not read, so it never hides its children; the section above folds them, and a child folder keeps its own row and chevron. A consumer replacing the folder renderer (`config.sidePanel.components.Folder`) takes this case over too.
+
 ## Implementation files
 
 ```text
@@ -492,6 +511,9 @@ frontend/plugin/doc-entry.ts             load the workspace: its doc pages (alia
                                          panels and their includes, "source" and "tag" sections,
                                          docPageAlias / textSource / nodeSource / includeSource
                                          annotation, file hashes
+frontend/plugin/doc-sidebar-effective.ts the side panel shown: one effective occurrence per doc page
+                                         (later includes shielded), the sole wrapper item of a mount
+                                         marked isSidebarRootHidden
 frontend/plugin/doc-source.ts            config.yaml workspace / docEntry -> configDoc, watch the
                                          loaded files, report a label write or a move as data
 frontend/plugin/doc-side-panel-text.ts   a label change as one line operation of its yaml file
@@ -514,7 +536,8 @@ comp-doc/side-panel/side-panel-drag.js     the drag: rows measured, zones, depth
 comp-doc/side-panel/SidePanelDragOverlay.jsx  drop indicator, ghost label, move notice
 comp-doc/side-panel/SidePanelMovePicker.jsx   the move picker
 comp-doc/side-panel/SidePanelItemContextMenu.jsx  right-click menu of an item: Rename, Move…
-comp-doc/side-panel/DocSidebarFolder.jsx   default folder gesture, open state by item id
+comp-doc/side-panel/DocSidebarFolder.jsx   default folder gesture, open state by item id, a hidden
+                                           root row drawn as its children
 comp-doc/side-panel/DocSidePanelSection.jsx  a root doc page of a workspace of several: heading, toolbar
 comp-mdx/tag/TagLabel.jsx, TagList.jsx     tag display
 ```

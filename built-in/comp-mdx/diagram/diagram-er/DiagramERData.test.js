@@ -8,6 +8,27 @@ import { diagramDependenciesCollect, diagramSourceDefaultCreate, dataverseSource
 const nodeCreate = (id, position = 'auto') => ({ id, renderer: { type: 'dataverse-table' }, position, data: { name: id, columns: [{ id: 'value', name: 'Value' }] }, handles: [{ id: 'port', direction: 'both', anchor: { target: 'column/value', side: 'right' } }] });
 const diagramCreate = () => ({ version: 1, nodes: [nodeCreate('source', { x: 0, y: 0 }), nodeCreate('target')], connections: [{ id: 'link', source: { nodeId: 'source', handleId: 'port' }, target: { nodeId: 'target', handleId: 'port' } }] });
 
+test('Power Platform resource nodes share the graph, property anchors and connection validation', () => {
+	const graph = diagramCreate();
+	graph.nodes[0].renderer.type = 'power-automate';
+	graph.nodes[0].data = { name: 'On update', kind: 'trigger', connector: 'Dataverse', properties: [{ id: 'filter', name: 'Filter rows', value: 'statecode eq 0' }] };
+	graph.nodes[0].handles[0].anchor.target = 'property/filter';
+	graph.nodes[1].renderer.type = 'business-rule';
+	graph.nodes[1].data = { name: 'Require approval', kind: 'action', action: 'setRequired', table: 'account' };
+	graph.nodes[1].handles[0].anchor.target = 'header';
+	const result = diagramNormalize(graph);
+	assert.equal(result.nodes[0].data.properties[0].value, 'statecode eq 0');
+	assert.equal(result.nodes[1].data.scope, 'All Forms');
+	assert.equal(result.connections.length, 1);
+	graph.nodes[0].data.kind = 'invented';
+	assert.throws(() => diagramNormalize(graph), /unsupported value/);
+	graph.nodes[0].data.kind = 'trigger';
+	graph.nodes[0].data.properties.push({ id: 'filter' });
+	assert.throws(() => diagramNormalize(graph), /Duplicate property/);
+	graph.nodes[0].data.properties = [{ id: 'filter', value: false }];
+	assert.throws(() => diagramNormalize(graph), /must be text/);
+});
+
 test('renderer contracts stay immutable and obsolete viewport fields fail explicitly', () => {
 	const input = { version: 1, nodes: [{ id: 'custom', renderer: { component: 'Custom' } }] };
 	const contract = { anchorListGet: () => Object.freeze([{ id: 'port', sideList: ['left'] }]) };

@@ -1,4 +1,6 @@
 import { dataverseCardNormalize, dataverseAnchorListGet } from './DataverseCardData.js';
+import { powerAutomateNodeContract } from './PowerAutomateNodeData.js';
+import { businessRuleNodeContract } from './BusinessRuleNodeData.js';
 
 const sides = ['left', 'right', 'top', 'bottom'];
 const lineTypes = ['straight', 'bezier', 'step', 'smoothstep', 'polyline'];
@@ -65,6 +67,8 @@ function rendererRead(value, field, placement, resolve) {
 	if (type === 'operator') {
 		return { renderer: { type }, contract: { anchorListGet: () => [{ id: 'body', sideList: sides }], sizeDefault: { width: 220, height: 100 } } };
 	}
+	if (type === 'power-automate') return { renderer: { type }, contract: powerAutomateNodeContract };
+	if (type === 'business-rule') return { renderer: { type }, contract: businessRuleNodeContract };
 	throw new Error(`${field}: unknown node type "${type}".`);
 }
 

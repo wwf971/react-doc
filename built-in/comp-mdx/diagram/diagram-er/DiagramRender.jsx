@@ -2,6 +2,8 @@ import { createContext, useContext, useLayoutEffect, useRef, useState } from 're
 import { BaseEdge, Handle, Position, getBezierPath, getSmoothStepPath, getStraightPath, useUpdateNodeInternals } from '@xyflow/react';
 import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
 import { DataverseCard } from './DataverseCard.jsx';
+import { PowerAutomateNode } from './PowerAutomateNode.jsx';
+import { BusinessRuleNode } from './BusinessRuleNode.jsx';
 
 export const DiagramRenderContext = createContext({});
 const positions = { left: Position.Left, right: Position.Right, top: Position.Top, bottom: Position.Bottom };
@@ -67,7 +69,9 @@ export function DiagramNode({ id, data }) {
 			<div className="doc-vis-node-content nowheel">
 				{node.renderer.component ? (
 					<RegisteredComp compName={node.renderer.component} placement="visualizationNode" input={{ data: node.data }} configRuntime={{ ...config, instanceId: `${config.instanceId ?? 'diagram'}:node:${id}`, isEdit: false, visualization }} />
-				) : node.renderer.type === 'operator' ? (
+				) : node.renderer.type === 'power-automate' ? <PowerAutomateNode data={node.data} anchorRef={anchorRef} editor={editor} nodeId={id} />
+				: node.renderer.type === 'business-rule' ? <BusinessRuleNode data={node.data} anchorRef={anchorRef} editor={editor} nodeId={id} />
+				: node.renderer.type === 'operator' ? (
 					<div className="doc-vis-operator"><strong>{node.data.label ?? node.data.name ?? id}</strong>{node.data.description ? <p>{node.data.description}</p> : null}</div>
 				) : <DataverseCard data={node.data} type={node.renderer.type} anchorRef={anchorRef} editor={editor} nodeId={id} />}
 			</div>

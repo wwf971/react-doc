@@ -23,6 +23,9 @@
 //                                               { object, version, isCreated }; isCreated false when an
 //                                               object of that name exists: it is answered, nothing is created
 //   objectUpdate({ store, objectId, hashBase, text | dataBase64, mode, note, dependencyList, versionMetadata })
+//   testCaseResultSet({ store, objectId, hashBase, docPath, caseId, testerId, operator, result, timeTimezone,
+//                       evidence, versionId })   { object, version }: one test result appended to the
+//                                               history of a TestCaseTable object, at its head
 //   versionMetadataSet(store, objectId, versionId, versionMetadata)  { object, version }
 //   dependencyListGet(store, objectId, versionId)      { versionId, dependencyList }
 //   dependentListGet(store, objectId, versionId)       { dependentList }   versionId '' for the whole object
@@ -76,6 +79,7 @@ export function assetBackendApiCreate(endpoint) {
     dataUrlGet: (store, objectId, versionId = 'head') => `${endpointNormalized}/object/data?${objectQueryBuild(store, objectId, versionId)}`,
     objectCreate: (input) => requestPost('/object/create', input),
     objectUpdate: (input) => requestPost('/object/update', input),
+    testCaseResultSet: (input) => requestPost('/test-case/result/set', input),
     objectDelete: (store, objectId) => requestPost('/object/delete', { store, objectId }),
     objectRestore: (store, objectId) => requestPost('/object/restore', { store, objectId }),
     objectMetaSet: (store, objectId, change) => requestPost('/object/meta/set', { store, objectId, ...change }),
@@ -182,6 +186,7 @@ export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
     },
     objectCreate: readOnly,
     objectUpdate: readOnly,
+    testCaseResultSet: readOnly,
     objectDelete: readOnly,
     objectRestore: readOnly,
     objectMetaSet: readOnly,

@@ -208,3 +208,6 @@ Every leaf must explicitly define every declared column. This keeps an omitted v
 ## Alternate Presentation
 
 The same `columns` and `rows` can be used by [ListHierarchy](../list-hierarchy/comp_list_hierarchy.md) with a custom row renderer instead of a cell grid. Embed both components in [SwitchView](../../switch-view/comp_switch_view.md) and share the dataset through YAML anchors. Set column order once to keep tool priority consistent in the table and the list.
+## Reusing the view
+
+`TableHierarchy.jsx` exports `TableHierarchyView` beside the component: the table on parsed data (`tableHierarchyDataParse`), for a component that builds the data itself and keeps the grouping, the collapsing and the registered cells. Its optional `cellRender({ cell, column, row })` draws a leaf cell in place of the registered cell component; returning `undefined` falls through to it. `TestCaseTable` (`../../test-case-table/comp_test_case_table.md`) is the component built on it: the confirmation columns of its testers are columns it appends, drawn by `cellRender`.

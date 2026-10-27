@@ -10,7 +10,11 @@
 //   kind            how the page is served
 //   label           how the panel and messages name it
 //   capabilityList  what it offers; a capability that needs an api is on only
-//                   when the api is configured too (and, for "edit", answers)
+//                   when the api is configured too (and, for "edit", answers).
+//                   "service" is in every kind: the service backend is a
+//                   process of its own, not the server of the page, so the
+//                   page reaches it wherever it is served once it is given its
+//                   address (doc_page_impl_service.md#reaching-the-backend)
 export const docEnvKindDefineList = [
   {
     kind: 'viteDevServer',
@@ -20,7 +24,7 @@ export const docEnvKindDefineList = [
   {
     kind: 'staticBuild',
     label: 'static build',
-    capabilityList: [],
+    capabilityList: ['service'],
   },
 ];
 
@@ -30,7 +34,8 @@ export const docEnvKindDefineList = [
 //                 place: edit mode, side-panel edits, doc page config values
 //   asset         the asset api of the development server; without it the
 //                 asset service layer reads the snapshot bundled into a build
-//   service       the service backend, forwarded by the development server
+//   service       the service backend, at the address the page is given (the
+//                 development server forwards it; a build may name a deployed one)
 //   devWarning    hints meant for the integrator, printed to the console
 export const docEnvCapabilityDefineByName = {
   sourceWrite: { api: 'source', label: 'creating files' },
@@ -42,9 +47,11 @@ export const docEnvCapabilityDefineByName = {
 
 // the kind of a page that was not told its kind (a host that renders
 // DocPageMdx without the virtual module's docEnv): served by a development
-// server when any api is configured, else a static build
+// server when any api of the development server is configured, else a static
+// build. the service backend's address says nothing of how the page is served
 export function docEnvKindInfer(endpointByApi = {}) {
-  return Object.values(endpointByApi).some((endpoint) => typeof endpoint === 'string' && endpoint !== '')
+  return Object.entries(endpointByApi)
+    .some(([api, endpoint]) => api !== 'service' && typeof endpoint === 'string' && endpoint !== '')
     ? 'viteDevServer'
     : 'staticBuild';
 }

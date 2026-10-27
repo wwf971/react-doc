@@ -149,7 +149,9 @@ Fumadocs wraps heading text in hash links. Releasing the pointer after selecting
 
 History entries contain the semantic route and fragment together. Repeating the current destination reruns its destination behavior without adding a duplicate entry. Normal navigation after moving backward removes the forward branch.
 
-`DocNavigationButtons` exposes the same actions in the document toolbar and compact floating controls:
+`DocNavigationButtons` exposes the same actions in the document toolbar and compact floating controls. The document toolbar (navigation, language, edit toggle, document edit controls) never shows a scrollbar: when it is wider than the page column, it sits in the host-injected `config.components.ScrollHorizontal`, which clips it and moves it horizontally by the mouse wheel over it (the page does not scroll meanwhile), and brings a control reached by keyboard focus into view. The offset is `DocStore.toolbarScrollLeft`, starting at the left edge. Without the injected component the toolbar wraps onto a second row.
+
+The actions:
 
 1. **Back** calls `DocStore.navigationBack()`. Query mode delegates to browser history; memory mode moves through the internal history list.
 2. **Forward** calls `DocStore.navigationForward()` through the same mode-specific mechanism.
@@ -172,6 +174,8 @@ The default sidebar folder override keeps route changes separate from expansion 
 - Selecting an inactive folder label navigates to its document without changing expansion.
 - Selecting the active label toggles expansion. A double click therefore navigates first and then toggles.
 - Selecting the chevron toggles expansion without navigating.
+
+Because the label and the chevron of such a folder are two targets, the default renderer draws them as two: the chevron sits in a small box of its own, separated from the label by a faint vertical line, and highlights alone on hover. A folder without a document keeps the plain chevron, since its whole row toggles. The reader can therefore tell, before clicking, whether a folder opens a document. The box keeps the row height, so nothing moves.
 
 Consumers can replace this gesture policy through `config.sidePanel.components.Folder` without replacing route resolution or history behavior.
 

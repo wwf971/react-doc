@@ -1,6 +1,7 @@
 import { makeAutoObservable } from 'mobx';
 import { load as yamlLoad } from 'js-yaml';
 import { imageGridDataParse, imageGridRawBuild } from './ImageGridData.js';
+import { imageDeleteFileListBuild } from '../image/image-paste.js';
 
 // the parsed data of an ImageGrid block (ImageGridData.js): the images (a
 // slot may be empty, without src: the state a new grid is created in,
@@ -59,6 +60,10 @@ export function imageGridAssetDependencyListGet(data) {
 		.map((image) => String(image.src ?? image.source ?? '').trim())
 		.filter((source) => source !== '')
 		.map((source) => ({ type: 'source', path: source }));
+}
+
+export function imageGridDeleteFileListGet(data) {
+	return imageDeleteFileListBuild(imageGridAssetDependencyListGet(data));
 }
 
 export { ImageGridStore };

@@ -2,6 +2,7 @@ import { blockQADataParse } from '../../../built-in/comp-mdx/block/block-qa/Bloc
 import { indexDataParse } from '../../../built-in/comp-mdx/index/IndexData.js';
 import { switchViewDependenciesCollect } from '../../../built-in/comp-mdx/switch-view/SwitchViewData.js';
 import { diagramDependenciesCollect } from '../../../built-in/comp-mdx/diagram/diagram-er/DiagramERSource.js';
+import { testCaseDependenciesCollect } from '../../../built-in/comp-mdx/test-case-table/TestCaseTableData.js';
 
 // Build-time dependency extractors, keyed by component id (the values of
 // config.yaml compRegistry). The doc-source plugin calls them while it prunes
@@ -81,7 +82,12 @@ export const sourceDependencyCollectByCompId = {
   'common/BlockQA': blockQACollect,
   // every view, including those not shown, through the collector of its component
   'common/SwitchView': switchViewDependenciesCollect,
-  // the registered components drawing nodes and connections of a diagram
+  // the registered components drawing nodes and connections of a diagram;
+  // the Power Platform design diagrams are DiagramER with another starter
   'common/DiagramER': diagramDependenciesCollect,
+  'common/DiagramPowerAutomate': diagramDependenciesCollect,
+  'common/DiagramBusinessRule': diagramDependenciesCollect,
+  // the evidence documents of every recorded result, and its custom cells
+  'common/TestCaseTable': testCaseDependenciesCollect,
   'specific/SourceLink': sourceLinkCollect,
 };

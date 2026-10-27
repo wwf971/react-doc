@@ -806,7 +806,7 @@
 
 .doc-workspace-edit-row {
   display: grid;
-  grid-template-columns: 1.4rem minmax(5rem, 0.9fr) minmax(12rem, 2.6fr) minmax(4.5rem, 0.8fr) auto;
+  grid-template-columns: 1.4rem minmax(5rem, 0.9fr) minmax(12rem, 2.6fr) minmax(4.5rem, 0.8fr) auto auto;
   align-items: center;
   gap: 10px;
   min-height: 30px;
@@ -823,6 +823,15 @@
 
 .doc-workspace-edit-row > span {
   min-width: 0;
+}
+
+.doc-workspace-edit-check {
+  display: flex;
+  justify-content: center;
+}
+
+.doc-workspace-edit-check input {
+  margin: 0;
 }
 
 .doc-workspace-edit-value {

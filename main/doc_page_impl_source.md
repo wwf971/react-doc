@@ -183,7 +183,11 @@ docPageList:                        # the root-level doc pages, in side-panel or
     sidePanel: main                 # optional: the side panel shown for it
   - alias: api
     dir: ../api
+    isRootVisible: false            # optional: the sole wrapper item of its side panel shows its
+                                    # children only, without a row (a yaml boolean, never "false")
 ```
+
+`isRootVisible` is an option of the mount, not of the entry: the same doc page can be shown with its root row in one workspace and without it in another. What it does, and what it never does, is in [the root row hidden](doc_page_impl_side_panel.md#the-root-row-hidden); `docEntry` of `config.yaml` takes it as well.
 
 Loading a workspace (`docWorkspaceLoad`, `plugin/doc-entry.ts`) registers every root-level doc page under its alias first, then loads each entry with everything it reaches ([loading](doc_page_impl_side_panel.md#loading)): the source rules of every doc page, in order, each rule carrying the alias of its doc page; the tag definitions; the config declarations, stacked so that a root doc page decides over what it includes (the first root doc page last); and every side panel. The page shows, with one root doc page, that doc page's chosen side panel, exactly as before; with several, one **section** per root doc page: its alias as a muted heading, its side panel below at the depth of the tree's root, so its items look as they do when the doc page is served alone; the doc pages keep their side panels and the workspace only arranges them (a side panel of the workspace's own is a later addition). The tree node of a section carries `docPageSection` (`{ alias, title, isTemporary, isFirst }`); what the side panel does with it is in [a workspace of several doc pages](doc_page_impl_side_panel.md#a-workspace-of-several-doc-pages). `siteTitle`, `homeDoc` and `homeItem` come from `config.yaml`, else the workspace file, else the first root doc page's entry.
 
@@ -192,6 +196,8 @@ Loading a workspace (`docWorkspaceLoad`, `plugin/doc-entry.ts`) registers every 
 A doc page's side panel includes another doc page through an `include` naming its folder or entry, and the reference gives the included doc page its alias: `include: { dir: ../sub-doc, alias: sub }` ([including other side panels](doc_page_impl_side_panel.md#including-other-side-panels)). The included doc page joins the workspace: its rules, tags, config and asset folders come along, and its files are `~sub:sub-doc/...` to every other doc page. Giving the alias is recommended for every include of a doc page; without it, the folder name stands in, like for a root.
 
 A doc page is **one thing however often it is reached**, identified by its entry file: the same folder included by two side panels, or listed in the workspace and included as well, loads once, and every reference to it is a *mention* recorded on it. Its alias is the one of its first mention, and root-level mentions come first, so the workspace file decides over any include: a mention under another alias is reported (a warning in the console and in `workspace.warningList`, drawn in the [Workspace tab](#the-workspace-tab)) and ignored, so exactly one alias is valid for a doc page. Two different doc pages under one alias, or an alias that is not one word, stop the page from loading with the two places named. A doc page naming its own entry (a side panel of its own included from a resource file) is not a mention.
+
+Its side panel is shown once as well: at its mount when it is a root doc page, else at the first include reached; every later include is shielded from the side panel shown, with its subtree, while the mention, the rules and the graph edge stay ([one effective occurrence per doc page](doc_page_impl_side_panel.md#one-effective-occurrence-per-doc-page)).
 
 ### What the page receives
 
@@ -203,7 +209,8 @@ workspace
   title
   file, fileHash   the workspace file (relative to the config directory, '' when there is none) and the
                    hash of the version loaded, which an edit is built on
-  itemList         its docPageList as written: [{ alias?, dir?, file?, sidePanel? }], paths relative to it
+  itemList         its docPageList as written: [{ alias?, dir?, file?, sidePanel?, isRootVisible? }],
+                   paths relative to it
   dirBaseAbs       the folder relative paths of the workspace are read from (the file's, else the config
                    directory), where os path completion starts
   docPageList      [{ alias, entryFile, dirPage, title, isRoot, isTemporary,
@@ -233,7 +240,8 @@ Every change is one request of the edit api, `POST {edit}/workspace/edit` `{ req
 | --- | --- |
 | `itemFieldSet` | `index`, `field` (`alias` \| `sidePanel`), `value` (`''` removes the key) |
 | `itemPathSet` | `index`, `kind` (`dir` \| `file`), `value` |
-| `itemAdd` | `item { alias?, dir \| file, sidePanel? }`, at the end |
+| `itemRootVisibleSet` | `index`, `isRootVisible` (a boolean: `false` writes the key, `true` removes it); the "root row" checkbox of an item |
+| `itemAdd` | `item { alias?, dir \| file, sidePanel?, isRootVisible? }`, at the end |
 | `itemRemove` | `index` |
 | `itemMove` | `index`, `indexTo` (its place afterwards) |
 | `titleSet` | `value` (`''` removes it) |
@@ -347,11 +355,15 @@ Every place that asks for a path uses it with its specification: the location pr
 A component that holds bytes to keep, such as an image pasted into `Image`, does not write them itself. It reports the request through the event layer, and the **source route** answers it from `DocSourceFileStore`:
 
 ```text
-fileCreateRequest { name, blob | text, dirPath, isLocationCustom }
+fileCreateRequest { name, blob | text, dirPath, isLocationCustom, anchorElement? }
   -> { code: 0, data: { path, entry } } | { code: -1, message }
 ```
 
-`dirPath` is the folder, a source path, usually from the component's own config (`Image` reads `compConfig.FileStoreDir`); in the local form it is a root of the doc page of the document the request comes from (`source.sourcePath` of the event). `isLocationCustom: true`, or a `dirPath` that is not a source path, opens the **location prompt** (`SourceFilePrompt`): a floating panel at the pointer with the folder (a [`SourcePathPicker`](#choosing-a-path) of the folders of the source, its tree behind the browse button), the file name, Create and Cancel. The prompt stays open while the file is written, shows a failure in place so another folder can be tried, and answers the request with a failure when dismissed. The name is made unique in the folder (`fileNameUniqueGet`) before the file is written; the answer carries the source path of the new file, which the component then puts into its data through the edit layer (`dataReplaceRequest`, see [component awareness](doc_page_impl_mdx_comp.md#component-awareness)).
+`dirPath` is the folder, a source path, usually from the component's own config (`Image` reads `compConfig.FileStoreDir`); in the local form it is a root of the doc page of the document the request comes from (`source.sourcePath` of the event). `isLocationCustom: true`, or a `dirPath` that is not a source path, opens the **location prompt** (`SourceFilePrompt`): a floating panel with the folder (a [`SourcePathPicker`](#choosing-a-path) of the folders of the source, its tree behind the browse button), the file name, Create and Cancel. The prompt stays open while the file is written, shows a failure in place so another folder can be tried, and answers the request with a failure when dismissed. The name is made unique in the folder (`fileNameUniqueGet`) before the file is written; the answer carries the source path of the new file, which the component then puts into its data through the edit layer (`dataReplaceRequest`, see [component awareness](doc_page_impl_mdx_comp.md#component-awareness)).
+
+**Where the prompt is.** A request may name an `anchorElement`, the element of the component the file is for (`Image` gives its figure): the prompt is then rendered into that element, absolutely positioned a little inside its top left corner and never wider than it, so it moves with the component when a container or the page scrolls, without any recomputation on scroll. Without an anchor the prompt floats at the pointer position of the request, or at the top center of the page. The element is browser state of the prompt only (`DocSourceFileStore.prompt.anchorElement`, kept by reference): the write request carries the folder, the name and the bytes, nothing else of the event. `Image` hides its own "saving" status while the prompt is inside it (`.doc-image:has(> .doc-source-prompt)`), so the pending message is not shown twice; a direct save without a prompt keeps that status.
+
+**The prompt belongs to the editor that asked.** While an author uses the prompt, the editing session of the component (the field editor of an `Image`, the grid of an `ImageGrid`) must stay open: the created path is answered to that session's draft. The prompt therefore carries the edit layer's popup marker (`doc-edit-popup`, [use-edit-outside-pointer.js](doc_page_impl_edit.md#editing-primitives)), and so does the folder suggestion list that `SourcePathInput` portals to the body, so a pointer in either is not a click outside the session; the prompt's own pointer-outside cancellation also treats a pointer in that list as its own. A genuine click elsewhere still leaves the editor and cancels the prompt, as before; nothing is suppressed globally and nothing auto-saves.
 
 The two requests keep the component thin: it knows how to turn a clipboard into a file name and bytes, and how to write its own data with a new source; where the file goes, how it is written, and whether the data is a block of the document or a version of an asset are decided by the page.
 
@@ -366,6 +378,7 @@ The two requests keep the component thin: it knows how to turn a clipboard into 
 | `lib/doc-os-path-complete.js` | os path completion: the listings by folder, the candidates of the current text |
 | `plugin/doc-source-exclude.ts` | the `exclude` patterns of an addFolder rule |
 | `plugin/doc-workspace-edit.ts` | a change of the workspace file as line operations |
+| `plugin/doc-sidebar-effective.ts` | the side panel shown: one effective occurrence per doc page, the root row of a mount hidden |
 | `plugin/doc-entry.ts` | the workspace and its doc pages: `docWorkspaceLoad`, `docEntryLoad` (a virtual workspace), aliases, mentions, root aliases of the rules |
 | `plugin/doc-source.ts` | `config.yaml` workspace / docEntry, temporary doc pages, rules, collection, the folders kept out by convention, folder manifest, source api (os listing, mounts), module generation (the component mounts included) |
 | `plugin/doc-service-server.ts` | the service folders of a doc page (`SERVICE_CONFIG_FILE_NAME`, `SERVICE_FOLDER_DEFAULT_LIST`), the forwarded service api and its sync route |

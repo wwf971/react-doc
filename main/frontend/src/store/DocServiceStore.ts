@@ -18,7 +18,7 @@ import { dashboardDataTextBuild } from '../../../comp-doc/service/service-dashbo
 // of an infra name, the logs) and answers the events of the dashboards
 // (eventHandle):
 //
-//   backendStatus     'none'     the page has no backend (no config service, or a build)
+//   backendStatus     'none'     the page has no backend (no config service, or a build given no address)
 //                     'loading'  the first answer is awaited
 //                     'up'       the backend answered the last request
 //                     'down'     the development server answered that the backend cannot be reached
@@ -360,7 +360,7 @@ export class DocServiceStore {
 
   get unavailableReason(): string {
     if (this.backendStatus === 'none') {
-      return 'The page has no service backend: config.yaml has no service section, or the page is a build (a build has no backend).';
+      return 'The page has no service backend: config.yaml has no service section, or the page is a build that was given no backend address.';
     }
     if (this.backendStatus === 'down') return this.backendMessage || 'The service backend cannot be reached.';
     return '';

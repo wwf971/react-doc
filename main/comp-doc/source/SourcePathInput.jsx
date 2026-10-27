@@ -4,6 +4,7 @@ import { observer } from 'mobx-react-lite';
 import { TriangleAlert, Undo2 } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
+import { EDIT_POPUP_CLASS } from '../edit/use-edit-outside-pointer.js';
 import './DocSource.css';
 
 // A source path typed with completion from the doc page source service layer
@@ -20,7 +21,10 @@ import './DocSource.css';
 // the dropdown is rendered into document.body at a fixed position under the
 // text, not inside the field: the field is often placed in a scrolling or
 // clipping container (every item of the settings panel hides its overflow),
-// where a list positioned inside would be cut off.
+// where a list positioned inside would be cut off. being outside, it
+// carries the edit-popup marker (use-edit-outside-pointer.js): a pointer
+// choosing a folder in it is not a click outside the editor the field
+// belongs to (the location prompt of a pasted image).
 //
 //   value            the current path
 //   spec             what the path names (lib/doc-source-complete.js):
@@ -249,7 +253,7 @@ export const SourcePathInput = observer(function SourcePathInput({
       {isListShown && listPosition ? createPortal(
         <ul
           ref={listRef}
-          className="doc-popover doc-source-path-list not-prose"
+          className={`doc-popover doc-source-path-list not-prose ${EDIT_POPUP_CLASS}`}
           role="listbox"
           style={{ top: listPosition.top, left: listPosition.left, minWidth: listPosition.minWidth, maxWidth: listPosition.maxWidth }}
         >

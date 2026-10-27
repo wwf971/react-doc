@@ -37,10 +37,14 @@ import './DocSettings.css';
 // temporary doc pages are mounted (WorkspaceMountEdit):
 //
 //   Workspace file  workspace.yaml                         [🔒 Locked]
-//   #  alias     path                          side panel
-//   1  example   [dir|file] ./example_doc      default      [↑][↓][🗑]
-//   2  second    [dir|file] ./example_doc/...  default      [↑][↓][🗑]
+//   #  alias     path                          side panel  root row
+//   1  example   [dir|file] ./example_doc      default      [x]     [↑][↓][🗑]
+//   2  second    [dir|file] ./example_doc/...  default      [ ]     [↑][↓][🗑]
 //   [+ Add doc page]
+//
+// "root row" is the mount option isRootVisible (plugin/doc-sidebar-effective.ts):
+// unchecked, the sole wrapper item of the doc page's side panel shows its
+// children directly under the section heading, without a row of its own
 //
 //   Temporary doc pages   not written; gone when the server restarts
 //   extra  ../extra                                          [Unmount]
@@ -253,6 +257,7 @@ const WorkspaceFileEdit = observer(function WorkspaceFileEdit() {
             <span role="columnheader">alias</span>
             <span role="columnheader">folder or entry file</span>
             <span role="columnheader">side panel</span>
+            <span role="columnheader" title="Whether the sole wrapper item of the side panel is drawn as a row">root row</span>
             <span role="columnheader" aria-label="actions" />
           </div>
           {itemList.map((item, index) => (
@@ -294,6 +299,8 @@ const WorkspaceFileEdit = observer(function WorkspaceFileEdit() {
 const WorkspaceFileItem = observer(function WorkspaceFileItem({ item, index, count, isEditable, edit }) {
   const kind = item.file !== undefined && item.dir === undefined ? 'file' : 'dir';
   const pathText = item[kind] ?? '';
+  const isRootVisible = item.isRootVisible !== false;
+  const nameDocPage = item.alias || pathText || `doc page ${index + 1}`;
   return (
     <div className="doc-workspace-edit-row" role="row">
       <span className="doc-workspace-settings-muted" role="cell">{index + 1}</span>
@@ -329,6 +336,18 @@ const WorkspaceFileItem = observer(function WorkspaceFileItem({ item, index, cou
           isLocked={!isEditable}
           newlineAs=""
           onCommit={(text) => void edit({ action: 'itemFieldSet', index, field: 'sidePanel', value: text }, `sidePanel:${index}`)}
+        />
+      </span>
+      <span role="cell" className="doc-workspace-edit-check">
+        <input
+          type="checkbox"
+          checked={isRootVisible}
+          disabled={!isEditable}
+          aria-label={`Root row of the side panel of ${nameDocPage}`}
+          title={isRootVisible
+            ? 'The root row is shown. Uncheck to show the children of a sole wrapper item directly under the section heading (isRootVisible: false)'
+            : 'The root row is hidden: the children of a sole wrapper item are shown directly under the section heading. Check to show the row again'}
+          onChange={(event) => void edit({ action: 'itemRootVisibleSet', index, isRootVisible: event.target.checked }, `rootVisible:${index}`)}
         />
       </span>
       <span role="cell" className="doc-workspace-edit-actions">

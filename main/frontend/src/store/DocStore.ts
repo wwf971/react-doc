@@ -78,6 +78,10 @@ export class DocStore {
   navigationHistoryIndex = -1;
   // id of the DocLink whose candidate dropdown is open; only one at a time
   linkDropdownOpenId = '';
+  // horizontal offset (px) of the document toolbar when it is wider than the
+  // page column; the toolbar has no scrollbar and moves by the mouse wheel
+  // (ScrollHorizontal of the host), clamped by it on every resize
+  toolbarScrollLeft = 0;
   searchQuery = '';
   // matcher output; searchResults derives the displayed rows from it
   searchResultsRaw: any[] = [];
@@ -688,6 +692,10 @@ export class DocStore {
 
   setLinkDropdownOpen(id: string) {
     this.linkDropdownOpenId = id;
+  }
+
+  toolbarScrollLeftSet(scrollLeft: number) {
+    this.toolbarScrollLeft = Math.max(0, Number(scrollLeft) || 0);
   }
 
   setSearchQuery(query: string) {

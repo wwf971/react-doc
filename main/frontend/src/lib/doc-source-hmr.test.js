@@ -9,7 +9,7 @@ import { createElement } from 'react';
 import { transformSync } from 'esbuild';
 import { docSourcePlugin, docSourceMiddlewareCreate, generateModuleCode } from '../../plugin/doc-source.ts';
 import { docEditMiddlewareCreate } from '../../plugin/doc-edit-server.ts';
-import { lineOperationApply } from '../../plugin/doc-edit-lines.ts';
+import { lineOperationApply, textHashGet } from '../../plugin/doc-edit-lines.ts';
 import { sidePanelTextOperationBuild } from '../../plugin/doc-side-panel-text.ts';
 import { DocSourceStore } from '../store/DocSourceStore.ts';
 import { MdxBody } from './MdxBody.jsx';
@@ -435,3 +435,126 @@ test('production module generation keeps raw imports and no-op subscriptions', (
   assert.ok(code.includes('export function subscribeDocSource() { return () => {}; }'));
   assert.ok(!code.includes('fetch('));
 });
+
+// ---------- deleting a block with its files ----------
+// (doc_page_impl_block_ops.md#deleting-blocks): the edit middleware over a
+// hand-made manifest in a temporary folder, so every path, rename and
+// write is the real one
+
+function deleteFixtureCreate() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-edit-delete-'));
+  fs.mkdirSync(path.join(dir, 'docs'));
+  const textDoc = ['# A', '', '<!--renderComp=Image-->', '```yaml', 'src: pic.png', '```', '', 'after', ''].join('\n');
+  fs.writeFileSync(path.join(dir, 'docs', 'a.md'), textDoc);
+  fs.writeFileSync(path.join(dir, 'docs', 'pic.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  fs.writeFileSync(path.join(dir, 'docs', 'other.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 1]));
+  fs.writeFileSync(path.join(dir, 'docs', 'note.txt'), 'a note\n');
+  fs.symlinkSync(path.join(dir, 'docs', 'pic.png'), path.join(dir, 'docs', 'link.png'));
+  const entryList = ['a.md', 'pic.png', 'other.png', 'note.txt', 'link.png'].map((name) => ({
+    absPath: path.join(dir, 'docs', name),
+    ext: name.split('.').at(-1),
+    internalPath: `~docs/${name}`,
+  }));
+  const callCount = { fileEntryListGet: 0, lstat: 0, rename: 0 };
+  const middleware = docEditMiddlewareCreate({
+    endpoint: '/__doc-edit',
+    fileEntryListGet: () => {
+      callCount.fileEntryListGet += 1;
+      return entryList;
+    },
+  });
+  const hashGet = () => textHashGet(fs.readFileSync(path.join(dir, 'docs', 'a.md'), 'utf-8'));
+  const apply = (body) => requestRun(middleware, { method: 'POST', url: '/__doc-edit/source/apply', body: { internalPath: '~docs/a.md', hashBase: hashGet(), ...body } });
+  const deleteOperation = { action: 'deleteLines', lineStart: 3, lineEnd: 7 };
+  const nameList = () => fs.readdirSync(path.join(dir, 'docs')).sort();
+  const backupList = (name) => nameList().filter((item) => item.startsWith(`.${name}.`) && item.endsWith('.deleted'));
+  // the fs calls a cleanup makes, counted while a request runs
+  const fsCount = async (run) => {
+    const { lstatSync, renameSync } = fs;
+    fs.lstatSync = (...args) => { callCount.lstat += 1; return lstatSync.apply(fs, args); };
+    fs.renameSync = (...args) => { callCount.rename += 1; return renameSync.apply(fs, args); };
+    try {
+      return await run();
+    } finally {
+      fs.lstatSync = lstatSync;
+      fs.renameSync = renameSync;
+    }
+  };
+  return { dir, textDoc, apply, deleteOperation, nameList, backupList, callCount, fsCount, docRead: () => fs.readFileSync(path.join(dir, 'docs', 'a.md'), 'utf-8') };
+}
+
+test('a block deletion moves the chosen files to backups beside them and writes the document', async () => {
+  const fixture = deleteFixtureCreate();
+  const result = await fixture.apply({ operation: fixture.deleteOperation, filePathDeleteList: ['~docs/pic.png', '~docs/note.txt', '~docs/pic.png'] });
+  assert.equal(result.status, 200);
+  const payload = JSON.parse(result.text);
+  assert.equal(payload.code, 0);
+  assert.equal(payload.data.text, '# A\n\nafter\n');
+  assert.equal(fixture.docRead(), '# A\n\nafter\n');
+  assert.equal(fs.existsSync(path.join(fixture.dir, 'docs', 'pic.png')), false);
+  assert.equal(fs.existsSync(path.join(fixture.dir, 'docs', 'note.txt')), false, 'any collected regular file, not only an image');
+  assert.equal(fixture.backupList('pic.png').length, 1, 'one backup for a path named twice');
+  assert.equal(fixture.backupList('note.txt').length, 1);
+  assert.deepEqual(fs.readFileSync(path.join(fixture.dir, 'docs', fixture.backupList('pic.png')[0])), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  assert.ok(fs.existsSync(path.join(fixture.dir, 'docs', 'other.png')), 'an unchosen file stays');
+  fs.rmSync(fixture.dir, { recursive: true, force: true });
+});
+
+test('every chosen file is checked before anything moves: unknown paths, the document, a symlink', async () => {
+  const fixture = deleteFixtureCreate();
+  for (const filePathDeleteList of [['~docs/pic.png', '~docs/missing.png'], ['~docs/a.md'], ['~docs/other.png', '~docs/link.png']]) {
+    const result = await fixture.apply({ operation: fixture.deleteOperation, filePathDeleteList });
+    assert.equal(result.status, 400, filePathDeleteList.join(','));
+    assert.equal(JSON.parse(result.text).code, -1);
+  }
+  assert.equal(fixture.docRead(), fixture.textDoc);
+  assert.deepEqual(fixture.nameList(), ['a.md', 'link.png', 'note.txt', 'other.png', 'pic.png']);
+  fs.rmSync(fixture.dir, { recursive: true, force: true });
+});
+
+test('a failed document write puts the moved files back', async () => {
+  const fixture = deleteFixtureCreate();
+  const { writeFileSync } = fs;
+  fs.writeFileSync = (filePath, ...rest) => {
+    if (String(filePath).endsWith('a.md') && rest[0] === '# A\n\nafter\n') throw new Error('disk full');
+    return writeFileSync.call(fs, filePath, ...rest);
+  };
+  let result;
+  try {
+    result = await fixture.apply({ operation: fixture.deleteOperation, filePathDeleteList: ['~docs/pic.png', '~docs/other.png'] });
+  } finally {
+    fs.writeFileSync = writeFileSync;
+  }
+  assert.equal(result.status, 500);
+  assert.equal(JSON.parse(result.text).code, -1);
+  assert.equal(fixture.docRead(), fixture.textDoc);
+  assert.deepEqual(fixture.nameList(), ['a.md', 'link.png', 'note.txt', 'other.png', 'pic.png']);
+  fs.rmSync(fixture.dir, { recursive: true, force: true });
+});
+
+test('a stale hash and an operation other than one deleteLines refuse the cleanup untouched', async () => {
+  const fixture = deleteFixtureCreate();
+  const stale = await fixture.apply({ hashBase: 'stale', operation: fixture.deleteOperation, filePathDeleteList: ['~docs/pic.png'] });
+  assert.equal(stale.status, 409);
+  assert.equal(JSON.parse(stale.text).code, -2);
+  const replaced = await fixture.apply({ operation: { action: 'replaceLines', lineStart: 3, lineEnd: 7, text: 'x' }, filePathDeleteList: ['~docs/pic.png'] });
+  assert.equal(replaced.status, 400);
+  const listed = await fixture.apply({ operationList: [fixture.deleteOperation], filePathDeleteList: ['~docs/pic.png'] });
+  assert.equal(listed.status, 400);
+  const malformed = await fixture.apply({ operation: fixture.deleteOperation, filePathDeleteList: 'pic.png' });
+  assert.equal(malformed.status, 400);
+  assert.equal(fixture.docRead(), fixture.textDoc);
+  assert.deepEqual(fixture.nameList(), ['a.md', 'link.png', 'note.txt', 'other.png', 'pic.png']);
+  fs.rmSync(fixture.dir, { recursive: true, force: true });
+});
+
+test('an ordinary write never enumerates, stats or renames files', async () => {
+  const fixture = deleteFixtureCreate();
+  const result = await fixture.fsCount(() => fixture.apply({ operation: fixture.deleteOperation }));
+  assert.equal(result.status, 200);
+  assert.equal(fixture.docRead(), '# A\n\nafter\n');
+  assert.deepEqual(fixture.callCount, { fileEntryListGet: 1, lstat: 0, rename: 0 });
+  assert.ok(fs.existsSync(path.join(fixture.dir, 'docs', 'pic.png')));
+  fs.rmSync(fixture.dir, { recursive: true, force: true });
+});
+

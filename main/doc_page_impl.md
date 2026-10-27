@@ -96,7 +96,7 @@ Render components observe stores via context and submit change attempts through 
 
 ## The environment
 
-Much of the page depends on where it runs: a document can be edited, a file created, the asset api or the service backend reached only when a development server answers. One store answers all of these questions, `DocEnvStore`, so no store or component decides it from an endpoint, a build flag or `import.meta.env` of its own:
+Much of the page depends on where it runs: a document can be edited, a file created, the asset api reached only when a development server answers. One store answers all of these questions, `DocEnvStore`, so no store or component decides it from an endpoint, a build flag or `import.meta.env` of its own:
 
 ```text
 virtual module docEnv { kind }  +  the endpoints DocPageMdx is given
@@ -114,7 +114,7 @@ DocSourceStore.isWritable, DocEditStore.isAvailable, the doc page config layer, 
 DocAssetStore / DocServiceStore, the settings panel, registered components (config.env)
 ```
 
-A kind offers a set of capabilities; a capability that needs an api is on only when the api is configured too, and editing only once the edit api has answered that it writes (`init`, the one probe of the page). `vite` serving the page is `viteDevServer`; a built site, including `vite preview`, is `staticBuild`. The plugin exports the kind as `docEnv`; a host rendering `DocPageMdx` without it gets the kind inferred from the endpoints it passes. A new environment, say a page served by a backend of its own, is one more kind with its capabilities. Whether a service that is offered is up (the asset store answers, the service backend runs) is the state of that service, kept by its own store.
+A kind offers a set of capabilities; a capability that needs an api is on only when the api is configured too (`service` is offered by every kind: the service backend is a process of its own, so a build reaches it when given its address, [Reaching the backend](doc_page_impl_service.md#reaching-the-backend)), and editing only once the edit api has answered that it writes (`init`, the one probe of the page). `vite` serving the page is `viteDevServer`; a built site, including `vite preview`, is `staticBuild`. The plugin exports the kind as `docEnv`; a host rendering `DocPageMdx` without it gets the kind inferred from the endpoints it passes. A new environment, say a page served by a backend of its own, is one more kind with its capabilities. Whether a service that is offered is up (the asset store answers, the service backend runs) is the state of that service, kept by its own store.
 
 ## The workspace and the document entry
 

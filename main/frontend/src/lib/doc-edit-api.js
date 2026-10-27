@@ -35,10 +35,14 @@ export function docEditApiCreate(endpoint) {
     // applies one line operation (lib/doc-edit-block.js builds them) against
     // the version identified by hashBase; answers the new { text, hash }.
     // a list of operations built on the same text is applied together.
-    sourceApply(internalPath, hashBase, operation) {
+    // filePathDeleteList: source files the server deletes with the write (a
+    // block deletion with the files its component offered); sent only when
+    // nonempty, so every other write keeps its request as it was
+    sourceApply(internalPath, hashBase, operation, filePathDeleteList = []) {
       const body = Array.isArray(operation)
         ? { internalPath, hashBase, operationList: operation }
         : { internalPath, hashBase, operation };
+      if (Array.isArray(filePathDeleteList) && filePathDeleteList.length > 0) body.filePathDeleteList = filePathDeleteList;
       return requestSend('/source/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -13,6 +13,11 @@ export async function resolve(specifier, context, nextResolve) {
     // the diagram store of built-in/ reads React Flow's node changes; it is a
     // dependency of the frontend, not found from beside built-in/
     || specifier === '@xyflow/react'
+    // one mobx, one observer binding: a component of built-in/ rendered in a
+    // test must see the react of the frontend through mobx-react-lite, not
+    // another copy found above the package
+    || specifier === 'mobx'
+    || specifier === 'mobx-react-lite'
   ) {
     return nextResolve(specifier, { ...context, parentURL: reactParentURL });
   }

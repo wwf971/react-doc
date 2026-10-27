@@ -69,3 +69,14 @@ export function imageAssetDependencyListGet(data) {
 		return [];
 	}
 }
+
+export function imageDeleteFileListBuild(dependencyList) {
+	return dependencyList.map(({ path }) => ({
+		path,
+		reason: /\.(?:png|jpe?g|gif|webp|svg|bmp|avif|ico|tiff?)$/i.test(path) ? '' : 'Not a supported image file.',
+	}));
+}
+
+export function imageDeleteFileListGet(data) {
+	return imageDeleteFileListBuild(imageAssetDependencyListGet(data));
+}

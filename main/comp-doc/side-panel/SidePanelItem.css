@@ -393,3 +393,35 @@ body[data-side-panel-dragging] #nd-sidebar-mobile {
   gap: 0.125rem;
   padding-top: 0.125rem;
 }
+
+/* the chevron of a folder bound to a document (DocSidebarFolder): a target
+   of its own beside the label, which opens the document. it keeps the row
+   height (negative block margin) so nothing moves */
+.doc-sidebar-folder-toggle {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-block: -0.25rem;
+  margin-inline: auto -0.25rem;
+  border-radius: 0.3rem;
+  color: var(--color-fd-muted-foreground);
+  transition: background-color 0.12s;
+}
+
+.doc-sidebar-folder-toggle::before {
+  content: '';
+  position: absolute;
+  inset-block: 0.25rem;
+  inset-inline-start: -0.2rem;
+  width: 1px;
+  background: var(--color-fd-border);
+}
+
+.doc-sidebar-folder-toggle:hover {
+  background: color-mix(in srgb, var(--color-fd-foreground) 9%, transparent);
+  color: var(--color-fd-foreground);
+}

@@ -157,7 +157,22 @@ export type EditDeleteConfirm = {
   blockIndex: number;
   status: 'confirming' | 'submitting' | 'error';
   message: string;
+  // the files the component of the block offers to delete with it (compDefine
+  // deleteFileListGet; doc_page_impl_block_ops.md#deleting-blocks): present,
+  // possibly empty, only for a block of a component with that capability.
+  // fileList is read while isFileLoading; filePathDeleteList is the choice,
+  // every file unchosen at first; fileMessage says why the list could not be
+  // read (then the block can still be deleted, its files kept)
+  fileList?: EditDeleteFile[];
+  filePathDeleteList?: string[];
+  isFileLoading?: boolean;
+  fileMessage?: string;
 };
+
+// one file offered with a block deletion: its source path (the reference
+// as authored when it resolves to nothing), whether it can be chosen, and
+// why not
+export type EditDeleteFile = { path: string; isDeletable: boolean; reason: string };
 
 // one entry of the mode menu of a block: a view mode or an edit mode as the
 // component exposes it (comp-expose.js), plus whether it can be chosen now
@@ -641,14 +656,18 @@ export class DocEditStore {
   //                    the component state service layer re-keys the states
   //                    of the moved lines before the new text is compiled, so
   //                    the body rendered from it finds them under the new lines
+  //   filePathDeleteList  source files deleted on the server with the write
+  //                    (a block deletion with the files its component
+  //                    offered); empty for every other write
   private async operationApply(
     path: string,
     operation: any,
-    { messageFailure, onApplied, isHistoryRecorded = true, stateRemapList }: {
+    { messageFailure, onApplied, isHistoryRecorded = true, stateRemapList, filePathDeleteList = [] }: {
       messageFailure: string;
       onApplied?: () => void;
       isHistoryRecorded?: boolean;
       stateRemapList?: { lineFrom: number; lineTo: number | undefined }[];
+      filePathDeleteList?: string[];
     },
   ): Promise<EditResult> {
     if (!this.api) return { code: -1, message: 'The edit api is not available.' };
@@ -656,7 +675,7 @@ export class DocEditStore {
     if (source?.status !== 'done' || !source.hash) {
       return { code: -1, message: 'The document source is not loaded.' };
     }
-    const result = await this.api.sourceApply(path, source.hash, operation);
+    const result = await this.api.sourceApply(path, source.hash, operation, filePathDeleteList);
     if (result.code !== 0) {
       return { code: result.code, message: result.code === -2 ? messageConflict : result.message || messageFailure };
     }
@@ -1947,17 +1966,112 @@ export class DocEditStore {
 
   // ---------- deletion ----------
 
+  // opens the confirmation of a block deletion. for a block of a component
+  // that offers files with its deletion (compDefine deleteFileListGet) the
+  // confirmation also lists those files, read after it opens
+  // (deleteFileListLoad); nothing is chosen until the author chooses it
   async deleteConfirmSet(path: string, blockIndex: number): Promise<boolean> {
     if (this.deleteConfirm?.status === 'submitting') return false;
     const isLeft = await this.sessionLeaveForIndexAction(path);
     if (!isLeft) return false;
-    runInAction(() => {
+    const definition = this.blockDefinitionGet(path, blockIndex);
+    const isFileChoiceOffered = typeof definition?.deleteFileListGet === 'function';
+    const confirm = runInAction(() => {
       this.insertMenu = undefined;
       this.blockMoveClear();
       this.blockAssetMoveClear();
-      this.deleteConfirm = { path, blockIndex, status: 'confirming', message: '' };
+      this.deleteConfirm = {
+        path,
+        blockIndex,
+        status: 'confirming',
+        message: '',
+        ...(isFileChoiceOffered ? { fileList: [], filePathDeleteList: [], isFileLoading: true, fileMessage: '' } : {}),
+      };
+      return this.deleteConfirm!;
     });
+    if (isFileChoiceOffered) void this.deleteFileListLoad(confirm, definition);
     return true;
+  }
+
+  // reads the files the component offers for the confirmation: the block's
+  // data (the text of its asset version for a reference block) normalized as
+  // the component sees it, the candidates of deleteFileListGet resolved
+  // against the document and listed once each. a file cannot be chosen when
+  // the block's asset object is used by other blocks (they may read the
+  // file), when it is not a file of the collected source, or when the
+  // component says so. the result reaches the confirmation only while it
+  // is still the open one: a confirmation closed or replaced meanwhile is
+  // never filled
+  private async deleteFileListLoad(confirm: EditDeleteConfirm, definition: any): Promise<void> {
+    const { path, blockIndex } = confirm;
+    const isCurrent = () => this.deleteConfirm === confirm;
+    try {
+      const component = this.docEditByPath[path]?.model?.blockList[blockIndex]?.component;
+      if (!component) throw new Error('The block is not a component block.');
+      let raw = String(component.raw ?? '');
+      let lang = component.lang;
+      if (assetRefLangIs(component.lang)) {
+        const reference = assetRefParse(component.raw);
+        if (reference.message) throw new Error(reference.message);
+        if (!this.assetStore) throw new Error('The page has no asset service layer.');
+        await this.assetStore.refLoad(reference);
+        const state = this.assetStore.refQuery(reference);
+        if (state.status !== 'done' || typeof state.version?.text !== 'string') {
+          throw new Error(state.message || 'The asset data of the block is not loaded.');
+        }
+        raw = state.version.text;
+        // the data of an asset object is yaml, the format the edit layer
+        // writes a block's data into the store as
+        lang = 'yaml';
+      }
+      const { data } = compInputNormalize(definition, { raw, lang, propsAuthored: component.props ?? {} });
+      const candidateList: any[] = definition.deleteFileListGet(data) ?? [];
+      const assetObject = this.blockAssetObjectGet(path, blockIndex);
+      const fileByPath = new Map<string, EditDeleteFile>();
+      for (const candidate of candidateList) {
+        const reference = String(candidate?.path ?? '').trim();
+        if (!reference) continue;
+        const entry = this.sourceStore.fileResolve(reference, path);
+        const filePath = entry?.internalPath ?? reference;
+        if (fileByPath.has(filePath)) continue;
+        const reason = assetObject && assetObject.usageCountOther > 0
+          ? 'other blocks use the asset object of this block and may show this file'
+          : !entry
+            ? 'not a file of the collected source'
+            : String(candidate?.reason ?? '');
+        fileByPath.set(filePath, { path: filePath, isDeletable: reason === '', reason });
+      }
+      runInAction(() => {
+        if (isCurrent()) confirm.fileList = [...fileByPath.values()];
+      });
+    } catch (error: any) {
+      runInAction(() => {
+        if (isCurrent()) confirm.fileMessage = `The files of the block could not be listed: ${String(error?.message ?? error)}`;
+      });
+    } finally {
+      runInAction(() => {
+        if (isCurrent()) confirm.isFileLoading = false;
+      });
+    }
+  }
+
+  // chooses or unchooses one offered file; only a file that can be deleted,
+  // and not while the list is read or the deletion runs
+  deleteFileSelectedSet(filePath: string, isSelected: boolean) {
+    const confirm = this.deleteConfirm;
+    if (!confirm?.fileList || confirm.status === 'submitting' || confirm.isFileLoading) return;
+    const file = confirm.fileList.find((item) => item.path === filePath);
+    if (!file?.isDeletable) return;
+    const pathSet = new Set(confirm.filePathDeleteList ?? []);
+    if (isSelected) pathSet.add(filePath);
+    else pathSet.delete(filePath);
+    confirm.filePathDeleteList = [...pathSet];
+  }
+
+  deleteFileSelectionClear() {
+    const confirm = this.deleteConfirm;
+    if (!confirm?.fileList || confirm.status === 'submitting') return;
+    confirm.filePathDeleteList = [];
   }
 
   deleteConfirmClear() {
@@ -1995,10 +2109,15 @@ export class DocEditStore {
   // written last, the write being the step that makes the deletion happen:
   // when it fails, the mark is taken back and both are as they were. a
   // block deleted without its object leaves the object to the store, where
-  // an object no block references any more shows as an orphan.
+  // an object no block references any more shows as an orphan. the files
+  // chosen in the confirmation (filePathDeleteList) go with the same write:
+  // the server moves them aside and writes the document in one request
+  // (doc_page_impl_block_ops.md#deleting-blocks); the choice is checked
+  // against the listed files once more here, so only a file the component
+  // offered and that can be deleted is ever named
   async blockDelete(path: string, blockIndex: number, options: { isAssetDeleted?: boolean } = {}): Promise<boolean> {
     const confirm = this.deleteConfirm;
-    if (!confirm || confirm.path !== path || confirm.blockIndex !== blockIndex || confirm.status === 'submitting') {
+    if (!confirm || confirm.path !== path || confirm.blockIndex !== blockIndex || confirm.status === 'submitting' || confirm.isFileLoading) {
       return false;
     }
     const failSet = (message: string) => {
@@ -2007,6 +2126,14 @@ export class DocEditStore {
         confirm.message = message;
       });
     };
+    const filePathDeleteList = [...(confirm.filePathDeleteList ?? [])];
+    const isSelectionValid = filePathDeleteList.every((filePath) => (
+      confirm.fileList?.some((file) => file.path === filePath && file.isDeletable)
+    ));
+    if (!isSelectionValid) {
+      failSet('A chosen file is not one the block offers for deletion; the block was kept.');
+      return false;
+    }
     runInAction(() => {
       confirm.status = 'submitting';
       confirm.message = '';
@@ -2028,7 +2155,7 @@ export class DocEditStore {
     }
     const result = await this.blockDeleteApply(path, blockIndex, () => {
       if (this.deleteConfirm === confirm) this.deleteConfirm = undefined;
-    });
+    }, filePathDeleteList);
     if (result.code !== 0) {
       if (isAssetMarked) await this.assetStore!.objectRestore(assetObject!.store, assetObject!.objectId);
       failSet(result.message);
@@ -2111,8 +2238,8 @@ export class DocEditStore {
   }
 
   // the delete operation of one block, shared by the confirmed deletion and
-  // by canceling a created block
-  private blockDeleteApply(path: string, blockIndex: number, onApplied: () => void): Promise<EditResult> {
+  // by canceling a created block (which names no files)
+  private blockDeleteApply(path: string, blockIndex: number, onApplied: () => void, filePathDeleteList: string[] = []): Promise<EditResult> {
     const model = this.docEditByPath[path]?.model;
     if (!model || !model.blockList[blockIndex]) {
       return Promise.resolve({ code: -1, message: 'The block no longer exists.' });
@@ -2120,6 +2247,7 @@ export class DocEditStore {
     return this.operationApply(path, blockDeleteOperationBuild(model, blockIndex), {
       messageFailure: 'The block was not deleted.',
       onApplied,
+      filePathDeleteList,
     });
   }
 }

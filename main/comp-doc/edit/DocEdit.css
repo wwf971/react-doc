@@ -448,6 +448,118 @@
   cursor: default;
 }
 
+/* ---------- a confirmation with file choices ---------- */
+
+/* a deletion that offers the files of the block (FileDeleteChoices) needs
+   room for paths and reasons: it floats below the floating area, over the
+   top of the block, like the insert menu, as wide as a path needs within
+   the window. the other confirmations keep their one-row look. */
+.doc-edit-confirm:has(.doc-edit-file-delete) {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 5;
+  box-sizing: border-box;
+  width: min(28rem, calc(100vw - 48px));
+  max-width: 100%;
+  margin-top: 0.2rem;
+  padding: 8px;
+  cursor: auto;
+}
+
+/* a wrapped path or reason must not overlap the next row */
+.doc-edit-confirm:has(.doc-edit-file-delete) button {
+  height: auto;
+  min-height: 1.75rem;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+.doc-edit-file-delete {
+  display: flex;
+  flex-basis: 100%;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.doc-edit-file-delete-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  max-height: 12rem;
+  overflow: auto;
+}
+
+/* one offered file: a checkbox row that is a button, so it reads as a
+   control and takes Space / Enter; the reason, when there is one, below
+   the path */
+.doc-edit-file-delete .doc-edit-file-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 4px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--color-fd-foreground);
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.doc-edit-file-delete .doc-edit-file-option:hover:not(:disabled),
+.doc-edit-file-delete .doc-edit-file-option:focus-visible:not(:disabled) {
+  background: var(--color-fd-accent);
+  outline: none;
+}
+
+.doc-edit-file-option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.doc-edit-file-option-reason {
+  display: block;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.66rem;
+}
+
+.doc-edit-file-check {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border: 1px solid currentcolor;
+  border-radius: 2px;
+}
+
+.doc-edit-file-option[aria-checked='true'] .doc-edit-file-check {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-edit-file-delete-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.doc-edit-file-delete-note {
+  flex: 1 1 12rem;
+  min-width: 0;
+  color: var(--color-fd-muted-foreground);
+  line-height: 1.3;
+  white-space: normal;
+}
+
 /* the empty-document notice carries the insert button; its toolbar is
    always visible and in the flow (there is no block to float over) */
 .doc-edit-empty {

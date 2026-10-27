@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
@@ -23,6 +24,13 @@ import { workspaceEditBuild } from './doc-workspace-edit.ts';
 //        body { internalPath, hashBase, operation }   operation: doc-edit-lines.ts
 //          or { internalPath, hashBase, operationList }  several operations built on
 //                                         the same text, applied together (moving blocks)
+//        optional filePathDeleteList: [source path]   collected files deleted with the
+//                                         write (a block deleted with the files its
+//                                         component offered; doc_page_impl_block_ops.md
+//                                         #deleting-blocks). allowed with one deleteLines
+//                                         operation only; every file is moved to a
+//                                         recoverable backup beside it before the
+//                                         document is written (sourceFileDeleteApply)
 //   POST {endpoint}/side-panel/text        -> { code: 0, data: { file, fieldName, text } }
 //        body { file, nodePath, language, text, textBase }   doc-side-panel-text.ts
 //   POST {endpoint}/side-panel/move        -> { code: 0, data: { fileChangeList } }
@@ -162,6 +170,15 @@ async function routeHandle(
       jsonSend(res, 400, { code: -1, data: null, message: 'request needs hashBase and a valid line operation (or a list of them)' });
       return;
     }
+    const filePathDeleteList = body?.filePathDeleteList ?? [];
+    if (!Array.isArray(filePathDeleteList) || !filePathDeleteList.every((item: unknown) => typeof item === 'string')) {
+      jsonSend(res, 400, { code: -1, data: null, message: 'filePathDeleteList must be a list of source paths' });
+      return;
+    }
+    if (filePathDeleteList.length > 0 && (operationList || body.operation.action !== 'deleteLines')) {
+      jsonSend(res, 400, { code: -1, data: null, message: 'files are deleted with one deleteLines operation only (a block deletion)' });
+      return;
+    }
     const textCurrent = fs.readFileSync(entry.absPath, 'utf-8');
     const hashCurrent = textHashGet(textCurrent);
     if (hashCurrent !== body.hashBase) {
@@ -181,7 +198,17 @@ async function routeHandle(
       jsonSend(res, 400, { code: -1, data: null, message: String(error?.message ?? error) });
       return;
     }
-    fs.writeFileSync(entry.absPath, textNext, 'utf-8');
+    if (filePathDeleteList.length === 0) {
+      fs.writeFileSync(entry.absPath, textNext, 'utf-8');
+    } else {
+      try {
+        sourceFileDeleteApply(entry, textCurrent, textNext, filePathDeleteList, fileEntryListGet());
+      } catch (error: any) {
+        if (!(error instanceof SourceFileDeleteRequestError)) throw error;
+        jsonSend(res, 400, { code: -1, data: null, message: error.message });
+        return;
+      }
+    }
     jsonSend(res, 200, { code: 0, data: sourceDataBuild(entry, textNext), message: '' });
     return;
   }
@@ -450,6 +477,75 @@ function sidePanelFilePathGet(sidePanel: DocEditSidePanelOptions, file: string):
   const filePath = path.resolve(sidePanel.configDir, file);
   const isFileLoaded = sidePanel.fileListGet().some((loaded) => path.resolve(loaded) === filePath);
   return isFileLoaded ? filePath : undefined;
+}
+
+// a request that names files which cannot be deleted: answered with 400
+// before anything is touched
+class SourceFileDeleteRequestError extends Error {}
+
+// the write of a block deletion together with the files chosen for it
+// (doc_page_impl_block_ops.md#deleting-blocks): every path is resolved
+// through the collected source first (an unknown path, a path that is not
+// a regular file (a symlink is not), or the document itself refuses the
+// whole request), then each file is renamed into a backup beside it,
+// `.{name}.{uuid}.deleted`, and the document is written last. a failure
+// caught on the way puts the renamed files back in reverse order and the
+// document back to its previous text, then rethrows for the middleware's
+// error response. this is best effort for caught errors, not a transaction:
+// a crash in the middle, or a failure of the restoring itself, leaves what
+// was done. the server does not know which block the files belonged to:
+// the page chooses among what the component offered, and the server checks
+// that the files are collected regular files
+export function sourceFileDeleteApply(
+  entry: DocEditFileEntry,
+  textCurrent: string,
+  textNext: string,
+  filePathDeleteList: string[],
+  fileEntryList: DocEditFileEntry[],
+): { file: string; backup: string }[] {
+  const fileList: DocEditFileEntry[] = [];
+  const absPathSeen = new Set<string>();
+  for (const internalPath of new Set(filePathDeleteList)) {
+    const fileEntry = fileEntryList.find((item) => item.internalPath === internalPath);
+    if (!fileEntry) throw new SourceFileDeleteRequestError(`not a file of the collected source: ${internalPath}`);
+    if (path.resolve(fileEntry.absPath) === path.resolve(entry.absPath)) {
+      throw new SourceFileDeleteRequestError(`the document being edited cannot be deleted with its block: ${internalPath}`);
+    }
+    let isFile = false;
+    try {
+      isFile = fs.lstatSync(fileEntry.absPath).isFile();
+    } catch {
+      isFile = false;
+    }
+    if (!isFile) throw new SourceFileDeleteRequestError(`not a regular file: ${internalPath}`);
+    if (absPathSeen.has(path.resolve(fileEntry.absPath))) continue;
+    absPathSeen.add(path.resolve(fileEntry.absPath));
+    fileList.push(fileEntry);
+  }
+  const movedList: { file: string; backup: string }[] = [];
+  try {
+    for (const fileEntry of fileList) {
+      const backup = path.join(path.dirname(fileEntry.absPath), `.${path.basename(fileEntry.absPath)}.${randomUUID()}.deleted`);
+      fs.renameSync(fileEntry.absPath, backup);
+      movedList.push({ file: fileEntry.absPath, backup });
+    }
+    fs.writeFileSync(entry.absPath, textNext, 'utf-8');
+  } catch (error) {
+    for (const moved of [...movedList].reverse()) {
+      try {
+        fs.renameSync(moved.backup, moved.file);
+      } catch {
+        // the file stays as its backup; nothing more can be done here
+      }
+    }
+    try {
+      if (fs.readFileSync(entry.absPath, 'utf-8') !== textCurrent) fs.writeFileSync(entry.absPath, textCurrent, 'utf-8');
+    } catch {
+      // the document could not be read or written back
+    }
+    throw error;
+  }
+  return movedList;
 }
 
 function editableEntryGet(entryList: DocEditFileEntry[], internalPath: string): DocEditFileEntry | undefined {

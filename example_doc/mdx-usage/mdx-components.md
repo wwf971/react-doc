@@ -138,6 +138,16 @@ subtopics:
           en: Visual editing
           jp: 視覚的な編集
         target: ~example/mdx-usage/comp-diagram-er.md#diagram-er-edit
+      - id: powerplatform-flow
+        title:
+          en: Power Automate flow design
+          jp: Power Automate フロー設計
+        target: ~example/mdx-usage/comp-powerplatform.md#powerplatform-flow
+      - id: powerplatform-business-rule
+        title:
+          en: Business rule design
+          jp: ビジネスルール設計
+        target: ~example/mdx-usage/comp-powerplatform.md#powerplatform-business-rule
   - id: spreadsheets
     title:
       en: Spreadsheets
@@ -168,6 +178,11 @@ subtopics:
           en: Switchable views
           jp: 表示の切り替え
         target: ~example/mdx-usage/comp-hierarchy.md#switch-view
+      - id: test-case-table
+        title:
+          en: Test case table
+          jp: 試験仕様書の表
+        target: ~example/mdx-usage/comp-test-case-table.md
   - id: files
     title:
       en: Files
@@ -263,12 +278,13 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`DiagramER` draws Dataverse tables, global choices, processing steps, and registered components as nodes on a canvas, joined by connections between named handles. `DiagramDataverseEntity` shows one table card in the flow of the document. Both are edited visually in place, on inline YAML or on data in the asset service layer.
+`DiagramER` draws Dataverse tables, global choices, processing steps, and registered components as nodes on a canvas, joined by connections between named handles. `DiagramDataverseEntity` shows one table card in the flow of the document. Both are edited visually in place, on inline YAML or on data in the asset service layer. `DiagramPowerAutomate` and `DiagramBusinessRule` are the same diagram with cards for the design of a Power Automate flow and of a Dataverse business rule.
 
-`DiagramER` は、Dataverse のテーブル、グローバル選択肢、処理ステップ、登録済みコンポーネントをキャンバス上のノードとして描き、名前付きハンドル間の接続線で結びます。`DiagramDataverseEntity` はテーブルカードを一枚、文書の流れの中に表示します。どちらも、インラインの YAML でもアセットサービス層のデータでも、その場で視覚的に編集できます。
+`DiagramER` は、Dataverse のテーブル、グローバル選択肢、処理ステップ、登録済みコンポーネントをキャンバス上のノードとして描き、名前付きハンドル間の接続線で結びます。`DiagramDataverseEntity` はテーブルカードを一枚、文書の流れの中に表示します。どちらも、インラインの YAML でもアセットサービス層のデータでも、その場で視覚的に編集できます。`DiagramPowerAutomate` と `DiagramBusinessRule` は同じ図で、Power Automate のフローと Dataverse のビジネスルールの設計をカードとして描きます。
 ```
 
 - [Data diagrams](comp-diagram-er.md)
+- [Power Platform design diagrams](comp-powerplatform.md)
 
 <!--renderComp=MultiLang-->
 ## {en: "Spreadsheets", jp: "スプレッドシート"}
@@ -287,12 +303,13 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`TableHierarchy` and `ListHierarchy` show rows grouped at any depth, with registered components for cells and rows. `SwitchView` shows the same data through several of them, chosen by tabs.
+`TableHierarchy` and `ListHierarchy` show rows grouped at any depth, with registered components for cells and rows. `SwitchView` shows the same data through several of them, chosen by tabs. `TestCaseTable` is a test specification on the hierarchy table: a confirmation column per tester, and results recorded as a history on the block's asset object.
 
-`TableHierarchy` と `ListHierarchy` は、任意の深さでグループ化した行を、セルや行に登録済みコンポーネントを使って表示します。`SwitchView` は、同じデータをそれらの複数の表示でタブ切り替えします。
+`TableHierarchy` と `ListHierarchy` は、任意の深さでグループ化した行を、セルや行に登録済みコンポーネントを使って表示します。`SwitchView` は、同じデータをそれらの複数の表示でタブ切り替えします。`TestCaseTable` は階層テーブルによる試験仕様書で、確認者ごとの確認列を持ち、結果はブロックのアセットオブジェクトに履歴として記録します。
 ```
 
 - [Hierarchies and switchable views](comp-hierarchy.md)
+- [Test case table](comp-test-case-table.md)
 
 <!--renderComp=MultiLang-->
 ## {en: "Files", jp: "ファイル"}

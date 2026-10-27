@@ -92,7 +92,7 @@ export type AssetUsageChange =
 
 // the events of the asset domain (doc_page_impl_event.md): what a component
 // whose data is an asset asks of the store
-export const assetEventTypeList = ['assetRefreshRequest'];
+export const assetEventTypeList = ['assetRefreshRequest', 'assetTestCaseResultRequest'];
 
 type DocEvent = { type: string; data: Record<string, any>; source: Record<string, any> };
 
@@ -1013,14 +1013,19 @@ export class DocAssetStore {
 
   // ---------- the events of the asset domain ----------
 
+  async eventHandle(event: DocEvent): Promise<AssetResult | undefined> {
+    if (event.type === 'assetRefreshRequest') return this.refreshHandle(event);
+    if (event.type === 'assetTestCaseResultRequest') return this.testCaseResultHandle(event);
+    return undefined;
+  }
+
   // assetRefreshRequest: the object the component's data comes from
   // (event.source.asset) is read again from the store, so a change written
   // by another block or outside the page is seen now; the component
   // re-renders with it like every block reading the object. the answer says
   // whether the data the component reads changed: { versionIdHead, versionId,
   // hash, isChanged }
-  async eventHandle(event: DocEvent): Promise<AssetResult | undefined> {
-    if (event.type !== 'assetRefreshRequest') return undefined;
+  private async refreshHandle(event: DocEvent): Promise<AssetResult> {
     const asset = event.source?.asset;
     if (!asset?.isFromAsset) {
       return { code: -1, message: 'assetRefreshRequest comes from a component whose data is not an asset (config.assetInfo.isFromAsset)' };
@@ -1036,6 +1041,48 @@ export class DocAssetStore {
       data: { versionIdHead: object.versionIdHead, versionId, hash: version?.hash ?? '', isChanged: versionId !== asset.versionId || version?.hash !== asset.hash },
       message: '',
     };
+  }
+
+  // assetTestCaseResultRequest { caseId, testerId, result, operator, evidence?,
+  // timeTimezone, hashBase }: one result appended to the history of the
+  // TestCaseTable object the component reads (event.source.asset), by the
+  // dedicated route of the api (comp-mdx/test-case-table/). the write is a
+  // head update: hashBase is the hash the component read when the cell was
+  // opened, kept on purpose, so a result recorded meanwhile by somebody else
+  // is a conflict (-2) the author sees before recording over it; the object
+  // is then read again. the document is not written: the data belongs to
+  // the object. a pinned reference cannot record (a write goes to the head).
+  // the answer is the api's { object, version }, the version's hash being
+  // what the next record of the same cell is based on
+  private async testCaseResultHandle(event: DocEvent): Promise<AssetResult> {
+    const asset = event.source?.asset;
+    if (!asset?.isFromAsset) {
+      return { code: -1, message: 'assetTestCaseResultRequest comes from a component whose data is not an asset (config.assetInfo.isFromAsset)' };
+    }
+    if (asset.versionIdRef !== 'head') {
+      return { code: -1, message: `the block reads version ${asset.versionIdRef} of its asset, not the head; a result is recorded at the head` };
+    }
+    if (!this.backend) return { code: -1, message: this.unavailableReason };
+    const data = event.data ?? {};
+    const result = await this.writeApply(
+      asset.store,
+      () => this.backend!.testCaseResultSet({
+        store: asset.store,
+        objectId: asset.objectId,
+        hashBase: String(data.hashBase ?? asset.hash ?? ''),
+        docPath: String(event.source.sourcePath ?? ''),
+        caseId: data.caseId,
+        testerId: data.testerId,
+        operator: data.operator,
+        result: data.result,
+        timeTimezone: data.timeTimezone,
+        evidence: data.evidence,
+        versionId: asset.versionIdRef,
+      }),
+      'The test result was not recorded.',
+    );
+    if (result.code === -2) void this.objectReload(asset.store, asset.objectId);
+    return result;
   }
 
   // ---------- the asset panels ----------

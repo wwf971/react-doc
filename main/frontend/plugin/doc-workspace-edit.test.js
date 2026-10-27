@@ -81,3 +81,21 @@ test('yamlMapKeyRemoveBuild refuses the only key of a mapping', () => {
   const result = yamlMapKeyRemoveBuild(textTwo, parseDocument(textTwo), ['a', 'b']);
   assert.equal(lineOperationListApply(textTwo, result.data.operationList), 'a:\n  c: 2\n');
 });
+
+test('the root row of a doc page: false is written as a yaml boolean, true removes the key, comments stay', () => {
+  const textHidden = edit({ action: 'itemRootVisibleSet', index: 0, isRootVisible: false });
+  assert.match(textHidden, /- alias: guide\n {4}dir: \.\/guide {7}# its folder\n {4}isRootVisible: false\n\n {2}- alias: api/);
+  assert.equal(parseDocument(textHidden).toJS().docPageList[0].isRootVisible, false);
+  // true removes the key; already absent: nothing changes
+  const textShown = edit({ action: 'itemRootVisibleSet', index: 0, isRootVisible: true }, textHidden);
+  assert.equal(textShown, source);
+  assert.equal(edit({ action: 'itemRootVisibleSet', index: 1, isRootVisible: true }), source);
+  // the key stays with its item when the item moves
+  const textMoved = edit({ action: 'itemMove', index: 0, indexTo: 1 }, textHidden);
+  assert.deepEqual(parseDocument(textMoved).toJS().docPageList.map((item) => item.isRootVisible), [undefined, false]);
+  // a new item may carry it
+  assert.match(edit({ action: 'itemAdd', item: { dir: '../extra', isRootVisible: false } }), /- dir: \.\.\/extra\n {4}isRootVisible: false\n/);
+  // never the text "false"
+  assert.equal(workspaceEditBuild(source, { action: 'itemRootVisibleSet', index: 0, isRootVisible: 'false' }).code, -1);
+  assert.equal(workspaceEditBuild(source, { action: 'itemRootVisibleSet', index: 7, isRootVisible: false }).code, -1);
+});

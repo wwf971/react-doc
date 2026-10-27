@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { DocSidePanelSection } from './DocSidePanelSection.jsx';
+import './SidePanelItem.css';
 import {
   ChevronDown,
   Link,
@@ -30,8 +31,23 @@ const classNameLink = `${classNameItem} data-[active=true]:bg-fd-primary/10 data
 // starts from it; a folder the store opens (the new parent of a moved item,
 // a folder held under a dragged item) opens, as fumadocs opens a folder
 // whose defaultOpen turns true.
+//
+// a folder bound to a document draws its chevron as a target of its own,
+// split from the label by a faint line (doc-sidebar-folder-toggle): the
+// label opens the document, the chevron only folds. a folder without a
+// document keeps the plain chevron of fumadocs, its whole row folds.
+//
+// a folder marked isSidebarRootHidden (the sole wrapper item of a doc page
+// mounted with isRootVisible: false, plugin/doc-sidebar-effective.ts) is
+// drawn without its row: its children come as they are, at the depth the
+// folder has, as if written at the top of the section. the folder stays in
+// the tree (its item, its route, its part), it only has no row to click:
+// its remembered open state is not read, so it never hides its children;
+// the section above still folds them, and a child folder keeps its own row
+// and chevron.
 export const DocSidebarFolder = observer(function DocSidebarFolder({ item, children }) {
   if (item.docPageSection) return <DocSidePanelSection item={item}>{children}</DocSidePanelSection>;
+  if (item.isSidebarRootHidden) return <div className="contents" data-side-panel-root-hidden={item.$id}>{children}</div>;
   return <DocSidebarFolderTree item={item}>{children}</DocSidebarFolderTree>;
 });
 
@@ -98,10 +114,15 @@ function DocSidebarFolderLink({ item, isActive }) {
       {item.icon}
       {item.name}
       {folder.collapsible && (
-        <ChevronDown
+        <span
           data-icon
-          className={`ms-auto transition-transform${folder.open ? '' : ' -rotate-90 rtl:rotate-90'}`}
-        />
+          className="doc-sidebar-folder-toggle"
+          title={folder.open ? 'Collapse' : 'Expand'}
+        >
+          <ChevronDown
+            className={`transition-transform${folder.open ? '' : ' -rotate-90 rtl:rotate-90'}`}
+          />
+        </span>
       )}
     </Link>
   );

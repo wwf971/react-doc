@@ -2,6 +2,52 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DataverseEditStore } from './DataverseEditStore.js';
 import { DiagramERStore, diagramViewStateGet } from './DiagramERStore.js';
+import { powerAutomateSourceDefaultCreate } from './PowerAutomateNodeSource.js';
+import { businessRuleSourceDefaultCreate } from './BusinessRuleNodeSource.js';
+
+test('resource starters edit fields and properties, restore cells, and reject invalid drafts', () => {
+	for (const source of [powerAutomateSourceDefaultCreate(), businessRuleSourceDefaultCreate()]) {
+		const store = new DataverseEditStore('# Keep this comment\n' + source.raw);
+		const node = store.nodes[0];
+		store.focusSet(node.id);
+		assert.equal(store.rowFocused, undefined);
+		assert.equal(store.propertyAdd(node.id), true);
+		const row = store.rowsGet(store.nodeFocused).at(-1);
+		store.cellStart(node.id, row.id, 'value');
+		assert.equal(store.fieldSet(node.id, row.id, 'value', 'Configured'), true);
+		store.cellCancel();
+		assert.equal(store.rowsGet(store.nodeFocused).at(-1).value, '');
+		assert.equal(store.fieldSet(node.id, null, 'kind', 'invalid'), false);
+		assert.match(store.message, /unsupported value/);
+		assert.equal(store.propertyRemove(node.id, row.id), true);
+		assert.equal(store.isDirty, false);
+		assert.match(store.rawDraft, /^# Keep this comment/);
+	}
+});
+
+test('resource graph commands preserve identities and prevent dangling connections', () => {
+	const store = new DataverseEditStore(powerAutomateSourceDefaultCreate().raw);
+	assert.equal(store.nodeRemove('trigger'), false);
+	assert.match(store.message, /connections first/);
+	assert.equal(store.connectionSet('yes', 'label', 'Approved path'), true);
+	assert.equal(store.connections.find(item => item.id === 'yes').label.text, 'Approved path');
+	assert.equal(store.connectionSet('yes', 'target', { nodeId: 'missing', handleId: 'in' }), false);
+	assert.equal(store.nodeAdd('business-rule'), true);
+	assert.equal(store.nodeAdd('power-automate'), true);
+	assert.equal(store.connectionAdd(), true);
+	const connection = store.connections.at(-1);
+	assert.equal(store.connectionSet(connection.id, 'target', { nodeId: 'business-rule-1', handleId: 'in' }), true);
+	assert.equal(store.nodeRemove('business-rule-1'), false);
+	assert.equal(store.connectionRemove(connection.id), true);
+	assert.equal(store.nodeRemove('business-rule-1'), true);
+	assert.equal(store.propertyRemove('trigger', 'filter'), true);
+	store.handleModeSet('trigger', 'table', 'right');
+	const handle = store.nodes[0].handles.find(item => item.anchor.target === 'property/table');
+	assert.equal(store.connectionSet('start', 'source', { nodeId: 'trigger', handleId: handle.id }), true);
+	assert.equal(store.propertyRemove('trigger', 'table'), false);
+	assert.match(store.message, /connections first/);
+	assert.equal(store.report.saveTarget, 'asset');
+});
 
 function sourceCreate() {
 	return JSON.stringify({ version: 1, nodes: [

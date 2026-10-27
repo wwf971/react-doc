@@ -29,7 +29,7 @@ main/config*.yaml.bak
 
 
 # the state the service runtime kernel keeps beside a backend config file
-update-*.md 
+update-*
 # (doc_page_impl_service.md#the-service-runtime-kernel)
 **/.doc-page/service-kernel.yaml
 

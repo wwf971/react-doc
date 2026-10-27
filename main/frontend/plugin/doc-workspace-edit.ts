@@ -21,7 +21,10 @@ import {
 //   { action: 'itemPathSet', index, kind: 'dir' | 'file', value }
 //                                   the folder or the entry file of the item;
 //                                   the other of the two keys is removed
-//   { action: 'itemAdd', item: { alias?, dir | file, sidePanel? } }   at the end
+//   { action: 'itemRootVisibleSet', index, isRootVisible }
+//                                   a boolean: false writes "isRootVisible: false"
+//                                   (doc-sidebar-effective.ts), true removes the key
+//   { action: 'itemAdd', item: { alias?, dir | file, sidePanel?, isRootVisible? } }   at the end
 //   { action: 'itemRemove', index } the last item is never removed
 //   { action: 'itemMove', index, indexTo }   indexTo: its place afterwards
 //   { action: 'titleSet', value }   the page title of the workspace; '' removes it
@@ -29,7 +32,8 @@ import {
 export type WorkspaceEditRequest =
   | { action: 'itemFieldSet'; index: number; field: 'alias' | 'sidePanel'; value: string }
   | { action: 'itemPathSet'; index: number; kind: 'dir' | 'file'; value: string }
-  | { action: 'itemAdd'; item: { alias?: string; dir?: string; file?: string; sidePanel?: string } }
+  | { action: 'itemRootVisibleSet'; index: number; isRootVisible: boolean }
+  | { action: 'itemAdd'; item: { alias?: string; dir?: string; file?: string; sidePanel?: string; isRootVisible?: boolean } }
   | { action: 'itemRemove'; index: number }
   | { action: 'itemMove'; index: number; indexTo: number }
   | { action: 'titleSet'; value: string };
@@ -81,6 +85,17 @@ export function workspaceEditBuild(source: string, request: WorkspaceEditRequest
         operationList.push(...removal.data.operationList);
       }
       result = { code: 0, data: { operationList }, message: '' };
+    }
+  } else if (request.action === 'itemRootVisibleSet') {
+    if (!indexCheck(request.index)) return fail(`the workspace has no doc page ${request.index}`);
+    // a yaml boolean is written, never the text "false": the loader refuses that
+    if (typeof request.isRootVisible !== 'boolean') return fail('"isRootVisible" must be true or false');
+    const keyPath = [LIST_KEY, request.index, 'isRootVisible'];
+    if (request.isRootVisible) {
+      result = document.hasIn(keyPath) ? yamlMapKeyRemoveBuild(source, document, keyPath) : { code: 0, data: { operationList: [] }, message: '' };
+    } else {
+      const set = yamlValueSetOperationBuild(source, keyPath, 'false');
+      result = set.code === 0 ? { code: 0, data: { operationList: [set.data.operation] }, message: '' } : fail(set.message);
     }
   } else if (request.action === 'itemAdd') {
     const lineList = itemLineListBuild(request.item);
@@ -146,5 +161,6 @@ function itemLineListBuild(item: any): string[] | string {
   if (alias) lineList.push(`alias: ${yamlScalarTextBuild(alias)}`);
   lineList.push(dir ? `dir: ${yamlScalarTextBuild(dir)}` : `file: ${yamlScalarTextBuild(file)}`);
   if (sidePanel) lineList.push(`sidePanel: ${yamlScalarTextBuild(sidePanel)}`);
+  if (item?.isRootVisible === false) lineList.push('isRootVisible: false');
   return lineList.map((line, index) => (index === 0 ? `- ${line}` : `  ${line}`));
 }

@@ -10,7 +10,12 @@ import { BlockSimple } from '../../../built-in/comp-mdx/block/block-simple/Block
 import { DiagramMermaid } from '../../../built-in/comp-mdx/diagram/diagram-mermaid/DiagramMermaid.jsx';
 import { DiagramText } from '../../../built-in/comp-mdx/diagram/diagram-ascii/DiagramText.jsx';
 import { DiagramER } from '../../../built-in/comp-mdx/diagram/diagram-er/DiagramER.jsx';
-import { diagramDataverseEntityExpose, diagramERExpose } from '../../../built-in/comp-mdx/diagram/diagram-er/diagram-er-expose.js';
+import {
+  diagramBusinessRuleExpose,
+  diagramDataverseEntityExpose,
+  diagramERExpose,
+  diagramPowerAutomateExpose,
+} from '../../../built-in/comp-mdx/diagram/diagram-er/diagram-er-expose.js';
 import { DiagramDataverseEntity } from '../../../built-in/comp-mdx/diagram/diagram-db-tabe/DiagramDataverseEntity.jsx';
 import { ExcelUniver } from '../../../built-in/comp-mdx/media/excel-univer/ExcelUniver.jsx';
 import { excelUniverExpose } from '../../../built-in/comp-mdx/media/excel-univer/excel-univer-expose.js';
@@ -20,10 +25,10 @@ import { FileIcon as FileDownloadIcon } from '../../../built-in/comp-mdx/media/f
 import { FileTree } from '../../../built-in/comp-mdx/hierarchy/file-tree/FileTree.jsx';
 import { Image } from '../../../built-in/comp-mdx/media/image/image/Image.jsx';
 import { imageExpose } from '../../../built-in/comp-mdx/media/image/image/image-expose.js';
-import { imageAssetDependencyListGet } from '../../../built-in/comp-mdx/media/image/image/image-paste.js';
+import { imageAssetDependencyListGet, imageDeleteFileListGet } from '../../../built-in/comp-mdx/media/image/image/image-paste.js';
 import { ImageGrid } from '../../../built-in/comp-mdx/media/image/image-grid/ImageGrid.jsx';
 import { imageGridExpose } from '../../../built-in/comp-mdx/media/image/image-grid/image-grid-expose.js';
-import { imageGridAssetDependencyListGet } from '../../../built-in/comp-mdx/media/image/image-grid/ImageGridStore.js';
+import { imageGridAssetDependencyListGet, imageGridDeleteFileListGet } from '../../../built-in/comp-mdx/media/image/image-grid/ImageGridStore.js';
 import { Index } from '../../../built-in/comp-mdx/index/Index.jsx';
 import { ListHierarchy } from '../../../built-in/comp-mdx/hierarchy/list-hierarchy/ListHierarchy.jsx';
 import { ListSupportedToolsRow } from '../../../built-in/comp-mdx/hierarchy/list-hierarchy/ListSupportedToolsRow.jsx';
@@ -33,6 +38,8 @@ import { ProxyConnectionDiagram } from '../../../built-in/comp-mdx/diagram/proxy
 import { SwitchView } from '../../../built-in/comp-mdx/switch-view/SwitchView.jsx';
 import { TableCapabilityCell } from '../../../built-in/comp-mdx/hierarchy/table-hierarchy/TableCapabilityCell.jsx';
 import { TableHierarchy } from '../../../built-in/comp-mdx/hierarchy/table-hierarchy/TableHierarchy.jsx';
+import { TestCaseTable, testCaseTableExpose } from '../../../built-in/comp-mdx/test-case-table/TestCaseTable.jsx';
+import { testCaseAssetDependencyListGet } from '../../../built-in/comp-mdx/test-case-table/TestCaseTableData.js';
 import { TextInfoCell } from '../../../built-in/comp-mdx/hierarchy/table-hierarchy/TextInfoCell.jsx';
 import { Tag } from '../../../built-in/comp-mdx/tag/Tag.jsx';
 import { TagLabel } from '../../../built-in/comp-mdx/tag/TagLabel.jsx';
@@ -95,17 +102,22 @@ const compMultiLang = compDefine(MultiLang, {
 // (doc_page_impl_mdx_comp.md#what-a-component-exposes). both learn whether
 // their data is an asset (isAssetAware) and name the files their data refers
 // to, recorded as the dependencies of an asset made from it
-// (doc_page_impl_asset.md#dependencies)
+// (doc_page_impl_asset.md#dependencies). both also offer those files when
+// the block is deleted (deleteFileListGet, doc_page_impl_block_ops.md): the
+// image family decides which files it offers (image files only); the edit
+// layer never knows a component by its id
 const compImage = compDefine(Image, {
   placementList: ['mdx', 'commentBlock'],
   isAssetAware: true,
   assetDependencyListGet: imageAssetDependencyListGet,
+  deleteFileListGet: imageDeleteFileListGet,
   expose: imageExpose,
 });
 const compImageGrid = compDefine(ImageGrid, {
   placementList: ['mdx', 'commentBlock'],
   isAssetAware: true,
   assetDependencyListGet: imageGridAssetDependencyListGet,
+  deleteFileListGet: imageGridDeleteFileListGet,
   expose: imageGridExpose,
 });
 const compDiagramText = compDefine(DiagramText, { placementList: ['commentBlock'], expose: diagramTextExpose });
@@ -118,6 +130,12 @@ const compDiagramMermaid = compDefine(DiagramMermaid, { placementList: ['mdx', '
 // both learn whether their data is an asset (isAssetAware)
 const compDiagramER = compDefine(DiagramER, { placementList: ['mdx', 'commentBlock'], isAssetAware: true, expose: diagramERExpose });
 const compDiagramDataverseEntity = compDefine(DiagramDataverseEntity, { placementList: ['mdx', 'commentBlock'], isAssetAware: true, expose: diagramDataverseEntityExpose });
+// the Power Platform design diagrams are the ER diagram with another
+// starter (comp_db_vis.md#power-platform-resource-nodes): a flow of Power
+// Automate steps, a Dataverse business rule. one graph grammar, so a
+// diagram may mix their nodes with tables and choices
+const compDiagramPowerAutomate = compDefine(DiagramER, { placementList: ['mdx', 'commentBlock'], isAssetAware: true, expose: diagramPowerAutomateExpose });
+const compDiagramBusinessRule = compDefine(DiagramER, { placementList: ['mdx', 'commentBlock'], isAssetAware: true, expose: diagramBusinessRuleExpose });
 // a spreadsheet drawn by Univer, which is not a package dependency either:
 // the host supplies config.univerLoad. it is asset-only (excel-univer-expose.js),
 // so it is a comment block whose fenced block is an asset reference, and it
@@ -158,6 +176,16 @@ const compFileDownload = compDefine(FileDownload, {
 // commentBlock) from yaml data, one per view.
 const compTableHierarchy = compDefine(TableHierarchy, { placementList: ['commentBlock'], expose: tableHierarchyExpose });
 const compListHierarchy = compDefine(ListHierarchy, { placementList: ['commentBlock'], expose: listHierarchyExpose });
+// a test specification table drawn by the hierarchy view, whose results are
+// a managed history recorded on its asset object (comp_test_case_table.md):
+// it reads its asset (the hash a record is based on) and names the evidence
+// documents of its history as the dependencies of the object
+const compTestCaseTable = compDefine(TestCaseTable, {
+  placementList: ['commentBlock'],
+  isAssetAware: true,
+  assetDependencyListGet: testCaseAssetDependencyListGet,
+  expose: testCaseTableExpose,
+});
 const compSwitchView = compDefine(SwitchView, { placementList: ['commentBlock'], expose: switchViewExpose });
 
 // all components the package registers. what is actually exposed to doc
@@ -191,6 +219,8 @@ export const compById = {
   'common/DiagramMermaid': compDiagramMermaid,
   'common/DiagramER': compDiagramER,
   'common/DiagramDataverseEntity': compDiagramDataverseEntity,
+  'common/DiagramPowerAutomate': compDiagramPowerAutomate,
+  'common/DiagramBusinessRule': compDiagramBusinessRule,
   'common/ExcelUniver': compExcelUniver,
   'common/Block': compBlock,
   'common/BlockSimple': compBlockSimple,
@@ -200,6 +230,7 @@ export const compById = {
   'common/FileIcon': compDefine(FileDownloadIcon, { placementList: ['fileDownloadIcon'], expose: fileIconExpose }),
   'common/TableHierarchy': compTableHierarchy,
   'common/ListHierarchy': compListHierarchy,
+  'common/TestCaseTable': compTestCaseTable,
   'common/SwitchView': compSwitchView,
   'common/TextInfoCell': compDefine(TextInfoCell, { placementList: ['tableCell'], expose: textInfoCellExpose }),
   'common/TableCapabilityCell': compDefine(TableCapabilityCell, { placementList: ['tableCell'], expose: tableCapabilityCellExpose }),

@@ -18,15 +18,22 @@
 #
 # the sub document of the demonstration (example_doc/sub-doc) is not listed
 # here: the demonstration doc page includes it under the alias "sub"
-# (example_doc/.doc-page/side-panel.yaml). listing it here as well would
-# show it a second time, as a section of its own.
+# (example_doc/.doc-page/side-panel.yaml). listed here as well, it would be
+# shown once, as a section of its own, and no longer under "example": a doc
+# page has one effective occurrence in the side panel, its root mount first
+# (doc_page_impl_side_panel.md#one-effective-occurrence-per-doc-page).
 docPageList:
   - alias: example
     dir: ./example_doc
     # sidePanel: compact
-  # a second root doc page: the side panel shows a section for each
+  # a second root doc page: the side panel shows a section for each. its
+  # side panel is one wrapper item holding its documents; isRootVisible:
+  # false shows them directly under the section heading, without the
+  # wrapper's row (doc_page_impl_side_panel.md#the-root-row-hidden). a
+  # yaml boolean: the text "false" is refused
   - alias: second
     dir: ./example_doc/second-doc
+    isRootVisible: false
 
 # page values over those of the first doc page's entry (docEntry.title /
 # homeDoc / homeItem); left to the entry here

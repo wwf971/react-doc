@@ -1,8 +1,10 @@
 import { makeAutoObservable } from 'mobx';
 import { parseDocument, stringify } from 'yaml';
 import { diagramLegacyConvert, diagramNormalize, dataverseStandaloneNormalize } from './DiagramERData.js';
+import { powerAutomateNodeFields } from './PowerAutomateNodeData.js';
+import { businessRuleNodeFields } from './BusinessRuleNodeData.js';
 
-export const dataverseEditModeList = [{ id: 'visual', label: 'Visual', description: 'Edit Dataverse table cells and handles', isDefault: true }];
+export const dataverseEditModeList = [{ id: 'visual', label: 'Visual', description: 'Edit diagram cards, properties and connections', isDefault: true }];
 export const dataverseKeyList = ['', 'PK', 'FK'];
 export const dataverseTypeList = ['Text', 'Multiline Text', 'Whole Number', 'Decimal Number', 'Floating Point Number', 'Currency', 'Date', 'Date and Time', 'Choice', 'Choices', 'Lookup', 'Customer', 'Owner', 'Boolean', 'Unique identifier', 'UUID', 'String'];
 
@@ -39,7 +41,10 @@ export class DataverseEditStore {
 	get isDirty() { return this.valueCurrent !== this.valueInitial || this.saveTarget === 'inline'; }
 	get nodes() { const value = JSON.parse(this.valueCurrent); return this.kind === 'diagram' ? value.nodes : [value.node]; }
 	get nodeFocused() { return this.nodes.find(node => node.id === this.focus?.nodeId); }
-	get rowFocused() { return this.nodeFocused?.data.columns.find(row => row.id === this.focus?.rowId); }
+	get rowFocused() { return this.rowsGet(this.nodeFocused).find(row => row.id === this.focus?.rowId); }
+	get connections() { return JSON.parse(this.valueCurrent).connections ?? []; }
+	get connectionFocused() { return this.connections.find(connection => connection.id === this.focus?.connectionId); }
+	rowsGet(node) { return node?.data?.[resourceFieldsGet(node?.renderer.type) ? 'properties' : 'columns'] ?? []; }
 
 	validate(value) {
 		return this.kind === 'diagram' ? diagramNormalize(value, this.resolve) : dataverseStandaloneNormalize(value);
@@ -51,10 +56,16 @@ export class DataverseEditStore {
 		this.message = '';
 	}
 
+	connectionFocusSet(connectionId) {
+		this.cell = null;
+		this.focus = connectionId ? { connectionId } : null;
+		this.message = '';
+	}
+
 	cellStart(nodeId, rowId, field) {
 		this.focusSet(nodeId, rowId);
 		const node = this.nodeFocused;
-		const item = rowId ? node.data.columns.find(row => row.id === rowId) : node.data;
+		const item = rowId ? this.rowsGet(node).find(row => row.id === rowId) : node.data;
 		this.cell = { nodeId, rowId, field, valueInitial: item[field], isPresent: Object.hasOwn(item, field) };
 	}
 
@@ -90,14 +101,16 @@ export class DataverseEditStore {
 	}
 
 	fieldSet(nodeId, rowId, field, value, isDelete = false) {
-		const allowed = rowId ? ['name', 'nameLogical', 'type', 'key', 'description', 'isRequired'] : ['name', 'nameLogical', 'description'];
+		const node = this.nodes.find(item => item.id === nodeId);
+		const fields = resourceFieldsGet(node?.renderer.type);
+		const allowed = fields ? rowId ? ['name', 'value', 'description'] : fields.map(item => item.id) : rowId ? ['name', 'nameLogical', 'type', 'key', 'description', 'isRequired'] : ['name', 'nameLogical', 'description'];
 		if (!allowed.includes(field)) return false;
 		return this.changeApply(documentNext => {
 			const path = [...this.nodePathGet(nodeId), 'data'];
 			if (rowId) {
-				const rowIndex = this.nodes.find(node => node.id === nodeId).data.columns.findIndex(row => row.id === rowId);
+				const rowIndex = this.rowsGet(node).findIndex(row => row.id === rowId);
 				if (rowIndex < 0) throw new Error('Unknown row.');
-				path.push('columns', rowIndex);
+				path.push(fields ? 'properties' : 'columns', rowIndex);
 			}
 			path.push(field);
 			if (isDelete) documentNext.deleteIn(path);
@@ -106,8 +119,10 @@ export class DataverseEditStore {
 	}
 
 	handleModeGet(nodeId, rowId) {
-		const handles = this.nodes.find(node => node.id === nodeId)?.handles ?? [];
-		const sides = new Set(handles.filter(handle => handle.anchor.target === `column/${rowId}`).map(handle => handle.anchor.side));
+		const node = this.nodes.find(item => item.id === nodeId);
+		const handles = node?.handles ?? [];
+		const target = `${resourceFieldsGet(node?.renderer.type) ? 'property' : 'column'}/${rowId}`;
+		const sides = new Set(handles.filter(handle => handle.anchor.target === target).map(handle => handle.anchor.side));
 		return sides.has('left') && sides.has('right') ? 'both' : sides.has('left') ? 'left' : sides.has('right') ? 'right' : 'none';
 	}
 
@@ -116,7 +131,7 @@ export class DataverseEditStore {
 		return this.changeApply(documentNext => {
 			const path = this.nodePathGet(nodeId);
 			const node = documentNext.getIn(path).toJSON();
-			const target = `column/${rowId}`;
+			const target = `${resourceFieldsGet(node.renderer.type) ? 'property' : 'column'}/${rowId}`;
 			const sides = mode === 'both' ? ['left', 'right'] : mode === 'none' ? [] : [mode];
 			const handles = node.handles ?? [];
 			const selected = handles.filter(handle => handle.anchor.target === target);
@@ -144,6 +159,86 @@ export class DataverseEditStore {
 	}
 
 	saveTargetSet(value) { if (['asset', 'inline'].includes(value)) this.saveTarget = value; }
+
+	propertyAdd(nodeId) {
+		const node = this.nodes.find(item => item.id === nodeId);
+		if (!resourceFieldsGet(node?.renderer.type)) return false;
+		const rows = this.rowsGet(node);
+		const id = idNext('property', rows);
+		return this.changeApply(documentNext => documentNext.setIn([...this.nodePathGet(nodeId), 'data', 'properties'], documentNext.createNode([...rows, { id, name: 'Property', value: '' }])));
+	}
+
+	propertyRemove(nodeId, rowId) {
+		const node = this.nodes.find(item => item.id === nodeId);
+		if (!resourceFieldsGet(node?.renderer.type)) return false;
+		const isChanged = this.changeApply(documentNext => {
+			const handles = node.handles ?? [];
+			const removed = handles.filter(handle => handle.anchor.target === `property/${rowId}`);
+			if (this.connections.some(connection => ['source', 'target'].some(role => connection[role].nodeId === nodeId && removed.some(handle => handle.id === connection[role].handleId)))) throw new Error('Remove the property connections first.');
+			const path = this.nodePathGet(nodeId);
+			documentNext.setIn([...path, 'data', 'properties'], documentNext.createNode(this.rowsGet(node).filter(row => row.id !== rowId)));
+			documentNext.setIn([...path, 'handles'], documentNext.createNode(handles.filter(handle => !removed.includes(handle))));
+		});
+		if (isChanged) this.focusSet(nodeId);
+		return isChanged;
+	}
+
+	nodeAdd(type) {
+		if (this.kind !== 'diagram' || !resourceFieldsGet(type)) return false;
+		const id = idNext(type, this.nodes);
+		const data = Object.fromEntries(resourceFieldsGet(type).map(field => [field.id, field.defaultValue ?? '']));
+		data.name = type === 'power-automate' ? 'Flow step' : 'Business rule';
+		data.properties = [];
+		const node = { id, renderer: { type }, data, handles: [
+			{ id: 'in', direction: 'in', anchor: { target: 'header', side: 'left' } },
+			{ id: 'out', direction: 'out', anchor: { target: 'header', side: 'right' } },
+		] };
+		return this.changeApply(documentNext => documentNext.addIn(['nodes'], documentNext.createNode(node)));
+	}
+
+	nodeRemove(nodeId) {
+		if (this.kind !== 'diagram') return false;
+		const isChanged = this.changeApply(documentNext => {
+			if (this.connections.some(connection => connection.source.nodeId === nodeId || connection.target.nodeId === nodeId)) throw new Error('Remove the node connections first.');
+			documentNext.deleteIn(this.nodePathGet(nodeId));
+		});
+		if (isChanged) this.focusSet(null);
+		return isChanged;
+	}
+
+	connectionAdd() {
+		if (this.kind !== 'diagram') return false;
+		return this.changeApply(documentNext => {
+			const endpoints = role => this.nodes.flatMap(node => (node.handles ?? []).filter(handle => handle.direction === role || handle.direction === 'both').map(handle => ({ nodeId: node.id, handleId: handle.id })));
+			const source = endpoints('out')[0];
+			const target = endpoints('in').find(endpoint => endpoint.nodeId !== source?.nodeId);
+			if (!source || !target) throw new Error('A connection needs an output and an input on different nodes.');
+			const connection = { id: idNext('connection', this.connections), source, target, label: { text: 'Next' } };
+			if (!documentNext.has('connections')) documentNext.set('connections', documentNext.createNode([]));
+			documentNext.addIn(['connections'], documentNext.createNode(connection));
+		});
+	}
+
+	connectionSet(connectionId, field, value) {
+		if (!['label', 'source', 'target'].includes(field)) return false;
+		return this.changeApply(documentNext => {
+			const index = this.connections.findIndex(connection => connection.id === connectionId);
+			if (index < 0) throw new Error('Unknown connection.');
+			const path = ['connections', index, field];
+			if (field === 'label') path.push('text');
+			documentNext.setIn(path, documentNext.createNode(value));
+		});
+	}
+
+	connectionRemove(connectionId) {
+		const isChanged = this.changeApply(documentNext => {
+			const index = this.connections.findIndex(connection => connection.id === connectionId);
+			if (index < 0) throw new Error('Unknown connection.');
+			documentNext.deleteIn(['connections', index]);
+		});
+		if (isChanged) this.connectionFocusSet(null);
+		return isChanged;
+	}
 
 	positionRememberSet(nodeId, isRemembered, position) {
 		const node = this.nodes.find(item => item.id === nodeId);
@@ -174,4 +269,14 @@ export class DataverseEditStore {
 	get report() {
 		return { raw: this.rawDraft, lang: 'yaml', saveTarget: this.saveTarget, isDirty: this.isDirty };
 	}
+}
+
+export function resourceFieldsGet(type) {
+	return type === 'power-automate' ? powerAutomateNodeFields : type === 'business-rule' ? businessRuleNodeFields : undefined;
+}
+
+function idNext(prefix, items) {
+	let index = 1;
+	while (items.some(item => item.id === `${prefix}-${index}`)) index += 1;
+	return `${prefix}-${index}`;
 }

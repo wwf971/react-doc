@@ -20,12 +20,22 @@ const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEven
 	const [store] = useState(() => new CodeBlockCompactStore());
 	const [warningText, setWarningText] = useState('');
 	const refWrap = useRef(null);
-	const target = targetGet(data);
-	const label = String(data.label ?? data.title ?? target);
+	// the authored reference is resolved as every other reference of the page
+	// is (DocSourceStore.fileResolve: a full source path, a local path of the
+	// owning doc page, a relative path, a suffix, a name): a local spelling
+	// written in a document of one doc page of a workspace names that page's
+	// file, whose manifest key is the full form. the canonical internal path
+	// is what every lookup below uses; the authored spelling stays the label
+	// and the message of a reference that names nothing (or several files)
+	const targetRaw = targetGet(data);
+	const sourceEntry = targetRaw
+		? sourceStore.fileResolve(targetRaw, config.sourcePath || docStore.docCurrentPath)
+		: undefined;
+	const target = sourceEntry?.internalPath ?? targetRaw;
+	const label = String(data.label ?? data.title ?? targetRaw);
 	// every value other than 'render' means source mode, keeping existing
 	// Index inline-link and block usages (no displayMode) compatible.
 	const displayMode = data.displayMode === 'render' ? 'render' : 'source';
-	const sourceEntry = target ? sourceStore.entryByInternalPath.get(target) : undefined;
 	const sourceState = target
 		? (displayMode === 'render' ? sourceStore.compiledByPath[target] : sourceStore.rawByPath[target])
 		: undefined;

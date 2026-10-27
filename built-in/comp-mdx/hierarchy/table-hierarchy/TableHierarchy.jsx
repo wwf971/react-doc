@@ -17,7 +17,10 @@ function TableHierarchy({ data = {}, config = {}, onEvent }) {
   return <TableHierarchyView key={JSON.stringify(value)} value={value} config={config} onEvent={onEvent} />;
 }
 
-function TableHierarchyView({ value, config, onEvent }) {
+// the view on parsed data, for a component that builds the data itself
+// (TestCaseTable): cellRender({ cell, column, row }) may draw a leaf cell
+// in place of the registered cell component; undefined falls through
+function TableHierarchyView({ value, config, onEvent, cellRender }) {
   const titleId = useId();
   const [expandedByKey, setExpandedByKey] = useState({});
   const { context, eventHandle } = useHierarchyContext(value.context, onEvent);
@@ -148,11 +151,18 @@ function TableHierarchyView({ value, config, onEvent }) {
                   </th>
                 );
               })}
-              {!row.isGroupRow && value.columns.map((column) => (
-                row.cells
-                  ? <td key={column.id}><TableHierarchyCell cell={row.cells[column.id]} component={column.cellComponent} config={configShared} onEvent={eventHandle} instanceId={`${config.instanceId}:${row.key}:${column.id}`} /></td>
-                  : <td key={column.id} />
-              ))}
+              {!row.isGroupRow && value.columns.map((column) => {
+                if (!row.cells) return <td key={column.id} />;
+                const cell = row.cells[column.id];
+                const rendered = cellRender?.({ cell, column, row });
+                return (
+                  <td key={column.id}>
+                    {rendered !== undefined
+                      ? rendered
+                      : <TableHierarchyCell cell={cell} component={column.cellComponent} config={configShared} onEvent={eventHandle} instanceId={`${config.instanceId}:${row.key}:${column.id}`} />}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
@@ -162,4 +172,4 @@ function TableHierarchyView({ value, config, onEvent }) {
   );
 }
 
-export { TableHierarchy };
+export { TableHierarchy, TableHierarchyView };

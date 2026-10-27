@@ -1,6 +1,8 @@
 import { MousePointer2, TableProperties, Waypoints } from '../../../../main/frontend/UICommon.js';
 import { dataverseEditModeList } from './DataverseEditStore.js';
 import { dataverseSourceDefaultCreate, diagramSourceDefaultCreate } from './DiagramERSource.js';
+import { powerAutomateSourceDefaultCreate } from './PowerAutomateNodeSource.js';
+import { businessRuleSourceDefaultCreate } from './BusinessRuleNodeSource.js';
 
 // What DiagramER and DiagramDataverseEntity expose through their registry
 // definitions (compDefine expose, doc_page_impl_mdx_comp.md#what-a-component-exposes).
@@ -41,4 +43,16 @@ export const diagramDataverseEntityExpose = {
   icon: TableProperties,
   editModeList,
   sourceDefaultCreate: dataverseSourceDefaultCreate,
+};
+
+export const diagramPowerAutomateExpose = {
+  ...diagramERExpose,
+  meta: { ...metaShared, label: 'Power Automate flow', description: 'Trigger, actions, branches and configuration in a design diagram.' },
+  sourceDefaultCreate: powerAutomateSourceDefaultCreate,
+};
+
+export const diagramBusinessRuleExpose = {
+  ...diagramERExpose,
+  meta: { ...metaShared, label: 'Business rule', description: 'Dataverse conditions, actions, scope and target columns.' },
+  sourceDefaultCreate: businessRuleSourceDefaultCreate,
 };

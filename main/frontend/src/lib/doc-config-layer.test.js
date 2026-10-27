@@ -172,6 +172,11 @@ test('the environment: one answer for what the page may do, whatever asks', () =
   assert.equal(envStatic2.endpointGet('edit'), '');
   assert.equal(envStatic2.isCapable('edit'), false);
   assert.match(envStatic2.reasonGet('sourceWrite'), /static build/);
+  // but the service backend is a process of its own: a build reaches it when given its address
+  const envStaticService = new DocEnvStore({ env: { kind: 'staticBuild' }, endpointByApi: { service: 'https://service.example/api' } });
+  assert.equal(envStaticService.endpointGet('service'), 'https://service.example/api');
+  assert.equal(envStatic2.isCapable('service'), false);
+  assert.match(envStatic2.reasonGet('service'), /not given the service api/);
 
   const envDev = new DocEnvStore({ env: { kind: 'viteDevServer' }, endpointByApi: { source: '/__doc-source', edit: '/__doc-edit' } });
   assert.equal(envDev.isCapable('sourceWrite'), true);
@@ -187,6 +192,7 @@ test('the environment: one answer for what the page may do, whatever asks', () =
   // without a kind, it is inferred from the endpoints
   assert.equal(new DocEnvStore({ endpointByApi: { source: '/x' } }).kind, 'viteDevServer');
   assert.equal(new DocEnvStore({}).kind, 'staticBuild');
+  assert.equal(new DocEnvStore({ endpointByApi: { service: '/__doc-service' } }).kind, 'staticBuild');
 });
 
 test('the edit mode grid: one column per declaration, one row per key, the last valid value decides', async () => {
