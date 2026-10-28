@@ -91,6 +91,7 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 //                                                   // the components of the loaded doc pages, their modules imported
 //   export function subscribeDocSource(listener)    // dev: the source data changed
 //   export function subscribeDocAsset(listener)     // dev: an object or the store's folders changed on disk
+//   export function subscribeDocServer(listener)    // dev: { isConnected } when the HMR socket of vite closes / opens
 //
 // every file is named by its source path, in the full form
 // ~docPageAlias:rootAlias/relPath (doc-source-path.js); a rule of a doc page
@@ -1748,7 +1749,13 @@ export function generateModuleCode(
     lines.push('  return () => listenersDocSource.delete(listener);');
     lines.push('}');
     lines.push('export function subscribeDocAsset(listener) { listenersDocAsset.add(listener); return () => listenersDocAsset.delete(listener); }');
+    // the development server stopped (or came back): vite's client reports
+    // its socket; the page turns view-only meanwhile (DocEnvStore)
+    lines.push('const listenersDocServer = import.meta.hot?.data.listenersDocServer ?? new Set();');
+    lines.push('export function subscribeDocServer(listener) { listenersDocServer.add(listener); return () => listenersDocServer.delete(listener); }');
     lines.push('if (import.meta.hot) {');
+    lines.push("  import.meta.hot.on('vite:ws:disconnect', () => { for (const listener of listenersDocServer) listener({ isConnected: false }); });");
+    lines.push("  import.meta.hot.on('vite:ws:connect', () => { for (const listener of listenersDocServer) listener({ isConnected: true }); });");
     // a collected file changed: the new manifest metadata arrives as data;
     // the text of a changed file is fetched when the page needs it
     lines.push("  import.meta.hot.on('doc-source-change', (dataNext) => {");
@@ -1762,6 +1769,7 @@ export function generateModuleCode(
     lines.push('  import.meta.hot.dispose((data) => {');
     lines.push('    data.listenersDocSource = listenersDocSource;');
     lines.push('    data.listenersDocAsset = listenersDocAsset;');
+    lines.push('    data.listenersDocServer = listenersDocServer;');
     lines.push('    data.sourceState = sourceState;');
     lines.push('  });');
     // the module itself was replaced (a genuine regeneration, not a content save)
@@ -1779,6 +1787,7 @@ export function generateModuleCode(
   } else {
     lines.push('export function subscribeDocSource() { return () => {}; }');
     lines.push('export function subscribeDocAsset() { return () => {}; }');
+    lines.push('export function subscribeDocServer() { return () => {}; }');
   }
   return lines.join('\n');
 }

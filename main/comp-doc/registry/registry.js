@@ -252,9 +252,11 @@ export const compById = {
   'common/TagOverview': compDefine(TagOverview, { placementList: ['tagOverview', 'mdx', 'commentBlock'], expose: tagOverviewExpose }),
   // default editors of the edit layer, one per block kind. mapping the
   // built-in name in compRegistry replaces the editor of that kind.
+  // paragraphs and lists offer the slash mode (/link ...) while their
+  // source is edited (doc_page_impl_edit_slash.md)
   'common/Heading': compDefine(Heading, { placementList: ['edit'] }),
-  'common/Paragraph': compDefine(Paragraph, { placementList: ['edit'] }),
-  'common/List': compDefine(List, { placementList: ['edit'] }),
+  'common/Paragraph': compDefine(Paragraph, { placementList: ['edit'], expose: { meta: { isEditSlashEnabled: true } } }),
+  'common/List': compDefine(List, { placementList: ['edit'], expose: { meta: { isEditSlashEnabled: true } } }),
   'common/BlockSource': compDefine(BlockSource, { placementList: ['edit'] }),
   // compatibility ids: existing consumer configs map tags to these ids
   'common/DocFileTree': compFileTree,

@@ -24,6 +24,8 @@ Some features already implemented which you can utilize in case you need. Check 
 
 - **MDX document in-place editing**: Edit mode in local dev. Maintains an internal representation of the current document as root-level blocks with their source lines, updated after every write, and edits one block at a time by sending line operations to the source file without reload. Provides the block toolbar and insert menu, the component edit-mode contract, and reusable editing primitives (inline value editing, floating panel, source surface, click-outside handling). Side-panel item in-place editing (renaming a label, moving an item) is supported by the same layer; refer to `main/doc_page_impl_side_panel.md` for that part. Refer to `main/doc_page_impl_edit.md`.
 
+- **Slash mode**: In the source of a paragraph or a list being edited, `/` opens a menu of slash actions, and an action can take a parameter with its own completion (`/link` lists the documents of the workspace and writes the link). Provides a registry of slash actions, built at page start beside the component registry, that service layers add actions to, a callback interface for the parameter of an action, and standard effects (replace the slash text, rewrite the parameter, cancel). Components opt in per block kind (`meta.isEditSlashEnabled`). Refer to `main/doc_page_impl_edit_slash.md`.
+
 - **Block-level operations**: Insert, move, duplicate, delete, copy / move blocks to another place or document, paste text as blocks, and block selection mode. Refer to `main/doc_page_impl_block_ops.md`.
 
 - **Block popup**: Opens any component block in a maximizable dialog with a view / edit switch. Refer to `main/doc_page_impl_popup.md`.

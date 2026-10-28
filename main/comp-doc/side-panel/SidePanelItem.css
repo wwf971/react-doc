@@ -394,11 +394,11 @@ body[data-side-panel-dragging] #nd-sidebar-mobile {
   padding-top: 0.125rem;
 }
 
-/* the chevron of a folder bound to a document (DocSidebarFolder): a target
-   of its own beside the label, which opens the document. it keeps the row
+/* the chevron of a folder bound to a document (DocSidebarFolder): a small
+   framed button of its own beside the label, which opens the document; a
+   folder without a document keeps the plain chevron. it keeps the row
    height (negative block margin) so nothing moves */
 .doc-sidebar-folder-toggle {
-  position: relative;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -407,21 +407,15 @@ body[data-side-panel-dragging] #nd-sidebar-mobile {
   height: 1.5rem;
   margin-block: -0.25rem;
   margin-inline: auto -0.25rem;
-  border-radius: 0.3rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.35rem;
+  background: var(--color-fd-background);
   color: var(--color-fd-muted-foreground);
-  transition: background-color 0.12s;
-}
-
-.doc-sidebar-folder-toggle::before {
-  content: '';
-  position: absolute;
-  inset-block: 0.25rem;
-  inset-inline-start: -0.2rem;
-  width: 1px;
-  background: var(--color-fd-border);
+  transition: background-color 0.12s, border-color 0.12s;
 }
 
 .doc-sidebar-folder-toggle:hover {
-  background: color-mix(in srgb, var(--color-fd-foreground) 9%, transparent);
+  border-color: color-mix(in srgb, var(--color-fd-foreground) 32%, var(--color-fd-border));
+  background: var(--color-fd-accent);
   color: var(--color-fd-foreground);
 }

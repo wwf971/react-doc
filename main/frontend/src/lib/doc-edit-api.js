@@ -1,9 +1,12 @@
 // Browser client of the edit api served by the development server
 // (plugin/doc-edit-server.ts). Every call resolves to { code, data, message };
 // code 0 is success, a negative code is a failure explained by message.
-// Network failures are reported the same way, so callers need one branch.
+// Network failures are reported the same way, so callers need one branch;
+// such a result also carries isUnreachable, and onUnreachable(message) is
+// called, so the environment learns that the development server is gone
+// (DocEnvStore.serverLostReport) from any call, not only from its own probe.
 
-export function docEditApiCreate(endpoint) {
+export function docEditApiCreate(endpoint, { onUnreachable } = {}) {
   const endpointNormalized = String(endpoint ?? '').replace(/\/+$/, '');
 
   const requestSend = async (route, init) => {
@@ -15,7 +18,9 @@ export function docEditApiCreate(endpoint) {
       }
       return payload;
     } catch (error) {
-      return { code: -1, data: null, message: `edit api is not reachable: ${String(error?.message ?? error)}` };
+      const message = `edit api is not reachable: ${String(error?.message ?? error)}`;
+      onUnreachable?.(message);
+      return { code: -1, data: null, message, isUnreachable: true };
     }
   };
 

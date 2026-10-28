@@ -1,5 +1,6 @@
-import { createElement, useEffect, useLayoutEffect, useRef } from 'react';
+import { createElement, Fragment, useEffect, useLayoutEffect, useRef } from 'react';
 import { caretPlaceAtEdge, caretPlaceInitial, caretRectGet } from './caret-place.js';
+import { useEditSlash } from '../slash/use-edit-slash.js';
 import './DocEdit.css';
 
 // The editing surface of a block's source: the block's own element made
@@ -31,6 +32,11 @@ import './DocEdit.css';
 //                       for in the rendered block, so entering the block does
 //                       not change its line rhythm (a list: the gaps between
 //                       its items)
+//   slash               optional: config.edit.slash of the editor. with it
+//                       the surface offers the slash mode: "/" typed at the
+//                       start of a word opens the menu of actions
+//                       (doc_page_impl_edit_slash.md); the keys of the menu
+//                       come before the keys below while it is open
 //   isLocked            no editing while a change request is pending
 //   onTextChange(text)  typed text
 //   onSubmitRequest()   Ctrl/Cmd + Enter
@@ -47,6 +53,7 @@ export function EditSourceSurface({
   textVersion = 0,
   selectionInitial = 'end',
   lineSpaceListGet,
+  slash,
   isLocked = false,
   className = '',
   onTextChange,
@@ -56,6 +63,7 @@ export function EditSourceSurface({
   ariaLabel = 'Block source',
 }) {
   const elementRef = useRef(null);
+  const slashBinding = useEditSlash(elementRef, slash, { textBeforeCaretGet });
 
   useLayoutEffect(() => {
     const element = elementRef.current;
@@ -77,6 +85,7 @@ export function EditSourceSurface({
 
   const keyDownHandle = (event) => {
     if (event.nativeEvent?.isComposing) return;
+    if (slashBinding.keyDown(event)) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       onCancelRequest?.();
@@ -118,7 +127,7 @@ export function EditSourceSurface({
     onTextChange?.(surfaceTextGet(element));
   };
 
-  return createElement(tag, {
+  const surface = createElement(tag, {
     ref: elementRef,
     className: `doc-edit-surface${className ? ` ${className}` : ''}`,
     role: 'textbox',
@@ -131,11 +140,16 @@ export function EditSourceSurface({
     'data-kind': kind,
     'data-lines': lineSpaceListGet ? '' : undefined,
     'data-locked': isLocked ? '' : undefined,
-    onInput: (event) => textReport(event.currentTarget, event.nativeEvent?.isComposing === true),
+    onInput: (event) => {
+      textReport(event.currentTarget, event.nativeEvent?.isComposing === true);
+      slashBinding.inputAfter(event);
+    },
     onCompositionEnd: (event) => textReport(event.currentTarget, false),
     onKeyDown: keyDownHandle,
     onPaste: pasteHandle,
   });
+  // the menu of the slash mode is a portal: nothing is added to the flow
+  return slashBinding.menu ? createElement(Fragment, null, surface, slashBinding.menu) : surface;
 }
 
 // innerText turns line breaks of the editable element into "\n" (the surface

@@ -24,6 +24,11 @@ import { compIconDefault } from './comp-icon.jsx';
 //                  inline data is edited as usual; default false),
 //                  isNotInDoc (it cannot be placed in a document: it renders
 //                  elsewhere, e.g. in the side panel; default false),
+//                  isEditSlashEnabled (its blocks offer the slash mode in
+//                  the default edit mode, the source surface: "/" opens the
+//                  menu of slash actions, doc_page_impl_edit_slash.md;
+//                  default false. the default editors of paragraphs and
+//                  lists declare it),
 //                  assetSaveMode (inPlace | newVersion: the save mode written
 //                  into an asset object the page creates for a block of the
 //                  component; absent: the store's default applies),
@@ -85,6 +90,7 @@ const metaDefault = Object.freeze({
   isAssetOnly: false,
   isEditAssetAccepted: false,
   isNotInDoc: false,
+  isEditSlashEnabled: false,
   assetSaveMode: undefined,
   configDefineList: [],
 });
@@ -141,6 +147,7 @@ function metaNormalize(meta) {
     isAssetOnly: meta.isAssetOnly === true,
     isEditAssetAccepted: meta.isEditAssetAccepted === true,
     isNotInDoc: meta.isNotInDoc === true,
+    isEditSlashEnabled: meta.isEditSlashEnabled === true,
     assetSaveMode: meta.assetSaveMode,
     configDefineList: meta.configDefineList ?? [],
   };

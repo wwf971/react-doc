@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { EditActions } from '../../../main/comp-doc/edit/EditActions.jsx';
 import { EditFloatingPanel } from '../../../main/comp-doc/edit/EditFloatingPanel.jsx';
 import { EditSourceSurface } from '../../../main/comp-doc/edit/EditSourceSurface.jsx';
+import { EditSlashToggle } from '../../../main/comp-doc/slash/EditSlashToggle.jsx';
 import { headingLevelGet } from './HeadingData.js';
 import { listLineSpaceListGet } from './ListData.js';
 import './text-block.css';
@@ -24,6 +25,9 @@ import './text-block.css';
 //   config.edit.block              the block model entry (kind decides the surface)
 //   config.edit.label              what is being edited, e.g. "Paragraph"
 //   config.edit.isSurfaceFloating  the surface goes into the panel (frontmatter, document)
+//   config.edit.slash              present when the block offers the slash mode
+//                                  (doc_page_impl_edit_slash.md): handed to the
+//                                  surface, and its switch is shown in the bar
 //
 // events (handled by the edit layer):
 //   editDraftChange { text }      typed text; what a leave saves
@@ -66,6 +70,7 @@ export const TextBlockEdit = observer(function TextBlockEdit({ data = {}, config
       selectionInitial={session.selectionInitial ?? 'end'}
       // a list keeps the gaps between its items while its source is edited
       lineSpaceListGet={kind === 'list' && !edit.isSurfaceFloating ? listLineSpaceListGet : undefined}
+      slash={edit.slash}
       isLocked={isLocked}
       ariaLabel={`${label} source`}
       onTextChange={(text) => void onEvent?.('editDraftChange', { text })}
@@ -76,13 +81,22 @@ export const TextBlockEdit = observer(function TextBlockEdit({ data = {}, config
         : (direction, { point } = {}) => void onEvent?.('editFocusShiftRequest', { direction }, { point })}
     />
   );
+  // the controls of the kind (children) and the switch of the slash mode
+  const head = edit.slash
+    ? (
+        <>
+          {children}
+          <EditSlashToggle slash={edit.slash} isDisabled={isLocked} />
+        </>
+      )
+    : children;
   const actions = (
     <EditActions status={session.status} message={session.message} onSubmit={submitRequest} onCancel={cancelRequest} />
   );
 
   if (edit.isSurfaceFloating) {
     return (
-      <EditFloatingPanel label={label} head={children} actions={actions} placement="below">
+      <EditFloatingPanel label={label} head={head} actions={actions} placement="below">
         {surface}
       </EditFloatingPanel>
     );
@@ -90,7 +104,7 @@ export const TextBlockEdit = observer(function TextBlockEdit({ data = {}, config
   return (
     <>
       {surface}
-      <EditFloatingPanel label={label} head={children} actions={actions} />
+      <EditFloatingPanel label={label} head={head} actions={actions} />
     </>
   );
 });

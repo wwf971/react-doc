@@ -32,8 +32,8 @@ const classNameLink = `${classNameItem} data-[active=true]:bg-fd-primary/10 data
 // a folder held under a dragged item) opens, as fumadocs opens a folder
 // whose defaultOpen turns true.
 //
-// a folder bound to a document draws its chevron as a target of its own,
-// split from the label by a faint line (doc-sidebar-folder-toggle): the
+// a folder bound to a document draws its chevron as a small framed button
+// of its own (doc-sidebar-folder-toggle): the
 // label opens the document, the chevron only folds. a folder without a
 // document keeps the plain chevron of fumadocs, its whole row folds.
 //

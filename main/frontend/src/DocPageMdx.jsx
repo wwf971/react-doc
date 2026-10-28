@@ -16,6 +16,7 @@ import { DocPasteStore } from './store/DocPasteStore.js';
 import { DocBlockSelectStore } from './store/DocBlockSelectStore.js';
 import { DocPanelLayoutStore } from './store/DocPanelLayoutStore.js';
 import { DocWorkspaceStore } from './store/DocWorkspaceStore.js';
+import { DocSlashStore } from './store/DocSlashStore.js';
 import { DocEventRouter } from './lib/doc-event.js';
 import { DocCompStateStore } from './store/DocCompStateStore.js';
 import { StoreContext, useDocStores } from './store/context.js';
@@ -41,13 +42,15 @@ import { DocSettingsButton } from '../../comp-doc/settings/DocSettingsButton.jsx
 import { DocSettingsPanel } from '../../comp-doc/settings/DocSettingsPanel.jsx';
 import { compById as compByIdDefault } from '../../comp-doc/registry/registry.js';
 import { compMountByIdBuild } from '../../comp-doc/registry/comp-mount.js';
+import { slashActionById as slashActionByIdDefault } from '../../comp-doc/slash/slash-registry.js';
+import { slashActionByIdBuild } from '../../comp-doc/slash/slash-define.js';
 import './DocPageMdx.css';
 
 // Embeddable MD/MDX document page.
 //
 //   <DocPageMdx
 //     data={{ configDoc, fileManifest, dirManifest, fileUrlByPath, assetSnapshot, compMountList }}
-//     config={{ routeMode: 'memory', compById, compConfigHost, configDefineList, link: { CompRender },
+//     config={{ routeMode: 'memory', compById, slashActionById, compConfigHost, configDefineList, link: { CompRender },
 //               source: { endpoint }, edit: { endpoint, pasteTransformList }, asset: { endpoint, subscribe },
 //               service: { endpoint } }}
 //     onEvent={(eventType, eventData) => { ... }}
@@ -77,6 +80,8 @@ import './DocPageMdx.css';
 // mounted them (docCompMountList, doc_page_impl_mdx_comp.md#components-of-a-doc-page):
 // their definitions join the registry between the package's and the host's
 // config.compById, and their tag names are in configDoc.compRegistry already.
+// config.slashActionById are the host's slash actions over the package's
+// (doc_page_impl_edit_slash.md#the-slash-action-registry); null removes one.
 
 export function DocPageMdx({ data, config = {}, onEvent }) {
   const languageAncestor = useDocLanguage();
@@ -84,7 +89,10 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
   const pageElementRef = useRef(null);
   const headingPointerRef = useRef(null);
   const [stores] = useState(() => {
+    // the registries of the page, built from the package's definitions, the
+    // doc pages' and the host's (see registry building at the end of this file)
     const compById = compByIdBuild(data.compMountList, config.compById);
+    const slashActionById = slashActionByIdPageBuild(config.slashActionById);
     // the environment of the page: how it is served, and so what it allows.
     // every store asks it, not an endpoint or a build flag of its own
     const envStore = new DocEnvStore({
@@ -159,6 +167,9 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // the workspace and its doc pages as the Workspace tab of the settings
     // panel shows them (doc_page_impl_source.md#the-workspace-tab)
     const workspaceStore = new DocWorkspaceStore({ sourceStore });
+    // the slash mode of the default editors: "/" in a paragraph or a list
+    // opens the menu of the slash actions (doc_page_impl_edit_slash.md)
+    const slashStore = new DocSlashStore({ slashActionById });
     // the event layer (doc_page_impl_event.md): component reports are routed
     // to the domain that answers them; the stores never see onEvent callbacks
     const eventRouter = new DocEventRouter();
@@ -221,6 +232,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       pasteStore,
       blockSelectStore,
       panelLayoutStore,
+      slashStore,
       eventRouter,
       compById,
     };
@@ -251,12 +263,17 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       stores.editStore.dispose();
       stores.compStateStore.dispose();
       stores.docStore.dispose();
+      stores.envStore.dispose();
     };
   }, [stores]);
 
   useEffect(() => {
     stores.docStore.replaceCompById(compByIdBuild(data.compMountList, config.compById));
   }, [data.compMountList, config.compById, stores]);
+
+  useEffect(() => {
+    stores.slashStore.replaceSlashActionById(slashActionByIdPageBuild(config.slashActionById));
+  }, [config.slashActionById, stores]);
 
   useEffect(() => {
     stores.docStore.setLanguagePage(languagePage);
@@ -389,8 +406,26 @@ function DocPageLayoutContainer({ children, ...props }) {
   );
 }
 
-// the registry of the page: the package's definitions, the components of
-// the doc pages mounted over them, the host's own over both
+// ---------- registry building ----------
+//
+// the page has two registries, built the same way when the page starts and
+// again when what they are built from changes: the package's definitions,
+// then those of the doc pages, then the host's, each layer over the one
+// before (an id of a later layer replaces the same id of an earlier one).
+//
+//   registry            package            doc pages              host
+//   compById            registry.js        data.compMountList     config.compById
+//   slashActionById     slash-registry.js  (none yet)             config.slashActionById
+//
+// compById is held by DocStore (replaceCompById), slashActionById by
+// DocSlashStore (replaceSlashActionById).
+
+// the component registry (doc_page_impl.md#component-registry)
 function compByIdBuild(compMountList, compByIdHost) {
   return { ...compByIdDefault, ...compMountByIdBuild(compMountList), ...(compByIdHost ?? {}) };
+}
+
+// the slash action registry (doc_page_impl_edit_slash.md#the-slash-action-registry)
+function slashActionByIdPageBuild(slashActionByIdHost) {
+  return slashActionByIdBuild(slashActionByIdDefault, slashActionByIdHost);
 }

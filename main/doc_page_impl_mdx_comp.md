@@ -22,7 +22,7 @@ compDefine(Xxx, {
   isAssetAware, assetDependencyListGet, deleteFileListGet,
   expose: {                                                     what it tells the page about itself
     meta:          { label, description, isReadOnly, isEditSourceAccepted, isInsertCommon,
-                     isEditEnterButtonOnly, isAssetOnly, isEditAssetAccepted, isNotInDoc,
+                     isEditEnterButtonOnly, isAssetOnly, isEditAssetAccepted, isNotInDoc, isEditSlashEnabled,
                      assetSaveMode, configDefineList, ... }
     icon:          a component drawing the icon of Xxx at any size
     viewModeList:  [{ id, label, description, icon, isDefault }]   the ways its data is displayed
@@ -52,6 +52,7 @@ Facts about the component that are not modes or drawings, as one object, so that
 | `isAssetOnly` | `false` | its data lives in the asset service layer only and is never written inline in a document: a block of it is always an asset reference ([Asset-only and not-in-doc](#asset-only-and-not-in-doc)) |
 | `isEditAssetAccepted` | `false` | its own edit modes also edit the data of an asset reference, at the head of an object in a writable store, saving into the object ([Asset-backed component drafts](doc_page_impl_edit.md#asset-backed-component-drafts)). An opt-in, not a restriction: inline data stays displayed, edited and inserted as before. Without it (and without `isAssetOnly`) a block whose data is an asset is edited as source only. The component declares `isAssetAware` too, to receive the reference and the version's metadata. `DiagramER` and `DiagramDataverseEntity` declare it |
 | `isNotInDoc` | `false` | it cannot be a block of a document at all, because it renders elsewhere (a side-panel item); the insert menu does not offer it and a block of it shows an error ([Asset-only and not-in-doc](#asset-only-and-not-in-doc)) |
+| `isEditSlashEnabled` | `false` | a block of it offers the [slash mode](doc_page_impl_edit_slash.md) while it is edited as source: `/` opens the menu of slash actions (`/link …`). The default editors of paragraphs and lists (`Paragraph`, `List`) declare it; a component whose source is prose can too ([Which blocks offer it](doc_page_impl_edit_slash.md#which-blocks-offer-it)) |
 | `assetSaveMode` | — | `inPlace` or `newVersion`: the save mode an asset object gets when the page creates it for a block of this component (from the insert menu, or by **to asset**). Without it the object has no save mode, which saves in place ([Save modes](doc_page_impl_asset.md#save-modes)). Only the creation reads it; the object's own mode decides every later save |
 | `configDefineList` | `[]` | the shape of its component-level config: which keys exist, their types, defaults, descriptions. Only the shape; the values come from the config layers and the document levels, and reach the component as `config.compConfig` ([Component-level config](doc_page_impl_config.md#component-level-config)) |
 

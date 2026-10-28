@@ -51,6 +51,11 @@ export { EditSourceSurface } from '../../comp-doc/edit/EditSourceSurface.jsx';
 export { EditValueInline } from '../../comp-doc/edit/EditValueInline.jsx';
 export { BlockRender } from '../../../built-in/comp-mdx/text/BlockRender.jsx';
 export { TextBlockEdit } from '../../../built-in/comp-mdx/text/TextBlockEdit.jsx';
+// the slash mode of the default editors (doc_page_impl_edit_slash.md): a
+// host defines its own actions and hands them as config.slashActionById
+export { slashActionDefine } from '../../comp-doc/slash/slash-define.js';
+export { slashEffect } from './lib/doc-slash.js';
+export { DocSlashStore } from './store/DocSlashStore.js';
 export { MdxRenderer } from '../../comp-doc/mdx-render/MdxRenderer.jsx';
 export { SidePanelItem } from '../../comp-doc/side-panel/SidePanelItem.jsx';
 export { SidePanelItemSurfaceContext } from '../../comp-doc/side-panel/SidePanelItemHost.jsx';

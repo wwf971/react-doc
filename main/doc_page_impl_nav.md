@@ -69,6 +69,25 @@ When a source document exists but has no side-panel item, activating its link op
 
 The default document-link renderer and warning are also the display boundary for inline source links. A source target absent from the collected manifest uses the same red broken-link treatment as a missing document. A collected source that cannot be loaded or opened uses the orange unavailable treatment and the same local warning. This keeps target-state feedback consistent while leaving document navigation and source-popup behavior in their respective controllers.
 
+## Writing a link
+
+Resolution reads a target. Its inverse writes one: for a document chosen while editing, it gives the target the author would have written. The navigation layer offers this as the `/link` action of the [slash mode](doc_page_impl_edit_slash.md). In a paragraph or a list being edited, `/link ` followed by a name, a title or a path lists the documents of the whole workspace. Choosing one replaces what was typed with `[title](target)`.
+
+```text
+the chosen document, seen from the document being edited      target written (sourcePathReferenceGet)
+same root of the same doc page                                 ./a.md, ../x/a.md
+another root of the same doc page                              ~root/x/a.md
+another doc page of the workspace                              ~page:root/x/a.md
+```
+
+The target is the shortest one that resolves to exactly that document by [the rules above](#link-recognition-and-target-resolution). A relative path also works in a plain Markdown viewer and survives the doc page being included elsewhere. The local form is exact because the local doc page answers a local path first. A document of another doc page needs the full form, since its local form would name a root of the local doc page. A file name alone is never written, because another document may come to share it.
+
+The candidates come from the same internal representation as resolution: every document and folder by its full source path, with its manifest entry (`DocSourceStore.pathComplete`), and the doc page of the document being edited. The list follows these rules (`lib/doc-link-complete.js`):
+
+- **Words** match the name, the title and the path of a document; every word must match. Documents of the local doc page come first, then names that start with the first word.
+- **A path** (`~root/…`, `~page:root/…`, `./`, `../`) walks the folders one level at a time, folders first. Choosing a folder continues inside it, and choosing a document ends the walk.
+- **A place** (`…#Setup`) after `#` is kept and added to the target.
+
 ## Fragment scrolling and highlighting
 
 Document replacement and place selection have different behavior:
@@ -175,7 +194,7 @@ The default sidebar folder override keeps route changes separate from expansion 
 - Selecting the active label toggles expansion. A double click therefore navigates first and then toggles.
 - Selecting the chevron toggles expansion without navigating.
 
-Because the label and the chevron of such a folder are two targets, the default renderer draws them as two: the chevron sits in a small box of its own, separated from the label by a faint vertical line, and highlights alone on hover. A folder without a document keeps the plain chevron, since its whole row toggles. The reader can therefore tell, before clicking, whether a folder opens a document. The box keeps the row height, so nothing moves.
+Because the label and the chevron of such a folder are two targets, the default renderer draws the chevron as a small framed button of its own, and a folder without a document keeps the plain chevron, so the reader can tell which folders open a document before clicking ([Side panel: folder interaction](doc_page_impl_side_panel.md#folder-interaction-and-routes), a requirement of the default renderer).
 
 Consumers can replace this gesture policy through `config.sidePanel.components.Folder` without replacing route resolution or history behavior.
 

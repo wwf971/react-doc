@@ -41,7 +41,9 @@ createRoot(document.getElementById('root')).render(
       routeMode: 'query',
       // the environment the page runs in (doc_page_impl.md#the-environment):
       // the vite development server, or a static build
-      env: docSource.docEnv,
+      // with the connection of the development server (its HMR socket): the
+      // page turns view-only while the server is gone
+      env: { ...docSource.docEnv, serverSubscribe: docSource.subscribeDocServer },
       // host components would go here as registry definitions (compDefine),
       // so they receive { data, config, onEvent } like every registered
       // component; the demonstration has none, its components are the doc

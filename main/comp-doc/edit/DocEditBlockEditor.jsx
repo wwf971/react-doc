@@ -2,7 +2,7 @@ import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve } from '../registry/comp-registry.js';
 import { compDefinitionGet } from '../registry/comp-definition.js';
-import { COMP_EDIT_MODE_SOURCE_ID } from '../registry/comp-expose.js';
+import { COMP_EDIT_MODE_SOURCE_ID, compMetaGet } from '../registry/comp-expose.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import { useDocEditDoc } from './DocEditDocContext.js';
 import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
@@ -35,7 +35,7 @@ import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
 // every editor edits the block in its place and floats its controls
 // (doc_page_impl_edit.md#no-jitter-rule). it receives config.edit =
 // { session, block, format, sourcePath, label, modeId, viewRendered,
-// isSurfaceFloating, submitPrepareSet, receiverSet } and reports through events (editDraftChange,
+// isSurfaceFloating, submitPrepareSet, receiverSet, slash } and reports through events (editDraftChange,
 // editTextSetRequest, editSubmitRequest, editCancelRequest,
 // editFocusShiftRequest); the event layer routes them to
 // DocEditStore.eventHandle. the session draft is what a leave saves, so an
@@ -48,11 +48,17 @@ import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
 // registers a receiver with receiverSet(handler, { typeList }) and answers
 // each event { code: 0 } or { code: -1, message } (sessionReceiverSet).
 //
+// a block in the built-in mode 'source' gets config.edit.slash when it
+// offers the slash mode (doc_page_impl_edit_slash.md#which-blocks-offer-it):
+// the component of a component block decides, else the default editor of
+// the block kind (Paragraph and List do); the frontmatter and the whole
+// document never.
+//
 //   block         the block of a block session
 //   viewRendered  the block as the body rendered it, for editors that keep a
 //                 rendered part in the flow
 export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, viewRendered }) {
-  const { compById, editStore, sourceStore } = useDocStores();
+  const { compById, editStore, slashStore, sourceStore } = useDocStores();
   const { path, format } = useDocEditDoc();
   const session = editStore.session;
   if (!session || session.path !== path) return null;
@@ -72,6 +78,7 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
       isSurfaceFloating: session.type === 'frontmatter' || session.type === 'document',
       submitPrepareSet: (handler) => editStore.sessionSubmitPrepareSet(session, handler),
       receiverSet: (handler, option) => editStore.sessionReceiverSet(session, handler, option),
+      slash: undefined,
     },
   };
 
@@ -99,6 +106,13 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
   }
 
   const compName = session.type === 'block' ? compNameByBlockKind[block?.kind] ?? 'BlockSource' : 'BlockSource';
+  if (slashStore && session.type === 'block' && slashIsEnabled(compById, sourceStore.configDoc, component?.compName ?? compName)) {
+    configEdit.edit.slash = {
+      store: slashStore,
+      // what the slash actions are given (slash-define.js)
+      context: { sourcePath: path, docPageAlias: sourceStore.docPageAliasOfPath(path), source: sourceStore.sourceService },
+    };
+  }
   return (
     <RegisteredComp
       compName={compName}
@@ -108,6 +122,14 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
     />
   );
 });
+
+// the block offers the slash mode in its source surface: the component
+// named (the block's own component, or the default editor of its kind)
+// declares meta.isEditSlashEnabled
+function slashIsEnabled(compById, configDoc, compName) {
+  const definition = compDefinitionNormalize(compDefinitionGet(compById, compIdResolve(configDoc, compName)));
+  return definition ? compMetaGet(definition).isEditSlashEnabled === true : false;
+}
 
 // default editor (built-in component name) of each block kind
 const compNameByBlockKind = {

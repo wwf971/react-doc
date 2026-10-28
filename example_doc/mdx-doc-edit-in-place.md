@@ -66,6 +66,12 @@ function greet(name) {
 }
 ```
 
+## Slash commands
+
+Paragraphs and lists offer the slash mode while their source is edited. Enter the paragraph below, go to its end, and type `/`: a menu of actions opens under it. Type `/link ` (with the space) and then a word, such as `setup` or `image`, and the menu lists the documents of the whole workspace that match. ↑ and ↓ move through the list, and Enter (or a click) writes the link in place of what you typed. The target is the shortest one that names exactly that document: `./…` in this folder, `~root/…` in another root of this doc page, `~sub:sub-doc/…` for a document of the included sub doc page. Type a path instead of a word to walk the folders (`/link ~example/`, then choose a folder), and add `#` and a heading to link to a place (`/link writing#Lists`). Escape, two spaces in a row, or moving the caret away leaves what you typed as plain text. The **Slash** button in the floating bar turns the slash mode off for the page, and `/` is then just a character. Headings, code blocks and the other kinds do not offer it.
+
+Try the slash mode here: write a sentence and link it to a page of the sub doc page with /link.
+
 ## Components with their own editor
 
 A component exposes the edit modes of its editor in its registration (`expose.editModeList`) and renders `XxxEdit` when the page hands it `config.isEdit`. The editor keeps the component in the flow at its usual size, makes the values it displays editable where they are, and floats the rest, so entering edit mode does not move the page. The comment marker and its block are one block to the edit layer, so editing or deleting them never separates the two. Every such block also keeps the plain source editor as a second edit mode, **Source**, one entry away in the mode menu.

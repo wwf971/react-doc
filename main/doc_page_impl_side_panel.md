@@ -468,6 +468,8 @@ Document items and folders bound to documents receive stable item routes, while 
 
 The default folder gesture (an inactive label navigates, the active label toggles, the chevron only toggles) lives in `DocSidebarFolder`. Consumers replace it through runtime `config.sidePanel.components.Folder` without replacing route resolution or history. See [Indexed-folder interaction](doc_page_impl_nav.md#indexed-folder-interaction).
 
+**A folder bound to a document looks different from one that is not.** This is a requirement of the default renderer: the two answer a click on their label differently (the first navigates, the second only folds), so the reader must be able to tell them apart before clicking, at rest, without hovering. `DocSidebarFolder` draws the chevron of a bound folder as a small framed button of its own (`doc-sidebar-folder-toggle`), and the chevron of an unbound folder plain, as part of a row that only folds. The difference keeps the row height, so a folder never shifts when its document is bound or unbound. A renderer supplied through `config.sidePanel.components.Folder` is the consumer's and is not held to this.
+
 ## A workspace of several doc pages
 
 A workspace with one root doc page shows that doc page's side panel, as if it were served alone. With several (written in the workspace file or [mounted for now](doc_page_impl_source.md#temporary-doc-pages)), the side panel shows them one after the other, each as a **section**: the alias of the doc page as a muted heading, then its own side panel at the depth of the tree's root, so its items look as they do alone. The workspace only arranges the side panels; a doc page's tree stays in its entry.

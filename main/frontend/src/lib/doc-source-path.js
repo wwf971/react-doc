@@ -177,3 +177,32 @@ export function sourcePathFromRelative(value, fromPath) {
   }
   return text;
 }
+
+// the shortest spelling of a reference to targetPath, written in the
+// document fromPath, that still names exactly that file (both full paths):
+//   same root of the same doc page   relative: './a.md', '../x/a.md'
+//   another root of the same doc page   local form: '~root/x/a.md'
+//   another doc page                 full form: '~page:root/x/a.md'
+// a relative spelling stays valid when the doc page is included elsewhere
+// or renamed, and a plain Markdown viewer follows it too; the local doc
+// page answers a local path first, so the local form is exact there
+// (doc_page_impl_nav.md#link-recognition-and-target-resolution).
+// a path that is not in the full form is returned normalized.
+export function sourcePathReferenceGet(targetPath, fromPath) {
+  const target = sourcePathParse(targetPath);
+  const from = sourcePathParse(fromPath);
+  if (!target || !target.docPageAlias) return sourcePathNormalize(targetPath);
+  if (!from || from.docPageAlias !== target.docPageAlias) return sourcePathNormalize(targetPath);
+  if (from.rootAlias !== target.rootAlias) return sourcePathBuild(target.rootAlias, target.relPath);
+  const segFromList = from.relPath.split('/').filter(Boolean).slice(0, -1);
+  const segTargetList = target.relPath.split('/').filter(Boolean);
+  let countCommon = 0;
+  while (
+    countCommon < segFromList.length
+    && countCommon < segTargetList.length - 1
+    && segFromList[countCommon] === segTargetList[countCommon]
+  ) countCommon += 1;
+  const upList = segFromList.slice(countCommon).map(() => '..');
+  const rest = segTargetList.slice(countCommon).join('/');
+  return upList.length > 0 ? `${upList.join('/')}/${rest}` : `./${rest}`;
+}

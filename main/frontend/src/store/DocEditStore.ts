@@ -306,7 +306,7 @@ export class DocEditStore {
   configStore: DocConfigStore;
   api: ReturnType<typeof docEditApiCreate> | undefined;
   // the environment of the page; only isCapable / endpointGet are used
-  envStore: Pick<DocEnvStore, 'isCapable' | 'endpointGet'>;
+  envStore: Pick<DocEnvStore, 'isCapable' | 'endpointGet'> & Partial<Pick<DocEnvStore, 'serverLostReport'>>;
   isEditMode = false;
   isBlockSelectMode = false;
   sourceByPath: Record<string, EditSource> = {};
@@ -352,7 +352,7 @@ export class DocEditStore {
     sourceStore: DocSourceStore,
     docStore: DocStore,
     configStore: DocConfigStore,
-    options?: { envStore?: Pick<DocEnvStore, 'isCapable' | 'endpointGet'>; assetStore?: DocAssetStore; compStateStore?: DocCompStateStore },
+    options?: { envStore?: Pick<DocEnvStore, 'isCapable' | 'endpointGet'> & Partial<Pick<DocEnvStore, 'serverLostReport'>>; assetStore?: DocAssetStore; compStateStore?: DocCompStateStore },
   ) {
     this.sourceStore = sourceStore;
     this.envStore = options?.envStore ?? sourceStore.envStore;
@@ -361,7 +361,11 @@ export class DocEditStore {
     this.assetStore = options?.assetStore;
     this.compStateStore = options?.compStateStore;
     const endpoint = this.envStore.endpointGet('edit');
-    this.api = endpoint ? docEditApiCreate(endpoint) : undefined;
+    // a call that cannot reach the server tells the environment, which turns
+    // editing off (view-only) until the server answers again
+    this.api = endpoint
+      ? docEditApiCreate(endpoint, { onUnreachable: (message: string) => this.envStore.serverLostReport?.(message) })
+      : undefined;
     makeAutoObservable(this, {
       api: false,
       envStore: false,
