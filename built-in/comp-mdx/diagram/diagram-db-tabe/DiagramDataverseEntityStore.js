@@ -18,7 +18,7 @@ class DiagramDataverseEntityStore {
 		if (!this.source.trim()) {
 			this.entity = null;
 			this.node = null;
-			this.loadState = { status: 'empty', message: 'エンティティ定義が空です。' };
+			this.loadState = { status: 'empty', message: 'The table definition is empty.' };
 			return;
 		}
 

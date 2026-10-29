@@ -35,7 +35,7 @@ node:
 - `isRequired` and `description` are optional.
 - A column description must be available from the corresponding column-name tooltip without increasing the table's vertical size.
 - Legacy `entity: ...` input remains readable through the same model's compatibility adapter.
-- Asset-backed cards support the shared visual cell and row/table settings editor. Drafts save on Save or normal exit, to the asset or inline YAML; Cancel discards them. Inline cards remain read-only in visual mode.
+- Inline and asset-backed cards share the visual editor of the diagrams (`DiagramVisualEdit`, [comp_db_vis.md](../diagram-er/comp_db_vis.md#card-editing)): cells typed in place, rows inserted / moved / removed, row handles added and removed from the Row tab or the row edges. Drafts save on Save or normal exit, to the asset or inline YAML; Cancel discards them.
 
 ## Display Requirements
 
@@ -45,4 +45,5 @@ node:
 - Allow horizontal scrolling for the complete table only when its content does not fit within the document width.
 - `height: auto` follows the content. An explicit numeric height constrains the wrapper and enables scrolling.
 - Do not provide diagram interactions such as zooming, panning, translation, dragging, or connectors.
-- When input loading or parsing fails, display a Japanese error message at the corresponding input location.
+- When input loading or parsing fails, display the error with its reason in place of the card.
+- Both modes render inside `BlockPopupSurface`: the card opens in the block popup and is edited there; the surface's outer box (`.doc-vis-card-shell`) carries the block's margins ([Block-like components](../../../../main/doc_page_impl_mdx_comp_block.md)).

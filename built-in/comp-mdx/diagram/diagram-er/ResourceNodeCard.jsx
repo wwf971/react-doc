@@ -1,26 +1,21 @@
 import { observer } from 'mobx-react-lite';
-import { DataverseCell } from './DataverseVisualEdit.jsx';
+import { TableCard } from './TableCard.jsx';
+import { cardSchemaGet } from './TableCardSchema.js';
 import './ResourceNodeCard.css';
 
-export const ResourceNodeCard = observer(function ResourceNodeCard({ data, fields, family, label, Icon, anchorRef, editor, nodeId }) {
-	const focus = editor?.store.focus;
-	const isFocused = focus?.nodeId === nodeId;
-	const cell = (field, value, rowId = null) => <DataverseCell editor={editor} nodeId={nodeId} rowId={rowId} field={field.id} value={value} values={field.values} />;
-	return <div className={`doc-er-table doc-resource-card is-${family}${editor ? ' is-editable' : ''}${isFocused && !focus.rowId ? ' is-focused' : ''}`} tabIndex={editor ? 0 : undefined}
-		onClick={editor ? event => editor.focus(nodeId, null, event.currentTarget) : undefined}>
-		<div ref={anchorRef?.('header')} className="doc-er-table-title">
-			<Icon size={16} />
-			<span className="doc-er-table-title-text">{cell(fields[0], data.name)}</span>
-			<span className="doc-resource-family">{label}</span>
-		</div>
-		{fields.slice(1).map(field => <div key={field.id} className="doc-resource-field nodrag">
-			<span className="doc-resource-label">{field.label}</span>
-			{cell(field, data[field.id])}
-		</div>)}
-		{data.properties.map(property => <div key={property.id} ref={anchorRef?.(`property/${property.id}`)} className={`doc-resource-field doc-resource-property nodrag${isFocused && focus.rowId === property.id ? ' is-focused' : ''}`}
-			onClick={editor ? event => { event.stopPropagation(); editor.focus(nodeId, property.id, event.currentTarget); } : undefined}>
-			{cell({ id: 'name' }, property.name, property.id)}
-			<span title={property.description || undefined}>{cell({ id: 'value' }, property.value, property.id)}</span>
-		</div>)}
-	</div>;
+// A Power Platform resource card (a flow step, a business rule): the generic
+// table card with the resource schema: head fields under the title and
+// property rows, each a name and a value
+export const ResourceNodeCard = observer(function ResourceNodeCard({ node, family, label, Icon, anchorRef, editor, nodeId }) {
+	const schema = cardSchemaGet(node);
+	return (
+		<TableCard
+			node={node} schema={schema} editor={editor} nodeId={nodeId} anchorRef={anchorRef}
+			className={`doc-resource-card is-${family}`}
+			columnsStyle={{ '--doc-card-columns': 'minmax(0, 0.8fr) minmax(0, 1.6fr)' }}
+			titleLeading={<Icon size={16} />}
+			titleTrailing={<span className="doc-resource-family">{label}</span>}
+			cellRender={(field, row, value) => field.id === 'value' ? <span title={row.description || undefined}>{value}</span> : undefined}
+		/>
+	);
 });

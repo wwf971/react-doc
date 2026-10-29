@@ -1,5 +1,4 @@
-import { useContext, useEffect, useId, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { toJS } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import {
@@ -12,20 +11,33 @@ import {
 	useNodesInitialized,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Copy, Expand, X } from '../../../../main/frontend/UICommon.js';
+import { Copy } from '../../../../main/frontend/UICommon.js';
+import { BlockPopupSurface } from '../../../../main/comp-doc/popup/BlockPopupSurface.jsx';
 import { DiagramERStore, diagramViewStateGet } from './DiagramERStore.js';
-import { DiagramNode, DiagramEdge, DiagramRenderContext } from './DiagramRender.jsx';
+import { DiagramNode, DiagramPointNode, DiagramCreateNode, DiagramEdge, DiagramConnectionLine, DiagramRenderContext } from './DiagramRender.jsx';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve } from '../../../../main/comp-doc/registry/comp-registry.js';
 import './DiagramER.css';
-import { DataverseVisualEdit } from './DataverseVisualEdit.jsx';
+import { DiagramVisualEdit } from './DiagramVisualEdit.jsx';
 
+// A diagram of nodes and connections on a pannable, zoomable canvas
+// (comp_db_vis.md). Both modes render inside BlockPopupSurface
+// (doc_page_impl_mdx_comp_block.md): the diagram opens in the block popup,
+// fills it, and switches between View and Edit there. The outer box of the
+// surface carries the block's margins; the figure has none, so it sits
+// flush in the popup and the geometry lock of an edit session measures the
+// block from the outer box.
 function DiagramER({ data = {}, config = {}, onEvent }) {
-	if (config.isEdit && config.edit?.modeId === 'visual') return <DataverseVisualEdit data={data} config={config} onEvent={onEvent} kind="diagram" renderContent={props => <DiagramERView {...props} config={config} onEvent={onEvent} />} />;
-	return <DiagramERView data={data} config={config} onEvent={onEvent} />;
+	return (
+		<BlockPopupSurface config={config} title={data.title || 'Diagram'} className="doc-er-diagram-shell not-prose">
+			{({ isInPopup }) => (config.isEdit && config.edit?.modeId === 'visual'
+				? <DiagramVisualEdit data={data} config={config} onEvent={onEvent} kind="diagram" isInPopup={isInPopup} renderContent={props => <DiagramERView {...props} config={config} onEvent={onEvent} isInPopup={isInPopup} />} />
+				: <DiagramERView data={data} config={config} onEvent={onEvent} isInPopup={isInPopup} />)}
+		</BlockPopupSurface>
+	);
 }
 
-const DiagramERView = observer(function DiagramERView({ data = {}, config = {}, onEvent, editor }) {
+const DiagramERView = observer(function DiagramERView({ data = {}, config = {}, onEvent, editor, isInPopup = false }) {
 	const sourceDiagram = data.source || data.raw || '';
 	const { compById, sourceStore } = useDocStores();
 	const [viewState] = useState(() => diagramViewStateGet(sourceStore, config));
@@ -34,29 +46,15 @@ const DiagramERView = observer(function DiagramERView({ data = {}, config = {}, 
 		if (!definition?.placementList?.includes(placement)) return undefined;
 		return definition.expose?.[placement];
 	}, heightGet(data.height ?? config.height)));
-	const titleId = useId();
+	const edgeGeometry = useRef(new Map());
 	// the height is an authored prop (data.height); config.height is the
 	// form a host passes it in
 	const heightDiagram = store.viewport.size.height === 'auto' ? 620 : store.viewport.size.height;
-	const context = { config, editor, measurementSet: store.measurementSet };
-
-	const isExpandedSet = async (isExpanded) => {
-		const result = await onEvent?.('expandChangeRequest', { isExpanded });
-		if (result?.code !== 0) store.expandedSet(isExpanded);
-	};
+	const context = { config, editor, measurementSet: store.measurementSet, edgeGeometry: edgeGeometry.current };
 
 	useEffect(() => {
 		if (store.source !== sourceDiagram) store.sourceLoad(sourceDiagram, Boolean(editor));
 	}, [sourceDiagram, store]);
-
-	useEffect(() => {
-		if (!store.isExpanded) return undefined;
-		const keyDownHandle = (event) => {
-			if (event.key === 'Escape') void isExpandedSet(false);
-		};
-		window.addEventListener('keydown', keyDownHandle);
-		return () => window.removeEventListener('keydown', keyDownHandle);
-	}, [store.isExpanded]);
 
 	async function sourceCopy() {
 		const result = await onEvent?.('copyRequest', { text: sourceDiagram });
@@ -69,48 +67,16 @@ const DiagramERView = observer(function DiagramERView({ data = {}, config = {}, 
 		}
 	}
 
-	const copyLabel = store.copyStatus === 'copied'
-		? 'コピーしました'
-		: store.copyStatus === 'failed'
-			? 'コピーできませんでした'
-			: 'ER 図の YAML をコピー';
-	const popup = store.isExpanded && typeof document !== 'undefined' ? createPortal(
-		<div className="doc-er-diagram-overlay" onMouseDown={() => void isExpandedSet(false)}>
-			<section
-				className="doc-er-diagram-popup"
-				role="dialog"
-				aria-modal="true"
-				aria-labelledby={titleId}
-				onMouseDown={(event) => event.stopPropagation()}
-			>
-				<header className="doc-er-diagram-popup-header">
-					<h2 id={titleId}>{data.title ?? 'ER Diagram'}</h2>
-					<button type="button" title="拡大表示を閉じる" aria-label="拡大表示を閉じる" onClick={() => void isExpandedSet(false)}>
-						<X size={18} />
-					</button>
-				</header>
-				<div className="doc-er-diagram-popup-content">
-					<ReactFlowProvider>
-						<DiagramRenderContext.Provider value={context}><DiagramERCanvas store={store} /></DiagramRenderContext.Provider>
-					</ReactFlowProvider>
-				</div>
-			</section>
-		</div>,
-		document.body,
-	) : null;
-
+	const copyLabel = store.copyStatus === 'copied' ? 'Copied' : store.copyStatus === 'failed' ? 'Could not copy' : 'Copy the diagram YAML';
 	return (
 		<figure
-			className="doc-er-diagram"
-			aria-label={data.title ?? 'ER Diagram'}
-			style={{ '--doc-er-diagram-height': `${heightDiagram}px`, width: store.viewport.size.width === 'auto' ? '100%' : store.viewport.size.width, maxWidth: '100%' }}
+			className={`doc-er-diagram${isInPopup ? ' is-popup' : ''}${editor ? ' is-editing' : ''}`}
+			aria-label={data.title ?? 'Diagram'}
+			style={{ '--doc-er-diagram-height': `${heightDiagram}px`, width: isInPopup || store.viewport.size.width === 'auto' ? '100%' : store.viewport.size.width, maxWidth: '100%' }}
 		>
 			{!editor ? <div className="doc-er-diagram-toolbar">
 				<button type="button" title={copyLabel} aria-label={copyLabel} onClick={sourceCopy}>
-					<Copy size={17} />
-				</button>
-				<button type="button" title="図を拡大表示" aria-label="図を拡大表示" onClick={() => void isExpandedSet(true)}>
-					<Expand size={17} />
+					<Copy size={15} />
 				</button>
 			</div> : null}
 			<div className="doc-er-diagram-viewport">
@@ -118,19 +84,33 @@ const DiagramERView = observer(function DiagramERView({ data = {}, config = {}, 
 					<DiagramRenderContext.Provider value={context}><DiagramERCanvas store={store} viewState={viewState} isEditing={Boolean(editor)} /></DiagramRenderContext.Provider>
 				</ReactFlowProvider>
 			</div>
-			{popup}
 		</figure>
 	);
 });
 
 const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, isEditing = false }) {
-	const { editor } = useContext(DiagramRenderContext);
-	const { fitView, setViewport, getViewport, getNode } = useReactFlow();
+	const { editor, edgeGeometry } = useContext(DiagramRenderContext);
+	const { fitView, setViewport, getViewport, getNode, getInternalNode, screenToFlowPosition, flowToScreenPosition } = useReactFlow();
 	const isInitialized = useNodesInitialized();
+	const wrapper = useRef(null);
 	const graphVersion = store.graphVersion;
 	const viewport = store.viewport;
-	const nodeList = toJS(store.nodeList).map(node => ({ ...node, draggable: !node.data.node.isPositionLocked && !editor?.isLocked }));
-	const edgeList = toJS(store.edgeList);
+	const isLocked = Boolean(editor?.isLocked);
+	const selection = editor?.store.selection;
+	const interaction = editor?.store.interaction;
+	const create = editor?.store.create;
+	// while reading, a node is never dragged: a drag on a card pans the
+	// canvas, as on empty space, and a drag in a row selects its text
+	const nodeList = [
+		...toJS(store.nodeList).map(node => node.type === 'visualizationNode' ? { ...node, draggable: isEditing && !isLocked && !node.data.node.isPositionLocked } : node.type === 'visualizationPoint' ? { ...node, draggable: isEditing && !isLocked } : node),
+		...(create ? [{ id: '~create', type: 'visualizationCreate', position: create.position, initialWidth: 300, initialHeight: 240, draggable: false, selectable: false, focusable: false, connectable: false, zIndex: 1000, data: { position: create.position } }] : []),
+	];
+	const edgeList = toJS(store.edgeList).map(edge => ({
+		...edge,
+		reconnectable: isEditing && !isLocked,
+		className: selection?.connectionId === edge.id ? 'is-selected' : undefined,
+		hidden: interaction?.type === 'detach' && interaction.connectionId === edge.id,
+	}));
 	const signature = JSON.stringify(viewport);
 	const viewRemembered = viewState?.signature === signature ? viewState.view : undefined;
 
@@ -139,10 +119,45 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 		const canvas = {
 			positionGet: id => getNode(id)?.position,
 			viewRemember: () => { if (viewState) Object.assign(viewState, { signature, view: { ...getViewport() } }); },
+			// the center of a handle in canvas coordinates, with the side it faces
+			handlePositionGet: (nodeId, handleId) => {
+				const internal = getInternalNode(nodeId);
+				const bounds = [...(internal?.internals.handleBounds?.source ?? []), ...(internal?.internals.handleBounds?.target ?? [])].find(handle => handle.id === handleId);
+				if (!internal || !bounds) return null;
+				return { x: internal.internals.positionAbsolute.x + bounds.x + bounds.width / 2, y: internal.internals.positionAbsolute.y + bounds.y + bounds.height / 2, side: bounds.position };
+			},
+			// the handle nearest to a canvas position, within a radius in canvas units
+			handleNearestGet: (position, radius = 18) => {
+				let nearest = null;
+				for (const node of store.nodeList) {
+					if (node.type !== 'visualizationNode') continue;
+					const internal = getInternalNode(node.id);
+
+					if (!internal) continue;
+					for (const bounds of [...(internal.internals.handleBounds?.source ?? []), ...(internal.internals.handleBounds?.target ?? [])]) {
+						const x = internal.internals.positionAbsolute.x + bounds.x + bounds.width / 2;
+						const y = internal.internals.positionAbsolute.y + bounds.y + bounds.height / 2;
+						const distance = Math.hypot(x - position.x, y - position.y);
+						if (distance <= radius && (!nearest || distance < nearest.distance)) nearest = { nodeId: node.id, handleId: bounds.id, distance };
+					}
+				}
+				return nearest;
+			},
+			nodeRectGet: id => wrapper.current?.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`)?.getBoundingClientRect() ?? null,
+			edgeRectGet: id => {
+				const geometry = edgeGeometry?.get(id);
+				if (!geometry) return null;
+				const point = flowToScreenPosition({ x: geometry.midX, y: geometry.midY });
+				return { left: point.x - 6, right: point.x + 6, top: point.y - 6, bottom: point.y + 6, width: 12, height: 12 };
+			},
+			centerGet: () => {
+				const rect = wrapper.current?.getBoundingClientRect();
+				return rect ? screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) : null;
+			},
 		};
 		editor.canvas.current = canvas;
 		return () => { if (editor.canvas.current === canvas) editor.canvas.current = null; };
-	}, [editor?.canvas, getNode, getViewport, viewState, signature]);
+	}, [editor?.canvas, getNode, getInternalNode, getViewport, flowToScreenPosition, screenToFlowPosition, viewState, signature, edgeGeometry]);
 
 	useEffect(() => {
 		if (store.loadState.status !== 'done' || !isInitialized) return undefined;
@@ -170,22 +185,24 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 	if (store.loadState.status === 'error') {
 		return (
 			<div className="doc-er-diagram-message is-error" role="alert">
-				<strong>Failed to read ER diagram data.</strong>
+				<strong>The diagram data could not be read.</strong>
 				<span>{store.loadState.message}</span>
 			</div>
 		);
 	}
 	if (store.loadState.status !== 'done') {
-		return <div className="doc-er-diagram-message">ER diagram data is empty.</div>;
+		return <div className="doc-er-diagram-message">The diagram data is empty.</div>;
 	}
 
 	return (
 		<ReactFlow
+			ref={wrapper}
 			className="doc-er-diagram-flow"
 			nodes={nodeList}
 			edges={edgeList}
 			nodeTypes={nodeTypes}
 			edgeTypes={edgeTypes}
+			connectionLineComponent={DiagramConnectionLine}
 			defaultViewport={viewRemembered ?? (viewport.view === 'auto' ? { x: 0, y: 0, zoom: 1 } : viewport.view)}
 			fitViewOptions={{ padding: 0.12 }}
 			minZoom={viewport.zoom.min}
@@ -193,19 +210,38 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			onMove={(_event, view) => { if (viewState) Object.assign(viewState, { signature, view: { ...view } }); }}
 			onMoveEnd={(_event, view) => rangeApply(view)}
 			proOptions={{ hideAttribution: true }}
-			nodesDraggable={!editor?.isLocked}
-			onNodeDragStop={isEditing ? (_event, node) => {
-				const authored = editor.store.nodes.find(item => item.id === node.id);
-				if (authored?.position && authored.position !== 'auto' && !authored.isPositionLocked) editor.change(() => editor.store.nodeMove(node.id, node.position));
-			} : undefined}
-			onPaneClick={isEditing ? editor.clearFocus : undefined}
-			onNodeClick={isEditing ? (event, node) => {
-				if (node.data.node.renderer.type?.startsWith('dataverse-')) editor.focus(node.id, null, event.currentTarget);
-			} : undefined}
-			nodesConnectable={false}
+			nodesDraggable={isEditing && !isLocked}
+			nodesConnectable={isEditing && !isLocked}
+			nodesFocusable={false}
+			edgesFocusable={false}
+			edgesReconnectable={isEditing && !isLocked}
 			elementsSelectable={false}
+			connectionMode="loose"
+			connectOnClick={false}
+			connectionRadius={24}
+			reconnectRadius={12}
+			zoomOnDoubleClick={!isEditing}
+			deleteKeyCode={null}
+			selectionKeyCode={null}
 			multiSelectionKeyCode={null}
 			onNodesChange={store.nodeListChange}
+			onNodeDragStart={isEditing ? (_event, node) => editor.nodeDragStart(node) : undefined}
+			onNodeDragStop={isEditing ? (event, node) => editor.nodeDragStop(node, event.clientX !== undefined ? screenToFlowPosition({ x: event.clientX, y: event.clientY }) : null) : undefined}
+			// React Flow turns the pointer off on a node that takes no interaction
+			// at all; a mouse-enter handler keeps it on, so the text of a card
+			// stays selectable while reading and a drag on its title line pans
+			onNodeMouseEnter={nodeMouseEnterNoop}
+			onNodeClick={isEditing ? (event, node) => { if (node.type === 'visualizationNode' && !event.target.closest('.doc-card, .doc-vis-operator')) editor.select(node.id, {}, event.currentTarget); } : undefined}
+			onEdgeClick={isEditing ? (_event, edge) => editor.selectConnection(edge.id) : undefined}
+			onPaneClick={isEditing ? () => { editor.clearSelection(); editor.createClose(); } : undefined}
+			onDoubleClick={isEditing ? event => { if (event.target.classList?.contains('react-flow__pane')) editor.createOpen(screenToFlowPosition({ x: event.clientX, y: event.clientY })); } : undefined}
+			onConnectStart={isEditing ? (_event, params) => editor.connectStart(params.nodeId, params.handleId) : undefined}
+			onConnect={isEditing ? connection => editor.connect(connection) : undefined}
+			onConnectEnd={isEditing ? (_event, state) => editor.connectEnd(state) : undefined}
+			isValidConnection={isEditing ? connection => editor.connectionIsValid(connection) : undefined}
+			onReconnectStart={isEditing ? (_event, edge, handleType) => editor.reconnectStart(edge, handleType) : undefined}
+			onReconnect={isEditing ? (edge, connection) => editor.reconnect(edge, connection) : undefined}
+			onReconnectEnd={isEditing ? (_event, edge, handleType, state) => editor.reconnectEnd(edge, handleType, state) : undefined}
 		>
 			<Background gap={18} size={1} />
 			<Controls showInteractive={false} />
@@ -214,7 +250,8 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 	);
 });
 
-const nodeTypes = { visualizationNode: DiagramNode };
+const nodeMouseEnterNoop = () => {};
+const nodeTypes = { visualizationNode: DiagramNode, visualizationPoint: DiagramPointNode, visualizationCreate: DiagramCreateNode };
 const edgeTypes = { visualizationEdge: DiagramEdge };
 
 function heightGet(value) {

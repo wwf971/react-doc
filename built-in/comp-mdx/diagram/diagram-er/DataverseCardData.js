@@ -1,6 +1,6 @@
 export function dataverseCardNormalize(data = {}) {
 	if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Card data must be a mapping.');
-	if (!Array.isArray(data.columns) || !data.columns.length) throw new Error('Card columns must be a non-empty list.');
+	if (!Array.isArray(data.columns)) throw new Error('Card columns must be a list.');
 	const ids = new Set();
 	return {
 		...data,
@@ -24,10 +24,16 @@ export function dataverseCardNormalize(data = {}) {
 	};
 }
 
+// a table card has no handle on its title line: handles belong to its rows
+// (comp_db_vis.md#handles-and-anchors)
 export function dataverseAnchorListGet(data) {
 	return [
 		{ id: 'body', sideList: ['left', 'right', 'top', 'bottom'] },
 		...data.columns.map(column => ({ id: `column/${column.id}`, sideList: ['left', 'right'] })),
-		{ id: 'header', sideList: ['left', 'right'] },
 	];
+}
+
+// a choice card is referenced as a whole: connections attach to its header
+export function dataverseChoiceAnchorListGet(data) {
+	return [...dataverseAnchorListGet(data), { id: 'header', sideList: ['left', 'right'] }];
 }

@@ -2,6 +2,26 @@
 
 Development guidance for this project is in `main/ai-dev.md`; read it first. This file lists the service layers that already exist, so that before building a feature an agent can judge whether it is missing or already there, and in the latter case find it.
 
+## When about to do something, read this first
+
+Each row names a kind of change and the document that states what the result must satisfy. Read the document before starting; the points in bold are the ones most often missed.
+
+| When about to ... | Refer to |
+| --- | --- |
+| Implement or change the **edit mode of an MDX component** | `main/doc_page_impl_edit.md`, [Component edit mode](main/doc_page_impl_edit.md#component-edit-mode) and [the no-jitter rule](main/doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule). **Entering must move nothing: no height change, no shift of what is below, and no change of the page's scroll position** (measure the block's top and the scroll container's `scrollTop` before and after). Everything that exists only for editing floats; Escape and leaving follow the contract. |
+| Implement a **block-like component** (a canvas, a sheet, an image, a wide table, a dashboard: anything with a box of its own that the reader works inside) | `main/doc_page_impl_mdx_comp_block.md`. **Both modes inside `BlockPopupSurface` with the margins on the outer box; view mode writes nothing and keeps the wheel inside the box; one selection model and an edit card for a canvas.** Its checklist is the definition of done. |
+| Define, register or expose an **MDX component** | `main/doc_page_impl_mdx_comp.md` ([What a component exposes](main/doc_page_impl_mdx_comp.md#what-a-component-exposes)); a component inside list items: `main/doc_page_impl_mdx_li.md` |
+| Let a block open in a **popup** | `main/doc_page_impl_popup.md` |
+| Keep **state of a component** across navigation or between blocks | `main/doc_page_impl_mdx_comp_state.md` |
+| Add a **slash action** to the source editor | `main/doc_page_impl_edit_slash.md` |
+| Read or write **assets**, or make a component asset-backed | `main/doc_page_impl_asset.md` |
+| Touch the **side panel** or its yaml | `main/doc_page_impl_side_panel.md` |
+| Resolve a **path, link or reference** | `main/doc_page_impl_source.md`, `main/doc_page_impl_nav.md` |
+| Add a **config key** or read config | `main/doc_page_impl_config.md` |
+| Edit a **YAML file** programmatically | `main/doc_page_impl_yaml_utils.md` (never overwrite a file with re-serialized yaml) |
+| Talk to the **backend** or add a service | `main/doc_page_impl_service.md` |
+| Change the **diagram components** (DiagramER, the cards, the visual editor) | `built-in/comp-mdx/diagram/diagram-er/comp_db_vis.md` and the rules written for authors in `example_doc/mdx-usage/comp-diagram-er.md` |
+
 ## Existing service layers
 
 Some features already implemented which you can utilize in case you need. Check this list before building something, so a capability that already exists is extended rather than built again.
@@ -28,7 +48,7 @@ Some features already implemented which you can utilize in case you need. Check 
 
 - **Block-level operations**: Insert, move, duplicate, delete, copy / move blocks to another place or document, paste text as blocks, and block selection mode. Refer to `main/doc_page_impl_block_ops.md`.
 
-- **Block popup**: Opens any component block in a maximizable dialog with a view / edit switch. Refer to `main/doc_page_impl_popup.md`.
+- **Block popup**: Opens any component block in a maximizable dialog with a view / edit switch. Refer to `main/doc_page_impl_popup.md`. What a block-like component must and should do around it (view mode, wheel containment, entering without moving the page, the selection and edit-card patterns of a canvas) is in `main/doc_page_impl_mdx_comp_block.md`.
 
 - **Panel contract**: All dialogs of the page are framed by the host's panel component, and can be made movable, resizable and size-remembered. The host also injects menu and segmented-control components. Refer to `main/doc_page_impl.md#the-panel-contract`.
 

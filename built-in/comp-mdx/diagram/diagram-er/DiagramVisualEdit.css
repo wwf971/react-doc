@@ -1,0 +1,713 @@
+/* The visual editor of the diagrams (DiagramVisualEdit.jsx). Its buttons and
+   texts are the shared classes of the edit layer (.doc-button-dialog,
+   .doc-button-icon, .doc-note, .doc-error, the .doc-edit-panel bar); this
+   file lays out what is its own: the states of a card in the editor, the
+   cells, the host's text control in a cell, the edit card (DiagramEditCard.jsx)
+   and its PropEditor in the colors of the page, the create panel. */
+
+.doc-vis-edit-message {
+	display: block;
+	margin: 0.25rem 0;
+}
+
+/* ---------- bar ---------- */
+
+.doc-vis-dirty {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+	color: var(--color-fd-muted-foreground);
+	white-space: nowrap;
+}
+
+.doc-vis-dirty.is-dirty {
+	color: var(--color-fd-foreground);
+}
+
+.doc-vis-dirty.is-dirty::before {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: #d97706;
+	content: '';
+}
+
+.doc-vis-save-target {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+	padding-left: 0.4rem;
+	border-left: 1px solid var(--color-fd-border);
+	color: var(--color-fd-muted-foreground);
+	white-space: nowrap;
+}
+
+/* ---------- a card in the editor ---------- */
+
+.doc-er-table.is-editable .doc-card-row {
+	cursor: pointer;
+}
+
+.doc-er-table.is-editable .doc-card-row:hover:not(.is-row-of-selection) {
+	background: color-mix(in srgb, var(--color-fd-primary) 4%, transparent);
+}
+
+.doc-er-table.is-selected,
+.doc-vis-operator.is-selected {
+	outline: 2px solid var(--color-fd-primary);
+	outline-offset: 1px;
+}
+
+.doc-card-row.is-selected {
+	background: color-mix(in srgb, var(--color-fd-primary) 9%, var(--color-fd-background));
+	box-shadow: inset 3px 0 var(--color-fd-primary);
+}
+
+.doc-card-row.is-row-of-selection:not(.is-selected) {
+	box-shadow: inset 3px 0 color-mix(in srgb, var(--color-fd-primary) 45%, transparent);
+}
+
+.doc-er-table.is-editable .doc-card-field {
+	cursor: pointer;
+}
+
+.doc-er-table.is-editable .doc-card-field:hover,
+.doc-card-field.is-selected {
+	background: color-mix(in srgb, var(--color-fd-primary) 12%, transparent);
+	color: var(--color-fd-primary);
+}
+
+.doc-vis-cell.is-column-selected {
+	background: color-mix(in srgb, var(--color-fd-primary) 5%, transparent);
+}
+
+.doc-vis-cell.is-cell-selected {
+	box-shadow: inset 0 0 0 1.5px var(--color-fd-primary);
+}
+
+.doc-er-table.is-editable:focus-visible,
+.doc-card-row:focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--color-fd-primary) 60%, transparent);
+	outline-offset: -2px;
+}
+
+/* the "+" at an edge of a row (or of the title line) that adds a handle
+   there; shown while the row is pointed at */
+.doc-card-handle-add {
+	position: absolute;
+	top: 50%;
+	z-index: 2;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 13px;
+	height: 13px;
+	padding: 0;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 50%;
+	background: var(--color-fd-background);
+	color: var(--color-fd-muted-foreground);
+	opacity: 0;
+	cursor: pointer;
+	transform: translate(-50%, -50%);
+	transition: opacity 80ms ease;
+}
+
+.doc-card-handle-add.is-left {
+	left: 0;
+}
+
+.doc-card-handle-add.is-right {
+	left: 100%;
+}
+
+.doc-card-row:hover > .doc-card-handle-add,
+.doc-card-title:hover > .doc-card-handle-add,
+.doc-card-handle-add:focus-visible {
+	opacity: 1;
+}
+
+.doc-card-handle-add:hover {
+	border-color: var(--color-fd-primary);
+	color: var(--color-fd-primary);
+}
+
+/* a value of a cell: the text of the read view, clickable. no padding and
+   no minimum height of its own, so the row keeps its height */
+.doc-vis-cell-value {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+	margin: 0;
+	padding: 0 2px;
+	border: 0;
+	border-radius: 2px;
+	background: none;
+	color: inherit;
+	font: inherit;
+	line-height: inherit;
+	letter-spacing: inherit;
+	text-align: inherit;
+	overflow-wrap: anywhere;
+	cursor: text;
+}
+
+.doc-vis-cell-value:hover:not(:disabled),
+.doc-vis-cell-value:focus-visible {
+	background: color-mix(in srgb, var(--color-fd-primary) 10%, transparent);
+	outline: none;
+}
+
+.doc-vis-cell-value:disabled {
+	cursor: default;
+}
+
+/* an enum cell picks from a menu: the chevron appears on the row being
+   pointed at or selected, so a card at rest reads like the read view */
+.doc-vis-value-menu.is-cell {
+	position: relative;
+	display: block;
+	cursor: pointer;
+}
+
+.doc-vis-value-menu.is-cell > svg {
+	position: absolute;
+	top: 50%;
+	right: -0.4rem;
+	opacity: 0;
+	pointer-events: none;
+	transform: translateY(-50%);
+	transition: opacity 80ms ease;
+}
+
+.doc-card-row:hover .doc-vis-value-menu.is-cell > svg,
+.doc-card-row.is-row-of-selection .doc-vis-value-menu.is-cell > svg,
+.doc-vis-value-menu.is-cell[aria-expanded='true'] > svg {
+	opacity: 0.7;
+}
+
+/* ---------- the host's text control ---------- */
+
+.doc-vis-text {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+}
+
+.doc-vis-text .editable-value-container .value-text-viewport .editable-value-text {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 100%;
+	min-height: 1.5rem;
+	padding: 3px 6px;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 2px;
+	background: var(--color-fd-background);
+	color: var(--color-fd-foreground);
+	font-size: 0.72rem;
+	line-height: 1.3;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.doc-vis-text .editable-value-container .value-text-viewport .editable-value-text.editing {
+	border-color: var(--color-fd-primary);
+	box-shadow: none;
+}
+
+.doc-vis-text.is-multiline .editable-value-container .value-text-viewport .editable-value-text {
+	min-height: 3.4rem;
+}
+
+/* in a cell the control takes the place of the text: same font, same line
+   height, no padding; the frame is an outline, which takes no room */
+.doc-vis-text.is-cell .editable-value-container .value-text-viewport .editable-value-text {
+	min-height: 0;
+	padding: 0 2px;
+	border: 0;
+	outline: 1.5px solid var(--color-fd-primary);
+	outline-offset: 1px;
+	font: inherit;
+	line-height: inherit;
+}
+
+/* ---------- the edit card ---------- */
+
+.doc-vis-card-panel.doc-edit-panel {
+	position: fixed;
+	z-index: 1500;
+	box-sizing: border-box;
+	width: 320px;
+	max-width: calc(100vw - 16px);
+	max-height: calc(100vh - 16px);
+	padding: 0.35rem 0.5rem 0.5rem;
+	overflow: auto;
+}
+
+.doc-vis-card-head strong {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.doc-vis-card-body {
+	margin-top: 0.35rem;
+}
+
+.doc-vis-card-message {
+	display: block;
+	margin-top: 0.35rem;
+}
+
+.doc-vis-card-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	padding: 0.2rem 0;
+}
+
+.doc-vis-card-actions .doc-button-dialog.is-danger {
+	color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-vis-card-note {
+	padding: 0.1rem 0;
+}
+
+.doc-vis-card-menu.doc-button-dialog {
+	width: 100%;
+}
+
+/* the PropEditor of the host (react-comp-misc) in the colors and the scale
+   of the edit layer: no background of its own, the page's variables for the
+   tabs, the keys and the values */
+.doc-vis-card-panel .prop-editor-root {
+	min-height: 0;
+	width: 100%;
+	border-radius: 0;
+	background: transparent;
+	color: var(--color-fd-foreground);
+	font-size: 0.72rem;
+}
+
+.doc-vis-card-panel .prop-editor-main {
+	background: transparent;
+}
+
+.doc-vis-card-panel .prop-editor-top-tabs {
+	min-height: 0;
+	padding: 0;
+	gap: 2px;
+	background: transparent;
+	box-shadow: inset 0 -1px 0 var(--color-fd-border);
+}
+
+.doc-vis-card-panel .prop-editor-top-tab {
+	min-height: 1.5rem;
+	padding: 0.15rem 0.5rem;
+	border-radius: 2px 2px 0 0;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.72rem;
+}
+
+.doc-vis-card-panel .prop-editor-top-tab:hover:not(:disabled) {
+	background: var(--color-fd-accent);
+	color: var(--color-fd-foreground);
+}
+
+.doc-vis-card-panel .prop-editor-top-tab.is-selected {
+	top: 0;
+	background: transparent;
+	color: var(--color-fd-primary);
+	box-shadow: inset 0 -2px 0 var(--color-fd-primary);
+}
+
+.doc-vis-card-panel .prop-editor-top-tab:disabled,
+.doc-vis-card-panel .prop-editor-top-tab.is-disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+.doc-vis-card-panel .prop-editor-top-panel {
+	padding: 0.4rem 0 0;
+	overflow: visible;
+}
+
+.doc-vis-card-panel .prop-editor-group-header {
+	min-height: 1.25rem;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.66rem;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+
+.doc-vis-card-panel .prop-editor-group-header.is-static:hover {
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-vis-card-panel .prop-editor-group-caret.is-static {
+	display: none;
+}
+
+.doc-vis-card-panel .prop-editor-group-divider {
+	border-top-color: var(--color-fd-border);
+}
+
+.doc-vis-card-panel .prop-editor-group-body {
+	padding: 0 0 0.2rem;
+}
+
+.doc-vis-card-panel .prop-editor-root .keyvalues-list {
+	font-size: 0.72rem;
+}
+
+.doc-vis-card-panel .prop-editor-root .keyvalues-row {
+	min-height: 1.5rem;
+}
+
+.doc-vis-card-panel .prop-editor-root .keyvalues-row.is-row-editable:hover {
+	background: color-mix(in srgb, var(--color-fd-primary) 4%, transparent);
+}
+
+.doc-vis-card-panel .prop-editor-root .keyvalues-cell {
+	min-height: 1.5rem;
+	padding: 1px 4px;
+}
+
+.doc-vis-card-panel .prop-editor-root .key-cell {
+	color: var(--color-fd-muted-foreground);
+	font-weight: 500;
+}
+
+.doc-vis-card-panel .prop-editor-root .value-cell {
+	color: var(--color-fd-foreground);
+}
+
+.doc-vis-card-panel .prop-editor-editable-value {
+	min-height: 1.25rem;
+	color: var(--color-fd-foreground);
+	line-height: 1.1rem;
+}
+
+.doc-vis-card-panel .prop-editor-editable-value:hover {
+	background: color-mix(in srgb, var(--color-fd-primary) 8%, transparent);
+}
+
+.doc-vis-card-panel .prop-editor-editable-value:focus {
+	background: var(--color-fd-background);
+	box-shadow: inset 0 0 0 1px var(--color-fd-primary);
+}
+
+.doc-vis-card-panel .prop-editor-checkbox,
+.doc-vis-card-panel .prop-editor-radio-item {
+	color: var(--color-fd-foreground);
+	font-size: 0.72rem;
+}
+
+.doc-vis-card-panel .prop-editor-checkbox-mark {
+	border-color: var(--color-fd-border);
+	background: var(--color-fd-background);
+}
+
+.doc-vis-card-panel .prop-editor-checkbox.is-checked .prop-editor-checkbox-mark {
+	border-color: var(--color-fd-primary);
+	background: var(--color-fd-primary);
+}
+
+.doc-vis-card-panel .prop-editor-step-button,
+.doc-vis-card-panel .prop-editor-color-value,
+.doc-vis-card-panel .prop-editor-bool {
+	background: var(--color-fd-accent);
+	color: var(--color-fd-foreground);
+	font-size: 0.72rem;
+}
+
+.doc-vis-card-panel .prop-editor-custom-item {
+	color: inherit;
+	font-size: 0.72rem;
+}
+
+.doc-vis-card-panel .prop-editor-value-shell.has-custom-value {
+	align-items: center;
+}
+
+/* the plain form, when the host injects no PropEditor */
+
+.doc-vis-card-tabs {
+	display: flex;
+	gap: 2px;
+	box-shadow: inset 0 -1px 0 var(--color-fd-border);
+}
+
+.doc-vis-card-tab {
+	padding: 0.15rem 0.5rem;
+	border: 0;
+	background: transparent;
+	color: var(--color-fd-muted-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.doc-vis-card-tab[aria-selected='true'] {
+	color: var(--color-fd-primary);
+	box-shadow: inset 0 -2px 0 var(--color-fd-primary);
+}
+
+.doc-vis-card-tab:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+.doc-vis-card-section {
+	display: grid;
+	gap: 0.3rem;
+	padding: 0.4rem 0 0.2rem;
+}
+
+.doc-vis-card-section-label {
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.66rem;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+
+.doc-vis-field {
+	display: grid;
+	grid-template-columns: 5.2rem minmax(0, 1fr);
+	gap: 0.5rem;
+	align-items: center;
+}
+
+.doc-vis-field-label {
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-vis-card-number,
+.doc-vis-card-color {
+	box-sizing: border-box;
+	height: 1.35rem;
+	padding: 0 0.3rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 2px;
+	background: var(--color-fd-background);
+	color: inherit;
+	font: inherit;
+}
+
+.doc-vis-value-menu.doc-button-dialog {
+	display: inline-flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.3rem;
+	box-sizing: border-box;
+	min-width: 0;
+	max-width: 100%;
+	height: 1.35rem;
+	white-space: nowrap;
+}
+
+.doc-vis-field .doc-vis-value-menu.doc-button-dialog {
+	width: 100%;
+}
+
+.doc-vis-value-menu > span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.doc-vis-value-menu > svg {
+	flex-shrink: 0;
+}
+
+.doc-vis-check {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
+
+.doc-vis-check:disabled {
+	cursor: default;
+	opacity: 0.55;
+}
+
+.doc-vis-checkbox {
+	display: grid;
+	place-items: center;
+	box-sizing: border-box;
+	width: 14px;
+	height: 14px;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 3px;
+	background: var(--color-fd-background);
+}
+
+.doc-vis-check[aria-checked='false'] .doc-vis-checkbox svg {
+	visibility: hidden;
+}
+
+.doc-vis-check[aria-checked='true'] .doc-vis-checkbox {
+	border-color: var(--color-fd-primary);
+	background: var(--color-fd-primary);
+	color: var(--color-fd-primary-foreground);
+}
+
+/* ---------- menus ---------- */
+
+.doc-vis-menu-value {
+	display: grid;
+	grid-template-columns: 12px 1fr;
+	gap: 6px;
+	align-items: center;
+}
+
+.doc-vis-menu .menu-core-item.is-container,
+.doc-vis-menu .menu-core-item.is-container:hover {
+	padding: 0;
+	background: transparent;
+	cursor: default;
+}
+
+.doc-vis-picker {
+	box-sizing: border-box;
+	width: 260px;
+	max-width: calc(100vw - 32px);
+	padding: 6px;
+	font-size: 0.75rem;
+	text-align: left;
+}
+
+.doc-vis-picker-search {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.doc-vis-picker-search > svg {
+	flex-shrink: 0;
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-vis-picker-caption {
+	margin: 6px 2px 3px;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.68rem;
+}
+
+.doc-vis-picker-results {
+	display: grid;
+	gap: 1px;
+	max-height: 13rem;
+	overflow-y: auto;
+}
+
+.doc-vis-picker-option {
+	display: grid;
+	grid-template-columns: 12px 1fr;
+	gap: 6px;
+	align-items: center;
+	padding: 3px 6px;
+	border: 0;
+	border-radius: 2px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.doc-vis-picker-option[aria-selected='true'] {
+	background: var(--color-fd-accent);
+}
+
+/* ---------- the create panel ---------- */
+
+.doc-vis-create-panel {
+	box-sizing: border-box;
+	width: 300px;
+	padding: 0.35rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 3px;
+	background: var(--color-fd-popover, var(--color-fd-background));
+	color: var(--color-fd-foreground);
+	box-shadow: 0 6px 18px rgb(0 0 0 / 0.16);
+	font-size: 0.72rem;
+	font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.doc-vis-create-search {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	padding: 0.15rem 0.3rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 2px;
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-vis-create-search input {
+	flex: 1 1 auto;
+	min-width: 0;
+	border: 0;
+	background: transparent;
+	color: var(--color-fd-foreground);
+	font: inherit;
+	outline: none;
+}
+
+.doc-vis-create-list {
+	display: grid;
+	gap: 1px;
+	max-height: 14rem;
+	margin-top: 0.3rem;
+	overflow-y: auto;
+}
+
+.doc-vis-create-option {
+	display: grid;
+	grid-template-columns: 14px auto minmax(0, 1fr);
+	gap: 0.4rem;
+	align-items: center;
+	padding: 0.25rem 0.35rem;
+	border: 0;
+	border-radius: 2px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.doc-vis-create-option[aria-selected='true'] {
+	background: var(--color-fd-accent);
+}
+
+.doc-vis-create-label {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.doc-vis-create-description {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--color-fd-muted-foreground);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* the editor root takes the focus for its keys; it shows no ring of its own */
+.doc-vis-edit:focus {
+	outline: none;
+}

@@ -1,8 +1,17 @@
+/* the outer box of the block (BlockPopupSurface) carries the margins of the
+   diagram and of the standalone card; their own boxes have none, so they
+   sit flush in the block popup and the geometry lock of an edit session
+   measures the block from the outer box (doc_page_impl_mdx_comp_block.md) */
+.doc-er-diagram-shell,
+.doc-vis-card-shell {
+	margin: 1rem 0 1.5rem;
+}
+
 .doc-er-diagram {
 	position: relative;
 	width: 100%;
 	height: var(--doc-er-diagram-height, 620px);
-	margin: 1rem 0 1.5rem;
+	margin: 0;
 	overflow: hidden;
 	border: 1px solid var(--color-fd-border);
 	border-radius: 0.5rem;
@@ -10,23 +19,38 @@
 }
 
 .doc-er-diagram-viewport,
-.doc-er-diagram-viewport > div,
-.doc-er-diagram-popup-content,
-.doc-er-diagram-popup-content > div {
+.doc-er-diagram-viewport > div {
 	width: 100%;
 	height: 100%;
+}
+
+/* in the block popup the diagram fills the dialog, whatever its height in
+   the page; the editor root around it is a column that lets it grow */
+.doc-er-diagram.is-popup {
+	flex: 1 1 auto;
+	min-height: 0;
+	height: 100%;
+	border: 0;
+	border-radius: 0;
+}
+
+.doc-block-popup-content > .doc-vis-edit.is-popup {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+	flex-direction: column;
 }
 
 .doc-er-diagram-toolbar {
 	position: absolute;
 	z-index: 6;
-	top: 0.5rem;
-	right: 0.5rem;
+	top: 0.25rem;
+	right: 2rem;
 	display: flex;
 	gap: 0.25rem;
-	padding: 0.2rem;
+	padding: 0.1rem;
 	border: 1px solid var(--color-fd-border);
-	border-radius: 0.45rem;
+	border-radius: 2px;
 	background: color-mix(in srgb, var(--color-fd-background) 92%, transparent);
 	box-shadow: 0 2px 8px rgb(15 23 42 / 12%);
 	opacity: 0;
@@ -40,8 +64,7 @@
 	pointer-events: auto;
 }
 
-.doc-er-diagram-toolbar button,
-.doc-er-diagram-popup-header button {
+.doc-er-diagram-toolbar button {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -54,9 +77,7 @@
 }
 
 .doc-er-diagram-toolbar button:hover,
-.doc-er-diagram-toolbar button:focus-visible,
-.doc-er-diagram-popup-header button:hover,
-.doc-er-diagram-popup-header button:focus-visible {
+.doc-er-diagram-toolbar button:focus-visible {
 	background: var(--color-fd-accent);
 	color: var(--color-fd-accent-foreground);
 	outline: none;
@@ -149,8 +170,9 @@
 .doc-er-table-column {
 	display: grid;
 	/* the same grid in reading and in editing: a cell becoming editable
-	   never changes a column's width or the card's height */
-	grid-template-columns: 2.9rem minmax(6.5rem, 1fr) minmax(7rem, 1.1fr) 7rem;
+	   never changes a column's width or the card's height. the variant
+	   sets the columns (TableCard columnsStyle) */
+	grid-template-columns: var(--doc-card-columns, repeat(4, minmax(0, 1fr)));
 	align-items: center;
 }
 
@@ -264,8 +286,169 @@
 
 .doc-vis-card-static {
 	max-width: 100%;
-	margin: 1rem 0 1.5rem;
+	margin: 0;
 	overflow: auto;
+}
+
+.doc-vis-card-static.is-popup {
+	width: 100% !important;
+	padding: 1rem;
+}
+
+/* ---------- the generic card ---------- */
+
+/* a row of the card is text while reading: a drag in it selects, and the
+   wheel over it zooms the canvas like anywhere else (no nowheel) */
+.doc-card-row,
+.doc-card-head-field {
+	position: relative;
+}
+
+.doc-card-head-field {
+	display: grid;
+	grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.6fr);
+	min-height: 2rem;
+	border-bottom: 1px solid var(--color-fd-border);
+	font-size: 0.72rem;
+	line-height: 1.4;
+}
+
+.doc-card-head-field > span {
+	min-width: 0;
+	padding: 0.35rem 0.5rem;
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+}
+
+.doc-card-head-field > span + span {
+	border-left: 1px solid var(--color-fd-border);
+}
+
+.doc-card-head-label {
+	color: var(--color-fd-muted-foreground);
+	font-weight: 600;
+}
+
+/* the handles of a node: out / both in blue, in in amber. in the editor
+   they are larger, a handle with connections is filled, and the handle of
+   the selected connection is ringed */
+.doc-er-table-handle {
+	width: 9px;
+	height: 9px;
+	border: 1.5px solid #2563eb;
+	border-radius: 2px;
+	background: var(--color-fd-background);
+}
+
+.doc-er-table-handle.is-in {
+	border-color: #d97706;
+}
+
+.doc-er-table-handle.is-editable {
+	width: 11px;
+	height: 11px;
+	cursor: crosshair;
+}
+
+.doc-er-table-handle.is-occupied {
+	background: #2563eb;
+}
+
+.doc-er-table-handle.is-in.is-occupied {
+	background: #d97706;
+}
+
+.doc-er-table-handle.is-selected {
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-fd-primary) 35%, transparent);
+}
+
+/* a dangling end of a connection, and the end of a line being dragged */
+.doc-vis-edge-end {
+	fill: var(--color-fd-background);
+	stroke: #64748b;
+	stroke-width: 1.5px;
+}
+
+.doc-vis-edge-selection {
+	stroke: color-mix(in srgb, var(--color-fd-primary) 30%, transparent);
+	stroke-width: 9px;
+	stroke-linecap: round;
+}
+
+.react-flow__edge.is-selected .react-flow__edge-textbg {
+	stroke: var(--color-fd-primary);
+}
+
+.doc-er-diagram.is-editing .react-flow__edge {
+	cursor: pointer;
+}
+
+.doc-vis-connection-line path {
+	stroke-width: 1.5px;
+}
+
+.doc-vis-connection-line.is-valid path,
+.doc-vis-connection-line.is-valid .doc-vis-edge-end {
+	stroke: #16a34a;
+}
+
+.doc-vis-connection-line.is-invalid path,
+.doc-vis-connection-line.is-invalid .doc-vis-edge-end {
+	stroke: #dc2626;
+}
+
+/* the point node a dangling end rests on: no size and no pointer of its
+   own, so the anchor of the edge end below it can be dragged; in the editor
+   its dot takes the pointer and is dragged as a node, above the cards */
+.react-flow__node-visualizationPoint {
+	width: 1px;
+	height: 1px;
+	pointer-events: none !important;
+}
+
+.doc-vis-point-dot {
+	position: absolute;
+	top: 0;
+	left: 0;
+	box-sizing: border-box;
+	width: 12px;
+	height: 12px;
+	border: 1.5px solid #2563eb;
+	border-radius: 50%;
+	background: var(--color-fd-background);
+	cursor: move;
+	pointer-events: auto;
+	transform: translate(-50%, -50%);
+}
+
+.doc-vis-point-dot:hover {
+	background: color-mix(in srgb, #2563eb 20%, var(--color-fd-background));
+}
+
+.doc-vis-point,
+.doc-vis-point-handle {
+	width: 1px;
+	height: 1px;
+	min-width: 0;
+	min-height: 0;
+	border: 0;
+	background: transparent;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.doc-vis-point-handle {
+	left: 0;
+	top: 0;
+	transform: translate(-50%, -50%);
+}
+
+.react-flow__node-visualizationCreate {
+	pointer-events: none;
+}
+
+.doc-vis-create {
+	pointer-events: auto;
 }
 
 .doc-er-table-column-logical {
@@ -330,60 +513,4 @@
 	flex-direction: column;
 	gap: 0.35rem;
 	color: #b42318;
-}
-
-.doc-er-diagram-overlay {
-	position: fixed;
-	z-index: 210;
-	inset: 0;
-	display: grid;
-	place-items: center;
-	padding: 2rem;
-	background: rgb(15 23 42 / 58%);
-}
-
-.doc-er-diagram-popup {
-	display: flex;
-	width: min(100rem, 100%);
-	height: calc(100vh - 4rem);
-	max-height: calc(100vh - 4rem);
-	flex-direction: column;
-	overflow: hidden;
-	border: 1px solid var(--color-fd-border);
-	border-radius: 0.75rem;
-	background: var(--color-fd-background);
-	box-shadow: 0 24px 70px rgb(15 23 42 / 35%);
-}
-
-.doc-er-diagram-popup-header {
-	display: flex;
-	flex: 0 0 auto;
-	align-items: center;
-	justify-content: space-between;
-	gap: 1rem;
-	padding: 0.75rem 1rem;
-	border-bottom: 1px solid var(--color-fd-border);
-}
-
-.doc-er-diagram-popup-header h2 {
-	margin: 0;
-	font-size: 1rem;
-	font-weight: 650;
-}
-
-.doc-er-diagram-popup-content {
-	flex: 1 1 auto;
-	min-height: 0;
-	overflow: hidden;
-}
-
-@media (max-width: 720px) {
-	.doc-er-diagram-overlay {
-		padding: 0.75rem;
-	}
-
-	.doc-er-diagram-popup {
-		height: calc(100vh - 1.5rem);
-		max-height: calc(100vh - 1.5rem);
-	}
 }

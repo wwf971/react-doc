@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DocEditStore } from '../../../../main/frontend/src/store/DocEditStore.ts';
 import { compDefine } from '../../../../main/comp-doc/registry/comp-registry.js';
-import { dataverseEditModeList } from './DataverseEditStore.js';
+import { diagramEditModeList } from './DiagramEditStore.js';
 
 function fixtureCreate() {
 	const writes = [];
@@ -13,7 +13,7 @@ function fixtureCreate() {
 	const block = { index: 0, kind: 'component', lineStart: 1, lineEnd: 5, text: `${markerText}\n${nodeText}`, component: { compName: 'Card', lang: 'asset', raw, nodeType: 'code', markerText, textBefore: '', textBetween: '\n', nodeText, props: { title: 'Example' } } };
 	const store = Object.create(DocEditStore.prototype);
 	store.sourceStore = { configDoc: { compRegistry: { Card: 'test/Card' } } };
-	store.docStore = { compById: { 'test/Card': compDefine(() => null, { isAssetAware: true, expose: { meta: { isEditAssetAccepted: true }, editModeList: dataverseEditModeList } }) } };
+	store.docStore = { compById: { 'test/Card': compDefine(() => null, { isAssetAware: true, expose: { meta: { isEditAssetAccepted: true }, editModeList: diagramEditModeList } }) } };
 	store.docEditByPath = { [path]: { model: { blockList: [block] } } };
 	store.assetStore = { isWritable: true, objectUpdate: async (...args) => { writes.push({ target: 'asset', args }); return { code: 0 }; } };
 	store.blockDependencyListGet = () => [];
@@ -43,7 +43,7 @@ test('visual mode edits inline data, and a reference only at a writable head', (
 
 test('a component without isEditAssetAccepted keeps only the source mode on a reference', () => {
 	const { store, path } = fixtureCreate();
-	store.docStore.compById['test/Card'] = compDefine(() => null, { isAssetAware: true, expose: { editModeList: dataverseEditModeList } });
+	store.docStore.compById['test/Card'] = compDefine(() => null, { isAssetAware: true, expose: { editModeList: diagramEditModeList } });
 	const modeList = store.blockEditModeListGet(path, 0);
 	assert.equal(modeList.find(mode => mode.id === 'visual').isDisabled, true);
 	assert.equal(modeList.find(mode => mode.id === 'source').isDefault, true);

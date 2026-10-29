@@ -3,6 +3,7 @@ export {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  Boxes,
   Boxes as ProjectIcon,
   Building2,
   ChartBar,

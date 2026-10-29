@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { ConfigPanel, EditableValueComp, Menu, PathBar, ScrollHorizontal, SegmentedControl } from '@wwf971/react-comp-misc';
+import { ConfigPanel, EditableValueComp, Menu, PathBar, PropEditor, ScrollHorizontal, SegmentedControl } from '@wwf971/react-comp-misc';
 import * as docSource from 'virtual:doc-source';
 import { DocPageMdx } from './DocPageMdx.jsx';
 // the panel component that frames the popups of the page is host
@@ -80,10 +80,12 @@ createRoot(document.getElementById('root')).render(
       // dropdown menu (no Menu, no mode button); the path of the Services
       // tab through the injected path bar (no PathBar: plain links); the
       // cells of the diagram's visual editor through the injected editable
-      // value (no EditableValueComp: the cells are read-only); the document
+      // value (no EditableValueComp: the cells are read-only); the edit card
+      // of the diagram editor through the injected property editor (no
+      // PropEditor: a plain form of the same fields); the document
       // toolbar through the injected horizontal scroller, moved by the mouse
       // wheel without a scrollbar (no ScrollHorizontal: the toolbar wraps)
-      components: { ConfigPanel, EditableValueComp, Menu, PathBar, ScrollHorizontal, SegmentedControl },
+      components: { ConfigPanel, EditableValueComp, Menu, PathBar, PropEditor, ScrollHorizontal, SegmentedControl },
       // Index contributes its translations to the language selector and
       // its titles/descriptions to the search index. both maps are keyed by
       // author-facing tag name, so the compatibility tag DocIndex is listed too.

@@ -1,5 +1,5 @@
 import { MousePointer2, TableProperties, Waypoints } from '../../../../main/frontend/UICommon.js';
-import { dataverseEditModeList } from './DataverseEditStore.js';
+import { diagramEditModeList } from './DiagramEditStore.js';
 import { dataverseSourceDefaultCreate, diagramSourceDefaultCreate } from './DiagramERSource.js';
 import { powerAutomateSourceDefaultCreate } from './PowerAutomateNodeSource.js';
 import { businessRuleSourceDefaultCreate } from './BusinessRuleNodeSource.js';
@@ -17,9 +17,9 @@ const metaShared = {
   isEditEnterButtonOnly: true,
 };
 
-// the mode list itself stays in DataverseEditStore.js, which tests load
+// the mode list itself stays in DiagramEditStore.js, which tests load
 // without the page's icon set
-const editModeList = dataverseEditModeList.map((mode) => ({ ...mode, icon: MousePointer2 }));
+const editModeList = diagramEditModeList.map((mode) => ({ ...mode, icon: MousePointer2 }));
 
 export const diagramERExpose = {
   meta: {

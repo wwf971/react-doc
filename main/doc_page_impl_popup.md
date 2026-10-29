@@ -2,7 +2,7 @@
 
 # Block Popup: Design
 
-A component block can be opened in a popup dialog: larger than its place in the page, maximizable to the window, and switchable between **View** and **Edit** in the dialog itself. The page provides this once for every component; a component opts in and supplies only its rendering. ExcelUniver and the example application's StockTable use it.
+A component block can be opened in a popup dialog: larger than its place in the page, maximizable to the window, and switchable between **View** and **Edit** in the dialog itself. The page provides this once for every component; a component opts in and supplies only its rendering. ExcelUniver, DiagramER, DiagramDataverseEntity and the example application's StockTable use it; every block-like component is expected to ([Block-like MDX components](doc_page_impl_mdx_comp_block.md)).
 
 ```text
 page (DocPageMdx)                                  document body (reading or edit)

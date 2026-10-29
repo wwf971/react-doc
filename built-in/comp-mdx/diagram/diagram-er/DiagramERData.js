@@ -1,9 +1,12 @@
-import { dataverseCardNormalize, dataverseAnchorListGet } from './DataverseCardData.js';
+import { dataverseCardNormalize, dataverseAnchorListGet, dataverseChoiceAnchorListGet } from './DataverseCardData.js';
+import { tableCardNormalize, tableCardAnchorListGet } from './TableCardData.js';
 import { powerAutomateNodeContract } from './PowerAutomateNodeData.js';
 import { businessRuleNodeContract } from './BusinessRuleNodeData.js';
 
 const sides = ['left', 'right', 'top', 'bottom'];
 const lineTypes = ['straight', 'bezier', 'step', 'smoothstep', 'polyline'];
+const markerTypes = ['none', 'arrow', 'arrowClosed'];
+const attachPolicies = ['single', 'multiple'];
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 
 function mapping(value, field) {
@@ -47,6 +50,19 @@ function unique(items, field) {
 	return result;
 }
 
+// The renderer catalog of the diagram: what draws a node and what the diagram
+// may assume about it (anchors, default size, the normalization of its data).
+// A registered component brings the same contract through expose.visualizationNode
+// (comp_db_vis.md#nodes-and-renderers).
+export const nodeRendererContracts = {
+	'dataverse-table': { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseAnchorListGet, sizeDefault: { width: 410, height: 320 } },
+	'dataverse-choice': { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseChoiceAnchorListGet, sizeDefault: { width: 410, height: 320 } },
+	table: { dataNormalize: tableCardNormalize, anchorListGet: tableCardAnchorListGet, sizeDefault: { width: 360, height: 240 } },
+	operator: { anchorListGet: () => [{ id: 'body', sideList: sides }], sizeDefault: { width: 220, height: 100 } },
+	'power-automate': powerAutomateNodeContract,
+	'business-rule': businessRuleNodeContract,
+};
+
 function rendererRead(value, field, placement, resolve) {
 	mapping(value, field);
 	if (own(value, 'type') === own(value, 'component')) throw new Error(`${field} requires exactly one of type or component.`);
@@ -61,15 +77,9 @@ function rendererRead(value, field, placement, resolve) {
 		if (!lineTypes.includes(type)) throw new Error(`${field}: unknown line type "${type}".`);
 		return { renderer: { type }, contract: {} };
 	}
-	if (type === 'dataverse-table' || type === 'dataverse-choice') {
-		return { renderer: { type }, contract: { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseAnchorListGet, sizeDefault: { width: 410, height: 320 } } };
-	}
-	if (type === 'operator') {
-		return { renderer: { type }, contract: { anchorListGet: () => [{ id: 'body', sideList: sides }], sizeDefault: { width: 220, height: 100 } } };
-	}
-	if (type === 'power-automate') return { renderer: { type }, contract: powerAutomateNodeContract };
-	if (type === 'business-rule') return { renderer: { type }, contract: businessRuleNodeContract };
-	throw new Error(`${field}: unknown node type "${type}".`);
+	const contract = nodeRendererContracts[type];
+	if (!contract) throw new Error(`${field}: unknown node type "${type}".`);
+	return { renderer: { type }, contract };
 }
 
 export function viewportNormalize(value = {}, height = 620) {
@@ -131,6 +141,25 @@ export function diagramLegacyConvert(value, height = 620) {
 	return { version: 1, viewport: { size: { height } }, nodes, connections };
 }
 
+// an endpoint of a connection: attached to a handle, or dangling at a
+// position of the canvas (comp_db_vis.md#connections)
+export function endpointIsDangling(endpoint) {
+	return Boolean(endpoint) && endpoint.position !== undefined;
+}
+
+export function endpointRead(value, field) {
+	mapping(value, field);
+	if (own(value, 'position')) {
+		if (own(value, 'nodeId') || own(value, 'handleId')) throw new Error(`${field}: a dangling endpoint has a position only.`);
+		return { position: point(value.position, `${field}.position`) };
+	}
+	return { nodeId: text(value.nodeId, `${field}.nodeId`), handleId: text(value.handleId, `${field}.handleId`) };
+}
+
+export function handleRoleAccepts(handle, role) {
+	return handle.direction === 'both' || handle.direction === (role === 'source' ? 'out' : 'in');
+}
+
 export function diagramNormalize(input, resolve, height = 620) {
 	mapping(input, 'diagram');
 	const isLegacy = input.version === undefined && own(input, 'tables');
@@ -148,6 +177,7 @@ export function diagramNormalize(input, resolve, height = 620) {
 	const nodes = list(value.nodes, 'nodes').map(node => {
 		mapping(node, 'node');
 		const id = text(node.id, 'node.id');
+		if (id.startsWith('~')) throw new Error(`${id}: node ids starting with "~" are reserved.`);
 		if (node.isPositionLocked !== undefined && typeof node.isPositionLocked !== 'boolean') throw new Error(`${id}.isPositionLocked must be boolean.`);
 		if (node.isPositionLocked && (!node.position || node.position === 'auto')) throw new Error(`${id}: a locked node requires an explicit position.`);
 		const { renderer, contract } = rendererRead(node.renderer, `${id}.renderer`, 'visualizationNode', resolve);
@@ -179,7 +209,9 @@ export function diagramNormalize(input, resolve, height = 620) {
 			if (!definition?.sideList.includes(anchor.side)) throw new Error(`${id}.${handle.id}: unknown anchor or unsupported side.`);
 			const offset = number(anchor.offset ?? 0.5, `${id}.${handle.id}.offset`, 0);
 			if (offset > 1) throw new Error(`${id}.${handle.id}: offset exceeds 1.`);
-			return { ...handle, anchor: { target, side: anchor.side, offset } };
+			const attachPolicy = handle.attachPolicy ?? 'multiple';
+			if (!attachPolicies.includes(attachPolicy)) throw new Error(`${id}.${handle.id}: attachPolicy must be single or multiple.`);
+			return { ...handle, attachPolicy, anchor: { target, side: anchor.side, offset } };
 		});
 		unique(handles, `${id}.handles`);
 		return { ...node, id, renderer, data, anchors, handles, size: sizeResolved, sizeDefault, position: node.position === undefined || node.position === 'auto' ? 'auto' : point(node.position, `${id}.position`) };
@@ -187,14 +219,22 @@ export function diagramNormalize(input, resolve, height = 620) {
 	const nodesById = unique(nodes, 'nodes');
 	const connectionDefault = mapping(defaults.connection ?? {}, 'defaults.connection');
 	if (['id', 'source', 'target'].some(key => own(connectionDefault, key))) throw new Error('Connection defaults cannot contain identity or endpoints.');
+	const countByHandle = new Map();
 	const connections = list(value.connections ?? [], 'connections').map(connection => {
 		const id = text(connection.id, 'connection.id');
 		const { renderer, contract } = rendererRead(connection.renderer ?? connectionDefault.renderer ?? { type: 'smoothstep' }, `${id}.renderer`, 'visualizationEdge', resolve);
+		const endpoints = {};
 		for (const role of ['source', 'target']) {
-			const endpoint = mapping(connection[role], `${id}.${role}`);
+			const endpoint = endpointRead(connection[role], `${id}.${role}`);
+			endpoints[role] = endpoint;
+			if (endpointIsDangling(endpoint)) continue;
 			const handle = nodesById.get(endpoint.nodeId)?.handles.find(item => item.id === endpoint.handleId);
-			if (!handle || (handle.direction !== 'both' && handle.direction !== (role === 'source' ? 'out' : 'in'))) throw new Error(`${id}.${role}: missing or incompatible handle.`);
+			if (!handle || !handleRoleAccepts(handle, role)) throw new Error(`${id}.${role}: missing or incompatible handle.`);
+			const key = `${endpoint.nodeId}/${endpoint.handleId}`;
+			countByHandle.set(key, (countByHandle.get(key) ?? 0) + 1);
+			if (handle.attachPolicy === 'single' && countByHandle.get(key) > 1) throw new Error(`${id}.${role}: handle "${endpoint.handleId}" of "${endpoint.nodeId}" accepts one connection.`);
 		}
+		if (!endpointIsDangling(endpoints.source) && !endpointIsDangling(endpoints.target) && endpoints.source.nodeId === endpoints.target.nodeId && endpoints.source.handleId === endpoints.target.handleId) throw new Error(`${id}: both ends are on the same handle.`);
 		const style = { stroke: '#64748b', strokeWidth: 1.5, ...mapping(connectionDefault.style ?? {}, 'default style'), ...mapping(connection.style ?? {}, `${id}.style`) };
 		number(style.strokeWidth, `${id}.strokeWidth`, Number.MIN_VALUE);
 		text(style.stroke, `${id}.stroke`);
@@ -208,8 +248,8 @@ export function diagramNormalize(input, resolve, height = 620) {
 			else if (typeof contract.routeValidate === 'function') contract.routeValidate(route);
 			else throw new Error(`${id}: renderer does not accept route data.`);
 		}
-		const result = { ...connectionDefault, ...connection, id, renderer, style, label, route, data: mapping(connection.data ?? connectionDefault.data ?? {}, `${id}.data`), markerStart: connection.markerStart ?? connectionDefault.markerStart ?? 'none', markerEnd: connection.markerEnd ?? connectionDefault.markerEnd ?? 'arrowClosed', isAnimated: connection.isAnimated ?? connectionDefault.isAnimated ?? false };
-		if (![result.markerStart, result.markerEnd].every(marker => ['none', 'arrow', 'arrowClosed'].includes(marker))) throw new Error(`${id}: invalid marker.`);
+		const result = { ...connectionDefault, ...connection, id, ...endpoints, renderer, style, label, route, data: mapping(connection.data ?? connectionDefault.data ?? {}, `${id}.data`), markerStart: connection.markerStart ?? connectionDefault.markerStart ?? 'none', markerEnd: connection.markerEnd ?? connectionDefault.markerEnd ?? 'arrowClosed', isAnimated: connection.isAnimated ?? connectionDefault.isAnimated ?? false };
+		if (![result.markerStart, result.markerEnd].every(marker => markerTypes.includes(marker))) throw new Error(`${id}: invalid marker.`);
 		if (typeof result.isAnimated !== 'boolean') throw new Error(`${id}: isAnimated must be boolean.`);
 		return result;
 	});
@@ -245,3 +285,13 @@ export function dataverseStandaloneNormalize(input) {
 	if (graph.nodes[0].renderer.type !== 'dataverse-table') throw new Error('DiagramDataverseEntity requires a dataverse-table node.');
 	return graph.nodes[0];
 }
+
+// the id of the hidden point node that stands for a dangling endpoint on the
+// canvas (DiagramERStore); never an authored node id
+export function pointNodeIdBuild(connectionId, role) {
+	return `~end:${role}:${connectionId}`;
+}
+
+export const lineTypeList = lineTypes;
+export const markerTypeList = markerTypes;
+export const attachPolicyList = attachPolicies;

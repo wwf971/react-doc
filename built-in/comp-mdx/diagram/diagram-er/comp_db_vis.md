@@ -1,6 +1,6 @@
 # Data Visualization: Design
 
-This document defines a shared data format for diagrams made of nodes and connections. `DiagramER` renders this format. Asset-backed Dataverse cards support the first visual editing slice: cells, table/row settings, and row handles. Other visual diagram operations remain planned; the source editor remains available.
+This document defines a shared data format for diagrams made of nodes and connections, and the visual editor of that format. `DiagramER` renders it on a canvas; `DiagramDataverseEntity` renders one card of it. The editor (`DiagramVisualEdit`, [Card Editing](#card-editing)) edits cells, rows, columns, handles, connections and positions in place, with an edit card beside the selection; the source editor remains available. What every block-like component of the page must do, which both components follow, is in [Block-like MDX components](../../../../main/doc_page_impl_mdx_comp_block.md).
 
 For the surrounding system, see [component registration](../../doc_page_impl_mdx_comp.md), [document editing](../../doc_page_impl_edit.md#component-edit-mode), and [asset storage](../../doc_page_impl_asset.md). A standalone [Dataverse entity card](../diagram-db-tabe/comp_db_table.md) can share a node's content renderer without using a canvas.
 
@@ -113,7 +113,7 @@ IDs do not have to describe the content: short opaque IDs are valid. Renaming a 
 
 ### Internal and Registered Renderers
 
-Internal renderers `dataverse-table`, `dataverse-choice`, and `operator` live in a visualization-owned catalog. They need not appear in the unified component registry. `dataverse-choice` uses a purple header and dashed border while remaining a peer of `dataverse-table`, rather than a special case of the graph's basic node type. Styling belongs to that renderer, not to a column's `type: Choice` text.
+Internal renderers `table`, `dataverse-table`, `dataverse-choice`, `operator`, `power-automate`, and `business-rule` live in a visualization-owned catalog (`nodeRendererContracts` in `DiagramERData.js`). They need not appear in the unified component registry. `dataverse-choice` uses a purple header and dashed border while remaining a peer of `dataverse-table`, rather than a special case of the graph's basic node type. Styling belongs to that renderer, not to a column's `type: Choice` text.
 
 `renderer.component` resolves through the existing component-name/ID rules and renders through `RegisteredComp`, using a new placement named `visualizationNode`. The registered definition must explicitly allow that placement. An unknown internal type, missing component, or incompatible placement produces an error naming the node; it must not silently become a table or load code from an arbitrary path.
 
@@ -157,8 +157,11 @@ anchor:
 | `anchor.target` | Anchor ID exposed by the renderer. Defaults to `body`. |
 | `anchor.side` | `left`, `right`, `top`, or `bottom`, restricted by the anchor's `sideList`. Required. |
 | `anchor.offset` | Position along that side, from 0 to 1; default 0.5. Left/right run top to bottom; top/bottom run left to right. |
+| `attachPolicy` | `multiple` (default) or `single`: how many connections the handle accepts. Validation rejects a second connection on a `single` handle, and the editor refuses to drop one there. |
 
 A row handle stays attached to that row when its order, text, or height changes. Persist its anchor and offset, not its measured page coordinates. A renderer must attach every declared non-body anchor; a missing anchor is an actionable error, not a connection to the node's origin.
+
+Which anchors a card offers is the renderer's decision, and the title line is **not** one of them by default: a `dataverse-table` offers `body` and `column/<id>`; a `dataverse-choice` adds `header` (a choice is referenced as a whole); a resource card offers `header` and `property/<id>`; a generic `table` offers `row/<id>` and `header` only when its data sets `isHeaderHandleEnabled`. A handle on `header` of a type that does not offer it is a validation error.
 
 ```text
 select a table row
@@ -176,7 +179,7 @@ An anchor may hold multiple handles. The planned visual editor flags exact overl
 
 The React Flow adapter derives runtime source/target handles from `direction`. A `both` handle uses separate runtime source and target IDs mapped back to the same authored ID. Side and position are not part of those IDs. After row reordering, resizing, or an anchor change, the adapter remeasures anchors and calls React Flow's `updateNodeInternals`.
 
-Connection creation and reconnection use the same validation: the source allows `out`, the target allows `in`, and both handles exist. `both` allows either role. The core does not impose database type matching, acyclicity, or cardinality; a diagram-specific validator may add those rules. Deleting a connected handle, row, or node requires either reassignment or confirmation to delete the affected connections in the same edit. No dangling references are silently discarded.
+Connection creation and reconnection use the same validation: the source allows `out`, the target allows `in`, both handles exist, both ends are not the same handle, and a `single` handle has room. `both` allows either role. The core does not impose database type matching, acyclicity, or cardinality; a diagram-specific validator may add those rules. Deleting a connected handle, row, or node never leaves a reference to something gone and never discards a connection silently: the connections are moved to the handle on the other side of the same anchor when one exists, and otherwise **detached**, each end becoming a free end ([Connections](#connections)) placed a little away from where the handle was.
 
 ## Position and Size
 
@@ -237,7 +240,7 @@ Connections have their own IDs and refer to `{ nodeId, handleId }` at each end. 
 
 | Connection field | Meaning |
 | --- | --- |
-| `id`, `source`, `target` | Required identity and endpoints. Connection IDs are unique within the diagram. |
+| `id`, `source`, `target` | Required identity and endpoints. Connection IDs are unique within the diagram. An endpoint is a handle `{ nodeId, handleId }` or a **free end** `{ position: { x, y } }` in diagram coordinates; either end may be free, and a free end is drawn as a small ring exactly where it was left. |
 | `renderer` | Internal line renderer `{ type }` or registered `{ component }`. |
 | `label` | `{ text, position }`, where position is a fraction along the path, default 0.5. Omission means no label. |
 | `style` | Validated presentation fields: `stroke`, positive `strokeWidth`, and optional `strokeDasharray`. |
@@ -285,57 +288,46 @@ inferred from card placement: label branches and run-after conditions explicitly
 
 Files for each resource share a prefix: `PowerAutomateNode*` and
 `BusinessRuleNode*` contain its renderer, fields/validation, and starter source.
-`ResourceNodeCard` shares the table-card visual language and text/menu controls.
-The YAML draft remains in `DataverseEditStore`, including node/property
-addition/removal and connection endpoint/label changes. Connected nodes and
-properties cannot be removed until their connections are removed or reassigned.
-Use Source mode for custom handles, line styles, and other graph fields not
-exposed in the visual controls. See [Power Platform diagrams](../../../../example_doc/mdx-usage/comp-powerplatform.md)
+`ResourceNodeCard` is the table card with the resource schema (head fields and
+property rows). The YAML draft is in `DiagramEditStore`, with the same rows,
+handles and connection commands as every card. See [Power Platform diagrams](../../../../example_doc/mdx-usage/comp-powerplatform.md)
 for complete examples and design-specific caveats.
+
+## The Table Card
+
+`TableCard` (`TableCard.jsx`) is the one card renderer: a title line (name and a subtitle), an optional description, head fields, a header of the card's **fields** and its **rows**, one cell per field. What a node type shows in it is its **schema** (`TableCardSchema.js`, `cardSchemaGet(node)`): where the rows live (`columns`, `properties`, `rows`), the anchor prefix of a row, the fields (fixed for the Dataverse and resource cards, authored in `data.fields` for the generic `table`), the properties of the Table and Row tabs, how a new row starts, and whether rows and the title line take handles. The Dataverse card (`DataverseCard.jsx`) and the resource cards (`ResourceNodeCard.jsx`) are the table card with a schema and small render hooks (a badge, a key cell, a required star, a tooltip); a new card-like node type is a schema and, at most, a variant like these.
+
+The read and edit layouts of a card are one grid: without an editor a cell is text, with one it is a control in the same box, so a cell starting or ending editing moves nothing. Every row and the description are `nodrag nopan`, so a drag in them selects text and a drag on the title line pans the canvas (reading) or moves the node (editing); no part of a card is `nowheel`, so the wheel over a card zooms the canvas like the wheel over empty canvas and never scrolls the page.
 
 ## Card Editing
 
-`visual` edits inline YAML and, with `meta.isEditAssetAccepted: true`, writable, unlocked asset data at its head version. The flag opts the component's own modes into asset editing; it does not restrict inline editing or display. Older or locked asset versions cannot be visually edited. Both diagram and fixed-card views share the editor, alongside source editing. The former `isEditAssetOnly` flag is no longer used.
+`visual` edits inline YAML and, with `meta.isEditAssetAccepted: true`, writable, unlocked asset data at its head version. Both the diagram and the standalone card share the editor (`DiagramVisualEdit.jsx`) and its store (`DiagramEditStore.js`), alongside source editing. The editor renders the same view as reading and hands it an `editor` object; the store holds the draft and the selection; the canvas interactions are translated into store commands by the editor.
 
 | State | Responsibility |
 | --- | --- |
-| YAML draft | Preserves authored data and comments, without serializing React Flow objects. |
-| `focus: { nodeId, rowId }` | Semantic selection independent of a mode or DOM instance; a null row selects the table. |
-| Active cell | Field identity and original value; Enter/blur ends cell entry, Escape restores that cell. |
-| `isDirty` | Compares draft with initial content and accounts for save-target conversion. |
-| `saveTarget` | `asset` uses the object's save policy; `inline` replaces the document reference without updating the object. |
-| Session status | The document editor owns editing/submitting/error states; failed saves retain the draft for retry. |
+| YAML draft | Preserves authored data and comments, without serializing React Flow objects. Every command changes the YAML document, validates the result with `diagramNormalize`, and keeps the previous draft with a message when it is invalid. |
+| `selection` | `{ nodeId, rowId, fieldId, connectionId }`: a card with one of its rows, fields and cells, and at most one connection attached to one of its handles (the handle-click rotation); or `{ connectionId }`: a line selected by clicking it; or null. One kind of state for cards and lines. |
+| `cell` | The cell being typed, with the value it had, so Escape restores it. |
+| `cardTab` | The tab the edit card shows (`table`, `row`, `column`, `cell`, `line`), set by the selection and changeable by the author; a tab without a subject is greyed out. |
+| `interaction` | A gesture in progress (`connect`, `detach`, `reconnect`, `nodeDrag`): the edit card is hidden while it lasts. |
+| `create` | The create panel, at a canvas position. |
+| `isDirty`, `saveTarget` | As before: the draft compared with the initial text; `asset` or `inline`. |
 
-DOM anchors and nearby panel position belong to the view, not semantic focus. Fixed-set cells use the host's Menu, never HTML select. Accepted changes report `editDraftChange` to the in-memory session, not a storage API. Save and non-canceling exits persist the latest draft; Cancel discards it. Clean/reverted drafts do not write. Controls are disabled while submitting.
+**The edit card** (`DiagramEditCard.jsx`) is a popup of the edit layer beside the selection, following it while the canvas pans or zooms. Its content is data (`DiagramEditCardModel.js`: tabs, sections, properties, actions) rendered by the host's `PropEditor` (`config.components.PropEditor`, with a plain form when the host injects none): Table (the card's properties, title handles, position, add row / column, remove node), Row (the row's values and properties, its handles and their attach policies, insert above / below, move up / down, remove), Column (label; insert / move / remove for an authored field list), Cell (the value), Line (label, line type, color, thickness, dash, markers, animation, the two ends, remove).
 
-Escape first restores the active cell, then clears the row or table selection. It never saves or cancels the block session, even when nothing is selected. Use Save (or Ctrl/Command + Enter) to submit and Cancel to discard. For an asset-backed block, **Save to > Inline YAML** replaces the reference with the draft without writing the asset; the default **Asset object** target follows the object's save policy and leaves the document unchanged.
+**Rows, columns, handles.** Rows are inserted at an index, moved and removed (`rowInsert`, `rowMove`, `rowRemove`); columns of a generic table likewise (`columnInsert`, `columnMove`, `columnRemove`, `columnLabelSet`), the values of a removed column dropped from every row. A handle is added or removed per side of an anchor (`handleSideSet`; the **+** at the row edges adds one), with the reroute-or-detach rule above; `handleAttachPolicySet` sets its policy.
 
-Row handles support none, left, right, or both. Moving a side preserves IDs and connections. Removing a connected handle is refused. Fixed cards retain handle configuration for reuse in diagrams without drawing connections. Dataverse cards expose `header`; choice references use its left edge at offset 0.5. Resource nodes and connections can be added through the floating toolbar; connection labels and endpoints are edited through its Connections menu. Drag-to-connect, node resizing, and creation of other renderer types remain source-editing operations.
+**Connections.** A click on a handle rotates the selection through the connections attached to it and back to none (`handleClick`), keeping the card selected. A drag from a handle starts a new line (`connect` interaction) unless a connection at that handle is selected, or the handle takes one line and has it: then the drag detaches that end and carries it (`detach`), drawn by the custom connection line from the line's other end. React Flow's edge anchors move an end (`reconnect`); a free end is a hidden point node whose dot can also be dragged, snapping to the nearest handle within reach on drop. Every drop goes through one validation (`endpointAttachReasonGet`: direction, same handle, attach policy), and a drop that is refused or lands on nothing leaves the end free where it was dropped (`connectionEndpointSet`). A new line is oriented so that it leaves a handle that can send and enters one that can receive (`connectionOrient`). `connectionSet` changes the presentation fields; `connectionRemove` deletes.
 
-The table settings panel's **Use current position** captures the current canvas coordinates in `position`. While selected, dragging updates those coordinates in the draft. Clearing it returns the node to `auto`; temporary movement is not saved. The adjacent lock captures the position and sets `isPositionLocked`, preventing dragging in both edit and read views. Unlocking retains the remembered coordinates and permits dragging again. These changes follow the same Save/Cancel behavior as cell edits.
+**Creating.** A double-click on empty canvas (or the bar's **+**) opens the create panel (`DiagramCreatePanel.jsx`), a searched list of the fixed registry `diagram-node-registry.js`: the node cards and a connection with two free ends. The chosen node gets the panel's position and is selected.
 
-The camera is transient state scoped to the document block. Save preserves zoom and pan across the edit-to-read remount without rewriting `viewport.view`; an explicitly changed viewport configuration still takes precedence. Type menus show common choices with a searchable, height-limited result list, using the shared contenteditable control rather than native inputs.
+**Removing a node** detaches its connections (free ends where its handles were) and deletes the node; nothing is refused for being connected.
 
-## Further Visual Editing (Planned)
+Escape first restores the active cell, then closes the create panel, then clears the selection. It never saves or cancels the block session. Save (or Ctrl/Command + Enter) submits and Cancel discards. For an asset-backed block, **Save to > Inline YAML** replaces the reference with the draft without writing the asset; the default **Asset object** target follows the object's save policy and leaves the document unchanged.
 
-One `visual` edit mode will support WYSIWYG-style editing beside the document system's existing `source` mode. It will reuse the same node renderers as read mode. Inline controls edit labels or fields; floating controls edit node size, handle anchors, and connection appearance. Entering edit mode preserves the diagram box and camera, following the document editor's no-jitter rule. The following commands and save behavior describe that future mode, not current reader interactions.
+The Table tab's **Remember** captures the current canvas coordinates in `position`; while remembered, dragging updates those coordinates in the draft (read a frame after the drop, when the last position change has reached the canvas store). Clearing it returns the node to `auto`. **Locked** captures the position and sets `isPositionLocked`, preventing dragging in both edit and read views. The camera is transient state scoped to the document block, kept across the edit-to-read remount without rewriting `viewport.view`.
 
-```text
-drag / resize / edit content / connect / reconnect
-	-> a command validates and updates the authored draft
-	-> regenerate only the affected runtime geometry
-	-> serialize the draft as YAML
-	-> report editDraftChange { raw }
-	-> document editor handles save, cancel, conflicts, and errors
-```
-
-The diagram store owns commands such as `nodeMove`, `nodeResize`, `nodeDataChange`, `handleAdd`, `handleMove`, `connectionAdd`, `connectionReconnect`, and `connectionUpdate`. Nested node/edge events reach this store first, with their owning ID supplied by the wrapper; they do not start independent document edit sessions. Only the outer diagram reports the block's draft through `onEvent`.
-
-Undo/redo records semantic commands. One continuous drag or resize is one undo step, although its latest draft is reported during the gesture. Any throttled draft update must flush before Save or leaving the session. Cancel restores content, handles, positions, and connections together. A failed save retains the draft. Read mode may allow temporary movement for exploration, but never persists it; entering edit mode starts from authored data, not uncommitted reading interactions.
-
-Serialization preserves stable IDs, declaration order, and renderer-specific data. Use the YAML document API to update relevant fields while retaining comments where possible. Never serialize the normalized React Flow objects: they contain derived handles, measurements, functions, and transient interaction state. Invalid input remains available in the source editor with an error identifying the field; it must not be replaced by an empty diagram.
-
-For a diagram stored as an asset, use the existing asset edit route and save mode. Do not add a second layout file with an independent save lifecycle: content and geometry belong to the same authored object and should save or cancel together.
+The rules as an author sees them are in [Data diagrams](../../../../example_doc/mdx-usage/comp-diagram-er.md#diagram-er-view) (Reading a diagram, Visual editing).
 
 ## React Flow Boundary
 
@@ -347,10 +339,14 @@ YAML / edit draft
 	-> measure declared anchors -> React Flow handles
 	-> connection adapter -> built-in path or registered edge renderer
 
-React Flow interactions
-	-> map runtime IDs back to authored IDs
-	-> validated diagram commands
+React Flow interactions (edit mode)
+	-> onConnect / onConnectEnd / onReconnect / onNodeDragStop, the handle clicks
+	-> the editor maps runtime ids back to authored ids and free ends to point nodes
+	-> validated store commands on the YAML draft
+	-> the draft is parsed again into nodes and edges (positions kept)
 ```
+
+A free end is a hidden point node (`~end:<role>:<connectionId>`, type `visualizationPoint`) with one handle at its origin; the edge ends on it, and the edge draws the ring. Authored node ids may not start with `~`.
 
 React Flow supplies canvas interaction and path utilities. The diagram supplies the domain-neutral schema, automatic layout policy, validation, and serialization. Table rows and choice options belong to node renderers, not to the graph adapter. Reusable entity content can therefore appear both inside a node and in `DiagramDataverseEntity` without forcing a static card to support canvas interaction.
 
