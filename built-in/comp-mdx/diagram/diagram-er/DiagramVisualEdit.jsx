@@ -23,8 +23,9 @@ const dropOf = (connection, from) => connection.source === from.nodeId && (conne
 // The visual edit mode of DiagramER and DiagramDataverseEntity
 // (comp_db_vis.md#card-editing): the same renderer as the read view, given an
 // `editor` that the cards, the handles and the canvas report to. The draft
-// lives in DiagramEditStore; this component owns what belongs to the view:
-// the element the edit card is anchored to, the canvas api (positions of
+// and the path of the edit card live in DiagramEditStore; this component
+// owns what belongs to the view: where the edit card stands (beside the
+// principal of the path, anchorRectGet), the canvas api (positions of
 // handles and nodes, the camera), and the drag interactions of the canvas
 // (connect, detach, reconnect, create), which it turns into store commands.
 export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, config, onEvent, kind, isInPopup = false, renderContent }) {
@@ -38,7 +39,6 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			return { store: new DiagramEditStore(data.source || data.raw, kind, resolve) };
 		} catch (error) { return { message: error.message }; }
 	});
-	const anchor = useRef(null);
 	const canvas = useRef(null);
 	const root = useRef(null);
 	const session = config.edit?.session ?? {};
@@ -63,9 +63,12 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		}
 	};
 	const cancel = () => { if (!isLocked) void onEvent?.('editCancelRequest'); };
+	const focusRoot = () => root.current?.focus({ preventScroll: true });
 	// Escape steps out one level at a time: the cell being typed (restoring
-	// it), the create panel, then the selection. it never ends the session,
-	// so a stray key cannot discard the draft; Save, Cancel or a click outside do
+	// it), the create panel, then one segment of the path (a cell to its row,
+	// a row to the list of rows, the list to the card, the card to nothing).
+	// it never ends the session, so a stray key cannot discard the draft;
+	// Save, Cancel or a click outside do
 	const keyDown = event => {
 		if (event.nativeEvent.isComposing) return;
 		if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -78,17 +81,32 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			event.preventDefault();
 			if (store.cell) editor.cancelCell();
 			else if (store.create) editor.createClose();
-			else if (store.selection) editor.clearSelection();
+			else if (store.display) editor.stepOut();
 		}
 	};
 	const editor = store && isAllowed ? {
 		store, isLocked, change, canvas, kind,
-		anchorSet: target => { anchor.current = target; },
-		select: (nodeId, options = {}, element) => { if (element) anchor.current = element; store.select(nodeId, options); },
-		selectConnection: connectionId => { anchor.current = { getRect: () => canvas.current?.edgeRectGet(connectionId) }; store.selectConnection(connectionId); },
-		handleClick: (nodeId, handleId, element) => { anchor.current = element; store.handleClick(nodeId, handleId); },
-		cancelCell: () => { change(() => store.cellCancel()); root.current?.focus({ preventScroll: true }); },
-		clearSelection: () => { anchor.current = null; store.selectionClear(); root.current?.focus({ preventScroll: true }); },
+		// ---- the path of the edit card ----
+		navigate: path => { store.pathSet(path); },
+		select: (nodeId, options = {}) => { store.select(nodeId, options); },
+		selectConnection: connectionId => { store.selectConnection(connectionId); },
+		handleClick: (nodeId, handleId) => { store.handleClick(nodeId, handleId); },
+		stepOut: () => { store.pathUp(); if (!store.display) focusRoot(); },
+		clearSelection: () => { store.selectionClear(); focusRoot(); },
+		cancelCell: () => { change(() => store.cellCancel()); focusRoot(); },
+		// where the edit card stands: beside the principal of the path as a
+		// whole (the node on the canvas, the standalone card, the middle of a
+		// line), never beside the row or the cell within it
+		anchorRectGet: () => {
+			const display = store.display;
+			if (!display) return null;
+			if (display.nodeId) {
+				const fromCanvas = canvas.current?.nodeRectGet(display.nodeId);
+				if (fromCanvas) return fromCanvas;
+				return root.current?.querySelector(`[data-node-id="${CSS.escape(display.nodeId)}"]`)?.getBoundingClientRect() ?? null;
+			}
+			return canvas.current?.edgeRectGet(display.connectionId) ?? null;
+		},
 		handlePositionGet: (nodeId, handleId) => canvas.current?.handlePositionGet(nodeId, handleId),
 		nodePositionGet: nodeId => canvas.current?.positionGet(nodeId),
 		// a drag from a handle: a new line, or, when a connection at the handle
@@ -123,7 +141,7 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			if (interaction.type === 'connect') {
 				const orient = store.connectionOrient(endpointOf(connection.source, connection.sourceHandle), endpointOf(connection.target, connection.targetHandle));
 				if (!orient) return;
-				change(() => { const id = store.connectionCreate(orient.source, orient.target); if (id) editor.selectConnection(id); });
+				change(() => { const id = store.connectionCreate(orient.source, orient.target); if (id) store.selectConnection(id); });
 			} else if (interaction.type === 'detach') {
 				const drop = dropOf(connection, { nodeId: interaction.fromNodeId, handleId: interaction.fromHandleId });
 				change(() => store.connectionEndpointSet(interaction.connectionId, interaction.role, drop));
@@ -181,17 +199,12 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			});
 		},
 		createOpen: position => { if (position) { store.selectionClear(); store.createOpen(position); } },
-		createClose: () => { store.createClose(); root.current?.focus({ preventScroll: true }); },
+		createClose: () => { store.createClose(); focusRoot(); },
 		createChoose: (entry, position) => {
 			store.createClose();
 			change(() => {
-				if (entry.isConnection) {
-					const id = store.connectionCreateDangling(position);
-					if (id) editor.selectConnection(id);
-				} else {
-					const id = store.nodeAdd(entry.id, position);
-					if (id) anchor.current = { getRect: () => canvas.current?.nodeRectGet(id) };
-				}
+				if (entry.isConnection) store.connectionCreateDangling(position);
+				else store.nodeAdd(entry.id, position);
 			});
 		},
 	} : undefined;
@@ -208,6 +221,6 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 				<ValueMenu label="Save to" value={store.saveTarget} values={['asset', 'inline']} valueLabels={saveTargetLabels} isLocked={isLocked || !isAllowed} onChange={value => change(() => store.saveTargetSet(value))} />
 			</span> : null}
 		</> : null} actions={<EditActions status={session.status} message={session.message || store?.message} titleCancel="Cancel" isSubmitDisabled={!store || !isAllowed} onSubmit={submit} onCancel={cancel} />} />
-		{editor && store.isCardShown ? <DiagramEditCard editor={editor} anchor={anchor} onKeyDown={keyDown} /> : null}
+		{editor && store.isCardShown ? <DiagramEditCard editor={editor} onKeyDown={keyDown} /> : null}
 	</div>;
 });

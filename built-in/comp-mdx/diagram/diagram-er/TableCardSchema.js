@@ -9,6 +9,13 @@ import { businessRuleNodeFields } from './BusinessRuleNodeData.js';
 //
 //   property   { id, label, kind: 'text' | 'enum' | 'bool', values?, isMultiline?, isSearchable? }
 //   field      a property shown as a column of the card
+//
+// the words of a card: labelNode (the card), labelRow / labelRowPlural (one
+// row of it: a Column of a Dataverse table, an Option, a Property, a Row),
+// labelField / labelFieldPlural (one field: a Field of a fixed card, a Column
+// of a generic table). the edit card names its tabs, its lists and the
+// segments of its path with them (DiagramEditPath.js). reasonFieldListFixed
+// is what the edit card says where the fields cannot be changed
 export const dataverseKeyList = ['', 'PK', 'FK'];
 export const dataverseTypeList = ['Text', 'Multiline Text', 'Whole Number', 'Decimal Number', 'Floating Point Number', 'Currency', 'Date', 'Date and Time', 'Choice', 'Choices', 'Lookup', 'Customer', 'Owner', 'Boolean', 'Unique identifier', 'UUID', 'String', 'Option'];
 
@@ -26,6 +33,10 @@ function resourceSchema(type, fieldsResource, labelNode) {
 		kind: 'resource',
 		labelNode,
 		labelRow: 'Property',
+		labelRowPlural: 'Properties',
+		labelField: 'Field',
+		labelFieldPlural: 'Fields',
+		reasonFieldListFixed: `The fields of a ${labelNode.toLowerCase()} card are fixed: a property is a name and a value.`,
 		rowListKey: 'properties',
 		anchorPrefix: 'property',
 		fieldList: [{ id: 'name', label: 'Property', kind: 'text' }, { id: 'value', label: 'Value', kind: 'text', isMultiline: true }],
@@ -44,6 +55,10 @@ const schemaByType = {
 		kind: 'dataverse',
 		labelNode: 'Table',
 		labelRow: 'Column',
+		labelRowPlural: 'Columns',
+		labelField: 'Field',
+		labelFieldPlural: 'Fields',
+		reasonFieldListFixed: 'The fields of a Dataverse table card are fixed: Key, Column, Logical name and Type.',
 		rowListKey: 'columns',
 		anchorPrefix: 'column',
 		fieldList: dataverseFieldList,
@@ -59,6 +74,10 @@ const schemaByType = {
 		kind: 'dataverse',
 		labelNode: 'Choice',
 		labelRow: 'Option',
+		labelRowPlural: 'Options',
+		labelField: 'Field',
+		labelFieldPlural: 'Fields',
+		reasonFieldListFixed: 'The fields of a choice card are fixed: Key, Option, Logical name and Type.',
 		rowListKey: 'columns',
 		anchorPrefix: 'column',
 		fieldList: dataverseFieldList,
@@ -76,6 +95,10 @@ const schemaByType = {
 		kind: 'table',
 		labelNode: 'Table',
 		labelRow: 'Row',
+		labelRowPlural: 'Rows',
+		labelField: 'Column',
+		labelFieldPlural: 'Columns',
+		reasonFieldListFixed: '',
 		rowListKey: 'rows',
 		anchorPrefix: 'row',
 		fieldList: [],

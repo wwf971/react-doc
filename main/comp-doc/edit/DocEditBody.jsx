@@ -173,7 +173,7 @@ const DocEditEmptyNotice = observer(function DocEditEmptyNotice() {
     <div ref={elementRef} className="doc-edit-empty not-prose">
       <span className="doc-content-empty">This document is empty.</span>
       <div className="doc-edit-toolbar" data-open={isMenuHere ? '' : undefined}>
-        <div className="doc-edit-toolbar-actions">
+        <div className="doc-edit-toolbar-actions doc-button-group">
           <button type="button" disabled={editStore.isSubmitting} aria-pressed={isMenuHere}
             title="Insert the first block" aria-label="Insert the first block"
             onClick={() => void (isMenuHere ? editStore.insertMenuClose() : editStore.insertMenuOpen(path, -1, 0))}>

@@ -35,7 +35,7 @@ node:
 - `isRequired` and `description` are optional.
 - A column description must be available from the corresponding column-name tooltip without increasing the table's vertical size.
 - Legacy `entity: ...` input remains readable through the same model's compatibility adapter.
-- Inline and asset-backed cards share the visual editor of the diagrams (`DiagramVisualEdit`, [comp_db_vis.md](../diagram-er/comp_db_vis.md#card-editing)): cells typed in place, rows inserted / moved / removed, row handles added and removed from the Row tab or the row edges. Drafts save on Save or normal exit, to the asset or inline YAML; Cancel discards them.
+- Inline and asset-backed cards share the visual editor of the diagrams (`DiagramVisualEdit`, [comp_db_vis.md](../diagram-er/comp_db_vis.md#card-editing)): cells typed in place, rows inserted / moved / removed from the toolbar of a focused row or the lists of the edit card, row handles added and removed from the row's detail or the row edges; the edit card stands beside the whole card and is driven by its path ([comp-diagram-er.md](../../../../example_doc/mdx-usage/comp-diagram-er.md#diagram-er-edit)). Drafts save on Save or normal exit, to the asset or inline YAML; Cancel discards them.
 
 ## Display Requirements
 

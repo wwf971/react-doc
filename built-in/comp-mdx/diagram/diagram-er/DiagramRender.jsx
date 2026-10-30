@@ -1,4 +1,4 @@
-import { createContext, useContext, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { BaseEdge, Handle, Position, getBezierPath, getSmoothStepPath, getStraightPath, useUpdateNodeInternals, useViewport } from '@xyflow/react';
 import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
@@ -19,6 +19,11 @@ import { endpointIsDangling } from './DiagramERData.js';
 export const DiagramRenderContext = createContext({});
 const positions = { left: Position.Left, right: Position.Right, top: Position.Top, bottom: Position.Bottom };
 
+// the node component React Flow renders, around the card. while a node is
+// dragged React Flow renders it every frame with its new position; the
+// card inside is given the same props (node, anchorRef, visualization keep
+// their identity), so it is not rendered again, and the other nodes are
+// not touched at all (DiagramERStore: nodeList keeps their identity)
 export const DiagramNode = observer(function DiagramNode({ id, data }) {
 	const { node } = data;
 	const { config = {}, measurementSet, editor } = useContext(DiagramRenderContext);
@@ -28,14 +33,14 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 	const measureCurrent = useRef(() => {});
 	const [geometry, geometrySet] = useState({ handles: [], missing: [] });
 	const updateNodeInternals = useUpdateNodeInternals();
-	const anchorRef = anchorId => {
+	const anchorRef = useCallback(anchorId => {
 		if (!refs.current.has(anchorId)) refs.current.set(anchorId, element => {
 			if (element) anchors.current.set(anchorId, element);
 			else anchors.current.delete(anchorId);
 			measureCurrent.current();
 		});
 		return refs.current.get(anchorId);
-	};
+	}, []);
 	useLayoutEffect(() => {
 		let frame;
 		const measure = () => {
@@ -74,7 +79,7 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 		};
 	}, [id, node, measurementSet]);
 	useLayoutEffect(() => { updateNodeInternals(id); }, [geometry, id, updateNodeInternals]);
-	const visualization = { nodeId: id, size: node.size, isEdit: false, anchorRef };
+	const visualization = useMemo(() => ({ nodeId: id, size: node.size, isEdit: false, anchorRef }), [id, node.size, anchorRef]);
 	const selection = editor?.store.selection;
 	const connectionSelected = selection?.nodeId === id && selection.connectionId ? editor.store.connectionGet(selection.connectionId) : undefined;
 	const isConnectable = Boolean(editor) && !editor.isLocked;
@@ -91,7 +96,7 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 					className={`doc-er-table-handle is-${handle.direction}${isSelected ? ' is-selected' : ''}${count ? ' is-occupied' : ''}${editor ? ' is-editable' : ''}`}
 					title={editor ? `${handle.id}: ${count === 0 ? 'drag to connect' : `${count} connection${count === 1 ? '' : 's'}; click to select one, drag to connect`}` : undefined}
 					style={{ left: handle.left, top: handle.top, right: 'auto', bottom: 'auto', transform: 'translate(-50%, -50%)', visibility: handle.isHidden ? 'hidden' : 'visible' }}
-					onClick={editor ? event => { event.stopPropagation(); editor.handleClick(id, handle.id, event.currentTarget); } : undefined} />;
+					onClick={editor ? event => { event.stopPropagation(); editor.handleClick(id, handle.id); } : undefined} />;
 			})}
 		</div>
 	);
@@ -111,8 +116,8 @@ const DiagramNodeContent = observer(function DiagramNodeContent({ id, node, conf
 const OperatorCard = observer(function OperatorCard({ node, editor, nodeId }) {
 	const content = editor?.store.nodeGet(nodeId)?.data ?? node.data;
 	const isSelected = editor?.store.selection?.nodeId === nodeId;
-	return <div className={`doc-vis-operator${editor ? ' is-editable' : ''}${isSelected ? ' is-selected' : ''}`} tabIndex={editor ? 0 : undefined}
-		onClick={editor ? event => editor.select(nodeId, {}, event.currentTarget) : undefined}>
+	return <div data-node-id={nodeId} className={`doc-vis-operator${editor ? ' is-editable' : ''}${isSelected ? ' is-selected' : ''}`} tabIndex={editor ? 0 : undefined}
+		onClick={editor ? event => { event.stopPropagation(); editor.select(nodeId); } : undefined}>
 		<strong><CardCell editor={editor} nodeId={nodeId} field={{ id: 'label', kind: 'text', label: 'Label' }} value={content.label ?? content.name ?? ''}>{node.data.label ?? node.data.name ?? nodeId}</CardCell></strong>
 		{node.data.description || editor ? <p className="nodrag nopan"><CardCell editor={editor} nodeId={nodeId} field={{ id: 'description', kind: 'text', label: 'Description' }} value={content.description ?? ''}>{node.data.description}</CardCell></p> : null}
 	</div>;
@@ -121,12 +126,12 @@ const OperatorCard = observer(function OperatorCard({ node, editor, nodeId }) {
 // the node a dangling end of a connection ends on: one handle at the node's
 // origin and no size. while reading it is invisible (the edge draws the end);
 // in the editor it shows a dot that can be dragged, above the cards, to move
-// the end or to drop it on a handle
-export const DiagramPointNode = observer(function DiagramPointNode() {
+// the end or to drop it on a handle; a click on it selects the line
+export const DiagramPointNode = observer(function DiagramPointNode({ data }) {
 	const { editor } = useContext(DiagramRenderContext);
 	return <div className="doc-vis-point">
 		<Handle id="end" type="source" position={Position.Left} isConnectable={false} className="doc-vis-point-handle" />
-		{editor ? <div className="doc-vis-point-dot" title="Drag the free end; drop it on a handle to attach it" /> : null}
+		{editor ? <div className="doc-vis-point-dot" title="Drag the free end; drop it on a handle to attach it. Click to select the line" onClick={event => { event.stopPropagation(); editor.selectConnection(data.connectionId); }} /> : null}
 	</div>;
 });
 

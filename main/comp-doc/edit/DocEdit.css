@@ -365,55 +365,12 @@
   white-space: nowrap;
 }
 
-/* the control group of a block: a step larger than the other floating
-   controls (1.75rem tall, 14px icons, wider buttons), since it is what the
-   pointer reaches for while moving over the document */
+/* the control group of a block: the shared .doc-button-group (src/css/
+   button.css), a step larger than the other floating controls (1.75rem
+   tall, 14px icons), since it is what the pointer reaches for while moving
+   over the document */
 .doc-edit-toolbar-actions {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: stretch;
-  height: var(--doc-edit-toolbar-height);
-  border: 1px solid var(--color-fd-border);
-  border-radius: 2px;
-  background: var(--color-fd-background);
-  box-shadow: 0 1px 3px rgb(15 23 42 / 10%);
-}
-
-.doc-edit-toolbar-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  min-width: 1.9rem;
-  padding: 0 0.45rem;
-  border: 0;
-  border-left: 1px solid var(--color-fd-border);
-  background: transparent;
-  color: var(--color-fd-muted-foreground);
-  cursor: pointer;
-  font-size: 0.78rem;
-  line-height: 1;
-  justify-content: center;
-}
-
-.doc-edit-toolbar-actions button:first-child {
-  border-left: 0;
-}
-
-.doc-edit-toolbar-actions button:hover:not(:disabled),
-.doc-edit-toolbar-actions button:focus-visible:not(:disabled) {
-  background: var(--color-fd-accent);
-  color: var(--color-fd-foreground);
-  outline: none;
-}
-
-.doc-edit-toolbar-actions button[aria-pressed='true'] {
-  background: color-mix(in srgb, var(--color-fd-primary) 12%, var(--color-fd-background));
-  color: var(--color-fd-primary);
-}
-
-.doc-edit-toolbar-actions button:disabled {
-  opacity: 0.35;
-  cursor: default;
+  --doc-button-group-height: var(--doc-edit-toolbar-height);
 }
 
 .doc-edit-confirm {

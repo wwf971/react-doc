@@ -92,7 +92,7 @@ const ServicePathRow = observer(function ServicePathRow() {
   };
   return (
     <div className="doc-service-path-row">
-      <div className="doc-service-path">
+      <div className="doc-service-path doc-path">
         {PathBar ? (
           <PathBar
             pathData={{ segments: segmentList }}

@@ -11,6 +11,10 @@
    in their own cascade layer after the Tailwind layers: a rule of a component
    stylesheet (no layer) always wins over a shared rule */
 @import './css/index.css' layer(doc-shared);
+/* the shared look of the host's PathBar (.doc-path) stays outside the layer:
+   it overrides the component's own unlayered stylesheet (react-comp-misc),
+   which a layered rule could not */
+@import './css/path.css';
 @source '../../../third_party/shadcn';
 
 @theme {

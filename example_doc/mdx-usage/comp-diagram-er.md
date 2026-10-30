@@ -73,11 +73,34 @@ nodes:
       nameLogical: account
       description: A company the organization does business with.
       columns:
-        - { id: accountid, name: Account, nameLogical: accountid, type: Unique identifier, key: PK, isRequired: true }
-        - { id: name, name: Account Name, nameLogical: name, type: Text, isRequired: true }
-        - { id: revenue, name: Annual Revenue, nameLogical: revenue, type: Currency, description: Reported yearly revenue }
+        - {
+            id: accountid,
+            name: Account,
+            nameLogical: accountid,
+            type: Unique identifier,
+            key: PK,
+            isRequired: true
+          }
+        - {
+            id: name,
+            name: Account Name,
+            nameLogical: name,
+            type: Text,
+            isRequired: true
+          }
+        - {
+            id: revenue,
+            name: Annual Revenue,
+            nameLogical: revenue,
+            type: Currency,
+            description: Reported yearly revenue
+          }
     handles:
-      - { id: accountid-out, direction: out, anchor: { target: column/accountid, side: right } }
+      - {
+          id: accountid-out,
+          direction: out,
+          anchor: { target: column/accountid, side: right }
+        }
   - id: salesorder
     renderer: { type: dataverse-table }
     position: { x: 520, y: 0 }
@@ -86,14 +109,50 @@ nodes:
       name: Order
       nameLogical: salesorder
       columns:
-        - { id: salesorderid, name: Order, nameLogical: salesorderid, type: Unique identifier, key: PK, isRequired: true }
-        - { id: customerid, name: Customer, nameLogical: customerid, type: Customer, key: FK, isRequired: true }
-        - { id: statuscode, name: Status Reason, nameLogical: statuscode, type: Choice }
-        - { id: totalamount, name: Total Amount, nameLogical: totalamount, type: Currency }
+        - {
+            id: salesorderid,
+            name: Order,
+            nameLogical: salesorderid,
+            type: Unique identifier,
+            key: PK,
+            isRequired: true
+          }
+        - {
+            id: customerid,
+            name: Customer,
+            nameLogical: customerid,
+            type: Customer,
+            key: FK,
+            isRequired: true
+          }
+        - {
+            id: statuscode,
+            name: Status Reason,
+            nameLogical: statuscode,
+            type: Choice
+          }
+        - {
+            id: totalamount,
+            name: Total Amount,
+            nameLogical: totalamount,
+            type: Currency
+          }
     handles:
-      - { id: customerid-in, direction: in, anchor: { target: column/customerid, side: left } }
-      - { id: salesorderid-out, direction: out, anchor: { target: column/salesorderid, side: right } }
-      - { id: statuscode-out, direction: out, anchor: { target: column/statuscode, side: left } }
+      - {
+          id: customerid-in,
+          direction: in,
+          anchor: { target: column/customerid, side: left }
+        }
+      - {
+          id: salesorderid-out,
+          direction: out,
+          anchor: { target: column/salesorderid, side: right }
+        }
+      - {
+          id: statuscode-out,
+          direction: out,
+          anchor: { target: column/statuscode, side: left }
+        }
   - id: salesorderdetail
     renderer: { type: dataverse-table }
     position: { x: 1040, y: 40 }
@@ -101,24 +160,65 @@ nodes:
       name: Order Product
       nameLogical: salesorderdetail
       columns:
-        - { id: salesorderdetailid, name: Order Product, nameLogical: salesorderdetailid, type: Unique identifier, key: PK, isRequired: true }
-        - { id: salesorderid, name: Order, nameLogical: salesorderid, type: Lookup, key: FK, isRequired: true }
-        - { id: productid, name: Existing Product, nameLogical: productid, type: Lookup, key: FK }
+        - {
+            id: salesorderdetailid,
+            name: Order Product,
+            nameLogical: salesorderdetailid,
+            type: Unique identifier,
+            key: PK,
+            isRequired: true
+          }
+        - {
+            id: salesorderid,
+            name: Order,
+            nameLogical: salesorderid,
+            type: Lookup,
+            key: FK,
+            isRequired: true
+          }
+        - {
+            id: productid,
+            name: Existing Product,
+            nameLogical: productid,
+            type: Lookup,
+            key: FK
+          }
         - { id: quantity, name: Quantity, nameLogical: quantity, type: Decimal Number }
     handles:
-      - { id: salesorderid-in, direction: in, anchor: { target: column/salesorderid, side: left } }
-      - { id: productid-in, direction: in, anchor: { target: column/productid, side: left } }
+      - {
+          id: salesorderid-in,
+          direction: in,
+          anchor: { target: column/salesorderid, side: left }
+        }
+      - {
+          id: productid-in,
+          direction: in,
+          anchor: { target: column/productid, side: left }
+        }
   - id: product
     renderer: { type: dataverse-table }
-    position: { x: 520, y: 330 }
+    position:
+      x: 806
+      y: 521
     data:
       name: Product
       nameLogical: product
       columns:
-        - { id: productid, name: Product, nameLogical: productid, type: Unique identifier, key: PK, isRequired: true }
+        - {
+            id: productid,
+            name: Product,
+            nameLogical: productid,
+            type: Unique identifier,
+            key: PK,
+            isRequired: true
+          }
         - { id: name, name: Name, nameLogical: name, type: Text, isRequired: true }
     handles:
-      - { id: productid-out, direction: out, anchor: { target: column/productid, side: right } }
+      - {
+          id: productid-out,
+          direction: out,
+          anchor: { target: column/productid, side: right }
+        }
   - id: orderstatus
     renderer: { type: dataverse-choice }
     position: { x: 0, y: 330 }
@@ -394,65 +494,91 @@ These are the rules of a diagram while the document is read (and of a block in e
 <!--renderComp=Anchor,id=diagram-er-edit-->
 ## Visual Editing
 
-In edit mode, both components open in the **Visual** mode from the block's Edit button, from the mode menu, or from **Edit** in the popup; a click on the canvas pans or selects, it never enters the editor. The built-in **Source** mode stays available from the mode menu. Every change is a draft of the same YAML, with its comments kept; Save or a click outside the block writes it once, and Cancel discards it.
+In edit mode, both components open in the **Visual** mode from the block's Edit button, from the mode menu, or from **Edit** in the popup; a click on the canvas pans or focuses, it never enters the editor. The built-in **Source** mode stays available from the mode menu. Every change is a draft of the same YAML, with its comments kept; Save or a click outside the block writes it once, and Cancel discards it.
 
 ### Entering and leaving
 
-- **Entering moves nothing.** The block keeps its height, its place, and the camera of the canvas; the page does not scroll. The only things that appear are the floating bar above the block and, later, the edit card beside what is selected.
+- **Entering moves nothing.** The block keeps its height, its place, and the camera of the canvas; the page does not scroll. The only things that appear are the floating bar above the block and, later, the edit card beside what is focused.
 - **The floating bar** shows whether there are unsaved changes, **+** (add a node or a connection at the center of the canvas), **Save to** for an asset-backed block, and **Save** / **Cancel**. Ctrl/⌘ + Enter saves.
-- **Escape steps out one level at a time:** the cell being typed (restoring it), then the create panel, then the selection. It never ends the session, so a stray key cannot discard the draft.
+- **Escape steps out one level at a time:** the cell being typed (restoring it), then the create panel, then one segment of the edit card's path (a cell to its column, a column to the list of columns, the list to the card, the card to nothing). It never ends the session, so a stray key cannot discard the draft.
 - **A failed change is refused with its reason** in the edit card (or the bar), and the draft stays as it was: a handle that takes one connection and has it, both ends of a line on the same handle, a locked node without a position.
 
-### Selection and the edit card
+### Everything answers a click
 
-One thing is selected at a time, and the **edit card** opens beside it with the settings of that thing. The card is the host's property editor with tabs; a tab without a subject is greyed out, and the author may switch to any enabled tab.
+In edit mode, every part of a card or a line answers a click with a visible focus, whether or not it can be changed: a reader who clicks and sees nothing happen assumes the editor is broken. The focus is drawn the same way everywhere (a tinted row with a bar at its left, a ringed handle, a haloed line), and the edit card follows it.
 
-| What is selected | How | Tabs enabled |
+| A click on | Focuses | The edit card opens |
 | --- | --- | --- |
-| A card (node) | a click on its title line, or on an operator | **Table** (name, subtitle, description, title handles, position, add row / column, remove node) |
-| A row of a card | a click in the row; the Row tab | Table, **Row** (its values, its handles, insert above / below, move up / down, remove) |
-| A column of a card | a click on a column header | Table, **Column** (its label; insert left / right, move left / right, remove; fixed for Dataverse and resource cards) |
-| A cell | a click in the cell, once typing ends | Table, Row, Column, **Cell** (the value) |
-| A connection, from a card | a click on a handle of the card, which rotates through the connections attached to it, and back to none | the tabs of the card and **Line** |
-| A connection, by itself | a click anywhere near the line, or on its label | **Line** only |
+| the title line of a card, or an operator | the card | the card's tab (Table, Flow step, Business rule ...) |
+| the description line, or a head field of a resource card (Step, Table, Scope ...) | that property of the card | the card's tab; the property is edited in place or there |
+| a row of a card (a Dataverse column, an option, a property, a row) | the row, with its toolbar | the row's detail |
+| a cell | the cell, and starts typing in it (Enter or a click elsewhere ends it, Escape restores it) | the cell, once typing ends |
+| a field header (Key, Column, Logical name, Type; the authored columns of a generic table) | the field, with its toolbar | the field's detail, which says when the fields of the card are fixed |
+| a handle | the next line attached to the handle, then the list of the card's lines | the line's detail, then the list |
+| a line, its label, or the ring of a free end | the line by itself | the line's detail |
+| empty canvas | nothing | closes |
 
-- Selecting a connection is the same kind of state as selecting a card. A click on a line selects it where the pointer is, within a few pixels of the path, and the line is drawn with a halo; its label is part of it.
-- The edit card is **hidden while something is being typed or dragged**: while a cell is being edited, while a node, a line end or a new line is being dragged, and while the create panel is open. It comes back, with the same tab, when the gesture ends.
-- A click on empty canvas, Escape, or the card's close button clears the selection.
+A button that the card does not support is greyed out, never missing, and its tooltip says why (*The fields of a Dataverse table card are fixed: Key, Column, Logical name and Type.*, *Already first.*, *A standalone card has no lines.*).
+
+### The edit card and its path
+
+The edit card stands **beside the principal** of what is focused: the whole card (not the row or the cell within it), or the line. Its top edge is computed from the principal alone, so it does not move while the author works in it: the card grows and shrinks downward as its content changes (a handle switched on adds a row of settings; a tab changes the view), and what does not fit scrolls inside it. Nothing the author does in the card moves the card.
+
+Inside, from top to bottom: the name of the principal, the **tabs**, the **path bar**, and the view of the active tab. The path is the one state the card is drawn from:
+
+```text
+Customer                            the card: name, description, title handles, position
+Customer › Columns                  the list of its columns (the rows of the card)
+Customer › Columns › Name           one column: values, handles, insert / move / remove
+Customer › Columns › Name › Type    one cell: its value
+Customer › Fields                   the fields of the card (Key, Column, Logical name, Type)
+Customer › Fields › Type            one field
+Customer › Lines                    the lines at the card's handles
+Customer › Lines › places           one of them
+places                              a line selected by itself
+```
+
+The words are the card's own: the rows of a Dataverse table are its *Columns*, of a choice its *Options*, of a flow step or a business rule its *Properties*, of a generic table its *Rows*; the fields of a generic table are its *Columns*, of every other card its *Fields*.
+
+- **What is shown is read off the path.** The last segment names the view: a collection (*Columns*, *Fields*, *Lines*) is a **list**, one item is its **detail**, the card alone is the card's tab. The tab that is lit is the collection the path is in; the canvas highlights the item the path ends in (and only that: a highlight can never be stale, since there is no second copy of the focus). The tabs lead into the path: **Columns** goes to the focused column when there is one, else to the list; **Cell** is enabled only when the path holds a column and a field; **Lines** goes to the focused line or the list. A tab without a place is greyed out with the reason.
+- **The path changes with what the author does.** A click on the canvas focuses that thing (the table above). A click on a **segment of the path bar** cuts the path there: *Customer › Columns* from the cell path shows the list. A click on an **item of a list** opens its detail and focuses it on the card. **Escape** drops the last segment.
+- **The path changes with the data.** Inserting a column, a field, a node or a line focuses the new thing. Removing one goes to its list (*Customer › Columns* after a column is removed, *Customer › Lines* after a line is removed from the card). A subject that disappears for another reason (a handle removed, and with it the line selected through the card) sends the path to the nearest place that still exists: its list, the card, or nothing when the card itself is gone. Nothing in the path is ever left pointing at something gone.
+- **One place, several spellings.** A column may be named by its id, by its index, or by its name: all route to the same display, and the path the editor keeps is the canonical one. This is what a host hooks into to redirect a path (a rule that answers *go there instead* for a display), for views the editor does not have yet.
 
 ### Cards: cells, rows and columns
 
 - **Click a cell to type in it.** Enter or a click elsewhere ends the cell, Escape restores it. Key and Type of a Dataverse column open a menu; Type has a search over the Dataverse column types. The card does not change size when a cell starts or ends editing.
-- The **Cell** tab offers the same value as a field, so a value can also be typed in the edit card.
-- **Rows** can be inserted at any index (above or below the selected row, or appended from the Table tab), moved up and down, and removed. A new row is selected at once. Removing a row removes its handles; connections on them are detached (their ends stay where the handles were).
-- **Columns** of a generic `table` can be inserted left or right of the selected column, moved, relabeled and removed (the values of the removed column are dropped from every row; a table keeps at least one column). The columns of a Dataverse card and of a resource card are fixed: the Column tab says so.
-- The title line edits the name and the subtitle in place; the description and the head fields of a resource card are in the Table tab.
+- The **Cell** detail offers the same value as a field, so a value can also be typed in the edit card.
+- **A focused row shows its toolbar** at the left of the card: a grip to drag the row to another place (the drop place is drawn as a line while dragging), insert above, insert below, move up, move down, remove. The **list of the rows** in the edit card offers the same with the grip and the remove button before every row, and **Add** at its end; the row's detail has the same actions as buttons. A new row starts with example values and is focused at once. Removing a row removes its handles; connections on them are detached (their ends stay where the handles were).
+- **A focused field shows its toolbar** above its header: insert left, insert right, move left, move right, remove, and a grip. For a generic `table` the fields are authored and all of these work (a table keeps at least one column; the values of a removed column are dropped from every row). For a Dataverse card and a resource card the fields are fixed: the field is still focused and listed, its buttons are greyed out, and their tooltip and the field's detail say so.
+- The title line edits the name and the subtitle in place; the description and the head fields of a resource card are edited in place too, and in the card's tab.
 
 ### Handles
 
-- **Adding a handle:** point at a row and press the **+** that appears at its left or right edge, or switch the left / right handle on in the Row tab. A new handle takes connections in both directions and any number of them.
+- **Adding a handle:** point at a row and press the **+** that appears at its left or right edge, or switch the left / right handle on in the row's detail. A new handle takes connections in both directions and any number of them.
 - **Title-line handles** are off by default. They exist for a choice card and a resource card, and for a generic table whose **Title handles** setting is on; a Dataverse table has none.
-- **Removing a handle** (Row tab, or Title handles) that connections use moves those connections to the handle on the other side of the same row when there is one. Otherwise the connections are detached: each end becomes a free end a little away from where the handle was. Nothing is deleted silently.
-- **Attach policy:** a handle accepts many lines (the default) or one (**Right accepts: One line** in the Row tab). A handle that takes one line and has it refuses another end dropped on it, and a drag from it moves its line instead of starting a new one.
-- A handle with connections is drawn filled; the handle of the selected connection is ringed. A handle does not know which end of a line it holds: the direction of a line is shown by its arrows.
+- **Removing a handle** (the row's detail, or Title handles) that connections use moves those connections to the handle on the other side of the same row when there is one. Otherwise the connections are detached: each end becomes a free end a little away from where the handle was. Nothing is deleted silently.
+- **Attach policy:** a handle accepts many lines (the default) or one (**Right accepts: One line** in the row's detail). A handle that takes one line and has it refuses another end dropped on it, and a drag from it moves its line instead of starting a new one.
+- A handle with connections is drawn filled; the handle of the focused connection is ringed. A handle does not know which end of a line it holds: the direction of a line is shown by its arrows.
 
 ### Connections
 
-- **Drawing a line:** drag from a handle. A dashed line follows the pointer, green over a handle that will take it and red over one that will not. Releasing on a valid handle (of any card, the same one included, but never the same handle) creates the connection and selects it; releasing anywhere else creates nothing.
+- **Drawing a line:** drag from a handle. A dashed line follows the pointer, green over a handle that will take it and red over one that will not. Releasing on a valid handle (of any card, the same one included, but never the same handle) creates the connection and focuses it; releasing anywhere else creates nothing.
 - **Direction:** the new line runs out of the handle that can send and into the handle that can receive, whichever end the drag started from; a handle declared `both` does either.
-- **Dragging from a handle whose connection is selected** (after a click on the handle chose it) does not start a new line: it detaches that end of the selected line and carries it with the pointer, drawn from the line's other end. The same happens when dragging from a handle that takes one line and has it.
+- **Dragging from a handle whose connection is focused** (after a click on the handle chose it) does not start a new line: it detaches that end of the focused line and carries it with the pointer, drawn from the line's other end. The same happens when dragging from a handle that takes one line and has it.
 - **Moving an end:** drag the end of a line where it meets a handle, or drag the ring of a free end. Dropping it on a handle that takes it attaches it there; dropping it anywhere else leaves it as a free end at that point. A free end is part of the saved data (`position`), so it is still there after a reload.
-- **Line settings** (the Line tab): label, line type (smooth step, step, curve, straight, polyline), color, thickness, dash (solid, dashed, dotted), the arrow at each end, animation, and **Remove connection**. The two ends are listed as read-only text.
+- **Line settings** (the line's detail): label, line type (smooth step, step, curve, straight, polyline), color, thickness, dash (solid, dashed, dotted), the arrow at each end, animation, and **Remove line**. The two ends are listed as read-only text. The **Lines** list of a card names every line at its handles, with its ends, and removes one with the button before it.
+- The edit card is **hidden while something is being typed or dragged**: while a cell is being edited, while a node, a line end or a new line is being dragged, and while the create panel is open. It comes back, at the same path, when the gesture ends.
 
 ### Creating nodes and connections
 
 - **Double-click empty canvas**, or press **+** in the floating bar, to open the create panel at that point: a search field over what can be added (a generic table, a Dataverse table, a Dataverse choice, an operator, a Power Automate step, a business rule, and a connection with two free ends). Type to filter, ArrowUp / ArrowDown to move, Enter to take the highlighted entry, Escape or a click outside to close.
-- The new node appears at the panel's position, with an explicit position, and is selected with its edit card open. A new connection appears with both ends free and selected; drag its ends onto handles.
-- **Removing a node** (Table tab) keeps the connections on it: their ends become free ends where the handles were. Remove the lines from their Line tab when they are not wanted.
+- The new node appears at the panel's position, with an explicit position, and is focused with its edit card open. A new connection appears with both ends free and focused; drag its ends onto handles.
+- **Removing a node** (the card's tab) keeps the connections on it: their ends become free ends where the handles were. Remove the lines from their detail, or from the **Lines** list of a card, when they are not wanted.
 
 ### Positions
 
-- Dragging a card in edit mode moves it, and the position is written to the draft when the card has an explicit position. The Table tab's **Remember** keeps the current canvas position as the node's `position` (off: the node returns to the automatic layout); **Locked** keeps the position and prevents dragging in either mode. A locked node cannot be dragged, in reading or in editing.
+- Dragging a card in edit mode moves it, and the position is written to the draft when the card has an explicit position. The card's tab has **Remember**, which keeps the current canvas position as the node's `position` (off: the node returns to the automatic layout); **Locked** keeps the position and prevents dragging in either mode. A locked node cannot be dragged, in reading or in editing.
 - The camera is kept when the block saves.
 
 ### Data in the asset service layer

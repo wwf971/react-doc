@@ -1,5 +1,4 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import { toJS } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import {
 	Background,
@@ -9,6 +8,7 @@ import {
 	ReactFlowProvider,
 	useReactFlow,
 	useNodesInitialized,
+	useViewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Copy } from '../../../../main/frontend/UICommon.js';
@@ -92,6 +92,10 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 	const { editor, edgeGeometry } = useContext(DiagramRenderContext);
 	const { fitView, setViewport, getViewport, getNode, getInternalNode, screenToFlowPosition, flowToScreenPosition } = useReactFlow();
 	const isInitialized = useNodesInitialized();
+	// the zoom, as a custom property of the canvas: the controls drawn over a
+	// card (the toolbars of a focused row or field) undo it, so they keep
+	// their screen size at any zoom (DiagramVisualEdit.css)
+	const { zoom } = useViewport();
 	const wrapper = useRef(null);
 	const graphVersion = store.graphVersion;
 	const viewport = store.viewport;
@@ -100,17 +104,32 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 	const interaction = editor?.store.interaction;
 	const create = editor?.store.create;
 	// while reading, a node is never dragged: a drag on a card pans the
-	// canvas, as on empty space, and a drag in a row selects its text
+	// canvas, as on empty space, and a drag in a row selects its text. the
+	// node and edge objects handed to React Flow keep their identity while
+	// nothing about them changed (decorated once per store item and flag
+	// set), so a drag frame re-renders the dragged node alone
+	const decorated = useRef(new WeakMap());
+	const decorate = (item, flags, build) => {
+		const key = JSON.stringify(flags);
+		const cached = decorated.current.get(item);
+		if (cached?.key === key) return cached.value;
+		const value = build();
+		decorated.current.set(item, { key, value });
+		return value;
+	};
 	const nodeList = [
-		...toJS(store.nodeList).map(node => node.type === 'visualizationNode' ? { ...node, draggable: isEditing && !isLocked && !node.data.node.isPositionLocked } : node.type === 'visualizationPoint' ? { ...node, draggable: isEditing && !isLocked } : node),
+		...store.nodeList.map(node => {
+			const draggable = node.type === 'visualizationNode' ? isEditing && !isLocked && !node.data.node.isPositionLocked : node.type === 'visualizationPoint' ? isEditing && !isLocked : node.draggable;
+			return decorate(node, [draggable], () => ({ ...node, draggable }));
+		}),
 		...(create ? [{ id: '~create', type: 'visualizationCreate', position: create.position, initialWidth: 300, initialHeight: 240, draggable: false, selectable: false, focusable: false, connectable: false, zIndex: 1000, data: { position: create.position } }] : []),
 	];
-	const edgeList = toJS(store.edgeList).map(edge => ({
-		...edge,
-		reconnectable: isEditing && !isLocked,
-		className: selection?.connectionId === edge.id ? 'is-selected' : undefined,
-		hidden: interaction?.type === 'detach' && interaction.connectionId === edge.id,
-	}));
+	const edgeList = store.edgeList.map(edge => {
+		const reconnectable = isEditing && !isLocked;
+		const className = selection?.connectionId === edge.id ? 'is-selected' : undefined;
+		const hidden = interaction?.type === 'detach' && interaction.connectionId === edge.id;
+		return decorate(edge, [reconnectable, className, hidden], () => ({ ...edge, reconnectable, className, hidden }));
+	});
 	const signature = JSON.stringify(viewport);
 	const viewRemembered = viewState?.signature === signature ? viewState.view : undefined;
 
@@ -198,6 +217,7 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 		<ReactFlow
 			ref={wrapper}
 			className="doc-er-diagram-flow"
+			style={{ '--doc-vis-zoom': zoom }}
 			nodes={nodeList}
 			edges={edgeList}
 			nodeTypes={nodeTypes}
@@ -231,7 +251,7 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			// at all; a mouse-enter handler keeps it on, so the text of a card
 			// stays selectable while reading and a drag on its title line pans
 			onNodeMouseEnter={nodeMouseEnterNoop}
-			onNodeClick={isEditing ? (event, node) => { if (node.type === 'visualizationNode' && !event.target.closest('.doc-card, .doc-vis-operator')) editor.select(node.id, {}, event.currentTarget); } : undefined}
+			onNodeClick={isEditing ? (event, node) => { if (node.type === 'visualizationNode' && !event.target.closest('.doc-card, .doc-vis-operator')) editor.select(node.id); } : undefined}
 			onEdgeClick={isEditing ? (_event, edge) => editor.selectConnection(edge.id) : undefined}
 			onPaneClick={isEditing ? () => { editor.clearSelection(); editor.createClose(); } : undefined}
 			onDoubleClick={isEditing ? event => { if (event.target.classList?.contains('react-flow__pane')) editor.createOpen(screenToFlowPosition({ x: event.clientX, y: event.clientY })); } : undefined}

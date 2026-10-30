@@ -1,8 +1,11 @@
-import { makeAutoObservable } from 'mobx';
+import { makeAutoObservable, observable } from 'mobx';
 import { parseDocument, stringify } from 'yaml';
 import { diagramLegacyConvert, diagramNormalize, dataverseStandaloneNormalize, endpointIsDangling, handleRoleAccepts, lineTypeList, markerTypeList, attachPolicyList } from './DiagramERData.js';
 import { cardSchemaGet, cardRowAnchorBuild } from './TableCardSchema.js';
 import { diagramNodeRegistry } from './diagram-node-registry.js';
+import { pathResolve, pathEquals, selectionPathBuild, tabPathGet, nodeLineListGet, cardTabList } from './DiagramEditPath.js';
+
+export { cardTabList };
 
 export const diagramEditModeList = [{ id: 'visual', label: 'Visual', description: 'Edit cards, rows, handles and connections on the canvas', isDefault: true }];
 
@@ -13,8 +16,6 @@ export const strokeDashList = [
 	{ id: 'dotted', label: 'Dotted', value: '2 3' },
 ];
 
-export const cardTabList = ['table', 'row', 'column', 'cell', 'line'];
-
 // The draft of a diagram (or of one card) while its visual edit mode is open
 // (comp_db_vis.md#card-editing). The YAML document is the draft; every
 // command changes it through the YAML document api, validates the result
@@ -23,13 +24,16 @@ export const cardTabList = ['table', 'row', 'column', 'cell', 'line'];
 //
 // Beside the draft the store holds what the editor shows but never saves:
 //
-//   selection    { nodeId, rowId, fieldId, connectionId } a card, with one of
-//                its rows, fields (a column of the card) and cells, and at
-//                most one connection attached to a handle of the card (the
-//                handle-click rotation); or { connectionId } a line selected
-//                by clicking it; or null
+//   path         where the author is in the principal of the edit card
+//                (DiagramEditPath.js): a card with one of its rows, fields,
+//                cells, properties or lines, or a line selected by itself;
+//                [] when nothing is selected. The path is kept canonical
+//                (ids), and every change of the draft re-resolves it, so a
+//                subject that is gone redirects to its list. selection and
+//                cardTab are read off it for the cards and the edit card
+//   redirectRuleList   rules of the host, (display, path, store) => path |
+//                null, applied after the built-in redirects
 //   cell         the cell being typed, with the value it had, so Escape restores it
-//   cardTab      the tab the edit card shows: table | row | column | cell | line
 //   interaction  a drag in progress (a connection being drawn, an end being
 //                moved, a node being dragged, the create panel): the edit
 //                card is hidden while it lasts
@@ -41,9 +45,9 @@ export class DiagramEditStore {
 	valueCurrent;
 	documentDraft;
 	kind;
-	selection = null;
+	path = [];
+	redirectRuleList = [];
 	cell = null;
-	cardTab = 'table';
 	interaction = null;
 	create = null;
 	saveTarget = 'asset';
@@ -64,7 +68,7 @@ export class DiagramEditStore {
 		this.validate(value);
 		this.valueInitial = JSON.stringify(value);
 		this.valueCurrent = this.valueInitial;
-		makeAutoObservable(this, { documentDraft: false, resolve: false }, { autoBind: true });
+		makeAutoObservable(this, { documentDraft: false, resolve: false, path: observable.ref, redirectRuleList: false }, { autoBind: true });
 	}
 
 	// ---------- the draft ----------
@@ -89,6 +93,7 @@ export class DiagramEditStore {
 			this.valueCurrent = JSON.stringify(value);
 			this.rawDraft = this.valueCurrent === this.valueInitial ? this.rawInitial : documentNext.toString();
 			this.message = '';
+			this.pathNormalize();
 			return true;
 		} catch (error) {
 			this.message = error.message;
@@ -115,7 +120,8 @@ export class DiagramEditStore {
 	get nodeSelected() { return this.selection?.nodeId ? this.nodeGet(this.selection.nodeId) : undefined; }
 	get rowSelected() { return this.selection?.rowId ? this.rowGet(this.selection.nodeId, this.selection.rowId) : undefined; }
 	get connectionSelected() { return this.selection?.connectionId ? this.connectionGet(this.selection.connectionId) : undefined; }
-	get isCardShown() { return Boolean(this.selection) && !this.cell && !this.interaction && !this.create; }
+	get isCardShown() { return Boolean(this.display) && !this.cell && !this.interaction && !this.create; }
+	nodeLineListGet(nodeId) { return nodeLineListGet(this, nodeId); }
 
 	// the connections attached to a handle, with the role each has there
 	handleConnectionListGet(nodeId, handleId) {
@@ -168,43 +174,85 @@ export class DiagramEditStore {
 		return null;
 	}
 
-	// ---------- selection ----------
+	// ---------- the path ----------
 
-	select(nodeId, { rowId = null, fieldId = null, connectionId = null } = {}) {
-		const previous = this.selection;
-		if (previous?.nodeId !== nodeId || previous?.rowId !== rowId) this.cell = null;
-		this.selection = nodeId ? { nodeId, rowId, fieldId, connectionId } : null;
+	// the path resolved against the draft: its canonical form and the display
+	// it stands for (DiagramEditPath.js). what the draft no longer has is
+	// redirected away, so the display is always of things that exist
+	get route() { return pathResolve(this.path, this, this.redirectRuleList); }
+	get display() { return this.route.display; }
+
+	// the selection the cards highlight, read off the display: { nodeId,
+	// rowId, fieldId, connectionId, propId } for a card, { connectionId } for
+	// a line selected by itself, null for none
+	get selection() {
+		const display = this.display;
+		if (!display) return null;
+		if (display.principal === 'connection') return { connectionId: display.connectionId };
+		return { nodeId: display.nodeId, rowId: display.rowId, fieldId: display.fieldId, connectionId: display.connectionId, propId: display.propId };
+	}
+
+	get cardTab() { return this.display?.tab ?? 'table'; }
+
+	pathSet(path) {
+		const route = pathResolve(path, this, this.redirectRuleList);
+		const previous = this.display;
+		const next = route.display;
+		if (this.cell && (this.cell.nodeId !== next?.nodeId || this.cell.rowId !== (next?.rowId ?? null))) this.cell = null;
+		if (!pathEquals(route.path, this.path)) this.path = route.path;
+		if (previous?.nodeId !== next?.nodeId || previous?.connectionId !== next?.connectionId) this.message = '';
+	}
+
+	// the path cut at a segment (a click on the path bar), and one level up (Escape)
+	pathGo(index) { this.pathSet(this.path.slice(0, index + 1)); }
+	pathUp() { this.pathSet(this.path.slice(0, -1)); }
+
+	// the canonical form of the path after the draft changed: a removed row
+	// takes its segment away, a row renamed keeps its id
+	pathNormalize() {
+		const route = this.route;
+		if (!pathEquals(route.path, this.path)) this.path = route.path;
+	}
+
+	// ---------- selection (the path in the terms of the cards) ----------
+
+	select(nodeId, { rowId = null, fieldId = null, connectionId = null, propId = null } = {}) {
+		this.pathSet(selectionPathBuild(nodeId, { rowId, fieldId, connectionId, propId }));
 		this.message = '';
-		this.cardTab = connectionId ? 'line' : rowId && fieldId ? 'cell' : rowId ? 'row' : fieldId ? 'column' : 'table';
 	}
 
 	selectConnection(connectionId) {
 		this.cell = null;
-		this.selection = connectionId ? { connectionId } : null;
-		this.cardTab = 'line';
+		this.pathSet(connectionId ? [{ kind: 'connection', id: connectionId }] : []);
 		this.message = '';
 	}
 
 	selectionClear() {
-		this.selection = null;
+		this.pathSet([]);
 		this.cell = null;
 		this.message = '';
 	}
 
+	// a tab is a place in the path: the subject the display has for it, or
+	// its list (tabPathGet); a tab without a place is not switched to
 	cardTabSet(tab) {
-		if (cardTabList.includes(tab)) this.cardTab = tab;
+		if (!cardTabList.includes(tab)) return false;
+		const path = tabPathGet(this.display, tab);
+		if (!path) return false;
+		this.pathSet(path);
+		return true;
 	}
 
 	// a click on a handle rotates through the connections attached to it:
-	// none, the first, the second ..., none again. the card stays selected
-	// with the handle's row; the chosen connection joins the selection
+	// the first, the second ..., then the list of the card's lines (none
+	// chosen), and the first again
 	handleClick(nodeId, handleId) {
 		const list = this.handleConnectionListGet(nodeId, handleId).map(item => item.connection.id);
-		const rowId = this.handleRowIdGet(nodeId, handleId);
-		const current = this.selection?.nodeId === nodeId && this.selection.connectionId ? list.indexOf(this.selection.connectionId) : -1;
+		const display = this.display;
+		const current = display?.nodeId === nodeId && display.connectionId ? list.indexOf(display.connectionId) : -1;
 		const next = current + 1 < list.length ? list[current + 1] : null;
-		this.select(nodeId, { rowId, connectionId: next });
-		this.cardTab = next ? 'line' : rowId ? 'row' : 'table';
+		this.pathSet(next ? selectionPathBuild(nodeId, { connectionId: next }) : [{ kind: 'node', id: nodeId }, { kind: 'lines' }]);
+		this.message = '';
 	}
 
 	interactionSet(interaction) { this.interaction = interaction; }
@@ -213,9 +261,10 @@ export class DiagramEditStore {
 
 	// ---------- cells ----------
 
+	// typing in a cell focuses it: a cell of a row, or a property of the card
 	cellStart(nodeId, rowId, field) {
-		const fieldId = rowId ? field : null;
-		if (this.selection?.nodeId !== nodeId || this.selection?.rowId !== rowId || this.selection?.fieldId !== fieldId) this.select(nodeId, { rowId, fieldId });
+		const selection = this.selection;
+		if (rowId ? selection?.nodeId !== nodeId || selection?.rowId !== rowId || selection?.fieldId !== field : selection?.nodeId !== nodeId || selection?.propId !== field) this.select(nodeId, rowId ? { rowId, fieldId: field } : { propId: field });
 		const node = this.nodeGet(nodeId);
 		const item = rowId ? this.rowGet(nodeId, rowId) : node.data;
 		this.cell = { nodeId, rowId, field, valueInitial: item[field], isPresent: Object.hasOwn(item, field) };
@@ -299,7 +348,7 @@ export class DiagramEditStore {
 			documentNext.setIn([...path, 'data', schema.rowListKey], documentNext.createNode(this.rowsGet(node).filter(row => row.id !== rowId)));
 			documentNext.setIn([...path, 'handles'], documentNext.createNode((node.handles ?? []).filter(handle => !removed.includes(handle))));
 		});
-		if (isChanged) this.select(nodeId);
+		if (isChanged) this.pathSet([{ kind: 'node', id: nodeId }, { kind: 'rows' }]);
 		return isChanged;
 	}
 
@@ -348,7 +397,7 @@ export class DiagramEditStore {
 			documentNext.setIn([...path, 'fields'], documentNext.createNode(fields.filter(field => field.id !== fieldId)));
 			documentNext.setIn([...path, 'rows'], documentNext.createNode(this.rowsGet(node).map(({ [fieldId]: _, ...row }) => row)));
 		});
-		if (isChanged) this.select(nodeId);
+		if (isChanged) this.pathSet([{ kind: 'node', id: nodeId }, { kind: 'fields' }]);
 		return isChanged;
 	}
 
@@ -451,7 +500,9 @@ export class DiagramEditStore {
 			this.endpointsDetach(documentNext, endpoint => endpoint.nodeId === nodeId, positionGet);
 			documentNext.deleteIn(this.nodePathGet(nodeId));
 		});
-		if (isChanged) this.selectionClear();
+		// the node is the principal of the card it was removed from; another
+		// card's path is only re-resolved (its lines may have come loose)
+		if (isChanged && !(this.display?.nodeId && this.display.nodeId !== nodeId)) this.selectionClear();
 		return isChanged;
 	}
 
@@ -564,7 +615,8 @@ export class DiagramEditStore {
 			documentNext.deleteIn(['connections', index]);
 		});
 		if (isChanged) {
-			if (this.selection?.nodeId) this.select(this.selection.nodeId, { rowId: this.selection.rowId, fieldId: this.selection.fieldId });
+			const nodeId = this.display?.nodeId;
+			if (nodeId) this.pathSet([{ kind: 'node', id: nodeId }, { kind: 'lines' }]);
 			else this.selectionClear();
 		}
 		return isChanged;

@@ -1,6 +1,6 @@
 import { applyNodeChanges, MarkerType } from '@xyflow/react';
 import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
-import { makeAutoObservable, toJS } from 'mobx';
+import { makeAutoObservable, observable } from 'mobx';
 import { diagramNormalize, diagramPositionsGet, viewportNormalize, endpointIsDangling, pointNodeIdBuild } from './DiagramERData.js';
 
 const viewStates = new WeakMap();
@@ -21,6 +21,13 @@ export function diagramViewStateGet(owner, config) {
 // edges React Flow draws. A dangling end of a connection is a hidden point
 // node (type visualizationPoint) that the edge ends on; it is never part of
 // the authored data (comp_db_vis.md#react-flow-boundary).
+//
+// nodeList and edgeList are shallow observables: the lists change, their
+// items are the plain objects React Flow is given, and an item keeps its
+// identity until it changes. A drag therefore replaces one node per frame
+// (applyNodeChanges copies only what changed) and leaves every other card
+// unrendered; a deep clone of the whole list per frame is what made
+// dragging sluggish (comp_db_vis.md#react-flow-boundary).
 class DiagramERStore {
 	source = '';
 	graph = null;
@@ -36,7 +43,10 @@ class DiagramERStore {
 	constructor(source = '', rendererResolve, height = 620) {
 		this.rendererResolve = rendererResolve;
 		this.height = height;
-		makeAutoObservable(this, { rendererResolve: false }, { autoBind: true });
+		// the graph, the measurements and the temporary positions are plain data:
+		// nothing renders from them, and the nodes handed to React Flow are
+		// built from the graph, so they must not be observable proxies
+		makeAutoObservable(this, { rendererResolve: false, graph: observable.ref, viewport: observable.ref, measurements: false, positionsTemporary: false, nodeList: observable.shallow, edgeList: observable.shallow }, { autoBind: true });
 		this.sourceLoad(source);
 	}
 
@@ -106,9 +116,10 @@ class DiagramERStore {
 
 	nodeListChange(changeList) {
 		const changes = changeList.filter(change => change.type !== 'position' || !this.nodeList.find(node => node.id === change.id)?.data.node?.isPositionLocked);
-		this.nodeList = applyNodeChanges(changes, toJS(this.nodeList));
+		if (!changes.length) return;
+		this.nodeList = applyNodeChanges(changes, this.nodeList.slice());
 		for (const change of changes) {
-			if (change.type === 'position' && change.position) this.positionsTemporary[change.id] = change.position;
+			if (change.type === 'position' && change.position) this.positionsTemporary[change.id] = { x: change.position.x, y: change.position.y };
 		}
 	}
 
@@ -120,7 +131,12 @@ class DiagramERStore {
 		try {
 			const nodes = this.graph.nodes.map(node => this.positionsTemporary[node.id] ? { ...node, position: this.positionsTemporary[node.id] } : node);
 			const positions = diagramPositionsGet(nodes, this.graph.layout, this.measurements);
-			this.nodeList = this.nodeList.map(node => node.type === 'visualizationNode' ? { ...node, position: positions.get(node.id) } : node);
+			// a node whose place did not change keeps its identity
+			this.nodeList = this.nodeList.map(node => {
+				if (node.type !== 'visualizationNode') return node;
+				const position = positions.get(node.id);
+				return position && node.position?.x === position.x && node.position?.y === position.y ? node : { ...node, position };
+			});
 		} catch (error) {
 			this.loadState = { status: 'error', message: error.message };
 		}

@@ -1,9 +1,10 @@
 /* The visual editor of the diagrams (DiagramVisualEdit.jsx). Its buttons and
-   texts are the shared classes of the edit layer (.doc-button-dialog,
-   .doc-button-icon, .doc-note, .doc-error, the .doc-edit-panel bar); this
-   file lays out what is its own: the states of a card in the editor, the
-   cells, the host's text control in a cell, the edit card (DiagramEditCard.jsx)
-   and its PropEditor in the colors of the page, the create panel. */
+   texts are the shared classes of the edit layer (.doc-button, .doc-button-icon,
+   .doc-button-group, .doc-path, .doc-note, .doc-error, the .doc-edit-panel
+   bar); this file lays out what is its own: the states of a card in the
+   editor, the cells, the toolbars of a focused row or field, the host's
+   text control in a cell, the edit card (DiagramEditCard.jsx) with its
+   PropEditor and PathBar in the colors of the page, the create panel. */
 
 .doc-vis-edit-message {
 	display: block;
@@ -234,30 +235,237 @@
 	line-height: inherit;
 }
 
-/* ---------- the edit card ---------- */
+/* ---------- the parts of a card that take the focus ---------- */
 
+/* a head field of a resource card and the description line focus the
+   property they show: the same highlight as a row */
+.doc-er-table.is-editable .doc-card-prop {
+	cursor: pointer;
+}
+
+.doc-er-table.is-editable .doc-card-prop:hover:not(.is-selected) {
+	background: color-mix(in srgb, var(--color-fd-primary) 4%, transparent);
+}
+
+.doc-card-prop.is-selected {
+	background: color-mix(in srgb, var(--color-fd-primary) 9%, var(--color-fd-background));
+	box-shadow: inset 3px 0 var(--color-fd-primary);
+}
+
+.doc-card-prop:focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--color-fd-primary) 60%, transparent);
+	outline-offset: -2px;
+}
+
+/* in edit mode the standalone card lets its toolbars stand outside it */
+.doc-vis-edit .doc-vis-card-static {
+	overflow: visible;
+}
+
+/* ---------- the toolbar of a focused row or field ----------
+   the control group of the edit layer (.doc-button-group), a size smaller
+   than the block toolbar so it fits a row. it floats inside the card, over
+   the top edge of the focused row (centered on it, at the row's left) or
+   above the header of the focused field (over the title line), so it is
+   never clipped by the edge of the canvas box. on the canvas it undoes the
+   zoom (--doc-vis-zoom, set by DiagramER on the flow) and keeps its screen
+   size; the standalone card has no zoom. the scale is taken from the
+   bottom left corner, so the bottom edge stays where it is anchored */
+.doc-card-toolbar {
+	--doc-button-group-height: 1.5rem;
+	position: absolute;
+	z-index: 6;
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1)));
+	transform-origin: left bottom;
+}
+
+.doc-card-toolbar.is-row {
+	bottom: 100%;
+	left: 2px;
+	margin-bottom: calc(-0.75rem / var(--doc-vis-zoom, 1));
+}
+
+.doc-card-toolbar.is-field {
+	bottom: calc(100% + 3px);
+	left: 0;
+}
+
+.doc-card-toolbar > button {
+	min-width: 1.5rem;
+	padding: 0 0.3rem;
+}
+
+.doc-card-toolbar-grip:not(:disabled) {
+	cursor: grab;
+}
+
+.doc-card-toolbar-grip:not(:disabled):active {
+	cursor: grabbing;
+}
+
+/* where a dragged row or field will land: a line before the sibling the
+   pointer is above, or after the last */
+.doc-card-row.is-drop-before::before,
+.doc-card-row.is-drop-after::after {
+	position: absolute;
+	right: 0;
+	left: 0;
+	z-index: 3;
+	height: 2px;
+	background: var(--color-fd-primary);
+	content: '';
+	pointer-events: none;
+}
+
+.doc-card-row.is-drop-before::before {
+	top: -1px;
+}
+
+.doc-card-row.is-drop-after::after {
+	bottom: -1px;
+}
+
+.doc-card-field.is-drop-before::before,
+.doc-card-field.is-drop-after::after {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	z-index: 3;
+	width: 2px;
+	background: var(--color-fd-primary);
+	content: '';
+	pointer-events: none;
+}
+
+.doc-card-field.is-drop-before::before {
+	left: -1px;
+}
+
+.doc-card-field.is-drop-after::after {
+	right: -1px;
+}
+
+/* ---------- the edit card ----------
+   a panel beside the principal of the path: title, tabs, the path bar,
+   the view. its top edge comes from the principal alone, so the panel
+   grows and shrinks downward and never moves while the author works in it
+   (DiagramEditCard.jsx); what does not fit scrolls inside it */
 .doc-vis-card-panel.doc-edit-panel {
 	position: fixed;
 	z-index: 1500;
 	box-sizing: border-box;
-	width: 320px;
+	width: 340px;
 	max-width: calc(100vw - 16px);
-	max-height: calc(100vh - 16px);
-	padding: 0.35rem 0.5rem 0.5rem;
+	gap: 0;
+	padding: 0.45rem 0.8rem 0.6rem;
 	overflow: auto;
+	font-size: 0.76rem;
+}
+
+.doc-vis-card-head {
+	flex-wrap: nowrap;
+	gap: 0.4rem;
+	min-height: 1.5rem;
 }
 
 .doc-vis-card-head strong {
 	flex: 1 1 auto;
 	min-width: 0;
 	overflow: hidden;
-	font-weight: 600;
+	font-size: 0.86rem;
+	font-weight: 650;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
+.doc-vis-card-kind {
+	flex: 0 0 auto;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.7rem;
+}
+
+/* the tabs: the places of the path a tab leads to; a tab without a place
+   is greyed out and says why in its title */
+.doc-vis-card-tabs {
+	display: flex;
+	gap: 2px;
+	margin-top: 0.3rem;
+	box-shadow: inset 0 -1px 0 var(--color-fd-border);
+}
+
+.doc-vis-card-tab {
+	padding: 0.25rem 0.55rem;
+	border: 0;
+	border-radius: 2px 2px 0 0;
+	background: transparent;
+	color: var(--color-fd-muted-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.doc-vis-card-tab:hover:not(:disabled) {
+	background: var(--color-fd-accent);
+	color: var(--color-fd-foreground);
+}
+
+.doc-vis-card-tab[aria-selected='true'] {
+	color: var(--color-fd-primary);
+	box-shadow: inset 0 -2px 0 var(--color-fd-primary);
+}
+
+.doc-vis-card-tab:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+/* the path bar, always under the tabs: the shared .doc-path look of the
+   host's PathBar, frameless, on the panel's surface */
+.doc-vis-card-path {
+	display: flex;
+	align-items: center;
+	min-height: 1.5rem;
+	margin: 0.2rem 0 0.1rem;
+}
+
+.doc-vis-card-path .pathbar-container {
+	width: 100%;
+	font-size: 0.72rem;
+}
+
+.doc-vis-card-path .pathbar-separator {
+	padding: 0 0.15rem;
+}
+
+.doc-vis-card-path-plain {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	font-size: 0.72rem;
+}
+
+.doc-vis-card-path-segment {
+	padding: 1px 5px;
+	border: 0;
+	border-radius: 3px;
+	background: transparent;
+	color: var(--color-fd-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.doc-vis-card-path-segment:hover {
+	background: var(--color-fd-accent);
+	color: var(--color-fd-primary);
+}
+
+.doc-vis-card-path-separator {
+	padding: 0 0.15rem;
+	color: var(--color-fd-muted-foreground);
+}
+
 .doc-vis-card-body {
-	margin-top: 0.35rem;
+	margin-top: 0.15rem;
 }
 
 .doc-vis-card-message {
@@ -265,84 +473,136 @@
 	margin-top: 0.35rem;
 }
 
+/* the actions of a section: the shared .doc-button; a disabled one keeps
+   its reason as its title */
 .doc-vis-card-actions {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 0.25rem;
-	padding: 0.2rem 0;
+	gap: 0.3rem;
+	padding: 0.3rem 0 0.15rem;
 }
 
-.doc-vis-card-actions .doc-button-dialog.is-danger {
+.doc-vis-card-actions .doc-button.is-danger:not(:disabled) {
 	color: var(--color-fd-destructive, #dc2626);
 }
 
 .doc-vis-card-note {
-	padding: 0.1rem 0;
+	padding: 0.15rem 0;
 }
 
 .doc-vis-card-menu.doc-button-dialog {
 	width: 100%;
 }
 
+/* ---------- a list view ----------
+   the items of a collection (the rows, the fields, the lines of a card),
+   drawn by the host's PropEditor as draggable items: a grip and a remove
+   button before each, then the item: its name in bold with a badge, and a
+   sub line under it. a click on the item opens its detail */
+.doc-vis-list-item {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 1px;
+	box-sizing: border-box;
+	width: 100%;
+	min-height: 2rem;
+	padding: 0.25rem 0.45rem;
+	border: 0;
+	border-radius: 3px;
+	background: transparent;
+	color: var(--color-fd-foreground);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.doc-vis-list-item:hover {
+	background: var(--color-fd-accent);
+}
+
+.doc-vis-list-item.is-selected {
+	background: color-mix(in srgb, var(--color-fd-primary) 9%, var(--color-fd-background));
+	box-shadow: inset 3px 0 var(--color-fd-primary);
+}
+
+.doc-vis-list-main {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	min-width: 0;
+	max-width: 100%;
+}
+
+.doc-vis-list-name {
+	min-width: 0;
+	overflow: hidden;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.doc-vis-list-badge.doc-badge {
+	flex: 0 0 auto;
+	font-size: 0.62rem;
+	text-transform: none;
+}
+
+.doc-vis-list-sub {
+	max-width: 100%;
+	overflow: hidden;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.7rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* the list of the plain form: move and remove buttons before each item */
+.doc-vis-list {
+	display: grid;
+	gap: 1px;
+}
+
+.doc-vis-list-row {
+	display: flex;
+	align-items: center;
+	gap: 1px;
+}
+
+.doc-vis-list-row > .doc-vis-list-item {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
 /* the PropEditor of the host (react-comp-misc) in the colors and the scale
-   of the edit layer: no background of its own, the page's variables for the
-   tabs, the keys and the values */
+   of the edit layer: no background of its own, the page's variables for
+   the groups, the keys and the values, the items of a list */
 .doc-vis-card-panel .prop-editor-root {
 	min-height: 0;
 	width: 100%;
 	border-radius: 0;
 	background: transparent;
 	color: var(--color-fd-foreground);
-	font-size: 0.72rem;
+	font-size: 0.76rem;
 }
 
 .doc-vis-card-panel .prop-editor-main {
 	background: transparent;
 }
 
-.doc-vis-card-panel .prop-editor-top-tabs {
-	min-height: 0;
-	padding: 0;
-	gap: 2px;
-	background: transparent;
-	box-shadow: inset 0 -1px 0 var(--color-fd-border);
+.doc-vis-card-panel .prop-editor-node-list {
+	gap: 0.35rem;
 }
 
-.doc-vis-card-panel .prop-editor-top-tab {
-	min-height: 1.5rem;
-	padding: 0.15rem 0.5rem;
-	border-radius: 2px 2px 0 0;
-	color: var(--color-fd-muted-foreground);
-	font-size: 0.72rem;
-}
-
-.doc-vis-card-panel .prop-editor-top-tab:hover:not(:disabled) {
-	background: var(--color-fd-accent);
-	color: var(--color-fd-foreground);
-}
-
-.doc-vis-card-panel .prop-editor-top-tab.is-selected {
-	top: 0;
-	background: transparent;
-	color: var(--color-fd-primary);
-	box-shadow: inset 0 -2px 0 var(--color-fd-primary);
-}
-
-.doc-vis-card-panel .prop-editor-top-tab:disabled,
-.doc-vis-card-panel .prop-editor-top-tab.is-disabled {
-	opacity: 0.4;
-	cursor: default;
-}
-
-.doc-vis-card-panel .prop-editor-top-panel {
-	padding: 0.4rem 0 0;
-	overflow: visible;
+.doc-vis-card-panel .prop-editor-node-list.is-direct-controlled {
+	gap: 0;
 }
 
 .doc-vis-card-panel .prop-editor-group-header {
-	min-height: 1.25rem;
+	min-height: 1.5rem;
 	color: var(--color-fd-muted-foreground);
-	font-size: 0.66rem;
+	font-size: 0.7rem;
+	font-weight: 650;
 	letter-spacing: 0.02em;
 	text-transform: uppercase;
 }
@@ -364,20 +624,30 @@
 }
 
 .doc-vis-card-panel .prop-editor-root .keyvalues-list {
-	font-size: 0.72rem;
+	font-size: 0.76rem;
 }
 
 .doc-vis-card-panel .prop-editor-root .keyvalues-row {
 	min-height: 1.5rem;
+	border-bottom: 0;
 }
 
 .doc-vis-card-panel .prop-editor-root .keyvalues-row.is-row-editable:hover {
 	background: color-mix(in srgb, var(--color-fd-primary) 4%, transparent);
 }
 
+/* a key and a value start at the same line: a key cell is one line tall
+   and centers its text; a value cell is as tall as its control and keeps
+   the control's first line at the same height, so a control that wraps
+   onto two lines (a segmented control) still lines up its first row with
+   the key */
 .doc-vis-card-panel .prop-editor-root .keyvalues-cell {
 	min-height: 1.5rem;
 	padding: 1px 4px;
+}
+
+.doc-vis-card-panel .prop-editor-root .value-cell {
+	align-items: flex-start;
 }
 
 .doc-vis-card-panel .prop-editor-root .key-cell {
@@ -387,6 +657,10 @@
 
 .doc-vis-card-panel .prop-editor-root .value-cell {
 	color: var(--color-fd-foreground);
+}
+
+.doc-vis-card-panel .prop-editor-value-shell {
+	min-height: calc(1.5rem - 2px);
 }
 
 .doc-vis-card-panel .prop-editor-editable-value {
@@ -407,7 +681,7 @@
 .doc-vis-card-panel .prop-editor-checkbox,
 .doc-vis-card-panel .prop-editor-radio-item {
 	color: var(--color-fd-foreground);
-	font-size: 0.72rem;
+	font-size: 0.76rem;
 }
 
 .doc-vis-card-panel .prop-editor-checkbox-mark {
@@ -425,44 +699,95 @@
 .doc-vis-card-panel .prop-editor-bool {
 	background: var(--color-fd-accent);
 	color: var(--color-fd-foreground);
-	font-size: 0.72rem;
+	font-size: 0.76rem;
 }
 
 .doc-vis-card-panel .prop-editor-custom-item {
 	color: inherit;
-	font-size: 0.72rem;
+	font-size: 0.76rem;
 }
 
 .doc-vis-card-panel .prop-editor-value-shell.has-custom-value {
 	align-items: center;
 }
 
-/* the plain form, when the host injects no PropEditor */
-
-.doc-vis-card-tabs {
-	display: flex;
+/* the segmented control of an enum value: a flat row of choices in the
+   tones of the page, the chosen one lifted on a light pill; it wraps
+   when the choices do not fit, so the sliding pill of the control is
+   replaced by the chosen segment's own background */
+.doc-vis-card-panel .segmented-control-track {
+	flex-wrap: wrap;
 	gap: 2px;
-	box-shadow: inset 0 -1px 0 var(--color-fd-border);
+	height: auto;
+	min-height: 0;
+	padding: 2px;
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--color-fd-muted) 70%, var(--color-fd-background));
 }
 
-.doc-vis-card-tab {
-	padding: 0.15rem 0.5rem;
-	border: 0;
-	background: transparent;
+.doc-vis-card-panel .segmented-control-highlight {
+	display: none;
+}
+
+.doc-vis-card-panel .segmented-control-segment {
+	min-height: 1.125rem;
+	height: auto;
+	padding: 0 0.5rem;
+	border-radius: 3px;
 	color: var(--color-fd-muted-foreground);
 	font: inherit;
-	cursor: pointer;
+	font-size: 0.72rem;
+	line-height: 1.125rem;
 }
 
-.doc-vis-card-tab[aria-selected='true'] {
-	color: var(--color-fd-primary);
-	box-shadow: inset 0 -2px 0 var(--color-fd-primary);
+.doc-vis-card-panel .segmented-control-segment:hover:not(:disabled) {
+	color: var(--color-fd-foreground);
 }
 
-.doc-vis-card-tab:disabled {
-	opacity: 0.4;
-	cursor: default;
+.doc-vis-card-panel .segmented-control-track.has-color-highlight .segmented-control-segment[data-state='active'],
+.doc-vis-card-panel .segmented-control-segment[data-state='active'] {
+	background: var(--color-fd-background);
+	color: var(--color-fd-foreground);
+	box-shadow: 0 1px 2px rgb(15 23 42 / 12%), 0 0 0 1px color-mix(in srgb, var(--color-fd-border) 80%, transparent);
+	font-weight: 600;
 }
+
+/* the draggable items of a list: the grip and the remove button before
+   each item, in the muted color, the remove button red when pointed at */
+.doc-vis-card-panel .prop-editor-direct-drag-handle,
+.doc-vis-card-panel .prop-editor-direct-item-action {
+	width: 18px;
+	min-height: 1.5rem;
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-vis-card-panel .prop-editor-direct-drag-handle:hover:not(:disabled) {
+	background: var(--color-fd-accent);
+	color: var(--color-fd-foreground);
+}
+
+.doc-vis-card-panel .prop-editor-direct-item-action:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 10%, transparent);
+	color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-vis-card-panel .prop-editor-direct-drag-item {
+	border-bottom: 1px solid color-mix(in srgb, var(--color-fd-border) 60%, transparent);
+}
+
+.doc-vis-card-panel .prop-editor-direct-drag-item:last-child {
+	border-bottom: 0;
+}
+
+.doc-vis-card-panel .prop-editor-direct-drag-content > .prop-editor-custom-item {
+	width: 100%;
+}
+
+.doc-vis-card-panel .prop-editor-direct-drop-line {
+	background: var(--color-fd-primary);
+}
+
+/* the plain form, when the host injects no PropEditor */
 
 .doc-vis-card-section {
 	display: grid;
@@ -472,7 +797,7 @@
 
 .doc-vis-card-section-label {
 	color: var(--color-fd-muted-foreground);
-	font-size: 0.66rem;
+	font-size: 0.7rem;
 	letter-spacing: 0.02em;
 	text-transform: uppercase;
 }
@@ -481,11 +806,12 @@
 	display: grid;
 	grid-template-columns: 5.2rem minmax(0, 1fr);
 	gap: 0.5rem;
-	align-items: center;
+	align-items: start;
 }
 
 .doc-vis-field-label {
 	color: var(--color-fd-muted-foreground);
+	line-height: 1.35rem;
 }
 
 .doc-vis-card-number,

@@ -96,3 +96,62 @@
   opacity: 0.4;
   cursor: default;
 }
+
+/* ---------- .doc-button-group ----------
+   a row of icon buttons in one frame: the control group over a hovered
+   block, the controls of a focused row or column of a card. buttons are
+   divided by hairlines; aria-pressed marks the one whose menu is open;
+   a disabled button keeps its title, which says why. the height is the
+   custom property, 1.75rem unless the group sets another. */
+.doc-button-group {
+  --doc-button-group-height: 1.75rem;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  height: var(--doc-button-group-height);
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 10%);
+}
+
+.doc-button-group > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 1.9rem;
+  padding: 0 0.45rem;
+  border: 0;
+  border-left: 1px solid var(--color-fd-border);
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.doc-button-group > button:first-child {
+  border-left: 0;
+}
+
+.doc-button-group > button:hover:not(:disabled),
+.doc-button-group > button:focus-visible:not(:disabled) {
+  background: var(--color-fd-accent);
+  color: var(--color-fd-foreground);
+  outline: none;
+}
+
+.doc-button-group > button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--color-fd-primary) 12%, var(--color-fd-background));
+  color: var(--color-fd-primary);
+}
+
+.doc-button-group > button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.doc-button-group > button[data-danger]:hover:not(:disabled) {
+  color: var(--color-fd-destructive, #dc2626);
+}

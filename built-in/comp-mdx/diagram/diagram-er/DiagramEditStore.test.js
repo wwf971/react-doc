@@ -41,7 +41,7 @@ test('cell draft and selection are independent; Escape restores dirty state', ()
 	store.cellStart('table', 'email', 'name');
 	store.fieldSet('table', 'email', 'name', 'Work email');
 	assert.equal(store.isDirty, true);
-	assert.deepEqual({ ...store.selection }, { nodeId: 'table', rowId: 'email', fieldId: 'name', connectionId: null });
+	assert.deepEqual({ ...store.selection }, { nodeId: 'table', rowId: 'email', fieldId: 'name', connectionId: null, propId: null });
 	assert.equal(store.cardTab, 'cell');
 	assert.equal(store.isCardShown, false);
 	store.cellCancel();
@@ -108,20 +108,27 @@ test('a connection attaches only to a compatible handle with room, and either en
 	assert.equal(graph.connections.length, 2);
 });
 
-test('a handle click rotates through its connections and back to none', () => {
+test('a handle click rotates through its connections and ends on the list of the lines', () => {
 	const store = new DiagramEditStore(sourceCreate());
 	store.connectionCreate({ nodeId: 'table', handleId: 'email-out' }, { position: { x: 400, y: 20 } });
 	store.handleClick('table', 'email-out');
-	assert.deepEqual({ ...store.selection }, { nodeId: 'table', rowId: 'email', fieldId: null, connectionId: 'link' });
+	assert.deepEqual({ ...store.selection }, { nodeId: 'table', rowId: null, fieldId: null, connectionId: 'link', propId: null });
 	assert.equal(store.cardTab, 'line');
+	assert.equal(store.display.view, 'detail');
 	store.handleClick('table', 'email-out');
 	assert.equal(store.selection.connectionId, 'connection-1');
 	store.handleClick('table', 'email-out');
 	assert.equal(store.selection.connectionId, null);
-	assert.equal(store.cardTab, 'row');
-	store.selectConnection('link');
-	assert.deepEqual({ ...store.selection }, { connectionId: 'link' });
+	assert.equal(store.cardTab, 'line');
+	assert.equal(store.display.view, 'list');
+	store.handleClick('table', 'email-out');
+	assert.equal(store.selection.connectionId, 'link');
+	// removing the line selected from the card goes back to the card's lines
 	assert.equal(store.connectionRemove('link'), true);
+	assert.deepEqual(store.path, [{ kind: 'node', id: 'table' }, { kind: 'lines' }]);
+	store.selectConnection('connection-1');
+	assert.deepEqual({ ...store.selection }, { connectionId: 'connection-1' });
+	assert.equal(store.connectionRemove('connection-1'), true);
 	assert.equal(store.selection, null);
 });
 

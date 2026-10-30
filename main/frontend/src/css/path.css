@@ -1,0 +1,44 @@
+/* ---------- .doc-path ----------
+   the PathBar the host injects (react-comp-misc) in the tokens of the page:
+   a row of segments, each a link to where it names, in the font of the
+   page (never monospace). a component wraps the PathBar in an element with
+   this class and sets only its own layout (where the bar goes, its height). */
+.doc-path .pathbar-container {
+  border-color: var(--color-fd-border);
+  border-radius: 4px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  font-family: inherit;
+  font-size: 0.76rem;
+}
+
+.doc-path .pathbar-container:hover {
+  border-color: var(--color-fd-border);
+}
+
+.doc-path .pathbar-segment {
+  padding: 1px 5px;
+  color: var(--color-fd-foreground);
+}
+
+/* the first segment is the root of the path */
+.doc-path .pathbar-segment:first-child {
+  color: var(--color-fd-primary);
+}
+
+.doc-path .pathbar-segment:hover {
+  background: var(--color-fd-accent);
+  color: var(--color-fd-primary);
+}
+
+.doc-path .pathbar-separator {
+  color: var(--color-fd-muted-foreground);
+}
+
+/* a frameless bar: the segments alone, on the surface they are in */
+.doc-path[data-plain] .pathbar-container {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}

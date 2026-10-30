@@ -107,7 +107,7 @@
 	align-items: baseline;
 	justify-content: space-between;
 	gap: 0.75rem;
-	padding: 0.6rem 0.75rem;
+	padding: 0.4rem 0.75rem;
 	border-bottom: 1px solid var(--color-fd-border);
 	border-radius: 0.4rem 0.4rem 0 0;
 	background: color-mix(in srgb, #2563eb 10%, var(--color-fd-background));
@@ -118,7 +118,7 @@
 .doc-er-table-title-logical {
 	color: var(--color-fd-muted-foreground);
 	font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-	font-size: 0.68rem;
+	font-size: 0.76rem;
 	font-weight: 500;
 }
 
@@ -129,7 +129,7 @@
 }
 
 .doc-er-table:not(.is-choice) .doc-er-table-title {
-	padding: 0.3rem 0.65rem;
+	padding: 0.2rem 0.65rem;
 }
 
 /* conceptual global-choice node: table-shaped reference, visually distinct
@@ -187,9 +187,15 @@
 
 .doc-er-table-column-header > span,
 .doc-er-table-column > span {
+	position: relative;
 	min-width: 0;
 	padding: 0.35rem 0.45rem;
 	overflow-wrap: anywhere;
+}
+
+.doc-er-table-column-header > span {
+	padding-top: 0.3rem;
+	padding-bottom: 0.3rem;
 }
 
 .doc-er-table-column-header > span + span,
@@ -215,7 +221,7 @@
 	font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 	font-size: 0.65rem;
 	font-weight: 700;
-	text-align: center;
+	text-align: left;
 }
 
 .doc-er-table-key.is-set {

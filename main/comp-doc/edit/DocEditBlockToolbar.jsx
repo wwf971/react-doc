@@ -125,7 +125,7 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
   return (
     <div ref={toolbarRef} className="doc-edit-toolbar not-prose" role="toolbar" aria-label={`${label} block`}>
       <span className="doc-edit-toolbar-label">{label}</span>
-      <div className="doc-edit-toolbar-actions" role="group" aria-label="Block actions">
+      <div className="doc-edit-toolbar-actions doc-button-group" role="group" aria-label="Block actions">
         <DocEditBlockModeButton blockIndex={blockIndex} size="toolbar" />
         <button type="button" disabled={isSubmitting || isReadOnly}
           title={isReadOnly ? 'This component is read-only' : 'Edit this block'} aria-label="Edit this block"

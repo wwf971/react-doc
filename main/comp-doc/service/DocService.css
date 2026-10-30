@@ -245,8 +245,9 @@
 }
 
 /* ---------- the path of the view shown ----------
-   the PathBar the host injects (react-comp-misc), in the tokens of the
-   page; or the plain links without one. the refresh beside it */
+   the PathBar the host injects (react-comp-misc), styled by the shared
+   .doc-path (src/css/path.css); or the plain links without one. the
+   refresh beside it */
 .doc-service-path-row {
   display: flex;
   align-items: center;
@@ -256,38 +257,6 @@
 .doc-service-path {
   flex: 1;
   min-width: 0;
-}
-
-.doc-service-path .pathbar-container {
-  border-color: var(--color-fd-border);
-  border-radius: 4px;
-  background: var(--color-fd-background);
-  color: var(--color-fd-foreground);
-  font-family: inherit;
-  font-size: 0.76rem;
-}
-
-.doc-service-path .pathbar-container:hover {
-  border-color: var(--color-fd-border);
-}
-
-.doc-service-path .pathbar-segment {
-  padding: 1px 5px;
-  color: var(--color-fd-foreground);
-}
-
-/* the first segment goes back to the overview; the last is where the tab is */
-.doc-service-path .pathbar-segment:first-child {
-  color: var(--color-fd-primary);
-}
-
-.doc-service-path .pathbar-segment:hover {
-  background: var(--color-fd-accent);
-  color: var(--color-fd-primary);
-}
-
-.doc-service-path .pathbar-separator {
-  color: var(--color-fd-muted-foreground);
 }
 
 .doc-service-path-plain {
