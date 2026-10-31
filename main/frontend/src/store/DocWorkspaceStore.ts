@@ -27,6 +27,10 @@ export class DocWorkspaceStore {
   nodeSelectedId = '';
   // node id -> position, for nodes the person moved
   positionByNodeId: Record<string, { x: number; y: number }> = {};
+  // what the graph shows: the doc pages (below the workspace), the packages
+  // the workspace imports (above it; below it when the doc pages are hidden)
+  isDocPageVisible = true;
+  isPackageVisible = true;
 
   // the workspace file is edited only once unlocked; never stored
   isFileLocked = true;
@@ -120,17 +124,40 @@ export class DocWorkspaceStore {
     return this.sourceStore.configDoc?.workspace;
   }
 
+  get packageList(): any[] {
+    return Array.isArray(this.sourceStore.configDoc?.packageList) ? this.sourceStore.configDoc.packageList : [];
+  }
+
+  // a dragged position is kept per arrangement: a package dragged above the
+  // workspace is not moved there when the packages grow below it
+  get layoutKey(): string {
+    return `${this.isDocPageVisible ? 'd' : ''}${this.isPackageVisible ? 'p' : ''}`;
+  }
+
   get graph() {
-    const graph = workspaceGraphBuild(this.workspace);
+    const graph = workspaceGraphBuild(this.workspace, this.packageList, { isDocPageVisible: this.isDocPageVisible, isPackageVisible: this.isPackageVisible });
     const nodeList = graph.nodeList.map((node: any) => ({
       ...node,
-      position: this.positionByNodeId[node.id] ?? node.position,
+      position: this.positionByNodeId[`${this.layoutKey}:${node.id}`] ?? node.position,
       selected: node.id === this.nodeSelectedId,
     }));
     return { ...graph, nodeList };
   }
 
   // the doc page chosen, or undefined for the workspace node / none
+  get packageSelected(): any {
+    const node = this.graph.nodeList.find((item: any) => item.id === this.nodeSelectedId);
+    return node?.type === 'package' ? node.data : undefined;
+  }
+
+  docPageVisibleSet(isVisible: boolean): void {
+    this.isDocPageVisible = isVisible;
+  }
+
+  packageVisibleSet(isVisible: boolean): void {
+    this.isPackageVisible = isVisible;
+  }
+
   get docPageSelected(): any {
     const node = this.graph.nodeList.find((item: any) => item.id === this.nodeSelectedId);
     return node?.type === 'docPage' ? node.data.docPage : undefined;
@@ -148,7 +175,7 @@ export class DocWorkspaceStore {
   nodeListChange = (changeList: any[]): void => {
     const nodeListNext = applyNodeChanges(changeList, this.graph.nodeList as any[]);
     for (const change of changeList) {
-      if (change.type === 'position' && change.position) this.positionByNodeId[change.id] = { ...change.position };
+      if (change.type === 'position' && change.position) this.positionByNodeId[`${this.layoutKey}:${change.id}`] = { ...change.position };
       if (change.type === 'select') {
         if (change.selected) this.nodeSelectedId = change.id;
         else if (this.nodeSelectedId === change.id) this.nodeSelectedId = '';

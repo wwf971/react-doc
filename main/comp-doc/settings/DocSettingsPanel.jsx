@@ -9,6 +9,7 @@ import { ServiceSettings } from './ServiceSettings.jsx';
 import { WorkspaceSettings } from './WorkspaceSettings.jsx';
 import { SourcePathInput } from '../source/SourcePathInput.jsx';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
+import { usePanelLayout } from '../popup/use-panel-layout.js';
 import './DocSettings.css';
 
 // The settings panel, rendered by the application's ConfigPanel
@@ -55,10 +56,11 @@ import './DocSettings.css';
 //
 // the tab shown is DocConfigStore.settingsTabId. the panel is rendered once
 // at page level while DocConfigStore.isSettingsOpen: a popup centered in
-// the browser window, at a fixed height. a tab taller than that scrolls
-// inside the tab; the title and the tabs stay put. it closes only with the
-// close button at the top right. the header, aside from its buttons, drags
-// the panel.
+// the browser window. a tab taller than the panel scrolls inside the tab;
+// the title and the tabs stay put. it closes only with the close button at
+// the top right. the header, aside from its buttons, drags the panel, and
+// its edges and corners resize it; the size is remembered for the next
+// opening (DocPanelLayoutStore, id docSettings).
 export const DocSettingsPanel = observer(function DocSettingsPanel() {
   const stores = useDocStores();
   const { configStore } = stores;
@@ -68,14 +70,21 @@ export const DocSettingsPanel = observer(function DocSettingsPanel() {
 
 const panelPath = ['docSettings'];
 
+// the settings panel is moved by its header and resized by its edges and
+// corners; its size is remembered (DocPanelLayoutStore, id docSettings)
+const PANEL_LAYOUT_OPTION = { isMovable: true, isResizable: true, isSizeRemembered: true };
+const PANEL_EDGE_LIST = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+const PANEL_MARGIN = 8;
+const PANEL_WIDTH_MIN = 420;
+const PANEL_HEIGHT_MIN = 260;
+
 const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
   const stores = useDocStores();
   const { componentConfig, configStore } = stores;
   const ConfigPanel = componentConfig.ConfigPanel;
   const panelRef = useRef(null);
-  const dragOffsetRef = useRef({ x: 0, y: 0 });
-  const [dragOffset, dragOffsetSet] = useState(dragOffsetRef.current);
   const [isDragging, isDraggingSet] = useState(false);
+  const panelLayout = usePanelLayout('docSettings', true, PANEL_LAYOUT_OPTION);
   // the asset item whose change is being written (or failed): it shows the
   // request state
   const [assetRequestItemPathText, assetRequestItemPathTextSet] = useState('');
@@ -150,45 +159,60 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
     });
   };
 
-  // the header moves the panel. a button in the header (Clear cache, Close) is
-  // not a drag handle, so a click there stays a click.
-  const headPointerDownHandle = (event) => {
-    if (event.button !== 0 || event.target.closest('button')) return;
+  // the place and size of the panel are kept by DocPanelLayoutStore under
+  // 'docSettings' (doc_page_impl.md#the-panel-contract): the header moves
+  // it, its edges and corners resize it, and the size a resize leaves is
+  // remembered. a button in the header (Clear cache, Close) is not a drag
+  // handle, so a click there stays a click.
+  const rectDrag = (event, edge) => {
+    if (event.button !== 0) return;
     const panel = panelRef.current;
-    const head = event.currentTarget;
     if (!panel) return;
     event.preventDefault();
+    event.stopPropagation();
+    const handle = event.currentTarget;
     const startX = event.clientX;
     const startY = event.clientY;
-    const startRect = panel.getBoundingClientRect();
-    const origin = dragOffsetRef.current;
-    head.setPointerCapture(event.pointerId);
+    const start = panel.getBoundingClientRect();
+    handle.setPointerCapture(event.pointerId);
     isDraggingSet(true);
-    const moveHandle = (moveEvent) => {
-      const margin = 8;
-      let left = startRect.left + moveEvent.clientX - startX;
-      let top = startRect.top + moveEvent.clientY - startY;
-      const maxLeft = Math.max(margin, window.innerWidth - startRect.width - margin);
-      const maxTop = Math.max(margin, window.innerHeight - startRect.height - margin);
-      left = Math.min(Math.max(margin, left), maxLeft);
-      top = Math.min(Math.max(margin, top), maxTop);
-      const next = {
-        x: origin.x + (left - startRect.left),
-        y: origin.y + (top - startRect.top),
-      };
-      dragOffsetRef.current = next;
-      dragOffsetSet(next);
+    const rectAt = (moveEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      const margin = PANEL_MARGIN;
+      if (edge === 'move') {
+        const x = Math.min(Math.max(margin, start.left + dx), Math.max(margin, window.innerWidth - start.width - margin));
+        const y = Math.min(Math.max(margin, start.top + dy), Math.max(margin, window.innerHeight - start.height - margin));
+        return { x, y, width: start.width, height: start.height };
+      }
+      let { left, top, right, bottom } = start;
+      if (edge.includes('w')) left = Math.min(Math.max(margin, left + dx), right - PANEL_WIDTH_MIN);
+      if (edge.includes('e')) right = Math.max(Math.min(window.innerWidth - margin, right + dx), left + PANEL_WIDTH_MIN);
+      if (edge.includes('n')) top = Math.min(Math.max(margin, top + dy), bottom - PANEL_HEIGHT_MIN);
+      if (edge.includes('s')) bottom = Math.max(Math.min(window.innerHeight - margin, bottom + dy), top + PANEL_HEIGHT_MIN);
+      return { x: left, y: top, width: right - left, height: bottom - top };
     };
-    const upHandle = () => {
-      head.removeEventListener('pointermove', moveHandle);
-      head.removeEventListener('pointerup', upHandle);
-      head.removeEventListener('pointercancel', upHandle);
+    const kind = edge === 'move' ? 'move' : 'resize';
+    const moveHandle = (moveEvent) => panelLayout.eventHandle('rectChangeRequest', { rect: rectAt(moveEvent), kind, isEnd: false });
+    const upHandle = (upEvent) => {
+      panelLayout.eventHandle('rectChangeRequest', { rect: rectAt(upEvent), kind, isEnd: true });
+      handle.removeEventListener('pointermove', moveHandle);
+      handle.removeEventListener('pointerup', upHandle);
+      handle.removeEventListener('pointercancel', upHandle);
       isDraggingSet(false);
     };
-    head.addEventListener('pointermove', moveHandle);
-    head.addEventListener('pointerup', upHandle);
-    head.addEventListener('pointercancel', upHandle);
+    handle.addEventListener('pointermove', moveHandle);
+    handle.addEventListener('pointerup', upHandle);
+    handle.addEventListener('pointercancel', upHandle);
   };
+  const headPointerDownHandle = (event) => {
+    if (event.target.closest('button')) return;
+    rectDrag(event, 'move');
+  };
+  const rect = panelLayout.config.rect;
+  const panelStyle = rect?.x !== undefined && rect?.y !== undefined
+    ? { left: rect.x, top: rect.y, width: rect.width, height: rect.height, transform: 'none' }
+    : rect ? { width: rect.width, height: rect.height } : undefined;
 
   const isValueTab = configStore.settingsTabId === 'config' || configStore.settingsTabId === 'compConfig';
   const layerShown = isValueTab ? configStore.layerGet(configStore.settingsLayerId) : undefined;
@@ -201,8 +225,11 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
       role="dialog"
       aria-label="Settings"
       data-dragging={isDragging ? '' : undefined}
-      style={{ transform: `translate(calc(-50% + ${dragOffset.x}px), calc(-50% + ${dragOffset.y}px))` }}
+      style={panelStyle}
     >
+      {PANEL_EDGE_LIST.map((edge) => (
+        <div key={edge} className="doc-settings-resize" data-edge={edge} aria-hidden="true" onPointerDown={(event) => rectDrag(event, edge)} />
+      ))}
       <div className="doc-settings-head" onPointerDown={headPointerDownHandle}>
         <div className="doc-settings-head-main">
           <span className="doc-settings-title">Settings</span>

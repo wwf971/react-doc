@@ -1,0 +1,18 @@
+# The Power Platform series (doc/power-platform.md): Dataverse tables and
+# global choices, Power Automate steps and business rules, as node kinds of
+# the card diagram of the base series (../card-diagram). Every diagram
+# component of the series draws with one node registry
+# (power-platform-node-registry.js); DiagramDataverseEntity shows one
+# Dataverse table card outside a canvas.
+compList:
+  - tagName: DiagramER
+    entry: ./power-platform-comp.js
+    dependencyCollect: { entry: ../card-diagram/DiagramERSource.js, export: diagramDependenciesCollect }
+  - tagName: DiagramPowerAutomate
+    entry: ./power-platform-comp.js
+    dependencyCollect: { entry: ../card-diagram/DiagramERSource.js, export: diagramDependenciesCollect }
+  - tagName: DiagramBusinessRule
+    entry: ./power-platform-comp.js
+    dependencyCollect: { entry: ../card-diagram/DiagramERSource.js, export: diagramDependenciesCollect }
+  - tagName: DiagramDataverseEntity
+    entry: ./power-platform-comp.js

@@ -1,0 +1,51 @@
+import { GitBranch, TableProperties, Waypoints, Workflow } from '../../../../main/frontend/UICommon.js';
+import { compDefine } from '../../../../main/comp-doc/registry/comp-registry.js';
+import { cardDiagramCompCreate } from '../card-diagram/CardDiagram.jsx';
+import { cardStandaloneCompCreate } from '../card-diagram/CardStandalone.jsx';
+import { cardDiagramDefineOptionsBuild } from '../card-diagram/card-diagram-comp.js';
+import { dataverseSourceDefaultCreate, diagramSourceDefaultCreate } from './DataverseCardSource.js';
+import { powerAutomateSourceDefaultCreate } from './PowerAutomateNodeSource.js';
+import { businessRuleSourceDefaultCreate } from './BusinessRuleNodeSource.js';
+import { dataverseEntityNodeRegistry, powerPlatformNodeRegistry } from './power-platform-node-registry.js';
+
+// The components of the Power Platform series (power-platform.md), mounted
+// by comp.yaml beside this file. DiagramER, DiagramPowerAutomate and
+// DiagramBusinessRule are one diagram component on the registry of the
+// series (power-platform-node-registry.js), exposed three times with another
+// label and starting text, so one diagram may mix their nodes.
+// DiagramDataverseEntity is a standalone card on a registry of the Dataverse
+// table alone.
+const PowerPlatformDiagram = cardDiagramCompCreate(powerPlatformNodeRegistry, 'PowerPlatformDiagram');
+
+export const DiagramER = compDefine(PowerPlatformDiagram, cardDiagramDefineOptionsBuild({
+	label: 'ER diagram',
+	description: 'Nodes and connections on a canvas: Dataverse tables, choices, operators and registered components.',
+	icon: Waypoints,
+	// two tables and one connection between column handles: the smallest
+	// diagram that shows every part of the format
+	sourceDefaultCreate: diagramSourceDefaultCreate,
+}));
+
+export const DiagramPowerAutomate = compDefine(PowerPlatformDiagram, cardDiagramDefineOptionsBuild({
+	label: 'Power Automate flow',
+	description: 'Trigger, actions, branches and configuration in a design diagram.',
+	icon: Workflow,
+	sourceDefaultCreate: powerAutomateSourceDefaultCreate,
+}));
+
+export const DiagramBusinessRule = compDefine(PowerPlatformDiagram, cardDiagramDefineOptionsBuild({
+	label: 'Business rule',
+	description: 'Dataverse conditions, actions, scope and target columns.',
+	icon: GitBranch,
+	sourceDefaultCreate: businessRuleSourceDefaultCreate,
+}));
+
+export const DiagramDataverseEntity = compDefine(
+	cardStandaloneCompCreate(dataverseEntityNodeRegistry, 'DiagramDataverseEntity', 'Dataverse table'),
+	cardDiagramDefineOptionsBuild({
+		label: 'Dataverse table',
+		description: 'One Dataverse table card with its columns, outside a canvas.',
+		icon: TableProperties,
+		sourceDefaultCreate: dataverseSourceDefaultCreate,
+	}),
+);

@@ -35,6 +35,16 @@ docPageList:
     dir: ./example_doc/second-doc
     isRootVisible: false
 
+# the packages the workspace imports (main/doc_page_impl_package.md):
+# each named by its folder, relative to this file. a package brings its
+# components (mounted under the ids {packageName}/{tagName}) and its service
+# templates to every doc page of the workspace, and the packages it needs
+# itself. cloud-dev-vis carries the diagrams the demonstration shows:
+# CardDiagram, DiagramER, DiagramPowerAutomate, DiagramBusinessRule,
+# DiagramDataverseEntity
+packageList:
+  - dir: ./package/cloud-dev-vis
+
 # page values over those of the first doc page's entry (docEntry.title /
 # homeDoc / homeItem); left to the entry here
 # title: React Doc Test

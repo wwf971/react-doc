@@ -185,7 +185,11 @@ docPageList:                        # the root-level doc pages, in side-panel or
     dir: ../api
     isRootVisible: false            # optional: the sole wrapper item of its side panel shows its
                                     # children only, without a row (a yaml boolean, never "false")
+packageList:                        # optional: the packages the workspace imports, by folder
+  - dir: ../package/cloud-dev-vis   #   (doc_page_impl_package.md)
 ```
+
+`packageList` makes the components and service templates of each package (and of the packages it needs) available to every doc page of the workspace. A workspace given by `docEntry` of `config.yaml` names its packages in `config.yaml` beside it; with `workspace`, only the workspace does.
 
 `isRootVisible` is an option of the mount, not of the entry: the same doc page can be shown with its root row in one workspace and without it in another. What it does, and what it never does, is in [the root row hidden](doc_page_impl_side_panel.md#the-root-row-hidden); `docEntry` of `config.yaml` takes it as well.
 
@@ -226,7 +230,19 @@ workspace
 
 ### The Workspace tab
 
-The settings panel has a **Workspace** tab (`comp-doc/settings/WorkspaceSettings.jsx`) that draws the workspace with React Flow: a node for the workspace (marked virtual when `config.yaml` named one doc page), a node per doc page (alias, title, folder, the number of roots and of mentions, a "root" badge), and an edge per mention, from the workspace or from the doc page whose file holds the include, labeled with the alias that mention gives. Two mentions of one doc page are two edges into one node, which is how the de-duplication is seen; a mention whose alias is not the one kept is a dashed amber edge with an "alias conflict" badge on the node, and the warnings are listed under the graph. Choosing a node shows its folder, entry, roots (`~page:root → folder`) and mentions, the ignored ones marked. The graph is laid out by depth (the workspace, the root doc pages, then the doc pages reached by includes) and the nodes can be dragged; Reset layout puts them back. The model is `lib/doc-workspace-graph.js` (`workspaceGraphBuild(workspace)`: nodes with positions, edges, warnings), the state `store/DocWorkspaceStore.ts` (the graph derived from `configDoc.workspace`, the node chosen, the positions dragged to), so the view only renders.
+The settings panel has a **Workspace** tab (`comp-doc/settings/WorkspaceSettings.jsx`) that draws the workspace with React Flow: a node for the workspace (marked virtual when `config.yaml` named one doc page), a node per doc page (alias, title, folder, the number of roots and of mentions, a "root" badge), and an edge per mention, from the workspace or from the doc page whose file holds the include, labeled with the alias that mention gives. Two mentions of one doc page are two edges into one node, which is how the de-duplication is seen; a mention whose alias is not the one kept is a dashed amber edge with an "alias conflict" badge on the node, and the warnings are listed under the graph. Choosing a node shows its folder, entry, roots (`~page:root → folder`) and mentions, the ignored ones marked. The packages the workspace imports are drawn too, in a tone of their own and **above** the workspace node: an edge `imports` to each package the workspace names, an edge `needs` from a package to each package it needs, a package one row above every package needing it, so the dependencies grow upward while the doc pages grow downward ([Packages: in the Workspace tab](doc_page_impl_package.md#in-the-workspace-tab)); choosing a package shows its description, folder, and what it needs and is needed by. Two toggles, **doc pages** and **packages**, show or hide either; with one of them alone, it grows below the workspace node.
+
+```text
+   [base]  package                 packages: above, a package above everything needing it
+      │ needs
+   [cloud-dev-vis]  package
+      │ imports
+   [workspace]
+      │ example     │ second       doc pages: below, by depth of include
+   [example]     [second]
+```
+
+The graph is laid out by depth and the nodes can be dragged; Reset layout puts them back, and a position dragged to is kept per arrangement (with or without each of the two), so a package dragged above the workspace does not land there when the packages grow below it. The canvas opens in the block popup like a block of a document (its surface has a `popupKey`, [Block popup](doc_page_impl_popup.md)). The model is `lib/doc-workspace-graph.js` (`workspaceGraphBuild(workspace, packageList, { isDocPageVisible, isPackageVisible })`: nodes with positions, edges, warnings), the state `store/DocWorkspaceStore.ts` (the graph derived from `configDoc.workspace` and `configDoc.packageList`, the toggles, the node chosen, the positions dragged to), so the view only renders.
 
 Above the graph the tab edits the workspace and mounts doc pages, both described below.
 
@@ -288,7 +304,7 @@ The development server answers `{base}/__doc-source` (exported as `docSourceEndp
 
 A file the page creates joins the manifest at once: the plugin remembers the path it just wrote, and when the file watcher reports the new file, the source data is sent to the page without a full reload (`doc-source-change`), so the page keeps its state and the new entry appears. Every path in the api is a source path, the full form; a folder in the local form is accepted for creation when exactly one doc page has the root. A folder is accepted for creation only when a folder rule of the same root collects it (inside a recursive or referenced folder, or the folder of a direct rule itself).
 
-The development server also tells the service backend which doc pages the page has loaded: `POST {base}/__doc-service/registry/docpage/sync` is answered by the plugin itself, under the forwarded service api ([the Vite plugin](doc_page_impl_service.md#the-vite-plugin)). The request body is ignored; the plugin builds `{ docPageList: [{ alias, dir, serviceFile }] }` from the workspace as it is loaded at request time (root doc pages, included ones and temporary mounts; a doc page with `service: false` is left out), `dir` the absolute doc page folder and `serviceFile` the absolute service config file when the entry names one or `.doc-page/service.yaml` exists, `''` otherwise, forwards it to the backend's route of the same name and answers the backend's answer (`{ code: -5 }`, http 503, when the backend is down). `DocServiceStore` calls it when the backend comes up and after the workspace changes, so the backend's registry follows the Workspace tab.
+The development server also tells the service backend which doc pages the page has loaded: `POST {base}/__doc-service/registry/docpage/sync` is answered by the plugin itself, under the forwarded service api ([the Vite plugin](doc_page_impl_service.md#the-vite-plugin)). The request body is ignored; the plugin builds `{ docPageList: [{ alias, dir, serviceFile }], packageList: [{ name, dir }] }` from the workspace as it is loaded at request time (root doc pages, included ones and temporary mounts; a doc page with `service: false` is left out), `dir` the absolute doc page folder and `serviceFile` the absolute service config file when the entry names one or `.doc-page/service.yaml` exists, `''` otherwise, forwards it to the backend's route of the same name and answers the backend's answer (`{ code: -5 }`, http 503, when the backend is down). `DocServiceStore` calls it when the backend comes up and after the workspace changes, so the backend's registry follows the Workspace tab.
 
 ## Files in a build
 

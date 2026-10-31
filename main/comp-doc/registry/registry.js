@@ -9,14 +9,6 @@ import { BlockQA } from '../../../built-in/comp-mdx/block/block-qa/BlockQA.jsx';
 import { BlockSimple } from '../../../built-in/comp-mdx/block/block-simple/BlockSimple.jsx';
 import { DiagramMermaid } from '../../../built-in/comp-mdx/diagram/diagram-mermaid/DiagramMermaid.jsx';
 import { DiagramText } from '../../../built-in/comp-mdx/diagram/diagram-ascii/DiagramText.jsx';
-import { DiagramER } from '../../../built-in/comp-mdx/diagram/diagram-er/DiagramER.jsx';
-import {
-  diagramBusinessRuleExpose,
-  diagramDataverseEntityExpose,
-  diagramERExpose,
-  diagramPowerAutomateExpose,
-} from '../../../built-in/comp-mdx/diagram/diagram-er/diagram-er-expose.js';
-import { DiagramDataverseEntity } from '../../../built-in/comp-mdx/diagram/diagram-db-tabe/DiagramDataverseEntity.jsx';
 import { ExcelUniver } from '../../../built-in/comp-mdx/media/excel-univer/ExcelUniver.jsx';
 import { excelUniverExpose } from '../../../built-in/comp-mdx/media/excel-univer/excel-univer-expose.js';
 import { FileDownload } from '../../../built-in/comp-mdx/media/file-download/FileDownload.jsx';
@@ -124,18 +116,6 @@ const compDiagramText = compDefine(DiagramText, { placementList: ['commentBlock'
 // mermaid itself is not a package dependency: the host app supplies
 // config.mermaidLoad through DocPageMdx config.compConfigHost.
 const compDiagramMermaid = compDefine(DiagramMermaid, { placementList: ['mdx', 'commentBlock'], expose: diagramMermaidExpose });
-// the ER diagram draws with @xyflow/react, a dependency of the package. it
-// and the standalone Dataverse table card share a visual edit mode
-// (diagram-er-expose.js) that also edits the data of an asset reference, so
-// both learn whether their data is an asset (isAssetAware)
-const compDiagramER = compDefine(DiagramER, { placementList: ['mdx', 'commentBlock'], isAssetAware: true, expose: diagramERExpose });
-const compDiagramDataverseEntity = compDefine(DiagramDataverseEntity, { placementList: ['mdx', 'commentBlock'], isAssetAware: true, expose: diagramDataverseEntityExpose });
-// the Power Platform design diagrams are the ER diagram with another
-// starter (comp_db_vis.md#power-platform-resource-nodes): a flow of Power
-// Automate steps, a Dataverse business rule. one graph grammar, so a
-// diagram may mix their nodes with tables and choices
-const compDiagramPowerAutomate = compDefine(DiagramER, { placementList: ['mdx', 'commentBlock'], isAssetAware: true, expose: diagramPowerAutomateExpose });
-const compDiagramBusinessRule = compDefine(DiagramER, { placementList: ['mdx', 'commentBlock'], isAssetAware: true, expose: diagramBusinessRuleExpose });
 // a spreadsheet drawn by Univer, which is not a package dependency either:
 // the host supplies config.univerLoad. it is asset-only (excel-univer-expose.js),
 // so it is a comment block whose fenced block is an asset reference, and it
@@ -194,7 +174,10 @@ const compSwitchView = compDefine(SwitchView, { placementList: ['commentBlock'],
 // folders (comp-mdx/comp.yaml), mounted by the vite plugin
 // (doc_page_impl_mdx_comp.md#components-of-a-doc-page): the demonstration
 // components of example_doc/comp-mdx/ and SourceLink, bound to the
-// demonstration's popup panel there, are not registered here.
+// demonstration's popup panel there, are not registered here. nor are the
+// components of the packages a workspace imports (the diagrams of
+// package/cloud-dev-vis: DiagramER, DiagramDataverseEntity ...), mounted
+// the same way (doc_page_impl_dir.md#the-package-folder).
 export const compById = {
   // relatively common components, re-exported from the fumadocs default theme
   'common/Tabs': compNativeDefine(Tabs, { placementList: ['mdx'], expose: tabsExpose }),
@@ -217,10 +200,6 @@ export const compById = {
   'common/ImageGrid': compImageGrid,
   'common/DiagramText': compDiagramText,
   'common/DiagramMermaid': compDiagramMermaid,
-  'common/DiagramER': compDiagramER,
-  'common/DiagramDataverseEntity': compDiagramDataverseEntity,
-  'common/DiagramPowerAutomate': compDiagramPowerAutomate,
-  'common/DiagramBusinessRule': compDiagramBusinessRule,
   'common/ExcelUniver': compExcelUniver,
   'common/Block': compBlock,
   'common/BlockSimple': compBlockSimple,

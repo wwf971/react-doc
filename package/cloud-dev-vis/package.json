@@ -1,0 +1,7 @@
+{
+  "name": "@wwf971/react-doc-package-cloud-dev-vis",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A react-doc package (doc-package.yaml is its config). Not an npm package; this file marks the folder's .js modules as ES modules for node (tests, build-time dependency extractors)."
+}

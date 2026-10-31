@@ -1,0 +1,16 @@
+# The base series of the package (doc/card-diagram.md): the canvas of node
+# cards and connection lines on React Flow, the generic cards (a table with
+# any number of rows and columns, a resource card, an operator), the visual
+# editor, and the node registry mechanism every series builds its own
+# registry with. Its own component type is CardDiagram, on the registry of
+# the generic kinds (card-diagram-node-registry.js).
+#
+# the id of every entry is {packageName}/{tagName} when not written
+# (cloud-dev-vis/CardDiagram). dependencyCollect names the build-time
+# extractor of the files and components a block refers to
+# (doc_page_impl_mdx_comp.md#components-of-a-doc-page)
+compList:
+  - tagName: CardDiagram
+    entry: ./card-diagram-comp.js
+    export: cardDiagramDefine
+    dependencyCollect: { entry: ./DiagramERSource.js, export: diagramDependenciesCollect }

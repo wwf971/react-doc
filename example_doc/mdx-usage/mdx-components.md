@@ -128,6 +128,11 @@ subtopics:
           en: Layout and viewport
           jp: 配置とビューポート
         target: ~example/mdx-usage/comp-diagram-er.md#diagram-er-layout
+      - id: card-diagram
+        title:
+          en: Generic card diagram
+          jp: 汎用カード図
+        target: ~example/mdx-usage/comp-diagram-er.md#card-diagram
       - id: diagram-dataverse-entity
         title:
           en: Dataverse table card
@@ -278,9 +283,9 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`DiagramER` draws Dataverse tables, global choices, processing steps, and registered components as nodes on a canvas, joined by connections between named handles. `DiagramDataverseEntity` shows one table card in the flow of the document. Both are edited visually in place, on inline YAML or on data in the asset service layer. `DiagramPowerAutomate` and `DiagramBusinessRule` are the same diagram with cards for the design of a Power Automate flow and of a Dataverse business rule.
+`DiagramER` draws Dataverse tables, global choices, processing steps, and registered components as nodes on a canvas, joined by connections between named handles. `DiagramDataverseEntity` shows one table card in the flow of the document. Both are edited visually in place, on inline YAML or on data in the asset service layer. `DiagramPowerAutomate` and `DiagramBusinessRule` are the same diagram with cards for the design of a Power Automate flow and of a Dataverse business rule. `CardDiagram` is the same canvas with generic tables and operators only. They come from the package cloud-dev-vis, which the workspace imports.
 
-`DiagramER` は、Dataverse のテーブル、グローバル選択肢、処理ステップ、登録済みコンポーネントをキャンバス上のノードとして描き、名前付きハンドル間の接続線で結びます。`DiagramDataverseEntity` はテーブルカードを一枚、文書の流れの中に表示します。どちらも、インラインの YAML でもアセットサービス層のデータでも、その場で視覚的に編集できます。`DiagramPowerAutomate` と `DiagramBusinessRule` は同じ図で、Power Automate のフローと Dataverse のビジネスルールの設計をカードとして描きます。
+`DiagramER` は、Dataverse のテーブル、グローバル選択肢、処理ステップ、登録済みコンポーネントをキャンバス上のノードとして描き、名前付きハンドル間の接続線で結びます。`DiagramDataverseEntity` はテーブルカードを一枚、文書の流れの中に表示します。どちらも、インラインの YAML でもアセットサービス層のデータでも、その場で視覚的に編集できます。`DiagramPowerAutomate` と `DiagramBusinessRule` は同じ図で、Power Automate のフローと Dataverse のビジネスルールの設計をカードとして描きます。`CardDiagram` は汎用テーブルと処理ノードだけを持つ同じキャンバスです。これらはワークスペースが読み込むパッケージ cloud-dev-vis のコンポーネントです。
 ```
 
 - [Data diagrams](comp-diagram-er.md)

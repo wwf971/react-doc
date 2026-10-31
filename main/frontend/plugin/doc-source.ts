@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isCSSRequest, type EnvironmentModuleNode, type Plugin } from 'vite';
 import {
@@ -60,6 +61,7 @@ import {
   compConfigOfDocPageListGet, compConfigurationFileListGet, compFolderListGet, compManifestPathIs, compPathIs,
   type CompConfig, type CompMount,
 } from './doc-comp-config.ts';
+import { docPackageListLoad, docPackageSpecListRead, PACKAGE_SERVICE_TEMPLATE_FOLDER_LIST, type DocPackageLoaded } from './doc-package.ts';
 import {
   assetConfigFormerReject, assetConfigOfDocPageListGet, assetStoreCreate, objectIdFromDirName,
   type AssetSnapshot, type AssetStore, type AssetStoreConfig, type AssetUsageDoc,
@@ -223,6 +225,13 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
   let pathsConfiguration: string[] = [];
   const moduleId = options.moduleId ?? MODULE_ID_DEFAULT;
   const moduleIdResolved = `\0${moduleId}`;
+  // the build-time dependency extractors the component manifests name
+  // (dependencyCollect), keyed by component id: loading starts when the
+  // configuration is resolved and is awaited by buildStart, so a manifest
+  // naming a new one needs a restart. the plugin option
+  // sourceDependencyCollectByCompId wins
+  let collectByCompIdMount: Record<string, DocSourceDependencyCollect> = {};
+  let collectByCompIdMountLoad: Promise<void> = Promise.resolve();
 
   // the local store of the asset service layer (config asset.file), or undefined without one;
   // created from the config file as it is now
@@ -242,7 +251,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
     return pruneSourceToSidePanel(
       configDoc,
       entries,
-      options.sourceDependencyCollectByCompId,
+      { ...collectByCompIdMount, ...options.sourceDependencyCollectByCompId },
       assetTextExpandGet(assetStore),
       assetStore ? assetStore.dependencySourcePathList() : [],
     );
@@ -292,6 +301,12 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       docServiceEndpoint = isBuild || !serviceConfigGet(configDocEarly, configDir)
         ? ''
         : endpointBuild(viteConfig.base, DOC_SERVICE_ENDPOINT_NAME);
+      collectByCompIdMountLoad = compDependencyCollectLoad(compConfigGet(configDocEarly).mountList)
+        .then((result) => { collectByCompIdMount = result; });
+    },
+
+    async buildStart() {
+      await collectByCompIdMountLoad;
     },
 
     resolveId(id) {
@@ -619,6 +634,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
           endpoint: docServiceEndpoint,
           backendUrlGet: () => serviceConfig.backendUrl,
           docPageListGet: () => serviceSyncDocPageListBuild(loadConfigDoc(configFile, options).docEntry.docPageList),
+          packageListGet: () => loadConfigDoc(configFile, options).docEntry.packageList.map((item: DocPackageLoaded) => ({ name: item.name, dir: item.dir })),
         }));
         if (serviceConfig.isLaunch) void serviceBackendLaunch(serviceConfig);
       }
@@ -1000,6 +1016,15 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
   // the doc pages mounted from the settings panel while this development
   // server runs, after the ones written (doc_page_impl_source.md#temporary-doc-pages)
   for (const mount of workspaceMountListGet(configFile)) workspaceSpec.docPageList.push({ ...mount, isTemporary: true });
+  // the packages the workspace imports (doc_page_impl_package.md):
+  // "packageList" of the workspace, or of config beside "docEntry"
+  if (isWorkspaceGiven && config.packageList !== undefined) {
+    throw new Error(`[doc-source] config "packageList" goes with "docEntry"; a workspace names its packages itself: ${configFile}`);
+  }
+  const packageSpecList = isWorkspaceGiven
+    ? workspaceSpec.packageList ?? []
+    : docPackageSpecListRead(config.packageList, configDir, `config (${configFile})`);
+  const packageList = docPackageListLoad(packageSpecList, workspaceSpec.file ?? configFile);
 
   // the workspace loaded: the source rules of its doc pages, the page side
   // panel inlined (so the browser side never touches the file system), tag
@@ -1044,11 +1069,30 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
     enumerable: false,
     value: entryLoaded.docPageList,
   });
-  // the components of the doc pages (doc_page_impl_mdx_comp.md#components-of-a-doc-page):
-  // their modules are imported by the virtual module, and the tag names
-  // they declare are compRegistry entries, over those of config.yaml: a doc
-  // page's own tag names win for that name
-  const compConfig = compConfigOfDocPageListGet(entryLoaded.docPageList, configDir);
+  // the packages loaded, for the components and the service layer: absolute
+  // paths, not part of the data sent to the page; the page receives, for
+  // the Workspace tab, their names, descriptions, folders relative to the
+  // config directory, the names of the packages each needs, and whether the
+  // workspace names it itself (else only another package needs it)
+  Object.defineProperty(config.docEntry, 'packageList', {
+    enumerable: false,
+    value: packageList,
+  });
+  const packageDirNamedSet = new Set(packageSpecList.map((spec) => spec.dir));
+  const packageNameByDir = new Map(packageList.map((item) => [item.dir, item.name]));
+  config.packageList = packageList.map((item) => ({
+    name: item.name,
+    description: item.description,
+    dir: path.relative(configDir, item.dir).split(path.sep).join('/'),
+    dependNameList: item.dependDirList.map((dir) => packageNameByDir.get(dir) ?? path.basename(dir)),
+    isWorkspaceNamed: packageDirNamedSet.has(item.dir),
+  }));
+  // the components of the doc pages and of the packages
+  // (doc_page_impl_mdx_comp.md#components-of-a-doc-page): their modules are
+  // imported by the virtual module, and the tag names they declare are
+  // compRegistry entries, over those of config.yaml: a doc page's own tag
+  // names win for that name, then those of the packages
+  const compConfig = compConfigOfDocPageListGet(entryLoaded.docPageList, configDir, packageList);
   Object.defineProperty(config.docEntry, 'compConfig', { enumerable: false, value: compConfig });
   if (compConfig.mountList.length > 0) {
     config.compRegistry = {
@@ -1240,9 +1284,14 @@ type SourceExclude = {
 
 function sourceExcludeGet(configDoc: any, configDir: string): SourceExclude {
   const docPageList = Array.isArray(configDoc.docEntry?.docPageList) ? configDoc.docEntry.docPageList : [];
+  const serviceFolderSet = serviceFolderSetGet(serviceConfigGet(configDoc, configDir), docPageList);
+  // the template folders of the packages, should a source rule reach them
+  for (const item of (configDoc.docEntry?.packageList ?? []) as DocPackageLoaded[]) {
+    for (const folder of PACKAGE_SERVICE_TEMPLATE_FOLDER_LIST) serviceFolderSet.folderList.push(path.join(item.dir, folder.path));
+  }
   return {
     assetConfig: assetConfigGet(configDoc, configDir),
-    serviceFolderSet: serviceFolderSetGet(serviceConfigGet(configDoc, configDir), docPageList),
+    serviceFolderSet,
     compConfig: compConfigGet(configDoc),
   };
 }
@@ -1251,6 +1300,25 @@ function sourceExcludePathIs(exclude: SourceExclude, filePath: string): boolean 
   return (exclude.assetConfig !== undefined && assetPathIs(exclude.assetConfig, filePath))
     || servicePathIs(exclude.serviceFolderSet, filePath)
     || compPathIs(exclude.compConfig, filePath);
+}
+
+// the dependency extractors the mounts name (dependencyCollect of a
+// manifest entry), keyed by component id; one that does not load is
+// reported and left out
+async function compDependencyCollectLoad(mountList: CompMount[]): Promise<Record<string, DocSourceDependencyCollect>> {
+  const result: Record<string, DocSourceDependencyCollect> = {};
+  for (const mount of mountList) {
+    if (!mount.dependencyCollect) continue;
+    const { entryFile, export: exportName } = mount.dependencyCollect;
+    try {
+      const module = await import(pathToFileURL(entryFile).href);
+      if (typeof module[exportName] !== 'function') throw new Error(`no function export "${exportName}"`);
+      result[mount.id] = module[exportName];
+    } catch (error: any) {
+      console.warn(`[doc-comp] ${mount.tagName}: the dependency extractor ${entryFile} did not load: ${String(error?.message ?? error)}`);
+    }
+  }
+  return result;
 }
 
 // the components of the doc pages, as loadConfigDoc read them
@@ -1690,7 +1758,7 @@ export function generateModuleCode(
   lines.push(`export let configDoc = ${JSON.stringify(configDoc)};`);
   lines.push('export const docCompMountList = [');
   for (const mount of compMountList) {
-    const { manifestFile: _manifestFile, ...mountData } = mount;
+    const { manifestFile: _manifestFile, dependencyCollect: _dependencyCollect, ...mountData } = mount;
     lines.push(`  { ...${JSON.stringify({ ...mountData, entryFile: normalizeSlashPath(mount.entryFile) })}, module: ${moduleNameByEntryFile.get(mount.entryFile)} },`);
   }
   lines.push('];');

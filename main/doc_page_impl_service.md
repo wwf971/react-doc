@@ -76,15 +76,16 @@ An app instance keeps nothing in its own folder but its copy of the template: it
 
 Today a service is referred to by a **name string**: an infra service by its infra name (`expose.infra.name` of its script, the template name when absent), a dashboard's template by the template name in its component id (`service/{templateName}/{dashboardId}`), a template target by a template id. The names are unique in the registry (a second template of a name is skipped with a scan problem), which is enough for one backend of a few services, and nothing more: two templates providing the same infra name (a local and a remote sqlite) are told apart by their ids and chosen by the route, and nothing says whether their apis agree.
 
-**TODO** a more rigorous reference: a **contract** an infra name stands for (its apis and their versions, the storage type it promises), declared by the templates that implement it and checked when a dependency is resolved, so that a consumer can require `sqlite@1` and the kernel can refuse a provider that does not implement it; and an **identity** of a template beyond its id and name (a content hash of its version, a signature of its author; [Future updates](#future-updates)), so that an instance can prove what it was created from and a dependency can name a trusted implementation.
+A more rigorous reference (a contract behind an infra name, an identity of a template) is in [TODO](doc_page_impl_TODO.md#service-reference).
 
 ## Where templates and instances come from
 
-The registry reads folders of three origins, and every template and instance carries its origin (`origin: { kind, alias, dir }`):
+The registry reads folders of four origins, and every template and instance carries its origin (`origin: { kind, alias, dir }`):
 
 | origin | folders | what |
 | --- | --- | --- |
 | `builtIn` | `built-in/service-template-app/`, `built-in/service-template-infra/` of the project | what the package ships: the example app template `note-db`, the built-in infra templates `logging` and `sqlite`, the connections. Templates only, never instances. Found by the backend beside itself (`built-in/` two levels above `service-backend/`), or named by the backend config (`builtIn: path`; `builtIn: false` for none) |
+| `package` | `service-template-app/`, `service-template-infra/` of a package the workspace imports ([packages](doc_page_impl_package.md)) | the templates a package carries, at fixed names; never instances. The page syncs the packages it loaded with its doc pages; an instance created from one goes to the main doc page, as for a built-in template |
 | `docPage` | the service folders of a doc page: by convention `service-template-app/`, `service-template-infra/`, `service-app/`, `service-infra/` of the doc page folder, or those its `.doc-page/service.yaml` names ([the doc page folder](doc_page_impl_dir.md#service-folders)) | a doc page's own templates and instances, part of the doc page like its documents and asset folders. The doc pages come from the backend config (`docPageList`) and from the page, which syncs the doc pages it loaded (included ones too) when the backend comes up |
 | `folder` | `templateFolderList`, `instanceFolderList` of the backend config, each with a kind | plain folders, outside any doc page |
 
@@ -112,7 +113,7 @@ Instances of one template could share the template's script, pinned to a templat
 - changing a template changes no instance, and changing an instance (its config, its script, its dashboards) changes no other instance and no template; there is no version binding to resolve at start, and no upgrade that reaches instances by surprise;
 - every instance loads its own `service.py` into a module of its own and serves its own dashboard module, so no module-level state is shared between instances.
 
-Copying the files isolates the folders, not the execution: instances still run in the one backend process, each in its own worker thread, and a script can still reach whatever the process can (environment, other paths). Trusted local scripts need no more; [Future updates](#future-updates) lists what stronger isolation would take. An instance that should follow a newer template is updated by an explicit step, never by the template changing.
+Copying the files isolates the folders, not the execution: instances still run in the one backend process, each in its own worker thread, and a script can still reach whatever the process can (environment, other paths). Trusted local scripts need no more; [TODO](doc_page_impl_TODO.md#service-layer) lists what stronger isolation would take. An instance that should follow a newer template is updated by an explicit step, never by the template changing.
 
 ## Backend
 
@@ -191,7 +192,7 @@ config:                        # the initial config of an instance, checked agai
   versionKeepMax: 50
 ```
 
-A template is `ready` when its file, its `service.py`, and its config check, `error` with the reason otherwise; an instance can only be created from a ready template. The **version id** names the state of the template's files: whoever changes them records a new version (`POST /template/version/new`, with a note; the `+` beside the version in the Services tab), which becomes `versionId` and is appended to `versionList`. The backend does not notice changed files by itself; [Future updates](#future-updates) has the hash that would.
+A template is `ready` when its file, its `service.py`, and its config check, `error` with the reason otherwise; an instance can only be created from a ready template. The **version id** names the state of the template's files: whoever changes them records a new version (`POST /template/version/new`, with a note; the `+` beside the version in the Services tab), which becomes `versionId` and is appended to `versionList`. The backend does not notice changed files by itself; [TODO](doc_page_impl_TODO.md#service-layer) has the hash that would.
 
 ```yaml
 # {templateName}-inst-{serviceId}/service.yaml, written by the backend in this key order
@@ -215,7 +216,7 @@ config:                        # the instance's config, checked against its own 
                                # a key the script does not declare is kept
 ```
 
-`template` is required: an instance without it is in `error`, since every instance is created from a template. Today the record is the template's id, name, and version id, which says where the instance came from as long as nobody reuses a version id for other files; [Future updates](#future-updates) has the hash and signature that would prove it. `service.yaml` is the instance's config, so an instance is reconfigured by editing it (the backend restarts the instance at the next scan), and renamed by editing its `name`. The backend writes it when it creates the instance and when the Services tab changes its dependencies or enables it (the file is the backend's own, comment-free, rewritten whole and atomically: a temporary file renamed over it); a `dependencyList` absent from the file means the script's declaration.
+`template` is required: an instance without it is in `error`, since every instance is created from a template. Today the record is the template's id, name, and version id, which says where the instance came from as long as nobody reuses a version id for other files; [TODO](doc_page_impl_TODO.md#service-layer) has the hash and signature that would prove it. `service.yaml` is the instance's config, so an instance is reconfigured by editing it (the backend restarts the instance at the next scan), and renamed by editing its `name`. The backend writes it when it creates the instance and when the Services tab changes its dependencies or enables it (the file is the backend's own, comment-free, rewritten whole and atomically: a temporary file renamed over it); a `dependencyList` absent from the file means the script's declaration.
 
 `service-record.yaml` beside it is the kernel's, never edited by hand: whether the `onCreate` hook ran (`timeCreateHook`) and the last twenty hook runs ([Lifecycle and hooks](#lifecycle-and-hooks)). It is state, ignored by git with the instance's data.
 
@@ -415,7 +416,7 @@ For every infra name the kernel knows (required by someone, provided by an insta
 
 The current instance is the **explicit route** when there is one (`POST /infra/route { name, serviceId }`, kept in `service-kernel.yaml` beside the backend config; `''` removes it), else the **default route**: among the providers, a ready one first, one a person created before one the kernel provisioned, the oldest first, so the same instance answers while nothing changes. An explicit route to an instance that is gone, or does not provide the name, is a kernel problem and the default route is used. The route is read at every call, so a name moves to another instance the moment the route is set, or the moment the current one stops being ready.
 
-Routing is what makes an infra instance replaceable without touching its consumers; it is not what makes the data follow. The sqlite instance a name is routed to keeps the databases of its consumers in its own folder, and routing the name to another instance means the consumers see that instance's databases: an empty one, for a new instance. That is a property of the resource, not of the route, and it is not hidden: the Services tab shows which instance is current, and `storageInfo` of an app service names the instance and the file its data is in. Moving a consumer's database from one instance to another is a storage operation of a later version ([Future updates](#future-updates)).
+Routing is what makes an infra instance replaceable without touching its consumers; it is not what makes the data follow. The sqlite instance a name is routed to keeps the databases of its consumers in its own folder, and routing the name to another instance means the consumers see that instance's databases: an empty one, for a new instance. That is a property of the resource, not of the route, and it is not hidden: the Services tab shows which instance is current, and `storageInfo` of an app service names the instance and the file its data is in. Moving a consumer's database from one instance to another is a storage operation of a later version ([TODO](doc_page_impl_TODO.md#service-deployed-backend)).
 
 ### Provisioning
 
@@ -459,7 +460,7 @@ The kernel cannot depend on a service to start logging, so it has a **kernel log
 
 The built-in template `logging` (`built-in/service-template-infra/w55iiudjrez--logging/`) keeps the records in a sqlite database of its own folder (`log.sqlite`), not in the sqlite infra service: logging depends on nothing and starts first. Its apis: `logWrite(recordList)` (kernel and services), `logQuery({ principalKind, principalId, feature, level, text, timeFrom, timeTo, limit, offset })` (newest first, with the total), `logFacetGet()` (the principals, features and levels the records have, with counts: what the filters of the Logs area offer), `statGet()`, `logPrune(keepDays)`, `logClear()`, `export()`. It is resident: its `run()` prunes the records older than `keepDays` (30) once an hour. It is provisioned by the kernel (`provision: auto`) since the kernel requires it; the Services tab's **Logs** area reads it with target `{ infra: 'logging' }` and falls back to `/log/recent` when there is none.
 
-**TODO** the records' backup and the audit of what matters: an audit group (permissions changed, instances deleted, routes set) with a stricter retention than the operational records, and the backup of the log database through a storage infra, once there is one to back up to.
+The audit of what matters and the backup of the records are in [TODO](doc_page_impl_TODO.md#service-log-audit).
 
 ## Storage infra services
 
@@ -615,7 +616,7 @@ The address is a url prefix like any other, relative or absolute, and the client
 
 The environment offers `service` whatever the kind of the page ([The environment](doc_page_impl.md#the-environment)): unlike editing or the asset api, the service backend is not the server of the page but a process of its own, so a build reaches it once it is given an address; a build without one has none. Whether the backend answers is the store's `backendStatus`, the same in every case.
 
-A deployed backend needs nothing of the page beyond its address. What it needs of itself is left for later ([Future updates](#future-updates)): being reachable from the page's origin (the backend sends no CORS headers on purpose today, so a reverse proxy on the site's origin is the simple way, and the addresses stay relative), the doc pages it serves listed in its own config (the `registry/docpage/sync` body is filled by the development server; to a backend reached directly it is empty and mounts nothing more), and authorization of the callers ([Authorization](#authorization)), which a backend on localhost does without.
+A deployed backend needs nothing of the page beyond its address. What it needs of itself is left for later ([TODO](doc_page_impl_TODO.md#service-deployed-backend)): being reachable from the page's origin (the backend sends no CORS headers on purpose today, so a reverse proxy on the site's origin is the simple way, and the addresses stay relative), the doc pages it serves listed in its own config (the `registry/docpage/sync` body is filled by the development server; to a backend reached directly it is empty and mounts nothing more), and authorization of the callers ([Authorization](#authorization)), which a backend on localhost does without.
 
 ## The Vite plugin
 
@@ -907,14 +908,4 @@ example_doc/service-kernel.md          the demonstration of app and infra servic
 
 ## Future updates
 
-What the present model leaves for later, in the order it would matter:
-
-- **A rigorous reference to a service** ([Naming a service](#naming-a-service)): a contract behind an infra name (apis, versions, storage promises), declared by the templates implementing it and checked when a dependency is resolved; a content hash of a template's files at a version (computed when a version is recorded, so the backend also notices files changed without a new version) and a digital signature of the template's author over it, so an instance can prove what it was created from, and a template from elsewhere can be trusted or refused.
-- **Backup and migration of a consumer's data**: the `backup` storage operation, implemented by a storage infra on top of another infra (a cloud object store: the sqlite infra depending on it is what the dependency mechanism is for), with the backup status reported as part of the storage (last backup, verified, pending changes), since reliability is a state to observe, not a flag; and moving a consumer's database from one sqlite instance to another when a name is rerouted.
-- **A policy of permissions** ([Authorization](#authorization), [Dependencies](#dependencies)): which caller may call what, which infra names an instance may add at runtime and with which scope, in one place, with the end user behind a page request carried through the calls and into the log's principal.
-- **Comparing and updating from a template.** With the hash, the Services tab can say which files of an instance differ from its template's version, and from the template's current version; `Update from template` (copying chosen files again, the data kept) and `Recreate` would be explicit steps, never a template change reaching instances by itself. Where a newer script needs another shape of data, the update carries a migration of the instance's state.
-- **Templates from instances.** Saving an instance (its script and dashboards, not its data) as a new template, a fork with its own id and versions.
-- **A deployed backend** ([Reaching the backend](#reaching-the-backend)): the backend on a server, reached by a built site or a development server alike by its address alone; it needs a way to be reached from the page's origin (a reverse proxy, or CORS for the origins named in its config), its doc pages from its own config instead of the development server's sync, and the authorization above, since a page on the network is no longer the only caller. Its address would then come from `config.yaml` for a build too, not only from a host passing it.
-- **Calls from any component.** Only dashboards send `serviceApiCallRequest`; a component of the registry that is not a dashboard could call an instance by a target too, as the page.
-- **Execution isolation.** Instances share one process today; a template could declare how its instances run (the shared process, a worker, a process of their own, outside the backend), for scripts that are not trusted or that need resources of their own; a hook that does not return could then be killed instead of recorded.
-- **Events.** The lifecycle changes, the dependency changes and the log records share one envelope today only in the log; a subscription (a dashboard told that its instance restarted, a service told that its dependency came back) would be the next channel beside the calls.
+What the present model leaves for later (a rigorous reference to a service, backup, permissions, updating from a template, a deployed backend, isolation, events) is in [TODO](doc_page_impl_TODO.md#service-layer).

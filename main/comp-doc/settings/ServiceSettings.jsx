@@ -259,10 +259,12 @@ function timeShortText(text) {
 }
 
 // where a template or an instance comes from: the package's built-in folder,
-// a doc page (by its alias), or a plain folder of the backend config
+// a package the workspace imports (by its name), a doc page (by its alias),
+// or a plain folder of the backend config
 function originText(origin) {
   if (!origin) return '';
   if (origin.kind === 'builtIn') return 'built-in';
+  if (origin.kind === 'package') return `package ${origin.alias}`;
   if (origin.kind === 'docPage') return origin.alias ? `page ${origin.alias}` : 'doc page';
   return 'folder';
 }
@@ -270,6 +272,7 @@ function originText(origin) {
 function originTitle(origin) {
   if (!origin) return '';
   if (origin.kind === 'builtIn') return `shipped by the package: ${origin.dir}`;
+  if (origin.kind === 'package') return `the package ${origin.alias}: ${origin.dir}`;
   if (origin.kind === 'docPage') return `the doc page ${origin.alias}: ${origin.dir}`;
   return `a folder of the backend config: ${origin.dir}`;
 }
@@ -1287,13 +1290,14 @@ const InstanceCreate = observer(function InstanceCreate({ templateIdInitial, isT
   const isSubmitting = serviceStore.settings.create.status === 'submitting';
   const template = serviceStore.templateGet(templateId);
   const docPageAliasMain = sourceStore?.docPageAliasMain ?? serviceStore.docPageAliasMain;
-  const isBuiltIn = template?.origin?.kind === 'builtIn';
-  const docPageAlias = isBuiltIn ? docPageAliasMain : (template?.origin?.kind === 'docPage' ? template.origin.alias : '');
+  // a template shipped by the package or by an imported package belongs to no doc page
+  const isOfNoDocPage = template?.origin?.kind === 'builtIn' || template?.origin?.kind === 'package';
+  const docPageAlias = isOfNoDocPage ? docPageAliasMain : (template?.origin?.kind === 'docPage' ? template.origin.alias : '');
 
   const create = async () => {
     const name = String(nameRef.current?.textContent ?? '').trim();
     const description = String(descriptionRef.current?.textContent ?? '').trim();
-    const result = await serviceStore.instanceCreate({ templateId, name, description, docPageAlias: isBuiltIn ? docPageAliasMain : undefined });
+    const result = await serviceStore.instanceCreate({ templateId, name, description, docPageAlias: isOfNoDocPage ? docPageAliasMain : undefined });
     if (result.code === 0) onDone();
   };
 

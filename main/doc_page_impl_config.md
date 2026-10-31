@@ -164,7 +164,7 @@ TagsOverviewPopup...IsOn     ▌true                    —                     
 
 Every declared cell is edited in place, so when two declarations set the same key either one can be changed, and the layer still takes the value the stack order decides; the panel never guesses which declaration a change of the merged value belongs to. Component keys are shown the same way, a group of rows per component. Editing needs an environment that offers it ([the environment](doc_page_impl.md#the-environment)): on the development server a value is written in place. The write follows the rules of every yaml write of the page ([YAML utilities](doc_page_impl_yaml_utils.md)): the edit api rewrites the one value (`POST config/value` with the file, the key path inside the declaration, and the value the page displayed as base), the rest of the file, its comments and order stay, the previous file is kept beside it as `{file}.bak`, and the new configuration comes back as data; until it does the layer shows the value it just wrote. Only a key the declaration already holds can be written. A built page has no edit api, so the layer is shown but cannot be changed.
 
-TODO, not supported yet: adding a key to a declaration, removing one, and adding a declaration from the page. Until then they are written in the files.
+Adding a key to a declaration, removing one, and adding a declaration are written in the files ([TODO](doc_page_impl_TODO.md#config-declaration-edit)).
 
 ### The client layer
 

@@ -1,10 +1,12 @@
 ---
 title: Data Diagrams
-description: DiagramER draws nodes and connections on a canvas; DiagramDataverseEntity shows one Dataverse table card; both are edited visually in place or in the block popup
+description: DiagramER draws nodes and connections on a canvas; CardDiagram is the same canvas with generic cards only; DiagramDataverseEntity shows one Dataverse table card; all are edited visually in place or in the block popup
 language: en
 ---
 
 Two components share one data model and one card renderer. `DiagramER` draws **nodes** and the **connections** between their **handles** on a pannable, zoomable canvas. `DiagramDataverseEntity` shows a single Dataverse table card in the flow of the document, without a canvas. Both read YAML, both open in the block popup, and both are edited visually in place: cells, rows, columns, handles, connections and node positions.
+
+These components are not part of the doc page package: they come from the package **cloud-dev-vis** (`package/cloud-dev-vis/` of the project), which the workspace imports (`packageList` in `workspace.yaml`). Each diagram component has a fixed **node registry**: the node types it can draw and offers to create. `DiagramER` (and `DiagramPowerAutomate`, `DiagramBusinessRule`) use the registry of the Power Platform series; [`CardDiagram`](#card-diagram) uses the one of the base series, generic tables and operators only.
 
 <!--renderComp=DiagramText-->
 ```text
@@ -388,6 +390,50 @@ connections:
     style: { strokeDasharray: "4 3" }
 ```
 
+<!--renderComp=Anchor,id=card-diagram-->
+## Card Diagram: Generic Cards Only
+
+`CardDiagram` is the canvas of the base series of cloud-dev-vis, on which the other diagram components are built. Its node registry holds two kinds: the generic `table` (any number of fields and rows) and the `operator`. Its create panel offers only those and a connection, and a node of another series is refused with the types it knows: a `dataverse-table` node in a `CardDiagram` is an error, not a Dataverse card. The grammar is the one of `DiagramER`.
+
+<!--renderComp=CardDiagram,title=Normalize email-->
+```yaml
+version: 1
+viewport:
+  size: { height: 360 }
+nodes:
+  - id: source
+    renderer: { type: table }
+    position: { x: 0, y: 40 }
+    data:
+      name: Source
+      fields: [{ id: name, label: Name }, { id: value, label: Value }]
+      rows:
+        - { id: email, name: Email, value: text }
+        - { id: phone, name: Phone, value: text }
+    handles:
+      - { id: email-out, direction: out, anchor: { target: row/email, side: right } }
+  - id: normalize
+    renderer: { type: operator }
+    position: { x: 440, y: 70 }
+    data: { label: Normalize, description: Trim and lower-case }
+    handles:
+      - { id: in, direction: in, anchor: { side: left } }
+      - { id: out, direction: out, anchor: { side: right } }
+  - id: target
+    renderer: { type: table }
+    position: { x: 760, y: 40 }
+    data:
+      name: Target
+      fields: [{ id: name, label: Name }, { id: value, label: Value }]
+      rows:
+        - { id: email, name: Email, value: "text, lower case" }
+    handles:
+      - { id: email-in, direction: in, anchor: { target: row/email, side: left } }
+connections:
+  - { id: source-normalize, source: { nodeId: source, handleId: email-out }, target: { nodeId: normalize, handleId: in } }
+  - { id: normalize-target, source: { nodeId: normalize, handleId: out }, target: { nodeId: target, handleId: email-in } }
+```
+
 <!--renderComp=Anchor,id=diagram-er-layout-->
 ## Automatic Layout and Viewport
 
@@ -572,7 +618,7 @@ The words are the card's own: the rows of a Dataverse table are its *Columns*, o
 
 ### Creating nodes and connections
 
-- **Double-click empty canvas**, or press **+** in the floating bar, to open the create panel at that point: a search field over what can be added (a generic table, a Dataverse table, a Dataverse choice, an operator, a Power Automate step, a business rule, and a connection with two free ends). Type to filter, ArrowUp / ArrowDown to move, Enter to take the highlighted entry, Escape or a click outside to close.
+- **Double-click empty canvas**, or press **+** in the floating bar, to open the create panel at that point: a search field over what the node registry of the component can add, and a connection with two free ends. In `DiagramER` these are a generic table, an operator, a Dataverse table, a Dataverse choice, a Power Automate step and a business rule; in `CardDiagram`, a generic table and an operator. Type to filter, ArrowUp / ArrowDown to move, Enter to take the highlighted entry, Escape or a click outside to close.
 - The new node appears at the panel's position, with an explicit position, and is focused with its edit card open. A new connection appears with both ends free and focused; drag its ends onto handles.
 - **Removing a node** (the card's tab) keeps the connections on it: their ends become free ends where the handles were. Remove the lines from their detail, or from the **Lines** list of a card, when they are not wanted.
 

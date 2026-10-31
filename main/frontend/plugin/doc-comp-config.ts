@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readYaml, type EntryFileSection } from './doc-entry.ts';
+import { docPackageCompFolderGet, type DocPackageLoaded } from './doc-package.ts';
 import { problemListReport } from './doc-service-server.ts';
 
 // The components of a doc page (design:
@@ -35,6 +36,15 @@ import { problemListReport } from './doc-service-server.ts';
 //                                        # optional: an export of the same module holding the
 //                                        #   options of compDefine(Comp, options) when the export
 //                                        #   is a plain component
+//       dependencyCollect: { entry: ./StockTableSource.js, export: stockTableDependenciesCollect }
+//                                        # optional: the build-time extractor of what a block
+//                                        #   refers to (registry-source-dependency.js), in a
+//                                        #   module free of React and browser apis
+//
+// a package (doc-package.ts) carries components the same way, in its fixed
+// folder comp-mdx/, and the default id of its entries is
+// {packageName}/{tagName}. the doc pages are read first, then the packages,
+// so a doc page's own tag name wins over a package's.
 //
 // a mapping without compList is one entry. every problem is reported with
 // the file and the place ([doc-comp] ...), and skips that entry, never the
@@ -55,7 +65,7 @@ export const COMP_GROUP_DEPTH_MAX = 8;
 
 const TAG_NAME_REGEX = /^[A-Za-z][A-Za-z0-9_]*$/;
 const EXPORT_NAME_REGEX = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const ENTRY_KEY_LIST = ['tagName', 'id', 'entry', 'export', 'defineOptionsExport'];
+const ENTRY_KEY_LIST = ['tagName', 'id', 'entry', 'export', 'defineOptionsExport', 'dependencyCollect'];
 
 // what the reader needs of a loaded doc page (DocPageLoaded has it)
 export type CompDocPageInput = {
@@ -68,7 +78,10 @@ export type CompDocPageInput = {
 // one component a doc page mounts, as the plugin knows it; the virtual
 // module adds the imported module
 export type CompMount = {
+  // the doc page declaring it, or '' for a package
   docPageAlias: string;
+  // the package declaring it, or '' for a doc page
+  packageName: string;
   tagName: string;
   id: string;
   export: string;
@@ -78,9 +91,15 @@ export type CompMount = {
   entryFile: string;
   // the manifest it is declared in, absolute
   manifestFile: string;
+  // the build-time extractor of the dependencies of a block, absolute;
+  // undefined when the entry names none. never sent to the page
+  dependencyCollect?: { entryFile: string; export: string };
 };
 
+// the component folders of a doc page or of a package (kind; alias is
+// then the package name)
 export type CompDocPage = {
+  kind: 'docPage' | 'package';
   alias: string;
   entryFile: string;
   dirPage: string;
@@ -109,22 +128,26 @@ export function compConfigFileGet(input: Pick<CompDocPageInput, 'entryFile' | 'c
   return input.comp ? path.resolve(dirEntry, input.comp.file) : path.join(dirEntry, COMP_CONFIG_FILE_NAME);
 }
 
-// the components of every doc page the page loads, in loading order. a tag
-// name declared by two doc pages belongs to the first loaded (reported);
-// an id likewise
-export function compConfigOfDocPageListGet(docPageInputList: CompDocPageInput[], configDir: string): CompConfig {
+// the components of every doc page the page loads, in loading order, then
+// those of the packages, in loading order (a package after the packages it
+// needs). a tag name declared twice belongs to the first loaded
+// (reported); an id likewise
+export function compConfigOfDocPageListGet(docPageInputList: CompDocPageInput[], configDir: string, packageList: DocPackageLoaded[] = []): CompConfig {
   const docPageList: CompDocPage[] = [];
   const mountList: CompMount[] = [];
   const mountByTagName = new Map<string, CompMount>();
   const mountById = new Map<string, CompMount>();
-  for (const input of docPageInputList) {
-    if (input.comp === false) continue;
-    const docPage = compDocPageRead(input, configDir);
+  const ownerReadList = [
+    ...docPageInputList.filter((input) => input.comp !== false).map((input) => () => compDocPageRead(input, configDir)),
+    ...packageList.map((item) => () => compPackageRead(item, configDir)),
+  ];
+  for (const ownerRead of ownerReadList) {
+    const docPage = ownerRead();
     for (const mount of docPage.mountList) {
       const mountSameTag = mountByTagName.get(mount.tagName);
       if (mountSameTag) {
         docPage.problemList.push(
-          `${pathRelativeGet(mount.manifestFile, configDir)}: the tag name ${mount.tagName} is declared by doc page "${mountSameTag.docPageAlias}" already`
+          `${pathRelativeGet(mount.manifestFile, configDir)}: the tag name ${mount.tagName} is declared by ${mountOwnerText(mountSameTag)} already`
             + ` (${pathRelativeGet(mountSameTag.manifestFile, configDir)}); the first loaded is kept`,
         );
         continue;
@@ -133,7 +156,7 @@ export function compConfigOfDocPageListGet(docPageInputList: CompDocPageInput[],
       if (mountSameId) {
         docPage.problemList.push(
           `${pathRelativeGet(mount.manifestFile, configDir)}: the id ${mount.id} is declared for the tag ${mountSameId.tagName}`
-            + ` of doc page "${mountSameId.docPageAlias}" already (${pathRelativeGet(mountSameId.manifestFile, configDir)}); the first loaded is kept`,
+            + ` of ${mountOwnerText(mountSameId)} already (${pathRelativeGet(mountSameId.manifestFile, configDir)}); the first loaded is kept`,
         );
         continue;
       }
@@ -147,10 +170,38 @@ export function compConfigOfDocPageListGet(docPageInputList: CompDocPageInput[],
   return { docPageList, mountList };
 }
 
+function mountOwnerText(mount: CompMount): string {
+  return mount.packageName ? `package "${mount.packageName}"` : `doc page "${mount.docPageAlias}"`;
+}
+
+// the component folder and manifests of one package: its comp-mdx/, no
+// config to read. its config file stands for the comp config file, so a
+// change of it regenerates the manifest of the page
+export function compPackageRead(loaded: DocPackageLoaded, configDir: string): CompDocPage {
+  const docPage: CompDocPage = {
+    kind: 'package',
+    alias: loaded.name,
+    entryFile: loaded.configFile,
+    dirPage: loaded.dir,
+    configFile: loaded.configFile,
+    isConfigFileExists: true,
+    folderList: [docPackageCompFolderGet(loaded)],
+    manifestFileList: [],
+    mountList: [],
+    problemList: [],
+  };
+  for (const manifestFile of compManifestFileListFind(docPage.folderList[0])) {
+    docPage.manifestFileList.push(manifestFile);
+    compManifestRead(manifestFile, { kind: 'package', name: loaded.name }, configDir, docPage);
+  }
+  return docPage;
+}
+
 // the component folders and manifests of one doc page (pure: nothing is created)
 export function compDocPageRead(input: CompDocPageInput, configDir: string): CompDocPage {
   const configFile = compConfigFileGet(input);
   const docPage: CompDocPage = {
+    kind: 'docPage',
     alias: input.alias,
     entryFile: input.entryFile,
     dirPage: input.dirPage,
@@ -193,7 +244,7 @@ export function compDocPageRead(input: CompDocPageInput, configDir: string): Com
   for (const folderAbs of docPage.folderList) {
     for (const manifestFile of compManifestFileListFind(folderAbs)) {
       docPage.manifestFileList.push(manifestFile);
-      compManifestRead(manifestFile, input, configDir, docPage);
+      compManifestRead(manifestFile, { kind: 'docPage', name: input.alias }, configDir, docPage);
     }
   }
   return docPage;
@@ -219,7 +270,10 @@ function compManifestFileListFind(folderAbs: string): string[] {
 
 // one manifest: its entries appended to the doc page's mounts, its problems
 // to the doc page's list, each naming the file and the place
-function compManifestRead(manifestFile: string, input: CompDocPageInput, configDir: string, docPage: CompDocPage) {
+// owner: the doc page (its alias) or the package (its name) the manifest belongs to
+type CompOwner = { kind: 'docPage' | 'package'; name: string };
+
+function compManifestRead(manifestFile: string, owner: CompOwner, configDir: string, docPage: CompDocPage) {
   const place = pathRelativeGet(manifestFile, configDir);
   let content: any;
   try {
@@ -245,7 +299,7 @@ function compManifestRead(manifestFile: string, input: CompDocPageInput, configD
   const dirBase = path.dirname(manifestFile);
   entryList.forEach((item: any, index: number) => {
     const placeEntry = content.compList !== undefined ? `${place} compList[${index}]` : place;
-    const mount = compMountRead(item, dirBase, input.alias, manifestFile, docPage.problemList, placeEntry);
+    const mount = compMountRead(item, dirBase, owner, manifestFile, docPage.problemList, placeEntry);
     if (!mount) return;
     const mountSameTag = docPage.mountList.find((mountKept) => mountKept.tagName === mount.tagName);
     if (mountSameTag) {
@@ -261,7 +315,7 @@ function compManifestRead(manifestFile: string, input: CompDocPageInput, configD
   });
 }
 
-function compMountRead(item: any, dirBase: string, docPageAlias: string, manifestFile: string, problemList: string[], place: string): CompMount | undefined {
+function compMountRead(item: any, dirBase: string, owner: CompOwner, manifestFile: string, problemList: string[], place: string): CompMount | undefined {
   if (!item || typeof item !== 'object' || Array.isArray(item)) {
     problemList.push(`${place}: an entry is a mapping { tagName, id?, entry, export?, defineOptionsExport? }`);
     return undefined;
@@ -284,7 +338,7 @@ function compMountRead(item: any, dirBase: string, docPageAlias: string, manifes
     problemList.push(`${place}: entry of ${tagName} not found: ${entryWritten}`);
     return undefined;
   }
-  let id = `${docPageAlias}/${tagName}`;
+  let id = `${owner.name}/${tagName}`;
   if (item.id !== undefined) {
     if (typeof item.id !== 'string' || item.id.trim() === '') {
       problemList.push(`${place}: id of ${tagName} must be a non-empty string`);
@@ -308,7 +362,27 @@ function compMountRead(item: any, dirBase: string, docPageAlias: string, manifes
     }
     defineOptionsExport = item.defineOptionsExport.trim();
   }
-  return { docPageAlias, tagName, id, export: exportName, defineOptionsExport, entryFile, manifestFile };
+  let dependencyCollect: CompMount['dependencyCollect'];
+  if (item.dependencyCollect !== undefined) {
+    const value = item.dependencyCollect;
+    const collectEntry = typeof value?.entry === 'string' ? value.entry.trim() : '';
+    const collectExport = typeof value?.export === 'string' ? value.export.trim() : '';
+    if (!value || typeof value !== 'object' || Array.isArray(value) || collectEntry === '' || !EXPORT_NAME_REGEX.test(collectExport)) {
+      problemList.push(`${place}: dependencyCollect of ${tagName} is { entry, export }, the module relative to the manifest and its export`);
+      return undefined;
+    }
+    const collectFile = path.resolve(dirBase, collectEntry);
+    if (!fs.existsSync(collectFile) || !fs.statSync(collectFile).isFile()) {
+      problemList.push(`${place}: dependencyCollect entry of ${tagName} not found: ${collectEntry}`);
+      return undefined;
+    }
+    dependencyCollect = { entryFile: collectFile, export: collectExport };
+  }
+  return {
+    docPageAlias: owner.kind === 'docPage' ? owner.name : '',
+    packageName: owner.kind === 'package' ? owner.name : '',
+    tagName, id, export: exportName, defineOptionsExport, entryFile, manifestFile, dependencyCollect,
+  };
 }
 
 // ---------- what is never a document ----------

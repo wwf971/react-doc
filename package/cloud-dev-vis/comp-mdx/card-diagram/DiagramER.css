@@ -1,0 +1,480 @@
+/* the outer box of the block (BlockPopupSurface) carries the margins of the
+   diagram and of the standalone card; their own boxes have none, so they
+   sit flush in the block popup and the geometry lock of an edit session
+   measures the block from the outer box (doc_page_impl_mdx_comp_block.md) */
+.doc-er-diagram-shell,
+.doc-vis-card-shell {
+	margin: 1rem 0 1.5rem;
+}
+
+.doc-er-diagram {
+	position: relative;
+	width: 100%;
+	height: var(--doc-er-diagram-height, 620px);
+	margin: 0;
+	overflow: hidden;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.5rem;
+	background: var(--color-fd-background);
+}
+
+.doc-er-diagram-viewport,
+.doc-er-diagram-viewport > div {
+	width: 100%;
+	height: 100%;
+}
+
+/* in the block popup the diagram fills the dialog, whatever its height in
+   the page; the editor root around it is a column that lets it grow */
+.doc-er-diagram.is-popup {
+	flex: 1 1 auto;
+	min-height: 0;
+	height: 100%;
+	border: 0;
+	border-radius: 0;
+}
+
+.doc-block-popup-content > .doc-vis-edit.is-popup {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+	flex-direction: column;
+}
+
+.doc-er-diagram-flow .react-flow__node-visualizationNode {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+}
+
+.doc-er-table {
+	width: 100%;
+	box-sizing: border-box;
+	overflow: visible;
+	border: 1px solid color-mix(in srgb, var(--color-fd-foreground) 24%, var(--color-fd-border));
+	border-radius: 0.45rem;
+	background: var(--color-fd-background);
+	box-shadow: 0 4px 14px rgb(15 23 42 / 9%);
+	color: var(--color-fd-foreground);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.doc-er-table-title {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.4rem 0.75rem;
+	border-bottom: 1px solid var(--color-fd-border);
+	border-radius: 0.4rem 0.4rem 0 0;
+	background: color-mix(in srgb, #2563eb 10%, var(--color-fd-background));
+	font-size: 0.9rem;
+	font-weight: 700;
+}
+
+.doc-er-table-title-logical {
+	color: var(--color-fd-muted-foreground);
+	font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+	font-size: 0.76rem;
+	font-weight: 500;
+}
+
+.doc-er-table-title-name {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+}
+
+.doc-er-table:not(.is-choice) .doc-er-table-title {
+	padding: 0.2rem 0.65rem;
+}
+
+/* conceptual global-choice node: table-shaped reference, visually distinct
+   from a physical table through a dashed border and its own title color. */
+.doc-er-table.is-choice {
+	border-style: dashed;
+	border-color: color-mix(in srgb, #7c3aed 48%, var(--color-fd-border));
+}
+
+.doc-er-table.is-choice .doc-er-table-title {
+	background: color-mix(in srgb, #7c3aed 10%, var(--color-fd-background));
+	color: color-mix(in srgb, #7c3aed 62%, var(--color-fd-foreground));
+}
+
+.doc-er-table-badge {
+	padding: 0.1rem 0.3rem;
+	border: 1px solid color-mix(in srgb, #7c3aed 42%, var(--color-fd-border));
+	border-radius: 0.3rem;
+	background: color-mix(in srgb, #7c3aed 14%, var(--color-fd-background));
+	color: color-mix(in srgb, #7c3aed 72%, var(--color-fd-foreground));
+	font-size: 0.6rem;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+.doc-er-table-description {
+	padding: 0.4rem 0.75rem;
+	border-bottom: 1px solid var(--color-fd-border);
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.68rem;
+	line-height: 1.45;
+	user-select: text;
+}
+
+.doc-er-table-column-header,
+.doc-er-table-column {
+	display: grid;
+	/* the same grid in reading and in editing: a cell becoming editable
+	   never changes a column's width or the card's height. the variant
+	   sets the columns (TableCard columnsStyle) */
+	grid-template-columns: var(--doc-card-columns, repeat(4, minmax(0, 1fr)));
+	align-items: center;
+}
+
+.doc-er-table-column-header {
+	border-bottom: 1px solid var(--color-fd-border);
+	background: color-mix(in srgb, var(--color-fd-muted) 62%, transparent);
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.64rem;
+	font-weight: 700;
+	text-transform: uppercase;
+}
+
+.doc-er-table-column-header > span,
+.doc-er-table-column > span {
+	position: relative;
+	min-width: 0;
+	padding: 0.35rem 0.45rem;
+	overflow-wrap: anywhere;
+}
+
+.doc-er-table-column-header > span {
+	padding-top: 0.3rem;
+	padding-bottom: 0.3rem;
+}
+
+.doc-er-table-column-header > span + span,
+.doc-er-table-column > span + span {
+	border-left: 1px solid color-mix(in srgb, var(--color-fd-border) 72%, transparent);
+}
+
+.doc-er-table-column {
+	position: relative;
+	min-height: 2rem;
+	border-bottom: 1px solid color-mix(in srgb, var(--color-fd-border) 78%, transparent);
+	font-size: 0.72rem;
+	line-height: 1.3;
+	user-select: text;
+}
+
+.doc-er-table-column:last-child {
+	border-bottom: 0;
+}
+
+.doc-er-table-key {
+	color: var(--color-fd-muted-foreground);
+	font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+	font-size: 0.65rem;
+	font-weight: 700;
+	text-align: left;
+}
+
+.doc-er-table-key.is-set {
+	color: #b45309;
+}
+
+.doc-er-table-column-name {
+	font-weight: 600;
+}
+
+.doc-er-table-column-name sup {
+	margin-left: 0.15rem;
+	color: #b45309;
+}
+
+.doc-vis-node {
+	position: relative;
+	width: 100%;
+}
+
+.doc-vis-node-content {
+	width: 100%;
+	height: 100%;
+	overflow: auto;
+}
+
+.doc-vis-node.is-height-auto > .doc-vis-node-content {
+	height: auto;
+	overflow: visible;
+}
+
+.doc-vis-node-error {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	padding: 0.2rem 0.4rem;
+	border-top: 1px solid color-mix(in srgb, #b42318 40%, var(--color-fd-border));
+	background: color-mix(in srgb, #b42318 8%, var(--color-fd-background));
+	color: #b42318;
+	font-size: 0.68rem;
+}
+
+.doc-vis-operator {
+	box-sizing: border-box;
+	display: grid;
+	gap: 0.3rem;
+	min-height: 64px;
+	padding: 0.6rem 0.75rem;
+	border: 1px solid color-mix(in srgb, #0f766e 55%, var(--color-fd-border));
+	border-left-width: 3px;
+	border-radius: 0.45rem;
+	background: var(--color-fd-background);
+	box-shadow: 0 4px 14px rgb(15 23 42 / 9%);
+	color: var(--color-fd-foreground);
+	font-size: 0.75rem;
+	line-height: 1.4;
+}
+
+.doc-vis-operator strong {
+	font-size: 0.82rem;
+}
+
+.doc-vis-operator p {
+	margin: 0;
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-vis-card-static {
+	max-width: 100%;
+	margin: 0;
+	overflow: auto;
+}
+
+.doc-vis-card-static.is-popup {
+	width: 100% !important;
+	padding: 1rem;
+}
+
+/* ---------- the generic card ---------- */
+
+/* a row of the card is text while reading: a drag in it selects, and the
+   wheel over it zooms the canvas like anywhere else (no nowheel) */
+.doc-card-row,
+.doc-card-head-field {
+	position: relative;
+}
+
+.doc-card-head-field {
+	display: grid;
+	grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.6fr);
+	min-height: 2rem;
+	border-bottom: 1px solid var(--color-fd-border);
+	font-size: 0.72rem;
+	line-height: 1.4;
+}
+
+.doc-card-head-field > span {
+	min-width: 0;
+	padding: 0.35rem 0.5rem;
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+}
+
+.doc-card-head-field > span + span {
+	border-left: 1px solid var(--color-fd-border);
+}
+
+.doc-card-head-label {
+	color: var(--color-fd-muted-foreground);
+	font-weight: 600;
+}
+
+/* the handles of a node: out / both in blue, in in amber. in the editor
+   they are larger, a handle with connections is filled, and the handle of
+   the selected connection is ringed */
+.doc-er-table-handle {
+	width: 9px;
+	height: 9px;
+	border: 1.5px solid #2563eb;
+	border-radius: 2px;
+	background: var(--color-fd-background);
+}
+
+.doc-er-table-handle.is-in {
+	border-color: #d97706;
+}
+
+.doc-er-table-handle.is-editable {
+	width: 11px;
+	height: 11px;
+	cursor: crosshair;
+}
+
+.doc-er-table-handle.is-occupied {
+	background: #2563eb;
+}
+
+.doc-er-table-handle.is-in.is-occupied {
+	background: #d97706;
+}
+
+.doc-er-table-handle.is-selected {
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-fd-primary) 35%, transparent);
+}
+
+/* a dangling end of a connection, and the end of a line being dragged */
+.doc-vis-edge-end {
+	fill: var(--color-fd-background);
+	stroke: #64748b;
+	stroke-width: 1.5px;
+}
+
+.doc-vis-edge-selection {
+	stroke: color-mix(in srgb, var(--color-fd-primary) 30%, transparent);
+	stroke-width: 9px;
+	stroke-linecap: round;
+}
+
+.react-flow__edge.is-selected .react-flow__edge-textbg {
+	stroke: var(--color-fd-primary);
+}
+
+.doc-er-diagram.is-editing .react-flow__edge {
+	cursor: pointer;
+}
+
+.doc-vis-connection-line path {
+	stroke-width: 1.5px;
+}
+
+.doc-vis-connection-line.is-valid path,
+.doc-vis-connection-line.is-valid .doc-vis-edge-end {
+	stroke: #16a34a;
+}
+
+.doc-vis-connection-line.is-invalid path,
+.doc-vis-connection-line.is-invalid .doc-vis-edge-end {
+	stroke: #dc2626;
+}
+
+/* the point node a dangling end rests on: no size and no pointer of its
+   own, so the anchor of the edge end below it can be dragged; in the editor
+   its dot takes the pointer and is dragged as a node, above the cards */
+.react-flow__node-visualizationPoint {
+	width: 1px;
+	height: 1px;
+	pointer-events: none !important;
+}
+
+.doc-vis-point-dot {
+	position: absolute;
+	top: 0;
+	left: 0;
+	box-sizing: border-box;
+	width: 12px;
+	height: 12px;
+	border: 1.5px solid #2563eb;
+	border-radius: 50%;
+	background: var(--color-fd-background);
+	cursor: move;
+	pointer-events: auto;
+	transform: translate(-50%, -50%);
+}
+
+.doc-vis-point-dot:hover {
+	background: color-mix(in srgb, #2563eb 20%, var(--color-fd-background));
+}
+
+.doc-vis-point,
+.doc-vis-point-handle {
+	width: 1px;
+	height: 1px;
+	min-width: 0;
+	min-height: 0;
+	border: 0;
+	background: transparent;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.doc-vis-point-handle {
+	left: 0;
+	top: 0;
+	transform: translate(-50%, -50%);
+}
+
+.react-flow__node-visualizationCreate {
+	pointer-events: none;
+}
+
+.doc-vis-create {
+	pointer-events: auto;
+}
+
+.doc-er-table-column-logical {
+	color: var(--color-fd-muted-foreground);
+	font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+	font-size: 0.66rem;
+}
+
+/* a type is a word, not an identifier: the sans font keeps "Unique
+   identifier" on one line */
+.doc-er-table-column-type {
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.68rem;
+}
+
+.doc-er-table-handle {
+	width: 9px;
+	height: 9px;
+	border: 1.5px solid #2563eb;
+	border-radius: 2px;
+	background: var(--color-fd-background);
+}
+
+.doc-er-table-handle.is-target {
+	border-color: #d97706;
+}
+
+.doc-er-diagram-flow .react-flow__edge-path {
+	stroke: color-mix(in srgb, #475569 82%, var(--color-fd-foreground));
+}
+
+.doc-er-diagram-flow .react-flow__edge-textbg {
+	fill: var(--color-fd-background);
+	stroke: var(--color-fd-border);
+	stroke-width: 1px;
+}
+
+.doc-er-diagram-flow .react-flow__edge-text {
+	fill: var(--color-fd-foreground);
+}
+
+.doc-er-diagram-flow .react-flow__controls {
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.4rem;
+	overflow: hidden;
+	background: var(--color-fd-background);
+	box-shadow: 0 2px 8px rgb(15 23 42 / 10%);
+}
+
+.doc-er-diagram-message {
+	display: flex;
+	width: 100%;
+	height: 100%;
+	align-items: center;
+	justify-content: center;
+	padding: 1rem;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.875rem;
+}
+
+.doc-er-diagram-message.is-error {
+	flex-direction: column;
+	gap: 0.35rem;
+	color: #b42318;
+}

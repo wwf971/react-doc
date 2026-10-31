@@ -503,11 +503,12 @@ export class DocServiceStore {
   // into a folder of the instance's own, and records the template in it.
   // the instance folder is that of the doc page named (docPageAlias), else
   // of the template's own doc page, else the backend's default; an instance
-  // of a built-in template (shipped by the package, of no doc page) goes to
-  // the page's main doc page unless told otherwise
+  // of a built-in template (shipped by the package, of no doc page) or of a
+  // template of a package the workspace imports goes to the page's main doc
+  // page unless told otherwise
   async instanceCreate(input: { templateId: string; name: string; description?: string; config?: Record<string, any>; docPageAlias?: string }): Promise<ServiceResult> {
     const template = this.templateGet(input.templateId);
-    const docPageAlias = input.docPageAlias ?? (template?.origin?.kind === 'builtIn' ? this.docPageAliasMain : '');
+    const docPageAlias = input.docPageAlias ?? (['builtIn', 'package'].includes(template?.origin?.kind) ? this.docPageAliasMain : '');
     const result = await this.settingsWrite('create', () => this.backend!.instanceCreate({
       templateId: input.templateId,
       name: input.name,

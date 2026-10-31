@@ -151,7 +151,7 @@ The edit layer's own per-block memory, the view mode a reader picked for a block
 ## Extending the layer
 
 - **An anchor as a key.** A block whose `Anchor` id the boundary knows (through the block model, which a scan already finds for the usage index) would be keyed `anchor:{docPath}#{id}` between the id prop and the place, stable across edits like an id and declared outside the marker.
-- **Two tabs, one page.** Tabs of one `DocPageMdx` share its stores and need nothing. Tabs that are separate pages (two browser tabs) would need the state objects of one key to be kept in step through a channel (`BroadcastChannel`, a websocket), which is also the channel the TODO subscriptions of the event layer would use ([Extending the layer](doc_page_impl_event.md#extending-the-layer)); the key format is already the address.
+- **Two tabs, one page.** Tabs of one `DocPageMdx` share its stores and need nothing. Tabs that are separate pages (two browser tabs) would need the state objects of one key to be kept in step through a channel (`BroadcastChannel`, a websocket), which is also the channel subscriptions of the event layer would use; the key format is already the address ([TODO](doc_page_impl_TODO.md#state-two-tabs)).
 - **A state that outlives the page.** A state object marked persistent could be written to the client config layer under its key and read back on the first ask; the key rule gives it a stable name only for asset and id keys, so persistence would be offered for those.
 
 ## Files

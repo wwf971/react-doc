@@ -1,0 +1,4 @@
+/* the accent colors of the Power Platform resource families on the resource
+   card of the base series (ResourceNodeCard.css) */
+.doc-resource-card.is-flow { --resource-accent: #0f766e; }
+.doc-resource-card.is-rule { --resource-accent: #b45309; }

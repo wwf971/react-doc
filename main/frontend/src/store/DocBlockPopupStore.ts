@@ -12,8 +12,12 @@ import { COMP_EDIT_MODE_SOURCE_ID } from '../../../comp-doc/registry/comp-expose
 // this store owns everything else, the same for every component:
 //
 //   popup          the open popup, or undefined. one at a time.
-//     key          the block's identity: document, marker line, component
-//     path         the document of the block
+//     key          the block's identity: document, marker line, component;
+//                  or, for a surface outside the documents (a canvas of a
+//                  settings panel), the key the surface gives: `panel:{id}`
+//     isDocBlock   a block of a document (View / Edit offered); false for a
+//                  surface outside the documents, which is only shown
+//     path         the document of the block ('' outside the documents)
 //     sourceLine   the line of the block's marker comment (DocComp sourceLine)
 //     compId       the component of the block
 //     title        the dialog title
@@ -40,6 +44,7 @@ export type BlockPopupTransition = 'idle' | 'entering' | 'leaving' | 'canceling'
 
 export type BlockPopup = {
   key: string;
+  isDocBlock: boolean;
   path: string;
   sourceLine: number;
   compId: string;
@@ -53,6 +58,8 @@ export type BlockPopup = {
 };
 
 export type BlockPopupOpenRequest = {
+  // a surface outside the documents names its popup itself (blockPopupPanelKeyBuild)
+  key?: string;
   path: string;
   sourceLine: number;
   compId: string;
@@ -75,6 +82,11 @@ type BlockPopupStores = {
   sourceStore: Pick<DocSourceStore, 'configDoc'>;
   assetStore?: Pick<DocAssetStore, 'isWritable' | 'writeUnavailableReason'>;
 };
+
+// the key of a surface outside the documents (BlockPopupSurface popupKey)
+export function blockPopupPanelKeyBuild(popupKey: string): string {
+  return `panel:${popupKey}`;
+}
 
 export function blockPopupKeyBuild(path: string, sourceLine: number, compId: string): string {
   return `${path}#${sourceLine}#${compId}`;
@@ -129,7 +141,8 @@ export class DocBlockPopupStore {
     if (this.popup) return;
     this.generationLast += 1;
     this.popup = {
-      key: blockPopupKeyBuild(request.path, request.sourceLine, request.compId),
+      key: request.key ?? blockPopupKeyBuild(request.path, request.sourceLine, request.compId),
+      isDocBlock: request.key === undefined,
       path: request.path,
       sourceLine: request.sourceLine,
       compId: request.compId,
@@ -235,7 +248,7 @@ export class DocBlockPopupStore {
   get editState(): BlockPopupEditState {
     const popup = this.popup;
     const editStore = this.stores.editStore;
-    if (!popup || !editStore.isAvailable) return { isOffered: false, isEnabled: false, reason: '' };
+    if (!popup || !popup.isDocBlock || !editStore.isAvailable) return { isOffered: false, isEnabled: false, reason: '' };
     if (popup.path !== this.stores.docStore.docCurrentPath || !editStore.docIsEditable(popup.path)) {
       return { isOffered: true, isEnabled: false, reason: 'This document cannot be edited here.' };
     }

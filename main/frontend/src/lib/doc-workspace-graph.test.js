@@ -46,3 +46,39 @@ test('an empty or missing workspace gives the workspace node alone', () => {
   assert.equal(graph.nodeList.length, 1);
   assert.equal(graph.edgeList.length, 0);
 });
+
+// vis is named by the workspace and needs base; app is named by the
+// workspace and needs vis: base stands above vis, vis above app
+const packageList = [
+  { name: 'base', description: '', dir: 'package/base', dependNameList: [], isWorkspaceNamed: false },
+  { name: 'vis', description: '', dir: 'package/vis', dependNameList: ['base'], isWorkspaceNamed: true },
+  { name: 'app', description: '', dir: 'package/app', dependNameList: ['vis'], isWorkspaceNamed: true },
+];
+
+test('the packages grow above the workspace, a package above every package needing it', () => {
+  const graph = workspaceGraphBuild(workspace, packageList);
+  const yById = Object.fromEntries(graph.nodeList.map((node) => [node.id, node.position.y]));
+  assert.ok(yById['package:app'] < 0);
+  assert.ok(yById['package:vis'] < yById['package:app']);
+  assert.ok(yById['package:base'] < yById['package:vis']);
+  assert.ok(yById['doc-page:guide'] > 0);
+  assert.deepEqual(graph.edgeList.filter((edge) => edge.data.kind).map((edge) => [edge.source, edge.target, edge.label, edge.sourceHandle]), [
+    ['workspace', 'package:vis', 'imports', 'up'],
+    ['package:vis', 'package:base', 'needs', 'up'],
+    ['workspace', 'package:app', 'imports', 'up'],
+    ['package:app', 'package:vis', 'needs', 'up'],
+  ]);
+  assert.equal(graph.packageCount, 3);
+  assert.deepEqual(graph.nodeList.find((node) => node.id === 'package:vis').data.neededByList, ['app']);
+});
+
+test('doc pages or packages hidden: the ones shown grow below the workspace', () => {
+  const graphPackage = workspaceGraphBuild(workspace, packageList, { isDocPageVisible: false });
+  assert.ok(graphPackage.nodeList.every((node) => node.type !== 'docPage'));
+  assert.ok(graphPackage.nodeList.filter((node) => node.type === 'package').every((node) => node.position.y > 0));
+  assert.equal(graphPackage.edgeList.every((edge) => edge.sourceHandle === 'down'), true);
+  assert.equal(graphPackage.docPageCount, 3);
+  const graphDocPage = workspaceGraphBuild(workspace, packageList, { isPackageVisible: false });
+  assert.ok(graphDocPage.nodeList.every((node) => node.type !== 'package'));
+  assert.equal(graphDocPage.edgeList.length, 4);
+});

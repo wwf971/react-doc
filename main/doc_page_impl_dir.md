@@ -62,7 +62,7 @@ folderList:
 
 Inside a component folder the components may be grouped by function, a group inside another ([Groups](#groups-in-a-component-or-template-folder)).
 
-The package's own components, the ones every doc page can use (`Tabs`, `Image`, `FileTree`, …), live in `built-in/comp-mdx/` of the project ([The built-in folder](#the-built-in-folder)); they are registered by the package itself, since the page depends on them, and a doc page's components come on top.
+The package's own components, the ones every doc page can use (`Tabs`, `Image`, `FileTree`, …), live in `built-in/comp-mdx/` of the project ([The built-in folder](#the-built-in-folder)); they are registered by the package itself, since the page depends on them, and a doc page's components come on top. Between the two come the components of the packages a workspace imports ([Packages](doc_page_impl_package.md)).
 
 ### Service folders
 
@@ -103,6 +103,28 @@ built-in/service-template-infra/
 ## The built-in folder
 
 What the package ships beside the page is laid out like the managed folders of a doc page, in `built-in/` at the root of the project: `built-in/comp-mdx/` (the package's components), `built-in/service-template-app/` and `built-in/service-template-infra/` (the service templates every backend knows: the example app service `note-db`, the built-in infra services `logging` and `sqlite`, the connections). Both are grouped by function ([Groups](#groups-in-a-component-or-template-folder)): the components in `block/` (the block components and code blocks), `diagram/`, `media/` (with `media/image/` holding `image` and `image-grid`), `hierarchy/` (the list and table hierarchies, the file tree), the components the page itself depends on (`text`, `anchor`, `tag`, `multi-lang`, `index`, …) at the top; the templates as above, and `note-db` in `notes/`. The package registers its components by import (`comp-doc/registry/registry.js`), not by manifests, so for them a group is only where the files are. The built-in folder holds templates and components only, never instances: an instance is always created in a doc page or in a folder of a backend config. The service backend finds the built-in folder beside itself; a backend config can name another (`builtIn: path`) or none (`builtIn: false`).
+
+## The package folder
+
+A package is a folder of components and service templates that a workspace imports; what a package is, how it is imported and how its components and templates join the page is in [Packages](doc_page_impl_package.md). This section is its layout. Unlike a doc page folder, nothing in it is optional or renamed by a config file: the names below are the only ones read.
+
+```text
+my-package/                      the package folder: give its path to a workspace (packageList)
+├── doc-package.yaml             its config, at this fixed name: name, description, packageDependList, all required
+├── doc/
+│   ├── README.md                its root document (required)
+│   └── xxx.md                   its other documents, one per series of components
+├── comp-mdx/                    its components: comp.yaml manifests, the grammar of a doc page's
+│   └── {series}/comp.yaml         (Component folders above), grouped by function
+├── service-template-app/        its app service templates, {templateId}--{name}/, grouped as in a doc page
+├── service-template-infra/      its infra service templates
+└── package.json                 optional: { "type": "module" }, so node reads its .js as ES modules
+```
+
+- **Required**: `doc-package.yaml` and `doc/README.md`. The three content folders may be absent (nothing of that kind), never moved.
+- **Never there**: instance folders (`service-app/`, `service-infra/`), asset folders and `.doc-page/`: a package holds no state and is not a doc page.
+
+The packages of the project live in `package/` at its root, one folder each; `package/cloud-dev-vis/` is the one the demonstration imports ([its root document](../package/cloud-dev-vis/doc/README.md)).
 
 ## Finding the entry from a folder
 
@@ -180,7 +202,7 @@ A deployment of several doc pages side by side is a workspace file, by conventio
 
 ## The demonstration doc page
 
-`example_doc/` follows the convention: its metadata is in `example_doc/.doc-page/` (an entry naming `source.yaml`, `tag.yaml`, `config.yaml` and `side-panel.yaml`, the side panels of two parts, `asset.yaml` naming its two asset folders `~example:example/asset` and `~example:example/asset-archive`, `service-backend.yaml`), its components in `example_doc/comp-mdx/` with their manifests, grouped (`comp.yaml` at the top, `panel/comp.yaml` for the side-panel item and the source link, `table/stock-table/comp.yaml` a group in a group), its own app template in a group in a group (`example_doc/service-template-app/productivity/task/`), its instances in `example_doc/service-app/`, the infra instances the kernel provisions in `example_doc/service-infra/`, and its sub document `example_doc/sub-doc/` is a doc page folder with its own `.doc-page/entry.yaml`, written inline. `workspace.yaml` at the project root names it as the first root doc page of the demonstration, under the alias `example` (`main/config.yaml` names the workspace file), beside a second one, `example_doc/second-doc/` as `second`; its side panel includes the sub document as `include: { dir: ../sub-doc, alias: sub }`, and its source rule excludes both folders (`exclude: [sub-doc/, second-doc/]`).
+`example_doc/` follows the convention: its metadata is in `example_doc/.doc-page/` (an entry naming `source.yaml`, `tag.yaml`, `config.yaml` and `side-panel.yaml`, the side panels of two parts, `asset.yaml` naming its two asset folders `~example:example/asset` and `~example:example/asset-archive`, `service-backend.yaml`), its components in `example_doc/comp-mdx/` with their manifests, grouped (`comp.yaml` at the top, `panel/comp.yaml` for the side-panel item and the source link, `table/stock-table/comp.yaml` a group in a group), its own app template in a group in a group (`example_doc/service-template-app/productivity/task/`), its instances in `example_doc/service-app/`, the infra instances the kernel provisions in `example_doc/service-infra/`, and its sub document `example_doc/sub-doc/` is a doc page folder with its own `.doc-page/entry.yaml`, written inline. `workspace.yaml` at the project root imports the package `package/cloud-dev-vis/` (whose diagrams the demonstration's documents use) and names it as the first root doc page of the demonstration, under the alias `example` (`main/config.yaml` names the workspace file), beside a second one, `example_doc/second-doc/` as `second`; its side panel includes the sub document as `include: { dir: ../sub-doc, alias: sub }`, and its source rule excludes both folders (`exclude: [sub-doc/, second-doc/]`).
 
 ## Implementation
 
@@ -193,3 +215,5 @@ A deployment of several doc pages side by side is a workspace file, by conventio
 | `service-backend/service_kernel.py` | the same service folders, read by the backend (`doc_page_service_folder_list_read`) |
 | `workspace.yaml` | the workspace file of the demonstration, at the project root |
 | `built-in/` | what the package ships: `comp-mdx/`, `service-template-app/`, `service-template-infra/` |
+| `plugin/doc-package.ts` | `PACKAGE_CONFIG_FILE_NAME`, the fixed folders of a package (the rest: [Packages](doc_page_impl_package.md#implementation)) |
+| `package/` | the packages of the project, `package/cloud-dev-vis/` the one the demonstration imports |

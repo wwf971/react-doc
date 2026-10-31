@@ -4,6 +4,7 @@ import { parse as parseYaml } from 'yaml';
 import { textHashGet } from './doc-edit-lines.ts';
 import { sourceAliasIsValid, sourcePathFullGet, sourcePathIsRooted } from '../src/lib/doc-source-path.js';
 import { excludePatternTextListRead } from './doc-source-exclude.ts';
+import { docPackageSpecListRead, type DocPackageSpec } from './doc-package.ts';
 import { sidePanelEffectiveGet, sidePanelRootHiddenApply } from './doc-sidebar-effective.ts';
 
 // The workspace, its doc pages, the entry of each and the yaml files it reaches.
@@ -228,6 +229,9 @@ export type DocWorkspaceSpec = {
   itemListWritten?: { alias?: string; dir?: string; file?: string; sidePanel?: string; isRootVisible?: boolean }[];
   // the folder the paths of the items are relative to, absolute
   dirBase?: string;
+  // the packages the workspace imports, their folders absolute
+  // (doc_page_impl_package.md)
+  packageList?: DocPackageSpec[];
 };
 
 export type DocWorkspaceLoaded = {
@@ -308,7 +312,7 @@ const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'service'
 // page (or switches the feature off), found beside the entry by convention
 const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'service', 'comp'] as const;
 const CONFIG_FILE_KEY_LIST = ['config', 'variable'];
-const WORKSPACE_FILE_KEY_LIST = ['title', 'homeDoc', 'homeItem', 'docPageList'];
+const WORKSPACE_FILE_KEY_LIST = ['title', 'homeDoc', 'homeItem', 'docPageList', 'packageList'];
 const ENTRY_FILE_SUFFIX = '-entry.yaml';
 const ENTRY_FILE_NAME = 'entry.yaml';
 
@@ -382,7 +386,7 @@ export function docWorkspaceSpecRead(workspace: any, configDir: string, configFi
   let fileHash: string | undefined;
   let dirBase = configDir;
   const placeConfig = `config "workspace" (${configFile})`;
-  if (!mappingIs(content)) throw new Error(`[doc-source] ${placeConfig} must be { file } or { docPageList, title?, homeDoc?, homeItem? }`);
+  if (!mappingIs(content)) throw new Error(`[doc-source] ${placeConfig} must be { file } or { docPageList, packageList?, title?, homeDoc?, homeItem? }`);
   if (content.file !== undefined) {
     if (typeof content.file !== 'string' || !content.file.trim() || Object.keys(content).length !== 1) {
       throw new Error(`[doc-source] ${placeConfig}: "file" names the workspace file and stands alone`);
@@ -427,6 +431,7 @@ export function docWorkspaceSpecRead(workspace: any, configDir: string, configFi
   content.docPageList.forEach((item: any, index: number) => {
     spec.docPageList.push(docPageSpecRead(item, dirBase, `${place} docPageList[${index}]`));
   });
+  spec.packageList = docPackageSpecListRead(content.packageList, dirBase, place);
   return spec;
 }
 

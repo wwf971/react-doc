@@ -20,7 +20,16 @@ Each row names a kind of change and the document that states what the result mus
 | Add a **config key** or read config | `main/doc_page_impl_config.md` |
 | Edit a **YAML file** programmatically | `main/doc_page_impl_yaml_utils.md` (never overwrite a file with re-serialized yaml) |
 | Talk to the **backend** or add a service | `main/doc_page_impl_service.md` |
-| Change the **diagram components** (DiagramER, the cards, the visual editor) | `built-in/comp-mdx/diagram/diagram-er/comp_db_vis.md` and the rules written for authors in `example_doc/mdx-usage/comp-diagram-er.md` |
+| Change the **diagram components** (DiagramER, CardDiagram, the cards, the visual editor, a node registry) | `package/cloud-dev-vis/doc/README.md` (the package, its series and **one node registry per component type: the engine in `card-diagram/` never imports a platform series**), then `card-diagram.md` / `power-platform.md` beside it, and the rules written for authors in `example_doc/mdx-usage/comp-diagram-er.md` |
+| Add or change a **package** (components and service templates a workspace imports) | `main/doc_page_impl_package.md` (its folder layout: `main/doc_page_impl_dir.md#the-package-folder`). **Its config file and folder names are fixed and every key of `doc-package.yaml` is required; there are no config overrides as for a doc page.** |
+
+## The TODO list
+
+What the design leaves for later is listed in one place, `main/doc_page_impl_TODO.md`, grouped by functional area; the design documents only point to it. Keep it that way:
+
+- **Before building**, check the list. When the request matches an item there, say which item, and ask the user to confirm that it is what they mean before starting.
+- **After building**, compare the result with the item: remove an item the work fully implements (its design now belongs in the design document, as what exists), and rewrite an item it implements in part so that it says what is still missing.
+- A new gap found while working goes into the list under its group, never as a TODO paragraph in a design document.
 
 ## Existing service layers
 
@@ -54,11 +63,13 @@ Some features already implemented which you can utilize in case you need. Check 
 
 - **Tag system**: Maintains an internal representation of every tag declared on source rules and side-panel items, queried through a tag service. Displays tags on side-panel items, beside links, in text and in a tag overview. Refer to `main/doc_page_impl_tag.md`.
 
-- **Config system**: Maintains an internal representation of the config values of the page and of components, stacked by level: config layers (the package default, the doc page's own declarations, the browser) around the document levels (source rules, side panel, frontmatter); more layers can be inserted. Read through a config service; the settings panel shows what each layer declares and edits the doc page declarations in place. A component can declare its own keys. Refer to `main/doc_page_impl_config.md`; the doc page folder convention (metadata in `.doc-page/`, a doc page named by its folder, its managed folders for assets, components and services, and the built-in folder of the package) is in `main/doc_page_impl_dir.md`.
+- **Config system**: Maintains an internal representation of the config values of the page and of components, stacked by level: config layers (the package default, the doc page's own declarations, the browser) around the document levels (source rules, side panel, frontmatter); more layers can be inserted. Read through a config service; the settings panel shows what each layer declares and edits the doc page declarations in place. A component can declare its own keys. Refer to `main/doc_page_impl_config.md`; the doc page folder convention (metadata in `.doc-page/`, a doc page named by its folder, its managed folders for assets, components and services, and the built-in folder of the package, and the packages a workspace imports) is in `main/doc_page_impl_dir.md`.
 
 - **Navigation**: Maintains the current location (route, document, fragment) and its history as the single place to change it from. Provides the link / target grammar, anchors and aliases, back / forward / up, and a navigation channel for hosted indexes. Refer to `main/doc_page_impl_nav.md`.
 
-- **Component registry and MDX components**: How a component is defined and registered (render, placements, exposed meta / icon / modes / config keys), the comment-marked block form for graceful degradation, data reuse between blocks, rendering markdown inside a component, and the components a doc page carries in its own folder (`comp-mdx/` with `comp.yaml` manifests), mounted into the registry when the doc page is loaded. Refer to `main/doc_page_impl_mdx_comp.md`, and `main/doc_page_impl_mdx_li.md` for components inside list items.
+- **Packages**: Folders of components and service templates, with documents of their own, that a workspace imports by folder (`packageList`), with the packages they need; their config file and folders have fixed names and nothing is optional. Their components are mounted like a doc page's (ids `{packageName}/{tagName}`), their templates join the service registry (origin `package`), and the Workspace tab draws them above the workspace. Refer to `main/doc_page_impl_package.md`.
+
+- **Component registry and MDX components**: How a component is defined and registered (render, placements, exposed meta / icon / modes / config keys), the comment-marked block form for graceful degradation, data reuse between blocks, rendering markdown inside a component, and the components a doc page carries in its own folder (`comp-mdx/` with `comp.yaml` manifests), mounted into the registry when the doc page is loaded; the components of the packages a workspace imports are mounted the same way. Refer to `main/doc_page_impl_mdx_comp.md`, and `main/doc_page_impl_mdx_li.md` for components inside list items.
 
 - **Multilingual content**: Per-language headings, paragraphs, lists and the multi-lang block, with one language preference across the page. Refer to `main/doc_page_impl_multi-lang.md`.
 

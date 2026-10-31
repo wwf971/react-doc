@@ -176,7 +176,7 @@ test('the sync body lists every loaded doc page with its service file when it ex
 
 // the sync route against a backend stub: the request body is ignored, the
 // body sent is built from the getter at request time
-test('POST /registry/docpage/sync forwards the loaded doc pages, reads the list at request time, and answers -5 when down', async () => {
+test('POST /registry/docpage/sync forwards the loaded doc pages and packages, reads the list at request time, and answers -5 when down', async () => {
   const received = [];
   const backend = http.createServer((req, res) => {
     let text = '';
@@ -194,6 +194,7 @@ test('POST /registry/docpage/sync forwards the loaded doc pages, reads the list 
     endpoint: '/__doc-service',
     backendUrlGet: () => `http://127.0.0.1:${port}`,
     docPageListGet: () => docPageList,
+    packageListGet: () => [{ name: 'vis', dir: '/x/package/vis' }],
   });
   const request = (url, body) => new Promise((resolve) => {
     const req = new EventEmitter();
@@ -215,7 +216,7 @@ test('POST /registry/docpage/sync forwards the loaded doc pages, reads the list 
     const first = await request('/__doc-service/registry/docpage/sync', '{"ignored": true}');
     assert.equal(first.status, 200);
     assert.deepEqual(first.body, { code: 0, data: { count: 1 } });
-    assert.deepEqual(received[0], { url: '/registry/docpage/sync', body: { docPageList: [{ alias: 'a', dir: '/x/a', serviceFile: '' }] } });
+    assert.deepEqual(received[0], { url: '/registry/docpage/sync', body: { docPageList: [{ alias: 'a', dir: '/x/a', serviceFile: '' }], packageList: [{ name: 'vis', dir: '/x/package/vis' }] } });
     // the workspace changed: the next sync carries the current list
     docPageList = [...docPageList, { alias: 'b', dir: '/x/b', serviceFile: '/x/b/.doc-page/service.yaml' }];
     const second = await request('/__doc-service/registry/docpage/sync', '');

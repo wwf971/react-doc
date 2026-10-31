@@ -8,45 +8,42 @@
 
 /* the component's content is a stacking context of its own, below the open
    button: an engine's layers (Univer positions its canvas and ui layers
-   with z-indexes) stay inside it and never cover the button */
+   with z-indexes) stay inside it and never cover the toolbar */
 .doc-block-popup-inline {
   position: relative;
   z-index: 0;
 }
 
-/* hidden until the block is hovered or holds the focus, like the toolbar of
-   an image; it does not catch the pointer while hidden */
-.doc-block-popup-open {
+/* the toolbar of a surface: the component's block actions and the open
+   button, in one .doc-button-group (button.css), so every button has one
+   size. in the page it is hidden until the block is hovered or holds the
+   focus, like the toolbar of an image, and does not catch the pointer while
+   hidden; in the popup it stands at the top right of the slot */
+.doc-block-toolbar {
+  --doc-button-group-height: 1.6rem;
   position: absolute;
   z-index: 1;
   top: 0.25rem;
   right: 0.25rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.2rem;
-  border: 1px solid var(--color-fd-border);
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--color-fd-background) 92%, transparent);
-  color: var(--color-fd-muted-foreground);
-  cursor: pointer;
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
 }
 
-.doc-block-popup-surface:hover > .doc-block-popup-open,
-.doc-block-popup-surface:focus-within > .doc-block-popup-open,
-.doc-block-popup-open:focus-visible {
-  opacity: 1;
-  pointer-events: auto;
+.doc-block-toolbar > button {
+  box-sizing: border-box;
+  width: 1.65rem;
+  min-width: 0;
+  padding: 0;
 }
 
-.doc-block-popup-open:hover,
-.doc-block-popup-open:focus-visible {
-  background: var(--color-fd-accent);
-  color: var(--color-fd-accent-foreground);
-  outline: none;
+.doc-block-popup-surface:hover > .doc-block-toolbar,
+.doc-block-popup-surface:focus-within > .doc-block-toolbar,
+.doc-block-popup-slot:hover > .doc-block-toolbar,
+.doc-block-popup-slot:focus-within > .doc-block-toolbar,
+.doc-block-toolbar:focus-within {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* the place the block keeps while it is in the popup */
@@ -83,6 +80,7 @@
 }
 
 .doc-block-popup-slot {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   min-height: 0;

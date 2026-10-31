@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
 import { Expand } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
-import { blockPopupKeyBuild } from '../../frontend/src/store/DocBlockPopupStore.js';
+import { blockPopupKeyBuild, blockPopupPanelKeyBuild } from '../../frontend/src/store/DocBlockPopupStore.js';
 import { DocEditBlockFloatContext } from '../edit/DocEditDocContext.js';
 import './DocBlockPopup.css';
 
@@ -22,6 +22,17 @@ import './DocBlockPopup.css';
 //               block's margins (the component's own root has none, so it
 //               sits flush in the popup)
 //   children    a render function: isInPopup tells it to fill the popup
+//   popupKey    optional: makes a surface outside the documents (a canvas of
+//               the settings panel) open in the popup too, under this id;
+//               it is only shown there, without View / Edit, and config
+//               may then be empty
+//   actionList  optional: the component's own block actions (copy the
+//               source, download ...): [{ id, label, Icon, onClick }]. they
+//               are drawn in the one toolbar of the surface, beside the
+//               open button, in the page and in the popup alike, so a
+//               component never draws a floating button group of its own
+//               next to the surface's (which is how two such groups ended
+//               up with different sizes and hand-tuned offsets)
 //
 // the children are rendered once, into a container element of their own,
 // and that element is moved between the page and the popup: the component
@@ -33,7 +44,7 @@ import './DocBlockPopup.css';
 // the popup is offered for a block of the document that the host can show
 // a panel for (compConfigHost.panelComponent); elsewhere the surface renders
 // its children in place.
-export const BlockPopupSurface = observer(function BlockPopupSurface({ config = {}, title = '', className = '', children }) {
+export const BlockPopupSurface = observer(function BlockPopupSurface({ config = {}, title = '', className = '', actionList = [], popupKey = '', children }) {
   const { blockPopupStore, compConfigHost } = useDocStores();
   const floatElementOuter = useContext(DocEditBlockFloatContext);
   const shellRef = useRef(null);
@@ -42,10 +53,12 @@ export const BlockPopupSurface = observer(function BlockPopupSurface({ config = 
   const [container] = useState(() => (typeof document === 'undefined' ? null : containerCreate()));
   const [token, tokenSet] = useState(0);
   const isOffered = Boolean(compConfigHost.panelComponent && blockPopupStore)
-    && config.placement === 'commentBlock'
-    && Number.isFinite(config.sourceLine)
-    && Boolean(config.sourcePath);
-  const key = isOffered ? blockPopupKeyBuild(config.sourcePath, config.sourceLine, config.compId) : '';
+    && (popupKey !== '' || (config.placement === 'commentBlock'
+      && Number.isFinite(config.sourceLine)
+      && Boolean(config.sourcePath)));
+  const key = !isOffered ? ''
+    : popupKey !== '' ? blockPopupPanelKeyBuild(popupKey)
+    : blockPopupKeyBuild(config.sourcePath, config.sourceLine, config.compId);
 
   useLayoutEffect(() => {
     if (!key) return undefined;
@@ -78,7 +91,8 @@ export const BlockPopupSurface = observer(function BlockPopupSurface({ config = 
 
   const open = () => {
     blockPopupStore.open({
-      path: config.sourcePath,
+      ...(popupKey !== '' ? { key } : {}),
+      path: config.sourcePath ?? '',
       sourceLine: config.sourceLine,
       compId: config.compId,
       title,
@@ -100,24 +114,45 @@ export const BlockPopupSurface = observer(function BlockPopupSurface({ config = 
       data-in-popup={isInPopup ? '' : undefined}
       style={heightInline ? { height: `${heightInline}px` } : undefined}
     >
-      {isOffered && !isInPopup ? (
-        <button
-          ref={buttonRef}
-          type="button"
-          className="doc-block-popup-open not-prose"
-          title="Open in a popup"
-          aria-label={title ? `Open ${title} in a popup` : 'Open in a popup'}
-          onClick={open}
-        >
-          <Expand size={14} aria-hidden="true" />
-        </button>
+      {!isInPopup && (isOffered || actionList.length > 0) ? (
+        <BlockToolbar actionList={actionList}>
+          {isOffered ? (
+            <button
+              ref={buttonRef}
+              type="button"
+              title="Open in a popup"
+              aria-label={title ? `Open ${title} in a popup` : 'Open in a popup'}
+              onClick={open}
+            >
+              <Expand size={BLOCK_TOOLBAR_ICON_SIZE} aria-hidden="true" />
+            </button>
+          ) : null}
+        </BlockToolbar>
       ) : null}
+      {isInPopup && slotElement && actionList.length > 0 ? createPortal(<BlockToolbar actionList={actionList} />, slotElement) : null}
       {isInPopup ? <p className="doc-block-popup-away not-prose">Shown in the popup.</p> : null}
       <div ref={inlineSlotRef} className="doc-block-popup-inline" />
       {container ? createPortal(content, container) : content}
     </div>
   );
 });
+
+// every button of the toolbar has one icon size and the button style of
+// .doc-button-group, the actions of the component and the open button alike
+const BLOCK_TOOLBAR_ICON_SIZE = 14;
+
+function BlockToolbar({ actionList, children = null }) {
+  return (
+    <div className="doc-block-toolbar doc-button-group not-prose">
+      {actionList.map(({ id, label, Icon, onClick }) => (
+        <button key={id} type="button" title={label} aria-label={label} onClick={onClick}>
+          <Icon size={BLOCK_TOOLBAR_ICON_SIZE} aria-hidden="true" />
+        </button>
+      ))}
+      {children}
+    </div>
+  );
+}
 
 function containerCreate() {
   const element = document.createElement('div');

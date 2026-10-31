@@ -1,0 +1,17 @@
+/* the resource cards: the generic table card with an accent color on the
+   title line; a series sets --resource-accent for its families
+   (.doc-resource-card.is-{family}) in its own stylesheet */
+.doc-resource-card { font-family: inherit; --resource-accent: #475569; }
+.doc-resource-card .doc-er-table-title {
+	align-items: center;
+	gap: 0.45rem;
+	background: color-mix(in srgb, var(--resource-accent) 10%, var(--color-fd-background));
+	border-top: 3px solid var(--resource-accent);
+}
+.doc-resource-card .doc-er-table-title > .doc-er-table-title-name > svg { flex: none; color: var(--resource-accent); }
+.doc-resource-card .doc-er-table-title-name { flex: 1; min-width: 0; }
+.doc-resource-card .doc-er-table-title-text { min-width: 0; overflow-wrap: anywhere; }
+.doc-resource-family { flex: none; font-size: 0.6rem; font-weight: 600; color: var(--color-fd-muted-foreground); }
+.doc-resource-card .doc-card-row { background: color-mix(in srgb, var(--color-fd-muted) 30%, transparent); }
+.doc-resource-card .doc-card-row > span { white-space: pre-wrap; }
+.doc-resource-card .doc-vis-cell-value { white-space: pre-wrap; overflow-wrap: anywhere; }

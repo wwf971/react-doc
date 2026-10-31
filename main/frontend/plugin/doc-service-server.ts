@@ -120,6 +120,14 @@ export type ServiceDocPageInput = {
 };
 
 // a doc page as the sync route sends it to the backend
+// a package as the sync route sends it: its name and its folder, absolute;
+// the backend reads its fixed template folders (service-template-app/,
+// service-template-infra/; doc_page_impl_package.md)
+export type ServiceSyncPackage = {
+  name: string;
+  dir: string;
+};
+
 export type ServiceSyncDocPage = {
   alias: string;
   // the doc page folder, absolute
@@ -366,8 +374,11 @@ export function docServiceMiddlewareCreate(options: {
   backendUrlGet: () => string;
   // the doc pages loaded now, for the sync route; none without it
   docPageListGet?: () => ServiceSyncDocPage[];
+  // the packages loaded now (doc-package.ts), whose template folders the
+  // backend reads beside those of the doc pages
+  packageListGet?: () => ServiceSyncPackage[];
 }): Middleware {
-  const { endpoint, backendUrlGet, docPageListGet } = options;
+  const { endpoint, backendUrlGet, docPageListGet, packageListGet } = options;
   return (req, res, next) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname !== endpoint && !url.pathname.startsWith(`${endpoint}/`)) {
@@ -404,7 +415,7 @@ export function docServiceMiddlewareCreate(options: {
       req.resume();
       let body: string;
       try {
-        body = JSON.stringify({ docPageList: docPageListGet() });
+        body = JSON.stringify({ docPageList: docPageListGet(), packageList: packageListGet?.() ?? [] });
       } catch (error: any) {
         res.writeHead(500, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
         res.end(JSON.stringify({ code: -1, data: null, message: `the loaded doc pages cannot be listed: ${String(error?.message ?? error)}` }));

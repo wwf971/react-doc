@@ -1,7 +1,6 @@
 import { blockQADataParse } from '../../../built-in/comp-mdx/block/block-qa/BlockQAData.js';
 import { indexDataParse } from '../../../built-in/comp-mdx/index/IndexData.js';
 import { switchViewDependenciesCollect } from '../../../built-in/comp-mdx/switch-view/SwitchViewData.js';
-import { diagramDependenciesCollect } from '../../../built-in/comp-mdx/diagram/diagram-er/DiagramERSource.js';
 import { testCaseDependenciesCollect } from '../../../built-in/comp-mdx/test-case-table/TestCaseTableData.js';
 
 // Build-time dependency extractors, keyed by component id (the values of
@@ -25,7 +24,8 @@ import { testCaseDependenciesCollect } from '../../../built-in/comp-mdx/test-cas
 //
 // a dataRef property is handled for every component by the collector itself.
 // consumers add extractors for their own component ids through the plugin
-// option sourceDependencyCollectByCompId.
+// option sourceDependencyCollectByCompId; a component of a doc page or of a
+// package names its own in its manifest (dependencyCollect of comp.yaml).
 
 function markdownRawCollect(data, context) {
   context.markdownCollect(String(data.raw ?? ''));
@@ -82,11 +82,6 @@ export const sourceDependencyCollectByCompId = {
   'common/BlockQA': blockQACollect,
   // every view, including those not shown, through the collector of its component
   'common/SwitchView': switchViewDependenciesCollect,
-  // the registered components drawing nodes and connections of a diagram;
-  // the Power Platform design diagrams are DiagramER with another starter
-  'common/DiagramER': diagramDependenciesCollect,
-  'common/DiagramPowerAutomate': diagramDependenciesCollect,
-  'common/DiagramBusinessRule': diagramDependenciesCollect,
   // the evidence documents of every recorded result, and its custom cells
   'common/TestCaseTable': testCaseDependenciesCollect,
   'specific/SourceLink': sourceLinkCollect,

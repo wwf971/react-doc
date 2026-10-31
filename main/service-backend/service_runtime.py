@@ -823,6 +823,9 @@ class ServiceRuntime:
         # the doc pages of the config, and those the page synced (docpage_sync)
         self.doc_page_list_config = self._doc_page_list_read(config.get('docPageList'))
         self.doc_page_list_page = []
+        # the packages the page loaded (doc_page_impl_dir.md#the-package-folder): their
+        # fixed template folders are read like those of the built-in folder
+        self.package_list_page = []
         # the plain folders of the config (the former form; kind app by default)
         self.folder_list_config = (
             [self._folder_config_build(item, 'template') for item in self._folder_list_read(config.get('templateFolderList'), 'templateFolderList')]
@@ -899,12 +902,21 @@ class ServiceRuntime:
             result[0]['isDefault'] = True
         return result
 
-    def docpage_sync(self, doc_page_list):
-        """The doc pages the page loaded, with their folders: mounted for as
-        long as the backend runs, after those of the config (a doc page the
-        config names is not mounted twice). Raises ServiceError -1."""
+    def docpage_sync(self, doc_page_list, package_list=None):
+        """The doc pages and the packages the page loaded, with their folders:
+        mounted for as long as the backend runs, after those of the config (a
+        doc page the config names is not mounted twice). Raises ServiceError -1."""
         if not isinstance(doc_page_list, list):
             raise ServiceError(-1, 'docPageList must be a list of { alias, dir, serviceFile? }')
+        package_list = package_list or []
+        if not isinstance(package_list, list):
+            raise ServiceError(-1, 'packageList must be a list of { name, dir }')
+        package_result = []
+        for index, item in enumerate(package_list):
+            if not isinstance(item, dict) or not isinstance(item.get('name'), str) or item['name'] == '' \
+                    or not isinstance(item.get('dir'), str) or not os.path.isabs(item['dir']):
+                raise ServiceError(-1, f'packageList[{index}] must be {{ name, dir (absolute) }}')
+            package_result.append({'name': item['name'], 'dir': os.path.normpath(item['dir'])})
         result = []
         for index, item in enumerate(doc_page_list):
             if not isinstance(item, dict) or not isinstance(item.get('dir'), str) or item['dir'] == '' or not os.path.isabs(item['dir']):
@@ -922,11 +934,14 @@ class ServiceRuntime:
         with self.lock:
             dir_set = {item['dir'] for item in self.doc_page_list_config}
             result = [item for item in result if item['dir'] not in dir_set]
-            is_changed = [(item['alias'], item['dir'], item['serviceFile']) for item in result] != [(item['alias'], item['dir'], item['serviceFile']) for item in self.doc_page_list_page]
+            is_changed = [(item['alias'], item['dir'], item['serviceFile']) for item in result] != [(item['alias'], item['dir'], item['serviceFile']) for item in self.doc_page_list_page] \
+                or package_result != self.package_list_page
             self.doc_page_list_page = result
+            self.package_list_page = package_result
         if is_changed:
-            self.kernel_log.kernel('info', 'registry', f'{len(result)} doc page(s) mounted by the page',
-                                   {'docPageList': [{'alias': item['alias'], 'dir': item['dir']} for item in result]})
+            self.kernel_log.kernel('info', 'registry', f'{len(result)} doc page(s) and {len(package_result)} package(s) mounted by the page',
+                                   {'docPageList': [{'alias': item['alias'], 'dir': item['dir']} for item in result],
+                                    'packageList': package_result})
         self.scan()
         return self.status_get()['kernel']['docPageList']
 
@@ -935,7 +950,7 @@ class ServiceRuntime:
 
     def folder_list_get(self):
         """Every folder the registry reads, with its origin: the built-in folder's, the
-        doc pages', the config's. The problems of the doc pages are reported."""
+        packages', the doc pages', the config's. The problems of the doc pages are reported."""
         folder_list = []
         problem_list = []
         if self.built_in_dir:
@@ -947,6 +962,18 @@ class ServiceRuntime:
                     'kind': item['kind'],
                     'isDefault': False,
                     'origin': {'kind': 'builtIn', 'alias': '', 'dir': self.built_in_dir},
+                })
+        # a package has the template folders of the built-in folder, by the same
+        # fixed names, and no instance folders
+        for package in self.package_list_page:
+            for item in BUILT_IN_FOLDER_LIST:
+                folder_list.append({
+                    'path': os.path.join(package['dir'], item['path']),
+                    'pathWritten': item['path'],
+                    'role': item['role'],
+                    'kind': item['kind'],
+                    'isDefault': False,
+                    'origin': {'kind': 'package', 'alias': package['name'], 'dir': package['dir']},
                 })
         for doc_page in self.doc_page_list_get():
             try:

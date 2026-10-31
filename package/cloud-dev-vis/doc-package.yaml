@@ -1,0 +1,13 @@
+# The config of a package (design: main/doc_page_impl_package.md).
+# Its name and place are fixed: doc-package.yaml at the root of the package.
+# Every key is required; the folders of a package have fixed names
+# (comp-mdx/, service-template-app/, service-template-infra/, doc/README.md)
+# and nothing here can rename them.
+name: cloud-dev-vis
+description: >-
+  Visualization of cloud architecture: node cards and connection lines on a
+  React Flow canvas, a base series of generic cards and a series of Power
+  Platform resources.
+# the packages this one needs (their components are imported by ours, or
+# named in the data of ours): { dir }, relative to this file
+packageDependList: []

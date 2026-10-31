@@ -4,6 +4,7 @@ import { toJS } from 'mobx';
 import { Background, Controls, Handle, Position, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useDocStores } from '../../frontend/src/store/context.js';
+import { BlockPopupSurface } from '../popup/BlockPopupSurface.jsx';
 import { WORKSPACE_NODE_ID } from '../../frontend/src/lib/doc-workspace-graph.js';
 import { ArrowDown, ArrowUp, FolderInput, LoaderCircle, Lock, LockOpen, Plus, Trash2, Unplug } from '../../frontend/UICommon.js';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
@@ -11,10 +12,14 @@ import { OsPathInput } from '../source/OsPathInput.jsx';
 import './DocSettings.css';
 
 // The "Workspace" tab of the settings panel (design:
-// doc_page_impl_source.md#the-workspace-tab): the workspace and its doc
-// pages as a graph drawn with React Flow.
+// doc_page_impl_source.md#the-workspace-tab): the workspace, its doc pages
+// and the packages it imports as a graph drawn with React Flow.
 //
-//   [workspace: Site · 2 doc pages]
+//   [base]                      packages, in their own tone, above:
+//      │ needs                  a package above every package needing it
+//   [cloud-dev-vis]
+//      │ imports
+//   [workspace: Site · 2 doc pages · 1 package]
 //        │ example            │ extra
 //   [example  React Doc Test] [extra ...]
 //        │ as sub  (red: the alias this include gives is not the one kept)
@@ -30,8 +35,11 @@ import './DocSettings.css';
 // alias differs from the doc page's alias (another mention came first) is
 // a conflict: a red dashed edge, a badge on the node, a line in the
 // warnings. the graph is DocWorkspaceStore.graph; clicking a node shows
-// its details under the graph; nodes can be dragged. Rendered by
-// ConfigPanel as a custom full-width item; it reads the stores itself.
+// its details under the graph; nodes can be dragged. [doc pages] and
+// [packages] toggle what is drawn: with one of them alone, it grows below
+// the workspace. the canvas opens in the block popup like a block of a
+// document (BlockPopupSurface with a popupKey). Rendered by ConfigPanel as
+// a custom full-width item; it reads the stores itself.
 //
 // above the graph, the workspace file is edited (WorkspaceFileEdit) and
 // temporary doc pages are mounted (WorkspaceMountEdit):
@@ -60,6 +68,8 @@ export const WorkspaceSettings = observer(function WorkspaceSettings() {
         <span>{graph.docPageCount} doc page{graph.docPageCount === 1 ? '' : 's'}</span>
         <span className="doc-workspace-settings-muted">·</span>
         <span>{graph.mentionCount} mention{graph.mentionCount === 1 ? '' : 's'}</span>
+        <span className="doc-workspace-settings-muted">·</span>
+        <span>{graph.packageCount} package{graph.packageCount === 1 ? '' : 's'}</span>
         {graph.warningList.length > 0 ? (
           <>
             <span className="doc-workspace-settings-muted">·</span>
@@ -67,13 +77,37 @@ export const WorkspaceSettings = observer(function WorkspaceSettings() {
           </>
         ) : null}
         <span className="doc-workspace-settings-spacer" />
+        <span className="doc-workspace-edit-kind" role="group" aria-label="Shown in the graph">
+          <button
+            type="button"
+            className="doc-button-dialog"
+            aria-pressed={workspaceStore.isDocPageVisible}
+            title="Show the doc pages of the workspace, below it"
+            onClick={() => workspaceStore.docPageVisibleSet(!workspaceStore.isDocPageVisible)}
+          >
+            doc pages
+          </button>
+          <button
+            type="button"
+            className="doc-button-dialog"
+            aria-pressed={workspaceStore.isPackageVisible}
+            title="Show the packages the workspace imports and the packages they need, above it (below it when the doc pages are hidden)"
+            onClick={() => workspaceStore.packageVisibleSet(!workspaceStore.isPackageVisible)}
+          >
+            packages
+          </button>
+        </span>
         <button type="button" className="doc-button" onClick={() => workspaceStore.layoutReset()}>Reset layout</button>
       </div>
-      <div className="doc-workspace-settings-canvas">
-        <ReactFlowProvider>
-          <WorkspaceCanvas />
-        </ReactFlowProvider>
-      </div>
+      <BlockPopupSurface popupKey="settings-workspace-graph" title="Workspace graph" className="doc-workspace-settings-canvas-shell">
+        {({ isInPopup }) => (
+          <div className={`doc-workspace-settings-canvas${isInPopup ? ' is-popup' : ''}`}>
+            <ReactFlowProvider>
+              <WorkspaceCanvas isInPopup={isInPopup} />
+            </ReactFlowProvider>
+          </div>
+        )}
+      </BlockPopupSurface>
       {graph.warningList.length > 0 ? (
         <ul className="doc-workspace-settings-warning-list" role="alert">
           {graph.warningList.map((warning) => <li key={warning}>{warning}</li>)}
@@ -84,7 +118,9 @@ export const WorkspaceSettings = observer(function WorkspaceSettings() {
   );
 });
 
-const WorkspaceCanvas = observer(function WorkspaceCanvas() {
+// the view is fitted again when the nodes shown change and when the canvas
+// moves between the panel and the popup
+const WorkspaceCanvas = observer(function WorkspaceCanvas({ isInPopup = false }) {
   const { workspaceStore } = useDocStores();
   const { fitView } = useReactFlow();
   const nodeList = toJS(workspaceStore.graph.nodeList);
@@ -93,7 +129,7 @@ const WorkspaceCanvas = observer(function WorkspaceCanvas() {
   useEffect(() => {
     const frameId = requestAnimationFrame(() => fitView({ padding: 0.2, duration: 200 }));
     return () => cancelAnimationFrame(frameId);
-  }, [fitView, nodeCount]);
+  }, [fitView, nodeCount, isInPopup]);
   return (
     <ReactFlow
       className="doc-workspace-flow"
@@ -127,8 +163,31 @@ const WorkspaceNode = observer(function WorkspaceNode({ data, selected }) {
       </div>
       <div className="doc-workspace-node-note">
         {data.isVirtual ? 'config.yaml names one doc page' : `${data.docPageCount} doc page${data.docPageCount === 1 ? '' : 's'}`}
+        {data.packageCount > 0 ? ` · ${data.packageCount} package${data.packageCount === 1 ? '' : 's'}` : ''}
       </div>
-      <Handle type="source" position={Position.Bottom} isConnectable={false} />
+      <Handle id="up" type="source" position={Position.Top} isConnectable={false} />
+      <Handle id="down" type="source" position={Position.Bottom} isConnectable={false} />
+    </div>
+  );
+});
+
+// a package the workspace imports, or one a package needs; drawn above the
+// workspace (side up: entered from below, leaving upward to the packages it
+// needs), or below it when the doc pages are hidden (side down)
+const PackageNode = observer(function PackageNode({ data, selected }) {
+  const item = data.package;
+  const isUp = data.side === 'up';
+  return (
+    <div className={`doc-workspace-node is-package${selected ? ' is-selected' : ''}`}>
+      <Handle id={data.side} type="target" position={isUp ? Position.Bottom : Position.Top} isConnectable={false} />
+      <div className="doc-workspace-node-head">
+        <span className="doc-workspace-node-kind">package</span>
+        <span className="doc-workspace-node-alias">{item.name}</span>
+        {item.isWorkspaceNamed ? null : <span className="doc-badge-outline">needed</span>}
+      </div>
+      <div className="doc-workspace-node-title doc-workspace-node-clamp" title={item.description}>{item.description || <span className="doc-workspace-settings-muted">no description</span>}</div>
+      <div className="doc-workspace-node-note" title={item.dir}>{item.dir}</div>
+      <Handle id={data.side} type="source" position={isUp ? Position.Top : Position.Bottom} isConnectable={false} />
     </div>
   );
 });
@@ -155,12 +214,31 @@ const DocPageNode = observer(function DocPageNode({ data, selected }) {
   );
 });
 
-const nodeTypes = { workspace: WorkspaceNode, docPage: DocPageNode };
+const nodeTypes = { workspace: WorkspaceNode, docPage: DocPageNode, package: PackageNode };
 
 // what the chosen node is: the workspace, or a doc page with its roots and mentions
 const WorkspaceDetail = observer(function WorkspaceDetail() {
   const { workspaceStore } = useDocStores();
   const docPage = workspaceStore.docPageSelected;
+  const packageSelected = workspaceStore.packageSelected;
+  if (packageSelected) {
+    const item = packageSelected.package;
+    return (
+      <div className="doc-workspace-settings-detail">
+        <div className="doc-workspace-settings-detail-title">
+          <span className="doc-workspace-node-alias">{item.name}</span>
+          <span className="doc-workspace-settings-muted">package</span>
+        </div>
+        <dl className="doc-workspace-settings-grid">
+          <dt>description</dt><dd>{item.description || <span className="doc-workspace-settings-muted">none</span>}</dd>
+          <dt>folder</dt><dd>{item.dir}</dd>
+          <dt>imported</dt><dd>{item.isWorkspaceNamed ? 'by the workspace (packageList)' : 'not by the workspace: only as a package another one needs'}</dd>
+          <dt>needs</dt><dd>{item.dependNameList.length ? item.dependNameList.join(', ') : <span className="doc-workspace-settings-muted">no package</span>}</dd>
+          <dt>needed by</dt><dd>{packageSelected.neededByList.length ? packageSelected.neededByList.join(', ') : <span className="doc-workspace-settings-muted">no package</span>}</dd>
+        </dl>
+      </div>
+    );
+  }
   if (workspaceStore.isWorkspaceSelected) {
     const { workspace } = workspaceStore;
     return (

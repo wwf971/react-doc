@@ -23,7 +23,7 @@ Every block-like component renders both of its modes as the children of `BlockPo
 - The surface's `className` is the **outer box** and carries the block's margins (`margin: 1rem 0 1.5rem` or whatever the block needs). The component's own root has **no outer margins**, so it sits flush in the popup and the geometry lock of an edit session measures the block from the outer box. This is also what keeps the page from moving when the block enters edit mode ([the no-jitter rule](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule)): a margin on the editor's root inside the locked wrapper would push the content down by that margin.
 - `isInPopup` tells the component to fill the dialog: the root gets height `100%` (a flex column with `flex: 1 1 auto; min-height: 0` when the editor wraps it) instead of its height in the page; a fixed width becomes `100%`.
 - The engine or canvas is **not remounted** for the popup: the surface moves the element, so the camera, the selection and an unsaved draft survive opening, maximizing and closing. Keep every such state in the component's own store or in the [component state service layer](doc_page_impl_mdx_comp_state.md), never in a place that a remount would lose.
-- The surface draws its open button at the top right of the outer box; a toolbar of the component's own keeps clear of that corner.
+- The surface draws **the one toolbar of the block** at the top right of the outer box (in the popup, of the popup): the open button and the component's own block actions (copy the source, download ...), which the component hands to it as `actionList` (`[{ id, label, Icon, onClick }]`) instead of drawing a floating button group of its own. Every button of that toolbar has one size and one style (`.doc-button-group`), so two groups of different sizes side by side, kept apart by hand-tuned offsets, cannot happen.
 
 ## Must: view mode changes nothing and moves nothing
 
@@ -57,7 +57,7 @@ For a component whose box is a canvas of things (nodes and lines, shapes, images
 - **Nothing is discarded silently:** removing a thing that others depend on (a handle with lines, a row with handles, a node with lines) reroutes or detaches them and keeps them visible (a free end), rather than refusing or deleting the dependents.
 - **Keyboard:** Escape steps out, Enter confirms a cell, Ctrl/⌘ + Enter saves, ArrowUp / ArrowDown and Enter in a search list.
 
-`DiagramER` implements all of these; its rules are written out for authors in [Data diagrams](../example_doc/mdx-usage/comp-diagram-er.md#diagram-er-view) and for implementers in [comp_db_vis.md](../built-in/comp-mdx/diagram/diagram-er/comp_db_vis.md#card-editing).
+`DiagramER` implements all of these; its rules are written out for authors in [Data diagrams](../example_doc/mdx-usage/comp-diagram-er.md#diagram-er-view) and for implementers in [card-diagram.md](../package/cloud-dev-vis/doc/card-diagram.md#card-editing).
 
 ## Should: switching view and edit while open
 

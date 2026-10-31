@@ -202,7 +202,7 @@ def handler_class_build(runtime):
                     data = runtime.infra_route_set(body.get('name', ''), str(body.get('serviceId') or ''))
                     self.response_send({'code': 0, 'data': data})
                 elif path == '/registry/docpage/sync':
-                    data = runtime.docpage_sync(body.get('docPageList') or [])
+                    data = runtime.docpage_sync(body.get('docPageList') or [], body.get('packageList') or [])
                     self.response_send({'code': 0, 'data': data})
                 elif path == '/template/version/new':
                     data = runtime.template_version_new(body.get('templateId', ''), body.get('note', ''))
