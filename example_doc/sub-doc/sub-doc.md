@@ -15,7 +15,7 @@ The demonstration page includes it with one node, naming the folder and the alia
   include: { dir: ../sub-doc, alias: sub }      # written in example_doc/.doc-page/side-panel.yaml
 ```
 
-Nothing else in the page knows about this folder. The main `source.yaml` does not collect it, the main `tag.yaml` does not define `sub`, and the page side panel only names the folder. Its config declarations come along too, below the page's own: the page decides when both set a key.
+Nothing else in the page knows about this folder. The main `source.yaml` does not collect it, the main `tag.yaml` does not define `sub`, and the page side panel only names the folder. Its config declarations come along too, but as a tab of their own in the settings panel (`sub`), shown and not applied: only the main doc page of the workspace and the workspace itself decide the page config; served alone, this doc page is the main one and its config applies.
 
 ## Deploying it alone
 

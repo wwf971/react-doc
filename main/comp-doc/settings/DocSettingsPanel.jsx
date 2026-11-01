@@ -7,13 +7,14 @@ import { SETTINGS_RESULT_ID } from '../../frontend/src/store/DocConfigStore.ts';
 import { assetStoreItemListBuild } from './AssetStoreSettings.jsx';
 import { ServiceSettings } from './ServiceSettings.jsx';
 import { WorkspaceSettings } from './WorkspaceSettings.jsx';
+import { ApiSettings } from './ApiSettings.jsx';
 import { SourcePathInput } from '../source/SourcePathInput.jsx';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
 import { usePanelLayout } from '../popup/use-panel-layout.js';
 import './DocSettings.css';
 
 // The settings panel, rendered by the application's ConfigPanel
-// (config.components) with five tabs (subtab items):
+// (config.components) with six tabs (subtab items):
 //
 //   Config       the page config keys
 //   Component    the component-level keys
@@ -35,6 +36,9 @@ import './DocSettings.css';
 //                (WorkspaceSettings, doc_page_impl_source.md#the-workspace-tab):
 //                which doc page includes which under what alias, and the
 //                alias conflicts.
+//   API          the unified api registry (ApiSettings, doc_page_impl_api.md):
+//                the remote address, every api and whether it can run, the
+//                keyboard maps and the keys they bind, the last calls.
 //
 // Config and Component carry a second tab line, one tab per config layer
 // (doc_page_impl_config.md#config-layers, DocConfigStore.layerList), then
@@ -43,11 +47,16 @@ import './DocSettings.css';
 //   Default    every key (the layer declares them all: config.yaml
 //              configDefault over the built-in defaults), greyed out: it is
 //              the package's, never written from the page
-//   Doc page   the keys the doc page declares, merged, display only. "Edit"
-//              switches to its edit mode (DeclarationGrid): every declaration
-//              side by side, a column each in stack order, one row per key;
-//              a value is edited in place in any declaration that holds it,
-//              and the layer still takes the last one
+//   {alias}    one tab per doc page of the workspace, named by its alias, the
+//              main doc page first: the keys that doc page declares, merged,
+//              display only. "Edit" switches to its edit mode
+//              (DeclarationGrid): every declaration side by side, a column
+//              each in stack order, one row per key; a value is edited in
+//              place in any declaration that holds it, and the layer still
+//              takes the last one. only the main doc page's values are
+//              applied; the head of another doc page's tab says so
+//   Workspace  the keys the workspace declares ("config" of its file), the
+//              same way; applied over the main doc page's
 //   Client     the keys kept in this browser, each removable, and a list to
 //              add one; "Clear cache" drops them all with the storage entry
 // Result lists every key with the value in effect and the level that
@@ -124,6 +133,12 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
       type: 'subtab',
       name: 'Workspace',
       children: [{ id: 'workspaceGraph', type: 'custom', comp: WorkspaceSettings, isFullWidth: true }],
+    },
+    {
+      id: 'api',
+      type: 'subtab',
+      name: 'API',
+      children: [{ id: 'apiRegistry', type: 'custom', comp: ApiSettings, isFullWidth: true }],
     },
   ];
   // the layer line of both value tabs shows the same layer
@@ -649,16 +664,22 @@ const tabNoteByTabId = {
   assetStore: 'each doc page\'s folders are written into its .doc-page/asset.yaml',
   service: 'the instances live in the service backend, in its instance folders',
   workspace: 'the doc pages the page serves, and which includes which under what alias',
+  api: 'the apis of the page, the keys bound to them (package < doc pages < workspace), and the calls made',
 };
 
 // what the head says on the Result tab
 const resultNote = 'the values in effect at page level, and the level that decided each; a document may refine a document-level key';
 
-// the head of a value tab: what the layer shown is, Clear cache for a layer
-// that can be dropped at once, the switch to the edit view for a layer of
-// several declarations, and the state of its last write
+// the head of a value tab: what the layer shown is (its note in this
+// workspace, else the description of its definition; why it cannot be
+// written, when it cannot), Clear cache for a layer that can be dropped at
+// once, the switch to the edit view for a layer of several declarations,
+// and the state of its last write
 const LayerHead = observer(function LayerHead({ layer }) {
   const { configStore } = useDocStores();
+  const headText = layer.note
+    ? `${layer.define.label}: ${layer.note}${layer.isWritable ? '' : ` (${layer.disabledReason})`}`
+    : `${layer.define.label}: ${layer.isWritable ? layer.define.description : layer.disabledReason}`;
   return (
     <>
       {layer.isClearable ? (
@@ -688,7 +709,7 @@ const LayerHead = observer(function LayerHead({ layer }) {
           <span>{layer.isWritable ? 'Edit' : 'Declarations'}</span>
         </button>
       ) : null}
-      <HeadNote text={`${layer.define.label}: ${layer.isWritable ? layer.define.description : layer.disabledReason}`} />
+      <HeadNote text={headText} />
       {layer.request.status === 'submitting' ? (
         <span className="doc-settings-note doc-settings-request" role="status">
           <LoaderCircle aria-hidden="true" size={11} strokeWidth={2} className="doc-spin" />

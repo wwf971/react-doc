@@ -30,8 +30,8 @@ import { docEnvCapabilityDefineByName, docEnvKindDefineList, docEnvKindInfer } f
 //                  (server lost, edit api refused); '' otherwise. the edit
 //                  toggle shows it as the view-only mark
 
-export type DocEnvApi = 'source' | 'edit' | 'asset' | 'service';
-export type DocEnvCapability = 'sourceWrite' | 'edit' | 'asset' | 'service' | 'devWarning';
+export type DocEnvApi = 'source' | 'edit' | 'asset' | 'service' | 'api';
+export type DocEnvCapability = 'sourceWrite' | 'edit' | 'asset' | 'service' | 'apiRemote' | 'devWarning';
 
 // the capabilities whose api is served by the development server itself,
 // lost with it. the service backend is a process of its own and reports its
@@ -76,6 +76,7 @@ export class DocEnvStore {
       edit: String(endpointByApi.edit ?? ''),
       asset: String(endpointByApi.asset ?? ''),
       service: String(endpointByApi.service ?? ''),
+      api: String(endpointByApi.api ?? ''),
     };
     const kindGiven = options.env?.kind;
     this.kind = typeof kindGiven === 'string' && docEnvKindDefineList.some((define) => define.kind === kindGiven)

@@ -75,6 +75,12 @@ sidePanelById:
       - doc: ~example/comp-state.md
         text: Component State
         tags: [guide]
+      # the unified api registry: the command palette, the keyboard maps of
+      # .doc-page/hotkey/, the apis declared in .doc-page/api.yaml, and
+      # calling the page from outside through the development server
+      - doc: ~example/api-command-palette.md
+        text: Command Palette and Apis
+        tags: [guide]
       # free to change: the playground and everything it creates are ignored
       # by git, so a fresh checkout reports this document as missing
       - doc: ~example/playground/playground.md

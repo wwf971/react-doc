@@ -13,3 +13,7 @@ Checked in the development server with a browser simulation: the form submitted 
 ## Login form, wrong password
 
 Checked the same way: the response is the generic "address or password is wrong" message, and the address field keeps its value.
+
+## Login form, empty submit (recorded through the api)
+
+Checked again when the unified api registry was built: the result was recorded by an api call from outside the page (`common/TestCaseTable/resultRecord` through the development server), not by a click on the cell, and reached the same history.

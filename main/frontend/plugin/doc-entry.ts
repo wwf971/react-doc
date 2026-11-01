@@ -118,8 +118,9 @@ export type ConfigDeclaration = {
   // yaml address of the mapping in the file, e.g. ['config'] or ['config', 1]
   path: (string | number)[];
   config: Record<string, any>;
-  // the entry of the document the declaration belongs to, relative to the
-  // config directory, and its alias
+  // the entry of the doc page the declaration belongs to, relative to the
+  // config directory, and its alias; both '' for a declaration of the
+  // workspace itself (the workspace config layer)
   entryFile: string;
   docPageAlias: string;
 };
@@ -165,11 +166,15 @@ export type DocPageLoaded = {
   isTemporary: boolean;
   rootList: DocPageRoot[];
   mentionList: DocPageMention[];
-  // "asset", "service" and "comp" of the entry as written: undefined (the
-  // convention), false (none), or { file } (relative to the entry)
+  // "asset", "service", "comp", "hotkey" and "api" of the entry as written:
+  // undefined (the convention), false (none), or { file } (relative to the
+  // entry). hotkey: the active keyboard map (doc-hotkey.ts); api: the
+  // declared apis (doc-api-config.ts)
   asset: EntryFileSection;
   service: EntryFileSection;
   comp: EntryFileSection;
+  hotkey: EntryFileSection;
+  api: EntryFileSection;
 };
 
 // a section of the entry that names a config file of the doc page, or
@@ -210,6 +215,9 @@ export type DocWorkspaceInfo = {
   // every mention as an edge: from the workspace ('') or a doc page, to a doc page
   includeList: { fromAlias: string; toAlias: string; alias: string; isAliasGiven: boolean; file: string; place: string }[];
   warningList: string[];
+  // the workspace config layer (doc_page_impl_config.md#the-workspace-layer):
+  // the declarations of the "config" of the workspace, in stack order
+  configDeclarationList: ConfigDeclaration[];
 };
 
 // what config.yaml says about the workspace, normalized
@@ -232,6 +240,14 @@ export type DocWorkspaceSpec = {
   // the packages the workspace imports, their folders absolute
   // (doc_page_impl_package.md)
   packageList?: DocPackageSpec[];
+  // the "config" of the workspace as written (the workspace config layer),
+  // the file it is written in (absolute: the workspace file, else
+  // config.yaml) and its yaml address there
+  config?: any;
+  fileConfig?: string;
+  addressConfig?: (string | number)[];
+  // the workspace's keyboard map, absolute (workspace "hotkey: { file }")
+  hotkeyFile?: string;
 };
 
 export type DocWorkspaceLoaded = {
@@ -249,6 +265,9 @@ export type DocWorkspaceLoaded = {
   // (a later one wins): the documents included last first, the root doc
   // pages last (the first root last); within one document in the order read
   configDeclarationList: ConfigDeclaration[];
+  // the workspace config layer: the declarations of the workspace's
+  // "config", in the order read (above every doc page's)
+  configDeclarationListWorkspace: ConfigDeclaration[];
   // the variables the config files declare, in the same order merged
   variableByName: Record<string, string>;
   // the doc pages loaded, the root ones first
@@ -307,12 +326,12 @@ type LoadContext = {
   warningList: string[];
 };
 
-const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'service', 'comp', 'sidePanelDefault', 'sidePanelById'];
+const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'service', 'comp', 'hotkey', 'api', 'sidePanelDefault', 'sidePanelById'];
 // the sections an entry alone may hold: each names a config file of the doc
 // page (or switches the feature off), found beside the entry by convention
-const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'service', 'comp'] as const;
+const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'service', 'comp', 'hotkey', 'api'] as const;
 const CONFIG_FILE_KEY_LIST = ['config', 'variable'];
-const WORKSPACE_FILE_KEY_LIST = ['title', 'homeDoc', 'homeItem', 'docPageList', 'packageList'];
+const WORKSPACE_FILE_KEY_LIST = ['title', 'homeDoc', 'homeItem', 'docPageList', 'packageList', 'config', 'hotkey'];
 const ENTRY_FILE_SUFFIX = '-entry.yaml';
 const ENTRY_FILE_NAME = 'entry.yaml';
 
@@ -380,6 +399,10 @@ export function docPageAliasDefaultGet(entryFile: string): string {
 //       dir: ../guide        # the doc page folder, or "file": its entry file
 //       sidePanel: main      # optional: the side panel shown for it
 //       isRootVisible: false # optional: its sole wrapper item shows its children only
+//   config:                  # optional: the workspace config layer, the forms of a
+//     - file: ./config.yaml  #   doc page's "config" (doc_page_impl_config.md#the-workspace-layer)
+//   hotkey:                  # optional: the workspace's keyboard map, over the doc pages'
+//     file: ./hotkey.yaml    #   (doc_page_impl_api_hotkey.md)
 export function docWorkspaceSpecRead(workspace: any, configDir: string, configFile: string): DocWorkspaceSpec {
   let content = workspace;
   let fileWorkspace: string | undefined;
@@ -427,6 +450,17 @@ export function docWorkspaceSpecRead(workspace: any, configDir: string, configFi
     if (content[key] === undefined) continue;
     if (typeof content[key] !== 'string') throw new Error(`[doc-source] workspace "${key}" must be a string: ${place}`);
     spec[key] = content[key];
+  }
+  if (content.config !== undefined) {
+    spec.config = content.config;
+    spec.fileConfig = fileWorkspace ?? configFile;
+    spec.addressConfig = fileWorkspace ? ['config'] : ['workspace', 'config'];
+  }
+  if (content.hotkey !== undefined) {
+    if (!mappingIs(content.hotkey) || typeof content.hotkey.file !== 'string' || !content.hotkey.file.trim()) {
+      throw new Error(`[doc-source] workspace "hotkey" is { file }, the keyboard map of the workspace: ${place}`);
+    }
+    spec.hotkeyFile = path.resolve(dirBase, content.hotkey.file);
   }
   content.docPageList.forEach((item: any, index: number) => {
     spec.docPageList.push(docPageSpecRead(item, dirBase, `${place} docPageList[${index}]`));
@@ -585,14 +619,25 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
     sidePanel = { ...sidePanelFirst, tree: sidePanelEffectiveGet(treeOfRootGet(sidePanelFirst, 0), aliasRootList) };
   }
 
+  // the workspace config layer (doc_page_impl_config.md#the-workspace-layer):
+  // the "config" of the workspace, the same forms as a doc page's, read
+  // after the doc pages (its config files are watched like theirs)
+  if (spec.config !== undefined && spec.fileConfig) {
+    configSectionLoad(spec.config, spec.fileConfig, spec.addressConfig ?? ['config'], '', context);
+  }
+
   const fileHashByFile: Record<string, string> = {};
   for (const fileLoaded of context.fileByPath.values()) {
     fileHashByFile[fileRelativeGet(fileLoaded.filePath, configDir)] = fileLoaded.contentHash;
   }
 
-  // the doc page config layer: the documents included last first, so a
-  // root doc page decides over what it includes (as for tags)
+  // the doc page config layers: every doc page's declarations, the
+  // documents included last first and the main doc page (the first root)
+  // last; the page keeps one layer per doc page and applies the main one's
+  // (doc_page_impl_config.md#the-doc-page-layers). the variables: the doc
+  // pages' in the same order, the workspace's over them
   const configDeclarationList: ConfigDeclaration[] = [];
+  const configDeclarationListWorkspace = context.configDeclarationList.filter((declaration) => declaration.entryFile === '');
   const variableByName: Record<string, string> = {};
   for (const entryOwner of [...context.entryFileList].reverse()) {
     for (const declaration of context.configDeclarationList) {
@@ -601,6 +646,9 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
     for (const declaration of context.variableDeclarationList) {
       if (declaration.entryOwner === entryOwner) Object.assign(variableByName, declaration.variableByName);
     }
+  }
+  for (const declaration of context.variableDeclarationList) {
+    if (declaration.entryOwner === '') Object.assign(variableByName, declaration.variableByName);
   }
 
   const docPageList = context.entryFileList.map((entryFile) => context.docPageByEntryFile.get(entryFile)!);
@@ -623,9 +671,10 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
     sourceRuleList: context.sourceRuleList,
     tagDefineById: context.tagDefineById,
     configDeclarationList,
+    configDeclarationListWorkspace,
     variableByName,
     docPageList,
-    workspace: workspaceInfoBuild(spec, docPageList, entry.title ?? '', context),
+    workspace: workspaceInfoBuild(spec, docPageList, entry.title ?? '', context, configDeclarationListWorkspace),
     fileListLoaded: context.fileListLoaded,
     fileHashByFile,
   };
@@ -633,7 +682,13 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
 
 // the workspace as data for the page: the doc pages, every mention as an
 // edge, the warnings
-function workspaceInfoBuild(spec: DocWorkspaceSpec, docPageList: DocPageLoaded[], title: string, context: LoadContext): DocWorkspaceInfo {
+function workspaceInfoBuild(
+  spec: DocWorkspaceSpec,
+  docPageList: DocPageLoaded[],
+  title: string,
+  context: LoadContext,
+  configDeclarationList: ConfigDeclaration[],
+): DocWorkspaceInfo {
   const aliasOfEntry = (entryFile: string) => (entryFile === '' ? '' : context.docPageByEntryFile.get(entryFile)?.alias ?? '');
   const relative = (filePath: string) => (filePath === '' ? '' : fileRelativeGet(filePath, context.configDir));
   const docPageInfoList: DocPageInfo[] = docPageList.map((docPage) => ({
@@ -668,6 +723,7 @@ function workspaceInfoBuild(spec: DocWorkspaceSpec, docPageList: DocPageLoaded[]
     docPageList: docPageInfoList,
     includeList,
     warningList: [...context.warningList],
+    configDeclarationList,
   };
 }
 
@@ -710,6 +766,8 @@ function docPageRegister(entryFile: string, mention: DocPageMention, isRoot: boo
     asset: undefined,
     service: undefined,
     comp: undefined,
+    hotkey: undefined,
+    api: undefined,
   };
   context.docPageByEntryFile.set(entryFile, docPage);
   return docPage;
@@ -947,13 +1005,15 @@ function pathIsInside(filePath: string, folder: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-// ---------- asset, service and comp sections ----------
+// ---------- asset, service, comp, hotkey and api sections ----------
 // the config files of the doc page that are found beside the entry by
 // convention: the asset store config (doc_page_impl_asset.md), the service
-// folders (doc_page_impl_service.md) and the component folders
-// (doc_page_impl_mdx_comp.md#components-of-a-doc-page). each is { file },
-// relative to the entry, or false for none. absent: {key}.yaml beside the
-// entry, read when it exists, the defaults of the feature otherwise
+// folders (doc_page_impl_service.md), the component folders
+// (doc_page_impl_mdx_comp.md#components-of-a-doc-page), the active keyboard
+// map (doc_page_impl_api_hotkey.md: hotkey/main.yaml) and the declared apis
+// (doc_page_impl_api.md: api.yaml). each is { file }, relative to the entry,
+// or false for none. absent: the convention file beside the entry, read
+// when it exists, the defaults of the feature otherwise
 
 function entryFileSectionRead(value: any, key: string, filePath: string): EntryFileSection {
   if (value === undefined || value === null) return undefined;
@@ -961,7 +1021,7 @@ function entryFileSectionRead(value: any, key: string, filePath: string): EntryF
   if (mappingIs(value) && typeof value.file === 'string' && value.file.trim() !== '' && Object.keys(value).length === 1) {
     return { file: value.file.trim() };
   }
-  throw new Error(`[doc-source] "${key}" of an entry is { file: ./${key}.yaml } or false: ${filePath}`);
+  throw new Error(`[doc-source] "${key}" of an entry is { file: <a path relative to the entry> } or false: ${filePath}`);
 }
 
 // ---------- tag section ----------
@@ -1040,12 +1100,13 @@ function configItemLoad(
 ) {
   if (item.file === undefined) {
     const file = fileRelativeGet(filePath, context.configDir);
+    // entryOwner '' is the workspace's own config (the workspace config layer)
     context.configDeclarationList.push({
       id: `${file}#${address.join('.')}`,
       file,
       path: address,
       config: item,
-      entryFile: fileRelativeGet(entryOwner, context.configDir),
+      entryFile: entryOwner === '' ? '' : fileRelativeGet(entryOwner, context.configDir),
       docPageAlias: context.docPageByEntryFile.get(entryOwner)?.alias ?? '',
     });
     return;

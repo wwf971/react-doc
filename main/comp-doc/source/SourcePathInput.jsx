@@ -82,7 +82,9 @@ export const SourcePathInput = observer(function SourcePathInput({
   // what is typed, in the full form when it names a root
   const textFullGet = (text) => sourceStore.pathFullGet(text, '', docPageAlias);
 
-  const candidateList = isOpen ? sourceStore.pathComplete(typed, spec).slice(0, 40) : [];
+  // a local form typed (~root/dir) is completed as the full form it stands
+  // for, since the candidates are full paths
+  const candidateList = isOpen ? sourceStore.pathComplete(textFullGet(typed), spec).slice(0, 40) : [];
   const isListShown = isOpen && candidateList.length > 0;
   // the kind of a candidate is told only when the list mixes both
   const isKindShown = spec.kind === 'any';

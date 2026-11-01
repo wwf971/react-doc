@@ -7,6 +7,7 @@ import { configDeclaredCheck, configModelBuild } from '../lib/doc-config-model.j
 import { compIdBuiltinByName, compIdResolve } from '../../../comp-doc/registry/comp-registry.js';
 import {
   configLayerCreate,
+  configLayerDefineListExpand,
   type ConfigLayer,
   type ConfigLayerDeclaration,
   type ConfigLayerDefine,
@@ -16,12 +17,13 @@ import {
 // Config service of the doc page. Design: doc_page_impl_config.md
 // Page-level values come from the config layers (doc-config-layer.ts): the
 // default config of the package (config.yaml configDefault), the config
-// declarations of the doc page (its entry and the files it reaches), the
-// reader's values kept in the browser (client), stacked in the order of
-// configLayerDefineList. Document-level values are resolved per document:
-// the layers below the document levels, source rules, side-panel nodes,
-// frontmatter, then the layers above. Renderers ask here instead of reading
-// any of those places.
+// declarations of the main doc page (its entry and the files it reaches;
+// the other doc pages of the workspace have layers of their own, shown but
+// not applied), the workspace's declarations, the reader's values kept in
+// the browser (client), stacked in the order of configLayerDefineList.
+// Document-level values are resolved per document: the layers below the
+// document levels, source rules, side-panel nodes, frontmatter, then the
+// layers above. Renderers ask here instead of reading any of those places.
 //
 // Component-level keys (doc_page_impl_config.md#component-level-config) are
 // declared by the registered components themselves (compDefine
@@ -49,8 +51,8 @@ export type ConfigDefine = {
   isUserSettable?: boolean;
 };
 
-export type SettingsTabId = 'config' | 'compConfig' | 'assetStore' | 'service' | 'workspace';
-const settingsTabIdList: SettingsTabId[] = ['config', 'compConfig', 'assetStore', 'service', 'workspace'];
+export type SettingsTabId = 'config' | 'compConfig' | 'assetStore' | 'service' | 'workspace' | 'api';
+const settingsTabIdList: SettingsTabId[] = ['config', 'compConfig', 'assetStore', 'service', 'workspace', 'api'];
 
 // the tab after the layer tabs: the values in effect. no layer has this id.
 export const SETTINGS_RESULT_ID = 'result';
@@ -107,8 +109,12 @@ export class DocConfigStore {
   sourceStore: DocSourceStore;
   docStore: DocStore;
   configDefineByKey: Map<string, ConfigDefine>;
-  // the config layers in stack order (doc-config-layer.ts)
-  layerList: ConfigLayer[];
+  // the layer definitions in stack order, and the layer objects built from
+  // them, kept by id so a layer keeps its state (a pending write) while the
+  // workspace changes under it (layerList)
+  layerDefineList: ConfigLayerDefine[];
+  layerById = new Map<string, ConfigLayer>();
+  layerOptions: { sourceStore: DocSourceStore; envStore: DocEnvStore };
   // stable query object handed to registered components through config
   configService: Readonly<Record<string, (...args: any[]) => any>>;
   // the settings panel is open (a centered popup; see DocSettingsPanel)
@@ -138,13 +144,10 @@ export class DocConfigStore {
     this.sourceStore = sourceStore;
     this.docStore = docStore;
     this.configDefineByKey = configDefineByKeyBuild(options?.configDefineList ?? []);
-    const layerDefineList: ConfigLayerDefine[] = options?.layerDefineList ?? (configLayerDefineList as ConfigLayerDefine[]);
-    this.layerList = layerDefineList.map((define) => configLayerCreate(define, {
-      sourceStore,
-      envStore: options?.envStore ?? sourceStore.envStore,
-    }));
+    this.layerDefineList = options?.layerDefineList ?? (configLayerDefineList as ConfigLayerDefine[]);
+    this.layerOptions = { sourceStore, envStore: options?.envStore ?? sourceStore.envStore };
     // the panel opens on the last layer: the one whose values win
-    this.settingsLayerId = this.layerList[this.layerList.length - 1]?.id ?? '';
+    this.settingsLayerId = this.layerDefineList[this.layerDefineList.length - 1]?.id ?? '';
     this.configService = Object.freeze({
       configDefineListGet: () => [...this.configDefineByKey.values()],
       configDocGet: (docPath: string) => this.configDocGet(docPath),
@@ -160,7 +163,30 @@ export class DocConfigStore {
       configService: false,
       docStore: false,
       sourceStore: false,
-      layerList: false,
+      layerDefineList: false,
+      layerById: false,
+      layerOptions: false,
+    });
+  }
+
+  // the config layers in stack order (doc-config-layer.ts): the definitions
+  // expanded for this workspace, one layer per doc page for a per-doc-page
+  // definition, the main doc page (the first root doc page) first; follows
+  // the workspace (a doc page mounted from the settings panel gets its tab)
+  get layerList(): ConfigLayer[] {
+    const configDoc = this.sourceStore.configDoc;
+    const aliasMain = String(configDoc?.docEntry?.alias ?? configDoc?.workspace?.docPageList?.[0]?.alias ?? '');
+    const aliasList = [aliasMain];
+    for (const docPage of configDoc?.workspace?.docPageList ?? []) {
+      if (typeof docPage?.alias === 'string' && !aliasList.includes(docPage.alias)) aliasList.push(docPage.alias);
+    }
+    return configLayerDefineListExpand(this.layerDefineList, aliasList).map((define) => {
+      const layerKept = this.layerById.get(define.id);
+      if (layerKept) return layerKept;
+      const { docPageAlias, ...defineOne } = define;
+      const layer = configLayerCreate(defineOne, { ...this.layerOptions, docPageAlias });
+      this.layerById.set(define.id, layer);
+      return layer;
     });
   }
 
@@ -174,7 +200,9 @@ export class DocConfigStore {
     return configModelBuild({
       configDefineByKey: this.configDefineByKey,
       configDoc: this.sourceStore.configDoc,
-      layerList: this.layerList.map((layer) => ({
+      // the layers applied: every layer but the doc page layers other than
+      // the main doc page's (doc_page_impl_config.md#the-doc-page-layers)
+      layerList: this.layerList.filter((layer) => layer.isParticipating).map((layer) => ({
         id: layer.id,
         config: layer.config,
         compConfig: layer.compConfig,

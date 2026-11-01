@@ -83,7 +83,7 @@ A focus shift is the event that shows why routing belongs to the store and not t
 - **A new domain** declares a route in `DocPageMdx` and a handler on its store; components start reporting the type. No existing place changes.
 - **A new event of an existing domain** is one more entry in the domain's type list and one more branch in its handler.
 - **History (undo / redo)** attaches at two points that already exist: every write of the edit layer (a document operation in `operationApply`, a side-panel move in `DocSidePanelStore`) is recorded with the texts before and after by `DocEditStore.historyRecord` ([History records](doc_page_impl_edit.md#history-records)), and the router's `dispatch` is the one place every component report passes, where `historyUndoRequest` / `historyRedoRequest` become one more route answered from those records. Neither needs a change in a component.
-- **Tooling**: a test or a palette can build an event with `eventBuild` and `dispatch` it with a `source` of its own; the handlers do not distinguish it from a component report.
+- **Tooling**: a test or a palette can build an event with `eventBuild` and `dispatch` it with a `source` of its own; the handlers do not distinguish it from a component report. The apis of the [unified api registry](doc_page_impl_api.md#apis-and-the-event-layer) do exactly this (`context.eventDispatch`): an api that enters a block, replaces the data of a block or records a test result dispatches the event a component would, with `placement: 'api'` and the principal of the call (the palette, a hotkey, a remote caller) in its source, so the host application sees a change made by an agent the way it sees a click.
 - **Subscriptions**: the layer carries reports *from* components and answers them; it does not deliver events *to* them. A subscription is the second direction, which no existing route needs to change for ([TODO](doc_page_impl_TODO.md#event-subscription)).
 
 ## Files
@@ -104,4 +104,5 @@ comp-doc/side-panel/SidePanelItemHost.jsx, SidePanelMovePicker.jsx  a drop and a
                                        sidePanelItemMoveRequest
 comp-doc/service/ServiceDashboardHost.jsx  adds what the dashboard block shows to every report of a dashboard
 comp-doc/edit/DocEditDocContext.js     DocEditBlockContext: the block index a component in the edit body reports with
+frontend/src/store/DocApiStore.ts      contextBuild: eventDispatch, the apis' reports (placement 'api', the principal in source)
 ```

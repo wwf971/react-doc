@@ -53,9 +53,12 @@ import {
 import { DOC_EDIT_ENDPOINT_NAME, docEditMiddlewareCreate } from './doc-edit-server.ts';
 import { excludeMatcherBuild, type ExcludeMatcher } from './doc-source-exclude.ts';
 import { DOC_ASSET_ENDPOINT_NAME, docAssetMiddlewareCreate } from './doc-asset-server.ts';
+import { DOC_API_ENDPOINT_NAME, docApiBridgeCreate } from './doc-api-server.ts';
+import { apiDeclaredConfigOfDocPageListGet } from './doc-api-config.ts';
+import { hotkeyConfigGet } from './doc-hotkey.ts';
 import {
   DOC_SERVICE_ENDPOINT_NAME, docServiceMiddlewareCreate, serviceBackendLaunch, serviceConfigGet, serviceFolderSetGet, servicePathIs,
-  serviceConfigFileGet, serviceSyncDocPageListBuild, type ServiceFolderSet,
+  serviceConfigFileGet, serviceSyncDocPageListBuild, problemListReport, type ServiceFolderSet,
 } from './doc-service-server.ts';
 import {
   compConfigOfDocPageListGet, compConfigurationFileListGet, compFolderListGet, compManifestPathIs, compPathIs,
@@ -88,12 +91,15 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 //   export const docEditEndpoint = '/__doc-edit'    // '' in a build: no edit api
 //   export const docAssetEndpoint = '/__doc-asset'  // '' in a build or without asset.file
 //   export const docServiceEndpoint = '/__doc-service' // '' in a build or without config service
+//   export const docApiEndpoint = '/__doc-api'      // '' in a build: the remote api of the page (doc-api-server.ts)
 //   export const assetSnapshot = {...} | null       // the asset service layer, bundled in a build
 //   export const docCompMountList = [{ docPageAlias, tagName, id, export, defineOptionsExport, entryFile, module }]
 //                                                   // the components of the loaded doc pages, their modules imported
 //   export function subscribeDocSource(listener)    // dev: the source data changed
 //   export function subscribeDocAsset(listener)     // dev: an object or the store's folders changed on disk
 //   export function subscribeDocServer(listener)    // dev: { isConnected } when the HMR socket of vite closes / opens
+//   export function subscribeDocApi(listener)       // dev: a request of the remote api forwarded by the server
+//   export function docApiSend(event, data)         // dev: a message to the server over the HMR socket (hello, response)
 //
 // every file is named by its source path, in the full form
 // ~docPageAlias:rootAlias/relPath (doc-source-path.js); a rule of a doc page
@@ -217,6 +223,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
   let docEditEndpoint = '';
   let docAssetEndpoint = '';
   let docServiceEndpoint = '';
+  let docApiEndpoint = '';
   // the configuration files of the page: config.yaml and its local layer,
   // the entry file of the document and every yaml file it reaches (included
   // side panels, source and tag files), and the tag file of config. a change
@@ -287,6 +294,9 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       configDir = path.dirname(configFile);
       docSourceEndpoint = isBuild ? '' : endpointBuild(viteConfig.base, DOC_SOURCE_ENDPOINT_NAME);
       docEditEndpoint = isBuild ? '' : endpointBuild(viteConfig.base, DOC_EDIT_ENDPOINT_NAME);
+      // the remote api of the page (doc_page_impl_api.md#remote-callers):
+      // a built page has no server to forward a call
+      docApiEndpoint = isBuild ? '' : endpointBuild(viteConfig.base, DOC_API_ENDPOINT_NAME);
       const configDocEarly = loadConfigDoc(configFile, options);
       pathsConfiguration = collectPathsConfiguration(configDocEarly);
       // the asset section is checked here, before the endpoint is chosen: a
@@ -345,6 +355,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         docEditEndpoint,
         docAssetEndpoint,
         docServiceEndpoint,
+        docApiEndpoint,
         assetSnapshot,
         moduleId,
         compMountList: compConfigGet(configDoc).mountList,
@@ -559,9 +570,15 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         },
         // the doc page config layer (doc_page_impl_config.md#the-doc-page-layer):
         // the config declarations of the entry and the files it reaches
+        // the doc page config layers and the workspace config layer
+        // (doc_page_impl_config.md#config-layers): the config declarations
+        // of every doc page and of the workspace
         config: {
           configDir,
-          declarationListGet: () => loadConfigDoc(configFile, options).docEntry.configDeclarationList,
+          declarationListGet: () => {
+            const configDocNow = loadConfigDoc(configFile, options);
+            return [...configDocNow.docEntry.configDeclarationList, ...(configDocNow.workspace.configDeclarationList ?? [])];
+          },
           onFileListWritten: configurationFileListWritten,
         },
         // the workspace file (doc_page_impl_source.md#editing-the-workspace-file)
@@ -621,6 +638,13 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         server.watcher.on('add', assetChangeSend);
         server.watcher.on('change', assetChangeSend);
         server.watcher.on('unlink', assetChangeSend);
+      }
+
+      // the remote api of the page (doc_page_impl_api.md#remote-callers): a
+      // request of a caller outside the page is forwarded to a connected
+      // page over the HMR socket and answered with what the page answered
+      if (docApiEndpoint) {
+        server.middlewares.use(docApiBridgeCreate(server, { endpoint: docApiEndpoint }).middleware);
       }
 
       // the service api is the backend's; the plugin only forwards it. like
@@ -1100,6 +1124,30 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
       ...Object.fromEntries(compConfig.mountList.map((mount) => [mount.tagName, mount.id])),
     };
   }
+  // the keyboard maps (doc_page_impl_api_hotkey.md): the package's default
+  // map ("hotkey: { file }" of config.yaml, the default keys of the built-in
+  // apis), the maps of the doc pages, the workspace's map ("hotkey" of the
+  // workspace); and the apis the doc pages declare in yaml
+  // (doc_page_impl_api.md#declared-apis). read here, handed to the page as
+  // data; their files are configuration
+  if (config.hotkey !== undefined && (!config.hotkey || typeof config.hotkey !== 'object' || Array.isArray(config.hotkey) || typeof config.hotkey.file !== 'string' || !config.hotkey.file.trim())) {
+    throw new Error(`[doc-source] config "hotkey" is { file }, the default keyboard map of the package: ${configFile}`);
+  }
+  const hotkeyConfig = hotkeyConfigGet({
+    filePackage: config.hotkey ? { id: 'package', file: path.resolve(configDir, config.hotkey.file), alias: 'package' } : undefined,
+    fileWorkspace: workspaceSpec.hotkeyFile ? { id: 'workspace', file: workspaceSpec.hotkeyFile, alias: 'workspace' } : undefined,
+    docPageInputList: entryLoaded.docPageList,
+  }, configDir);
+  for (const problem of hotkeyConfig.problemList) problemListReport('doc-hotkey', problem.file, [problem.message]);
+  config.hotkey = {
+    mapPackage: hotkeyConfig.mapPackage,
+    docPageList: hotkeyConfig.docPageList,
+    mapWorkspace: hotkeyConfig.mapWorkspace,
+    problemList: hotkeyConfig.problemList,
+  };
+  const apiDeclaredConfig = apiDeclaredConfigOfDocPageListGet(entryLoaded.docPageList, configDir);
+  for (const problem of apiDeclaredConfig.problemList) problemListReport('doc-api', problem.file, [problem.message]);
+  config.apiDeclared = { list: apiDeclaredConfig.list, problemList: apiDeclaredConfig.problemList };
   // page values the workspace or its first doc page supplies when
   // config.yaml does not set them, so that a doc page used in another
   // deployment brings its own. a home document written in config.yaml is a
@@ -1146,6 +1194,10 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
     if (docPage.service !== false) fileListConfiguration.push(serviceConfigFileGet(docPage));
   }
   fileListConfiguration.push(...compConfigurationFileListGet(compConfig));
+  // the map files of the package and the workspace, the hotkey folders and
+  // the api files of the doc pages: a change there reloads the page with
+  // the new maps / apis
+  fileListConfiguration.push(...hotkeyConfig.pathList, ...apiDeclaredConfig.pathList);
   Object.defineProperty(config, 'fileListConfiguration', { enumerable: false, value: fileListConfiguration });
   return config;
 }
@@ -1738,6 +1790,7 @@ export function generateModuleCode(
     docEditEndpoint: string;
     docAssetEndpoint: string;
     docServiceEndpoint?: string;
+    docApiEndpoint?: string;
     assetSnapshot: AssetSnapshot | null;
     moduleId: string;
     compMountList?: CompMount[];
@@ -1768,6 +1821,7 @@ export function generateModuleCode(
   lines.push(`export const docEditEndpoint = ${JSON.stringify(services.docEditEndpoint)};`);
   lines.push(`export const docAssetEndpoint = ${JSON.stringify(services.docAssetEndpoint)};`);
   lines.push(`export const docServiceEndpoint = ${JSON.stringify(services.docServiceEndpoint ?? '')};`);
+  lines.push(`export const docApiEndpoint = ${JSON.stringify(services.docApiEndpoint ?? '')};`);
   lines.push(`export const assetSnapshot = ${JSON.stringify(services.assetSnapshot)};`);
   // the bytes of the files components name: a build inlines them as data
   // urls, keyed by source path and by the spelling the reference used; in
@@ -1821,6 +1875,11 @@ export function generateModuleCode(
     // its socket; the page turns view-only meanwhile (DocEnvStore)
     lines.push('const listenersDocServer = import.meta.hot?.data.listenersDocServer ?? new Set();');
     lines.push('export function subscribeDocServer(listener) { listenersDocServer.add(listener); return () => listenersDocServer.delete(listener); }');
+    // the remote api (doc-api-server.ts): the server forwards a request over
+    // the HMR socket, the page answers through it (DocApiStore)
+    lines.push('const listenersDocApi = import.meta.hot?.data.listenersDocApi ?? new Set();');
+    lines.push('export function subscribeDocApi(listener) { listenersDocApi.add(listener); return () => listenersDocApi.delete(listener); }');
+    lines.push('export function docApiSend(event, data) { import.meta.hot?.send(event, data); }');
     lines.push('if (import.meta.hot) {');
     lines.push("  import.meta.hot.on('vite:ws:disconnect', () => { for (const listener of listenersDocServer) listener({ isConnected: false }); });");
     lines.push("  import.meta.hot.on('vite:ws:connect', () => { for (const listener of listenersDocServer) listener({ isConnected: true }); });");
@@ -1838,6 +1897,7 @@ export function generateModuleCode(
     lines.push('    data.listenersDocSource = listenersDocSource;');
     lines.push('    data.listenersDocAsset = listenersDocAsset;');
     lines.push('    data.listenersDocServer = listenersDocServer;');
+    lines.push('    data.listenersDocApi = listenersDocApi;');
     lines.push('    data.sourceState = sourceState;');
     lines.push('  });');
     // the module itself was replaced (a genuine regeneration, not a content save)
@@ -1851,11 +1911,16 @@ export function generateModuleCode(
     lines.push("  import.meta.hot.on('doc-asset-change', (dataChange) => {");
     lines.push('    for (const listener of listenersDocAsset) listener(dataChange);');
     lines.push('  });');
+    lines.push("  import.meta.hot.on('doc-api-request', (request) => {");
+    lines.push('    for (const listener of listenersDocApi) listener(request);');
+    lines.push('  });');
     lines.push('}');
   } else {
     lines.push('export function subscribeDocSource() { return () => {}; }');
     lines.push('export function subscribeDocAsset() { return () => {}; }');
     lines.push('export function subscribeDocServer() { return () => {}; }');
+    lines.push('export function subscribeDocApi() { return () => {}; }');
+    lines.push('export function docApiSend() {}');
   }
   return lines.join('\n');
 }

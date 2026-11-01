@@ -19,7 +19,7 @@ export const docEnvKindDefineList = [
   {
     kind: 'viteDevServer',
     label: 'development server',
-    capabilityList: ['sourceWrite', 'edit', 'asset', 'service', 'devWarning'],
+    capabilityList: ['sourceWrite', 'edit', 'asset', 'service', 'apiRemote', 'devWarning'],
   },
   {
     kind: 'staticBuild',
@@ -36,12 +36,15 @@ export const docEnvKindDefineList = [
 //                 asset service layer reads the snapshot bundled into a build
 //   service       the service backend, at the address the page is given (the
 //                 development server forwards it; a build may name a deployed one)
+//   apiRemote     the apis of the page called from outside it, through the
+//                 development server (doc_page_impl_api.md#remote-callers)
 //   devWarning    hints meant for the integrator, printed to the console
 export const docEnvCapabilityDefineByName = {
   sourceWrite: { api: 'source', label: 'creating files' },
   edit: { api: 'edit', label: 'editing' },
   asset: { api: 'asset', label: 'the asset api' },
   service: { api: 'service', label: 'the service backend' },
+  apiRemote: { api: 'api', label: 'remote api calls' },
   devWarning: { api: '', label: 'development warnings' },
 };
 

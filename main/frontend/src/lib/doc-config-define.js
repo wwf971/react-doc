@@ -120,10 +120,18 @@ export const configDefineListBuiltin = [
 //                      it is read and written (store/doc-config-layer.ts):
 //                        'package'   config.yaml of the doc page package
 //                                    (configDefault); never written from the page
-//                        'docEntry'  the "config" declarations of the entry of the
+//                        'docEntry'  the "config" declarations of the entry of a
 //                                    doc page and of the files it reaches, written
 //                                    in place by the development server
+//                        'workspace' the "config" declarations of the workspace
+//                                    (its file, or "workspace" of config.yaml),
+//                                    written in place the same way
 //                        'browser'   the browser's localStorage, for this page
+//   isPerDocPage       one layer per doc page of the workspace, in the order of
+//                      the workspace with the main doc page (its first root doc
+//                      page) first, each named by the doc page's alias (the
+//                      layer id {id}:{alias}); only the main doc page's layer
+//                      takes part in the resolution, the others are shown
 //   isAboveDocLevels   the layer is applied after the document levels (source,
 //                      side panel, frontmatter), so it wins over what documents
 //                      declare; false: before them, so documents refine it
@@ -131,7 +139,10 @@ export const configDefineListBuiltin = [
 //                      are part of it (the default layer)
 //   description        shown in the head of the settings panel
 // another layer is one more entry here, at its place in the stack, with a
-// storage the store knows how to read and write.
+// storage the store knows how to read and write. the stack: the package's
+// defaults, the main doc page's declarations, the workspace's (the
+// deployment decides over the doc page it deploys, as the main doc page
+// decides over the doc pages it includes), the document levels, the browser.
 export const configLayerDefineList = [
   {
     id: 'default',
@@ -145,9 +156,18 @@ export const configLayerDefineList = [
     id: 'docPage',
     label: 'Doc page',
     storage: 'docEntry',
+    isPerDocPage: true,
     isAboveDocLevels: false,
     isEveryKeyDeclared: false,
     description: 'declared by the doc page: its entry and the files it reaches; documents may refine a value',
+  },
+  {
+    id: 'workspace',
+    label: 'Workspace',
+    storage: 'workspace',
+    isAboveDocLevels: false,
+    isEveryKeyDeclared: false,
+    description: 'declared by the workspace ("config" of its file): the deployment\'s values over the main doc page\'s; documents may refine a value',
   },
   {
     id: 'client',
@@ -158,6 +178,12 @@ export const configLayerDefineList = [
     description: 'kept in this browser for this page; wins over what documents declare',
   },
 ];
+
+// the layer id of a per-doc-page layer for one doc page: {id}:{alias}, or
+// the id alone when the page has no alias (a host without a workspace)
+export function configLayerIdOfDocPage(define, docPageAlias) {
+  return docPageAlias ? `${define.id}:${docPageAlias}` : define.id;
+}
 
 // the levels a value can be decided by, in resolution order: the definition
 // default (the default layer, when there is one), the layers below the

@@ -29,12 +29,13 @@ compDefine(Xxx, {
     editModeList:  [{ id, label, description, icon, isDefault }]   the ways its data is edited in place
     sourceDefaultCreate: (env) => { lang, raw, props } | { text } | undefined
                                                                  the source of a new block
+    apiList:       [apiDefine({ name, label, paramList, run, ... })]    the apis it offers the unified api registry
     anythingElse:  kept as written                                  for a host or a later feature
   },
 })
 ```
 
-Five names are **standard**: the page knows their shape, normalizes them at registration (`comp-expose.js`, `compExposeNormalize`; a wrong shape fails there, not later in some reader), and reads them where it needs them. Every other name is **non-standard**: kept exactly as declared, read by whoever knows it through `compExposeGet(definition, name)`, so a host application or a feature that does not exist yet can hang its own facts on a component without a change to the registry. A legacy definition (a bare React component in `compById`) exposes nothing and gets the defaults of every standard name. The standard names are read through small accessors rather than by reaching into the definition (`compMetaGet`, `compIconGet`, `compViewModeListGet`, `compEditModeListGet`, `compSourceDefaultGet`, `compExposeGet`); for a component that exposes nothing they return the defaults described below.
+Six names are **standard**: the page knows their shape, normalizes them at registration (`comp-expose.js`, `compExposeNormalize`; a wrong shape fails there, not later in some reader), and reads them where it needs them. Every other name is **non-standard**: kept exactly as declared, read by whoever knows it through `compExposeGet(definition, name)`, so a host application or a feature that does not exist yet can hang its own facts on a component without a change to the registry. A legacy definition (a bare React component in `compById`) exposes nothing and gets the defaults of every standard name. The standard names are read through small accessors rather than by reaching into the definition (`compMetaGet`, `compIconGet`, `compViewModeListGet`, `compEditModeListGet`, `compSourceDefaultGet`, `compApiListGet`, `compExposeGet`); for a component that exposes nothing they return the defaults described below.
 
 The exposures of the components registered by the package are kept beside the component when it has an editor of its own (`image-expose.js`, `image-grid-expose.js`, the demo `StockTable`), and in `comp-doc/registry/registry-expose.js` for the others; every component that can start a block of a document exposes a label, a description, an icon, and a `sourceDefaultCreate`.
 
@@ -157,6 +158,10 @@ returns
 ```
 
 The returned shape is checked when the factory is called; a factory that throws or returns a wrong shape is reported in the console and its component left out of the menu, so one faulty component does not take the menu with it. A component without a factory cannot be inserted from the menu, only written by hand: the components a document writes only inside another one (`Tab`, `Step`, `Accordion`, `File`, `Folder`), markers of the next node (`Anchor`), inline components (`Tag`, `DocLinkInline`), the parts other components render through the registry (`FileIcon`, the cells, rows and header controls of the hierarchies), and what is not document content (`SidePanelItem`, `TagLabel`, the editors of the edit layer). A component declared `isNotInDoc` is left out of the menu even with a factory.
+
+### Apis
+
+A component offers operations on its blocks to whoever works the page programmatically, the command palette, a hotkey or an AI agent, through `expose.apiList`: definitions made with `apiDefine()` (or their options), each with a `name`, registered as `{compId}/{name}` in the [unified api registry](doc_page_impl_api.md#the-apis-of-a-component) while the component is in the component registry, and gone with it. An api's `run(context, params)` receives the context of every api plus `context.comp = { compId, definition }`, locates its block like the document apis do (an index, or the `id` of the marker), and reads and writes through the same paths as the page (the event layer for a change). `TestCaseTable` exposes `tableGet` and `resultRecord` (`TestCaseTableApiList.js`): reading a table and recording a result as a click on a cell would, which is how an agent that checked a feature records its check.
 
 ## Component styles
 

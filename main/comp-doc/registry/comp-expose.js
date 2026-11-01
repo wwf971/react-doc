@@ -1,4 +1,5 @@
 import { FileCode } from '../../frontend/UICommon.js';
+import { apiDefine, apiDefinitionIs } from '../../frontend/src/lib/doc-api.js';
 import { compIconDefault } from './comp-icon.jsx';
 
 // What a component exposes about itself through its registry definition
@@ -67,6 +68,13 @@ import { compIconDefault } from './comp-icon.jsx';
 //                    undefined the component starts no block there (an
 //                        mdx-only component in an md document)
 //                  a component without it cannot be inserted from the menu
+//   apiList        [apiDefine({ name, label, description, paramList, run,
+//                  isAvailable, palette })]: the apis the component offers
+//                  the unified api registry (doc_page_impl_api.md#the-apis-of-a-component),
+//                  registered as {compId}/{name} while the component is in
+//                  the registry; run(context, params) receives
+//                  context.comp = { compId, definition }. plain option
+//                  objects are accepted and defined here
 
 export const COMP_EDIT_MODE_SOURCE_ID = 'source';
 
@@ -102,7 +110,7 @@ const ASSET_SAVE_MODE_LIST = ['inPlace', 'newVersion'];
 // isAssetOnly renders there only with data from the asset service layer
 export const COMP_PLACEMENT_DOC_LIST = ['mdx', 'commentBlock'];
 
-export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate'];
+export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'apiList'];
 
 // the normalized `expose` of a definition; throws on a shape the page
 // cannot work with, so a wrong declaration fails at registration
@@ -115,7 +123,7 @@ export function compExposeNormalize(expose = {}) {
   if (expose.editTemplate !== undefined) {
     throw new Error('compDefine: expose.editTemplate is expose.sourceDefaultCreate(env) now (comp-expose.js).');
   }
-  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, ...exposeOther } = expose;
+  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, apiList, ...exposeOther } = expose;
   return {
     ...exposeOther,
     meta: metaNormalize(meta),
@@ -123,7 +131,23 @@ export function compExposeNormalize(expose = {}) {
     viewModeList: modeListNormalize(viewModeList, 'expose.viewModeList', []),
     editModeList: modeListNormalize(editModeList, 'expose.editModeList', [COMP_EDIT_MODE_SOURCE_ID]),
     sourceDefaultCreate: sourceDefaultCreateNormalize(sourceDefaultCreate),
+    apiList: apiListNormalize(apiList),
   };
+}
+
+// the apis a component exposes: definitions made with apiDefine, or the
+// options of one; every one needs a name, unique in the list
+function apiListNormalize(apiList) {
+  if (apiList === undefined) return [];
+  if (!Array.isArray(apiList)) throw new Error('compDefine: expose.apiList must be an array.');
+  const nameSet = new Set();
+  return apiList.map((item, index) => {
+    const api = apiDefinitionIs(item) ? item : apiDefine(item);
+    if (api.name === '') throw new Error(`compDefine: expose.apiList[${index}] needs a name.`);
+    if (nameSet.has(api.name)) throw new Error(`compDefine: expose.apiList declares '${api.name}' twice.`);
+    nameSet.add(api.name);
+    return api;
+  });
 }
 
 function metaNormalize(meta) {
@@ -234,6 +258,11 @@ export function compExposeGet(definition, name) {
 
 export function compMetaGet(definition) {
   return definition?.expose?.meta ?? metaDefault;
+}
+
+// the apis a component exposes (none for a legacy definition)
+export function compApiListGet(definition) {
+  return definition?.expose?.apiList ?? [];
 }
 
 // the icon the page draws for a component: its own, else the default one

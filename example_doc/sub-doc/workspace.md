@@ -24,7 +24,9 @@ workspace (workspace.yaml)
 └── second    ./example_doc/second-doc  root doc page, alias "second"
 ```
 
-A deployment of one doc page needs no workspace file: `config.yaml` names the doc page itself (`docEntry: { dir, alias }`), and the page serves it as a *virtual workspace* holding that doc page alone. Both read the same, so a doc page written for one deployment works in any workspace.
+The first doc page of the list is the **main doc page**: the page takes its title and home document from it, applies its config (the config of the other doc pages is shown in the settings panel, not applied), and reads a local path typed in the page as one of its roots. What the deployment itself decides is written in the workspace file: its `config`, over the main doc page's, and its keyboard map (`hotkey: { file }`), over every doc page's.
+
+A deployment of one doc page needs no workspace file: `config.yaml` names the doc page itself (`docEntry: { dir, alias }`), and the page serves it as a *virtual workspace* holding that doc page alone, as its main doc page. Both read the same, so a doc page written for one deployment works in any workspace.
 
 ## Two kinds of alias
 

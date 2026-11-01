@@ -1,0 +1,33 @@
+# The default keyboard map of the doc page package: the default keys of the
+# built-in apis, named by config.yaml (hotkey.file), the lowest map of the
+# stack. The maps of the doc pages (.doc-page/hotkey/), the workspace's map
+# (workspace.yaml hotkey.file) and the host's are stacked over it, so any of
+# them rebinds or unbinds a key here. The keys follow the editors readers
+# know (the palette as in VS Code) and avoid the keys browsers keep for
+# themselves; "mod" is Cmd on macOS and Ctrl elsewhere. The grammar is the
+# one of every map file. design: doc_page_impl_api_hotkey.md
+hotkeyMap:
+  description: the default keys of the doc page package
+  bindingList:
+    - key: mod+shift+p
+      api: palette/toggle
+      description: the command palette
+    - key: f1
+      api: palette/toggle
+      description: the command palette
+    - key: alt+left
+      api: nav/back
+    - key: alt+right
+      api: nav/forward
+    - key: alt+up
+      api: nav/up
+    - key: alt+home
+      api: nav/home
+    - key: mod+shift+e
+      api: edit/modeToggle
+      when: editAvailable
+    - key: mod+shift+b
+      api: edit/blockSelectModeToggle
+      when: editAvailable
+    - key: mod+,
+      api: settings/toggle

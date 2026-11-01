@@ -24,8 +24,11 @@ tag:
       display:
         data: { colorBorder: '#0f766e', colorBackground: '#ccfbf1', colorText: '#115e59' }
 
-# config of this doc page. included by another page, its declarations sit
-# below those of the including page, which decides over them.
+# config of this doc page. it is applied when this doc page is the main
+# doc page of the workspace (deployed alone, or first in a workspace file);
+# included by another doc page, as here, it is shown on a tab of its own in
+# the settings panel and not applied: the main doc page and the workspace
+# decide the page config (doc_page_impl_config.md#the-doc-page-layers).
 config:
   TagsDisplayAtLinkIsOn: false
   TagsDisplayAtLinkPosition: before

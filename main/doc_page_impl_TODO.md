@@ -25,7 +25,7 @@ How the list is kept (also in `AGENTS.md`):
 
 ## Config
 
-- <a id="config-declaration-edit"></a>**Adding and removing config keys and declarations from the page.** The doc page layer edits a value a declaration already holds; adding a key to a declaration, removing one, and adding a declaration are written in the files ([The doc page layer](doc_page_impl_config.md#the-doc-page-layer)). The yaml utilities that insert and remove keys in place are the place to start ([YAML utilities](doc_page_impl_yaml_utils.md)).
+- <a id="config-declaration-edit"></a>**Adding and removing config keys and declarations from the page.** The doc page layer edits a value a declaration already holds; adding a key to a declaration, removing one, and adding a declaration are written in the files ([The doc page layer](doc_page_impl_config.md#the-doc-page-layers)). The yaml utilities that insert and remove keys in place are the place to start ([YAML utilities](doc_page_impl_yaml_utils.md)).
 
 ## Editing
 
@@ -39,6 +39,14 @@ How the list is kept (also in `AGENTS.md`):
 ## Asset service layer
 
 - <a id="asset-remote-store"></a>**Remote stores and a local cache.** The page has one store, `local`; a remote store answering the same api over the network, and a local cache of it whose versions are never the truth, are planned, and references already name their store ([Stores, objects, versions](doc_page_impl_asset.md#stores-objects-versions)).
+
+## Api registry
+
+In the order they would matter ([Unified api registry](doc_page_impl_api.md)):
+
+- <a id="api-registry"></a><a id="api-hotkey-client-map"></a>**Keys edited from the page.** The keyboard maps are files of the package, the doc pages and the workspace, and the host's; the reader can only pick a map of a doc page ([Where the maps are](doc_page_impl_api_hotkey.md#where-the-maps-are)). A client map kept in the browser above the stack, edited in the API tab (a key, an api chosen from the registry), would be the counterpart of the client config layer; `DocHotkeyStore.mapListStack` takes one more map.
+- <a id="api-job"></a>**An api that is a job.** An api answers within the call ([Core concepts](doc_page_impl_api.md#core-concepts)); a long operation (a build, a scan of every document) has no form yet. The jobs of the service backend (`serviceJobGetRequest`, polled) are the model: an api returning a job id, and `api/jobGet` to follow it.
+- <a id="api-remote-build"></a>**Remote calls without the development server.** A built page keeps its apis for the page's own ui only: the bridge is a route of the development server ([Remote callers](doc_page_impl_api.md#remote-callers)). A page served otherwise would need the same bridge in its server, with the authorization a page on the network needs (the question of [a deployed backend](#service-deployed-backend)).
 
 ## Service layer
 

@@ -4,8 +4,8 @@
 
 The config system decides how the doc page behaves, for example whether tags appear next to the path bar. It has three parts:
 
-- **Config layers**: page-wide values, stacked in a fixed order ([Config layers](#config-layers)). The page has three: the **default** layer, which comes with the doc page package (`config.yaml` `configDefault`) and is never changed from the page; the **doc page** layer, declared by the doc page itself (its entry file and the files it reaches); and the **client** layer, kept in the reader's browser.
-- **Document config**: for some keys, a single document can have its own value. That value is resolved from several places in a fixed order: the default and doc page layers, source rules, side-panel items, the document's frontmatter, then the client layer.
+- **Config layers**: page-wide values, stacked in a fixed order ([Config layers](#config-layers)). The page has four kinds: the **default** layer, which comes with the doc page package (`config.yaml` `configDefault`) and is never changed from the page; the **doc page** layers, one per doc page of the workspace, declared by each doc page itself (its entry file and the files it reaches), of which only the **main doc page's** is applied; the **workspace** layer, declared by the workspace file of the deployment; and the **client** layer, kept in the reader's browser.
+- **Document config**: for some keys, a single document can have its own value. That value is resolved from several places in a fixed order: the default, main doc page and workspace layers, source rules, side-panel items, the document's frontmatter, then the client layer.
 
 The keys of the page are declared in code. A registered component may declare keys of its own, which go through the same levels under a `compConfig` mapping, kept visibly apart from the page keys ([Component-level config](#component-level-config)); and a value at any level may use a variable ([Variables](#variables)). All parts use the same lists of known keys, and renderers read them through one config service. For the overall architecture, refer to [Document Page: Design](doc_page_impl.md).
 
@@ -14,21 +14,23 @@ key definitions (code)          which keys exist, their values, default, scope
 component definitions (code)    the keys a component declares for itself (compDefine expose.meta.configDefineList)
 layer definitions (code)        which config layers exist, how each is stored, where it sits in the stack
         │
-default layer:   config.yaml configDefault (+ built-in defaults)   the package's values, read only
-doc page layer:  "config" of the entry and the files it reaches   the doc page's values, edited in place
+default layer:    config.yaml configDefault (+ built-in defaults)   the package's values, read only
+doc page layers:  "config" of each doc page's entry and the files it reaches   one layer per doc page of the
+        │           workspace; the main doc page's (the first root doc page) applied, the others shown only
+workspace layer:  "config" of the workspace file                  the deployment's values, over the main doc page's
         │                                     (each value: { Key, compConfig: { Comp: { Key } } }, ${name} variables)
         │  document-level keys only, later wins:
         ├── source.yaml       rules that collected the document
         ├── side-panel.yaml   items that bind the document, or a folder above it
         └── frontmatter       "config" of the document itself
         │
-client layer:    this browser's storage   overrides any key, page or document
+client layer:     this browser's storage   overrides any key, page or document
         ▼
 DocConfigStore  ──►  config service  ──►  renderers (side-panel items, path bar, links, ...)
                                      ──►  RegisteredComp: config.compConfig of every component
         ▲
 settings panel  ──►  one tab per layer, showing what the layer declares (tabs Config / Component)
-                     doc page: a value written into its declaration in place (development server)
+                     doc page, workspace: a value written into its declaration in place (development server)
                      client:   keys added, removed, cleared
 ```
 
@@ -38,9 +40,10 @@ This is separate from the rest of `config.yaml`, such as `docEntry`, `asset`, `s
 
 - **Key definition**: declares that a key exists: its value type, its default, its scope, a description for the settings panel, and whether the reader may change it. Definitions live in code; values live in YAML (or the browser). This mirrors the component registry, where code decides what exists and config decides what is used.
 - **Scope**: `page` keys have one value for the whole page and are read from the config layers only. `doc` keys can additionally be set for single documents.
-- **Declaration**: one mapping of config keys written in one place: `configDefault` of `config.yaml`, one `config` mapping of a doc page file, a source rule, a side-panel node, a frontmatter, the browser's entry. A declaration says only the keys it wants; a key it leaves out keeps the value of the levels below.
-- **Level**: one place where a value can be declared. The levels are the layers below the document levels (default, doc page), source, side panel, document, and the layers above them (client). Some features add an inline level of their own, such as a link title marker.
-- **Layer**: a page-wide level made of one or more declarations, stacked in order. A layer is defined by its id, its storage, and whether it sits below or above the document levels; the layers form a list, and nothing in the config module knows the current ones by name ([Config layers](#config-layers)).
+- **Declaration**: one mapping of config keys written in one place: `configDefault` of `config.yaml`, one `config` mapping of a doc page file or of the workspace file, a source rule, a side-panel node, a frontmatter, the browser's entry. A declaration says only the keys it wants; a key it leaves out keeps the value of the levels below.
+- **Level**: one place where a value can be declared. The levels are the layers below the document levels (default, the main doc page, workspace), source, side panel, document, and the layers above them (client). Some features add an inline level of their own, such as a link title marker.
+- **Layer**: a page-wide level made of one or more declarations, stacked in order. A layer is defined by its id, its storage, and whether it sits below or above the document levels; the layers form a list, and nothing in the config module knows the current ones by name ([Config layers](#config-layers)). A definition may stand for one layer per doc page of the workspace, and a layer may be **shown without being applied**: a doc page's layer other than the main doc page's.
+- **The main doc page**: the first root doc page of the workspace (the first of `docPageList` of the workspace file, or the one doc page of a virtual workspace). It is the doc page whose config takes part in the resolution; the page values (`siteTitle`, `homeDoc`) and the local paths typed in the page are its as well.
 - **Config service**: the query object renderers use. They never read `configDefault`, the doc page declarations, source rules, side-panel nodes, or frontmatter themselves.
 
 ## Naming keys
@@ -67,23 +70,29 @@ A new feature picks one prefix and uses it for all of its keys.
 A layer is a page-wide level: a stack of declarations, each a mapping of config keys, with one storage that says where the declarations are kept and how the page writes them. The layers are themselves a stack, defined in one list (`configLayerDefineList` in `lib/doc-config-define.js`); the order of the list is the order of the stack, and each definition says where the layer is stored and whether it sits below or above the document levels:
 
 ```js
-{ id: 'default', label: 'Default',  storage: 'package',  isAboveDocLevels: false, isEveryKeyDeclared: true, description: '...' }
-{ id: 'docPage', label: 'Doc page', storage: 'docEntry', isAboveDocLevels: false, description: '...' }
-{ id: 'client',  label: 'Client',   storage: 'browser',  isAboveDocLevels: true,  description: '...' }
+{ id: 'default',   label: 'Default',   storage: 'package',   isAboveDocLevels: false, isEveryKeyDeclared: true, description: '...' }
+{ id: 'docPage',   label: 'Doc page',  storage: 'docEntry',  isAboveDocLevels: false, isPerDocPage: true,      description: '...' }
+{ id: 'workspace', label: 'Workspace', storage: 'workspace', isAboveDocLevels: false, description: '...' }
+{ id: 'client',    label: 'Client',    storage: 'browser',   isAboveDocLevels: true,  description: '...' }
 ```
 
 ```text
-          who declares                       where                                   written from the page
-default   the doc page package               config.yaml configDefault (+ code)     never
-docPage   the doc page                       "config" of its entry and files        a declared value, in place (development server)
+                who declares                     where                                   written from the page
+default         the doc page package             config.yaml configDefault (+ code)     never
+docPage:{alias} each doc page of the workspace   "config" of its entry and files        a declared value, in place (development server)
+                  (the main doc page's applied, the others shown)
+workspace       the deployment                   "config" of the workspace file         a declared value, in place (development server)
   ── document levels: source rules, side-panel nodes, frontmatter ──
-client    the reader                         this browser's localStorage            any key: add, change, remove, clear
+client          the reader                       this browser's localStorage            any key: add, change, remove, clear
 ```
 
-Two ideas shape every layer:
+The order of the stack follows one rule, **the container decides over what it contains**: the workspace, which names the doc pages it deploys, decides over the main doc page; the main doc page, which includes other doc pages, decides over them (so completely that their config is not applied at all, [The doc page layers](#the-doc-page-layers)); the reader, who sits over the whole page, decides over everything. The default layer is the ground the rest refines. The same rule orders the keyboard maps ([Keyboard maps](doc_page_impl_api_hotkey.md#where-the-maps-are)) and the page values (`siteTitle` of `config.yaml`, else the workspace's, else the main doc page's).
 
-- **Layers are open-ended.** Nothing but the list knows which layers exist. The config model takes the layers as a list and applies the ones below the document levels before the source rules and the ones above after the frontmatter (`configModelBuild({ layerList })`), the store builds one layer object per definition (`configLayerCreate`, `store/doc-config-layer.ts`), and the settings panel shows one tab per layer. Another layer, say a team layer kept on a server between the doc page and the documents, is one more definition at its place in the list and one more storage class behind the same `ConfigLayer` surface: its declarations (`declarationList`), its merged values (`config`, `compConfig`), whether it can be written now and why not (`isWritable`, `disabledReason`), whether it takes new keys (`isKeyAddable`), whether its declarations are worth showing one by one (`isDeclarationViewOffered`), whether it can be cleared at once (`isClearable`), the state of its last write (`request`), and the writes (`valueSet`, `compValueSet`, `declarationValueSet`, `declarationCompValueSet`, `valueRemove`, `compValueRemove`, `clear`, each answering `{ code, message }`). A yaml layer keys its component values by tag name, a layer the page keeps itself by component id (`isCompKeyedById`); the model treats both alike.
-- **A layer shows what it declares.** A layer is not a full set of keys with a value for each: it holds the keys someone chose to set there, and the settings panel lists exactly those, with where each is written. The value a key has in the end is the business of the stack, shown on its own tab (Result). Only the default layer lists every key, because it does declare every key: the built-in defaults of the definitions are part of it.
+Three ideas shape every layer:
+
+- **Layers are open-ended.** Nothing but the list knows which layers exist. The config model takes the layers as a list and applies the ones below the document levels before the source rules and the ones above after the frontmatter (`configModelBuild({ layerList })`), the store builds one layer object per definition (`configLayerCreate`, `store/doc-config-layer.ts`), and the settings panel shows one tab per layer. Another layer, say a team layer kept on a server between the workspace and the documents, is one more definition at its place in the list and one more storage class behind the same `ConfigLayer` surface: its declarations (`declarationList`), its merged values (`config`, `compConfig`), whether it is applied (`isParticipating`) and what it is in this workspace (`note`), whether it can be written now and why not (`isWritable`, `disabledReason`), whether it takes new keys (`isKeyAddable`), whether its declarations are worth showing one by one (`isDeclarationViewOffered`), whether it can be cleared at once (`isClearable`), the state of its last write (`request`), and the writes (`valueSet`, `compValueSet`, `declarationValueSet`, `declarationCompValueSet`, `valueRemove`, `compValueRemove`, `clear`, each answering `{ code, message }`). A yaml layer keys its component values by tag name, a layer the page keeps itself by component id (`isCompKeyedById`); the model treats both alike.
+- **A definition may stand for several layers.** A definition with `isPerDocPage` is expanded for the workspace (`configLayerDefineListExpand`): one layer per doc page, named by the doc page's alias (id `docPage:{alias}`, the main doc page first, then the others in the order the workspace loaded them), so the list of layers follows the workspace (a doc page mounted from the settings panel gets its tab) while the definitions stay a fixed list. `DocConfigStore.layerList` is derived from the definitions and the workspace, and keeps the layer objects by id across changes, so a pending write survives a reload of the configuration.
+- **A layer shows what it declares.** A layer is not a full set of keys with a value for each: it holds the keys someone chose to set there, and the settings panel lists exactly those, with where each is written. The value a key has in the end is the business of the stack, shown on its own tab (Result). Only the default layer lists every key, because it does declare every key: the built-in defaults of the definitions are part of it. A layer that is shown without being applied (a doc page's other than the main one) lists what it declares like any other, and its head says why it is not applied.
 
 ### The default layer
 
@@ -118,7 +127,7 @@ Built-in keys:
 
 How the tag features behave is described in [Tag system](doc_page_impl_tag.md#where-tags-are-displayed), the edit key in [MDX document in-place editing](doc_page_impl_edit.md#availability-and-mode).
 
-### The doc page layer
+### The doc page layers
 
 A doc page declares its own config in the `config` section of its entry file, and of any document yaml file the entry reaches. The section takes three forms, and a list may mix them, so the config can be declared in one place, in several places, or in files of its own:
 
@@ -140,18 +149,19 @@ config:
       FileStoreDir: ${dirImage}
 ```
 
-Every mapping of keys is one **declaration**, named by its file and its yaml address (`entry.yaml › config.1`). The loader (`plugin/doc-entry.ts`) records them while it reads the files, and the layer stacks them, a later one winning key by key:
+Every mapping of keys is one **declaration**, named by its file and its yaml address (`entry.yaml › config.1`). The loader (`plugin/doc-entry.ts`) records them while it reads the files, each with the alias of the doc page it belongs to, and the page keeps **one layer per doc page of the workspace**, named by the doc page's alias, holding that doc page's declarations in the order read (the entry's `config`, a config file where it is named, then the `config` of the files its side panels reach), a later one winning key by key:
 
 ```text
-declarations of the doc page layer, in stack order:
-  documents included by the page (a side panel including another doc page), the one loaded last first
-  then the page's own entry and the files it reaches,
-    in the order read: the entry's "config" (a config file where it is named),
-    then the "config" of the files its side panels reach
--> the page decides over the documents it includes, as for tag definitions
+the doc page layers of a workspace (workspace.yaml: example, second; example includes sub):
+  docPage:example   the main doc page (the first root doc page)     applied
+  docPage:sub       included by example                             shown, not applied
+  docPage:second    a root doc page after the main one              shown, not applied
+-> only the main doc page's config takes part in the resolution; the workspace layer sits over it
 ```
 
-`configDoc.docEntry.configDeclarationList` carries the declarations to the page as written, variables not expanded; the model merges them into one layer. A `variable` mapping of a config file adds to the variables of `config.yaml`, winning over them.
+The rule is deliberate: a doc page's config describes how *that doc page* wants the page to behave when it is the page, and a doc page included by another, or listed after the first, is content of someone else's page. Its declarations still travel with it (it is served alone by naming its folder first, and then they apply), and the settings panel shows them on its own tab, so a reader sees what the doc page would set and the author edits it in place, but nothing of them reaches the resolution. Whatever the deployment wants for the whole page is said once, in the workspace layer, not in the doc pages it assembles.
+
+`configDoc.docEntry.configDeclarationList` carries every doc page's declarations to the page as written, variables not expanded, each with its `docPageAlias`; the store splits them by doc page (`ConfigLayerDeclared`, storage `docEntry`). A `variable` mapping of a config file adds to the variables of `config.yaml`, winning over them (the variables of every doc page are read, the main doc page's last, the workspace's over all).
 
 The settings panel shows the layer merged, for display: each key with the declaration its value comes from. Values are edited in the layer's **edit mode**, which shows the declarations themselves instead, side by side:
 
@@ -166,27 +176,45 @@ Every declared cell is edited in place, so when two declarations set the same ke
 
 Adding a key to a declaration, removing one, and adding a declaration are written in the files ([TODO](doc_page_impl_TODO.md#config-declaration-edit)).
 
+### The workspace layer
+
+The workspace file ([the workspace file](doc_page_impl_source.md#the-workspace-file)) declares the config of the deployment in its `config` section, with the same three forms as a doc page (`{ Key: value }`, `{ file }` relative to the workspace file, or a list of both); a workspace written in `config.yaml` itself (`workspace: { docPageList, config }`) takes it the same way, and a virtual workspace (`docEntry`) has none. The declarations are read after every doc page's and form the **workspace** layer, one layer over the main doc page's: where the main doc page says how it behaves as a page, the workspace says what this deployment of it (and of the doc pages beside it) wants, so a value there wins over the doc page without touching the doc page's files. It sits below the document levels like the doc page layers, so a document still refines a document-level key.
+
+```yaml
+# workspace.yaml
+docPageList: [...]
+config:
+  TagsOverviewPopupAtSidePanelItemIsOn: true    # a choice of this deployment
+  # - file: ./workspace-config.yaml             # or a config file, { config, variable }
+```
+
+The layer is written like a doc page's (`ConfigLayerDeclared`, storage `workspace`): a value edited in place in its edit mode, through the same edit api route, the workspace file backed up beside itself. `configDoc.workspace.configDeclarationList` carries its declarations.
+
 ### The client layer
 
 The client layer is this browser's storage (`localStorage`, one entry per layer and per doc page entry: `doc-config:{layerId}:{entry file}`). It sits above the document levels: a value there wins over what the documents declare, for every document and for part index overrides that declared the key. It is the one layer that takes any key from the page: a key is added (it starts with the page value in effect), changed, and removed, and **Clear cache** drops every value together with the storage entry. It survives a reload.
 
 ### Settings panel
 
-The settings button (a gear, left of the sidebar collapse trigger in the sidebar header) opens the settings panel, a popup centered in the browser window, with a fixed height and five tabs. A tab taller than the panel scrolls inside that tab; the title and the tab bars stay put. The panel closes only with the close button at its top right. Dragging the header, aside from its buttons, moves the panel. The tab labels are grey, the active one black, like the text of the config items.
+The settings button (a gear, left of the sidebar collapse trigger in the sidebar header) opens the settings panel, a popup centered in the browser window, with a fixed height and six tabs. A tab taller than the panel scrolls inside that tab; the title and the tab bars stay put. The panel closes only with the close button at its top right. Dragging the header, aside from its buttons, moves the panel. The tab labels are grey, the active one black, like the text of the config items.
 
-The **Config** tab lists the page keys, the **Component** tab the keys components declare ([Component-level config](#component-level-config)), one group per component that documents can name. Under each sits a second tab line, one tab per config layer, then **Result**; the tab shown is shared by the two (`DocConfigStore.settingsLayerId`).
+The **Config** tab lists the page keys, the **Component** tab the keys components declare ([Component-level config](#component-level-config)), one group per component that documents can name. Under each sits a second tab line, one tab per config layer in stack order, then **Result**; the tab shown is shared by the two (`DocConfigStore.settingsLayerId`).
 
 ```text
 Default    every user-settable key, greyed out, beside each "built-in" or "config.yaml configDefault"
-Doc page   the keys the doc page declares, merged, beside each the declaration that decides it
-           (display only)
+{alias}    one tab per doc page of the workspace, named by its alias, the main doc page first: the keys
+           that doc page declares, merged, beside each the declaration that decides it (display only).
+           the head says whether the layer is applied (the main doc page) or shown only (included by
+           which doc page, or a root doc page after the main one)
            [Edit]          the declarations side by side, a column each; any declared value edited in place
+Workspace  the keys the workspace file declares, the same way, [Edit] as well
 Client     the keys kept in this browser, each with a remove button; "Add a key…" lists the others
            [Clear cache]   drops every value and the storage entry
 Result     every key with the value in effect at page level and the level that decided it
+           (a doc page level is named docPage:{alias})
 ```
 
-An item shows the value as written (a variable stays `${name}`), with a control for its type: a switch for `boolean`, a dropdown for `enum`, a number or text field otherwise, a path field with completion for `sourcePath`; `any` keys are not listed. A key a layer declares but cannot use (unknown, a value of the wrong type) is listed as written, greyed out, with the reason. The header of the panel says which layer is shown and how it is kept; a layer that cannot be written says why instead, and its items are disabled with the same reason; a write that failed is reported there until dismissed. The **Asset service** tab is not config of the page at all but the folders of the local store of the asset service layer: a change there is written to the store's own file by the development server ([the local store](doc_page_impl_asset.md#the-local-store-folders-fully-reflected)). Below the folders it lists the orphan objects, the objects no block references, and the broken references, and opens the asset panel of an object in place ([Usage](doc_page_impl_asset.md#usage)). It lives in the settings panel because it is where a reader looks for how the page is set up. The **Services** tab is not config either: the service templates of the service backend and its instances, in two areas of cards (the instances with the system ones, none yet), a template with its versions and the creation of an instance from it, an instance with the template it was created from, its apis and its config dashboard ([The Services tab](doc_page_impl_service.md#the-services-tab)). The **Workspace** tab draws the workspace the page serves as a graph: its doc pages, which includes which under what alias, and the alias conflicts ([The Workspace tab](doc_page_impl_source.md#the-workspace-tab)). The tabs without layers say in the panel's header where what they show lives. The tab shown is `DocConfigStore.settingsTabId`, kept while the panel is closed.
+An item shows the value as written (a variable stays `${name}`), with a control for its type: a switch for `boolean`, a dropdown for `enum`, a number or text field otherwise, a path field with completion for `sourcePath`; `any` keys are not listed. A key a layer declares but cannot use (unknown, a value of the wrong type) is listed as written, greyed out, with the reason. The header of the panel says which layer is shown and what it is in this workspace (`layer.note`: the main doc page, a doc page included by another, the workspace file) or how it is kept; a layer that cannot be written says why as well, and its items are disabled with the same reason; a write that failed is reported there until dismissed. The **Asset service** tab is not config of the page at all but the folders of the local store of the asset service layer: a change there is written to the store's own file by the development server ([the local store](doc_page_impl_asset.md#the-local-store-folders-fully-reflected)). Below the folders it lists the orphan objects, the objects no block references, and the broken references, and opens the asset panel of an object in place ([Usage](doc_page_impl_asset.md#usage)). It lives in the settings panel because it is where a reader looks for how the page is set up. The **Services** tab is not config either: the service templates of the service backend and its instances, in two areas of cards (the instances with the system ones, none yet), a template with its versions and the creation of an instance from it, an instance with the template it was created from, its apis and its config dashboard ([The Services tab](doc_page_impl_service.md#the-services-tab)). The **Workspace** tab draws the workspace the page serves as a graph: its doc pages, which includes which under what alias, and the alias conflicts ([The Workspace tab](doc_page_impl_source.md#the-workspace-tab)). The **API** tab shows the unified api registry: the address a caller outside the page uses, every api with whether it can run and its key, the keyboard maps of the doc pages with the reader's choice of a map, the resolved keys, and the last calls ([The API tab](doc_page_impl_api.md#the-api-tab)). The tabs without layers say in the panel's header where what they show lives. The tab shown is `DocConfigStore.settingsTabId`, kept while the panel is closed.
 
 ```text
 settings panel, tab of layer L ──► DocConfigStore.layerValueSet / layerDeclarationValueSet / layerKeyAdd ...
@@ -202,7 +230,8 @@ A key can be listed but not changeable at the moment: the panel marks the item d
 Store api of the layers:
 
 ```text
-layerList, layerGet(layerId)                       the layer objects, in stack order
+layerList, layerGet(layerId)                       the layer objects, in stack order (derived: the definitions expanded
+                                                   for the doc pages of the workspace, the objects kept by id)
 layerItemListGet(layerId)                          the page keys the layer declares: { key, define, valueDeclared,
                                                    value, isValid, message, origin } (every key for the default layer)
 declarationItemListGet(layerId, declarationId)     the same for one declaration
@@ -216,7 +245,7 @@ layerKeyAddableListGet / layerCompKeyAddableListGet, layerKeyAdd / layerCompKeyA
 layerIsDeclaringAny(layerId), layerClear(layerId)  whether Clear cache has anything to do; clear it
 configDefineListUserSettable                       the definitions the panel lists
 isSettingsOpen, settingsOpenSet(isOpen)
-settingsTabId, settingsTabIdSet(tabId)             'config' | 'compConfig' | 'assetStore' | 'service' | 'workspace'
+settingsTabId, settingsTabIdSet(tabId)             'config' | 'compConfig' | 'assetStore' | 'service' | 'workspace' | 'api'
 settingsLayerId, settingsLayerIdSet(layerId)       the layer the Config and Component tabs show, or 'result'
 settingsIsDeclarationView, settingsIsDeclarationViewSet   the edit mode of a layer edited per declaration
 ```
@@ -229,7 +258,8 @@ settingsIsDeclarationView, settingsIsDeclarationViewSet   the edit mode of a lay
 value of a document-level key K for document D:
 1. default        definition default, then config.yaml configDefault.K (the default layer)
 2. layers below   the other config layers below the document levels, in stack order:
-                  doc page (the doc page's config declarations, merged)
+                  the main doc page (its config declarations, merged; the other doc pages' layers are
+                  not applied), then the workspace (the "config" of the workspace file)
 3. source         source rules that collected D, in rule order
 4. side panel     side-panel nodes that bind D, or a folder node above an item of D, in tree order
 5. document       frontmatter config.K of D
@@ -246,7 +276,8 @@ A page without a document, such as a component panel or an inline side-panel ite
 Example, with the declarations in order:
 
 ```text
-entry.yaml        config: TagsDisplayAtLinkIsOn: false            (doc page layer)
+entry.yaml        config: TagsDisplayAtLinkIsOn: false            (the main doc page's layer)
+workspace.yaml    config: TagsDisplayAtLinkPosition: after         (the workspace layer)
 source.yaml       setConfigByPath ~guide/**, TagsDisplayAtLinkIsOn: true
 side-panel.yaml   folder "Guide" above ~guide/a.md, TagsDisplayAtLinkPosition: before
 ~guide/a.md       frontmatter config: TagsDisplayAtLinkIsOn: false
@@ -345,7 +376,8 @@ configGlobalGet()               { key: value } of every key, page level
 valueGlobalGet(key)             one page-level value
 configDocGet(docPath)           { key: value } of every key, resolved for one document
 valueDocGet(docPath, key)       one resolved value
-levelDocGet(docPath, key)       level that decided it: a layer id (default, docPage, client) | source | sidePanel | doc
+levelDocGet(docPath, key)       level that decided it: a layer id (default, docPage:{alias}, workspace, client)
+                                | source | sidePanel | doc
 configDefineListGet()           every key definition
 compConfigGet(compId, docPath)  { key: value } of a component's own keys, resolved for one document
 compConfigDefineListGet(compId) the keys a component declares
@@ -429,7 +461,7 @@ A component receives its resolved values as `config.compConfig` (the `config` pr
 
 ## Variables
 
-A value that several keys share, such as the folder pasted images go to for `Image` and for `ImageGrid`, is written once as a variable and used as `${name}`. Variables are declared in the `variable` mapping of `config.yaml`, and of a config file of the doc page ([the doc page layer](#the-doc-page-layer)), whose variables win over those of `config.yaml`:
+A value that several keys share, such as the folder pasted images go to for `Image` and for `ImageGrid`, is written once as a variable and used as `${name}`. Variables are declared in the `variable` mapping of `config.yaml`, and of a config file of a doc page ([the doc page layers](#the-doc-page-layers)) or of the workspace, whose variables win over those of `config.yaml` (every doc page's are read, whether its layer is applied or not):
 
 ```yaml
 # .doc-page/config.yaml of the demonstration doc page
@@ -450,22 +482,28 @@ config:
 All config logic uses the `doc-config` prefix:
 
 ```text
-frontend/src/lib/doc-config-define.js      key definitions, layer definitions (configLayerDefineList), value
-                                           validation (shared with the plugin), the component key index
-                                           (compConfigDefineByCompIdBuild), variableExpand
-frontend/plugin/doc-entry.ts               the doc page layer: "config" sections and config files read while the
-                                           entry is loaded, the declarations in stack order, their variables
+frontend/src/lib/doc-config-define.js      key definitions, layer definitions (configLayerDefineList, one per doc
+                                           page for isPerDocPage: configLayerIdOfDocPage), value validation (shared
+                                           with the plugin), the component key index (compConfigDefineByCompIdBuild),
+                                           variableExpand
+frontend/plugin/doc-entry.ts               the doc page layers and the workspace layer: "config" sections and config
+                                           files read while the entries and the workspace are loaded, every
+                                           declaration with its doc page (docPageAlias, '' for the workspace's),
+                                           their variables; "config" and "hotkey" of the workspace file
 frontend/plugin/doc-config-source.ts       source and frontmatter levels, called from the source scan
 frontend/src/lib/doc-config-side-panel.js  side-panel level, called from page-tree.js
 frontend/src/lib/doc-config-model.js       resolution into the config model, the layers as a list;
                                            configDeclaredCheck, one declaration key by key for the panel
 frontend/src/store/doc-config-layer.ts     the layer objects: ConfigLayerPackage (configDefault, read only),
-                                           ConfigLayerDocEntry (the doc page declarations, through the edit api where
-                                           the environment offers editing, DocEnvStore),
-                                           ConfigLayerBrowser (localStorage), one ConfigLayer surface
-frontend/src/store/DocConfigStore.ts       config model owner, the layer stack and its writes, settings panel
-                                           state, config service
-frontend/plugin/doc-edit-server.ts         POST config/value: one value of a doc page declaration rewritten in place, backup
+                                           ConfigLayerDeclared (the declarations of one doc page, or of the workspace,
+                                           through the edit api where the environment offers editing, DocEnvStore;
+                                           isParticipating for the main doc page's and the workspace's),
+                                           ConfigLayerBrowser (localStorage), one ConfigLayer surface;
+                                           configLayerDefineListExpand (the definitions for a workspace)
+frontend/src/store/DocConfigStore.ts       config model owner, the layer list derived from the workspace, the writes,
+                                           settings panel state, config service
+frontend/plugin/doc-edit-server.ts         POST config/value: one value of a doc page's or the workspace's declaration
+                                           rewritten in place, backup
 frontend/plugin/doc-yaml-edit.ts           the in-place yaml edit shared with the side-panel text edit
 comp-doc/registry/comp-registry.js         compDefine expose: what a component declares about itself
 comp-doc/registry/comp-expose.js           the standard names of the exposure, meta.configDefineList among them
@@ -473,7 +511,8 @@ comp-mdx/media/image/image/image-paste.js              imageConfigDefineList, th
 comp-doc/registry/RegisteredComp.jsx       config.compConfig of every rendered component
 comp-doc/settings/                         DocSettingsButton (sidebar header), DocSettingsPanel (centered popup of fixed
                                            height; the close button dismisses it; tabs Config / Component / Asset service / Services /
-                                           Workspace, a layer tab line in the first two with Result; DeclarationGrid, the edit mode; adding keys),
+                                           Workspace / API, a layer tab line in the first two (one tab per layer: Default, each doc
+                                           page by alias, Workspace, Client) with Result; DeclarationGrid, the edit mode; adding keys),
                                            assetStoreItemListBuild (the Asset service tab as panel items: folders, orphans),
                                            ServiceSettings (the Services tab: templates, instances),
                                            WorkspaceSettings (the Workspace tab: the doc pages and their includes as a graph),

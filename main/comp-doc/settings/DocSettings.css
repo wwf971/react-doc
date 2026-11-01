@@ -200,7 +200,7 @@
   background: transparent;
 }
 
-.doc-settings-panel .doc-settings-body > * > *:last-child > * > *:first-child button {
+.doc-settings-panel .doc-settings-body > * > *:last-child > * > *:first-child:has([role='tab']) button {
   margin-bottom: -1px;
   padding: 4px 10px;
   border-bottom-width: 1px;
@@ -208,7 +208,7 @@
   text-shadow: none;
 }
 
-.doc-settings-panel .doc-settings-body > * > *:last-child > * > *:first-child button[aria-selected='true'] {
+.doc-settings-panel .doc-settings-body > * > *:last-child > * > *:first-child:has([role='tab']) button[aria-selected='true'] {
   border-bottom-color: var(--color-fd-primary);
   color: var(--color-fd-primary);
 }

@@ -34,7 +34,7 @@ Loading a yaml file loads everything in it, once:
 
 - Its source rules are appended after the rules of the file that included it, in order of appearance. The files of this folder are collected because this entry says so, not because the page's `source.yaml` does.
 - Its tag definitions are merged below the definitions of the including file, so the including document decides when both define the same tag.
-- Its config declarations join the doc page config layer below those of the including document, which decides when both set a key.
+- Its config declarations get a config layer of their own, shown in the settings panel under its alias and not applied: the main doc page of the workspace and the workspace decide the page config, so an included doc page never changes the page that includes it.
 - Its other side panels become available for inclusion.
 - The doc page joins the workspace under the alias of the include, and its asset folders come along.
 

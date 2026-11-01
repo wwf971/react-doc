@@ -46,7 +46,9 @@ export {
   History,
   Image as ImageIcon,
   Images as ImagesIcon,
+  House,
   Info,
+  Keyboard,
   KeyRound,
   Languages,
   Laptop,
@@ -95,6 +97,8 @@ export {
   SquareCheck,
   SquareCode,
   SquareSlash,
+  SquareDashedMousePointer,
+  SquarePen,
   SquareTerminal,
   Table as TableIcon,
   Table2,
@@ -152,6 +156,7 @@ export {
   useSidebar,
 } from 'fumadocs-ui/components/sidebar/base';
 export { useTreePath } from 'fumadocs-ui/contexts/tree';
+export { useSearchContext } from 'fumadocs-ui/contexts/search';
 export { Tabs, Tab } from 'fumadocs-ui/components/tabs';
 export { Callout } from 'fumadocs-ui/components/callout';
 export { Accordions, Accordion } from 'fumadocs-ui/components/accordion';

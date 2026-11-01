@@ -1,0 +1,34 @@
+# The keyboard map the demonstration doc page activates: main.yaml of the
+# hotkey/ folder of its metadata folder is the active map by convention
+# (the entry could name another with "hotkey: { file }"). The maps of a doc
+# page are stacked over the package's default map (main/hotkey/default.yaml)
+# and under the workspace's (workspace-hotkey.yaml at the project root), so
+# a binding here wins over the package's for the same key and the workspace
+# may rebind it; the reader may pick another map of this folder in the API
+# tab of the settings panel.
+# design: doc_page_impl_api_hotkey.md
+hotkeyMap:
+  id: main
+  description: the keys of the demonstration
+  # the maps stacked below this one, the first lowest; paths relative to
+  # this file. base.yaml holds what every map of the demonstration shares
+  include:
+    - ./base.yaml
+  bindingList:
+    # an api the doc page declares itself (.doc-page/api.yaml)
+    - key: mod+alt+g
+      api: example/openGuide
+      description: the document model, the start of the demonstration
+    # a chord: two strokes one after the other, as in VS Code
+    - key: ctrl+k ctrl+s
+      api: settings/open
+      params: { tab: api }
+    # bound to an api of a service instance: shown (and working) only while
+    # the todo-list instance runs; otherwise the key falls through to what
+    # base.yaml binds it to
+    - key: mod+alt+t
+      api: service/todo-list/todoList
+    # "when": only while a block is being edited; otherwise alt+s is nothing
+    - key: alt+s
+      api: edit/sessionLeave
+      when: sessionOpen

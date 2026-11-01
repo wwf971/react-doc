@@ -56,6 +56,14 @@ export { TextBlockEdit } from '../../../built-in/comp-mdx/text/TextBlockEdit.jsx
 export { slashActionDefine } from '../../comp-doc/slash/slash-define.js';
 export { slashEffect } from './lib/doc-slash.js';
 export { DocSlashStore } from './store/DocSlashStore.js';
+// the unified api registry (doc_page_impl_api.md): a host defines apis and
+// hands them as config.apiById, a component exposes them (expose.apiList);
+// the command palette and the hotkeys run them
+export { apiDefine } from './lib/doc-api.js';
+export { DocApiStore } from './store/DocApiStore.js';
+export { DocPaletteStore } from './store/DocPaletteStore.js';
+export { DocHotkeyStore } from './store/DocHotkeyStore.js';
+export { hotkeyParse, hotkeyFormat } from './lib/doc-hotkey.js';
 export { MdxRenderer } from '../../comp-doc/mdx-render/MdxRenderer.jsx';
 export { SidePanelItem } from '../../comp-doc/side-panel/SidePanelItem.jsx';
 export { SidePanelItemSurfaceContext } from '../../comp-doc/side-panel/SidePanelItemHost.jsx';

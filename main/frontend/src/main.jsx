@@ -62,6 +62,10 @@ createRoot(document.getElementById('root')).render(
       // service backend, reached through the development server; empty in
       // a build, where every dashboard shows that there is no backend
       service: { endpoint: docSource.docServiceEndpoint },
+      // the unified api registry reached from outside the page
+      // (doc_page_impl_api.md#remote-callers): the development server
+      // forwards calls to the page through its HMR socket; empty in a build
+      api: { endpoint: docSource.docApiEndpoint, subscribe: docSource.subscribeDocApi, send: docSource.docApiSend },
       // host settings handed to every registered component's config:
       // DiagramMermaid loads mermaid on first use, ExcelUniver the Univer
       // sheet engine, and the page frames popups such as the tag overview

@@ -21,16 +21,24 @@ source:
 tag:
   file: ./tag.yaml
 
-# the doc page config layer: values of config keys for this doc page, over
-# the package defaults (config.yaml configDefault). a mapping of keys, a
-# config file { file }, or a list of both; declarations are stacked in the
-# order read, a later one wins. the settings panel shows them on its
-# "Doc page" tab, and edits a value in place on the development server.
-# design: doc_page_impl_config.md#the-doc-page-layer
+# the config layer of this doc page: values of config keys, over the
+# package defaults (config.yaml configDefault) and under the workspace's
+# own config (workspace.yaml); applied because this doc page is the main
+# one of the workspace (the config of an included doc page is shown, not
+# applied). a mapping of keys, a config file { file }, or a list of both;
+# declarations are stacked in the order read, a later one wins. the
+# settings panel shows them on the tab named by this doc page's alias, and
+# edits a value in place on the development server.
+# design: doc_page_impl_config.md#the-doc-page-layers
 config:
   - file: ./config.yaml
   # a declaration written in place, after the file, so it wins over it
   - TagsDisplayAtLinkPosition: after
+
+# the keyboard maps (.doc-page/hotkey/, main.yaml active) and the declared
+# apis (.doc-page/api.yaml) of this doc page are found beside this entry by
+# convention; "hotkey: { file }" / "api: { file }" would name other files,
+# "hotkey: false" / "api: false" none (doc_page_impl_api_hotkey.md, doc_page_impl_api.md)
 
 # the side panels of this document. the page shows the default one
 # (config.yaml docEntry.sidePanel picks another); a node of any side panel

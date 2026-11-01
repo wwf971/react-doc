@@ -1,0 +1,20 @@
+# A map shared by the maps of the demonstration: main.yaml includes it, so
+# its bindings sit below those of main.yaml and above the package's default
+# map. A map is a resource, like a side panel: it is not active by itself,
+# only through the map that includes it (or when the reader picks it).
+# design: doc_page_impl_api_hotkey.md
+hotkeyMap:
+  id: base
+  description: what every map of the demonstration shares
+  bindingList:
+    # the key main.yaml gives to a service api: this is what it does while
+    # that service is not running
+    - key: mod+alt+t
+      api: nav/goTo
+      params: { target: ~example/service-kernel.md }
+      description: the todo-list demonstration
+    # unbind a package key: alt+home does nothing in this doc page (the
+    # workspace of the demonstration binds it again above this map:
+    # workspace-hotkey.yaml at the project root)
+    - key: alt+home
+      api: null

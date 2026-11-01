@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { makeAutoObservable } from 'mobx';
-import { configLayerCreate } from '../store/doc-config-layer.ts';
+import { configLayerCreate, configLayerDefineListExpand } from '../store/doc-config-layer.ts';
 import { DocEnvStore } from '../store/DocEnvStore.ts';
 import { configDefineByKeyBuild, configLayerDefineList, configLevelListBuild } from './doc-config-define.js';
 import { configDeclaredCheck, configModelBuild } from './doc-config-model.js';
@@ -47,16 +47,21 @@ const configDocExample = {
   },
 };
 
-test('the layer stack: default, doc page, the document levels, client', () => {
-  assert.deepEqual(configLayerDefineList.map((define) => define.id), ['default', 'docPage', 'client']);
-  assert.deepEqual(configLevelListBuild(), ['default', 'docPage', 'source', 'sidePanel', 'doc', 'client']);
+test('the layer stack: default, the doc pages, the workspace, the document levels, client', () => {
+  assert.deepEqual(configLayerDefineList.map((define) => define.id), ['default', 'docPage', 'workspace', 'client']);
+  assert.deepEqual(configLevelListBuild(), ['default', 'docPage', 'workspace', 'source', 'sidePanel', 'doc', 'client']);
   // another layer is one more definition, at its place in the stack
   const layerDefineList = [...configLayerDefineList];
-  layerDefineList.splice(2, 0, { id: 'team', storage: 'browser', isAboveDocLevels: false });
-  assert.deepEqual(configLevelListBuild(layerDefineList), ['default', 'docPage', 'team', 'source', 'sidePanel', 'doc', 'client']);
+  layerDefineList.splice(3, 0, { id: 'team', storage: 'browser', isAboveDocLevels: false });
+  assert.deepEqual(configLevelListBuild(layerDefineList), ['default', 'docPage', 'workspace', 'team', 'source', 'sidePanel', 'doc', 'client']);
+  // the doc page definition expands into one layer per doc page, the main one first
+  assert.deepEqual(configLayerDefineListExpand(configLayerDefineList, ['guide', 'sub']).map((define) => [define.id, define.label]), [
+    ['default', 'Default'], ['docPage:guide', 'guide'], ['docPage:sub', 'sub'], ['workspace', 'Workspace'], ['client', 'Client'],
+  ]);
+  assert.deepEqual(configLayerDefineListExpand(configLayerDefineList, []).map((define) => define.id), ['default', 'docPage', 'workspace', 'client']);
 });
 
-test('the default layer is read only; the doc page layer merges its declarations, later wins', () => {
+test('the default layer is read only; a doc page layer merges its declarations, later wins', () => {
   const sourceStore = sourceStoreCreate(configDocExample);
   const [layerDefault, layerDocPage] = configLayerDefineList.map((define) => configLayerCreate(define, { sourceStore, envStore: envStatic }));
   assert.equal(layerDefault.isWritable, false);
@@ -80,6 +85,53 @@ test('the default layer is read only; the doc page layer merges its declarations
   assert.equal(model.configGlobal.TagsDisplayAtLinkPosition, 'after');
   assert.equal(model.levelGlobalByKey.TagsDisplayAtLinkPosition, 'docPage');
   assert.equal(model.levelGlobalByKey.TagsDisplayAtLinkIsOn, 'default');
+});
+
+test('one layer per doc page, the main one applied; the workspace layer over it', async () => {
+  const { DocConfigStore } = await import('../store/DocConfigStore.ts');
+  const configDoc = {
+    ...configDocExample,
+    docEntry: {
+      file: 'guide/.doc-page/entry.yaml',
+      alias: 'guide',
+      configDeclarationList: [
+        { id: 'sub/.doc-page/entry.yaml#config', file: 'sub/.doc-page/entry.yaml', path: ['config'], config: { TagsDisplayAtLinkIsOn: true, TagsDisplayAtLinkPosition: 'before' }, entryFile: 'sub/.doc-page/entry.yaml', docPageAlias: 'sub' },
+        { id: 'guide/.doc-page/entry.yaml#config', file: 'guide/.doc-page/entry.yaml', path: ['config'], config: { TagsDisplayAtLinkPosition: 'after', TagsOverviewPopupIsOn: false }, entryFile: 'guide/.doc-page/entry.yaml', docPageAlias: 'guide' },
+      ],
+    },
+    workspace: {
+      file: 'workspace.yaml',
+      docPageList: [
+        { alias: 'guide', dirPage: 'guide', isRoot: true, mentionList: [] },
+        { alias: 'sub', dirPage: 'sub', isRoot: false, mentionList: [{ fromAlias: 'guide' }] },
+      ],
+      configDeclarationList: [
+        { id: 'workspace.yaml#config', file: 'workspace.yaml', path: ['config'], config: { TagsOverviewPopupIsOn: true }, entryFile: '', docPageAlias: '' },
+      ],
+    },
+  };
+  const sourceStore = makeAutoObservable({ configDoc, fileManifest: [], envStore: envStatic });
+  const docStore = { compById: {}, compByIdVersion: 0, treeModel: { configDeclarationList: [], partById: new Map() } };
+  const configStore = new DocConfigStore(sourceStore, docStore, { envStore: envStatic });
+  assert.deepEqual(configStore.layerList.map((layer) => [layer.id, layer.define.label, layer.isParticipating]), [
+    ['default', 'Default', true], ['docPage:guide', 'guide', true], ['docPage:sub', 'sub', false], ['workspace', 'Workspace', true], ['client', 'Client', true],
+  ]);
+  // a doc page layer holds that doc page's declarations, named relative to its folder
+  assert.deepEqual(configStore.layerGet('docPage:sub').declarationList.map((declaration) => declaration.label), ['.doc-page/entry.yaml › config']);
+  assert.match(configStore.layerGet('docPage:sub').note, /included by guide/);
+  assert.match(configStore.layerGet('docPage:guide').note, /main doc page/);
+  // the included doc page's value is not applied; the workspace wins over the main doc page
+  assert.equal(configStore.configGlobal.TagsDisplayAtLinkIsOn, false);
+  assert.equal(configStore.configModel.levelGlobalByKey.TagsDisplayAtLinkIsOn, 'default');
+  assert.equal(configStore.configGlobal.TagsDisplayAtLinkPosition, 'after');
+  assert.equal(configStore.configModel.levelGlobalByKey.TagsDisplayAtLinkPosition, 'docPage:guide');
+  assert.equal(configStore.configGlobal.TagsOverviewPopupIsOn, true);
+  assert.equal(configStore.configModel.levelGlobalByKey.TagsOverviewPopupIsOn, 'workspace');
+  // the same layer object is kept while the workspace changes
+  const layerGuide = configStore.layerGet('docPage:guide');
+  sourceStore.configDoc = { ...configDoc, workspace: { ...configDoc.workspace, docPageList: [...configDoc.workspace.docPageList, { alias: 'third', dirPage: 'third', isRoot: true, mentionList: [] }] } };
+  assert.equal(configStore.layerGet('docPage:guide'), layerGuide);
+  assert.deepEqual(configStore.layerList.map((layer) => layer.id), ['default', 'docPage:guide', 'docPage:sub', 'docPage:third', 'workspace', 'client']);
 });
 
 test('configDeclaredCheck lists what a declaration declares, each key checked', () => {

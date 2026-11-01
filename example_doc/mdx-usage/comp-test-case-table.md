@@ -99,9 +99,9 @@ results:
 <!--renderComp=Anchor,id=test-case-table-asset-->
 ## As an asset object
 
-The table of this section reads the asset object `login test cases` of the [asset service layer](../asset-store.md); the block in the document is only the reference. Its records are **component checks of this demonstration**, recorded through the page while the component was checked, not the acceptance of any system.
+The table of this section reads the asset object `login test cases` of the [asset service layer](../asset-store.md); the block in the document is only the reference. Its records are **component checks of this demonstration**, recorded through the page while the component was checked, not the acceptance of any system. The marker carries an `id`, so an api call names this table by it (`block: login-asset`; see [Command Palette and Apis](../api-command-palette.md)).
 
-<!--renderComp=TestCaseTable-->
+<!--renderComp=TestCaseTable,id=login-asset-->
 ```asset
 store: local
 name: login test cases

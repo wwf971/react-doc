@@ -2,6 +2,7 @@ import { makeAutoObservable, observable, runInAction } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import type { DocEnvStore } from './DocEnvStore.js';
 import { docEditApiCreate } from '../lib/doc-edit-api.js';
+import { configLayerIdOfDocPage } from '../lib/doc-config-define.js';
 
 // The config layers as the page reads and writes them. Design:
 // doc_page_impl_config.md#config-layers
@@ -10,9 +11,12 @@ import { docEditApiCreate } from '../lib/doc-edit-api.js';
 // that a layer exists and how it is stored; a layer object here holds its
 // values and knows how to change them. A layer is a stack of declarations,
 // mappings of config keys written in one place each (one for the default
-// and the client layer, several for the doc page layer); later declarations
-// win. Every layer offers the same surface, so the settings panel and the
-// config model treat them alike:
+// and the client layer, several for a doc page's and the workspace's);
+// later declarations win. A definition with isPerDocPage gives one layer
+// object per doc page of the workspace (DocConfigStore), named by the doc
+// page's alias; only the main doc page's takes part in the resolution
+// (isParticipating), the others are shown. Every layer offers the same
+// surface, so the settings panel and the config model treat them alike:
 //
 //   declarationList  the declarations in stack order: { id, label, file, path,
 //                    config, compConfig, isWritable }
@@ -20,6 +24,10 @@ import { docEditApiCreate } from '../lib/doc-edit-api.js';
 //   compConfig       { Comp: { Key: value } } the component keys, merged; Comp
 //                    is a tag name (a yaml layer) or a component id
 //                    (isCompKeyedById: a layer the page keeps itself)
+//   isParticipating  the layer's values are applied (false: a doc page's layer
+//                    other than the main doc page's, shown and edited, not applied)
+//   note             what the layer is in this workspace, for the head of the
+//                    settings panel ('' when the definition's description says it)
 //   isWritable       values can be set now; disabledReason says why not
 //   isKeyAddable     keys can be added and removed from the page (a layer the
 //                    page keeps itself); otherwise only declared keys change
@@ -39,20 +47,24 @@ import { docEditApiCreate } from '../lib/doc-edit-api.js';
 // storage 'package'   ConfigLayerPackage: config.yaml configDefault (with its
 //                     local layer config.0.yaml), read from configDoc; the
 //                     default config of the doc page package, never written
-// storage 'docEntry'  ConfigLayerDocEntry: the config declarations of the doc
-//                     page (configDoc.docEntry.configDeclarationList), written
-//                     where the environment offers editing (DocEnvStore "edit")
-//                     through the edit api (POST config/value), which rewrites
-//                     the one value in place and keeps a backup; the new
-//                     configuration comes back as data (doc-source-change), and
-//                     until it does the layer shows the value it just wrote
+// storage 'docEntry'  ConfigLayerDeclared: the config declarations of one doc
+//                     page (configDoc.docEntry.configDeclarationList, the ones
+//                     with its docPageAlias), written where the environment
+//                     offers editing (DocEnvStore "edit") through the edit api
+//                     (POST config/value), which rewrites the one value in
+//                     place and keeps a backup; the new configuration comes
+//                     back as data (doc-source-change), and until it does the
+//                     layer shows the value it just wrote
+// storage 'workspace' ConfigLayerDeclared as well: the declarations of the
+//                     workspace's "config" (configDoc.workspace.configDeclarationList)
 // storage 'browser'   ConfigLayerBrowser: localStorage of this browser, one
 //                     entry per layer and page
 
 export type ConfigLayerDefine = {
   id: string;
   label: string;
-  storage: 'package' | 'docEntry' | 'browser';
+  storage: 'package' | 'docEntry' | 'workspace' | 'browser';
+  isPerDocPage?: boolean;
   isAboveDocLevels: boolean;
   isEveryKeyDeclared?: boolean;
   description: string;
@@ -79,6 +91,8 @@ export type ConfigLayerDeclaration = {
 export interface ConfigLayer {
   readonly define: ConfigLayerDefine;
   readonly id: string;
+  readonly isParticipating: boolean;
+  readonly note: string;
   readonly isCompKeyedById: boolean;
   readonly isWritable: boolean;
   readonly isKeyAddable: boolean;
@@ -104,14 +118,36 @@ export type ConfigLayerOptions = {
   sourceStore: DocSourceStore;
   // the environment of the page: whether files can be written, and the edit api
   envStore: Pick<DocEnvStore, 'isCapable' | 'reasonGet' | 'endpointGet'>;
+  // the doc page of a per-doc-page layer (storage 'docEntry'): its alias
+  docPageAlias?: string;
 };
 
-// the layer object of a definition, by its storage
+// the layer object of a definition, by its storage. a per-doc-page
+// definition is given the doc page (options.docPageAlias) and a definition
+// of its own (id {id}:{alias}, label the alias): configLayerListCreate
 export function configLayerCreate(define: ConfigLayerDefine, options: ConfigLayerOptions): ConfigLayer {
   if (define.storage === 'package') return new ConfigLayerPackage(define, options);
-  if (define.storage === 'docEntry') return new ConfigLayerDocEntry(define, options);
+  if (define.storage === 'docEntry' || define.storage === 'workspace') return new ConfigLayerDeclared(define, options);
   if (define.storage === 'browser') return new ConfigLayerBrowser(define, options);
   throw new Error(`[doc-config] unknown storage "${String((define as any).storage)}" of config layer "${define.id}"`);
+}
+
+// the definitions of the layers of this workspace, in stack order: a
+// per-doc-page definition expanded into one per doc page, the main doc
+// page (the first of the workspace) first. aliasList: the doc pages of the
+// workspace, the main one first ([''] for a page without a workspace)
+export function configLayerDefineListExpand(defineList: ConfigLayerDefine[], aliasList: string[]): (ConfigLayerDefine & { docPageAlias?: string })[] {
+  const result: (ConfigLayerDefine & { docPageAlias?: string })[] = [];
+  for (const define of defineList) {
+    if (!define.isPerDocPage) {
+      result.push(define);
+      continue;
+    }
+    for (const alias of aliasList.length > 0 ? aliasList : ['']) {
+      result.push({ ...define, id: configLayerIdOfDocPage(define, alias), label: alias || define.label, docPageAlias: alias });
+    }
+  }
+  return result;
 }
 
 const RESULT_REFUSED = (message: string): Promise<ConfigLayerResult> => Promise.resolve({ code: -1, message });
@@ -121,6 +157,8 @@ const RESULT_OK: ConfigLayerResult = { code: 0, message: '' };
 
 export class ConfigLayerPackage implements ConfigLayer {
   readonly define: ConfigLayerDefine;
+  readonly isParticipating = true;
+  readonly note = '';
   readonly isCompKeyedById = false;
   readonly isWritable = false;
   readonly isKeyAddable = false;
@@ -191,7 +229,7 @@ export class ConfigLayerPackage implements ConfigLayer {
   requestMessageClear(): void {}
 }
 
-// ---------- storage 'docEntry': the config declarations of the doc page ----------
+// ---------- storage 'docEntry' / 'workspace': config declarations written in files ----------
 
 type ConfigLayerDocEntryPending = {
   // the configuration the values were written against; once the source
@@ -201,12 +239,14 @@ type ConfigLayerDocEntryPending = {
   byDeclarationId: Record<string, { config: Record<string, any>; compConfig: Record<string, Record<string, any>> }>;
 };
 
-export class ConfigLayerDocEntry implements ConfigLayer {
+export class ConfigLayerDeclared implements ConfigLayer {
   readonly define: ConfigLayerDefine;
   readonly isCompKeyedById = false;
   readonly isKeyAddable = false;
   readonly isDeclarationViewOffered = true;
   readonly isClearable = false;
+  // storage 'docEntry': the doc page whose declarations this layer holds
+  readonly docPageAlias: string;
   sourceStore: DocSourceStore;
   envStore: ConfigLayerOptions['envStore'];
   api: ReturnType<typeof docEditApiCreate> | undefined;
@@ -215,16 +255,45 @@ export class ConfigLayerDocEntry implements ConfigLayer {
 
   constructor(define: ConfigLayerDefine, options: ConfigLayerOptions) {
     this.define = define;
+    this.docPageAlias = options.docPageAlias ?? '';
     this.sourceStore = options.sourceStore;
     this.envStore = options.envStore;
     const endpoint = options.envStore.endpointGet('edit');
     this.api = endpoint ? docEditApiCreate(endpoint) : undefined;
     // pending holds a configDoc, which must stay a plain reference
-    makeAutoObservable(this, { define: false, sourceStore: false, envStore: false, api: false, pending: observable.ref });
+    makeAutoObservable(this, { define: false, docPageAlias: false, sourceStore: false, envStore: false, api: false, pending: observable.ref });
   }
 
   get id(): string {
     return this.define.id;
+  }
+
+  get isDocPage(): boolean {
+    return this.define.storage === 'docEntry';
+  }
+
+  // the main doc page of the workspace: its first root doc page
+  private get docPageAliasMain(): string {
+    const configDoc = this.sourceStore.configDoc;
+    return String(configDoc?.docEntry?.alias ?? configDoc?.workspace?.docPageList?.[0]?.alias ?? '');
+  }
+
+  // the workspace's layer and the main doc page's are applied; another doc
+  // page's is shown and edited only
+  get isParticipating(): boolean {
+    return !this.isDocPage || this.docPageAlias === this.docPageAliasMain;
+  }
+
+  get note(): string {
+    if (!this.isDocPage) {
+      const file = this.sourceStore.configDoc?.workspace?.file;
+      return file ? `the "config" of the workspace file ${file}: the deployment's values over the main doc page's; documents may refine a value` : '';
+    }
+    if (this.isParticipating) return 'the main doc page of the workspace (its first root doc page): its declarations are applied; documents may refine a value';
+    const docPage = (this.sourceStore.configDoc?.workspace?.docPageList ?? []).find((item: any) => item.alias === this.docPageAlias);
+    const mention = docPage?.mentionList?.[0];
+    const how = docPage?.isRoot ? 'a root doc page of the workspace after the main one' : mention?.fromAlias ? `included by ${mention.fromAlias}` : 'included';
+    return `${how}; its declarations are shown, not applied: only the main doc page (${this.docPageAliasMain}) and the workspace decide the page config`;
   }
 
   get isWritable(): boolean {
@@ -235,13 +304,27 @@ export class ConfigLayerDocEntry implements ConfigLayer {
     return this.envStore.reasonGet('edit');
   }
 
+  // the declarations as the configuration reported them
+  private get declaredList(): any[] {
+    const configDoc = this.sourceStore.configDoc;
+    if (!this.isDocPage) {
+      const list = configDoc?.workspace?.configDeclarationList;
+      return Array.isArray(list) ? list : [];
+    }
+    const list = configDoc?.docEntry?.configDeclarationList;
+    if (!Array.isArray(list)) return [];
+    return list.filter((declared: any) => String(declared.docPageAlias ?? '') === this.docPageAlias);
+  }
+
   // the declarations as the files hold them (variables not expanded), with
   // what was just written while the new configuration is on its way
   get declarationList(): ConfigLayerDeclaration[] {
-    const declaredList = this.sourceStore.configDoc?.docEntry?.configDeclarationList;
-    if (!Array.isArray(declaredList)) return [];
+    const declaredList = this.declaredList;
     const pending = this.pendingCurrentGet();
-    const dirPage = docPageDirGet(this.sourceStore.configDoc?.docEntry?.file);
+    const docPage = (this.sourceStore.configDoc?.workspace?.docPageList ?? []).find((item: any) => item.alias === this.docPageAlias);
+    const dirPage = this.isDocPage
+      ? (docPage?.dirPage ? `${String(docPage.dirPage).replace(/\/$/, '')}/` : docPageDirGet(this.sourceStore.configDoc?.docEntry?.file))
+      : '';
     return declaredList.map((declared: any) => {
       const { config, compConfig } = configSplit(mappingGet(declared.config));
       const pendingOne = pending?.byDeclarationId[declared.id];
@@ -332,8 +415,7 @@ export class ConfigLayerDocEntry implements ConfigLayer {
   // the value the file declares, as the configuration reported it: the base
   // the server checks the write against
   private declaredValueGet(declarationId: string, keyPath: string[]): any {
-    const declaredList = this.sourceStore.configDoc?.docEntry?.configDeclarationList ?? [];
-    let value: any = declaredList.find((declared: any) => declared.id === declarationId)?.config;
+    let value: any = this.declaredList.find((declared: any) => declared.id === declarationId)?.config;
     for (const key of keyPath) value = mappingGet(value)[key];
     return value ?? null;
   }
@@ -397,6 +479,8 @@ const DECLARATION_ID_BROWSER = 'browser';
 
 export class ConfigLayerBrowser implements ConfigLayer {
   readonly define: ConfigLayerDefine;
+  readonly isParticipating = true;
+  readonly note = '';
   readonly isCompKeyedById = true;
   readonly isKeyAddable = true;
   readonly isDeclarationViewOffered = false;

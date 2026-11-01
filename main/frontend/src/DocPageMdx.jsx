@@ -17,6 +17,9 @@ import { DocBlockSelectStore } from './store/DocBlockSelectStore.js';
 import { DocPanelLayoutStore } from './store/DocPanelLayoutStore.js';
 import { DocWorkspaceStore } from './store/DocWorkspaceStore.js';
 import { DocSlashStore } from './store/DocSlashStore.js';
+import { DocApiStore } from './store/DocApiStore.js';
+import { DocPaletteStore } from './store/DocPaletteStore.js';
+import { DocHotkeyStore } from './store/DocHotkeyStore.js';
 import { DocEventRouter } from './lib/doc-event.js';
 import { DocCompStateStore } from './store/DocCompStateStore.js';
 import { StoreContext, useDocStores } from './store/context.js';
@@ -40,19 +43,26 @@ import { MultiLangControl } from '../../../built-in/comp-mdx/multi-lang/MultiLan
 import { DocEditToggle } from '../../comp-doc/edit/DocEditToggle.jsx';
 import { DocSettingsButton } from '../../comp-doc/settings/DocSettingsButton.jsx';
 import { DocSettingsPanel } from '../../comp-doc/settings/DocSettingsPanel.jsx';
+import { DocCommandPalette } from '../../comp-doc/api/DocCommandPalette.jsx';
+import { DocApiNotice } from '../../comp-doc/api/DocApiNotice.jsx';
+import { DocHotkeyListener } from '../../comp-doc/api/DocHotkeyListener.jsx';
+import { DocPaletteButton } from '../../comp-doc/api/DocPaletteButton.jsx';
+import { serviceApiProviderCreate } from '../../comp-doc/api/api-service.js';
 import { compById as compByIdDefault } from '../../comp-doc/registry/registry.js';
 import { compMountByIdBuild } from '../../comp-doc/registry/comp-mount.js';
 import { slashActionById as slashActionByIdDefault } from '../../comp-doc/slash/slash-registry.js';
 import { slashActionByIdBuild } from '../../comp-doc/slash/slash-define.js';
+import { apiById as apiByIdDefault } from '../../comp-doc/api/api-registry.js';
+import { apiByIdBuild, apiDeclaredLayerBuild } from './lib/doc-api.js';
 import './DocPageMdx.css';
 
 // Embeddable MD/MDX document page.
 //
 //   <DocPageMdx
 //     data={{ configDoc, fileManifest, dirManifest, fileUrlByPath, assetSnapshot, compMountList }}
-//     config={{ routeMode: 'memory', compById, slashActionById, compConfigHost, configDefineList, link: { CompRender },
-//               source: { endpoint }, edit: { endpoint, pasteTransformList }, asset: { endpoint, subscribe },
-//               service: { endpoint } }}
+//     config={{ routeMode: 'memory', compById, slashActionById, apiById, hotkeyMapList, compConfigHost, configDefineList,
+//               link: { CompRender }, source: { endpoint }, edit: { endpoint, pasteTransformList },
+//               asset: { endpoint, subscribe }, service: { endpoint }, api: { endpoint, subscribe, send } }}
 //     onEvent={(eventType, eventData) => { ... }}
 //   />
 //
@@ -82,6 +92,12 @@ import './DocPageMdx.css';
 // config.compById, and their tag names are in configDoc.compRegistry already.
 // config.slashActionById are the host's slash actions over the package's
 // (doc_page_impl_edit_slash.md#the-slash-action-registry); null removes one.
+// config.apiById are the host's apis over the package's and the doc pages'
+// declared ones (doc_page_impl_api.md#the-registry); null removes one.
+// config.hotkeyMapList are the host's keyboard maps, stacked above the doc
+// pages' (doc_page_impl_api_hotkey.md). config.api is the remote api of
+// the development server (docApiEndpoint, subscribeDocApi, docApiSend): a
+// caller outside the page reaches the apis through it; absent in a build.
 
 export function DocPageMdx({ data, config = {}, onEvent }) {
   const languageAncestor = useDocLanguage();
@@ -93,6 +109,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // doc pages' and the host's (see registry building at the end of this file)
     const compById = compByIdBuild(data.compMountList, config.compById);
     const slashActionById = slashActionByIdPageBuild(config.slashActionById);
+    const apiById = apiByIdPageBuild(data.configDoc?.apiDeclared, config.apiById);
     // the environment of the page: how it is served, and so what it allows.
     // every store asks it, not an endpoint or a build flag of its own
     const envStore = new DocEnvStore({
@@ -102,6 +119,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
         edit: config.edit?.endpoint,
         asset: config.asset?.endpoint,
         service: config.service?.endpoint,
+        api: config.api?.endpoint,
       },
     });
     const sourceStore = new DocSourceStore(data, {
@@ -170,6 +188,18 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // the slash mode of the default editors: "/" in a paragraph or a list
     // opens the menu of the slash actions (doc_page_impl_edit_slash.md)
     const slashStore = new DocSlashStore({ slashActionById });
+    // the unified api registry (doc_page_impl_api.md): every api of the
+    // page, run by the palette, the hotkeys, a remote caller through the
+    // development server, the host, and other apis; the command palette
+    // (doc_page_impl_api_command_palette.md) and the keyboard maps
+    // (doc_page_impl_api_hotkey.md) are its two callers of the page's own ui
+    const apiStore = new DocApiStore({
+      apiById,
+      remote: { endpoint: envStore.endpointGet('api'), subscribe: config.api?.subscribe, send: config.api?.send },
+    });
+    apiStore.providerAdd(serviceApiProviderCreate(serviceStore));
+    const paletteStore = new DocPaletteStore({ apiStore });
+    const hotkeyStore = new DocHotkeyStore({ apiStore, mapListHost: config.hotkeyMapList ?? [] });
     // the event layer (doc_page_impl_event.md): component reports are routed
     // to the domain that answers them; the stores never see onEvent callbacks
     const eventRouter = new DocEventRouter();
@@ -215,7 +245,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       typeList: sidePanelEventTypeList,
       handle: (event) => sidePanelStore.eventHandle(event),
     });
-    return {
+    const stores = {
       envStore,
       sourceStore,
       sourceFileStore,
@@ -233,9 +263,16 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       blockSelectStore,
       panelLayoutStore,
       slashStore,
+      apiStore,
+      paletteStore,
+      hotkeyStore,
       eventRouter,
+      onEvent,
       compById,
     };
+    // the apis run with every store of the page in their context
+    apiStore.storesSet(stores);
+    return stores;
   });
   const framework = useMemo(() => makeFramework(stores.docStore), [stores]);
   const contextValue = useMemo(() => ({
@@ -256,7 +293,10 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     stores.assetStore.init();
     stores.blockPopupStore.init();
     stores.serviceStore.init();
+    stores.apiStore.init();
     return () => {
+      stores.hotkeyStore.dispose();
+      stores.apiStore.dispose();
       stores.serviceStore.dispose();
       stores.blockPopupStore.dispose();
       stores.assetStore.dispose();
@@ -274,6 +314,14 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
   useEffect(() => {
     stores.slashStore.replaceSlashActionById(slashActionByIdPageBuild(config.slashActionById));
   }, [config.slashActionById, stores]);
+
+  useEffect(() => {
+    stores.apiStore.replaceApiById(apiByIdPageBuild(data.configDoc?.apiDeclared, config.apiById));
+  }, [data.configDoc?.apiDeclared, config.apiById, stores]);
+
+  useEffect(() => {
+    stores.hotkeyStore.replaceMapListHost(config.hotkeyMapList ?? []);
+  }, [config.hotkeyMapList, stores]);
 
   useEffect(() => {
     stores.docStore.setLanguagePage(languagePage);
@@ -347,6 +395,9 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
               <DocBlockSelectMenu />
               <DocBlockTransferPopup />
               <DocSettingsPanel />
+              <DocCommandPalette />
+              <DocApiNotice />
+              <DocHotkeyListener />
             </RootProvider>
           </FrameworkProvider>
         </StoreContext.Provider>
@@ -374,7 +425,7 @@ const DocsShell = observer(function DocsShell() {
   return (
     <DocsLayout
       tree={docStore.treePage}
-      nav={{ title: sourceStore.configDoc.siteTitle ?? 'Docs', children: <DocSettingsButton /> }}
+      nav={{ title: sourceStore.configDoc.siteTitle ?? 'Docs', children: <><DocPaletteButton /><DocSettingsButton /></> }}
       sidebar={sidePanelProps}
       slots={docsLayoutSlots}
       themeSwitch={themeSwitchSidebarDisabled}
@@ -408,17 +459,21 @@ function DocPageLayoutContainer({ children, ...props }) {
 
 // ---------- registry building ----------
 //
-// the page has two registries, built the same way when the page starts and
-// again when what they are built from changes: the package's definitions,
-// then those of the doc pages, then the host's, each layer over the one
-// before (an id of a later layer replaces the same id of an earlier one).
+// the page has three registries, built the same way when the page starts
+// and again when what they are built from changes: the package's
+// definitions, then those of the doc pages, then the host's, each layer
+// over the one before (an id of a later layer replaces the same id of an
+// earlier one).
 //
-//   registry            package            doc pages              host
-//   compById            registry.js        data.compMountList     config.compById
-//   slashActionById     slash-registry.js  (none yet)             config.slashActionById
+//   registry            package            doc pages                      host
+//   compById            registry.js        data.compMountList             config.compById
+//   slashActionById     slash-registry.js  (none yet)                     config.slashActionById
+//   apiById             api-registry.js    configDoc.apiDeclared (yaml)   config.apiById
 //
 // compById is held by DocStore (replaceCompById), slashActionById by
-// DocSlashStore (replaceSlashActionById).
+// DocSlashStore (replaceSlashActionById), apiById by DocApiStore
+// (replaceApiById; the apis of components and services join it through
+// providers at run time).
 
 // the component registry (doc_page_impl.md#component-registry)
 function compByIdBuild(compMountList, compByIdHost) {
@@ -428,4 +483,9 @@ function compByIdBuild(compMountList, compByIdHost) {
 // the slash action registry (doc_page_impl_edit_slash.md#the-slash-action-registry)
 function slashActionByIdPageBuild(slashActionByIdHost) {
   return slashActionByIdBuild(slashActionByIdDefault, slashActionByIdHost);
+}
+
+// the api registry (doc_page_impl_api.md#the-registry)
+function apiByIdPageBuild(apiDeclared, apiByIdHost) {
+  return apiByIdBuild(apiByIdDefault, apiDeclaredLayerBuild(apiDeclared), apiByIdHost);
 }

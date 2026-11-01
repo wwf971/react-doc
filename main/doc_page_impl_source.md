@@ -47,7 +47,7 @@ doc page folder
 │   ├── side panels           resources by id, each a tree of documents, folders, parts, panels and includes
 │   │                         of other side panels, of this file or of another doc page (which joins the workspace)
 │   ├── tag definitions       how each tag looks (doc_page_impl_tag.md)
-│   ├── config declarations   the doc page config layer (doc_page_impl_config.md#the-doc-page-layer)
+│   ├── config declarations   the doc page's config layer (doc_page_impl_config.md#the-doc-page-layers)
 │   ├── asset folders         .doc-page/asset.yaml, or asset/ by default (doc_page_impl_asset.md)
 │   ├── service folders       .doc-page/service.yaml, or service-template-app/, service-template-infra/,
 │   │                         service-app/, service-infra/ by default (doc_page_impl_service.md)
@@ -187,13 +187,17 @@ docPageList:                        # the root-level doc pages, in side-panel or
                                     # children only, without a row (a yaml boolean, never "false")
 packageList:                        # optional: the packages the workspace imports, by folder
   - dir: ../package/cloud-dev-vis   #   (doc_page_impl_package.md)
+config:                             # optional: the workspace config layer, the forms of a doc page's "config"
+  TagsOverviewPopupIsOn: true       #   (doc_page_impl_config.md#the-workspace-layer); { file } relative to this file
+hotkey:                             # optional: the keyboard map of the workspace, over the doc pages' maps
+  file: ./workspace-hotkey.yaml     #   (doc_page_impl_api_hotkey.md)
 ```
 
-`packageList` makes the components and service templates of each package (and of the packages it needs) available to every doc page of the workspace. A workspace given by `docEntry` of `config.yaml` names its packages in `config.yaml` beside it; with `workspace`, only the workspace does.
+`packageList` makes the components and service templates of each package (and of the packages it needs) available to every doc page of the workspace. A workspace given by `docEntry` of `config.yaml` names its packages in `config.yaml` beside it; with `workspace`, only the workspace does. `config` and `hotkey` are what the deployment decides for the whole page, over the doc pages it assembles: the first doc page of `docPageList` is the **main doc page**, the only one whose own config is applied, and the workspace's config sits over it; the workspace's keyboard map sits over the maps of every doc page. A workspace written in place in `config.yaml` (`workspace: { docPageList, config, hotkey }`) takes both the same way; a virtual workspace (`docEntry`) has neither.
 
 `isRootVisible` is an option of the mount, not of the entry: the same doc page can be shown with its root row in one workspace and without it in another. What it does, and what it never does, is in [the root row hidden](doc_page_impl_side_panel.md#the-root-row-hidden); `docEntry` of `config.yaml` takes it as well.
 
-Loading a workspace (`docWorkspaceLoad`, `plugin/doc-entry.ts`) registers every root-level doc page under its alias first, then loads each entry with everything it reaches ([loading](doc_page_impl_side_panel.md#loading)): the source rules of every doc page, in order, each rule carrying the alias of its doc page; the tag definitions; the config declarations, stacked so that a root doc page decides over what it includes (the first root doc page last); and every side panel. The page shows, with one root doc page, that doc page's chosen side panel, exactly as before; with several, one **section** per root doc page: its alias as a muted heading, its side panel below at the depth of the tree's root, so its items look as they do when the doc page is served alone; the doc pages keep their side panels and the workspace only arranges them (a side panel of the workspace's own is a later addition). The tree node of a section carries `docPageSection` (`{ alias, title, isTemporary, isFirst }`); what the side panel does with it is in [a workspace of several doc pages](doc_page_impl_side_panel.md#a-workspace-of-several-doc-pages). `siteTitle`, `homeDoc` and `homeItem` come from `config.yaml`, else the workspace file, else the first root doc page's entry.
+Loading a workspace (`docWorkspaceLoad`, `plugin/doc-entry.ts`) registers every root-level doc page under its alias first, then loads each entry with everything it reaches ([loading](doc_page_impl_side_panel.md#loading)): the source rules of every doc page, in order, each rule carrying the alias of its doc page; the tag definitions; the config declarations of every doc page, each with its doc page's alias (the page keeps one layer per doc page and applies the main doc page's, [the doc page layers](doc_page_impl_config.md#the-doc-page-layers)), then the workspace's own; and every side panel. The page shows, with one root doc page, that doc page's chosen side panel, exactly as before; with several, one **section** per root doc page: its alias as a muted heading, its side panel below at the depth of the tree's root, so its items look as they do when the doc page is served alone; the doc pages keep their side panels and the workspace only arranges them (a side panel of the workspace's own is a later addition). The tree node of a section carries `docPageSection` (`{ alias, title, isTemporary, isFirst }`); what the side panel does with it is in [a workspace of several doc pages](doc_page_impl_side_panel.md#a-workspace-of-several-doc-pages). `siteTitle`, `homeDoc` and `homeItem` come from `config.yaml`, else the workspace file, else the first root doc page's entry.
 
 ### Doc pages reached by includes
 
@@ -224,9 +228,10 @@ workspace
   includeList      every mention as an edge: { fromAlias ('' for the workspace), toAlias, alias,
                    isAliasGiven, file, place }
   warningList      the alias conflicts, as the console reports them
+  configDeclarationList   the declarations of the workspace's "config" (the workspace config layer)
 ```
 
-`configDoc.docEntry` still carries what runtime code reads of the first root doc page: its entry `file` and `alias`, the side panel shown, `sidePanelIdList`, `configDeclarationList` (each declaration with its `docPageAlias`) and `fileHashByFile`. Every side-panel node carries `docPageAlias`, the doc page it is written in, with its `doc` / `sourceFolder` paths already in the full form, and a node including a doc page has `includeSource.docPageAlias`. The plugin keeps the loaded doc pages (`docPageList`, absolute, not sent to the page, each with its entry's `asset`, `service` and `comp` sections as written) for the asset service layer, which names every folder in the full form, for the service folders and the sync route of the service backend, and for the components of the doc pages (`compConfig`, their mounts; `configDoc.compRegistry` carries their tag names).
+`configDoc.docEntry` still carries what runtime code reads of the first root doc page, the main one: its entry `file` and `alias`, the side panel shown, `sidePanelIdList`, `configDeclarationList` (the declarations of every doc page, each with its `docPageAlias`) and `fileHashByFile`. `configDoc.hotkey` carries the keyboard maps: the package's (`mapPackage`), every doc page's (`docPageList`) and the workspace's (`mapWorkspace`). Every side-panel node carries `docPageAlias`, the doc page it is written in, with its `doc` / `sourceFolder` paths already in the full form, and a node including a doc page has `includeSource.docPageAlias`. The plugin keeps the loaded doc pages (`docPageList`, absolute, not sent to the page, each with its entry's `asset`, `service` and `comp` sections as written) for the asset service layer, which names every folder in the full form, for the service folders and the sync route of the service backend, and for the components of the doc pages (`compConfig`, their mounts; `configDoc.compRegistry` carries their tag names).
 
 ### The Workspace tab
 

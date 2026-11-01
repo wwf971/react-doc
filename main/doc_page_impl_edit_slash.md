@@ -128,7 +128,7 @@ The registry mirrors the [component registry](doc_page_impl.md#component-registr
 | held by | `DocStore.compById` | `DocSlashStore.slashActionById` |
 | looked up by | a tag name → id (`compIdResolve`) | a typed name or alias → action (`DocSlashStore.actionGet`) |
 
-Ids are `{layer}/{name}`, such as `nav/link`. An action is defined by the service layer it belongs to, beside that layer's other code, and is listed in `slash-registry.js`; the slash mode knows no action by name. When two actions declare one name, the later in the registry wins (the host's over the package's), with a warning.
+Ids are `{layer}/{name}`, such as `nav/link`. The [unified api registry](doc_page_impl_api.md#the-registry) is the third registry built this way, with `apiDefine` and `config.apiById`. An action is defined by the service layer it belongs to, beside that layer's other code, and is listed in `slash-registry.js`; the slash mode knows no action by name. When two actions declare one name, the later in the registry wins (the host's over the package's), with a warning.
 
 | id | name | provided by | does |
 | --- | --- | --- | --- |

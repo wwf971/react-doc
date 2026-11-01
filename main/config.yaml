@@ -70,9 +70,11 @@ service:
 # the default config layer: the values of the config keys this package
 # provides, over the built-in defaults of the key definitions. the settings
 # panel shows them greyed out and never writes them; a doc page sets its own
-# values in the "config" of its entry (the doc page layer, above this one).
-# keys of one feature share a prefix. document-level keys can be refined per
-# document by source rules, side-panel nodes and frontmatter "config".
+# values in the "config" of its entry (the doc page layer, above this one,
+# of which only the main doc page's is applied), and the workspace its own
+# in the "config" of the workspace file (the workspace layer, above the doc
+# page's). keys of one feature share a prefix. document-level keys can be
+# refined per document by source rules, side-panel nodes and frontmatter "config".
 # component-level keys (the keys a registered component declares for itself,
 # compDefine configDefineList) go under "compConfig", by the component's tag
 # name. design: doc_page_impl_config.md#config-layers
@@ -88,6 +90,16 @@ configDefault:
       PasteReplaceConfirmIsOn: true         # ask before a paste replaces an existing image
     ImageGrid:
       PasteReplaceConfirmIsOn: true
+
+# the default keyboard map of the package: the default keys of the built-in
+# apis (the palette on mod+shift+p and f1, Back / Forward / Up / Home on alt
+# with the arrows, the settings on mod+,), one map file. it is the lowest
+# map of the stack: the maps of the doc pages (.doc-page/hotkey/), the
+# workspace's map (workspace.yaml hotkey) and the host's rebind or unbind
+# any key of it. absent, the package binds no key.
+# design: doc_page_impl_api_hotkey.md
+hotkey:
+  file: ./hotkey/default.yaml
 
 # tag name usable in docs -> component id in comp-doc/registry/registry.js
 compRegistry:

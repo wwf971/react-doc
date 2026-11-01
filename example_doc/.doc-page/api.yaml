@@ -1,0 +1,23 @@
+# The apis the demonstration doc page declares without code: each is an
+# alias of an api of the page with fixed parameters, or a sequence of such
+# calls, listed in the command palette and bound to keys like any other api
+# (hotkey/main.yaml binds example/openGuide). Read when it exists, beside
+# the entry (the entry could name another file with "api: { file }").
+# design: doc_page_impl_api.md#declared-apis
+apiList:
+  - id: example/openGuide
+    label: Open the document model
+    description: The first document of the demonstration.
+    category: Example
+    run:
+      api: nav/goTo
+      params: { target: ~example/doc.md }
+  - id: example/editPlayground
+    label: Edit the in-place editing playground
+    description: Opens the editing demonstration and turns edit mode on, in two steps.
+    category: Example
+    run:
+      - api: nav/goTo
+        params: { target: ~example/mdx-doc-edit-in-place.md }
+      - api: edit/modeSet
+        params: { isOn: true }

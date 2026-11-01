@@ -1,0 +1,363 @@
+/* The command palette and the notice of the api layer
+   (doc_page_impl_api_command_palette.md). Both are .doc-popover of the
+   shared styles, at the top of the window, above every dialog of the page
+   (a dialog sits at 210). */
+
+/* ---------- the palette ---------- */
+.doc-palette {
+  top: 10vh;
+  left: 50%;
+  z-index: 240;
+  display: flex;
+  flex-direction: column;
+  width: min(36rem, calc(100vw - 2rem));
+  transform: translateX(-50%);
+  font-size: 0.8rem;
+}
+
+.doc-palette-field {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2rem;
+  padding: 0 0.6rem;
+  border-bottom: 1px solid var(--color-fd-border);
+}
+
+.doc-palette-field-icon {
+  flex: 0 0 auto;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-palette-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  color: var(--color-fd-foreground);
+  font: inherit;
+  outline: none;
+}
+
+.doc-palette-count {
+  flex: 0 0 auto;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.7rem;
+}
+
+.doc-palette-list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(22rem, 60vh);
+  padding: 3px 0;
+  overflow-y: auto;
+}
+
+.doc-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 1.6rem;
+  padding: 0 0.6rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.doc-palette-item[data-active] {
+  background: var(--color-fd-accent);
+}
+
+.doc-palette-item[data-disabled] {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.doc-palette-item-icon {
+  flex: 0 0 auto;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-palette-item-label {
+  flex: 0 0 auto;
+}
+
+.doc-palette-item-category {
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-palette-item-description {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+}
+
+.doc-palette-item-recent {
+  flex: 0 0 auto;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.68rem;
+}
+
+.doc-palette-item-key,
+.doc-api-key {
+  flex: 0 0 auto;
+  padding: 0 0.3rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  color: var(--color-fd-muted-foreground);
+  font-family: inherit;
+  font-size: 0.68rem;
+  line-height: 1.1rem;
+}
+
+.doc-palette-item:not(:has(.doc-palette-item-description)) .doc-palette-item-label {
+  flex: 1 1 auto;
+}
+
+.doc-palette-item-more {
+  margin-left: 0.1rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-palette-none {
+  padding: 0.4rem 0.6rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+/* ---------- the params step ---------- */
+.doc-palette-params-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2rem;
+  padding: 0 0.6rem;
+  border-bottom: 1px solid var(--color-fd-border);
+  white-space: nowrap;
+}
+
+.doc-palette-params-title {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.doc-palette-params {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: min(22rem, 60vh);
+  padding: 0.5rem 0.6rem 0.2rem;
+  overflow-y: auto;
+}
+
+/* a parameter: its name, its field, its description under the field */
+.doc-palette-param {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.1rem 0.6rem;
+}
+
+.doc-palette-param-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.2rem;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-palette-param-required {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-palette-param-type {
+  margin-left: 0.2rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.66rem;
+}
+
+.doc-palette-param-description {
+  grid-column: 2;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.68rem;
+}
+
+.doc-palette-param-input,
+.doc-palette-param-path {
+  box-sizing: border-box;
+  min-width: 0;
+  height: 1.55rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  font: inherit;
+  font-size: 0.76rem;
+}
+
+.doc-palette-param-input:focus,
+.doc-palette-param-path:focus-within {
+  border-color: var(--color-fd-primary);
+  outline: none;
+}
+
+/* the path field is a SourcePathInput (an EditValueInline with its
+   completion list outside); it fills its column like a text field */
+.doc-palette-param-path {
+  display: flex;
+  width: 100%;
+  font-size: 0.76rem;
+}
+
+.doc-palette-param-path .doc-edit-value {
+  width: 100%;
+}
+
+.doc-palette-param-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+/* the line that says why Enter did not run: always there, so the form
+   keeps its height whether or not something is said */
+.doc-palette-params-message {
+  min-height: 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* the completion list of a path field sits above the palette while the
+   palette is open (the list is a popover of its own, in the body) */
+body:has(.doc-palette) .doc-source-path-list {
+  z-index: 250;
+}
+
+.doc-palette-hint {
+  padding: 0.2rem 0.6rem;
+  border-top: 1px solid var(--color-fd-border);
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.68rem;
+}
+
+.doc-palette-match {
+  padding: 0;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--color-fd-primary) 25%, transparent);
+  color: inherit;
+}
+
+/* ---------- the notice ---------- */
+.doc-api-notice {
+  top: 0.75rem;
+  left: 50%;
+  z-index: 245;
+  max-width: min(36rem, calc(100vw - 2rem));
+  padding: 0.3rem 0.7rem;
+  transform: translateX(-50%);
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.doc-api-notice[data-error] {
+  border-color: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 50%, var(--color-fd-border));
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+/* ---------- the API tab of the settings panel ----------
+   padded like the Workspace tab, so its text and tables stand off the
+   edge of the panel */
+.doc-api-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.3rem calc(0.5rem + 1px) 0.6rem;
+  font-size: 0.78rem;
+}
+
+.doc-api-settings h3 {
+  margin: 0.4rem 0 0.1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.doc-api-settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  min-height: 1.6rem;
+}
+
+/* the maps of the stack, lowest first: a badge for the place of each
+   (package, a doc page, workspace), its file and description, and for a
+   doc page the choice of its map (.doc-button-dialog, the chosen pressed) */
+.doc-api-settings-map {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+  min-height: 1.6rem;
+}
+
+.doc-api-settings-map > .doc-badge-outline {
+  min-width: 5.5rem;
+  text-align: center;
+}
+
+.doc-api-settings-map-file {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+}
+
+.doc-api-settings-map .doc-button-dialog {
+  padding: 0 6px;
+  font-size: 0.7rem;
+  line-height: 1.15rem;
+}
+
+.doc-api-settings-code {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-muted);
+  font-size: 0.72rem;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.doc-api-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.74rem;
+}
+
+.doc-api-table th,
+.doc-api-table td {
+  padding: 0.15rem 0.4rem;
+  border-bottom: 1px solid var(--color-fd-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.doc-api-table th {
+  color: var(--color-fd-muted-foreground);
+  font-weight: 600;
+}
+
+.doc-api-table td[data-muted] {
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-api-table tr[data-passed] td {
+  color: var(--color-fd-muted-foreground);
+  text-decoration: line-through;
+}

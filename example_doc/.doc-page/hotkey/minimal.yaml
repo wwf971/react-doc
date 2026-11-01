@@ -1,0 +1,11 @@
+# A second map of the demonstration, not active by default: the reader
+# picks it for this browser in the API tab of the settings panel ("doc page
+# example uses the map"). It binds the palette to one more key and nothing
+# else, so the package's default keys apply otherwise.
+# design: doc_page_impl_api_hotkey.md
+hotkeyMap:
+  id: minimal
+  description: only the palette, on one more key
+  bindingList:
+    - key: mod+k mod+p
+      api: palette/toggle

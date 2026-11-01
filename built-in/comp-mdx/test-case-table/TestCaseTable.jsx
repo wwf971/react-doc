@@ -10,6 +10,7 @@ import { TableHierarchyView } from '../hierarchy/table-hierarchy/TableHierarchy.
 import { SourceLink } from '../source-link/SourceLink.jsx';
 import { TEST_CASE_COLUMN_PREFIX, testCaseCellGet, testCaseSourceDefaultCreate, testCaseTableParse, testCaseTimeFormat } from './TestCaseTableData.js';
 import { TestCaseTableStore } from './TestCaseTableStore.js';
+import { testCaseTableApiList } from './TestCaseTableApiList.js';
 import './TestCaseTable.css';
 
 // A test specification table (comp_test_case_table.md): the test cases as
@@ -35,6 +36,11 @@ import './TestCaseTable.css';
 //   config.panelComponent   the host's panel, framing the popup; without
 //                           it the cells are not clickable
 //   config.isEdit, config.edit.modeId   the mode `results`
+//
+// the component exposes two apis to the unified api registry
+// (doc_page_impl_api.md#the-apis-of-a-component): reading a table of a
+// document and recording a result, so an AI agent that checked a feature
+// records its check through the page (TestCaseTableApiList.js)
 
 export const testCaseTableExpose = {
   meta: {
@@ -49,6 +55,7 @@ export const testCaseTableExpose = {
     { id: 'results', label: 'Results', description: 'Record a result of a test case, with the name of who confirms it.', icon: Check },
   ],
   sourceDefaultCreate: testCaseSourceDefaultCreate,
+  apiList: testCaseTableApiList,
 };
 
 export function TestCaseTable({ data = {}, config = {}, onEvent }) {
