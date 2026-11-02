@@ -1,6 +1,6 @@
 # a node renderer of DiagramER (placement visualizationNode), the demonstration
 # of a registered component drawing a node of a diagram
-# (package/cloud-dev-vis/doc/card-diagram.md#internal-and-registered-renderers):
+# (package/cloud-dev-vis/doc/card-diagram-impl.md#internal-and-registered-renderers):
 # a node of every diagram component, whatever its node registry
 tagName: MigrationStep
 id: specific/MigrationStep

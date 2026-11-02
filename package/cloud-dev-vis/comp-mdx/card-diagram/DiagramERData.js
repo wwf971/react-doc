@@ -49,7 +49,7 @@ function unique(items, field) {
 // default size, the normalization of its data): the contract of its kind in
 // the node registry of the component (node-registry.js), or, for a
 // registered component, its expose.visualizationNode
-// (card-diagram.md#nodes-and-renderers).
+// (card-diagram-impl.md#nodes-and-renderers).
 function rendererRead(value, field, placement, resolve, registry) {
 	mapping(value, field);
 	if (own(value, 'type') === own(value, 'component')) throw new Error(`${field} requires exactly one of type or component.`);
@@ -97,7 +97,7 @@ export function viewportNormalize(value = {}, height = 620) {
 }
 
 // the ER grammar written before `version: 1` (tables and relationships),
-// converted in memory (card-diagram.md#existing-er-data). its tables become
+// converted in memory (card-diagram-impl.md#existing-er-data). its tables become
 // Dataverse kinds, so it reads only in a component whose registry has them
 export function diagramLegacyConvert(value, height = 620) {
 	const nodes = list(value.tables, 'tables').map((table, index) => {
@@ -132,7 +132,7 @@ export function diagramLegacyConvert(value, height = 620) {
 }
 
 // an endpoint of a connection: attached to a handle, or dangling at a
-// position of the canvas (card-diagram.md#connections)
+// position of the canvas (card-diagram-impl.md#connections)
 export function endpointIsDangling(endpoint) {
 	return Boolean(endpoint) && endpoint.position !== undefined;
 }

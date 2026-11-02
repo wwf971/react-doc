@@ -3,6 +3,7 @@ import { parseDocument, stringify } from 'yaml';
 import { diagramLegacyConvert, diagramNormalize, cardStandaloneNormalize, endpointIsDangling, handleRoleAccepts, lineTypeList, markerTypeList, attachPolicyList } from './DiagramERData.js';
 import { cardSchemaGet, cardRowAnchorBuild } from './TableCardSchema.js';
 import { pathResolve, pathEquals, selectionPathBuild, tabPathGet, nodeLineListGet, cardTabList } from './DiagramEditPath.js';
+import { EditHistory } from './DiagramEditHistory.js';
 
 export { cardTabList };
 
@@ -16,12 +17,22 @@ export const strokeDashList = [
 ];
 
 // The draft of a diagram (or of one card) while its visual edit mode is open
-// (card-diagram.md#card-editing). The YAML document is the draft; every
-// command changes it through the YAML document api, validates the result
-// with the same normalization the view uses, and keeps the previous draft
-// when the change is invalid (the message says why).
+// (card-diagram-impl.md#card-editing). The YAML document is the draft; every
+// command changes it through the YAML document api (changeApply), validates
+// the result with the same normalization the view uses, and keeps the
+// previous draft when the change is invalid (the message says why).
 //
-// Beside the draft the store holds what the editor shows but never saves:
+// changeApply is also where the history is recorded (DiagramEditHistory.js,
+// card-diagram-impl.md#history): the state of the draft before and after
+// every accepted change, so undo and redo exist for every command, the ones
+// below and the ones a series adds, as long as they change the draft through
+// changeApply. A command that is typing passes a group key, so the
+// keystrokes in one cell or field are one step. The history belongs to the
+// session: it starts empty with the store and is dropped with it when a
+// save closes the session; nothing of it is written with the data.
+//
+// Beside the draft the store holds what the editor shows but never saves,
+// and none of which the history records:
 //
 //   path         where the author is in the principal of the edit card
 //                (DiagramEditPath.js): a card with one of its rows, fields,
@@ -44,6 +55,7 @@ export class DiagramEditStore {
 	valueCurrent;
 	documentDraft;
 	kind;
+	history;
 	path = [];
 	redirectRuleList = [];
 	cell = null;
@@ -71,7 +83,10 @@ export class DiagramEditStore {
 		this.validate(value);
 		this.valueInitial = JSON.stringify(value);
 		this.valueCurrent = this.valueInitial;
-		makeAutoObservable(this, { documentDraft: false, resolve: false, registry: false, path: observable.ref, redirectRuleList: false }, { autoBind: true });
+		// two states are one draft when their values are: the text may differ
+		// (the initial text keeps its comments and layout) and is restored with it
+		this.history = new EditHistory({ isSame: (a, b) => a.valueCurrent === b.valueCurrent });
+		makeAutoObservable(this, { documentDraft: false, resolve: false, registry: false, history: false, path: observable.ref, redirectRuleList: false }, { autoBind: true });
 	}
 
 	// ---------- the draft ----------
@@ -86,15 +101,26 @@ export class DiagramEditStore {
 		return this.kind === 'diagram' ? diagramNormalize(value, this.registry, this.resolve) : cardStandaloneNormalize(value, this.registry);
 	}
 
-	changeApply(change) {
+	// the draft as a state of the history: the YAML document (never changed in
+	// place after it became the draft, so an older one can be the draft again),
+	// its value and its text
+	stateGet() { return { documentDraft: this.documentDraft, valueCurrent: this.valueCurrent, rawDraft: this.rawDraft }; }
+
+	// every change of the draft, the commands below and those of a series:
+	// the change is made on a clone of the document, validated, and recorded
+	// (groupKey: the typing it is part of, see DiagramEditHistory.js). a
+	// refused change leaves the draft and the history as they were
+	changeApply(change, { groupKey = null } = {}) {
 		const documentNext = this.documentDraft.clone();
 		try {
 			change(documentNext);
 			const value = documentNext.toJS();
 			this.validate(value);
+			const stateBefore = this.stateGet();
 			this.documentDraft = documentNext;
 			this.valueCurrent = JSON.stringify(value);
 			this.rawDraft = this.valueCurrent === this.valueInitial ? this.rawInitial : documentNext.toString();
+			this.history.record(stateBefore, this.stateGet(), groupKey);
 			this.message = '';
 			this.pathNormalize();
 			return true;
@@ -103,6 +129,30 @@ export class DiagramEditStore {
 			return false;
 		}
 	}
+
+	// ---------- undo and redo ----------
+
+	// the draft put back to an earlier (undo) or later (redo) state. not
+	// during a gesture, whose end would write into the restored draft. the
+	// cell being typed is dropped (its value may be gone), the path is
+	// re-resolved against the restored draft, never restored itself
+	undo() { return this.historyStep(this.history.undo); }
+	redo() { return this.historyStep(this.history.redo); }
+
+	historyStep(step) {
+		if (this.interaction) return false;
+		const state = step(this.stateGet());
+		if (!state) return false;
+		this.documentDraft = state.documentDraft;
+		this.valueCurrent = state.valueCurrent;
+		this.rawDraft = state.rawDraft;
+		this.cell = null;
+		this.message = '';
+		this.pathNormalize();
+		return true;
+	}
+
+	historyClear() { this.history.clear(); }
 
 	saveTargetSet(value) { if (['asset', 'inline'].includes(value)) this.saveTarget = value; }
 
@@ -202,7 +252,9 @@ export class DiagramEditStore {
 		const previous = this.display;
 		const next = route.display;
 		if (this.cell && (this.cell.nodeId !== next?.nodeId || this.cell.rowId !== (next?.rowId ?? null))) this.cell = null;
-		if (!pathEquals(route.path, this.path)) this.path = route.path;
+		// going elsewhere ends the typing step in progress; the path itself is
+		// not a step of the history
+		if (!pathEquals(route.path, this.path)) { this.path = route.path; this.history.groupClose(); }
 		if (previous?.nodeId !== next?.nodeId || previous?.connectionId !== next?.connectionId) this.message = '';
 	}
 
@@ -273,22 +325,28 @@ export class DiagramEditStore {
 		this.cell = { nodeId, rowId, field, valueInitial: item[field], isPresent: Object.hasOwn(item, field) };
 	}
 
-	cellEnd() { this.cell = null; }
+	// the typing in the cell is one step of the history, closed with the
+	// cell; a cell restored by Escape leaves no step (the group ends where
+	// it started, DiagramEditHistory.js)
+	cellEnd() { this.cell = null; this.history.groupClose(); }
 	cellCancel() {
 		if (!this.cell) return;
 		const { nodeId, rowId, field, valueInitial, isPresent } = this.cell;
 		this.fieldSet(nodeId, rowId, field, valueInitial, !isPresent);
 		this.cell = null;
+		this.history.groupClose();
 	}
 
-	// a value of the card (rowId null) or of one of its rows
+	// a value of the card (rowId null) or of one of its rows. a typed value
+	// (every keystroke reaches the draft) is grouped in the history under its
+	// field; a picked one (an enum, a boolean) is a step of its own
 	fieldSet(nodeId, rowId, field, value, isDelete = false) {
 		const node = this.nodeGet(nodeId);
 		const schema = cardSchemaGet(node, this.registry);
-		const allowed = schema
-			? rowId ? [...schema.fieldList, ...schema.rowPropertyList].map(item => item.id) : schema.nodePropertyList.map(item => item.id)
-			: rowId ? [] : ['label', 'name', 'description'];
-		if (!allowed.includes(field)) return false;
+		const definitionList = schema ? rowId ? [...schema.fieldList, ...schema.rowPropertyList] : schema.nodePropertyList : rowId ? [] : [{ id: 'label' }, { id: 'name' }, { id: 'description' }];
+		const definition = definitionList.find(item => item.id === field);
+		if (!definition) return false;
+		const groupKey = ['enum', 'bool'].includes(definition.kind) ? null : `field:${nodeId}/${rowId ?? ''}/${field}`;
 		return this.changeApply(documentNext => {
 			const path = [...this.nodePathGet(nodeId), 'data'];
 			if (rowId) {
@@ -299,7 +357,7 @@ export class DiagramEditStore {
 			path.push(field);
 			if (isDelete) documentNext.deleteIn(path);
 			else documentNext.setIn(path, value);
-		});
+		}, { groupKey });
 	}
 
 	// ---------- rows ----------
@@ -410,7 +468,7 @@ export class DiagramEditStore {
 		if (!schema?.isFieldListEditable) return false;
 		const index = (node.data.fields ?? []).findIndex(field => field.id === fieldId);
 		if (index < 0) return false;
-		return this.changeApply(documentNext => documentNext.setIn([...this.nodePathGet(nodeId), 'data', 'fields', index, 'label'], label));
+		return this.changeApply(documentNext => documentNext.setIn([...this.nodePathGet(nodeId), 'data', 'fields', index, 'label'], label), { groupKey: `column:${nodeId}/${fieldId}` });
 	}
 
 	// ---------- handles ----------
@@ -573,10 +631,13 @@ export class DiagramEditStore {
 	}
 
 	// the presentation of a connection: label, lineType, stroke, strokeWidth,
-	// strokeDash (a preset name), markerStart, markerEnd, isAnimated
+	// strokeDash (a preset name), markerStart, markerEnd, isAnimated. the
+	// typed and dragged values (the label, the color picker, the width) are
+	// grouped in the history; a picked one is a step of its own
 	connectionSet(connectionId, field, value) {
 		const index = this.connections.findIndex(connection => connection.id === connectionId);
 		if (index < 0) return false;
+		const groupKey = ['label', 'stroke', 'strokeWidth'].includes(field) ? `connection:${connectionId}/${field}` : null;
 		return this.changeApply(documentNext => {
 			const path = ['connections', index];
 			switch (field) {
@@ -608,7 +669,7 @@ export class DiagramEditStore {
 				case 'isAnimated': documentNext.setIn([...path, 'isAnimated'], Boolean(value)); break;
 				default: throw new Error(`Unknown connection field "${field}".`);
 			}
-		});
+		}, { groupKey });
 	}
 
 	connectionRemove(connectionId) {

@@ -22,7 +22,7 @@ import { DiagramVisualEdit } from './DiagramVisualEdit.jsx';
 import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
 
 // A diagram of nodes and connections on a pannable, zoomable canvas
-// (card-diagram.md), drawn with the node registry of its component type
+// (card-diagram-impl.md), drawn with the node registry of its component type
 // (node-registry.js): what each node type is and draws, and what the create
 // panel offers. A series makes its diagram component with
 // cardDiagramCompCreate(registry); CardDiagram is the one of the base series.

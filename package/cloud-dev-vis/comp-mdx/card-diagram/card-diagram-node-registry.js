@@ -5,7 +5,7 @@ import { tableCardSchema } from './TableCardSchema.js';
 import { TableCard } from './TableCard.jsx';
 import { OperatorCard } from './OperatorCard.jsx';
 
-// The node kinds of the base series (card-diagram.md#node-registries): a
+// The node kinds of the base series (card-diagram-impl.md#node-registries): a
 // generic table card with authored fields and rows, without any limit on
 // their number, and an operator, a step with a label and a note. Every
 // series may add them to its own registry; CardDiagram offers them alone.

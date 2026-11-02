@@ -55,9 +55,10 @@ For a component whose box is a canvas of things (nodes and lines, shapes, images
 - **Gestures hide the edit card** while they last and bring it back when they end; a drag never opens a card.
 - **A drag is validated while it lasts:** the line being drawn shows whether its target will take it, and releasing on an invalid target does nothing.
 - **Nothing is discarded silently:** removing a thing that others depend on (a handle with lines, a row with handles, a node with lines) reroutes or detaches them and keeps them visible (a free end), rather than refusing or deleting the dependents.
-- **Keyboard:** Escape steps out, Enter confirms a cell, Ctrl/⌘ + Enter saves, ArrowUp / ArrowDown and Enter in a search list.
+- **Keyboard:** Escape steps out, Enter confirms a cell, Ctrl/⌘ + Enter saves, ArrowUp / ArrowDown and Enter in a search list, Ctrl/⌘ + Z undoes and Ctrl/⌘ + Shift + Z redoes.
+- **Undo and redo of the draft, in the session:** every change of the draft is a step the author can take back and repeat, from the bar and from the keys, until the session is saved or canceled; typing in one cell is one step; the selection is not a step and is not restored by one. The history belongs to the session in the browser: it starts empty when the block enters edit mode and is dropped with the session, so nothing of it is in the data. The editors of the diagrams get this from their engine ([the history](../package/cloud-dev-vis/doc/card-diagram-impl.md#history)); another engine keeps a history of its own on the same terms.
 
-`DiagramER` implements all of these; its rules are written out for authors in [Data diagrams](../example_doc/mdx-usage/comp-diagram-er.md#diagram-er-view) and for implementers in [card-diagram.md](../package/cloud-dev-vis/doc/card-diagram.md#card-editing).
+`DiagramER` implements all of these; its rules are written out for authors in [Data diagrams](../package/cloud-dev-vis/doc/comp-diagram-er.md#diagram-er-view) and for implementers in [card-diagram-impl.md](../package/cloud-dev-vis/doc/card-diagram-impl.md#card-editing), with the guidance for building on that engine in [card-diagram.md](../package/cloud-dev-vis/doc/card-diagram.md) beside it.
 
 ## Should: switching view and edit while open
 
@@ -77,6 +78,7 @@ Before reporting a block-like component done, check each line:
 | ☐ | Values are edited in place in the same layout; the bar floats; the edit card is a `doc-edit-popup` beside the selection and hides during gestures |
 | ☐ | Escape steps out and never cancels the session; Cancel says so; Ctrl/⌘ + Enter saves |
 | ☐ | A refused change shows its reason and keeps the draft |
+| ☐ | Every change of the draft can be undone and redone within the session (bar buttons and Ctrl/⌘ + Z / Shift + Z); the selection is not a step; the history is dropped with the session and never saved |
 | ☐ | Every part of the box answers a click with a visible focus; unsupported actions are greyed out with their reason, not missing |
 | ☐ | The edit card is anchored to the principal (node or line) and its top edge does not move when its content changes (measured) |
 | ☐ | The rules of the component are written in its usage document, organized by reading and editing, and demonstrated in `example_doc/` |

@@ -117,42 +117,42 @@ subtopics:
         title:
           en: ER diagram
           jp: ER 図
-        target: ~example/mdx-usage/comp-diagram-er.md#diagram-er-dataverse
+        target: ~cloud-dev-vis/comp-diagram-er.md#diagram-er-dataverse
       - id: diagram-er-flow
         title:
           en: Operators and custom nodes
           jp: 処理ノードと独自ノード
-        target: ~example/mdx-usage/comp-diagram-er.md#diagram-er-flow
+        target: ~cloud-dev-vis/comp-diagram-er.md#diagram-er-flow
       - id: diagram-er-layout
         title:
           en: Layout and viewport
           jp: 配置とビューポート
-        target: ~example/mdx-usage/comp-diagram-er.md#diagram-er-layout
+        target: ~cloud-dev-vis/comp-diagram-er.md#diagram-er-layout
       - id: card-diagram
         title:
           en: Generic card diagram
           jp: 汎用カード図
-        target: ~example/mdx-usage/comp-diagram-er.md#card-diagram
+        target: ~cloud-dev-vis/comp-diagram-er.md#card-diagram
       - id: diagram-dataverse-entity
         title:
           en: Dataverse table card
           jp: Dataverse テーブルカード
-        target: ~example/mdx-usage/comp-diagram-er.md#diagram-dataverse-entity
+        target: ~cloud-dev-vis/comp-diagram-er.md#diagram-dataverse-entity
       - id: diagram-er-edit
         title:
           en: Visual editing
           jp: 視覚的な編集
-        target: ~example/mdx-usage/comp-diagram-er.md#diagram-er-edit
+        target: ~cloud-dev-vis/comp-diagram-er.md#diagram-er-edit
       - id: powerplatform-flow
         title:
           en: Power Automate flow design
           jp: Power Automate フロー設計
-        target: ~example/mdx-usage/comp-powerplatform.md#powerplatform-flow
+        target: ~cloud-dev-vis/comp-powerplatform.md#powerplatform-flow
       - id: powerplatform-business-rule
         title:
           en: Business rule design
           jp: ビジネスルール設計
-        target: ~example/mdx-usage/comp-powerplatform.md#powerplatform-business-rule
+        target: ~cloud-dev-vis/comp-powerplatform.md#powerplatform-business-rule
   - id: spreadsheets
     title:
       en: Spreadsheets
@@ -288,8 +288,8 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 `DiagramER` は、Dataverse のテーブル、グローバル選択肢、処理ステップ、登録済みコンポーネントをキャンバス上のノードとして描き、名前付きハンドル間の接続線で結びます。`DiagramDataverseEntity` はテーブルカードを一枚、文書の流れの中に表示します。どちらも、インラインの YAML でもアセットサービス層のデータでも、その場で視覚的に編集できます。`DiagramPowerAutomate` と `DiagramBusinessRule` は同じ図で、Power Automate のフローと Dataverse のビジネスルールの設計をカードとして描きます。`CardDiagram` は汎用テーブルと処理ノードだけを持つ同じキャンバスです。これらはワークスペースが読み込むパッケージ cloud-dev-vis のコンポーネントです。
 ```
 
-- [Data diagrams](comp-diagram-er.md)
-- [Power Platform design diagrams](comp-powerplatform.md)
+- [Data diagrams](~cloud-dev-vis/comp-diagram-er.md)
+- [Power Platform design diagrams](~cloud-dev-vis/comp-powerplatform.md)
 
 <!--renderComp=MultiLang-->
 ## {en: "Spreadsheets", jp: "スプレッドシート"}

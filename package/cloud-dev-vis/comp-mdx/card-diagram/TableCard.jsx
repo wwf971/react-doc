@@ -6,7 +6,7 @@ import { cardRowAnchorBuild } from './TableCardSchema.js';
 import { TextValue, ValueMenu } from './DiagramValueControls.jsx';
 import './DiagramER.css';
 
-// The generic table-like card of a diagram node (card-diagram.md#the-table-card):
+// The generic table-like card of a diagram node (card-diagram-impl.md#the-table-card):
 // a title line (name and a subtitle), an optional description, the head
 // fields of the card, a header of its fields, and its rows, one cell per
 // field. The Dataverse cards and the resource cards are variants that pass a

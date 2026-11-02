@@ -43,6 +43,18 @@
 	white-space: nowrap;
 }
 
+/* undo and redo: two icon buttons of the bar; the redo arrow is the undo
+   arrow mirrored, so the set of icons stays the page's */
+.doc-vis-history {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.1rem;
+}
+
+.doc-vis-history .is-mirrored svg {
+	transform: scaleX(-1);
+}
+
 /* ---------- a card in the editor ---------- */
 
 .doc-er-table.is-editable .doc-card-row {

@@ -117,9 +117,9 @@ sequenceDiagram
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`DiagramER` draws tables, other nodes, and the connections between them from YAML, and `DiagramDataverseEntity` shows one table card without a canvas. Both have their own page with every option and their visual editing: [Data diagrams](comp-diagram-er.md).
+`DiagramER` draws tables, other nodes, and the connections between them from YAML, and `DiagramDataverseEntity` shows one table card without a canvas. Both have their own page with every option and their visual editing: [Data diagrams](~cloud-dev-vis/comp-diagram-er.md).
 
-`DiagramER` は YAML からテーブルやその他のノードと、その間の接続線を描き、`DiagramDataverseEntity` はテーブルカードを一枚キャンバスなしで表示します。すべての指定方法と視覚的な編集は専用のページにまとめています：[データ図](comp-diagram-er.md)。
+`DiagramER` は YAML からテーブルやその他のノードと、その間の接続線を描き、`DiagramDataverseEntity` はテーブルカードを一枚キャンバスなしで表示します。すべての指定方法と視覚的な編集は専用のページにまとめています：[データ図](~cloud-dev-vis/comp-diagram-er.md)。
 ```
 
 <!--renderComp=Anchor,id=proxy-connection-diagram-->

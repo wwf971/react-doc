@@ -1,6 +1,6 @@
 # Power Platform: Design
 
-The Power Platform series of the package ([README](README.md)), in `comp-mdx/power-platform/`: design diagrams of Dataverse tables and global choices, Power Automate flows and Dataverse business rules, drawn with the engine of the base series ([Card Diagram](card-diagram.md)). The series adds node kinds and binds them to its components; it changes nothing in the engine.
+The Power Platform series of the package ([README](README.md)), in `comp-mdx/power-platform/`: design diagrams of Dataverse tables and global choices, Power Automate flows and Dataverse business rules, drawn with the engine of the base series ([Card Diagram](card-diagram-impl.md)). The series adds node kinds and binds them to its components; it changes nothing in the engine.
 
 ```text
 power-platform-node-registry.js
@@ -17,7 +17,7 @@ power-platform-comp.js                             the four components (compDefi
 
 ## Dataverse Tables and Choices
 
-A `dataverse-table` card lists its columns with the fixed fields Key, Column, Logical name and Type (`dataverseTableSchema`, `DataverseCardSchema.js`); a required column is starred and its description is the tooltip of its name. A `dataverse-choice` card is a global choice: a purple header and a dashed border, its options as rows, and it is referenced as a whole. The ER grammar written before `version: 1` (`tables`, `relationships`) converts to these two kinds ([Existing ER Data](card-diagram.md#existing-er-data)).
+A `dataverse-table` card lists its columns with the fixed fields Key, Column, Logical name and Type (`dataverseTableSchema`, `DataverseCardSchema.js`); a required column is starred and its description is the tooltip of its name. A `dataverse-choice` card is a global choice: a purple header and a dashed border, its options as rows, and it is referenced as a whole. The ER grammar written before `version: 1` (`tables`, `relationships`) converts to these two kinds ([Existing ER Data](card-diagram-impl.md#existing-er-data)).
 
 ### Anchors
 
@@ -41,7 +41,7 @@ invalid enum values and duplicate property IDs are rejected. Anchors are
 direction, side, endpoint, and label rules. No runtime execution order is
 inferred from card placement: label branches and run-after conditions explicitly.
 
-Files for each resource share a prefix: `PowerAutomateNode*` and `BusinessRuleNode*` contain its card (the resource card of the base series with an icon and an accent color), its fields and validation, and its starting text. The kinds themselves (contract, schema, card, create entry) are declared in `power-platform-node-registry.js`. See [Power Platform diagrams](../../../example_doc/mdx-usage/comp-powerplatform.md) for complete examples and design-specific caveats.
+Files for each resource share a prefix: `PowerAutomateNode*` and `BusinessRuleNode*` contain its card (the resource card of the base series with an icon and an accent color), its fields and validation, and its starting text. The kinds themselves (contract, schema, card, create entry) are declared in `power-platform-node-registry.js`. See [Power Platform diagrams](comp-powerplatform.md) for complete examples and design-specific caveats.
 
 ## Mapping Operators
 
@@ -95,7 +95,7 @@ node --import ./src/lib/node-test-register.js --test ../../package/cloud-dev-vis
 
 ## The Standalone Dataverse Card
 
-`DiagramDataverseEntity` is the standalone card of the series (`cardStandaloneCompCreate(dataverseEntityNodeRegistry)`, [Standalone Cards](card-diagram.md#standalone-cards)): one `dataverse-table` node in the flow of the document, without React Flow, connectors, panning, zooming, or dragging. Displayed text remains normal selectable and copyable DOM text.
+`DiagramDataverseEntity` is the standalone card of the series (`cardStandaloneCompCreate(dataverseEntityNodeRegistry)`, [Standalone Cards](card-diagram-impl.md#standalone-cards)): one `dataverse-table` node in the flow of the document, without React Flow, connectors, panning, zooming, or dragging. Displayed text remains normal selectable and copyable DOM text.
 
 ### Input
 
@@ -128,7 +128,7 @@ node:
 - `isRequired` and `description` are optional.
 - A column description must be available from the corresponding column-name tooltip without increasing the table's vertical size.
 - Legacy `entity: ...` input remains readable: the registry's `cardLegacyConvert` (`dataverseCardLegacyConvert`) turns it into `{ version: 1, node }`.
-- Inline and asset-backed cards share the visual editor of the diagrams (`DiagramVisualEdit`, [card-diagram.md](card-diagram.md#card-editing)): cells typed in place, rows inserted / moved / removed from the toolbar of a focused row or the lists of the edit card, row handles added and removed from the row's detail or the row edges; the edit card stands beside the whole card and is driven by its path ([comp-diagram-er.md](../../../example_doc/mdx-usage/comp-diagram-er.md#diagram-er-edit)). Drafts save on Save or normal exit, to the asset or inline YAML; Cancel discards them.
+- Inline and asset-backed cards share the visual editor of the diagrams (`DiagramVisualEdit`, [card-diagram-impl.md](card-diagram-impl.md#card-editing)): cells typed in place, rows inserted / moved / removed from the toolbar of a focused row or the lists of the edit card, row handles added and removed from the row's detail or the row edges; the edit card stands beside the whole card and is driven by its path ([comp-diagram-er.md](comp-diagram-er.md#diagram-er-edit)). Drafts save on Save or normal exit, to the asset or inline YAML; Cancel discards them.
 
 ### Display Requirements
 

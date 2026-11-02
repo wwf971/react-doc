@@ -6,7 +6,7 @@ import { DiagramVisualEdit } from './DiagramVisualEdit.jsx';
 import { cardSchemaGet } from './TableCardSchema.js';
 
 // One card in the flow of the document, without a canvas
-// (card-diagram.md#standalone-cards): the card of a kind of the node registry
+// (card-diagram-impl.md#standalone-cards): the card of a kind of the node registry
 // of its component type, read and edited like a node of a diagram. A series
 // makes its standalone card component with cardStandaloneCompCreate(registry,
 // title). Both modes render inside BlockPopupSurface: the card opens in the

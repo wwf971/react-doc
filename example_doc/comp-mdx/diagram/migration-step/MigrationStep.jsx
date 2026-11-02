@@ -4,7 +4,7 @@ import './MigrationStep.css';
 // Demonstration node renderer of DiagramER: one step of a data migration
 // (a transformation between a source and a target column). It is drawn by
 // the diagram through RegisteredComp in the placement visualizationNode
-// (package/cloud-dev-vis/doc/card-diagram.md#internal-and-registered-renderers); it is not a document
+// (package/cloud-dev-vis/doc/card-diagram-impl.md#internal-and-registered-renderers); it is not a document
 // block of its own.
 //
 //   data.label       the name of the step

@@ -20,14 +20,14 @@ export function diagramViewStateGet(owner, config) {
 // The canvas model of a diagram: the authored graph turned into the nodes and
 // edges React Flow draws. A dangling end of a connection is a hidden point
 // node (type visualizationPoint) that the edge ends on; it is never part of
-// the authored data (card-diagram.md#react-flow-boundary).
+// the authored data (card-diagram-impl.md#react-flow-boundary).
 //
 // nodeList and edgeList are shallow observables: the lists change, their
 // items are the plain objects React Flow is given, and an item keeps its
 // identity until it changes. A drag therefore replaces one node per frame
 // (applyNodeChanges copies only what changed) and leaves every other card
 // unrendered; a deep clone of the whole list per frame is what made
-// dragging sluggish (card-diagram.md#react-flow-boundary).
+// dragging sluggish (card-diagram-impl.md#react-flow-boundary).
 class DiagramERStore {
 	source = '';
 	graph = null;
@@ -94,12 +94,22 @@ class DiagramERStore {
 				};
 			});
 			this.nodeList = [
-				...this.graph.nodes.map(node => ({
-					...previous.get(node.id),
-					id: node.id, type: 'visualizationNode', position: previous.get(node.id)?.position ?? positions.get(node.id),
-					style: { width: node.size.width === 'auto' ? node.sizeDefault.width : node.size.width, ...(node.size.height === 'auto' ? {} : { height: node.size.height }) },
-					data: { node },
-				})),
+				...this.graph.nodes.map(node => {
+					// a draft reloaded keeps where each node is on the canvas, unless
+					// the draft now says otherwise (a position remembered, cleared,
+					// locked, or put back by an undo): then the authored position
+					// (or the layout, for auto) is where the node goes, and the
+					// place a drag left it is forgotten
+					const before = previous.get(node.id);
+					const isPositionAuthoredChanged = Boolean(before) && !positionEquals(before.data.node.position, node.position);
+					if (isPositionAuthoredChanged) delete this.positionsTemporary[node.id];
+					return {
+						...before,
+						id: node.id, type: 'visualizationNode', position: before && !isPositionAuthoredChanged ? before.position : positions.get(node.id),
+						style: { width: node.size.width === 'auto' ? node.sizeDefault.width : node.size.width, ...(node.size.height === 'auto' ? {} : { height: node.size.height }) },
+						data: { node },
+					};
+				}),
 				...pointNodes,
 			];
 			this.loadState = { status: 'done', message: '' };
@@ -175,3 +185,9 @@ class DiagramCopyStore {
 }
 
 export { DiagramERStore, DiagramCopyStore };
+
+// two authored positions of a node as one: both 'auto', or the same point
+function positionEquals(a, b) {
+	if (a === 'auto' || b === 'auto') return a === b;
+	return a?.x === b?.x && a?.y === b?.y;
+}

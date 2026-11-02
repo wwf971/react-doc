@@ -529,7 +529,7 @@ node:
 <!--renderComp=Anchor,id=diagram-er-view-->
 ## Reading a Diagram
 
-These are the rules of a diagram while the document is read (and of a block in edit mode whose session is not open). They are the general principle of every block-like component with a canvas ([Block-like components](../../main/doc_page_impl_mdx_comp_block.md)):
+These are the rules of a diagram while the document is read (and of a block in edit mode whose session is not open). They are the general principle of every block-like component with a canvas ([Block-like components](../../../main/doc_page_impl_mdx_comp_block.md)):
 
 - **The reader moves the camera, never the content.** Dragging on empty canvas or on the title line of a card pans; the mouse wheel zooms around the pointer; the controls at the bottom left zoom and fit. A node cannot be dragged: its position is part of the document, and the document is changed only in edit mode.
 - **Text stays text.** Dragging across the rows of a card selects their text, as in any paragraph; a column description is the tooltip of its name.
@@ -545,7 +545,8 @@ In edit mode, both components open in the **Visual** mode from the block's Edit 
 ### Entering and leaving
 
 - **Entering moves nothing.** The block keeps its height, its place, and the camera of the canvas; the page does not scroll. The only things that appear are the floating bar above the block and, later, the edit card beside what is focused.
-- **The floating bar** shows whether there are unsaved changes, **+** (add a node or a connection at the center of the canvas), **Save to** for an asset-backed block, and **Save** / **Cancel**. Ctrl/⌘ + Enter saves.
+- **The floating bar** shows whether there are unsaved changes, **Undo** / **Redo**, **+** (add a node or a connection at the center of the canvas), **Save to** for an asset-backed block, and **Save** / **Cancel**. Ctrl/⌘ + Enter saves.
+- **Every change can be taken back.** Undo (Ctrl/⌘ + Z, or the bar) puts the draft back one step, Redo (Ctrl/⌘ + Shift + Z, Ctrl/⌘ + Y, or the bar) repeats it. A step is one thing done: a row inserted, a line drawn, a node dropped, a value picked; typing in one cell is one step, however many keys, and a cell restored with Escape leaves no step. What is focused is not a step: undo never moves the selection, and after an undo the edit card shows the nearest thing that still exists. While a cell is being typed, Ctrl/⌘ + Z takes back the typing in that cell, as in any text field; end the cell (Enter or a click elsewhere) to undo the diagram. The steps belong to this edit session: they begin when the block enters edit mode, end with Save or Cancel, and are never written into the document or the asset object; a new session starts with none.
 - **Escape steps out one level at a time:** the cell being typed (restoring it), then the create panel, then one segment of the edit card's path (a cell to its column, a column to the list of columns, the list to the card, the card to nothing). It never ends the session, so a stray key cannot discard the draft.
 - **A failed change is refused with its reason** in the edit card (or the bar), and the draft stays as it was: a handle that takes one connection and has it, both ends of a line on the same handle, a locked node without a position.
 
@@ -629,7 +630,7 @@ The words are the card's own: the rows of a Dataverse table are its *Columns*, o
 
 ### Data in the asset service layer
 
-The examples above are inline: a save rewrites the block. The two blocks below are references into the [asset service layer](../asset-store.md). Their Visual mode edits the referenced object, at its head version and while it is not locked, and a save writes a version of the object without touching the document. **Save to → Inline YAML** writes the draft into the block in place of the reference instead, and leaves the object as it was.
+The examples above are inline: a save rewrites the block. The two blocks below are references into the [asset service layer](~example/asset-store.md). Their Visual mode edits the referenced object, at its head version and while it is not locked, and a save writes a version of the object without touching the document. **Save to → Inline YAML** writes the draft into the block in place of the reference instead, and leaves the object as it was.
 
 <!--renderComp=DiagramER,title=Support cases-->
 ```asset

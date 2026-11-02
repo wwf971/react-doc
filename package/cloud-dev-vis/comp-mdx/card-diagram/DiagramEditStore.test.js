@@ -265,3 +265,145 @@ test('invalid node declarations are rejected with their reason', () => {
 	header.nodes[0].handles.push({ id: 'title', direction: 'in', anchor: { target: 'header', side: 'left' } });
 	assert.throws(() => diagramNormalize(header, registry), /unknown anchor/);
 });
+
+// ---------- the history of the draft (card-diagram-impl.md#history) ----------
+
+test('a new store has no history, and every command through changeApply is undone and redone', () => {
+	const store = new DiagramEditStore(sourceCreate(), 'diagram', undefined, registry);
+	assert.equal(store.history.isUndoAvailable, false);
+	assert.equal(store.history.isRedoAvailable, false);
+	assert.equal(store.undo(), false);
+	const rowId = store.rowInsert('table', 0);
+	assert.equal(store.handleSideSet('table', 'column/phone', 'left', true), true);
+	assert.equal(store.connectionSet('link', 'lineType', 'bezier'), true);
+	assert.equal(store.nodeRemove('choice', positionGet), true);
+	assert.equal(store.history.length, 4);
+	const rawAfter = store.rawDraft;
+	assert.equal(store.undo(), true);
+	assert.ok(store.nodeGet('choice'));
+	assert.deepEqual(store.connectionGet('link').target, { nodeId: 'choice', handleId: 'header-in' });
+	assert.equal(store.undo(), true);
+	assert.equal(store.connectionGet('link').renderer, undefined);
+	assert.equal(store.undo(), true);
+	assert.equal(store.nodeGet('table').handles.length, 1);
+	assert.equal(store.undo(), true);
+	assert.equal(store.rowGet('table', rowId), undefined);
+	assert.equal(store.isDirty, false);
+	assert.equal(store.rawDraft, store.rawInitial);
+	assert.equal(store.history.isUndoAvailable, false);
+	assert.equal(store.history.isRedoAvailable, true);
+	for (let index = 0; index < 4; index += 1) assert.equal(store.redo(), true);
+	assert.equal(store.rawDraft, rawAfter);
+	assert.equal(store.redo(), false);
+	// a new change after an undo drops what could be redone
+	assert.equal(store.undo(), true);
+	assert.equal(store.connectionSet('link', 'isAnimated', true), true);
+	assert.equal(store.history.isRedoAvailable, false);
+	assert.equal(store.redo(), false);
+});
+
+test('the selection is not a step of the history, and the path is re-resolved after an undo', () => {
+	const store = new DiagramEditStore(sourceCreate(), 'diagram', undefined, registry);
+	store.select('table', { rowId: 'email' });
+	store.selectConnection('link');
+	store.cardTabSet('line');
+	store.selectionClear();
+	assert.equal(store.history.isUndoAvailable, false);
+	const rowId = store.rowInsert('table');
+	assert.equal(store.selection.rowId, rowId);
+	assert.equal(store.undo(), true);
+	// the row the path led to is gone: the path goes to the list of rows
+	assert.deepEqual(store.path, [{ kind: 'node', id: 'table' }, { kind: 'rows' }]);
+	assert.equal(store.selection.rowId, null);
+	store.select('table', { rowId: 'phone' });
+	assert.equal(store.redo(), true);
+	// a redo does not move the selection either
+	assert.equal(store.selection.rowId, 'phone');
+	assert.ok(store.rowGet('table', rowId));
+});
+
+test('the typing in a cell is one step, a cell restored with Escape leaves none, and a picked value is a step of its own', () => {
+	const store = new DiagramEditStore(sourceCreate(), 'diagram', undefined, registry);
+	store.cellStart('table', 'email', 'name');
+	for (const text of ['W', 'Wo', 'Wor', 'Work']) assert.equal(store.fieldSet('table', 'email', 'name', text), true);
+	store.cellEnd();
+	assert.equal(store.history.length, 1);
+	store.cellStart('table', 'email', 'name');
+	assert.equal(store.fieldSet('table', 'email', 'name', 'Work email'), true);
+	store.cellEnd();
+	assert.equal(store.history.length, 2);
+	assert.equal(store.undo(), true);
+	assert.equal(store.rowGet('table', 'email').name, 'Work');
+	assert.equal(store.undo(), true);
+	assert.equal(store.rowGet('table', 'email').name, 'Email');
+	assert.equal(store.history.isUndoAvailable, false);
+	// typed and restored: nothing to undo
+	store.cellStart('table', 'phone', 'name');
+	store.fieldSet('table', 'phone', 'name', 'P');
+	store.fieldSet('table', 'phone', 'name', 'Ph');
+	store.cellCancel();
+	assert.equal(store.rowGet('table', 'phone').name, 'Phone');
+	assert.equal(store.history.isUndoAvailable, false);
+	// a value that was not there is removed again by Escape, and leaves no step
+	store.cellStart('table', 'phone', 'description');
+	store.fieldSet('table', 'phone', 'description', 'A phone');
+	store.cellCancel();
+	assert.equal(Object.hasOwn(store.rowGet('table', 'phone'), 'description'), false);
+	assert.equal(store.history.isUndoAvailable, false);
+	// a value picked from a menu: each pick is a step
+	assert.equal(store.fieldSet('table', 'email', 'key', 'PK'), true);
+	assert.equal(store.fieldSet('table', 'email', 'key', 'FK'), true);
+	assert.equal(store.history.length, 2);
+	// a typed field of the edit card groups until the path moves elsewhere
+	assert.equal(store.connectionSet('link', 'label', 'p'), true);
+	assert.equal(store.connectionSet('link', 'label', 'pl'), true);
+	assert.equal(store.connectionSet('link', 'stroke', '#000000'), true);
+	assert.equal(store.connectionSet('link', 'stroke', '#111111'), true);
+	assert.equal(store.history.length, 4);
+	store.selectConnection('link');
+	assert.equal(store.connectionSet('link', 'stroke', '#222222'), true);
+	assert.equal(store.history.length, 5);
+	assert.equal(store.undo(), true);
+	assert.equal(store.connectionGet('link').style.stroke, '#111111');
+	assert.equal(store.undo(), true);
+	assert.equal(store.connectionGet('link').style, undefined);
+	assert.equal(store.connectionGet('link').label.text, 'pl');
+});
+
+test('a refused change, a change that changes nothing, and a gesture in progress leave the history alone', () => {
+	const store = new DiagramEditStore(sourceCreate(), 'diagram', undefined, registry);
+	assert.equal(store.connectionSet('link', 'lineType', 'curvy'), false);
+	assert.equal(store.fieldSet('table', 'email', 'name', 'Email'), true);
+	assert.equal(store.history.isUndoAvailable, false);
+	assert.equal(store.rowMove('table', 'email', 1), true);
+	store.interactionSet({ type: 'nodeDrag', nodeId: 'table' });
+	assert.equal(store.undo(), false);
+	assert.deepEqual(store.rowsGet(store.nodeGet('table')).map(row => row.id), ['phone', 'email']);
+	store.interactionSet(null);
+	assert.equal(store.undo(), true);
+	assert.deepEqual(store.rowsGet(store.nodeGet('table')).map(row => row.id), ['email', 'phone']);
+	store.historyClear();
+	assert.equal(store.history.isUndoAvailable, false);
+	assert.equal(store.history.isRedoAvailable, false);
+});
+
+test('an undo keeps the comments of the initial text and the canvas follows an undone position', () => {
+	const store = new DiagramEditStore('# Keep this comment\n' + powerAutomateSourceDefaultCreate().raw, 'diagram', undefined, registry);
+	const node = store.nodes[0];
+	assert.equal(store.positionRememberSet(node.id, true, { x: 10, y: 20 }), true);
+	assert.equal(store.nodeMove(node.id, { x: 300, y: 400 }), true);
+	const canvas = new DiagramERStore(store.rawDraft, undefined, 620, registry);
+	assert.deepEqual({ ...canvas.nodeList[0].position }, { x: 300, y: 400 });
+	// a drag in progress leaves the canvas node where the pointer is; the
+	// draft reloaded keeps that place while the authored position is unchanged
+	canvas.nodeListChange([{ type: 'position', id: node.id, position: { x: 310, y: 410 } }]);
+	canvas.sourceLoad(store.rawDraft, true);
+	assert.deepEqual({ ...canvas.nodeList[0].position }, { x: 310, y: 410 });
+	assert.equal(store.undo(), true);
+	canvas.sourceLoad(store.rawDraft, true);
+	assert.deepEqual({ ...canvas.nodeList[0].position }, { x: 10, y: 20 });
+	assert.equal(canvas.positionsTemporary[node.id], undefined);
+	assert.equal(store.undo(), true);
+	assert.equal(store.isDirty, false);
+	assert.match(store.rawDraft, /^# Keep this comment/);
+});

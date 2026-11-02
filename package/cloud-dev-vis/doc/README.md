@@ -9,18 +9,25 @@ cloud-dev-vis/
 ├── doc-package.yaml        name, description, packageDependList
 ├── package.json            marks the .js files as ES modules for node (tests); not an npm package
 ├── doc/
-│   ├── README.md           this document
-│   ├── card-diagram.md     the base series: data format, canvas, cards, editor, node registries
-│   └── power-platform.md   the Power Platform series
+│   ├── README.md               this document
+│   ├── card-diagram.md         building on the framework: the standards, the checklists (read before changing anything)
+│   ├── card-diagram-impl.md    the base series, design and implementation: data format, canvas, cards,
+│   │                           editor, history, node registries
+│   ├── power-platform.md       the Power Platform series, design
+│   ├── comp-diagram-er.md      for authors: DiagramER, CardDiagram, DiagramDataverseEntity, reading and editing
+│   └── comp-powerplatform.md   for authors: DiagramPowerAutomate, DiagramBusinessRule
 └── comp-mdx/
     ├── card-diagram/       the base series       CardDiagram
     └── power-platform/     Power Platform        DiagramER, DiagramPowerAutomate, DiagramBusinessRule,
                                                   DiagramDataverseEntity
 ```
 
+The two documents written for authors are the usage documents of the components; the demonstration doc page of the project collects them into its MDX Components part (`example_doc/.doc-page/source.yaml`, under the alias `cloud-dev-vis`), so they are rendered with their live examples there while staying with the package they describe.
+
 ## Core concepts
 
-- **Node and connection.** A diagram is nodes (what is drawn, where) and connections between named handles on them. The YAML is the source of truth; React Flow objects are derived from it and never saved ([Core Model](card-diagram.md#core-model)).
+- **Node and connection.** A diagram is nodes (what is drawn, where) and connections between named handles on them. The YAML is the source of truth; React Flow objects are derived from it and never saved ([Core Model](card-diagram-impl.md#core-model)).
+- **Draft and history.** While a block is edited, a draft of the same YAML is the truth, changed only through the store's one method, which validates every change and records it, so every command can be undone and redone within the session; the selection is not recorded, and nothing of the history is saved ([History](card-diagram-impl.md#history)).
 - **Node kind.** Everything the engine knows about one node type (`renderer: { type: ... }`): how to check its data, which anchors it offers, the rows and fields the editor works with, the card that draws it, and how the create panel makes a new one.
 - **Node registry.** The list of kinds one diagram component can draw and create. It is fixed per component type, in code.
 - **Series.** A folder of components sharing one registry. The **base series** (`card-diagram`) holds the engine and the generic kinds; every other series is a list of kinds plus the components bound to them.
@@ -39,17 +46,19 @@ base series (card-diagram)                         a platform series (power-plat
 2. **One registry per component type.** Each series builds its own registry and binds it to its components (`cardDiagramCompCreate`, `cardStandaloneCompCreate`). A diagram only offers, and only reads, the kinds of its registry, so a Power Platform diagram never offers the cards of another platform, and a node of the wrong series is an error that names the types the diagram knows. Combining registries by configuration is left for later; a combination today is a registry written in code (the Power Platform registry includes the generic kinds of the base series this way).
 3. **New cards are schemas over the generic cards.** The table card has any number of fields and rows; the resource card has head fields and property rows. A platform card is a schema on one of them plus, at most, a small variant (an icon, an accent color, a badge).
 4. **Registered components stay open to every diagram.** A node drawn by a component of the page (`renderer: { component }`) is not a kind of any registry; it is resolved through the component registry of the page, in every diagram.
+5. **One place for every change of the draft.** A command of the editor, of the base or of a series, changes the draft through `DiagramEditStore.changeApply` and nowhere else: validation, the message of a refusal, the path's redirects and the history of undo / redo all hang on that one place, so a series gets them without writing them.
 
-More in [Node Registries](card-diagram.md#node-registries).
+More in [Node Registries](card-diagram-impl.md#node-registries) and [History](card-diagram-impl.md#history).
 
 ## Where to read next
 
 | To ... | Read |
 | --- | --- |
-| understand the data format, the canvas, the editor, or add a generic card | [card-diagram.md](card-diagram.md) |
+| change anything of the framework, add a kind, a series or a command | the guidance [card-diagram.md](card-diagram.md) first: the standards and the checklist of that kind of change |
+| understand the data format, the canvas, the editor, the history, or add a generic card | [card-diagram-impl.md](card-diagram-impl.md) |
 | change a Power Platform card or component | [power-platform.md](power-platform.md) |
-| write diagrams in a document | [Data diagrams](../../../example_doc/mdx-usage/comp-diagram-er.md), [Power Platform diagrams](../../../example_doc/mdx-usage/comp-powerplatform.md) |
-| add a series for another platform | [Node Registries](card-diagram.md#node-registries): a folder with its kinds, its registry, its components and a `comp.yaml` |
+| write diagrams in a document | [Data diagrams](comp-diagram-er.md), [Power Platform diagrams](comp-powerplatform.md) |
+| add a series for another platform | [Adding a series](card-diagram.md#adding-a-series), then [Node Registries](card-diagram-impl.md#node-registries): a folder with its kinds, its registry, its components and a `comp.yaml` |
 
 ## Implementation
 
@@ -59,6 +68,7 @@ More in [Node Registries](card-diagram.md#node-registries).
 | `comp-mdx/card-diagram/card-diagram-node-registry.js` | the generic kinds (`table`, `operator`) and the registry of `CardDiagram` |
 | `comp-mdx/card-diagram/CardDiagram.jsx`, `CardStandalone.jsx` | the canvas and the standalone card, and their factories `cardDiagramCompCreate`, `cardStandaloneCompCreate` |
 | `comp-mdx/card-diagram/DiagramERData.js`, `DiagramERStore.js`, `DiagramEdit*.js`, `DiagramRender.jsx` | normalization, the canvas model, the editor's draft and path, the node and edge components (their names keep the `DiagramER` prefix of the series they started in) |
+| `comp-mdx/card-diagram/DiagramEditHistory.js` | `EditHistory`: the history of a draft (steps, typing groups, undo, redo), generic over the state its owner records; `DiagramEditStore` records in it from `changeApply` and `DiagramVisualEdit` offers it in the bar and on the keys |
 | `comp-mdx/card-diagram/TableCard*.js(x)`, `ResourceNodeCard.jsx`, `OperatorCard.jsx` | the generic cards and their schemas |
 | `comp-mdx/card-diagram/card-diagram-comp.js` | the exposure shared by every diagram component, and the definition of `CardDiagram` |
 | `comp-mdx/power-platform/power-platform-node-registry.js` | the Power Platform kinds and its two registries |

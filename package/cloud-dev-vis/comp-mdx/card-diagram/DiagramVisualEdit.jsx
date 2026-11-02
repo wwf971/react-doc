@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Plus } from '../../../../main/frontend/UICommon.js';
+import { Plus, Undo2 } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve } from '../../../../main/comp-doc/registry/comp-registry.js';
 import { EditActions } from '../../../../main/comp-doc/edit/EditActions.jsx';
@@ -13,6 +13,9 @@ import './DiagramVisualEdit.css';
 
 const saveTargetLabels = { asset: 'Asset object', inline: 'Inline YAML' };
 const endpointOf = (nodeId, handleId) => ({ nodeId, handleId: handleId ?? null });
+// a key pressed in a text being typed (a cell, a field of the edit card, the
+// search of the create panel) belongs to the field
+const isInTextField = target => Boolean(target?.isContentEditable) || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName);
 const isPointNode = nodeId => String(nodeId).startsWith('~');
 // the handle a dragged line was dropped on: the end of the React Flow
 // connection that is not the handle the drag started from
@@ -21,13 +24,16 @@ const dropOf = (connection, from) => connection.source === from.nodeId && (conne
 	: endpointOf(connection.source, connection.sourceHandle);
 
 // The visual edit mode of a card diagram and of a standalone card
-// (card-diagram.md#card-editing): the same renderer as the read view, given an
-// `editor` that the cards, the handles and the canvas report to. The draft
-// and the path of the edit card live in DiagramEditStore; this component
-// owns what belongs to the view: where the edit card stands (beside the
-// principal of the path, anchorRectGet), the canvas api (positions of
-// handles and nodes, the camera), and the drag interactions of the canvas
-// (connect, detach, reconnect, create), which it turns into store commands.
+// (card-diagram-impl.md#card-editing): the same renderer as the read view, given an
+// `editor` that the cards, the handles and the canvas report to. The draft,
+// its history and the path of the edit card live in DiagramEditStore; this
+// component owns what belongs to the view: where the edit card stands
+// (beside the principal of the path, anchorRectGet), the canvas api
+// (positions of handles and nodes, the camera), the drag interactions of
+// the canvas (connect, detach, reconnect, create), which it turns into
+// store commands, and the keys of the editor (Escape, Ctrl/⌘ + Enter, undo
+// and redo), handled here first so no keyboard map takes them from an open
+// editor.
 export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, config, onEvent, kind, registry, isInPopup = false, renderContent }) {
 	const { compById, sourceStore } = useDocStores();
 	const [result] = useState(() => {
@@ -55,7 +61,17 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		: '';
 	const isAllowed = !reasonRefused;
 	const report = () => { if (store) void onEvent?.('editDraftChange', store.report); };
-	const change = operation => { if (!isLocked) { operation(); report(); } };
+	const focusRoot = () => root.current?.focus({ preventScroll: true });
+	// every command, then the draft reported to the page. a control that acts
+	// may be gone once the draft rendered (the toolbar of a row that lost the
+	// focus to the row it inserted), leaving the keyboard focus on the body:
+	// the editor takes it back, so the next key (Escape, undo) reaches it
+	const change = operation => {
+		if (isLocked) return;
+		operation();
+		report();
+		requestAnimationFrame(() => { if (document.activeElement === document.body && root.current) focusRoot(); });
+	};
 	const submit = () => {
 		if (!isLocked && store) {
 			canvas.current?.viewRemember();
@@ -63,18 +79,28 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		}
 	};
 	const cancel = () => { if (!isLocked) void onEvent?.('editCancelRequest'); };
-	const focusRoot = () => root.current?.focus({ preventScroll: true });
 	// Escape steps out one level at a time: the cell being typed (restoring
 	// it), the create panel, then one segment of the path (a cell to its row,
 	// a row to the list of rows, the list to the card, the card to nothing).
 	// it never ends the session, so a stray key cannot discard the draft;
-	// Save, Cancel or a click outside do
+	// Save, Cancel or a click outside do.
+	// Ctrl/⌘ + Z undoes and Ctrl/⌘ + Shift + Z (or Ctrl/⌘ + Y) redoes the last
+	// step of the draft (card-diagram-impl.md#history), except in a text
+	// being typed, where the keys stay the browser's: the typing it takes
+	// back reaches the draft through the field's input event, as the typing did
 	const keyDown = event => {
 		if (event.nativeEvent.isComposing) return;
-		if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+		const isMod = (event.ctrlKey || event.metaKey) && !event.altKey;
+		const key = event.key.toLowerCase();
+		if (event.key === 'Enter' && isMod) {
 			event.preventDefault();
 			event.stopPropagation();
 			submit();
+		} else if (isMod && (key === 'z' || key === 'y')) {
+			if (isInTextField(event.target) || !store || !editor) return;
+			event.preventDefault();
+			event.stopPropagation();
+			if (key === 'y' || event.shiftKey) editor.redo(); else editor.undo();
 		} else if (event.key === 'Escape') {
 			event.stopPropagation();
 			if (!store || !editor) return;
@@ -94,6 +120,12 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		stepOut: () => { store.pathUp(); if (!store.display) focusRoot(); },
 		clearSelection: () => { store.selectionClear(); focusRoot(); },
 		cancelCell: () => { change(() => store.cellCancel()); focusRoot(); },
+		// ---- the history of the draft ----
+		// the draft put back a step; the focus returns to the editor root when
+		// it came from a control outside it (the bar's buttons are portaled),
+		// so the next key reaches the editor
+		undo: ({ isFromControl = false } = {}) => { change(() => { if (store.undo() && isFromControl) focusRoot(); }); },
+		redo: ({ isFromControl = false } = {}) => { change(() => { if (store.redo() && isFromControl) focusRoot(); }); },
 		// where the edit card stands: beside the principal of the path as a
 		// whole (the node on the canvas, the standalone card, the middle of a
 		// line), never beside the row or the cell within it
@@ -215,6 +247,10 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		{store ? renderContent({ data: { ...data, source: store.rawDraft, raw: store.rawDraft }, editor }) : null}
 		<EditFloatingPanel label={kind === 'diagram' ? 'Diagram' : 'Table'} head={store ? <>
 			<span className={`doc-vis-dirty${store.isDirty ? ' is-dirty' : ''}`} role="status">{store.isDirty ? 'Unsaved changes' : 'No changes'}</span>
+			{editor ? <span className="doc-vis-history" role="group" aria-label="History">
+				<button type="button" className="doc-button-icon" title="Undo (Ctrl/⌘ + Z)" aria-label="Undo" disabled={isLocked || !store.history.isUndoAvailable} onClick={() => editor.undo({ isFromControl: true })}><Undo2 size={14} /></button>
+				<button type="button" className="doc-button-icon is-mirrored" title="Redo (Ctrl/⌘ + Shift + Z)" aria-label="Redo" disabled={isLocked || !store.history.isRedoAvailable} onClick={() => editor.redo({ isFromControl: true })}><Undo2 size={14} /></button>
+			</span> : null}
 			{kind === 'diagram' && editor ? <button type="button" className="doc-button-icon" title="Add a node or a connection (or double-click the canvas)" aria-label="Add" disabled={isLocked} onClick={() => editor.createOpen(canvas.current?.centerGet())}><Plus size={14} /></button> : null}
 			{isFromAsset ? <span className="doc-vis-save-target">
 				<span>Save to</span>

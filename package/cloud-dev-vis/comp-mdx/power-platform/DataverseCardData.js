@@ -25,7 +25,7 @@ export function dataverseCardNormalize(data = {}) {
 }
 
 // a table card has no handle on its title line: handles belong to its rows
-// (card-diagram.md#handles-and-anchors)
+// (card-diagram-impl.md#handles-and-anchors)
 export function dataverseAnchorListGet(data) {
 	return [
 		{ id: 'body', sideList: ['left', 'right', 'top', 'bottom'] },

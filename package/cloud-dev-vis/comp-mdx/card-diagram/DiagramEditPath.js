@@ -1,7 +1,7 @@
 import { cardSchemaGet } from './TableCardSchema.js';
 import { endpointIsDangling } from './DiagramERData.js';
 
-// The path of the edit card (card-diagram.md#the-path-of-the-edit-card): where
+// The path of the edit card (card-diagram-impl.md#the-path-of-the-edit-card): where
 // the author is in the principal of the card (a node, or a line by itself),
 // as a list of segments. The path is the one state the card is drawn from:
 // its tabs, the view of the tab (a list, or the detail of one thing), and

@@ -1,4 +1,4 @@
-# The base series of the package (doc/card-diagram.md): the canvas of node
+# The base series of the package (doc/card-diagram-impl.md): the canvas of node
 # cards and connection lines on React Flow, the generic cards (a table with
 # any number of rows and columns, a resource card, an operator), the visual
 # editor, and the node registry mechanism every series builds its own

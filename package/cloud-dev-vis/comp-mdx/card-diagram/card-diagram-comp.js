@@ -6,7 +6,7 @@ import { CardDiagram } from './CardDiagram.jsx';
 
 // What a card diagram and a standalone card expose through their registry
 // definitions (compDefine expose, doc_page_impl_mdx_comp.md#what-a-component-exposes),
-// shared by every series: the visual edit mode (card-diagram.md#card-editing)
+// shared by every series: the visual edit mode (card-diagram-impl.md#card-editing)
 // beside the built-in source mode. The visual mode edits inline data like any
 // other component mode, and also the data of an asset reference
 // (isEditAssetAccepted): the draft then goes to the asset object, or into the

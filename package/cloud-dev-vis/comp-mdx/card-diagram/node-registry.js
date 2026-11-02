@@ -1,6 +1,6 @@
 import { Waypoints } from '../../../../main/frontend/UICommon.js';
 
-// The node registry of a diagram component (card-diagram.md#node-registries):
+// The node registry of a diagram component (card-diagram-impl.md#node-registries):
 // the node kinds a diagram of that component can draw, and the entries its
 // create panel offers. A registry is fixed per component type: each series
 // of components builds its own from the kinds it knows, and binds it to its
