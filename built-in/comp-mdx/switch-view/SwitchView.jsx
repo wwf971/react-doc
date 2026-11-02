@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import { Grid2X2, ListIcon, PanelsTopLeft, Table2 } from '../../../main/frontend/UICommon.js';
 import { RegisteredComp } from '../../../main/comp-doc/registry/RegisteredComp.jsx';
+import { useDocEventSubscribe } from '../../../main/comp-doc/registry/use-doc-event.js';
 import { switchViewDataParse } from './SwitchViewData.js';
 import './SwitchView.css';
 
@@ -24,6 +25,17 @@ function SwitchViewPanel({ value, config, onEvent }) {
     setViewCurrent(viewId);
     setViewsVisited((previous) => previous.includes(viewId) ? previous : [...previous, viewId]);
   };
+  // a navigation to a reference written in one of the views (a backlink
+  // followed here, doc_page_impl_event.md#events-delivered-to-components):
+  // the view holding it is shown, so the page finds the reference
+  useDocEventSubscribe(config, 'placeReveal', (data) => {
+    const target = String(data.target ?? '');
+    if (!target) return undefined;
+    const view = value.views.find((viewItem) => viewTextGet(viewItem).includes(target));
+    if (!view) return undefined;
+    viewSelect(view.id);
+    return { code: 0 };
+  });
   return (
     <div className="switch-view not-prose">
       <div className="switch-view-tabs" role="tablist" aria-label={value.label} onKeyDown={(event) => {
@@ -56,6 +68,16 @@ function SwitchViewPanel({ value, config, onEvent }) {
       ))}
     </div>
   );
+}
+
+// the data of a view as text, where a reference it holds can be found
+function viewTextGet(view) {
+  if (typeof view.raw === 'string' && view.raw) return view.raw;
+  try {
+    return JSON.stringify(view.data ?? {});
+  } catch {
+    return '';
+  }
 }
 
 export { SwitchView };

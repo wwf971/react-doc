@@ -186,3 +186,135 @@ test('legacy sourceDependencies are still retained, with a deprecation warning',
   );
   assert.match(warn.mock.calls[0].arguments[0], /sourceDependencies is deprecated/);
 });
+
+// ---------- where a reference is written ----------
+
+test('a reference records its line, its block, the headings above it and the text around it', () => {
+  const { dependencyList } = docSourceDependenciesCollect([
+    '---',
+    'title: Page',
+    '---',
+    '# Guide',
+    '',
+    'Intro text.',
+    '',
+    '## Setup',
+    '',
+    '### Install',
+    '',
+    'First read [the model](a.md#Model) carefully, then continue with the rest of this sentence.',
+    '',
+    '## Usage',
+    '',
+    '- a list item mentioning `b.md` inline',
+    '- and [[c.md]] as a wiki link',
+    '',
+    '![diagram](./d.png)',
+  ].join('\n'), { internalPath: '~docs/page.md', ext: 'md' }, configDoc);
+  assert.deepEqual(dependencyList.map((dependency) => ({
+    target: dependency.target,
+    sourceLine: dependency.sourceLine,
+    blockLine: dependency.blockLine,
+    headingTrail: dependency.headingTrail,
+    context: dependency.context,
+  })), [
+    {
+      target: 'a.md#Model',
+      sourceLine: 9,
+      blockLine: 9,
+      headingTrail: ['Guide', 'Setup', 'Install'],
+      context: { before: 'First read ', label: 'the model', after: ' carefully, then continue with the rest of this sentence.' },
+    },
+    {
+      target: 'b.md',
+      sourceLine: 13,
+      blockLine: 13,
+      headingTrail: ['Guide', 'Usage'],
+      context: { before: 'a list item mentioning ', label: 'b.md', after: ' inline' },
+    },
+    {
+      target: 'c.md',
+      sourceLine: 14,
+      blockLine: 13,
+      headingTrail: ['Guide', 'Usage'],
+      context: { before: 'and ', label: '[[c.md]]', after: ' as a wiki link' },
+    },
+    {
+      target: './d.png',
+      sourceLine: 16,
+      blockLine: 16,
+      headingTrail: ['Guide', 'Usage'],
+      context: { before: '', label: 'diagram', after: '' },
+    },
+  ]);
+});
+
+test('a long sentence is clipped around the reference at word boundaries', () => {
+  const before = 'word '.repeat(30).trim();
+  const after = 'tail '.repeat(30).trim();
+  const { dependencyList } = docSourceDependenciesCollect(
+    `${before} [link](a.md) ${after}`,
+    { internalPath: '~docs/page.md', ext: 'md' },
+    configDoc,
+  );
+  const { context } = dependencyList[0];
+  assert.ok(context.before.startsWith('…word '), context.before);
+  assert.ok(context.before.length <= 50, String(context.before.length));
+  assert.ok(context.after.endsWith(' tail…'), context.after);
+  assert.ok(context.after.length <= 74, String(context.after.length));
+});
+
+test('a reference of component data is written at the block, without a line, under the block\'s headings', () => {
+  const { dependencyList } = docSourceDependenciesCollect([
+    '# Top',
+    '',
+    '## Notes',
+    '',
+    '<!--renderComp=BlockMdx,title=Note-->',
+    `${F}md`,
+    'see [the setup](setup.md) here',
+    F,
+    '',
+    '<!--renderComp=FileTree,dataRef=tree.md#project-->',
+    `${F}yaml`,
+    'tree: []',
+    F,
+  ].join('\n'), { internalPath: '~docs/page.md', ext: 'md' }, configDoc);
+  assert.deepEqual(dependencyList.map((dependency) => ({
+    target: dependency.target,
+    construct: dependency.construct,
+    sourceLine: dependency.sourceLine,
+    blockLine: dependency.blockLine,
+    headingTrail: dependency.headingTrail,
+    context: dependency.context,
+  })), [
+    {
+      target: 'setup.md',
+      construct: 'BlockMdx',
+      sourceLine: undefined,
+      blockLine: 5,
+      headingTrail: ['Top', 'Notes'],
+      context: { before: 'see ', label: 'the setup', after: ' here' },
+    },
+    {
+      target: 'tree.md',
+      construct: 'dataRef of FileTree',
+      sourceLine: undefined,
+      blockLine: 10,
+      headingTrail: ['Top', 'Notes'],
+      context: undefined,
+    },
+  ]);
+});
+
+test('an mdx element at the root is its own block; a link in a heading is under that heading', () => {
+  const { dependencyList } = docSourceDependenciesCollect(
+    '# A [link](a.md)\n\n<SourceLink target="~docs/a.ps1" />\n',
+    { internalPath: '~docs/page.mdx', ext: 'mdx' },
+    configDoc,
+  );
+  assert.deepEqual(dependencyList.map((dependency) => [dependency.target, dependency.sourceLine, dependency.blockLine, dependency.headingTrail]), [
+    ['a.md', 1, 1, ['A link']],
+    ['~docs/a.ps1', undefined, 3, ['A link']],
+  ]);
+});

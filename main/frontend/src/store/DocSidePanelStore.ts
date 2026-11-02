@@ -120,11 +120,9 @@ export type SidePanelNodeDialog = {
   // the path chosen in the picker (a full source path)
   bindKind: 'doc' | 'folder' | 'none';
   bindPath: string;
-  // remove: the item's document is deleted with it; the documents that link
-  // to that document, asked from the development server
+  // remove: the item's document is deleted with it (the documents that link
+  // to it are read from the link index, DocLinkStore.referrerListGet)
   isFileDeleted: boolean;
-  referrerStatus: '' | 'loading' | 'done' | 'error';
-  referrerList: { docPath: string; count: number }[];
   status: 'open' | 'submitting' | 'error';
   message: string;
 };
@@ -432,8 +430,6 @@ export class DocSidePanelStore {
       bindKind: 'doc',
       bindPath: '',
       isFileDeleted: false,
-      referrerStatus: '',
-      referrerList: [],
       status: 'open',
       message: '',
       ...dialog,
@@ -547,27 +543,13 @@ export class DocSidePanelStore {
   }
 
   // a removal is confirmed first. a document item offers its document,
-  // unchosen; the documents linking to it are asked from the server, so the
-  // confirmation can say who would be left with a broken link
+  // unchosen; the dialog says who would be left with a broken link, from
+  // the link index of the page (DocLinkStore)
   removeOpen(itemId: string, point?: EditPoint): EditResult {
     const resolved = this.removeResolve(itemId);
     if (resolved.code !== 0) return resolved;
     this.dialogOpen({ kind: 'remove', itemId, point });
-    if (resolved.data.filePath && this.sourceStore.isWritable) void this.referrerLoad(itemId, resolved.data.filePath);
     return { code: 0, message: '' };
-  }
-
-  private async referrerLoad(itemId: string, filePath: string) {
-    const seq = this.dialog!.seq;
-    this.dialog!.referrerStatus = 'loading';
-    const result = await this.sourceStore.fileReferrerListGet(filePath);
-    runInAction(() => {
-      // the answer is for the dialog still open only
-      const dialog = this.dialog;
-      if (!dialog || dialog.seq !== seq || dialog.itemId !== itemId) return;
-      dialog.referrerStatus = result.code === 0 ? 'done' : 'error';
-      dialog.referrerList = result.code === 0 ? (result.data?.referrerList ?? []) : [];
-    });
   }
 
   // the other items bound to the same document: they would show it missing

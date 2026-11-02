@@ -47,6 +47,46 @@ function headingTitleNormalize(text) {
   return String(text ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+// a focus names a reference written in the document body, finer than a
+// fragment (doc_page_impl_nav_backlink.md#going-to-a-backlink): the link
+// controllers carry the target as written (data-doc-link-target) and, in
+// the document's own Markdown, the line (data-doc-link-line). the one on
+// the focus's line wins; else the first with that target, which is how a
+// reference written in the data of a component (no line of its own) is
+// found.
+function focusElementFind(contentElement, focus) {
+  if (!contentElement || !focus?.target) return null;
+  const elementList = [
+    ...contentElement.querySelectorAll(`[data-doc-link-target="${attributeValueEscape(focus.target)}"]`),
+  ];
+  if (elementList.length === 0) return null;
+  if (focus.sourceLine) {
+    const elementOnLine = elementList.find((element) => (
+      Number(element.getAttribute('data-doc-link-line')) === focus.sourceLine
+    ));
+    if (elementOnLine) return elementOnLine;
+  }
+  return elementList[0];
+}
+
+function attributeValueEscape(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+// the block of text a focused reference sits in: what is aligned with the
+// top of the viewport, so the reference is read in its sentence
+function focusBlockGet(element) {
+  return element.closest('p, li, h1, h2, h3, h4, h5, h6, td, th, dt, dd, figcaption, blockquote') ?? element;
+}
+
+function navigationFocusSet(pageElement, focusElement) {
+  if (!pageElement) return;
+  for (const element of pageElement.querySelectorAll('.doc-navigation-focus')) {
+    if (element !== focusElement) element.classList.remove('doc-navigation-focus');
+  }
+  focusElement?.classList.add('doc-navigation-focus');
+}
+
 function navigationHighlightTargetGet(element) {
   const isEmpty = !element.textContent?.trim() && element.children.length === 0;
   const heading = isEmpty ? element.closest('h1, h2, h3, h4, h5, h6') : null;
@@ -78,18 +118,23 @@ function pageScrollDestinationIsAligned(pageElement, targetElement, tolerance = 
   return Math.abs(targetRect.top - pageRect.top - 8) <= tolerance;
 }
 
-function pageScrollDestinationAlign(pageElement, targetElement) {
+// offsetTop: the gap kept above the destination; a focused reference gets
+// a larger one, so its ring and the line above it are in view
+function pageScrollDestinationAlign(pageElement, targetElement, offsetTop = 8) {
   if (!pageElement || !targetElement) return;
   const pageRect = pageElement.getBoundingClientRect();
   const targetRect = targetElement.getBoundingClientRect();
   pageElement.scrollTop = Math.max(
     0,
-    pageElement.scrollTop + targetRect.top - pageRect.top - 8,
+    pageElement.scrollTop + targetRect.top - pageRect.top - offsetTop,
   );
 }
 
 export {
   destinationElementFind,
+  focusBlockGet,
+  focusElementFind,
+  navigationFocusSet,
   navigationHighlightSet,
   navigationHighlightTargetGet,
   pageScrollDestinationAlign,

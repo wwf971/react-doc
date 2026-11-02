@@ -2,7 +2,7 @@
 
 # Event Layer: Design
 
-A component on the page never calls a store. It reports what the author or reader asked for (`onEvent(eventType, eventData)`, the third of the common props `{ data, config, onEvent }`), and the page decides who answers. This document specifies the layer between the two: how a report becomes an event, how an event is routed to the domain that owns it (navigation, tags, editing), how the answer comes back, and how the layer grows when a new domain or a new concern (undo / redo) arrives. For the overall architecture, refer to [Document Page: Design](doc_page_impl.md). The design follows the document store of Yamd (`doc-mobx`): one event shape, one result shape, routing centralized in one place that knows the current state, and handlers that are plain store methods.
+A component on the page never calls a store. It reports what the author or reader asked for (`onEvent(eventType, eventData)`, the third of the common props `{ data, config, onEvent }`), and the page decides who answers. This document specifies the layer between the two: how a report becomes an event, how an event is routed to the domain that owns it (navigation, tags, editing), how the answer comes back, how the page in turn tells a component something at its place ([events delivered to components](#events-delivered-to-components)), and how the layer grows when a new domain or a new concern (undo / redo) arrives. For the overall architecture, refer to [Document Page: Design](doc_page_impl.md). The design follows the document store of Yamd (`doc-mobx`): one event shape, one result shape, routing centralized in one place that knows the current state, and handlers that are plain store methods.
 
 ```text
 component            RegisteredComp                        DocEventRouter                 stores
@@ -70,6 +70,28 @@ The routes of the page are declared in one place, `DocPageMdx`, next to the stor
 
 A route handles the type for every component that reports it: a `navigateRequest` from an index item, a tag overview entry, or a link component takes the same path. The page's own ui (`DocLink`, the navigation buttons, the document toolbar) is not a component in this sense and calls the stores directly; the router is the boundary of registered components. Two pieces of the page's own ui join the layer on purpose: the block wrapper and the block toolbar of the edit layer (its mode menu included) dispatch entering a block, moving it, and moving its data into the asset service layer as `editBlockEnterRequest`, `editBlockMoveRequest`, and `editBlockAssetMoveRequest` (with `eventBuild`, source `{ sourcePath, blockIndex, placement: 'editBlock' | 'editToolbar' }`, the click's position as `point`), because these are operations of the document like the ones components request, and the host application and a future history should see them the same way. The drag of a side-panel item and the move picker do the same for a move (`sidePanelItemMoveRequest`, source `{ itemId, placement: 'sidePanelDisplay' | 'sidePanelMovePicker' }`, the drop's position as `point`).
 
+## Events delivered to components
+
+The dispatch above carries reports *from* components. The page sometimes has something to tell a component: a navigation arrived at a reference written inside it, which it may be holding out of sight. This is the second direction of the layer, a **subscription**, and it goes through the same router so that one object knows both who answers what and who listens where:
+
+```text
+component (in a document, at a block)               DocEventRouter                     the page
+useDocEventSubscribe(config, type, listener) ─► subscribe({ type, sourcePath, sourceLine }, listener)
+                                                                                 ◄── publish({ type, subject, data })
+listener({ ...data, subject }) ◄──────────── every subscriber of the subject's document and block
+  returns { code: 0 } | undefined ───────────► { resultList, isAccepted }
+```
+
+A subscription names a **place**, not a component instance: the document (`sourcePath`) and the marker line of the block (`sourceLine`, the block identity of the page, [Places in a document](doc_page_impl_nav.md#places-in-a-document)); a subscriber without a line hears every event of its document. The page publishes for a place too, `subject: { sourcePath, blockLine }`, so neither side needs to know the other: the backlinks of the navigation layer know a block line from the link index, and the component at that line answers. `RegisteredComp` binds the subscription for every component it renders, as `config.eventSubscribe(type, listener)`, from the same runtime facts it fills the source of a report with; a component rendered inside another one (a view of a `SwitchView`) has no block of its own and hears nothing unless the outer one forwards. The hook `useDocEventSubscribe(config, type, listener)` (`comp-doc/registry/use-doc-event.js`) subscribes for the mount and always calls the latest listener given, so a component writes one line and closes over its state.
+
+A delivered event has a result like a report: `{ code: 0 }` says the component took it (it revealed the place), `undefined` that it is not the component's business; `publish` resolves with every result and whether one accepted, after awaiting the listeners in subscription order, a failing one reported and passed over. The page does not depend on an answer: the one delivered event today, `placeReveal`, is followed by the page's own lookup of the reference whether or not a component answered ([Going to a backlink](doc_page_impl_nav_backlink.md#going-to-a-backlink)). What a component should do with `placeReveal` is in [MDX components](doc_page_impl_mdx_comp.md#a-place-the-page-asks-to-see).
+
+| delivered event | subject | data | published by |
+| --- | --- | --- | --- |
+| `placeReveal` | the document and the block holding a reference | `{ kind: 'link', target, sourceLine, blockLine }`: the reference as written and where | the destination navigation, a frame after the body rendered, before it looks for the reference |
+
+The direction is open to the next subjects: a component told that its asset object changed, a dashboard told that its instance restarted, would subscribe for an object or an instance instead of a block, which the router's matching would grow a key for ([TODO](doc_page_impl_TODO.md#event-subscription)).
+
 ## The edit domain and the focus shift
 
 The edit store is the one handler of its domain, so the route is a single line (`handle: (event) => editStore.eventHandle(event)`), and the store decides with its own state whether an event applies: session events are accepted only from the editor of the open session (`event.source.sourcePath` is the session's document), the rest get code -1 with a reason. The events of the domain name their subject in `source`, filled by `RegisteredComp` from the runtime config of the component: a session event is matched against the session, a block event carries `sourcePath` and `blockIndex`, a side-panel label event carries `itemId` (the host of a side-panel item renders it with `itemId` in its runtime config, so every report of an item label knows its item).
@@ -84,15 +106,18 @@ A focus shift is the event that shows why routing belongs to the store and not t
 - **A new event of an existing domain** is one more entry in the domain's type list and one more branch in its handler.
 - **History (undo / redo)** attaches at two points that already exist: every write of the edit layer (a document operation in `operationApply`, a side-panel move in `DocSidePanelStore`) is recorded with the texts before and after by `DocEditStore.historyRecord` ([History records](doc_page_impl_edit.md#history-records)), and the router's `dispatch` is the one place every component report passes, where `historyUndoRequest` / `historyRedoRequest` become one more route answered from those records. Neither needs a change in a component.
 - **Tooling**: a test or a palette can build an event with `eventBuild` and `dispatch` it with a `source` of its own; the handlers do not distinguish it from a component report. The apis of the [unified api registry](doc_page_impl_api.md#apis-and-the-event-layer) do exactly this (`context.eventDispatch`): an api that enters a block, replaces the data of a block or records a test result dispatches the event a component would, with `placement: 'api'` and the principal of the call (the palette, a hotkey, a remote caller) in its source, so the host application sees a change made by an agent the way it sees a click.
-- **Subscriptions**: the layer carries reports *from* components and answers them; it does not deliver events *to* them. A subscription is the second direction, which no existing route needs to change for ([TODO](doc_page_impl_TODO.md#event-subscription)).
+- **A new delivered event** is one more type the page publishes for a place and components subscribe to; the router, `RegisteredComp` and the hook do not change. A subject other than a block (an asset object, a service instance) is one more key of the subscription and of the matching in `publish` ([TODO](doc_page_impl_TODO.md#event-subscription)).
 
 ## Files
 
 ```text
-frontend/src/lib/doc-event.js          DocEventRouter (routeAdd, eventBuild, dispatch),
+frontend/src/lib/doc-event.js          DocEventRouter (routeAdd, eventBuild, dispatch; subscribe, publish),
                                        resultNormalize, eventResultIsAccepted, pointNormalize, result codes
 frontend/src/DocPageMdx.jsx            router creation and the route declarations
-comp-doc/registry/RegisteredComp.jsx   eventHandle: the component report (data, { point }) becomes an event
+comp-doc/registry/RegisteredComp.jsx   eventHandle: the component report (data, { point }) becomes an event;
+                                       config.eventSubscribe: the component's subscription at its block
+comp-doc/registry/use-doc-event.js     useDocEventSubscribe: a component listens for a delivered event
+frontend/src/lib/use-doc-destination-navigation.js   publishes placeReveal for a navigation focus
 comp-doc/edit/DocEditBlock.jsx         a click on a block dispatches editBlockEnterRequest with its point
 comp-doc/edit/DocEditBlockToolbar.jsx  the edit, move, and to-asset buttons dispatch their block events
 frontend/src/store/DocEditStore.ts     editEventTypeList, eventHandle (the edit domain)

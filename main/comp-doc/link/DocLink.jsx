@@ -16,12 +16,17 @@ import { SourceLinkRenderPopup } from '../../../built-in/comp-mdx/source-link/So
 // says so inline (tagsDisplay: before | after | on | off, from remark-doc-link).
 // configDocOverride: document-level config values that replace the values of
 // the containing document, e.g. part.index.config for a hosted part index.
+// line: the line the link is written on in its document (remark-doc-link,
+// the compile of a document only). the controller carries the target as
+// written and the line, so a navigation to a backlink finds the link in the
+// rendered body (doc_page_impl_nav_backlink.md#going-to-a-backlink).
 export const DocLink = observer(function DocLink({
   target,
   from,
   kind,
   tagsDisplay = '',
   configDocOverride,
+  line,
   children,
 }) {
   const { configStore, docStore, sourceStore, compConfigHost, linkConfig, onEvent: onEventPage, tagStore } = useDocStores();
@@ -188,7 +193,12 @@ export const DocLink = observer(function DocLink({
   };
 
   return (
-    <span ref={refWrap} className="doc-link-controller">
+    <span
+      ref={refWrap}
+      className="doc-link-controller"
+      data-doc-link-target={target ?? ''}
+      data-doc-link-line={line || undefined}
+    >
       <CompRender data={data} config={config} onEvent={eventHandle} />
       <LinkWarning text={warningText} anchorRef={refWrap} onDismiss={() => setWarningText('')} />
       {pathPopup && Panel ? <SourceLinkRenderPopup Panel={Panel} store={{

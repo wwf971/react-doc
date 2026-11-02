@@ -27,6 +27,19 @@
 // measures in, so a handler can compare it with any element on the screen
 // without converting. a handler that places a caret uses it to put the caret
 // where the user pointed (doc_page_impl_edit.md).
+//
+// the second direction, an event delivered to components
+// (doc_page_impl_event.md#events-delivered-to-components): a component
+// subscribes for a type at its place in a document (RegisteredComp does it
+// for it, config.eventSubscribe), the page publishes an event for a place,
+// and every subscriber of that place receives it and may answer.
+//
+//   subscribe({ type, sourcePath, sourceLine? }, listener)  -> unsubscribe
+//   publish({ type, subject: { sourcePath, blockLine }, data })
+//     -> { resultList: [DocEventResult], isAccepted }
+//
+// a subscriber with a sourceLine (the marker line of its block) receives the
+// events of that block; one without receives every event of its document.
 
 export const eventCodeAccepted = 0;
 export const eventCodeRejected = -1;
@@ -38,6 +51,8 @@ export class DocEventRouter {
     this.routeList = [];
     // route by event type, built from routeList
     this.routeByType = new Map();
+    // the subscriptions of components, by event type
+    this.subscriptionListByType = new Map();
   }
 
   // a domain declares the event types it answers. a type declared twice is
@@ -78,6 +93,53 @@ export class DocEventRouter {
       if (resultRoute) return resultRoute;
     }
     return { code: eventCodeUnrouted, data: undefined, message: `no handler for event ${event.type}` };
+  }
+
+  // ---------- events delivered to components ----------
+
+  // a component asks to be told of events of a type at its place:
+  //   subject.sourcePath   the document the component is rendered in
+  //   subject.sourceLine   the marker line of its block (its block identity),
+  //                        or undefined for every event of the document
+  // the listener receives the event's data with its subject, and answers
+  // with a result or undefined. returns the function that ends the
+  // subscription (idempotent).
+  subscribe({ type, sourcePath, sourceLine }, listener) {
+    const subscription = { type, sourcePath: String(sourcePath ?? ''), sourceLine, listener };
+    const subscriptionList = this.subscriptionListByType.get(type) ?? [];
+    subscriptionList.push(subscription);
+    this.subscriptionListByType.set(type, subscriptionList);
+    return () => {
+      const list = this.subscriptionListByType.get(type);
+      if (!list) return;
+      const index = list.indexOf(subscription);
+      if (index >= 0) list.splice(index, 1);
+    };
+  }
+
+  // the page tells the components at a place what it asks of them:
+  //   subject.sourcePath   the document
+  //   subject.blockLine    the marker line of the block, matched against the
+  //                        subscribers' sourceLine
+  // every matching subscriber is called, in subscription order; a listener
+  // that throws is reported and passed over. isAccepted: at least one
+  // answered with code 0.
+  async publish({ type, subject = {}, data = {} }) {
+    const sourcePath = String(subject.sourcePath ?? '');
+    const subscriptionList = [...(this.subscriptionListByType.get(type) ?? [])].filter((subscription) => (
+      subscription.sourcePath === sourcePath
+      && (subscription.sourceLine === undefined || subscription.sourceLine === subject.blockLine)
+    ));
+    const resultList = [];
+    for (const subscription of subscriptionList) {
+      try {
+        const result = resultNormalize(await subscription.listener({ ...data, subject: { ...subject, type } }));
+        if (result) resultList.push(result);
+      } catch (error) {
+        console.error(`[doc-event] a subscriber of ${type} failed.`, error);
+      }
+    }
+    return { resultList, isAccepted: resultList.some(eventResultIsAccepted) };
   }
 }
 

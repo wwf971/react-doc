@@ -41,6 +41,25 @@ type PartIndexFloatingLayout = {
   top: number;
   width: number;
 };
+// what the right column shows beside the document: the headings of the
+// page, the hosted index of the part, or the backlinks of the document
+export type TocContentMode = 'page' | 'part' | 'backlink';
+// a place inside the document finer than a fragment, asked for by a
+// navigation and applied once the body is rendered
+// (doc_page_impl_nav_backlink.md#going-to-a-backlink): the reference a
+// backlink stands for, found by its target text and its line
+export type NavigationFocus = {
+  kind: 'link';
+  // the target as written in the document (data-doc-link-target of its link)
+  target: string;
+  // the line of the reference, when it is written in the document's own
+  // Markdown, and the line of the root-level block holding it
+  sourceLine?: number;
+  blockLine: number;
+  // the nearest heading above it: where to go when the reference itself is
+  // not found (the document changed since the index was read)
+  heading?: string;
+};
 
 export class DocStore {
   sourceStore: DocSourceStore;
@@ -50,7 +69,7 @@ export class DocStore {
   compByIdVersion = 0;
   languagePage = '';
   languageSelectedByContentPath: Record<string, string> = {};
-  partIndexContentMode: 'page' | 'part' = 'part';
+  tocContentMode: TocContentMode = 'part';
   partIndexDisplayModeByPartId: Record<string, 'docked' | 'floating'> = {};
   partIndexFloatingLayoutByPartId: Record<string, PartIndexFloatingLayout> = {};
   partIndexLanguageSelectedByPartId: Record<string, string> = {};
@@ -59,6 +78,9 @@ export class DocStore {
   itemCurrentId = '';
   docCurrentPath = '';
   docCurrentHash = '';
+  // the place inside the document the last navigation asked for beyond its
+  // fragment; undefined after every navigation that did not ask for one
+  docCurrentFocus: NavigationFocus | undefined = undefined;
   // Path/hash values do not change when the user selects the current index
   // destination again. Keep a separate request signal so the view can repeat
   // the requested top reset or fragment alignment and highlight.
@@ -186,8 +208,8 @@ export class DocStore {
     return this.sourceStore.configDoc.partIndex?.isEnabled !== false;
   }
 
-  get partIndexContentModeCurrent(): 'page' | 'part' {
-    return this.partIndexContentMode;
+  get tocContentModeCurrent(): TocContentMode {
+    return this.tocContentMode;
   }
 
   get partIndexDisplayModeCurrent(): 'docked' | 'floating' {
@@ -346,9 +368,9 @@ export class DocStore {
     return true;
   }
 
-  partIndexContentModeSet(mode: 'page' | 'part'): boolean {
-    if (mode !== 'page' && mode !== 'part') return false;
-    this.partIndexContentMode = mode;
+  tocContentModeSet(mode: TocContentMode): boolean {
+    if (mode !== 'page' && mode !== 'part' && mode !== 'backlink') return false;
+    this.tocContentMode = mode;
     return true;
   }
 
@@ -549,6 +571,9 @@ export class DocStore {
     // do not ask the view to reapply the destination (top reset, fragment
     // alignment); used when only the source text was reloaded
     isRequestVersionKept?: boolean;
+    // a place finer than the fragment to go to once the body is rendered
+    // (doc_page_impl_nav_backlink.md#going-to-a-backlink)
+    focus?: NavigationFocus;
   }) {
     const indexHash = target.indexOf('#');
     const path = indexHash >= 0 ? target.slice(0, indexHash) : target;
@@ -566,6 +591,7 @@ export class DocStore {
     this.itemCurrentId = item.id;
     this.docCurrentPath = item.docPath ?? '';
     this.docCurrentHash = hash;
+    this.docCurrentFocus = options?.focus;
     if (!options?.isRequestVersionKept) this.navigationRequestVersion += 1;
     this.navigationError = '';
     this.linkDropdownOpenId = '';

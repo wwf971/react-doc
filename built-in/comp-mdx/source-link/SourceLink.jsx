@@ -101,7 +101,11 @@ const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEven
 	};
 
 	return (
-		<span ref={refWrap} className={`doc-link-controller doc-source-link${config.className ? ` ${config.className}` : ''}`}>
+		<span
+			ref={refWrap}
+			className={`doc-link-controller doc-source-link${config.className ? ` ${config.className}` : ''}`}
+			data-doc-link-target={targetRaw}
+		>
 			<LinkDocRender
 				data={{
 					ariaHasPopup: 'dialog',

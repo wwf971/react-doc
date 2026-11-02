@@ -10,9 +10,10 @@ config.yaml: workspace | docEntry ──► vite plugin "doc-source" (build / de
                                         ├── scanSource        file entries   { docPageAlias, rootAlias, relPath, internalPath, collect, ... }
                                         ├── scanSourceDirs    folder entries { docPageAlias, rootAlias, relPath, internalPath, collect }
                                         ├── dev api {base}/__doc-source: file text, file bytes, file creation,
-                                        │     refresh, referrers of a file, os folder listing, temporary doc pages
+                                        │     refresh, os folder listing, temporary doc pages
+                                        ├── doc-link-index     the references every document writes (doc_page_impl_nav_backlink.md)
                                         └── virtual:doc-source: configDoc (with workspace), fileManifest, dirManifest,
-                                            fileUrlByPath, docSourceEndpoint
+                                            docLinkIndex, fileUrlByPath, docSourceEndpoint
                                                 ▼
 page: DocSourceStore (the source as the page reads it, sourceService for components)
       DocSourceFileStore (file creation requested by components, the location prompt and its chooser)
@@ -305,7 +306,6 @@ The development server answers `{base}/__doc-source` (exported as `docSourceEndp
 | `GET /data?path=~page:root/image/a.png` | the bytes of a collected file with their mime type, binary or text |
 | `POST /file/create` `{ dirPath, name, text \| dataBase64, isOverwrite? }` | writes a file into a folder of the source; `{ code: 0, data: { path, entry } }`, `-1` invalid, `-2` the file exists, `-3` the folder is not collected by any rule |
 | `POST /refresh` | the configuration and the source read again from disk and reported as data, without a reload: for a change the file watcher did not see ([reading an item again](doc_page_impl_side_panel.md#reading-an-item-again)) |
-| `GET /file/referrer?path=~page:root/a.md` | `{ referrerList: [{ docPath, count }] }`: the documents whose links, images and inline targets resolve to the file, the way the page resolves them (asked before a file is deleted) |
 | `GET /os/list?path=` | a folder of the file system, for [os path completion](#os-path-completion) |
 | `POST /workspace/mount`, `/workspace/unmount` | [temporary doc pages](#temporary-doc-pages) |
 
@@ -319,7 +319,7 @@ A build has no api. The bytes of the files that are used are bundled as data url
 
 ## The page side: DocSourceStore and the service object
 
-`DocSourceStore` holds the source as the page reads it: `configDoc`, `fileManifest`, `dirManifest`, the raw texts and compile results, the structured data for search. It receives the source api endpoint and `fileUrlByPath` from `DocPageMdx` (`config.source.endpoint`, `data.fileUrlByPath`). Beside the reading methods it offers the **service object** of this layer, a stable object handed to every registered component as `config.source`:
+`DocSourceStore` holds the source as the page reads it: `configDoc`, `fileManifest`, `dirManifest`, `linkIndex` (the references every document writes, read by `DocLinkStore` for the backlinks of a document, [The link index](doc_page_impl_nav_backlink.md#the-link-index)), the raw texts and compile results, the structured data for search. It receives the source api endpoint and `fileUrlByPath` from `DocPageMdx` (`config.source.endpoint`, `data.fileUrlByPath`). Beside the reading methods it offers the **service object** of this layer, a stable object handed to every registered component as `config.source`:
 
 | Method | Meaning |
 | --- | --- |
@@ -403,7 +403,7 @@ sourceFileBackupMove(files)          each renamed into a hidden backup beside it
 sourceFileBackupRestore(moved)       on a failure: the backups renamed back, in reverse order
 ```
 
-A backup is never collected, whatever the rules say (`sourceFileBackupNameIs`), so it appears in no tree and no search, and restoring a file is renaming its backup on disk; there is no undo in the page. Before an item's document is deleted the page asks who still names it (`GET file/referrer`): the dependency scan of [pruning](doc_page_impl.md#source-pruning-for-deployment) over every document, its targets resolved as the page resolves links, the document's own doc page first; a target matching several files counts for each, so a file is never reported unused while a link may reach it. After the deletion those links show as links to a missing file, as they would for a file removed on disk. Renaming or moving a file, which would rewrite the links instead, is not offered ([TODO](doc_page_impl_TODO.md#source-file-rename)).
+A backup is never collected, whatever the rules say (`sourceFileBackupNameIs`), so it appears in no tree and no search, and restoring a file is renaming its backup on disk; there is no undo in the page. Before an item's document is deleted the page says who still names it, from the link index it holds ([Backlinks](doc_page_impl_nav_backlink.md#the-link-index)): the dependency scan of [pruning](doc_page_impl.md#source-pruning-for-deployment) over every document, kept on the development server, its targets resolved on the page as links are, the document's own doc page first; a target matching several files counts for each, so a file is never reported unused while a link may reach it. After the deletion those links show as links to a missing file, as they would for a file removed on disk. Renaming or moving a file, which would rewrite the links instead, is not offered ([TODO](doc_page_impl_TODO.md#source-file-rename)).
 
 ## Code map
 
@@ -419,11 +419,12 @@ A backup is never collected, whatever the rules say (`sourceFileBackupNameIs`), 
 | `plugin/doc-workspace-edit.ts` | a change of the workspace file as line operations |
 | `plugin/doc-sidebar-effective.ts` | the side panel shown: one effective occurrence per doc page, the root row of a mount hidden |
 | `plugin/doc-entry.ts` | the workspace and its doc pages: `docWorkspaceLoad`, `docEntryLoad` (a virtual workspace), aliases, mentions, root aliases of the rules |
-| `plugin/doc-source.ts` | `config.yaml` workspace / docEntry, temporary doc pages, rules, collection, the folders kept out by convention, folder manifest, source api (file creation, refresh, referrers, os listing, mounts), module generation (the component mounts included) |
+| `plugin/doc-source.ts` | `config.yaml` workspace / docEntry, temporary doc pages, rules, collection, the folders kept out by convention, folder manifest, source api (file creation, refresh, os listing, mounts), module generation (the component mounts and the link index included) |
+| `plugin/doc-link-index.ts` | the link index: the references of every document, scanned again per changed document ([Backlinks](doc_page_impl_nav_backlink.md)) |
 | `plugin/doc-service-server.ts` | the service folders of a doc page (`SERVICE_CONFIG_FILE_NAME`, `SERVICE_FOLDER_DEFAULT_LIST`), the forwarded service api and its sync route |
 | `plugin/doc-comp-config.ts` | the component folders of a doc page (`COMP_CONFIG_FILE_NAME`, `COMP_FOLDER_DEFAULT_LIST`) and their `comp.yaml` manifests |
 | `plugin/doc-attachment.ts` | the files components name, the mime types, the data urls of a build |
-| `store/DocSourceStore.ts` | the source as the page reads it, the doc pages, the service object (`config.source`), refresh and referrers |
+| `store/DocSourceStore.ts` | the source as the page reads it, the doc pages, the link index, the service object (`config.source`), refresh |
 | `store/DocSourceFileStore.ts` | file creation requests, the location prompt and its chooser (`locationChoose`) |
 | `store/DocWorkspaceStore.ts` | the graph of the Workspace tab, the node chosen, the positions; the lock, edits of the workspace file, mounts |
 | `comp-doc/source/SourcePathInput.jsx`, `SourceTreeSelect.jsx`, `SourcePathPicker.jsx`, `SourceFilePrompt.jsx` | the path input with completion, the tree view, the two as one path picker, the location prompt |

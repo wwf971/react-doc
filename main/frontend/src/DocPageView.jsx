@@ -31,7 +31,7 @@ import './DocPageView.css';
 // fully driven by store state; the compile cache lives in DocSourceStore.
 
 export const DocPageView = observer(function DocPageView() {
-  const { compById, docStore, editStore, pageElementRef, sourceStore } = useDocStores();
+  const { compById, docStore, editStore, eventRouter, pageElementRef, sourceStore } = useDocStores();
   const item = docStore.itemCurrent;
   const path = docStore.docCurrentPath;
   const pathContent = item?.type === 'inline' ? item.route : path;
@@ -46,6 +46,8 @@ export const DocPageView = observer(function DocPageView() {
   );
   useDocDestinationNavigation({
     compiledStatus: docEdit ? 'done' : compiled?.status,
+    eventRouter,
+    focus: docStore.docCurrentFocus,
     hash: docStore.docCurrentHash,
     navigationRequestVersion,
     pageElementRef,

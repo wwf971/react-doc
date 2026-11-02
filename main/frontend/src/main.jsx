@@ -22,6 +22,10 @@ createRoot(document.getElementById('root')).render(
       // the folders of the source (doc_page_impl_source.md): where files
       // can be created, what path completion offers
       dirManifest: docSource.dirManifest,
+      // the link index of the workspace (doc_page_impl_nav_backlink.md): the
+      // references every document writes, kept up to date by the plugin,
+      // from which the page lists the backlinks of a document
+      linkIndex: docSource.docLinkIndex,
       // the bytes of the source files a build collected, by source path;
       // empty in development, where the source api answers them
       fileUrlByPath: docSource.fileUrlByPath,

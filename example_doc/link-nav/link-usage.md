@@ -101,6 +101,16 @@ In `.mdx` documents, write the component on its own line before the heading or b
 ## Configuration
 ```
 
+<!--renderComp=Anchor,id=link-usage-backlinks-->
+## Backlinks
+
+Every document knows which documents link to it. The control at the top of the right column switches between **On this page**, **In this part** (inside a part) and **Backlinks**: the documents that reference the document shown, in side-panel order, and under each the references as written, with the headings above each one and the sentence around it.
+
+- Clicking a reference opens its document at the link, which is marked with a ring. A component holding the link out of sight, such as a folded answer of a `BlockQA` or a view of a `SwitchView`, shows it first.
+- A reference that points at a place of this document also offers a chip with that place; clicking the chip goes there in this document.
+
+Try it here: switch the right column to **Backlinks**. [Link Test Cases](links.mdx) links to this document several times, and [Ambiguous Name Example](notes.md) links to [Linking to a section](link-usage.md#Linking%20to%20a%20section) from inside a folded answer, which unfolds when the backlink is followed.
+
 ## Deprecated: span markers
 
 Earlier documents placed raw HTML markers before a heading, separated from it by a blank line:

@@ -30,10 +30,11 @@
   color: #b42318;
 }
 
-/* the host panel, not the reusable Index, is the scroll owner: a short index
-   keeps its natural height, a tall one scrolls within the window. the
-   height comes from DocPageToc.jsx; the page/part switch stays above it. */
-.doc-part-index-panel {
+/* a panel of the right column (the part index, the backlinks) is the scroll
+   owner of its content: a short one keeps its natural height, a tall one
+   scrolls within the window. the height comes from use-panel-height-available.js;
+   the page/part/backlinks switch stays above it. */
+.doc-toc-panel {
   min-width: 0;
   max-height: var(--doc-part-index-height-available, calc(100dvh - 2rem));
   overflow-x: auto;
@@ -42,7 +43,7 @@
   scrollbar-gutter: stable;
 }
 
-.doc-part-index-panel[hidden] {
+.doc-toc-panel[hidden] {
   display: none;
 }
 
@@ -52,14 +53,19 @@
   max-width: min(36rem, var(--doc-part-index-width-available, 100%));
 }
 
-.doc-page-toc.is-part-mode {
+/* a panel other than the page headings replaces the native heading list
+   inside the same shell, so the column keeps its width and top inset */
+.doc-page-toc.is-mode-part,
+.doc-page-toc.is-mode-backlink {
   align-self: start;
   height: auto;
   overflow: visible;
 }
 
-.doc-page-toc.is-part-mode > #toc-title,
-.doc-page-toc.is-part-mode > #toc-title + * {
+.doc-page-toc.is-mode-part > #toc-title,
+.doc-page-toc.is-mode-part > #toc-title + *,
+.doc-page-toc.is-mode-backlink > #toc-title,
+.doc-page-toc.is-mode-backlink > #toc-title + * {
   display: none;
 }
 
@@ -106,4 +112,3 @@
 .doc-part-index-panel.is-display-floating .doc-index-title-subtopics-items {
   border: 0;
 }
-

@@ -96,7 +96,7 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
         : [[remarkCommentComp, { onComponent: onCommentComponent, structuredDataGet }]]),
       ...(config.isDefaultLinkRecognitionEnabled === false
         ? []
-        : [[remarkDocLink, { fromPath: internalPath }]]),
+        : [[remarkDocLink, { fromPath: internalPath, isSourceLineEnabled: true }]]),
       ...(config.remarkPlugins ?? []),
       [remarkStructure, { exportAs: 'structuredData' }],
     ],

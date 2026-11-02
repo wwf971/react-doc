@@ -1,0 +1,199 @@
+/* the backlinks panel of the right column (doc_page_impl_nav_backlink.md#the-backlinks-panel):
+   a summary line, then the referencing documents, each with its references
+   as rows. shared classes: .doc-note (the empty hint), .doc-badge (what
+   declared a reference) */
+.doc-backlink-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-right: 0.25rem;
+  font-size: 0.78rem;
+}
+
+.doc-backlink-summary {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+}
+
+.doc-backlink-hint {
+  padding: 0.1rem 0;
+  line-height: 1.4;
+}
+
+.doc-backlink-group-list,
+.doc-backlink-item-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc-backlink-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.doc-backlink-group {
+  min-width: 0;
+}
+
+.doc-backlink-group-head {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.doc-backlink-group-head .doc-link-controller {
+  min-width: 0;
+}
+
+.doc-backlink-group-head .doc-link-render {
+  padding: 0;
+  color: var(--color-fd-foreground);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.doc-backlink-group-head .doc-link-render.is-broken,
+.doc-backlink-group-head .doc-link-render.is-unavailable {
+  font-weight: 500;
+}
+
+.doc-backlink-group-head .doc-link-render-icon {
+  width: 11px;
+  height: 11px;
+  opacity: 0.55;
+}
+
+.doc-backlink-group-head .doc-link-render-icon > svg {
+  width: 11px;
+  height: 11px;
+}
+
+.doc-backlink-group-count {
+  flex: 0 0 auto;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.doc-backlink-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 0.3rem;
+  padding-left: 0.4rem;
+  border-left: 2px solid var(--color-fd-border);
+}
+
+.doc-backlink-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* the row: where the reference is written (the headings above it), then
+   the sentence around it with the reference's own text marked */
+.doc-backlink-item-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.3rem 0.5rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.doc-backlink-item-main:hover:not(:disabled),
+.doc-backlink-item-main:focus-visible {
+  background: var(--color-fd-accent);
+  outline: none;
+}
+
+.doc-backlink-item-main:disabled {
+  color: var(--color-fd-muted-foreground);
+  cursor: default;
+}
+
+.doc-backlink-trail {
+  overflow: hidden;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.68rem;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-backlink-context {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.doc-backlink-badge {
+  margin-right: 0.3rem;
+  vertical-align: 0.08em;
+}
+
+.doc-backlink-badge[data-kind="image"],
+.doc-backlink-badge[data-kind="source"] {
+  background: color-mix(in srgb, var(--color-fd-muted-foreground) 16%, transparent);
+}
+
+.doc-backlink-label {
+  padding: 0 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-fd-primary) 14%, transparent);
+  color: inherit;
+  font-weight: 600;
+}
+
+.doc-backlink-target {
+  color: var(--color-fd-muted-foreground);
+}
+
+/* the place of this document the reference points at: a small chip under
+   the sentence that goes there; marked while that place is the current one */
+.doc-backlink-fragment {
+  flex: 0 0 auto;
+  max-width: 100%;
+  align-self: flex-start;
+  margin: 0 0 0.2rem 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-backlink-fragment:hover,
+.doc-backlink-fragment:focus-visible {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border));
+  color: var(--color-fd-primary);
+  outline: none;
+}
+
+.doc-backlink-item.is-target-current .doc-backlink-fragment {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border));
+  background: color-mix(in srgb, var(--color-fd-primary) 10%, transparent);
+  color: var(--color-fd-primary);
+}

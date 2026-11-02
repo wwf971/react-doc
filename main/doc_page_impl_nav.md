@@ -1,6 +1,6 @@
 # Navigation Design
 
-This document describes navigation for the reusable document page. For the overall architecture, source collection, and component registry, refer to [Document Page: Design](doc_page_impl.md); for the side-panel tree format and item rendering, refer to [Side panel design](doc_page_impl_side_panel.md).
+This document describes navigation for the reusable document page. For the overall architecture, source collection, and component registry, refer to [Document Page: Design](doc_page_impl.md); for the side-panel tree format and item rendering, refer to [Side panel design](doc_page_impl_side_panel.md). The inverse of a link, the backlinks of a document (the link index of the workspace, the backlinks panel, going to the reference itself), has a document of its own: [Backlinks](doc_page_impl_nav_backlink.md).
 
 `DocStore` is the navigation source of truth. Links and controls do not update the document body, URL, or history independently.
 
@@ -21,6 +21,7 @@ The current location has three related identities, and one derived from them:
 - `routeCurrentPath`: stable route of the selected side-panel item.
 - `docCurrentPath`: source document rendered by that item, as its full source path `~page:root/...` ([source paths](doc_page_impl_source.md#source-paths)).
 - `docCurrentHash`: optional place inside the document.
+- `docCurrentFocus`: optional place finer than the fragment, one reference written in the document, asked for by a navigation to a backlink (`navigate(target, hash, { focus })`) and applied once the body is rendered; cleared by every navigation that asks for none, and never part of the URL or the history ([Going to a backlink](doc_page_impl_nav_backlink.md#going-to-a-backlink)).
 - `docPageCurrentAlias`: the doc page the current document belongs to, read from its path; the *local* doc page of everything resolved while it is shown.
 
 Side-panel item identity remains separate from source identity because the same source can appear in more than one semantic location. `DocStore.navigate()` resolves the requested route or source path to one side-panel item before changing any current-location state. A source document that is not represented in the side panel is not directly navigable. The navigation always holds a document by its full path, so a document of an included doc page and a document of the including one with the same root and name are two locations; a path in the local form given to `navigate()` (an older url, a link written in the page itself) is taken as one of the current doc page when it has the document, else of the doc page that has it (`docPathFullGet`).
@@ -109,6 +110,8 @@ same fragment again
 
 The resolved destination receives `doc-navigation-target`. The package stylesheet displays this as a full-content-width yellow marker until navigation selects another document or place. Alignment runs again after the browser layout phase only when movement is needed. Pending images above the destination also request another alignment when they finish loading.
 
+The same hook applies a navigation's focus after the fragment: the components of the focused block are told (`placeReveal`), the reference is looked for by the target and line its link carries, its paragraph is aligned and the link itself receives `doc-navigation-focus`, a ring in the primary color; a reference no longer in the body falls back to its nearest heading ([Going to a backlink](doc_page_impl_nav_backlink.md#going-to-a-backlink)).
+
 ### Fragment targets: titles and declared ids
 
 A fragment names a place either by id or by heading title. `destinationElementFind()` in `lib/doc-destination-navigation.js` looks it up inside the document body:
@@ -160,7 +163,7 @@ navigation target (docPlaceTargetGet)   docPath#fragment, or docPath without a f
 written for a reader (docPlaceTextGet)  a.md#fragment, a.md:12, or a.md
 ```
 
-The line identifies the block now and moves with every edit above it, so it is what a list compares and never a navigation target; the fragment is the stable part, and a link goes through `DocStore.navigate` with the ordinary target grammar. A block that other places point at should therefore declare an `Anchor` id, as a section does. A later identity (a block id kept across edits) would be one more key of the place.
+The line identifies the block now and moves with every edit above it, so it is what a list compares and never a navigation target; the fragment is the stable part, and a link goes through `DocStore.navigate` with the ordinary target grammar. A block that other places point at should therefore declare an `Anchor` id, as a section does. A later identity (a block id kept across edits) would be one more key of the place. A backlink is such a place one step finer, a reference inside the block: it is followed with a navigation focus, found by the target as written and the line, and is likewise never a link ([Backlinks](doc_page_impl_nav_backlink.md)).
 
 ### Heading selection
 

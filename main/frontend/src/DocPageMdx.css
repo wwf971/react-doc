@@ -47,6 +47,32 @@
   line-height: 1;
 }
 
+/* a reference a navigation focused on (a backlink followed to where it is
+   written, doc_page_impl_nav_backlink.md): a ring in the primary color on
+   the link itself, drawn in once, kept until the next navigation */
+.doc-page-mdx .doc-navigation-focus {
+  border-radius: 3px;
+  background-color: color-mix(in srgb, var(--color-fd-primary) 12%, transparent);
+  box-shadow:
+    0 0 0 2px var(--color-fd-primary),
+    0 0 0 6px color-mix(in srgb, var(--color-fd-primary) 22%, transparent);
+  animation: doc-navigation-focus-in 700ms ease-out;
+}
+
+@keyframes doc-navigation-focus-in {
+  from {
+    box-shadow:
+      0 0 0 2px var(--color-fd-primary),
+      0 0 0 16px color-mix(in srgb, var(--color-fd-primary) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doc-page-mdx .doc-navigation-focus {
+    animation: none;
+  }
+}
+
 .doc-page-mdx .doc-navigation-target {
   box-sizing: border-box;
   width: fit-content;

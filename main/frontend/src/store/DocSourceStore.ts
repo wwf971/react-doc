@@ -58,6 +58,15 @@ export type SourceData = {
   configDoc: any;
   fileManifest: FileEntry[];
   dirManifest?: DirEntry[];
+  // the link index of the workspace (lib/doc-link-index.js): the references
+  // every document writes, from which DocLinkStore lists backlinks; a host
+  // that builds its own manifest may give none
+  linkIndex?: LinkIndex | null;
+};
+
+export type LinkIndex = {
+  version: number;
+  byDoc: Record<string, { contentHash: string; linkList: any[] }>;
 };
 
 export type SourceResult = { code: number; data?: any; message: string };
@@ -123,6 +132,7 @@ export class DocSourceStore {
   configDoc: any;
   fileManifest: FileEntry[];
   dirManifest: DirEntry[];
+  linkIndex: LinkIndex | undefined;
   compileConfig: any;
   linkResolve: any;
   // the environment of the page (DocEnvStore): whether files can be created
@@ -156,6 +166,7 @@ export class DocSourceStore {
     this.configDoc = sourceData.configDoc;
     this.fileManifest = sourceData.fileManifest;
     this.dirManifest = sourceData.dirManifest ?? [];
+    this.linkIndex = sourceData.linkIndex ?? undefined;
     this.compileConfig = options?.compile ?? {};
     this.linkResolve = options?.linkResolve;
     // a store made without the page's environment (a test) infers one from its endpoint
@@ -192,6 +203,7 @@ export class DocSourceStore {
       configDoc: observable.ref,
       fileManifest: observable.ref,
       dirManifest: observable.ref,
+      linkIndex: observable.ref,
       compileConfig: false,
       linkResolve: false,
       envStore: false,
@@ -299,6 +311,7 @@ export class DocSourceStore {
     this.configDoc = sourceData.configDoc;
     this.fileManifest = sourceData.fileManifest;
     if (sourceData.dirManifest) this.dirManifest = sourceData.dirManifest;
+    if (sourceData.linkIndex !== undefined) this.linkIndex = sourceData.linkIndex ?? undefined;
     const entryByPathNext = this.entryByInternalPath;
 
     const pathsChanged: string[] = [];
@@ -648,13 +661,6 @@ export class DocSourceStore {
   async sourceRefresh(): Promise<SourceResult> {
     if (!this.isWritable) return { code: -1, message: 'The source is read again through the development server only.' };
     return this.sourceApiCall('/refresh', { method: 'POST' });
-  }
-
-  // the documents whose links name the file, as the development server
-  // finds them (GET file/referrer): [{ docPath, count }]
-  async fileReferrerListGet(internalPath: string): Promise<SourceResult> {
-    if (!this.isWritable) return { code: -1, message: 'The documents are searched through the development server only.' };
-    return this.sourceApiCall(`/file/referrer?path=${encodeURIComponent(internalPath)}`, { method: 'GET' });
   }
 
   private async sourceApiCall(route: string, init: RequestInit): Promise<SourceResult> {

@@ -36,9 +36,18 @@ import {
 //
 // generated elements carry node.data.isDocLinkGenerated, so a later sanitizer
 // can tell them from authored JSX of the same name.
+//
+// options.isSourceLineEnabled: each DocLink also carries the line the link
+// is written on (counted in the text compiled, the document without its
+// frontmatter), as the link index records it: the compile of a document
+// sets it, nested Markdown (MdxRenderer) does not, since its lines are not
+// the document's (doc_page_impl_nav_backlink.md#going-to-a-backlink).
 
 export function remarkDocLink(options = {}) {
   const fromPath = options.fromPath ?? '';
+  const lineGet = options.isSourceLineEnabled === true
+    ? (node) => node.position?.start?.line
+    : () => undefined;
 
   return (tree) => {
     // [text](target): any relative url is treated as a doc link
@@ -58,6 +67,7 @@ export function remarkDocLink(options = {}) {
         fromPath,
         kind: 'link',
         tagsDisplay: linkTagsDisplayGet(node.title),
+        line: lineGet(node),
         children: node.children,
       });
     });
@@ -70,6 +80,7 @@ export function remarkDocLink(options = {}) {
         target: node.value,
         fromPath,
         kind: 'code',
+        line: lineGet(node),
         children: [{ type: 'inlineCode', value: node.value }],
       });
     });
@@ -86,6 +97,7 @@ export function remarkDocLink(options = {}) {
             target: part.target,
             fromPath,
             kind: 'wiki',
+            line: lineGet(node),
             children: [{ type: 'text', value: part.target }],
           })
       ));
@@ -95,13 +107,14 @@ export function remarkDocLink(options = {}) {
   };
 }
 
-function makeDocLinkNode({ target, fromPath, kind, tagsDisplay = '', children }) {
+function makeDocLinkNode({ target, fromPath, kind, tagsDisplay = '', line, children }) {
   const attributes = [
     { type: 'mdxJsxAttribute', name: 'target', value: target },
     { type: 'mdxJsxAttribute', name: 'from', value: fromPath },
     { type: 'mdxJsxAttribute', name: 'kind', value: kind },
   ];
   if (tagsDisplay) attributes.push({ type: 'mdxJsxAttribute', name: 'tagsDisplay', value: tagsDisplay });
+  if (line !== undefined) attributes.push({ type: 'mdxJsxAttribute', name: 'line', value: String(line) });
   return {
     type: 'mdxJsxTextElement',
     name: 'DocLink',

@@ -394,7 +394,7 @@ A component whose data has a **managed part** goes one step further: it does not
 
 An object can change without the component doing anything: another block reading it saves, its panel moves the head, an editor rewrites a file. Every block reading the object re-renders with the change the page hears of (a write through the page replaces the loaded object; a change of the folder is pushed by the development server as `doc-asset-change`), so a component that only renders its data needs nothing. A component that holds something derived from its data (a draft, an engine instance) and wants to be sure before it acts reports `assetRefreshRequest` (no data, routed to the asset domain, `DocAssetStore.eventHandle`): the object is read again from the store, every block reading it re-renders with what was read, and the answer says what the component's reference resolves to now, `{ versionIdHead, versionId, hash, isChanged }`, `isChanged` comparing with what it read (`assetInfo.versionId`, `assetInfo.hash`). A component whose data is not an asset gets code -1.
 
-Being told of a change as it happens, instead of asking, needs subscriptions of the event layer ([TODO](doc_page_impl_TODO.md#event-subscription)); until then the re-render and the refresh request are the two ways.
+Being told of a change as it happens, instead of asking, would use the delivery direction of the event layer with the object as its subject, which exists for places of a document today and not yet for objects ([TODO](doc_page_impl_TODO.md#event-subscription)); until then the re-render and the refresh request are the two ways.
 
 ### The component an object is for
 
@@ -421,6 +421,33 @@ Two rules that could look natural are deliberately **not** modeled:
 - no owner: an object has no host block that owns it, decides for the other blocks, or goes away with it.
 
 Both would be rules the page could only keep while it is the one writing. A block copied by hand, a document restored by git, an object folder copied to another project would break them without the page knowing, and every rule would then need a handling of its violation, which the page cannot do on files it does not control. The declaration and the usage index record what is, and the decisions stay with the person, with the facts in front of them: the delete question names the object and the other blocks that use it.
+
+## A place the page asks to see
+
+The page can tell a component something, the other way round from `onEvent`: an event delivered at the component's place in the document ([Events delivered to components](doc_page_impl_event.md#events-delivered-to-components)). The one such event today is `placeReveal`: a reader followed a backlink to a reference written in the component's block ([Going to a backlink](doc_page_impl_nav_backlink.md#going-to-a-backlink)), and the page is about to look for that link in the rendered body and mark it. A component that always shows all of its content has nothing to do. A component that holds some of its content out of sight, folded, in a tab or a view, behind a switch, should reveal the part holding the reference first:
+
+```jsx
+import { useDocEventSubscribe } from '.../comp-doc/registry/use-doc-event.js';
+
+useDocEventSubscribe(config, 'placeReveal', (data) => {
+  // data.target: the reference as written in the document (a.md#Setup, ./x.png, ...)
+  // data.sourceLine, data.blockLine: where; data.subject: { sourcePath, blockLine, type }
+  const view = views.find((view) => view.raw.includes(data.target));
+  if (!view) return undefined;      // not in this component: say nothing
+  viewSelect(view.id);              // reveal
+  return { code: 0 };               // taken
+});
+```
+
+The rules of such a handler:
+
+- **Find the reference by its text.** The data of the component holds the target as it was written; the target is what the page looks for in the DOM too (`data-doc-link-target`), so the two agree. A component rendering nested Markdown through `MdxRenderer` needs nothing for the link itself.
+- **Reveal, nothing more.** Show the part; do not scroll, select, or enter edit mode. The page aligns the paragraph and marks the link once it is laid out, and waits for it while the component re-renders.
+- **Answer honestly.** `{ code: 0 }` when the component showed something, `undefined` when the reference is not its; the page goes on either way, so a component that ignores the event is not broken, only its hidden references are reached by their nearest heading instead.
+- **Forward to what is inside.** A component that renders other registered components (a `SwitchView` rendering a view, an index rendering a nested component) is the one subscribed at the block; the inner ones have no block of their own. It reveals what it can and may pass the event on by its own means.
+- **Keep the subscription at the boundary.** `config.eventSubscribe` comes from `RegisteredComp`; a component rendered without the boundary (a preview, a test) has none, and the hook does nothing then.
+
+`BlockQA` unfolds the item whose question or answer holds the target; `SwitchView` selects the view whose data holds it. `BlockSimple` and `Block` show everything and subscribe to nothing.
 
 ## Text blocks and edit mode
 

@@ -51,6 +51,7 @@ import {
   type DocSourceDependencyCollect,
 } from './doc-source-dependency.ts';
 import { DOC_EDIT_ENDPOINT_NAME, docEditMiddlewareCreate } from './doc-edit-server.ts';
+import { DocLinkIndexBuilder, type DocLinkIndex } from './doc-link-index.ts';
 import { excludeMatcherBuild, type ExcludeMatcher } from './doc-source-exclude.ts';
 import { DOC_ASSET_ENDPOINT_NAME, docAssetMiddlewareCreate } from './doc-asset-server.ts';
 import { DOC_API_ENDPOINT_NAME, docApiBridgeCreate } from './doc-api-server.ts';
@@ -86,6 +87,7 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 //   export let fileManifest = [{ docPageAlias, rootAlias, relPath, name, ext, title, internalPath,
 //                                collect, contentHash, tagList, configSource, configFrontmatter, load }]
 //   export let dirManifest = [{ docPageAlias, rootAlias, relPath, internalPath, collect }]   // the folders of the source
+//   export let docLinkIndex = { version, byDoc }   // the references every document writes (doc-link-index.ts)
 //   export const fileUrlByPath = {...}              // source path -> url of the file's bytes (build: data url)
 //   export const docEnv = { kind }                   // 'viteDevServer' | 'staticBuild' (DocEnvStore)
 //   export const docSourceEndpoint = '/__doc-source' // '' in a build: no source api
@@ -264,13 +266,26 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       assetStore ? assetStore.dependencySourcePathList() : [],
     );
   };
-  // the data of one "doc-source-change" event: the manifest and the folders
-  const sourceDataBuild = (configDoc: any, entries: FileEntry[]) => ({
-    moduleId,
-    configDoc,
-    fileManifest: entriesVisibleGet(configDoc, entries).map(fileMetadataBuild),
-    dirManifest: scanSourceDirs(configDoc, configDir).map(dirMetadataBuild),
-  });
+  // the link index of the workspace (doc-link-index.ts): the references
+  // every document writes, scanned again only for the documents that
+  // changed. the extractors are those of pruning, so a reference a component
+  // declares is a backlink as well as a retained file
+  const linkIndexBuilder = new DocLinkIndexBuilder();
+  const linkIndexGet = (configDoc: any, entries: FileEntry[]): DocLinkIndex => (
+    linkIndexBuilder.build(entries, configDoc, { ...collectByCompIdMount, ...options.sourceDependencyCollectByCompId })
+  );
+  // the data of one "doc-source-change" event: the manifest, the folders
+  // and the link index
+  const sourceDataBuild = (configDoc: any, entries: FileEntry[]) => {
+    const entriesVisible = entriesVisibleGet(configDoc, entries);
+    return {
+      moduleId,
+      configDoc,
+      fileManifest: entriesVisible.map(fileMetadataBuild),
+      dirManifest: scanSourceDirs(configDoc, configDir).map(dirMetadataBuild),
+      linkIndex: linkIndexGet(configDoc, entriesVisible),
+    };
+  };
 
   return {
     name: `doc-source:${moduleId}`,
@@ -352,6 +367,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         ? { ...assetStore.snapshotBuild(), usageDocList: assetUsageDocListScan(fileEntries, []) }
         : null;
       return generateModuleCode(configDoc, fileEntries, dirEntries, attachmentList, isBuild, {
+        linkIndex: linkIndexGet(configDoc, fileEntries),
         docSourceEndpoint,
         docEditEndpoint,
         docAssetEndpoint,
@@ -483,7 +499,6 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
           fileEntryListCached = undefined;
           return configurationReload();
         },
-        referrerListGet: (internalPath) => sourceFileReferrerListGet(internalPath, loadConfigDoc(configFile, options), fileEntryListGet()),
         workspace: {
           dirBaseGet: workspaceDirBaseGet,
           // { kind: 'dir' | 'file', path, alias?, sidePanel? }: the doc page
@@ -752,11 +767,6 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
 //   POST {endpoint}/refresh                the configuration and the source read again from disk and
 //                                          reported to the page as data, without a reload (a change the
 //                                          file watcher missed, such as on a network folder)
-//   GET  {endpoint}/file/referrer?path=~page:root/a.md
-//                                          -> { code, data: { referrerList: [{ docPath, count }] } }
-//                                          the documents whose links, images or inline targets resolve
-//                                          to the file, as the page resolves them (asked before the
-//                                          file is deleted)
 //
 // only source paths resolve; a query is never used as a file path. the folder
 // of a "direct" rule accepts files right in it only; "recursive" and
@@ -770,8 +780,6 @@ type SourceMiddlewareOptions = {
   onFileCreated: (filePath: string) => void;
   // POST refresh: '' when the configuration loads, else why not
   onRefresh?: () => string;
-  // GET file/referrer
-  referrerListGet?: (internalPath: string) => { docPath: string; count: number }[];
   // the folder a relative path typed in the page is read from (os/list,
   // workspace/mount); the temporary doc pages, mounted and unmounted
   workspace?: {
@@ -782,7 +790,7 @@ type SourceMiddlewareOptions = {
 };
 
 export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
-  const { endpoint, fileEntryListGet, sourceRootListGet, onFileCreated, onRefresh, referrerListGet, workspace } = options;
+  const { endpoint, fileEntryListGet, sourceRootListGet, onFileCreated, onRefresh, workspace } = options;
   const textSend = (res: ServerResponse, statusCode: number, text: string) => {
     res.statusCode = statusCode;
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -797,7 +805,7 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const route = url.pathname.startsWith(`${endpoint}/`) ? url.pathname.slice(endpoint.length) : '';
     const isWorkspaceRoute = route === '/os/list' || route === '/workspace/mount' || route === '/workspace/unmount';
-    const isOwnRoute = route === '/file' || route === '/data' || route === '/file/create' || route === '/refresh' || route === '/file/referrer';
+    const isOwnRoute = route === '/file' || route === '/data' || route === '/file/create' || route === '/refresh';
     if (!isOwnRoute && !isWorkspaceRoute) {
       next();
       return;
@@ -813,17 +821,6 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
       }
       const message = onRefresh ? onRefresh() : 'the server cannot read the source again';
       jsonSend(res, message === '' ? 200 : 400, { code: message === '' ? 0 : -1, data: null, message });
-      return;
-    }
-
-    if (route === '/file/referrer') {
-      const internalPath = sourcePathNormalize(url.searchParams.get('path') ?? '');
-      if (!fileEntryListGet().some((item) => item.internalPath === internalPath)) {
-        jsonSend(res, 404, { code: -3, data: null, message: `not a file of the collected source: ${internalPath}` });
-        return;
-      }
-      const referrerList = referrerListGet ? referrerListGet(internalPath) : [];
-      jsonSend(res, 200, { code: 0, data: { referrerList }, message: '' });
       return;
     }
 
@@ -1749,37 +1746,6 @@ export function pruneSourceToSidePanel(
   return entries.filter((entry) => pathsRetained.has(entry.internalPath));
 }
 
-// the documents that name a file: every link, image, inline target and
-// component reference the dependency scan finds (doc-source-dependency.ts,
-// the scan of pruning), resolved as the page resolves it (the document's
-// own doc page first). a target matching several files counts for each of
-// them, so a file is never reported unused while a link may reach it.
-// a document naming itself is not counted.
-export function sourceFileReferrerListGet(
-  internalPath: string,
-  configDoc: any,
-  entries: FileEntry[],
-): { docPath: string; count: number }[] {
-  const sourceIndex = sourceIndexBuild(entries);
-  const referrerList: { docPath: string; count: number }[] = [];
-  for (const entry of entries) {
-    if ((entry.ext !== 'md' && entry.ext !== 'mdx') || entry.internalPath === internalPath) continue;
-    let text = '';
-    try {
-      text = fs.readFileSync(entry.absPath, 'utf-8');
-    } catch {
-      continue;
-    }
-    let count = 0;
-    for (const dependency of docSourceDependenciesCollect(text, entry, configDoc).dependencyList) {
-      const { entryList } = docTargetResolve(dependency.target, dependency.sourcePath, sourceIndex) as { entryList: FileEntry[] };
-      if (entryList.some((item) => item.internalPath === internalPath)) count++;
-    }
-    if (count > 0) referrerList.push({ docPath: entry.internalPath, count });
-  }
-  return referrerList;
-}
-
 // same rules as at runtime: documents and assets through docTargetResolve
 // (DocSourceStore.resolveLink), source targets as source paths (SourceLink),
 // local to the document that names them. every match is retained: a build
@@ -1883,6 +1849,7 @@ export function generateModuleCode(
     assetSnapshot: AssetSnapshot | null;
     moduleId: string;
     compMountList?: CompMount[];
+    linkIndex?: DocLinkIndex;
   },
 ): string {
   const lines: string[] = [];
@@ -1947,6 +1914,9 @@ export function generateModuleCode(
   }
   lines.push('];');
   lines.push(`export let dirManifest = ${JSON.stringify(dirEntries.map(dirMetadataBuild))};`);
+  // the link index of the workspace (doc-link-index.ts): the references every
+  // document writes, from which the page lists the backlinks of a document
+  lines.push(`export let docLinkIndex = ${JSON.stringify(services.linkIndex ?? null)};`);
   if (!isBuild) {
     // the listeners and the latest source data survive a replacement of
     // this module (hot.data), so subscriptions a host keeps stay valid and
@@ -1979,7 +1949,8 @@ export function generateModuleCode(
     lines.push('    configDoc = dataNext.configDoc;');
     lines.push('    fileManifest = dataNext.fileManifest.map((entry) => ({ ...entry, load: () => sourceTextLoad(entry.internalPath) }));');
     lines.push('    dirManifest = dataNext.dirManifest;');
-    lines.push('    sourceState.current = { configDoc, fileManifest, dirManifest };');
+    lines.push('    if (dataNext.linkIndex !== undefined) docLinkIndex = dataNext.linkIndex;');
+    lines.push('    sourceState.current = { configDoc, fileManifest, dirManifest, linkIndex: docLinkIndex };');
     lines.push('    for (const listener of listenersDocSource) listener(sourceState.current);');
     lines.push('  });');
     lines.push('  import.meta.hot.dispose((data) => {');
@@ -1992,7 +1963,7 @@ export function generateModuleCode(
     // the module itself was replaced (a genuine regeneration, not a content save)
     lines.push('  import.meta.hot.accept((moduleNext) => {');
     lines.push('    if (!moduleNext) return;');
-    lines.push('    const dataNext = { configDoc: moduleNext.configDoc, fileManifest: moduleNext.fileManifest, dirManifest: moduleNext.dirManifest };');
+    lines.push('    const dataNext = { configDoc: moduleNext.configDoc, fileManifest: moduleNext.fileManifest, dirManifest: moduleNext.dirManifest, linkIndex: moduleNext.docLinkIndex };');
     lines.push('    sourceState.current = dataNext;');
     lines.push('    for (const listener of listenersDocSource) listener(dataNext);');
     lines.push('  });');

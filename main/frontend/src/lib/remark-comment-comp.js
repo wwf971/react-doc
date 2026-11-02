@@ -93,6 +93,9 @@ export function remarkCommentComp(options = {}) {
         props,
         raw,
         sourceOffset: node.position?.start?.offset,
+        // the line of the marker comment, counted without the frontmatter:
+        // the block identity (doc_page_impl_popup.md#block-identity)
+        sourceLine: node.position?.start?.line,
       });
 
       if (isInline) {

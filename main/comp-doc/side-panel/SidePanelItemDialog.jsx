@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Check, LoaderCircle, X } from '../../frontend/UICommon.js';
+import { Check, X } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
 import { EDIT_POPUP_CLASS } from '../edit/use-edit-outside-pointer.js';
@@ -34,8 +34,7 @@ export const SidePanelItemDialog = observer(function SidePanelItemDialog() {
   const dialog = sidePanelStore.dialog;
   const isOpen = dialog !== undefined;
   // the dialog stays inside the window: after it renders (and whenever its
-  // content grows, the documents linking to the file listed), it is moved
-  // up by what it would stick out below
+  // content grows), it is moved up by what it would stick out below
   const [shiftUp, shiftUpSet] = useState(0);
   useLayoutEffect(() => {
     const element = elementRef.current;
@@ -245,7 +244,7 @@ function removeContentGet(dialog, sidePanelStore, isSubmitting) {
             </span>
           </button>
         </div>
-        <ReferrerNote dialog={dialog} itemSameDocCount={itemSameDocCount} />
+        <ReferrerNote filePath={data.filePath} itemSameDocCount={itemSameDocCount} />
         {dialog.isFileDeleted ? (
           <span className="doc-edit-file-delete-note">The document is moved to a hidden backup beside it, not erased.</span>
         ) : null}
@@ -262,42 +261,34 @@ function removeContentGet(dialog, sidePanelStore, isSubmitting) {
   };
 }
 
-// who would be left with a broken link or a missing document; an observer
-// of its own, since the list arrives after the dialog rendered
-const ReferrerNote = observer(function ReferrerNote({ dialog, itemSameDocCount }) {
+// who would be left with a broken link or a missing document: the other
+// items showing it, and the documents the link index says reference it
+// (doc_page_impl_nav_backlink.md#the-link-index)
+const ReferrerNote = observer(function ReferrerNote({ filePath, itemSameDocCount }) {
+  const { linkStore } = useDocStores();
   const lineList = [];
   if (itemSameDocCount > 0) {
     lineList.push(`${itemSameDocCount} other item${itemSameDocCount === 1 ? ' shows' : 's show'} this document; ${itemSameDocCount === 1 ? 'it' : 'they'} would show it missing.`);
   }
-  if (dialog.referrerStatus === 'loading') {
-    return (
-      <span className="doc-status" role="status">
-        <LoaderCircle aria-hidden="true" size={11} strokeWidth={2.2} className="doc-spin" />
-        <span>Looking for documents that link to it…</span>
-      </span>
-    );
-  }
-  if (dialog.referrerStatus === 'error') lineList.push('The documents linking to it could not be listed.');
-  if (dialog.referrerStatus === 'done') {
-    const referrerList = dialog.referrerList;
-    if (referrerList.length === 0) lineList.push('No document links to it.');
-  }
+  const referrerList = linkStore.isIndexAvailable ? linkStore.referrerListGet(filePath) : [];
+  if (!linkStore.isIndexAvailable) lineList.push('The documents linking to it are not known here.');
+  else if (referrerList.length === 0) lineList.push('No document links to it.');
   return (
     <div className="doc-side-panel-node-referrer">
       {lineList.map((line) => <span key={line} className="doc-edit-file-delete-note">{line}</span>)}
-      {dialog.referrerStatus === 'done' && dialog.referrerList.length > 0 ? (
+      {referrerList.length > 0 ? (
         <>
           <span className="doc-edit-file-delete-note">
-            {`Linked from ${dialog.referrerList.length} document${dialog.referrerList.length === 1 ? '' : 's'}; ${dialog.referrerList.length === 1 ? 'its links' : 'their links'} would break:`}
+            {`Linked from ${referrerList.length} document${referrerList.length === 1 ? '' : 's'}; ${referrerList.length === 1 ? 'its links' : 'their links'} would break:`}
           </span>
           <div className="doc-side-panel-node-referrer-list">
-            {dialog.referrerList.slice(0, 6).map((referrer) => (
+            {referrerList.slice(0, 6).map((referrer) => (
               <span key={referrer.docPath} className="doc-side-panel-node-referrer-path">
                 {referrer.docPath}
                 {referrer.count > 1 ? <small>{` ×${referrer.count}`}</small> : null}
               </span>
             ))}
-            {dialog.referrerList.length > 6 ? <span className="doc-side-panel-node-referrer-path">{`and ${dialog.referrerList.length - 6} more`}</span> : null}
+            {referrerList.length > 6 ? <span className="doc-side-panel-node-referrer-path">{`and ${referrerList.length - 6} more`}</span> : null}
           </div>
         </>
       ) : null}

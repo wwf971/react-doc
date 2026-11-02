@@ -1,4 +1,4 @@
-import { useContext, useId } from 'react';
+import { useContext, useId, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from './comp-registry.js';
@@ -146,6 +146,18 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
   // by the wrapper of the edit body; undefined in reading mode, where the
   // document cannot be written
   const blockIndex = configRuntime.blockIndex ?? (editBlock?.path === sourcePath ? editBlock.blockIndex : undefined);
+  // the second direction of the event layer
+  // (doc_page_impl_event.md#events-delivered-to-components): the component
+  // subscribes for the events the page delivers at its place, its document
+  // and the marker line of its block (a component without a block of its
+  // own, inside another component, hears nothing unless that one forwards)
+  const sourceLine = configRuntime.sourceLine;
+  const eventSubscribe = useMemo(
+    () => (eventRouter
+      ? (type, listener) => eventRouter.subscribe({ type, sourcePath, sourceLine }, listener)
+      : undefined),
+    [eventRouter, sourcePath, sourceLine],
+  );
   // the view mode of a component that exposes view modes
   // (doc_page_impl_mdx_comp.md#view-modes-and-edit-modes): the one a reader
   // picked for this block through the mode menu, else the component's
@@ -182,6 +194,7 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
     ...(viewMode !== undefined ? { viewMode } : {}),
     blockIndex,
     compId: compIdResolved,
+    eventSubscribe,
     instanceId,
     placement,
     sourcePath,

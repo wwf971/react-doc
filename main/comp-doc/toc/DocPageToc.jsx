@@ -5,36 +5,52 @@ import { PageToc } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import { DocLanguageProvider } from '../../../built-in/comp-mdx/multi-lang/MultiLangContext.jsx';
+import { BacklinkPanel } from './BacklinkPanel.jsx';
+import { usePanelHeightAvailable } from './use-panel-height-available.js';
 import './DocPageToc.css';
 
+// The right column beside the document (doc_page_impl.md#semantic-parts-and-hosted-indexes):
+// the headings of the page (the native TOC), the hosted index of the part
+// the document is in, or the backlinks of the document
+// (doc_page_impl_nav_backlink.md#the-backlinks-panel), chosen with one
+// segmented control. without the host's segmented control, or with neither
+// a part index nor a link index, the native TOC stands alone.
 const DocPageToc = observer(function DocPageToc(props) {
-  const { componentConfig, docStore } = useDocStores();
+  const { componentConfig, docStore, linkStore } = useDocStores();
   const SegmentedControl = componentConfig.SegmentedControl;
   const part = docStore.partCurrent;
   const indexRef = part?.index;
-  const isAvailable = Boolean(
+  const isPartAvailable = Boolean(
     docStore.isPartIndexEnabled
-    && SegmentedControl
     && indexRef?.docId
     && indexRef?.componentId
   );
+  const isBacklinkAvailable = linkStore.isEnabled && linkStore.isIndexAvailable;
+  const isControlAvailable = Boolean(SegmentedControl) && (isPartAvailable || isBacklinkAvailable);
 
   useEffect(() => {
-    if (isAvailable) void docStore.partIndexLoadCurrent();
-  }, [docStore, indexRef?.componentId, indexRef?.docId, isAvailable, part?.id]);
+    if (isPartAvailable) void docStore.partIndexLoadCurrent();
+  }, [docStore, indexRef?.componentId, indexRef?.docId, isPartAvailable, part?.id]);
 
-  if (!isAvailable) return <PageToc {...props} />;
+  if (!isControlAvailable) return <PageToc {...props} />;
 
   const language = docStore.languageSelected || 'en';
   const labels = labelSetGet(language);
+  // the mode chosen is kept across documents; one not available beside
+  // this document shows the page headings meanwhile
+  const modeChosen = docStore.tocContentModeCurrent;
+  const mode = (modeChosen === 'part' && !isPartAvailable) || (modeChosen === 'backlink' && !isBacklinkAvailable)
+    ? 'page'
+    : modeChosen;
   const control = (
     <div className="doc-part-index-source-control" role="group" aria-label={labels.navigationScope}>
       <SegmentedControl
         data={{
-          valueSelected: docStore.partIndexContentModeCurrent,
+          valueSelected: mode,
           segList: [
             { value: 'page', labelText: labels.onThisPage },
-            { value: 'part', labelText: labels.inThisPart },
+            ...(isPartAvailable ? [{ value: 'part', labelText: labels.inThisPart }] : []),
+            ...(isBacklinkAvailable ? [{ value: 'backlink', labelText: labels.backlinks }] : []),
           ],
         }}
         config={{
@@ -44,18 +60,17 @@ const DocPageToc = observer(function DocPageToc(props) {
         }}
         onEvent={(eventType, eventData) => {
           if (eventType === 'valueSelectedChange') {
-            docStore.partIndexContentModeSet(eventData.valueSelected);
+            docStore.tocContentModeSet(eventData.valueSelected);
           }
         }}
       />
     </div>
   );
 
-  const isPartMode = docStore.partIndexContentModeCurrent === 'part';
   const classNameContainer = [
     props.container?.className,
     'doc-page-toc',
-    isPartMode ? 'is-part-mode' : '',
+    `is-mode-${mode}`,
   ].filter(Boolean).join(' ');
   return (
     <PageToc
@@ -65,11 +80,14 @@ const DocPageToc = observer(function DocPageToc(props) {
         <>
           {props.header}
           {control}
-          <PartIndexPanel
-            isVisible={isPartMode}
-            key={`${part.id}:${indexRef.docId}:${indexRef.componentId}`}
-            labels={labels}
-          />
+          {isPartAvailable ? (
+            <PartIndexPanel
+              isVisible={mode === 'part'}
+              key={`${part.id}:${indexRef.docId}:${indexRef.componentId}`}
+              labels={labels}
+            />
+          ) : null}
+          {isBacklinkAvailable ? <BacklinkPanel isVisible={mode === 'backlink'} labels={labels} /> : null}
         </>
       )}
     />
@@ -89,54 +107,11 @@ const PartIndexPanel = observer(function PartIndexPanel({ isVisible, labels }) {
   // space between its own top edge and the bottom of the window, docked or
   // floating (the floating top follows dragging). the docked width is also
   // bounded by the window; the floating width comes from its saved layout.
-  useEffect(() => {
-    const panel = refPanel.current;
-    if (!isVisible || !panel) return undefined;
-    // docked: the height is computed from the document scrollport and the
-    // panel's fixed offset inside the sticky TOC column, never from where
-    // the panel happens to be in the viewport. at the document bottom the
-    // sticky column moves up to stay inside its containing block; measuring
-    // the viewport position there would grant the panel more height, push
-    // the column further up, and repeat until the index reaches its full
-    // content height.
-    const column = displayMode === 'floating' ? null : panel.closest('.doc-page-toc');
-    const scrollContainer = column?.closest('.doc-page-mdx');
-
-    let frameId = 0;
-    const sizeUpdate = () => {
-      frameId = 0;
-      const rect = panel.getBoundingClientRect();
-      const heightAvailable = column
-        ? Math.max(
-          96,
-          (scrollContainer?.clientHeight ?? window.innerHeight)
-            - (parseFloat(window.getComputedStyle(column).top) || 0)
-            - (rect.top - column.getBoundingClientRect().top)
-            - 16,
-        )
-        : Math.max(96, window.innerHeight - rect.top - 16);
-      panel.style.setProperty('--doc-part-index-height-available', `${heightAvailable}px`);
-      if (displayMode !== 'floating') {
-        const widthAvailable = Math.max(0, window.innerWidth - rect.left - 16);
-        panel.style.setProperty('--doc-part-index-width-available', `${widthAvailable}px`);
-      }
-    };
-    const sizeUpdateSchedule = () => {
-      if (!frameId) frameId = requestAnimationFrame(sizeUpdate);
-    };
-    const observer = typeof ResizeObserver === 'undefined'
-      ? undefined
-      : new ResizeObserver(sizeUpdateSchedule);
-    sizeUpdate();
-    window.addEventListener('resize', sizeUpdateSchedule);
-    if (panel.parentElement) observer?.observe(panel.parentElement);
-    if (scrollContainer) observer?.observe(scrollContainer);
-    return () => {
-      window.removeEventListener('resize', sizeUpdateSchedule);
-      observer?.disconnect();
-      if (frameId) cancelAnimationFrame(frameId);
-    };
-  }, [displayMode, floatingLayout?.top, isVisible, result?.status]);
+  usePanelHeightAvailable(refPanel, {
+    isVisible,
+    isFloating: displayMode === 'floating',
+    dependencyList: [floatingLayout?.top, result?.status],
+  });
 
   const floatingLayoutPrepare = () => {
     const panel = refPanel.current;
@@ -219,7 +194,7 @@ const PartIndexPanel = observer(function PartIndexPanel({ isVisible, labels }) {
   const panel = (
     <div
       ref={refPanel}
-      className={`doc-part-index-panel is-display-${displayMode}`}
+      className={`doc-toc-panel doc-part-index-panel is-display-${displayMode}`}
       hidden={!isVisible}
       style={displayMode === 'floating' && floatingLayout
         ? {
@@ -282,6 +257,13 @@ const PartIndexPanel = observer(function PartIndexPanel({ isVisible, labels }) {
 function labelSetGet(language) {
   if (language === 'jp' || language === 'ja') {
     return {
+      backlinks: 'バックリンク',
+      backlinkNone: 'バックリンクはありません',
+      backlinkNoneHint: '他の文書からこの文書へのリンクはありません。',
+      backlinkNotNavigable: 'この文書はサイドパネルにありません',
+      backlinkOpen: 'リンクが書かれている箇所を開く',
+      backlinkSummaryGet: (count, docCount) => `${docCount} 件の文書から ${count} 件のリンク`,
+      backlinkToPlace: 'このリンクが指す箇所へ移動',
       docked: '固定',
       floating: 'フローティング',
       inThisPart: 'この章',
@@ -292,6 +274,15 @@ function labelSetGet(language) {
     };
   }
   return {
+    backlinks: 'Backlinks',
+    backlinkNone: 'No backlinks',
+    backlinkNoneHint: 'No other document links to this one yet.',
+    backlinkNotNavigable: 'This document is not in the side panel',
+    backlinkOpen: 'Open the document where this link is written',
+    backlinkSummaryGet: (count, docCount) => (
+      `${count} backlink${count === 1 ? '' : 's'} from ${docCount} document${docCount === 1 ? '' : 's'}`
+    ),
+    backlinkToPlace: 'Go to the place this link points to',
     docked: 'Docked',
     floating: 'Floating',
     inThisPart: 'In this part',
