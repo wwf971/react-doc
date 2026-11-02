@@ -65,7 +65,7 @@ test('a component type draws and creates the kinds of its own registry only', ()
 	// the base series does not know the Dataverse kinds, and says what it knows
 	assert.throws(() => diagramNormalize(diagramCreate(), cardDiagramNodeRegistry), /unknown node type "dataverse-table" \(this diagram knows: table, operator\)/);
 	assert.deepEqual(cardDiagramNodeRegistry.createEntryList.map(entry => entry.id), ['table', 'operator', 'connection']);
-	assert.deepEqual(registry.createEntryList.map(entry => entry.id), ['table', 'operator', 'dataverse-table', 'dataverse-choice', 'power-automate', 'business-rule', 'connection']);
+	assert.deepEqual(registry.createEntryList.map(entry => entry.id), ['table', 'operator', 'operator-abandon', 'operator-text', 'operator-mapping', 'dataverse-table', 'dataverse-choice', 'power-automate', 'business-rule', 'connection']);
 	// the standalone Dataverse card takes a Dataverse table alone, and its older form
 	assert.throws(() => cardStandaloneNormalize({ version: 1, node: { id: 'x', renderer: { type: 'table' }, data: {} } }, dataverseEntityNodeRegistry), /unknown node type "table"/);
 	assert.equal(cardStandaloneNormalize({ entity: { id: 'customer', name: 'Customer', columns: [] } }, dataverseEntityNodeRegistry).id, 'customer');

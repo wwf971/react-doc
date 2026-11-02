@@ -363,6 +363,18 @@
 	font-size: 0.76rem;
 }
 
+body:has(.doc-block-popup .doc-vis-edit) .doc-vis-card-panel.doc-edit-panel {
+	z-index: calc(var(--doc-vis-modal-z-index, 100000) + 1);
+}
+
+body:has(.doc-block-popup .doc-vis-edit) .doc-vis-menu {
+	z-index: calc(var(--doc-vis-modal-z-index, 100000) + 2);
+}
+
+body:has(.doc-block-popup .doc-vis-edit) .prop-editor-color-popover {
+	z-index: calc(var(--doc-vis-modal-z-index, 100000) + 3);
+}
+
 .doc-vis-card-head {
 	flex-wrap: nowrap;
 	gap: 0.4rem;

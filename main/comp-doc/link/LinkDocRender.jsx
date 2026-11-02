@@ -1,5 +1,7 @@
 // Default visual renderer for recognized document links.
+import { useRef } from 'react';
 import { TagList } from '../../../built-in/comp-mdx/tag/TagList.jsx';
+import { AnchoredPopover } from '../popup/AnchoredPopover.jsx';
 import './LinkDocRender.css';
 //
 // Interface:
@@ -13,6 +15,7 @@ import './LinkDocRender.css';
 //   activateRequest         user activates the main link
 //   candidateSelectRequest user chooses one ambiguous target
 export function LinkDocRender({ data = {}, config = {}, onEvent }) {
+  const refAnchor = useRef(null);
   const {
     ariaHasPopup,
     displayContent,
@@ -58,7 +61,7 @@ export function LinkDocRender({ data = {}, config = {}, onEvent }) {
   }
 
   return (
-    <span className="doc-link-render-wrap">
+    <span ref={refAnchor} className="doc-link-render-wrap">
       {tagsPosition === 'before' ? tagListContent : null}
       {activationElement === 'button' ? (
         <button
@@ -82,7 +85,7 @@ export function LinkDocRender({ data = {}, config = {}, onEvent }) {
       )}
       {tagsPosition === 'after' ? tagListContent : null}
       {isDropdownOpen ? (
-        <span className="doc-link-render-menu">
+        <AnchoredPopover anchorRef={refAnchor} className="doc-link-render-menu">
           {targetList.map((target) => (
             <button
               key={target.internalPath}
@@ -93,7 +96,7 @@ export function LinkDocRender({ data = {}, config = {}, onEvent }) {
               {target.internalPath}
             </button>
           ))}
-        </span>
+        </AnchoredPopover>
       ) : null}
     </span>
   );

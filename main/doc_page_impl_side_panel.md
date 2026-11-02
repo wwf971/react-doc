@@ -509,6 +509,23 @@ main-project                     ⌄     ◄ the section heading
 
 The option belongs to the mount, not to the reusable entry, and is read as a yaml boolean only (`"false"`, the text, is refused). It hides one sole wrapper item with children and nothing else: several roots, a leaf, an empty folder, a separator keep their display, so no content ever disappears. It is not a flatten: the wrapper stays in the semantic tree, marked `isSidebarRootHidden` by the loader (`sidePanelRootHiddenApply`), with its item id, bound document, tags, config, part, breadcrumb and home targets, and its `textSource` / `nodeSource` for editing. `page-tree.js` keeps the mark on the folder it builds and counts it in the render key of the tree, so toggling the option re-renders the side panel at once while the item ids stay. `DocSidebarFolder` draws such a folder as its children only, without a row and without a folder level; its remembered open state is not read, so it never hides its children; the section above folds them, and a child folder keeps its own row and chevron. A consumer replacing the folder renderer (`config.sidePanel.components.Folder`) takes this case over too.
 
+## Embedded height and scrolling
+
+The document page is its own scroll container (`.doc-page-mdx`, `height: 100%; overflow: auto`) and fills a host of definite height, which is often shorter than the window: a tab of an application, a panel. Fumadocs sizes the sticky sidebar wrapper and the layout's minimum height from `--fd-docs-height`, which it initializes to `100dvh` on `#nd-docs-layout`. Embedded, the two contracts disagree: the sidebar measures the window, the page shows only the host, and the last side-panel items fall below the visible page while the sidebar's scrollbar believes everything fits. Capping the inner aside does not help, since the wrapper keeps the window's height.
+
+`DocPageMdx.css` therefore makes the page a size container and gives Fumadocs the container's height:
+
+```css
+.doc-page-mdx { container-type: size; }
+.doc-page-mdx #nd-docs-layout { --fd-docs-height: 100cqh; }
+```
+
+Every calculation of Fumadocs that uses the variable (header offsets included) then follows the host, also when the host changes size without the window changing, or is revealed after being hidden. Scrollbar visibility stays with the Radix scroll area of the sidebar, which observes its viewport and content; it is not replaced by a window-height subtraction, a permanent scrollbar, or overflow state kept in JavaScript.
+
+The floating theme switch sits over the bottom left of the page and would cover the last row. The sidebar viewport has trailing room for it (`#nd-sidebar [data-radix-scroll-area-viewport] { padding-bottom: 4rem }`), so the last row scrolls above the switch.
+
+**The host's part.** The host must still give the page a definite height that fits its actual panel, with shrinkable flex/grid ancestors (`min-height: 0`) where needed. The page cannot detect being covered by an unrelated overlay or compensate for a host that itself extends below a clipping parent. No host-specific selectors or dimensions belong in the page's CSS.
+
 ## Implementation files
 
 ```text

@@ -120,7 +120,7 @@ const SourceLink = observer(function SourceLink({ data = {}, config = {}, onEven
 				}}
 				onEvent={eventHandle}
 			/>
-			<LinkWarning text={warningText} onDismiss={() => setWarningText('')} />
+			<LinkWarning text={warningText} anchorRef={refWrap} onDismiss={() => setWarningText('')} />
 			{displayMode === 'render'
 				? <SourceLinkRenderPopup Panel={Panel} store={store} />
 				: <CodeBlockCompactPopup Panel={Panel} sourceStore={sourceStore} store={store} />}

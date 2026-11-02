@@ -10,6 +10,7 @@
 export { DocPageMdx } from './DocPageMdx.jsx';
 export { DocLink, DocLinkInline } from '../../comp-doc/link/DocLink.jsx';
 export { LinkDocRender } from '../../comp-doc/link/LinkDocRender.jsx';
+export { AnchoredPopover } from '../../comp-doc/popup/AnchoredPopover.jsx';
 export { RegisteredComp } from '../../comp-doc/registry/RegisteredComp.jsx';
 export { compDefine, compNativeDefine } from '../../comp-doc/registry/comp-registry.js';
 // what a component exposes (doc_page_impl_mdx_comp.md#what-a-component-exposes):

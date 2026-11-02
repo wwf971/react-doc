@@ -1,0 +1,19 @@
+.doc-anchored-popover {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: auto;
+  color: inherit;
+}
+
+.doc-anchored-popover::backdrop {
+  pointer-events: none;
+}
+
+.doc-anchored-popover:not(:popover-open) {
+  display: none;
+}

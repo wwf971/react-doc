@@ -10,6 +10,23 @@
      would widen the layout and shift every column. Reserve its gutter. */
   scrollbar-gutter: stable;
   font-family: var(--font-sans);
+  /* Fumadocs sizes the sticky sidebar wrapper and the layout's minimum
+     height from --fd-docs-height, initialized to 100dvh. Embedded in a host
+     shorter than the window, that makes the sidebar taller than what is
+     visible, and its last items fall below the page without a scrollbar.
+     Size it from this element instead (see doc_page_impl_side_panel.md,
+     "Embedded height and scrolling"). */
+  container-type: size;
+}
+
+.doc-page-mdx #nd-docs-layout {
+  --fd-docs-height: 100cqh;
+}
+
+/* trailing room so the last side-panel row scrolls above the floating
+   theme switch instead of staying under it */
+.doc-page-mdx #nd-sidebar [data-radix-scroll-area-viewport] {
+  padding-bottom: 4rem;
 }
 
 .doc-page-mdx :is(h1, h2, h3, h4, h5, h6),

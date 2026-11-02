@@ -4,6 +4,7 @@ import { useDocStores } from '../../frontend/src/store/context.js';
 import { eventResultIsAccepted, resultNormalize } from '../../frontend/src/lib/doc-event.js';
 import { LinkDocRender } from './LinkDocRender.jsx';
 import { LinkWarning } from './LinkWarning.jsx';
+import { SourceLinkRenderPopup } from '../../../built-in/comp-mdx/source-link/SourceLinkRenderPopup.jsx';
 
 // renders one recognized doc link (from remark-doc-link).
 // resolution against the doc index happens here, at render time:
@@ -23,10 +24,12 @@ export const DocLink = observer(function DocLink({
   configDocOverride,
   children,
 }) {
-  const { configStore, docStore, linkConfig, onEvent: onEventPage, tagStore } = useDocStores();
+  const { configStore, docStore, sourceStore, compConfigHost, linkConfig, onEvent: onEventPage, tagStore } = useDocStores();
   const id = useId();
   const refWrap = useRef(null);
   const [warningText, setWarningText] = useState('');
+  const [pathPopup, setPathPopup] = useState('');
+  const Panel = compConfigHost?.panelComponent;
   const { targetList: targets, hash } = docStore.docTargetResolve(target ?? '', from ?? '');
   const isDropdownOpen = docStore.linkDropdownOpenId === id;
   const CompRender = linkConfig.CompRender ?? LinkDocRender;
@@ -48,7 +51,16 @@ export const DocLink = observer(function DocLink({
   const isBroken = targets.length === 0;
   const isMultiple = targets.length > 1;
   const targetFirst = targets[0];
+  const isPopupTarget = (path) => {
+    const entry = sourceStore?.entryByInternalPath.get(path);
+    return Boolean(Panel && entry)
+      && !docStore.isDocNavigable(path)
+      && (['md', 'mdx'].includes(entry.ext)
+        || Object.hasOwn(sourceStore.configDoc.fileDisplay ?? {}, entry.ext));
+  };
+  const isPopup = !isMultiple && Boolean(targetFirst) && isPopupTarget(targetFirst.internalPath);
   const isNavigationUnavailable = Boolean(targetFirst)
+    && !isMultiple && !isPopup
     && !docStore.isDocNavigable(targetFirst.internalPath);
   const pathFirst = targetFirst
     ? (targetFirst.navigationTarget ?? targetFirst.internalPath) + (hash ? `#${hash}` : '')
@@ -61,10 +73,11 @@ export const DocLink = observer(function DocLink({
     ? tagStore.tagDisplayListGet(tagStore.tagService.assetKeyGet('doc', targetFirst.internalPath))
     : [];
   const data = {
+    ariaHasPopup: isPopup ? 'dialog' : undefined,
     displayContent: children ?? target,
     fromPath: from ?? '',
     hash,
-    href: pathFirst && !isNavigationUnavailable
+    href: pathFirst && !isNavigationUnavailable && !isPopup
       ? docStore.toBrowserHref(pathFirst)
       : undefined,
     kind: kind ?? 'markdown',
@@ -80,10 +93,11 @@ export const DocLink = observer(function DocLink({
         : targetFirst.internalPath,
   };
   const config = {
+    activationElement: isPopup ? 'button' : 'anchor',
     isBroken,
     isClickable: !isBroken,
     isCurrent: !isMultiple
-      && !isNavigationUnavailable
+      && !isNavigationUnavailable && !isPopup
       && Boolean(targetFirst?.internalPath)
       && targetFirst.internalPath === docStore.docCurrentPath
       && (hash || '') === (docStore.docCurrentHash || ''),
@@ -95,11 +109,24 @@ export const DocLink = observer(function DocLink({
     tagsPosition,
   };
 
+  const popupOpen = async (path) => {
+    setWarningText('');
+    try {
+      await sourceStore.loadDoc(path);
+      const compiled = sourceStore.compiledByPath[path];
+      if (compiled?.status === 'done') setPathPopup(path);
+      else setWarningText(compiled?.message || `Unable to open document: ${path}`);
+    } catch (error) {
+      setWarningText(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const eventHandle = async (eventType, eventData = {}) => {
     const event = eventData.event;
     if (
       eventType === 'activateRequest'
       && !isMultiple
+      && !isPopup
       && (event?.metaKey || event?.ctrlKey || event?.shiftKey || event?.altKey)
     ) return;
     event?.preventDefault();
@@ -119,6 +146,10 @@ export const DocLink = observer(function DocLink({
 
     if (eventType === 'activateRequest') {
       if (isBroken) {
+        return;
+      }
+      if (isPopup) {
+        await popupOpen(targetFirst.internalPath);
         return;
       }
       if (isNavigationUnavailable) {
@@ -142,6 +173,10 @@ export const DocLink = observer(function DocLink({
     }
     if (eventType === 'candidateSelectRequest' && eventData.target) {
       docStore.setLinkDropdownOpen('');
+      if (isPopupTarget(eventData.target.internalPath)) {
+        await popupOpen(eventData.target.internalPath);
+        return;
+      }
       const isNavigated = docStore.navigate(eventData.target.internalPath + (hash ? `#${hash}` : ''));
       if (!isNavigated) {
         setWarningText(docStore.navigationError || data.titleText);
@@ -155,7 +190,12 @@ export const DocLink = observer(function DocLink({
   return (
     <span ref={refWrap} className="doc-link-controller">
       <CompRender data={data} config={config} onEvent={eventHandle} />
-      <LinkWarning text={warningText} onDismiss={() => setWarningText('')} />
+      <LinkWarning text={warningText} anchorRef={refWrap} onDismiss={() => setWarningText('')} />
+      {pathPopup && Panel ? <SourceLinkRenderPopup Panel={Panel} store={{
+        pathPopup,
+        isPopupOpen: true,
+        popupClose: () => setPathPopup(''),
+      }} /> : null}
     </span>
   );
 });

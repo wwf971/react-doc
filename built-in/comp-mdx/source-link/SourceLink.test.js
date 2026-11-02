@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createElement } from 'react';
+import { createElement, isValidElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StoreContext } from '../../../main/frontend/src/store/context.js';
 import { sourceIndexBuild, docTargetResolve } from '../../../main/frontend/src/lib/doc-target-resolve.js';
 import { SourceLink } from './SourceLink.jsx';
+import { SourceLinkRenderPopup } from './SourceLinkRenderPopup.jsx';
+import { DocLink } from '../../../main/comp-doc/link/DocLink.jsx';
 
 // SourceLink resolves the authored reference as the page resolves every
 // reference (DocSourceStore.fileResolve with the owning document as
@@ -91,4 +93,56 @@ test('an explicit label is kept, and render mode reads the compiled state of the
   const html = htmlRender(stores, { target: '~codeapp-dev/script/codeapp-build.ps1', label: 'build script', displayMode: 'render' }, { sourcePath: docPath });
   assert.match(html, />build script</);
   assert.ok(keyReadList.includes(scriptPath));
+});
+
+test('render popup titles pass literal filenames to the host panel', () => {
+  const pathPopup = '~wiki:docs/mdx_T05_submitted.md';
+  const { stores } = storesCreate({ compiledByPath: { [pathPopup]: {
+    status: 'done', Body: () => createElement('p', null, 'Evidence'),
+  } } });
+  stores.sourceStore.entryByInternalPath.set(pathPopup, { name: 'mdx_T05_submitted.md' });
+  const Panel = ({ data, content }) => {
+    assert.ok(isValidElement(data.title));
+    return createElement('section', null, data.title, content);
+  };
+  const html = renderToStaticMarkup(createElement(StoreContext.Provider, { value: stores },
+    createElement(SourceLinkRenderPopup, { Panel, store: { pathPopup, isPopupOpen: true } })));
+  assert.match(html, /<span>mdx_T05_submitted\.md<\/span>/);
+});
+
+test('off-sidebar Markdown and configured source links open a popup; sidebar links still navigate', async () => {
+  for (const { ext, isNavigable } of [
+    { ext: 'md', isNavigable: false },
+    { ext: 'md', isNavigable: true },
+    { ext: 'json', isNavigable: false },
+    { ext: 'json', isNavigable: true },
+    { ext: 'yaml', isNavigable: false },
+  ]) {
+    const pathEvidence = `~wiki:docs/test_results.${ext}`;
+    const { stores } = storesCreate();
+    stores.sourceStore.entryByInternalPath.set(pathEvidence, { ext, name: `test_results.${ext}` });
+    stores.sourceStore.configDoc.fileDisplay = { json: 'json', yaml: 'yaml' };
+    const loaded = [];
+    const navigated = [];
+    let rendered;
+    stores.compConfigHost = { panelComponent: () => null };
+    stores.linkConfig = { CompRender: props => { rendered = props; return null; } };
+    Object.assign(stores.docStore, {
+      docTargetResolve: () => ({ targetList: [{ internalPath: pathEvidence }], hash: '' }),
+      isDocNavigable: () => isNavigable,
+      toBrowserHref: path => path,
+      navigate: path => { navigated.push(path); return true; },
+    });
+    stores.sourceStore.loadDoc = async path => {
+      loaded.push(path);
+      stores.sourceStore.compiledByPath[path] = { status: 'done' };
+    };
+    renderToStaticMarkup(createElement(StoreContext.Provider, { value: stores },
+      createElement(DocLink, { target: pathEvidence })));
+    assert.equal(rendered.config.isNavigationUnavailable, false);
+    assert.equal(rendered.config.activationElement, isNavigable ? 'anchor' : 'button');
+    await rendered.onEvent('activateRequest');
+    assert.deepEqual(loaded, isNavigable ? [] : [pathEvidence]);
+    assert.deepEqual(navigated, isNavigable ? [pathEvidence] : []);
+  }
 });

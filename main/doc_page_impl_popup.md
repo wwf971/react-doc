@@ -71,9 +71,45 @@ The dialog belongs to the edit session of its block: it carries `doc-edit-popup`
 
 Navigating to another page closes the dialog and drops an Edit entry still in flight.
 
+## Inline Tooltips and Dropdowns
+
+The block popup is a dialog. The small overlays that belong to an inline element (the candidate list of an ambiguous link, a tooltip, a dropdown of a cell) are a different case, and they have their own rule: **an inline overlay must not be a plain absolutely positioned descendant.** Documents put such elements inside containers that clip: Fumadocs wraps every Markdown table in an `overflow: auto` element, and hierarchy tables scroll with fixed heights. An absolutely positioned descendant cannot leave those boxes, whatever its z-index, and `overflow-y: visible` alone does not help since the other axis stays `auto`. Removing the overflow breaks wide-table scrolling and is not the fix; table overflow and border-radius stay as they are.
+
+`AnchoredPopover` (`comp-doc/popup/AnchoredPopover.jsx`, exported from the package entry) is the shared surface for these overlays. It renders a `<span popover="manual">` that is shown in the browser's **top layer**, so no ancestor's overflow, transform, or stacking context clips or covers it, while the node stays where React puts it, under its owner: it inherits the owner's styles and context, and DOM containment checks (an outside click, whether a pointer is inside an edit session) treat it as part of the owner. It is placed against an anchor element (below it, above when it does not fit), clamped to the viewport, scrolls its own content when long, and follows scrolling of any ancestor and resizing of the anchor, the popover and the window.
+
+```jsx
+import { AnchoredPopover } from '@wwf971/react-doc';
+
+const refAnchor = useRef(null);
+<span ref={refAnchor}>
+  {label}
+  {isOpen ? (
+    <AnchoredPopover anchorRef={refAnchor} className="my-menu" role="listbox">
+      {items}
+    </AnchoredPopover>
+  ) : null}
+</span>
+```
+
+- The caller mounts it **only while open** and owns dismissal, focus and accessibility semantics (roles, keyboard handling). It is not a modal and does not replace the block-popup dialog.
+- It is positioned in an effect after the anchor's ref is attached; unmounting (also the double mount of React Strict Mode) removes the top-layer entry, the observers and the listeners.
+- It needs the native Popover API (current Chromium, Firefox and Safari).
+
+`LinkDocRender` uses it for the candidate list of an ambiguous link; the link controller and the candidate-selection events are unchanged. Overlays that already escape clipping need no change: native `title` tooltips, the host `Menu` (portaled to the body), `LinkWarning` (portaled to the body at a fixed position) and the `SourcePathInput` dropdown. A third-party renderer that draws its own inline overlay is not repaired automatically; it must follow the same contract, through this helper or a correctly positioned portal.
+
+The regression `comp-doc/popup/AnchoredPopover.browser.test.mjs` builds a fixture with the real link renderer and popup CSS (stubbing only the tag list), opens it in a headless Chromium at two widths, and checks hit-testing and selection beyond hidden and scrolling table boundaries (also under a transformed ancestor), preserved horizontal table scrolling, scroll tracking, an unrelated tooltip on the same helper, viewport clamping and above-anchor placement, long lists, Strict Mode, and cleanup on unmount. From `main/frontend`:
+
+```sh
+DOC_TEST_BROWSER="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  node --test ../comp-doc/popup/AnchoredPopover.browser.test.mjs
+```
+
+`DOC_TEST_BROWSER` defaults to Windows Edge; without an executable the test is skipped, which is not a verification.
+
 ## Files
 
 - `frontend/src/store/DocBlockPopupStore.ts`: the popup, the surfaces, the mode and its changes.
 - `comp-doc/popup/DocBlockPopup.jsx`: the dialog of the page.
 - `comp-doc/popup/BlockPopupSurface.jsx`: what a component renders in; `DocBlockPopup.css`.
 - `frontend/src/lib/doc-block-popup-store.test.js`: mode, transitions, failures, navigation, surfaces.
+- `comp-doc/popup/AnchoredPopover.jsx`: the top-layer surface of inline tooltips and dropdowns; `AnchoredPopover.css`, `AnchoredPopover.browser.test.mjs`.

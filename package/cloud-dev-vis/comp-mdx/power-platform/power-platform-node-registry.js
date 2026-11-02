@@ -10,6 +10,7 @@ import { powerAutomateNodeContract, powerAutomateNodeFields } from './PowerAutom
 import { PowerAutomateNode } from './PowerAutomateNode.jsx';
 import { businessRuleNodeContract, businessRuleNodeFields } from './BusinessRuleNodeData.js';
 import { BusinessRuleNode } from './BusinessRuleNode.jsx';
+import { operatorNodeKindList } from './OperatorNodes.js';
 
 // The node kinds of the Power Platform series (power-platform.md): Dataverse
 // tables and global choices, Power Automate steps and business rules, on top
@@ -61,7 +62,7 @@ export const businessRuleNodeKind = {
 export const powerPlatformNodeRegistry = nodeRegistryBuild({
 	id: 'power-platform',
 	label: 'Power Platform',
-	kindList: [...cardDiagramNodeKindList, dataverseTableNodeKind, dataverseChoiceNodeKind, powerAutomateNodeKind, businessRuleNodeKind],
+	kindList: [...cardDiagramNodeKindList, ...operatorNodeKindList, dataverseTableNodeKind, dataverseChoiceNodeKind, powerAutomateNodeKind, businessRuleNodeKind],
 });
 
 // DiagramDataverseEntity: one Dataverse table card, outside a canvas

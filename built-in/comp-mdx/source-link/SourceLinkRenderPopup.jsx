@@ -34,7 +34,7 @@ const SourceLinkRenderPopup = observer(function SourceLinkRenderPopup({ Panel, s
 	const Body = compiled.Body;
 	return (
 		<Panel
-			data={{ title: entryPopup?.name ?? pathPopup }}
+			data={{ title: <span>{entryPopup?.name ?? pathPopup}</span> }}
 			config={{
 				isPopup: true,
 				isCloseVisible: true,

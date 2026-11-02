@@ -44,6 +44,7 @@ CardDiagram            registry card-diagram      table, operator
 DiagramER              registry power-platform    table, operator, dataverse-table, dataverse-choice,
 DiagramPowerAutomate     (one registry for the      power-automate, business-rule
 DiagramBusinessRule       three: one diagram may mix them)
+                        plus operator-abandon, operator-text, operator-mapping
 DiagramDataverseEntity registry dataverse-entity  dataverse-table   (a standalone card)
 ```
 

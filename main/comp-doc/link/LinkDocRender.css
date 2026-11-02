@@ -71,14 +71,10 @@
 }
 
 .doc-link-render-menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
   z-index: 50;
   display: flex;
-  min-width: max-content;
+  width: max-content;
   flex-direction: column;
-  margin-top: 2px;
   padding: 2px;
   border: 1px solid var(--color-fd-border);
   border-radius: 3px;
@@ -106,13 +102,14 @@
 }
 
 .doc-link-warning {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  z-index: 60;
+  position: fixed;
+  z-index: 10000;
   display: flex;
   width: max-content;
   max-width: min(28rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 1rem);
+  overflow: auto;
+  box-sizing: border-box;
   align-items: flex-start;
   gap: 0.65rem;
   padding: 0.55rem 0.65rem;
@@ -129,10 +126,8 @@
 }
 
 .doc-link-warning-arrow {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 50%;
-  z-index: 61;
+  position: fixed;
+  z-index: 10001;
   width: 0.6rem;
   height: 0.6rem;
   border-top: 1px solid #d38a20;

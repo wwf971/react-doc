@@ -6,6 +6,7 @@ The Power Platform series of the package ([README](README.md)), in `comp-mdx/pow
 power-platform-node-registry.js
   kinds       dataverse-table, dataverse-choice    DataverseCard (the table card, fixed fields)
               power-automate, business-rule        the resource card, with an icon and an accent
+              operator-abandon, operator-text, operator-mapping  compact mapping operations
               + table, operator                    the generic kinds of the base series
   registries  powerPlatformNodeRegistry            DiagramER, DiagramPowerAutomate, DiagramBusinessRule
               dataverseEntityNodeRegistry          DiagramDataverseEntity (dataverse-table alone)
@@ -41,6 +42,56 @@ direction, side, endpoint, and label rules. No runtime execution order is
 inferred from card placement: label branches and run-after conditions explicitly.
 
 Files for each resource share a prefix: `PowerAutomateNode*` and `BusinessRuleNode*` contain its card (the resource card of the base series with an icon and an accent color), its fields and validation, and its starting text. The kinds themselves (contract, schema, card, create entry) are declared in `power-platform-node-registry.js`. See [Power Platform diagrams](../../../example_doc/mdx-usage/comp-powerplatform.md) for complete examples and design-specific caveats.
+
+## Mapping Operators
+
+The Power Platform registry adds three compact operators, implemented in files named `OperatorXxx` beside the other kinds. They are available from the create panel of `DiagramER`, `DiagramPowerAutomate` and `DiagramBusinessRule`; the generic `CardDiagram` and standalone `DiagramDataverseEntity` registries are unchanged.
+
+| Renderer type | Content | Default width | Initial handles |
+| --- | --- | --- | --- |
+| `operator-abandon` | Editable `name` label, defaulting to Abandon | 96 | Left input, right input |
+| `operator-text` | Editable `name` header and `description` text | 200 | Left input, right output |
+| `operator-mapping` | Editable `name` header and `rows: [{ id, key, value }]` | 240 | Left input, right output |
+
+These are declarative mapping steps, not executable operations. Abandon is a sink: either side accepts an incoming field to discard. The other operators transform or translate a value between tables. Headers use 12px text at the default root font size, smaller than the Dataverse card's 14.4px, with reduced padding and row heights. Width and height still follow the shared node-sizing contract.
+
+Every operator exposes a `body` anchor on the left and right only. A mapping also exposes `row/<id>` anchors on those sides; its title does not take handles. The create panel supplies explicit starting handles, while authored YAML must declare its own handles as usual. Connections still belong to the shared engine, not the cards.
+
+```yaml
+nodes:
+  - id: discard
+    renderer: { type: operator-abandon }
+    data: { name: Abandon }
+    handles:
+      - { id: left, direction: in, anchor: { target: body, side: left } }
+      - { id: right, direction: in, anchor: { target: body, side: right } }
+  - id: normalize
+    renderer: { type: operator-text }
+    data: { name: Normalize email, description: Trim and lowercase. }
+    handles:
+      - { id: left, direction: in, anchor: { target: body, side: left } }
+      - { id: right, direction: out, anchor: { target: body, side: right } }
+  - id: status
+    renderer: { type: operator-mapping }
+    data:
+      name: Status mapping
+      rows:
+        - { id: active, key: A, value: Active }
+        - { id: inactive, key: I, value: Inactive }
+    handles:
+      - { id: left, direction: in, anchor: { target: body, side: left } }
+      - { id: right, direction: out, anchor: { target: body, side: right } }
+```
+
+The mapping is a fixed-column schema over the shared `TableCard`: exactly **Key** and **Value**, in that order. Do not author `data.fields`; it is rejected rather than silently changing the schema. Column insertion, deletion, reordering and renaming are unavailable. Entry IDs remain stable while either cell is edited; rows can be inserted, reordered or removed using the normal card controls. Duplicate row IDs are rejected. Empty row lists are valid. Row removal follows the engine's existing connection-detachment rules.
+
+The Abandon label, text and key/value cells use the existing `CardCell` and injected `EditableValueComp`, so edits participate in the diagram draft, cell cancellation and block Save/Cancel. Abandon nodes with no authored `data.name` still display Abandon; editing writes the label to `data.name`, which must be text. Cancel preserves the original data, including a missing name. There is no independent write path and no raw input/textarea control. The mapping schema and normalizer enforce the column limit even outside the UI.
+
+The focused regression file is `comp-mdx/power-platform/OperatorNodes.test.js`. From `main/frontend`, run:
+
+```sh
+node --import ./src/lib/node-test-register.js --test ../../package/cloud-dev-vis/comp-mdx/power-platform/OperatorNodes.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramERData.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditStore.test.js
+```
 
 ## The Standalone Dataverse Card
 
