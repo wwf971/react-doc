@@ -33,6 +33,7 @@ import { AssetPanelPopup } from '../../comp-doc/asset/AssetPanelPopup.jsx';
 import { DocBlockPopup } from '../../comp-doc/popup/DocBlockPopup.jsx';
 import { SourceFilePrompt } from '../../comp-doc/source/SourceFilePrompt.jsx';
 import { SidePanelMovePicker } from '../../comp-doc/side-panel/SidePanelMovePicker.jsx';
+import { SidePanelItemDialog } from '../../comp-doc/side-panel/SidePanelItemDialog.jsx';
 import { SidePanelDragOverlay } from '../../comp-doc/side-panel/SidePanelDragOverlay.jsx';
 import { SidePanelItemContextMenu } from '../../comp-doc/side-panel/SidePanelItemContextMenu.jsx';
 import { DocPastePopup } from '../../comp-doc/paste/DocPastePopup.jsx';
@@ -169,7 +170,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     const serviceStore = new DocServiceStore({ endpoint: envStore.endpointGet('service'), assetStore, sourceStore });
     // the side panel: folder open state, and moving items in edit mode
     // (doc_page_impl_side_panel.md#moving-an-item)
-    const sidePanelStore = new DocSidePanelStore({ sourceStore, docStore, editStore });
+    const sidePanelStore = new DocSidePanelStore({ sourceStore, sourceFileStore, docStore, editStore });
     // blocks selected in block selection mode, then copied or moved, and
     // the blocks the author is at in any mode with blocks
     // (doc_page_impl_block_ops.md#selecting-blocks)
@@ -389,6 +390,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
               <DocBlockPopup />
               <SourceFilePrompt />
               <SidePanelMovePicker />
+              <SidePanelItemDialog />
               <SidePanelDragOverlay />
               <SidePanelItemContextMenu />
               <DocPastePopup />

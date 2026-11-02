@@ -150,7 +150,7 @@ Node forms:
 
 - `doc`: a document item. With `children` it becomes a folder bound to that document.
 - `text` + `children`: a virtual folder unrelated to the disk layout.
-- `sourceFolder`: the generated tree below any source folder (`~root/dir`, a root of the doc page the node is written in); files of a `referenced` folder are not pages and are left out. `sourceRoot: root` is a shorthand for a complete root. Without `text` or `display`, the generated children are placed directly in the parent.
+- `sourceFolder`: the generated tree below any source folder (`~root/dir`, a root of the doc page the node is written in); files of a `referenced` folder are not pages and are left out. `sourceRoot: root` is a shorthand for a complete root. Without `text` or `display`, the generated children are placed directly in the parent. How such a file tree lives among the authored items: [An item mirroring a source folder](#an-item-mirroring-a-source-folder).
 - `panel.component` + `panel.data`: a leaf whose main panel is rendered by a registered component. It receives the unified `{ data, config, onEvent }` props, with the item and runtime metadata in `config`.
 - `separator`: a visual separator.
 
@@ -194,6 +194,31 @@ sidePanelById:
 ```
 
 The optional `root` mapping is merged onto the including node, so a document keeps its label, root document, part index, tags, source rules, and tag definitions in its own folder while the including file only names the node. Explicit properties on the including node win. Because the merge happens in the loader, an included `part` registers against the including node's `id` exactly as inline configuration does. `root` never becomes a visible child, and `root.children` / `root.include` are configuration errors. Inclusion cycles, missing files, an invalid reference, a side panel id the file does not declare, and side panels without a `tree` list are configuration errors that name the file.
+
+## An item mirroring a source folder
+
+A `sourceFolder` node puts a piece of the file tree into the free tree. Its children are not authored: they are **generated** from the file manifest every time the tree is built, one item per page and per folder below the source folder (the files of a folder first, then its subfolders), labeled by the title of the document or the name of the folder. They follow the files: a file added, renamed or deleted on disk changes them, and nothing about them is written in yaml.
+
+```text
+side-panel.yaml                          side panel
+- text: Topics                           Topics  [tree]                   the source-folder item, a node of the file
+  sourceFolder: ~guide/topics              [file] Install                 generated: ~guide/topics/install.md
+                                           [dir]  advanced                generated: ~guide/topics/advanced
+                                             [file] Tuning                generated: ~guide/topics/advanced/tuning.md
+```
+
+**One owner.** The source-folder item owns everything below it: a `children` list on the node is not read, which is why a folder is bound to an item only while the item holds no items of its own ([changing the structure](#changing-the-structure)). Without `text` or `display` the node has no item at all and its generated items stand in its parent; that form is for a fallback list at the end of a tree (`sourceRoot` nodes), managed in the file.
+
+**What the other layers see.** A generated item is an item like any other for everything that reads the tree, and nothing that writes it:
+
+| Layer | A generated item, or the source-folder item |
+| --- | --- |
+| navigation | every generated page and folder has a route; its id comes from its source path (`src-{page}-{root}-{path}`), not from its position, so a file added or removed elsewhere in the folder leaves the routes, and the folders remembered open, of the others as they are. A link to a file goes to the first item in tree order, so an authored item earlier in the tree wins over the mirror ([side-panel routes](doc_page_impl_nav.md#side-panel-routes-and-folder-navigation)) |
+| tags, config | the node's `tags` attach to the folder asset (`folderPath`), its `config` applies to every document below ([tags](doc_page_impl_tag.md), [config](doc_page_impl_config.md#declaring-document-config)) |
+| source, pruning | the folder is a root of pruning: every page below it is retained in a build ([source pruning](doc_page_impl.md#source-pruning-for-deployment)) |
+| editing | a generated item is not renamed, moved, removed or bound, and nothing is placed next to it; its menu says why, naming the folder it mirrors. It can be read again (refresh). The source-folder item itself is an item of the file: renamed, moved, removed, rebound, detached |
+
+**How it looks.** The reader tells the file tree from the authored items before clicking: a generated item has a small file or folder glyph before its name (`data.isGenerated`), and the source-folder item a small tree glyph after its name, the folder's path as its hover title (`data.isSourceFolder`). Both are drawn by the default renderer on the `sidebar` surface in every mode, so nothing moves when edit mode is toggled; a custom renderer wrapping `SidePanelItem` keeps them.
 
 ## Semantic parts
 
@@ -266,6 +291,8 @@ data.textMessage       '' or the diagnostic of an invalid authored text
 data.kind              separator | folder | folder-file | file | panel | inline
 data.fileExt, fileName, filePath, isMissing, isTextCustom, sourcePath
                        present when the item is bound to a file or folder
+data.isGenerated       the item mirrors a file or folder of a source folder
+data.isSourceFolder    the item mirrors a source folder (its children are generated)
 data.itemDeclared      the YAML node as authored, without children; its text
                        can be a language mapping and is not meant for display
 data.tagListDeclared   tags written on this node, normalized to [{ id, data }]
@@ -285,6 +312,10 @@ config.textEditStatus  '' | editing | submitting | error, for this rendering of 
 config.textEditMessage why the last save of the label failed
 config.isMovable       edit mode, sidebar surface: the item can be moved (its row is
                        dragged through the host; the renderer offers the move picker)
+config.isRefreshable   edit mode, sidebar surface: the item is bound to a file or folder
+                       that can be read again (see "Reading an item again")
+config.refreshStatus   '' | submitting | error;  config.refreshMessage  why it failed
+config.isMenuAvailable edit mode, sidebar surface: the item has its menu of actions
 config.instanceId      this rendering of the label, distinct for every rendering of the
                        same item; the source of its events
 config.placement, compId, sourcePath
@@ -296,6 +327,9 @@ onEvent('sidePanelTextCancelRequest')          drop the edit
 onEvent('sidePanelItemMovePickerOpenRequest', {}, { point })
                                                open the move picker where the pointer is
                                                (see "Moving an item")
+onEvent('sidePanelItemRefreshRequest')         read the item's file or folder again
+onEvent('sidePanelItemMenuOpenRequest', {}, { point })
+                                               open the item's menu there
 ```
 
 `data.tagList` is every resolved tag of the asset; `data.tagListDeclared` is only what this one node wrote. They differ when tags come from source rules or from other items bound to the same document. Which tags are actually shown is a decision of the renderer, guided by `config.configGlobal`.
@@ -372,7 +406,7 @@ page-tree.js               itemOutlineById[itemId]: textSource, isTextAuthored
 SidePanelItemHost          config.instanceId: this rendering of the label (owner);
                            config.isTextEditable, textEditStatus, textEditMessage;
                            data.text = the label just saved while the new tree is pending
-SidePanelItem              hover: [✎] after the label  ->  sidePanelTextEditStartRequest
+SidePanelItem              hover: [✎] at the row's end  ->  sidePanelTextEditStartRequest
                            the text span made contenteditable, Enter / blur
                            -> sidePanelTextSubmitRequest { text }, Escape -> ...CancelRequest
 event layer                edit route -> DocEditStore.eventHandle (source.itemId,
@@ -404,7 +438,7 @@ plugin                     write; report the new configuration as "doc-source-ch
 
 **Inside a link or a folder button.** The label is inside the sidebar link of its item or the button of its folder, which the side panel does not own. The edit button and the editor stop their pointer events. The editor also keeps the keys from them: a button activates on the key-up of Space and Enter, so the editor stops the key-up and prevents its default (Space has typed its space on key-down, and the folder does not toggle); Enter saves on key-down without following the link, Escape drops the edit on key-down; both stop there. Keys during IME composition are left to the composition, and paste inserts plain text.
 
-**No jitter.** Nothing moves when edit mode is toggled or when a label is edited. The edit button hangs off a zero-width inline anchor placed after the label and the tags, absolutely positioned, transparent until the row or the button itself is hovered: it takes no room, and the label host fills the row of the sidebar link (`flex: 1 1 auto`) so that hovering anywhere on the row shows it. It is styled like a button of the block toolbar (no frame, muted icon, accent background on hover; the icon size is set by class, because the sidebar link sizes every svg inside it) and it always takes the pointer, even while transparent, so a click on it never falls through to the link and navigates. The label is edited in its own span, made `contenteditable` (plain text), with an outline drawn outside its box: same element, same typography, same size. Enter and leaving the focus submit, Escape drops the edit; the button and the editable span stop their pointer events, so the sidebar link does not navigate and the folder does not toggle while a label is edited. While the write is pending the span is locked and dimmed; a failure shows the message as the label's hover title with a red outline, and the edit button is back so the edit can be retried.
+**No jitter.** Nothing moves when edit mode is toggled or when a label is edited. The edit button sits with the other buttons of the label (move, refresh, more) in one small group floating at the right end of the row, over the end of the label and left of a folder's chevron, transparent until the row or the group is hovered: it takes no room, never leaves the row however long the label is, and the label host fills the row of the sidebar link (`flex: 1 1 auto`) so that hovering anywhere on the row shows it. The group is styled like a button group of the block toolbar (a framed chip, muted icons, accent background on hover; the icon size is set by class, because the sidebar link sizes every svg inside it) and it always takes the pointer, even while transparent, so a click on it never falls through to the link and navigates. The label is edited in its own span, made `contenteditable` (plain text), with an outline drawn outside its box: same element, same typography, same size. Enter and leaving the focus submit, Escape drops the edit; the button and the editable span stop their pointer events, so the sidebar link does not navigate and the folder does not toggle while a label is edited. While the write is pending the span is locked and dimmed; a failure shows the message as the label's hover title with a red outline, and the edit button is back so the edit can be retried.
 
 ## Moving an item
 
@@ -426,7 +460,7 @@ lib/side-panel-move.js     sidePanelMoveResolve(place index, itemId, position, t
 SidePanelItemHost          wrapper element (data-side-panel-item-id) with the drag handlers;
                            config.isMovable
 side-panel-drag.js         pointer -> drop { position, targetItemId } over the measured rows
-SidePanelItem              hover: [✎][✥] after the label -> sidePanelItemMovePickerOpenRequest
+SidePanelItem              hover: [✎][✥] at the row's end -> sidePanelItemMovePickerOpenRequest
 SidePanelMovePicker        the side panel as a tree (SourceTreeSelect) + Before / After /
                            Into, first / Into, last
 event layer                sidePanelItemMoveRequest { position, targetItemId } (source.itemId)
@@ -460,11 +494,73 @@ A flow list or a flow mapping cannot take an item in place and is refused with a
 
 **The drag.** `SidePanelItemHost` wraps the label in an element that takes no box (`display: contents`) and names the item; the row is its parent, a fumadocs link, folder button or separator. A mouse or pen drag starts after 5px, never from the editable label, the edit or move button, or a tag, and its mousedown is kept from the browser so a link row is not dragged as a link. On every move the rows of the side panel it started in (desktop or mobile) are measured and the pointer becomes a drop: a row that can hold children is split 25 / 50 / 25 into before, into (as last child, a box around the row), and after (or the first child, when it is an open folder showing children); any other row 50 / 50. After a row that ends its folder, the pointer's x chooses the depth: further left means after the folder, and after the folder around it, as far as each is a last child. A zone is kept while the pointer stays within 4px of it; the middle of a closed folder opens it after 600ms (through `folderOpenById`); the side panel scrolls near its edges; Escape cancels; the click that ends the drag is swallowed. `SidePanelDragOverlay` draws the indicator in a fixed layer above the page: a line starting at the depth the item would have, with a dot there, or a box; grey when the drop is refused, with the reason under the label that follows the pointer. A drop is reported as `sidePanelItemMoveRequest`, and while it is written, and after a failure, a small notice stays where the item was dropped until the next click or Escape.
 
-**The picker.** The move button sits in the zero-width anchor of the edit button (both buttons in one group, shown on hover, nothing moves). It reports `sidePanelItemMovePickerOpenRequest` with the pointer; `SidePanelMovePicker` floats there, styled like the location prompt of the doc page source service layer, with the side panel in the tree view of the same layer (`SourceTreeSelect`), opened down to the moved item, which is disabled with everything below it. Choosing an item shows the four actions; one that is refused is disabled and says why on hover. The picker shows the move being written and its failure. Its header, aside from the close button, drags the picker, which stays inside the window; a picker opened again starts where the pointer was. It closes with the close button at the top right, on Escape, or on a pointer down outside, and not while the move is being written.
+**The picker.** The move button sits in the button group of the label, next to the edit button (shown on hover, nothing moves). It reports `sidePanelItemMovePickerOpenRequest` with the pointer; `SidePanelMovePicker` floats there, styled like the location prompt of the doc page source service layer, with the side panel in the tree view of the same layer (`SourceTreeSelect`), opened down to the moved item, which is disabled with everything below it. Choosing an item shows the four actions; one that is refused is disabled and says why on hover. The picker shows the move being written and its failure. Its header, aside from the close button, drags the picker, which stays inside the window; a picker opened again starts where the pointer was. It closes with the close button at the top right, on Escape, or on a pointer down outside, and not while the move is being written.
 
-**The context menu.** A right click on the row of an item that can be renamed or moved (edit mode, `sidebar` surface, the host application injected `config.components.Menu`) opens `SidePanelItemContextMenu` at the pointer instead of the browser's menu; the editable label being edited keeps the browser's menu. It is the injected Menu (react-comp-misc), styled like the mode menu of a block (`doc-edit-mode-menu`), with two entries, the two buttons of the label: **Rename** reports `sidePanelTextEditStartRequest` with the `instanceId` of the rendering that was right-clicked, so that rendering owns the edit as if its pencil was clicked; **Move…** reports `sidePanelItemMovePickerOpenRequest` with the point of the right click, so the picker opens there. Both go through the event router with `placement: 'sidePanelContextMenu'`. An entry that does not apply is disabled with its reason as hover title. The open state is `DocSidePanelStore.contextMenu { itemId, instanceId, point }`; opening closes the menu that is open and opens the new one on the next frame, so a right click on another row while the menu is open moves the menu there. A pointer down outside or Escape closes it.
+**The context menu.** In edit mode, on the `sidebar` surface, when the host application injected `config.components.Menu`, a right click on the row of any item opens `SidePanelItemContextMenu` at the pointer instead of the browser's menu, and the "more" button (⋯) of the label opens it under the button; the editable label being edited keeps the browser's menu. It is the injected Menu (react-comp-misc), styled like the mode menu of a block (`doc-edit-mode-menu`), in groups separated by a line:
+
+```text
+Rename · Move… · Refresh                          the buttons of the label
+New folder ▸ · New document ▸                     Above / Below / Inside, last
+Change document… · Bind document… · Bind folder…  the binding changes the item offers
+  · Change folder… · Detach…                      (see "Changing the structure")
+Remove…
+```
+
+**Rename** reports `sidePanelTextEditStartRequest` with the `instanceId` of the rendering the menu was opened from, so that rendering owns the edit as if its pencil was clicked; **Move…** reports `sidePanelItemMovePickerOpenRequest` with the point of the menu, so the picker opens there; every other entry reports the request of its change. All go through the event router with `placement: 'sidePanelContextMenu'`. An entry that does not apply is disabled with its reason as hover title, the reasons being those of the move and of the structure changes (`lib/side-panel-move.js`, `lib/side-panel-node.js`). The open state is `DocSidePanelStore.contextMenu { itemId, instanceId, point }`; opening closes the menu that is open and opens the new one on the next frame, so a right click on another row while the menu is open moves the menu there. A pointer down outside or Escape closes it.
 
 **History.** A move is recorded by `DocEditStore.historyRecord` with the text of both files before and after (`kind: 'sidePanelItemMove'`), next to the records of document operations; see [History records](doc_page_impl_edit.md#history-records). The events of the sidePanel route pass the host application first, like every component report.
+
+## Changing the structure
+
+In edit mode the tree itself is changed from the side panel: an item is inserted, bound to another document or source folder (or to nothing), or removed, each change written in place into the yaml file of the item like a label or a move. As for those, it is available on the development server only, on the `sidebar` surface, for items that are a node of a side-panel file; the entries are in the item's menu ([the context menu](#moving-an-item)).
+
+```text
+change          entry                                  written into the node's file
+new folder      New folder ▸ Above | Below | Inside    - text: <label typed>
+                                                         children: []
+new document    New document ▸ Above | Below | Inside  - doc: ~root/dir/name.mdx   and the file, empty
+bind, change    Change document… | Bind document…      doc: or sourceFolder: set, the other one removed
+                Bind folder… | Change folder…
+detach          Detach…                                doc / sourceFolder removed, "children: []" kept
+remove          Remove…                                the node's lines (and, if chosen, its document)
+```
+
+**What is allowed**, decided in one place, `lib/side-panel-node.js`, which the menu, the dialogs and the event handler all ask (as `lib/side-panel-move.js` for a move), in terms of leaf and non-leaf items:
+
+- a new item goes before or after any item that is a node, or into a document item or a folder as its last child (a leaf document then becomes a folder, as in a move);
+- a **leaf** document item changes its document and is never detached: a leaf bound to nothing would be nothing;
+- a **non-leaf** item (a document folder, a virtual folder, a source folder) is bound to a document, to a source folder, or to nothing. A source folder replaces the items with the files, so a folder is bound only while the item holds no items; an item that would lose its label (the title of its document, the name of its folder) gets the label shown written as `text`;
+- an item including another side panel keeps the binding of that side panel's root, where it is changed;
+- only an item holding no items of its own is removed; a source-folder item goes with its generated items, its files stay;
+- generated items take none of these changes ([an item mirroring a source folder](#an-item-mirroring-a-source-folder)).
+
+A path is chosen among the roots of the doc page the node is written in, and written in the local form (`~root/...`), so the doc page stays valid under any alias a workspace gives it.
+
+**The dialogs.** A new folder asks its label; a binding shows the path picker of the source layer (`SourcePathPicker`, [choosing a path](doc_page_impl_source.md#choosing-a-path)) over the documents (`.md`, `.mdx`), or the folders, of that doc page; a detach says what the item becomes. They are one floating dialog, `SidePanelItemDialog`, styled like the move picker, which stays while the change is written and shows its failure. A **new document** is placed instead through the location prompt of the source layer (`DocSourceFileStore.locationChoose`, [creating and deleting files](doc_page_impl_source.md#creating-and-deleting-files)): the folders of the doc page's roots, the folder of the item's own document first, a file name (`.md` or `.mdx`; without an extension `.mdx`). The file is created empty with its item, in one request, and the new document opens, where the empty-document notice offers its first block.
+
+**Removing.** A removal is confirmed in the dialog. A document item offers its document, unchosen, and says what deleting it would break before the choice is made: the other items showing the document (they would show it missing) and the documents that link to it, asked from the development server (`GET {source}/file/referrer`, every link, image and inline target resolved the way the page resolves them). A deleted document is moved to a hidden backup beside it, not erased.
+
+```text
+menu entry / ⋯ button
+  -> sidePanelItemInsertRequest { kind, position } | sidePanelItemBindRequest { kind } | sidePanelItemRemoveRequest
+  -> sidePanel route -> DocSidePanelStore: the dialog, or the location prompt for a new document
+  -> lib/side-panel-node.js: allowed? the request
+  -> leave the block session; POST {editEndpoint}/side-panel/node
+       { file, request, hashBase, fileCreate?, filePathDeleteList? }
+plugin/doc-side-panel-node.ts  the node inserted, removed or bound, in place (doc-yaml-edit.ts)
+plugin/doc-edit-server.ts      the source file first (created, or moved into its backup:
+                               doc-source-file.ts), then the yaml with its .bak; both put back
+                               when the write fails or the configuration does not load
+plugin                         the changed files marked as the page's own; the configuration
+                               and the source reported once, as data, without a reload
+DocEditStore.historyRecord     kind sidePanelNodeInsert | sidePanelNodeRemove | sidePanelNodeBind
+```
+
+The file and the yaml go in one request for the reason a block and its files do ([deleting blocks](doc_page_impl_block_ops.md#deleting-blocks)): two requests would leave an item without its document, or a document without its item, when the second fails. The request carries the hash the page built its side panel from (`fileHashByFile`); a file changed since is refused (code -2). The yaml is changed step by step on the parsed file (a key set in place or added after the node's first key, a key removed, an item of a list inserted or removed), every other line kept, and the result parsed again before it is written.
+
+## Reading an item again
+
+The page learns of a change on disk from the file watcher of the development server, which does not see every change: a folder on a network drive, a file replaced while the server was busy. In edit mode every item bound to a file or folder (a document item, a document folder, a source-folder item, a generated item) has a **refresh** button in the group of its label, also **Refresh** in its menu. It reports `sidePanelItemRefreshRequest`; `DocSidePanelStore.itemRefresh` asks the source layer to read everything again (`POST {source}/refresh`: the configuration and the source scanned again, reported as data), which compiles again every document whose content hash changed and brings in a file added to a source folder, then compiles again the documents of the item that are shown, whatever their hash. The button spins while it runs and turns red, with the reason as its title, when it fails.
 
 ## Folder interaction and routes
 
@@ -541,24 +637,29 @@ frontend/plugin/doc-source.ts            config.yaml workspace / docEntry -> con
                                          loaded files, report a label write or a move as data
 frontend/plugin/doc-side-panel-text.ts   a label change as one line operation of its yaml file
 frontend/plugin/doc-side-panel-move.ts   a move as line operations of one or two yaml files
+frontend/plugin/doc-side-panel-node.ts   a node inserted, removed or bound, in place
 frontend/plugin/doc-yaml-edit.ts         the in-place yaml edit they are built on (node ranges ->
                                          line operations; list items: lines, remove, insert)
-frontend/plugin/doc-edit-server.ts       POST {editEndpoint}/side-panel/text and /side-panel/move,
-                                         the writes with their backups
+frontend/plugin/doc-edit-server.ts       POST {editEndpoint}/side-panel/text, /side-panel/move and
+                                         /side-panel/node, the writes with their backups
 frontend/src/lib/page-tree.js            tree conversion, routes, parts, tag and config declarations
 frontend/src/lib/side-panel-move.js      place index, what a move is allowed to do and writes
+frontend/src/lib/side-panel-node.js      what a structure change is allowed to do and writes
 frontend/src/lib/side-panel-item.js      renderer choice and item data
 frontend/src/lib/text-localized.js       localized label parsing and selection, shared with indexes
 frontend/src/store/DocEditStore.ts       sidePanelText: the label being edited, the write
-frontend/src/store/DocSidePanelStore.ts  folder open state, drag, picker, context menu, the move (sidePanel route)
+frontend/src/store/DocSidePanelStore.ts  folder open state, drag, picker, context menu, the move, the
+                                         structure changes and their dialog, refresh (sidePanel route)
 comp-doc/side-panel/SidePanelItemHost.jsx  runtime context, surfaces, edit state and owner of the
                                            label, the drag wrapper
 comp-doc/side-panel/SidePanelItem.jsx      default renderer (common/SidePanelItem), label editing,
-                                           move button
+                                           the button group, the glyphs of a mirrored file tree
 comp-doc/side-panel/side-panel-drag.js     the drag: rows measured, zones, depth, auto open / scroll
 comp-doc/side-panel/SidePanelDragOverlay.jsx  drop indicator, ghost label, move notice
 comp-doc/side-panel/SidePanelMovePicker.jsx   the move picker
-comp-doc/side-panel/SidePanelItemContextMenu.jsx  right-click menu of an item: Rename, Move…
+comp-doc/side-panel/SidePanelItemContextMenu.jsx  menu of an item: Rename, Move…, Refresh, new items,
+                                                  binding, Remove…
+comp-doc/side-panel/SidePanelItemDialog.jsx  the dialog of a new folder, a binding, a detach, a removal
 comp-doc/side-panel/DocSidebarFolder.jsx   default folder gesture, open state by item id, a hidden
                                            root row drawn as its children
 comp-doc/side-panel/DocSidePanelSection.jsx  a root doc page of a workspace of several: heading, toolbar

@@ -1,5 +1,5 @@
 import { isValidElement, useEffect, useRef } from 'react';
-import { Move, Pencil } from '../../frontend/UICommon.js';
+import { Ellipsis, FileText, FolderIcon, FolderTreeIcon, Move, Pencil, RotateCw } from '../../frontend/UICommon.js';
 import { TagList } from '../../../built-in/comp-mdx/tag/TagList.jsx';
 import './SidePanelItem.css';
 
@@ -31,6 +31,17 @@ import './SidePanelItem.css';
 //   config.isMovable         edit mode: the item can be moved (dragged by its
 //                            row, which the host handles, or placed through
 //                            the move picker)
+//   config.isRefreshable     edit mode: the item is bound to a file or folder
+//                            whose content can be read again
+//   config.refreshStatus     '' | submitting | error, for this item
+//   config.refreshMessage    why the last refresh failed
+//   config.isMenuAvailable   edit mode: the item has a menu of actions (the
+//                            context menu, also opened by the "more" button)
+//   data.isGenerated         the item mirrors a file or folder of a source
+//                            folder: a small file or folder glyph before the
+//                            name says it follows the files
+//   data.isSourceFolder      the item mirrors a source folder: a small tree
+//                            glyph after the name, its path as the title
 //
 // Events emitted:
 //   tagOverviewOpenRequest { tagId }      a tag was clicked
@@ -39,6 +50,9 @@ import './SidePanelItem.css';
 //   sidePanelTextCancelRequest            the edit was dropped (Escape)
 //   sidePanelItemMovePickerOpenRequest    the move button was clicked (with
 //                                         the pointer, where the picker opens)
+//   sidePanelItemRefreshRequest           the refresh button was clicked
+//   sidePanelItemMenuOpenRequest          the "more" button was clicked (with
+//                                         the pointer, where the menu opens)
 //
 // The label is always inside the .doc-side-panel-item host, with or without
 // tags. On the sidebar surface the host wraps long names onto more lines
@@ -67,8 +81,20 @@ export function SidePanelItem({ data = {}, config = {}, onEvent }) {
   const titleText = isTextInvalid ? data.textMessage : (isTextEditFailed ? config.textEditMessage : undefined);
   const isEditButtonShown = config.isTextEditable === true && isTextPlain && !isTextEditing;
   const isMoveButtonShown = config.isMovable === true && !isTextEditing;
+  const isRefreshButtonShown = config.isRefreshable === true && !isTextEditing;
+  const isMenuButtonShown = config.isMenuAvailable === true && !isTextEditing;
+  const isButtonGroupShown = isEditButtonShown || isMoveButtonShown || isRefreshButtonShown || isMenuButtonShown;
+  const refreshStatus = config.refreshStatus ?? '';
+  const isSidebar = (config.surface ?? 'sidebar') === 'sidebar';
   return (
     <span className="doc-side-panel-item" data-surface={config.surface ?? 'sidebar'}>
+      {isSidebar && data.isGenerated ? (
+        <span className="doc-side-panel-item-generated" aria-hidden="true">
+          {data.kind === 'folder'
+            ? <FolderIcon className="doc-side-panel-item-generated-icon" size={12} strokeWidth={1.8} />
+            : <FileText className="doc-side-panel-item-generated-icon" size={12} strokeWidth={1.8} />}
+        </span>
+      ) : null}
       {isTextEditing ? (
         <SidePanelItemTextEdit
           key="edit"
@@ -88,6 +114,11 @@ export function SidePanelItem({ data = {}, config = {}, onEvent }) {
           {data.textDisplay ?? textRenderableGet(data.text)}
         </span>
       )}
+      {isSidebar && data.isSourceFolder ? (
+        <span className="doc-side-panel-item-source-folder" title={`Mirrors the source folder ${data.sourcePath ?? ''}: its items follow the files`}>
+          <FolderTreeIcon aria-hidden="true" className="doc-side-panel-item-source-folder-icon" size={12} strokeWidth={1.8} />
+        </span>
+      ) : null}
       {tagList.length > 0 ? (
         <TagList
           data={{ tagList }}
@@ -97,7 +128,7 @@ export function SidePanelItem({ data = {}, config = {}, onEvent }) {
           }}
         />
       ) : null}
-      {isEditButtonShown || isMoveButtonShown ? (
+      {isButtonGroupShown ? (
         <span className="doc-side-panel-item-edit">
           <span className="doc-side-panel-item-edit-group">
             {isEditButtonShown ? (
@@ -130,6 +161,49 @@ export function SidePanelItem({ data = {}, config = {}, onEvent }) {
                 }}
               >
                 <Move aria-hidden="true" className="doc-side-panel-item-edit-icon" size={11} strokeWidth={2} />
+              </button>
+            ) : null}
+            {isRefreshButtonShown ? (
+              <button
+                type="button"
+                className="doc-button-icon doc-side-panel-item-edit-button"
+                data-status={refreshStatus || undefined}
+                title={refreshStatus === 'error'
+                  ? `The files were not read again: ${config.refreshMessage ?? ''}`
+                  : refreshStatus === 'submitting' ? 'Reading the files again…' : 'Read the file or folder of this item again from disk'}
+                aria-label="Refresh this item from disk"
+                disabled={refreshStatus === 'submitting'}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onEvent?.('sidePanelItemRefreshRequest');
+                }}
+              >
+                <RotateCw
+                  aria-hidden="true"
+                  className={`doc-side-panel-item-edit-icon${refreshStatus === 'submitting' ? ' doc-spin' : ''}`}
+                  size={11}
+                  strokeWidth={2}
+                />
+              </button>
+            ) : null}
+            {isMenuButtonShown ? (
+              <button
+                type="button"
+                className="doc-button-icon doc-side-panel-item-edit-button"
+                title="More actions: new items, binding, remove"
+                aria-label="More actions"
+                aria-haspopup="menu"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  onEvent?.('sidePanelItemMenuOpenRequest', {}, { point: { clientX: rect.left, clientY: rect.bottom + 2 } });
+                }}
+              >
+                <Ellipsis aria-hidden="true" className="doc-side-panel-item-edit-icon" size={11} strokeWidth={2} />
               </button>
             ) : null}
           </span>

@@ -38,6 +38,11 @@ export const sidePanelMovePositionList = ['before', 'after', 'insideFirst', 'ins
 //                   document the item belongs to
 //   scopeIdChildren the scope of its children: its own when it is a part root
 //                   or a sub document, else its scopeId
+//   kind            the item data kind: file | folder-file | folder | separator
+//                   | panel | inline (a document leaf is file, a document with
+//                   children folder-file)
+//   docPageAlias, bindPath, isMissing, generatedFrom   what the item is bound
+//                   to, for structure edits (lib/side-panel-node.js)
 // }
 export function sidePanelPlaceIndexBuild(treePage, itemOutlineById) {
   const placeById = new Map();
@@ -66,6 +71,11 @@ export function sidePanelPlaceIndexBuild(treePage, itemOutlineById) {
       includeSource: outline.includeSource,
       scopeId: placeParent.scopeIdChildren,
       scopeIdChildren,
+      kind: outline.kind ?? '',
+      docPageAlias: outline.docPageAlias ?? '',
+      bindPath: outline.bindPath ?? '',
+      isMissing: outline.isMissing === true,
+      generatedFrom: outline.generatedFrom,
     };
     placeById.set(place.itemId, place);
     placeParent.childIdList.push(place.itemId);
@@ -115,7 +125,7 @@ export function sidePanelMoveResolve(placeById, itemId, position, targetItemId, 
   let targetRequest;
   let parent;
   if (isInside) {
-    const reason = childrenRefusedReasonGet(target, textGet);
+    const reason = sidePanelChildrenRefusedReasonGet(target, textGet);
     if (reason) return resultFail(reason);
     parent = target;
     targetRequest = insideTargetBuild(target, position);
@@ -145,8 +155,9 @@ export function sidePanelMoveResolve(placeById, itemId, position, targetItemId, 
 
 // a document item or a folder holds children; the list they go into is the
 // node's own "children", or, for a node including a side panel, the
-// included tree (first), and its "children" only when it has some (last)
-function insideTargetBuild(target, position) {
+// included tree (first), and its "children" only when it has some (last).
+// also where a new item goes into it (lib/side-panel-node.js)
+export function insideTargetBuild(target, position) {
   const listLocal = { file: target.nodeSource.file, listPath: [...target.nodeSource.path, 'children'] };
   const include = target.includeSource;
   if (position === 'insideFirst') {
@@ -156,7 +167,8 @@ function insideTargetBuild(target, position) {
   return { ...listLocal, index: -1 };
 }
 
-function childrenRefusedReasonGet(target, textGet) {
+// '' when the item holds items, else why not (shared with lib/side-panel-node.js)
+export function sidePanelChildrenRefusedReasonGet(target, textGet) {
   const label = textGet(target.itemId);
   if (target.nodeForm === 'doc' || target.nodeForm === 'folder') return '';
   if (target.nodeForm === 'separator') return 'a separator holds no items';

@@ -811,6 +811,24 @@
   min-width: 0;
 }
 
+.doc-edit-mode-item[data-danger] {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+/* a line between groups of a menu: a container item holding only the
+   separator is the line itself */
+.doc-edit-mode-menu .menu-core-item.is-container:has(> .menu-core-item-label .doc-edit-mode-separator) {
+  height: 0;
+  margin: 0.2rem 0;
+  padding: 0;
+  border-top: 1px solid var(--color-fd-border);
+  overflow: hidden;
+}
+
+.doc-edit-mode-separator {
+  display: block;
+}
+
 .doc-edit-mode-item-icon {
   display: inline-flex;
   flex: 0 0 auto;

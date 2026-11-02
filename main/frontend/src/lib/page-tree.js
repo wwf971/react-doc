@@ -230,15 +230,27 @@ function autoChildren(fileManifest, context) {
   return result;
 }
 
-// pathFolder: internal path of the folder these entries are listed under
-function folderChildren(entries, position, context, partId, pathFolder) {
+// pathFolder: internal path of the folder these entries are listed under.
+// generatedFrom: the source-folder node they are generated from (undefined
+// for the tree generated without a side panel).
+// a generated item has an id from its source path (src-{path}), not from its
+// position: a file added or removed elsewhere in the folder leaves the
+// routes and the remembered open folders of the others as they were
+function folderChildren(entries, position, context, partId, pathFolder, generatedFrom) {
   const entriesDirect = [];
   const entriesBySubDir = new Map();
   for (const entry of entries) {
     const pathTree = entry.relPathTree ?? entry.relPath;
     const indexSlash = pathTree.indexOf('/');
     if (indexSlash < 0) {
-      entriesDirect.push(registerDocItem({}, [entry], [...position, entriesDirect.length], context, partId));
+      entriesDirect.push(registerDocItem(
+        { id: generatedIdGet(entry.internalPath) },
+        [entry],
+        [...position, entriesDirect.length],
+        context,
+        partId,
+        generatedFrom,
+      ));
     } else {
       const subDir = pathTree.slice(0, indexSlash);
       const list = entriesBySubDir.get(subDir) ?? [];
@@ -248,21 +260,27 @@ function folderChildren(entries, position, context, partId, pathFolder) {
   }
 
   const folders = [...entriesBySubDir.entries()].map(([subDir, entriesSub], index) => {
-    const id = uniqueId(`dir-${position.join('-')}-${index}-${subDir}`, context);
     const pathSub = `${pathFolder}/${subDir}`;
+    const id = uniqueId(generatedIdGet(pathSub), context);
     return {
       $id: id,
       type: 'folder',
       name: itemNameCreate({}, itemTextResolve({}, subDir, id), context, {
         assetKey: tagSidePanelAssetKeyGet({ folderPath: pathSub }),
-        dataItem: { kind: 'folder', sourcePath: pathSub },
+        dataItem: { kind: 'folder', sourcePath: pathSub, isGenerated: Boolean(generatedFrom) },
+        generatedFrom,
         itemId: id,
       }),
       defaultOpen: true,
-      children: folderChildren(entriesSub, [...position, entriesDirect.length + index], context, partId, pathSub),
+      children: folderChildren(entriesSub, [...position, entriesDirect.length + index], context, partId, pathSub, generatedFrom),
     };
   });
   return [...entriesDirect, ...folders];
+}
+
+// the id of an item generated for a file or a folder of the source
+function generatedIdGet(internalPath) {
+  return `src-${String(internalPath).replace(/^~/, '')}`;
 }
 
 function uniqueId(idRaw, context) {
@@ -321,6 +339,17 @@ function itemNameCreate(node, label, context, options) {
     nodeSource: node.nodeSource,
     includeSource: node.includeSource,
     isPartRoot: node.part !== undefined && node.part !== false && Boolean(node.id),
+    // the doc page the node is written in: a path written into its file is
+    // one of that doc page's roots, in the local form
+    docPageAlias: node.docPageAlias ?? '',
+    // what the item is bound to: the document (full source path, or the
+    // reference written for a missing one), or the source folder it mirrors
+    bindPath: options.dataItem?.filePath ?? options.dataItem?.sourcePath ?? '',
+    isMissing: options.dataItem?.isMissing === true,
+    // an item generated from a source folder: the item of that folder ('' when
+    // the folder node has no label and its items stand in its parent) and the
+    // node that declares the folder
+    generatedFrom: options.generatedFrom,
   });
   return sidePanelItemNameCreate(node, label, context, options);
 }
@@ -408,14 +437,15 @@ function convertSourceFolder(node, position, context, partId) {
     ...entry,
     relPathTree: entry.internalPath.slice(pathFolder.length).replace(/^\//, ''),
   }));
-  const children = folderChildren(entriesRelative, position, context, partId, pathFolder);
+  const generatedFrom = { itemId: id, nodeSource: node.nodeSource, folderPath: pathFolder };
+  const children = folderChildren(entriesRelative, position, context, partId, pathFolder, generatedFrom);
   if (!isFolderItem) return children;
   return [{
     $id: id,
     type: 'folder',
     name: itemNameCreate(node, itemTextResolve(node, pathFolder.split('/').at(-1), id), context, {
       assetKey,
-      dataItem: { kind: 'folder', sourcePath: pathFolder },
+      dataItem: { kind: 'folder', sourcePath: pathFolder, isSourceFolder: true },
       itemId: id,
     }),
     collapsible: node.collapsible !== false,
@@ -424,8 +454,8 @@ function convertSourceFolder(node, position, context, partId) {
   }];
 }
 
-function registerDocItem(node, entries, position, context, partId) {
-  return docPageCreate(node, entries, position, context, false, partId).page;
+function registerDocItem(node, entries, position, context, partId, generatedFrom) {
+  return docPageCreate(node, entries, position, context, false, partId, generatedFrom).page;
 }
 
 function docFolderRegister(node, entries, position, context, partId) {
@@ -454,7 +484,7 @@ function docFolderCreate(node, position, context, { item, page }, partId) {
   };
 }
 
-function docPageCreate(node, entries, position, context, isFolderIndex = false, partId = '') {
+function docPageCreate(node, entries, position, context, isFolderIndex = false, partId = '', generatedFrom = undefined) {
   const entry = entries[0];
   const id = uniqueId(node.id ?? `doc-${position.join('-')}`, context);
   const route = itemRoute(id);
@@ -486,7 +516,9 @@ function docPageCreate(node, entries, position, context, isFolderIndex = false, 
         fileName: entry.name,
         filePath: entry.internalPath,
         isTextCustom: node.text !== undefined,
+        ...(generatedFrom ? { isGenerated: true } : {}),
       },
+      generatedFrom,
       isItemDisplayApplied: true,
       itemId: id,
     }),

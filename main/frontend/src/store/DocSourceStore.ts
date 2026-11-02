@@ -639,6 +639,39 @@ export class DocSourceStore {
     return { code: 0, data: payload.data, message: '' };
   }
 
+  // ---------- reading the source again ----------
+
+  // the development server reads the configuration and the source again
+  // and reports them as data (POST refresh): a document whose content
+  // changed is compiled again (replaceSourceData), a file added or removed
+  // where the file watcher did not see it joins or leaves the manifest
+  async sourceRefresh(): Promise<SourceResult> {
+    if (!this.isWritable) return { code: -1, message: 'The source is read again through the development server only.' };
+    return this.sourceApiCall('/refresh', { method: 'POST' });
+  }
+
+  // the documents whose links name the file, as the development server
+  // finds them (GET file/referrer): [{ docPath, count }]
+  async fileReferrerListGet(internalPath: string): Promise<SourceResult> {
+    if (!this.isWritable) return { code: -1, message: 'The documents are searched through the development server only.' };
+    return this.sourceApiCall(`/file/referrer?path=${encodeURIComponent(internalPath)}`, { method: 'GET' });
+  }
+
+  private async sourceApiCall(route: string, init: RequestInit): Promise<SourceResult> {
+    let payload: any;
+    try {
+      const response = await fetch(`${this.sourceEndpoint}${route}`, { ...init, cache: 'no-store' });
+      payload = await response.json().catch(() => undefined);
+      if (!payload || typeof payload.code !== 'number') {
+        return { code: -1, message: `the source api answered ${response.status} without a result` };
+      }
+    } catch (error: any) {
+      return { code: -1, message: `the source api is not reachable: ${String(error?.message ?? error)}` };
+    }
+    if (payload.code !== 0) return { code: payload.code, message: payload.message };
+    return { code: 0, data: payload.data, message: '' };
+  }
+
   // the source path a file of the folder would have
   filePathBuild(dirPath: string, name: string): string {
     return `${sourcePathNormalize(dirPath)}/${sourcePathNameGet(name)}`;

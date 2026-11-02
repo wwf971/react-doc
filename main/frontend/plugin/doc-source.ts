@@ -71,6 +71,7 @@ import {
 } from './doc-asset-store.ts';
 import { assetBlockTextExpand, assetUsageListScan } from '../src/lib/doc-asset-ref.js';
 import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
+import { sourceFileBackupNameIs } from './doc-source-file.ts';
 import { textLocalizedGet } from '../src/lib/text-localized.js';
 
 // vite plugin "doc-source" (design: doc_page_impl_source.md).
@@ -439,9 +440,11 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         });
       };
 
-      // a file the page created through the source api: the watcher reports
-      // the addition too, and must report it as data, not reload the page
-      const pathsCreatedByPage = new Set<string>();
+      // a file the page created through the source api, or created or
+      // deleted (moved into its backup) with a write of the edit api: the
+      // watcher reports the addition or removal too, which was already
+      // reported as data and must not reload the page
+      const pathsChangedByPage = new Set<string>();
       // the files that are never documents, as the doc pages loaded now
       // declare them (the service and component folders follow a mount);
       // declared below the middlewares, refreshed with every configuration load
@@ -471,9 +474,16 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         fileEntryListGet,
         sourceRootListGet: () => sourceRootListGet(loadConfigDoc(configFile, options), configDir),
         onFileCreated: (filePath) => {
-          pathsCreatedByPage.add(filePath);
+          pathsChangedByPage.add(filePath);
           configDataSend(loadConfigDoc(configFile, options));
         },
+        // the source read again as it is on disk now and reported as data,
+        // for a change the watcher did not see (a network folder)
+        onRefresh: () => {
+          fileEntryListCached = undefined;
+          return configurationReload();
+        },
+        referrerListGet: (internalPath) => sourceFileReferrerListGet(internalPath, loadConfigDoc(configFile, options), fileEntryListGet()),
         workspace: {
           dirBaseGet: workspaceDirBaseGet,
           // { kind: 'dir' | 'file', path, alias?, sidePanel? }: the doc page
@@ -581,6 +591,15 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
           },
           onFileListWritten: configurationFileListWritten,
         },
+        // the file operations a write performs with it: a document created
+        // for a new side-panel item, files deleted with a block or an item
+        sourceFile: {
+          create: (body) => sourceFileCreate(body, sourceRootListGet(loadConfigDoc(configFile, options), configDir), fileEntryListGet()),
+          pathListMark: (absPathList) => {
+            for (const absPath of absPathList) pathsChangedByPage.add(absPath);
+          },
+          dataReport: () => configDataSend(loadConfigDoc(configFile, options)),
+        },
         // the workspace file (doc_page_impl_source.md#editing-the-workspace-file)
         workspace: {
           fileGet: () => {
@@ -679,8 +698,10 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
           (p) => filePath === p || filePath.startsWith(p + path.sep),
         );
         if (!isRelated) return;
-        // the page created it and was already told as data
-        if (pathsCreatedByPage.delete(filePath)) return;
+        // the backup of a deleted file is never a document
+        if (sourceFileBackupNameIs(path.basename(filePath))) return;
+        // the page created or deleted it and was already told as data
+        if (pathsChangedByPage.delete(filePath)) return;
         fileEntryListCached = undefined;
         try {
           const configDocUpdated = loadConfigDoc(configFile, options);
@@ -728,6 +749,14 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
 //                                          addFolder rule; the folders on the way are created. codes:
 //                                          -1 bad request, -2 the file exists (isOverwrite false),
 //                                          -3 the folder is not in the source
+//   POST {endpoint}/refresh                the configuration and the source read again from disk and
+//                                          reported to the page as data, without a reload (a change the
+//                                          file watcher missed, such as on a network folder)
+//   GET  {endpoint}/file/referrer?path=~page:root/a.md
+//                                          -> { code, data: { referrerList: [{ docPath, count }] } }
+//                                          the documents whose links, images or inline targets resolve
+//                                          to the file, as the page resolves them (asked before the
+//                                          file is deleted)
 //
 // only source paths resolve; a query is never used as a file path. the folder
 // of a "direct" rule accepts files right in it only; "recursive" and
@@ -739,6 +768,10 @@ type SourceMiddlewareOptions = {
   fileEntryListGet: () => FileEntry[];
   sourceRootListGet: () => SourceRoot[];
   onFileCreated: (filePath: string) => void;
+  // POST refresh: '' when the configuration loads, else why not
+  onRefresh?: () => string;
+  // GET file/referrer
+  referrerListGet?: (internalPath: string) => { docPath: string; count: number }[];
   // the folder a relative path typed in the page is read from (os/list,
   // workspace/mount); the temporary doc pages, mounted and unmounted
   workspace?: {
@@ -749,7 +782,7 @@ type SourceMiddlewareOptions = {
 };
 
 export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
-  const { endpoint, fileEntryListGet, sourceRootListGet, onFileCreated, workspace } = options;
+  const { endpoint, fileEntryListGet, sourceRootListGet, onFileCreated, onRefresh, referrerListGet, workspace } = options;
   const textSend = (res: ServerResponse, statusCode: number, text: string) => {
     res.statusCode = statusCode;
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -764,12 +797,35 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const route = url.pathname.startsWith(`${endpoint}/`) ? url.pathname.slice(endpoint.length) : '';
     const isWorkspaceRoute = route === '/os/list' || route === '/workspace/mount' || route === '/workspace/unmount';
-    if (route !== '/file' && route !== '/data' && route !== '/file/create' && !isWorkspaceRoute) {
+    const isOwnRoute = route === '/file' || route === '/data' || route === '/file/create' || route === '/refresh' || route === '/file/referrer';
+    if (!isOwnRoute && !isWorkspaceRoute) {
       next();
       return;
     }
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    if (route === '/refresh') {
+      if (req.method !== 'POST') {
+        res.setHeader('Allow', 'POST');
+        jsonSend(res, 405, { code: -1, data: null, message: 'refresh answers POST only' });
+        return;
+      }
+      const message = onRefresh ? onRefresh() : 'the server cannot read the source again';
+      jsonSend(res, message === '' ? 200 : 400, { code: message === '' ? 0 : -1, data: null, message });
+      return;
+    }
+
+    if (route === '/file/referrer') {
+      const internalPath = sourcePathNormalize(url.searchParams.get('path') ?? '');
+      if (!fileEntryListGet().some((item) => item.internalPath === internalPath)) {
+        jsonSend(res, 404, { code: -3, data: null, message: `not a file of the collected source: ${internalPath}` });
+        return;
+      }
+      const referrerList = referrerListGet ? referrerListGet(internalPath) : [];
+      jsonSend(res, 200, { code: 0, data: { referrerList }, message: '' });
+      return;
+    }
 
     if (isWorkspaceRoute) {
       if (!workspace) {
@@ -1563,6 +1619,8 @@ function walkFiles(dirAbs: string, isRecursive: boolean, exclude?: ExcludeMatche
       if (!isRecursive || exclude?.isExcluded(relPath, true)) continue;
       result.push(...walkFiles(itemAbs, true, exclude, relPath));
     } else if (item.isFile()) {
+      // the backup of a file deleted from the page (doc-source-file.ts)
+      if (sourceFileBackupNameIs(item.name)) continue;
       if (!exclude?.isExcluded(relPath, false)) result.push(itemAbs);
     }
   }
@@ -1689,6 +1747,37 @@ export function pruneSourceToSidePanel(
     collected(docSourceDependenciesCollect(text, entry, configDoc, collectByCompId), entry.internalPath);
   }
   return entries.filter((entry) => pathsRetained.has(entry.internalPath));
+}
+
+// the documents that name a file: every link, image, inline target and
+// component reference the dependency scan finds (doc-source-dependency.ts,
+// the scan of pruning), resolved as the page resolves it (the document's
+// own doc page first). a target matching several files counts for each of
+// them, so a file is never reported unused while a link may reach it.
+// a document naming itself is not counted.
+export function sourceFileReferrerListGet(
+  internalPath: string,
+  configDoc: any,
+  entries: FileEntry[],
+): { docPath: string; count: number }[] {
+  const sourceIndex = sourceIndexBuild(entries);
+  const referrerList: { docPath: string; count: number }[] = [];
+  for (const entry of entries) {
+    if ((entry.ext !== 'md' && entry.ext !== 'mdx') || entry.internalPath === internalPath) continue;
+    let text = '';
+    try {
+      text = fs.readFileSync(entry.absPath, 'utf-8');
+    } catch {
+      continue;
+    }
+    let count = 0;
+    for (const dependency of docSourceDependenciesCollect(text, entry, configDoc).dependencyList) {
+      const { entryList } = docTargetResolve(dependency.target, dependency.sourcePath, sourceIndex) as { entryList: FileEntry[] };
+      if (entryList.some((item) => item.internalPath === internalPath)) count++;
+    }
+    if (count > 0) referrerList.push({ docPath: entry.internalPath, count });
+  }
+  return referrerList;
 }
 
 // same rules as at runtime: documents and assets through docTargetResolve

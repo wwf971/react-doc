@@ -97,6 +97,27 @@ export function docEditApiCreate(endpoint, { onUnreachable } = {}) {
       });
     },
 
+    // inserts, removes or binds one node of a side-panel file
+    // (plugin/doc-side-panel-node.ts); answers { fileChangeList, fileCreated,
+    // fileDeletedList }
+    //   file                 the side-panel file, relative to the config directory
+    //   request              { action: 'insert' | 'remove' | 'bind', ... }
+    //   hashBase             the hash of the file the page was built from
+    //   fileCreate           optional { dirPath, name, text }: the document
+    //                        created for an inserted document node
+    //   filePathDeleteList   optional: the document of a removed node, deleted
+    //                        with it (moved into a recoverable backup)
+    sidePanelNodeApply({ file, request, hashBase, fileCreate, filePathDeleteList }) {
+      const body = { file, request, hashBase };
+      if (fileCreate) body.fileCreate = fileCreate;
+      if (Array.isArray(filePathDeleteList) && filePathDeleteList.length > 0) body.filePathDeleteList = filePathDeleteList;
+      return requestSend('/side-panel/node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    },
+
     // writes one value of a config declaration of the doc page, in place;
     // answers { file, keyPath, value }
     //   file        the file of the declaration, relative to the config directory

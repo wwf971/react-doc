@@ -2,6 +2,8 @@ import { makeAutoObservable, observable, runInAction } from 'mobx';
 import type { DocSourceStore, SourceResult } from './DocSourceStore.js';
 import { sourcePathIsRooted, sourcePathNormalize } from '../lib/doc-source-path.js';
 
+type SourcePathSpec = { kind: 'dir' | 'file' | 'any'; rootList?: string[]; [key: string]: unknown };
+
 // The file-creation service of the doc page source service layer as the page offers it to
 // components (design: doc_page_impl_source.md#creating-files). A component
 // that holds bytes to keep (an image pasted into Image) reports
@@ -31,14 +33,42 @@ import { sourcePathIsRooted, sourcePathNormalize } from '../lib/doc-source-path.
 // a click outside that editor (SourceFilePrompt carries the edit-popup
 // marker, use-edit-outside-pointer.js), so the draft the file is for stays
 // active until the path reaches it.
+//
+// the prompt is the location chooser of the layer, not only of
+// fileCreateRequest: locationChoose(option, apply) opens it with the
+// folders a caller allows (spec, e.g. the roots of one doc page), its own
+// title and action, and runs apply(location) for the confirmed location,
+// keeping the prompt open with the failure until apply succeeds or the
+// prompt is dismissed. a new document of the side panel is created this way
+// (DocSidePanelStore, doc_page_impl_side_panel.md#changing-the-structure).
 
 type SourcePoint = { clientX: number; clientY: number };
 
 type SourceLocation = { dirPath: string; name: string };
 
+// what a caller of locationChoose says about its prompt
+export type SourceLocationOption = {
+  dirPath: string;
+  name: string;
+  point?: SourcePoint;
+  anchorElement?: HTMLElement;
+  // the folders offered; { kind: 'dir' } (every folder of the source) by default
+  spec?: SourcePathSpec;
+  title?: string;
+  actionText?: string;
+  pendingText?: string;
+  // '' when the name can be used, else why not (checked on confirm)
+  nameCheck?: (name: string) => string;
+};
+
 export type SourceFilePrompt = {
   dirPath: string;
   name: string;
+  spec: SourcePathSpec;
+  title: string;
+  actionText: string;
+  pendingText: string;
+  nameCheck?: (name: string) => string;
   status: 'open' | 'submitting' | 'error';
   message: string;
   // where the pointer was when the request was made (the prompt opens there
@@ -86,14 +116,22 @@ export class DocSourceFileStore {
     const dirPath = this.sourceStore.pathFullGet(String(data.dirPath ?? ''), fromPath);
     const isPromptNeeded = data.isLocationCustom === true || !sourcePathIsRooted(dirPath);
     if (!isPromptNeeded) return this.fileCreateApply({ dirPath, name }, data);
+    return this.locationChoose(
+      { dirPath, name, point, anchorElement: data.anchorElement },
+      (location) => this.fileCreateApply(location, data),
+    );
+  }
 
-    // the person chooses the location; a failed creation keeps the prompt
-    // open with the message, and a new confirmation tries again
-    this.promptOpen(dirPath, name, point, data.anchorElement);
+  // the person chooses a location in the prompt, then apply(location) runs;
+  // a failure keeps the prompt open with its message, and a new
+  // confirmation tries again. answers what apply answered, or a failure
+  // when the prompt is dismissed
+  async locationChoose(option: SourceLocationOption, apply: (location: SourceLocation) => Promise<SourceResult>): Promise<SourceResult> {
+    this.promptOpen(option);
     while (this.prompt) {
       const location = await this.promptLocationAwait();
-      if (!location) return { code: -1, message: 'The file was not created: no folder was chosen.' };
-      const result = await this.fileCreateApply(location, data);
+      if (!location) return { code: -1, message: 'Nothing was created: no folder was chosen.' };
+      const result = await apply(location);
       if (result.code === 0) {
         runInAction(() => { this.prompt = undefined; });
         return result;
@@ -104,7 +142,7 @@ export class DocSourceFileStore {
         this.prompt.message = result.message;
       });
     }
-    return { code: -1, message: 'The file was not created: the prompt was dismissed.' };
+    return { code: -1, message: 'Nothing was created: the prompt was dismissed.' };
   }
 
   // only the fields of the write request: nothing else of the event data
@@ -116,17 +154,33 @@ export class DocSourceFileStore {
 
   // ---------- the location prompt ----------
 
-  private promptOpen(dirPath: string, name: string, point?: SourcePoint, anchorElement?: HTMLElement): void {
+  private promptOpen(option: SourceLocationOption): void {
     this.prompt?.resolve(undefined);
+    const spec = option.spec ?? { kind: 'dir' };
     this.prompt = {
-      dirPath: dirPath || this.sourceStore.dirListWritable[0]?.internalPath || '',
-      name,
+      dirPath: option.dirPath || this.promptDirListGet(spec)[0] || '',
+      name: option.name,
+      spec,
+      title: option.title ?? 'Save file to',
+      actionText: option.actionText ?? 'Create',
+      pendingText: option.pendingText ?? 'Creating the file…',
+      nameCheck: option.nameCheck,
       status: 'open',
       message: '',
-      point,
-      anchorElement,
+      point: option.point,
+      anchorElement: option.anchorElement,
       resolve: () => {},
     };
+  }
+
+  // the folders the prompt accepts: folders of the source a file can be
+  // written to, narrowed by the prompt's specification
+  private promptDirListGet(spec: SourcePathSpec): string[] {
+    const dirPathList = this.sourceStore.dirListWritable.map((dir) => dir.internalPath);
+    const isNarrowed = Object.keys(spec).some((key) => key !== 'kind');
+    if (!isNarrowed) return dirPathList;
+    const pathAllowedSet = new Set(this.sourceStore.pathComplete('', spec).map((candidate: any) => candidate.path));
+    return dirPathList.filter((dirPath) => pathAllowedSet.has(dirPath));
   }
 
   private promptLocationAwait(): Promise<SourceLocation | undefined> {
@@ -155,10 +209,11 @@ export class DocSourceFileStore {
     this.prompt.name = name.trim();
   }
 
-  // the folder must be one of the source: a folder the completion knows
+  // the folder must be one of the source the prompt offers
   get promptDirPathIsValid(): boolean {
-    const dirPath = this.prompt?.dirPath ?? '';
-    return sourcePathIsRooted(dirPath) && this.sourceStore.dirListWritable.some((dir) => dir.internalPath === dirPath);
+    const prompt = this.prompt;
+    const dirPath = prompt?.dirPath ?? '';
+    return Boolean(prompt) && sourcePathIsRooted(dirPath) && this.promptDirListGet(prompt!.spec).includes(dirPath);
   }
 
   promptConfirm(): void {
@@ -172,6 +227,12 @@ export class DocSourceFileStore {
     if (!prompt.name) {
       prompt.status = 'error';
       prompt.message = 'The file needs a name.';
+      return;
+    }
+    const nameMessage = prompt.nameCheck?.(prompt.name) ?? '';
+    if (nameMessage) {
+      prompt.status = 'error';
+      prompt.message = nameMessage;
       return;
     }
     prompt.status = 'submitting';

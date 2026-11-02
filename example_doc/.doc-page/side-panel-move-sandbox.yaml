@@ -1,9 +1,11 @@
-# Side panel of the "Move Sandbox" folder of side-panel.yaml, included
+# Side panel of the "Side Panel Sandbox" folder of side-panel.yaml, included
 # there through "include". A resource file (no entry, no part): its items
 # and the items written under the folder in side-panel.yaml belong to
 # the same scope, so in edit mode they move freely between the two files.
-# Free to change: moving items rewrites this file, in place.
-# design: doc_page_impl_side_panel.md#moving-an-item
+# Free to change: moving, inserting, binding and removing items rewrite this
+# file, in place.
+# design: doc_page_impl_side_panel.md#moving-an-item,
+#         doc_page_impl_side_panel.md#changing-the-structure
 sidePanelById:
   main:
     tree:
@@ -18,3 +20,8 @@ sidePanelById:
             text: Included B
             inline:
               content: An inline page inside a folder of `.doc-page/side-panel-move-sandbox.yaml`.
+      # mirrors a source folder: its files and subfolders are generated
+      # items, which follow the files (doc_page_impl_side_panel.md#an-item-mirroring-a-source-folder)
+      - id: move-included-mirror
+        text: Mirrored Folder
+        sourceFolder: ~example/side-panel-move/mirrored

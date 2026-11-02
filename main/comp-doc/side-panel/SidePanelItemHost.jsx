@@ -48,8 +48,14 @@ export const SidePanelItemSurfaceContext = createContext('sidebar');
 // (data-side-panel-item-id), which the drag uses to find the rows; its
 // mousedown is kept from the browser, so a link row is not dragged as a
 // link nor its text selected. a right click on the row opens the context
-// menu of the item (SidePanelItemContextMenu: Rename, Move…) instead of the
-// browser's, when the item can be renamed or moved.
+// menu of the item (SidePanelItemContextMenu: Rename, Move…, Refresh, the
+// structure changes) instead of the browser's, for every item in edit mode;
+// the "more" button of the label opens the same menu under it.
+//
+// in edit mode an item bound to a file or folder can have it read again
+// (doc_page_impl_side_panel.md#reading-an-item-again): the renderer receives
+//   config.isRefreshable, config.refreshStatus, config.refreshMessage
+// and reports sidePanelItemRefreshRequest (its refresh button).
 export const SidePanelItemHost = observer(function SidePanelItemHost({
   assetKey,
   compName,
@@ -90,8 +96,13 @@ export const SidePanelItemHost = observer(function SidePanelItemHost({
   useEffect(() => () => editStore.sidePanelTextOwnerRelease(instanceId), [editStore, instanceId]);
   const isMovable = surface === 'sidebar' && sidePanelStore.itemIsMovable(itemId);
   const isDragged = sidePanelStore.drag?.itemId === itemId;
-  // the context menu needs the Menu the host application injects
-  const isContextMenuAvailable = Boolean(componentConfig.Menu) && (isTextEditable || isMovable);
+  const isRefreshable = surface === 'sidebar' && sidePanelStore.itemIsRefreshable(itemId);
+  const refreshStatus = sidePanelStore.refresh?.itemId === itemId ? sidePanelStore.refresh.status : '';
+  const refreshMessage = sidePanelStore.refresh?.itemId === itemId ? sidePanelStore.refresh.message : '';
+  // the context menu needs the Menu the host application injects; in edit
+  // mode every item has one (what does not apply is disabled with a reason)
+  const isContextMenuAvailable = Boolean(componentConfig.Menu) && surface === 'sidebar' && sidePanelStore.isMoveAvailable;
+  const contextMenuOpen = (point) => sidePanelStore.contextMenuOpen(itemId, instanceId, { clientX: point.clientX, clientY: point.clientY });
   const moveDispatch = (position, targetItemId, point) => {
     const event = eventRouter.eventBuild({
       type: 'sidePanelItemMoveRequest',
@@ -128,7 +139,7 @@ export const SidePanelItemHost = observer(function SidePanelItemHost({
             if (event.target instanceof Element && event.target.closest('[contenteditable="true"], [contenteditable="plaintext-only"]')) return;
             event.preventDefault();
             event.stopPropagation();
-            sidePanelStore.contextMenuOpen(itemId, instanceId, { clientX: event.clientX, clientY: event.clientY });
+            contextMenuOpen(event);
           }
         : undefined}
     >
@@ -139,10 +150,14 @@ export const SidePanelItemHost = observer(function SidePanelItemHost({
           configGlobal: configStore.configGlobal,
           configService: configStore.configService,
           instanceId,
+          isMenuAvailable: isContextMenuAvailable,
           isMovable,
+          isRefreshable,
           isTagOverviewAvailable,
           isTextEditable,
           itemId,
+          refreshMessage,
+          refreshStatus,
           surface,
           tagService: tagStore.tagService,
           textEditMessage: textEdit.message,
@@ -157,6 +172,15 @@ export const SidePanelItemHost = observer(function SidePanelItemHost({
           }
           if (eventType === 'sidePanelItemMovePickerOpenRequest' && !isMovable) {
             return { code: -1, message: 'this item is not moved from here' };
+          }
+          if (eventType === 'sidePanelItemRefreshRequest' && !isRefreshable) {
+            return { code: -1, message: 'this item is not read again from here' };
+          }
+          // the menu belongs to this rendering: Rename in it edits this label
+          if (eventType === 'sidePanelItemMenuOpenRequest') {
+            if (!isContextMenuAvailable || !eventData.point) return { code: -1, message: 'this item has no menu here' };
+            contextMenuOpen(eventData.point);
+            return { code: 0 };
           }
           if (eventType !== 'tagOverviewOpenRequest' || !isTagOverviewAvailable) return undefined;
           return tagStore.overviewOpen(eventData.tagId) ? { code: 0 } : { code: -1, message: 'tag overview not available' };

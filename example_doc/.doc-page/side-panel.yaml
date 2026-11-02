@@ -40,12 +40,13 @@ sidePanelById:
       - doc: ~example/mdx-doc-edit-in-place.md
         text: MDX Document In-place Editing
         tags: [guide]
-      # moving items in edit mode (MDX Document In-place Editing, "Moving side-panel
-      # items"): the first items of this folder come from an included
-      # resource file, the last ones are written here, so an item can be
-      # moved from one file to the other. free to change.
+      # moving and changing items in edit mode (MDX Document In-place Editing,
+      # "Moving side-panel items", "Changing the side panel"): the first items
+      # of this folder come from an included resource file, the last ones are
+      # written here, so an item can be moved from one file to the other.
+      # free to change.
       - id: move-sandbox
-        text: Move Sandbox
+        text: Side Panel Sandbox
         include: ./side-panel-move-sandbox.yaml
         children:
           - id: move-local-c

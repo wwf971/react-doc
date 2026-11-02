@@ -31,6 +31,10 @@ How the list is kept (also in `AGENTS.md`):
 
 - <a id="edit-undo"></a>**Undo and redo.** Every write of the edit layer is already recorded with the texts before and after (`DocEditStore.historyRecord`, [History records](doc_page_impl_edit.md#history-records)); what is missing is the routes that write a record back (`historyUndoRequest` / `historyRedoRequest` through the router's `dispatch`, [Extending the layer](doc_page_impl_event.md#extending-the-layer)), refusing where the file is no longer the text after.
 
+## Source
+
+- <a id="source-file-rename"></a>**Renaming and moving a file from the page.** A file is created and deleted from the page ([creating and deleting files](doc_page_impl_source.md#creating-and-deleting-files)), but renamed or moved only on disk, where every link to it, every side-panel `doc` and every asset dependency naming it breaks. A rename from the page would rewrite those references in the same request. The referrer scan (`GET file/referrer`: the links of every document resolved as the page resolves them) already finds the documents to rewrite, the side-panel nodes are found through `nodeSource`, and the file operations of `plugin/doc-source-file.ts` are where a rename with its rollback belongs.
+
 ## Events and component state
 
 - <a id="event-subscription"></a>**Subscriptions: events delivered to components.** The event layer carries reports *from* components and answers them; a component wanting to be told when its asset object changes asks (`assetRefreshRequest`, [Changes made by others](doc_page_impl_mdx_comp.md#changes-made-by-others)). A subscription needs the second direction: a component registers for `{ type, subject }`, a domain publishes what it observes (the asset service layer on `doc-asset-change`), the router delivers until the component unmounts ([Extending the layer](doc_page_impl_event.md#extending-the-layer)). The same channel would carry the service events below.

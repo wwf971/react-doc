@@ -2,7 +2,7 @@
 
 # Doc Page Source Service Layer
 
-The **doc page source service layer** is everything the page knows about the files it serves: which doc pages make up the workspace, which files and folders form the source of each, how every file is named, which of them are pages, how their bytes are reached, and how a file is created from the page. It is the ground the other layers stand on: documents and links ([navigation](doc_page_impl_nav.md)), tags and config declared per file ([tags](doc_page_impl_tag.md), [config](doc_page_impl_config.md)), the files the [asset service layer](doc_page_impl_asset.md) depends on, and the files components refer to or create ([MDX components](doc_page_impl_mdx_comp.md)).
+The **doc page source service layer** is everything the page knows about the files it serves: which doc pages make up the workspace, which files and folders form the source of each, how every file is named, which of them are pages, how their bytes are reached, and how a file is created or deleted from the page. It is the ground the other layers stand on: documents and links ([navigation](doc_page_impl_nav.md)), tags and config declared per file ([tags](doc_page_impl_tag.md), [config](doc_page_impl_config.md)), the files the [asset service layer](doc_page_impl_asset.md) depends on, and the files components refer to or create ([MDX components](doc_page_impl_mdx_comp.md)).
 
 ```text
 config.yaml: workspace | docEntry ──► vite plugin "doc-source" (build / dev)
@@ -10,12 +10,12 @@ config.yaml: workspace | docEntry ──► vite plugin "doc-source" (build / de
                                         ├── scanSource        file entries   { docPageAlias, rootAlias, relPath, internalPath, collect, ... }
                                         ├── scanSourceDirs    folder entries { docPageAlias, rootAlias, relPath, internalPath, collect }
                                         ├── dev api {base}/__doc-source: file text, file bytes, file creation,
-                                        │     os folder listing, temporary doc pages
+                                        │     refresh, referrers of a file, os folder listing, temporary doc pages
                                         └── virtual:doc-source: configDoc (with workspace), fileManifest, dirManifest,
                                             fileUrlByPath, docSourceEndpoint
                                                 ▼
 page: DocSourceStore (the source as the page reads it, sourceService for components)
-      DocSourceFileStore (file creation requested by components, the location prompt)
+      DocSourceFileStore (file creation requested by components, the location prompt and its chooser)
       DocWorkspaceStore (the workspace as the settings panel draws and edits it)
 ```
 
@@ -304,10 +304,12 @@ The development server answers `{base}/__doc-source` (exported as `docSourceEndp
 | `GET /file?path=~page:root/a.md` | the current text of a collected file, `text/plain`, never cached (the page reads documents through it in development) |
 | `GET /data?path=~page:root/image/a.png` | the bytes of a collected file with their mime type, binary or text |
 | `POST /file/create` `{ dirPath, name, text \| dataBase64, isOverwrite? }` | writes a file into a folder of the source; `{ code: 0, data: { path, entry } }`, `-1` invalid, `-2` the file exists, `-3` the folder is not collected by any rule |
+| `POST /refresh` | the configuration and the source read again from disk and reported as data, without a reload: for a change the file watcher did not see ([reading an item again](doc_page_impl_side_panel.md#reading-an-item-again)) |
+| `GET /file/referrer?path=~page:root/a.md` | `{ referrerList: [{ docPath, count }] }`: the documents whose links, images and inline targets resolve to the file, the way the page resolves them (asked before a file is deleted) |
 | `GET /os/list?path=` | a folder of the file system, for [os path completion](#os-path-completion) |
 | `POST /workspace/mount`, `/workspace/unmount` | [temporary doc pages](#temporary-doc-pages) |
 
-A file the page creates joins the manifest at once: the plugin remembers the path it just wrote, and when the file watcher reports the new file, the source data is sent to the page without a full reload (`doc-source-change`), so the page keeps its state and the new entry appears. Every path in the api is a source path, the full form; a folder in the local form is accepted for creation when exactly one doc page has the root. A folder is accepted for creation only when a folder rule of the same root collects it (inside a recursive or referenced folder, or the folder of a direct rule itself).
+A file the page creates or deletes joins or leaves the manifest at once: the plugin remembers the paths it just changed (created, deleted, written as backups), and when the file watcher reports them, the source data has already been sent to the page without a full reload (`doc-source-change`), so the page keeps its state; a file added or removed by anyone else still reloads the page. Every path in the api is a source path, the full form; a folder in the local form is accepted for creation when exactly one doc page has the root. A folder is accepted for creation only when a folder rule of the same root collects it (inside a recursive or referenced folder, or the folder of a direct rule itself).
 
 The development server also tells the service backend which doc pages the page has loaded: `POST {base}/__doc-service/registry/docpage/sync` is answered by the plugin itself, under the forwarded service api ([the Vite plugin](doc_page_impl_service.md#the-vite-plugin)). The request body is ignored; the plugin builds `{ docPageList: [{ alias, dir, serviceFile }], packageList: [{ name, dir }] }` from the workspace as it is loaded at request time (root doc pages, included ones and temporary mounts; a doc page with `service: false` is left out), `dir` the absolute doc page folder and `serviceFile` the absolute service config file when the entry names one or `.doc-page/service.yaml` exists, `''` otherwise, forwards it to the backend's route of the same name and answers the backend's answer (`{ code: -5 }`, http 503, when the backend is down). `DocServiceStore` calls it when the backend comes up and after the workspace changes, so the backend's registry follows the Workspace tab.
 
@@ -371,7 +373,7 @@ message
 
 Every place that asks for a path uses it with its specification: the location prompt of a new file a folder (`{ kind: 'dir' }`, tree folded), the copy / move dialog a document (`{ kind: 'file', extList: ['md', 'mdx'] }`, [copying and moving blocks](doc_page_impl_block_ops.md#the-dialog)).
 
-## Creating files
+## Creating and deleting files
 
 A component that holds bytes to keep, such as an image pasted into `Image`, does not write them itself. It reports the request through the event layer, and the **source route** answers it from `DocSourceFileStore`:
 
@@ -388,6 +390,21 @@ fileCreateRequest { name, blob | text, dirPath, isLocationCustom, anchorElement?
 
 The two requests keep the component thin: it knows how to turn a clipboard into a file name and bytes, and how to write its own data with a new source; where the file goes, how it is written, and whether the data is a block of the document or a version of an asset are decided by the page.
 
+**The location prompt as a chooser.** The prompt is not tied to `fileCreateRequest`: `DocSourceFileStore.locationChoose(option, apply)` opens it with the folders a caller allows (`spec`, a [source path specification](#path-completion), such as the roots of one doc page), its own title, action and pending text, and a check of the name, then runs `apply(location)` for each confirmed location, keeping the prompt open with the failure until `apply` succeeds or the prompt is dismissed. `fileCreateRequest` is one caller (every folder of the source, "Save file to"); a new document of the side panel is another ([changing the structure](doc_page_impl_side_panel.md#changing-the-structure)), whose `apply` creates the file and its item in one write.
+
+**Deleting files.** A file is deleted from the page only together with the write that makes it unused, in the same request: a block deleted with the files it offered ([deleting blocks](doc_page_impl_block_ops.md#deleting-blocks)), a side-panel item removed with its document ([changing the structure](doc_page_impl_side_panel.md#changing-the-structure)). Two requests would leave the block or the item without its file, or the file without them, when the second one fails. The routes of those writes use the file operations of this layer on the development server (`plugin/doc-source-file.ts`):
+
+```text
+sourceFileDeleteListResolve(paths)   each a collected regular file (lstat: a symlink is not), none of
+                                     them the file being written; else the whole request is refused
+sourceFileBackupMove(files)          each renamed into a hidden backup beside it,
+                                     .{name}.{uuid}.deleted
+  ... the write (a document, a side-panel file)
+sourceFileBackupRestore(moved)       on a failure: the backups renamed back, in reverse order
+```
+
+A backup is never collected, whatever the rules say (`sourceFileBackupNameIs`), so it appears in no tree and no search, and restoring a file is renaming its backup on disk; there is no undo in the page. Before an item's document is deleted the page asks who still names it (`GET file/referrer`): the dependency scan of [pruning](doc_page_impl.md#source-pruning-for-deployment) over every document, its targets resolved as the page resolves links, the document's own doc page first; a target matching several files counts for each, so a file is never reported unused while a link may reach it. After the deletion those links show as links to a missing file, as they would for a file removed on disk. Renaming or moving a file, which would rewrite the links instead, is not offered ([TODO](doc_page_impl_TODO.md#source-file-rename)).
+
 ## Code map
 
 | Place | Role |
@@ -398,15 +415,16 @@ The two requests keep the component thin: it knows how to turn a clipboard into 
 | `lib/doc-workspace-graph.js` | the workspace as a graph for the Workspace tab |
 | `lib/doc-os-path-complete.js` | os path completion: the listings by folder, the candidates of the current text |
 | `plugin/doc-source-exclude.ts` | the `exclude` patterns of an addFolder rule |
+| `plugin/doc-source-file.ts` | deleting files of the source into hidden backups, and restoring them |
 | `plugin/doc-workspace-edit.ts` | a change of the workspace file as line operations |
 | `plugin/doc-sidebar-effective.ts` | the side panel shown: one effective occurrence per doc page, the root row of a mount hidden |
 | `plugin/doc-entry.ts` | the workspace and its doc pages: `docWorkspaceLoad`, `docEntryLoad` (a virtual workspace), aliases, mentions, root aliases of the rules |
-| `plugin/doc-source.ts` | `config.yaml` workspace / docEntry, temporary doc pages, rules, collection, the folders kept out by convention, folder manifest, source api (os listing, mounts), module generation (the component mounts included) |
+| `plugin/doc-source.ts` | `config.yaml` workspace / docEntry, temporary doc pages, rules, collection, the folders kept out by convention, folder manifest, source api (file creation, refresh, referrers, os listing, mounts), module generation (the component mounts included) |
 | `plugin/doc-service-server.ts` | the service folders of a doc page (`SERVICE_CONFIG_FILE_NAME`, `SERVICE_FOLDER_DEFAULT_LIST`), the forwarded service api and its sync route |
 | `plugin/doc-comp-config.ts` | the component folders of a doc page (`COMP_CONFIG_FILE_NAME`, `COMP_FOLDER_DEFAULT_LIST`) and their `comp.yaml` manifests |
 | `plugin/doc-attachment.ts` | the files components name, the mime types, the data urls of a build |
-| `store/DocSourceStore.ts` | the source as the page reads it, the doc pages, the service object (`config.source`) |
-| `store/DocSourceFileStore.ts` | file creation requests, the location prompt |
+| `store/DocSourceStore.ts` | the source as the page reads it, the doc pages, the service object (`config.source`), refresh and referrers |
+| `store/DocSourceFileStore.ts` | file creation requests, the location prompt and its chooser (`locationChoose`) |
 | `store/DocWorkspaceStore.ts` | the graph of the Workspace tab, the node chosen, the positions; the lock, edits of the workspace file, mounts |
 | `comp-doc/source/SourcePathInput.jsx`, `SourceTreeSelect.jsx`, `SourcePathPicker.jsx`, `SourceFilePrompt.jsx` | the path input with completion, the tree view, the two as one path picker, the location prompt |
 | `comp-doc/source/OsPathInput.jsx` | a path of the file system with completion |

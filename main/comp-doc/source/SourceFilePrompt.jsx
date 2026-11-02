@@ -14,7 +14,10 @@ import './DocSource.css';
 // placed in the element the request anchored it to (the figure of the
 // Image: it then scrolls with the image, in a scrolling container and on
 // the page alike), else it floats where the pointer was when the file was
-// requested (or at the top center of the page). it holds the folder
+// requested (or at the top center of the page). its title, action and the
+// folders it offers are the caller's (DocSourceFileStore.locationChoose:
+// "Save file to" every folder for a pasted file, "New document" the roots of
+// one doc page for the side panel). it holds the folder
 // (SourcePathPicker: typed with completion from the folders of the source,
 // or picked from them as a tree behind its browse button), the file name,
 // Create and Cancel. Escape cancels; a pointer going down outside it
@@ -66,7 +69,7 @@ export const SourceFilePrompt = observer(function SourceFilePrompt() {
       ref={elementRef}
       className={`doc-popover-form doc-source-prompt not-prose ${EDIT_POPUP_CLASS}`}
       role="dialog"
-      aria-label="Save the file to a folder of the source"
+      aria-label={prompt.title}
       style={style}
       onKeyDown={(event) => {
         if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
@@ -75,10 +78,10 @@ export const SourceFilePrompt = observer(function SourceFilePrompt() {
         }
       }}
     >
-      <p className="doc-source-prompt-title">Save file to</p>
+      <p className="doc-source-prompt-title">{prompt.title}</p>
       <SourcePathPicker
         value={prompt.dirPath}
-        spec={{ kind: 'dir' }}
+        spec={prompt.spec}
         label="folder"
         placeholder="~page:root/folder"
         isDisabled={isSubmitting}
@@ -96,12 +99,12 @@ export const SourceFilePrompt = observer(function SourceFilePrompt() {
         />
       </label>
       <div className="doc-source-prompt-actions">
-        <button type="button" className="doc-button-dialog doc-source-prompt-button" disabled={isSubmitting} onClick={() => sourceFileStore.promptConfirm()}>Create</button>
+        <button type="button" className="doc-button-dialog doc-source-prompt-button" disabled={isSubmitting} onClick={() => sourceFileStore.promptConfirm()}>{prompt.actionText}</button>
         <button type="button" className="doc-button-dialog doc-source-prompt-button" disabled={isSubmitting} onClick={() => sourceFileStore.promptCancel()}>Cancel</button>
         {isSubmitting ? (
           <span className="doc-status" role="status">
             <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-spin" />
-            <span>Creating the file…</span>
+            <span>{prompt.pendingText}</span>
           </span>
         ) : null}
       </div>

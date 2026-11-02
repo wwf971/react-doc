@@ -46,34 +46,53 @@
   text-underline-offset: 3px;
 }
 
-/* the edit and move buttons hang off a zero-width anchor right after the
-   label, so they take no room in the row. they look like buttons of the
-   block toolbar (DocEdit.css .doc-edit-toolbar-actions): no frame of their
-   own, the muted icon, the accent background on hover. they are invisible
-   until the row or a button itself is hovered, but always take the pointer,
-   so the click never falls through to the sidebar link below them. */
-.doc-side-panel-item-edit {
+/* the buttons of the label (rename, move, refresh, more) float in a small
+   group at the right end of the row, over the end of the label, inside the
+   label host (left of a folder's chevron): they take no room and never leave
+   the row, whatever the length of the label. the group looks like a button
+   group of the block toolbar (.doc-button-group: a framed chip, the muted
+   icons, the accent on hover). it is invisible until the row or the group is
+   hovered, but always takes the pointer, so a click on it never falls
+   through to the sidebar link below it. the zero-size element in the flow
+   (.doc-side-panel-item-edit) only carries it. */
+.doc-side-panel-item[data-surface='sidebar'] {
   position: relative;
-  display: inline-block;
+}
+
+.doc-side-panel-item-edit {
+  display: inline;
   width: 0;
   height: 0;
-  vertical-align: middle;
 }
 
 .doc-side-panel-item-edit-group {
   position: absolute;
-  top: -9px;
-  left: 5px;
+  top: 50%;
+  right: 0;
+  z-index: 1;
   display: inline-flex;
   gap: 1px;
+  padding: 1px;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-background);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 10%);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 80ms ease;
 }
 
-/* a .doc-button-icon, shown while the row is hovered */
+.doc-side-panel-item:hover .doc-side-panel-item-edit-group,
+.doc-side-panel-item-edit-group:hover,
+.doc-side-panel-item-edit-group:focus-within,
+.doc-side-panel-item-edit-group:has([data-status]) {
+  opacity: 1;
+}
+
+/* a .doc-button-icon */
 .doc-side-panel-item-edit-button {
   width: 18px;
   height: 18px;
-  opacity: 0;
-  transition: opacity 80ms ease;
 }
 
 /* the sidebar link sizes every svg inside it ([&_svg]:size-4); the icon of
@@ -81,12 +100,6 @@
 .doc-side-panel-item-edit-button .doc-side-panel-item-edit-icon {
   width: 11px;
   height: 11px;
-}
-
-.doc-side-panel-item:hover .doc-side-panel-item-edit-button,
-.doc-side-panel-item-edit-button:hover,
-.doc-side-panel-item-edit-button:focus-visible {
-  opacity: 1;
 }
 
 /* ---------- moving (edit mode, sidebar surface) ----------
@@ -262,6 +275,82 @@ body[data-side-panel-dragging] #nd-sidebar-mobile {
   gap: 4px;
 }
 
+
+/* ---------- the dialog of a structure change (SidePanelItemDialog) ----------
+   the move picker's panel and head; the rows of the location prompt, the
+   file choice of a block deletion */
+.doc-side-panel-node-dialog {
+  width: min(22rem, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+}
+
+/* in a column the note's flex basis of the block toolbar would be a height */
+.doc-side-panel-node-dialog .doc-edit-file-delete-note {
+  flex: 0 0 auto;
+}
+
+.doc-side-panel-node-dialog .doc-source-picker-tree {
+  max-height: 14rem;
+}
+
+.doc-side-panel-node-dialog .doc-button-dialog[data-danger]:not(:disabled) {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-side-panel-node-dialog .doc-edit-file-option-path {
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-side-panel-node-referrer,
+.doc-side-panel-node-referrer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.doc-side-panel-node-referrer-list {
+  max-height: 7rem;
+  overflow: auto;
+  padding-inline-start: 0.75rem;
+}
+
+.doc-side-panel-node-referrer-path {
+  color: var(--color-fd-foreground);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- items of a source folder ----------
+   an item mirroring a file or folder of a source folder has a small glyph
+   before its name, so the reader tells the file tree from the items written
+   in the side panel; the item of the source folder itself has a tree glyph
+   after its name. both are static: nothing moves when edit mode toggles */
+.doc-side-panel-item-generated {
+  display: inline-flex;
+  margin-inline-end: 5px;
+  vertical-align: -1px;
+  opacity: 0.7;
+}
+
+.doc-side-panel-item-source-folder {
+  display: inline-flex;
+  margin-inline-start: 5px;
+  vertical-align: -1px;
+  opacity: 0.65;
+}
+
+/* the sidebar link sizes every svg inside it ([&_svg]:size-4) */
+.doc-side-panel-item .doc-side-panel-item-generated-icon,
+.doc-side-panel-item .doc-side-panel-item-source-folder-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.doc-side-panel-item-edit-button[data-status='error'] {
+  color: var(--color-fd-destructive, #dc2626);
+}
 
 /* ---------- doc page sections (DocSidePanelSection) ----------
    a workspace of several root doc pages: one section per doc page, its

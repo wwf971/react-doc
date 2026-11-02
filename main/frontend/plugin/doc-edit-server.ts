@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
@@ -10,9 +9,18 @@ import {
   type LineOperation,
 } from './doc-edit-lines.ts';
 import { sidePanelMoveBuild, sidePanelMoveRequestIsValid } from './doc-side-panel-move.ts';
+import { sidePanelNodeBuild, sidePanelNodeRequestIsValid } from './doc-side-panel-node.ts';
+import {
+  SourceFileDeleteRequestError,
+  sourceFileBackupMove,
+  sourceFileBackupRestore,
+  sourceFileDeleteListResolve,
+  type SourceFileMoved,
+} from './doc-source-file.ts';
 import { sidePanelTextOperationBuild } from './doc-side-panel-text.ts';
 import { yamlValueGet, yamlValueSetOperationBuild, yamlValueTextBuild } from './doc-yaml-edit.ts';
 import { workspaceEditBuild } from './doc-workspace-edit.ts';
+import { sourcePathLocalGet } from '../src/lib/doc-source-path.js';
 
 // Edit api of the development server. It exists only while `vite` serves the
 // page: a built page has no server behind it and shows no edit controls.
@@ -30,13 +38,23 @@ import { workspaceEditBuild } from './doc-workspace-edit.ts';
 //                                         #deleting-blocks). allowed with one deleteLines
 //                                         operation only; every file is moved to a
 //                                         recoverable backup beside it before the
-//                                         document is written (sourceFileDeleteApply)
+//                                         document is written (sourceFileDeleteApply,
+//                                         with doc-source-file.ts)
 //   POST {endpoint}/side-panel/text        -> { code: 0, data: { file, fieldName, text } }
 //        body { file, nodePath, language, text, textBase }   doc-side-panel-text.ts
 //   POST {endpoint}/side-panel/move        -> { code: 0, data: { fileChangeList } }
 //        body { item, target, hashBaseByFile }   doc-side-panel-move.ts; one or
 //        two files, written together; fileChangeList [{ file, hashBefore,
 //        hashAfter, textBefore, textAfter }], empty when nothing moved
+//   POST {endpoint}/side-panel/node        -> { code: 0, data: { fileChangeList, fileCreated, fileDeletedList } }
+//        body { file, request, hashBase, fileCreate?, filePathDeleteList? }
+//        fileCreated: the source path of the created file ('' none),
+//        fileDeletedList: the source paths of the deleted files;
+//        one node of a side-panel file inserted, removed or bound to another
+//        document or folder (doc-side-panel-node.ts). fileCreate { dirPath,
+//        name, text }: a document created for an inserted node, in the same
+//        request; filePathDeleteList: the document of a removed node,
+//        deleted with it into a recoverable backup (doc-source-file.ts)
 //   POST {endpoint}/config/value           -> { code: 0, data: { file, keyPath, value } }
 //        body { file, keyPath, value, valueBase }   a value of one config declaration of
 //                                             the doc page (doc_page_impl_config.md#the-doc-page-layer)
@@ -81,6 +99,21 @@ export type DocEditSidePanelOptions = {
   onFileListWritten: (fileList: { filePath: string; text: string }[]) => string;
 };
 
+// the file operations of the doc page source service layer that a write
+// of this api performs with it (doc_page_impl_source.md#creating-and-deleting-files)
+export type DocEditSourceFileOptions = {
+  // a file created in a folder of the source: the source api's own creation
+  // (doc-source.ts sourceFileCreate), { code, data: { path, entry }, message }
+  create: (body: { dirPath: string; name: string; text: string }) => { code: number; data: any; message: string };
+  // the files created, deleted or written as backups by a write, told before
+  // anything is reported: the watcher's report of them is not a change made
+  // elsewhere, and must not reload the page
+  pathListMark: (absPathList: string[]) => void;
+  // the source as it is now reported to the page as data (a deletion that
+  // came with a document write, which reports only the document)
+  dataReport: () => void;
+};
+
 // the config value route: the config declarations of the doc page
 export type DocEditConfigOptions = {
   configDir: string;
@@ -105,6 +138,7 @@ export type DocEditMiddlewareOptions = {
   sidePanel?: DocEditSidePanelOptions;
   config?: DocEditConfigOptions;
   workspace?: DocEditWorkspaceOptions;
+  sourceFile?: DocEditSourceFileOptions;
 };
 
 // what follows the address of a declaration in a config/value key path:
@@ -202,7 +236,11 @@ async function routeHandle(
       fs.writeFileSync(entry.absPath, textNext, 'utf-8');
     } else {
       try {
-        sourceFileDeleteApply(entry, textCurrent, textNext, filePathDeleteList, fileEntryListGet());
+        const fileList = sourceFileDeleteListResolve(filePathDeleteList, fileEntryListGet(), [entry.absPath]);
+        options.sourceFile?.pathListMark(fileList.map((item) => item.absPath));
+        const movedList = sourceFileDeleteApply(entry, textCurrent, textNext, filePathDeleteList, fileEntryListGet());
+        options.sourceFile?.pathListMark(movedList.map((item) => item.backup));
+        options.sourceFile?.dataReport();
       } catch (error: any) {
         if (!(error instanceof SourceFileDeleteRequestError)) throw error;
         jsonSend(res, 400, { code: -1, data: null, message: error.message });
@@ -222,6 +260,12 @@ async function routeHandle(
   if (req.method === 'POST' && route === '/side-panel/move') {
     const body = await jsonBodyRead(req);
     sidePanelMoveRouteHandle(res, body, options.sidePanel);
+    return;
+  }
+
+  if (req.method === 'POST' && route === '/side-panel/node') {
+    const body = await jsonBodyRead(req);
+    sidePanelNodeRouteHandle(res, body, options);
     return;
   }
 
@@ -470,6 +514,134 @@ function sidePanelMoveRouteHandle(res: ServerResponse, body: any, sidePanel: Doc
   jsonSend(res, 200, { code: 0, data: { fileChangeList }, message: '' });
 }
 
+// one node of a side-panel file inserted, removed or bound to another
+// document or folder (doc-side-panel-node.ts). the file must be one the
+// configuration loads, with the hash the page built its side panel from.
+// a document created for an inserted node (fileCreate) and the document of a
+// removed node (filePathDeleteList) go in the same request as the yaml
+// write, through the file operations of the source layer: two requests
+// would leave a node without its document, or a document without its node,
+// when the second one fails. the order: the file first (created, or moved
+// into its backup), then the yaml; a yaml write that fails, or a
+// configuration that does not load afterwards, puts the file back.
+function sidePanelNodeRouteHandle(res: ServerResponse, body: any, options: DocEditMiddlewareOptions) {
+  const { sidePanel, sourceFile } = options;
+  if (!sidePanel) {
+    jsonSend(res, 404, { code: -3, data: null, message: 'the page has no side panel file' });
+    return;
+  }
+  const file = String(body?.file ?? '');
+  const filePath = sidePanelFilePathGet(sidePanel, file);
+  if (!filePath) {
+    jsonSend(res, 404, { code: -3, data: null, message: `not a side panel file of the configuration: ${file}` });
+    return;
+  }
+  const request = body?.request;
+  if (!sidePanelNodeRequestIsValid(request)) {
+    jsonSend(res, 400, { code: -1, data: null, message: 'request needs an action (insert | remove | bind) with its yaml addresses' });
+    return;
+  }
+  const fileCreate = body?.fileCreate;
+  const filePathDeleteList: unknown = body?.filePathDeleteList ?? [];
+  if (fileCreate !== undefined && (request.action !== 'insert' || request.node.kind !== 'doc')) {
+    jsonSend(res, 400, { code: -1, data: null, message: 'a file is created for an inserted document node only' });
+    return;
+  }
+  if (!Array.isArray(filePathDeleteList) || !filePathDeleteList.every((item) => typeof item === 'string')) {
+    jsonSend(res, 400, { code: -1, data: null, message: 'filePathDeleteList must be a list of source paths' });
+    return;
+  }
+  if (filePathDeleteList.length > 0 && request.action !== 'remove') {
+    jsonSend(res, 400, { code: -1, data: null, message: 'files are deleted with a removed node only' });
+    return;
+  }
+  if ((fileCreate !== undefined || filePathDeleteList.length > 0) && !sourceFile) {
+    jsonSend(res, 404, { code: -3, data: null, message: 'the server creates and deletes no source file' });
+    return;
+  }
+  const textBefore = fs.readFileSync(filePath, 'utf-8');
+  if (typeof body?.hashBase !== 'string' || body.hashBase !== textHashGet(textBefore)) {
+    jsonSend(res, 409, { code: -2, data: null, message: `${file} changed since the side panel was loaded; nothing was changed` });
+    return;
+  }
+  const result = sidePanelNodeBuild(textBefore, request);
+  if (result.code !== 0) {
+    jsonSend(res, 400, { code: -1, data: null, message: `${file}: ${result.message}` });
+    return;
+  }
+  const textAfter = result.data.text;
+
+  // the file of the source, before the yaml
+  let fileCreated: { path: string; absPath: string } | undefined;
+  let movedList: SourceFileMoved[] = [];
+  let pathDeletedList: string[] = [];
+  if (fileCreate !== undefined && sourceFile) {
+    const docText = String(request.action === 'insert' && request.node.kind === 'doc' ? request.node.doc : '');
+    const created = sourceFile.create({
+      dirPath: String(fileCreate?.dirPath ?? ''),
+      name: String(fileCreate?.name ?? ''),
+      text: typeof fileCreate?.text === 'string' ? fileCreate.text : '',
+    });
+    if (created.code !== 0) {
+      jsonSend(res, created.code === -2 ? 409 : 400, { code: created.code, data: null, message: created.message });
+      return;
+    }
+    fileCreated = { path: created.data.path, absPath: created.data.entry.absPath };
+    sourceFile.pathListMark([fileCreated.absPath]);
+    // the node names the file it was created for
+    if (sourcePathLocalGet(fileCreated.path) !== sourcePathLocalGet(docText)) {
+      fs.rmSync(fileCreated.absPath, { force: true });
+      jsonSend(res, 400, { code: -1, data: null, message: `the node names ${docText}, the file was created as ${fileCreated.path}; nothing was kept` });
+      return;
+    }
+  }
+  if (filePathDeleteList.length > 0 && sourceFile) {
+    try {
+      const fileList = sourceFileDeleteListResolve(filePathDeleteList, options.fileEntryListGet());
+      sourceFile.pathListMark(fileList.map((item) => item.absPath));
+      movedList = sourceFileBackupMove(fileList);
+      pathDeletedList = fileList.map((item) => item.internalPath);
+      sourceFile.pathListMark(movedList.map((item) => item.backup));
+    } catch (error: any) {
+      if (!(error instanceof SourceFileDeleteRequestError)) throw error;
+      jsonSend(res, 400, { code: -1, data: null, message: error.message });
+      return;
+    }
+  }
+  const sourceFileRestore = () => {
+    if (fileCreated) fs.rmSync(fileCreated.absPath, { force: true });
+    sourceFileBackupRestore(movedList);
+  };
+
+  try {
+    fileWriteWithBackup(filePath, textAfter);
+  } catch (error) {
+    sourceFileRestore();
+    throw error;
+  }
+  const messageLoad = sidePanel.onFileListWritten([{ filePath, text: textAfter }]);
+  if (messageLoad !== '') {
+    fs.writeFileSync(filePath, textBefore, 'utf-8');
+    sourceFileRestore();
+    sidePanel.onFileListWritten([{ filePath, text: textBefore }]);
+    jsonSend(res, 400, {
+      code: -1,
+      data: null,
+      message: `the configuration would not load after the change (${messageLoad}); the files were left as they were`,
+    });
+    return;
+  }
+  jsonSend(res, 200, {
+    code: 0,
+    data: {
+      fileChangeList: [{ file, hashBefore: textHashGet(textBefore), hashAfter: textHashGet(textAfter), textBefore, textAfter }],
+      fileCreated: fileCreated?.path ?? '',
+      fileDeletedList: pathDeletedList,
+    },
+    message: '',
+  });
+}
+
 // the absolute path of a side-panel file named relative to the config
 // directory, when the configuration loads it
 function sidePanelFilePathGet(sidePanel: DocEditSidePanelOptions, file: string): string | undefined {
@@ -479,65 +651,32 @@ function sidePanelFilePathGet(sidePanel: DocEditSidePanelOptions, file: string):
   return isFileLoaded ? filePath : undefined;
 }
 
-// a request that names files which cannot be deleted: answered with 400
-// before anything is touched
-class SourceFileDeleteRequestError extends Error {}
-
 // the write of a block deletion together with the files chosen for it
 // (doc_page_impl_block_ops.md#deleting-blocks): every path is resolved
 // through the collected source first (an unknown path, a path that is not
 // a regular file (a symlink is not), or the document itself refuses the
-// whole request), then each file is renamed into a backup beside it,
-// `.{name}.{uuid}.deleted`, and the document is written last. a failure
-// caught on the way puts the renamed files back in reverse order and the
-// document back to its previous text, then rethrows for the middleware's
-// error response. this is best effort for caught errors, not a transaction:
-// a crash in the middle, or a failure of the restoring itself, leaves what
-// was done. the server does not know which block the files belonged to:
-// the page chooses among what the component offered, and the server checks
-// that the files are collected regular files
+// whole request), then each file is renamed into its backup
+// (doc-source-file.ts), and the document is written last. a failure caught
+// on the way puts the renamed files back and the document back to its
+// previous text, then rethrows for the middleware's error response. this is
+// best effort for caught errors, not a transaction: a crash in the middle,
+// or a failure of the restoring itself, leaves what was done. the server
+// does not know which block the files belonged to: the page chooses among
+// what the component offered, and the server checks that the files are
+// collected regular files
 export function sourceFileDeleteApply(
   entry: DocEditFileEntry,
   textCurrent: string,
   textNext: string,
   filePathDeleteList: string[],
   fileEntryList: DocEditFileEntry[],
-): { file: string; backup: string }[] {
-  const fileList: DocEditFileEntry[] = [];
-  const absPathSeen = new Set<string>();
-  for (const internalPath of new Set(filePathDeleteList)) {
-    const fileEntry = fileEntryList.find((item) => item.internalPath === internalPath);
-    if (!fileEntry) throw new SourceFileDeleteRequestError(`not a file of the collected source: ${internalPath}`);
-    if (path.resolve(fileEntry.absPath) === path.resolve(entry.absPath)) {
-      throw new SourceFileDeleteRequestError(`the document being edited cannot be deleted with its block: ${internalPath}`);
-    }
-    let isFile = false;
-    try {
-      isFile = fs.lstatSync(fileEntry.absPath).isFile();
-    } catch {
-      isFile = false;
-    }
-    if (!isFile) throw new SourceFileDeleteRequestError(`not a regular file: ${internalPath}`);
-    if (absPathSeen.has(path.resolve(fileEntry.absPath))) continue;
-    absPathSeen.add(path.resolve(fileEntry.absPath));
-    fileList.push(fileEntry);
-  }
-  const movedList: { file: string; backup: string }[] = [];
+): SourceFileMoved[] {
+  const fileList = sourceFileDeleteListResolve(filePathDeleteList, fileEntryList, [entry.absPath]);
+  const movedList = sourceFileBackupMove(fileList);
   try {
-    for (const fileEntry of fileList) {
-      const backup = path.join(path.dirname(fileEntry.absPath), `.${path.basename(fileEntry.absPath)}.${randomUUID()}.deleted`);
-      fs.renameSync(fileEntry.absPath, backup);
-      movedList.push({ file: fileEntry.absPath, backup });
-    }
     fs.writeFileSync(entry.absPath, textNext, 'utf-8');
   } catch (error) {
-    for (const moved of [...movedList].reverse()) {
-      try {
-        fs.renameSync(moved.backup, moved.file);
-      } catch {
-        // the file stays as its backup; nothing more can be done here
-      }
-    }
+    sourceFileBackupRestore(movedList);
     try {
       if (fs.readFileSync(entry.absPath, 'utf-8') !== textCurrent) fs.writeFileSync(entry.absPath, textCurrent, 'utf-8');
     } catch {
