@@ -6,18 +6,19 @@ description: App services keep their state in infra services, both run by the se
 The [service instances](service-instance.md) document shows `note-db`, a service that keeps its notes in a database file of its own folder. That is the simplest service there is, and it is also the kind that is hard to move, back up or share: its state is wherever its folder is. The services of a page are of **two kinds** so that state has one place to be:
 
 - An **app service** (`kind: app`) is what a document works through its dashboards: a todo list, a crawler, a report. It is meant to be **stateless**: its folder holds its script, its dashboards and its config, and nothing it would miss. What it keeps between requests, it keeps in an infra service.
-- An **infra service** (`kind: infra`) serves other services, never a document: storage (`sqlite`), logging (`logging`), connections (`aws-connection`, `postgres-connection`, `google-drive`, `cognito-auth`). It has no dashboards of its own; it is worked from the Services tab.
+- An **infra service** (`kind: infra`) serves other services, never a document: storage (`sqlite`), backup (`local-backup`), logging (`logging`), connections (`aws-connection`, `postgres-connection`, `google-drive`, `cognito-auth`). It is worked from the Services tab, through the dashboards it has, if any (`local-backup` has one), or the apis it answers to the page.
 
 Both kinds come as templates and instances, in one registry, run by the same backend. What tells them apart is who they serve, and what the **service runtime kernel** of the backend does for them: it provisions an infra service when one is needed, routes a name to the instance providing it, watches every instance (its lifecycle, its dependencies, its health), runs the lifecycle hooks, and logs it all into the logging infra service.
 
 ## An app service: todo-list
 
-The template `todo-list` (`example_doc/service-template-app/productivity/task/w55iiudjq5y--todo-list/`) is a todo list. Its script declares one dependency, the infra name `sqlite`, and reaches it by that name; it never knows which instance provides it, nor where the database file is:
+The template `todo-list` (`example_doc/service-template-app/productivity/task/w55iiudjq5y--todo-list/`, described for its users in `service_todo_list.md` beside its script) is a todo list. Its script declares two dependencies by infra name, `sqlite` for the todos and `local-backup` for their backups, and reaches each by that name; it never knows which instance provides it, nor where a file is:
 
 ```python
 expose = {
     'dependencyList': [
         {'name': 'sqlite', 'isRequired': True, 'onUnavailable': 'report'},
+        {'name': 'local-backup', 'isRequired': False, 'onUnavailable': 'report'},
     ],
     …
 }
@@ -67,7 +68,7 @@ The template's script declares the initial list (`expose.dependencyList`), copie
 
 ## Waiting and provisioning
 
-An instance whose required infra name has no instance providing it does not start: it is `waiting`, and the kernel starts it when the name is provided. Nobody has to provide it by hand. An infra template may say `provision: auto`, and the kernel then **provisions** an instance from it when the name is required and nobody provides it; the built-in `sqlite` and `logging` templates do. That is how the two instances of `example_doc/service-infra/` came to be: `sqlite (auto)` when the first todo list was created, `logging (auto)` when the kernel first started, since the kernel itself requires `logging` for its records. Each remembers why in its `service.yaml`:
+An instance whose required infra name has no instance providing it does not start: it is `waiting`, and the kernel starts it when the name is provided. Nobody has to provide it by hand. An infra template may say `provision: auto`, and the kernel then **provisions** an instance from it when the name is required and nobody provides it; the built-in `sqlite` and `logging` templates do. That is how the instances of `example_doc/service-infra/` came to be: `sqlite (auto)` and `local-backup (auto)` when the first todo list was created, `logging (auto)` when the kernel first started, since the kernel itself requires `logging` for its records. Each remembers why in its `service.yaml`:
 
 ```yaml
 provision:
@@ -96,13 +97,36 @@ objectId: w55j4vfa50k
 
 The first rows are the instance as the kernel sees it: what it depends on, with the status of each name and the infra instance answering it, and its health. Then the database itself: the file in the infra instance's folder, its size and tables, and the versions. **Create version** keeps the todos as they are now, with a note; the example was written with one version, `first todos`. **Check out** makes the todos those of a version: the database as it is now is kept as a version first, so a checkout loses nothing and can be undone by checking that one out. The version list is the infra service's, in its folder, and `versionKeepMax` of the sqlite instance's config says how many it keeps.
 
+## Backups: a copy outside every instance
+
+A version lives in the sqlite instance's folder: delete that instance, or point the name `sqlite` at another one, and the versions are not where the consumer looks. A **backup** is a copy kept outside every instance, as a file a person can see and copy. The last rows of the storage dashboard above are the backups of the todos, kept by the **local-backup** infra service: **Create backup** asks the sqlite infra for a consistent copy of the database and hands the file to the backup infra, which writes one zip file; **Bring back** extracts it and hands the database to sqlite again (the one before is kept as a sqlite version first, like a checkout). `local-backup` is an optional dependency of `todo-list`: without an instance of it the todos work and this part of the dashboard says what is missing; the kernel provisions one from the built-in template, as it did `sqlite`.
+
+The backup infra keeps nothing but the files. Its folder is `.doc-page/service-backup/` of the doc page by default (ignored by git, like the provisioned instances), or whatever `backupDir` of its config names, and every file in it is named so that the folder reads without the backend: the consumer first, then its template, the time and the note:
+
+```text
+example_doc/.doc-page/service-backup/
+└── w55j3ztn3rq--todo-list--20261103_00063634+09--two-todos-before-the-third.zip
+      service-backup.yaml     the consumer (id, name, template), the time, the whole note, who asked, the entries
+      data/current.sqlite     what the consumer gave
+```
+
+Its own dashboard shows the folder and what it holds, by consumer. A consumer whose instance the kernel no longer lists (deleted, or made by another backend) is an **orphan**: nothing is removed when an instance is deleted, so its backups stay until someone removes them here, one by one, by consumer, or all orphans at once. The dashboard is bound to the instance the kernel provisioned on the machine the example was written on; on another, pick the local-backup instance in its head.
+
+<!--renderComp=service/local-backup/default-->
+```asset
+store: local
+objectId: w5f3p2e9xsm
+```
+
+The same dashboard is shown in the Services tab under the local-backup instance (its `config` dashboard, with the instance's config above it). A consumer reaches its own backups only, even another instance of the same template; the page names the consumer it works on. The folder layout, the apis and the round trip of a consumer are in `service_local_backup.md` of the template (`built-in/service-template-infra/storage/w5f2xw18q2r--local-backup/`).
+
 ## Where templates and instances come from
 
 The registry reads service folders of three origins, and every template and instance says which (`origin: { kind, alias, dir }`):
 
 | origin | templates | instances |
 | --- | --- | --- |
-| **built-in**: what the package ships | `built-in/service-template-app/` (`note-db`), `built-in/service-template-infra/` (`sqlite`, `logging`, the connections) | none |
+| **built-in**: what the package ships | `built-in/service-template-app/` (`note-db`), `built-in/service-template-infra/` (`sqlite`, `local-backup`, `logging`, the connections) | none |
 | **docPage**: a doc page's own | `service-template-app/`, `service-template-infra/` of the doc page folder | `service-app/`, `service-infra/` of the doc page folder |
 | **folder**: named in the backend config | `templateFolderList` | `instanceFolderList` |
 

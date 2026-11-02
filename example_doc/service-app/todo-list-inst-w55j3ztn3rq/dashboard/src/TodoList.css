@@ -202,8 +202,14 @@
   border-bottom: none;
 }
 
-.todo-list-table td.todo-list-cell-action {
+.todo-list-table td.todo-list-cell-action,
+.todo-list-table td.todo-list-cell-nowrap {
   white-space: nowrap;
+}
+
+/* a long file name wraps inside its cell instead of squeezing the others */
+.todo-list-table td.todo-list-cell-wrap {
+  overflow-wrap: anywhere;
 }
 
 .todo-list-section {

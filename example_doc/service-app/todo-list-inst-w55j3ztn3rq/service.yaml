@@ -7,10 +7,13 @@ timeCreated: 20261029_05414849+09
 template:
   templateId: w55iiudjq5y
   name: todo-list
-  versionId: w55iiudjq61
+  versionId: w5f2xw1cv7d
 dependencyList:
 - name: sqlite
   isRequired: true
+  onUnavailable: report
+- name: local-backup
+  isRequired: false
   onUnavailable: report
 isDependencyDynamicAllowed: false
 config:

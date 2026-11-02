@@ -4,7 +4,9 @@ import { serviceApiCall, serviceRefresh } from './service-call.js';
 // The config dashboard of todo-list ("Storage"): the instance keeps nothing
 // of its own, so the dashboard shows where its todos are: the infra services
 // it depends on, its health, and the database the sqlite infra service
-// holds for it, with its versions (created, checked out, removed from here).
+// holds for it, with its versions (created, checked out, removed from here),
+// and the backups the local-backup infra service keeps of it (made, brought
+// back and removed from here; absent when no local-backup instance answers).
 //
 //   config.service.instance   the instance as the backend lists it: its
 //                             dependencies with their status (which infra
@@ -15,9 +17,12 @@ export function TodoListConfigDashboard({ config = {}, onEvent }) {
   const [info, setInfo] = useState(null);
   const [message, setMessage] = useState('');
   const [noteDraft, setNoteDraft] = useState('');
+  const [backupNoteDraft, setBackupNoteDraft] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   // what the last version operation said: { text, isError }
   const [notice, setNotice] = useState({ text: '', isError: false });
+  // the same for the backups
+  const [backupNotice, setBackupNotice] = useState({ text: '', isError: false });
 
   const infoLoad = async () => {
     const result = await serviceApiCall(onEvent, 'storageInfo');
@@ -74,8 +79,45 @@ export function TodoListConfigDashboard({ config = {}, onEvent }) {
     return result;
   };
 
+  const backupCreate = async () => {
+    setIsBusy(true);
+    const result = await serviceApiCall(onEvent, 'backupCreate', { note: backupNoteDraft.trim() });
+    setIsBusy(false);
+    if (result.code !== 0) {
+      setBackupNotice({ text: result.message, isError: true });
+      return;
+    }
+    setBackupNoteDraft('');
+    setBackupNotice({ text: `backup ${result.data.fileName} made`, isError: false });
+    await infoLoad();
+  };
+
+  const backupCheckout = async (versionId) => {
+    setIsBusy(true);
+    const result = await serviceApiCall(onEvent, 'backupCheckout', { versionId });
+    setIsBusy(false);
+    if (result.code === 0) {
+      setBackupNotice({ text: `backup brought back; the database as it was is sqlite version ${result.data.versionBefore?.versionId}`, isError: false });
+      await infoLoad();
+    }
+    return result;
+  };
+
+  const backupDelete = async (versionId) => {
+    setIsBusy(true);
+    const result = await serviceApiCall(onEvent, 'backupDelete', { versionId });
+    setIsBusy(false);
+    if (result.code === 0) {
+      setBackupNotice({ text: 'backup removed', isError: false });
+      await infoLoad();
+    }
+    return result;
+  };
+
   const database = info?.database;
   const versionList = database?.versionList ?? [];
+  const backup = info?.backup ?? null;
+  const backupList = backup?.backupList ?? [];
 
   return (
     <div className="todo-list">
@@ -162,7 +204,113 @@ export function TodoListConfigDashboard({ config = {}, onEvent }) {
             </table>
           )}
       <div className="todo-list-muted">a checkout keeps the database as it is as a version first; the versions are the infra service's, in its own folder.</div>
+      <div className="todo-list-toolbar">
+        <span className="todo-list-section">backups</span>
+        {backup
+          ? (
+              <>
+                <input
+                  className="todo-list-input todo-list-input-note"
+                  type="text"
+                  placeholder="a note for the backup"
+                  value={backupNoteDraft}
+                  onChange={(event) => setBackupNoteDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void backupCreate();
+                  }}
+                />
+                <button type="button" className="todo-list-button" disabled={isBusy || !info} onClick={() => void backupCreate()}>Create backup</button>
+                <span className="todo-list-muted">kept by {backup.infra.name} <StatusDot status={backup.infra.status} />{backup.infra.serviceId}</span>
+              </>
+            )
+          : <span className="todo-list-muted">{info ? 'no local-backup infra instance answers: the backups need one (the kernel provisions it from the built-in template)' : ''}</span>}
+        {backupNotice.text ? <span className={backupNotice.isError ? 'todo-list-error' : 'todo-list-muted'}>{backupNotice.text}</span> : null}
+      </div>
+      {backup
+        ? backupList.length === 0
+          ? <div className="todo-list-muted">no backup yet</div>
+          : (
+              <table className="todo-list-table">
+                <thead>
+                  <tr>
+                    <th>time</th>
+                    <th>note</th>
+                    <th>size</th>
+                    <th>file</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {backupList.map((item) => (
+                    <BackupRow
+                      key={item.versionId}
+                      backup={item}
+                      isBusy={isBusy}
+                      onCheckout={() => backupCheckout(item.versionId)}
+                      onDelete={() => backupDelete(item.versionId)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            )
+        : null}
+      {backup ? <div className="todo-list-muted">a backup is one zip file in the local-backup instance's folder, outside the sqlite instance; bringing one back keeps the database as it is as a sqlite version first.</div> : null}
     </div>
+  );
+}
+
+// one backup: bring back and remove, each confirmed in place, like a version
+function BackupRow({ backup, isBusy, onCheckout, onDelete }) {
+  // '' | 'checkout' | 'delete'
+  const [asked, setAsked] = useState('');
+  const [message, setMessage] = useState('');
+
+  const run = async (action) => {
+    setAsked('');
+    const result = await action();
+    setMessage(result.code === 0 ? '' : result.message);
+  };
+
+  return (
+    <>
+      <tr className={asked || message ? 'todo-list-row-open' : ''}>
+        <td className="todo-list-code todo-list-cell-nowrap">{backup.time}</td>
+        <td>{backup.note || <span className="todo-list-muted">(no note)</span>}</td>
+        <td className="todo-list-cell-nowrap">{backup.size}</td>
+        <td className="todo-list-code todo-list-cell-wrap" title={backup.file}>{backup.fileName}</td>
+        <td className="todo-list-cell-action">
+          <button type="button" className="todo-list-button" disabled={isBusy || asked !== ''} onClick={() => setAsked('checkout')}>Bring back</button>
+          {' '}
+          <button type="button" className="todo-list-icon" title="remove the backup" disabled={isBusy || asked !== ''} onClick={() => setAsked('delete')}>🗑</button>
+        </td>
+      </tr>
+      {asked || message
+        ? (
+            <tr>
+              <td colSpan={5}>
+                {asked === 'checkout'
+                  ? (
+                      <span className="todo-list-ask">
+                        the todos become those of the backup of {backup.time}; the database as it is now is kept as a sqlite version first.
+                        <button type="button" className="todo-list-button" onClick={() => void run(onCheckout)}>Bring back</button>
+                        <button type="button" className="todo-list-button" onClick={() => setAsked('')}>Keep</button>
+                      </span>
+                    )
+                  : asked === 'delete'
+                    ? (
+                        <span className="todo-list-ask">
+                          remove the backup of {backup.time}?
+                          <button type="button" className="todo-list-button" onClick={() => void run(onDelete)}>Remove</button>
+                          <button type="button" className="todo-list-button" onClick={() => setAsked('')}>Keep</button>
+                        </span>
+                      )
+                    : null}
+                {message ? <span className="todo-list-error">{message}</span> : null}
+              </td>
+            </tr>
+          )
+        : null}
+    </>
   );
 }
 
@@ -182,8 +330,8 @@ function VersionRow({ version, isBusy, onCheckout, onDelete }) {
   return (
     <>
       <tr className={asked || message ? 'todo-list-row-open' : ''}>
-        <td className="todo-list-code">{version.versionId}</td>
-        <td className="todo-list-code">{version.time}</td>
+        <td className="todo-list-code todo-list-cell-nowrap">{version.versionId}</td>
+        <td className="todo-list-code todo-list-cell-nowrap">{version.time}</td>
         <td>{version.note || <span className="todo-list-muted">(no note)</span>}</td>
         <td>{version.size}</td>
         <td className="todo-list-cell-action">

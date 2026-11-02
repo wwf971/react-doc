@@ -52,3 +52,7 @@
 !/w55j4vdm1uw--todos dashboard/w55j4vefjq0.yaml
 !/w55j4vfa50k--todos storage/object.yaml
 !/w55j4vfa50k--todos storage/w55j4vg6ufb.yaml
+# the Backups dashboard of the local-backup infra instance (provisioned, so
+# bound to the instance of the machine the example was written on)
+!/w5f3p2e9xsm--backups of the example/object.yaml
+!/w5f3p2e9xsm--backups of the example/w5f3p2ea8t0.yaml

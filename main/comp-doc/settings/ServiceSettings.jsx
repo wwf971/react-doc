@@ -19,7 +19,7 @@ import '../service/DocService.css';
 import './DocSettings.css';
 
 // The "Services" tab of the settings panel (design:
-// doc_page_impl_service.md#the-services-tab): one view at a time, under a
+// doc_page_impl_service_dashboard.md#the-services-tab): one view at a time, under a
 // path (the PathBar the host injects as config.components.PathBar); its
 // first segment goes back to the overview:
 //

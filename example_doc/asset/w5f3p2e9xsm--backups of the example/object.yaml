@@ -1,0 +1,25 @@
+objectId: w5f3p2e9xsm
+name: backups of the example
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+component:
+  name: service/local-backup/default
+saveMode: inPlace
+versionIdHead: w5f3p2ea8t0
+isDeleted: false
+isLocked: false
+timeCreated: 20261103_00100000+09
+versionList:
+  - versionId: w5f3p2ea8t0
+    versionIdPrevList: []
+    time: 20261103_00100000+09
+    note: the Backups dashboard of local-backup, bound to the instance the kernel provisioned on the machine the example was written on
+    size: 33
+    hash: 0be26f0ada135f7f043ad2a55370d01a454f6bab
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261103_00100000+09
+    versionId: w5f3p2ea8t0

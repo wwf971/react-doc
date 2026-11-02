@@ -1,0 +1,17 @@
+templateId: w5f2xw18q2r
+name: local-backup
+description: a local backup infra service; every consumer instance keeps backups of its data as zip files in one folder, listed from the folder alone, checked out and deleted from there
+kind: infra
+# the kernel creates an instance of it when the name "local-backup" is required and no instance provides it
+provision: auto
+timeCreated: 20261102_23540104+09
+versionId: w5f2xw17i8e
+versionList:
+- versionId: w5f2xw17i8e
+  time: 20261102_23540104+09
+  note: the built-in local backup infra service
+config:
+  # '' is the default folder: .doc-page/service-backup/ of the doc page the instance belongs to
+  backupDir: ''
+  # the oldest backups of a consumer beyond this many are removed when one is created (0: keep all)
+  versionKeepMax: 0

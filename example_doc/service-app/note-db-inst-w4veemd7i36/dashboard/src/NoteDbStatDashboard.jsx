@@ -5,7 +5,7 @@ import { serviceApiCall, serviceResolve } from './service-call.js';
 // on a second line another instance of the same template: the dashboard
 // resolves it by template, reads its numbers by its id, and asks its own
 // instance to import its notes, which calls the other instance itself
-// (doc_page_impl_service.md#calls-between-services).
+// (doc_page_impl_service_kernel.md#calls-between-services).
 export function NoteDbStatDashboard({ config, onEvent }) {
   const [stat, setStat] = useState(null);
   const [message, setMessage] = useState('');

@@ -164,7 +164,7 @@ This is what an AI agent that checked a feature does to record its check: read t
 
 ## The apis of a service instance
 
-The service instances of the backend are the second provider (`comp-doc/api/api-service.js`): while the backend is up, every **sync** api of every ready instance that pages may call is registered as `service/{templateName}/{apiName}`, with the parameters the script declared ([What a service script exposes](doc_page_impl_service.md#what-a-service-script-exposes)) and one more, `serviceId`, to pick an instance when several of the template run. The call goes through `DocServiceStore.apiCall` with the target `{ serviceId }`, as a dashboard's call does. An async api of a service runs as a job and is not an api of the page. The apis leave the registry when the instance stops or the backend goes down, which is what makes a key bound to one safe ([Resolution](doc_page_impl_api_hotkey.md#resolution)).
+The service instances of the backend are the second provider (`comp-doc/api/api-service.js`): while the backend is up, every **sync** api of every ready instance that pages may call is registered as `service/{templateName}/{apiName}`, with the parameters the script declared ([What a service script exposes](doc_page_impl_service_backend.md#what-a-service-script-exposes)) and one more, `serviceId`, to pick an instance when several of the template run. The call goes through `DocServiceStore.apiCall` with the target `{ serviceId }`, as a dashboard's call does. An async api of a service runs as a job and is not an api of the page. The apis leave the registry when the instance stops or the backend goes down, which is what makes a key bound to one safe ([Resolution](doc_page_impl_api_hotkey.md#resolution)).
 
 ## Declared apis
 

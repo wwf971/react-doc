@@ -1,7 +1,7 @@
 """The parts of the service runtime kernel that stand on their own: the kernel
 log, the service folders of a doc page, the infra routing table.
 
-Design: doc_page_impl_service.md#the-service-runtime-kernel
+Design: doc_page_impl_service_kernel.md#the-service-runtime-kernel
 
 The kernel is the part of the backend that is no service: it keeps the
 registry (the templates and instances found in the folders it watches),
@@ -22,7 +22,7 @@ from service_util import time_iso_get, yaml_read
 LOG_LEVEL_LIST = ['debug', 'info', 'warn', 'error']
 
 # the infra service the kernel itself requires: where its records go
-# (doc_page_impl_service.md#the-logging-infra-service)
+# (doc_page_impl_service_kernel.md#the-logging-infra-service)
 INFRA_LOGGING_NAME = 'logging'
 
 # the files and folders of a doc page that concern the service backend
@@ -45,7 +45,7 @@ BUILT_IN_FOLDER_LIST = [
 
 class KernelLog:
     """The kernel's own logger: what the kernel and the instances log, on its
-    way to the logging infra service (doc_page_impl_service.md#the-logging-infra-service).
+    way to the logging infra service (doc_page_impl_service_kernel.md#the-logging-infra-service).
 
     A record is written here first, to stderr (from level warn, or every
     level with isVerbose) and into a bounded buffer; flush() hands the
@@ -212,7 +212,7 @@ def folder_item_normalize(item, dir_base, role, place):
 # ---------- infra routing ----------
 
 class InfraRouteTable:
-    """Which instance answers an infra service name (doc_page_impl_service.md#routing-an-infra-service).
+    """Which instance answers an infra service name (doc_page_impl_service_kernel.md#routing-an-infra-service).
 
     route_by_name: the explicit routes (set from the Services tab, kept in the
     kernel's state file); an explicit route to an instance that is gone or

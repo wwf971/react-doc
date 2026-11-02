@@ -816,11 +816,11 @@ export class DocServiceStore {
 
   // ---------- events ----------
 
-  // the events of a dashboard (doc_page_impl_service.md#dashboard-events).
+  // the events of a dashboard (doc_page_impl_service_dashboard.md#dashboard-events).
   // the frame of the dashboard (ServiceDashboardHost) adds data.dashboard,
   // { templateName, dashboardId, serviceId, state }: what the block shows now. a
   // call goes to that instance, or to the one data.target names
-  // (doc_page_impl_service.md#calls-between-services: an instance, a
+  // (doc_page_impl_service_kernel.md#calls-between-services: an instance, a
   // template, or an infra name), the dashboard's instance sent as the
   // caller. the bind and the state are written into the block's asset object
   // (source.asset); a place that keeps them elsewhere (the Services tab)

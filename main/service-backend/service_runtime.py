@@ -1,6 +1,6 @@
 """The service runtime: the kernel, the registry of templates and instances, the calls.
 
-Design: doc_page_impl_service.md#the-service-runtime-kernel
+Design: doc_page_impl_service_kernel.md#the-service-runtime-kernel
 
 - a template is a folder {folder}/{templateId}--{name}/ holding
   service-template.yaml and service.py (with its icon and dashboards): the
@@ -452,6 +452,7 @@ class ServiceInstance:
             kind=self.kind,
             dependency_list=service_config['dependencyList'],
             is_dependency_dynamic_allowed=service_config['isDependencyDynamicAllowed'],
+            origin=origin_info_get(self.folder),
         )
         self.context = context
         self.thread = threading.Thread(
@@ -635,7 +636,7 @@ class ServiceInstance:
                 'timeCreateHook': self.record['timeCreateHook'],
                 'hookRecordList': self.record['hookRecordList'][-HOOK_RECORD_KEEP_MAX:],
             }, 'the record the service runtime kernel keeps of this instance: whether its onCreate hook ran,\n'
-               'and its last lifecycle hook runs (doc_page_impl_service.md#lifecycle-and-hooks). written by the kernel.')
+               'and its last lifecycle hook runs (doc_page_impl_service_kernel.md#lifecycle-and-hooks). written by the kernel.')
         except OSError as error:
             print(f'[service] {SERVICE_RECORD_FILE} of {self.dir_name} could not be written: {error}', file=sys.stderr)
 
@@ -1001,7 +1002,7 @@ class ServiceRuntime:
 
     def _kernel_state_write(self):
         yaml_write_commented(self.kernel_state_path, {'routeByInfra': dict(self.route_table.route_by_name)},
-                             'the state of the service runtime kernel (doc_page_impl_service.md#the-service-runtime-kernel):\n'
+                             'the state of the service runtime kernel (doc_page_impl_service_kernel.md#the-service-runtime-kernel):\n'
                              'routeByInfra: the infra service names routed to one instance on purpose, by service id.\n'
                              'written by the kernel (the Services tab); without an entry a name goes to the oldest ready instance providing it.')
 

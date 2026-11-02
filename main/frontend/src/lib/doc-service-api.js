@@ -1,5 +1,5 @@
 // The client of the service backend in the browser (design:
-// doc_page_impl_service.md#backend-api). The page reaches the
+// doc_page_impl_service_backend.md#backend-api). The page reaches the
 // backend through the development server, which forwards {endpoint}/* to
 // it unchanged (plugin/doc-service-server.ts). Every call answers
 // { code, data, message }:

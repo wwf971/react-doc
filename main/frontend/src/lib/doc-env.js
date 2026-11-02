@@ -14,7 +14,7 @@
 //                   "service" is in every kind: the service backend is a
 //                   process of its own, not the server of the page, so the
 //                   page reaches it wherever it is served once it is given its
-//                   address (doc_page_impl_service.md#reaching-the-backend)
+//                   address (doc_page_impl_service_dashboard.md#reaching-the-backend)
 export const docEnvKindDefineList = [
   {
     kind: 'viteDevServer',

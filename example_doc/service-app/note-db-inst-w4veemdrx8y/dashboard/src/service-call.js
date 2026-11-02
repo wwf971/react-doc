@@ -2,7 +2,7 @@
 // page (onEvent), answered with { code, data, message }. A call goes to the
 // instance the dashboard is bound to, or to the one a target names:
 // { serviceId }, or { templateId, versionId? } for another instance created
-// from that template (doc_page_impl_service.md#calls-between-services).
+// from that template (doc_page_impl_service_kernel.md#calls-between-services).
 
 export function serviceApiCall(onEvent, api, params = {}, target = undefined) {
   return onEvent('serviceApiCallRequest', { api, params, target });

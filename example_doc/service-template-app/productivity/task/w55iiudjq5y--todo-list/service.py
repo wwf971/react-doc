@@ -12,7 +12,19 @@ asked for by this service for its own database.
 The schema is created in on_create (once in the life of the instance) and
 checked again in start (a checkout may bring an older database back); both
 are idempotent.
+
+A backup is the same idea one level up: the "local-backup" infra service
+keeps zip files of a consumer's data in a folder outside any infra instance.
+This service asks sqlite for a consistent copy of its database, hands the
+file to local-backup, and on a restore brings the file back through sqlite
+(doc_page_impl_service_storage.md#the-local-backup-infra-service). The dependency
+is optional: without a local-backup instance the todos work, and the backup
+apis answer -7.
 """
+
+import os
+import shutil
+import tempfile
 
 from service_define import Service, ServiceError, api, param, returns
 from service_util import time_text_get
@@ -55,6 +67,7 @@ class TodoList(Service):
         # keeps the effective one, which the Services tab edits)
         'dependencyList': [
             {'name': 'sqlite', 'isRequired': True, 'onUnavailable': 'report'},
+            {'name': 'local-backup', 'isRequired': False, 'onUnavailable': 'report'},
         ],
         'configDefineList': [
             {'key': 'titleLengthMax', 'type': 'integer', 'default': 200, 'description': 'the longest title a todo may have'},
@@ -63,7 +76,8 @@ class TodoList(Service):
             {'id': 'default', 'purpose': 'default', 'label': 'Todos', 'export': 'TodoListDashboard',
              'description': 'list, add, check off and remove the todos', 'heightMin': '12rem'},
             {'id': 'config', 'purpose': 'config', 'label': 'Storage', 'export': 'TodoListConfigDashboard',
-             'description': 'the database the sqlite infra service keeps for this instance: its versions, a checkout', 'heightMin': '10rem'},
+             'description': 'the database the sqlite infra service keeps for this instance: its versions, a checkout; '
+                            'its backups in the local-backup infra service', 'heightMin': '10rem'},
         ],
         'dashboardRemote': {
             'dir': 'dashboard/dist',
@@ -76,6 +90,10 @@ class TodoList(Service):
     @property
     def db(self):
         return self.context.infra('sqlite')
+
+    @property
+    def backup(self):
+        return self.context.infra('local-backup')
 
     def on_create(self):
         self.db.executeScript(script=SCHEMA_SCRIPT)
@@ -152,13 +170,23 @@ class TodoList(Service):
     # ---------- the storage: the instance's database in the infra service ----------
 
     @api(kind='query', description='the database the sqlite infra service keeps for this instance: file, size, versions, '
-                                   'and the infra instance that holds it',
-         result=returns('object', '{ infra: { serviceId, name, status }, database: { file, size, tableList, versionList } }'))
+                                   'and the infra instance that holds it; and the backups the local-backup infra service '
+                                   'keeps of it (backup is null when no local-backup instance answers)',
+         result=returns('object', '{ infra: { serviceId, name, status }, database: { file, size, tableList, versionList }, '
+                                  'backup: { infra: { serviceId, name, status }, backupList } | null }'))
     def storageInfo(self):
         infra = self.db.resolve()
+        backup = None
+        if self.backup.is_available():
+            backup_infra = self.backup.resolve()
+            backup = {
+                'infra': {'serviceId': backup_infra['serviceId'], 'name': backup_infra['name'], 'status': backup_infra['status']},
+                'backupList': self.backup.versionList(),
+            }
         return {
             'infra': {'serviceId': infra['serviceId'], 'name': infra['name'], 'status': infra['status']},
             'database': self.db.databaseInfo(),
+            'backup': backup,
         }
 
     @api(kind='command', description='a version of the database, made by the infra service',
@@ -185,6 +213,54 @@ class TodoList(Service):
          result=returns('null'))
     def versionDelete(self, versionId):
         self.db.versionDelete(versionId=versionId)
+        return None
+
+    # ---------- the backups: the database as a zip file in the local-backup infra service ----------
+
+    @api(kind='command', description='a backup of the database: a consistent copy handed to the local-backup infra service, '
+                                     'which keeps it as one zip file in its folder',
+         params=[param('note', 'string', 'what the backup is', default='')],
+         result=returns('object', 'the backup: { versionId, fileName, file, time, note, size }'))
+    def backupCreate(self, note=''):
+        dir_temp = tempfile.mkdtemp(prefix='todo-list-backup-')
+        try:
+            exported = self.db.exportTo(dirTarget=dir_temp)
+            backup = self.backup.versionCreate(pathList=[exported['file']], note=note,
+                                               meta={'storage': 'sqlite', 'file': 'current.sqlite', 'size': exported['size']})
+        finally:
+            shutil.rmtree(dir_temp, ignore_errors=True)
+        self.context.log('info', 'backup', f'backup {backup["versionId"]} made', {'note': note})
+        return backup
+
+    @api(kind='query', description='the backups of the database in the local-backup infra service, oldest first',
+         result=returns('array', 'the backups'))
+    def backupList(self):
+        return self.backup.versionList()
+
+    @api(kind='command', description='brings a backup back: the todos become those of the backup (the database as it was '
+                                     'is kept as a sqlite version first)',
+         params=[param('versionId', 'string', 'the backup')],
+         result=returns('object', '{ versionId, versionBefore }'))
+    def backupCheckout(self, versionId):
+        dir_temp = tempfile.mkdtemp(prefix='todo-list-backup-')
+        try:
+            checkout = self.backup.checkout(versionId=versionId, dirTarget=dir_temp)
+            file_list = [entry for entry in checkout['entryList'] if entry['path'].endswith('.sqlite')]
+            if len(file_list) != 1:
+                raise ServiceError(-1, f'the backup {versionId} holds no single sqlite file: {[entry["path"] for entry in checkout["entryList"]]}')
+            restored = self.db.restore(file=os.path.join(dir_temp, file_list[0]['path']), note=f'backup {versionId}')
+        finally:
+            shutil.rmtree(dir_temp, ignore_errors=True)
+        # the backup may predate the schema
+        self.db.executeScript(script=SCHEMA_SCRIPT)
+        self.context.log('info', 'backup', f'backup {versionId} checked out', {'versionBefore': restored['versionBefore']['versionId']})
+        return {'versionId': versionId, 'versionBefore': restored['versionBefore']}
+
+    @api(kind='command', description='removes a backup',
+         params=[param('versionId', 'string', 'the backup')],
+         result=returns('null'))
+    def backupDelete(self, versionId):
+        self.backup.versionDelete(versionId=versionId)
         return None
 
     # ---------- helpers ----------

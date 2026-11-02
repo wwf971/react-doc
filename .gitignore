@@ -32,8 +32,18 @@ main/config*.yaml.bak
 update-*
 # (doc_page_impl_service.md#the-service-runtime-kernel)
 **/.doc-page/service-kernel.yaml
+# the default backup folder of the local-backup infra service: the backups
+# of a doc page's service instances (doc_page_impl_service.md#the-local-backup-infra-service)
+**/.doc-page/service-backup/
 
-service-template-infra/
+# the built-in infra templates are not tracked yet, except local-backup
+# (doc_page_impl_service.md#the-local-backup-infra-service): everything of
+# service-template-infra/ is ignored but that template's folder (its build
+# and installed dependencies stay ignored by the rules above)
+**/service-template-infra/*
+!**/service-template-infra/storage/
+**/service-template-infra/storage/*
+!**/service-template-infra/storage/w5f2xw18q2r--local-backup/
 
 # hidden backups of files deleted from the page, .{name}.{uuid}.deleted
 # (doc_page_impl_source.md#creating-and-deleting-files)

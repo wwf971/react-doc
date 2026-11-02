@@ -29,7 +29,7 @@ The layer answers three questions a component should not answer alone:
 Three things the state is **not**:
 
 - **Not data.** The data is the document's lines or the asset object's version; a state is what the component makes of it while it is shown. A draft may sit in the state while a session lasts ([Drafts and sharing](#drafts-and-sharing)), but what is saved goes where the data goes.
-- **Not persistent.** It lives with the page and is empty after a reload. What must survive a reload is written into the data (a [dashboard writes its state into its asset object](doc_page_impl_service.md#dashboard-state)) or into a config layer ([the client layer](doc_page_impl_config.md#the-client-layer)).
+- **Not persistent.** It lives with the page and is empty after a reload. What must survive a reload is written into the data (a [dashboard writes its state into its asset object](doc_page_impl_service_dashboard.md#dashboard-state)) or into a config layer ([the client layer](doc_page_impl_config.md#the-client-layer)).
 - **Not guaranteed.** A state can be lost: the cap, a document edited outside the page. A component keeps in it what it can afford to lose and recompute: a selection, a draft the session will save anyway, an open folder.
 
 ## The key

@@ -2,7 +2,7 @@
 
     python3 server.py --config ../../example_doc/.doc-page/service-backend.yaml [--port 45190] [--host 127.0.0.1]
 
-Design: doc_page_impl_service.md#backend
+Design: doc_page_impl_service_backend.md#backend
 
 It runs on its own; the doc page reaches it through the vite plugin, which
 forwards /__doc-service/* here unchanged. Every answer is

@@ -1,6 +1,6 @@
 """What the script of a service is and what it exposes.
 
-Design: doc_page_impl_service.md#what-a-service-script-exposes
+Design: doc_page_impl_service_backend.md#what-a-service-script-exposes
 
 The script of a service is a Python class deriving from Service, in the file
 service.py of a template folder, and of every instance folder created from
@@ -82,9 +82,12 @@ DASHBOARD_PURPOSE_LIST = ['default', 'config', 'other']
 CONFIG_TYPE_LIST = ['string', 'integer', 'number', 'boolean']
 
 # the storage a infra service exposes to its consumers: the kind of store, the
-# shape of its history, the operations it has (doc_page_impl_service.md#storage-infra-services)
+# shape of its history, the operations it has (doc_page_impl_service_storage.md#storage-infra-services)
 STORAGE_VERSIONING_LIST = ['none', 'linear']
-STORAGE_OPERATION_LIST = ['versionCreate', 'versionList', 'checkout', 'versionDelete', 'export', 'backup']
+STORAGE_OPERATION_LIST = ['versionCreate', 'versionList', 'checkout', 'versionDelete', 'export', 'restore', 'backup']
+
+# the metadata folder of a doc page (doc_page_impl_dir.md), as service_kernel names it
+DOC_PAGE_META_DIR_NAME = '.doc-page'
 
 EXPOSE_NAME_STANDARD_LIST = ['meta', 'configDefineList', 'dependencyList', 'infra', 'execution', 'lifecycle',
                              'dashboardList', 'dashboardRemote']
@@ -158,7 +161,7 @@ class ServiceCaller:
 
 class InfraClient:
     """An infra service as an instance uses it: by name, routed by the kernel
-    to the current instance providing that name (doc_page_impl_service.md#using-an-infra-service).
+    to the current instance providing that name (doc_page_impl_service_kernel.md#using-an-infra-service).
 
         db = self.context.infra('sqlite')
         db.query(sql='SELECT 1')          # any api of the infra: a keyword call
@@ -199,6 +202,9 @@ class ServiceContext:
     template            the template it was created from, as recorded in its
                         service.yaml: { templateId, name, versionId }. a
                         record only: the instance never reads the template
+    origin              where the instance's folder was found: { kind: docPage |
+                        folder, alias, dir }; for a doc page, dir is the doc page
+                        folder (doc_page_meta_dir_get: its .doc-page/ folder)
     config              the instance's config, with the defaults of configDefineList
     dependency_list     the infra services the instance uses, normalized
                         [{ name, isRequired, onUnavailable }]
@@ -213,12 +219,13 @@ class ServiceContext:
     """
 
     def __init__(self, service_id, name, dir_path, template, config, runtime=None, kind='app',
-                 dependency_list=(), is_dependency_dynamic_allowed=False):
+                 dependency_list=(), is_dependency_dynamic_allowed=False, origin=None):
         self.service_id = service_id
         self.name = name
         self.kind = kind
         self.dir_path = dir_path
         self.template = template
+        self.origin = dict(origin) if origin else {'kind': 'folder', 'alias': '', 'dir': os.path.dirname(dir_path)}
         self.config = config
         self.dependency_list = [dict(item) for item in dependency_list]
         self.is_dependency_dynamic_allowed = is_dependency_dynamic_allowed
@@ -254,6 +261,14 @@ class ServiceContext:
     def path_get(self, name):
         """A file of the instance's folder."""
         return os.path.join(self.dir_path, name)
+
+    def doc_page_meta_dir_get(self):
+        """The metadata folder (.doc-page/) of the doc page the instance belongs
+        to, where a service keeps what should outlive the instance's folder
+        (the backups of local-backup); '' for an instance of a plain folder."""
+        if self.origin.get('kind') != 'docPage' or not self.origin.get('dir'):
+            return ''
+        return os.path.join(self.origin['dir'], DOC_PAGE_META_DIR_NAME)
 
     def job_progress_set(self, fraction, message=''):
         """The progress of the async job being run, 0..1, with a short text."""
@@ -355,7 +370,7 @@ class Service:
     (sqlite) as a plain attribute. Two instances never share a module, so
     module-level state is never shared either.
 
-    The lifecycle hooks (doc_page_impl_service.md#lifecycle-and-hooks), each
+    The lifecycle hooks (doc_page_impl_service_kernel.md#lifecycle-and-hooks), each
     run with the timeout of expose.lifecycle.hookTimeoutSecond:
       on_create   once in the life of the instance, the first time it starts
       start       every time the instance starts (after on_create the first time)

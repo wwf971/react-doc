@@ -2,7 +2,7 @@
 // page (onEvent), answered with { code, data, message }. A call goes to the
 // instance the dashboard is bound to, or to the one a target names:
 // { serviceId }, { templateId, versionId? }, or { infra: name } for the
-// infra service of that name (doc_page_impl_service.md#calls-between-services).
+// infra service of that name (doc_page_impl_service_kernel.md#calls-between-services).
 // -7 says an infra service the call depends on is unavailable: the todos of
 // todo-list live in the sqlite infra service, so every api may answer it.
 

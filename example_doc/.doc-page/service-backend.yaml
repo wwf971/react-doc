@@ -1,4 +1,4 @@
-# the service backend of the example doc (doc_page_impl_service.md#backend-config)
+# the service backend of the example doc (doc_page_impl_service_backend.md#backend-config)
 #   python3 main/service-backend/server.py --config example_doc/.doc-page/service-backend.yaml
 # started by the development server itself (config.yaml service.launch).
 # host and port: where the backend listens, and the one place they are
