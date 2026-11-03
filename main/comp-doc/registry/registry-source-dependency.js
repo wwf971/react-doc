@@ -2,6 +2,7 @@ import { blockQADataParse } from '../../../built-in/comp-mdx/block/block-qa/Bloc
 import { indexDataParse } from '../../../built-in/comp-mdx/index/IndexData.js';
 import { switchViewDependenciesCollect } from '../../../built-in/comp-mdx/switch-view/SwitchViewData.js';
 import { testCaseDependenciesCollect } from '../../../built-in/comp-mdx/test-case-table/TestCaseTableData.js';
+import { objectDependenciesCollect } from '../object/object-comp-dependency.js';
 
 // Build-time dependency extractors, keyed by component id (the values of
 // config.yaml compRegistry). The doc-source plugin calls them while it prunes
@@ -85,4 +86,7 @@ export const sourceDependencyCollectByCompId = {
   // the evidence documents of every recorded result, and its custom cells
   'common/TestCaseTable': testCaseDependenciesCollect,
   'specific/SourceLink': sourceLinkCollect,
+  // the documents named by references of the object registry (doc:...)
+  'common/ObjectView': objectDependenciesCollect,
+  'common/ObjectGroup': objectDependenciesCollect,
 };

@@ -20,6 +20,8 @@ The consumer is the caller the kernel knows, never a parameter: a service reache
 
 The storage operations are deliberately a storage layer's: `checkout` is not a read, it is a state change of the resource with lifecycle consequences, and it belongs to the infra service that holds the connection, not to the app service that asked for it.
 
+Both built-in storage services offer what they keep as objects of the [object registry](doc_page_impl_obj.md#services), so a consumer, the Services tab or a card diagram can name them without knowing the service: `sqlite` every consumer's database (`sqlite.database`, `service.{id}:database/{consumerServiceId}`, with its size and versions), `local-backup` every backup of its folder (`local-backup.backup`, `service.{id}:backup/{versionId}`), each related to the consumer instance it is for (`sqlite.keptFor`, `local-backup.backupOf`, to `service:{consumerServiceId}`, an instance that may be gone). They are read only through the registry: the data changes through the storage operations of its consumer.
+
 ### The local-backup infra service
 
 A version of the sqlite infra service lives in the sqlite instance's folder: it goes where that instance goes, and is gone with it. A **backup** is a copy of a consumer's data kept **outside every instance**, as a file a person can see, copy and bring back. The built-in template `local-backup` (`built-in/service-template-infra/storage/w5f2xw18q2r--local-backup/`, infra name `local-backup`, `provision: auto`) is the simplest infra service that does this: **one zip file per backup, in one local folder**.

@@ -123,11 +123,11 @@ export const DiagramPointNode = observer(function DiagramPointNode({ data }) {
 // the temporary node of the create panel, at the canvas position that was
 // double-clicked; drawn at screen scale whatever the zoom
 export const DiagramCreateNode = observer(function DiagramCreateNode({ data }) {
-	const { editor } = useContext(DiagramRenderContext);
+	const { editor, config } = useContext(DiagramRenderContext);
 	const { zoom } = useViewport();
 	if (!editor) return null;
 	return <div className="doc-vis-create nodrag nopan nowheel" style={{ transform: `scale(${1 / zoom})`, transformOrigin: 'top left' }}>
-		<DiagramCreatePanel position={data.position} editor={editor} />
+		<DiagramCreatePanel position={data.position} editor={editor} objectService={config?.object} sessionKey={`diagram-create:${config?.instanceId ?? 'diagram'}`} />
 	</div>;
 });
 

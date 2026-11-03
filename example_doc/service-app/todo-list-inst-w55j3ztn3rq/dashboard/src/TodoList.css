@@ -216,3 +216,80 @@
   margin-top: 2px;
   font-weight: 600;
 }
+
+/* TodoCard: the object view of a task, in a line (icon, inline) or a box (card) */
+.todo-list-card {
+  font-size: 0.85rem;
+  color: inherit;
+}
+
+.todo-list-card-icon,
+.todo-list-card-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.todo-list-card-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--color-fd-border, #ccc);
+  border-radius: 6px;
+  background: var(--color-fd-card, #fff);
+}
+
+.todo-list-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.todo-list-card-box {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--color-fd-muted-foreground, #777);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-fd-primary, #2563eb);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.todo-list-card-box-done {
+  border-color: var(--color-fd-primary, #2563eb);
+}
+
+.todo-list-card-box:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.todo-list-card-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.todo-list-card-title-done {
+  color: var(--color-fd-muted-foreground, #777);
+  text-decoration: line-through;
+}
+
+.todo-list-card-note {
+  overflow: hidden;
+  color: var(--color-fd-muted-foreground, #777);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

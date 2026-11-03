@@ -45,6 +45,18 @@
 //   templateIconUrlGet(templateId)           the url of a template's icon
 //   instanceIconUrlGet(serviceId)            the url of an instance's icon (its own copy)
 //   dashboardEntryUrlGet(serviceId, entry)   the url of the remote entry of an instance's dashboards
+//   urlGet(path)                             the url of a path of the backend api (an iconUrl a descriptor names)
+//
+// the object registry of the backend (doc_page_impl_obj.md#the-backend-registry):
+//   typeList()                               { typeList, problemList }: the built-in Types and the templates'
+//   objectProviderList()                     [{ id, label, namespaceList, typeList, relationTypeList, capabilityList, status, ... }]
+//   objectQuery(spec)                        { objectList, isTruncated, completeness: { isComplete, providerList } }
+//   objectCount(spec)                        { providerList: [{ providerId, count, countKind: exact | unknown, status }] }:
+//                                            how many a query would answer, nothing fetched (a search's preflight)
+//   objectResolve(refList, isVerify)         [descriptor], in order, each with its status
+//   objectRead(ref), objectUpdate(ref, patch)  { descriptor, content }, from the provider
+//   relationQuery(spec)                      { relationList, completeness }
+//   objectRegister({ descriptorList, namespaceList, isReplace })   the page's descriptors (namespaces of the page only)
 
 export const SERVICE_CODE_NOT_ALLOWED = -2;
 export const SERVICE_CODE_NOT_FOUND = -3;
@@ -111,5 +123,15 @@ export function serviceBackendApiCreate(endpoint) {
     templateIconUrlGet: (templateId) => `${endpointNormalized}/template/icon/${query(templateId)}`,
     instanceIconUrlGet: (serviceId) => `${endpointNormalized}/instance/icon/${query(serviceId)}`,
     dashboardEntryUrlGet: (serviceId, entry) => `${endpointNormalized}/instance/dashboard/${query(serviceId)}/${entry}`,
+    urlGet: (path) => `${endpointNormalized}${path}`,
+    typeList: () => requestSend('/type/list'),
+    objectProviderList: () => requestSend('/object/provider/list'),
+    objectQuery: (spec) => requestPost('/object/query', spec),
+    objectCount: (spec) => requestPost('/object/count', spec),
+    objectResolve: (refList, isVerify) => requestPost('/object/resolve', { refList, isVerify: isVerify === true }),
+    objectRead: (ref) => requestPost('/object/read', { ref }),
+    objectUpdate: (ref, patch) => requestPost('/object/update', { ref, patch }),
+    relationQuery: (spec) => requestPost('/object/relation/query', spec),
+    objectRegister: ({ descriptorList, namespaceList, isReplace }) => requestPost('/object/register', { descriptorList, namespaceList, isReplace: isReplace === true }),
   };
 }

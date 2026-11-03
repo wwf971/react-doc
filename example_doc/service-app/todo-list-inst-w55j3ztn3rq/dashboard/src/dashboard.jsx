@@ -1,7 +1,9 @@
 // The module the page loads (container serviceTodoList, module ./dashboard).
 // Every export named by expose.dashboardList[].export of service.py is
 // one dashboard component; the page renders it with { data, config, onEvent }
-// (doc_page_impl_service_dashboard.md#dashboard-props).
+// (doc_page_impl_service_dashboard.md#dashboard-props). An export named by
+// expose.compList[].export is a further component: TodoCard, the object view
+// of a task (doc_page_impl_obj.md#object-views).
 import todoListCssText from './TodoList.css?inline';
 
 // the module adds its own stylesheet: the federation plugin links an emitted
@@ -21,3 +23,5 @@ styleElement.textContent = todoListCssText;
 
 export { TodoListDashboard } from './TodoListDashboard.jsx';
 export { TodoListConfigDashboard } from './TodoListConfigDashboard.jsx';
+// an object view (expose.compList): the card of any core.task
+export { TodoCard } from './TodoCard.jsx';

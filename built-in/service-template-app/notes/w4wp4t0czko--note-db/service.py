@@ -3,6 +3,12 @@
 The example of a stateful service (example_doc/service-instance.md). This
 file is the template's; every instance created from the template runs its
 own copy, and keeps its own notes.sqlite (created by start(), ignored by git).
+
+Its notes are objects of the object registry (doc_page_impl_obj.md): the
+Type note-db.note (a core.document), provided in the instance's namespace
+through the object apis, which only the kernel calls. The module carries no
+view of a note: the page draws one with whatever view it has for a document,
+else with its fallback view (expose.requireList says so, not required).
 """
 
 import os
@@ -55,6 +61,22 @@ class NoteDb(Service):
             'container': 'serviceNoteDb',
             'module': './dashboard',
         },
+        # the Types the template defines, under its name (doc_page_impl_obj.md#types)
+        'typeList': [
+            {'id': 'note-db.note', 'label': 'Note', 'extendList': ['core.document'], 'icon': 'sticky-note',
+             'summaryKeyList': ['length', 'timeUpdated'],
+             'description': 'a note of a note-db instance: a title and a text; an update { title?, body? } changes it'},
+        ],
+        # the objects every instance provides (the object apis below)
+        'objectProvide': {
+            'typeList': ['note-db.note'],
+            'cacheSecond': 15,
+        },
+        # a view for documents, if the page has one; the fallback view otherwise
+        'requireList': [
+            {'objectView': 'core.document', 'context': 'card', 'isRequired': False,
+             'note': 'a card of a note: the module carries none'},
+        ],
         # a custom exposure: the sqlite schema, for whoever wants to read the file directly
         'sqliteTableList': ['note', 'setting'],
     }
@@ -126,6 +148,7 @@ class NoteDb(Service):
             [title, body, now, now],
         )
         self.connection.commit()
+        self.context.object_changed()
         return self._note_get(cursor.lastrowid)
 
     @api(kind='command', description='changes the title or the body of a note',
@@ -144,6 +167,7 @@ class NoteDb(Service):
             [title_new, body_new, time_text_get(), noteId],
         )
         self.connection.commit()
+        self.context.object_changed([f'note/{noteId}'])
         return self._note_get(noteId)
 
     @api(kind='command', description='removes a note',
@@ -153,6 +177,7 @@ class NoteDb(Service):
         self._note_get(noteId)
         self.connection.execute('DELETE FROM note WHERE noteId = ?', [noteId])
         self.connection.commit()
+        self.context.object_changed()
         return None
 
     # ---------- the database ----------
@@ -230,11 +255,78 @@ class NoteDb(Service):
             )
             imported_count += 1
         self.connection.commit()
+        if imported_count:
+            self.context.object_changed()
         return {
             'source': {'serviceId': source['serviceId'], 'name': source['name']},
             'importedCount': imported_count,
             'skippedCount': len(note_list) - imported_count,
         }
+
+    # ---------- the objects: the provider of the object registry ----------
+    # local ids: 'note/{noteId}'; the kernel makes them references of the
+    # instance's namespace, service.{serviceId}:note/{noteId}
+
+    @api(kind='query', description='the notes as objects, newest first',
+         params=[param('typeList', 'array', 'the Types asked for'), param('text', 'string', 'text the title or the body contains', default=''),
+                 param('filter', 'object', 'no filter', default=None), param('limit', 'integer', 'how many at most', default=100)],
+         result=returns('array', 'descriptors'), callerKindList=['kernel'])
+    def objectQuery(self, typeList, text='', filter=None, limit=100):
+        if not self.context.object_type_list_match(['note-db.note'], typeList):
+            return []
+        return [self._note_descriptor_build(note) for note in self.noteList(limit=limit, query=text)['noteList']]
+
+    @api(kind='query', description='how many notes objectQuery would answer, without listing them (the preflight of a search)',
+         params=[param('typeList', 'array', 'the Types asked for'), param('text', 'string', 'text the label contains', default=''),
+                 param('filter', 'object', 'the filters', default=None)],
+         result=returns('integer', 'how many'), callerKindList=['kernel'])
+    def objectCount(self, typeList, text='', filter=None):
+        if not self.context.object_type_list_match(['note-db.note'], typeList):
+            return 0
+        return self.noteList(limit=1, query=text)['total']
+
+    @api(kind='query', description='the descriptor of each local id, null for one that does not exist',
+         params=[param('localIdList', 'array', 'the local ids')], result=returns('array', 'descriptors or null'), callerKindList=['kernel'])
+    def objectResolve(self, localIdList):
+        result = []
+        for local_id in localIdList:
+            note = self._note_of_local_get(local_id)
+            result.append(self._note_descriptor_build(note) if note is not None else None)
+        return result
+
+    @api(kind='query', description='{ descriptor, content: the note } of a note',
+         params=[param('localId', 'string', 'the local id')], result=returns('object', '{ descriptor, content }'), callerKindList=['kernel'])
+    def objectRead(self, localId):
+        note = self._note_of_local_get(localId)
+        if note is None:
+            raise ServiceError(-3, f'{localId} is not a note of this instance')
+        return {'descriptor': self._note_descriptor_build(note), 'content': {**note, 'text': note['body']}}
+
+    @api(kind='command', description='changes a note: { title?, body? }',
+         params=[param('localId', 'string', 'the local id'), param('patch', 'object', '{ title?, body? }')],
+         result=returns('object', '{ descriptor, content }'), callerKindList=['kernel'])
+    def objectUpdate(self, localId, patch):
+        note = self._note_of_local_get(localId)
+        if note is None:
+            raise ServiceError(-3, f'{localId} is not a note of this instance')
+        self.noteUpdate(note['noteId'], title=patch.get('title'), body=patch.get('body'))
+        return self.objectRead(localId)
+
+    def _note_of_local_get(self, local_id):
+        if not isinstance(local_id, str) or not local_id.startswith('note/'):
+            return None
+        try:
+            note_id = int(local_id[len('note/'):])
+        except ValueError:
+            return None
+        row = self.connection.execute('SELECT * FROM note WHERE noteId = ?', [note_id]).fetchone()
+        return dict(row) if row is not None else None
+
+    def _note_descriptor_build(self, note):
+        body = note.get('body') or ''
+        return {'localId': f'note/{note["noteId"]}', 'typeList': ['note-db.note'], 'label': note['title'],
+                'description': body[:120], 'summary': {'length': len(body), 'timeUpdated': note.get('timeUpdated', '')},
+                'capabilityList': ['read', 'update'], 'open': {'kind': 'serviceInstance', 'serviceId': self.context.service_id}}
 
     # ---------- helpers ----------
 

@@ -2,6 +2,8 @@
 
 This document describes navigation for the reusable document page. For the overall architecture, source collection, and component registry, refer to [Document Page: Design](doc_page_impl.md); for the side-panel tree format and item rendering, refer to [Side panel design](doc_page_impl_side_panel.md). The inverse of a link, the backlinks of a document (the link index of the workspace, the backlinks panel, going to the reference itself), has a document of its own: [Backlinks](doc_page_impl_nav_backlink.md).
 
+The links between documents are also relations of the [object registry](doc_page_impl_obj.md#documents-as-objects) (`doc.link`), answered from the link index of the backlinks; the navigation's own representation is unchanged by it.
+
 `DocStore` is the navigation source of truth. Links and controls do not update the document body, URL, or history independently.
 
 ```text

@@ -113,6 +113,32 @@ def handler_class_build(runtime):
                 raise ServiceError(-1, 'the body must be a json object')
             return body
 
+        # ---------- the object registry (doc_page_impl_obj.md) ----------
+
+        def object_route(self, path, body):
+            """The object registry, for the page: every request is the page's
+            (caller page), which registers in namespaces no provider of the backend owns."""
+            registry = runtime.object_registry
+            caller = self.page_caller_get(body.get)
+            if path == '/object/query':
+                return registry.query(body, caller)
+            if path == '/object/count':
+                return registry.count(body, caller)
+            if path == '/object/resolve':
+                return registry.resolve(body.get('refList'), body.get('isVerify') is True, caller)
+            if path == '/object/read':
+                return registry.read(str(body.get('ref') or ''), caller)
+            if path == '/object/update':
+                return registry.update(str(body.get('ref') or ''), body.get('patch'), caller)
+            if path == '/object/relation/query':
+                return registry.relation_query(body, caller)
+            if path == '/object/register':
+                return registry.register(body.get('descriptorList'), {'kind': 'page', 'id': ''}, body.get('namespaceList') or [],
+                                         body.get('isReplace') is True)
+            if path == '/object/unregister':
+                return registry.unregister(body.get('refList'), {'kind': 'page', 'id': ''})
+            raise ServiceError(-3, f'POST {path} is not an endpoint')
+
         # ---------- routes ----------
 
         def do_GET(self):
@@ -173,6 +199,11 @@ def handler_class_build(runtime):
                     self.file_send(remote_dir, unquote(relative_path))
                 elif path == '/job/get':
                     self.response_send({'code': 0, 'data': runtime.job_get(query.get('serviceId', ''), query.get('jobId', ''))})
+                elif path == '/type/list':
+                    runtime.scan()
+                    self.response_send({'code': 0, 'data': runtime.object_registry.type_list_get()})
+                elif path == '/object/provider/list':
+                    self.response_send({'code': 0, 'data': runtime.object_registry.provider_info_list_get()})
                 else:
                     self.response_send({'code': -3, 'message': f'GET {path} is not an endpoint'})
             except ServiceError as error:
@@ -207,6 +238,8 @@ def handler_class_build(runtime):
                 elif path == '/template/version/new':
                     data = runtime.template_version_new(body.get('templateId', ''), body.get('note', ''))
                     self.response_send({'code': 0, 'data': data})
+                elif path.startswith('/object/'):
+                    self.response_send({'code': 0, 'data': self.object_route(path, body)})
                 elif path == '/api/call':
                     # target, or serviceId alone: the short form of target { serviceId }
                     target = body.get('target') if body.get('target') is not None else {'serviceId': body.get('serviceId', '')}

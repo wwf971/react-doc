@@ -118,6 +118,18 @@ export {
   Waypoints,
   Workflow,
   X,
+  // the icons of the object Types (comp-doc/object/object-icon.jsx)
+  Archive,
+  Book,
+  Box,
+  CircleDashed,
+  Database,
+  Group,
+  Layers,
+  ListTodo,
+  Package,
+  Plug,
+  StickyNote,
 } from 'lucide-react';
 export { FrameworkProvider, usePathname } from 'fumadocs-core/framework';
 export { default as Link } from 'fumadocs-core/link';

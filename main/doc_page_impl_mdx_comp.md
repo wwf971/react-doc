@@ -14,6 +14,34 @@ document  <!--renderComp=FileTree,id=x-->  or  <FileTree .../>
 
 ## What a component exposes
 
+Everything a component says about itself is in its registry definition, made by `compDefine(Xxx, options)`; nothing about a component is known anywhere else. In summary:
+
+```text
+a component definition (compDefine)
+├── CompRender                       the React component, given { data, config, onEvent }
+├── how the registry boundary treats it (RegisteredComp)
+│   ├── placementList                where it may render: mdx, commentBlock, commentInline, edit, objectView,
+│   │                                visualizationNode, tableCell, serviceSettings, ... (undefined: anywhere)
+│   ├── componentType, dataRefTypeList   what it can be referenced as, whose data it reuses (dataRef)
+│   ├── dataBuild                    how its input becomes { data, config }
+│   ├── isAssetAware                 told whether its data is inline or an asset (config.assetInfo)
+│   ├── assetDependencyListGet       the files and assets its data refers to
+│   └── deleteFileListGet            the files it offers to delete with its block
+└── expose: what it tells the page about itself
+    ├── standard names: normalized at registration, read through accessors
+    │   ├── meta                     facts: label, description, isReadOnly, isEditSourceAccepted, isInsertCommon,
+    │   │                            isEditEnterButtonOnly, isAssetOnly, isEditAssetAccepted, isNotInDoc,
+    │   │                            isEditSlashEnabled, assetSaveMode, configDefineList, any key of its own
+    │   ├── icon                     a component drawing its icon at any size
+    │   ├── viewModeList             the ways its data is displayed, one default (config.viewMode)
+    │   ├── editModeList             the ways its data is edited in place (+ the built-in source mode)
+    │   ├── sourceDefaultCreate      the source of a new block, for the insert menu
+    │   ├── apiList                  the apis it offers the unified api registry, {compId}/{name}
+    │   └── objectView               the object Types it draws, in which contexts (icon, inline, card, block)
+    └── non-standard names: kept as declared, read by whoever knows them (compExposeGet)
+        └── visualizationNode        e.g. the node contract of a card diagram: anchorListGet, sizeDefault
+```
+
 A definition says two kinds of things about a component. The first is how the registry boundary (`RegisteredComp`) treats it: where it may render (`placementList`), what it can be referenced as (`componentType`, `dataRefTypeList`), how its input is normalized (`dataBuild`), what it is told about its data (`isAssetAware`, `assetDependencyListGet`; [Components and the asset service layer](#components-and-the-asset-service-layer)), and which of the files its data names it offers for deletion with a block of it (`deleteFileListGet(data) -> [{ path, reason? }]`, an opt-in capability the edit layer asks for without knowing the component: [Deleting blocks](doc_page_impl_block_ops.md#deleting-blocks); `Image` and `ImageGrid` offer their image files). The second is what the component tells the page about itself, for the page to offer to readers and authors: that it is read-only, in which ways it can be displayed and edited, what its icon is, how a new block of it starts, which config keys it has. These are the component's **exposure**, the `expose` option of `compDefine()`:
 
 ```text
@@ -30,12 +58,13 @@ compDefine(Xxx, {
     sourceDefaultCreate: (env) => { lang, raw, props } | { text } | undefined
                                                                  the source of a new block
     apiList:       [apiDefine({ name, label, paramList, run, ... })]    the apis it offers the unified api registry
+    objectView:    { typeList, contextList, priority }               the objects it draws, for the object registry
     anythingElse:  kept as written                                  for a host or a later feature
   },
 })
 ```
 
-Six names are **standard**: the page knows their shape, normalizes them at registration (`comp-expose.js`, `compExposeNormalize`; a wrong shape fails there, not later in some reader), and reads them where it needs them. Every other name is **non-standard**: kept exactly as declared, read by whoever knows it through `compExposeGet(definition, name)`, so a host application or a feature that does not exist yet can hang its own facts on a component without a change to the registry. A legacy definition (a bare React component in `compById`) exposes nothing and gets the defaults of every standard name. The standard names are read through small accessors rather than by reaching into the definition (`compMetaGet`, `compIconGet`, `compViewModeListGet`, `compEditModeListGet`, `compSourceDefaultGet`, `compApiListGet`, `compExposeGet`); for a component that exposes nothing they return the defaults described below.
+Seven names are **standard**: the page knows their shape, normalizes them at registration (`comp-expose.js`, `compExposeNormalize`; a wrong shape fails there, not later in some reader), and reads them where it needs them. Every other name is **non-standard**: kept exactly as declared, read by whoever knows it through `compExposeGet(definition, name)`, so a host application or a feature that does not exist yet can hang its own facts on a component without a change to the registry. A legacy definition (a bare React component in `compById`) exposes nothing and gets the defaults of every standard name. The standard names are read through small accessors rather than by reaching into the definition (`compMetaGet`, `compIconGet`, `compViewModeListGet`, `compEditModeListGet`, `compSourceDefaultGet`, `compApiListGet`, `compObjectViewGet`, `compExposeGet`); for a component that exposes nothing they return the defaults described below.
 
 The exposures of the components registered by the package are kept beside the component when it has an editor of its own (`image-expose.js`, `image-grid-expose.js`, the demo `StockTable`), and in `comp-doc/registry/registry-expose.js` for the others; every component that can start a block of a document exposes a label, a description, an icon, and a `sourceDefaultCreate`.
 
@@ -162,6 +191,10 @@ The returned shape is checked when the factory is called; a factory that throws 
 ### Apis
 
 A component offers operations on its blocks to whoever works the page programmatically, the command palette, a hotkey or an AI agent, through `expose.apiList`: definitions made with `apiDefine()` (or their options), each with a `name`, registered as `{compId}/{name}` in the [unified api registry](doc_page_impl_api.md#the-apis-of-a-component) while the component is in the component registry, and gone with it. An api's `run(context, params)` receives the context of every api plus `context.comp = { compId, definition }`, locates its block like the document apis do (an index, or the `id` of the marker), and reads and writes through the same paths as the page (the event layer for a change). `TestCaseTable` exposes `tableGet` and `resultRecord` (`TestCaseTableApiList.js`): reading a table and recording a result as a click on a cell would, which is how an agent that checked a feature records its check.
+
+### Object views
+
+A component that draws objects of the [object registry](doc_page_impl_obj.md) says which: `expose.objectView`, `{ typeList, contextList, priority }`, the object Types it draws (and every subtype of them) in which contexts (`icon`, `inline`, `card`, `block`), checked at registration like the other standard names. Such a component renders in the placement `objectView`, with `data: { ref, descriptor }` and `config.objectView: { context, isEditAllowed, editUnavailableReason, note }`, and asks for a change of the object with `objectUpdateRequest`. Which view draws an object is the page's choice, not the object's: the nearest of its Types wins, then the priority, and the fallback view, registered for `core.object`, draws every object nothing nearer draws ([Object views](doc_page_impl_obj.md#object-views)). A component of a doc page or a package becomes a view the same way, and a service template's module carries views too (`expose.compList` of its script). The views of the package are `common/ObjectViewFallback`, `ObjectViewCollection`, `ObjectViewConfig` and `ObjectViewDocument` (`comp-doc/object/`); the components a document writes to place objects are `ObjectView`, `ObjectList`, `ObjectGroup` and `ObjectSearch` ([Search](doc_page_impl_obj_search.md)).
 
 ## Component styles
 

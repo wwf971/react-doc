@@ -67,6 +67,8 @@ backlink
   key            docPath and the reference's position: stable while the document is unchanged
 ```
 
+The index also answers the [object registry](doc_page_impl_obj.md#documents-as-objects): the provider `doc-link` (`lib/doc-object-provider-link.js`) gives the references of a document, and the backlinks of a document or a section, as `doc.link` relations between `doc:` objects, resolved by the same rules as below. The index stays the navigation layer's own; nothing of it is copied into the registry.
+
 Three rules of the inversion: a reference that resolves to several files (a bare name shared by two documents) is a backlink of **each**, so a document never misses a link that may reach it, as pruning retains each; a document's references to **itself** are not backlinks, as a referrer count never counted them; and the backlinks of a document are ordered by where they are written, so the list reads like the referencing document does. The groups of the panel follow the side panel: the referencing documents in the order of their first item, documents without an item last, by path.
 
 ## The backlinks panel

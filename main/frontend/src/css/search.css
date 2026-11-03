@@ -1,0 +1,92 @@
+/* ---------- .doc-search-* ----------
+   a search of the page: its field (an icon, the text), and its results,
+   one row each (a name, a label, a description, the matched text marked).
+   the insert menu of the edit layer floats its results over the menu
+   (.doc-edit-insert-result-list positions them); the object search lists
+   them in its panel (doc_page_impl_obj_search.md). */
+.doc-search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 1.35rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+}
+
+.doc-search-field:focus-within {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border));
+}
+
+.doc-search-field-icon {
+  flex: 0 0 auto;
+  margin: 0 0.3rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-search-field-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 0.3rem 0 0;
+  border: 0;
+  background: none;
+  color: var(--color-fd-foreground);
+  font: inherit;
+  outline: none;
+}
+
+.doc-search-result-list {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0;
+  overflow-y: auto;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-popover, var(--color-fd-background));
+  color: var(--color-fd-popover-foreground, var(--color-fd-foreground));
+}
+
+.doc-search-result {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.35rem;
+  padding: 0 0.4rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.doc-search-result:hover,
+.doc-search-result[data-active] {
+  background: var(--color-fd-accent);
+}
+
+.doc-search-result-name {
+  flex: 0 0 auto;
+}
+
+.doc-search-result-label {
+  flex: 0 0 auto;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-search-result-description {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-search-none {
+  padding: 0.15rem 0.4rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-search-match {
+  padding: 0;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--color-fd-primary) 25%, transparent);
+  color: inherit;
+}

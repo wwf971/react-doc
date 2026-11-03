@@ -21,6 +21,11 @@ import { DocSlashStore } from './store/DocSlashStore.js';
 import { DocApiStore } from './store/DocApiStore.js';
 import { DocPaletteStore } from './store/DocPaletteStore.js';
 import { DocHotkeyStore } from './store/DocHotkeyStore.js';
+import { DocObjectStore, objectEventTypeList } from './store/DocObjectStore.js';
+import { objectProviderDocCreate } from './lib/doc-object-provider-doc.js';
+import { objectProviderLinkCreate } from './lib/doc-object-provider-link.js';
+import { objectProviderAssetCreate } from './lib/doc-object-provider-asset.js';
+import { objectProviderBackendCreate } from './lib/doc-object-provider-backend.js';
 import { DocEventRouter } from './lib/doc-event.js';
 import { DocCompStateStore } from './store/DocCompStateStore.js';
 import { StoreContext, useDocStores } from './store/context.js';
@@ -207,6 +212,15 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       remote: { endpoint: envStore.endpointGet('api'), subscribe: config.api?.subscribe, send: config.api?.send },
     });
     apiStore.providerAdd(serviceApiProviderCreate(serviceStore));
+    // the object registry (doc_page_impl_obj.md): the service layers of the
+    // page provide their objects and relations from their own
+    // representations (the doc page source, the links, the asset store),
+    // the backend's registry provides those of its kernel and instances
+    const objectStore = new DocObjectStore({ serviceStore, docStore, configStore, assetStore, sourceStore });
+    objectStore.providerAdd(objectProviderDocCreate({ sourceStore, docStore }));
+    objectStore.providerAdd(objectProviderLinkCreate({ sourceStore, linkStore }));
+    objectStore.providerAdd(objectProviderAssetCreate({ assetStore }));
+    objectStore.providerAdd(objectProviderBackendCreate({ serviceStore }));
     const paletteStore = new DocPaletteStore({ apiStore });
     const hotkeyStore = new DocHotkeyStore({ apiStore, mapListHost: config.hotkeyMapList ?? [] });
     // the event layer (doc_page_impl_event.md): component reports are routed
@@ -250,6 +264,11 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       handle: (event) => serviceStore.eventHandle(event),
     });
     eventRouter.routeAdd({
+      name: 'object',
+      typeList: objectEventTypeList,
+      handle: (event) => objectStore.eventHandle(event),
+    });
+    eventRouter.routeAdd({
       name: 'sidePanel',
       typeList: sidePanelEventTypeList,
       handle: (event) => sidePanelStore.eventHandle(event),
@@ -268,6 +287,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       assetStore,
       blockPopupStore,
       serviceStore,
+      objectStore,
       sidePanelStore,
       pasteStore,
       blockSelectStore,
@@ -303,10 +323,12 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     stores.assetStore.init();
     stores.blockPopupStore.init();
     stores.serviceStore.init();
+    stores.objectStore.init();
     stores.apiStore.init();
     return () => {
       stores.hotkeyStore.dispose();
       stores.apiStore.dispose();
+      stores.objectStore.dispose();
       stores.serviceStore.dispose();
       stores.blockPopupStore.dispose();
       stores.assetStore.dispose();

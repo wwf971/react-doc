@@ -42,6 +42,16 @@ import { List } from '../../../built-in/comp-mdx/text/List.jsx';
 import { Paragraph } from '../../../built-in/comp-mdx/text/Paragraph.jsx';
 import { compDefine, compNativeDefine } from './comp-registry.js';
 import {
+  compObjectGroup,
+  compObjectList,
+  compObjectSearch,
+  compObjectView,
+  compObjectViewCollection,
+  compObjectViewConfig,
+  compObjectViewDocument,
+  compObjectViewFallback,
+} from '../object/object-comp-define.js';
+import {
   accordionsExpose,
   blockExpose,
   blockMdxExpose,
@@ -225,6 +235,16 @@ export const compById = {
     placementList: ['sidePanelDisplay'],
     expose: { meta: { label: 'Side panel item', isNotInDoc: true } },
   }),
+  // the object registry (doc_page_impl_obj.md): the components a document
+  // writes, and the views objects are drawn with (placement objectView)
+  'common/ObjectView': compObjectView,
+  'common/ObjectList': compObjectList,
+  'common/ObjectGroup': compObjectGroup,
+  'common/ObjectSearch': compObjectSearch,
+  'common/ObjectViewFallback': compObjectViewFallback,
+  'common/ObjectViewCollection': compObjectViewCollection,
+  'common/ObjectViewConfig': compObjectViewConfig,
+  'common/ObjectViewDocument': compObjectViewDocument,
   'common/Anchor': compDefine(Anchor, { placementList: ['mdx', 'commentBlock', 'commentInline'] }),
   'common/Tag': compDefine(Tag, { placementList: ['mdx', 'commentInline'] }),
   'common/TagLabel': compDefine(TagLabel, { placementList: ['tag', 'mdx'] }),

@@ -256,6 +256,8 @@ connections:
 
 A node is not necessarily a table. `operator` is a built-in step node; `renderer: { component: MigrationStep }` draws a node with a registered component that declares the `visualizationNode` placement and lists its anchors (`input`, `output`). Lines take a `renderer.type` (`smoothstep` by default, `bezier`, `straight`, `step`, or `polyline` with waypoints), and a `style`, `label`, markers, and `isAnimated`. `defaults.connection` sets these for every line; a line overrides them one property at a time.
 
+A node can also be **any object** of the page's object registry: `renderer: { component: ObjectView }` with `data: { object: doc:~example:example/service-kernel.md }` draws a card of that document, and the same with a service instance, its config, a todo or a database, each by the view of its own Types (`example_doc/object-registry.md`, [Objects and Types](../../../main/doc_page_impl_obj.md#object-views)). It has one anchor, `body`, on every side. In edit mode, a double-click on the canvas and a few typed words also list the objects found by the page's object search, below the node kinds; choosing one adds such a node. `objectSearch: { typeList: [core.task] }` in the diagram's data narrows what is offered, `objectSearch: { isEnabled: false }` offers none.
+
 <!--renderComp=DiagramER,title=Customer migration-->
 ```yaml
 version: 1

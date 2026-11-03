@@ -1,6 +1,7 @@
 import { FileCode } from '../../frontend/UICommon.js';
 import { apiDefine, apiDefinitionIs } from '../../frontend/src/lib/doc-api.js';
 import { compIconDefault } from './comp-icon.jsx';
+import { OBJECT_VIEW_CONTEXT_LIST } from '../../frontend/src/lib/doc-object-ref.js';
 
 // What a component exposes about itself through its registry definition
 // (doc_page_impl_mdx_comp.md#what-a-component-exposes): the `expose` option
@@ -75,6 +76,14 @@ import { compIconDefault } from './comp-icon.jsx';
 //                  the registry; run(context, params) receives
 //                  context.comp = { compId, definition }. plain option
 //                  objects are accepted and defined here
+//   objectView     { typeList, contextList, priority }: the component draws
+//                  objects of these Types (and their subtypes) in these
+//                  contexts (icon, inline, card, block), for the object
+//                  registry (doc_page_impl_obj.md#object-views). it renders in
+//                  the placement objectView with data { ref, descriptor }
+//                  and config.objectView { context, isEditAllowed,
+//                  editUnavailableReason }; priority orders two views of
+//                  the same Type (default 0)
 
 export const COMP_EDIT_MODE_SOURCE_ID = 'source';
 
@@ -110,7 +119,9 @@ const ASSET_SAVE_MODE_LIST = ['inPlace', 'newVersion'];
 // isAssetOnly renders there only with data from the asset service layer
 export const COMP_PLACEMENT_DOC_LIST = ['mdx', 'commentBlock'];
 
-export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'apiList'];
+export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'apiList', 'objectView'];
+
+const REGEX_TYPE_ID = /^[a-z][a-z0-9-]*(\.[a-zA-Z][a-zA-Z0-9-]*)+$/;
 
 // the normalized `expose` of a definition; throws on a shape the page
 // cannot work with, so a wrong declaration fails at registration
@@ -123,7 +134,7 @@ export function compExposeNormalize(expose = {}) {
   if (expose.editTemplate !== undefined) {
     throw new Error('compDefine: expose.editTemplate is expose.sourceDefaultCreate(env) now (comp-expose.js).');
   }
-  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, apiList, ...exposeOther } = expose;
+  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, apiList, objectView, ...exposeOther } = expose;
   return {
     ...exposeOther,
     meta: metaNormalize(meta),
@@ -132,7 +143,26 @@ export function compExposeNormalize(expose = {}) {
     editModeList: modeListNormalize(editModeList, 'expose.editModeList', [COMP_EDIT_MODE_SOURCE_ID]),
     sourceDefaultCreate: sourceDefaultCreateNormalize(sourceDefaultCreate),
     apiList: apiListNormalize(apiList),
+    objectView: objectViewNormalize(objectView),
   };
+}
+
+// what the component draws as an object view: the Types, the contexts, the
+// priority; undefined for a component that draws no object
+function objectViewNormalize(objectView) {
+  if (objectView === undefined) return undefined;
+  if (!objectView || typeof objectView !== 'object' || Array.isArray(objectView)) {
+    throw new Error('compDefine: expose.objectView must be { typeList, contextList, priority? }.');
+  }
+  const { typeList, contextList = OBJECT_VIEW_CONTEXT_LIST, priority = 0 } = objectView;
+  if (!Array.isArray(typeList) || typeList.length === 0 || !typeList.every((typeId) => REGEX_TYPE_ID.test(String(typeId)))) {
+    throw new Error('compDefine: expose.objectView.typeList must list Type ids (core.object, doc.document).');
+  }
+  if (!Array.isArray(contextList) || contextList.length === 0 || !contextList.every((context) => OBJECT_VIEW_CONTEXT_LIST.includes(context))) {
+    throw new Error(`compDefine: expose.objectView.contextList must list some of ${OBJECT_VIEW_CONTEXT_LIST.join(', ')}.`);
+  }
+  if (typeof priority !== 'number') throw new Error('compDefine: expose.objectView.priority must be a number.');
+  return { typeList: [...typeList], contextList: [...contextList], priority };
 }
 
 // the apis a component exposes: definitions made with apiDefine, or the
@@ -284,6 +314,12 @@ export function compSourceDefaultGet(definition, env) {
     throw new Error(`sourceDefaultCreate of ${env.compName}: an isAssetOnly component returns { lang, raw, props }, not { text }.`);
   }
   return source;
+}
+
+// what a component draws as an object view (expose.objectView), undefined
+// for one that draws no object (doc_page_impl_obj.md#object-views)
+export function compObjectViewGet(definition) {
+  return definition?.expose?.objectView;
 }
 
 export function compViewModeListGet(definition) {

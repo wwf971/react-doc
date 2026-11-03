@@ -17,7 +17,11 @@ the code they describe:
             'execution': {...},          passive (apis only) or resident (a run() thread of its own)
             'lifecycle': {...},          the timeout of the lifecycle hooks
             'dashboardList': [...],      the dashboards, keyed by id (optional)
+            'compList': [...],           further components of the module: object views (optional)
             'dashboardRemote': {...},    where the federated module of the dashboards is
+            'typeList': [...],           the object Types the template defines, under its name
+            'objectProvide': {...},      the objects it provides to the object registry
+            'requireList': [...],        the Types and components it needs others to provide
             'anythingElse': ...,         kept as written (non-standard names)
         }
 
@@ -90,7 +94,28 @@ STORAGE_OPERATION_LIST = ['versionCreate', 'versionList', 'checkout', 'versionDe
 DOC_PAGE_META_DIR_NAME = '.doc-page'
 
 EXPOSE_NAME_STANDARD_LIST = ['meta', 'configDefineList', 'dependencyList', 'infra', 'execution', 'lifecycle',
-                             'dashboardList', 'dashboardRemote']
+                             'dashboardList', 'compList', 'dashboardRemote', 'typeList', 'objectProvide', 'requireList']
+
+# ---------- the object registry (doc_page_impl_obj.md) ----------
+
+# an object reference: {namespace}:{local}. the namespace names the provider
+# that is authoritative for the object; the local part is the provider's own
+REGEX_OBJECT_REF = re.compile(r'^([a-zA-Z][a-zA-Z0-9.-]*):(.+)$')
+# a Type id: dotted, its first part the namespace of whoever defines it
+# (core, doc, service, or a template's name)
+REGEX_TYPE_ID = re.compile(r'^[a-z][a-z0-9-]*(\.[a-zA-Z][a-zA-Z0-9-]*)+$')
+TYPE_KIND_LIST = ['object', 'relation']
+TYPE_ROOT_BY_KIND = {'object': 'core.object', 'relation': 'core.relation'}
+# the contexts an object is drawn in (doc_page_impl_obj.md#object-views)
+OBJECT_VIEW_CONTEXT_LIST = ['icon', 'inline', 'card', 'block']
+# what a provider can be asked, besides being named by its namespace
+OBJECT_CAPABILITY_LIST = ['query', 'count', 'resolve', 'read', 'update', 'relationQuery']
+# the api of a script that answers each capability of its objectProvide;
+# the kernel is their only caller (callerKindList ['kernel'])
+OBJECT_API_BY_CAPABILITY = {'query': 'objectQuery', 'count': 'objectCount', 'resolve': 'objectResolve', 'read': 'objectRead',
+                            'update': 'objectUpdate', 'relationQuery': 'relationQuery'}
+OBJECT_CACHE_SECOND_DEFAULT = 15
+REQUIRE_KIND_LIST = ['type', 'objectView', 'comp']
 
 REGEX_DASHBOARD_ID = re.compile(r'^[a-z][a-zA-Z0-9-]*$')
 REGEX_API_NAME = re.compile(r'^[a-z][a-zA-Z0-9]*$')
@@ -354,6 +379,77 @@ class ServiceContext:
         name, template, status, expose, … }); raises ServiceError -3 when none."""
         return self._runtime.target_resolve(target, self._caller_self_get()).info_get()
 
+    # ---------- the object registry (doc_page_impl_obj.md) ----------
+    # the registry is a place of discovery and resolution, never the truth
+    # of an object: what it answers may be stale or incomplete, and says so
+    # (status, completeness). an object is read and changed through its
+    # provider (object_read, object_update), which decides
+
+    @property
+    def object_namespace(self):
+        """The namespace of the objects this instance provides: service.{serviceId}."""
+        return f'service.{self.service_id}'
+
+    def object_ref_build(self, local_id):
+        """The reference of one of this instance's own objects."""
+        return f'{self.object_namespace}:{local_id}'
+
+    def object_type_is_assignable(self, type_id, type_id_to):
+        """Whether an object of type_id is one of type_id_to (the same Type, or a
+        subtype), by the Type registry of the backend: what a provider asks to
+        answer a query for a Type it does not name itself (core.object)."""
+        return self._runtime.object_registry.type_registry.is_assignable(type_id, type_id_to)
+
+    def object_type_list_match(self, type_list_own, type_list_asked):
+        """The Types of type_list_own that a query for type_list_asked wants."""
+        return [type_id for type_id in type_list_own
+                if any(self.object_type_is_assignable(type_id, asked) for asked in (type_list_asked or ['core.object']))]
+
+    def object_query(self, type_list=None, text='', filter=None, limit=100, is_fresh=False):
+        """Objects of these Types (and their subtypes), from every provider that has
+        some, and from what was registered: { objectList, completeness }. A
+        provider that does not answer is in completeness, not an error."""
+        return self._runtime.object_registry.query({'typeList': type_list or [], 'text': text, 'filter': filter or {},
+                                                    'limit': limit, 'isFresh': is_fresh}, self._caller_self_get())
+
+    def object_count(self, type_list=None, text='', filter=None):
+        """How many objects a query would answer, per provider, without fetching them:
+        { providerList: [{ providerId, label, status, count, countKind: exact | unknown }] }."""
+        return self._runtime.object_registry.count({'typeList': type_list or [], 'text': text, 'filter': filter or {}},
+                                                   self._caller_self_get())
+
+    def object_resolve(self, ref_list, is_verify=False):
+        """The descriptors of these references, in order, each with its status
+        (found, registered, missing, unavailable, unknown)."""
+        return self._runtime.object_registry.resolve(ref_list, is_verify, self._caller_self_get())
+
+    def object_read(self, ref):
+        """{ descriptor, content } of an object, from its provider; raises ServiceError."""
+        return self._runtime.object_registry.read(ref, self._caller_self_get())
+
+    def object_update(self, ref, patch):
+        """Changes an object through its provider, which checks the patch; raises ServiceError."""
+        return self._runtime.object_registry.update(ref, patch, self._caller_self_get())
+
+    def relation_query(self, from_ref='', to_ref='', type_list=None, is_fresh=False):
+        """The relations from from_ref and / or to to_ref, of these Types: { relationList, completeness }."""
+        return self._runtime.object_registry.relation_query({'fromRef': from_ref, 'toRef': to_ref, 'typeList': type_list or [],
+                                                             'isFresh': is_fresh}, self._caller_self_get())
+
+    def object_register(self, descriptor_list, is_replace=False):
+        """Registers descriptors of this instance's own objects (a localId, or a
+        reference of its namespace), so a query finds them without asking the
+        instance; with is_replace its earlier registrations are dropped first.
+        Registered is known, not verified: a resolve still asks the instance."""
+        return self._runtime.object_registry.register(descriptor_list, {'kind': 'service', 'id': self.service_id},
+                                                      [self.object_namespace], is_replace)
+
+    def object_changed(self, local_id_list=None):
+        """Tells the registry that these objects (all of this instance's, for None)
+        changed or are gone: what it keeps of them is asked again."""
+        ref_list = None if local_id_list is None else [self.object_ref_build(local_id) for local_id in local_id_list]
+        self._runtime.object_registry.changed(f'service:{self.service_id}', ref_list)
+
     def _caller_self_get(self):
         caller_current = self.caller
         chain = caller_current.chain if caller_current is not None else ()
@@ -468,6 +564,8 @@ def expose_build(service_class, label, dir_path):
     if 'apiList' in expose_other:
         raise ServiceDefineError(f'{label}: apiList is not declared in expose; mark the methods with @api')
     dashboard_list = _dashboard_list_normalize(expose.get('dashboardList'), label)
+    comp_list = _comp_list_normalize(expose.get('compList'), label, dashboard_list)
+    api_list = _api_list_build(service_class, label)
     hook_list = [name for name, method in HOOK_METHOD_BY_NAME.items() if getattr(service_class, method) is not getattr(Service, method)]
     return {
         **expose_other,
@@ -479,9 +577,13 @@ def expose_build(service_class, label, dir_path):
         'lifecycle': _lifecycle_normalize(expose.get('lifecycle'), label),
         # the hooks the script implements (the methods it overrides), for information
         'hookList': hook_list,
-        'apiList': _api_list_build(service_class, label),
+        'apiList': api_list,
         'dashboardList': dashboard_list,
-        'dashboardRemote': _dashboard_remote_normalize(expose.get('dashboardRemote'), label, dir_path, dashboard_list),
+        'compList': comp_list,
+        'dashboardRemote': _dashboard_remote_normalize(expose.get('dashboardRemote'), label, dir_path, dashboard_list + comp_list),
+        'typeList': type_define_list_normalize(expose.get('typeList'), f'{label}: expose.typeList'),
+        'objectProvide': _object_provide_normalize(expose.get('objectProvide'), label, api_list),
+        'requireList': _require_list_normalize(expose.get('requireList'), label),
     }
 
 
@@ -732,11 +834,13 @@ def _dashboard_list_normalize(dashboard_list, label):
     return result
 
 
-def _dashboard_remote_normalize(remote, label, dir_path, dashboard_list):
+def _dashboard_remote_normalize(remote, label, dir_path, module_comp_list):
+    """Where the federated module of the dashboards and of the further
+    components (compList) is; None for a script with neither."""
     place = f'{label}: expose.dashboardRemote'
-    if len(dashboard_list) == 0:
+    if len(module_comp_list) == 0:
         if remote is not None:
-            raise ServiceDefineError(f'{place} goes with dashboardList; the script declares no dashboard')
+            raise ServiceDefineError(f'{place} goes with dashboardList or compList; the script declares no component')
         return None
     if not isinstance(remote, dict):
         raise ServiceDefineError(f'{place} must be a mapping {{ dir, entry, container, module }}')
@@ -751,6 +855,259 @@ def _dashboard_remote_normalize(remote, label, dir_path, dashboard_list):
         'entry': remote['entry'],
         'container': remote['container'],
         'module': remote['module'],
+    }
+
+
+def _comp_list_normalize(comp_list, label, dashboard_list):
+    """The components of the module beyond the dashboards (doc_page_impl_obj.md#object-views):
+    [{ id, export, label, description, objectView? }], the ids unique among the
+    dashboards' too, since both are named service/{templateName}/... on the page."""
+    place = f'{label}: expose.compList'
+    if comp_list is None:
+        return []
+    if not isinstance(comp_list, list):
+        raise ServiceDefineError(f'{place} must be a list of components, or absent')
+    id_set = {dashboard['id'] for dashboard in dashboard_list}
+    result = []
+    for index, comp in enumerate(comp_list):
+        if not isinstance(comp, dict):
+            raise ServiceDefineError(f'{place}[{index}] must be a mapping')
+        comp_id = comp.get('id')
+        if not isinstance(comp_id, str) or not REGEX_DASHBOARD_ID.match(comp_id):
+            raise ServiceDefineError(f'{place}[{index}].id must start with a lowercase letter, then letters, digits, -')
+        if comp_id in id_set:
+            raise ServiceDefineError(f'{place}: {comp_id} is declared twice (the ids of dashboardList and compList are one set)')
+        id_set.add(comp_id)
+        export_name = comp.get('export')
+        if not isinstance(export_name, str) or export_name == '':
+            raise ServiceDefineError(f'{place}[{index}].export must name the export of the module')
+        result.append({
+            **comp,
+            'id': comp_id,
+            'export': export_name,
+            'label': comp.get('label') or comp_id,
+            'description': comp.get('description', ''),
+            'objectView': object_view_normalize(comp.get('objectView'), f'{place}[{index}].objectView'),
+        })
+    return result
+
+
+def object_view_normalize(object_view, place):
+    """What a component draws as an object view: { typeList, contextList, priority }; None when absent."""
+    if object_view is None:
+        return None
+    if not isinstance(object_view, dict):
+        raise ServiceDefineError(f'{place} must be {{ typeList, contextList, priority? }}')
+    type_list = object_view.get('typeList')
+    if not isinstance(type_list, list) or len(type_list) == 0 or not all(isinstance(item, str) and REGEX_TYPE_ID.match(item) for item in type_list):
+        raise ServiceDefineError(f'{place}.typeList must list Type ids (core.task, todo-list.todo)')
+    context_list = object_view.get('contextList', OBJECT_VIEW_CONTEXT_LIST)
+    if not isinstance(context_list, list) or len(context_list) == 0 or not all(item in OBJECT_VIEW_CONTEXT_LIST for item in context_list):
+        raise ServiceDefineError(f'{place}.contextList must list some of {", ".join(OBJECT_VIEW_CONTEXT_LIST)}')
+    priority = object_view.get('priority', 0)
+    if not isinstance(priority, (int, float)) or isinstance(priority, bool):
+        raise ServiceDefineError(f'{place}.priority must be a number')
+    return {'typeList': list(type_list), 'contextList': list(context_list), 'priority': priority}
+
+
+def type_define_normalize(item, place):
+    """One Type definition: { id, kind?, label?, description?, extendList?, icon?, summaryKeyList? }.
+    Raises ServiceDefineError. Whether its parents exist is the Type registry's check."""
+    if not isinstance(item, dict) or not isinstance(item.get('id'), str) or not REGEX_TYPE_ID.match(item['id']):
+        raise ServiceDefineError(f'{place}: a Type needs an id, dotted (todo-list.todo)')
+    type_id = item['id']
+    kind = item.get('kind', 'object')
+    if kind not in TYPE_KIND_LIST:
+        raise ServiceDefineError(f'{place}: the kind of {type_id} is object or relation')
+    extend_list = item.get('extendList')
+    if extend_list is None:
+        extend_list = [] if type_id == TYPE_ROOT_BY_KIND[kind] else [TYPE_ROOT_BY_KIND[kind]]
+    if not isinstance(extend_list, list) or not all(isinstance(parent, str) and REGEX_TYPE_ID.match(parent) for parent in extend_list):
+        raise ServiceDefineError(f'{place}: extendList of {type_id} must list Type ids')
+    if type_id in extend_list:
+        raise ServiceDefineError(f'{place}: {type_id} cannot extend itself')
+    summary_key_list = item.get('summaryKeyList', [])
+    if not isinstance(summary_key_list, list) or not all(isinstance(key, str) for key in summary_key_list):
+        raise ServiceDefineError(f'{place}: summaryKeyList of {type_id} must list keys')
+    for key in ['label', 'description', 'icon']:
+        if item.get(key) is not None and not isinstance(item.get(key), str):
+            raise ServiceDefineError(f'{place}: {key} of {type_id} must be a string')
+    return {
+        **item,
+        'id': type_id,
+        'kind': kind,
+        'label': item.get('label') or type_id,
+        'description': item.get('description', ''),
+        'extendList': list(extend_list),
+        'icon': item.get('icon', ''),
+        'summaryKeyList': list(summary_key_list),
+    }
+
+
+def type_define_list_normalize(type_list, place):
+    if type_list is None:
+        return []
+    if not isinstance(type_list, list):
+        raise ServiceDefineError(f'{place} must be a list of Types')
+    result = []
+    for index, item in enumerate(type_list):
+        normalized = type_define_normalize(item, f'{place}[{index}]')
+        if any(existing['id'] == normalized['id'] for existing in result):
+            raise ServiceDefineError(f'{place} defines {normalized["id"]} twice')
+        result.append(normalized)
+    return result
+
+
+def _object_provide_normalize(provide, label, api_list):
+    """expose.objectProvide: the objects the instances of the template provide
+    to the object registry, { typeList, relationTypeList?, queryFilterList?,
+    cacheSecond? }; None for a script that provides none. Its capabilities are
+    the object apis the script implements (objectQuery, objectResolve,
+    objectRead, objectUpdate, relationQuery), each answered to the kernel."""
+    place = f'{label}: expose.objectProvide'
+    api_by_name = {item['name']: item for item in api_list}
+    for capability, api_name in OBJECT_API_BY_CAPABILITY.items():
+        api_define = api_by_name.get(api_name)
+        if api_define is not None and provide is None:
+            raise ServiceDefineError(f'{label}: api {api_name} is an object api; declare expose.objectProvide')
+        if api_define is not None and 'kernel' not in api_define['callerKindList']:
+            raise ServiceDefineError(f'{label}: api {api_name} is called by the kernel; its callerKindList must hold kernel')
+    if provide is None:
+        return None
+    if not isinstance(provide, dict):
+        raise ServiceDefineError(f'{place} must be {{ typeList, relationTypeList?, queryFilterList?, cacheSecond? }}')
+    type_list = provide.get('typeList', [])
+    relation_type_list = provide.get('relationTypeList', [])
+    for key, value in [('typeList', type_list), ('relationTypeList', relation_type_list)]:
+        if not isinstance(value, list) or not all(isinstance(item, str) and REGEX_TYPE_ID.match(item) for item in value):
+            raise ServiceDefineError(f'{place}.{key} must list Type ids')
+    if len(type_list) == 0 and len(relation_type_list) == 0:
+        raise ServiceDefineError(f'{place} provides no Type: typeList or relationTypeList names one at least')
+    filter_list = provide.get('queryFilterList', [])
+    if not isinstance(filter_list, list) or not all(isinstance(item, str) for item in filter_list):
+        raise ServiceDefineError(f'{place}.queryFilterList must list filter names')
+    cache_second = provide.get('cacheSecond', OBJECT_CACHE_SECOND_DEFAULT)
+    if not isinstance(cache_second, (int, float)) or isinstance(cache_second, bool) or cache_second < 0:
+        raise ServiceDefineError(f'{place}.cacheSecond must be a number, 0 or more')
+    capability_list = [capability for capability, api_name in OBJECT_API_BY_CAPABILITY.items() if api_name in api_by_name]
+    if 'query' not in capability_list and 'resolve' not in capability_list and len(type_list) > 0:
+        raise ServiceDefineError(f'{place}: a provider of objects answers objectQuery or objectResolve at least')
+    if 'relationQuery' not in capability_list and len(relation_type_list) > 0:
+        raise ServiceDefineError(f'{place}: relationTypeList needs the api relationQuery')
+    return {
+        **provide,
+        'typeList': list(type_list),
+        'relationTypeList': list(relation_type_list),
+        'queryFilterList': list(filter_list),
+        'cacheSecond': float(cache_second),
+        'capabilityList': capability_list,
+    }
+
+
+def _require_list_normalize(require_list, label):
+    """What the template needs others to provide (doc_page_impl_obj.md#what-a-template-declares):
+    [{ type } | { objectView: typeId, context? } | { comp }, with isRequired?, note?]."""
+    place = f'{label}: expose.requireList'
+    if require_list is None:
+        return []
+    if not isinstance(require_list, list):
+        raise ServiceDefineError(f'{place} must be a list')
+    result = []
+    for index, item in enumerate(require_list):
+        if not isinstance(item, dict):
+            raise ServiceDefineError(f'{place}[{index}] must be {{ type }}, {{ objectView }} or {{ comp }}')
+        kind_list = [kind for kind in REQUIRE_KIND_LIST if kind in item]
+        if len(kind_list) != 1:
+            raise ServiceDefineError(f'{place}[{index}] names one of type, objectView, comp')
+        kind = kind_list[0]
+        value = item[kind]
+        if kind in ('type', 'objectView') and (not isinstance(value, str) or not REGEX_TYPE_ID.match(value)):
+            raise ServiceDefineError(f'{place}[{index}].{kind} must be a Type id')
+        if kind == 'comp' and (not isinstance(value, str) or value == ''):
+            raise ServiceDefineError(f'{place}[{index}].comp must be a component id')
+        context = item.get('context', '')
+        if context and (kind != 'objectView' or context not in OBJECT_VIEW_CONTEXT_LIST):
+            raise ServiceDefineError(f'{place}[{index}].context goes with objectView, one of {", ".join(OBJECT_VIEW_CONTEXT_LIST)}')
+        is_required = item.get('isRequired', True)
+        if not isinstance(is_required, bool):
+            raise ServiceDefineError(f'{place}[{index}].isRequired must be true or false')
+        result.append({'kind': kind, 'value': value, 'context': context, 'isRequired': is_required,
+                       'note': str(item.get('note', ''))})
+    return result
+
+
+# ---------- object descriptors and relations ----------
+
+def object_ref_split(ref):
+    """(namespace, local) of an object reference; raises ServiceError -1."""
+    match = REGEX_OBJECT_REF.match(ref) if isinstance(ref, str) else None
+    if match is None:
+        raise ServiceError(-1, f'{ref!r} is not an object reference: {{namespace}}:{{local}}')
+    return match.group(1), match.group(2)
+
+
+def object_descriptor_normalize(item, place, namespace_own=None):
+    """A descriptor as a provider or a registrant gives it. With namespace_own,
+    a localId is made into a reference of that namespace, and a reference of
+    another namespace is refused: a provider names only its own objects.
+    Raises ServiceError -1."""
+    if not isinstance(item, dict):
+        raise ServiceError(-1, f'{place}: a descriptor is a mapping {{ ref | localId, typeList, label, ... }}')
+    ref = item.get('ref')
+    if ref is None and namespace_own is not None and item.get('localId') not in (None, ''):
+        ref = f'{namespace_own}:{item["localId"]}'
+    namespace, _local = object_ref_split(ref)
+    if namespace_own is not None and namespace != namespace_own:
+        raise ServiceError(-1, f'{place}: {ref} is not of the namespace {namespace_own}; a provider names its own objects only')
+    type_list = item.get('typeList') or []
+    if not isinstance(type_list, list) or len(type_list) == 0 or not all(isinstance(type_id, str) and REGEX_TYPE_ID.match(type_id) for type_id in type_list):
+        raise ServiceError(-1, f'{place}: typeList of {ref} must list Type ids')
+    summary = item.get('summary') or {}
+    if not isinstance(summary, dict):
+        raise ServiceError(-1, f'{place}: summary of {ref} must be a mapping')
+    capability_list = item.get('capabilityList') or []
+    if not isinstance(capability_list, list):
+        raise ServiceError(-1, f'{place}: capabilityList of {ref} must be a list')
+    return {
+        'ref': ref,
+        'typeList': list(type_list),
+        'label': str(item.get('label') or ref),
+        'description': str(item.get('description') or ''),
+        'summary': summary,
+        'iconUrl': str(item.get('iconUrl') or ''),
+        'capabilityList': [str(capability) for capability in capability_list],
+        'open': item.get('open') if isinstance(item.get('open'), dict) else None,
+    }
+
+
+def relation_normalize(item, place, namespace_own=None):
+    """A relation as a provider gives it: { key, type, fromRef, toRef, order?, label?, data? }.
+    With namespace_own a fromLocalId / toLocalId is made into a reference of it. Raises ServiceError -1."""
+    if not isinstance(item, dict):
+        raise ServiceError(-1, f'{place}: a relation is a mapping {{ key, type, fromRef, toRef }}')
+    result = {}
+    for end in ['from', 'to']:
+        ref = item.get(f'{end}Ref')
+        if ref is None and namespace_own is not None and item.get(f'{end}LocalId') not in (None, ''):
+            ref = f'{namespace_own}:{item[f"{end}LocalId"]}'
+        object_ref_split(ref)
+        result[f'{end}Ref'] = ref
+    if not isinstance(item.get('type'), str) or not REGEX_TYPE_ID.match(item['type']):
+        raise ServiceError(-1, f'{place}: the type of a relation is a Type id')
+    key = item.get('key')
+    if not isinstance(key, (str, int)) or key == '':
+        raise ServiceError(-1, f'{place}: a relation needs a key (its entry, unique for its provider)')
+    data = item.get('data') or {}
+    if not isinstance(data, dict):
+        raise ServiceError(-1, f'{place}: data of a relation must be a mapping')
+    order = item.get('order')
+    return {
+        'key': str(key),
+        'type': item['type'],
+        **result,
+        'order': order if isinstance(order, (int, float)) and not isinstance(order, bool) else None,
+        'label': str(item.get('label') or ''),
+        'data': data,
     }
 
 

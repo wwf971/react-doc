@@ -3,7 +3,7 @@ name: todo-list
 description: a stateless app service; its todos live in the sqlite infra service, versioned and checked out from there
 kind: app
 timeCreated: 20261029_12000000+09
-versionId: w5f2xw1cv7d
+versionId: w5h8m728e18
 versionList:
 - versionId: w55iiudjq61
   time: 20261029_12000000+09
@@ -11,5 +11,8 @@ versionList:
 - versionId: w5f2xw1cv7d
   time: 20261102_23540104+09
   note: 'backups through the local-backup infra service: backupCreate, backupList, backupCheckout, backupDelete'
+- versionId: w5h8m728e18
+  time: 20261104_01420053+09
+  note: 'the object registry: the Types todo-list.todo and todo-list.list, the todos provided as objects, the TodoCard object view of a task'
 config:
   titleLengthMax: 200

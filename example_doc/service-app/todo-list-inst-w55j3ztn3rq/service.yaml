@@ -7,7 +7,7 @@ timeCreated: 20261029_05414849+09
 template:
   templateId: w55iiudjq5y
   name: todo-list
-  versionId: w5f2xw1cv7d
+  versionId: w5h8m728e18
 dependencyList:
 - name: sqlite
   isRequired: true

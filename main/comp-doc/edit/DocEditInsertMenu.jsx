@@ -128,11 +128,11 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
       aria-label="Insert a block"
       onKeyDown={keyDownHandle}
     >
-      <div className="doc-edit-insert-search">
-        <Search className="doc-edit-insert-search-icon" size={12} aria-hidden="true" />
+      <div className="doc-search-field">
+        <Search className="doc-search-field-icon" size={12} aria-hidden="true" />
         <input
           type="text"
-          className="doc-edit-insert-search-input"
+          className="doc-search-field-input"
           value={query}
           placeholder="Search blocks and components"
           aria-label="Search blocks and components"
@@ -146,13 +146,13 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
           onKeyDown={searchKeyDownHandle}
         />
         {isQuery ? (
-          <div className="doc-edit-insert-result-list" role="listbox" aria-label="Search results">
+          <div className="doc-search-result-list doc-edit-insert-result-list" role="listbox" aria-label="Search results">
             {resultList.length === 0 ? (
-              <span className="doc-edit-insert-result-none">nothing matches “{query.trim()}”</span>
+              <span className="doc-search-none">nothing matches “{query.trim()}”</span>
             ) : resultList.map((result, index) => (
               <div
                 key={result.template.id}
-                className="doc-edit-insert-result"
+                className="doc-search-result"
                 role="option"
                 aria-selected={index === indexActive}
                 data-active={index === indexActive ? '' : undefined}
@@ -162,12 +162,12 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
                 onClick={() => choose(result.template)}
               >
                 <result.template.icon size={13} aria-hidden="true" />
-                <span className="doc-edit-insert-result-name">{textHighlight(result.name, result.queryLower)}</span>
+                <span className="doc-search-result-name">{textHighlight(result.name, result.queryLower)}</span>
                 {result.label !== '' ? (
-                  <span className="doc-edit-insert-result-label">{textHighlight(result.label, result.queryLower)}</span>
+                  <span className="doc-search-result-label">{textHighlight(result.label, result.queryLower)}</span>
                 ) : null}
                 {result.template.description ? (
-                  <span className="doc-edit-insert-result-description">{textHighlight(result.template.description, result.queryLower)}</span>
+                  <span className="doc-search-result-description">{textHighlight(result.template.description, result.queryLower)}</span>
                 ) : null}
               </div>
             ))}
@@ -247,7 +247,7 @@ function textHighlight(text, queryLower) {
   while (indexMatch !== -1) {
     if (indexMatch > indexStart) partList.push(text.slice(indexStart, indexMatch));
     const indexEnd = indexMatch + queryLower.length;
-    partList.push(<mark key={indexMatch} className="doc-edit-insert-match">{text.slice(indexMatch, indexEnd)}</mark>);
+    partList.push(<mark key={indexMatch} className="doc-search-match">{text.slice(indexMatch, indexEnd)}</mark>);
     indexStart = indexEnd;
     indexMatch = textLower.indexOf(queryLower, indexStart);
   }

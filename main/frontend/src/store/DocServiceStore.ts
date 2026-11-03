@@ -40,6 +40,11 @@ import { dashboardDataTextBuild } from '../../../comp-doc/service/service-dashbo
 //                     templated: { name, serviceId (the current instance, '' none), status: available |
 //                     unavailable | notProvided, message, isRouteExplicit, providerList, consumerList,
 //                     templateList, storage }
+//   objectTypeList    the Types of the backend's object registry: { typeList, problemList } (the
+//                     built-in Types and those the templates define, doc_page_impl_obj.md#types)
+//   objectProviderList the object providers of the backend (the kernel, the instances whose
+//                     script declares expose.objectProvide): { id, label, namespaceList, typeList,
+//                     relationTypeList, capabilityList, status, ... }
 //   moduleByServiceId the dashboard module of each instance (every instance serves its own copy):
 //                     { status, module, message, entryUrl }
 //   settings          the Services tab of the settings panel: the view shown (its path: the
@@ -186,6 +191,8 @@ export class DocServiceStore {
   templateList: any[] = [];
   instanceList: any[] = [];
   infraList: any[] = [];
+  objectTypeList: { typeList: any[]; problemList: string[] } | null = null;
+  objectProviderList: any[] = [];
   isRefreshing = false;
   moduleByServiceId: Record<string, ModuleState> = {};
   settings = {
@@ -248,6 +255,8 @@ export class DocServiceStore {
       templateList: observable.ref,
       instanceList: observable.ref,
       infraList: observable.ref,
+      objectTypeList: observable.ref,
+      objectProviderList: observable.ref,
       backendInfo: observable.ref,
     });
   }
@@ -299,6 +308,8 @@ export class DocServiceStore {
         this.templateList = result.data.templateList ?? [];
         this.instanceList = result.data.instanceList ?? [];
         this.infraList = result.data.infraList ?? [];
+        this.objectTypeList = result.data.objectTypeList ?? null;
+        this.objectProviderList = result.data.objectProviderList ?? [];
       });
       // the backend turned up (the first answer, or up again): the doc
       // pages the page loaded are synced into its kernel
@@ -777,6 +788,29 @@ export class DocServiceStore {
       || result.code === SERVICE_CODE_NOT_READY
       || result.code === SERVICE_CODE_INFRA_UNAVAILABLE
     ) void this.refresh();
+  }
+
+  // ---------- the object registry of the backend (doc_page_impl_obj.md) ----------
+  // the page's registry (DocObjectStore) reaches the backend's through these,
+  // as one provider of its own (lib/doc-object-provider-backend.js)
+
+  async objectCall(call: (backend: NonNullable<DocServiceStore['backend']>) => Promise<ServiceResult>): Promise<ServiceResult> {
+    if (!this.backend) return { code: -1, message: this.unavailableReason };
+    const result = await call(this.backend);
+    if (result.code === SERVICE_CODE_BACKEND_DOWN) runInAction(() => this.backendFailureAccept(result));
+    return result;
+  }
+
+  // the url of a path of the backend api (the iconUrl of a descriptor of the backend)
+  backendUrlGet(path: string): string {
+    return this.backend ? this.backend.urlGet(path) : '';
+  }
+
+  // the module of an instance's components (dashboards and compList), once loaded
+  moduleExportGet(serviceId: string, exportName: string): any {
+    const moduleState = this.moduleByServiceId[serviceId];
+    if (!exportName || moduleState?.status !== 'done') return undefined;
+    return moduleState.module?.[exportName];
   }
 
   // ---------- the state of a dashboard ----------

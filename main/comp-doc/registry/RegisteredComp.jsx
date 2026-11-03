@@ -23,7 +23,7 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
     onEventRuntime,
     placement,
   } = props;
-  const { compById, compConfigHost, configStore, docStore, editStore, envStore, eventRouter, onEvent: onEventPage, sourceStore } = useDocStores();
+  const { compById, compConfigHost, configStore, docStore, editStore, envStore, eventRouter, objectStore, onEvent: onEventPage, sourceStore } = useDocStores();
   const idFallback = useId();
   // the block of the edit body the component is rendered in, when it is
   const editBlock = useContext(DocEditBlockContext);
@@ -186,6 +186,9 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
     // env.kindGet() (doc_page_impl.md#the-environment)
     env: envStore.envService,
     source: sourceStore.sourceService,
+    // the object registry (doc_page_impl_obj.md): resolve, query, read,
+    // update, relationQuery, typeGet, typeIsAssignable, open
+    ...(objectStore ? { object: objectStore.objectService } : {}),
     ...compConfigHost,
     ...configBuilt,
     ...configRuntime,

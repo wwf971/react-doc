@@ -333,6 +333,8 @@ A build has no api. The bytes of the files that are used are bundled as data url
 
 Beside the service object the store knows the workspace: `docPageList` (`configDoc.workspace.docPageList`), `docPageGet(alias)`, `docPageAliasMain` (the first root doc page, whose roots a local path written in the page itself, such as a config value in the settings panel, is taken from), `docPageAliasOfPath(path)`, and `pathFullGet(path, fromPath?, docPageAlias?)`: a local path as one of the doc page of `fromPath` or of the alias given, else of the main doc page when it has the root, else of the only doc page that has it. `sourceIndex` is the set of indexes a target is resolved with (by full path, by local path, by name), built by `sourceIndexBuild` of `lib/doc-target-resolve.js`.
 
+**Objects.** The same representation answers the [object registry](doc_page_impl_obj.md#documents-as-objects): the doc pages, folders and documents of the manifests, and the sections and id'd blocks of a compiled document, are objects of the namespaces `docPage`, `docDir` and `doc` (`lib/doc-object-provider-doc.js`), with the containment between them as relations; the store keeps its representation, and the registry asks it each time it needs an answer. The page also registers its doc pages and documents into the backend's registry, so a service can find them.
+
 `config.assetUrlGet`, which `Image`, `ImageGrid` and `DiagramMermaid` call with the references in their data, is `fileUrlGet` bound to the component's document by default (`RegisteredComp`); a host application may still hand its own through `compConfigHost.assetUrlGet`.
 
 ### Path completion

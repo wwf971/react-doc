@@ -553,6 +553,31 @@ export class DiagramEditStore {
 		return isChanged ? node.id : null;
 	}
 
+	// a node drawn by a registered component (renderer.component), with its
+	// data and an in handle on the left and an out handle on the right of its
+	// body: what the create panel adds for an object found by the search
+	// (compName ObjectView, data { object }). the engine knows the component
+	// only by its name; the normalization checks it draws visualizationNode
+	nodeComponentAdd(compName, data, position, idPrefix = 'node') {
+		if (this.kind !== 'diagram') return null;
+		const node = {
+			id: idNext(idPrefix, this.nodes),
+			renderer: { component: compName },
+			position: { x: Math.round(position.x), y: Math.round(position.y) },
+			data,
+			handles: [
+				{ id: 'in', direction: 'in', anchor: { side: 'left' } },
+				{ id: 'out', direction: 'out', anchor: { side: 'right' } },
+			],
+		};
+		const isChanged = this.changeApply(documentNext => {
+			if (!documentNext.has('nodes')) documentNext.set('nodes', documentNext.createNode([]));
+			documentNext.addIn(['nodes'], documentNext.createNode(node));
+		});
+		if (isChanged) this.select(node.id);
+		return isChanged ? node.id : null;
+	}
+
 	// a node goes alone: the connections on its handles stay, their ends
 	// dangling where the handles were
 	nodeRemove(nodeId, positionGet) {

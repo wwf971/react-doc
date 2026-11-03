@@ -5,6 +5,7 @@ import { useDocStores } from '../../frontend/src/store/context.js';
 import { serviceLogLevelList } from '../../frontend/src/store/DocServiceStore.ts';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
+import { ObjectViewHost } from '../object/ObjectViewHost.jsx';
 import { serviceDashboardCompIdBuild, SERVICE_DASHBOARD_PLACEMENT_SETTINGS } from '../service/service-dashboard-define.js';
 import { dashboardDataTextBuild, DASHBOARD_DATA_LANG } from '../service/service-dashboard-data.js';
 import {
@@ -580,6 +581,7 @@ const TemplateDetail = observer(function TemplateDetail({ template }) {
           </>
         ) : null}
         <ExposeRows expose={template.expose} />
+        <ObjectExposeRows expose={template.expose} />
         <span className="doc-service-detail-key">initial config</span>
         <span className="doc-service-detail-code">{configText(template.config)}</span>
         <ApiListRow expose={template.expose} />
@@ -889,7 +891,12 @@ const InstanceDetail = observer(function InstanceDetail({ instance }) {
       <LifecycleRow instance={instance} />
       <div className="doc-service-detail-grid">
         <ApiListRow expose={instance.expose} />
+        <ObjectExposeRows expose={instance.expose} />
       </div>
+      {/* the config of every instance, an object of the Type service.config
+          the kernel provides: drawn by the view of configurations, saved
+          through the object registry (doc_page_impl_obj.md#the-config-of-an-instance) */}
+      {instance.expose ? <ObjectViewHost objectRef={`serviceConfig:${instance.serviceId}`} context="block" /> : null}
       {dashboardIdConfig && templateRecord ? (
         <RegisteredComp
           compId={serviceDashboardCompIdBuild(templateRecord.name, dashboardIdConfig)}
@@ -1031,6 +1038,94 @@ function ExposeRows({ expose }) {
     </>
   );
 }
+
+// what a script declares for the object registry (doc_page_impl_obj.md#what-a-template-declares):
+// the Types it defines, the objects it provides, the components of its
+// module, and what it needs others to provide, each requirement with who
+// meets it now (resolved on the page, which knows every provider)
+const requireStatusTextByStatus = {
+  satisfied: 'met',
+  unavailable: 'provided, but no ready instance serves it',
+  fallback: 'only the fallback view draws it',
+  missing: 'nobody provides it',
+};
+
+const ObjectExposeRows = observer(function ObjectExposeRows({ expose }) {
+  const { objectStore } = useDocStores();
+  if (!expose) return null;
+  const typeList = expose.typeList ?? [];
+  const provide = expose.objectProvide;
+  const compList = expose.compList ?? [];
+  const requireList = expose.requireList ?? [];
+  if (typeList.length === 0 && !provide && compList.length === 0 && requireList.length === 0) {
+    return (
+      <>
+        <span className="doc-service-detail-key">objects</span>
+        <span className="doc-service-settings-muted">none of its own: the kernel provides its instances and their configs</span>
+      </>
+    );
+  }
+  return (
+    <>
+      {typeList.length > 0 ? (
+        <>
+          <span className="doc-service-detail-key">Types</span>
+          <span className="doc-service-detail-code">
+            {typeList.map((type) => (
+              <span key={type.id} className="doc-service-detail-line" title={type.description}>
+                {type.id}{type.kind === 'relation' ? ' (relation)' : ''} <span className="doc-service-settings-muted">extends {type.extendList.join(', ')}</span>
+              </span>
+            ))}
+          </span>
+        </>
+      ) : null}
+      {provide ? (
+        <>
+          <span className="doc-service-detail-key">provides</span>
+          <span className="doc-service-detail-code">
+            <span className="doc-service-detail-line">{[...provide.typeList, ...provide.relationTypeList].join(', ')}</span>
+            <span className="doc-service-detail-line doc-service-settings-muted">
+              {provide.capabilityList.join(', ')}{provide.queryFilterList?.length ? ` · filters ${provide.queryFilterList.join(', ')}` : ''} · answers reused {provide.cacheSecond} s
+            </span>
+          </span>
+        </>
+      ) : null}
+      {compList.length > 0 ? (
+        <>
+          <span className="doc-service-detail-key">components</span>
+          <span className="doc-service-detail-code">
+            {compList.map((comp) => (
+              <span key={comp.id} className="doc-service-detail-line" title={comp.description}>
+                {comp.id} <span className="doc-service-settings-muted">({comp.export}){comp.objectView ? ` · draws ${comp.objectView.typeList.join(', ')} as ${comp.objectView.contextList.join(', ')}` : ''}</span>
+              </span>
+            ))}
+          </span>
+        </>
+      ) : null}
+      {requireList.length > 0 ? (
+        <>
+          <span className="doc-service-detail-key">requires</span>
+          <span className="doc-service-detail-code">
+            {requireList.map((require, index) => {
+              const { status, providerList } = objectStore.requireStatusGet(require);
+              return (
+                <span key={index} className="doc-service-detail-line" title={require.note}>
+                  {require.kind === 'objectView' ? `a view of ${require.value}${require.context ? ` (${require.context})` : ''}` : `${require.kind} ${require.value}`}
+                  {require.isRequired ? '' : ' (optional)'}
+                  {' '}
+                  <span className="doc-badge-outline" {...(status === 'satisfied' ? { 'data-primary': '' } : status === 'missing' && require.isRequired ? { 'data-error': '' } : {})}>
+                    {requireStatusTextByStatus[status] ?? status}
+                  </span>
+                  {providerList.length > 0 ? <span className="doc-service-settings-muted"> · {providerList.join(', ')}</span> : null}
+                </span>
+              );
+            })}
+          </span>
+        </>
+      ) : null}
+    </>
+  );
+});
 
 // ---------- the dependencies of an instance ----------
 

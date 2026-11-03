@@ -1061,3 +1061,20 @@ body:has(.doc-block-popup .doc-vis-edit) .prop-editor-color-popover {
 .doc-vis-edit:focus {
 	outline: none;
 }
+
+/* the objects the create panel's text finds (DiagramCreatePanel): a group
+   label above them, and a line for a host too large to list */
+.doc-vis-create-group {
+	padding: 0.3rem 0.4rem 0.1rem;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.68rem;
+	font-weight: 600;
+}
+
+.doc-vis-create-summary {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0.15rem 0.4rem;
+}

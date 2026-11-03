@@ -72,6 +72,11 @@ sidePanelById:
       # kernel of the service backend
       - doc: ~example/service-kernel.md
         tags: [guide]
+      # the object registry: objects of the documents and the services, drawn
+      # by the views of their Types, in lists, groups and card diagrams
+      - doc: ~example/object-registry.md
+        text: Objects and Types
+        tags: [guide]
       # what a component keeps between renders and across its unmount
       - doc: ~example/comp-state.md
         text: Component State

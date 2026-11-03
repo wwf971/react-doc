@@ -74,6 +74,16 @@ A command is a method of `DiagramEditStore` (or of a store a series adds on the 
 | ☐ | The kind has a test beside the registry (as `OperatorNodes.test.js`), covering normalization, the schema's rows and fields, a cell edit and its undo |
 | ☐ | The series document and the usage document describe it; `example_doc/` shows it |
 
+## Adding nodes that are not kinds
+
+A node drawn by a registered component of the page (`renderer: { component }`) needs no kind: the create panel adds one with `DiagramEditStore.nodeComponentAdd(compName, data, position, idPrefix)`, and an entry of the panel that carries `nodeComponent: { compName, data, idPrefix }` is created that way by `createChoose`. That is how the objects of the page's object search become nodes (`ObjectView`, `data: { object }`). Keep it so: the engine names the component, it never imports it or knows what its data means, and a source of such entries other than the object search (a template gallery, a clipboard) is one more list of entries in the panel, not a change of the engine.
+
+| | Check |
+| --- | --- |
+| ☐ | The entries come from a service of the page reached through `config` (`config.object`), never from an import of a page store by the engine |
+| ☐ | The entries are searched only once something is typed, and never list more than a bound; a source that has more says how many (the object search's summaries) |
+| ☐ | The node is added through `nodeComponentAdd` (so `changeApply`, validation and undo apply) and the component declares the placement `visualizationNode` |
+
 ## Adding a series
 
 | | Check |

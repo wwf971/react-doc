@@ -114,6 +114,20 @@ class LocalBackup(Service):
             'container': 'serviceLocalBackup',
             'module': './dashboard',
         },
+        # the backups as objects of the object registry (doc_page_impl_obj.md): one
+        # per zip file, related to the consumer instance it is a backup of
+        'typeList': [
+            {'id': 'local-backup.backup', 'label': 'Backup', 'extendList': ['core.file'], 'icon': 'archive',
+             'summaryKeyList': ['size', 'time', 'consumerServiceId'],
+             'description': 'a backup of a consumer instance: one zip file of the backup folder'},
+            {'id': 'local-backup.backupOf', 'kind': 'relation', 'label': 'Backup of', 'extendList': ['core.reference'], 'icon': 'archive',
+             'description': 'from a backup to the consumer instance it was made of (an instance that may be gone)'},
+        ],
+        'objectProvide': {
+            'typeList': ['local-backup.backup'],
+            'relationTypeList': ['local-backup.backupOf'],
+            'cacheSecond': 15,
+        },
     }
 
     def start(self):
@@ -290,6 +304,82 @@ class LocalBackup(Service):
         id_list = [consumer['consumerServiceId'] for consumer in orphan_list]
         self.context.log('info', 'backup', f'{deleted_count} orphan backup(s) of {len(id_list)} consumer(s) removed', {'consumerServiceIdList': id_list})
         return {'deletedCount': deleted_count, 'consumerServiceIdList': id_list}
+
+    # ---------- the objects: the provider of the object registry ----------
+    # local ids: 'backup/{versionId}' (the file name without .zip). read only:
+    # a backup is made and removed by its consumer, or from the dashboards
+
+    @api(kind='query', description='the backups as objects, every consumer, oldest first',
+         params=[param('typeList', 'array', 'the Types asked for'), param('text', 'string', 'text the label contains', default=''),
+                 param('filter', 'object', '{ consumerServiceId? }', default=None), param('limit', 'integer', 'how many at most', default=100)],
+         result=returns('array', 'descriptors'), callerKindList=['kernel'])
+    def objectQuery(self, typeList, text='', filter=None, limit=100):
+        if not self.context.object_type_list_match(['local-backup.backup'], typeList):
+            return []
+        consumer = (filter or {}).get('consumerServiceId') or ''
+        result = []
+        for entry in self._folder_scan()['entryList']:
+            if consumer and entry['consumerServiceId'] != consumer:
+                continue
+            descriptor = self._backup_descriptor_build(self._record_get(entry['fileName']))
+            if text and text.lower() not in descriptor['label'].lower():
+                continue
+            result.append(descriptor)
+        return result[:limit]
+
+    @api(kind='query', description='how many backups objectQuery would answer (the preflight of a search): the names of the folder, no zip opened',
+         params=[param('typeList', 'array', 'the Types asked for'), param('text', 'string', 'text the label contains', default=''),
+                 param('filter', 'object', 'the filters', default=None)],
+         result=returns('integer', 'how many'), callerKindList=['kernel'])
+    def objectCount(self, typeList, text='', filter=None):
+        if not self.context.object_type_list_match(['local-backup.backup'], typeList):
+            return 0
+        consumer = (filter or {}).get('consumerServiceId') or ''
+        return len([entry for entry in self._folder_scan()['entryList']
+                    if (not consumer or entry['consumerServiceId'] == consumer) and (not text or text.lower() in entry['fileName'].lower())])
+
+    @api(kind='query', description='the descriptor of each local id, null for one that does not exist',
+         params=[param('localIdList', 'array', 'the local ids')], result=returns('array', 'descriptors or null'), callerKindList=['kernel'])
+    def objectResolve(self, localIdList):
+        return [self._backup_descriptor_build(record) if record is not None else None
+                for record in (self._backup_record_of_local_get(local_id) for local_id in localIdList)]
+
+    @api(kind='query', description='{ descriptor, content: the backup and its metadata } of a backup',
+         params=[param('localId', 'string', 'the local id')], result=returns('object', '{ descriptor, content }'), callerKindList=['kernel'])
+    def objectRead(self, localId):
+        record = self._backup_record_of_local_get(localId)
+        if record is None:
+            raise ServiceError(-3, f'{localId} is not a backup of the folder')
+        return {'descriptor': self._backup_descriptor_build(record), 'content': {**record, **self._meta_read(record['fileName'])}}
+
+    @api(kind='query', description='from every backup to the consumer instance it was made of',
+         params=[param('fromRef', 'string', 'the object the relations start at', default=''),
+                 param('toRef', 'string', 'the object they end at', default=''),
+                 param('typeList', 'array', 'the relation Types asked for', default=None)],
+         result=returns('array', 'relations'), callerKindList=['kernel'])
+    def relationQuery(self, fromRef='', toRef='', typeList=None):
+        if not self.context.object_type_list_match(['local-backup.backupOf'], typeList or ['core.relation']):
+            return []
+        return [{'key': f'backupOf/{entry["fileName"]}', 'type': 'local-backup.backupOf',
+                 'fromLocalId': f'backup/{entry["fileName"][:-len(BACKUP_FILE_EXT)]}', 'toRef': f'service:{entry["consumerServiceId"]}'}
+                for entry in self._folder_scan()['entryList']]
+
+    def _backup_record_of_local_get(self, local_id):
+        if not isinstance(local_id, str) or not local_id.startswith('backup/'):
+            return None
+        file_name = local_id[len('backup/'):] + BACKUP_FILE_EXT
+        if file_name_parse(file_name) is None or not os.path.isfile(os.path.join(self.backup_dir, file_name)):
+            return None
+        return self._record_get(file_name)
+
+    def _backup_descriptor_build(self, record):
+        note = f' · {record["note"]}' if record.get('note') else ''
+        return {'localId': f'backup/{record["versionId"]}', 'typeList': ['local-backup.backup'],
+                'label': f'{record["templateName"]} {record["time"]}{note}',
+                'description': f'a backup of {record["consumerServiceId"]}, {record["size"]} bytes',
+                'summary': {'size': record['size'], 'time': record['time'], 'consumerServiceId': record['consumerServiceId'],
+                            'consumerRef': f'service:{record["consumerServiceId"]}'},
+                'capabilityList': ['read'], 'open': {'kind': 'serviceInstance', 'serviceId': self.context.service_id}}
 
     # ---------- the consumer ----------
 

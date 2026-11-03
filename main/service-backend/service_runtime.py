@@ -21,6 +21,10 @@ Design: doc_page_impl_service_kernel.md#the-service-runtime-kernel
   instance whose service.yaml or whose service.py changed is restarted.
   after the scan the kernel reconciles: which infra names are required,
   which are provided, what to provision, where each name is routed
+- the object registry (service_object.py, doc_page_impl_obj.md) is kept
+  beside the service registry: its Types are rebuilt after a scan from the
+  built-in Types and the templates' scripts, its providers are the kernel
+  and the instances whose script declares expose.objectProvide
 - every call, from the page or from another instance, goes through
   api_call: the target resolved to an instance (an infra name routed to its
   current instance), the caller authorized (call_authorize, the dependency
@@ -50,6 +54,7 @@ from service_define import (
     expose_build,
     value_type_is,
 )
+from service_object import ObjectRegistry
 from service_kernel import (
     INFRA_LOGGING_NAME,
     BUILT_IN_FOLDER_LIST,
@@ -854,6 +859,10 @@ class ServiceRuntime:
         self.lock = threading.RLock()
         self.reconcile_thread = None
         self.reconcile_stop_event = threading.Event()
+        # the object registry and the Type registry (doc_page_impl_obj.md):
+        # discovery and resolution of the objects the kernel and the
+        # instances provide, never their truth
+        self.object_registry = ObjectRegistry(self, float(config.get('objectProviderWaitSecond', 5)))
         self.kernel_log.kernel('info', 'registry', f'kernel started with {self.config_path}',
                                {'builtInDir': self.built_in_dir, 'docPageCount': len(self.doc_page_list_config)})
 
@@ -1022,6 +1031,7 @@ class ServiceRuntime:
                     if problem not in problem_list_before:
                         self.kernel_log.kernel('warn', 'scan', problem)
             self._reconcile(folder_list, doc_page_problem_list)
+            self.object_registry.types_rebuild(list(self.template_by_id.values()), list(self.instance_by_id.values()))
         self._log_flush()
 
     def _template_scan(self, folder_list):
@@ -1155,6 +1165,8 @@ class ServiceRuntime:
         instance = self.instance_by_id.get(service_id)
         if instance is not None and instance.signature == signature:
             return
+        # what the object registry kept of the instance's answers is not reused
+        self.object_registry.provider_forget(f'service:{service_id}')
         if instance is not None:
             instance.stop()
             self.kernel_log.kernel('info', 'lifecycle', f'{instance.label_get()} restarted: its folder, {SERVICE_CONFIG_FILE} or {SERVICE_SCRIPT_FILE} changed')
@@ -1513,6 +1525,31 @@ class ServiceRuntime:
         self.scan()
         return self.instance_get(service_id).info_get()
 
+    def instance_config_set(self, service_id, value_by_key):
+        """Values of the instance's config changed (the update of its config object,
+        doc_page_impl_obj.md#the-config-of-an-instance): merged into its config,
+        checked against its own script, written into service.yaml; the
+        instance restarts with them. Raises ServiceError -1 for a wrong value."""
+        with self.lock:
+            instance = self.instance_get(service_id)
+            service_config = dict(instance.service_config)
+            if not service_config.get('serviceId') or instance.script.expose is None:
+                raise ServiceError(-1, f'the config of {instance.dir_name} cannot be changed: {instance.message}')
+            define_key_set = {define['key'] for define in instance.script.expose['configDefineList']}
+            key_unknown_list = [key for key in value_by_key if key not in define_key_set]
+            if key_unknown_list:
+                raise ServiceError(-1, f'the script of {instance.label_get()} declares no config key {", ".join(key_unknown_list)}')
+            try:
+                config = config_normalize({**(service_config.get('config') or {}), **value_by_key}, instance.script.expose)
+            except ValueError as error:
+                raise ServiceError(-1, str(error))
+            service_config['config'] = config
+            self._service_config_write(instance, service_config, is_restart=True)
+        self.kernel_log.kernel('info', 'lifecycle', f'the config of {instance.label_get()} is set: {", ".join(sorted(value_by_key))}',
+                               {'serviceId': service_id, 'keyList': sorted(value_by_key)})
+        self.scan()
+        return self.instance_get(service_id).info_get()
+
     def instance_enable_set(self, service_id, is_enabled):
         with self.lock:
             instance = self.instance_get(service_id)
@@ -1637,6 +1674,7 @@ class ServiceRuntime:
                     'log': self.kernel_log.info_get(),
                     'loggingServiceId': logging_info.get('serviceId', ''),
                     'loggingStatus': logging_info.get('status', 'notProvided'),
+                    'object': self.object_registry.status_get(),
                 },
             }
 
@@ -1649,6 +1687,9 @@ class ServiceRuntime:
                 'instanceList': [instance.info_get() for instance in self.instance_by_id.values()],
                 'infraList': [dict(info) for info in self.infra_info_by_name.values()],
                 'status': self.status_get(),
+                # the Types and the object providers of the backend (doc_page_impl_obj.md)
+                'objectTypeList': self.object_registry.type_list_get(),
+                'objectProviderList': self.object_registry.provider_info_list_get(),
             }
 
     def infra_list_get(self):
@@ -1799,12 +1840,14 @@ class ServiceRuntime:
 
     # ---------- calls: from the page and between instances ----------
 
-    def api_call(self, target, api_name, params, caller):
+    def api_call(self, target, api_name, params, caller, wait_second=None):
         """A call of an api: the result of a sync api, the job of an async one.
 
         target   { serviceId }, { templateId, versionId? } or { infra: name }: what the call names
         caller   the ServiceCaller, as the runtime knows it: page for an http
                  request, service for ServiceContext.service_call, kernel for the kernel
+        wait_second  how long a sync call is waited for (apiWaitSecondMax by
+                 default; the object registry waits less for one provider)
 
         Raises ServiceError for a call that cannot be made; the failure of
         the api itself is its result.
@@ -1835,8 +1878,9 @@ class ServiceRuntime:
             return {'code': 0, 'data': task.job_info_get()}
         task = ServiceTask(instance.service_id, api_define, param_dict, caller)
         instance.submit(task)
-        if not task.done_event.wait(self.api_wait_second_max):
-            return {'code': -6, 'message': f'{api_name} did not finish in {self.api_wait_second_max:g} s; it is still queued or running'}
+        wait = self.api_wait_second_max if wait_second is None else min(float(wait_second), self.api_wait_second_max)
+        if not task.done_event.wait(wait):
+            return {'code': -6, 'message': f'{api_name} did not finish in {wait:g} s; it is still queued or running'}
         return task.result
 
     def target_resolve(self, target, caller=None):

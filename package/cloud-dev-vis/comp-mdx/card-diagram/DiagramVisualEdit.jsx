@@ -236,6 +236,7 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			store.createClose();
 			change(() => {
 				if (entry.isConnection) store.connectionCreateDangling(position);
+				else if (entry.nodeComponent) store.nodeComponentAdd(entry.nodeComponent.compName, entry.nodeComponent.data, position, entry.nodeComponent.idPrefix);
 				else store.nodeAdd(entry.id, position);
 			});
 		},

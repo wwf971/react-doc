@@ -21,6 +21,7 @@ The layer is made of a few things, each with one job:
 - A **service template** is the initial state of a service of either kind: a folder with a script (`service.py`, a Python class with the apis), the dashboards (a federated module; optional for an infra service), an icon, and the initial config, and no data. A template is listed, never run. It plays the part of a project scaffold, not of a class: it is what an instance is created from, not what keeps defining it.
 - A **service instance** is a running service of either kind: a folder of its own holding a **copy** of everything its template held when it was created, its config, and (for a service that keeps any) its data. **An instance is always created from a template**, records which one, and never reads the template again.
 - The **service registry** is everything the backend knows: the templates and the instances of both kinds, found by scanning the folders it is given ([Where templates and instances come from](#where-templates-and-instances-come-from)), kept up to date on every listing and every tick of the kernel. There is one registry, with a part for templates and a part for instances; the kind is a property of each entry, not a second registry.
+- What an instance keeps can be offered to others as **objects** of the [object registry](doc_page_impl_obj.md): the template defines Types and declares the objects its instances provide, the components of its module that draw them, and what it needs others to provide (`expose.typeList`, `objectProvide`, `compList`, `requireList`); the kernel provides every instance, every template and **the config of every instance** as objects itself. The object registry finds and resolves them, never keeps them: the instance stays their truth.
 - The **service runtime kernel** is the part of the backend that is no service: it maintains the registry, runs the instances and their lifecycle hooks, monitors their health and their dependencies, routes every infra name to its current instance, provisions an infra instance from a template when a name is required and nobody provides it, and writes what it does, and what the instances log, into the **logging infra service**.
 
 ```text
@@ -125,6 +126,7 @@ The design is split by topic; this document holds the concepts and the folders, 
 | [The service runtime kernel](doc_page_impl_service_kernel.md) | dependencies, using and routing an infra service, provisioning, health, the lifecycle hooks, the logging infra service; the calls between services (targets, the caller, authorization) |
 | [Storage infra services](doc_page_impl_service_storage.md) | what a storage infra exposes, the sqlite infra service, the local-backup infra service |
 | [The page: dashboards and the Services tab](doc_page_impl_service_dashboard.md) | reaching the backend, the Vite plugin, `DocServiceStore`, dashboards in the registry, the dashboard frame and module, the Services tab, the example |
+| [Objects and Types](doc_page_impl_obj.md) | the object registry of the page and of the backend: the objects and Types a template provides, the kernel's objects (instances, templates, configs), the components of a template's module, the calls the kernel makes to an instance's object apis |
 
 ## Files
 
@@ -143,6 +145,9 @@ service-backend/service_define.py      Service (the hooks), ServiceContext (call
                                        service_call), InfraClient, ServiceCaller (page, service, kernel), ServiceError, @api, param,
                                        returns, expose_build (meta, dependencyList, infra + storage, execution, lifecycle, dashboards
                                        optional), call checking, OpenRPC
+service-backend/service_object.py      the object registry of the backend: the Type registry, the providers (the kernel's,
+                                       the instances'), query / resolve / read / update / relations, registrations, caches
+                                       (doc_page_impl_obj.md)
 service-backend/service_util.py        ms48 ids, time text, names ({templateId}--{name}, {templateName}-inst-{serviceId}),
                                        yaml read / atomic write
 built-in/service-template-app/           what the package ships: w4wp4t0czko--note-db/ (service-template.yaml, service.py, icon.svg,
@@ -165,6 +170,8 @@ comp-doc/service/service-dashboard-define.js  dashboard component ids, the defin
 comp-doc/service/service-dashboard-data.js    the data of a dashboard block (serviceId, state)
 comp-doc/service/ServiceDashboardHost.jsx     the frame: head, problems, props and events of the dashboard
 comp-doc/service/ServiceParts.jsx      icon, status, refresh, instance select, problem notice
+comp-doc/service/service-comp-define.js, ServiceCompHost.jsx   the components of a template's module beside its
+                                       dashboards (compList): service/{templateName}/comp/{compId}, loaded from an instance
 comp-doc/service/DocService.css
 comp-doc/settings/ServiceSettings.jsx  the Services tab: backend line, templates by kind, the infra routing table, instances by kind
                                        (dependencies, hooks, lifecycle, routes, config dashboard), the logs
