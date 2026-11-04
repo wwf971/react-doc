@@ -8,13 +8,14 @@ import { assetStoreItemListBuild } from './AssetStoreSettings.jsx';
 import { ServiceSettings } from './ServiceSettings.jsx';
 import { WorkspaceSettings } from './WorkspaceSettings.jsx';
 import { ApiSettings } from './ApiSettings.jsx';
+import { ObjectFrontendSettings } from './ObjectFrontendSettings.jsx';
 import { SourcePathInput } from '../source/SourcePathInput.jsx';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
 import { usePanelLayout } from '../popup/use-panel-layout.js';
 import './DocSettings.css';
 
 // The settings panel, rendered by the application's ConfigPanel
-// (config.components) with six tabs (subtab items):
+// (config.components) with seven tabs (subtab items):
 //
 //   Config       the page config keys
 //   Component    the component-level keys
@@ -28,6 +29,11 @@ import './DocSettings.css';
 //                a group of items per doc page (assetStoreItemListBuild),
 //                written into its asset store config by the development
 //                server, so they are kept (doc_page_impl_asset.md).
+//   Frontend objects
+//                the frontend object service layer (ObjectFrontendSettings,
+//                doc_page_impl_obj_frontend.md#the-settings-tab): the objects of
+//                the doc pages, their assets, the types the doc pages declare;
+//                creating, renaming and deleting an object, its assets.
 //   Services     the services of the page (ServiceSettings): system
 //                services, then the instances of the service backend as
 //                cards, the config dashboard of the one chosen, and the
@@ -121,6 +127,12 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
       type: 'subtab',
       name: 'Asset service',
       children: assetTab.itemList,
+    },
+    {
+      id: 'objectFrontend',
+      type: 'subtab',
+      name: 'Frontend objects',
+      children: [{ id: 'objectFrontendList', type: 'custom', comp: ObjectFrontendSettings, isFullWidth: true }],
     },
     {
       id: 'service',

@@ -592,18 +592,30 @@ A doc page is [one thing however often it is reached](doc_page_impl_source.md#do
 
 Shielding is a projection of the side panel shown (`sidePanelEffectiveGet`, `plugin/doc-sidebar-effective.ts`), applied in `docWorkspaceLoad` once the trees of the roots are assembled, for a workspace of several doc pages and for one root whose side panel includes another root; it clones what it keeps, so the cached side panel resources are untouched. What the workspace holds does not change: the shielded include is still a mention of the doc page, its rules, tags, config, aliases, services and assets are loaded as before, and the Workspace graph keeps every edge. The entry of a doc page shielded in one workspace needs no change.
 
-### The root row hidden
+### The sole root unfolded
 
-A doc page whose side panel is one wrapper item (a folder, or a document with children, holding everything) would show that single row under the section heading, and the reader would open it first. The workspace mount option `isRootVisible: false` ([the workspace file](doc_page_impl_source.md#the-workspace-file); a per-mount checkbox "root row" in the Workspace tab) shows the wrapper's children directly under the heading:
+The side panel of a doc page is very often **one root item holding everything**: a folder named like the doc page, or its overview document with the rest below it. Mounted in a workspace, that item would sit alone under the section heading, which already names the doc page, and the reader would open it before seeing anything. So a mount **unfolds** a sole root item, by default: its children are drawn at the top, directly under the heading (with one root doc page, at the top of the side panel), not one level down.
 
 ```text
-main-project                     ⌄     ◄ the section heading
-  業務フロー                             ◄ the children of the sole wrapper item, its row not drawn
-  データ仕様
-  システム構成
+folded (isRootUnfolded: false)      unfolded, root not bound      unfolded, root bound to a document
+main-project              ⌄         main-project            ⌄     main-project            ⌄
+  Main Project            ⌄           業務フロー                     ⌂ Main Project           ◄ the root row: opens its document
+    業務フロー                         データ仕様                      ─────────────
+    データ仕様                         システム構成                     業務フロー
+    システム構成                                                      データ仕様
+                                                                    システム構成
 ```
 
-The option belongs to the mount, not to the reusable entry, and is read as a yaml boolean only (`"false"`, the text, is refused). It hides one sole wrapper item with children and nothing else: several roots, a leaf, an empty folder, a separator keep their display, so no content ever disappears. It is not a flatten: the wrapper stays in the semantic tree, marked `isSidebarRootHidden` by the loader (`sidePanelRootHiddenApply`), with its item id, bound document, tags, config, part, breadcrumb and home targets, and its `textSource` / `nodeSource` for editing. `page-tree.js` keeps the mark on the folder it builds and counts it in the render key of the tree, so toggling the option re-renders the side panel at once while the item ids stay. `DocSidebarFolder` draws such a folder as its children only, without a row and without a folder level; its remembered open state is not read, so it never hides its children; the section above folds them, and a child folder keeps its own row and chevron. A consumer replacing the folder renderer (`config.sidePanel.components.Folder`) takes this case over too.
+- **Unbound root** (a plain folder): nothing of it is drawn; its children are the top of the section.
+- **Root bound to a document**: it is drawn as a **root row** above its children, at their depth: a house icon, the label in the foreground, a hairline under it, the same row height as the others. A click opens the document; it never folds, so the children are always shown. Active, it takes the highlight of any active item.
+
+When to keep it, and when not:
+
+- **Unfolding is the default and should stay on** for the usual doc page: one root item whose name says about what the section heading says (the alias `main-project`, the root `Main Project`). Do not remove the root item from the entry to get this look: the entry is reused alone and in other workspaces, and unfolding belongs to the mount.
+- **Turn it off** (`isRootUnfolded: false` on the mount, the "unfold" checkbox of the Workspace tab) only when the root item says something the heading does not, so that the extra level carries information.
+- It changes nothing for a side panel of **several root items** (they are already at the top), a single leaf, an empty folder or a separator: no content ever disappears.
+
+The option belongs to the mount (`docPageList` of the workspace file, `docEntry` of `config.yaml`, not the reusable entry), is a yaml boolean only (`"false"`, the text, is refused), and is `true` when absent; the former key `isRootVisible` is read as its opposite, with a warning. It is not a flatten: the root stays in the semantic tree, marked `isSidebarRootUnfolded` by the loader (`sidePanelRootUnfoldApply`), with its item id, bound document, tags, config, part, breadcrumb and home targets, and its `textSource` / `nodeSource` for editing (the root row carries the item's label component, so its menu and rename work in edit mode as anywhere). `page-tree.js` keeps the mark on the folder it builds and counts it in the render key of the tree, so toggling the option re-renders the side panel at once while the item ids stay. `DocSidebarFolder` draws such a folder without a folder level, the root row first when it has a document; its remembered open state is not read, so it never hides its children; the section above folds them, and a child folder keeps its own row and chevron. A consumer replacing the folder renderer (`config.sidePanel.components.Folder`) takes this case over too.
 
 ## Embedded height and scrolling
 
@@ -631,8 +643,8 @@ frontend/plugin/doc-entry.ts             load the workspace: its doc pages (alia
                                          docPageAlias / textSource / nodeSource / includeSource
                                          annotation, file hashes
 frontend/plugin/doc-sidebar-effective.ts the side panel shown: one effective occurrence per doc page
-                                         (later includes shielded), the sole wrapper item of a mount
-                                         marked isSidebarRootHidden
+                                         (later includes shielded), the sole root item of a mount
+                                         marked isSidebarRootUnfolded
 frontend/plugin/doc-source.ts            config.yaml workspace / docEntry -> configDoc, watch the
                                          loaded files, report a label write or a move as data
 frontend/plugin/doc-side-panel-text.ts   a label change as one line operation of its yaml file
@@ -660,8 +672,8 @@ comp-doc/side-panel/SidePanelMovePicker.jsx   the move picker
 comp-doc/side-panel/SidePanelItemContextMenu.jsx  menu of an item: Rename, Move…, Refresh, new items,
                                                   binding, Remove…
 comp-doc/side-panel/SidePanelItemDialog.jsx  the dialog of a new folder, a binding, a detach, a removal
-comp-doc/side-panel/DocSidebarFolder.jsx   default folder gesture, open state by item id, a hidden
-                                           root row drawn as its children
+comp-doc/side-panel/DocSidebarFolder.jsx   default folder gesture, open state by item id, an unfolded
+                                           sole root drawn as its children (its root row first when bound)
 comp-doc/side-panel/DocSidePanelSection.jsx  a root doc page of a workspace of several: heading, toolbar
 comp-mdx/tag/TagLabel.jsx, TagList.jsx     tag display
 ```

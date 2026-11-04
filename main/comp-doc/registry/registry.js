@@ -51,6 +51,7 @@ import {
   compObjectViewDocument,
   compObjectViewFallback,
 } from '../object/object-comp-define.js';
+import { compObjectFrontend, compObjectFrontendOverview, compObjectViewFrontend } from '../object-frontend/object-frontend-define.js';
 import {
   accordionsExpose,
   blockExpose,
@@ -245,6 +246,11 @@ export const compById = {
   'common/ObjectViewCollection': compObjectViewCollection,
   'common/ObjectViewConfig': compObjectViewConfig,
   'common/ObjectViewDocument': compObjectViewDocument,
+  // the frontend object service layer (doc_page_impl_obj_frontend.md): the
+  // entry component, the mode every frontend object has, its view
+  'common/ObjectFrontend': compObjectFrontend,
+  'common/ObjectFrontendOverview': compObjectFrontendOverview,
+  'common/ObjectViewFrontend': compObjectViewFrontend,
   'common/Anchor': compDefine(Anchor, { placementList: ['mdx', 'commentBlock', 'commentInline'] }),
   'common/Tag': compDefine(Tag, { placementList: ['mdx', 'commentInline'] }),
   'common/TagLabel': compDefine(TagLabel, { placementList: ['tag', 'mdx'] }),

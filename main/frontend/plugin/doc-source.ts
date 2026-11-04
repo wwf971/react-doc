@@ -67,10 +67,11 @@ import {
 } from './doc-comp-config.ts';
 import { docPackageListLoad, docPackageSpecListRead, PACKAGE_SERVICE_TEMPLATE_FOLDER_LIST, type DocPackageLoaded } from './doc-package.ts';
 import {
-  assetConfigFormerReject, assetConfigOfDocPageListGet, assetStoreCreate, objectIdFromDirName,
+  ASSET_OBJECT_META_NAME, assetConfigFormerReject, assetConfigOfDocPageListGet, assetStoreCreate, objectIdFromDirName,
   type AssetSnapshot, type AssetStore, type AssetStoreConfig, type AssetUsageDoc,
 } from './doc-asset-store.ts';
 import { assetBlockTextExpand, assetUsageListScan } from '../src/lib/doc-asset-ref.js';
+import { objectFrontendConfigForPage, objectFrontendConfigOfDocPageListGet, type ObjectFrontendConfig } from './doc-object-frontend.ts';
 import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
 import { sourceFileBackupNameIs } from './doc-source-file.ts';
 import { textLocalizedGet } from '../src/lib/text-localized.js';
@@ -364,7 +365,12 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       // the references of its documents travel with it, so a built page
       // still knows which objects its blocks use (doc_page_impl_asset.md#usage)
       const assetSnapshot = isBuild && assetStore
-        ? { ...assetStore.snapshotBuild(), usageDocList: assetUsageDocListScan(fileEntries, []) }
+        ? {
+            ...assetStore.snapshotBuild(),
+            usageDocList: assetUsageDocListScan(fileEntries, []),
+            // the frontend objects and types of the doc pages (doc_page_impl_obj_frontend.md)
+            objectFrontend: objectFrontendConfigForPage(objectFrontendConfigGet(configDoc, configDir)),
+          }
         : null;
       return generateModuleCode(configDoc, fileEntries, dirEntries, attachmentList, isBuild, {
         linkIndex: linkIndexGet(configDoc, fileEntries),
@@ -642,15 +648,24 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
           rootAbsPathByPathGet: () => sourceRootAbsPathByPathGet(loadConfigDoc(configFile, options), configDir),
           usageScan: (docPathList) => assetUsageDocListScan(fileEntryListGet(), docPathList),
           fileEntryListGet,
+          objectFrontendConfigGet: () => objectFrontendConfigGet(loadConfigDoc(configFile, options), configDir),
         }));
         // the config file of every doc page (watched whether it exists or
         // not: one created from the page is seen) and every folder
+        // the frontend object files of the doc pages: a change is told to the
+        // page, which reads them again (no reload)
+        let objectFrontendPathList = objectFrontendConfigGet(configDoc, configDir).pathList;
         const assetWatch = () => {
           for (const docPage of assetConfig!.docPageList) server.watcher.add(docPage.configFile);
           for (const folder of assetConfig!.folderList) server.watcher.add(folder.pathAbs);
+          for (const file of objectFrontendPathList) server.watcher.add(file);
         };
         assetWatch();
         const assetChangeSend = (filePath: string) => {
+          if (objectFrontendPathList.includes(filePath)) {
+            server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { objectId: '', isStoreChanged: false, isObjectFrontendChanged: true } });
+            return;
+          }
           if (assetConfig!.docPageList.some((docPage) => docPage.configFile === filePath)) {
             try {
               assetConfig = assetConfigCurrentGet();
@@ -659,15 +674,22 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
               console.warn(String(error?.message ?? error));
               return;
             }
+            try {
+              objectFrontendPathList = objectFrontendConfigGet(loadConfigDoc(configFile, options), configDir).pathList;
+            } catch {
+              // the last list is kept
+            }
             assetWatch();
             server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { objectId: '', isStoreChanged: true } });
             return;
           }
           const folder = assetConfig!.folderList.find((item) => pathIsInside(filePath, item.pathAbs));
           if (!folder) return;
-          // the object's folder is {objectId}--{name}; a file right in the
-          // store folder is not an object's
-          const objectId = objectIdFromDirName(path.relative(folder.pathAbs, filePath).split(path.sep)[0] ?? '');
+          // the object's folder is {objectId}--{name}, at the top of the store
+          // folder or inside group folders: the first folder of the path
+          // holding object.yaml whose name starts with an id. a file right in
+          // the store folder or in a group is not an object's
+          const objectId = assetObjectIdOfPathGet(folder.pathAbs, filePath);
           if (!objectId) return;
           server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { objectId, isStoreChanged: false } });
         };
@@ -1393,6 +1415,8 @@ type SourceExclude = {
   assetConfig: AssetStoreConfig | undefined;
   serviceFolderSet: ServiceFolderSet;
   compConfig: CompConfig;
+  // the frontend object files of the doc pages (and their backups), read by the asset api
+  objectFrontendPathList: string[];
 };
 
 function sourceExcludeGet(configDoc: any, configDir: string): SourceExclude {
@@ -1406,11 +1430,13 @@ function sourceExcludeGet(configDoc: any, configDir: string): SourceExclude {
     assetConfig: assetConfigGet(configDoc, configDir),
     serviceFolderSet,
     compConfig: compConfigGet(configDoc),
+    objectFrontendPathList: objectFrontendConfigGet(configDoc, configDir).pathList,
   };
 }
 
 function sourceExcludePathIs(exclude: SourceExclude, filePath: string): boolean {
   return (exclude.assetConfig !== undefined && assetPathIs(exclude.assetConfig, filePath))
+    || exclude.objectFrontendPathList.some((file) => filePath === file || filePath === `${file}.bak` || filePath === `${file}.tmp`)
     || servicePathIs(exclude.serviceFolderSet, filePath)
     || compPathIs(exclude.compConfig, filePath);
 }
@@ -1474,6 +1500,16 @@ function assetUsageDocListScan(entries: FileEntry[], docPathList: string[]): Ass
 // loads describe it now (doc_page_impl_asset.md#the-local-store-folders-fully-reflected):
 // the asset store config of each, its folders resolved against the roots
 // of the source rules; undefined when no doc page has a store (asset: false)
+// the frontend objects and types the doc pages declare (doc_page_impl_obj_frontend.md):
+// read from their files now, each doc page with the default asset folder its
+// objects keep their assets in
+function objectFrontendConfigGet(configDoc: any, configDir: string): ObjectFrontendConfig {
+  const docPageList = Array.isArray(configDoc.docEntry?.docPageList) ? configDoc.docEntry.docPageList : [];
+  const assetFolderByAlias = new Map<string, string>();
+  for (const docPage of assetConfigGet(configDoc, configDir)?.docPageList ?? []) assetFolderByAlias.set(docPage.alias, docPage.folderDefault);
+  return objectFrontendConfigOfDocPageListGet(docPageList, configDir, assetFolderByAlias);
+}
+
 function assetConfigGet(configDoc: any, configDir: string): AssetStoreConfig | undefined {
   const docPageList = configDoc.docEntry?.docPageList;
   if (!Array.isArray(docPageList)) return undefined;
@@ -1555,6 +1591,21 @@ function assetPathIs(assetConfig: AssetStoreConfig, filePath: string): boolean {
   ));
   if (isConfigFile) return true;
   return assetConfig.folderList.some((folder) => pathIsInside(filePath, folder.pathAbs));
+}
+
+// the object a file of a store folder belongs to: walking down the path,
+// the first folder named {objectId}(--{name}) that holds object.yaml (or the
+// last folder of the path, for the object.yaml being written or removed)
+function assetObjectIdOfPathGet(folderAbs: string, filePath: string): string {
+  const partList = path.relative(folderAbs, filePath).split(path.sep);
+  for (let index = 0; index < partList.length - 1; index++) {
+    const objectId = objectIdFromDirName(partList[index]);
+    if (!objectId) continue;
+    const dirAbs = path.join(folderAbs, ...partList.slice(0, index + 1));
+    const isObjectFile = index === partList.length - 2 && partList[partList.length - 1].startsWith(ASSET_OBJECT_META_NAME);
+    if (isObjectFile || fs.existsSync(path.join(dirAbs, ASSET_OBJECT_META_NAME))) return objectId;
+  }
+  return '';
 }
 
 function pathIsInside(filePath: string, folder: string): boolean {

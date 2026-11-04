@@ -259,7 +259,7 @@ test('an include gives the doc page its alias; two doc pages with one alias, or 
   assert.deepEqual(loadedDefault.docPageList[0].rootList.map((root) => root.alias), ['guide']);
 });
 
-// ---------- the side panel shown: one effective occurrence per doc page, the root row hidden ----------
+// ---------- the side panel shown: one effective occurrence per doc page, the sole root unfolded ----------
 // (plugin/doc-sidebar-effective.ts, doc_page_impl_side_panel.md#a-workspace-of-several-doc-pages)
 
 function deepFreeze(value) {
@@ -310,7 +310,7 @@ test('a doc page included twice is shown at its first include; a same-page inclu
 });
 
 test('the projection is pure: a frozen tree is not mutated, sections are never shielded', async () => {
-  const { sidePanelEffectiveGet, sidePanelRootHiddenApply } = await import('./doc-sidebar-effective.ts');
+  const { sidePanelEffectiveGet, sidePanelRootUnfoldApply } = await import('./doc-sidebar-effective.ts');
   const include = (id, alias, docPageAlias, children = []) => ({ id, docPageAlias, includeSource: { file: '', path: [], isDocEntry: true, docPageAlias: alias, isChildrenLocal: false }, children });
   const tree = deepFreeze([
     { id: 'doc-page-a', docPageAlias: 'a', docPageSection: { alias: 'a' }, includeSource: { file: '', path: [], isDocEntry: true, docPageAlias: 'a', isChildrenLocal: false }, children: [
@@ -326,16 +326,17 @@ test('the projection is pure: a frozen tree is not mutated, sections are never s
   assert.deepEqual(result[0].children.map((node) => node.id), ['b-first', 'own', 'resource', 'c']);
   assert.deepEqual(result[0].children[3].children, []);
   assert.equal(tree[0].children.length, 6);
-  // the root row hidden: one wrapper item only; a leaf, several roots, an empty folder, a separator are left
+  // the sole root unfolded: one wrapper item only, bound or not; a leaf, several roots, an empty folder, a separator are left
   const wrapper = deepFreeze([{ id: 'wrap', text: 'All', children: [{ doc: 'a.md' }] }]);
-  assert.equal(sidePanelRootHiddenApply(wrapper)[0].isSidebarRootHidden, true);
-  assert.equal(wrapper[0].isSidebarRootHidden, undefined);
+  assert.equal(sidePanelRootUnfoldApply(wrapper)[0].isSidebarRootUnfolded, true);
+  assert.equal(wrapper[0].isSidebarRootUnfolded, undefined);
+  assert.equal(sidePanelRootUnfoldApply([{ id: 'wrap', doc: 'r.md', children: [{ doc: 'a.md' }] }])[0].isSidebarRootUnfolded, true);
   for (const treeKept of [[{ doc: 'a.md' }], [{ id: 'x', children: [{ doc: 'a.md' }] }, { doc: 'b.md' }], [{ id: 'x', children: [] }], [{ separator: 'S' }], [{ sourceFolder: '~a/dir', children: [{ doc: 'a.md' }] }]]) {
-    assert.equal(sidePanelRootHiddenApply(treeKept), treeKept);
+    assert.equal(sidePanelRootUnfoldApply(treeKept), treeKept);
   }
 });
 
-test('isRootVisible false marks the sole wrapper item of a mount; the semantic node and its values stay', () => {
+test('a mount unfolds its sole wrapper item by default; isRootUnfolded false keeps it a folder; the semantic node and its values stay', () => {
   const dir = fixtureCreate();
   const entryFile = path.join(dir, 'guide/.doc-page/entry.yaml');
   const text = fs.readFileSync(entryFile, 'utf-8');
@@ -343,44 +344,55 @@ test('isRootVisible false marks the sole wrapper item of a mount; the semantic n
     '    tree:\n      - doc: ~guide/a.md\n      - id: sub\n        include: ../../sub\n',
     '    tree:\n      - id: wrap\n        text: Guide\n        tags: [part]\n        part: true\n        children:\n          - doc: ~guide/a.md\n          - id: sub\n            include: ../../sub\n',
   ));
-  const loaded = docWorkspaceLoad(workspaceSpecGet(dir, [{ alias: 'guide', dir: 'guide', isRootVisible: false }, { alias: 'sub', dir: 'sub' }]), dir);
+  const loaded = docWorkspaceLoad(workspaceSpecGet(dir, [{ alias: 'guide', dir: 'guide' }, { alias: 'sub', dir: 'sub' }]), dir);
   const wrap = loaded.sidePanel.tree[0].children[0];
   assert.equal(loaded.sidePanel.tree[0].children.length, 1);
-  assert.equal(wrap.isSidebarRootHidden, true);
+  assert.equal(wrap.isSidebarRootUnfolded, true);
   assert.equal(wrap.id, 'wrap');
   assert.equal(wrap.part, true);
   assert.deepEqual(wrap.tags, ['part']);
   assert.deepEqual(wrap.nodeSource, { file: 'guide/.doc-page/entry.yaml', path: ['sidePanelById', 'main', 'tree', 0] });
   // the include of sub inside the wrapper is shielded: sub is a root
   assert.deepEqual(wrap.children.map((child) => child.doc), ['~guide:guide/a.md']);
-  // written in a workspace file, the boolean reaches the page with the items as written
-  fs.writeFileSync(path.join(dir, 'workspace.yaml'), 'docPageList:\n  - alias: guide\n    dir: ./guide\n    isRootVisible: false\n  - alias: sub\n    dir: ./sub\n');
+  // false: a folder as written
+  const loadedFolded = docWorkspaceLoad(workspaceSpecGet(dir, [{ alias: 'guide', dir: 'guide', isRootUnfolded: false }, { alias: 'sub', dir: 'sub' }]), dir);
+  assert.equal(loadedFolded.sidePanel.tree[0].children[0].isSidebarRootUnfolded, undefined);
+  // a root bound to a document is unfolded too (drawn as a root row above its children)
+  fs.writeFileSync(entryFile, text.replace(
+    '    tree:\n      - doc: ~guide/a.md\n      - id: sub\n        include: ../../sub\n',
+    '    tree:\n      - id: wrap\n        doc: ~guide/a.md\n        children:\n          - id: sub\n            include: ../../sub\n          - text: More\n            children: [{ doc: ~guide/a.md }]\n',
+  ));
+  const loadedBound = docWorkspaceLoad(workspaceSpecGet(dir, [{ alias: 'guide', dir: 'guide' }, { alias: 'sub', dir: 'sub' }]), dir);
+  assert.equal(loadedBound.sidePanel.tree[0].children[0].isSidebarRootUnfolded, true);
+  assert.equal(loadedBound.sidePanel.tree[0].children[0].doc, '~guide:guide/a.md');
+  // written in a workspace file, the option reaches the page with the items as written; the former
+  // isRootVisible is read as its opposite
+  fs.writeFileSync(path.join(dir, 'workspace.yaml'), 'docPageList:\n  - alias: guide\n    dir: ./guide\n    isRootUnfolded: false\n  - alias: sub\n    dir: ./sub\n    isRootVisible: false\n');
   const loadedFile = docWorkspaceLoad(docWorkspaceSpecRead({ file: './workspace.yaml' }, dir, 'config.yaml'), dir);
-  assert.deepEqual(loadedFile.workspace.itemList, [{ alias: 'guide', dir: './guide', isRootVisible: false }, { alias: 'sub', dir: './sub' }]);
-  assert.equal(loadedFile.sidePanel.tree[0].children[0].isSidebarRootHidden, true);
-  fs.writeFileSync(path.join(dir, 'workspace.yaml'), 'docPageList:\n  - alias: guide\n    dir: ./guide\n    isRootVisible: "false"\n');
-  assert.throws(() => docWorkspaceSpecRead({ file: './workspace.yaml' }, dir, 'config.yaml'), /"isRootVisible" must be a yaml boolean/);
-  // the mount of sub: a leaf only, nothing to hide; omitted or true: as before
-  const loadedLeaf = docWorkspaceLoad(workspaceSpecGet(dir, [{ alias: 'guide', dir: 'guide' }, { alias: 'sub', dir: 'sub', isRootVisible: false }]), dir);
-  assert.equal(loadedLeaf.sidePanel.tree[0].children[0].isSidebarRootHidden, undefined);
-  assert.equal(loadedLeaf.sidePanel.tree[1].children[0].isSidebarRootHidden, undefined);
+  assert.deepEqual(loadedFile.workspace.itemList, [{ alias: 'guide', dir: './guide', isRootUnfolded: false }, { alias: 'sub', dir: './sub', isRootUnfolded: true }]);
+  assert.equal(loadedFile.sidePanel.tree[0].children[0].isSidebarRootUnfolded, undefined);
+  fs.writeFileSync(path.join(dir, 'workspace.yaml'), 'docPageList:\n  - alias: guide\n    dir: ./guide\n    isRootUnfolded: "false"\n');
+  assert.throws(() => docWorkspaceSpecRead({ file: './workspace.yaml' }, dir, 'config.yaml'), /"isRootUnfolded" must be a yaml boolean/);
+  // the mount of sub: a leaf only, nothing to unfold
+  assert.equal(loadedBound.sidePanel.tree[1].children[0].isSidebarRootUnfolded, undefined);
   // a virtual workspace (config docEntry) takes the option too
-  const loadedVirtual = docEntryLoad(path.join(dir, 'guide'), dir, '', undefined, false);
-  assert.equal(loadedVirtual.sidePanel.tree[0].isSidebarRootHidden, true);
-  assert.equal(loadedVirtual.sidePanel.tree[0].children.length, 2);
-  assert.equal(docEntryLoad(path.join(dir, 'guide'), dir).sidePanel.tree[0].isSidebarRootHidden, undefined);
+  assert.equal(docEntryLoad(path.join(dir, 'guide'), dir).sidePanel.tree[0].isSidebarRootUnfolded, true);
+  assert.equal(docEntryLoad(path.join(dir, 'guide'), dir, '', undefined, false).sidePanel.tree[0].isSidebarRootUnfolded, undefined);
   // several roots: unchanged
   fs.writeFileSync(entryFile, text);
-  const loadedRoots = docWorkspaceLoad(workspaceSpecGet(dir, [{ alias: 'guide', dir: 'guide', isRootVisible: false }, { alias: 'sub', dir: 'sub' }]), dir);
-  assert.deepEqual(loadedRoots.sidePanel.tree[0].children.map((node) => node.isSidebarRootHidden), [undefined]);
+  const loadedRoots = docWorkspaceLoad(workspaceSpecGet(dir, [{ alias: 'guide', dir: 'guide' }, { alias: 'sub', dir: 'sub' }]), dir);
+  assert.deepEqual(loadedRoots.sidePanel.tree[0].children.map((node) => node.isSidebarRootUnfolded), [undefined]);
 });
 
-test('isRootVisible must be a yaml boolean, not text', async () => {
+test('isRootUnfolded is a yaml boolean, not text; the former isRootVisible is its opposite and never beside it', async (context) => {
   const { docPageSpecRead } = await import('./doc-entry.ts');
-  assert.throws(() => docPageSpecRead({ dir: './guide', isRootVisible: 'false' }, '/tmp', 'workspace'), /"isRootVisible" must be a yaml boolean/);
+  context.mock.method(console, 'warn', () => {});
+  assert.throws(() => docPageSpecRead({ dir: './guide', isRootUnfolded: 'false' }, '/tmp', 'workspace'), /"isRootUnfolded" must be a yaml boolean/);
   assert.throws(() => docPageSpecRead({ dir: './guide', isRootVisible: 0 }, '/tmp', 'workspace'), /"isRootVisible" must be a yaml boolean/);
-  assert.equal(docPageSpecRead({ dir: './guide', isRootVisible: false }, '/tmp', 'workspace').isRootVisible, false);
-  assert.equal(docPageSpecRead({ dir: './guide' }, '/tmp', 'workspace').isRootVisible, undefined);
+  assert.equal(docPageSpecRead({ dir: './guide', isRootUnfolded: false }, '/tmp', 'workspace').isRootUnfolded, false);
+  assert.equal(docPageSpecRead({ dir: './guide', isRootVisible: true }, '/tmp', 'workspace').isRootUnfolded, false);
+  assert.equal(docPageSpecRead({ dir: './guide' }, '/tmp', 'workspace').isRootUnfolded, undefined);
+  assert.throws(() => docPageSpecRead({ dir: './guide', isRootVisible: true, isRootUnfolded: true }, '/tmp', 'workspace'), /write only "isRootUnfolded"/);
 });
 
 // ---------- the workspace folder (doc_page_impl_dir.md#the-workspace-folder) ----------

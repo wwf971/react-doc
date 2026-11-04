@@ -5,7 +5,7 @@ import { textHashGet } from './doc-edit-lines.ts';
 import { sourceAliasIsValid, sourcePathFullGet, sourcePathIsRooted } from '../src/lib/doc-source-path.js';
 import { excludePatternTextListRead } from './doc-source-exclude.ts';
 import { docPackageSpecListRead, type DocPackageSpec } from './doc-package.ts';
-import { sidePanelEffectiveGet, sidePanelRootHiddenApply } from './doc-sidebar-effective.ts';
+import { sidePanelEffectiveGet, sidePanelRootUnfoldApply } from './doc-sidebar-effective.ts';
 
 // The workspace, its doc pages, the entry of each and the yaml files it reaches.
 // design: doc_page_impl_source.md#the-workspace, doc_page_impl_side_panel.md#the-document-entry
@@ -166,15 +166,17 @@ export type DocPageLoaded = {
   isTemporary: boolean;
   rootList: DocPageRoot[];
   mentionList: DocPageMention[];
-  // "asset", "service", "comp", "hotkey" and "api" of the entry as written:
-  // undefined (the convention), false (none), or { file } (relative to the
-  // entry). hotkey: the active keyboard map (doc-hotkey.ts); api: the
-  // declared apis (doc-api-config.ts)
+  // "asset", "service", "comp", "hotkey", "api" and "objectFrontend" of the
+  // entry as written: undefined (the convention), false (none), or { file }
+  // (relative to the entry). hotkey: the active keyboard map (doc-hotkey.ts);
+  // api: the declared apis (doc-api-config.ts); objectFrontend: the frontend
+  // objects and their types (doc-object-frontend.ts)
   asset: EntryFileSection;
   service: EntryFileSection;
   comp: EntryFileSection;
   hotkey: EntryFileSection;
   api: EntryFileSection;
+  objectFrontend: EntryFileSection;
 };
 
 // a section of the entry that names a config file of the doc page, or
@@ -206,7 +208,7 @@ export type DocWorkspaceInfo = {
   // Workspace tab to edit (doc-workspace-edit.ts)
   file: string;
   fileHash: string;
-  itemList: { alias?: string; dir?: string; file?: string; sidePanel?: string; isRootVisible?: boolean }[];
+  itemList: { alias?: string; dir?: string; file?: string; sidePanel?: string; isRootUnfolded?: boolean }[];
   // the folder relative paths of the workspace are read from, absolute: the
   // workspace file's, else the config directory. the os path completion of
   // the Workspace tab starts there
@@ -227,14 +229,14 @@ export type DocWorkspaceSpec = {
   homeDoc?: string;
   homeItem?: string;
   // isTemporary: mounted from the settings panel, after the doc pages written.
-  // isRootVisible false: the sole wrapper item of the side panel shown
+  // isRootUnfolded (default true): the sole wrapper item of the side panel shown
   // for the doc page is not drawn as a row (doc-sidebar-effective.ts)
-  docPageList: { alias?: string; dir?: string; file?: string; sidePanel?: string; isRootVisible?: boolean; isTemporary?: boolean }[];
+  docPageList: { alias?: string; dir?: string; file?: string; sidePanel?: string; isRootUnfolded?: boolean; isTemporary?: boolean }[];
   // the file the spec was read from, absolute, when it is a workspace file;
   // its content hash and its items as written
   file?: string;
   fileHash?: string;
-  itemListWritten?: { alias?: string; dir?: string; file?: string; sidePanel?: string; isRootVisible?: boolean }[];
+  itemListWritten?: { alias?: string; dir?: string; file?: string; sidePanel?: string; isRootUnfolded?: boolean }[];
   // the folder the paths of the items are relative to, absolute
   dirBase?: string;
   // the packages the workspace imports, their folders absolute
@@ -326,10 +328,10 @@ type LoadContext = {
   warningList: string[];
 };
 
-const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'service', 'comp', 'hotkey', 'api', 'sidePanelDefault', 'sidePanelById'];
+const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'sidePanelDefault', 'sidePanelById'];
 // the sections an entry alone may hold: each names a config file of the doc
 // page (or switches the feature off), found beside the entry by convention
-const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'service', 'comp', 'hotkey', 'api'] as const;
+const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'service', 'comp', 'hotkey', 'api', 'objectFrontend'] as const;
 const CONFIG_FILE_KEY_LIST = ['config', 'variable'];
 const WORKSPACE_FILE_KEY_LIST = ['title', 'homeDoc', 'homeItem', 'docPageList', 'packageList', 'config', 'hotkey'];
 const ENTRY_FILE_SUFFIX = '-entry.yaml';
@@ -450,7 +452,8 @@ export function docWorkspaceFileFind(dirPath: string): string {
 //     - alias: guide         # unique in the workspace; the folder name when absent
 //       dir: ../guide        # the doc page folder, or "file": its entry file
 //       sidePanel: main      # optional: the side panel shown for it
-//       isRootVisible: false # optional: its sole wrapper item shows its children only
+//       isRootUnfolded: false # optional, default true: its sole root item is unfolded (its children shown
+//                             # at the top; the root a marked row when it is bound to a document)
 //   config:                  # optional: the workspace config layer, the forms of a
 //     - file: ./config.yaml  #   doc page's "config" (doc_page_impl_config.md#the-workspace-layer)
 //   hotkey:                  # optional: the workspace's keyboard map, over the doc pages'
@@ -497,7 +500,8 @@ export function docWorkspaceSpecRead(workspace: any, configDir: string, configFi
       for (const key of ['alias', 'dir', 'file', 'sidePanel']) {
         if (typeof item?.[key] === 'string') written[key] = item[key];
       }
-      if (typeof item?.isRootVisible === 'boolean') written.isRootVisible = item.isRootVisible;
+      const isRootUnfolded = docPageRootUnfoldedRead(item);
+      if (isRootUnfolded !== undefined) written.isRootUnfolded = isRootUnfolded;
       return written;
     }),
   };
@@ -524,18 +528,40 @@ export function docWorkspaceSpecRead(workspace: any, configDir: string, configFi
   return spec;
 }
 
+// the unfold option of a mount as written (doc_page_impl_side_panel.md#the-sole-root-unfolded):
+// isRootUnfolded, or the former isRootVisible read as its opposite;
+// undefined when neither is written (unfolded, the default)
+function docPageRootUnfoldedRead(item: any): boolean | undefined {
+  if (typeof item?.isRootUnfolded === 'boolean') return item.isRootUnfolded;
+  if (typeof item?.isRootVisible === 'boolean') return !item.isRootVisible;
+  return undefined;
+}
+const docPageRootVisibleWarnedSet = new Set<string>();
+
 // one doc page named by the workspace or by config docEntry:
-// { alias?, dir | file, sidePanel?, isRootVisible? }
+// { alias?, dir | file, sidePanel?, isRootUnfolded? }
 export function docPageSpecRead(item: any, dirBase: string, place: string): DocWorkspaceSpec['docPageList'][number] {
-  if (!mappingIs(item)) throw new Error(`[doc-source] ${place}: a doc page is { alias?, dir | file, sidePanel?, isRootVisible? }`);
+  if (!mappingIs(item)) throw new Error(`[doc-source] ${place}: a doc page is { alias?, dir | file, sidePanel?, isRootUnfolded? }`);
   for (const key of Object.keys(item)) {
-    if (!['alias', 'dir', 'file', 'sidePanel', 'isRootVisible'].includes(key)) {
-      throw new Error(`[doc-source] ${place}: unknown key "${key}" of a doc page (known: alias, dir, file, sidePanel, isRootVisible)`);
+    if (!['alias', 'dir', 'file', 'sidePanel', 'isRootUnfolded', 'isRootVisible'].includes(key)) {
+      throw new Error(`[doc-source] ${place}: unknown key "${key}" of a doc page (known: alias, dir, file, sidePanel, isRootUnfolded)`);
     }
   }
-  if (item.isRootVisible !== undefined && typeof item.isRootVisible !== 'boolean') {
-    throw new Error(
-      `[doc-source] ${place}: "isRootVisible" must be a yaml boolean, true or false (not the text ${JSON.stringify(item.isRootVisible)})`,
+  for (const key of ['isRootUnfolded', 'isRootVisible']) {
+    if (item[key] !== undefined && typeof item[key] !== 'boolean') {
+      throw new Error(
+        `[doc-source] ${place}: "${key}" must be a yaml boolean, true or false (not the text ${JSON.stringify(item[key])})`,
+      );
+    }
+  }
+  if (item.isRootUnfolded !== undefined && item.isRootVisible !== undefined) {
+    throw new Error(`[doc-source] ${place}: "isRootVisible" is the former form of "isRootUnfolded" (its opposite); write only "isRootUnfolded"`);
+  }
+  if (item.isRootVisible !== undefined && !docPageRootVisibleWarnedSet.has(place)) {
+    docPageRootVisibleWarnedSet.add(place);
+    console.warn(
+      `[doc-source] ${place}: "isRootVisible: ${item.isRootVisible}" is read as "isRootUnfolded: ${!item.isRootVisible}";`
+        + ' the root is unfolded by default now, so the key can usually be removed',
     );
   }
   const isFileGiven = typeof item.file === 'string' && item.file.trim() !== '';
@@ -557,16 +583,16 @@ export function docPageSpecRead(item: any, dirBase: string, place: string): DocW
     dir: isDirGiven ? path.resolve(dirBase, item.dir) : undefined,
     file: isFileGiven ? path.resolve(dirBase, item.file) : undefined,
     sidePanel: item.sidePanel,
-    isRootVisible: item.isRootVisible,
+    isRootUnfolded: docPageRootUnfoldedRead(item),
   };
 }
 
 // one doc page as the workspace: what config docEntry names (the former
 // form, kept): a virtual workspace holding it alone
-export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWanted = '', alias?: string, isRootVisible?: boolean): DocEntryLoaded {
+export function docEntryLoad(entryFile: string, configDir: string, sidePanelIdWanted = '', alias?: string, isRootUnfolded?: boolean): DocEntryLoaded {
   return docWorkspaceLoad({
     isVirtual: true,
-    docPageList: [{ alias, file: path.resolve(entryFile), sidePanel: sidePanelIdWanted || undefined, isRootVisible }],
+    docPageList: [{ alias, file: path.resolve(entryFile), sidePanel: sidePanelIdWanted || undefined, isRootUnfolded }],
   }, configDir);
 }
 
@@ -638,13 +664,14 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
   // the tree shown is then projected (doc-sidebar-effective.ts): a doc page
   // has one effective occurrence (its mount, else the first include reached;
   // later includes are shielded with their subtree), and a mount with
-  // isRootVisible false shows the children of its sole wrapper item without
-  // the wrapper's row. the cached side panels are not touched: the
+  // a mount unfolds its sole root item unless isRootUnfolded is false: the
+  // children shown at the top, the root a marked row of its own when it is
+  // bound to a document. the cached side panels are not touched: the
   // projection clones what it keeps.
   const aliasRootList = entryFileRootList.map((entryFile) => context.docPageByEntryFile.get(entryFile)!.alias);
   const treeOfRootGet = (sidePanelRoot: SidePanelLoaded | undefined, index: number): any[] => {
     const tree = sidePanelRoot?.tree ?? [];
-    return spec.docPageList[index].isRootVisible === false ? sidePanelRootHiddenApply(tree) : tree;
+    return spec.docPageList[index].isRootUnfolded === false ? tree : sidePanelRootUnfoldApply(tree);
   };
   const fileFirst = fileRootList[0];
   const { id: sidePanelId, sidePanel: sidePanelFirst } = sidePanelOfRoot(fileFirst, 0);
@@ -824,6 +851,7 @@ function docPageRegister(entryFile: string, mention: DocPageMention, isRoot: boo
     comp: undefined,
     hotkey: undefined,
     api: undefined,
+    objectFrontend: undefined,
   };
   context.docPageByEntryFile.set(entryFile, docPage);
   return docPage;
@@ -1067,7 +1095,8 @@ function pathIsInside(filePath: string, folder: string): boolean {
 // folders (doc_page_impl_service.md), the component folders
 // (doc_page_impl_mdx_comp.md#components-of-a-doc-page), the active keyboard
 // map (doc_page_impl_api_hotkey.md: hotkey/main.yaml) and the declared apis
-// (doc_page_impl_api.md: api.yaml). each is { file }, relative to the entry,
+// (doc_page_impl_api.md: api.yaml), the frontend objects and their types
+// (doc_page_impl_obj_frontend.md: object-frontend.yaml). each is { file }, relative to the entry,
 // or false for none. absent: the convention file beside the entry, read
 // when it exists, the defaults of the feature otherwise
 

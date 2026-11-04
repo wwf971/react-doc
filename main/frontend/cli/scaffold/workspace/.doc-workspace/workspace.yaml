@@ -6,7 +6,10 @@
 title: {{title}}
 
 # the root-level doc pages, in side-panel order, each under an alias unique
-# in the workspace; the first is the main doc page
+# in the workspace; the first is the main doc page. a doc page whose side
+# panel is one root item is shown unfolded (its children under the section
+# heading, the root a root row when it opens a document): keep it so unless
+# the root item says more than the alias (isRootUnfolded: false)
 docPageList:
   - alias: {{pageAlias}}
     dir: ../{{pageAlias}}

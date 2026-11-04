@@ -26,6 +26,8 @@ import { objectProviderDocCreate } from './lib/doc-object-provider-doc.js';
 import { objectProviderLinkCreate } from './lib/doc-object-provider-link.js';
 import { objectProviderAssetCreate } from './lib/doc-object-provider-asset.js';
 import { objectProviderBackendCreate } from './lib/doc-object-provider-backend.js';
+import { objectProviderFrontendCreate } from './lib/doc-object-provider-frontend.js';
+import { DocObjectFrontendStore, objectFrontendEventTypeList } from './store/DocObjectFrontendStore.js';
 import { DocEventRouter } from './lib/doc-event.js';
 import { DocCompStateStore } from './store/DocCompStateStore.js';
 import { StoreContext, useDocStores } from './store/context.js';
@@ -223,6 +225,11 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     objectStore.providerAdd(objectProviderLinkCreate({ linkStore }));
     objectStore.providerAdd(objectProviderAssetCreate({ assetStore }));
     objectStore.providerAdd(objectProviderBackendCreate({ serviceStore, configStore }));
+    // the frontend object service layer (doc_page_impl_obj_frontend.md):
+    // objects the page keeps itself, in assets, declared by the doc pages
+    // with their types; a provider of the registry like the other layers
+    const objectFrontendStore = new DocObjectFrontendStore({ assetStore, objectStore, configStore });
+    objectStore.providerAdd(objectProviderFrontendCreate({ objectFrontendStore }));
     const paletteStore = new DocPaletteStore({ apiStore });
     const hotkeyStore = new DocHotkeyStore({ apiStore, mapListHost: config.hotkeyMapList ?? [] });
     // the event layer (doc_page_impl_event.md): component reports are routed
@@ -271,6 +278,11 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       handle: (event) => objectStore.eventHandle(event),
     });
     eventRouter.routeAdd({
+      name: 'objectFrontend',
+      typeList: objectFrontendEventTypeList,
+      handle: (event) => objectFrontendStore.eventHandle(event),
+    });
+    eventRouter.routeAdd({
       name: 'sidePanel',
       typeList: sidePanelEventTypeList,
       handle: (event) => sidePanelStore.eventHandle(event),
@@ -290,6 +302,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       blockPopupStore,
       serviceStore,
       objectStore,
+      objectFrontendStore,
       sidePanelStore,
       pasteStore,
       blockSelectStore,
@@ -326,10 +339,12 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     stores.blockPopupStore.init();
     stores.serviceStore.init();
     stores.objectStore.init();
+    stores.objectFrontendStore.init();
     stores.apiStore.init();
     return () => {
       stores.hotkeyStore.dispose();
       stores.apiStore.dispose();
+      stores.objectFrontendStore.dispose();
       stores.objectStore.dispose();
       stores.serviceStore.dispose();
       stores.blockPopupStore.dispose();

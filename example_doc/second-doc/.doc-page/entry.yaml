@@ -15,19 +15,19 @@ source:
     path: ..
     collect: recursive
 
-# the side panel is one wrapper item holding the documents, as a doc page
-# with a single root often is. served alone, that row would be shown and
-# opened first; the workspace file mounts this doc page with
-# isRootVisible: false, so its children appear directly under the
-# section heading "second" (the wrapper keeps its id, tags and part; only
-# its row is not drawn). the Workspace tab toggles it per mount
+# the side panel is one root item holding the rest, as the side panel of a
+# doc page often is, and the root is bound to a document. a mount unfolds
+# such a sole root by default (the workspace mount option isRootUnfolded):
+# the root is drawn as a marked root row opening its document, and its
+# children directly under the section heading "second", not one level
+# down (the root keeps its id, tags and part). the Workspace tab toggles
+# it per mount ("unfold")
 sidePanelById:
   main:
     tree:
       - id: second-root
         text: Second Doc Page
+        doc: ~second-doc/second-doc.md
         children:
-          - doc: ~second-doc/second-doc.md
-            text: Workspace Sections
           - doc: ~second-doc/workspace-edit.md
             text: Editing the Workspace

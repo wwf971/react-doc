@@ -96,6 +96,9 @@ export const compIdBuiltinByName = {
   Tag: 'common/Tag',
   TagLabel: 'common/TagLabel',
   TagOverview: 'common/TagOverview',
+  // the entry component of the frontend objects, provided by the system
+  // (doc_page_impl_obj_frontend.md#the-entry-component)
+  ObjectFrontend: 'common/ObjectFrontend',
   // default editors of the edit layer, one per block kind (placement "edit")
   Heading: 'common/Heading',
   Paragraph: 'common/Paragraph',

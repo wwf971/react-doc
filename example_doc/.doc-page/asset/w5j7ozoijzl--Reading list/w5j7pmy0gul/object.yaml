@@ -1,0 +1,24 @@
+objectId: w5j7pmy0gul
+name: ""
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+owner:
+  ref: frontend:w5j7ozoijzl
+versionIdHead: w5j7pmy13gw
+isDeleted: false
+isLocked: false
+timeCreated: 20261105_01185253+09
+versionList:
+  - versionId: w5j7pmy13gw
+    versionIdPrevList: []
+    time: 20261105_01185253+09
+    note: book of the frontend object Reading list
+    size: 75
+    hash: 8df413d5bd92b7ba446a2985a93efe9617c73f2d
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261105_01185253+09
+    versionId: w5j7pmy13gw

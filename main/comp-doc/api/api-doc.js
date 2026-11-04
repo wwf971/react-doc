@@ -187,6 +187,22 @@ export const apiByIdDoc = {
       });
     },
   }),
+  'doc/blockPropSet': apiDefine({
+    label: 'Set the props of a component block',
+    description: 'Changes the props of the marker of a component block (<!--renderComp=X,key=value-->): the named ones replace those of the same name, an empty value removes one. Inline and asset-backed blocks alike: the data is not touched (blockPropSetRequest).',
+    icon: SquarePen,
+    palette: false,
+    paramList: [{ name: 'props', type: 'any', isRequired: true, description: 'a mapping { name: value }; "" or null removes a prop' }, blockParam, docParam],
+    isAvailable: ({ stores }) => stores.editStore.isAvailable || stores.envStore.reasonGet('edit'),
+    run: async (context, { props, block, doc }) => {
+      const ensured = await docModelEnsure(context, doc);
+      if (ensured.message) return { code: -1, message: ensured.message };
+      const located = blockLocate(ensured.model, block ?? context.block?.index);
+      if (located.message) return { code: -1, message: located.message };
+      if (!located.block.component) return { code: -1, message: `block ${located.index} is not a component block` };
+      return context.eventDispatch('blockPropSetRequest', { props }, { sourcePath: ensured.path, blockIndex: located.index });
+    },
+  }),
   'doc/blockTextSet': apiDefine({
     label: 'Replace the text of a block',
     description: 'Rewrites the lines of one block, as an edit session typed and saved would.',

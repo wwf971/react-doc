@@ -150,6 +150,10 @@ export type EditInsertMenu = {
   blockIndexAnchor: number;
   status: 'open' | 'submitting' | 'error';
   message: string;
+  // the entry whose component names an object, while its object is picked
+  // (meta.insertObjectPick): the menu shows a search of the object registry
+  // in place of its rows ('' otherwise)
+  pickTemplateId?: string;
 };
 
 export type EditDeleteConfirm = {
@@ -293,6 +297,7 @@ export const editEventTypeList = [
   'editBlockMoveRequest',
   'editBlockAssetMoveRequest',
   'dataReplaceRequest',
+  'blockPropSetRequest',
   'sidePanelTextEditStartRequest',
   'sidePanelTextSubmitRequest',
   'sidePanelTextCancelRequest',
@@ -1314,6 +1319,7 @@ export class DocEditStore {
     }
 
     if (event.type === 'dataReplaceRequest') return this.dataReplaceApply(event);
+    if (event.type === 'blockPropSetRequest') return this.blockPropSetApply(event);
 
     if (event.type.startsWith('sidePanelText')) {
       const itemId = String(event.source.itemId ?? '');
@@ -1403,6 +1409,25 @@ export class DocEditStore {
   insertMenuClose() {
     if (this.insertMenu?.status === 'submitting') return;
     this.insertMenu = undefined;
+  }
+
+  // the pick step of the insert menu: the entry whose object is being picked,
+  // '' back to the rows
+  insertMenuPickSet(templateId: string) {
+    const menu = this.insertMenu;
+    if (!menu || menu.status === 'submitting') return;
+    menu.pickTemplateId = templateId;
+    menu.status = 'open';
+    menu.message = '';
+  }
+
+  // a failure of the menu said where its action was asked (the pick step
+  // creating an object), the menu kept open
+  insertMenuMessageSet(message: string) {
+    const menu = this.insertMenu;
+    if (!menu) return;
+    menu.status = message ? 'error' : 'open';
+    menu.message = message;
   }
 
   // writes a new block (a template text) at the border of the open insert
@@ -2180,14 +2205,10 @@ export class DocEditStore {
   // dependencies recorded with asset data are what the component's
   // definition extracts from the new data, unless the request names them.
   private async dataReplaceApply(event: DocEvent): Promise<EditResult> {
-    const path = String(event.source.sourcePath ?? '');
-    const blockIndex = Number(event.source.blockIndex);
     const raw = String(event.data.raw ?? '');
-    if (!path || !Number.isInteger(blockIndex)) {
-      return { code: -1, message: 'dataReplaceRequest needs the document path and the block index (the document must be in edit mode)' };
-    }
-    const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
-    if (!block?.component) return { code: -1, message: 'dataReplaceRequest names a block that is not a component block' };
+    const located = await this.blockOfEventLocate(event);
+    if (located.code !== 0) return { code: -1, message: `dataReplaceRequest: ${located.message}` };
+    const { path, blockIndex, block } = located;
     const dependencyList = Array.isArray(event.data.dependencyList)
       ? event.data.dependencyList
       : this.blockDependencyListGet(block, raw, path);
@@ -2211,6 +2232,65 @@ export class DocEditStore {
     const text = componentBlockTextBuild(block, { raw });
     return this.operationApply(path, blockReplaceOperationBuild(block, text), {
       messageFailure: 'The data of the block was not replaced.',
+      onApplied: () => {
+        this.blockTextPending = { path, blockIndex, text };
+      },
+    });
+  }
+
+  // the component block an event of a component names: in edit mode by its
+  // index (event.source.blockIndex, given by the edit body), in reading mode
+  // by the marker line of its block (event.source.sourceLine, counted
+  // without the frontmatter), for which the document is read and its model
+  // built first. a component therefore changes its own block the same way
+  // whether the document is edited or read, wherever the page can write
+  private async blockOfEventLocate(event: DocEvent): Promise<{ code: 0; path: string; blockIndex: number; block: any } | { code: -1; message: string }> {
+    const path = String(event.source.sourcePath ?? '');
+    if (!path) return { code: -1, message: 'the event names no document' };
+    if (!this.docIsEditable(path)) return { code: -1, message: this.isAvailable ? 'the document cannot be written from the page' : (this.envStore as any).reasonGet?.('edit') || 'the page cannot write documents here' };
+    let blockIndex = Number(event.source.blockIndex);
+    if (!Number.isInteger(blockIndex)) {
+      const sourceLine = Number(event.source.sourceLine);
+      if (!Number.isInteger(sourceLine)) return { code: -1, message: 'the event names neither the block index nor the line of the block' };
+      if (!this.docEditByPath[path]?.model || this.docEditIsStale(path)) await this.docEditEnsure(path);
+      blockIndex = this.docEditByPath[path]?.model?.blockList.findIndex((item: any) => item.component?.markerLine === sourceLine) ?? -1;
+      if (blockIndex < 0) return { code: -1, message: `no component block starts at line ${sourceLine} of ${path} (the document changed: read it again)` };
+    }
+    const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
+    if (!block?.component) return { code: -1, message: 'the event names a block that is not a component block' };
+    return { code: 0, path, blockIndex, block };
+  }
+
+  // a component asks for the props of its marker to change
+  // (blockPropSetRequest { props }; doc_page_impl_mdx_comp.md#props-of-a-block):
+  // the props named replace those of the same name, a null or empty value
+  // removes one, the others stay. the marker is the block's whether its data
+  // is inline or an asset reference, so the props of an asset-backed block
+  // are set the same way; the data is not touched
+  private async blockPropSetApply(event: DocEvent): Promise<EditResult> {
+    const propsChange = event.data.props;
+    if (!propsChange || typeof propsChange !== 'object' || Array.isArray(propsChange)) {
+      return { code: -1, message: 'blockPropSetRequest: props is a mapping { name: value }' };
+    }
+    for (const [key, value] of Object.entries(propsChange)) {
+      if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(key)) return { code: -1, message: `blockPropSetRequest: "${key}" is not a prop name` };
+      if (value !== null && value !== undefined && /[,\n]|-->/.test(String(value))) {
+        return { code: -1, message: `blockPropSetRequest: the value of ${key} cannot hold ",", a line break or "-->" (write it in the data of the block)` };
+      }
+    }
+    const located = await this.blockOfEventLocate(event);
+    if (located.code !== 0) return { code: -1, message: `blockPropSetRequest: ${located.message}` };
+    const { path, blockIndex, block } = located;
+    const props: Record<string, any> = { ...(block.component.props ?? {}) };
+    for (const [key, value] of Object.entries(propsChange)) {
+      if (value === null || value === undefined || String(value) === '') delete props[key];
+      else props[key] = String(value);
+    }
+    const isLeft = await this.sessionLeaveForIndexAction(path);
+    if (!isLeft) return { code: -1, message: 'the open edit session was not left' };
+    const text = componentBlockTextBuild(block, { props });
+    return this.operationApply(path, blockReplaceOperationBuild(block, text), {
+      messageFailure: 'The props of the block were not changed.',
       onApplied: () => {
         this.blockTextPending = { path, blockIndex, text };
       },

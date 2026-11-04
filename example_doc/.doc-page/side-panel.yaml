@@ -77,6 +77,11 @@ sidePanelById:
       - doc: ~example/object-registry.md
         text: Objects and Types
         tags: [guide]
+      # objects the page keeps itself in assets, drawn in the modes of the
+      # types this doc page declares (.doc-page/object-frontend.yaml)
+      - doc: ~example/object-frontend.md
+        text: Frontend Objects
+        tags: [guide]
       # what a component keeps between renders and across its unmount
       - doc: ~example/comp-state.md
         text: Component State

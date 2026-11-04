@@ -1,0 +1,26 @@
+# the modes of the frontend object type example.reading-list
+# (.doc-page/object-frontend.yaml; design: main/doc_page_impl_obj_frontend.md):
+# components rendered by the entry component ObjectFrontend in the placement
+# objectFrontend, never written as blocks themselves (isNotInDoc). a group
+# in a group of the component folder (object-frontend/reading-list/).
+compList:
+  - tagName: ReadingList
+    id: specific/ReadingList
+    entry: ./ReadingList.jsx
+    export: ReadingList
+    defineOptionsExport: readingListDefineOptions
+  - tagName: ReadingListAdd
+    id: specific/ReadingListAdd
+    entry: ./ReadingList.jsx
+    export: ReadingListAdd
+    defineOptionsExport: readingListAddDefineOptions
+  - tagName: ReadingListBook
+    id: specific/ReadingListBook
+    entry: ./ReadingList.jsx
+    export: ReadingListBook
+    defineOptionsExport: readingListBookDefineOptions
+  - tagName: ReadingListStats
+    id: specific/ReadingListStats
+    entry: ./ReadingList.jsx
+    export: ReadingListStats
+    defineOptionsExport: readingListStatsDefineOptions

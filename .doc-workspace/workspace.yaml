@@ -29,13 +29,14 @@ docPageList:
     dir: ../example_doc
     # sidePanel: compact
   # a second root doc page: the side panel shows a section for each. its
-  # side panel is one wrapper item holding its documents; isRootVisible:
-  # false shows them directly under the section heading, without the
-  # wrapper's row (doc_page_impl_side_panel.md#the-root-row-hidden). a
-  # yaml boolean: the text "false" is refused
+  # side panel is one root item bound to a document and holding the rest;
+  # a mount unfolds such a sole root by default (isRootUnfolded, true when
+  # absent): the root a marked row that opens its document, its children
+  # directly under the section heading, not one level down
+  # (doc_page_impl_side_panel.md#the-sole-root-unfolded).
+  # "isRootUnfolded: false" would draw the root as a folder instead
   - alias: second
     dir: ../example_doc/second-doc
-    isRootVisible: false
 
 # the packages the workspace imports (main/doc_page_impl_package.md):
 # each named by its folder, relative to this file. a package brings its

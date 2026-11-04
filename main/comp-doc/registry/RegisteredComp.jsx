@@ -222,6 +222,9 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
         placement,
         sourcePath: config.sourcePath,
         blockIndex,
+        // the marker line of its block (counted without the frontmatter): how
+        // a block is found in reading mode, where there is no block index
+        sourceLine,
         // the asset the component's data came from, so a route that
         // replaces the data knows to update the asset, not the block
         asset: configRuntime.assetInfo?.isFromAsset ? configRuntime.assetInfo : undefined,

@@ -136,6 +136,8 @@ export type AssetObject = {
   contentType: string;
   fileExt: string;
   component?: AssetComponent;
+  // the object its data is a part of: { ref, role? } (doc_page_impl_obj_frontend.md#assets-and-their-owner)
+  owner?: { ref: string; role?: string };
   saveMode?: AssetSaveMode;
   versionIdHead: string;
   isDeleted: boolean;
@@ -144,9 +146,11 @@ export type AssetObject = {
   timeCreated: string;
   versionList: AssetVersionMeta[];
   eventList: AssetEvent[];
-  // where the object was found: the store folder, and its own folder in it ({objectId}--{name})
+  // where the object was found: the store folder, its own folder in it
+  // ({objectId}--{name}, behind its group folders), and those groups ('' at the top)
   folder: string;
   dirName: string;
+  groupPath?: string;
 };
 
 // a folder of the store: its full source path (~page:root/path), the doc page that names it
@@ -216,7 +220,7 @@ export type AssetPanelBlock = { compName: string; propsAuthored: Record<string, 
 export type DocAssetStoreOptions = {
   endpoint?: string;
   snapshot?: any;
-  subscribe?: (listener: (change: { objectId?: string; isStoreChanged?: boolean }) => void) => () => void;
+  subscribe?: (listener: (change: { objectId?: string; isStoreChanged?: boolean; isObjectFrontendChanged?: boolean }) => void) => () => void;
   manifestGet?: () => ManifestEntry[];
 };
 
@@ -761,6 +765,29 @@ export class DocAssetStore {
 
   versionLockSet(store: string, objectId: string, versionId: string, isLocked: boolean): Promise<AssetResult> {
     return this.writeApply(store, () => this.backend!.versionLockSet(store, objectId, versionId, isLocked), 'The lock of the version was not changed.');
+  }
+
+  // the object's folder moved into group folders of its store folder ('' the top)
+  objectMove(store: string, objectId: string, groupPath: string): Promise<AssetResult> {
+    return this.writeApply(store, () => this.backend!.objectMove(store, objectId, groupPath), 'The asset object was not moved.');
+  }
+
+  // objects another layer wrote through the same backend (the frontend
+  // object service layer: an object and its entry in one request), taken as
+  // the index would bring them; a deleted object stays, marked
+  objectListAccept(store: string, objectList: AssetObject[]) {
+    runInAction(() => {
+      for (const object of objectList) {
+        const objectBefore = this.objectGet(store, object.objectId);
+        this.objectAccept(store, object);
+        // the head moved or was rewritten: its data is read again when used
+        if (objectBefore && objectBefore.versionIdHead === object.versionIdHead) {
+          const versionHeadBefore = objectBefore.versionList.find((version) => version.versionId === object.versionIdHead);
+          const versionHead = object.versionList.find((version) => version.versionId === object.versionIdHead);
+          if (versionHeadBefore?.hash !== versionHead?.hash) delete this.versionByKey[versionKeyGet(store, object.objectId, object.versionIdHead)];
+        }
+      }
+    });
   }
 
   // ---------- the folders of the local store (settings panel) ----------

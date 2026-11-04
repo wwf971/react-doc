@@ -34,6 +34,10 @@ import { OBJECT_VIEW_CONTEXT_LIST } from '../../frontend/src/lib/doc-object-ref.
 //                  assetSaveMode (inPlace | newVersion: the save mode written
 //                  into an asset object the page creates for a block of the
 //                  component; absent: the store's default applies),
+//                  insertObjectPick ({ typeList, isCreateOffered }: the insert
+//                  menu asks for an object of these types first, a search of the
+//                  object registry, and the factory gets it as env.objectRef;
+//                  doc_page_impl_edit.md#creating-a-block-naming-an-object),
 //                  configDefineList (the shape of its component-level config,
 //                  doc_page_impl_config.md#component-level-config), label,
 //                  description, and any further key the component adds
@@ -191,6 +195,10 @@ function metaNormalize(meta) {
   if (meta.assetSaveMode !== undefined && !ASSET_SAVE_MODE_LIST.includes(meta.assetSaveMode)) {
     throw new Error(`compDefine: expose.meta.assetSaveMode must be one of ${ASSET_SAVE_MODE_LIST.join(', ')}.`);
   }
+  const pick = meta.insertObjectPick;
+  if (pick !== undefined && (!pick || typeof pick !== 'object' || !Array.isArray(pick.typeList) || pick.typeList.length === 0)) {
+    throw new Error('compDefine: expose.meta.insertObjectPick must be { typeList: [type id, ...], isCreateOffered? }.');
+  }
   return {
     ...metaDefault,
     ...meta,
@@ -204,6 +212,7 @@ function metaNormalize(meta) {
     isEditSlashEnabled: meta.isEditSlashEnabled === true,
     assetSaveMode: meta.assetSaveMode,
     configDefineList: meta.configDefineList ?? [],
+    insertObjectPick: pick ? { typeList: pick.typeList.map(String), isCreateOffered: pick.isCreateOffered === true } : undefined,
   };
 }
 

@@ -43,6 +43,12 @@
 //   versionLockSet(store, objectId, versionId, isLocked)
 //   folderSet(configFile, folderList, folderDefault)  the folders of one doc page (~root/path, or ~page:root/path),
 //                                               written into its asset store config
+//   objectMove(store, objectId, groupPath)      the object's folder moved into group folders
+//   objectFrontendConfigGet()                   { docPageList }: the frontend objects and types the doc
+//                                               pages declare (doc_page_impl_obj_frontend.md)
+//   objectFrontendWrite(route, body)            a write of the frontend object service layer (create,
+//                                               register, delete, meta/set, asset/create, asset/remove,
+//                                               asset/attach): { id, objectList, config }
 
 export function assetBackendApiCreate(endpoint) {
   const endpointNormalized = String(endpoint ?? '').replace(/\/+$/, '');
@@ -94,6 +100,9 @@ export function assetBackendApiCreate(endpoint) {
     dependencyAdd: (store, objectId, versionId, dependency) => requestPost('/dependency/add', { store, objectId, versionId, dependency }),
     dependencyRemove: (store, objectId, versionId, dependency) => requestPost('/dependency/remove', { store, objectId, versionId, dependency }),
     folderSet: (configFile, folderList, folderDefault) => requestPost('/folder/set', { configFile, folderList, folderDefault }),
+    objectMove: (store, objectId, groupPath) => requestPost('/object/move', { store, objectId, groupPath }),
+    objectFrontendConfigGet: () => requestSend('/object-frontend/config'),
+    objectFrontendWrite: (route, body) => requestPost(`/object-frontend/${route}`, body),
     usageList: (docPathList = []) => requestSend(
       `/usage/list${docPathList.length > 0 ? `?${docPathList.map((docPath) => `docPath=${encodeURIComponent(docPath)}`).join('&')}` : ''}`,
     ),
@@ -186,6 +195,10 @@ export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
     },
     objectCreate: readOnly,
     objectUpdate: readOnly,
+    objectMove: readOnly,
+    // the declarations the build carried
+    objectFrontendConfigGet: () => Promise.resolve({ code: 0, data: { docPageList: snapshot?.objectFrontend?.docPageList ?? [] }, message: '' }),
+    objectFrontendWrite: readOnly,
     testCaseResultSet: readOnly,
     objectDelete: readOnly,
     objectRestore: readOnly,

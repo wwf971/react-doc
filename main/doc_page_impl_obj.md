@@ -65,6 +65,7 @@ A reference is `{namespace}:{local}`, the namespace `[a-zA-Z][a-zA-Z0-9.-]*` up 
 | `docDir` | the doc page source | `doc.folder` | the folder's full source path, `~page:root/dir` |
 | `doc` | the doc page source | `doc.document`; `doc.section`, `doc.block`, `doc.group` with a fragment | `~page:root/a.md`, `~page:root/a.md#{fragment}` |
 | `asset` | the asset store (page) | `asset.object` | `{store}/{objectId}` |
+| `frontend` | the frontend object service layer (page) | `frontend.object` and the types the doc pages declare below it | the object's id |
 | `service` | the kernel (backend) | `service.instance` | the service id |
 | `serviceTemplate` | the kernel | `service.template` | the template id |
 | `serviceConfig` | the kernel | `service.config` | the service id of the instance |
@@ -128,6 +129,8 @@ core.object                                  anything the registry can name
 ├── core.config  ── service.config           { valueByKey, defineList }; an update { valueByKey }
 ├── core.task                                summary isDone; an update { isDone }
 ├── core.file    ── asset.object
+├── core.collection ── frontend.object       an object the page keeps in assets (doc_page_impl_obj_frontend.md);
+│                                            members: its assets. the root of the types doc pages declare
 ├── core.service ── service.instance
 └── service.template
 
@@ -138,6 +141,8 @@ core.relation
 ```
 
 A type is a promise of semantics, and the `core.*` types carry the few promises consumers rely on: a `core.task` has `summary.isDone` and accepts `{ isDone }`; a `core.config` reads as `{ valueByKey, defineList }` and accepts `{ valueByKey }`; a `core.collection` has `core.member` relations. Capability-like types and semantic ones are the same mechanism, named for what they mean. Being of a type does not promise behavior beyond that (availability, permissions, consistency are the provider's), and a type an object needs a conversion to reach (a PDF as frames) is a service turning one object into another, not a parent in the DAG.
+
+**Types of the doc pages.** A doc page declares the types of its [frontend objects](doc_page_impl_obj_frontend.md) in `.doc-page/object-frontend.yaml`, each below `frontend.object`, with the modes that draw it; the layer's provider defines them (`typeDefineGet`, `definedBy: { kind: docPage, alias }`), so they are types of the registry like any other, assignable, searchable, drawn by views. A doc page defines no type outside that tree ([TODO](doc_page_impl_TODO.md#object-type-source)).
 
 **Types of the templates.** A service template defines types in `expose.typeList` of its script, under its own name (`todo-list.todo`): the kernel refuses a type of another name with a problem, so two templates never collide. The kernel rebuilds the registry whenever a script changes: the built-in types, then the templates' (the oldest template id first; a second definition of an id is reported and left out), then those of instances whose template is gone. The page takes the backend's list over its own built-in copy when there is a backend.
 
@@ -171,11 +176,12 @@ provider
 | `doc-source` | page | `docPage`, `docDir`, `doc` | `doc.page`, `doc.folder`, `doc.document`, `doc.section`, `doc.block`, `doc.group` | `core.contains`, `core.member` (a group's) | query (places: compiled documents only, `partial`), resolve, read, relationQuery |
 | `doc-link` | page | none | none | `doc.link` | relationQuery (from or to a document) |
 | `asset` | page | `asset` | `asset.object` | none | query, resolve, read |
+| `frontend` | page | `frontend` | `frontend.object` and the doc pages' types (which it defines, `typeDefineGet`) | `core.member` (an object to its assets) | query, resolve, read, relationQuery |
 | `backend` | page (a peer) | the backend's | what the backend's providers have | theirs | all, federated by the backend |
 | `kernel` | backend | `service`, `serviceTemplate`, `serviceConfig` | `service.instance`, `service.template`, `service.config` | `service.createdFrom`, `service.dependsOn` | query, resolve, read, update (a config), relationQuery |
 | `service:{id}` | backend | `service.{id}` | its script's `objectProvide.typeList` | its `relationTypeList` | the object apis its script implements |
 
-Each provider of the page speaks for a service layer that keeps its own representation: the doc page source its manifests and compiled documents (and the headings of a compiled document, `headingListGet`), the navigation layer its link index, resolved once into links seen both ways, the asset store its index. None of them hands its representation to the registry; each answers from it when asked, and only what it is authorized to answer. What a provider needs of its layer is a method of the layer, so the provider only says it in the registry's words (references, descriptors, relations) and the layer stays the one place its rules live.
+Each provider of the page speaks for a service layer that keeps its own representation: the doc page source its manifests and compiled documents (and the headings of a compiled document, `headingListGet`), the navigation layer its link index, resolved once into links seen both ways, the asset store its index, the frontend object service layer the doc pages' declarations joined with the entries of its objects. None of them hands its representation to the registry; each answers from it when asked, and only what it is authorized to answer. What a provider needs of its layer is a method of the layer, so the provider only says it in the registry's words (references, descriptors, relations) and the layer stays the one place its rules live.
 
 This is why the registry knows no layer (the second principle at the top): what a provider brings besides objects (`typeDefine`, `compList`, `open`, the peer's `providerInfoList` and `count`) is all the registry learns of its layer.
 
@@ -273,6 +279,7 @@ compDefine(TaskCard, {
 | `common/ObjectViewCollection` | `core.collection` | card (members as icons), block (members as cards) |
 | `common/ObjectViewConfig` | `core.config` | card, block: a form of the define list; Save is the update `{ valueByKey }` |
 | `common/ObjectViewDocument` | `core.document`, `core.place` | card: opens it; counts the `doc.link` relations to a document or a section |
+| `common/ObjectViewFrontend` | `frontend.object` | card: its name, the kinds of its assets, its modes; block: the object in its default mode ([Frontend objects](doc_page_impl_obj_frontend.md#in-the-object-registry)) |
 | `service/todo-list/comp/todo-card` | `core.task` | card, icon, inline: checks it off (`{ isDone }`); from the module of the template `todo-list` |
 
 **The components a document writes** consume the registry: `ObjectView` (one object by its reference, in a context; also a node of a card diagram), `ObjectList` (the objects of some types: a federated query, with its completeness), `ObjectGroup` (a group whose truth is the document), `ObjectSearch` (a search by words, [Search](doc_page_impl_obj_search.md#the-ui)). A view keeps what it read and its draft in the layer, not in itself (`viewStateGet(key)`, `viewContentLoad`, `viewDraftSave`): the config form and the fallback view's content do. Their usage is in the demonstration, `example_doc/object-registry.md`. Every one of them draws objects through `ObjectViewHost`, which resolves the reference, chooses the view and renders it; a consumer of another package does the same.
@@ -354,6 +361,8 @@ frontend/src/lib/doc-object-provider-link.js    the links (doc.link) of the navi
 frontend/src/lib/doc-object-provider-asset.js   the asset store's objects; opens the asset panel
 frontend/src/lib/doc-object-provider-backend.js the backend's registry as a peer: its objects, types, components (compList),
                                                 providers and counts; opens the Services tab
+frontend/src/lib/doc-object-provider-frontend.js the frontend objects (doc_page_impl_obj_frontend.md): their types, their
+                                                assets as members; opens the Frontend objects tab
 frontend/src/lib/doc-service-api.js    the object endpoints of the backend
 frontend/src/store/DocObjectStore.ts   the page's registry, knowing the layers only through their providers: types,
                                        providers, resolve / query / relation states and caches, read, update,

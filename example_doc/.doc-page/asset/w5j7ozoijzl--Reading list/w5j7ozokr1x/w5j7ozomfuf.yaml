@@ -1,0 +1,23 @@
+name: Reading list
+type: example.reading-list
+description: the books of the demonstration, and notes on them
+assetList:
+  - key: book-1
+    kind: book
+    objectId: w5j7pmxa7fw
+  - key: book-2
+    kind: book
+    objectId: w5j7pmy0gul
+  - key: book-3
+    kind: book
+    objectId: w5j7pmym0fx
+  - key: book-4
+    kind: book
+    objectId: w5j7pmz5o32
+  - key: note-1
+    kind: note
+    objectId: w5j7pmznvdq
+  - key: note-2
+    kind: note
+    objectId: w5j7pn05cwa
+metadata: {}

@@ -27,12 +27,14 @@ my-doc/                          the doc page folder: give this to a workspace f
     ├── comp.yaml                its component folders (optional: comp-mdx/ below otherwise)
     ├── service.yaml             its service folders (optional: the four service-* below otherwise)
     ├── api.yaml                 the apis it declares without code (optional: none otherwise)
+    ├── object-frontend.yaml     its frontend objects and their types (optional: none otherwise; made by its first object)
     ├── service-backend.yaml     the config of the service backend, when the page is the one a backend is started for
     ├── hotkey/                  its keyboard maps, one yaml file each (optional: none otherwise)
     │   ├── main.yaml            the map it activates by convention (entry: hotkey.file names another)
     │   └── base.yaml            a map main.yaml includes, or the reader picks instead
     │                            the managed folders, each made by its first item (below):
     ├── asset/                   the asset objects of the doc page: its default asset folder
+    │   └── {id}--{name}/        a group folder: the assets of one frontend object, its entry among them
     ├── comp-mdx/                its components: comp.yaml manifests and the modules they name
     │   ├── comp.yaml            the components at the top of the folder
     │   └── table/stock-table/   a group in a group: any folders, each may hold a comp.yaml
@@ -54,7 +56,7 @@ The source scan never enters `.doc-page/`, so a rule collecting the doc page fol
 
 A doc page laid out before the managed folders moved into `.doc-page/` (`comp-mdx/`, `asset/`, `service-*/` beside the documents) is not read the old way: the folder of the former name is reported once in the console with where it goes now, and either moved there or named in the config file of its kind.
 
-The three managed kinds follow one rule, **a convention with a config file over it**: the folder of the known name is used when nothing is said, the config file in `.doc-page/` names other or more folders, and the entry can name another config file (`asset: { file }`, `comp: { file }`, `service: { file }`) or say the doc page has none (`asset: false`, `comp: false`, `service: false`). Two more files of `.doc-page/` follow the same rule without a managed folder: the keyboard maps and the declared apis ([below](#keyboard-maps-and-declared-apis)).
+The three managed kinds follow one rule, **a convention with a config file over it**: the folder of the known name is used when nothing is said, the config file in `.doc-page/` names other or more folders, and the entry can name another config file (`asset: { file }`, `comp: { file }`, `service: { file }`) or say the doc page has none (`asset: false`, `comp: false`, `service: false`). Three more files of `.doc-page/` follow the same rule without a managed folder: the keyboard maps and the declared apis ([below](#keyboard-maps-and-declared-apis)), and the frontend objects with their types ([below](#frontend-objects)).
 
 ### Managed folders made when first used
 
@@ -70,6 +72,8 @@ the folder                           made by
 .doc-page/service-template-app/,     whoever puts the first template there: by hand today
   service-template-infra/
 .doc-page/service-backup/            the local-backup infra service, at the first backup
+.doc-page/object-frontend.yaml,      the first frontend object created in the doc page (the Frontend
+  asset/{id}--{name}/                  objects tab, the insert menu): its line, its group folder
 ```
 
 The rule for anything that writes into a managed folder, now or later (a component or a template brought in from the page, say): **make the folder when writing the first item, never assume it exists, never make it ahead.** The rule for anything that reads one: **a missing folder is empty**, never an error. Since components and templates are put in by hand as often as by the page, the development server watches the metadata folder of every doc page, so a component folder that appears while it runs is mounted at once.
@@ -140,7 +144,11 @@ A doc page binds keys to apis and declares apis of its own in its metadata folde
 - **`.doc-page/hotkey/`** holds its keyboard maps, one yaml file each ([Keyboard maps](doc_page_impl_api_hotkey.md)). `main.yaml` is the map the doc page activates; the other files are resources that the active map includes (`include: [./base.yaml]`), or that the reader picks instead in the settings panel. The entry names another file as the active map with `hotkey: { file: ./hotkey/vim.yaml }`, or `hotkey: false` for none. The maps of every loaded doc page are stacked over the package's default map (`main/hotkey/default.yaml`, named by `config.yaml`) and under the workspace's map (named by the workspace file), the included doc pages below the one that includes them.
 - **`.doc-page/api.yaml`** holds the apis the doc page declares without code: aliases of apis of the page with fixed parameters, or sequences of calls ([Declared apis](doc_page_impl_api.md#declared-apis)), read when the file exists; `api: { file }` names another file, `api: false` none.
 
-Both are configuration, like the entry and the side-panel files: a change reloads the page, and they are never collected as documents. The package and the workspace keep a keyboard map each, as one file named explicitly (`hotkey: { file }` of `config.yaml` and of the workspace file; for a workspace, by habit `hotkey.yaml` beside the workspace file in `.doc-workspace/`, [The workspace folder](#the-workspace-folder)).
+Both are configuration, like the entry and the side-panel files: a change reloads the page, and they are never collected as documents.
+
+### Frontend objects
+
+**`.doc-page/object-frontend.yaml`** holds what the doc page keeps of the [frontend object service layer](doc_page_impl_obj_frontend.md): the **types** of its frontend objects (`typeList`, each below `frontend.object`, with its modes: the components that draw it, which are the doc page's own components or any of the registry) and the **objects** themselves (`objectList [{ id, entry }]`, the id of each and of its entry asset). The objects' data is assets of the doc page's default asset folder, the assets of one object gathered in a group folder named like an asset object, `{id}--{name}`, so the folder of the doc page shows one folder per object. The file is read when it exists; `objectFrontend: { file }` of the entry names another file, `objectFrontend: false` none. Its types are configuration a person writes, its object list the page keeps (a line added or removed in place by the Frontend objects tab); a change is read again by the page without a reload, as `asset.yaml` is, and the file is never collected as a document. It is made by the first object created in the doc page. The package and the workspace keep a keyboard map each, as one file named explicitly (`hotkey: { file }` of `config.yaml` and of the workspace file; for a workspace, by habit `hotkey.yaml` beside the workspace file in `.doc-workspace/`, [The workspace folder](#the-workspace-folder)).
 
 ## The built-in folder
 
@@ -256,11 +264,11 @@ my-workspace/                    the workspace folder: config.yaml names it (wor
     └── .gitignore               *.bak: the backups the Workspace tab keeps when it rewrites the file
 ```
 
-`config.yaml` names the workspace by its folder, `workspace: { dir }`, and the file is the first of `{dir}/.doc-workspace/workspace.yaml`, `{dir}/workspace.yaml`; `workspace: { file }` names a workspace file anywhere. Paths in the workspace file are relative to the file, so a doc page of the workspace folder is `../guide`, as a doc page folder is `..` from its `.doc-page/`. The doc page folders may lie anywhere (a workspace names them by path); keeping them in the workspace folder is what makes the folder a thing that can be copied, versioned or deployed whole.
+`config.yaml` names the workspace by its folder, `workspace: { dir }`, and the file is the first of `{dir}/.doc-workspace/workspace.yaml`, `{dir}/workspace.yaml`; `workspace: { file }` names a workspace file anywhere. Paths in the workspace file are relative to the file, so a doc page of the workspace folder is `../guide`, as a doc page folder is `..` from its `.doc-page/`. A doc page whose side panel is one root item is shown unfolded under its section by default ([the sole root unfolded](doc_page_impl_side_panel.md#the-sole-root-unfolded)), so a doc page keeps its root item, named like the doc page, and the workspace needs no option for it. The doc page folders may lie anywhere (a workspace names them by path); keeping them in the workspace folder is what makes the folder a thing that can be copied, versioned or deployed whole.
 
 ## The demonstration doc page
 
-`example_doc/` follows the convention, and its top shows documents only: its metadata is in `example_doc/.doc-page/` (an entry naming `source.yaml`, `tag.yaml`, `config.yaml` and `side-panel.yaml`, the side panels of two parts, `asset.yaml` naming its two asset folders `~example:example/.doc-page/asset` and `~example:example/.doc-page/asset-archive`, `service-backend.yaml`), and so are its managed folders: its components in `.doc-page/comp-mdx/` with their manifests, grouped (`comp.yaml` at the top, `panel/comp.yaml` for the side-panel item and the source link, `table/stock-table/comp.yaml` a group in a group), its own app template in a group in a group (`.doc-page/service-template-app/productivity/task/`), its instances in `.doc-page/service-app/`, the infra instances the kernel provisions in `.doc-page/service-infra/`. Its sub document `example_doc/sub-doc/` is a doc page folder with its own `.doc-page/entry.yaml`, written inline. The root of the project is the workspace folder of the demonstration: `main/config.yaml` names it (`workspace: { dir: .. }`), and `.doc-workspace/workspace.yaml` there imports the package `package/cloud-dev-vis/` (whose diagrams the demonstration's documents use), names the demonstration as the first root doc page under the alias `example`, beside a second one, `example_doc/second-doc/` as `second`, and names the keyboard map of the workspace, `.doc-workspace/hotkey.yaml`. The side panel of `example` includes the sub document as `include: { dir: ../sub-doc, alias: sub }`, and its source rule excludes both folders (`exclude: [sub-doc/, second-doc/]`).
+`example_doc/` follows the convention, and its top shows documents only: its metadata is in `example_doc/.doc-page/` (an entry naming `source.yaml`, `tag.yaml`, `config.yaml` and `side-panel.yaml`, the side panels of two parts, `asset.yaml` naming its two asset folders `~example:example/.doc-page/asset` and `~example:example/.doc-page/asset-archive`, `object-frontend.yaml` declaring the reading lists, whose assets are the group folders `{id}--{name}` of its asset folder, `service-backend.yaml`), and so are its managed folders: its components in `.doc-page/comp-mdx/` with their manifests, grouped (`comp.yaml` at the top, `panel/comp.yaml` for the side-panel item and the source link, `table/stock-table/comp.yaml` a group in a group), its own app template in a group in a group (`.doc-page/service-template-app/productivity/task/`), its instances in `.doc-page/service-app/`, the infra instances the kernel provisions in `.doc-page/service-infra/`. Its sub document `example_doc/sub-doc/` is a doc page folder with its own `.doc-page/entry.yaml`, written inline. The root of the project is the workspace folder of the demonstration: `main/config.yaml` names it (`workspace: { dir: .. }`), and `.doc-workspace/workspace.yaml` there imports the package `package/cloud-dev-vis/` (whose diagrams the demonstration's documents use), names the demonstration as the first root doc page under the alias `example`, beside a second one, `example_doc/second-doc/` as `second`, and names the keyboard map of the workspace, `.doc-workspace/hotkey.yaml`. The side panel of `example` includes the sub document as `include: { dir: ../sub-doc, alias: sub }`, and its source rule excludes both folders (`exclude: [sub-doc/, second-doc/]`).
 
 ## Implementation
 
@@ -277,6 +285,7 @@ my-workspace/                    the workspace folder: config.yaml names it (wor
 | `plugin/doc-package.ts` | `PACKAGE_CONFIG_FILE_NAME`, the fixed folders of a package (the rest: [Packages](doc_page_impl_package.md#implementation)) |
 | `plugin/doc-hotkey.ts` | `HOTKEY_DIR_NAME` (`hotkey`), `HOTKEY_MAP_DEFAULT_FILE_NAME` (`main.yaml`): the keyboard maps of a doc page, includes expanded; the one map file of the package and of the workspace (`hotkeyMapOfFileGet`) |
 | `plugin/doc-api-config.ts` | `API_CONFIG_FILE_NAME` (`api.yaml`): the apis a doc page declares |
+| `plugin/doc-object-frontend.ts`, `src/lib/doc-object-frontend.js` | `OBJECT_FRONTEND_CONFIG_FILE_NAME` (`object-frontend.yaml`): the frontend objects and types a doc page declares |
 | `plugin/doc-asset-store.ts`, `plugin/doc-comp-config.ts`, `plugin/doc-service-server.ts` | the convention folders of the three managed kinds: `ASSET_FOLDER_DEFAULT_LIST`, `COMP_FOLDER_DEFAULT_LIST`, `SERVICE_FOLDER_DEFAULT_LIST`, all in `.doc-page/` |
 | `plugin/doc-source.ts` | `folderManagedIsLazyGet` (config `folderManaged`), `folderManagedListGet` (the managed folders of the loaded doc pages), `folderManagedEnsure` (made with `isLazy: false`) |
 | `frontend/cli/` | `react-doc init`: the scaffold of each folder kind ([The command line](doc_page_impl_cli.md)) |

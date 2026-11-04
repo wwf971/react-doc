@@ -26,7 +26,7 @@
 // the projection clones what it keeps: the cached side panel resources the
 // loader built are never mutated.
 
-export const SIDEBAR_ROOT_HIDDEN_KEY = 'isSidebarRootHidden';
+export const SIDEBAR_ROOT_UNFOLDED_KEY = 'isSidebarRootUnfolded';
 
 // tree: the assembled side panel tree; aliasEffectiveList: the aliases
 // effective before the traversal (the root doc pages of the workspace)
@@ -65,19 +65,22 @@ function includeForeignAliasGet(node: Record<string, any>): string | undefined {
   return alias;
 }
 
-// The root row hidden (the workspace mount option isRootVisible: false): a
-// side panel whose tree is one wrapper item (a folder-form node with
-// children) shows the wrapper's children directly under the section
-// heading, without the wrapper's row. the wrapper stays in the tree, marked
-// isSidebarRootHidden: its item id, bound document, tags, config, part,
-// breadcrumb and edit addresses are as before, only its row is not drawn
-// (DocSidebarFolder). nothing else is flattened: several roots, a leaf, an
-// empty folder keep their display, so no content is ever hidden.
-export function sidePanelRootHiddenApply(tree: any[]): any[] {
+// The sole root unfolded (the workspace mount option isRootUnfolded, true
+// by default; doc_page_impl_side_panel.md#the-sole-root-unfolded): a side
+// panel whose tree is one wrapper item (a folder-form node with children)
+// shows the wrapper's children at the top, directly under the section
+// heading, not one level down. the wrapper stays in the tree, marked
+// isSidebarRootUnfolded: its item id, bound document, tags, config, part,
+// breadcrumb and edit addresses are as before. it has no folder row
+// (DocSidebarFolder): unbound, nothing of it is drawn; bound to a document,
+// it is drawn as a marked root row above its children, which opens that
+// document. nothing else is unfolded: several roots, a leaf, an empty
+// folder keep their display, so no content is ever hidden.
+export function sidePanelRootUnfoldApply(tree: any[]): any[] {
   if (tree.length !== 1) return tree;
   const root = tree[0];
   if (!nodeIsWrapper(root)) return tree;
-  return [{ ...root, [SIDEBAR_ROOT_HIDDEN_KEY]: true }];
+  return [{ ...root, [SIDEBAR_ROOT_UNFOLDED_KEY]: true }];
 }
 
 // a folder-form node: children of its own (a plain folder, or a document

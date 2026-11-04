@@ -5,6 +5,7 @@ import { DocSidePanelSection } from './DocSidePanelSection.jsx';
 import './SidePanelItem.css';
 import {
   ChevronDown,
+  House,
   Link,
   SidebarFolder,
   SidebarFolderContent,
@@ -37,19 +38,59 @@ const classNameLink = `${classNameItem} data-[active=true]:bg-fd-primary/10 data
 // label opens the document, the chevron only folds. a folder without a
 // document keeps the plain chevron of fumadocs, its whole row folds.
 //
-// a folder marked isSidebarRootHidden (the sole wrapper item of a doc page
-// mounted with isRootVisible: false, plugin/doc-sidebar-effective.ts) is
-// drawn without its row: its children come as they are, at the depth the
-// folder has, as if written at the top of the section. the folder stays in
-// the tree (its item, its route, its part), it only has no row to click:
-// its remembered open state is not read, so it never hides its children;
-// the section above still folds them, and a child folder keeps its own row
-// and chevron.
+// a folder marked isSidebarRootUnfolded (the sole wrapper item of a doc
+// page mount, unfolded unless isRootUnfolded is false,
+// plugin/doc-sidebar-effective.ts) is drawn without a folder row: its
+// children come as they are, at the depth the folder has, as if written at
+// the top of the section. bound to a document, the root is drawn above
+// them as a root row of its own (DocSidebarRootRow), which opens that
+// document and never folds; unbound, nothing of it is drawn. the folder
+// stays in the tree (its item, its route, its part): its remembered open
+// state is not read, so it never hides its children; the section above
+// still folds them, and a child folder keeps its own row and chevron.
 export const DocSidebarFolder = observer(function DocSidebarFolder({ item, children }) {
   if (item.docPageSection) return <DocSidePanelSection item={item}>{children}</DocSidePanelSection>;
-  if (item.isSidebarRootHidden) return <div className="contents" data-side-panel-root-hidden={item.$id}>{children}</div>;
+  if (item.isSidebarRootUnfolded) {
+    return (
+      <div className="contents" data-side-panel-root-unfolded={item.$id}>
+        {item.index ? <DocSidebarRootRow item={item} /> : null}
+        {children}
+      </div>
+    );
+  }
   return <DocSidebarFolderTree item={item}>{children}</DocSidebarFolderTree>;
 });
+
+// the root row of an unfolded sole root bound to a document: a link to
+// that document, marked as the root of the items below it (an icon, the
+// label in the foreground, a hairline under it), at the depth of its
+// children. it is a row like any other for the label component, the menu
+// and edit mode (item.name)
+function DocSidebarRootRow({ item }) {
+  const ref = useRef(null);
+  const depth = useFolderDepth();
+  const pathname = usePathname();
+  const { prefetch } = useSidebar();
+  const isActive = item.index.url === pathname;
+  useAutoScroll(isActive, ref);
+  return (
+    <div className="doc-sidebar-root-row">
+      <Link
+        ref={ref}
+        href={item.index.url}
+        external={item.index.external}
+        prefetch={prefetch}
+        data-active={isActive}
+        className={`${classNameLink} doc-sidebar-root-link w-full`}
+        style={{ paddingInlineStart: itemOffsetGet(depth) }}
+        title="The root of this doc page: opens its document"
+      >
+        <House aria-hidden="true" className="doc-sidebar-root-icon" />
+        {item.name}
+      </Link>
+    </div>
+  );
+}
 
 const DocSidebarFolderTree = observer(function DocSidebarFolderTree({ item, children }) {
   const { sidePanelStore } = useDocStores();

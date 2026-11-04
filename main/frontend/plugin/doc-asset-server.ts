@@ -4,6 +4,10 @@ import {
   textDecodeTry,
 } from './doc-asset-store.ts';
 import { testCaseAssetResultSet, testCaseAssetWriteCheck } from '../../../built-in/comp-mdx/test-case-table/TestCaseTableApi.js';
+import {
+  objectFrontendAssetAttach, objectFrontendAssetCreate, objectFrontendAssetRemove, objectFrontendConfigForPage,
+  objectFrontendCreate, objectFrontendDelete, objectFrontendMetaSet, objectFrontendRegister, type ObjectFrontendConfig,
+} from './doc-object-frontend.ts';
 
 // Asset api of the development server (design: doc_page_impl_asset.md). Like
 // the edit api, it exists only while `vite` serves the page; a built page
@@ -22,7 +26,7 @@ import { testCaseAssetResultSet, testCaseAssetWriteCheck } from '../../../built-
 //                                     the asset references of the collected documents, read from disk now; with
 //                                     docPath (repeatable) only those documents (a document that is gone is absent)
 //   POST {endpoint}/object/create    { store, name, lang, contentType, fileExt, text | dataBase64, note, folder | docPath, dependencyList,
-//                                       saveMode, versionMetadata, component }  -> { object, version, isCreated }
+//                                       saveMode, versionMetadata, component, groupPath, owner }  -> { object, version, isCreated }
 //                                     isCreated false: an object of that name exists and is answered, nothing is created
 //   POST {endpoint}/object/update    { store, objectId, hashBase, text | dataBase64, mode, note, dependencyList, versionMetadata }
 //                                                                 -> { object, version }
@@ -43,22 +47,36 @@ import { testCaseAssetResultSet, testCaseAssetWriteCheck } from '../../../built-
 //   POST {endpoint}/dependency/remove { store, objectId, versionId, dependency }      -> { object }
 //   POST {endpoint}/object/delete    { store, objectId }                                 -> { object }   (soft)
 //   POST {endpoint}/object/restore   { store, objectId }                                 -> { object }
-//   POST {endpoint}/object/meta/set  { store, objectId, name?, lang?, contentType?, saveMode?, component? } -> { object }
-//                                     component: { name }, or null to remove it
+//   POST {endpoint}/object/meta/set  { store, objectId, name?, lang?, contentType?, saveMode?, component?, owner? } -> { object }
+//                                     component: { name }, owner: { ref, role? }; null removes either
 //   POST {endpoint}/version/checkout { store, objectId, versionId }                      -> { object }   head moves
 //   POST {endpoint}/version/delete   { store, objectId, versionId }                      -> { object }
 //   POST {endpoint}/object/lock/set  { store, objectId, isLocked }                       -> { object }
 //   POST {endpoint}/version/lock/set { store, objectId, versionId, isLocked }            -> { object }
 //   POST {endpoint}/folder/set       { configFile, folderList: [~root/path | ~page:root/path], folderDefault } -> { ok }
 //                                     the folders of one doc page, written into its asset store config in place
+//   POST {endpoint}/object/move      { store, objectId, groupPath }                      -> { object }
+//                                     the object's folder moved into group folders of its store folder ('' the top)
+//
+// the frontend object service layer (doc_page_impl_obj_frontend.md, doc-object-frontend.ts), whose
+// objects keep their data in this store; every write answers { id, objectList, config }: the
+// asset objects it wrote, and the declarations of the doc pages as the files say now
+//   GET  {endpoint}/object-frontend/config                       -> { docPageList }
+//   POST {endpoint}/object-frontend/create       { docPageAlias, typeId, name, description?, metadata? }
+//   POST {endpoint}/object-frontend/register     { docPageAlias, entry }        an orphan entry listed again
+//   POST {endpoint}/object-frontend/delete       { id, isAssetKept? }
+//   POST {endpoint}/object-frontend/meta/set     { id, name?, description?, typeId?, metadata? }
+//   POST {endpoint}/object-frontend/asset/create { id, key?, kind?, lang?, text, note?, saveMode? }  (+ key, objectId)
+//   POST {endpoint}/object-frontend/asset/remove { id, key | objectId, isAssetKept? }
+//   POST {endpoint}/object-frontend/asset/attach { id, objectId, key?, kind? }
 //
 // every json response is { code, data, message }. code 0 is success; negative codes:
 //   -1  bad request or unexpected failure
 //   -2  hashBase is not the hash of the head data (changed meanwhile)
 //   -3  store, object or version not found
 //
-// object:  { objectId, name, lang, contentType, fileExt, component?, saveMode?, versionIdHead, isDeleted, isLocked,
-//            timeCreated, folder, dirName,
+// object:  { objectId, name, lang, contentType, fileExt, component?, owner?, saveMode?, versionIdHead, isDeleted, isLocked,
+//            timeCreated, folder, dirName, groupPath,
 //            versionList: [{ versionId, versionIdPrevList, time, note, size, hash, isLocked, dependencyList }],
 //            eventList: [{ eventType, time, versionId?, userId? }] }
 // dependency: { type: source, path } | { type: asset, objectId, versionId? }   (doc_page_impl_asset.md#dependencies)
@@ -86,8 +104,10 @@ export function docAssetMiddlewareCreate(options: {
   rootAbsPathByPathGet: () => Map<string, string>;
   usageScan: (docPathList: string[]) => AssetUsageDoc[];
   fileEntryListGet?: () => { internalPath: string; name: string }[];
+  // the frontend objects and types the doc pages declare, as the files say now
+  objectFrontendConfigGet?: () => ObjectFrontendConfig;
 }): Middleware {
-  const { endpoint, storeGet, rootAbsPathByPathGet, usageScan, fileEntryListGet } = options;
+  const { endpoint, storeGet, rootAbsPathByPathGet, usageScan, fileEntryListGet, objectFrontendConfigGet } = options;
   return (req, res, next) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname !== endpoint && !url.pathname.startsWith(`${endpoint}/`)) {
@@ -125,6 +145,12 @@ export function docAssetMiddlewareCreate(options: {
       }
       return;
     }
+    if (route.startsWith('/object-frontend/')) {
+      void objectFrontendRouteHandle(req, route, storeGet(), objectFrontendConfigGet)
+        .then((data) => jsonSend(res, 200, { code: 0, data, message: '' }))
+        .catch(failureSend);
+      return;
+    }
     void routeHandle(req, route, url, storeGet(), rootAbsPathByPathGet, fileEntryListGet)
       .then((data) => jsonSend(res, 200, { code: 0, data, message: '' }))
       .catch(failureSend);
@@ -132,6 +158,36 @@ export function docAssetMiddlewareCreate(options: {
 }
 
 const statusByCode: Record<number, number> = { [-1]: 400, [-2]: 409, [-3]: 404 };
+
+// the routes of the frontend object service layer: the store and the
+// declarations read for the request, the write, then the declarations read
+// again, which the answer carries
+async function objectFrontendRouteHandle(
+  req: IncomingMessage,
+  route: string,
+  store: AssetStore,
+  configGet: (() => ObjectFrontendConfig) | undefined,
+): Promise<any> {
+  if (!configGet) throw new AssetError(-1, 'the page has no frontend object service layer');
+  const method = req.method ?? 'GET';
+  if (method === 'GET' && route === '/object-frontend/config') return objectFrontendConfigForPage(configGet());
+  if (method !== 'POST') throw new AssetError(-1, `unknown frontend object route: ${method} ${route}`);
+  const body = (await jsonBodyRead(req)) ?? {};
+  const context = { store, config: configGet() };
+  const writeByRoute: Record<string, () => any> = {
+    '/object-frontend/create': () => objectFrontendCreate(context, body),
+    '/object-frontend/register': () => objectFrontendRegister(context, body),
+    '/object-frontend/delete': () => objectFrontendDelete(context, body),
+    '/object-frontend/meta/set': () => objectFrontendMetaSet(context, body),
+    '/object-frontend/asset/create': () => objectFrontendAssetCreate(context, body),
+    '/object-frontend/asset/remove': () => objectFrontendAssetRemove(context, body),
+    '/object-frontend/asset/attach': () => objectFrontendAssetAttach(context, body),
+  };
+  const write = writeByRoute[route];
+  if (!write) throw new AssetError(-1, `unknown frontend object route: ${method} ${route}`);
+  const result = write();
+  return { ...result, config: objectFrontendConfigForPage(configGet()) };
+}
 
 // the data of the answer, or an AssetError
 async function routeHandle(
@@ -194,6 +250,8 @@ async function routeHandle(
         saveMode: body?.saveMode,
         versionMetadata: body?.versionMetadata,
         component: body?.component,
+        groupPath: body?.groupPath ? String(body.groupPath) : undefined,
+        owner: body?.owner,
       });
       return { object: result.object, version: versionResponseBuild(result.version), isCreated: result.isCreated };
     }
@@ -256,9 +314,11 @@ async function routeHandle(
           contentType: body?.contentType,
           saveMode: body?.saveMode,
           component: body?.component,
+          owner: body?.owner,
         }),
       };
     }
+    if (route === '/object/move') return { object: store.objectMove(objectId, { groupPath: String(body?.groupPath ?? '') }) };
     if (route === '/version/checkout') return { object: store.versionCheckout(objectId, String(body?.versionId ?? '')) };
     if (route === '/version/delete') return { object: store.versionDelete(objectId, String(body?.versionId ?? '')) };
     if (route === '/object/lock/set') return { object: store.objectLockSet(objectId, body?.isLocked) };

@@ -51,8 +51,8 @@ export type ConfigDefine = {
   isUserSettable?: boolean;
 };
 
-export type SettingsTabId = 'config' | 'compConfig' | 'assetStore' | 'service' | 'workspace' | 'api';
-const settingsTabIdList: SettingsTabId[] = ['config', 'compConfig', 'assetStore', 'service', 'workspace', 'api'];
+export type SettingsTabId = 'config' | 'compConfig' | 'assetStore' | 'objectFrontend' | 'service' | 'workspace' | 'api';
+const settingsTabIdList: SettingsTabId[] = ['config', 'compConfig', 'assetStore', 'objectFrontend', 'service', 'workspace', 'api'];
 
 // the tab after the layer tabs: the values in effect. no layer has this id.
 export const SETTINGS_RESULT_ID = 'result';

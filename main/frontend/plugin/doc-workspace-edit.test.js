@@ -82,20 +82,24 @@ test('yamlMapKeyRemoveBuild refuses the only key of a mapping', () => {
   assert.equal(lineOperationListApply(textTwo, result.data.operationList), 'a:\n  c: 2\n');
 });
 
-test('the root row of a doc page: false is written as a yaml boolean, true removes the key, comments stay', () => {
-  const textHidden = edit({ action: 'itemRootVisibleSet', index: 0, isRootVisible: false });
-  assert.match(textHidden, /- alias: guide\n {4}dir: \.\/guide {7}# its folder\n {4}isRootVisible: false\n\n {2}- alias: api/);
-  assert.equal(parseDocument(textHidden).toJS().docPageList[0].isRootVisible, false);
+test('the unfold option of a doc page: false is written as a yaml boolean, true (the default) removes the key, comments stay', () => {
+  const textFolded = edit({ action: 'itemRootUnfoldedSet', index: 0, isRootUnfolded: false });
+  assert.match(textFolded, /- alias: guide\n {4}dir: \.\/guide {7}# its folder\n {4}isRootUnfolded: false\n\n {2}- alias: api/);
+  assert.equal(parseDocument(textFolded).toJS().docPageList[0].isRootUnfolded, false);
   // true removes the key; already absent: nothing changes
-  const textShown = edit({ action: 'itemRootVisibleSet', index: 0, isRootVisible: true }, textHidden);
-  assert.equal(textShown, source);
-  assert.equal(edit({ action: 'itemRootVisibleSet', index: 1, isRootVisible: true }), source);
+  const textUnfolded = edit({ action: 'itemRootUnfoldedSet', index: 0, isRootUnfolded: true }, textFolded);
+  assert.equal(textUnfolded, source);
+  assert.equal(edit({ action: 'itemRootUnfoldedSet', index: 1, isRootUnfolded: true }), source);
+  // the former key goes either way
+  const textFormer = source.replace('dir: ./guide       # its folder', 'dir: ./guide       # its folder\n    isRootVisible: true');
+  assert.equal(edit({ action: 'itemRootUnfoldedSet', index: 0, isRootUnfolded: true }, textFormer), source);
+  assert.deepEqual(parseDocument(edit({ action: 'itemRootUnfoldedSet', index: 0, isRootUnfolded: false }, textFormer)).toJS().docPageList[0], { alias: 'guide', dir: './guide', isRootUnfolded: false });
   // the key stays with its item when the item moves
-  const textMoved = edit({ action: 'itemMove', index: 0, indexTo: 1 }, textHidden);
-  assert.deepEqual(parseDocument(textMoved).toJS().docPageList.map((item) => item.isRootVisible), [undefined, false]);
+  const textMoved = edit({ action: 'itemMove', index: 0, indexTo: 1 }, textFolded);
+  assert.deepEqual(parseDocument(textMoved).toJS().docPageList.map((item) => item.isRootUnfolded), [undefined, false]);
   // a new item may carry it
-  assert.match(edit({ action: 'itemAdd', item: { dir: '../extra', isRootVisible: false } }), /- dir: \.\.\/extra\n {4}isRootVisible: false\n/);
+  assert.match(edit({ action: 'itemAdd', item: { dir: '../extra', isRootUnfolded: false } }), /- dir: \.\.\/extra\n {4}isRootUnfolded: false\n/);
   // never the text "false"
-  assert.equal(workspaceEditBuild(source, { action: 'itemRootVisibleSet', index: 0, isRootVisible: 'false' }).code, -1);
-  assert.equal(workspaceEditBuild(source, { action: 'itemRootVisibleSet', index: 7, isRootVisible: false }).code, -1);
+  assert.equal(workspaceEditBuild(source, { action: 'itemRootUnfoldedSet', index: 0, isRootUnfolded: 'false' }).code, -1);
+  assert.equal(workspaceEditBuild(source, { action: 'itemRootUnfoldedSet', index: 7, isRootUnfolded: false }).code, -1);
 });

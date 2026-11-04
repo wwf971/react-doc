@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { ClipboardPaste, LoaderCircle, Search } from '../../frontend/UICommon.js';
+import { ArrowLeft, ClipboardPaste, LoaderCircle, Plus, Search } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { useDocEditDoc } from './DocEditDocContext.js';
 import { editTemplateListBuild } from './edit-template.js';
+import { ObjectSearchPanel } from '../object/ObjectSearchPanel.jsx';
 import './DocEdit.css';
 
 // The menu of an insert button: the starting texts of a new block
@@ -32,6 +33,14 @@ import './DocEdit.css';
 // isAssetOnly component creates its asset object first and writes a
 // reference block to it (DocEditStore.blockCreateAsAsset).
 //
+// an entry whose component names an object (meta.insertObjectPick: the
+// Frontend Object) does not write at once: the menu shows the pick step in
+// place of its rows, a search of the object registry limited to the types of
+// the pick (all of them listed before anything is typed), and, when the pick
+// offers it, one button per type creating a new object of it; the object
+// chosen or created is written into the new block (textForObjectGet).
+// Escape or the back button returns to the rows.
+//
 // Paste… at the end of the Text row opens the review of a paste
 // (doc_page_impl_block_ops.md) for this border, with an empty text for the
 // author to paste Markdown / MDX into. it is shown when the host supplies
@@ -45,7 +54,7 @@ export const DocEditInsertMenu = observer(function DocEditInsertMenu() {
 });
 
 const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) {
-  const { compById, compConfigHost, configStore, editStore, pasteStore, serviceStore, sourceStore } = useDocStores();
+  const { compById, compConfigHost, configStore, editStore, objectFrontendStore, pasteStore, serviceStore, sourceStore } = useDocStores();
   const isPasteShown = Boolean(pasteStore && compConfigHost.panelComponent);
   const { path, format } = useDocEditDoc();
   const [query, querySet] = useState('');
@@ -70,8 +79,14 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
   const countComponentOther = templateList.filter((template) => template.group === 'component' && !template.isCommon).length;
   const templateListService = templateList.filter((template) => template.group === 'service');
 
+  const templatePick = menu.pickTemplateId ? templateList.find((template) => template.id === menu.pickTemplateId) : undefined;
+
   const choose = (template) => {
     if (isSubmitting) return;
+    if (template.objectPick) {
+      editStore.insertMenuPickSet(template.id);
+      return;
+    }
     if (template.isAssetOnly) {
       void editStore.blockCreateAsAsset(path, template);
       return;
@@ -85,6 +100,8 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
   };
 
   const keyDownHandle = (event) => {
+    // the search of the pick step answers its own keys (Escape: back)
+    if (templatePick) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       if (isQuery) queryChange('');
@@ -117,9 +134,18 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
       onClick={() => choose(template)}
     >
       <template.icon size={12} aria-hidden="true" />
-      <span>{template.group === 'component' ? template.compName : template.label}</span>
+      {/* an entry that asks for an object first reads as its label with "…", as Paste… does */}
+      <span>{template.objectPick ? `${template.label}…` : template.group === 'component' ? template.compName : template.label}</span>
     </button>
   );
+
+  if (templatePick) {
+    return (
+      <div className="doc-edit-insert-menu not-prose" role="menu" aria-label={`Insert ${templatePick.label}`} onKeyDown={keyDownHandle}>
+        <DocEditInsertPick menu={menu} template={templatePick} path={path} />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -214,6 +240,80 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
         <span className="doc-error doc-edit-message" role="alert">{menu.message}</span>
       ) : null}
     </div>
+  );
+});
+
+// the pick step of an entry naming an object: back to the rows, the search
+// of the objects of its types, and the creation of a new one (frontend
+// objects: one button per type the doc pages offer below the pick's types)
+const DocEditInsertPick = observer(function DocEditInsertPick({ menu, template, path }) {
+  const { editStore, objectFrontendStore, objectStore } = useDocStores();
+  const isSubmitting = menu.status === 'submitting';
+  const pick = template.objectPick;
+  const typeCreateList = pick.isCreateOffered && objectFrontendStore
+    ? objectFrontendStore.typeOfferList.filter((type) => pick.typeList.some((typeId) => objectStore.typeRegistry.isAssignable(type.id, typeId)))
+    : [];
+  const write = (objectRef) => {
+    const text = template.textForObjectGet(objectRef);
+    if (!text) {
+      editStore.insertMenuMessageSet(`${template.compName} starts no block for ${objectRef}`);
+      return;
+    }
+    void editStore.blockCreate(path, text);
+  };
+  const create = async (typeId) => {
+    if (isSubmitting || objectFrontendStore.write.status === 'submitting') return;
+    const result = await objectFrontendStore.createForInsert(typeId, path);
+    if (result.code !== 0) {
+      editStore.insertMenuMessageSet(result.message);
+      return;
+    }
+    write(result.ref);
+  };
+  const isCreating = objectFrontendStore?.write.status === 'submitting' && objectFrontendStore.write.route === 'create';
+  return (
+    <>
+      <div className="doc-edit-insert-group" role="group" aria-label={template.label}>
+        <button type="button" disabled={isSubmitting} title="back to the blocks (Esc)" onClick={() => editStore.insertMenuPickSet('')}>
+          <ArrowLeft size={12} aria-hidden="true" />
+          <span>Back</span>
+        </button>
+        <span className="doc-edit-insert-group-label">{template.label}: pick one</span>
+      </div>
+      <ObjectSearchPanel
+        sessionKey={`insertMenu:pick:${template.id}`}
+        typeList={pick.typeList}
+        isFilterShown={false}
+        isAutoFocus
+        placeholder={`Search: a name, a type, an id (${template.label})`}
+        onChoose={(hit) => write(hit.descriptor.ref)}
+        onClose={() => editStore.insertMenuPickSet('')}
+      />
+      {typeCreateList.length > 0 ? (
+        <div className="doc-edit-insert-group" role="group" aria-label="Create a new one">
+          <span className="doc-edit-insert-group-label">New</span>
+          {typeCreateList.map((type) => (
+            <button
+              key={type.id}
+              type="button"
+              disabled={isSubmitting || isCreating}
+              title={`a new ${type.label}${type.docPageAlias ? ` (a type of ${type.docPageAlias})` : ''}, written into this block`}
+              onClick={() => void create(type.id)}
+            >
+              <Plus size={12} aria-hidden="true" />
+              <span>{type.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {isSubmitting || isCreating ? (
+        <span className="doc-edit-insert-status" role="status">
+          <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.2} className="doc-spin" />
+          <span>{isCreating ? 'Creating the object…' : 'Creating the block…'}</span>
+        </span>
+      ) : null}
+      {menu.status === 'error' && menu.message ? <span className="doc-error doc-edit-message" role="alert">{menu.message}</span> : null}
+    </>
   );
 });
 

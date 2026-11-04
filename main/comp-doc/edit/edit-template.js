@@ -56,7 +56,13 @@ const templateTextList = [
 // env: { configDoc, compById, docPath, docFormat: 'md' | 'mdx', compConfigGet(compId),
 //        serviceDashboardList: [{ templateName, label, dashboardId, dashboardLabel, description }] }
 // -> [{ id, compName, label, description, text, icon, group: 'text' | 'component' | 'service', isCommon,
-//       isAssetOnly, assetSource? }]
+//       isAssetOnly, assetSource?, objectPick?, textForObjectGet? }]
+//
+// A component declaring meta.insertObjectPick ({ typeList, isCreateOffered })
+// names an object of the object registry in its block: its entry carries the
+// pick (objectPick), the menu asks for the object first (a search limited to
+// those types) and writes textForObjectGet(ref), its factory called with
+// env.objectRef (doc_page_impl_edit.md#creating-a-block-naming-an-object).
 export function editTemplateListBuild({ configDoc, compById, docPath, docFormat, compConfigGet, serviceDashboardList = [] }) {
   const templateListText = templateTextList.map((template) => ({
     id: template.id,
@@ -100,6 +106,13 @@ export function editTemplateListBuild({ configDoc, compById, docPath, docFormat,
       isCommon: meta.isInsertCommon,
       isAssetOnly: meta.isAssetOnly,
       ...(meta.isAssetOnly ? { assetSource: source } : {}),
+      ...(meta.insertObjectPick ? {
+        objectPick: meta.insertObjectPick,
+        textForObjectGet: (objectRef) => {
+          const sourceForObject = sourceDefaultSafeGet(definition, { compName, docPath, docFormat, compConfig: compConfigGet(compId), objectRef });
+          return sourceForObject ? sourceForObject.text ?? componentTemplateTextBuild(compName, sourceForObject) : '';
+        },
+      } : {}),
     });
   }
   templateListComponent.sort((a, b) => a.compName.localeCompare(b.compName));

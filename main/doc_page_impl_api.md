@@ -127,7 +127,7 @@ The levels are what the command function of a palette needs ("the current docume
 
 ### Apis and the event layer
 
-An api that changes the document does not call a store where a component would report an event: it dispatches the same event through the router, with `placement: 'api'` and the principal in its source, so the host application sees it first and the same route answers it ([Extending the layer](doc_page_impl_event.md#extending-the-layer)). `edit/blockEnter` dispatches `editBlockEnterRequest` as a click on the block does; `doc/blockDataSet` dispatches `dataReplaceRequest`, so an inline block is rewritten and an asset reference has its head updated by the one function that knows the difference; `common/TestCaseTable/resultRecord` dispatches `assetTestCaseResultRequest`, the event a cell's form sends. An api therefore makes the change the author could have made, with the same checks and in the same history.
+An api that changes the document does not call a store where a component would report an event: it dispatches the same event through the router, with `placement: 'api'` and the principal in its source, so the host application sees it first and the same route answers it ([Extending the layer](doc_page_impl_event.md#extending-the-layer)). `edit/blockEnter` dispatches `editBlockEnterRequest` as a click on the block does; `doc/blockDataSet` dispatches `dataReplaceRequest` (and `doc/blockPropSet` `blockPropSetRequest`), so an inline block is rewritten and an asset reference has its head updated by the one function that knows the difference; `common/TestCaseTable/resultRecord` dispatches `assetTestCaseResultRequest`, the event a cell's form sends. An api therefore makes the change the author could have made, with the same checks and in the same history.
 
 ## The apis of the page
 
@@ -139,6 +139,7 @@ An api that changes the document does not call a store where a component would r
 | `doc/blockListGet { doc? }` | the root-level blocks of a document as the edit layer models them ([The block model](doc_page_impl_edit.md)) | the edit api answers (development server) |
 | `doc/blockGet { block?, doc? }` | one block with its text and, for a component block, its data (an asset reference read) | the same |
 | `doc/blockDataSet { raw, block?, doc? }` | the complete new data of a component block, inline or in its asset object (`dataReplaceRequest`) | editing is available |
+| `doc/blockPropSet { props, block?, doc? }` | the props of a component block's marker changed, inline or asset-backed (`blockPropSetRequest`, [Changing its own block](doc_page_impl_mdx_comp.md#changing-its-own-block)) | editing is available |
 | `doc/blockTextSet { text, block?, doc? }` | the lines of one block rewritten, as a session typed and saved | edit mode is on |
 | `doc/blockInsert { text, borderIndex?, doc? }`, `doc/blockDelete { block?, doc? }` | blocks inserted at a border, a block removed ([Block-level operations](doc_page_impl_block_ops.md)) | editing is available |
 | `edit/modeToggle`, `edit/modeSet { isOn }`, `edit/blockSelectModeToggle` | the modes of the page | editing is available |
@@ -147,6 +148,8 @@ An api that changes the document does not call a store where a component would r
 | `page/contextGet` | the context above, serializable | |
 | `settings/open { tab? }`, `settings/close`, `settings/toggle`; `search/open`; `palette/open`, `palette/close`, `palette/toggle` | the dialogs of the page | |
 | `language/set { language }` | one of the authored languages of the document | |
+| `objectFrontend/list`, `objectFrontend/get { object }` | the frontend objects of the doc pages, their types with their modes, the problems of the files; one object as its entry says ([Frontend objects](doc_page_impl_obj_frontend.md)) | |
+| `objectFrontend/create { typeId, name, docPageAlias?, description? }`, `objectFrontend/assetCreate { object, text, kind?, key?, lang? }`, `objectFrontend/delete { object, isAssetKept? }` | a new object, a new asset of one, an object removed (the writes of the layer) | the asset store can be written |
 | `api/listGet`, `hotkey/listGet` | the registry itself: every api with its parameters and availability; every key with the binding that answers it and those it passes over | |
 
 **Locating a block.** The `block` parameter of a document api is the index of the block among the root-level blocks of the document, or the `id` of its marker (`<!--renderComp=TestCaseTable,id=login-asset-->`, the identity [`dataRef`](doc_page_impl_mdx_comp.md#component-data-reference) uses); without it, the block the author is at. `doc` is any link target form; without it, the current document. The block model comes from the edit layer and is read through the edit api, so these apis exist on the development server; a built page keeps the apis that need no server.

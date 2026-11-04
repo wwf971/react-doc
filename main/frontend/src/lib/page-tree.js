@@ -11,11 +11,12 @@
 // every node carries docPageAlias, the doc page it is written in (set by the
 // loader, plugin/doc-entry.ts), and its source paths in the full form
 // ~page:root/... (doc_page_impl_source.md#source-paths). a folder node the
-// loader marked isSidebarRootHidden (the sole wrapper item of a doc page
-// mounted with isRootVisible: false, plugin/doc-sidebar-effective.ts) keeps
-// the mark: it stays a folder of the semantic tree (its item, route, part,
-// tags and config are as for any folder), and only its row is not drawn
-// (comp-doc/side-panel/DocSidebarFolder.jsx).
+// loader marked isSidebarRootUnfolded (the sole wrapper item of a doc page
+// mount, unfolded unless isRootUnfolded is false, plugin/doc-sidebar-effective.ts)
+// keeps the mark: it stays a folder of the semantic tree (its item, route,
+// part, tags and config are as for any folder), and it is drawn without a
+// folder row: its children at the top, the root a marked row of its own
+// when it is bound to a document (comp-doc/side-panel/DocSidebarFolder.jsx).
 // every node may also declare "tags" (doc_page_impl_tag.md) and "config"
 // (doc_page_impl_config.md), and every item label is created by
 // sidePanelItemNameCreate (doc_page_impl_side_panel.md). "text" is a string or a
@@ -63,14 +64,14 @@ export function buildPageTreeModel(configDoc, fileManifest, compById = {}) {
   };
 }
 
-// the shape of the tree, the ids of its nodes nested, as a short hash. a
-// hidden root row is part of the shape: the same nodes drawn with or without
-// the wrapper's row must come as another tree, else fumadocs keeps the
+// the shape of the tree, the ids of its nodes nested, as a short hash. an
+// unfolded root is part of the shape: the same nodes drawn with or without
+// the wrapper's folder row must come as another tree, else fumadocs keeps the
 // first and the side panel stays stale until a reload
 export function treeShapeKeyGet(nodeList) {
   const textList = [];
   const visit = (node) => {
-    textList.push(`${node.$id ?? ''}${node.isSidebarRootHidden ? '#root-hidden' : ''}`);
+    textList.push(`${node.$id ?? ''}${node.isSidebarRootUnfolded ? '#root-unfolded' : ''}`);
     if (!Array.isArray(node.children)) return;
     textList.push('(');
     node.children.forEach(visit);
@@ -181,7 +182,7 @@ function convertNodeByForm(node, position, context, partIdParent) {
       // a root doc page of a workspace of several (plugin/doc-entry.ts):
       // drawn as a section under its alias, not as a folder
       ...(node.docPageSection ? { docPageSection: node.docPageSection } : {}),
-      ...(node.isSidebarRootHidden ? { isSidebarRootHidden: true } : {}),
+      ...(node.isSidebarRootUnfolded ? { isSidebarRootUnfolded: true } : {}),
       children: node.children.flatMap((child, index) => (
         convertNode(child, [...position, index], context, partId)
       )),
@@ -477,7 +478,7 @@ function docFolderCreate(node, position, context, { item, page }, partId) {
     index: page,
     collapsible: node.collapsible !== false,
     defaultOpen: node.defaultOpen ?? true,
-    ...(node.isSidebarRootHidden ? { isSidebarRootHidden: true } : {}),
+    ...(node.isSidebarRootUnfolded ? { isSidebarRootUnfolded: true } : {}),
     children: node.children.flatMap((child, index) => (
       convertNode(child, [...position, index], context, partId)
     )),

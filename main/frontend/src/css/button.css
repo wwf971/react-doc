@@ -35,6 +35,11 @@
   cursor: default;
 }
 
+/* data-danger: an action that removes something, in the destructive color */
+.doc-button[data-danger] {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
 /* ---------- .doc-button-dialog ----------
    the button of a dialog or a floating form (pickers, prompts): sized by
    its padding and the text, in the font of the dialog at 0.75rem.

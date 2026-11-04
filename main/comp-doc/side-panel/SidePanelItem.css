@@ -508,3 +508,26 @@ body[data-side-panel-dragging] #nd-sidebar-mobile {
   background: var(--color-fd-accent);
   color: var(--color-fd-foreground);
 }
+
+/* the root row of an unfolded sole root bound to a document
+   (DocSidebarFolder.jsx, doc_page_impl_side_panel.md#the-sole-root-unfolded):
+   the same row height as its children, told apart by an icon, the label in
+   the foreground and a hairline under it */
+.doc-sidebar-root-row {
+  padding-bottom: 0.125rem;
+  margin-bottom: 0.125rem;
+  border-bottom: 1px solid var(--color-fd-border);
+}
+
+.doc-sidebar-root-link {
+  font-weight: 500;
+}
+
+/* at rest only: active, the row takes the highlight of any active item */
+.doc-sidebar-root-link:not([data-active='true']) {
+  color: var(--color-fd-foreground);
+}
+
+.doc-sidebar-root-link:not([data-active='true']) .doc-sidebar-root-icon {
+  color: var(--color-fd-muted-foreground);
+}

@@ -185,8 +185,9 @@ docPageList:                        # the root-level doc pages, in side-panel or
     sidePanel: main                 # optional: the side panel shown for it
   - alias: api
     dir: ../api
-    isRootVisible: false            # optional: the sole wrapper item of its side panel shows its
-                                    # children only, without a row (a yaml boolean, never "false")
+    isRootUnfolded: false           # optional, default true: its sole root item is unfolded, its children
+                                    # at the top (doc_page_impl_side_panel.md#the-sole-root-unfolded);
+                                    # false draws it as a folder (a yaml boolean, never "false")
 packageList:                        # optional: the packages the workspace imports, by folder
   - dir: ../package/cloud-dev-vis   #   (doc_page_impl_package.md)
 config:                             # optional: the workspace config layer, the forms of a doc page's "config"
@@ -199,7 +200,7 @@ The workspace file is found from the workspace folder in its metadata folder, `.
 
 `packageList` makes the components and service templates of each package (and of the packages it needs) available to every doc page of the workspace. A workspace given by `docEntry` of `config.yaml` names its packages in `config.yaml` beside it; with `workspace`, only the workspace does. `config` and `hotkey` are what the deployment decides for the whole page, over the doc pages it assembles: the first doc page of `docPageList` is the **main doc page**, the only one whose own config is applied, and the workspace's config sits over it; the workspace's keyboard map sits over the maps of every doc page. A workspace written in place in `config.yaml` (`workspace: { docPageList, config, hotkey }`) takes both the same way; a virtual workspace (`docEntry`) has neither.
 
-`isRootVisible` is an option of the mount, not of the entry: the same doc page can be shown with its root row in one workspace and without it in another. What it does, and what it never does, is in [the root row hidden](doc_page_impl_side_panel.md#the-root-row-hidden); `docEntry` of `config.yaml` takes it as well.
+`isRootUnfolded` is an option of the mount, not of the entry, and **on by default**: a doc page whose side panel is one root item holding the rest (the usual shape) shows that item's children directly under its section, the root itself a marked root row when it is bound to a document; the same doc page can be drawn as a folder in another workspace (`isRootUnfolded: false`). What it does, and what it never does, is in [the sole root unfolded](doc_page_impl_side_panel.md#the-sole-root-unfolded); `docEntry` of `config.yaml` takes it as well. The former key `isRootVisible` is still read, as its opposite, with a warning.
 
 Loading a workspace (`docWorkspaceLoad`, `plugin/doc-entry.ts`) registers every root-level doc page under its alias first, then loads each entry with everything it reaches ([loading](doc_page_impl_side_panel.md#loading)): the source rules of every doc page, in order, each rule carrying the alias of its doc page; the tag definitions; the config declarations of every doc page, each with its doc page's alias (the page keeps one layer per doc page and applies the main doc page's, [the doc page layers](doc_page_impl_config.md#the-doc-page-layers)), then the workspace's own; and every side panel. The page shows, with one root doc page, that doc page's chosen side panel, exactly as before; with several, one **section** per root doc page: its alias as a muted heading, its side panel below at the depth of the tree's root, so its items look as they do when the doc page is served alone; the doc pages keep their side panels and the workspace only arranges them (a side panel of the workspace's own is a later addition). The tree node of a section carries `docPageSection` (`{ alias, title, isTemporary, isFirst }`); what the side panel does with it is in [a workspace of several doc pages](doc_page_impl_side_panel.md#a-workspace-of-several-doc-pages). `siteTitle`, `homeDoc` and `homeItem` come from `config.yaml`, else the workspace file, else the first root doc page's entry.
 
@@ -221,7 +222,7 @@ workspace
   title
   file, fileHash   the workspace file (relative to the config directory, '' when there is none) and the
                    hash of the version loaded, which an edit is built on
-  itemList         its docPageList as written: [{ alias?, dir?, file?, sidePanel?, isRootVisible? }],
+  itemList         its docPageList as written: [{ alias?, dir?, file?, sidePanel?, isRootUnfolded? }],
                    paths relative to it
   dirBaseAbs       the folder relative paths of the workspace are read from (the file's, else the config
                    directory), where os path completion starts
@@ -265,8 +266,8 @@ Every change is one request of the edit api, `POST {edit}/workspace/edit` `{ req
 | --- | --- |
 | `itemFieldSet` | `index`, `field` (`alias` \| `sidePanel`), `value` (`''` removes the key) |
 | `itemPathSet` | `index`, `kind` (`dir` \| `file`), `value` |
-| `itemRootVisibleSet` | `index`, `isRootVisible` (a boolean: `false` writes the key, `true` removes it); the "root row" checkbox of an item |
-| `itemAdd` | `item { alias?, dir \| file, sidePanel?, isRootVisible? }`, at the end |
+| `itemRootUnfoldedSet` | `index`, `isRootUnfolded` (a boolean: `false` writes the key, `true`, the default, removes it; either removes the former `isRootVisible`); the "unfold" checkbox of an item |
+| `itemAdd` | `item { alias?, dir \| file, sidePanel?, isRootUnfolded? }`, at the end |
 | `itemRemove` | `index` |
 | `itemMove` | `index`, `indexTo` (its place afterwards) |
 | `titleSet` | `value` (`''` removes it) |
@@ -422,7 +423,7 @@ A backup is never collected, whatever the rules say (`sourceFileBackupNameIs`), 
 | `plugin/doc-source-exclude.ts` | the `exclude` patterns of an addFolder rule |
 | `plugin/doc-source-file.ts` | deleting files of the source into hidden backups, and restoring them |
 | `plugin/doc-workspace-edit.ts` | a change of the workspace file as line operations |
-| `plugin/doc-sidebar-effective.ts` | the side panel shown: one effective occurrence per doc page, the root row of a mount hidden |
+| `plugin/doc-sidebar-effective.ts` | the side panel shown: one effective occurrence per doc page, the sole root of a mount unfolded |
 | `plugin/doc-entry.ts` | the workspace and its doc pages: `docWorkspaceLoad`, `docEntryLoad` (a virtual workspace), aliases, mentions, root aliases of the rules |
 | `plugin/doc-source.ts` | `config.yaml` workspace / docEntry, temporary doc pages, rules, collection, the folders kept out by convention, folder manifest, source api (file creation, refresh, os listing, mounts), module generation (the component mounts and the link index included) |
 | `plugin/doc-link-index.ts` | the link index: the references of every document, scanned again per changed document ([Backlinks](doc_page_impl_nav_backlink.md)) |

@@ -31,6 +31,11 @@ import { timeTextGet } from '../src/lib/time-text.js';
 //   {folder}/
 //     {objectId}--{name}/             one folder per object: its id (ms_48), and its name
 //       object.yaml                   when it has one, after the separator "--"
+//     {group}/.../{objectId}--{name}/ or inside group folders, to any depth (8 levels
+//                                     are read): a folder without object.yaml is a group,
+//                                     read in turn; a group changes nothing of its objects
+//                                     (the objects of a frontend object are kept in the group
+//                                     {id}--{name} of that object, doc_page_impl_obj_frontend.md)
 //       object.yaml.bak               the previous object.yaml, before the last rewrite
 //       {versionId}.{fileExt}         the bytes of one version
 //       {versionId}.{fileExt}.bak     the previous bytes, before an in-place update
@@ -93,6 +98,12 @@ import { timeTextGet } from '../src/lib/time-text.js';
 // mapping, so a key may be missing: userId is reserved for a store that
 // knows who writes. times carry their zone (time-format.md).
 //
+// owner says which object the data belongs to, when it is a part of a larger
+// one: { ref, role? }, a reference of the object registry (frontend:{id} for
+// a frontend object) and the part it plays (entry: the object's entry asset;
+// absent: one of its assets). like component it is a declaration for
+// recovering what belongs together, never checked by the store.
+//
 // component says which component the data is for, when it is the data of a
 // component block: { name } (the tag name the page created it for). it is a
 // record for recovering an object no block references any more, not a rule:
@@ -120,6 +131,8 @@ export const ASSET_STORE_ID_LOCAL = 'local';
 export const ASSET_DIR_SEPARATOR = '--';
 
 export const ASSET_NAME_LENGTH_MAX = 80;
+// how deep group folders inside a store folder are read
+export const ASSET_GROUP_DEPTH_MAX = 8;
 
 export type AssetSaveMode = 'inPlace' | 'newVersion';
 
@@ -127,9 +140,13 @@ export type AssetSaveMode = 'inPlace' | 'newVersion';
 // name only for now, an id and a version of the component are expected later
 export type AssetComponent = { name: string };
 
+// the object the data belongs to (doc_page_impl_obj_frontend.md#assets-and-their-owner):
+// a reference of the object registry, and the part it plays there
+export type AssetOwner = { ref: string; role?: string };
+
 export type AssetEventType =
   | 'create' | 'updateInPlace' | 'versionCreate' | 'checkout' | 'versionDelete' | 'metaSet' | 'delete' | 'restore'
-  | 'lock' | 'unlock' | 'dependencySet' | 'versionMetadataSet';
+  | 'lock' | 'unlock' | 'dependencySet' | 'versionMetadataSet' | 'move';
 
 // what the writer of a version's data says about it ({versionId}.metadata.yaml);
 // the store keeps it and never interprets it
@@ -176,6 +193,8 @@ export type AssetObjectMeta = {
   fileExt: string;
   // the component the data is for; absent when it is not a component's data
   component?: AssetComponent;
+  // the object it is a part of; absent when it stands alone
+  owner?: AssetOwner;
   saveMode?: AssetSaveMode;
   versionIdHead: string;
   isDeleted: boolean;
@@ -185,9 +204,11 @@ export type AssetObjectMeta = {
   versionList: AssetVersionMeta[];
   eventList: AssetEvent[];
   // where the object was found (not written into object.yaml): the folder
-  // of the store, as written in asset.yaml, and the object's folder in it
+  // of the store, as written in asset.yaml, the object's folder in it (a
+  // path with "/" when it is inside groups), and the groups ('' at the top)
   folder: string;
   dirName: string;
+  groupPath: string;
 };
 
 // the bytes of one version, with the text when the bytes are valid utf-8,
@@ -514,7 +535,7 @@ export function nameNormalize(nameInput: unknown): string {
 export function assetStoreCreate(config: AssetStoreConfig) {
   const folderList = config.folderList;
   const folderDefault = folderList.find((folder) => folder.isDefault);
-  const objectDirGet = (meta: AssetObjectMeta) => path.join(folderAbsGet(meta.folder), meta.dirName);
+  const objectDirGet = (meta: AssetObjectMeta) => path.join(folderAbsGet(meta.folder), ...meta.dirName.split('/'));
   const objectMetaPathGet = (meta: AssetObjectMeta) => path.join(objectDirGet(meta), ASSET_OBJECT_META_NAME);
   const versionPathGet = (meta: AssetObjectMeta, versionId: string) => path.join(objectDirGet(meta), `${versionId}.${meta.fileExt}`);
   // always yaml, whatever the extension of the data file
@@ -526,17 +547,33 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     return folder.pathAbs;
   }
 
-  // the object folders of a store folder: [{ dirName, objectId }], in name order
-  function objectDirList(folder: AssetFolder): { dirName: string; objectId: string }[] {
-    if (!fs.existsSync(folder.pathAbs)) return [];
-    const list: { dirName: string; objectId: string }[] = [];
-    for (const item of fs.readdirSync(folder.pathAbs, { withFileTypes: true })) {
-      if (!item.isDirectory()) continue;
-      const objectId = objectIdFromDirName(item.name);
-      if (!objectId) continue;
-      if (!fs.existsSync(path.join(folder.pathAbs, item.name, ASSET_OBJECT_META_NAME))) continue;
-      list.push({ dirName: item.name, objectId });
-    }
+  // the object folders of a store folder: [{ dirName, objectId, groupPath }],
+  // a folder before the folders inside it, in name order. a folder holding
+  // object.yaml whose name starts with an id is an object (nothing inside it
+  // is read for objects); any other folder is a group and is read in turn,
+  // to ASSET_GROUP_DEPTH_MAX levels; dot folders are never read
+  function objectDirList(folder: AssetFolder): { dirName: string; objectId: string; groupPath: string }[] {
+    const list: { dirName: string; objectId: string; groupPath: string }[] = [];
+    const visit = (groupPath: string, depth: number) => {
+      const dirAbs = groupPath ? path.join(folder.pathAbs, ...groupPath.split('/')) : folder.pathAbs;
+      if (!fs.existsSync(dirAbs)) return;
+      const itemList = fs.readdirSync(dirAbs, { withFileTypes: true })
+        .filter((item) => item.isDirectory() && !item.name.startsWith('.'))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      const groupList: string[] = [];
+      for (const item of itemList) {
+        const dirName = groupPath ? `${groupPath}/${item.name}` : item.name;
+        const objectId = objectIdFromDirName(item.name);
+        if (objectId && fs.existsSync(path.join(dirAbs, item.name, ASSET_OBJECT_META_NAME))) {
+          list.push({ dirName, objectId, groupPath });
+          continue;
+        }
+        groupList.push(dirName);
+      }
+      if (depth >= ASSET_GROUP_DEPTH_MAX) return;
+      for (const groupPathInner of groupList) visit(groupPathInner, depth + 1);
+    };
+    visit('', 0);
     return list;
   }
 
@@ -726,6 +763,8 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   //   saveMode         written into the object when given; absent: the key is not written
   //   versionMetadata  the metadata of the first version (none when absent)
   //   component        { name }: the component the data is for; absent: not written
+  //   groupPath        the group folders it is created in ("a/b", made when missing); '' or absent: the top
+  //   owner            { ref, role? }: the object it is a part of; absent: not written
   function objectCreate(input: {
     name?: string;
     lang?: string;
@@ -739,8 +778,12 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     saveMode?: unknown;
     versionMetadata?: unknown;
     component?: unknown;
+    groupPath?: string;
+    owner?: unknown;
   }): { object: AssetObjectMeta; version: AssetVersionData; isCreated: boolean } {
     if (!Buffer.isBuffer(input.data)) throw new AssetError(-1, 'data is required');
+    const groupPath = groupPathNormalize(input.groupPath);
+    const owner = ownerNormalize(input.owner ?? null);
     const dependencyList = dependencyListNormalize(input.dependencyList ?? []);
     const versionMetadata = versionMetadataNormalize(input.versionMetadata ?? {});
     const component = componentNormalize(input.component ?? null);
@@ -776,9 +819,11 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       versionList: [versionMetaBuild(versionId, [], time, input.note, input.data, dependencyList)],
       eventList: [{ eventType: 'create', time, versionId }],
       folder: folder.path,
-      dirName: objectDirNameBuild(objectId, name),
+      dirName: dirNameInGroupBuild(groupPath, objectDirNameBuild(objectId, name)),
+      groupPath,
     };
     if (component) meta.component = component;
+    if (owner) meta.owner = owner;
     if (input.saveMode === 'inPlace' || input.saveMode === 'newVersion') meta.saveMode = input.saveMode;
     fs.mkdirSync(objectDirGet(meta), { recursive: true });
     fileWriteSafe(versionPathGet(meta, versionId), input.data);
@@ -872,7 +917,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   // back to in place); component null removes the component the data is for.
   function objectMetaSet(
     objectId: string,
-    change: { name?: string; lang?: string; contentType?: string; saveMode?: AssetSaveMode | null; component?: unknown },
+    change: { name?: string; lang?: string; contentType?: string; saveMode?: AssetSaveMode | null; component?: unknown; owner?: unknown },
   ): AssetObjectMeta {
     const meta = objectGet(objectId);
     objectUnlockedCheck(meta);
@@ -885,7 +930,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
         }
         const dirPrevious = objectDirGet(meta);
         meta.name = nameNext;
-        meta.dirName = objectDirNameBuild(meta.objectId, nameNext);
+        meta.dirName = dirNameInGroupBuild(meta.groupPath, objectDirNameBuild(meta.objectId, nameNext));
         fs.renameSync(dirPrevious, objectDirGet(meta));
       }
     }
@@ -901,9 +946,72 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       if (component) meta.component = component;
       else delete meta.component;
     }
+    if (change.owner !== undefined) {
+      const owner = ownerNormalize(change.owner);
+      if (owner) meta.owner = owner;
+      else delete meta.owner;
+    }
     meta.eventList.push({ eventType: 'metaSet', time: timeTextGet() });
     objectMetaWrite(meta);
     return meta;
+  }
+
+  // the object's folder moved into other group folders of its store folder
+  // ('' the top); the groups it needs are made, the one it left is removed
+  // when nothing is left in it. what the object is does not change: a group
+  // is only where its folder is
+  function objectMove(objectId: string, change: { groupPath: string }): AssetObjectMeta {
+    const meta = objectGet(objectId);
+    objectUnlockedCheck(meta);
+    const groupPath = groupPathNormalize(change.groupPath);
+    if (groupPath === meta.groupPath) return meta;
+    const dirPrevious = objectDirGet(meta);
+    const groupPathPrevious = meta.groupPath;
+    meta.groupPath = groupPath;
+    meta.dirName = dirNameInGroupBuild(groupPath, path.basename(dirPrevious));
+    fs.mkdirSync(path.dirname(objectDirGet(meta)), { recursive: true });
+    fs.renameSync(dirPrevious, objectDirGet(meta));
+    groupEmptyRemove(meta.folder, groupPathPrevious);
+    meta.eventList.push({ eventType: 'move', time: timeTextGet() });
+    objectMetaWrite(meta);
+    return meta;
+  }
+
+  // a group folder renamed or moved (groupPathFrom -> groupPathTo, both in
+  // the store folder folderPath); every object inside goes with it. refused
+  // when the target exists, or when a locked object is inside
+  function groupMove(folderPath: string, groupPathFromInput: string, groupPathToInput: string): void {
+    const groupPathFrom = groupPathNormalize(groupPathFromInput);
+    const groupPathTo = groupPathNormalize(groupPathToInput);
+    if (!groupPathFrom || !groupPathTo) throw new AssetError(-1, 'a group is named by a path of folders inside the store folder');
+    if (groupPathFrom === groupPathTo) return;
+    const folderAbs = folderAbsGet(folderPath);
+    const dirFrom = path.join(folderAbs, ...groupPathFrom.split('/'));
+    const dirTo = path.join(folderAbs, ...groupPathTo.split('/'));
+    if (!fs.existsSync(dirFrom)) return;
+    if (fs.existsSync(dirTo)) throw new AssetError(-1, `the group ${groupPathTo} exists already`);
+    const folder = folderList.find((item) => item.path === folderPath)!;
+    for (const item of objectDirList(folder)) {
+      if (item.groupPath !== groupPathFrom && !item.groupPath.startsWith(`${groupPathFrom}/`)) continue;
+      const meta = objectMetaRead(folder, item.dirName);
+      if (meta?.isLocked) throw new AssetError(-1, `the object ${meta.objectId} in the group is locked`);
+    }
+    fs.mkdirSync(path.dirname(dirTo), { recursive: true });
+    fs.renameSync(dirFrom, dirTo);
+  }
+
+  // a group folder that holds nothing any more (no file, no folder) is removed,
+  // and so are the groups above it that become empty
+  function groupEmptyRemove(folderPath: string, groupPath: string) {
+    if (!groupPath) return;
+    const folderAbs = folderAbsGet(folderPath);
+    const partList = groupPath.split('/');
+    while (partList.length > 0) {
+      const dirAbs = path.join(folderAbs, ...partList);
+      if (!fs.existsSync(dirAbs) || fs.readdirSync(dirAbs).length > 0) return;
+      fs.rmdirSync(dirAbs);
+      partList.pop();
+    }
   }
 
   // the head moves to an existing version; a later new version branches from it
@@ -1086,11 +1194,13 @@ export function assetStoreCreate(config: AssetStoreConfig) {
 
   // ---------- files ----------
 
+  // dirName: the object's folder in the store folder, through its groups ("a/b/{id}--{name}")
   function objectMetaRead(folder: AssetFolder, dirName: string): AssetObjectMeta | undefined {
-    const filePath = path.join(folder.pathAbs, dirName, ASSET_OBJECT_META_NAME);
+    const partList = dirName.split('/');
+    const filePath = path.join(folder.pathAbs, ...partList, ASSET_OBJECT_META_NAME);
     if (!fs.existsSync(filePath)) return undefined;
     const content = yamlParse(fs.readFileSync(filePath, 'utf-8'));
-    return objectMetaNormalize(content, objectIdFromDirName(dirName), folder.path, dirName);
+    return objectMetaNormalize(content, objectIdFromDirName(partList[partList.length - 1]), folder.path, dirName, partList.slice(0, -1).join('/'));
   }
 
   // the file keeps one key order whatever the order the keys were set in;
@@ -1105,6 +1215,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       fileExt: meta.fileExt,
     };
     if (meta.component !== undefined) metaFile.component = meta.component;
+    if (meta.owner !== undefined) metaFile.owner = meta.owner;
     if (meta.saveMode !== undefined) metaFile.saveMode = meta.saveMode;
     metaFile.versionIdHead = meta.versionIdHead;
     metaFile.isDeleted = meta.isDeleted;
@@ -1132,6 +1243,8 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     objectDelete,
     objectRestore,
     objectMetaSet,
+    objectMove,
+    groupMove,
     versionCheckout,
     versionDelete,
     versionMetadataSet,
@@ -1162,6 +1275,8 @@ export type AssetSnapshot = {
   objectById: Record<string, AssetObjectMeta & { versionDataById: Record<string, AssetSnapshotVersion> }>;
   // the references of the documents of the build, added by the plugin
   usageDocList?: AssetUsageDoc[];
+  // the frontend objects and types the doc pages declare, added by the plugin
+  objectFrontend?: { docPageList: unknown[] };
 };
 
 // ---------- helpers ----------
@@ -1206,7 +1321,7 @@ const contentTypeByLang: Record<string, string> = {
 
 const eventTypeList: AssetEventType[] = [
   'create', 'updateInPlace', 'versionCreate', 'checkout', 'versionDelete', 'metaSet', 'delete', 'restore', 'lock', 'unlock',
-  'dependencySet', 'versionMetadataSet',
+  'dependencySet', 'versionMetadataSet', 'move',
 ];
 
 // ---------- version metadata ----------
@@ -1339,7 +1454,7 @@ function fileExtNormalize(fileExt: unknown): string {
 
 // the metadata as the file holds it. a file without eventList (written
 // before events were recorded) gets the one event its creation was.
-function objectMetaNormalize(content: any, objectId: string, folder: string, dirName: string): AssetObjectMeta {
+function objectMetaNormalize(content: any, objectId: string, folder: string, dirName: string, groupPath = ''): AssetObjectMeta {
   const versionList = Array.isArray(content?.versionList) ? content.versionList : [];
   const lang = String(content?.lang ?? '');
   const timeCreated = String(content?.timeCreated ?? '');
@@ -1373,8 +1488,15 @@ function objectMetaNormalize(content: any, objectId: string, folder: string, dir
     eventList,
     folder,
     dirName,
+    groupPath,
   };
   if (content?.saveMode === 'inPlace' || content?.saveMode === 'newVersion') meta.saveMode = content.saveMode;
+  try {
+    const owner = ownerNormalize(content?.owner ?? null);
+    if (owner) meta.owner = owner;
+  } catch {
+    // an owner written by hand that is not { ref } is ignored on read
+  }
   // a component entry written by hand that is not { name } is ignored on read
   try {
     const component = componentNormalize(content?.component ?? null);
@@ -1395,6 +1517,39 @@ export function componentNormalize(value: unknown): AssetComponent | undefined {
   const name = String((value as { name?: unknown }).name ?? '').trim();
   if (!name) throw new AssetError(-1, 'component needs a name (the tag name of the component)');
   return { name };
+}
+
+// the object an object's data belongs to: { ref, role? } with a reference
+// {namespace}:{local}, or undefined for null; anything else is a bad request
+export function ownerNormalize(value: unknown): AssetOwner | undefined {
+  if (value === null) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AssetError(-1, 'owner must be a mapping { ref, role? }, or null to remove it');
+  }
+  const ref = String((value as { ref?: unknown }).ref ?? '').trim();
+  if (!/^[a-zA-Z][a-zA-Z0-9.-]*:.+$/.test(ref)) throw new AssetError(-1, 'owner.ref must be an object reference {namespace}:{local}');
+  const role = String((value as { role?: unknown }).role ?? '').trim();
+  return role ? { ref, role } : { ref };
+}
+
+// a path of group folders: "a/b", trimmed of slashes; '' is the top. a part
+// may not be empty, "." or "..", nor start with a dot (dot folders are not read)
+export function groupPathNormalize(value: unknown): string {
+  const text = String(value ?? '').trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  if (text === '') return '';
+  const partList = text.split('/');
+  if (partList.length > ASSET_GROUP_DEPTH_MAX) throw new AssetError(-1, `a group is at most ${ASSET_GROUP_DEPTH_MAX} folders deep`);
+  for (const part of partList) {
+    // eslint-disable-next-line no-control-regex
+    if (part === '' || part.startsWith('.') || /[\\:*?"<>|\u0000-\u001f]/.test(part)) {
+      throw new AssetError(-1, `not a group folder name: "${part}"`);
+    }
+  }
+  return partList.join('/');
+}
+
+function dirNameInGroupBuild(groupPath: string, dirNameOwn: string): string {
+  return groupPath ? `${groupPath}/${dirNameOwn}` : dirNameOwn;
 }
 
 function eventNormalize(item: any): AssetEvent | undefined {

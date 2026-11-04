@@ -1015,3 +1015,114 @@
   flex-direction: column;
   align-items: stretch;
 }
+
+/* ---------- a tab drawn by a component of its own (the Frontend objects tab) ----------
+   sections under h3 / h4 headings, notes, rows of controls, forms of a
+   label column and a control column, the chosen item's details below its
+   table; tables are the asset layer's (.doc-asset-table) */
+
+.doc-settings-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  /* as wide as the panel, whatever its tables hold: they scroll inside
+     their own box, the tab never does (and never shifts when one opens) */
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.3rem 0.8rem 0.8rem;
+  font-size: 0.78rem;
+}
+
+.doc-settings-tab h3 {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.doc-settings-tab h4 {
+  margin: 0.35rem 0 0;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.doc-settings-tab .doc-note,
+.doc-settings-tab .doc-error {
+  margin: 0;
+}
+
+.doc-settings-tab-form {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 0.35rem 0.7rem;
+}
+
+.doc-settings-tab-form > .doc-button-group {
+  justify-self: start;
+  flex-wrap: wrap;
+}
+
+.doc-settings-tab-label {
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-settings-tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  min-height: 1.6rem;
+}
+
+.doc-settings-tab-row > .doc-edit-value {
+  min-width: 12rem;
+}
+
+.doc-settings-tab-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.5rem 0.75rem 0.6rem;
+  border-left: 2px solid color-mix(in srgb, var(--color-fd-primary) 40%, var(--color-fd-border));
+}
+
+.doc-settings-tab-detail .doc-settings-asset-link {
+  margin-left: 0;
+}
+
+.doc-settings-tab-detail .doc-asset-fields {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+.doc-settings-tab-detail .doc-asset-fields > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.doc-settings-tab-issue {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-settings-tab-actions {
+  text-align: right;
+}
+
+.doc-settings-tab-actions > * + * {
+  margin-left: 0.3rem;
+}
+
+.doc-settings-tab-list {
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.doc-settings-tab-code {
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-muted);
+  font-size: 0.72rem;
+  white-space: pre-wrap;
+  user-select: text;
+}

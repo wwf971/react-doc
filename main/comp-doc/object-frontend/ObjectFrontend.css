@@ -1,0 +1,103 @@
+/* The components of the frontend object service layer (doc_page_impl_obj_frontend.md).
+   The block adds nothing around the mode's component but the margins of a
+   block; what they share with the object views is in DocObject.css
+   (.doc-object-card, .doc-object-summary), the buttons and badges are the
+   shared ones (.doc-button-group, .doc-badge). */
+
+.doc-object-frontend {
+  margin: 1rem 0;
+}
+
+/* a line in place of the block: loading, a missing object, a mode the type lacks */
+.doc-object-frontend-line {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 1rem 0;
+}
+
+.doc-object-frontend-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.doc-object-frontend-table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.doc-object-frontend-table th,
+.doc-object-frontend-table td {
+  padding: 0.15rem 0.5rem 0.15rem 0;
+  border-bottom: 1px solid var(--color-fd-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.doc-object-frontend-table th {
+  color: var(--color-fd-muted-foreground);
+  font-weight: 500;
+}
+
+.doc-object-frontend-table td[data-error] {
+  color: var(--color-fd-error, #dc2626);
+}
+
+.doc-object-frontend-muted {
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-object-frontend-mode-bar {
+  align-self: flex-start;
+}
+
+.doc-object-frontend-problem {
+  margin: 0;
+  padding-left: 1rem;
+  font-size: 0.75rem;
+}
+
+/* ---------- the edit mode "entry" ---------- */
+
+.doc-object-frontend-edit .doc-edit-panel-row {
+  flex-wrap: wrap;
+}
+
+.doc-object-frontend-edit-object {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 18rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.doc-object-frontend-edit-param {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.25rem 0.5rem;
+}
+
+.doc-object-frontend-edit-param > .doc-edit-message {
+  grid-column: 2;
+}
+
+.doc-object-frontend-edit-label {
+  padding-top: 0.3rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+}
+
+.doc-object-frontend-edit-param .doc-edit-surface {
+  min-height: 1.8rem;
+  max-height: 12rem;
+}
+
+.doc-object-frontend-edit .doc-object-search {
+  margin: 0;
+}
