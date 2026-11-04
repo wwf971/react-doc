@@ -175,3 +175,52 @@ test('a provider brings types, components and the opening of its objects; the re
   assert.equal(await store.open('s:1'), true);
   assert.deepEqual(openedList, ['s:1']);
 });
+
+test('the writes go to the provider that owns what they change: the creator of a type, the keeper of a collection, the namespace of a reference', async () => {
+  const callList = [];
+  const store = new DocObjectStore({ docStore: { compById: {} } });
+  const typeList = [typeDefineNormalize({ id: 'x.box', extendList: ['core.collection'] }), typeDefineNormalize({ id: 'x.box-small', extendList: ['x.box'] })];
+  store.providerAdd(providerBuild({
+    id: 'boxes',
+    namespaceList: ['box'],
+    typeList: ['x.box'],
+    capabilityList: ['query', 'resolve', 'create', 'update', 'delete', 'relationCreate', 'relationDelete'],
+    createTypeList: ['x.box'],
+    typeDefineGet: () => ({ typeList, problemList: [] }),
+    typeInfoGet: (typeId) => (typeId.startsWith('x.') ? { modeList: [{ id: 'grid' }] } : undefined),
+    create: async (spec) => {
+      callList.push(['create', spec.typeId ?? '', spec.memberOf?.ref ?? '']);
+      return spec.memberOf ? { descriptor: { ref: 'file:new', typeList: ['core.file'], label: 'new' } } : { descriptor: { ref: 'box:1', typeList: [spec.typeId], label: spec.content?.name } };
+    },
+    update: async (ref, patch) => ({ descriptor: { ref, typeList: ['x.box'], label: patch.name }, content: patch }),
+    delete: async (ref, options) => { callList.push(['delete', ref, options.isMemberKept === true]); },
+    relationCreate: async (spec) => { callList.push(['relationCreate', spec.fromRef, spec.type]); return { relation: spec }; },
+    relationDelete: async (spec) => { callList.push(['relationDelete', spec.fromRef, spec.key]); },
+  }));
+  store.providerAdd(providerBuild({ id: 'tasks', namespaceList: ['task'], capabilityList: ['query', 'resolve'] }));
+  // a subtype is created by the creator of its parent
+  const created = await store.create({ typeId: 'x.box-small', content: { name: 'small' } });
+  assert.equal(created.code, 0);
+  assert.equal(created.data.descriptor.label, 'small');
+  assert.equal(store.resolveByRef.get('box:1')?.descriptor.label, 'small', 'what was created is known at once');
+  // a member is created by the collection's provider, whatever its type
+  assert.equal((await store.create({ memberOf: 'box:1', content: { text: 'a' } })).code, 0);
+  assert.deepEqual(callList.slice(0, 2), [['create', 'x.box-small', ''], ['create', '', 'box:1']]);
+  // nobody creates a task here; an unknown type is refused before any provider
+  assert.match((await store.create({ typeId: 'core.task' })).message, /no provider creates objects of the type core.task/);
+  assert.equal((await store.create({ typeId: 'x.nope' })).code, -1);
+  // delete and relations: by the namespace of the reference, refused where not offered
+  assert.equal((await store.delete('box:1', { isMemberKept: true })).code, 0);
+  assert.equal((await store.relationCreate({ fromRef: 'box:1', toRef: 'file:2' })).code, 0);
+  assert.equal((await store.relationDelete({ fromRef: 'box:1', key: 'member/a' })).code, 0);
+  assert.deepEqual(callList.slice(2), [['delete', 'box:1', true], ['relationCreate', 'box:1', 'core.member'], ['relationDelete', 'box:1', 'member/a']]);
+  assert.match((await store.delete('task:1')).message, /does not delete its objects/);
+  assert.match((await store.relationCreate({ fromRef: 'task:1', toRef: 'box:1' })).message, /does not add relations/);
+  // a type, with what its providers know of it and who creates it
+  const info = store.typeInfoGet('x.box-small');
+  assert.deepEqual(info.ancestorList.slice(0, 2), ['x.box', 'core.collection']);
+  assert.deepEqual(info.creatorList, ['boxes']);
+  assert.deepEqual(info.modeList, [{ id: 'grid' }]);
+  assert.deepEqual(store.typeInfoGet('x.box').descendantList, ['x.box-small']);
+  assert.ok(store.typeInfoListGet(['x.box']).every((type) => type.id.startsWith('x.')));
+});

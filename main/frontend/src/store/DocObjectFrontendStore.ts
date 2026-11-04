@@ -75,13 +75,6 @@ export type ObjectFrontendState = {
   entryObject: any;
 };
 
-export const objectFrontendEventTypeList = [
-  'objectFrontendAssetCreateRequest',
-  'objectFrontendAssetWriteRequest',
-  'objectFrontendAssetRemoveRequest',
-  'objectFrontendMetaSetRequest',
-];
-
 export class DocObjectFrontendStore {
   stores: Stores;
   config = { status: 'idle' as 'idle' | 'loading' | 'done' | 'error', message: '', docPageList: [] as any[] };
@@ -415,26 +408,6 @@ export class DocObjectFrontendStore {
     return { modeList, mode, param: objectFrontendParamMerge(mode?.param, paramBlock) };
   }
 
-  // ---------- events of components ----------
-
-  async eventHandle(event: { type: string; data: Record<string, any> }) {
-    if (!objectFrontendEventTypeList.includes(event.type)) return undefined;
-    const data = event.data ?? {};
-    const id = objectFrontendIdOfRefGet(String(data.object ?? data.id ?? ''));
-    switch (event.type) {
-      case 'objectFrontendAssetCreateRequest':
-        return this.assetCreate(id, { key: data.key, kind: data.kind, lang: data.lang, text: String(data.text ?? ''), note: data.note });
-      case 'objectFrontendAssetWriteRequest':
-        return this.assetWrite(id, String(data.key ?? ''), String(data.text ?? ''), data.note);
-      case 'objectFrontendAssetRemoveRequest':
-        return this.assetRemove(id, String(data.key ?? ''), data.isAssetKept === true);
-      case 'objectFrontendMetaSetRequest':
-        return data.metadata ? this.metadataSet(id, data.metadata) : this.metaSet(id, { name: data.name, description: data.description });
-      default:
-        return undefined;
-    }
-  }
-
   // ---------- the Frontend objects tab ----------
 
   settingsSelect(id: string) {
@@ -492,4 +465,3 @@ export class DocObjectFrontendStore {
     return result.code === 0 ? { code: 0, ref: objectFrontendRefBuild(result.data.id), message: '' } : { code: result.code, message: result.message };
   }
 }
-

@@ -33,7 +33,8 @@ The registry is a service layer of the page like the others ([AGENTS.md](../AGEN
 ```text
 the object service layer (DocObjectStore, and ObjectRegistry in the kernel)
 ├── the type registry           the types and their DAG: built-in, the templates' (the backend's list)
-├── the provider directory      who answers for which namespaces and types, with which capabilities, how fresh
+├── the provider directory      who answers for which namespaces and types, with which capabilities (the writes
+│                               among them, and the types it creates), how fresh
 ├── what providers answered     per reference (resolveByRef), per query and relation query, with when and from whom
 ├── the registrations           descriptors principals handed it, by registrant
 ├── the views                   which component draws which types in which context (from the component registry
@@ -41,7 +42,7 @@ the object service layer (DocObjectStore, and ObjectRegistry in the kernel)
 └── the searches                the sessions of the search uis: text, filters, result (DocObjectSearchStore)
 ```
 
-It offers its services through the store's methods (resolve, query, relationQuery, read, update, register, search, open), through `config.object` and the events of the route `object` for components, through the apis `object/*` of the unified api registry, and through the backend's `/object/*` for services. Searching it by words, with the moderation that keeps a search from fetching everything a host has, is [Objects and Types: Search](doc_page_impl_obj_search.md).
+It offers its services through the store's methods (resolve, query, relationQuery, read, update, create, delete, relationCreate, relationDelete, register, search, open, typeInfoGet), through `config.object` and the events of the route `object` for components, through the standard apis `object/*`, `relation/*` and `type/*` of the unified api registry ([The apis](#the-apis)), and through the backend's `/object/*` for services. Searching it by words, with the moderation that keeps a search from fetching everything a host has, is [Objects and Types: Search](doc_page_impl_obj_search.md).
 
 ## The concepts
 
@@ -49,7 +50,7 @@ It offers its services through the store's methods (resolve, query, relationQuer
 - A **reference** names it: `{namespace}:{local}`. The namespace names the provider authoritative for it; the local part is the provider's own and the registry never reads it.
 - A **descriptor** is what the registry knows of an object: a small JSON object (its reference, types, label, a summary, its capabilities, where to open it, its status and when it was checked). It is never the object's content, which is read from its provider.
 - A **type** is a JSON definition: an id, a kind (`object` or `relation`), a label, the types it extends. Types form a DAG; an object of a type is an object of every type it extends.
-- A **provider** answers for the objects of its namespaces, through the capabilities it has: `query` (list objects of some types), `resolve` (describe a reference), `read` (the content), `update` (a change it checks), `relationQuery`. It needs only the ones it can offer.
+- A **provider** answers for the objects of its namespaces, through the capabilities it has: `query` (list objects of some types), `resolve` (describe a reference), `read` (the content), `update` (a change it checks), `relationQuery`, and the writes `create` (an object of the types it creates, or a member of one of its collections), `delete`, `relationCreate`, `relationDelete`. It needs only the ones it can offer.
 - A **relation** is an entry from one object to another, of a relation type (`core.member`, `core.contains`, `doc.link`), with a key of its own. A relation is not an object unless it needs to be one.
 - A **collection** is an object with members (`core.member` relations from it); a **group** is an explicit one (`core.group`), with an identity and a lifecycle of its own.
 - A **view** is a component of the component registry that draws objects of some types in some **contexts** (`icon`, `inline`, `card`, `block`).
@@ -157,7 +158,9 @@ provider
   typeList                  the types of the objects it provides, the most specific
   relationTypeList          the types of the relations it provides
   capabilityList            some of query, count, resolve, read, update, relationQuery (count: how many a query
-                            would answer, without listing them: the preflight of a search)
+                            would answer, without listing them: the preflight of a search), and the writes
+                            create, delete, relationCreate, relationDelete (#writing-through-the-registry)
+  createTypeList            the types it creates objects of (and of every type below them)
   queryFilterList           the filters its query understands (isDone, kind, docPageAlias)
   cacheSecond               how long its answers may be reused
   status                    ready, or why not (the backend down, an instance waiting)
@@ -167,6 +170,7 @@ provider
   typeDefine                the types it defines ({ typeList, problemList }): the backend's list
   compList                  the components it serves, views among them, each available or not now: the templates' modules
   open(descriptor)          goes to where its own layer shows one of its objects: navigates, opens the Services tab, the asset panel
+  typeInfoGet(typeId)       what it knows of a type beyond its definition (the modes of a frontend object type)
   providerInfoList, count   a peer: the providers behind it, and how many each would answer (the plan and preflight of a search)
   descriptorListForPeer     what it registers into a peer: the doc page source, its documents
 ```
@@ -175,8 +179,8 @@ provider
 | --- | --- | --- | --- | --- | --- |
 | `doc-source` | page | `docPage`, `docDir`, `doc` | `doc.page`, `doc.folder`, `doc.document`, `doc.section`, `doc.block`, `doc.group` | `core.contains`, `core.member` (a group's) | query (places: compiled documents only, `partial`), resolve, read, relationQuery |
 | `doc-link` | page | none | none | `doc.link` | relationQuery (from or to a document) |
-| `asset` | page | `asset` | `asset.object` | none | query, resolve, read |
-| `frontend` | page | `frontend` | `frontend.object` and the doc pages' types (which it defines, `typeDefineGet`) | `core.member` (an object to its assets) | query, resolve, read, relationQuery |
+| `asset` | page | `asset` | `asset.object` | none | query, resolve, read (with the head's text), create, update, delete |
+| `frontend` | page | `frontend` | `frontend.object` and the doc pages' types (which it defines, `typeDefineGet`, with their modes, `typeInfoGet`) | `core.member` (an object to its assets) | query, resolve, read, relationQuery, create (an object, or an asset in one), update, delete, relationCreate, relationDelete |
 | `backend` | page (a peer) | the backend's | what the backend's providers have | theirs | all, federated by the backend |
 | `kernel` | backend | `service`, `serviceTemplate`, `serviceConfig` | `service.instance`, `service.template`, `service.config` | `service.createdFrom`, `service.dependsOn` | query, resolve, read, update (a config), relationQuery |
 | `service:{id}` | backend | `service.{id}` | its script's `objectProvide.typeList` | its `relationTypeList` | the object apis its script implements |
@@ -200,6 +204,7 @@ The operations are separate on purpose, each with its own promise:
 | `read(ref)` | `{ descriptor, content }` | its provider, always: never a cache |
 | `update(ref, patch)` | the provider's answer to a change it checks | its provider |
 | `relationQuery({ fromRef, toRef, typeList })` | relations, with how complete the answer is | every provider of an assignable relation type |
+| `create({ typeId, content, place, memberOf })`, `delete(ref, options)`, `relationCreate(spec)`, `relationDelete(spec)` | the provider's answer to a write it checks ([below](#writing-through-the-registry)) | the provider owning what the write changes |
 
 **A query is federated.** The registry asks each provider whose types are assignable to those asked for (a provider of `todo-list.todo` for `core.task`, everyone for `core.object`), in parallel, keeps of each answer the objects that are of the types asked for and match the text, adds the registered descriptors nobody answered for, and returns them with a **completeness**: one entry per provider, `answered`, `cached`, `partial` (the provider said it listed only part: the sections of the compiled documents only), `registered`, `unavailable`, `timedOut`, `skipped`, `failed`, with a count and a message. `isComplete` is true only when every provider answered in full, and even then it means complete *for those providers*, never that no other object exists. A consumer shows the line or acts on it: a list says "3 objects · the service backend: unavailable"; a service that must have everything refuses an incomplete answer.
 
@@ -218,6 +223,43 @@ The page reuses an answer while it asks again (a stale answer is drawn until the
 **What the registry does not promise**, because no provider can keep it for all: that a registered object exists, that a deleted object is unregistered at once, that a query is complete, that a provider notifies changes, that every object has a permanent identity. A document edited by another program while the page is closed, an instance whose database was restored, a provider that never reports a deletion: each is a provider still, and the registry answers what it knows, with when and from whom. Correctness and performance come from how providers and consumers use the registry (a provider that registers what it can and says when it changed; a consumer that verifies before an operation that matters, and reads the content from the provider), not from guarantees it would impose.
 
 **Registration** is for objects a principal wants found without being asked: a service registering its few important objects so a query need not call it (`self.context.object_register(descriptorList, is_replace)`, in its own namespace only), the page registering its documents into the backend's registry ([The page and the backend](#the-page-and-the-backend)), a component registering an object of a namespace no provider owns. A namespace a provider owns is registered in by that provider alone. A registration is held in memory, by registrant; a reference persistently held by someone (pinned, kept across restarts) is [TODO](doc_page_impl_TODO.md#object-registration-persistent).
+
+## Writing through the registry
+
+A change of an object is its provider's: the registry finds the provider and hands it the write, and the provider's own checks decide, exactly as for an update. The registry keeps nothing of a write but forgets what it kept of that provider (and of the references touched), so the next resolve and query ask again; what was created is known at once (`resolvePrime`). Who answers each write:
+
+| write | handed to | example |
+| --- | --- | --- |
+| `update(ref, patch)` | the provider of the reference's namespace | a todo `{ isDone }`, a config `{ valueByKey }`, a frontend object `{ name, metadata }`, an asset `{ text \| data }` |
+| `create({ typeId, content, place?, label? })` | the first provider whose `createTypeList` holds a type `typeId` is assignable to | `example.reading-list` (below `frontend.object`) by the frontend objects; `asset.object` by the asset store |
+| `create({ memberOf: { ref, key?, data? }, content })` | the provider of the collection `memberOf` names: a collection keeps its members, so it makes the member and the relation | an asset created in a frontend object, listed under its key |
+| `delete(ref, options)` | the provider of the reference | a frontend object with its assets (`{ isMemberKept }` keeps them); an asset's deletion mark |
+| `relationCreate({ fromRef, type, toRef, key?, data? })`, `relationDelete({ fromRef, key \| toRef, isTargetDeleted? })` | the provider of `fromRef`: a relation belongs to whoever keeps it ([below](#relations-collections-and-groups)) | an asset of the store attached to a frontend object; one taken out, kept or deleted |
+
+What a write carries is in the words of the object's type (`content`, `patch`, `options`), the way an update's patch is: the registry checks only that a type exists and that a provider offers the write (else `-2` with the reason: "no provider creates objects of the type core.task", "the doc page source does not delete its objects"). A provider offering a write says so twice: in its `capabilityList`, and per object in the descriptor's `capabilityList` (a locked asset offers no update), which is what a consumer reads before it offers the change. Which providers write today: the frontend objects (create, update, delete, the relations of their assets, [In the object registry](doc_page_impl_obj_frontend.md#in-the-object-registry)), the asset store (create, update, delete), the kernel through the peer (update of a config), the instances whose scripts implement `objectUpdate`. The documents are changed by the edit layer, not through the registry ([TODO](doc_page_impl_TODO.md#object-update-authorization)); creating and deleting objects of a service instance is [TODO](doc_page_impl_TODO.md#object-backend-write).
+
+## The apis
+
+The registry is offered to the palette, the hotkeys and callers outside the page (an agent working through the development server, [Remote callers](doc_page_impl_api.md#remote-callers)) as one set of **standard apis** of its semantic model, the same for every kind of object, each answered by the store's method of its name and so by the provider that owns what it is about (`comp-doc/api/api-object.js`):
+
+```text
+types      type/list { typeList? }            the types (of these and below), each with its ancestors, who defines it,
+           type/get { typeId }                who creates objects of it (creatorList), and what providers add (typeInfoGet:
+                                              the modes of a frontend object type), its descendants
+finding    object/search { text, typeList? … } the search by words (doc_page_impl_obj_search.md)
+           object/query { typeList, text?, filter?, limit? }   a federated query, with its completeness
+           object/resolve { ref, isVerify? }
+content    object/read { ref }                the content, from its provider (an asset: the text of its head)
+           object/open { ref }
+writing    object/create { typeId?, content?, place?, memberOf?, label? }
+           object/update { ref, patch }
+           object/delete { ref, options? }
+relations  relation/query { fromRef?, toRef?, typeList? }
+           relation/create { fromRef, toRef, type?, key?, data? }
+           relation/delete { fromRef, key | toRef, type?, isTargetDeleted? }
+```
+
+So a layer offers its objects to agents by implementing the capabilities of its provider, never by apis of its own, and a caller learns one vocabulary for all of them: a type tells it who creates its objects and what they offer, a descriptor which writes its object accepts, the content of a collection the references of its members. The search, the first of these, works the same way: it plans by what the providers say of themselves and asks them through the registry ([Moderation](doc_page_impl_obj_search.md#moderation-plan-preflight-bounded-fetch)). A component rendered as a mode of a frontend object gets a narrower api of its own object (`config.objectFrontend`), a convenience over the same layer, not another route around it.
 
 ## Relations, collections and groups
 
@@ -326,13 +368,13 @@ The backend cannot ask the page: the page is not a server, and may be closed. So
 
 ## From a component
 
-A component of the registry reaches the page's registry two ways: `config.object`, a stable service object (`resolve`, `query`, `read`, `update`, `relationQuery`, `typeGet`, `typeIsAssignable`, `open`), and the event layer ([Events](doc_page_impl_event.md)), the route `object`: `objectResolveRequest { ref | refList, isVerify }`, `objectQueryRequest { typeList, text, filter, limit, isFresh }`, `objectRelationQueryRequest { fromRef, toRef, typeList }`, `objectReadRequest { ref }`, `objectUpdateRequest { ref, patch }`, `objectOpenRequest { ref }`, each answered `{ code, data, message }`. A component of a service's module, which has its own module scope, uses the events. Opening an object goes to where its own layer shows it, and its provider does it: a document is navigated to, an instance or a template opens the Services tab on it, an asset the asset panel; an object nobody provides (a registration) is opened by the first provider that knows its kind of place.
+A component of the registry reaches the page's registry two ways: `config.object`, a stable service object (`resolve`, `query`, `read`, `update`, `create`, `delete`, `relationQuery`, `relationCreate`, `relationDelete`, `typeGet`, `typeInfoGet`, `typeIsAssignable`, `open`), and the event layer ([Events](doc_page_impl_event.md)), the route `object`: `objectResolveRequest { ref | refList, isVerify }`, `objectQueryRequest { typeList, text, filter, limit, isFresh }`, `objectRelationQueryRequest { fromRef, toRef, typeList }`, `objectReadRequest { ref }`, `objectUpdateRequest { ref, patch }`, `objectCreateRequest { typeId, content, place, memberOf }`, `objectDeleteRequest { ref, options }`, `objectRelationCreateRequest`, `objectRelationDeleteRequest` (the spec of the write), `objectOpenRequest { ref }`, each answered `{ code, data, message }`. A component of a service's module, which has its own module scope, uses the events. Opening an object goes to where its own layer shows it, and its provider does it: a document is navigated to, an instance or a template opens the Services tab on it, an asset the asset panel; an object nobody provides (a registration) is opened by the first provider that knows its kind of place.
 
 ## What is in the kernel, and what is not
 
 | level | what | where |
 | --- | --- | --- |
-| mechanism | references, descriptors, the type registry (assignability, rank), provider dispatch by namespace, federation with completeness, caching and invalidation, registrations | `service_object.py`, `DocObjectStore` |
+| mechanism | references, descriptors, the type registry (assignability, rank), provider dispatch by namespace (and by created type, by collection, by the keeper of a relation for the writes), federation with completeness, caching and invalidation, registrations | `service_object.py`, `DocObjectStore` |
 | standard types | `core.*` (object, collection, group, document, place, config, task, file, service, member, contains, reference) and the domain types of the page and the kernel | `object-type-builtin.json` |
 | built-in providers and views | the kernel's (instances, templates, configs), the page's layers, the fallback and the views of collections, configs and documents | the kernel, `lib/doc-object-provider-*.js`, `comp-doc/object/` |
 | services and components | groups, timelines, slide decks, a graph of relations, the todos, the notes, a card of a task | templates (`objectProvide`, `compList`) and components (`expose.objectView`) |
@@ -365,11 +407,13 @@ frontend/src/lib/doc-object-provider-frontend.js the frontend objects (doc_page_
                                                 assets as members; opens the Frontend objects tab
 frontend/src/lib/doc-service-api.js    the object endpoints of the backend
 frontend/src/store/DocObjectStore.ts   the page's registry, knowing the layers only through their providers: types,
-                                       providers, resolve / query / relation states and caches, read, update,
+                                       providers, resolve / query / relation states and caches, read, update, the
+                                       writes (create, delete, relationCreate / relationDelete) and typeInfoGet,
                                        registrations, the views (candidates, choice), requirement status, open, the
                                        events, the page's documents registered into the peer
 frontend/src/lib/doc-object-registry.test.js   types, references, federation, tolerance, registrations, the choice of a view,
-                                               what a provider brings (types, components, opening)
+                                               what a provider brings (types, components, opening), where the writes go
+comp-doc/api/api-object.js             the standard apis: type/*, object/*, relation/*
 frontend/src/store/DocObjectSearchStore.ts, lib/doc-object-search.js   the search (doc_page_impl_obj_search.md)
 comp-doc/object/                       ObjectViewHost (one object drawn), ObjectView, ObjectList, ObjectGroup, ObjectSearch,
                                        ObjectSearchPanel, the views

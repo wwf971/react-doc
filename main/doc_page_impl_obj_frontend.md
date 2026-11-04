@@ -90,21 +90,6 @@ metadata: {}            # the type's own: anything it wants to keep about the ob
 
 The entry is data the layer keeps, like the workbook of a sheet: it is written whole (`objectFrontendEntryTextBuild`), in place, by the server's writes. Read, every key is taken as far as it can be (`objectFrontendEntryParse`): an entry naming no type is a `frontend.object`, a type that is not a frontend object type is drawn as `frontend.object` with a problem, an asset listed twice under one key is left out. A key is `[A-Za-z0-9][A-Za-z0-9_.-]*`; an asset created without one gets `{kind}-{n}`. The key is how a mode addresses an asset, so a mode never writes object ids; relations between assets (a note naming its book) are written in the data, by key.
 
-## Assets and their owner
-
-An asset object may say it is a part of a larger object: `owner: { ref, role? }` in its `object.yaml`, a reference of the object registry and the part it plays (`role: entry` for the entry of a frontend object, nothing for its other assets). The asset store keeps the key like `component` ([Objects for components](doc_page_impl_asset.md#objects-for-components)) and checks nothing against it; `objectCreate` and `objectMetaSet` take it.
-
-The assets of one object are **gathered in a group folder** of the asset folder of its doc page, named like an asset object, `{id}--{name}` (its name changes the folder's), the entry among them. The asset store reads objects inside group folders at any depth ([Group folders](doc_page_impl_asset.md#group-folders)), so a group changes nothing of what an asset is or how it is referred to; it is where a person browsing the disk finds everything of one object.
-
-What the page reports where the declarations disagree (on the object, in the overview mode and the settings tab):
-
-| case | means | offered |
-| --- | --- | --- |
-| an asset listed and **missing** or **deleted** | the store has no such object, or it is marked deleted | removing it from the list |
-| an asset listed that **declares no owner** (or another) | the entry lists it, the asset does not say so | (shown; attaching sets it) |
-| a **stray** | an asset declares the object, the entry does not list it (an entry restored to an older version, a write interrupted) | **Attach**: listed again |
-| an **orphan entry** | an entry asset whose object no doc page lists (its line removed by hand, or the object deleted keeping its assets) | **List it in {doc page}**: the line written again |
-
 ## Types and modes
 
 A type's modes are its own declarations, then those of its ancestors in the order of the type registry (the nearest first, `ancestorListGet`); a mode id declared on a nearer type hides the same id farther up (`objectFrontendModeListResolve`). `frontend.object` brings one mode to every type, **`overview`** (`common/ObjectFrontendOverview`): the object as its entry describes it, its assets with their state, its metadata, and a button per mode. The default mode is the nearest one marked `isDefault`, else the first.
@@ -151,7 +136,7 @@ config.objectFrontend                    the object and its api (getters: the co
   open()                                 the object in the Frontend objects tab
 ```
 
-A component of a mode never reaches the asset store, the development server or the document: it asks its object's api, which goes through `DocObjectFrontendStore` (and for the data, `DocAssetStore`), and the events of the layer (`objectFrontendAssetCreateRequest`, `objectFrontendAssetWriteRequest`, `objectFrontendAssetRemoveRequest`, `objectFrontendMetaSetRequest`, route `objectFrontend`) offer the same to a component that has no `config.objectFrontend`. A component meant only as a mode declares `placementList: ['objectFrontend']` and `meta.isNotInDoc`, so the insert menu does not offer it as a block.
+A component of a mode never reaches the asset store, the development server or the document: it asks its object's api, which goes through `DocObjectFrontendStore` (and for the data, `DocAssetStore`); a component that has no `config.objectFrontend` (another block, a component of a service's module) works with frontend objects through the object registry, `config.object` and the events of the route `object`, like any object ([Writing it through the registry](#in-the-object-registry)). A component meant only as a mode declares `placementList: ['objectFrontend']` and `meta.isNotInDoc`, so the insert menu does not offer it as a block.
 
 **Switching what the block shows.** The mode and the parameters are the block's data, so a switch is a change of the block: the entry component shows it at once (in the block's state, [the component state service layer](doc_page_impl_mdx_comp_state.md), as long as the block's text is the one it was made on) and reports `dataReplaceRequest` with the new `{ object, mode, param }`, which the edit layer writes into the document, **in reading mode as in edit mode**, wherever the page can write ([Changing its own block from reading mode](doc_page_impl_mdx_comp.md#changing-its-own-block)). With `{ isSaved: false }`, or where the document cannot be written (a built page), the switch is not written and holds while the page is open; the next text of the block (a write, an edit by hand) replaces it. A mode decides which of its switches are kept: the demonstration's status filter writes `param.status` into the block, opening one book does not.
 
@@ -175,11 +160,39 @@ The layer's provider (`lib/doc-object-provider-frontend.js`, id `frontend`) spea
 | | |
 | --- | --- |
 | namespace | `frontend`; the local part is the object's id |
-| types | `frontend.object` (built-in, a `core.collection`) and the types the doc pages declare (`typeDefineGet`) |
+| types | `frontend.object` (built-in, a `core.collection`) and the types the doc pages declare (`typeDefineGet`); of each, its modes with the inherited ones (`typeInfoGet`, so `type/get` answers them) |
 | descriptor | label: the name; type: the entry's; summary `{ assetCount, docPageAlias, typeId }`; `open: { kind: objectFrontend, id }` |
 | relations | `core.member` from the object to each asset, `asset:local/{objectId}`, keyed `member/{key}`, `data: { kind, status }`, in the entry's order; to an asset, the object it belongs to |
-| capabilities | query, resolve, read (the entry as content: name, type, metadata, assets, modes), relationQuery |
+| capabilities | query, resolve, read (the entry as content: name, type, metadata, assets with their references, modes), relationQuery, and the writes below |
 | opening | the Frontend objects tab, the object chosen |
+
+**Writing it through the registry.** Everyone who is not a mode of an object (an agent, the palette, another component) creates and changes frontend objects with the standard writes of the registry ([Writing through the registry](doc_page_impl_obj.md#writing-through-the-registry)), each answered by this provider with a structural write of the layer, and the standard apis carry them ([The apis](doc_page_impl_obj.md#the-apis)); the layer has no apis of its own:
+
+```text
+type/get { typeId: example.reading-list }                  its ancestors, creatorList [frontend], modeList (inherited ones
+                                                           with the type they come from): what a block may show
+object/create { typeId: example.reading-list,              a new object in that doc page (create; the doc page of
+  content: { name, description?, metadata? },                place.docPath, or the first that can hold one, without it)
+  place: { docPageAlias: example } }
+object/create { memberOf: { ref: frontend:{id},            a new asset of the object, created in its group folder and
+  key?, data: { kind: book } },                              listed under its key ({kind}-{n} when absent)
+  content: { data: { title: Dune } } | { text, lang } }
+object/read { ref: frontend:{id} }                         the entry: name, type, metadata, assetList [{ key, kind, ref }], modes
+object/read { ref: asset:local/{objectId} }                one asset, with the text of its head
+object/update { ref: asset:local/{objectId}, patch: { data | text } }   the data of an asset (the asset store's provider)
+object/update { ref: frontend:{id}, patch: { name?, description?, typeId?, metadata? } }
+                                                           metadata a key at a time, null removes one; another key is
+                                                           refused with where it belongs
+relation/query { fromRef: frontend:{id} }                  its assets as core.member relations, keyed member/{key}
+relation/create { fromRef: frontend:{id}, toRef: asset:local/{objectId}, key?, data: { kind } }
+                                                           an asset of the store attached (its owner set, moved into the group)
+relation/delete { fromRef: frontend:{id}, key: member/{key} | toRef, isTargetDeleted? }
+                                                           an asset taken out: kept and released, or deleted
+object/delete { ref: frontend:{id}, options: { isMemberKept? } }       the object, its assets deleted too unless kept
+doc/blockDataSet { raw: "object: …\nmode: …\nparam: …" }   what a block shows (the block's data)
+```
+
+The writes check what the settings tab checks (a type no doc page declares, a doc page without frontend objects, a key taken, an asset of another object), so an agent and a person make the same changes the same way.
 
 `common/ObjectViewFrontend` is the view of `frontend.object` (contexts `card` and `block`): a card with the name, the type, the kinds of the assets and the modes, and in the block context the object in its default mode. A type of a doc page may expose a view of its own, nearer to its objects, as any type ([Object views](doc_page_impl_obj.md#object-views)). So a frontend object is found by a search (`type:frontend.object`), listed by `ObjectList`, grouped by `ObjectGroup`, drawn by `ObjectView` and in a card diagram, and its assets are members a view of collections lists.
 
@@ -241,7 +254,7 @@ frontend/plugin/doc-source.ts              the declarations for the asset api, w
 frontend/plugin/doc-object-frontend.test.js   declarations, inheritance, the writes, group folders
 frontend/src/lib/doc-asset-backend.js      objectFrontendConfigGet, objectFrontendWrite (api and snapshot), objectMove
 frontend/src/store/DocObjectFrontendStore.ts   the layer on the page
-frontend/src/lib/doc-object-provider-frontend.js   its provider of the object registry
+frontend/src/lib/doc-object-provider-frontend.js   its provider of the object registry, the writes among its capabilities
 frontend/src/store/DocEditStore.ts         dataReplaceRequest and blockPropSetRequest found by the block's line in reading
                                            mode; the pick step of the insert menu
 comp-doc/object-frontend/                  ObjectFrontend (the entry component and the api of a mode), ObjectFrontendEdit
@@ -249,7 +262,8 @@ comp-doc/object-frontend/                  ObjectFrontend (the entry component a
                                            (the view of frontend.object), object-frontend-define.js, ObjectFrontend.css
 comp-doc/edit/DocEditInsertMenu.jsx, edit-template.js   the pick step (meta.insertObjectPick)
 comp-doc/settings/ObjectFrontendSettings.jsx   the Frontend objects tab
-comp-doc/api/api-object-frontend.js        objectFrontend/list, get, create, assetCreate, delete; doc/blockPropSet in api-doc.js
+comp-doc/api/api-object.js, api-doc.js     the standard apis that reach the layer through its provider (doc_page_impl_obj.md#the-apis);
+                                           doc/blockPropSet
 example_doc/.doc-page/object-frontend.yaml the demonstration's types (example.reading-list, example.reading-list-short)
 example_doc/.doc-page/comp-mdx/object-frontend/reading-list/   their modes
 example_doc/object-frontend.md             the demonstration

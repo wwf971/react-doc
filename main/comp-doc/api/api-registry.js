@@ -3,7 +3,6 @@ import { apiByIdEdit } from './api-edit.js';
 import { apiByIdNav } from './api-nav.js';
 import { apiByIdPage } from './api-page.js';
 import { apiByIdObject } from './api-object.js';
-import { apiByIdObjectFrontend } from './api-object-frontend.js';
 
 // all apis the package registers, by id ({layer}/{name}), the counterpart
 // of compById in registry/registry.js and of slashActionById in
@@ -19,5 +18,4 @@ export const apiById = {
   ...apiByIdEdit,
   ...apiByIdPage,
   ...apiByIdObject,
-  ...apiByIdObjectFrontend,
 };

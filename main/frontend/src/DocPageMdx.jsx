@@ -27,7 +27,7 @@ import { objectProviderLinkCreate } from './lib/doc-object-provider-link.js';
 import { objectProviderAssetCreate } from './lib/doc-object-provider-asset.js';
 import { objectProviderBackendCreate } from './lib/doc-object-provider-backend.js';
 import { objectProviderFrontendCreate } from './lib/doc-object-provider-frontend.js';
-import { DocObjectFrontendStore, objectFrontendEventTypeList } from './store/DocObjectFrontendStore.js';
+import { DocObjectFrontendStore } from './store/DocObjectFrontendStore.js';
 import { DocEventRouter } from './lib/doc-event.js';
 import { DocCompStateStore } from './store/DocCompStateStore.js';
 import { StoreContext, useDocStores } from './store/context.js';
@@ -276,11 +276,6 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       name: 'object',
       typeList: objectEventTypeList,
       handle: (event) => objectStore.eventHandle(event),
-    });
-    eventRouter.routeAdd({
-      name: 'objectFrontend',
-      typeList: objectFrontendEventTypeList,
-      handle: (event) => objectFrontendStore.eventHandle(event),
     });
     eventRouter.routeAdd({
       name: 'sidePanel',

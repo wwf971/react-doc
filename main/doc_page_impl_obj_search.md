@@ -120,7 +120,7 @@ frontend/src/lib/doc-object-search.test.js  the grammar, the plan, the match, mo
 frontend/src/store/DocObjectSearchStore.ts  search (plan, preflight, bounded fetch, results), the sessions
 comp-doc/object/ObjectSearchPanel.jsx       the panel and its result row (ObjectSearchResultRow), textHighlight
 comp-doc/object/ObjectSearch.jsx            the panel as a block of a document
-comp-doc/api/api-object.js                  object/search, object/resolve, object/read, object/open
+comp-doc/api/api-object.js                  object/search beside the other standard apis of the layer (doc_page_impl_obj.md#the-apis)
 frontend/src/css/search.css                 .doc-search-*: the field and the result rows, shared with the insert menu
 service-backend/service_object.py           ObjectRegistry.count, the providers' count
 service-backend/server.py                   POST /object/count

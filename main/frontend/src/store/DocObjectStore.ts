@@ -86,6 +86,35 @@ export type ObjectQuerySpec = {
 
 export type ObjectRelationSpec = { fromRef?: string; toRef?: string; typeList?: string[] | string };
 
+// a new object (doc_page_impl_obj.md#writing-through-the-registry):
+//   typeId     what it is; the provider that creates objects of a type it is
+//              assignable to answers (createTypeList)
+//   content    what it holds, in the words of its type (a frontend object:
+//              { name, description, metadata }; an asset: { text | data, lang, name })
+//   place      where its provider keeps it, when it may choose ({ docPageAlias }, { docPath })
+//   memberOf   created as a member of a collection: { ref, key?, data? } (or the
+//              ref alone); the collection's provider creates it and the relation
+//   label      a shorthand of content.name
+export type ObjectCreateSpec = {
+  typeId?: string;
+  content?: Record<string, any>;
+  place?: Record<string, any>;
+  memberOf?: string | { ref: string; key?: string; data?: Record<string, any> };
+  label?: string;
+};
+
+// a relation written or removed by the provider that keeps it: the one of
+// the namespace of fromRef (a collection keeps its members)
+export type ObjectRelationWriteSpec = {
+  fromRef: string;
+  toRef?: string;
+  type?: string;
+  key?: string;
+  data?: Record<string, any>;
+  // relationDelete: the object at toRef is deleted too (else kept)
+  isTargetDeleted?: boolean;
+};
+
 // a component a provider serves (a view, when it has objectView). it is
 // drawn only while isAvailable; sourceLabel says whose it is (template todo-list)
 export type ObjectProviderComp = {
@@ -121,6 +150,19 @@ export type ObjectProvider = {
   read?: (ref: string, registry: any) => Promise<{ descriptor: any; content: any }>;
   update?: (ref: string, patch: any, registry: any) => Promise<{ descriptor: any; content: any }>;
   relationQuery?: (spec: any, registry: any) => Promise<any> | any;
+  // the writes besides update, each a capability of its name: create (of the
+  // types of createTypeList and their subtypes, or a member of one of its
+  // collections), delete, relationCreate / relationDelete (relations from its
+  // own objects). each answers { descriptor, content? } (relations: { relation })
+  // or throws an error with a code
+  createTypeList?: string[];
+  create?: (spec: ObjectCreateSpec, registry: any) => Promise<{ descriptor: any; content?: any }>;
+  delete?: (ref: string, options: Record<string, any>, registry: any) => Promise<{ descriptor?: any } | void>;
+  relationCreate?: (spec: ObjectRelationWriteSpec, registry: any) => Promise<{ relation: any }>;
+  relationDelete?: (spec: ObjectRelationWriteSpec, registry: any) => Promise<{ relation?: any } | void>;
+  // facts about a type beyond its definition that this provider knows (the
+  // modes of a frontend object type): merged into typeInfoGet
+  typeInfoGet?: (typeId: string, registry: any) => Record<string, any> | undefined;
   // a peer: how many objects each of its providers would answer, nothing
   // fetched ({ providerList: [{ providerId, count, countKind, status }] }),
   // and its providers as it lists them, for a search to plan per provider
@@ -163,7 +205,11 @@ export const objectEventTypeList = [
   'objectQueryRequest',
   'objectReadRequest',
   'objectUpdateRequest',
+  'objectCreateRequest',
+  'objectDeleteRequest',
   'objectRelationQueryRequest',
+  'objectRelationCreateRequest',
+  'objectRelationDeleteRequest',
   'objectOpenRequest',
 ];
 
@@ -203,8 +249,13 @@ export class DocObjectStore {
       query: (spec: ObjectQuerySpec) => this.query(spec),
       read: (ref: string) => this.read(ref),
       update: (ref: string, patch: any) => this.update(ref, patch),
+      create: (spec: ObjectCreateSpec) => this.create(spec),
+      delete: (ref: string, options?: any) => this.delete(ref, options),
       relationQuery: (spec: ObjectRelationSpec) => this.relationQuery(spec),
+      relationCreate: (spec: ObjectRelationWriteSpec) => this.relationCreate(spec),
+      relationDelete: (spec: ObjectRelationWriteSpec) => this.relationDelete(spec),
       typeGet: (typeId: string) => this.typeRegistry.typeGet(typeId),
+      typeInfoGet: (typeId: string) => this.typeInfoGet(typeId),
       typeIsAssignable: (typeId: string, typeIdTo: string) => this.typeRegistry.isAssignable(typeId, typeIdTo),
       open: (ref: string) => this.open(ref),
       // the search (doc_page_impl_obj_search.md): one search, or the
@@ -292,6 +343,34 @@ export class DocObjectStore {
       }
     }
     return 'box';
+  }
+
+  // what is known of a type: its definition, its ancestors (the nearest
+  // first) and descendants, who defines it, and what the providers know of it
+  // besides (typeInfoGet of a provider: the modes of a frontend object type);
+  // undefined for a type nobody defines
+  typeInfoGet(typeId: string): Record<string, any> | undefined {
+    const registry = this.typeRegistry;
+    const type = registry.typeGet(typeId);
+    if (!type) return undefined;
+    const extra: Record<string, any> = {};
+    for (const provider of this.providerList) Object.assign(extra, provider.typeInfoGet?.(typeId, registry) ?? {});
+    return {
+      ...type,
+      ancestorList: registry.ancestorListGet(typeId),
+      descendantList: registry.typeList().filter((item: any) => item.id !== typeId && registry.isAssignable(item.id, typeId)).map((item: any) => item.id),
+      // who can create an object of it (doc_page_impl_obj.md#writing-through-the-registry)
+      creatorList: this.providerList.filter((provider) => this.providerCreatesType(provider, typeId)).map((provider) => provider.id),
+      ...extra,
+    };
+  }
+
+  // the types, each with its ancestors; of these types and their subtypes when asked
+  typeInfoListGet(typeListAsked: string[] = []): Record<string, any>[] {
+    const registry = this.typeRegistry;
+    return registry.typeList()
+      .filter((type: any) => typeListAsked.length === 0 || typeListAsked.some((typeId) => registry.isAssignable(type.id, typeId)))
+      .map((type: any) => this.typeInfoGet(type.id)!);
   }
 
   // ---------- providers ----------
@@ -677,10 +756,102 @@ export class DocObjectStore {
     }
   }
 
-  private providerReasonGet(provider: ObjectProvider | undefined, ref: string, capability: 'read' | 'update'): string {
+  // ---------- the other writes: create, delete, relations ----------
+  // (doc_page_impl_obj.md#writing-through-the-registry) each goes to the
+  // provider that owns what it changes, and its own checks decide; the
+  // registry only finds that provider and forgets what it kept of it
+
+  // whether a provider creates objects of a type: a type of its
+  // createTypeList, or one below it
+  private providerCreatesType(provider: ObjectProvider, typeId: string): boolean {
+    if (!provider.capabilityList.includes('create') || !provider.create) return false;
+    const registry = this.typeRegistry;
+    return (provider.createTypeList ?? []).some((typeIdOwn) => registry.isAssignable(typeId, typeIdOwn));
+  }
+
+  // a new object: as a member of a collection, by the collection's provider;
+  // else by the provider that creates objects of its type
+  async create(specInput: ObjectCreateSpec): Promise<ObjectResult> {
+    const spec: ObjectCreateSpec = { ...specInput };
+    if (typeof spec.memberOf === 'string') spec.memberOf = { ref: spec.memberOf };
+    let provider: ObjectProvider | undefined;
+    if (spec.memberOf) {
+      const memberOfRef = String(spec.memberOf.ref ?? '');
+      provider = this.providerOfRefGet(memberOfRef);
+      if (!provider) return { code: -2, message: `no provider of ${memberOfRef || '(empty)'}` };
+      if (!provider.capabilityList.includes('create') || !provider.create) return { code: -2, message: `${provider.label} does not create members of its objects` };
+    } else {
+      const typeId = String(spec.typeId ?? '');
+      if (!typeId) return { code: -1, message: 'name the type of the object (typeId), or the collection it is created in (memberOf)' };
+      if (!this.typeRegistry.typeGet(typeId)) return { code: -1, message: `no one defines the type ${typeId}` };
+      provider = this.providerList.find((item) => this.providerCreatesType(item, typeId));
+      if (!provider) return { code: -2, message: `no provider creates objects of the type ${typeId}` };
+    }
+    const status = this.providerStatusGet(provider);
+    if (status.status !== 'ready') return { code: -2, message: status.message || `${provider.label} is ${status.status}` };
+    return this.writeRun(provider, async () => {
+      const data = await provider!.create!(spec, this.typeRegistry);
+      const descriptor = objectDescriptorNormalize(data.descriptor, provider, data.descriptor?.status ?? 'found') as ObjectDescriptor;
+      this.resolvePrime([descriptor]);
+      return { descriptor, content: data.content };
+    }, spec.memberOf ? [spec.memberOf.ref] : []);
+  }
+
+  // an object removed by its provider (options are the provider's: a frontend
+  // object { isMemberKept })
+  async delete(ref: string, options: Record<string, any> = {}): Promise<ObjectResult> {
+    const provider = this.providerOfRefGet(ref);
+    const reason = this.providerReasonGet(provider, ref, 'delete');
+    if (reason) return { code: -2, message: reason };
+    return this.writeRun(provider!, async () => {
+      const data = await provider!.delete!(ref, options ?? {}, this.typeRegistry);
+      return { ref, descriptor: data && 'descriptor' in data ? data.descriptor : undefined };
+    }, [ref]);
+  }
+
+  // a relation from an object written by the provider of that object: a
+  // collection keeps its members, so attaching an object to one is its provider's
+  relationCreate(spec: ObjectRelationWriteSpec): Promise<ObjectResult> {
+    return this.relationWrite(spec, 'relationCreate');
+  }
+
+  relationDelete(spec: ObjectRelationWriteSpec): Promise<ObjectResult> {
+    return this.relationWrite(spec, 'relationDelete');
+  }
+
+  private async relationWrite(spec: ObjectRelationWriteSpec, capability: 'relationCreate' | 'relationDelete'): Promise<ObjectResult> {
+    const fromRef = String(spec?.fromRef ?? '');
+    const provider = this.providerOfRefGet(fromRef);
+    const reason = this.providerReasonGet(provider, fromRef, capability);
+    if (reason) return { code: -2, message: reason };
+    const specNormalized = { ...spec, fromRef, type: String(spec.type ?? 'core.member') };
+    return this.writeRun(provider!, async () => (await provider![capability]!(specNormalized, this.typeRegistry)) ?? {}, [fromRef, spec.toRef ?? ''].filter(Boolean));
+  }
+
+  // a write of a provider: the answer, and what the registry kept of the
+  // provider (and of the references it touched) asked again
+  private async writeRun(provider: ObjectProvider, run: () => Promise<any>, refList: string[]): Promise<ObjectResult> {
+    try {
+      const data = await run();
+      this.changed(provider.id);
+      for (const ref of refList) {
+        const providerOther = this.providerOfRefGet(ref);
+        if (providerOther && providerOther !== provider) this.changed(providerOther.id, [ref]);
+      }
+      return { code: 0, data, message: '' };
+    } catch (error: any) {
+      return { code: typeof error?.code === 'number' ? error.code : -1, message: String(error?.message ?? error) };
+    }
+  }
+
+  private providerReasonGet(provider: ObjectProvider | undefined, ref: string, capability: 'read' | 'update' | 'delete' | 'relationCreate' | 'relationDelete'): string {
     if (!objectRefParse(ref)) return `${ref || '(empty)'} is not an object reference`;
     if (!provider) return `no provider of the namespace ${objectRefParse(ref)!.namespace}`;
-    if (!provider.capabilityList.includes(capability) || !provider[capability]) return `${provider.label} does not ${capability} its objects`;
+    if (!provider.capabilityList.includes(capability) || !provider[capability]) {
+      return capability.startsWith('relation')
+        ? `${provider.label} does not ${capability === 'relationCreate' ? 'add' : 'remove'} relations of its objects`
+        : `${provider.label} does not ${capability} its objects`;
+    }
     const status = this.providerStatusGet(provider);
     if (status.status !== 'ready') return status.message || `${provider.label} is ${status.status}`;
     return '';
@@ -941,6 +1112,14 @@ export class DocObjectStore {
         return this.read(String(data.ref ?? ''));
       case 'objectUpdateRequest':
         return this.update(String(data.ref ?? ''), data.patch);
+      case 'objectCreateRequest':
+        return this.create(data);
+      case 'objectDeleteRequest':
+        return this.delete(String(data.ref ?? ''), data.options ?? {});
+      case 'objectRelationCreateRequest':
+        return this.relationCreate(data as ObjectRelationWriteSpec);
+      case 'objectRelationDeleteRequest':
+        return this.relationDelete(data as ObjectRelationWriteSpec);
       case 'objectOpenRequest':
         return (await this.open(String(data.ref ?? ''))) ? { code: 0, message: '' } : { code: -1, message: 'the object has no place to open' };
       default:
