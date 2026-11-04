@@ -3,6 +3,8 @@ import { LoaderCircle } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { ASSET_STORE_ID_LOCAL } from '../../frontend/src/lib/doc-asset-ref.js';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
+import { ObjectFrontendAssetSearchPanel } from '../object-frontend/ObjectFrontendAssetSearchPanel.jsx';
+import { objectFrontendAssetPathListParse } from '../../frontend/src/lib/doc-object-frontend.js';
 import '../asset/DocAsset.css';
 import '../object-frontend/ObjectFrontend.css';
 import './DocSettings.css';
@@ -15,7 +17,9 @@ import './DocSettings.css';
 //   Objects (3)    one row per object of every doc page: name, type, doc page, assets, id, state
 //     the chosen one (a click on its row; again to close):
 //       name, description edited in place; its type, entry asset, folder
-//       its assets (key, kind, object, versions, state) each [Remove] (asks in its row)
+//       a search of its assets (names, paths, kinds), a hit marking its row
+//       its assets (key, name, paths, kind, object, versions, state): the name and
+//         the paths edited in place ("/a, /b"), each [Remove] (asks in its row)
 //       the assets declaring it that it does not list [Attach]
 //       its metadata, its modes
 //       [Delete object]  asks in its row: with its assets, or keeping them
@@ -187,16 +191,40 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
       {state.status !== 'found' ? <p className="doc-error">{state.message}</p> : null}
 
       <h4>Assets ({state.assetList.length})</h4>
+      {state.assetList.length > 0 ? (
+        <ObjectFrontendAssetSearchPanel
+          object={state.ref}
+          sessionKey={`settings:${id}`}
+          placeholder="Find an asset: a name, a path, kind:…"
+          onChoose={(hit) => store.settingsAssetSelect(hit.asset.key)}
+        />
+      ) : null}
       {state.assetList.length === 0 ? <p className="doc-note">No asset yet: the modes of its type create them, or attach one of the store.</p> : (
         <div className="doc-asset-table-scroll">
           <table className="doc-asset-table">
-            <thead><tr><th>key</th><th>kind</th><th>object</th><th className="doc-asset-version-size">versions</th><th>state</th><th aria-label="actions" /></tr></thead>
+            <thead><tr><th>key</th><th>name</th><th>paths</th><th>kind</th><th>object</th><th className="doc-asset-version-size">versions</th><th>state</th><th aria-label="actions" /></tr></thead>
             <tbody>
               {state.assetList.map((asset) => {
                 const confirmKey = `assetRemove:${asset.key}`;
+                const isLocked = !isWritable || isWriting;
                 return (
-                  <tr key={asset.key}>
+                  <tr key={asset.key} data-selected={store.settings.assetKeySelected === asset.key ? '' : undefined} className="doc-settings-tab-asset-row">
                     <td>{asset.key}</td>
+                    <td>
+                      <EditValueInline value={asset.name ?? ''} placeholder="(no name)" isLocked={isLocked} onCommit={(value) => void store.assetMetaSet(id, asset.key, { name: value.trim() || null })} />
+                    </td>
+                    <td>
+                      <EditValueInline
+                        value={(asset.pathList ?? []).join(', ')}
+                        placeholder="(no path)"
+                        isLocked={isLocked}
+                        onCommit={(value) => {
+                          const { pathList, problemList } = objectFrontendAssetPathListParse(value);
+                          if (problemList.length > 0) store.writeMessageSet(id, problemList.join('; '));
+                          else void store.assetMetaSet(id, asset.key, { pathList });
+                        }}
+                      />
+                    </td>
                     <td className="doc-asset-muted">{asset.kind}</td>
                     <td>
                       <button type="button" className="doc-settings-asset-link" disabled={!asset.object} onClick={() => assetStore.panelOpen(ASSET_STORE_ID_LOCAL, asset.objectId)}>{asset.object?.name || asset.objectId}</button>

@@ -3,6 +3,7 @@ import {
   OBJECT_FRONTEND_ROLE_ENTRY, OBJECT_FRONTEND_TYPE_ROOT,
   objectFrontendEntryParse, objectFrontendIdOfRefGet, objectFrontendModeChoose,
   objectFrontendModeListResolve, objectFrontendParamMerge, objectFrontendRefBuild,
+  objectFrontendAssetIndexBuild, objectFrontendAssetPathComplete, objectFrontendAssetRefResolve, objectFrontendAssetSearch,
 } from '../lib/doc-object-frontend.js';
 import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
 
@@ -49,6 +50,9 @@ export type ObjectFrontendAsset = {
   key: string;
   kind: string;
   objectId: string;
+  // how people and the object's modes find it (doc_page_impl_obj_frontend.md#naming-and-finding-the-assets)
+  name?: string;
+  pathList?: string[];
   // the asset object as the index knows it; undefined when the store has none
   object: any;
   status: 'found' | 'missing' | 'deleted';
@@ -68,6 +72,9 @@ export type ObjectFrontendState = {
   description: string;
   metadata: Record<string, any>;
   assetList: ObjectFrontendAsset[];
+  // the assets by key, path, name, id, and the folders their paths imply
+  // (objectFrontendAssetIndexBuild); what an asset reference resolves against
+  assetIndex: any;
   // assets declaring the object that its entry does not list
   strayList: any[];
   problemList: string[];
@@ -86,8 +93,12 @@ export class DocObjectFrontendStore {
     createName: '',
     // a question asked in its row: delete the object (deleteObject) or one of its assets (assetRemove:{key})
     confirm: '' as string,
+    // the asset a search of the chosen object's assets marked
+    assetKeySelected: '',
   };
   overrideByKey = observable.map<string, { mode?: string; param?: Record<string, any> }>({}, { deep: false });
+  // the sessions of the asset search uis (ObjectFrontendAssetSearchPanel), by the ui's key
+  assetSearchSessionByKey = new Map<string, ObjectFrontendAssetSearchSession>();
   unsubscribe: (() => void) | undefined;
   configPromise: Promise<void> | undefined;
 
@@ -96,6 +107,7 @@ export class DocObjectFrontendStore {
     makeAutoObservable(this, {
       stores: false,
       overrideByKey: false,
+      assetSearchSessionByKey: false,
       unsubscribe: false,
       configPromise: false,
       config: observable.ref,
@@ -223,7 +235,7 @@ export class DocObjectFrontendStore {
     const ref = objectFrontendRefBuild(id);
     const base: ObjectFrontendState = {
       id, ref, docPageAlias: '', entryObjectId: '', status: 'loading', message: '', name: '', typeId: OBJECT_FRONTEND_TYPE_ROOT,
-      description: '', metadata: {}, assetList: [], strayList: [], problemList: [], entryObject: undefined,
+      description: '', metadata: {}, assetList: [], assetIndex: objectFrontendAssetIndexBuild([]), strayList: [], problemList: [], entryObject: undefined,
     };
     if (!id) return { ...base, status: 'error', message: `${idOrRef || '(empty)'} names no frontend object: frontend:{id}` };
     if (this.config.status === 'idle' || (this.config.status === 'loading' && this.itemList.length === 0)) return base;
@@ -255,6 +267,8 @@ export class DocObjectFrontendStore {
         isOwnerMatch: object?.owner?.ref === ref,
       };
     });
+    const assetIndex = objectFrontendAssetIndexBuild(assetList);
+    problemList.push(...assetIndex.problemList);
     const objectIdListed = new Set([item.entry, ...entry.assetList.map((asset: any) => asset.objectId)]);
     const strayList = assetStore.objectList.filter((object: any) => object.owner?.ref === ref && !object.isDeleted && !objectIdListed.has(object.objectId));
     return {
@@ -266,6 +280,7 @@ export class DocObjectFrontendStore {
       description: entry.description,
       metadata: entry.metadata,
       assetList,
+      assetIndex,
       strayList,
       problemList,
     };
@@ -283,13 +298,56 @@ export class DocObjectFrontendStore {
     return list;
   }
 
-  // the data of one asset of an object, by its key: { status, text, object, versionId, hash };
-  // asks the asset store for it when it is not loaded yet
-  assetTextGet(idOrRef: string, key: string): { status: 'loading' | 'done' | 'error'; message: string; text: string; object?: any; versionId?: string } {
+  // ---------- finding the assets of an object ----------
+  // (doc_page_impl_obj_frontend.md#naming-and-finding-the-assets) an asset
+  // reference is a path (/book/sci-fi/dune), a key (book-1, key:book-1), a
+  // name (name:Dune) or an id (id:w5j…); every read below takes one
+
+  // what an asset reference names in an object: { status: found | missing |
+  // deleted | unknown | loading, asset?, by, message }. missing and deleted
+  // say which asset the object lists, so a mode can tell its reader what is gone
+  assetResolve(idOrRef: string, assetRef: string): { status: string; asset?: ObjectFrontendAsset; by: string; message: string } {
     const state = this.objectGet(idOrRef);
-    if (state.status !== 'found') return { status: state.status === 'loading' ? 'loading' : 'error', message: state.message, text: '' };
-    const asset = state.assetList.find((item) => item.key === key);
-    if (!asset) return { status: 'error', message: `the object has no asset ${key}`, text: '' };
+    if (state.status !== 'found') return { status: state.status === 'loading' ? 'loading' : 'unknown', by: '', message: state.message };
+    return objectFrontendAssetRefResolve(state.assetIndex, assetRef);
+  }
+
+  // the assets of an object found by words, the object search's way (kind:, name:, path:, key:, id:)
+  assetSearch(idOrRef: string, text: string, options: { kindList?: string[]; limit?: number } = {}) {
+    const state = this.objectGet(idOrRef);
+    if (state.status !== 'found') return { tokenList: [], hitList: [], isTruncated: false, status: state.status, message: state.message };
+    return { ...objectFrontendAssetSearch(state.assetList, text, options), status: 'found', message: '' };
+  }
+
+  // the candidates completing a typed path in an object: the folders and
+  // assets of the folder typed so far
+  assetComplete(idOrRef: string, text: string, options: { kindList?: string[]; base?: string } = {}) {
+    const state = this.objectGet(idOrRef);
+    if (state.status !== 'found') return [];
+    return objectFrontendAssetPathComplete(state.assetIndex, text, options);
+  }
+
+  // the session of a search ui of the assets of one object, by the ui's key
+  assetSearchSessionGet(key: string, options: { object: string; kindList?: string[] }): ObjectFrontendAssetSearchSession {
+    let session = this.assetSearchSessionByKey.get(key);
+    if (!session) {
+      session = new ObjectFrontendAssetSearchSession(this, options.object, options.kindList ?? []);
+      this.assetSearchSessionByKey.set(key, session);
+    } else if (session.object !== options.object) {
+      session.objectSet(options.object);
+    }
+    return session;
+  }
+
+  // the data of one asset of an object, by an asset reference: { status, text, object, versionId, assetStatus };
+  // asks the asset store for it when it is not loaded yet. an asset the object
+  // lists and the store lacks is an error saying so (assetStatus missing | deleted)
+  assetTextGet(idOrRef: string, assetRef: string): { status: 'loading' | 'done' | 'error'; message: string; text: string; object?: any; versionId?: string; asset?: ObjectFrontendAsset; assetStatus?: string } {
+    const resolved = this.assetResolve(idOrRef, assetRef);
+    if (resolved.status === 'loading') return { status: 'loading', message: '', text: '' };
+    if (resolved.status !== 'found') return { status: 'error', message: resolved.message, text: '', asset: resolved.asset, assetStatus: resolved.status };
+    const asset = resolved.asset!;
+    const key = asset.key;
     const refAsset = { store: ASSET_STORE_ID_LOCAL, objectId: asset.objectId, versionId: 'head' };
     const query = this.stores.assetStore.refQuery(refAsset);
     if (query.status === 'loading') {
@@ -297,8 +355,8 @@ export class DocObjectFrontendStore {
       return { status: 'loading', message: '', text: '' };
     }
     if (query.status === 'error') return { status: 'error', message: query.message, text: '' };
-    if (!query.version?.isText) return { status: 'error', message: `the asset ${key} is not text`, text: '', object: query.object };
-    return { status: 'done', message: '', text: query.version.text, object: query.object, versionId: query.versionId };
+    if (!query.version?.isText) return { status: 'error', message: `the asset ${key} is not text`, text: '', object: query.object, asset };
+    return { status: 'done', message: resolved.message, text: query.version.text, object: query.object, versionId: query.versionId, asset, assetStatus: 'found' };
   }
 
   private loadSchedule(ref: any) {
@@ -331,6 +389,15 @@ export class DocObjectFrontendStore {
     return { code: result.code, data: result.data, message: result.message ?? '' };
   }
 
+  // a failure said before anything is written (a path that does not read), where the writes say theirs
+  writeMessageSet(id: string, message: string) {
+    this.write = { status: 'error', route: '', id, message };
+  }
+
+  settingsAssetSelect(key: string) {
+    this.settings.assetKeySelected = this.settings.assetKeySelected === key ? '' : key;
+  }
+
   writeMessageClear() {
     if (this.write.status === 'error') this.write = { status: 'idle', route: '', id: '', message: '' };
   }
@@ -351,24 +418,32 @@ export class DocObjectFrontendStore {
     return this.writeRun('meta/set', { id, ...change });
   }
 
-  assetCreate(id: string, input: { key?: string; kind?: string; lang?: string; text: string; note?: string; saveMode?: string }) {
+  assetCreate(id: string, input: { key?: string; kind?: string; name?: string; pathList?: string[]; lang?: string; text: string; note?: string; saveMode?: string }) {
     return this.writeRun('asset/create', { id, ...input });
+  }
+
+  // how an asset is named and indexed: its name (null removes it), its
+  // paths (replaced whole), its kind; a path of another asset is refused
+  assetMetaSet(id: string, key: string, change: { name?: string | null; pathList?: string[]; kind?: string }) {
+    return this.writeRun('asset/meta/set', { id, key, ...change });
   }
 
   assetRemove(id: string, key: string, isAssetKept = false) {
     return this.writeRun('asset/remove', { id, key, isAssetKept });
   }
 
-  assetAttach(id: string, objectId: string, input: { key?: string; kind?: string } = {}) {
+  assetAttach(id: string, objectId: string, input: { key?: string; kind?: string; name?: string; pathList?: string[] } = {}) {
     return this.writeRun('asset/attach', { id, objectId, ...input });
   }
 
   // the data of one asset replaced, by the asset's save mode: an ordinary
   // write of the asset store, which the object does not need to know of
-  async assetWrite(idOrRef: string, key: string, text: string, note = ''): Promise<{ code: number; message: string }> {
+  async assetWrite(idOrRef: string, assetRef: string, text: string, note = ''): Promise<{ code: number; message: string }> {
     const state = this.objectGet(idOrRef);
-    const asset = state.assetList.find((item) => item.key === key);
-    if (!asset) return { code: -1, message: `the object has no asset ${key}` };
+    const resolved = this.assetResolve(idOrRef, assetRef);
+    if (resolved.status !== 'found') return { code: -1, message: resolved.message || `the object has no asset ${assetRef}` };
+    const asset = resolved.asset!;
+    const key = asset.key;
     const { assetStore } = this.stores;
     await assetStore.refLoad({ store: ASSET_STORE_ID_LOCAL, objectId: asset.objectId, versionId: 'head' });
     const result = await assetStore.objectUpdate(ASSET_STORE_ID_LOCAL, asset.objectId, { text }, undefined, note || `${key} of ${state.name || state.id}`);
@@ -413,6 +488,7 @@ export class DocObjectFrontendStore {
   settingsSelect(id: string) {
     this.settings.idSelected = this.settings.idSelected === id ? '' : id;
     this.settings.confirm = '';
+    this.settings.assetKeySelected = '';
     this.writeMessageClear();
   }
 
@@ -463,5 +539,58 @@ export class DocObjectFrontendStore {
     if (!docPage) return { code: -1, message: 'no doc page here can hold a frontend object (it needs an asset folder)' };
     const result = await this.create({ docPageAlias: docPage.alias, typeId, name: `New ${this.typeLabelGet(typeId).toLowerCase()}` });
     return result.code === 0 ? { code: 0, ref: objectFrontendRefBuild(result.data.id), message: '' } : { code: result.code, message: result.message };
+  }
+}
+
+// the search of the assets of one object as a ui shows it: the text, the
+// kinds it is narrowed to, the highlighted row. the result is read from the
+// layer on every render (the assets are in memory), so it follows the object
+export class ObjectFrontendAssetSearchSession {
+  store: DocObjectFrontendStore;
+  object: string;
+  kindList: string[];
+  text = '';
+  indexActive = -1;
+
+  constructor(store: DocObjectFrontendStore, object: string, kindList: string[]) {
+    this.store = store;
+    this.object = object;
+    this.kindList = kindList;
+    makeAutoObservable(this, { store: false });
+  }
+
+  get result() {
+    return this.store.assetSearch(this.object, this.text, { kindList: this.kindList, limit: 50 });
+  }
+
+  get hitActive() {
+    const hitList = this.result.hitList;
+    return hitList[this.indexActive] ?? hitList[0];
+  }
+
+  objectSet(object: string) {
+    this.object = object;
+    this.indexActive = -1;
+  }
+
+  textSet(text: string) {
+    this.text = text;
+    this.indexActive = -1;
+  }
+
+  kindListSet(kindList: string[]) {
+    this.kindList = kindList;
+    this.indexActive = -1;
+  }
+
+  indexActiveMove(step: number) {
+    const count = this.result.hitList.length;
+    if (count === 0) return;
+    this.indexActive = (this.indexActive + step + count) % count;
+  }
+
+  clear() {
+    this.text = '';
+    this.indexActive = -1;
   }
 }

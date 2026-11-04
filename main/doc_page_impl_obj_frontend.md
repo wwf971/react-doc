@@ -27,7 +27,7 @@ the page   DocObjectFrontendStore          joins the declarations with the asset
 
 - A **frontend object** has an id (ms_48), a reference `frontend:{id}`, a type, a name, and any number of **assets**. It exists because a doc page lists it; what it is, its entry says.
 - Its **entry asset** is an asset object of the store whose data (yaml) describes the object: its name, its type, its description, its assets by **key**, and **metadata**, a free mapping of the type's own.
-- An **asset of an object** is any asset object of the store; it **declares** the object in its own metadata (`owner`), and the entry lists it under a key unique in the object, with a **kind** that groups the assets of one sort (`book`, `note`).
+- An **asset of an object** is any asset object of the store; it **declares** the object in its own metadata (`owner`), and the entry lists it under a key unique in the object, with a **kind** that groups the assets of one sort (`book`, `note`), and optionally a **name** for people and **paths** indexing it, as many as the object wants (`/book/sci-fi/dune`, `/author/frank-herbert/dune`). Why they are called assets and not objects: [A word on the names](#a-word-on-the-names-assets-not-objects).
 - A **type** is a type of the type registry, `frontend.object` or one a doc page declares below it; it says how the object is drawn: its **modes**.
 - A **mode** is a component of the component registry and the parameters it starts with, with an id, a label and a **category** (`view`, `edit`, anything: how the modes are grouped). A type has its own modes and those of its ancestors.
 - The **entry component**, `ObjectFrontend`, is a block of a document naming an object, a mode and the parameters of that mode, and rendering the mode's component.
@@ -83,12 +83,92 @@ name: Reading list
 type: example.reading-list
 description: the books of the demonstration, and notes on them
 assetList:
-  - { key: book-1, kind: book, objectId: w5j7pmxa7fw }
-  - { key: note-1, kind: note, objectId: w5j7pmznvdq }
+  - key: book-1
+    kind: book
+    objectId: w5j7pmxa7fw
+    name: Dune                        # optional: for people
+    pathList:                         # optional: the paths indexing it, each unique in the object
+      - /book/sci-fi/dune
+      - /author/frank-herbert/dune
+  - { key: note-1, kind: note, objectId: w5j7pmznvdq, pathList: [/note/dune/1] }
 metadata: {}            # the type's own: anything it wants to keep about the object as a whole
 ```
 
-The entry is data the layer keeps, like the workbook of a sheet: it is written whole (`objectFrontendEntryTextBuild`), in place, by the server's writes. Read, every key is taken as far as it can be (`objectFrontendEntryParse`): an entry naming no type is a `frontend.object`, a type that is not a frontend object type is drawn as `frontend.object` with a problem, an asset listed twice under one key is left out. A key is `[A-Za-z0-9][A-Za-z0-9_.-]*`; an asset created without one gets `{kind}-{n}`. The key is how a mode addresses an asset, so a mode never writes object ids; relations between assets (a note naming its book) are written in the data, by key.
+The entry is data the layer keeps, like the workbook of a sheet: it is written whole (`objectFrontendEntryTextBuild`), in place, by the server's writes. Read, every key is taken as far as it can be (`objectFrontendEntryParse`): an entry naming no type is a `frontend.object`, a type that is not a frontend object type is drawn as `frontend.object` with a problem, an asset listed twice under one key is left out. A key is `[A-Za-z0-9][A-Za-z0-9_.-]*`; an asset created without one gets `{kind}-{n}`. The key is how a mode addresses an asset, so a mode never writes object ids; relations between assets (a note naming its book) are written in the data, by key, which never changes, rather than by a path, which is an index the object may rearrange. A name and paths are written only when an asset has them ([Naming and finding the assets](#naming-and-finding-the-assets)).
+
+## Naming and finding the assets
+
+An object holding many assets of several kinds needs them found: by the mode drawing one of them (`book: /book/sci-fi/dune`), by a reader typing where it is, by a search, by an agent. Each asset may carry two things for that, in its entry; both are the object's choice, and both may be absent (an asset is still its key):
+
+- a **name**, for people (`Dune`, the title of a book); names need not be unique;
+- **paths**, any number of them, each indexing the asset one way: a book filed by its genre and by its author, `/book/sci-fi/dune` and `/author/frank-herbert/dune`. Several paths are what lets one object be browsed by several hierarchies at once.
+
+**A path is read as an operating system reads one.** `/` separates the folders; repeated and trailing slashes, `.` and `..` are resolved (`book//sci-fi/./x/../dune/` is `/book/sci-fi/dune`; going above the root is refused); a folder name is any text up to 80 characters without control characters. It is kept in its canonical form, always from the root of the object (`objectFrontendAssetPathNormalize`). The folders are implied by the paths (`/book`, `/book/sci-fi`) and hold nothing themselves: there is no folder to create or to remove. A path names **one** asset of its object: the writes refuse a path another asset has; one written twice by hand names the first asset and is a problem of the object. An asset whose paths and name are absent is reached by its key.
+
+**Recommended patterns.** Which paths an asset has is up to the type (its modes write them), and a lazy type gives none. Paths are most useful when the **first folder is the kind** (`/book/…`, `/note/…`), so the kinds are the top of every listing, then folders of what the object's readers sort by (a genre, an author, a parent: `/note/{its book}/{n}`), then the asset's own segment, a name made a folder name (`objectFrontendAssetPathBuild('book', genre, title)`: lowercase, letters and digits joined by `-`). Keep a path a description of the asset, not its identity: the data names other assets by key.
+
+**An asset reference** is what names one asset within its object, wherever one is asked for (a mode's api, a block's `param`, the components below):
+
+```text
+/book/sci-fi/dune     a path (it starts with "/")
+book-1, key:book-1    its key
+name:Dune             its name; several assets of the name: the first, said to be ambiguous
+id:w5j7pmxa7fw        the object id of the asset
+```
+
+It resolves (`objectFrontendAssetRefResolve`, over the object's index `assetIndex`: by key, path, name, id, and the folders) to a status, and a reader of an asset handles each:
+
+| status | means | what a mode shows |
+| --- | --- | --- |
+| `found` | an asset of the object, there in the store | it |
+| `missing`, `deleted` | an asset the entry lists, gone from the asset store or marked deleted; the answer still carries the asset (its key, name, paths) | the asset by its name, with the state (the overview, the stats of the demonstration count them) |
+| `unknown` | nothing of the object answers to it: no such path, key or name, or a path that is a folder | the reference and why |
+| `loading` | the entry is not read yet | a line |
+
+Every read of the mode api takes a reference (`assetTextGet`, `assetDataGet` answer `assetStatus` and the asset beside an error), so a block whose asset is gone says so where it is, never an empty block.
+
+**Searching** the assets of an object reads words as the object registry's search does ([The grammar](doc_page_impl_obj_search.md#the-grammar)): words in any order, every one matching some field, a word narrowed by a key, `kind:book`, `name:dune`, `path:sci-fi` (a path word starting with `/` is a prefix: `path:/author/`), `key:`, `id:`; the score adds where each word matched (the start of the name 8, the name 5, the start of a folder of a path 4, a path 3, the key 3, the kind 2, the id 1), best first, with the path the words matched (`objectFrontendAssetSearch`). **Completing** a typed path lists the folder typed so far, as path completion of the doc page source does ([Path completion](doc_page_impl_source.md#path-completion)): its folders with how many assets they hold, then its assets, those whose folder name (or name) starts with what follows the last `/` first; a text without a leading `/` is read from a base folder; a kind list keeps the assets of those kinds and the folders holding one (`objectFrontendAssetPathComplete`). Both read the layer's memory, so they cost nothing per keystroke.
+
+**What the layer offers to build modes with.**
+
+```text
+config.objectFrontend (a mode's api)        assetResolve(ref), assetGet(ref), assetSearch(text, { kindList, limit }),
+                                            assetComplete(text, { kindList, base }), assetTextGet(ref), assetDataGet(ref),
+                                            assetCreate({ ..., name, pathList }), assetMetaSet(ref, { name, pathList, kind }),
+                                            assetWrite(ref, …), assetRemove(ref)
+DocObjectFrontendStore                      the same by object: assetResolve(object, ref), assetSearch, assetComplete,
+                                            assetSearchSessionGet(key, { object, kindList }), assetMetaSet(id, key, change)
+ObjectFrontendAssetPathInput                a path typed with completion, the look of SourcePathInput: the field, the dropdown
+  { object, value, kindList, base,          of the folder typed (folders with their count, assets with their name, kind and
+    isMissingWarned, onCommit, onChoose }   state); a folder continues into it, an asset is chosen (onChoose); Tab takes the
+                                            highlighted one; with isMissingWarned, a warning when the text names no asset
+ObjectFrontendAssetSearchPanel              the search as a panel, the look of ObjectSearchPanel: the field, the kinds of the
+  { object, sessionKey, kindList,           object as buttons, rows of name, kind, the path the words matched and the state;
+    onChoose, onClose }                     ArrowDown / ArrowUp / Enter / Escape; its session is the store's
+```
+
+Both components take the object by its reference and read the store themselves, so a mode, another block, or a panel uses them alike; the settings tab uses the search to find an asset of the chosen object, the demonstration's mode **find** both. Through the object registry the same is offered to everyone else: `relation/query { fromRef, text }` answers the assets the search finds (the provider has the capability `relationText`), each relation carrying `{ kind, name, pathList, status }`; `relation/update { fromRef, key, data: { name?, pathList?, kind? } }` names and indexes one (paths replaced whole); `object/create` with `memberOf.data` and `relation/create` take a name and paths too.
+
+**Versions.** An object reads the **head** of each of its assets: the entry lists assets, never a version of one, so a write of an asset is what every mode shows next. An asset pinned to a version (an object whose part must not change while its source is revised) is [TODO](doc_page_impl_TODO.md#object-frontend-version).
+
+## A word on the names: assets, not objects
+
+The pieces of data of a frontend object could be called its objects, or its data objects; they are called **assets** on purpose. *Object* is taken twice already, by the object registry (anything a provider names: a document, a todo, a frontend object) and by the frontend object itself; a third meaning, "the objects of an object", would make every sentence about the layer ambiguous ("delete the object": the frontend object, or one of its pieces?). The pieces are also, in fact, asset objects of the asset service layer, with their versions, locks and folders, so calling them assets names what they are and where they live, and keeps the vocabulary apart: a **frontend object** has **assets**; the registry lists **objects**. (The asset store's own pages call one asset an "asset object", which is the same thing seen from the store.)
+
+## Assets and their owner
+
+An asset object may say it is a part of a larger object: `owner: { ref, role? }` in its `object.yaml`, a reference of the object registry and the part it plays (`role: entry` for the entry of a frontend object, nothing for its other assets). The asset store keeps the key like `component` ([Objects for components](doc_page_impl_asset.md#objects-for-components)) and checks nothing against it; `objectCreate` and `objectMetaSet` take it.
+
+The assets of one object are **gathered in a group folder** of the asset folder of its doc page, named like an asset object, `{id}--{name}` (its name changes the folder's), the entry among them. The asset store reads objects inside group folders at any depth ([Group folders](doc_page_impl_asset.md#group-folders)), so a group changes nothing of what an asset is or how it is referred to; it is where a person browsing the disk finds everything of one object.
+
+What the page reports where the declarations disagree (on the object, in the overview mode and the settings tab):
+
+| case | means | offered |
+| --- | --- | --- |
+| an asset listed and **missing** or **deleted** | the store has no such object, or it is marked deleted | removing it from the list |
+| an asset listed that **declares no owner** (or another) | the entry lists it, the asset does not say so | (shown; attaching sets it) |
+| a **stray** | an asset declares the object, the entry does not list it (an entry restored to an older version, a write interrupted) | **Attach**: listed again |
+| an **orphan entry** | an entry asset whose object no doc page lists (its line removed by hand, or the object deleted keeping its assets) | **List it in {doc page}**: the line written again |
 
 ## Types and modes
 
@@ -123,11 +203,15 @@ config.objectFrontend                    the object and its api (getters: the co
   object                                 the object as the files say now: name, typeId, description, metadata,
                                          assetList [{ key, kind, objectId, object, status, isOwnerMatch }], strayList, problemList
   mode, modeList                         the mode drawn, the modes of the type
-  assetList(kind?), assetGet(key)        the assets, of one kind
-  assetTextGet(key), assetDataGet(key)   { status, message, text } / { ..., data } of an asset's head (yaml read); loaded on demand
-  assetCreate({ key?, kind?, lang?, text | data })   a new asset of the object: { code, data: { key, objectId } }
-  assetWrite(key, text | data)           the head of an asset replaced, by its save mode
-  assetRemove(key, { isAssetKept? })     an asset taken out (deleted softly, or kept and released)
+  assetList(kind?)                       the assets, of one kind
+  assetResolve(ref), assetGet(ref)       what an asset reference (/path, key, name:…, id:…) names, with its status
+  assetSearch(text), assetComplete(text) the assets found by words; the candidates completing a typed path
+  assetTextGet(ref), assetDataGet(ref)   { status, message, text, asset, assetStatus } / { ..., data } of an asset's head
+                                         (yaml read); loaded on demand
+  assetCreate({ key?, kind?, name?, pathList?, lang?, text | data })   a new asset: { code, data: { key, objectId } }
+  assetMetaSet(ref, { name?, pathList?, kind? })   how an asset is named and indexed
+  assetWrite(ref, text | data)           the head of an asset replaced, by its save mode
+  assetRemove(ref, { isAssetKept? })     an asset taken out (deleted softly, or kept and released)
   metadataSet(patch)                     the object's metadata, a key at a time (null removes one)
   modeSet(modeId, options), paramSet(paramChange, options), blockSet({ mode, param }, options)
                                          the block switched: another mode, other parameters (merged, null removes a key;
@@ -175,7 +259,7 @@ object/create { typeId: example.reading-list,              a new object in that 
   content: { name, description?, metadata? },                place.docPath, or the first that can hold one, without it)
   place: { docPageAlias: example } }
 object/create { memberOf: { ref: frontend:{id},            a new asset of the object, created in its group folder and
-  key?, data: { kind: book } },                              listed under its key ({kind}-{n} when absent)
+  key?, data: { kind: book, name?, pathList? } },            listed under its key ({kind}-{n} when absent)
   content: { data: { title: Dune } } | { text, lang } }
 object/read { ref: frontend:{id} }                         the entry: name, type, metadata, assetList [{ key, kind, ref }], modes
 object/read { ref: asset:local/{objectId} }                one asset, with the text of its head
@@ -183,8 +267,13 @@ object/update { ref: asset:local/{objectId}, patch: { data | text } }   the data
 object/update { ref: frontend:{id}, patch: { name?, description?, typeId?, metadata? } }
                                                            metadata a key at a time, null removes one; another key is
                                                            refused with where it belongs
-relation/query { fromRef: frontend:{id} }                  its assets as core.member relations, keyed member/{key}
-relation/create { fromRef: frontend:{id}, toRef: asset:local/{objectId}, key?, data: { kind } }
+relation/query { fromRef: frontend:{id}, text? }           its assets as core.member relations, keyed member/{key}, data
+                                                           { kind, name, pathList, status }; with text, those the asset
+                                                           search finds, best first (kind:, name:, path:/…)
+relation/update { fromRef: frontend:{id}, key: member/{key}, data: { name?, pathList?, kind? } }
+                                                           how an asset is named and indexed (paths replaced whole; a
+                                                           path another asset has is refused)
+relation/create { fromRef: frontend:{id}, toRef: asset:local/{objectId}, key?, data: { kind, name?, pathList? } }
                                                            an asset of the store attached (its owner set, moved into the group)
 relation/delete { fromRef: frontend:{id}, key: member/{key} | toRef, isTargetDeleted? }
                                                            an asset taken out: kept and released, or deleted
@@ -201,7 +290,7 @@ The writes check what the settings tab checks (a type no doc page declares, a do
 The **Frontend objects** tab of the settings panel (`ObjectFrontendSettings.jsx`) is the layer's own place:
 
 - **New object**: the doc page (those with an asset folder and not `objectFrontend: false`), the type (`frontend.object` and the declared ones), the name; **Create**.
-- **Objects**: one row per object of every doc page (name, type, doc page, assets, id, state: found, or how many things to look at). A click shows the chosen one below its table: name and description edited in place (a new name renames the group folder), the reference, the type, the entry asset (its asset panel opens from it) and where it lies, the modes; its **assets** (key, kind, object, versions, state), each **Remove** asking in its row whether to delete it or keep it in the store; the strays (**Attach**); the problems; the metadata; **Delete object**, asking in its row whether its assets go with it.
+- **Objects**: one row per object of every doc page (name, type, doc page, assets, id, state: found, or how many things to look at). A click shows the chosen one below its table: name and description edited in place (a new name renames the group folder), the reference, the type, the entry asset (its asset panel opens from it) and where it lies, the modes; a search of its assets (`ObjectFrontendAssetSearchPanel`, a hit marking its row); its **assets** (key, name and paths edited in place, the paths as `/a, /b`, kind, object, versions, state), each **Remove** asking in its row whether to delete it or keep it in the store; the strays (**Attach**); the problems; the metadata; **Delete object**, asking in its row whether its assets go with it.
 - **Types**: what the doc pages declare: id, label, extends, the modes (an inherited one marked ↑), the doc page.
 - **Problems** of the files, by doc page, and the **orphan entries** with **List it in {doc page}**.
 
@@ -244,7 +333,9 @@ A **built page** has no server: the declarations travel in the asset snapshot (`
 
 ```text
 built-in/object-type/object-type-builtin.json   frontend.object
-frontend/src/lib/doc-object-frontend.js    the pure part: references, the entry (parse, build, a free key), the block of the
+frontend/src/lib/doc-object-frontend.js    the pure part: references, the entry (parse, build, a free key), the names and paths
+                                           of the assets (normalize, the index, references, completion, search, the
+                                           recommended path), the block of the
                                            entry component, the modes (inheritance, choice), the built-in overview mode
 frontend/plugin/doc-object-frontend.ts     the declarations of the doc pages (object-frontend.yaml), the structural writes
 frontend/plugin/doc-asset-server.ts        the routes /object-frontend/* of the asset api
@@ -259,7 +350,9 @@ frontend/src/store/DocEditStore.ts         dataReplaceRequest and blockPropSetRe
                                            mode; the pick step of the insert menu
 comp-doc/object-frontend/                  ObjectFrontend (the entry component and the api of a mode), ObjectFrontendEdit
                                            (its edit mode), ObjectFrontendOverview (the mode overview), ObjectViewFrontend
-                                           (the view of frontend.object), object-frontend-define.js, ObjectFrontend.css
+                                           (the view of frontend.object), ObjectFrontendAssetPathInput and
+                                           ObjectFrontendAssetSearchPanel (finding the assets of an object),
+                                           object-frontend-define.js, ObjectFrontend.css
 comp-doc/edit/DocEditInsertMenu.jsx, edit-template.js   the pick step (meta.insertObjectPick)
 comp-doc/settings/ObjectFrontendSettings.jsx   the Frontend objects tab
 comp-doc/api/api-object.js, api-doc.js     the standard apis that reach the layer through its provider (doc_page_impl_obj.md#the-apis);

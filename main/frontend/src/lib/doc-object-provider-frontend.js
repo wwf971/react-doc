@@ -1,5 +1,5 @@
 import { objectRefParse } from './doc-object-ref.js';
-import { OBJECT_FRONTEND_NAMESPACE, OBJECT_FRONTEND_TYPE_ROOT, objectFrontendRefBuild } from './doc-object-frontend.js';
+import { OBJECT_FRONTEND_NAMESPACE, OBJECT_FRONTEND_TYPE_ROOT, objectFrontendAssetSearch, objectFrontendRefBuild } from './doc-object-frontend.js';
 import { stringify as yamlStringify } from 'yaml';
 import { typeDefineNormalize } from './doc-object-type.js';
 
@@ -17,13 +17,15 @@ import { typeDefineNormalize } from './doc-object-type.js';
 // structural write of the layer:
 //   create { typeId, content: { name, description, metadata }, place: { docPageAlias | docPath } }
 //                               a new object of a frontend type
-//   create { memberOf: { ref: frontend:{id}, key?, data: { kind } }, content: { text | data, lang } }
+//   create { memberOf: { ref: frontend:{id}, key?, data: { kind, name?, pathList? } }, content: { text | data, lang } }
 //                               a new asset of the object, listed under its key
 //   update frontend:{id} { name?, description?, typeId?, metadata? }   metadata a key at a time, null removes one
 //   delete frontend:{id} { isMemberKept? }                            its assets deleted too, or kept
 //   relationCreate { fromRef: frontend:{id}, type: core.member, toRef: asset:local/{objectId}, key?, data: { kind } }
 //                               an asset of the store attached to it
+//   relationUpdate { fromRef, key | toRef, data: { kind?, name?, pathList? } }   how an asset is named and indexed
 //   relationDelete { fromRef, key | toRef, isTargetDeleted? }        an asset taken out (kept, or deleted)
+//   relationQuery { fromRef, text? }                                 its assets; with text, those the asset search finds
 // the data of one asset is written by the asset store's own provider
 // (update asset:local/{objectId} { text | data }).
 
@@ -34,7 +36,7 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
     label: state.name || state.id,
     description: `${objectFrontendStore.typeLabelGet(state.typeId)} · ${state.assetList.length} asset(s) · ${state.docPageAlias}`,
     summary: { assetCount: state.assetList.length, docPageAlias: state.docPageAlias, typeId: state.typeId },
-    capabilityList: ['read', 'update', 'delete', 'relationCreate', 'relationDelete'],
+    capabilityList: ['read', 'update', 'delete', 'relationCreate', 'relationUpdate', 'relationDelete'],
     open: { kind: 'objectFrontend', id: state.id },
   });
 
@@ -48,7 +50,9 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
       metadata: state.metadata,
       docPageAlias: state.docPageAlias,
       entryObjectId: state.entryObjectId,
-      assetList: state.assetList.map(({ key, kind, objectId, status }) => ({ key, kind, objectId, ref: `asset:local/${objectId}`, status })),
+      assetList: state.assetList.map(({ key, kind, name, pathList, objectId, status }) => ({
+        key, kind, name: name ?? '', pathList: pathList ?? [], objectId, ref: `asset:local/${objectId}`, status,
+      })),
       modeList: objectFrontendStore.modeListGet(state.typeId).map(({ id, label, category, comp }) => ({ id, label, category, comp })),
     },
   });
@@ -83,7 +87,8 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
       return [OBJECT_FRONTEND_TYPE_ROOT, ...objectFrontendStore.typeDeclaredList.map((type) => type.id)];
     },
     relationTypeList: ['core.member'],
-    capabilityList: ['query', 'resolve', 'read', 'relationQuery', 'create', 'update', 'delete', 'relationCreate', 'relationDelete'],
+    // relationText: its relation query takes the text itself (the asset search)
+    capabilityList: ['query', 'resolve', 'read', 'relationQuery', 'relationText', 'create', 'update', 'delete', 'relationCreate', 'relationUpdate', 'relationDelete'],
     // objects of frontend.object and every type below it
     createTypeList: [OBJECT_FRONTEND_TYPE_ROOT],
     versionGet: () => [objectFrontendStore.config, objectFrontendStore.stores.assetStore.objectById],
@@ -154,7 +159,8 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
         if (spec.typeId && spec.typeId !== 'asset.object') throw codeError(-1, `a member of a frontend object is an asset (asset.object), not a ${spec.typeId}`);
         const content = spec.content ?? {};
         const result = resultCheck(await objectFrontendStore.assetCreate(id, {
-          key: memberOf.key, kind: memberOf.data?.kind ?? content.kind, lang: content.lang ?? 'yaml', text: textOfContent(content), note: content.note,
+          key: memberOf.key, kind: memberOf.data?.kind ?? content.kind, name: memberOf.data?.name, pathList: memberOf.data?.pathList,
+          lang: content.lang ?? 'yaml', text: textOfContent(content), note: content.note,
         }));
         return {
           descriptor: { ref: `asset:local/${result.data.objectId}`, typeList: ['asset.object'], label: result.data.key },
@@ -206,7 +212,9 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
       if (spec.type !== 'core.member') throw codeError(-1, `a frontend object keeps core.member relations only (its assets), not ${spec.type}`);
       const objectId = assetObjectIdOfRef(spec.toRef);
       if (!objectId) throw codeError(-1, `the member of a frontend object is an asset: asset:local/{objectId}, not ${spec.toRef}`);
-      resultCheck(await objectFrontendStore.assetAttach(idOfRef(spec.fromRef), objectId, { key: spec.key, kind: spec.data?.kind }));
+      resultCheck(await objectFrontendStore.assetAttach(idOfRef(spec.fromRef), objectId, {
+        key: spec.key, kind: spec.data?.kind, name: spec.data?.name, pathList: spec.data?.pathList,
+      }));
       return { relation: { fromRef: spec.fromRef, toRef: spec.toRef, type: 'core.member' } };
     },
 
@@ -222,15 +230,34 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
 
     // from an object: its assets, in the order of its entry; to an asset: the
     // object it belongs to
-    // from an object: its assets, in the order of its entry; to an asset: the
-    // object it belongs to
-    relationQuery: async ({ fromRef, toRef }) => {
+    // how an asset is named and indexed in its object: the data of its
+    // member entry ({ kind, name, pathList }, paths replaced whole)
+    relationUpdate: async (spec) => {
+      const id = idOfRef(spec.fromRef);
+      await ready([id]);
+      const state = objectFrontendStore.objectGet(id);
+      const keyOfTarget = spec.toRef ? state.assetList.find((asset) => `asset:local/${asset.objectId}` === spec.toRef)?.key : undefined;
+      const key = String(spec.key ?? '').replace(/^member\//, '') || keyOfTarget;
+      if (!key) throw codeError(-3, `${spec.fromRef} has no member ${spec.key ?? spec.toRef}`);
+      const data = spec.data ?? {};
+      const keyUnknownList = Object.keys(data).filter((item) => !['kind', 'name', 'pathList'].includes(item));
+      if (keyUnknownList.length > 0) throw codeError(-1, `the entry of an asset holds kind, name, pathList (not ${keyUnknownList.join(', ')}); its data is the asset's own (object/update)`);
+      resultCheck(await objectFrontendStore.assetMetaSet(id, key, data));
+      return { relation: { fromRef: spec.fromRef, key: `member/${key}`, type: 'core.member' } };
+    },
+
+    // from an object: its assets, in the order of its entry, or with a text
+    // the ones the asset search finds, best first (the object search's
+    // words: kind:, name:, path:, key:, id:); to an asset: the object it
+    // belongs to. the data of each: its kind, name, paths and state
+    relationQuery: async ({ fromRef, toRef, text }) => {
       await ready();
       const relationList = [];
       const stateList = fromRef ? [objectFrontendStore.objectGet(idOfRef(fromRef))] : stateFoundList();
       for (const state of stateList) {
         if (state.status !== 'found') continue;
-        state.assetList.forEach((asset, index) => {
+        const assetList = text ? objectFrontendAssetSearch(state.assetList, text).hitList.map((hit) => hit.asset) : state.assetList;
+        assetList.forEach((asset, index) => {
           const toRefAsset = `asset:local/${asset.objectId}`;
           if (toRef && toRef !== toRefAsset) return;
           relationList.push({
@@ -239,8 +266,8 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
             fromRef: objectFrontendRefBuild(state.id),
             toRef: toRefAsset,
             order: index,
-            label: asset.key,
-            data: { kind: asset.kind, status: asset.status },
+            label: asset.name || asset.key,
+            data: { kind: asset.kind, name: asset.name ?? '', pathList: asset.pathList ?? [], status: asset.status },
           });
         });
       }

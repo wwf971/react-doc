@@ -12,7 +12,8 @@ import {
 import {
   OBJECT_FRONTEND_CONFIG_FILE_NAME, OBJECT_FRONTEND_KEY_REGEX, OBJECT_FRONTEND_MODE_ID_REGEX, OBJECT_FRONTEND_ROLE_ENTRY,
   OBJECT_FRONTEND_TYPE_ID_REGEX, OBJECT_FRONTEND_TYPE_PREFIX_RESERVED_LIST, OBJECT_FRONTEND_TYPE_ROOT,
-  objectFrontendAssetKeyFree, objectFrontendEntryParse, objectFrontendEntryTextBuild, objectFrontendRefBuild,
+  objectFrontendAssetKeyFree, objectFrontendAssetPathNormalize, objectFrontendEntryParse, objectFrontendEntryTextBuild,
+  objectFrontendRefBuild,
 } from '../src/lib/doc-object-frontend.js';
 
 // The frontend object service layer on the development server (design:
@@ -423,7 +424,10 @@ export function objectFrontendMetaSet(
 // object, then listed in the entry under a key unique in the object
 export function objectFrontendAssetCreate(
   context: WriteContext,
-  input: { id: string; key?: string; kind?: string; lang?: string; text: string; note?: string; saveMode?: 'inPlace' | 'newVersion' },
+  input: {
+    id: string; key?: string; kind?: string; name?: string; pathList?: unknown; lang?: string; text: string; note?: string;
+    saveMode?: 'inPlace' | 'newVersion';
+  },
 ): ObjectFrontendWriteResult & { key: string; objectId: string } {
   const { store } = context;
   const item = itemGet(context.config, input.id);
@@ -434,6 +438,7 @@ export function objectFrontendAssetCreate(
   }
   const key = objectFrontendAssetKeyFree(entry, input.key ?? '', kind);
   if (!key) throw new AssetError(-1, `the object has an asset of the key ${input.key} already`);
+  const naming = assetNamingRead(entry, '', input);
   const { object } = store.objectCreate({
     lang: String(input.lang ?? 'yaml'),
     data: Buffer.from(String(input.text ?? ''), 'utf-8'),
@@ -443,7 +448,7 @@ export function objectFrontendAssetCreate(
     owner: { ref: objectFrontendRefBuild(item.id) },
     saveMode: input.saveMode,
   });
-  const entryNext = { ...entry, assetList: [...entry.assetList, { key, kind, objectId: object.objectId }] };
+  const entryNext = { ...entry, assetList: [...entry.assetList, { key, kind, objectId: object.objectId, ...naming }] };
   try {
     store.objectUpdate({ objectId: meta.objectId, hashBase: hash, data: Buffer.from(objectFrontendEntryTextBuild(entryNext), 'utf-8'), mode: 'inPlace' });
   } catch (error) {
@@ -491,7 +496,7 @@ export function objectFrontendAssetRemove(
 // declares the object already (a stray: not listed) is only listed
 export function objectFrontendAssetAttach(
   context: WriteContext,
-  input: { id: string; objectId: string; key?: string; kind?: string },
+  input: { id: string; objectId: string; key?: string; kind?: string; name?: string; pathList?: unknown },
 ): ObjectFrontendWriteResult {
   const { store } = context;
   const item = itemGet(context.config, input.id);
@@ -504,13 +509,56 @@ export function objectFrontendAssetAttach(
   const kind = String(input.kind ?? '');
   const key = objectFrontendAssetKeyFree(entry, input.key ?? '', kind);
   if (!key) throw new AssetError(-1, `the object has an asset of the key ${input.key} already`);
+  const naming = assetNamingRead(entry, '', input);
   if (!assetMeta.owner) store.objectMetaSet(assetMeta.objectId, { owner: { ref } });
   if (assetMeta.folder === meta.folder && groupIsOwn(meta, item.id) && assetMeta.groupPath !== meta.groupPath) {
     store.objectMove(assetMeta.objectId, { groupPath: meta.groupPath });
   }
-  const entryNext = { ...entry, assetList: [...entry.assetList, { key, kind, objectId: assetMeta.objectId }] };
+  const entryNext = { ...entry, assetList: [...entry.assetList, { key, kind, objectId: assetMeta.objectId, ...naming }] };
   store.objectUpdate({ objectId: meta.objectId, hashBase: hash, data: Buffer.from(objectFrontendEntryTextBuild(entryNext), 'utf-8'), mode: 'inPlace' });
   return writeResultBuild(context, item.id, [store.objectGet(assetMeta.objectId), store.objectGet(meta.objectId)]);
+}
+
+// how an asset of an object is named and indexed, in its entry: its name,
+// its paths (replaced whole; [] removes them), its kind. a path another
+// asset of the object has is refused
+export function objectFrontendAssetMetaSet(
+  context: WriteContext,
+  input: { id: string; key: string; name?: string | null; pathList?: unknown; kind?: string },
+): ObjectFrontendWriteResult {
+  const { store } = context;
+  const item = itemGet(context.config, input.id);
+  const { meta, entry, hash } = entryRead(store, item);
+  const asset = entry.assetList.find((one) => one.key === input.key);
+  if (!asset) throw new AssetError(-3, `the object has no asset ${input.key}`);
+  const naming = assetNamingRead(entry, asset.key, { name: input.name === null ? '' : input.name ?? asset.name, pathList: input.pathList ?? asset.pathList ?? [] });
+  const assetNext: any = { key: asset.key, kind: input.kind ?? asset.kind, objectId: asset.objectId, ...naming };
+  const entryNext = { ...entry, assetList: entry.assetList.map((one) => (one === asset ? assetNext : one)) };
+  store.objectUpdate({ objectId: meta.objectId, hashBase: hash, data: Buffer.from(objectFrontendEntryTextBuild(entryNext), 'utf-8'), mode: 'inPlace' });
+  return writeResultBuild(context, item.id, [store.objectGet(meta.objectId)]);
+}
+
+// { name?, pathList? } of an asset as a write gives them: the name trimmed,
+// the paths in their canonical form, each once, none another asset of the
+// object (other than keyOwn) has
+function assetNamingRead(entry: any, keyOwn: string, input: { name?: unknown; pathList?: unknown }): { name?: string; pathList?: string[] } {
+  const naming: { name?: string; pathList?: string[] } = {};
+  const name = String(input.name ?? '').trim();
+  if (name.length > 200) throw new AssetError(-1, 'the name of an asset is at most 200 characters');
+  if (name) naming.name = name;
+  if (input.pathList === undefined || input.pathList === null) return naming;
+  if (!Array.isArray(input.pathList)) throw new AssetError(-1, 'pathList is a list of paths (/kind/...)');
+  const pathList: string[] = [];
+  for (const pathText of input.pathList) {
+    const { path, message } = objectFrontendAssetPathNormalize(pathText);
+    if (message) throw new AssetError(-1, `the path ${JSON.stringify(pathText)}: ${message}`);
+    if (!path || pathList.includes(path)) continue;
+    const owner = entry.assetList.find((one: any) => one.key !== keyOwn && (one.pathList ?? []).includes(path));
+    if (owner) throw new AssetError(-1, `the path ${path} is the path of ${owner.name || owner.key} already`);
+    pathList.push(path);
+  }
+  if (pathList.length > 0) naming.pathList = pathList;
+  return naming;
 }
 
 // ---------- helpers ----------

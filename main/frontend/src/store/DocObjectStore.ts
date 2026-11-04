@@ -84,7 +84,9 @@ export type ObjectQuerySpec = {
   providerIdList?: string[];
 };
 
-export type ObjectRelationSpec = { fromRef?: string; toRef?: string; typeList?: string[] | string };
+// text: words every relation must match (its key, label, data), or the
+// provider's own search of them when it has the capability relationText
+export type ObjectRelationSpec = { fromRef?: string; toRef?: string; typeList?: string[] | string; text?: string };
 
 // a new object (doc_page_impl_obj.md#writing-through-the-registry):
 //   typeId     what it is; the provider that creates objects of a type it is
@@ -160,6 +162,7 @@ export type ObjectProvider = {
   delete?: (ref: string, options: Record<string, any>, registry: any) => Promise<{ descriptor?: any } | void>;
   relationCreate?: (spec: ObjectRelationWriteSpec, registry: any) => Promise<{ relation: any }>;
   relationDelete?: (spec: ObjectRelationWriteSpec, registry: any) => Promise<{ relation?: any } | void>;
+  relationUpdate?: (spec: ObjectRelationWriteSpec, registry: any) => Promise<{ relation?: any } | void>;
   // facts about a type beyond its definition that this provider knows (the
   // modes of a frontend object type): merged into typeInfoGet
   typeInfoGet?: (typeId: string, registry: any) => Record<string, any> | undefined;
@@ -209,6 +212,7 @@ export const objectEventTypeList = [
   'objectDeleteRequest',
   'objectRelationQueryRequest',
   'objectRelationCreateRequest',
+  'objectRelationUpdateRequest',
   'objectRelationDeleteRequest',
   'objectOpenRequest',
 ];
@@ -253,6 +257,7 @@ export class DocObjectStore {
       delete: (ref: string, options?: any) => this.delete(ref, options),
       relationQuery: (spec: ObjectRelationSpec) => this.relationQuery(spec),
       relationCreate: (spec: ObjectRelationWriteSpec) => this.relationCreate(spec),
+      relationUpdate: (spec: ObjectRelationWriteSpec) => this.relationUpdate(spec),
       relationDelete: (spec: ObjectRelationWriteSpec) => this.relationDelete(spec),
       typeGet: (typeId: string) => this.typeRegistry.typeGet(typeId),
       typeInfoGet: (typeId: string) => this.typeInfoGet(typeId),
@@ -618,12 +623,13 @@ export class DocObjectStore {
 
   // ---------- relations ----------
 
-  relationSpecNormalize(spec: ObjectRelationSpec = {}): { fromRef: string; toRef: string; typeList: string[] } {
+  relationSpecNormalize(spec: ObjectRelationSpec = {}): { fromRef: string; toRef: string; typeList: string[]; text: string } {
     const typeListRaw = typeof spec.typeList === 'string' ? [spec.typeList] : spec.typeList;
     return {
       fromRef: String(spec.fromRef ?? ''),
       toRef: String(spec.toRef ?? ''),
       typeList: Array.isArray(typeListRaw) && typeListRaw.length > 0 ? typeListRaw.map(String) : ['core.relation'],
+      text: String(spec.text ?? '').trim(),
     };
   }
 
@@ -642,7 +648,7 @@ export class DocObjectStore {
     return this.requestRun(this.relationByKey, objectRequestKeyBuild(spec), options.isFresh === true, () => this.relationFetch(spec));
   }
 
-  private async relationFetch(spec: { fromRef: string; toRef: string; typeList: string[] }): Promise<{ result: ObjectRelationResult; providerIdList: string[] }> {
+  private async relationFetch(spec: { fromRef: string; toRef: string; typeList: string[]; text: string }): Promise<{ result: ObjectRelationResult; providerIdList: string[] }> {
     const registry = this.typeRegistry;
     const providerList = this.providerList.filter((provider) => provider.capabilityList.includes('relationQuery') && provider.relationQuery);
     const answerList = await Promise.all(providerList.map((provider) => this.providerAsk(provider, registry, spec.typeList, provider.relationTypeList ?? [],
@@ -660,6 +666,7 @@ export class DocObjectStore {
         if (spec.fromRef && relation.fromRef !== spec.fromRef) continue;
         if (spec.toRef && relation.toRef !== spec.toRef) continue;
         if (!registry.isAssignableAny([relation.type], spec.typeList)) continue;
+        if (spec.text && !provider.capabilityList.includes('relationText') && !relationTextIsMatch(relation, spec.text)) continue;
         relationList.push(relation);
       }
     });
@@ -819,7 +826,13 @@ export class DocObjectStore {
     return this.relationWrite(spec, 'relationDelete');
   }
 
-  private async relationWrite(spec: ObjectRelationWriteSpec, capability: 'relationCreate' | 'relationDelete'): Promise<ObjectResult> {
+  // the data of a relation entry changed by its keeper (how an asset of a
+  // frontend object is named and indexed: { kind, name, pathList })
+  relationUpdate(spec: ObjectRelationWriteSpec): Promise<ObjectResult> {
+    return this.relationWrite(spec, 'relationUpdate');
+  }
+
+  private async relationWrite(spec: ObjectRelationWriteSpec, capability: 'relationCreate' | 'relationUpdate' | 'relationDelete'): Promise<ObjectResult> {
     const fromRef = String(spec?.fromRef ?? '');
     const provider = this.providerOfRefGet(fromRef);
     const reason = this.providerReasonGet(provider, fromRef, capability);
@@ -844,12 +857,12 @@ export class DocObjectStore {
     }
   }
 
-  private providerReasonGet(provider: ObjectProvider | undefined, ref: string, capability: 'read' | 'update' | 'delete' | 'relationCreate' | 'relationDelete'): string {
+  private providerReasonGet(provider: ObjectProvider | undefined, ref: string, capability: 'read' | 'update' | 'delete' | 'relationCreate' | 'relationUpdate' | 'relationDelete'): string {
     if (!objectRefParse(ref)) return `${ref || '(empty)'} is not an object reference`;
     if (!provider) return `no provider of the namespace ${objectRefParse(ref)!.namespace}`;
     if (!provider.capabilityList.includes(capability) || !provider[capability]) {
       return capability.startsWith('relation')
-        ? `${provider.label} does not ${capability === 'relationCreate' ? 'add' : 'remove'} relations of its objects`
+        ? `${provider.label} does not ${({ relationCreate: 'add', relationUpdate: 'change', relationDelete: 'remove' } as any)[capability]} relations of its objects`
         : `${provider.label} does not ${capability} its objects`;
     }
     const status = this.providerStatusGet(provider);
@@ -1118,6 +1131,8 @@ export class DocObjectStore {
         return this.delete(String(data.ref ?? ''), data.options ?? {});
       case 'objectRelationCreateRequest':
         return this.relationCreate(data as ObjectRelationWriteSpec);
+      case 'objectRelationUpdateRequest':
+        return this.relationUpdate(data as ObjectRelationWriteSpec);
       case 'objectRelationDeleteRequest':
         return this.relationDelete(data as ObjectRelationWriteSpec);
       case 'objectOpenRequest':
@@ -1149,6 +1164,12 @@ export class ObjectViewState {
     this.draftByKey = {};
     this.writeMessage = '';
   }
+}
+
+// every word of the text in the key, the label or the data of a relation
+function relationTextIsMatch(relation: any, text: string): boolean {
+  const haystack = `${relation.key ?? ''} ${relation.label ?? ''} ${JSON.stringify(relation.data ?? {})}`.toLowerCase();
+  return text.toLowerCase().split(/\s+/).filter(Boolean).every((word) => haystack.includes(word));
 }
 
 function completenessBuild(providerList: ObjectCompleteness['providerList']): ObjectCompleteness {

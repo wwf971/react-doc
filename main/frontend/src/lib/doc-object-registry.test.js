@@ -224,3 +224,28 @@ test('the writes go to the provider that owns what they change: the creator of a
   assert.deepEqual(store.typeInfoGet('x.box').descendantList, ['x.box-small']);
   assert.ok(store.typeInfoListGet(['x.box']).every((type) => type.id.startsWith('x.')));
 });
+
+test('a relation entry is changed by its keeper; a relation query with a text is matched, or searched by a provider that can', async () => {
+  const store = new DocObjectStore({ docStore: { compById: {} } });
+  const updateList = [];
+  const relationList = [
+    { key: 'member/a', type: 'core.member', fromRef: 'box:1', toRef: 'file:a', label: 'Dune', data: { pathList: ['/book/dune'] } },
+    { key: 'member/b', type: 'core.member', fromRef: 'box:1', toRef: 'file:b', label: 'Solaris', data: {} },
+  ];
+  store.providerAdd(providerBuild({
+    id: 'boxes', namespaceList: ['box'], relationTypeList: ['core.member'],
+    capabilityList: ['query', 'resolve', 'relationQuery', 'relationUpdate'],
+    relationQuery: () => ({ relationList }),
+    relationUpdate: async (spec) => { updateList.push([spec.fromRef, spec.key, spec.data]); },
+  }));
+  store.providerAdd(providerBuild({
+    id: 'searching', namespaceList: ['s'], relationTypeList: ['core.member'],
+    capabilityList: ['query', 'resolve', 'relationQuery', 'relationText'],
+    relationQuery: ({ text }) => ({ relationList: text ? [{ key: 'member/x', type: 'core.member', fromRef: 's:1', toRef: 'file:x', label: `found by ${text}` }] : [] }),
+  }));
+  assert.equal((await store.relationUpdate({ fromRef: 'box:1', key: 'member/a', data: { name: 'Dune' } })).code, 0);
+  assert.deepEqual(updateList, [['box:1', 'member/a', { name: 'Dune' }]]);
+  const result = await store.relationQuery({ typeList: ['core.member'], text: '/book' });
+  assert.deepEqual(result.relationList.map((relation) => relation.key), ['member/a', 'member/x']);
+  assert.match((await store.relationUpdate({ fromRef: 's:1', key: 'member/x', data: {} })).message, /does not change relations/);
+});

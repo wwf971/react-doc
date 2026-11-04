@@ -127,30 +127,50 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
     get writeUnavailableReason() { return objectFrontendStore.writeUnavailableReason; },
     // the structural write in progress (an asset being created or removed)
     get write() { return objectFrontendStore.write; },
+    // every read and write of one asset takes an asset reference: a path
+    // (/book/sci-fi/dune), a key (book-1), name:…, id:…
+    // (doc_page_impl_obj_frontend.md#naming-and-finding-the-assets)
     assetList: (kind) => stateGet().assetList.filter((asset) => kind === undefined || asset.kind === kind),
-    assetGet: (key) => stateGet().assetList.find((asset) => asset.key === key),
-    // { status, message, text } of an asset's head
-    assetTextGet: (key) => objectFrontendStore.assetTextGet(ref, key),
-    // { status, message, data } of an asset whose text is yaml (or json)
-    assetDataGet: (key) => {
-      const result = objectFrontendStore.assetTextGet(ref, key);
+    // { status: found | missing | deleted | unknown | loading, asset?, by, message }
+    assetResolve: (assetRef) => objectFrontendStore.assetResolve(ref, assetRef),
+    assetGet: (assetRef) => objectFrontendStore.assetResolve(ref, assetRef).asset,
+    // { tokenList, hitList: [{ asset, score, matchList, pathMatched }] }: the assets found by words
+    assetSearch: (text, options) => objectFrontendStore.assetSearch(ref, text, options),
+    // [{ kind: folder | asset, path, segment, asset?, assetCount }]: what completes a typed path
+    assetComplete: (text, options) => objectFrontendStore.assetComplete(ref, text, options),
+    // { status, message, text, asset, assetStatus } of an asset's head
+    assetTextGet: (assetRef) => objectFrontendStore.assetTextGet(ref, assetRef),
+    // { status, message, data, asset, assetStatus } of an asset whose text is yaml (or json)
+    assetDataGet: (assetRef) => {
+      const result = objectFrontendStore.assetTextGet(ref, assetRef);
       if (result.status !== 'done') return { ...result, data: undefined };
       try {
         return { ...result, data: yamlParse(result.text) };
       } catch (error) {
-        return { ...result, status: 'error', message: `the asset ${key} is not yaml: ${String(error?.message ?? error)}`, data: undefined };
+        return { ...result, status: 'error', message: `the asset ${assetRef} is not yaml: ${String(error?.message ?? error)}`, data: undefined };
       }
     },
-    // a new asset: { key?, kind?, lang?, text } or { ..., data } (written as yaml); { code, data: { key, objectId } }
+    // a new asset: { key?, kind?, name?, pathList?, lang?, text } or { ..., data } (written as yaml);
+    // { code, data: { key, objectId } }. a path another asset has is refused
     assetCreate: (input) => objectFrontendStore.assetCreate(stateGet().id, {
       key: input.key,
       kind: input.kind,
+      name: input.name,
+      pathList: input.pathList,
       lang: input.lang ?? 'yaml',
       text: input.text ?? yamlStringify(input.data ?? {}),
       note: input.note,
     }),
-    assetWrite: (key, textOrData, note) => objectFrontendStore.assetWrite(ref, key, typeof textOrData === 'string' ? textOrData : yamlStringify(textOrData ?? {}), note),
-    assetRemove: (key, options = {}) => objectFrontendStore.assetRemove(stateGet().id, key, options.isAssetKept === true),
+    assetWrite: (assetRef, textOrData, note) => objectFrontendStore.assetWrite(ref, assetRef, typeof textOrData === 'string' ? textOrData : yamlStringify(textOrData ?? {}), note),
+    // how an asset is named and indexed: { name?, pathList?, kind? } (paths replaced whole)
+    assetMetaSet: (assetRef, change) => {
+      const asset = objectFrontendStore.assetResolve(ref, assetRef).asset;
+      return asset ? objectFrontendStore.assetMetaSet(stateGet().id, asset.key, change) : Promise.resolve({ code: -1, message: `the object has no asset ${assetRef}` });
+    },
+    assetRemove: (assetRef, options = {}) => {
+      const asset = objectFrontendStore.assetResolve(ref, assetRef).asset;
+      return asset ? objectFrontendStore.assetRemove(stateGet().id, asset.key, options.isAssetKept === true) : Promise.resolve({ code: -1, message: `the object has no asset ${assetRef}` });
+    },
     metadataSet: (patch) => objectFrontendStore.metadataSet(ref, patch),
     // the block switched to another mode / other parameters: the block's own
     // parameters, changed a key at a time (null removes one) unless isReplaced;

@@ -5,7 +5,7 @@ description: Objects the page keeps itself, in assets, drawn in the modes their 
 
 A **frontend object** is an object of the [object registry](object-registry.md) whose data the page keeps itself, in the asset service layer: think of it as a service that runs in the page, hosting objects as free as their types make them. Each object has an **entry asset** that says what it is (its name, its type, its assets, its metadata) and any number of **assets of its own**, each declaring the object it belongs to. A doc page lists its objects, and declares their **types**, in `.doc-page/object-frontend.yaml`. The design is `main/doc_page_impl_obj_frontend.md`.
 
-The objects below are reading lists: a type of this doc page, `example.reading-list`. One reading list holds two kinds of data, each piece one asset: **books** (a title, an author, a status) and **notes** (a text, naming the book it is about). Its type declares the ways to work with it, its **modes**: a shelf, cards, a form adding a book, one book with its notes, some numbers.
+The objects below are reading lists: a type of this doc page, `example.reading-list`. One reading list holds two kinds of data, each piece one asset: **books** (a title, an author, a genre, a status) and **notes** (a text, naming the book it is about). Its type declares the ways to work with it, its **modes**: a shelf, cards, a form adding a book, one book with its notes, a search, some numbers.
 
 ## The entry component
 
@@ -60,7 +60,7 @@ mode: add
 object: frontend:w5j7ozoijzl
 mode: book
 param:
-  book: book-1
+  book: /book/sci-fi/dune
 ```
 
 <!--renderComp=ObjectFrontend-->
@@ -68,6 +68,37 @@ param:
 object: frontend:w5j7ozoijzl
 mode: stats
 ```
+
+## Naming and finding the assets
+
+Each asset of a reading list has a **name** (a book its title) and **paths**, as many as the list wants, read the way an operating system reads a path: a book is filed by its genre and by its author, a note under its book, the kind always first, the pattern the layer recommends:
+
+```text
+/book/sci-fi/dune                 /author/frank-herbert/dune          /note/dune/1
+/book/non-fiction/a-pattern-language   /author/christopher-alexander/a-pattern-language
+```
+
+The folders (`/book`, `/book/sci-fi`, `/author`) are implied by the paths and hold nothing themselves. Wherever a mode, a block or a caller names one asset, it writes an **asset reference**: a path (`/book/sci-fi/dune`), the key (`book-1`), `name:Dune`, or `id:` and the asset's object id. The book above is named by its path; a note names its book by the key, which never changes, since a path is an index the list may rearrange.
+
+The mode **find** uses the two pieces the layer ships for components of modes: a search by words in any order, as the object search reads them (`dune`, `herbert`, `kind:note`, `path:/author/`), and a path typed with completion, folder by folder (type `/`, then `a`, Tab, …). Choosing a book opens it; a note opens its book.
+
+<!--renderComp=ObjectFrontend-->
+```yaml
+object: frontend:w5j7ozoijzl
+mode: find
+```
+
+A reference that names nothing, or an asset its list names and the store has lost, is said where it is used, never an empty block:
+
+<!--renderComp=ObjectFrontend-->
+```yaml
+object: frontend:w5j7ozoijzl
+mode: book
+param:
+  book: /book/sci-fi/solaris
+```
+
+The names and paths of the assets are edited in the **Frontend objects** tab too, where a search finds an asset of the chosen object, and the registry's apis offer them to agents (`relation/query { fromRef, text }`, `relation/update { fromRef, key, data: { name, pathList } }`).
 
 ## Types and inheritance
 

@@ -5,4 +5,8 @@ assetList:
   - key: book-1
     kind: book
     objectId: w5j7pn121sr
+    name: Invisible Cities
+    pathList:
+      - /book/fiction/invisible-cities
+      - /author/italo-calvino/invisible-cities
 metadata: {}

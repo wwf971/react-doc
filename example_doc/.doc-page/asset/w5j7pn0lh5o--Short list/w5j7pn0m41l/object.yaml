@@ -15,8 +15,8 @@ versionList:
     versionIdPrevList: []
     time: 20261105_01185259+09
     note: the entry of the frontend object Short list
-    size: 174
-    hash: 948e145abd7ed408b6b1719503c143f3fe6e73d6
+    size: 301
+    hash: 5b1b88ee61e8d5f4f4fc55e04a5e156c518e4c4b
     isLocked: false
     dependencyList: []
 eventList:
@@ -25,4 +25,13 @@ eventList:
     versionId: w5j7pn0lmnu
   - eventType: updateInPlace
     time: 20261105_01185261+09
+    versionId: w5j7pn0lmnu
+  - eventType: updateInPlace
+    time: 20261105_03374823+09
+    versionId: w5j7pn0lmnu
+  - eventType: updateInPlace
+    time: 20261105_03410662+09
+    versionId: w5j7pn0lmnu
+  - eventType: updateInPlace
+    time: 20261105_03410669+09
     versionId: w5j7pn0lmnu

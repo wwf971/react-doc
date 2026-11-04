@@ -24,3 +24,8 @@ compList:
     entry: ./ReadingList.jsx
     export: ReadingListStats
     defineOptionsExport: readingListStatsDefineOptions
+  - tagName: ReadingListFind
+    id: specific/ReadingListFind
+    entry: ./ReadingList.jsx
+    export: ReadingListFind
+    defineOptionsExport: readingListFindDefineOptions

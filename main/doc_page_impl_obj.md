@@ -159,7 +159,8 @@ provider
   relationTypeList          the types of the relations it provides
   capabilityList            some of query, count, resolve, read, update, relationQuery (count: how many a query
                             would answer, without listing them: the preflight of a search), and the writes
-                            create, delete, relationCreate, relationDelete (#writing-through-the-registry)
+                            create, delete, relationCreate, relationUpdate, relationDelete (#writing-through-the-registry);
+                            relationText: its relation query searches the text itself
   createTypeList            the types it creates objects of (and of every type below them)
   queryFilterList           the filters its query understands (isDone, kind, docPageAlias)
   cacheSecond               how long its answers may be reused
@@ -203,7 +204,7 @@ The operations are separate on purpose, each with its own promise:
 | `resolve(ref, { isVerify: true })` | the same, asked again now | its provider, whatever is cached |
 | `read(ref)` | `{ descriptor, content }` | its provider, always: never a cache |
 | `update(ref, patch)` | the provider's answer to a change it checks | its provider |
-| `relationQuery({ fromRef, toRef, typeList })` | relations, with how complete the answer is | every provider of an assignable relation type |
+| `relationQuery({ fromRef, toRef, typeList, text })` | relations, with how complete the answer is; with a text, those matching it (a provider declaring `relationText` searches them itself: the assets of a frontend object by name and path) | every provider of an assignable relation type |
 | `create({ typeId, content, place, memberOf })`, `delete(ref, options)`, `relationCreate(spec)`, `relationDelete(spec)` | the provider's answer to a write it checks ([below](#writing-through-the-registry)) | the provider owning what the write changes |
 
 **A query is federated.** The registry asks each provider whose types are assignable to those asked for (a provider of `todo-list.todo` for `core.task`, everyone for `core.object`), in parallel, keeps of each answer the objects that are of the types asked for and match the text, adds the registered descriptors nobody answered for, and returns them with a **completeness**: one entry per provider, `answered`, `cached`, `partial` (the provider said it listed only part: the sections of the compiled documents only), `registered`, `unavailable`, `timedOut`, `skipped`, `failed`, with a count and a message. `isComplete` is true only when every provider answered in full, and even then it means complete *for those providers*, never that no other object exists. A consumer shows the line or acts on it: a list says "3 objects · the service backend: unavailable"; a service that must have everything refuses an incomplete answer.
@@ -234,7 +235,7 @@ A change of an object is its provider's: the registry finds the provider and han
 | `create({ typeId, content, place?, label? })` | the first provider whose `createTypeList` holds a type `typeId` is assignable to | `example.reading-list` (below `frontend.object`) by the frontend objects; `asset.object` by the asset store |
 | `create({ memberOf: { ref, key?, data? }, content })` | the provider of the collection `memberOf` names: a collection keeps its members, so it makes the member and the relation | an asset created in a frontend object, listed under its key |
 | `delete(ref, options)` | the provider of the reference | a frontend object with its assets (`{ isMemberKept }` keeps them); an asset's deletion mark |
-| `relationCreate({ fromRef, type, toRef, key?, data? })`, `relationDelete({ fromRef, key \| toRef, isTargetDeleted? })` | the provider of `fromRef`: a relation belongs to whoever keeps it ([below](#relations-collections-and-groups)) | an asset of the store attached to a frontend object; one taken out, kept or deleted |
+| `relationCreate({ fromRef, type, toRef, key?, data? })`, `relationUpdate({ fromRef, key \| toRef, data })`, `relationDelete({ fromRef, key \| toRef, isTargetDeleted? })` | the provider of `fromRef`: a relation belongs to whoever keeps it ([below](#relations-collections-and-groups)) | an asset of the store attached to a frontend object; its name and paths changed (the data of its entry); one taken out, kept or deleted |
 
 What a write carries is in the words of the object's type (`content`, `patch`, `options`), the way an update's patch is: the registry checks only that a type exists and that a provider offers the write (else `-2` with the reason: "no provider creates objects of the type core.task", "the doc page source does not delete its objects"). A provider offering a write says so twice: in its `capabilityList`, and per object in the descriptor's `capabilityList` (a locked asset offers no update), which is what a consumer reads before it offers the change. Which providers write today: the frontend objects (create, update, delete, the relations of their assets, [In the object registry](doc_page_impl_obj_frontend.md#in-the-object-registry)), the asset store (create, update, delete), the kernel through the peer (update of a config), the instances whose scripts implement `objectUpdate`. The documents are changed by the edit layer, not through the registry ([TODO](doc_page_impl_TODO.md#object-update-authorization)); creating and deleting objects of a service instance is [TODO](doc_page_impl_TODO.md#object-backend-write).
 
@@ -254,8 +255,10 @@ content    object/read { ref }                the content, from its provider (an
 writing    object/create { typeId?, content?, place?, memberOf?, label? }
            object/update { ref, patch }
            object/delete { ref, options? }
-relations  relation/query { fromRef?, toRef?, typeList? }
+relations  relation/query { fromRef?, toRef?, typeList?, text? }   text: words the relations must match (key, label,
+                                              data), or the provider's own search of them (capability relationText)
            relation/create { fromRef, toRef, type?, key?, data? }
+           relation/update { fromRef, key | toRef, data }
            relation/delete { fromRef, key | toRef, type?, isTargetDeleted? }
 ```
 
@@ -368,7 +371,7 @@ The backend cannot ask the page: the page is not a server, and may be closed. So
 
 ## From a component
 
-A component of the registry reaches the page's registry two ways: `config.object`, a stable service object (`resolve`, `query`, `read`, `update`, `create`, `delete`, `relationQuery`, `relationCreate`, `relationDelete`, `typeGet`, `typeInfoGet`, `typeIsAssignable`, `open`), and the event layer ([Events](doc_page_impl_event.md)), the route `object`: `objectResolveRequest { ref | refList, isVerify }`, `objectQueryRequest { typeList, text, filter, limit, isFresh }`, `objectRelationQueryRequest { fromRef, toRef, typeList }`, `objectReadRequest { ref }`, `objectUpdateRequest { ref, patch }`, `objectCreateRequest { typeId, content, place, memberOf }`, `objectDeleteRequest { ref, options }`, `objectRelationCreateRequest`, `objectRelationDeleteRequest` (the spec of the write), `objectOpenRequest { ref }`, each answered `{ code, data, message }`. A component of a service's module, which has its own module scope, uses the events. Opening an object goes to where its own layer shows it, and its provider does it: a document is navigated to, an instance or a template opens the Services tab on it, an asset the asset panel; an object nobody provides (a registration) is opened by the first provider that knows its kind of place.
+A component of the registry reaches the page's registry two ways: `config.object`, a stable service object (`resolve`, `query`, `read`, `update`, `create`, `delete`, `relationQuery`, `relationCreate`, `relationUpdate`, `relationDelete`, `typeGet`, `typeInfoGet`, `typeIsAssignable`, `open`), and the event layer ([Events](doc_page_impl_event.md)), the route `object`: `objectResolveRequest { ref | refList, isVerify }`, `objectQueryRequest { typeList, text, filter, limit, isFresh }`, `objectRelationQueryRequest { fromRef, toRef, typeList }`, `objectReadRequest { ref }`, `objectUpdateRequest { ref, patch }`, `objectCreateRequest { typeId, content, place, memberOf }`, `objectDeleteRequest { ref, options }`, `objectRelationCreateRequest`, `objectRelationUpdateRequest`, `objectRelationDeleteRequest` (the spec of the write), `objectOpenRequest { ref }`, each answered `{ code, data, message }`. A component of a service's module, which has its own module scope, uses the events. Opening an object goes to where its own layer shows it, and its provider does it: a document is navigated to, an instance or a template opens the Services tab on it, an asset the asset panel; an object nobody provides (a registration) is opened by the first provider that knows its kind of place.
 
 ## What is in the kernel, and what is not
 

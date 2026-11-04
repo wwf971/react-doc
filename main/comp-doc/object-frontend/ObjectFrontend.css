@@ -101,3 +101,13 @@
 .doc-object-frontend-edit .doc-object-search {
   margin: 0;
 }
+
+/* ---------- finding the assets of an object: the path input, the search ---------- */
+
+.doc-object-frontend-path-option-note {
+  overflow: hidden;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

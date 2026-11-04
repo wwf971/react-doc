@@ -17,7 +17,7 @@ import { apiDefine } from '../../frontend/src/lib/doc-api.js';
 //   finding    object/search, object/query, object/resolve
 //   content    object/read, object/open
 //   writing    object/create, object/update, object/delete
-//   relations  relation/query, relation/create, relation/delete
+//   relations  relation/query, relation/create, relation/update, relation/delete
 export const apiByIdObject = {
   'object/search': apiDefine({
     label: 'Search objects',
@@ -121,8 +121,23 @@ export const apiByIdObject = {
       { name: 'fromRef', type: 'string', description: 'from this object' },
       { name: 'toRef', type: 'string', description: 'to this object' },
       { name: 'typeList', type: 'list', description: 'the relation types (core.relation: all)' },
+      { name: 'text', type: 'string', description: 'words the relations must match (key, label, data); a provider may search them its own way (the assets of a frontend object: kind:, name:, path:, …)' },
     ],
     run: async ({ stores }, params) => ({ code: 0, message: '', data: await stores.objectStore.relationQuery(params, { isFresh: true }) }),
+  }),
+  'relation/update': apiDefine({
+    label: 'Change a relation',
+    description: 'The data of a relation entry, changed by the provider that keeps it: how an asset of a frontend object is named and indexed (data { kind?, name?, pathList? }, paths replaced whole).',
+    icon: Network,
+    palette: false,
+    paramList: [
+      { name: 'fromRef', type: 'string', isRequired: true, description: 'the object it is from' },
+      { name: 'key', type: 'string', description: 'its key (as relation/query answers it)' },
+      { name: 'toRef', type: 'string', description: 'or the object it is to' },
+      { name: 'type', type: 'string', description: 'the relation type (core.member when absent)' },
+      { name: 'data', type: 'any', isRequired: true, description: 'the change of its data' },
+    ],
+    run: ({ stores }, params) => stores.objectStore.relationUpdate(params),
   }),
   'relation/create': apiDefine({
     label: 'Add a relation',

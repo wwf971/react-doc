@@ -6,7 +6,7 @@ import {
 import { testCaseAssetResultSet, testCaseAssetWriteCheck } from '../../../built-in/comp-mdx/test-case-table/TestCaseTableApi.js';
 import {
   objectFrontendAssetAttach, objectFrontendAssetCreate, objectFrontendAssetRemove, objectFrontendConfigForPage,
-  objectFrontendCreate, objectFrontendDelete, objectFrontendMetaSet, objectFrontendRegister, type ObjectFrontendConfig,
+  objectFrontendAssetMetaSet, objectFrontendCreate, objectFrontendDelete, objectFrontendMetaSet, objectFrontendRegister, type ObjectFrontendConfig,
 } from './doc-object-frontend.ts';
 
 // Asset api of the development server (design: doc_page_impl_asset.md). Like
@@ -66,9 +66,10 @@ import {
 //   POST {endpoint}/object-frontend/register     { docPageAlias, entry }        an orphan entry listed again
 //   POST {endpoint}/object-frontend/delete       { id, isAssetKept? }
 //   POST {endpoint}/object-frontend/meta/set     { id, name?, description?, typeId?, metadata? }
-//   POST {endpoint}/object-frontend/asset/create { id, key?, kind?, lang?, text, note?, saveMode? }  (+ key, objectId)
+//   POST {endpoint}/object-frontend/asset/create { id, key?, kind?, name?, pathList?, lang?, text, note?, saveMode? }  (+ key, objectId)
+//   POST {endpoint}/object-frontend/asset/meta/set { id, key, name?, pathList?, kind? }   how an asset is named and indexed
 //   POST {endpoint}/object-frontend/asset/remove { id, key | objectId, isAssetKept? }
-//   POST {endpoint}/object-frontend/asset/attach { id, objectId, key?, kind? }
+//   POST {endpoint}/object-frontend/asset/attach { id, objectId, key?, kind?, name?, pathList? }
 //
 // every json response is { code, data, message }. code 0 is success; negative codes:
 //   -1  bad request or unexpected failure
@@ -182,6 +183,7 @@ async function objectFrontendRouteHandle(
     '/object-frontend/asset/create': () => objectFrontendAssetCreate(context, body),
     '/object-frontend/asset/remove': () => objectFrontendAssetRemove(context, body),
     '/object-frontend/asset/attach': () => objectFrontendAssetAttach(context, body),
+    '/object-frontend/asset/meta/set': () => objectFrontendAssetMetaSet(context, body),
   };
   const write = writeByRoute[route];
   if (!write) throw new AssetError(-1, `unknown frontend object route: ${method} ${route}`);

@@ -10,6 +10,8 @@ import { docAssetMiddlewareCreate } from './doc-asset-server.ts';
 import { docAssetConfigLoad, loadConfigDoc } from './doc-source.ts';
 import { objectFrontendConfigOfDocPageListGet } from './doc-object-frontend.ts';
 import {
+  objectFrontendAssetIndexBuild, objectFrontendAssetPathBuild, objectFrontendAssetPathComplete, objectFrontendAssetPathNormalize,
+  objectFrontendAssetRefResolve, objectFrontendAssetSearch,
   objectFrontendBlockRead, objectFrontendBlockTextBuild, objectFrontendEntryParse, objectFrontendModeChoose,
   objectFrontendModeListResolve,
 } from '../src/lib/doc-object-frontend.js';
@@ -213,4 +215,58 @@ test('group folders: an object is found at any depth, moved between groups, and 
   storeAgain.groupMove(storeAgain.folderList[0].path, 'g', 'h/i');
   assert.equal(storeAgain.objectGet(object.objectId).groupPath, 'h/i');
   assert.throws(() => storeAgain.objectMove(object.objectId, { groupPath: '../x' }), /not a group folder name/);
+});
+
+test('the paths of assets are read as os paths; the folders they imply complete a typed path, folder by folder', () => {
+  assert.deepEqual(objectFrontendAssetPathNormalize('book//sci-fi/./x/../dune/'), { path: '/book/sci-fi/dune', message: '' });
+  assert.match(objectFrontendAssetPathNormalize('/a/../..').message, /above the root/);
+  assert.match(objectFrontendAssetPathNormalize('/').message, /names no asset/);
+  assert.equal(objectFrontendAssetPathBuild('author', 'Ursula K. Le Guin', 'The Left Hand'), '/author/ursula-k-le-guin/the-left-hand');
+  const assetList = [
+    { key: 'book-1', kind: 'book', objectId: 'w1', name: 'Dune', pathList: ['/book/sci-fi/dune', '/author/frank-herbert/dune'], status: 'found' },
+    { key: 'book-2', kind: 'book', objectId: 'w2', name: 'Solaris', pathList: ['/book/sci-fi/solaris', '/book/sci-fi/dune'], status: 'missing' },
+    { key: 'note-1', kind: 'note', objectId: 'w3', name: 'Dune, again', pathList: ['/note/dune/1'], status: 'found' },
+  ];
+  const index = objectFrontendAssetIndexBuild(assetList);
+  // a path claimed twice names the first, and is reported
+  assert.equal(index.byPath.get('/book/sci-fi/dune').key, 'book-1');
+  assert.equal(index.problemList.length, 1);
+  assert.deepEqual(objectFrontendAssetPathComplete(index, '/').map((item) => `${item.kind}:${item.path}:${item.assetCount}`), ['folder:/author:1', 'folder:/book:2', 'folder:/note:1']);
+  assert.deepEqual(objectFrontendAssetPathComplete(index, '/book/sci-fi/so').map((item) => item.path), ['/book/sci-fi/solaris']);
+  assert.deepEqual(objectFrontendAssetPathComplete(index, 'sci-fi/', { base: '/book' }).map((item) => item.path), ['/book/sci-fi/dune', '/book/sci-fi/solaris']);
+  assert.deepEqual(objectFrontendAssetPathComplete(index, '/', { kindList: ['note'] }).map((item) => item.path), ['/note']);
+  // every form of a reference; an asset the store lacks says so, a folder is no asset
+  assert.equal(objectFrontendAssetRefResolve(index, '/author/frank-herbert/dune').asset.key, 'book-1');
+  assert.equal(objectFrontendAssetRefResolve(index, 'key:note-1').asset.key, 'note-1');
+  assert.equal(objectFrontendAssetRefResolve(index, 'id:w3').asset.key, 'note-1');
+  assert.equal(objectFrontendAssetRefResolve(index, 'name:Dune').asset.key, 'book-1');
+  const missing = objectFrontendAssetRefResolve(index, '/book/sci-fi/solaris');
+  assert.equal(missing.status, 'missing');
+  assert.equal(missing.asset.key, 'book-2');
+  assert.match(objectFrontendAssetRefResolve(index, '/book/sci-fi').message, /a folder of the object/);
+  assert.equal(objectFrontendAssetRefResolve(index, '/book/nope').status, 'unknown');
+  // words in any order, narrowed by a key; the best first, the path the words matched
+  assert.deepEqual(objectFrontendAssetSearch(assetList, 'herbert').hitList.map((hit) => [hit.asset.key, hit.pathMatched]), [['book-1', '/author/frank-herbert/dune']]);
+  assert.deepEqual(objectFrontendAssetSearch(assetList, 'dune').hitList.map((hit) => hit.asset.key), ['book-1', 'note-1', 'book-2']);
+  assert.deepEqual(objectFrontendAssetSearch(assetList, 'kind:note dune').hitList.map((hit) => hit.asset.key), ['note-1']);
+  assert.deepEqual(objectFrontendAssetSearch(assetList, 'path:/book sol').hitList.map((hit) => hit.asset.key), ['book-2']);
+});
+
+test('the names and paths of assets are written into the entry; a path another asset has is refused', async () => {
+  const dir = fixtureCreate();
+  const middleware = middlewareCreate(dir);
+  const created = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/create', { docPageAlias: 'page', typeId: 'frontend.object', name: 'Shelf' });
+  const { id, objectList } = created.body.data;
+  const asset = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/create', { id, kind: 'book', name: 'Dune', pathList: ['book//sci-fi/dune', '/author/frank-herbert/dune'], text: 'a: 1\n' });
+  assert.equal(asset.body.code, 0, asset.body.message);
+  const taken = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/create', { id, kind: 'book', pathList: ['/book/sci-fi/dune'], text: 'b: 1\n' });
+  assert.equal(taken.body.code, -1);
+  assert.match(taken.body.message, /is the path of Dune/);
+  const metaSet = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/meta/set', { id, key: 'book-1', name: null, pathList: ['/book/classic/dune'] });
+  assert.equal(metaSet.body.code, 0, metaSet.body.message);
+  const store = assetStoreCreate(docAssetConfigLoad(path.join(dir, 'config.yaml')));
+  const entry = objectFrontendEntryParse(store.versionDataGet(objectList[0].objectId).text).entry;
+  assert.deepEqual(entry.assetList[0], { key: 'book-1', kind: 'book', objectId: asset.body.data.objectId, pathList: ['/book/classic/dune'] });
+  const bad = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/meta/set', { id, key: 'book-1', pathList: ['/..'] });
+  assert.match(bad.body.message, /above the root/);
 });

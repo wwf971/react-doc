@@ -37,8 +37,12 @@ typeList:
         comp: ReadingListAdd
       - id: book
         label: One book
-        description: a book and its notes; param book names it
+        description: a book and its notes; param book names it (a path, a key, name:…)
         comp: ReadingListBook
+      - id: find
+        label: Find
+        description: the assets searched by words and browsed by their paths
+        comp: ReadingListFind
       - id: stats
         label: Numbers
         comp: ReadingListStats

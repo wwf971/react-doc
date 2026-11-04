@@ -5,19 +5,41 @@ assetList:
   - key: book-1
     kind: book
     objectId: w5j7pmxa7fw
+    name: Dune
+    pathList:
+      - /book/sci-fi/dune
+      - /author/frank-herbert/dune
   - key: book-2
     kind: book
     objectId: w5j7pmy0gul
+    name: The Left Hand of Darkness
+    pathList:
+      - /book/sci-fi/the-left-hand-of-darkness
+      - /author/ursula-k-le-guin/the-left-hand-of-darkness
   - key: book-3
     kind: book
     objectId: w5j7pmym0fx
+    name: Gödel, Escher, Bach
+    pathList:
+      - /book/non-fiction/gödel-escher-bach
+      - /author/douglas-hofstadter/gödel-escher-bach
   - key: book-4
     kind: book
     objectId: w5j7pmz5o32
+    name: A Pattern Language
+    pathList:
+      - /book/non-fiction/a-pattern-language
+      - /author/christopher-alexander/a-pattern-language
   - key: note-1
     kind: note
     objectId: w5j7pmznvdq
+    name: The ecology chapters hold up
+    pathList:
+      - /note/dune/1
   - key: note-2
     kind: note
     objectId: w5j7pn05cwa
+    name: Read the chapter on kemmer
+    pathList:
+      - /note/the-left-hand-of-darkness/1
 metadata: {}

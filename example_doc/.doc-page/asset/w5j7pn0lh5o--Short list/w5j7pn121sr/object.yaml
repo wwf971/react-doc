@@ -14,11 +14,14 @@ versionList:
     versionIdPrevList: []
     time: 20261105_01185261+09
     note: book of the frontend object Short list
-    size: 62
-    hash: eceffd85610e1e06fdb7b634f8f684bf676407b9
+    size: 77
+    hash: 6fe9721d36b98c1bbe0dde0bb505ffcec74fb8bd
     isLocked: false
     dependencyList: []
 eventList:
   - eventType: create
     time: 20261105_01185261+09
+    versionId: w5j7pn1320z
+  - eventType: updateInPlace
+    time: 20261105_03374822+09
     versionId: w5j7pn1320z

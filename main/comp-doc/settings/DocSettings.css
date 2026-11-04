@@ -1126,3 +1126,12 @@
   white-space: pre-wrap;
   user-select: text;
 }
+
+/* the asset a search marked, in the assets table of the Frontend objects tab */
+.doc-settings-tab-asset-row[data-selected] {
+  background: color-mix(in srgb, var(--color-fd-primary) 10%, var(--color-fd-background));
+}
+
+.doc-settings-tab-asset-row .doc-edit-value {
+  white-space: nowrap;
+}
