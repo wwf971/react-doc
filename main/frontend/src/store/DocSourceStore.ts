@@ -502,6 +502,20 @@ export class DocSourceStore {
     return { status: 'done', component: componentList[0] };
   }
 
+  // the headings of a compiled document, in order: the id its url names (the
+  // fragment navigation uses), its plain text and its depth. undefined while
+  // the document is not compiled on this page
+  headingListGet(internalPath: string): { index: number; id: string; title: string; depth: number }[] | undefined {
+    const state = this.compiledByPath[internalPath];
+    if (state?.status !== 'done') return undefined;
+    return (state.toc ?? []).map((item: any, index: number) => ({
+      index,
+      id: String(item.url ?? '').replace(/^#/, ''),
+      title: nodeTextGet(item.title),
+      depth: Number(item.depth ?? 2),
+    })).filter((item) => item.id !== '');
+  }
+
   // non-md files are displayed as synthesized markdown, strategy chosen by suffix
   toMarkdown(entry: FileEntry, raw: string): { markdown: string; format: 'md' | 'mdx'; isSourceFile: boolean } {
     if (entry.ext === 'mdx') return { markdown: raw, format: 'mdx', isSourceFile: false };
@@ -777,4 +791,12 @@ function blobBase64Get(blob: Blob): Promise<string> {
 function stripFrontmatter(markdown: string): string {
   const match = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(markdown);
   return match ? markdown.slice(match[0].length) : markdown;
+}
+
+// the plain text of a toc title, which the compiler gives as React nodes
+function nodeTextGet(node: any): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(nodeTextGet).join('');
+  return nodeTextGet(node.props?.children);
 }

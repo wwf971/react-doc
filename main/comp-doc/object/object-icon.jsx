@@ -25,8 +25,8 @@ import {
   StickyNote,
 } from '../../frontend/UICommon.js';
 
-// The icon of an object: the icon its Type names (doc_page_impl_obj.md#types,
-// the icon key of a Type, a lucide name), the nearest ancestor's when its
+// The icon of an object: the icon its type names (doc_page_impl_obj.md#types,
+// the icon key of a type, a lucide name), the nearest ancestor's when its
 // own names none, or the icon a descriptor carries (iconUrl: a service's).
 const ICON_BY_NAME = {
   archive: Archive,

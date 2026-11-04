@@ -84,7 +84,7 @@ export class DocObjectSearchStore {
     const spec = searchSpecNormalize(specInput);
     const { tokenList, refList } = objectSearchParse(spec.text);
     const typeRegistry = this.objectStore.typeRegistry;
-    // nothing asked: nothing listed (an empty text with a Type is a listing of that Type)
+    // nothing asked: nothing listed (an empty text with a type is a listing of that type)
     if (tokenList.length === 0 && spec.typeList.length === 0) {
       return { tokenList, objectList: [], providerList: [], isComplete: true, isEmptyQuery: true };
     }
@@ -108,12 +108,13 @@ export class DocObjectSearchStore {
       .map((provider) => ({ provider, plan: objectSearchPlanBuild(tokenList, objectSearchProviderFieldsBuild(provider, typeRegistry)) }))
       .filter((item) => item.plan.isCandidate);
 
-    // 3. ask each, the page's at once, the backend's after a preflight count
-    const planListPage = planList.filter((item) => item.provider.registry === 'page');
-    const planListBackend = planList.filter((item) => item.provider.registry === 'backend');
+    // 3. ask each: the page's at once, those behind a peer (the backend's)
+    // after a preflight count, through the peer
+    const planListPage = planList.filter((item) => !item.provider.peer);
+    const peerList = [...new Set(planList.map((item) => item.provider.peer).filter(Boolean))];
     const answerListPage = await Promise.all(planListPage.map((item) => this.pageProviderAsk(item, spec, typeListAsked)));
-    const answerListBackend = await this.backendProviderAsk(planListBackend, spec, typeListAsked);
-    for (const answer of [...answerListPage, ...answerListBackend]) {
+    const answerListPeer = (await Promise.all(peerList.map((peer) => this.peerProviderAsk(peer, planList.filter((item) => item.provider.peer === peer), spec, typeListAsked)))).flat();
+    for (const answer of [...answerListPage, ...answerListPeer]) {
       const { provider, plan, descriptorList, summary } = answer;
       const tokenCountProvider = tokenList.length - plan.tokenListObject.length;
       let matchCount = 0;
@@ -142,21 +143,21 @@ export class DocObjectSearchStore {
     };
   }
 
-  // the providers a search may ask, as the plan needs them: the page's own
-  // (but the peer), and each provider of the backend as the backend lists it
+  // the providers a search may ask, as the plan needs them: the page's own,
+  // and for a peer (the backend's registry), each provider behind it as the
+  // peer lists it, asked through the peer (peer)
   private providerInfoListGet(spec: ReturnType<typeof searchSpecNormalize>): any[] {
     const list: any[] = [];
-    if (spec.registryList.includes('page')) {
-      for (const provider of this.objectStore.providerList) {
-        if (provider.isPeer || !provider.capabilityList.includes('query') || !provider.query) continue;
-        list.push({ ...pick(provider, ['id', 'label', 'namespaceList', 'typeList', 'capabilityList', 'cacheSecond']), registry: 'page', provider });
+    for (const provider of this.objectStore.providerList) {
+      const registry = provider.registry ?? 'page';
+      if (!spec.registryList.includes(registry) || !provider.capabilityList.includes('query') || !provider.query) continue;
+      if (!provider.isPeer) {
+        list.push({ ...pick(provider, ['id', 'label', 'namespaceList', 'typeList', 'capabilityList', 'cacheSecond']), registry, provider });
+        continue;
       }
-    }
-    const serviceStore = this.objectStore.stores.serviceStore;
-    if (spec.registryList.includes('backend') && serviceStore && serviceStore.backendStatus === 'up') {
-      for (const info of serviceStore.objectProviderList ?? []) {
-        if (!(info.capabilityList ?? []).includes('query')) continue;
-        list.push({ ...info, registry: 'backend' });
+      if (this.objectStore.providerStatusGet(provider).status !== 'ready') continue;
+      for (const info of provider.providerInfoListGet?.() ?? []) {
+        if ((info.capabilityList ?? []).includes('query')) list.push({ ...info, registry, peer: provider });
       }
     }
     return spec.providerIdList.length > 0 ? list.filter((item) => spec.providerIdList.includes(item.id)) : list;
@@ -183,19 +184,23 @@ export class DocObjectSearchStore {
     }
   }
 
-  // the providers of the backend: one preflight count for all of them, then
+  // the providers behind a peer: one preflight count for all of them, then
   // a bounded fetch of each that is small enough, or narrowed enough by the
   // word it can filter by itself (textPush), or loaded on purpose
-  private async backendProviderAsk(planList: any[], spec: any, typeListAsked: string[]) {
+  private async peerProviderAsk(peer: any, planList: any[], spec: any, typeListAsked: string[]) {
     if (planList.length === 0) return [];
-    const serviceStore = this.objectStore.stores.serviceStore;
+    const typeRegistry = this.objectStore.typeRegistry;
     const fetchMax = spec.fetchMax;
     const countGet = async (itemList: any[], text: string) => {
       if (itemList.length === 0) return new Map();
-      const result = await serviceStore.objectCall((backend: any) => backend.objectCount({ typeList: typeListAsked, text, filter: spec.filter, providerIdList: itemList.map((item) => item.provider.id) }));
-      return new Map((result.code === 0 ? result.data.providerList : []).map((entry: any) => [entry.providerId, entry]));
+      try {
+        const data = await peer.count({ typeList: typeListAsked, text, filter: spec.filter, providerIdList: itemList.map((item) => item.provider.id) });
+        return new Map((data?.providerList ?? []).map((entry: any) => [entry.providerId, entry]));
+      } catch {
+        return new Map();
+      }
     };
-    // a count of everything of the Types asked for, then, for those too
+    // a count of everything of the types asked for, then, for those too
     // large, a count of what their own filter by the pushed word leaves
     const countAllById = await countGet(planList, '');
     const decisionList = planList.map((item) => {
@@ -233,12 +238,13 @@ export class DocObjectSearchStore {
             message: countKnown === null ? 'it does not count its objects: narrow the search, or load the first ones' : 'too many to list: narrow the search, or load the first ones' },
         };
       }
-      const result = await serviceStore.objectCall((backend: any) => backend.objectQuery({ typeList: typeListAsked, text: fetchText, filter: spec.filter, limit: fetchMax + 1, providerIdList: [item.provider.id] }));
-      if (result.code !== 0) return { ...item, descriptorList: [], summary: { ...summary, status: 'failed' as const, message: result.message } };
-      const descriptorListAll = (result.data.objectList ?? []).map((value: any) => objectDescriptorNormalize({
-        ...value,
-        iconUrl: typeof value.iconUrl === 'string' && value.iconUrl.startsWith('/') ? serviceStore.backendUrlGet(value.iconUrl) : value.iconUrl,
-      }, null, value.status));
+      let descriptorListAll: any[];
+      try {
+        const data = await peer.query({ typeList: typeListAsked, text: fetchText, filter: spec.filter, limit: fetchMax + 1, providerIdList: [item.provider.id] }, typeRegistry);
+        descriptorListAll = data?.objectList ?? [];
+      } catch (error: any) {
+        return { ...item, descriptorList: [], summary: { ...summary, status: 'failed' as const, message: String(error?.message ?? error) } };
+      }
       const isTruncated = descriptorListAll.length > fetchMax;
       return {
         ...item,

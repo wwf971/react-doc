@@ -1,10 +1,12 @@
-<!-- Design of the object registry and the Type registry: objects, references, descriptors, Types, providers, relations, groups, views, the backend's registry and the page's. Parent document: doc_page_impl.md. The services' part (what a template declares, the kernel's provider) is summarized here and specified in doc_page_impl_service_backend.md and doc_page_impl_service_kernel.md; the views are components of the registry, doc_page_impl_mdx_comp.md#what-a-component-exposes. -->
+<!-- Design of the object registry and the type registry: objects, references, descriptors, types, providers, relations, groups, views, the backend's registry and the page's. Parent document: doc_page_impl.md. The services' part (what a template declares, the kernel's provider) is summarized here and specified in doc_page_impl_service_backend.md and doc_page_impl_service_kernel.md; the views are components of the registry, doc_page_impl_mdx_comp.md#what-a-component-exposes. -->
 
 # Objects and Types: Design
 
 > **The Object Registry must not automatically become the source of truth for object contents, relationships, or lifecycle. Providers remain authoritative for the data they own. Registration, discovery, resolution, and verification are separate concerns.**
 
-Everything below follows from that sentence. The service layers of the page (the doc page source, the links, the asset store) and the service instances of the backend each keep things others may want to find, draw or work with: a document and its sections, the links between documents, an asset, a todo, a database, the config of an instance. Each keeps its own representation of them, and keeps it its own way. The **object registry** is where they say what they have (as **objects** of **Types**), and where anyone else (a component of a document, a card diagram, another service) finds them, without knowing who keeps them and without the registry keeping them either. A component that can draw a Type draws every object of it, whoever provides it; a service that accepts a Type accepts every object of it, today's and tomorrow's.
+> **The registry knows no service layer.** Everything it needs of a layer (its objects and relations, the types and components it brings, how to open one of its objects) it asks the layer's **provider**, the way the unified api registry asks its api providers ([Unified api registry](doc_page_impl_api.md)). `DocObjectStore` reads no other store but the component registry (for the views): the types and components of the services come from the backend peer provider, a document is opened by the doc page source's provider, an asset by the asset store's. A layer added later (tags, a timeline) takes part by adding a provider, never by a change to the registry. ([Providers](#providers))
+
+Everything below follows from that sentence. The service layers of the page (the doc page source, the links, the asset store) and the service instances of the backend each keep things others may want to find, draw or work with: a document and its sections, the links between documents, an asset, a todo, a database, the config of an instance. Each keeps its own representation of them, and keeps it its own way. The **object registry** is where they say what they have (as **objects** of **types**), and where anyone else (a component of a document, a card diagram, another service) finds them, without knowing who keeps them and without the registry keeping them either. A component that can draw a type draws every object of it, whoever provides it; a service that accepts a type accepts every object of it, today's and tomorrow's.
 
 ```text
                  consumers (know nothing of who keeps an object)
@@ -13,7 +15,7 @@ Everything below follows from that sentence. The service layers of the page (the
          ▼          ▼           ▼            ▼              ▼                  ▼             ▼
    ┌──────────────── the object service layer ─────────────────┐      ┌── the backend's registry ──┐
    │ page: DocObjectStore (+ DocObjectSearchStore)             │ peer │ kernel: ObjectRegistry      │
-   │   Type registry   built-in JSON + the backend's list      │◄────►│   Type registry: built-in   │
+   │   type registry   built-in JSON + the backend's list      │◄────►│   type registry: built-in   │
    │   providers       doc-source, doc-link, asset, backend    │      │     + templates' typeList   │
    │   what they said  resolve / query / relation caches       │      │   providers: kernel,        │
    │   registrations   (known, not verified)                   │      │     service:{id} instances  │
@@ -30,11 +32,11 @@ The registry is a service layer of the page like the others ([AGENTS.md](../AGEN
 
 ```text
 the object service layer (DocObjectStore, and ObjectRegistry in the kernel)
-├── the Type registry           the Types and their DAG: built-in, the templates' (the backend's list)
-├── the provider directory      who answers for which namespaces and Types, with which capabilities, how fresh
+├── the type registry           the types and their DAG: built-in, the templates' (the backend's list)
+├── the provider directory      who answers for which namespaces and types, with which capabilities, how fresh
 ├── what providers answered     per reference (resolveByRef), per query and relation query, with when and from whom
 ├── the registrations           descriptors principals handed it, by registrant
-├── the views                   which component draws which Types in which context (from the component registry
+├── the views                   which component draws which types in which context (from the component registry
 │                               and the templates' modules), and the state of each view (what it read, its draft)
 └── the searches                the sessions of the search uis: text, filters, result (DocObjectSearchStore)
 ```
@@ -43,14 +45,14 @@ It offers its services through the store's methods (resolve, query, relationQuer
 
 ## The concepts
 
-- An **object** is anything a provider is willing to name: a document, a heading, a todo, a backup. It has an identity (its **reference**), one or more **Types**, and whatever content its provider keeps; it need not be stored anywhere, nor registered, to exist.
+- An **object** is anything a provider is willing to name: a document, a heading, a todo, a backup. It has an identity (its **reference**), one or more **types**, and whatever content its provider keeps; it need not be stored anywhere, nor registered, to exist.
 - A **reference** names it: `{namespace}:{local}`. The namespace names the provider authoritative for it; the local part is the provider's own and the registry never reads it.
-- A **descriptor** is what the registry knows of an object: a small JSON object (its reference, Types, label, a summary, its capabilities, where to open it, its status and when it was checked). It is never the object's content, which is read from its provider.
-- A **Type** is a JSON definition: an id, a kind (`object` or `relation`), a label, the Types it extends. Types form a DAG; an object of a Type is an object of every Type it extends.
-- A **provider** answers for the objects of its namespaces, through the capabilities it has: `query` (list objects of some Types), `resolve` (describe a reference), `read` (the content), `update` (a change it checks), `relationQuery`. It needs only the ones it can offer.
-- A **relation** is an entry from one object to another, of a relation Type (`core.member`, `core.contains`, `doc.link`), with a key of its own. A relation is not an object unless it needs to be one.
+- A **descriptor** is what the registry knows of an object: a small JSON object (its reference, types, label, a summary, its capabilities, where to open it, its status and when it was checked). It is never the object's content, which is read from its provider.
+- A **type** is a JSON definition: an id, a kind (`object` or `relation`), a label, the types it extends. Types form a DAG; an object of a type is an object of every type it extends.
+- A **provider** answers for the objects of its namespaces, through the capabilities it has: `query` (list objects of some types), `resolve` (describe a reference), `read` (the content), `update` (a change it checks), `relationQuery`. It needs only the ones it can offer.
+- A **relation** is an entry from one object to another, of a relation type (`core.member`, `core.contains`, `doc.link`), with a key of its own. A relation is not an object unless it needs to be one.
 - A **collection** is an object with members (`core.member` relations from it); a **group** is an explicit one (`core.group`), with an identity and a lifecycle of its own.
-- A **view** is a component of the component registry that draws objects of some Types in some **contexts** (`icon`, `inline`, `card`, `block`).
+- A **view** is a component of the component registry that draws objects of some types in some **contexts** (`icon`, `inline`, `card`, `block`).
 - There are **two registries**, the page's (`DocObjectStore`) and the backend's (`ObjectRegistry` in the kernel), with the same model; each is a provider of the other's world where it can be ([The page and the backend](#the-page-and-the-backend)).
 
 ## References and descriptors
@@ -73,11 +75,11 @@ A reference is `{namespace}:{local}`, the namespace `[a-zA-Z][a-zA-Z0-9.-]*` up 
 ```text
 descriptor
   ref               service.w55j3ztn3rq:todo/12
-  typeList          [todo-list.todo]          the most specific Types; the ancestors are the Type registry's to know
+  typeList          [todo-list.todo]          the most specific types; the ancestors are the type registry's to know
   label             buy milk
   description       a todo of example todos
-  summary           { isDone: false }          small, for display and filters; may be stale. a Type says which keys it promises (summaryKeyList)
-  iconUrl           ''                         an icon of its own (a backend path, reached through the page's address), else its Type's
+  summary           { isDone: false }          small, for display and filters; may be stale. a type says which keys it promises (summaryKeyList)
+  iconUrl           ''                         an icon of its own (a backend path, reached through the page's address), else its type's
   capabilityList    [read, update]             what its provider does with it
   open              { kind: navigate, target } | { kind: serviceInstance, serviceId } | { kind: serviceTemplate, templateId } | { kind: asset, store, objectId } | null
   status            found | registered | missing | unavailable | unknown   (+ loading, on the page)
@@ -102,14 +104,14 @@ Type
                   whoever defines it (core, doc, asset, service, or the template's name)
   kind            object | relation
   label, description, icon      the icon a name of the page's icon set (box, file-text, square-check)
-  extendList      the Types it extends, of its kind; none for a root
+  extendList      the types it extends, of its kind; none for a root
   summaryKeyList  the keys of the summary an object of it promises (isDone for core.task)
   definedBy       { kind: builtIn } | { kind: serviceTemplate, id, name } | { kind: serviceInstance, id, name }
 ```
 
-The Type registry answers whether an object of a Type is one of another (**assignable**: the same, or a descendant), how far, and in which order its ancestors come (**rank**: breadth first, each Type's parents in the order it lists them). That is all it does: it is no programming-language type system, it checks no content against a schema, and assignability comes from declarations only, never from shapes that happen to match. A Type nobody defines is taken as a child of both roots, so every object is at least a `core.object` and is drawn by the fallback view. A Type extending one nobody defines extends the root instead, and a cycle is broken where it closes; both are reported (`problemList`).
+The type registry answers whether an object of a type is one of another (**assignable**: the same, or a descendant), how far, and in which order its ancestors come (**rank**: breadth first, each type's parents in the order it lists them). That is all it does: it is no programming-language type system, it checks no content against a schema, and assignability comes from declarations only, never from shapes that happen to match. A type nobody defines is taken as a child of both roots, so every object is at least a `core.object` and is drawn by the fallback view. A type extending one nobody defines extends the root instead, and a cycle is broken where it closes; both are reported (`problemList`).
 
-**Built-in Types** are one JSON file, `built-in/object-type/object-type-builtin.json`, read by the kernel and imported by the page, so both registries agree on them:
+**Built-in types** are one JSON file, `built-in/object-type/object-type-builtin.json`, read by the kernel and imported by the page, so both registries agree on them:
 
 ```text
 core.object                                  anything the registry can name
@@ -135,9 +137,9 @@ core.relation
 └── service.createdFrom
 ```
 
-A Type is a promise of semantics, and the `core.*` Types carry the few promises consumers rely on: a `core.task` has `summary.isDone` and accepts `{ isDone }`; a `core.config` reads as `{ valueByKey, defineList }` and accepts `{ valueByKey }`; a `core.collection` has `core.member` relations. Capability-like Types and semantic ones are the same mechanism, named for what they mean. Being of a Type does not promise behavior beyond that (availability, permissions, consistency are the provider's), and a Type an object needs a conversion to reach (a PDF as frames) is a service turning one object into another, not a parent in the DAG.
+A type is a promise of semantics, and the `core.*` types carry the few promises consumers rely on: a `core.task` has `summary.isDone` and accepts `{ isDone }`; a `core.config` reads as `{ valueByKey, defineList }` and accepts `{ valueByKey }`; a `core.collection` has `core.member` relations. Capability-like types and semantic ones are the same mechanism, named for what they mean. Being of a type does not promise behavior beyond that (availability, permissions, consistency are the provider's), and a type an object needs a conversion to reach (a PDF as frames) is a service turning one object into another, not a parent in the DAG.
 
-**Types of the templates.** A service template defines Types in `expose.typeList` of its script, under its own name (`todo-list.todo`): the kernel refuses a Type of another name with a problem, so two templates never collide. The kernel rebuilds the registry whenever a script changes: the built-in Types, then the templates' (the oldest template id first; a second definition of an id is reported and left out), then those of instances whose template is gone. The page takes the backend's list over its own built-in copy when there is a backend.
+**Types of the templates.** A service template defines types in `expose.typeList` of its script, under its own name (`todo-list.todo`): the kernel refuses a type of another name with a problem, so two templates never collide. The kernel rebuilds the registry whenever a script changes: the built-in types, then the templates' (the oldest template id first; a second definition of an id is reported and left out), then those of instances whose template is gone. The page takes the backend's list over its own built-in copy when there is a backend.
 
 ## Providers
 
@@ -147,14 +149,21 @@ A provider says what it has and what it can do, and nothing more is asked of it:
 provider
   id, label, registry       page | backend
   namespaceList             the namespaces it is authoritative for (a provider of relations only has none)
-  typeList                  the Types of the objects it provides, the most specific
-  relationTypeList          the Types of the relations it provides
+  typeList                  the types of the objects it provides, the most specific
+  relationTypeList          the types of the relations it provides
   capabilityList            some of query, count, resolve, read, update, relationQuery (count: how many a query
                             would answer, without listing them: the preflight of a search)
   queryFilterList           the filters its query understands (isDone, kind, docPageAlias)
   cacheSecond               how long its answers may be reused
   status                    ready, or why not (the backend down, an instance waiting)
   version (page)            a value that changes when what it answers may have: its answers kept are asked again
+
+  what a provider of the page may bring besides objects (each optional):
+  typeDefine                the types it defines ({ typeList, problemList }): the backend's list
+  compList                  the components it serves, views among them, each available or not now: the templates' modules
+  open(descriptor)          goes to where its own layer shows one of its objects: navigates, opens the Services tab, the asset panel
+  providerInfoList, count   a peer: the providers behind it, and how many each would answer (the plan and preflight of a search)
+  descriptorListForPeer     what it registers into a peer: the doc page source, its documents
 ```
 
 | provider | registry | namespaces | objects | relations | capabilities |
@@ -166,7 +175,11 @@ provider
 | `kernel` | backend | `service`, `serviceTemplate`, `serviceConfig` | `service.instance`, `service.template`, `service.config` | `service.createdFrom`, `service.dependsOn` | query, resolve, read, update (a config), relationQuery |
 | `service:{id}` | backend | `service.{id}` | its script's `objectProvide.typeList` | its `relationTypeList` | the object apis its script implements |
 
-Each provider of the page is an adapter of a service layer that keeps its own representation: the doc page source its manifests and compiled documents, the navigation layer its link index, the asset store its index. None of them hands its representation to the registry; each answers from it when asked, and only what it is authorized to answer. The minimal promises a provider keeps are those of the protocol, not of quality: its descriptors are well formed, its references are of its own namespaces, a change goes through its own checks. It may be slow, partial, stale or away; the registry says so instead of failing.
+Each provider of the page speaks for a service layer that keeps its own representation: the doc page source its manifests and compiled documents (and the headings of a compiled document, `headingListGet`), the navigation layer its link index, resolved once into links seen both ways, the asset store its index. None of them hands its representation to the registry; each answers from it when asked, and only what it is authorized to answer. What a provider needs of its layer is a method of the layer, so the provider only says it in the registry's words (references, descriptors, relations) and the layer stays the one place its rules live.
+
+This is why the registry knows no layer (the second principle at the top): what a provider brings besides objects (`typeDefine`, `compList`, `open`, the peer's `providerInfoList` and `count`) is all the registry learns of its layer.
+
+The minimal promises a provider keeps are those of the protocol, not of quality: its descriptors are well formed, its references are of its own namespaces, a change goes through its own checks. It may be slow, partial, stale or away; the registry says so instead of failing.
 
 ## Discovery and resolution
 
@@ -175,14 +188,14 @@ The operations are separate on purpose, each with its own promise:
 | operation | answers | from |
 | --- | --- | --- |
 | `register(descriptorList)` | that these objects are known | the registrant; never verified by it |
-| `query({ typeList, text, filter, limit })` | objects of these Types and their subtypes, with how complete the answer is | every provider of an assignable Type, and the registrations |
+| `query({ typeList, text, filter, limit })` | objects of these types and their subtypes, with how complete the answer is | every provider of an assignable type, and the registrations |
 | `resolve(ref, { isVerify })` | the descriptor of one reference, with its status | its provider; what was known when it cannot answer |
 | `resolve(ref, { isVerify: true })` | the same, asked again now | its provider, whatever is cached |
 | `read(ref)` | `{ descriptor, content }` | its provider, always: never a cache |
 | `update(ref, patch)` | the provider's answer to a change it checks | its provider |
-| `relationQuery({ fromRef, toRef, typeList })` | relations, with how complete the answer is | every provider of an assignable relation Type |
+| `relationQuery({ fromRef, toRef, typeList })` | relations, with how complete the answer is | every provider of an assignable relation type |
 
-**A query is federated.** The registry asks each provider whose Types are assignable to those asked for (a provider of `todo-list.todo` for `core.task`, everyone for `core.object`), in parallel, keeps of each answer the objects that are of the Types asked for and match the text, adds the registered descriptors nobody answered for, and returns them with a **completeness**: one entry per provider, `answered`, `cached`, `partial` (the provider said it listed only part: the sections of the compiled documents only), `registered`, `unavailable`, `timedOut`, `skipped`, `failed`, with a count and a message. `isComplete` is true only when every provider answered in full, and even then it means complete *for those providers*, never that no other object exists. A consumer shows the line or acts on it: a list says "3 objects · the service backend: unavailable"; a service that must have everything refuses an incomplete answer.
+**A query is federated.** The registry asks each provider whose types are assignable to those asked for (a provider of `todo-list.todo` for `core.task`, everyone for `core.object`), in parallel, keeps of each answer the objects that are of the types asked for and match the text, adds the registered descriptors nobody answered for, and returns them with a **completeness**: one entry per provider, `answered`, `cached`, `partial` (the provider said it listed only part: the sections of the compiled documents only), `registered`, `unavailable`, `timedOut`, `skipped`, `failed`, with a count and a message. `isComplete` is true only when every provider answered in full, and even then it means complete *for those providers*, never that no other object exists. A consumer shows the line or acts on it: a list says "3 objects · the service backend: unavailable"; a service that must have everything refuses an incomplete answer.
 
 **A provider the backend waits for has a limit.** The kernel calls an instance provider in the instance's queue with a short wait of its own (`objectProviderWaitSecond`, 5 s by default, beside `apiWaitSecondMax`); an instance busy with a long job is `timedOut` for that query while the others are answered. A call from a service into the registry never waits for the service's own queue: the provider that is the caller (or any instance in the call's chain) is `skipped`, as a call between services that would wait for itself is refused.
 
@@ -205,7 +218,7 @@ The page reuses an answer while it asks again (a stale answer is drawn until the
 ```text
 relation
   key        the entry, unique for its provider: member/{todoId}, {docPath}:{index}, contains/{ref}
-  type       a relation Type: core.member, core.contains, doc.link, service.dependsOn, sqlite.keptFor
+  type       a relation type: core.member, core.contains, doc.link, service.dependsOn, sqlite.keptFor
   fromRef, toRef
   order      its place among the relations from fromRef (members in order)
   label, data   the entry's own: a note in a group, the line and sentence of a link, the infra name of a dependency
@@ -214,7 +227,7 @@ relation
 
 A relation belongs to whoever keeps it, not to the objects it joins: a todo list keeps its members, the link index the links of the documents, a group its entries. The provider of the object at either end need not know of it. A relation that needs an identity, a state or permissions of its own becomes an object instead, with relations to both ends.
 
-The relation Types keep three things apart that are all edges of a graph: **containment** (`core.contains`: a section exists only in its document, a file in its folder), **membership** (`core.member`: an entry of a collection, chosen or derived, with its own key, so one object can be a member twice, each with its data), and **reference** (`core.reference`: a place names an object that may be gone, a link). `core.contains` extends `core.member`, so a view of collections lists a document's sections as members; a link is not a member of anything.
+The relation types keep three things apart that are all edges of a graph: **containment** (`core.contains`: a section exists only in its document, a file in its folder), **membership** (`core.member`: an entry of a collection, chosen or derived, with its own key, so one object can be a member twice, each with its data), and **reference** (`core.reference`: a place names an object that may be gone, a link). `core.contains` extends `core.member`, so a view of collections lists a document's sections as members; a link is not a member of anything.
 
 **Collections and groups.** A collection is any object with members: a group, a todo list, a folder, a document, a section; a query's result is a virtual one (`ObjectList`), with no identity at all. An explicit group is `core.group`. The registry has no group logic: a group is a provider's object like any other, and its members are its provider's relations. The page has one kind of group of its own, `ObjectGroup`, written in a document (`doc.group`, below); a service keeping groups (a timeline, a slide deck, a group service) provides them the same way, and the same views draw them. `memberStateGet(ref)` on the page is a relation query of `core.member` from the collection, in order.
 
@@ -228,13 +241,13 @@ The doc page source ([Doc page source service layer](doc_page_impl_source.md)) p
 | `core.member` | a group > the references its block lists, each entry with its key and note | the block's data |
 | `doc.link` | a document > the files its references resolve to; the inverse, a document's or a section's backlinks | the link index ([Backlinks](doc_page_impl_nav_backlink.md#the-link-index)) |
 
-The links are the navigation layer's: its link index stays its internal representation, kept and changed by it alone, and the provider `doc-link` answers relation queries from it with the same resolver the backlinks panel inverts it with, so a backlink and a `doc.link` relation are the same thing seen from two places. A reference that resolves to several files is a relation to each; one that resolves to nothing is kept, to the target as written, with `data.isResolved` false. Neither provider lists all its relations at once: a relation query names a document (from or to), and one naming neither is answered empty with the reason.
+The links are the navigation layer's: its link index stays its internal representation, kept and changed by it alone. The layer resolves the index once into one list of links, seen both ways: the links a document writes, and the backlinks of a file ([The link index](doc_page_impl_nav_backlink.md#the-link-index)). The Backlinks panel reads the second; the provider `doc-link` says both in the registry's words, so a backlink and a `doc.link` relation are one entry, with one key, seen from two places. A reference that resolves to several files is a relation to each; one that resolves to nothing is kept, to the target as written, with `data.isResolved` false. A link to a place (`a.md#setup`) is a relation to the place, not to its document; the links written under a heading are relations from its section. Neither provider lists all its relations at once: a relation query names a document (from or to), and one naming neither is answered empty with the reason.
 
-`ObjectGroup` is a component block whose data is a group: a label, and members, each a reference or `{ ref, key?, note? }`. Drawn, it shows its members by their views. With an id (`<!--renderComp=ObjectGroup,id=release-checklist-->`) it is an object, `doc:{document}#{id}` of the Type `doc.group` (a `core.group` and a `doc.block`), and its members are `core.member` relations of the doc page source, so anything can name the group by its reference: a view of collections draws it without knowing it is written in a document.
+`ObjectGroup` is a component block whose data is a group: a label, and members, each a reference or `{ ref, key?, note? }`. Drawn, it shows its members by their views. With an id (`<!--renderComp=ObjectGroup,id=release-checklist-->`) it is an object, `doc:{document}#{id}` of the type `doc.group` (a `core.group` and a `doc.block`), and its members are `core.member` relations of the doc page source, so anything can name the group by its reference: a view of collections draws it without knowing it is written in a document.
 
 ## Object views
 
-How an object is drawn is decided by the page, not by the object nor by its provider: a provider says what an object *is* (its Types), the component registry holds what can *draw* each Type, and the consumer decides *where* (the context) and *whether a change may be made there*. A component becomes a view by exposing it ([What a component exposes](doc_page_impl_mdx_comp.md#what-a-component-exposes)):
+How an object is drawn is decided by the page, not by the object nor by its provider: a provider says what an object *is* (its types), the component registry holds what can *draw* each type, and the consumer decides *where* (the context) and *whether a change may be made there*. A component becomes a view by exposing it ([What a component exposes](doc_page_impl_mdx_comp.md#what-a-component-exposes)):
 
 ```js
 compDefine(TaskCard, {
@@ -250,11 +263,11 @@ compDefine(TaskCard, {
 | `card` | a bounded box: a card of a list or a group, a node of a card diagram |
 | `block` | the width of a document: the object shown whole |
 
-**Choosing the view.** For an object and a context, the candidates are the views of the context whose Types the object is assignable to: the components of the component registry (the package's, the doc pages' and packages' mounted ones, the host's) and the components of the service templates' modules ([Services](#services)), these only while a ready instance of the template serves its module. The nearest Type wins, by rank (of two parents at one distance, the one the object's Type lists first: a `doc.document` is drawn as a document before it is drawn as a collection), then the highest priority, then a component of the page before one of a service. A consumer may ask for a view by its id (`view` of `ObjectView`), used when it can draw the object. The **fallback view** (`common/ObjectViewFallback`) is registered for `core.object` in every context with the lowest priority, so it is no special case: it is the least specific view, and every object has one. It draws what every descriptor has: the icon of the Type (the nearest ancestor's when its own names none), the label, the Type, the status when not found, the summary, the provider and the reference, and in the block context the content, read on request.
+**Choosing the view.** For an object and a context, the candidates are the views of the context whose types the object is assignable to: the components of the component registry (the package's, the doc pages' and packages' mounted ones, the host's) and the components the providers serve, which today are those of the service templates' modules ([Services](#services)), brought by the backend peer and drawn only while a ready instance of the template serves its module. The nearest type wins, by rank (of two parents at one distance, the one the object's type lists first: a `doc.document` is drawn as a document before it is drawn as a collection), then the highest priority, then a component of the page before one of a service. A consumer may ask for a view by its id (`view` of `ObjectView`), used when it can draw the object. The **fallback view** (`common/ObjectViewFallback`) is registered for `core.object` in every context with the lowest priority, so it is no special case: it is the least specific view, and every object has one. It draws what every descriptor has: the icon of the type (the nearest ancestor's when its own names none), the label, the type, the status when not found, the summary, the provider and the reference, and in the block context the content, read on request.
 
 **A view receives** `data: { ref, descriptor }` and `config.objectView: { context, isEditAllowed, editUnavailableReason, note, isFallback }`, in the placement `objectView`, through the ordinary boundary (`RegisteredComp`), so it has `config.object` and `onEvent` like any component. It asks for a change with `objectUpdateRequest { ref, patch }`; it never knows the provider. A change is offered only when three things agree, each of its own owner: the **consumer** allows it (`isEditable` of `ObjectView`; a read-only consumer), the **provider** offers it (`update` in the descriptor's capabilities) and answers now; whether the **user** may is the provider's check when the change arrives ([Authorization](doc_page_impl_service_kernel.md#authorization) is a TODO of the backend). `isEditAllowed` is the first two; the third is the answer.
 
-| view | Types | contexts |
+| view | types | contexts |
 | --- | --- | --- |
 | `common/ObjectViewFallback` | `core.object` | all (priority -100) |
 | `common/ObjectViewCollection` | `core.collection` | card (members as icons), block (members as cards) |
@@ -262,9 +275,9 @@ compDefine(TaskCard, {
 | `common/ObjectViewDocument` | `core.document`, `core.place` | card: opens it; counts the `doc.link` relations to a document or a section |
 | `service/todo-list/comp/todo-card` | `core.task` | card, icon, inline: checks it off (`{ isDone }`); from the module of the template `todo-list` |
 
-**The components a document writes** consume the registry: `ObjectView` (one object by its reference, in a context; also a node of a card diagram), `ObjectList` (the objects of some Types: a federated query, with its completeness), `ObjectGroup` (a group whose truth is the document), `ObjectSearch` (a search by words, [Search](doc_page_impl_obj_search.md#the-ui)). A view keeps what it read and its draft in the layer, not in itself (`viewStateGet(key)`, `viewContentLoad`, `viewDraftSave`): the config form and the fallback view's content do. Their usage is in the demonstration, `example_doc/object-registry.md`. Every one of them draws objects through `ObjectViewHost`, which resolves the reference, chooses the view and renders it; a consumer of another package does the same.
+**The components a document writes** consume the registry: `ObjectView` (one object by its reference, in a context; also a node of a card diagram), `ObjectList` (the objects of some types: a federated query, with its completeness), `ObjectGroup` (a group whose truth is the document), `ObjectSearch` (a search by words, [Search](doc_page_impl_obj_search.md#the-ui)). A view keeps what it read and its draft in the layer, not in itself (`viewStateGet(key)`, `viewContentLoad`, `viewDraftSave`): the config form and the fallback view's content do. Their usage is in the demonstration, `example_doc/object-registry.md`. Every one of them draws objects through `ObjectViewHost`, which resolves the reference, chooses the view and renders it; a consumer of another package does the same.
 
-**In a card diagram**, a node `renderer: { component: ObjectView }` with `data: { object: … }` is a card of any object: `ObjectView` declares the placement `visualizationNode` and the node contract (one `body` anchor on every side, `sizeDefault`), the way any registered renderer of the diagram does ([Internal and Registered Renderers](../package/cloud-dev-vis/doc/card-diagram-impl.md#internal-and-registered-renderers)). The diagram knows no Type; the lines are its own data. Drawing a diagram from relations of the registry is [TODO](doc_page_impl_TODO.md#object-relation-diagram).
+**In a card diagram**, a node `renderer: { component: ObjectView }` with `data: { object: … }` is a card of any object: `ObjectView` declares the placement `visualizationNode` and the node contract (one `body` anchor on every side, `sizeDefault`), the way any registered renderer of the diagram does ([Internal and Registered Renderers](../package/cloud-dev-vis/doc/card-diagram-impl.md#internal-and-registered-renderers)). The diagram knows no type; the lines are its own data. Drawing a diagram from relations of the registry is [TODO](doc_page_impl_TODO.md#object-relation-diagram).
 
 ## Services
 
@@ -280,7 +293,7 @@ expose = {
     'requireList': [{'type': 'core.task'}],
 }
 
-@api(kind='query', params=[param('typeList', 'array', '…'), …], callerKindList=['kernel'])
+@object_api(description='the todos and the list, as objects')     # parameters, result, caller: the protocol's
 def objectQuery(self, typeList, text='', filter=None, limit=100): …      # descriptors, with localId
 def objectCount(self, typeList, text='', filter=None): …                   # how many objectQuery would answer (optional)
 def objectResolve(self, localIdList): …                                     # one descriptor or None per id
@@ -289,31 +302,31 @@ def objectUpdate(self, localId, patch): …                                   # 
 def relationQuery(self, fromRef='', toRef='', typeList=None): …             # relations, fromLocalId / toLocalId or refs
 ```
 
-- **`typeList`**: the Types it defines, under its name.
-- **`objectProvide`**: the objects every instance provides, in its namespace `service.{serviceId}`. Its capabilities are the object apis the script implements, each answered to the kernel only (`callerKindList` holds `kernel`: the page reaches them through the registry, never directly), checked when the script loads. The kernel makes a `localId` a reference of the instance's namespace and refuses one of another, so an instance cannot speak for objects it does not own.
+- **`typeList`**: the types it defines, under its name.
+- **`objectProvide`**: the objects every instance provides, in its namespace `service.{serviceId}`. Its capabilities are the object apis the script implements, each marked `@object_api(description)`: their parameters, results and caller (the kernel only: the page reaches them through the registry, never directly) are the protocol's, declared once in `service_define.py`, so a script writes only what its answer means; checked when the script loads. The kernel makes a `localId` a reference of the instance's namespace and refuses one of another, so an instance cannot speak for objects it does not own.
 - **`compList`**: the components of its module beside its dashboards, today object views, named `service/{templateName}/comp/{compId}` on the page. The page loads one from the instance that provides the object drawn when it is one of the template's, else from any ready instance of the template with a built module; while none can serve it, the object is drawn by the fallback view with the reason. A component another template's objects are drawn with is **a dependency on the template that provides it**, at the level of templates, beside the infra dependencies of instances.
-- **`requireList`**: what the template needs others to provide: `{ type }` (a Type it extends or accepts), `{ objectView, context? }` (a view of a Type beyond the fallback), `{ comp }` (a component by id), each `isRequired` or not. Where possible a template requires a Type or a view, not a template: whoever provides it serves, a Type compatible in name promising no more than its declaration. The requirements are resolved **on the page**, which knows every provider (the built-in and the templates' Types, the views of the component registry and of the modules): the Services tab shows each as met, provided but with no ready instance, drawn by the fallback only, or missing, with who meets it.
+- **`requireList`**: what the template needs others to provide: `{ type }` (a type it extends or accepts), `{ objectView, context? }` (a view of a type beyond the fallback), `{ comp }` (a component by id), each `isRequired` or not. Where possible a template requires a type or a view, not a template: whoever provides it serves, a type compatible in name promising no more than its declaration. The requirements are resolved **on the page**, which knows every provider (the built-in and the templates' types, the views of the component registry and of the modules): the Services tab shows each as met, provided but with no ready instance, drawn by the fallback only, or missing, with who meets it.
 
 The **kernel's provider** gives every instance, app or infra, two objects without a line of its script: the instance (`service:{id}`, `service.instance`, its status, kind, health, template) and **its config** (`serviceConfig:{id}`, `service.config`). The config reads as `{ valueByKey, defineList }` from its `service.yaml` and its script's `configDefineList`; an update `{ valueByKey }` is checked against the instance's own script (a key it does not declare, a value of the wrong type: -1), written into `service.yaml`, and the instance restarts with it (`instance_config_set`). The view of `core.config` draws it, in a document, in a card diagram, and in the Services tab above the instance's config dashboard, so an infra instance without dashboards has its config form too. The kernel also provides `service.createdFrom` (an instance to its template) and `service.dependsOn` (an instance to the instance currently providing each infra name it uses).
 
-**A service as a consumer** uses the registry through its context: `object_query(type_list, text, filter, limit)`, `object_resolve(ref_list, is_verify)`, `object_read(ref)`, `object_update(ref, patch)`, `relation_query(from_ref, to_ref, type_list)`, `object_type_is_assignable(a, b)`; as a provider, `object_register(descriptor_list, is_replace)`, `object_changed(local_id_list?)`, `object_ref_build(local_id)`, `object_type_list_match(own, asked)` (which of its Types a query for others wants). The built-in templates provide: `todo-list` its todos and its list (a collection), `note-db` its notes (`note-db.note`, a `core.document`), `sqlite` the database of each consumer (`sqlite.database`, related to the consumer by `sqlite.keptFor`), `local-backup` every backup (`local-backup.backup`, related by `local-backup.backupOf`); `logging` and the connections provide none of their own.
+**A service as a consumer** uses the registry through its context: `object_query(type_list, text, filter, limit)`, `object_resolve(ref_list, is_verify)`, `object_read(ref)`, `object_update(ref, patch)`, `relation_query(from_ref, to_ref, type_list)`, `object_type_is_assignable(a, b)`; as a provider, `object_register(descriptor_list, is_replace)`, `object_changed(local_id_list?)`, `object_ref_build(local_id)`, `object_type_list_match(own, asked)` (which of its types a query for others wants). The built-in templates provide: `todo-list` its todos and its list (a collection), `note-db` its notes (`note-db.note`, a `core.document`), `sqlite` the database of each consumer (`sqlite.database`, related to the consumer by `sqlite.keptFor`), `local-backup` every backup (`local-backup.backup`, related by `local-backup.backupOf`); `logging` and the connections provide none of their own.
 
 ## The page and the backend
 
-The two registries have one model and different reach. The page's registry has the backend's as one **peer provider** (`lib/doc-object-provider-backend.js`): the namespaces of the backend's providers are its, its query and relation query are the backend's federated ones, whose completeness the page merges entry by entry, and its icons are paths of the backend api the page reaches through its own address. While the backend is down (or the page has none: a build), the peer is unavailable (or absent) and the page's own objects are answered as before.
+The two registries have one model and different reach. The page's registry has the backend's as one **peer provider** (`lib/doc-object-provider-backend.js`): the namespaces of the backend's providers are its, its query and relation query are the backend's federated ones, whose completeness the page merges entry by entry, and its icons are paths of the backend api the page reaches through its own address. It is also all the page's registry knows of the services: it brings the backend's type list, the components of the templates' modules (each available while an instance serves it), the providers behind it with a count of each (which the search plans with, [Search](doc_page_impl_obj_search.md#moderation-plan-preflight-bounded-fetch)), and opens an instance or a template in the Services tab. While the backend is down (or the page has none: a build), the peer is unavailable (or absent) and the page's own objects are answered as before.
 
 The backend cannot ask the page: the page is not a server, and may be closed. So the page **registers** its doc pages and documents into the backend's registry (`POST /object/register`, replacing what it registered before in the namespaces `doc` and `docPage`) whenever the backend is up and the source changes, and a service finds them by a query of `doc.document`, with the status `registered`: known, not verified, possibly stale once the page is closed. The backend refuses a page registration in a namespace of its own providers. A live route from the backend to the page's providers is [TODO](doc_page_impl_TODO.md#object-backend-page).
 
 ## From a component
 
-A component of the registry reaches the page's registry two ways: `config.object`, a stable service object (`resolve`, `query`, `read`, `update`, `relationQuery`, `typeGet`, `typeIsAssignable`, `open`), and the event layer ([Events](doc_page_impl_event.md)), the route `object`: `objectResolveRequest { ref | refList, isVerify }`, `objectQueryRequest { typeList, text, filter, limit, isFresh }`, `objectRelationQueryRequest { fromRef, toRef, typeList }`, `objectReadRequest { ref }`, `objectUpdateRequest { ref, patch }`, `objectOpenRequest { ref }`, each answered `{ code, data, message }`. A component of a service's module, which has its own module scope, uses the events. Opening an object goes to where its own layer shows it: a document is navigated to, an instance or a template opens the Services tab on it, an asset the asset panel.
+A component of the registry reaches the page's registry two ways: `config.object`, a stable service object (`resolve`, `query`, `read`, `update`, `relationQuery`, `typeGet`, `typeIsAssignable`, `open`), and the event layer ([Events](doc_page_impl_event.md)), the route `object`: `objectResolveRequest { ref | refList, isVerify }`, `objectQueryRequest { typeList, text, filter, limit, isFresh }`, `objectRelationQueryRequest { fromRef, toRef, typeList }`, `objectReadRequest { ref }`, `objectUpdateRequest { ref, patch }`, `objectOpenRequest { ref }`, each answered `{ code, data, message }`. A component of a service's module, which has its own module scope, uses the events. Opening an object goes to where its own layer shows it, and its provider does it: a document is navigated to, an instance or a template opens the Services tab on it, an asset the asset panel; an object nobody provides (a registration) is opened by the first provider that knows its kind of place.
 
 ## What is in the kernel, and what is not
 
 | level | what | where |
 | --- | --- | --- |
-| mechanism | references, descriptors, the Type registry (assignability, rank), provider dispatch by namespace, federation with completeness, caching and invalidation, registrations | `service_object.py`, `DocObjectStore` |
-| standard Types | `core.*` (object, collection, group, document, place, config, task, file, service, member, contains, reference) and the domain Types of the page and the kernel | `object-type-builtin.json` |
+| mechanism | references, descriptors, the type registry (assignability, rank), provider dispatch by namespace, federation with completeness, caching and invalidation, registrations | `service_object.py`, `DocObjectStore` |
+| standard types | `core.*` (object, collection, group, document, place, config, task, file, service, member, contains, reference) and the domain types of the page and the kernel | `object-type-builtin.json` |
 | built-in providers and views | the kernel's (instances, templates, configs), the page's layers, the fallback and the views of collections, configs and documents | the kernel, `lib/doc-object-provider-*.js`, `comp-doc/object/` |
 | services and components | groups, timelines, slide decks, a graph of relations, the todos, the notes, a card of a task | templates (`objectProvide`, `compList`) and components (`expose.objectView`) |
 
@@ -322,29 +335,32 @@ Nothing about groups, timelines or graphs is in the kernel: a timeline is a serv
 ## Files
 
 ```text
-built-in/object-type/object-type-builtin.json   the built-in Types, read by the kernel and the page
+built-in/object-type/object-type-builtin.json   the built-in types, read by the kernel and the page
 service-backend/service_object.py      TypeRegistry (rebuild, assignability, problems), ObjectRegistry (providers, query,
                                        resolve, read, update, relation_query, register, changed, caches, the wait for one
                                        provider), KernelObjectProvider, InstanceObjectProvider
 service-backend/service_define.py      expose: typeList, objectProvide (capabilities from the object apis), compList,
-                                       requireList; descriptor and relation normalization, references; ServiceContext:
+                                       requireList; object_api (the protocol of the object apis); descriptor and relation normalization, references; ServiceContext:
                                        object_query, object_resolve, object_read, object_update, relation_query,
                                        object_register, object_changed, object_ref_build, object_type_is_assignable
-service-backend/service_runtime.py     the registry kept beside the service registry: the Types rebuilt after a scan, an
+service-backend/service_runtime.py     the registry kept beside the service registry: the types rebuilt after a scan, an
                                        instance's answers forgotten when it restarts, instance_config_set, api_call's wait
 service-backend/server.py              GET /type/list, /object/provider/list; POST /object/query, resolve, read, update,
                                        relation/query, register, unregister
 frontend/src/lib/doc-object-ref.js     references, descriptors, relations, contexts, statuses, request keys
-frontend/src/lib/doc-object-type.js    the built-in Types, typeRegistryBuild: assignability, distance, rank
-frontend/src/lib/doc-object-provider-doc.js     the doc page source: doc pages, folders, documents, places, groups
-frontend/src/lib/doc-object-provider-link.js    the links (doc.link) from the link index
-frontend/src/lib/doc-object-provider-asset.js   the asset store's objects
-frontend/src/lib/doc-object-provider-backend.js the backend's registry as a peer
+frontend/src/lib/doc-object-type.js    the built-in types, typeRegistryBuild: assignability, distance, rank
+frontend/src/lib/doc-object-provider-doc.js     the doc page source: doc pages, folders, documents, places, groups; opens a document
+frontend/src/lib/doc-object-provider-link.js    the links (doc.link) of the navigation layer (DocLinkStore), both ways
+frontend/src/lib/doc-object-provider-asset.js   the asset store's objects; opens the asset panel
+frontend/src/lib/doc-object-provider-backend.js the backend's registry as a peer: its objects, types, components (compList),
+                                                providers and counts; opens the Services tab
 frontend/src/lib/doc-service-api.js    the object endpoints of the backend
-frontend/src/store/DocObjectStore.ts   the page's registry: Types, providers, resolve / query / relation states and caches,
-                                       read, update, registrations, the views (candidates, choice), requirement status,
-                                       open, the events, the page's documents registered into the backend
-frontend/src/lib/doc-object-registry.test.js   Types, references, federation, tolerance, registrations, the choice of a view
+frontend/src/store/DocObjectStore.ts   the page's registry, knowing the layers only through their providers: types,
+                                       providers, resolve / query / relation states and caches, read, update,
+                                       registrations, the views (candidates, choice), requirement status, open, the
+                                       events, the page's documents registered into the peer
+frontend/src/lib/doc-object-registry.test.js   types, references, federation, tolerance, registrations, the choice of a view,
+                                               what a provider brings (types, components, opening)
 frontend/src/store/DocObjectSearchStore.ts, lib/doc-object-search.js   the search (doc_page_impl_obj_search.md)
 comp-doc/object/                       ObjectViewHost (one object drawn), ObjectView, ObjectList, ObjectGroup, ObjectSearch,
                                        ObjectSearchPanel, the views
@@ -353,10 +369,10 @@ comp-doc/object/                       ObjectViewHost (one object drawn), Object
 comp-doc/service/service-comp-define.js, ServiceCompHost.jsx   the components of a template's module (compList)
 comp-doc/registry/comp-expose.js       expose.objectView, compObjectViewGet
 comp-doc/registry/RegisteredComp.jsx   config.object
-comp-doc/settings/ServiceSettings.jsx  a script's Types, objects, components and requirements; an instance's config object
+comp-doc/settings/ServiceSettings.jsx  a script's types, objects, components and requirements; an instance's config object
 example_doc/object-registry.md         the demonstration: views, lists, a group, a collection, a card diagram, tolerance
 ```
 
 ## Future updates
 
-What the present model leaves for later (persistent registrations and pins, versions of Types, Types of doc pages and packages, a diagram of relations, a live route from the backend to the page, batched resolves, the authorization of changes) is in [TODO](doc_page_impl_TODO.md#object-registry).
+What the present model leaves for later (persistent registrations and pins, versions of types, types of doc pages and packages, a diagram of relations, a live route from the backend to the page, batched resolves, the authorization of changes) is in [TODO](doc_page_impl_TODO.md#object-registry).

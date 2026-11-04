@@ -48,7 +48,7 @@
 //   urlGet(path)                             the url of a path of the backend api (an iconUrl a descriptor names)
 //
 // the object registry of the backend (doc_page_impl_obj.md#the-backend-registry):
-//   typeList()                               { typeList, problemList }: the built-in Types and the templates'
+//   typeList()                               { typeList, problemList }: the built-in types and the templates'
 //   objectProviderList()                     [{ id, label, namespaceList, typeList, relationTypeList, capabilityList, status, ... }]
 //   objectQuery(spec)                        { objectList, isTruncated, completeness: { isComplete, providerList } }
 //   objectCount(spec)                        { providerList: [{ providerId, count, countKind: exact | unknown, status }] }:

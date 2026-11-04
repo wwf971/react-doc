@@ -1,5 +1,5 @@
-import { makeAutoObservable, observable, reaction, runInAction } from 'mobx';
-import { typeBuiltinList, typeDefineNormalize, typeRegistryBuild } from '../lib/doc-object-type.js';
+import { comparer, makeAutoObservable, observable, reaction, runInAction } from 'mobx';
+import { typeBuiltinList, typeRegistryBuild } from '../lib/doc-object-type.js';
 import {
   OBJECT_VIEW_CONTEXT_LIST,
   objectDescriptorNormalize,
@@ -12,7 +12,6 @@ import {
 } from '../lib/doc-object-ref.js';
 import { compDefinitionNormalize } from '../../../comp-doc/registry/comp-registry.js';
 import { compDefinitionGet } from '../../../comp-doc/registry/comp-definition.js';
-import { serviceCompIdParse } from '../../../comp-doc/service/service-comp-define.js';
 import { compObjectViewGet } from '../../../comp-doc/registry/comp-expose.js';
 import { DocObjectSearchStore } from './DocObjectSearchStore.js';
 
@@ -23,13 +22,19 @@ import { DocObjectSearchStore } from './DocObjectSearchStore.js';
 // authoritative for the data they own. Registration, discovery, resolution,
 // and verification are separate concerns.
 //
-//   typeRegistry   the Types: the built-in ones (the JSON file the kernel
-//                  reads too), and the backend's list when there is one (the
-//                  built-in Types and those its templates define)
+//   typeRegistry   the types: the built-in ones (the JSON file the kernel
+//                  reads too), and those the providers define (the backend
+//                  peer: its built-in copy and the types of its templates)
 //   providerList   who answers for objects: the page's service layers (the
 //                  doc page source, the links, the asset store), each with
-//                  its namespaces, Types and capabilities, and the backend's
+//                  its namespaces, types and capabilities, and the backend's
 //                  registry as one peer provider of its namespaces
+//
+// The registry knows no service layer: what it needs of one (its objects,
+// the types and the components it brings, how to open its objects) it asks
+// the layer's provider, the way the api registry asks its api providers.
+// The only other store it reads is the component registry (DocStore), for
+// the views.
 //   resolveByRef   what the registry knows of a reference: the last answer
 //                  of its provider, reused for the provider's cacheSecond or
 //                  until its version changes, and kept (with the status
@@ -81,13 +86,25 @@ export type ObjectQuerySpec = {
 
 export type ObjectRelationSpec = { fromRef?: string; toRef?: string; typeList?: string[] | string };
 
+// a component a provider serves (a view, when it has objectView). it is
+// drawn only while isAvailable; sourceLabel says whose it is (template todo-list)
+export type ObjectProviderComp = {
+  compId: string;
+  label: string;
+  sourceLabel: string;
+  objectView?: { typeList: string[]; contextList: string[]; priority: number };
+  isAvailable: boolean;
+  unavailableReason: string;
+};
+
 // what a provider of the page offers. every method is optional but those
-// its capabilities name; each receives the Type registry
+// its capabilities name; each receives the type registry
 export type ObjectProvider = {
   id: string;
   label: string;
   registry?: 'page' | 'backend';
-  // another registry: its query and relation query answer their own completeness
+  // another registry: its query and relation query answer their own
+  // completeness, and it lists the providers behind it (providerInfoListGet)
   isPeer?: boolean;
   namespaceList: string[];
   namespaceIs?: (namespace: string) => boolean;
@@ -104,21 +121,39 @@ export type ObjectProvider = {
   read?: (ref: string, registry: any) => Promise<{ descriptor: any; content: any }>;
   update?: (ref: string, patch: any, registry: any) => Promise<{ descriptor: any; content: any }>;
   relationQuery?: (spec: any, registry: any) => Promise<any> | any;
+  // a peer: how many objects each of its providers would answer, nothing
+  // fetched ({ providerList: [{ providerId, count, countKind, status }] }),
+  // and its providers as it lists them, for a search to plan per provider
+  count?: (spec: any) => Promise<any>;
+  providerInfoListGet?: () => any[];
+  // a peer: accepts the descriptors the page's providers register into it
   register?: (descriptorList: any[], namespaceList: string[]) => Promise<ObjectResult>;
-  descriptorListForBackendGet?: () => any[];
+  // what the provider registers into a peer: the objects a service should
+  // find without asking the page (the doc page source: its documents)
+  descriptorListForPeerGet?: () => any[];
+  // besides objects, what a provider brings to the layer: the types it
+  // defines ({ typeList, problemList }), the components it serves, and
+  // going to where its own layer shows one of its objects (true when it did)
+  typeDefineGet?: () => { typeList: any[]; problemList: string[] } | null;
+  compListGet?: () => ObjectProviderComp[];
+  open?: (descriptor: ObjectDescriptor) => boolean | Promise<boolean>;
 };
 
 type ResolveEntry = { status: 'loading' | 'done'; descriptor: ObjectDescriptor; time: number; version: any; promise?: Promise<ObjectDescriptor> };
 type RequestEntry<T> = { status: 'loading' | 'done'; result: T | null; time: number; version: any; promise?: Promise<T>; providerIdList: string[] };
 
+// origin page: a component of the component registry; provider: one a
+// provider serves (a service template's module), drawn while isAvailable
 export type ObjectViewCandidate = {
   compId: string;
   typeList: string[];
   contextList: string[];
   priority: number;
-  origin: 'page' | 'service';
-  templateName?: string;
-  label?: string;
+  origin: 'page' | 'provider';
+  label: string;
+  sourceLabel: string;
+  isAvailable: boolean;
+  unavailableReason: string;
 };
 
 export type ObjectViewChoice = ObjectViewCandidate & { distance: number; isFallback: boolean };
@@ -133,20 +168,15 @@ export const objectEventTypeList = [
 ];
 
 // the view every object has: drawn for core.object, so it is simply the
-// least specific view, chosen when nothing nearer to the object's Types is
+// least specific view, chosen when nothing nearer to the object's types is
 export const OBJECT_VIEW_FALLBACK_COMP_ID = 'common/ObjectViewFallback';
 
 const CACHE_SECOND_DEFAULT = 15;
 const QUERY_LIMIT_MAX = 500;
-const BACKEND_REGISTER_DELAY_MS = 1500;
+const PEER_REGISTER_DELAY_MS = 1500;
 
-type Stores = {
-  serviceStore?: any;
-  docStore?: any;
-  configStore?: any;
-  assetStore?: any;
-  sourceStore?: any;
-};
+// the component registry (DocStore.compById), for the views
+type Stores = { docStore?: any };
 
 export class DocObjectStore {
   providerList: ObjectProvider[] = [];
@@ -154,15 +184,15 @@ export class DocObjectStore {
   queryByKey = observable.map<string, RequestEntry<ObjectQueryResult>>({}, { deep: false });
   relationByKey = observable.map<string, RequestEntry<ObjectRelationResult>>({}, { deep: false });
   registrationByRef = observable.map<string, { descriptor: ObjectDescriptor; registrant: any; time: number }>({}, { deep: false });
-  // the page's documents registered into the backend's registry
-  backendRegistration = { status: 'idle' as 'idle' | 'submitting' | 'done' | 'error', count: 0, time: 0, message: '' };
+  // the page's documents registered into the peer registry (the backend's)
+  peerRegistration = { status: 'idle' as 'idle' | 'submitting' | 'done' | 'error', count: 0, time: 0, message: '' };
   stores: Stores;
   objectService: Readonly<Record<string, (...args: any[]) => any>>;
   // the search of the layer (doc_page_impl_obj_search.md): one search, and
   // the sessions of the search uis
   searchStore: DocObjectSearchStore;
   disposeList: (() => void)[] = [];
-  backendRegisterTimer: ReturnType<typeof setTimeout> | undefined;
+  peerRegisterTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(stores: Stores = {}) {
     this.stores = stores;
@@ -191,7 +221,7 @@ export class DocObjectStore {
       searchStore: false,
       viewStateByKey: false,
       disposeList: false,
-      backendRegisterTimer: false,
+      peerRegisterTimer: false,
       resolveByRef: false,
       queryByKey: false,
       relationByKey: false,
@@ -200,36 +230,39 @@ export class DocObjectStore {
   }
 
   init() {
-    // the documents of the page, registered into the backend's registry when
-    // it is up and whenever the source changes, so its services find them
-    const { serviceStore, sourceStore } = this.stores;
-    if (serviceStore && sourceStore) {
-      this.disposeList.push(reaction(
-        () => [serviceStore.backendStatus === 'up', sourceStore.fileManifest, sourceStore.docPageList.length],
-        ([isUp]) => {
-          if (!isUp) return;
-          if (this.backendRegisterTimer) clearTimeout(this.backendRegisterTimer);
-          this.backendRegisterTimer = setTimeout(() => void this.backendRegister(), BACKEND_REGISTER_DELAY_MS);
-        },
-        { fireImmediately: true },
-      ));
-    }
+    // what the page's providers register into the peer (the documents of
+    // the page into the backend's registry, so its services find them):
+    // when the peer becomes ready, and whenever what they register changes
+    this.disposeList.push(reaction(
+      () => {
+        const peer = this.peerRegistrableGet();
+        return {
+          isReady: peer !== undefined && this.providerStatusGet(peer).status === 'ready',
+          descriptorList: this.providerList.flatMap((provider) => provider.descriptorListForPeerGet?.() ?? []),
+        };
+      },
+      ({ isReady }) => {
+        if (!isReady) return;
+        if (this.peerRegisterTimer) clearTimeout(this.peerRegisterTimer);
+        this.peerRegisterTimer = setTimeout(() => void this.peerRegister(), PEER_REGISTER_DELAY_MS);
+      },
+      { fireImmediately: true, equals: comparer.structural },
+    ));
   }
 
   dispose() {
     for (const disposeOne of this.disposeList) disposeOne();
     this.disposeList = [];
-    if (this.backendRegisterTimer) clearTimeout(this.backendRegisterTimer);
+    if (this.peerRegisterTimer) clearTimeout(this.peerRegisterTimer);
   }
 
-  // ---------- Types ----------
+  // ---------- types ----------
 
+  // the types the providers define come first, so the backend's definition
+  // of a built-in type (the same file) is the one kept
   get typeRegistry(): any {
-    const typeListBackend = this.stores.serviceStore?.objectTypeList?.typeList;
-    const typeList = Array.isArray(typeListBackend) && typeListBackend.length > 0
-      ? [...typeListBackend.map((item: any) => typeDefineNormalize(item, item.definedBy)), ...typeBuiltinList]
-      : typeBuiltinList;
-    return typeRegistryBuild(typeList);
+    const typeListProvided = this.providerList.flatMap((provider) => provider.typeDefineGet?.()?.typeList ?? []);
+    return typeRegistryBuild(typeListProvided.length > 0 ? [...typeListProvided, ...typeBuiltinList] : typeBuiltinList);
   }
 
   get typeList(): any[] {
@@ -237,19 +270,19 @@ export class DocObjectStore {
   }
 
   get typeProblemList(): string[] {
-    return [...(this.stores.serviceStore?.objectTypeList?.problemList ?? []), ...this.typeRegistry.problemList];
+    return [...this.providerList.flatMap((provider) => provider.typeDefineGet?.()?.problemList ?? []), ...this.typeRegistry.problemList];
   }
 
   typeGet(typeId: string): any {
     return this.typeRegistry.typeGet(typeId);
   }
 
-  // the label of a Type, its id when nobody defines it
+  // the label of a type, its id when nobody defines it
   typeLabelGet(typeId: string): string {
     return this.typeGet(typeId)?.label ?? typeId;
   }
 
-  // the icon name of an object's Type: its own Type's, else the nearest ancestor's
+  // the icon name of an object's type: its own type's, else the nearest ancestor's
   typeIconGet(typeList: string[]): string {
     const registry = this.typeRegistry;
     for (const typeId of typeList) {
@@ -416,9 +449,9 @@ export class DocObjectStore {
   private async queryFetch(spec: ReturnType<DocObjectStore['querySpecNormalize']>): Promise<{ result: ObjectQueryResult; providerIdList: string[] }> {
     const registry = this.typeRegistry;
     const providerList = this.providerList.filter((provider) => provider.capabilityList.includes('query') && provider.query
-      && (spec.providerIdList.length === 0 || spec.providerIdList.includes(provider.id)));
+      && this.providerIsAsked(provider, spec.providerIdList));
     const answerList = await Promise.all(providerList.map((provider) => this.providerAsk(provider, registry, spec.typeList, provider.typeList,
-      () => provider.query!(spec, registry), 'objectList')));
+      () => provider.query!(this.providerSpecGet(provider, spec), registry), 'objectList')));
     const objectByRef = new Map<string, ObjectDescriptor>();
     const completenessList: ObjectCompleteness['providerList'] = [];
     const providerIdList: string[] = [];
@@ -456,8 +489,23 @@ export class DocObjectStore {
     };
   }
 
+  // whether a query naming providers (providerIdList, empty: all) asks this
+  // one: by its id, or, for a peer, by the id of a provider behind it
+  private providerIsAsked(provider: ObjectProvider, providerIdList: string[]): boolean {
+    if (providerIdList.length === 0 || providerIdList.includes(provider.id)) return true;
+    return provider.isPeer === true && (provider.providerInfoListGet?.() ?? []).some((info: any) => providerIdList.includes(info.id));
+  }
+
+  // the spec a provider is asked with: a peer gets only the ids of its own
+  // providers (none: all of them)
+  private providerSpecGet(provider: ObjectProvider, spec: any): any {
+    if (!provider.isPeer || spec.providerIdList.length === 0) return spec;
+    const idSet = new Set((provider.providerInfoListGet?.() ?? []).map((info: any) => info.id));
+    return { ...spec, providerIdList: spec.providerIdList.filter((id: string) => idSet.has(id)) };
+  }
+
   // one provider of a federated request: undefined when it has nothing of
-  // the Types asked for; else what it answered and how complete it was
+  // the types asked for; else what it answered and how complete it was
   private async providerAsk(provider: ObjectProvider, registry: any, typeListAsked: string[], typeListOwn: string[], call: () => any, listKey: 'objectList' | 'relationList'):
     Promise<{ itemList: any[]; completenessList: ObjectCompleteness['providerList'] } | undefined> {
     const status = this.providerStatusGet(provider);
@@ -676,19 +724,24 @@ export class DocObjectStore {
     });
   }
 
+  // the peer registry that accepts the page's registrations (the backend's)
+  private peerRegistrableGet(): ObjectProvider | undefined {
+    return this.providerList.find((provider) => provider.isPeer && provider.register);
+  }
+
   // the page's own objects (the doc pages, the documents) registered into
-  // the backend's registry, replacing what the page registered before
-  async backendRegister(): Promise<void> {
-    const peer = this.providerList.find((provider) => provider.isPeer && provider.register);
+  // the peer registry, replacing what the page registered before
+  async peerRegister(): Promise<void> {
+    const peer = this.peerRegistrableGet();
     if (!peer || this.providerStatusGet(peer).status !== 'ready') return;
-    const descriptorList = this.providerList.flatMap((provider) => provider.descriptorListForBackendGet?.() ?? []);
+    const descriptorList = this.providerList.flatMap((provider) => provider.descriptorListForPeerGet?.() ?? []);
     const namespaceList = [...new Set(descriptorList.map((descriptor) => objectRefParse(descriptor.ref)?.namespace).filter(Boolean))] as string[];
     runInAction(() => {
-      this.backendRegistration = { ...this.backendRegistration, status: 'submitting' };
+      this.peerRegistration = { ...this.peerRegistration, status: 'submitting' };
     });
     const result = await peer.register!(descriptorList, namespaceList);
     runInAction(() => {
-      this.backendRegistration = result.code === 0
+      this.peerRegistration = result.code === 0
         ? { status: 'done', count: descriptorList.length, time: Date.now(), message: '' }
         : { status: 'error', count: 0, time: Date.now(), message: result.message };
     });
@@ -696,47 +749,40 @@ export class DocObjectStore {
 
   // ---------- views ----------
 
+  // the components the providers serve (the modules of the service templates)
+  get providerCompList(): ObjectProviderComp[] {
+    return this.providerList.flatMap((provider) => provider.compListGet?.() ?? []);
+  }
+
   // every component that draws objects: those of the component registry
-  // that expose objectView, and those of the service templates (compList)
+  // that expose objectView, and those the providers serve
   get viewCandidateList(): ObjectViewCandidate[] {
     const list: ObjectViewCandidate[] = [];
     for (const [compId, value] of Object.entries(this.stores.docStore?.compById ?? {})) {
       const definition = compDefinitionNormalize(value);
       const objectView = definition ? compObjectViewGet(definition) : undefined;
-      if (objectView) list.push({ compId, ...objectView, origin: 'page', label: definition.expose?.meta?.label ?? compId });
-    }
-    const serviceStore = this.stores.serviceStore;
-    if (serviceStore) {
-      const templateNameSet = new Set<string>();
-      const exposeAdd = (templateName: string, expose: any) => {
-        templateNameSet.add(templateName);
-        for (const comp of expose?.compList ?? []) {
-          if (!comp.objectView) continue;
-          list.push({ compId: `service/${templateName}/comp/${comp.id}`, ...comp.objectView, origin: 'service', templateName, label: comp.label });
-        }
-      };
-      for (const template of serviceStore.templateList ?? []) if (template.status === 'ready') exposeAdd(template.name, template.expose);
-      for (const instance of serviceStore.instanceList ?? []) {
-        const templateName = instance.template?.name;
-        if (templateName && !templateNameSet.has(templateName) && instance.expose) exposeAdd(templateName, instance.expose);
+      if (objectView) {
+        list.push({ compId, ...objectView, origin: 'page', label: definition.expose?.meta?.label ?? compId, sourceLabel: 'the page', isAvailable: true, unavailableReason: '' });
       }
+    }
+    for (const comp of this.providerCompList) {
+      if (!comp.objectView) continue;
+      list.push({
+        compId: comp.compId, ...comp.objectView, origin: 'provider', label: comp.label, sourceLabel: comp.sourceLabel, isAvailable: comp.isAvailable, unavailableReason: comp.unavailableReason,
+      });
     }
     return list;
   }
 
-  // whether a view can be drawn now: a component of a service template
-  // needs a ready instance of the template whose module is built
+  // whether a view can be drawn now: its provider says so (a component of a
+  // service template needs a ready instance of the template whose module is built)
   viewIsAvailable(candidate: ObjectViewCandidate): boolean {
-    if (candidate.origin === 'page') return true;
-    const serviceStore = this.stores.serviceStore;
-    if (!serviceStore || serviceStore.backendStatus !== 'up') return false;
-    return serviceStore.instanceListOfTemplateName(candidate.templateName)
-      .some((instance: any) => instance.status === 'ready' && instance.dashboardBuild?.isBuilt);
+    return candidate.isAvailable !== false;
   }
 
-  // the views that can draw an object of these Types in a context, the best
-  // first: the nearest Type (of two at one distance, the parent the object's
-  // Type lists first: rankGet), then the highest priority, then the page's own
+  // the views that can draw an object of these types in a context, the best
+  // first: the nearest type (of two at one distance, the parent the object's
+  // type lists first: rankGet), then the highest priority, then the page's own
   viewListGet(typeList: string[], context: string, isAvailableOnly = true): ObjectViewChoice[] {
     const registry = this.typeRegistry;
     const typeListObject = typeList.length > 0 ? typeList : ['core.object'];
@@ -765,7 +811,8 @@ export class DocObjectStore {
     const viewList = this.viewListGet(descriptor.typeList, contextUsed);
     const preferred = compIdPreferred ? viewList.find((view) => view.compId === compIdPreferred) : undefined;
     return preferred ?? viewList[0] ?? {
-      compId: OBJECT_VIEW_FALLBACK_COMP_ID, typeList: ['core.object'], contextList: [...OBJECT_VIEW_CONTEXT_LIST], priority: -100, origin: 'page', distance: 0, isFallback: true,
+      compId: OBJECT_VIEW_FALLBACK_COMP_ID, typeList: ['core.object'], contextList: [...OBJECT_VIEW_CONTEXT_LIST], priority: -100, origin: 'page',
+      label: 'the fallback view', sourceLabel: 'the page', isAvailable: true, unavailableReason: '', distance: 0, isFallback: true,
     };
   }
 
@@ -829,12 +876,12 @@ export class DocObjectStore {
 
   // whether a requirement of a template's script (expose.requireList:
   // { kind: type | objectView | comp, value, context, isRequired }) is met,
-  // and by whom. resolved here, where every provider of Types and views is
-  // known: the built-in Types and the templates' (the backend's list), the
-  // views of the component registry and of the templates' modules.
+  // and by whom. resolved here, where every provider of types and views is
+  // known: the built-in types and those the providers define, the views of
+  // the component registry and the components the providers serve.
   //   satisfied    someone provides it now
-  //   unavailable  a template provides it, but no ready instance of it can serve it
-  //   fallback     (objectView) nothing but the fallback view draws the Type
+  //   unavailable  a provider has it, but cannot serve it now (no ready instance of its template)
+  //   fallback     (objectView) nothing but the fallback view draws the type
   //   missing      nobody provides it
   requireStatusGet(require: { kind: string; value: string; context?: string }): { status: string; providerList: string[] } {
     if (require.kind === 'type') {
@@ -846,41 +893,30 @@ export class DocObjectStore {
     if (require.kind === 'objectView') {
       const viewList = this.viewListGet([require.value], require.context || 'card', false).filter((view) => !view.isFallback);
       if (viewList.length === 0) return { status: 'fallback', providerList: [] };
-      const providerList = viewList.map((view) => (view.origin === 'page' ? `${view.label ?? view.compId} (the page)` : `${view.label ?? view.compId} (template ${view.templateName}${this.viewIsAvailable(view) ? '' : ', no ready instance'})`));
+      const providerList = viewList.map((view) => `${view.label} (${view.sourceLabel}${view.isAvailable ? '' : `, ${view.unavailableReason}`})`);
       return { status: viewList.some((view) => this.viewIsAvailable(view)) ? 'satisfied' : 'unavailable', providerList };
     }
-    const serviceComp = serviceCompIdParse(require.value);
-    if (serviceComp) {
-      const candidate = this.viewCandidateList.find((view) => view.compId === require.value);
-      if (!candidate) return { status: 'missing', providerList: [] };
-      return { status: this.viewIsAvailable(candidate) ? 'satisfied' : 'unavailable', providerList: [`template ${serviceComp.templateName}`] };
-    }
-    const isRegistered = compDefinitionGet(this.stores.docStore?.compById ?? {}, require.value) !== undefined;
+    const comp = this.providerCompList.find((item) => item.compId === require.value);
+    if (comp) return { status: comp.isAvailable ? 'satisfied' : 'unavailable', providerList: [comp.sourceLabel] };
+    // a component of a service's module is defined from its id alone
+    // (service-comp-define.js): it exists only when a provider serves it
+    const definition = compDefinitionGet(this.stores.docStore?.compById ?? {}, require.value);
+    const isRegistered = definition !== undefined && definition.expose?.meta?.isServiceComp !== true;
     return isRegistered ? { status: 'satisfied', providerList: ['the component registry'] } : { status: 'missing', providerList: [] };
   }
 
   // ---------- opening an object ----------
 
-  // goes to where the object is shown by its own layer: a document, the
-  // Services tab, the asset panel. false when it has no such place
+  // goes to where the object is shown by its own layer (a document, the
+  // Services tab, the asset panel): its provider opens it, else the first
+  // provider that knows its kind of place (a registered object). false when
+  // it has no such place
   async open(ref: string): Promise<boolean> {
     const descriptor = this.resolveByRef.get(ref)?.descriptor?.open ? this.resolveByRef.get(ref)!.descriptor : await this.resolve(ref);
-    const open = descriptor.open;
-    const { docStore, configStore, serviceStore, assetStore } = this.stores;
-    if (!open) return false;
-    if (open.kind === 'navigate' && docStore) return docStore.navigate(open.target);
-    if ((open.kind === 'serviceInstance' || open.kind === 'serviceTemplate') && configStore && serviceStore) {
-      runInAction(() => {
-        configStore.settingsOpenSet(true);
-        configStore.settingsTabIdSet('service');
-        if (open.kind === 'serviceInstance') serviceStore.settingsServiceSelect(open.serviceId);
-        else serviceStore.settingsTemplateSelect(open.templateId);
-      });
-      return true;
-    }
-    if (open.kind === 'asset' && assetStore?.panelOpen) {
-      assetStore.panelOpen(open.store, open.objectId);
-      return true;
+    if (!descriptor.open) return false;
+    const providerOwn = this.providerOfRefGet(ref);
+    for (const provider of [providerOwn, ...this.providerList.filter((item) => item !== providerOwn)]) {
+      if (provider?.open && (await provider.open(descriptor)) === true) return true;
     }
     return false;
   }

@@ -43,7 +43,7 @@ import zipfile
 
 import yaml
 
-from service_define import Service, ServiceError, api, param, returns
+from service_define import Service, ServiceError, api, object_api, param, returns
 from service_util import REGEX_ID, REGEX_TEMPLATE_NAME, time_text_get
 
 BACKUP_DIR_DEFAULT_NAME = 'service-backup'
@@ -309,10 +309,7 @@ class LocalBackup(Service):
     # local ids: 'backup/{versionId}' (the file name without .zip). read only:
     # a backup is made and removed by its consumer, or from the dashboards
 
-    @api(kind='query', description='the backups as objects, every consumer, oldest first',
-         params=[param('typeList', 'array', 'the Types asked for'), param('text', 'string', 'text the label contains', default=''),
-                 param('filter', 'object', '{ consumerServiceId? }', default=None), param('limit', 'integer', 'how many at most', default=100)],
-         result=returns('array', 'descriptors'), callerKindList=['kernel'])
+    @object_api(description='the backups as objects, every consumer, oldest first')
     def objectQuery(self, typeList, text='', filter=None, limit=100):
         if not self.context.object_type_list_match(['local-backup.backup'], typeList):
             return []
@@ -327,10 +324,7 @@ class LocalBackup(Service):
             result.append(descriptor)
         return result[:limit]
 
-    @api(kind='query', description='how many backups objectQuery would answer (the preflight of a search): the names of the folder, no zip opened',
-         params=[param('typeList', 'array', 'the Types asked for'), param('text', 'string', 'text the label contains', default=''),
-                 param('filter', 'object', 'the filters', default=None)],
-         result=returns('integer', 'how many'), callerKindList=['kernel'])
+    @object_api(description='how many backups objectQuery would answer (the preflight of a search): the names of the folder, no zip opened')
     def objectCount(self, typeList, text='', filter=None):
         if not self.context.object_type_list_match(['local-backup.backup'], typeList):
             return 0
@@ -338,25 +332,19 @@ class LocalBackup(Service):
         return len([entry for entry in self._folder_scan()['entryList']
                     if (not consumer or entry['consumerServiceId'] == consumer) and (not text or text.lower() in entry['fileName'].lower())])
 
-    @api(kind='query', description='the descriptor of each local id, null for one that does not exist',
-         params=[param('localIdList', 'array', 'the local ids')], result=returns('array', 'descriptors or null'), callerKindList=['kernel'])
+    @object_api(description='the descriptor of each local id, null for one that does not exist')
     def objectResolve(self, localIdList):
         return [self._backup_descriptor_build(record) if record is not None else None
                 for record in (self._backup_record_of_local_get(local_id) for local_id in localIdList)]
 
-    @api(kind='query', description='{ descriptor, content: the backup and its metadata } of a backup',
-         params=[param('localId', 'string', 'the local id')], result=returns('object', '{ descriptor, content }'), callerKindList=['kernel'])
+    @object_api(description='{ descriptor, content: the backup and its metadata } of a backup')
     def objectRead(self, localId):
         record = self._backup_record_of_local_get(localId)
         if record is None:
             raise ServiceError(-3, f'{localId} is not a backup of the folder')
         return {'descriptor': self._backup_descriptor_build(record), 'content': {**record, **self._meta_read(record['fileName'])}}
 
-    @api(kind='query', description='from every backup to the consumer instance it was made of',
-         params=[param('fromRef', 'string', 'the object the relations start at', default=''),
-                 param('toRef', 'string', 'the object they end at', default=''),
-                 param('typeList', 'array', 'the relation Types asked for', default=None)],
-         result=returns('array', 'relations'), callerKindList=['kernel'])
+    @object_api(description='from every backup to the consumer instance it was made of')
     def relationQuery(self, fromRef='', toRef='', typeList=None):
         if not self.context.object_type_list_match(['local-backup.backupOf'], typeList or ['core.relation']):
             return []

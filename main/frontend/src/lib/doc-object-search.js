@@ -9,16 +9,16 @@ import { objectRefParse } from './doc-object-ref.js';
 //                 ("quoted words" are one token):
 //     word        any field: the name of the object, its id (its reference),
 //                 its host (the service instance or layer providing it: its
-//                 name, its id, its template, the doc page), its Types (id or
+//                 name, its id, its template, the doc page), its types (id or
 //                 label, with their ancestors), its description and summary
-//     type:word   its Types only            type:task  type:doc.section
+//     type:word   its types only            type:task  type:doc.section
 //     in:word     its host only             in:todos   in:w55j3   in:example
 //     id:word     its reference only        id:todo/3  id:~example:example/a.md
 //     ns:word     its namespace only        ns:doc     ns:service.w55j3ztn3rq
 //     a reference a whole reference (doc:~example:example/a.md#setup) is also
 //                 resolved at once: the object, whatever the rest says
 //
-// a token matched by what is known of a provider (its host, its Types) is
+// a token matched by what is known of a provider (its host, its types) is
 // met by every object of it; the others are matched by each object. so
 // "todos milk" finds the objects named like milk of the host named like
 // todos, without listing the objects of any other host.
@@ -51,7 +51,7 @@ export function objectSearchParse(text) {
 }
 
 // what a provider is known by before anything is fetched: its host (name,
-// id, service id, template, namespaces) and its Types (ids and labels, with
+// id, service id, template, namespaces) and its types (ids and labels, with
 // their ancestors)
 export function objectSearchProviderFieldsBuild(provider, typeRegistry) {
   return {
@@ -61,7 +61,7 @@ export function objectSearchProviderFieldsBuild(provider, typeRegistry) {
   };
 }
 
-// what an object is matched by: its name, its id, its host, its Types, the rest
+// what an object is matched by: its name, its id, its host, its types, the rest
 export function objectSearchFieldsBuild(descriptor, hostFieldList, typeRegistry) {
   const parsed = objectRefParse(descriptor.ref);
   const summaryTextList = Object.values(descriptor.summary ?? {})
@@ -78,7 +78,7 @@ export function objectSearchFieldsBuild(descriptor, hostFieldList, typeRegistry)
 
 // the plan of a search for one provider, before anything is fetched:
 //   isCandidate     whether objects of it can match at all: every token of
-//                   in: and ns: matches its host, every type: one of its Types
+//                   in: and ns: matches its host, every type: one of its types
 //   tokenListObject the tokens its objects must still match one by one (the
 //                   words its host does not match, type: and id:)
 //   textPush        the word a provider may filter by itself (its query's
@@ -91,7 +91,7 @@ export function objectSearchPlanBuild(tokenList, providerFields) {
       continue;
     }
     if (token.key === 'type') {
-      if (!providerFields.type.some((text) => text.includes(token.valueLower))) return { isCandidate: false, tokenListObject: [], textPush: '', reason: `${token.raw} matches none of its Types` };
+      if (!providerFields.type.some((text) => text.includes(token.valueLower))) return { isCandidate: false, tokenListObject: [], textPush: '', reason: `${token.raw} matches none of its types` };
       tokenListObject.push(token);
       continue;
     }

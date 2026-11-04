@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { objectSearchMatch, objectSearchParse, objectSearchPlanBuild, objectSearchProviderFieldsBuild, objectSearchFieldsBuild } from './doc-object-search.js';
 import { typeBuiltinList, typeRegistryBuild } from './doc-object-type.js';
 import { DocObjectStore } from '../store/DocObjectStore.ts';
+import { objectProviderBackendCreate } from './doc-object-provider-backend.js';
 
 // the search of the object service layer (doc_page_impl_obj_search.md)
 
@@ -73,7 +74,9 @@ function storeBuild() {
     backendUrlGet: (path) => path,
     instanceListOfTemplateName: () => [],
   };
-  const store = new DocObjectStore({ serviceStore });
+  // the backend reached as the page reaches it: through its peer provider
+  const store = new DocObjectStore();
+  store.providerAdd(objectProviderBackendCreate({ serviceStore }));
   return { store, requestList };
 }
 

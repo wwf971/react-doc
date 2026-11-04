@@ -1,9 +1,9 @@
 {
-  "comment": "The built-in Types of the object registry (main/doc_page_impl_obj.md#built-in-types). Read by the service runtime kernel (service_object.py) and by the page (lib/doc-object-type.js); one file, so both registries agree. A Type extends any number of Types of its kind; core.object and core.relation are the roots.",
+  "comment": "The built-in types of the object registry (main/doc_page_impl_obj.md#built-in-types). Read by the service runtime kernel (service_object.py) and by the page (lib/doc-object-type.js); one file, so both registries agree. A type extends any number of types of its kind; core.object and core.relation are the roots.",
   "version": 1,
   "typeList": [
     { "id": "core.object", "kind": "object", "label": "Object", "icon": "box",
-      "description": "Anything the object registry can name: the root of every object Type. A consumer that accepts core.object accepts every object, and draws it at least with the fallback view." },
+      "description": "Anything the object registry can name: the root of every object type. A consumer that accepts core.object accepts every object, and draws it at least with the fallback view." },
     { "id": "core.collection", "kind": "object", "label": "Collection", "icon": "layers", "extendList": ["core.object"],
       "description": "An object with members: the core.member relations from it, ordered, each entry with a key of its own (one object may be a member twice). Derived collections (the sections of a document, the results of a query) and explicit ones (a group) alike." },
     { "id": "core.group", "kind": "object", "label": "Group", "icon": "group", "extendList": ["core.collection"],
@@ -47,7 +47,7 @@
       "description": "The config of a service instance, provided by the kernel for every instance: read from its service.yaml, checked against its script's configDefineList, written back by an update (the instance restarts)." },
 
     { "id": "core.relation", "kind": "relation", "label": "Relation", "icon": "arrow-right",
-      "description": "A relation from one object to another: the root of every relation Type. Not every relation is an object; one that needs an identity, a state or a lifecycle of its own becomes an object instead." },
+      "description": "A relation from one object to another: the root of every relation type. Not every relation is an object; one that needs an identity, a state or a lifecycle of its own becomes an object instead." },
     { "id": "core.member", "kind": "relation", "label": "Member", "icon": "layers", "extendList": ["core.relation"],
       "description": "From a collection to one of its members. Each entry has a key of its own and an order, and may carry data of the entry (a duration on a timeline, a note in a group)." },
     { "id": "core.contains", "kind": "relation", "label": "Contains", "icon": "folder-tree", "extendList": ["core.member"],

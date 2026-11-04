@@ -16,13 +16,13 @@ import { nodeRegistrySearch } from './node-registry.js';
 // Below the kinds, the **objects** the text finds in the page's object
 // service layer (doc_page_impl_obj_search.md), when the page offers its
 // search (config.object): each one is added as a node drawn by ObjectView,
-// a card of the object whatever its Type, with an in and an out handle. The
+// a card of the object whatever its type, with an in and an out handle. The
 // search keeps its state in a session of the layer (sessionKey), runs only
 // once something is typed, and never lists a host that has too many objects:
 // such a host is a line with its count and a way to load its first ones.
 // The diagram narrows the search with its option objectSearch:
 //   objectSearch: { typeList: [core.task], isEnabled: true }
-// the engine knows no Type: it adds a registered component by name
+// the engine knows no type: it adds a registered component by name
 // (DiagramEditStore.nodeComponentAdd)
 export const DiagramCreatePanel = observer(function DiagramCreatePanel({ position, editor, objectService, sessionKey }) {
 	const [query, querySet] = useState('');

@@ -5,8 +5,8 @@ import './DocObject.css';
 
 // One object drawn in a context (doc_page_impl_obj.md#object-views): what
 // the registry knows of the reference (resolved when it knows nothing yet,
-// or what it knows is stale), the view chosen for its Types and the
-// context (the nearest Type wins; the fallback view of core.object when no
+// or what it knows is stale), the view chosen for its types and the
+// context (the nearest type wins; the fallback view of core.object when no
 // other can), and whether it may be changed here. Every consumer draws
 // objects through it: ObjectView, ObjectList, ObjectGroup, the collection
 // view, a node of a card diagram.

@@ -43,6 +43,14 @@ export function objectProviderAssetCreate({ assetStore }) {
     cacheSecond: 300,
     statusGet,
 
+    // an object of the store opens in the asset panel
+    open: (descriptor) => {
+      const open = descriptor.open;
+      if (open?.kind !== 'asset' || !assetStore.panelOpen) return false;
+      assetStore.panelOpen(open.store, open.objectId);
+      return true;
+    },
+
     query: async () => {
       await assetStore.indexLoad();
       return entryList().map(({ store, object }) => descriptorBuild(store, object));

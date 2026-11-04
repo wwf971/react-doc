@@ -7,7 +7,7 @@ import { groupDataRead } from '../../frontend/src/lib/doc-object-provider-doc.js
 
 // A group of objects declared in a document (doc_page_impl_obj.md#groups-and-collections):
 // the document is its source of truth. With an id, the block is an object
-// of the registry itself, doc:{document}#{id} of the Type doc.group (a
+// of the registry itself, doc:{document}#{id} of the type doc.group (a
 // core.group and a doc.block), whose members are the core.member relations
 // the doc page source provides from this data; a card diagram, an
 // ObjectView or another group can then name the group. A member is an entry

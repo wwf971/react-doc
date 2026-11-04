@@ -5,7 +5,7 @@ import { objectCompDataRead, objectContextRead } from './object-comp-data.js';
 // One object of the object registry, placed in a document or a diagram
 // (doc_page_impl_obj.md#object-views): the author names it by its
 // reference and the context it is drawn in, and nothing else; the registry
-// finds its provider, and the component registry the view of its Types.
+// finds its provider, and the component registry the view of its types.
 //
 //   <!--renderComp=ObjectView-->
 //   ```yaml

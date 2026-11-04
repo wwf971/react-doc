@@ -1,14 +1,14 @@
 import typeBuiltinFile from '../../../../built-in/object-type/object-type-builtin.json';
 
-// The Type registry of the page (design: doc_page_impl_obj.md#types). The
-// same semantics as the backend's (service_object.py TypeRegistry): a Type
+// The type registry of the page (design: doc_page_impl_obj.md#types). The
+// same semantics as the backend's (service_object.py TypeRegistry): a type
 // is { id, kind: object | relation, label, description, extendList, icon,
-// summaryKeyList, definedBy }, a Type extends any number of Types of its
-// kind, the roots are core.object and core.relation, and a Type nobody
+// summaryKeyList, definedBy }, a type extends any number of types of its
+// kind, the roots are core.object and core.relation, and a type nobody
 // defines is taken as a child of both roots (every object is a core.object).
 //
-// The page reads the built-in Types from the JSON file the kernel reads too,
-// and the backend's list when there is a backend (the built-in Types and
+// The page reads the built-in types from the JSON file the kernel reads too,
+// and the backend's list when there is a backend (the built-in types and
 // those the service templates define), so both registries agree.
 
 export const TYPE_ROOT_BY_KIND = { object: 'core.object', relation: 'core.relation' };
@@ -33,7 +33,7 @@ export function typeDefineNormalize(item, definedBy = { kind: 'builtIn' }) {
   };
 }
 
-// a registry of a list of Types: the first definition of an id is kept; a
+// a registry of a list of types: the first definition of an id is kept; a
 // parent nobody defines is replaced by the root of the kind; a cycle is
 // broken where it closes. problemList says what was done
 export function typeRegistryBuild(typeList) {
@@ -50,9 +50,9 @@ export function typeRegistryBuild(typeList) {
       let parentIdUsed = parentId;
       if (!parent) {
         parentIdUsed = TYPE_ROOT_BY_KIND[type.kind];
-        problemList.push(`the Type ${type.id} extends ${parentId}, which no one defines; it extends ${parentIdUsed} instead`);
+        problemList.push(`the type ${type.id} extends ${parentId}, which no one defines; it extends ${parentIdUsed} instead`);
       } else if (parent.kind !== type.kind) {
-        problemList.push(`the Type ${type.id} (${type.kind}) cannot extend ${parentId} (${parent.kind})`);
+        problemList.push(`the type ${type.id} (${type.kind}) cannot extend ${parentId} (${parent.kind})`);
         continue;
       }
       if (parentIdUsed !== type.id && !extendList.includes(parentIdUsed)) extendList.push(parentIdUsed);
@@ -66,7 +66,7 @@ export function typeRegistryBuild(typeList) {
     for (const parentId of [...type.extendList]) {
       if (!typeById.has(parentId)) continue;
       if (stateById.get(parentId) === 'visiting') {
-        problemList.push(`the Types extend one another in a cycle: ${[...path, typeId, parentId].join(' -> ')}`);
+        problemList.push(`the types extend one another in a cycle: ${[...path, typeId, parentId].join(' -> ')}`);
         type.extendList = type.extendList.filter((item) => item !== parentId);
       } else if (!stateById.has(parentId)) {
         visit(parentId, [...path, typeId]);
@@ -77,7 +77,7 @@ export function typeRegistryBuild(typeList) {
   for (const typeId of typeById.keys()) if (!stateById.has(typeId)) visit(typeId, []);
 
   const ancestorById = new Map();
-  // { ancestor: distance } of a Type, itself at 0
+  // { ancestor: distance } of a type, itself at 0
   const ancestorDistanceGet = (typeId) => {
     const cached = ancestorById.get(typeId);
     if (cached) return cached;
@@ -111,15 +111,15 @@ export function typeRegistryBuild(typeList) {
     typeGet: (typeId) => typeById.get(typeId),
     typeList: () => [...typeById.values()],
     ancestorDistanceGet,
-    // the ancestors of a Type, the nearest first (not itself)
+    // the ancestors of a type, the nearest first (not itself)
     ancestorListGet: (typeId) => [...ancestorDistanceGet(typeId)]
       .filter(([id]) => id !== typeId)
       .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
       .map(([id]) => id),
-    // whether an object of typeId is one of typeIdTo: the same Type or a subtype
+    // whether an object of typeId is one of typeIdTo: the same type or a subtype
     isAssignable: (typeId, typeIdTo) => ancestorDistanceGet(typeId).has(typeIdTo),
     isAssignableAny: (typeList, typeListTo) => typeList.some((typeId) => typeListTo.some((typeIdTo) => ancestorDistanceGet(typeId).has(typeIdTo))),
-    // how far an object of these Types is from typeIdTo: the smallest number
+    // how far an object of these types is from typeIdTo: the smallest number
     // of steps up to it, undefined when it is not one
     distanceGet: (typeList, typeIdTo) => {
       let distanceMin;
@@ -129,8 +129,8 @@ export function typeRegistryBuild(typeList) {
       }
       return distanceMin;
     },
-    // where typeIdTo comes among what an object of these Types is, walking up
-    // breadth first and each Type's parents in the order it lists them: the
+    // where typeIdTo comes among what an object of these types is, walking up
+    // breadth first and each type's parents in the order it lists them: the
     // nearest first, and of two at one distance the one listed first (a
     // doc.document is a core.document before it is a core.collection).
     // undefined when it is not one. what decides between two views
@@ -152,7 +152,7 @@ export function typeRegistryBuild(typeList) {
       }
       return undefined;
     },
-    // the Types that extend typeId directly
+    // the types that extend typeId directly
     childListGet: (typeId) => [...typeById.values()].filter((type) => type.extendList.includes(typeId)),
   };
   return registry;

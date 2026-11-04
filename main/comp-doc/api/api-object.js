@@ -9,11 +9,11 @@ import { apiDefine } from '../../frontend/src/lib/doc-api.js';
 export const apiByIdObject = {
   'object/search': apiDefine({
     label: 'Search objects',
-    description: 'Objects of the page and of the services by words in any order: a name, a host (service, doc page), an id, a Type; type:…, in:…, id:…, ns:… narrow a word. Hosts with too many objects are counted, not listed.',
+    description: 'Objects of the page and of the services by words in any order: a name, a host (service, doc page), an id, a type; type:…, in:…, id:…, ns:… narrow a word. Hosts with too many objects are counted, not listed.',
     icon: Search,
     paramList: [
       { name: 'text', type: 'string', isRequired: true, description: 'the words of the search' },
-      { name: 'typeList', type: 'list', description: 'only objects of these Types (and their subtypes)' },
+      { name: 'typeList', type: 'list', description: 'only objects of these types (and their subtypes)' },
       { name: 'providerIdList', type: 'list', description: 'only these providers (doc-source, service:{serviceId}, kernel, …)' },
       { name: 'fetchMax', type: 'number', description: 'the most objects asked of one provider (50)' },
       { name: 'providerIdExpandList', type: 'list', description: 'providers to load the first fetchMax of, however many they have' },

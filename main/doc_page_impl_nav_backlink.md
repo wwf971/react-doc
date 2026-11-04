@@ -56,18 +56,19 @@ The references are kept **as written, never resolved** on the server. Resolution
 
 ## The backlinks of a document
 
-`DocLinkStore` inverts the index once per change of the index or of the source (`linkIndexInvert`, `lib/doc-link-index.js`): every reference of every document is resolved, and becomes a backlink of each file it resolves to.
+`DocLinkStore` resolves the index once per change of the index or of the source (`linkIndexResolve`, `lib/doc-link-index.js`): every reference of every document is resolved into a **link** to each file it resolves to, and the one list of links is seen both ways, the links a document writes (`linkListOfDoc`, `linkListOfPlace` for those under a heading) and the backlinks of a file (`backlinkListGet`). A backlink is a link seen from its target: the same entry.
 
 ```text
-backlink
+link (a backlink, seen from its target)
   docPath        the document the reference is written in
   reference      the entry of the index
   fragment       the place after "#" in its target, '' when none
-  targetPath     the file it resolves to (this document)
-  key            docPath and the reference's position: stable while the document is unchanged
+  targetPath     the file it resolves to; '' when it resolves to nothing (in the links of a document only)
+  key            docPath and the reference's position (and the file, for each file of an ambiguous name):
+                 stable while the document is unchanged
 ```
 
-The index also answers the [object registry](doc_page_impl_obj.md#documents-as-objects): the provider `doc-link` (`lib/doc-object-provider-link.js`) gives the references of a document, and the backlinks of a document or a section, as `doc.link` relations between `doc:` objects, resolved by the same rules as below. The index stays the navigation layer's own; nothing of it is copied into the registry.
+The links also answer the [object registry](doc_page_impl_obj.md#documents-as-objects): the provider `doc-link` (`lib/doc-object-provider-link.js`) says the links of a document or a section, and the backlinks of a document or a section, as `doc.link` relations between `doc:` objects, with the links' own keys. The resolution and its rules stay here, the navigation layer's own; nothing of it is copied into the registry, and the Backlinks panel reads the layer directly, at once, as the layer's own ui.
 
 Three rules of the inversion: a reference that resolves to several files (a bare name shared by two documents) is a backlink of **each**, so a document never misses a link that may reach it, as pruning retains each; a document's references to **itself** are not backlinks, as a referrer count never counted them; and the backlinks of a document are ordered by where they are written, so the list reads like the referencing document does. The groups of the panel follow the side panel: the referencing documents in the order of their first item, documents without an item last, by path.
 
@@ -143,10 +144,11 @@ The page waits for the answers, then looks for the reference while the component
 frontend/plugin/doc-link-index.ts         DocLinkIndexBuilder: the index, scanned per changed document
 frontend/plugin/doc-source-dependency.ts  the scan: each reference with its line, block, headings, context
 frontend/plugin/doc-source.ts             the index in the virtual module (docLinkIndex) and in doc-source-change
-frontend/src/lib/doc-link-index.js        the inversion: referenceEntryListGet, linkIndexInvert,
+frontend/src/lib/doc-link-index.js        the resolution: referenceEntryListGet, linkIndexResolve (the links both ways),
                                           backlinkGroupListBuild, referrerListGet
 frontend/src/store/DocSourceStore.ts      linkIndex, received with the source data
-frontend/src/store/DocLinkStore.ts        the backlinks of the current document, backlinkOpen, backlinkTargetOpen,
+frontend/src/store/DocLinkStore.ts        the links resolved (linkListOfDoc, linkListOfPlace, backlinkListGet), the
+                                          backlinks of the current document, backlinkOpen, backlinkTargetOpen,
                                           referrerListGet, docLabelGet
 frontend/src/store/DocStore.ts            tocContentMode, docCurrentFocus, navigate({ focus })
 frontend/src/lib/doc-destination-navigation.js   focusElementFind, focusBlockGet, navigationFocusSet

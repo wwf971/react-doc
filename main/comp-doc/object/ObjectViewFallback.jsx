@@ -4,8 +4,8 @@ import { ObjectIcon } from './object-icon.jsx';
 
 // The view every object has (doc_page_impl_obj.md#the-fallback-view): it is
 // registered for core.object in every context, so it is chosen only when no
-// view nearer to the object's Types can draw it. It needs nothing but the
-// descriptor: the icon of the object's Type, its label, its Type, its
+// view nearer to the object's types can draw it. It needs nothing but the
+// descriptor: the icon of the object's type, its label, its type, its
 // status when it is not found, its summary, and where to open it. In the
 // block context it reads the object's content on demand, from its provider.
 

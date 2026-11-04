@@ -22,7 +22,7 @@ is optional: without a local-backup instance the todos work, and the backup
 apis answer -7.
 
 The todos are objects of the object registry too (doc_page_impl_obj.md): the
-template defines the Types todo-list.todo (a core.task) and todo-list.list (a
+template defines the types todo-list.todo (a core.task) and todo-list.list (a
 core.collection, one per instance), the instance provides them in its
 namespace service.{serviceId} through the object apis (objectQuery,
 objectResolve, objectRead, objectUpdate, relationQuery), which only the
@@ -36,7 +36,7 @@ import os
 import shutil
 import tempfile
 
-from service_define import Service, ServiceError, api, param, returns
+from service_define import Service, ServiceError, api, object_api, param, returns
 from service_util import time_text_get
 
 SCHEMA_SCRIPT = """
@@ -90,7 +90,7 @@ class TodoList(Service):
                             'its backups in the local-backup infra service', 'heightMin': '10rem'},
         ],
         # the components of the module besides the dashboards: an object view,
-        # chosen by the page for an object of a Type it draws (any core.task)
+        # chosen by the page for an object of a type it draws (any core.task)
         'compList': [
             {'id': 'todo-card', 'export': 'TodoCard', 'label': 'Task card',
              'description': 'a task: its title, checked off in place when the provider allows it',
@@ -102,7 +102,7 @@ class TodoList(Service):
             'container': 'serviceTodoList',
             'module': './dashboard',
         },
-        # the Types the template defines, under its name (doc_page_impl_obj.md#types)
+        # the types the template defines, under its name (doc_page_impl_obj.md#types)
         'typeList': [
             {'id': 'todo-list.todo', 'label': 'Todo', 'extendList': ['core.task'], 'icon': 'square-check',
              'summaryKeyList': ['isDone'],
@@ -118,7 +118,7 @@ class TodoList(Service):
             'queryFilterList': ['isDone'],
             'cacheSecond': 10,
         },
-        # what the template needs others to provide: its Types extend core.task
+        # what the template needs others to provide: its types extend core.task
         'requireList': [
             {'type': 'core.task', 'note': 'todo-list.todo extends it'},
         ],
@@ -311,10 +311,7 @@ class TodoList(Service):
     # local ids: 'list' (the list itself), 'todo/{todoId}'. the kernel makes
     # them references of the instance's namespace, service.{serviceId}:…
 
-    @api(kind='query', description='the objects of the instance of these Types (or their supertypes): the list, the todos',
-         params=[param('typeList', 'array', 'the Types asked for'), param('text', 'string', 'text the label contains', default=''),
-                 param('filter', 'object', '{ isDone? }', default=None), param('limit', 'integer', 'how many at most', default=100)],
-         result=returns('array', 'descriptors'), callerKindList=['kernel'])
+    @object_api(description='the objects of the instance of these types (or their supertypes): the list, the todos')
     def objectQuery(self, typeList, text='', filter=None, limit=100):
         filter = filter or {}
         result = []
@@ -326,10 +323,7 @@ class TodoList(Service):
                 result.append(self._todo_descriptor_build(todo))
         return result[:limit]
 
-    @api(kind='query', description='how many objects objectQuery would answer, without listing them (the preflight of a search)',
-         params=[param('typeList', 'array', 'the Types asked for'), param('text', 'string', 'text the label contains', default=''),
-                 param('filter', 'object', 'the filters', default=None)],
-         result=returns('integer', 'how many'), callerKindList=['kernel'])
+    @object_api(description='how many objects objectQuery would answer, without listing them (the preflight of a search)')
     def objectCount(self, typeList, text='', filter=None):
         filter = filter or {}
         count = 0
@@ -343,22 +337,18 @@ class TodoList(Service):
             count += self.db.query(sql=f'SELECT COUNT(*) AS total FROM todo WHERE {" AND ".join(where_list)}', params=argument_list)['rowList'][0]['total']
         return count
 
-    @api(kind='query', description='the descriptor of each local id, null for one that does not exist',
-         params=[param('localIdList', 'array', 'the local ids')], result=returns('array', 'descriptors or null'), callerKindList=['kernel'])
+    @object_api(description='the descriptor of each local id, null for one that does not exist')
     def objectResolve(self, localIdList):
         return [self._object_get(local_id)[0] for local_id in localIdList]
 
-    @api(kind='query', description='{ descriptor, content } of an object',
-         params=[param('localId', 'string', 'the local id')], result=returns('object', '{ descriptor, content }'), callerKindList=['kernel'])
+    @object_api(description='{ descriptor, content } of an object')
     def objectRead(self, localId):
         descriptor, content = self._object_get(localId)
         if descriptor is None:
             raise ServiceError(-3, f'{localId} is not an object of this list')
         return {'descriptor': descriptor, 'content': content}
 
-    @api(kind='command', description='changes a todo: { isDone } checks it off or on, { title } renames it',
-         params=[param('localId', 'string', 'the local id'), param('patch', 'object', '{ isDone?, title? }')],
-         result=returns('object', '{ descriptor, content }'), callerKindList=['kernel'])
+    @object_api(description='changes a todo: { isDone } checks it off or on, { title } renames it')
     def objectUpdate(self, localId, patch):
         todo_id = self._todo_id_get(localId)
         if todo_id is None:
@@ -371,11 +361,7 @@ class TodoList(Service):
             self.todoDoneSet(todo_id, patch['isDone'])
         return self.objectRead(localId)
 
-    @api(kind='query', description='the members of the list (core.member), from the list or to a todo',
-         params=[param('fromRef', 'string', 'the object the relations start at', default=''),
-                 param('toRef', 'string', 'the object they end at', default=''),
-                 param('typeList', 'array', 'the relation Types asked for', default=None)],
-         result=returns('array', 'relations'), callerKindList=['kernel'])
+    @object_api(description='the members of the list (core.member), from the list or to a todo')
     def relationQuery(self, fromRef='', toRef='', typeList=None):
         if not self.context.object_type_list_match(['core.member'], typeList or ['core.relation']):
             return []

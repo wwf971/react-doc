@@ -1,9 +1,9 @@
 ---
 title: Objects and Types
-description: One registry of objects for the documents and the services, each object drawn by the view of its Types, in a document, a list, a group or a card diagram
+description: One registry of objects for the documents and the services, each object drawn by the view of its types, in a document, a list, a group or a card diagram
 ---
 
-The documents and the services of a page each keep things a reader may want to see somewhere else: a document and its sections, the links between documents, an asset, a service instance and its config, a todo of the [todo list](service-kernel.md), a database of the sqlite infra service. The **object registry** lets any of them offer those things as **objects**, and lets anyone else find them, draw them and work with them without knowing who keeps them. Each object has **Types** (`core.task`, `doc.document`, `service.config`), and a component that can draw a Type draws every object of it, whoever provides it.
+The documents and the services of a page each keep things a reader may want to see somewhere else: a document and its sections, the links between documents, an asset, a service instance and its config, a todo of the [todo list](service-kernel.md), a database of the sqlite infra service. The **object registry** lets any of them offer those things as **objects**, and lets anyone else find them, draw them and work with them without knowing who keeps them. Each object has **types** (`core.task`, `doc.document`, `service.config`), and a component that can draw a type draws every object of it, whoever provides it.
 
 The registry is a place to find objects, never where they live: the doc page source answers for the documents, the link index for the links, the service instance for its todos. What the registry answers may be stale or incomplete, and it says so. The design is `main/doc_page_impl_obj.md`.
 
@@ -25,7 +25,7 @@ object: service.w55j3ztn3rq:todo/1
 context: card
 ```
 
-That is a todo of the instance `example todos`. Its Type `todo-list.todo` extends `core.task`, and the template `todo-list` carries a card for any `core.task` in its module (`TodoCard`, declared in `expose.compList` of its script): the page loads it from a running instance of the template and draws the todo with it. Check it off in place: the card asks the registry for the change `{ isDone }` that `core.task` promises, the registry hands it to the instance, which checks it and answers, and every place showing the todo follows. The dashboard of [the todo list](service-kernel.md) shows the same change, since it is the same todo.
+That is a todo of the instance `example todos`. Its type `todo-list.todo` extends `core.task`, and the template `todo-list` carries a card for any `core.task` in its module (`TodoCard`, declared in `expose.compList` of its script): the page loads it from a running instance of the template and draws the todo with it. Check it off in place: the card asks the registry for the change `{ isDone }` that `core.task` promises, the registry hands it to the instance, which checks it and answers, and every place showing the todo follows. The dashboard of [the todo list](service-kernel.md) shows the same change, since it is the same todo.
 
 The same `ObjectView`, with other references:
 
@@ -51,7 +51,7 @@ A document of this doc page (its card counts the links that reach it, from the n
 
 ## The config of an instance
 
-Every service instance offers its config as an object of the built-in Type `service.config`, provided by the kernel of the backend for every instance, app or infra, without a line in its script. The view of `core.config` draws it as a form; Save sends the changed values to the kernel, which checks them against the instance's script, writes its `service.yaml`, and restarts it:
+Every service instance offers its config as an object of the built-in type `service.config`, provided by the kernel of the backend for every instance, app or infra, without a line in its script. The view of `core.config` draws it as a form; Save sends the changed values to the kernel, which checks them against the instance's script, writes its `service.yaml`, and restarts it:
 
 <!--renderComp=ObjectView-->
 ```yaml
@@ -59,9 +59,9 @@ object: serviceConfig:w55j3ztn3rq
 context: block
 ```
 
-## Objects of a Type
+## Objects of a type
 
-`ObjectList` asks the registry for the objects of some Types, and of their subtypes: the registry asks every provider that has some, the page's and the backend's, and draws each object with the view of its own Types. Every task the page and the services know:
+`ObjectList` asks the registry for the objects of some types, and of their subtypes: the registry asks every provider that has some, the page's and the backend's, and draws each object with the view of its own types. Every task the page and the services know:
 
 <!--renderComp=ObjectList-->
 ```yaml
@@ -83,7 +83,7 @@ The line under a list says how complete it is: how many providers answered, and 
 
 ## Searching for an object
 
-`ObjectSearch` searches every provider of the page and of the services by words in any order: a name, the host of an object (the service instance or the doc page providing it, by its name or its id), its id, its Type. `type:`, `in:`, `id:` and `ns:` restrict a word to one of them. A host with too many objects is counted and not listed, with a way to load its first ones; a word its host matches is met by all its objects, so `todos check` searches the todos of `example todos` only. Try `todos`, `type:task version`, `in:example kernel`, `w55j3 config`:
+`ObjectSearch` searches every provider of the page and of the services by words in any order: a name, the host of an object (the service instance or the doc page providing it, by its name or its id), its id, its type. `type:`, `in:`, `id:` and `ns:` restrict a word to one of them. A host with too many objects is counted and not listed, with a way to load its first ones; a word its host matches is met by all its objects, so `todos check` searches the todos of `example todos` only. Try `todos`, `type:task version`, `in:example kernel`, `w55j3 config`:
 
 <!--renderComp=ObjectSearch-->
 ```yaml
@@ -109,7 +109,7 @@ memberList:
   - doc:~example:example/no-such-document.md
 ```
 
-The block has an id, so the group is an object itself, `doc:~example:example/object-registry.md#release-checklist`, of the Type `doc.group` (a `core.group` and a `doc.block`). Named by that reference anywhere, it is drawn by the view of collections, which knows nothing of documents: it asks the registry for the members (`core.member` relations from the group, provided by the doc page source from the block above):
+The block has an id, so the group is an object itself, `doc:~example:example/object-registry.md#release-checklist`, of the type `doc.group` (a `core.group` and a `doc.block`). Named by that reference anywhere, it is drawn by the view of collections, which knows nothing of documents: it asks the registry for the members (`core.member` relations from the group, provided by the doc page source from the block above):
 
 <!--renderComp=ObjectView-->
 ```yaml
@@ -127,7 +127,7 @@ context: block
 
 ## In a card diagram
 
-A node of a card diagram drawn by `ObjectView` is a card of any object, whatever its Type: the diagram knows nothing of documents, services or databases. The lines are the diagram's own, written in its data. In edit mode a double-click on the canvas opens the create panel, whose text also searches the objects (this diagram narrows it to tasks, documents and configs with its option `objectSearch`):
+A node of a card diagram drawn by `ObjectView` is a card of any object, whatever its type: the diagram knows nothing of documents, services or databases. The lines are the diagram's own, written in its data. In edit mode a double-click on the canvas opens the create panel, whose text also searches the objects (this diagram narrows it to tasks, documents and configs with its option `objectSearch`):
 
 <!--renderComp=CardDiagram,title=Objects of the todo list-->
 ```yaml

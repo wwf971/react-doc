@@ -4,10 +4,10 @@ import { typeBuiltinList, typeDefineNormalize, typeRegistryBuild } from './doc-o
 import { objectRefParse, objectRequestKeyBuild } from './doc-object-ref.js';
 import { DocObjectStore } from '../store/DocObjectStore.ts';
 
-// the object registry of the page (doc_page_impl_obj.md): the Types, and the
+// the object registry of the page (doc_page_impl_obj.md): the types, and the
 // registry over providers that answer, fail, answer partly, or are away
 
-test('the built-in Types: one DAG, multiple inheritance, roots for unknown Types', () => {
+test('the built-in types: one DAG, multiple inheritance, roots for unknown types', () => {
   const registry = typeRegistryBuild(typeBuiltinList);
   assert.deepEqual(registry.problemList, []);
   assert.ok(registry.isAssignable('doc.group', 'core.group'));
@@ -17,19 +17,19 @@ test('the built-in Types: one DAG, multiple inheritance, roots for unknown Types
   assert.ok(!registry.isAssignable('core.collection', 'doc.document'));
   assert.ok(registry.isAssignable('doc.link', 'core.reference'));
   assert.ok(!registry.isAssignable('doc.link', 'core.object'));
-  // a Type nobody defines is an object (and a relation): drawn at least by the fallback
+  // a type nobody defines is an object (and a relation): drawn at least by the fallback
   assert.ok(registry.isAssignable('nobody.knows', 'core.object'));
   assert.equal(registry.distanceGet(['doc.group'], 'core.group'), 1);
   assert.equal(registry.distanceGet(['doc.group'], 'core.object'), 3);
   assert.equal(registry.distanceGet(['doc.group'], 'core.task'), undefined);
-  // of two parents at one distance, the one a Type lists first ranks first
+  // of two parents at one distance, the one a type lists first ranks first
   assert.ok(registry.rankGet(['doc.document'], 'core.document') < registry.rankGet(['doc.document'], 'core.collection'));
   assert.ok(registry.rankGet(['doc.section'], 'core.place') < registry.rankGet(['doc.section'], 'core.collection'));
   assert.ok(registry.rankGet(['doc.group'], 'core.collection') < registry.rankGet(['doc.group'], 'core.place'));
   assert.equal(registry.rankGet(['doc.group'], 'core.task'), undefined);
 });
 
-test('a Type registry reports parents nobody defines and breaks cycles', () => {
+test('a type registry reports parents nobody defines and breaks cycles', () => {
   const registry = typeRegistryBuild([
     ...typeBuiltinList,
     typeDefineNormalize({ id: 'x.a', extendList: ['x.b'] }, { kind: 'test' }),
@@ -67,7 +67,7 @@ function providerBuild(overrides) {
   };
 }
 
-test('a query is federated, filtered by Type, and says how complete it is', async () => {
+test('a query is federated, filtered by type, and says how complete it is', async () => {
   const store = new DocObjectStore();
   store.providerAdd(providerBuild({
     id: 'tasks',
@@ -126,7 +126,7 @@ test('a registration is known, not verified; a provider\'s namespace is its own'
   assert.deepEqual(result.objectList.map((item) => [item.ref, item.status]), [['web:https://example.org', 'registered']]);
 });
 
-test('the view of an object: the nearest Type, then the priority; the fallback otherwise', () => {
+test('the view of an object: the nearest type, then the priority; the fallback otherwise', () => {
   const compById = {
     'common/ObjectViewFallback': { CompRender: () => null, expose: { objectView: { typeList: ['core.object'], contextList: ['icon', 'inline', 'card', 'block'], priority: -100 } } },
     'x/CollectionView': { CompRender: () => null, expose: { objectView: { typeList: ['core.collection'], contextList: ['card'], priority: 0 } } },
@@ -139,4 +139,39 @@ test('the view of an object: the nearest Type, then the priority; the fallback o
   assert.equal(store.viewResolve(descriptor, 'card', 'x/CollectionView').compId, 'x/CollectionView');
   assert.equal(store.viewResolve(descriptor, 'icon').compId, 'common/ObjectViewFallback');
   assert.equal(store.viewResolve({ ref: 't:1', typeList: ['core.task'] }, 'card').compId, 'common/ObjectViewFallback');
+});
+
+test('a provider brings types, components and the opening of its objects; the registry knows no layer', async () => {
+  let isServing = false;
+  const openedList = [];
+  const store = new DocObjectStore({ docStore: { compById: {} } });
+  store.providerAdd(providerBuild({
+    id: 'services',
+    namespaceList: ['s'],
+    typeList: ['x.todo'],
+    typeDefineGet: () => ({ typeList: [typeDefineNormalize({ id: 'x.todo', extendList: ['core.task'] }, { kind: 'serviceTemplate', name: 'x' })], problemList: ['a problem of the backend'] }),
+    compListGet: () => [
+      { compId: 'service/x/comp/card', label: 'card', sourceLabel: 'template x', objectView: { typeList: ['core.task'], contextList: ['card'], priority: 0 }, isAvailable: isServing, unavailableReason: 'no ready instance' },
+      { compId: 'service/x/comp/chart', label: 'chart', sourceLabel: 'template x', isAvailable: isServing, unavailableReason: 'no ready instance' },
+    ],
+    resolve: (refList) => refList.map((ref) => ({ ref, typeList: ['x.todo'], label: 'a todo', open: { kind: 'serviceInstance', serviceId: 'w1' } })),
+    open: (descriptor) => {
+      openedList.push(descriptor.ref);
+      return true;
+    },
+  }));
+  // the types it defines join the built-in ones
+  assert.ok(store.typeRegistry.isAssignable('x.todo', 'core.task'));
+  assert.ok(store.typeProblemList.includes('a problem of the backend'));
+  // its view is drawn only while it serves it; its other components are requirements too
+  assert.equal(store.viewResolve({ ref: 's:1', typeList: ['x.todo'] }, 'card').compId, 'common/ObjectViewFallback');
+  assert.equal(store.requireStatusGet({ kind: 'objectView', value: 'core.task', context: 'card' }).status, 'unavailable');
+  assert.equal(store.requireStatusGet({ kind: 'comp', value: 'service/x/comp/chart' }).status, 'unavailable');
+  assert.equal(store.requireStatusGet({ kind: 'comp', value: 'service/y/comp/gone' }).status, 'missing');
+  isServing = true;
+  assert.equal(store.viewResolve({ ref: 's:1', typeList: ['x.todo'] }, 'card').compId, 'service/x/comp/card');
+  assert.equal(store.requireStatusGet({ kind: 'comp', value: 'service/x/comp/chart' }).status, 'satisfied');
+  // its objects open where its own layer shows them
+  assert.equal(await store.open('s:1'), true);
+  assert.deepEqual(openedList, ['s:1']);
 });

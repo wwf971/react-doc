@@ -61,28 +61,18 @@ export function objectProviderDocCreate({ sourceStore, docStore }) {
     return isNavigable ? { kind: 'navigate', target: hash ? `${path}#${hash}` : path } : null;
   };
 
-  const docDescriptor = (entry) => ({
+  const docDescriptor = (entry, { isOpenable = true } = {}) => ({
     ref: `doc:${entry.internalPath}`,
     typeList: ['doc.document'],
     label: entry.title || entry.name,
     description: entry.internalPath,
     summary: { docPageAlias: entry.docPageAlias, ext: entry.ext, collect: entry.collect ?? '' },
     capabilityList: ['read'],
-    open: navigateOpenGet(entry.internalPath),
+    open: isOpenable ? navigateOpenGet(entry.internalPath) : null,
   });
 
-  // the sections of a compiled document: its toc, each heading with the id
-  // its url names and its depth
-  const sectionListGet = (path) => {
-    const state = sourceStore.compiledByPath[path];
-    if (state?.status !== 'done') return undefined;
-    return (state.toc ?? []).map((item, index) => ({
-      index,
-      id: String(item.url ?? '').replace(/^#/, ''),
-      title: typeof item.title === 'string' ? item.title : textOfNode(item.title),
-      depth: Number(item.depth ?? 2),
-    })).filter((item) => item.id !== '');
-  };
+  // the sections of a compiled document: its headings, as the source layer lists them
+  const sectionListGet = (path) => sourceStore.headingListGet(path);
 
   const sectionDescriptor = (path, section) => ({
     ref: `doc:${path}#${section.id}`,
@@ -114,16 +104,6 @@ export function objectProviderDocCreate({ sourceStore, docStore }) {
       capabilityList: ['read'],
       open: navigateOpenGet(path, component.id),
     };
-  };
-
-  // { path, fragment } of a doc reference; undefined for another namespace
-  const docRefSplit = (ref) => {
-    const parsed = objectRefParse(ref);
-    if (parsed?.namespace !== 'doc') return undefined;
-    const indexHash = parsed.local.indexOf('#');
-    return indexHash < 0
-      ? { path: parsed.local, fragment: '' }
-      : { path: parsed.local.slice(0, indexHash), fragment: decodeURIComponent(parsed.local.slice(indexHash + 1)) };
   };
 
   // the descriptor of a place in a document: a block of that id, else a
@@ -313,13 +293,38 @@ export function objectProviderDocCreate({ sourceStore, docStore }) {
       return relationList;
     },
 
+    // a document or a place in one is navigated to
+    open: (descriptor) => (descriptor.open?.kind === 'navigate' ? docStore.navigate(descriptor.open.target) : false),
+
     // what the page registers into the backend's registry: the doc pages and
-    // the documents, so a service can find them (doc_page_impl_obj.md#the-page-and-the-backend)
-    descriptorListForBackendGet: () => [
+    // the documents, so a service can find them (doc_page_impl_obj.md#the-page-and-the-backend);
+    // the backend cannot navigate the page, so they have no place to open
+    descriptorListForPeerGet: () => [
       ...sourceStore.docPageList.map(docPageDescriptor),
-      ...sourceStore.fileManifest.filter(isDocument).map((entry) => ({ ...docDescriptor(entry), open: null })),
+      ...sourceStore.fileManifest.filter(isDocument).map((entry) => docDescriptor(entry, { isOpenable: false })),
     ],
   };
+}
+
+// { path, fragment } of a reference of the namespace doc (the local part is
+// this provider's: a full source path, then "#" and a fragment); undefined
+// for another namespace. the links (doc-object-provider-link.js) relate the
+// same documents and read their references with it
+export function docRefSplit(ref) {
+  const parsed = objectRefParse(ref);
+  if (parsed?.namespace !== 'doc') return undefined;
+  const indexHash = parsed.local.indexOf('#');
+  return indexHash < 0
+    ? { path: parsed.local, fragment: '' }
+    : { path: parsed.local.slice(0, indexHash), fragment: fragmentDecode(parsed.local.slice(indexHash + 1)) };
+}
+
+function fragmentDecode(fragment) {
+  try {
+    return decodeURIComponent(fragment);
+  } catch {
+    return fragment;
+  }
 }
 
 // the data of an ObjectGroup block: { label, memberList: [{ key, ref, note }] }.
@@ -338,11 +343,4 @@ export function groupDataRead(component) {
     return { key: String(member.key ?? index), ref: String(member.ref ?? ''), note: String(member.note ?? '') };
   }).filter((member) => objectRefParse(member.ref) !== undefined);
   return { label: String(raw?.label ?? component.input?.propsAuthored?.label ?? ''), memberList };
-}
-
-function textOfNode(node) {
-  if (node === null || node === undefined || typeof node === 'boolean') return '';
-  if (typeof node === 'string' || typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map(textOfNode).join('');
-  return textOfNode(node.props?.children);
 }

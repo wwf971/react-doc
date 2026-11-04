@@ -40,8 +40,8 @@ import { dashboardDataTextBuild } from '../../../comp-doc/service/service-dashbo
 //                     templated: { name, serviceId (the current instance, '' none), status: available |
 //                     unavailable | notProvided, message, isRouteExplicit, providerList, consumerList,
 //                     templateList, storage }
-//   objectTypeList    the Types of the backend's object registry: { typeList, problemList } (the
-//                     built-in Types and those the templates define, doc_page_impl_obj.md#types)
+//   objectTypeList    the types of the backend's object registry: { typeList, problemList } (the
+//                     built-in types and those the templates define, doc_page_impl_obj.md#types)
 //   objectProviderList the object providers of the backend (the kernel, the instances whose
 //                     script declares expose.objectProvide): { id, label, namespaceList, typeList,
 //                     relationTypeList, capabilityList, status, ... }

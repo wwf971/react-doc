@@ -1,19 +1,23 @@
-import { makeAutoObservable } from 'mobx';
+import { computed, makeAutoObservable } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import type { DocStore, NavigationFocus } from './DocStore.js';
 import {
   backlinkGroupListBuild,
-  linkIndexInvert,
+  linkIndexResolve,
   referrerListGet,
 } from '../lib/doc-link-index.js';
 import { sourcePathNameGet } from '../lib/doc-source-path.js';
 import { textLocalizedGet } from '../lib/text-localized.js';
 
-// The backlinks of the page (design: doc_page_impl_nav_backlink.md): what
-// the link index of the workspace says about the current document, and the
-// two ways a backlink is followed. The index comes with the source data
-// (DocSourceStore.linkIndex) and is inverted here once per change of the
-// index or of the source; navigation stays with DocStore.
+// The links and backlinks of the page (design: doc_page_impl_nav_backlink.md):
+// what the link index of the workspace says about a document, and the two
+// ways a backlink is followed. The index comes with the source data
+// (DocSourceStore.linkIndex) and is resolved here once per change of the
+// index or of the source, into one list of links seen both ways: the links
+// a document writes, and the backlinks of a file. Both the Backlinks panel
+// and the object registry (the relations doc.link,
+// lib/doc-object-provider-link.js) read them here; navigation stays with
+// DocStore.
 
 export type Backlink = {
   docPath: string;
@@ -41,7 +45,9 @@ export class DocLinkStore {
   constructor({ sourceStore, docStore }: { sourceStore: DocSourceStore; docStore: DocStore }) {
     this.sourceStore = sourceStore;
     this.docStore = docStore;
-    makeAutoObservable(this, { sourceStore: false, docStore: false });
+    // the resolution is kept while the index and the source are unchanged,
+    // also for callers outside a reaction (the object registry's queries)
+    makeAutoObservable(this, { sourceStore: false, docStore: false, linkResolved: computed({ keepAlive: true }) });
   }
 
   // the backlinks panel is offered (config backlink.isEnabled, default true)
@@ -54,14 +60,40 @@ export class DocLinkStore {
     return Boolean(this.sourceStore.linkIndex);
   }
 
-  // every backlink of the index by the path it resolves to, resolved
-  // against the source as it is now
+  // every reference of the index resolved against the source as it is now:
+  // { linkListByDoc, backlinkListByTarget }, the same links both ways
+  get linkResolved(): { linkListByDoc: Map<string, Backlink[]>; backlinkListByTarget: Map<string, Backlink[]> } {
+    return linkIndexResolve(this.sourceStore.linkIndex, this.sourceStore.sourceIndex) as any;
+  }
+
   get backlinkListByTarget(): Map<string, Backlink[]> {
-    return linkIndexInvert(this.sourceStore.linkIndex, this.sourceStore.sourceIndex) as Map<string, Backlink[]>;
+    return this.linkResolved.backlinkListByTarget;
+  }
+
+  // what the links depend on: when a value changes, what was derived from
+  // them (the registry's answers) is derived again. plain observables, so a
+  // caller outside a reaction compares like values
+  versionGet(): any[] {
+    return [this.sourceStore.linkIndex, this.sourceStore.fileManifest];
   }
 
   backlinkListGet(docPath: string): Backlink[] {
     return this.backlinkListByTarget.get(docPath) ?? [];
+  }
+
+  // the links a document writes, in order; one that resolves to nothing has targetPath ''
+  linkListOfDoc(docPath: string): Backlink[] {
+    return this.linkResolved.linkListByDoc.get(docPath) ?? [];
+  }
+
+  // the links written in a section of a document: those under its heading.
+  // the heading is named by its id when the document is compiled on this
+  // page, else the fragment is taken as its title (the rules of a fragment,
+  // doc_page_impl_nav.md#fragment-targets-titles-and-declared-ids)
+  linkListOfPlace(docPath: string, fragment: string): Backlink[] {
+    const heading = this.sourceStore.headingListGet(docPath)?.find((item) => item.id === fragment);
+    const titleLower = (heading?.title ?? fragment).toLowerCase();
+    return this.linkListOfDoc(docPath).filter((link) => link.reference.headingTrail.some((title) => title.toLowerCase() === titleLower));
   }
 
   // the documents that reference a file, with how many references each

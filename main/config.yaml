@@ -144,7 +144,7 @@ compRegistry:
   ListSupportedToolsRow: common/ListSupportedToolsRow
   ListToolsControls: common/ListToolsControls
   # the object registry (doc_page_impl_obj.md): an object by its reference, the
-  # objects of some Types, a group written in the document
+  # objects of some types, a group written in the document
   ObjectView: common/ObjectView
   ObjectList: common/ObjectList
   ObjectGroup: common/ObjectGroup

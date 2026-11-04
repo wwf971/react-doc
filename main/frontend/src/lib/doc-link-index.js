@@ -12,10 +12,14 @@ import { sourcePathIsRooted } from './doc-source-path.js';
 //   linkIndex   { version, byDoc: { [docPath]: { contentHash, linkList: [reference] } } }
 //   reference   { target, kind, construct, sourceLine?, blockLine, headingTrail, context? }
 //               (DocSourceDependency of plugin/doc-source-dependency.ts, without its sourcePath)
-//   backlink    { docPath, reference, index, fragment, targetPath, key }
-//               docPath: the document the reference is written in; index:
-//               its position in that document's list; fragment: the place
-//               after "#" in its target, '' when none; key: stable identity
+//   link        { docPath, reference, index, fragment, targetPath, key }: a
+//               reference resolved to one file. docPath: the document it is
+//               written in; index: its position in that document's list;
+//               fragment: the place after "#" in its target, '' when none;
+//               targetPath: the file, '' when it resolves to nothing; key:
+//               stable identity, {docPath}:{index}, and :{targetPath} for
+//               each file of a reference that resolves to several
+//   backlink    a link seen from its target: the same entry
 
 export const LINK_INDEX_VERSION = 1;
 
@@ -41,32 +45,40 @@ export function referenceFragmentGet(reference) {
   return indexHash >= 0 ? target.slice(indexHash + 1) : '';
 }
 
-// every backlink of the index, by the path it resolves to. a reference
-// that resolves to several files (an ambiguous name) is a backlink of each
-// of them, so a document never misses a link that may reach it; a
-// document's references to itself are left out.
-export function linkIndexInvert(linkIndex, sourceIndex) {
+// every reference of the index resolved against the source, once, and
+// seen both ways: linkListByDoc, the links each document writes, in order
+// (a reference that resolves to nothing kept, with targetPath ''), and
+// backlinkListByTarget, the same links by the file they reach. a reference
+// that resolves to several files (an ambiguous name) is a link to each of
+// them, so a document never misses a link that may reach it; a document's
+// references to itself are left out of both.
+export function linkIndexResolve(linkIndex, sourceIndex) {
+  const linkListByDoc = new Map();
   const backlinkListByTarget = new Map();
   for (const [docPath, doc] of Object.entries(linkIndex?.byDoc ?? {})) {
-    const linkList = Array.isArray(doc?.linkList) ? doc.linkList : [];
-    linkList.forEach((reference, index) => {
-      for (const entry of referenceEntryListGet(reference, docPath, sourceIndex)) {
+    const referenceList = Array.isArray(doc?.linkList) ? doc.linkList : [];
+    const linkList = [];
+    referenceList.forEach((reference, index) => {
+      const fragment = referenceFragmentGet(reference);
+      const entryList = referenceEntryListGet(reference, docPath, sourceIndex);
+      if (entryList.length === 0) {
+        linkList.push({ docPath, reference, index, fragment, targetPath: '', key: `${docPath}:${index}` });
+        return;
+      }
+      for (const entry of entryList) {
         if (entry.internalPath === docPath) continue;
+        const key = entryList.length > 1 ? `${docPath}:${index}:${entry.internalPath}` : `${docPath}:${index}`;
+        const link = { docPath, reference, index, fragment, targetPath: entry.internalPath, key };
+        linkList.push(link);
         const backlinkList = backlinkListByTarget.get(entry.internalPath) ?? [];
-        backlinkList.push({
-          docPath,
-          reference,
-          index,
-          fragment: referenceFragmentGet(reference),
-          targetPath: entry.internalPath,
-          key: `${docPath}:${index}`,
-        });
+        backlinkList.push(link);
         backlinkListByTarget.set(entry.internalPath, backlinkList);
       }
     });
+    if (linkList.length > 0) linkListByDoc.set(docPath, linkList);
   }
   for (const backlinkList of backlinkListByTarget.values()) backlinkList.sort(backlinkCompare);
-  return backlinkListByTarget;
+  return { linkListByDoc, backlinkListByTarget };
 }
 
 // by document, then by where the reference is written in it

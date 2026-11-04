@@ -12,7 +12,7 @@ import { ObjectStatusBadge } from './ObjectViewFallback.jsx';
 // provider checks (the kernel, for the config of a service instance:
 // against the instance's own script, then service.yaml is written and the
 // instance restarts). It draws any config of any provider: what it knows
-// of the provider is the Type's promise. What it read and the draft are
+// of the provider is the type's promise. What it read and the draft are
 // the view's state in the object store (viewStateGet), not the component's.
 export const ObjectViewConfig = observer(function ObjectViewConfig({ data = {}, config = {} }) {
   const { objectStore } = useDocStores();

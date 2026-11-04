@@ -215,12 +215,14 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // the object registry (doc_page_impl_obj.md): the service layers of the
     // page provide their objects and relations from their own
     // representations (the doc page source, the links, the asset store),
-    // the backend's registry provides those of its kernel and instances
-    const objectStore = new DocObjectStore({ serviceStore, docStore, configStore, assetStore, sourceStore });
+    // the backend's registry provides those of its kernel and instances, and
+    // with them the types and components of the services. like the api
+    // registry, it knows the layers only through their providers
+    const objectStore = new DocObjectStore({ docStore });
     objectStore.providerAdd(objectProviderDocCreate({ sourceStore, docStore }));
-    objectStore.providerAdd(objectProviderLinkCreate({ sourceStore, linkStore }));
+    objectStore.providerAdd(objectProviderLinkCreate({ linkStore }));
     objectStore.providerAdd(objectProviderAssetCreate({ assetStore }));
-    objectStore.providerAdd(objectProviderBackendCreate({ serviceStore }));
+    objectStore.providerAdd(objectProviderBackendCreate({ serviceStore, configStore }));
     const paletteStore = new DocPaletteStore({ apiStore });
     const hotkeyStore = new DocHotkeyStore({ apiStore, mapListHost: config.hotkeyMapList ?? [] });
     // the event layer (doc_page_impl_event.md): component reports are routed

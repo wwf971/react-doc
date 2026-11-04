@@ -77,13 +77,13 @@ import { OBJECT_VIEW_CONTEXT_LIST } from '../../frontend/src/lib/doc-object-ref.
 //                  context.comp = { compId, definition }. plain option
 //                  objects are accepted and defined here
 //   objectView     { typeList, contextList, priority }: the component draws
-//                  objects of these Types (and their subtypes) in these
+//                  objects of these types (and their subtypes) in these
 //                  contexts (icon, inline, card, block), for the object
 //                  registry (doc_page_impl_obj.md#object-views). it renders in
 //                  the placement objectView with data { ref, descriptor }
 //                  and config.objectView { context, isEditAllowed,
 //                  editUnavailableReason }; priority orders two views of
-//                  the same Type (default 0)
+//                  the same type (default 0)
 
 export const COMP_EDIT_MODE_SOURCE_ID = 'source';
 
@@ -147,7 +147,7 @@ export function compExposeNormalize(expose = {}) {
   };
 }
 
-// what the component draws as an object view: the Types, the contexts, the
+// what the component draws as an object view: the types, the contexts, the
 // priority; undefined for a component that draws no object
 function objectViewNormalize(objectView) {
   if (objectView === undefined) return undefined;
@@ -156,7 +156,7 @@ function objectViewNormalize(objectView) {
   }
   const { typeList, contextList = OBJECT_VIEW_CONTEXT_LIST, priority = 0 } = objectView;
   if (!Array.isArray(typeList) || typeList.length === 0 || !typeList.every((typeId) => REGEX_TYPE_ID.test(String(typeId)))) {
-    throw new Error('compDefine: expose.objectView.typeList must list Type ids (core.object, doc.document).');
+    throw new Error('compDefine: expose.objectView.typeList must list type ids (core.object, doc.document).');
   }
   if (!Array.isArray(contextList) || contextList.length === 0 || !contextList.every((context) => OBJECT_VIEW_CONTEXT_LIST.includes(context))) {
     throw new Error(`compDefine: expose.objectView.contextList must list some of ${OBJECT_VIEW_CONTEXT_LIST.join(', ')}.`);

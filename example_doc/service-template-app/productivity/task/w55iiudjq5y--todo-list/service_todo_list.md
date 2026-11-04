@@ -29,7 +29,7 @@ The todos are objects of the object registry (`main/doc_page_impl_obj.md`), so a
 | objects | `service.{serviceId}:todo/{todoId}` (an update `{ isDone }` or `{ title }`), `service.{serviceId}:list` (its members, `core.member`, are the todos, oldest first) |
 | object apis | `objectQuery`, `objectResolve`, `objectRead`, `objectUpdate`, `relationQuery`, answered to the kernel only; every write of the todos calls `context.object_changed()` |
 | component | `TodoCard` (`expose.compList`, `todo-card`): the card of any `core.task`, checked off in place through the registry |
-| requires | the Type `core.task` (built in) |
+| requires | the type `core.task` (built in) |
 
 ## Dashboards
 

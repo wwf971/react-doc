@@ -4,10 +4,10 @@ import { ObjectViewHost } from './ObjectViewHost.jsx';
 import { ObjectCompleteness } from './ObjectCompleteness.jsx';
 import { objectCompDataRead, objectContextRead, objectTypeListRead } from './object-comp-data.js';
 
-// The objects of some Types, wherever they come from (doc_page_impl_obj.md#discovery):
-// a query of the registry, federated to every provider of those Types (the
+// The objects of some types, wherever they come from (doc_page_impl_obj.md#discovery):
+// a query of the registry, federated to every provider of those types (the
 // page's service layers, the backend's kernel and instances), each object
-// drawn by the view of its own Types. The list is a derived collection: it
+// drawn by the view of its own types. The list is a derived collection: it
 // has no identity of its own, and says how complete it is.
 //
 //   <!--renderComp=ObjectList-->

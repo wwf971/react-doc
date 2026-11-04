@@ -1,4 +1,4 @@
-"""The object registry and the Type registry of the backend.
+"""The object registry and the type registry of the backend.
 
 Design: doc_page_impl_obj.md
 
@@ -7,12 +7,12 @@ object contents, relationships, or lifecycle. Providers remain authoritative
 for the data they own. Registration, discovery, resolution, and verification
 are separate concerns.
 
-- a Type is a JSON definition { id, kind: object | relation, label,
-  extendList, ... }; the Type registry holds the built-in Types (the JSON
-  file of built-in/object-type/, shared with the page) and the Types the
+- a type is a JSON definition { id, kind: object | relation, label,
+  extendList, ... }; the type registry holds the built-in types (the JSON
+  file of built-in/object-type/, shared with the page) and the types the
   service templates define (expose.typeList, under the template's name), and
-  answers which Type is assignable to which (a DAG: a Type extends any
-  number of Types of its kind)
+  answers which type is assignable to which (a DAG: a type extends any
+  number of types of its kind)
 - an object is named by a reference {namespace}:{local}. the namespace is the
   provider's: service, serviceTemplate, serviceConfig (the kernel's own
   provider), service.{serviceId} (an instance whose script declares
@@ -23,7 +23,7 @@ are separate concerns.
 - the registry keeps three things, none of them the truth: what was
   registered (descriptors a principal handed it, never verified by the
   registering), what a provider answered (a cache, for cacheSecond), and
-  the Types. a query is federated to the providers of the Types asked for
+  the types. a query is federated to the providers of the types asked for
   and says how complete it is; a provider that does not answer is reported,
   not an error; a stale descriptor is answered with its status
 """
@@ -47,7 +47,7 @@ from service_define import (
     type_define_normalize,
 )
 
-# the built-in Types, beside the backend (two levels above service-backend/):
+# the built-in types, beside the backend (two levels above service-backend/):
 # they are part of the protocol of the registry, so they are read whatever
 # builtIn the backend config says
 OBJECT_TYPE_BUILTIN_FILE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'built-in',
@@ -71,7 +71,7 @@ QUERY_LIMIT_MAX = 500
 
 
 class TypeRegistry:
-    """The Types of the backend: the built-in ones, then those of the templates."""
+    """The types of the backend: the built-in ones, then those of the templates."""
 
     def __init__(self):
         self.type_by_id = {}
@@ -88,7 +88,7 @@ class TypeRegistry:
         for define, defined_by in entry_list:
             type_id = define['id']
             if type_id in type_by_id:
-                problem_list.append(f'the Type {type_id} of {defined_by_label_get(defined_by)} is defined by '
+                problem_list.append(f'the type {type_id} of {defined_by_label_get(defined_by)} is defined by '
                                     f'{defined_by_label_get(type_by_id[type_id]["definedBy"])} already; the first is kept')
                 continue
             type_by_id[type_id] = {**define, 'extendList': list(define['extendList']), 'definedBy': dict(defined_by)}
@@ -98,10 +98,10 @@ class TypeRegistry:
                 parent_define = type_by_id.get(parent)
                 if parent_define is None:
                     root = TYPE_ROOT_BY_KIND[type_define['kind']]
-                    problem_list.append(f'the Type {type_define["id"]} extends {parent}, which no one defines; it extends {root} instead')
+                    problem_list.append(f'the type {type_define["id"]} extends {parent}, which no one defines; it extends {root} instead')
                     parent = root
                 elif parent_define['kind'] != type_define['kind']:
-                    problem_list.append(f'the Type {type_define["id"]} ({type_define["kind"]}) cannot extend {parent} ({parent_define["kind"]})')
+                    problem_list.append(f'the type {type_define["id"]} ({type_define["kind"]}) cannot extend {parent} ({parent_define["kind"]})')
                     continue
                 if parent != type_define['id'] and parent not in extend_list:
                     extend_list.append(parent)
@@ -116,7 +116,7 @@ class TypeRegistry:
                 if parent not in type_by_id:
                     continue
                 if state_by_id.get(parent) == 'visiting':
-                    problem_list.append(f'the Types extend one another in a cycle: {" -> ".join(path + [type_id, parent])}; '
+                    problem_list.append(f'the types extend one another in a cycle: {" -> ".join(path + [type_id, parent])}; '
                                         f'{type_id} no longer extends {parent}')
                     type_define['extendList'].remove(parent)
                 elif state_by_id.get(parent) is None:
@@ -135,7 +135,7 @@ class TypeRegistry:
         return self.type_by_id.get(type_id)
 
     def ancestor_distance_get(self, type_id):
-        """{ ancestor: distance } of a Type, itself at 0. A Type no one defines is
+        """{ ancestor: distance } of a type, itself at 0. A type no one defines is
         taken as a child of both roots: every object is a core.object."""
         cached = self._ancestor_by_id.get(type_id)
         if cached is not None:
@@ -177,7 +177,7 @@ class TypeRegistry:
 def defined_by_label_get(defined_by):
     kind = defined_by.get('kind')
     if kind == 'builtIn':
-        return 'the built-in Types'
+        return 'the built-in types'
     if kind == 'serviceTemplate':
         return f'the template {defined_by.get("name", "")} ({defined_by.get("id", "")})'
     if kind == 'serviceInstance':
@@ -186,9 +186,9 @@ def defined_by_label_get(defined_by):
 
 
 def builtin_type_list_read():
-    """The built-in Types: (type_list, problem); a missing or broken file leaves the two roots."""
-    root_list = [type_define_normalize({'id': 'core.object', 'kind': 'object', 'label': 'Object'}, 'the built-in Types'),
-                 type_define_normalize({'id': 'core.relation', 'kind': 'relation', 'label': 'Relation'}, 'the built-in Types')]
+    """The built-in types: (type_list, problem); a missing or broken file leaves the two roots."""
+    root_list = [type_define_normalize({'id': 'core.object', 'kind': 'object', 'label': 'Object'}, 'the built-in types'),
+                 type_define_normalize({'id': 'core.relation', 'kind': 'relation', 'label': 'Relation'}, 'the built-in types')]
     try:
         with open(OBJECT_TYPE_BUILTIN_FILE, encoding='utf-8') as file:
             raw = json.load(file)
@@ -196,7 +196,7 @@ def builtin_type_list_read():
                      for index, item in enumerate(raw.get('typeList') or [])]
         return type_list, ''
     except (OSError, ValueError, ServiceDefineError) as error:
-        return root_list, f'the built-in Types cannot be read from {OBJECT_TYPE_BUILTIN_FILE}: {error}'
+        return root_list, f'the built-in types cannot be read from {OBJECT_TYPE_BUILTIN_FILE}: {error}'
 
 
 def text_is_match(descriptor, text):
@@ -503,12 +503,12 @@ class ObjectRegistry:
         self.resolve_cache = {}
         self.lock = threading.RLock()
 
-    # ---------- Types ----------
+    # ---------- types ----------
 
     def types_rebuild(self, template_list, instance_list):
-        """The Type registry rebuilt when a template's or an instance's script changed:
-        the built-in Types, the templates' (oldest id first), then those of instances
-        whose template is not found. A template defines Types under its name only."""
+        """The type registry rebuilt when a template's or an instance's script changed:
+        the built-in types, the templates' (oldest id first), then those of instances
+        whose template is not found. A template defines types under its name only."""
         template_list = sorted(template_list, key=lambda template: template.template_id)
         template_id_set = {template.template_id for template in template_list}
         instance_orphan_list = sorted((instance for instance in instance_list
@@ -529,7 +529,7 @@ class ObjectRegistry:
         for name, expose, defined_by in owner_list:
             for item in (expose or {}).get('typeList') or []:
                 if not item['id'].startswith(f'{name}.'):
-                    problem_list.append(f'{defined_by_label_get(defined_by)} defines {item["id"]}: a template defines Types under its name ({name}.…)')
+                    problem_list.append(f'{defined_by_label_get(defined_by)} defines {item["id"]}: a template defines types under its name ({name}.…)')
                     continue
                 entry_list.append((item, defined_by))
         self.type_registry.rebuild(entry_list, signature)
@@ -593,7 +593,7 @@ class ObjectRegistry:
         if isinstance(type_list, str):
             type_list = [type_list]
         if not isinstance(type_list, list) or not all(isinstance(item, str) and REGEX_TYPE_ID.match(item) for item in type_list):
-            raise ServiceError(-1, 'typeList of a query lists Type ids')
+            raise ServiceError(-1, 'typeList of a query lists type ids')
         filter_value = spec.get('filter') or {}
         if not isinstance(filter_value, dict):
             raise ServiceError(-1, 'filter of a query is a mapping')
@@ -614,9 +614,9 @@ class ObjectRegistry:
         }
 
     def query(self, spec, caller=None):
-        """Objects of the Types asked for, and of their subtypes: { objectList,
+        """Objects of the types asked for, and of their subtypes: { objectList,
         completeness: { isComplete, providerList }, isTruncated }. Each provider
-        of a Type assignable to one asked for is asked (or its answer of the last
+        of a type assignable to one asked for is asked (or its answer of the last
         cacheSecond reused); the registered descriptors are added. A provider that
         does not answer is in completeness, and what it answered before, if
         anything, is still answered with the status unavailable."""
@@ -694,7 +694,7 @@ class ObjectRegistry:
     # ---------- count: the preflight of a search ----------
 
     def count(self, spec, caller=None):
-        """How many objects each provider of the Types asked for would answer to a
+        """How many objects each provider of the types asked for would answer to a
         query, without fetching any (doc_page_impl_obj_search.md#the-preflight):
         { providerList: [{ providerId, label, status, count, countKind, message }] }.
         countKind is exact for a provider that counts (capability count), unknown
@@ -829,7 +829,7 @@ class ObjectRegistry:
     # ---------- relations ----------
 
     def relation_query(self, spec, caller=None):
-        """The relations from fromRef and / or to toRef, of the relation Types asked
+        """The relations from fromRef and / or to toRef, of the relation types asked
         for (core.relation: all), from every provider of one of them:
         { relationList, completeness }."""
         if not isinstance(spec, dict):

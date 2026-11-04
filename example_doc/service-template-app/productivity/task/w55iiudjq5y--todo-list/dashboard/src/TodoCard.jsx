@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 // The object view of a task (doc_page_impl_obj.md#object-views): declared in
-// expose.compList of service.py for the Type core.task, so the page draws
+// expose.compList of service.py for the type core.task, so the page draws
 // with it every task it is asked to show, a todo of this template or of
 // any other provider, in a list, a group or a node of a card diagram.
 //
@@ -20,7 +20,7 @@ import { useState } from 'react';
 //                           the card is drawn with the new descriptor
 //
 // the card knows nothing of the provider: a task is checked off by the
-// update { isDone } that the Type core.task promises.
+// update { isDone } that the type core.task promises.
 export function TodoCard({ data = {}, config = {}, onEvent }) {
   const descriptor = data.descriptor ?? {};
   const view = config.objectView ?? {};

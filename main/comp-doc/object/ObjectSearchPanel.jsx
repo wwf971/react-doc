@@ -7,15 +7,15 @@ import { ObjectStatusBadge } from './ObjectViewFallback.jsx';
 import './DocObject.css';
 
 // The search of the object service layer as a panel (doc_page_impl_obj_search.md#the-ui):
-// a field, filters by Type and by registry, the results as rows (the icon of
-// the object's Type, its name, its Type, where it is), and one line per
+// a field, filters by type and by registry, the results as rows (the icon of
+// the object's type, its name, its type, where it is), and one line per
 // host the search did not list in full (too many to list, how many is not
 // known, did not answer) with a way to load its first objects on purpose.
 // It keeps no state: the session of the search (DocObjectSearchStore, by
 // sessionKey) holds the text, the filters, the result, the highlighted row.
 //
 //   sessionKey      the key of its session; two panels of one key are one search
-//   typeList        the Types it starts filtered by (an option of the session)
+//   typeList        the types it starts filtered by (an option of the session)
 //   isFilterShown   the filter chips (default true)
 //   placeholder, isAutoFocus
 //   onChoose(hit)   a row chosen (a click, Enter): { descriptor, path, ... }
@@ -101,7 +101,7 @@ export const ObjectSearchPanel = observer(function ObjectSearchPanel({
       </div>
       {isFilterShown ? (
         <div className="doc-object-search-filter">
-          <div className="doc-button-group" role="group" aria-label="Type">
+          <div className="doc-button-group" role="group" aria-label="type">
             {OBJECT_SEARCH_TYPE_FILTER_LIST.map((item) => (
               <button key={item.label} type="button" aria-pressed={typeFilterCurrent === item} onClick={() => session.typeListSet(item.typeList)}>{item.label}</button>
             ))}
@@ -142,7 +142,7 @@ export const ObjectSearchPanel = observer(function ObjectSearchPanel({
   );
 });
 
-// one object found: the icon of its Type, its name, its Type, where it is
+// one object found: the icon of its type, its name, its type, where it is
 export const ObjectSearchResultRow = observer(function ObjectSearchResultRow({ hit, highlightList = [], isActive = false, onActive, onChoose }) {
   const { objectStore } = useDocStores();
   const { descriptor } = hit;

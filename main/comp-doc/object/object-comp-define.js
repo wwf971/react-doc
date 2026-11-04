@@ -12,11 +12,11 @@ import { ObjectViewDocument } from './ObjectViewDocument.jsx';
 
 // The components of the object registry (doc_page_impl_obj.md#the-components):
 // three a document writes (ObjectView, ObjectList, ObjectGroup), and the
-// views the page draws objects with when nothing nearer to their Types does
+// views the page draws objects with when nothing nearer to their types does
 // (expose.objectView): the fallback view of core.object, and the views of
 // core.collection, core.config and core.document. A view is a component of
 // the registry like any other; a doc page, a package or a service template
-// adds views the same way, and the nearest Type wins.
+// adds views the same way, and the nearest type wins.
 //
 // The blocks start in the comment-block form, as every component of the
 // package: the marker <!--renderComp=Xxx--> and its fenced yaml. DO NOT
@@ -29,7 +29,7 @@ export const compObjectView = compDefine(ObjectView, {
   expose: {
     meta: {
       label: 'Object',
-      description: 'one object of the object registry, by its reference, drawn by the view of its Types',
+      description: 'one object of the object registry, by its reference, drawn by the view of its types',
     },
     icon: Box,
     sourceDefaultCreate: ({ docPath }) => ({
@@ -50,7 +50,7 @@ export const compObjectList = compDefine(ObjectList, {
   expose: {
     meta: {
       label: 'Object list',
-      description: 'the objects of some Types, from every provider of the page and of the backend',
+      description: 'the objects of some types, from every provider of the page and of the backend',
     },
     icon: LayoutList,
     sourceDefaultCreate: () => ({ lang: 'yaml', raw: 'type: doc.document\nlimit: 12\ncontext: card\nlayout: grid\n' }),
@@ -78,7 +78,7 @@ export const compObjectSearch = compDefine(ObjectSearch, {
   expose: {
     meta: {
       label: 'Object search',
-      description: 'a search of the object service layer: names, hosts, ids, Types; the object chosen shown below',
+      description: 'a search of the object service layer: names, hosts, ids, types; the object chosen shown below',
     },
     icon: Search,
     sourceDefaultCreate: () => ({ lang: 'yaml', raw: 'typeList: []\ncontext: card\n' }),

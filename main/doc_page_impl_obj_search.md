@@ -24,8 +24,8 @@ A search text is **words, split by spaces, in any order**; every word must match
 
 | written | matches | example |
 | --- | --- | --- |
-| `word` | any field: the object's name, its id (its reference and the provider's own id), its host, its Types, its description and summary | `milk`, `todo/3`, `w55j3`, `task` |
-| `type:word` | its Types: the id or label of a Type of it, or of an ancestor | `type:task`, `type:doc.section` |
+| `word` | any field: the object's name, its id (its reference and the provider's own id), its host, its types, its description and summary | `milk`, `todo/3`, `w55j3`, `task` |
+| `type:word` | its types: the id or label of a type of it, or of an ancestor | `type:task`, `type:doc.section` |
 | `in:word` | its host: the service instance or layer providing it (its name, its provider id, its service id, its template name, its namespaces), and the doc page of a document | `in:todos`, `in:w55j3`, `in:note-db`, `in:example` |
 | `id:word` | its reference only | `id:todo/3` |
 | `ns:word` | its namespace only | `ns:doc`, `ns:service.w55j3ztn3rq` |
@@ -37,15 +37,15 @@ The **path** of an object, shown beside it in the results and matched by its wor
 
 A search must never make a provider list everything it has because a word happened to name it: a host named in the text may hold thousands of objects, some of them remote. So a search goes in three steps, and stops where it knows enough:
 
-1. **The plan**, per provider, from what is known of the provider alone, before any request: its label, its id, its service id and template, its namespaces, its Types (with their ancestors). A word that matches its host is **met by all its objects** (so `todos milk` means "milk" among the objects of a host called like todos); `in:` and `ns:` words that do not match exclude it, a `type:` word matching none of its Types excludes it, as do the Types and providers a consumer restricts the search to. What remains are the words its objects must still match, and the longest plain one is the **word pushed** to the provider, which it may filter by itself (the `text` of its query).
-2. **The preflight count.** The providers of the backend that remain are asked, in one request (`POST /object/count`), how many objects of the Types asked for they have, without listing any. A provider counts when it has the capability `count` (an instance's `objectCount` api, a cheap `COUNT` of its database; the kernel counts its own); one that cannot answers `unknown`.
+1. **The plan**, per provider, from what is known of the provider alone, before any request: its label, its id, its service id and template, its namespaces, its types (with their ancestors). A word that matches its host is **met by all its objects** (so `todos milk` means "milk" among the objects of a host called like todos); `in:` and `ns:` words that do not match exclude it, a `type:` word matching none of its types excludes it, as do the types and providers a consumer restricts the search to. What remains are the words its objects must still match, and the longest plain one is the **word pushed** to the provider, which it may filter by itself (the `text` of its query).
+2. **The preflight count.** The providers of the backend that remain are asked, in one request (`POST /object/count`), how many objects of the types asked for they have, without listing any. The search knows them only as the backend peer lists them (`providerInfoListGet`) and reaches them through the peer (its `count`, then its `query` naming one provider), like any consumer of the registry: it never calls the backend itself. A provider counts when it has the capability `count` (an instance's `objectCount` api, a cheap `COUNT` of its database; the kernel counts its own); one that cannot answers `unknown`.
 3. **The bounded fetch**, per provider, never more than `fetchMax` (50 by default; 20 in a card diagram's create panel):
 
 | what the preflight said | what is fetched |
 | --- | --- |
 | at most `fetchMax` | all of them, matched here (a word matching an id is found as well as one matching a name) |
 | more, and a word is pushed | the count of what the word leaves (a second preflight, per pushed word); fetched with that word when it is at most `fetchMax`, else **counted only** |
-| more, and no word is left (the text only named the host or a Type) | **counted only** |
+| more, and no word is left (the text only named the host or a type) | **counted only** |
 | not known (no count), and a word is left | the first `fetchMax` its own filter by the word gives, marked truncated when there are more |
 | not known, no word left | **counted only** |
 | the provider is loaded on purpose (`providerIdExpandList`) | its first `fetchMax`, filtered by the pushed word if any |
@@ -65,9 +65,9 @@ search({ text, typeList, providerIdList, registryList: [page, backend], filter, 
      isComplete       every provider asked was listed in full
 ```
 
-The score adds, per word, where it matched: the start of the name (8), the name (5), the id (3), the host (2), a Type or the description (1); a whole reference resolved is first. The descriptors found are kept as what the registry knows of them, so an object chosen from the results is drawn at once.
+The score adds, per word, where it matched: the start of the name (8), the name (5), the id (3), the host (2), a type or the description (1); a whole reference resolved is first. The descriptors found are kept as what the registry knows of them, so an object chosen from the results is drawn at once.
 
-**Filters**, to make a search smaller before it starts: `typeList` (objects of these Types and their subtypes; a provider of none of them is not asked), `providerIdList` (only these providers: `doc-source`, `kernel`, `service:{serviceId}`, …), `registryList` (`page`, `backend`), `filter` (what the providers filter by themselves, their `queryFilterList`: `isDone` of todo-list, `kind` and `status` of the kernel, `docPageAlias` of the doc page source), the keys of the grammar, and `fetchMax`. An empty text with a Type is a listing of that Type, moderated the same way; an empty text without one is no search.
+**Filters**, to make a search smaller before it starts: `typeList` (objects of these types and their subtypes; a provider of none of them is not asked), `providerIdList` (only these providers: `doc-source`, `kernel`, `service:{serviceId}`, …), `registryList` (`page`, `backend`), `filter` (what the providers filter by themselves, their `queryFilterList`: `isDone` of todo-list, `kind` and `status` of the kernel, `docPageAlias` of the doc page source), the keys of the grammar, and `fetchMax`. An empty text with a type is a listing of that type, moderated the same way; an empty text without one is no search.
 
 ## Where it is
 
@@ -92,12 +92,12 @@ The search is part of the object service layer and kept like the rest of it: `Do
 big list: 3412 objects, not listed: too many to list   [Load the first 50]
 ```
 
-ArrowDown / ArrowUp move in the results, Enter chooses the highlighted one, Escape clears the text, then closes (`onClose`). A row shows the icon of the object's Type, its name, its Type, its status when not found, and its path, the words of the search marked. The panel is a part other components embed (`sessionKey`, `typeList`, `onChoose(hit)`); `ObjectSearch` is the panel as a block of a document, which draws the object chosen below it by the view of its Types:
+ArrowDown / ArrowUp move in the results, Enter chooses the highlighted one, Escape clears the text, then closes (`onClose`). A row shows the icon of the object's type, its name, its type, its status when not found, and its path, the words of the search marked. The panel is a part other components embed (`sessionKey`, `typeList`, `onChoose(hit)`); `ObjectSearch` is the panel as a block of a document, which draws the object chosen below it by the view of its types:
 
 ````md
 <!--renderComp=ObjectSearch-->
 ```yaml
-typeList: []        # optional: the Types it starts filtered by
+typeList: []        # optional: the types it starts filtered by
 context: card       # how the chosen object is drawn
 ```
 ````

@@ -37,7 +37,7 @@ a component definition (compDefine)
     │   ├── editModeList             the ways its data is edited in place (+ the built-in source mode)
     │   ├── sourceDefaultCreate      the source of a new block, for the insert menu
     │   ├── apiList                  the apis it offers the unified api registry, {compId}/{name}
-    │   └── objectView               the object Types it draws, in which contexts (icon, inline, card, block)
+    │   └── objectView               the object types it draws, in which contexts (icon, inline, card, block)
     └── non-standard names: kept as declared, read by whoever knows them (compExposeGet)
         └── visualizationNode        e.g. the node contract of a card diagram: anchorListGet, sizeDefault
 ```
@@ -194,7 +194,7 @@ A component offers operations on its blocks to whoever works the page programmat
 
 ### Object views
 
-A component that draws objects of the [object registry](doc_page_impl_obj.md) says which: `expose.objectView`, `{ typeList, contextList, priority }`, the object Types it draws (and every subtype of them) in which contexts (`icon`, `inline`, `card`, `block`), checked at registration like the other standard names. Such a component renders in the placement `objectView`, with `data: { ref, descriptor }` and `config.objectView: { context, isEditAllowed, editUnavailableReason, note }`, and asks for a change of the object with `objectUpdateRequest`. Which view draws an object is the page's choice, not the object's: the nearest of its Types wins, then the priority, and the fallback view, registered for `core.object`, draws every object nothing nearer draws ([Object views](doc_page_impl_obj.md#object-views)). A component of a doc page or a package becomes a view the same way, and a service template's module carries views too (`expose.compList` of its script). The views of the package are `common/ObjectViewFallback`, `ObjectViewCollection`, `ObjectViewConfig` and `ObjectViewDocument` (`comp-doc/object/`); the components a document writes to place objects are `ObjectView`, `ObjectList`, `ObjectGroup` and `ObjectSearch` ([Search](doc_page_impl_obj_search.md)).
+A component that draws objects of the [object registry](doc_page_impl_obj.md) says which: `expose.objectView`, `{ typeList, contextList, priority }`, the object types it draws (and every subtype of them) in which contexts (`icon`, `inline`, `card`, `block`), checked at registration like the other standard names. Such a component renders in the placement `objectView`, with `data: { ref, descriptor }` and `config.objectView: { context, isEditAllowed, editUnavailableReason, note }`, and asks for a change of the object with `objectUpdateRequest`. Which view draws an object is the page's choice, not the object's: the nearest of its types wins, then the priority, and the fallback view, registered for `core.object`, draws every object nothing nearer draws ([Object views](doc_page_impl_obj.md#object-views)). A component of a doc page or a package becomes a view the same way, and a service template's module carries views too (`expose.compList` of its script). The views of the package are `common/ObjectViewFallback`, `ObjectViewCollection`, `ObjectViewConfig` and `ObjectViewDocument` (`comp-doc/object/`); the components a document writes to place objects are `ObjectView`, `ObjectList`, `ObjectGroup` and `ObjectSearch` ([Search](doc_page_impl_obj_search.md)).
 
 ## Component styles
 

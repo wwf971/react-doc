@@ -22,8 +22,8 @@ Design: doc_page_impl_service_kernel.md#the-service-runtime-kernel
   after the scan the kernel reconciles: which infra names are required,
   which are provided, what to provision, where each name is routed
 - the object registry (service_object.py, doc_page_impl_obj.md) is kept
-  beside the service registry: its Types are rebuilt after a scan from the
-  built-in Types and the templates' scripts, its providers are the kernel
+  beside the service registry: its types are rebuilt after a scan from the
+  built-in types and the templates' scripts, its providers are the kernel
   and the instances whose script declares expose.objectProvide
 - every call, from the page or from another instance, goes through
   api_call: the target resolved to an instance (an infra name routed to its
@@ -859,7 +859,7 @@ class ServiceRuntime:
         self.lock = threading.RLock()
         self.reconcile_thread = None
         self.reconcile_stop_event = threading.Event()
-        # the object registry and the Type registry (doc_page_impl_obj.md):
+        # the object registry and the type registry (doc_page_impl_obj.md):
         # discovery and resolution of the objects the kernel and the
         # instances provide, never their truth
         self.object_registry = ObjectRegistry(self, float(config.get('objectProviderWaitSecond', 5)))
@@ -1687,7 +1687,7 @@ class ServiceRuntime:
                 'instanceList': [instance.info_get() for instance in self.instance_by_id.values()],
                 'infraList': [dict(info) for info in self.infra_info_by_name.values()],
                 'status': self.status_get(),
-                # the Types and the object providers of the backend (doc_page_impl_obj.md)
+                # the types and the object providers of the backend (doc_page_impl_obj.md)
                 'objectTypeList': self.object_registry.type_list_get(),
                 'objectProviderList': self.object_registry.provider_info_list_get(),
             }

@@ -21,7 +21,7 @@ export function objectContextRead(value, contextDefault = 'card') {
   return OBJECT_VIEW_CONTEXT_LIST.includes(value) ? value : contextDefault;
 }
 
-// the Types a list asks for: typeList, or type, as a list
+// the types a list asks for: typeList, or type, as a list
 export function objectTypeListRead(data) {
   if (Array.isArray(data.typeList)) return data.typeList.map(String);
   if (typeof data.typeList === 'string') return data.typeList.split(',').map((item) => item.trim()).filter(Boolean);

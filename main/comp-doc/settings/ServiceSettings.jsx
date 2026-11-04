@@ -893,7 +893,7 @@ const InstanceDetail = observer(function InstanceDetail({ instance }) {
         <ApiListRow expose={instance.expose} />
         <ObjectExposeRows expose={instance.expose} />
       </div>
-      {/* the config of every instance, an object of the Type service.config
+      {/* the config of every instance, an object of the type service.config
           the kernel provides: drawn by the view of configurations, saved
           through the object registry (doc_page_impl_obj.md#the-config-of-an-instance) */}
       {instance.expose ? <ObjectViewHost objectRef={`serviceConfig:${instance.serviceId}`} context="block" /> : null}
@@ -1040,7 +1040,7 @@ function ExposeRows({ expose }) {
 }
 
 // what a script declares for the object registry (doc_page_impl_obj.md#what-a-template-declares):
-// the Types it defines, the objects it provides, the components of its
+// the types it defines, the objects it provides, the components of its
 // module, and what it needs others to provide, each requirement with who
 // meets it now (resolved on the page, which knows every provider)
 const requireStatusTextByStatus = {
@@ -1069,7 +1069,7 @@ const ObjectExposeRows = observer(function ObjectExposeRows({ expose }) {
     <>
       {typeList.length > 0 ? (
         <>
-          <span className="doc-service-detail-key">Types</span>
+          <span className="doc-service-detail-key">types</span>
           <span className="doc-service-detail-code">
             {typeList.map((type) => (
               <span key={type.id} className="doc-service-detail-line" title={type.description}>
