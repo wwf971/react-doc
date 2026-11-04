@@ -37,8 +37,8 @@ function fixtureCreate({ serviceYamlByPage = {}, entryLineListByPage = {} } = {}
   fs.writeFileSync(path.join(pageDir, 'a.md'), '# A\n');
   fs.writeFileSync(path.join(subDir, 'b.md'), '# B\n');
   for (const folderName of ['service-template-app', 'service-template-infra', 'service-app', 'service-infra']) {
-    fs.mkdirSync(path.join(pageDir, folderName, 'x'), { recursive: true });
-    fs.writeFileSync(path.join(pageDir, folderName, 'x', 'readme.md'), '# not a document\n');
+    fs.mkdirSync(path.join(pageDir, '.doc-page', folderName, 'x'), { recursive: true });
+    fs.writeFileSync(path.join(pageDir, '.doc-page', folderName, 'x', 'readme.md'), '# not a document\n');
   }
   fs.writeFileSync(path.join(pageDir, '.doc-page', 'entry.yaml'), [
     'docEntry:',
@@ -97,10 +97,10 @@ test('without service.yaml a doc page has the four convention folders; service: 
   assert.equal(docPage.isConfigFileExists, false);
   assert.equal(docPage.configFile, path.join(dir, 'page/.doc-page/service.yaml'));
   assert.deepEqual(docPage.folderList.map((folder) => [path.relative(dir, folder.pathAbs), folder.role, folder.kind, folder.isDefault]), [
-    ['page/service-template-app', 'template', 'app', false],
-    ['page/service-template-infra', 'template', 'infra', false],
-    ['page/service-app', 'instance', 'app', true],
-    ['page/service-infra', 'instance', 'infra', true],
+    ['page/.doc-page/service-template-app', 'template', 'app', false],
+    ['page/.doc-page/service-template-infra', 'template', 'infra', false],
+    ['page/.doc-page/service-app', 'instance', 'app', true],
+    ['page/.doc-page/service-infra', 'instance', 'infra', true],
   ]);
   assert.equal(SERVICE_FOLDER_DEFAULT_LIST.length, 4);
   const config = serviceConfigOfDocPageListGet(docPageInputList(dir, { serviceSub: false }));
@@ -155,11 +155,11 @@ test('the service folders are never documents nor folders of the source, the bac
     docPageInputList(dir, { serviceSub: false }),
   );
   assert.equal(servicePathIs(folderSet, path.join(dir, 'plain-templates/t/service.py')), true);
-  assert.equal(servicePathIs(folderSet, path.join(dir, 'page/service-infra/i/data.sqlite')), true);
+  assert.equal(servicePathIs(folderSet, path.join(dir, 'page/.doc-page/service-infra/i/data.sqlite')), true);
   assert.equal(servicePathIs(folderSet, path.join(dir, 'page/.doc-page/service.yaml')), true);
   assert.equal(servicePathIs(folderSet, path.join(dir, 'backend.yaml')), true);
   assert.equal(servicePathIs(folderSet, path.join(dir, 'page/a.md')), false);
-  assert.equal(servicePathIs(folderSet, path.join(dir, 'page/sub/service-app/i/x.md')), false);
+  assert.equal(servicePathIs(folderSet, path.join(dir, 'page/sub/.doc-page/service-app/i/x.md')), false);
 });
 
 test('the sync body lists every loaded doc page with its service file when it exists or is named', () => {

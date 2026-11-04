@@ -17,10 +17,10 @@ import './DocSettings.css';
 //
 //   example_doc [this page]                          group, one per doc page
 //   folders in .doc-page/asset.yaml                  (its own first, then the
-//     Folders          [~example/asset   ] Remove    ones it includes)
+//     Folders          [~example/.doc-page/asset   ] Remove    ones it includes)
 //                      [~root/path       ] Add       stringList
-//     Default folder   [~example/asset ▾]            select
-//     On disk          ~example/asset  store default  13 objects
+//     Default folder   [~example/.doc-page/asset ▾]            select
+//     On disk          ~example/.doc-page/asset  store default  13 objects
 //   Objects and references ⟳                         group: AssetOrphanArea
 //
 // Every doc page names its asset folders in its asset store config
@@ -140,8 +140,8 @@ function docPageGroupDescriptionGet(docPage) {
 // what each folder of a doc page holds on disk, then what is wrong with its
 // config
 //
-//   ~example/asset  [store default]  13 objects
-//   ~example/asset-archive           1 object
+//   ~example/.doc-page/asset  [store default]  13 objects
+//   ~example/.doc-page/asset-archive           1 object
 const DocPageFolderState = observer(function DocPageFolderState({ entryFile, problemList }) {
   const { assetStore } = useDocStores();
   return (

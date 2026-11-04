@@ -25,13 +25,13 @@ Open the settings panel and its **API** tab: it lists every api registered now, 
 
 ## The keyboard maps
 
-The keys are keyboard maps, yaml files of one grammar stacked like the config layers: the package's default map at the bottom (`main/hotkey/default.yaml`, named by `main/config.yaml`: the default keys of the built-in apis), the maps of the doc pages over it, the workspace's map over those (`workspace-hotkey.yaml` at the root of the project, named by `workspace.yaml`). This doc page keeps its maps in `.doc-page/hotkey/`: `main.yaml` is the active map, it includes `base.yaml`, and `minimal.yaml` is a second map the reader may pick instead (API tab, the row of `example`). A key is resolved when it is pressed, from the top:
+The keys are keyboard maps, yaml files of one grammar stacked like the config layers: the package's default map at the bottom (`main/hotkey/default.yaml`, named by `main/config.yaml`: the default keys of the built-in apis), the maps of the doc pages over it, the workspace's map over those (`.doc-workspace/hotkey.yaml` at the root of the project, named by `workspace.yaml` beside it). This doc page keeps its maps in `.doc-page/hotkey/`: `main.yaml` is the active map, it includes `base.yaml`, and `minimal.yaml` is a second map the reader may pick instead (API tab, the row of `example`). A key is resolved when it is pressed, from the top:
 
 - **Ctrl+Alt+G** (**⌥⌘G**) runs `example/openGuide`, the declared api;
 - **Ctrl+K Ctrl+S**, a chord, opens the settings panel on its API tab;
 - **Ctrl+Alt+T** (**⌥⌘T**) is bound in `main.yaml` to `service/todo-list/todoList`, and in `base.yaml` to opening the [todo-list demonstration](service-kernel.md). While the instance runs, the first binding is found; while it does not, that api is not registered, the binding is **hidden** rather than broken, and the key opens the document. Stop the backend and press it again;
 - **Alt+S** saves the block being edited, and only then (`when: sessionOpen`); otherwise the key is nothing;
-- **Alt+Home** goes through all three levels: the package binds it to the home document, this doc page **unbinds** it (`api: null` in `base.yaml`), and the workspace binds it again above the doc page (`workspace-hotkey.yaml`), so the key works, and the table says the binding comes from the workspace;
+- **Alt+Home** goes through all three levels: the package binds it to the home document, this doc page **unbinds** it (`api: null` in `base.yaml`), and the workspace binds it again above the doc page (`.doc-workspace/hotkey.yaml`), so the key works, and the table says the binding comes from the workspace;
 - **Ctrl+Alt+W** (**⌥⌘W**) is the workspace's own key: the Workspace tab of the settings panel.
 
 The API tab shows the maps of the stack and the table that results: every key, the binding that answers it now, and the ones it passes over, each with why.

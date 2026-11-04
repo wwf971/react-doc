@@ -16,7 +16,7 @@ import { problemListReport } from './doc-service-server.ts';
 //              the doc page has no component folders
 //   folders    folderList of that file: paths relative to the file
 //   no file    the default folders: COMP_FOLDER_DEFAULT_LIST, relative to the
-//              doc page folder (comp-mdx/)
+//              doc page folder (.doc-page/comp-mdx/)
 //
 // inside a component folder, a manifest comp.yaml describes the components:
 // one at the folder root listing several, and any number in its sub folders
@@ -53,8 +53,9 @@ import { problemListReport } from './doc-service-server.ts';
 
 export const COMP_CONFIG_FILE_NAME = 'comp.yaml';
 // the component folders of a doc page without a comp config file, relative
-// to the doc page folder
-export const COMP_FOLDER_DEFAULT_LIST = ['comp-mdx'];
+// to the doc page folder: inside its metadata folder, so that the folder of
+// the doc page shows its documents (doc_page_impl_dir.md)
+export const COMP_FOLDER_DEFAULT_LIST = ['.doc-page/comp-mdx'];
 // the manifest inside a component folder (at its root, or in a sub folder at any depth)
 export const COMP_MANIFEST_FILE_NAME = 'comp.yaml';
 // the folders of a component folder that never hold a manifest: what a

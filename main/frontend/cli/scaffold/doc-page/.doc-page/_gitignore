@@ -1,0 +1,9 @@
+# What the page and the service backend write into the metadata folder while
+# they run (main/doc_page_impl_dir.md): backups of the yaml files the page
+# rewrites, the state of the service runtime kernel, the backups of the
+# service instances, the infra instances the kernel provisions.
+*.bak
+*.tmp
+service-kernel.yaml
+service-backup/
+service-infra/

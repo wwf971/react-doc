@@ -2,7 +2,7 @@
 # hotkey/ folder of its metadata folder is the active map by convention
 # (the entry could name another with "hotkey: { file }"). The maps of a doc
 # page are stacked over the package's default map (main/hotkey/default.yaml)
-# and under the workspace's (workspace-hotkey.yaml at the project root), so
+# and under the workspace's (.doc-workspace/hotkey.yaml at the project root), so
 # a binding here wins over the package's for the same key and the workspace
 # may rebind it; the reader may pick another map of this folder in the API
 # tab of the settings panel.

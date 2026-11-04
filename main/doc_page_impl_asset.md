@@ -188,9 +188,9 @@ default folder           of the store: the page's own doc page's; of a new objec
 ```yaml
 # my-doc/.doc-page/asset.yaml
 folderList:
-  - ~my-doc/asset
-  - ~my-doc/asset-archive
-folderDefault: ~my-doc/asset
+  - ~my-doc/.doc-page/asset          # the default folder without this file
+  - ~my-doc/.doc-page/asset-archive
+folderDefault: ~my-doc/.doc-page/asset
 ```
 
 **A folder is always named by a source path**, relative to a root of the page's source rules (`~root/path`, [source paths](doc_page_impl_source.md#source-paths)), never by a path relative to the config file: a doc page may declare several roots, and a source path says which one a folder is in, means the same in every file of every doc page, and survives moving or renaming the folder. In the file the local form names a root of the doc page itself, the full form `~page:root/path` a root of another doc page; the store keeps every folder in the full form (`AssetFolder.path`), which is also what the page, the panel and object metadata use, and writes a doc page's own roots back in the local form. A path that is not a source path, names a root no source rule declares, or names a whole root is left out of the store and reported in the console and in the settings tab (`problemList` of the doc page); the rest of the config is read. The former form `[{ path, isDefault }]` is still read for its paths and default. A folder that does not exist yet is an empty folder of the store and is created when the first object is written to it, so a doc page without any asset needs nothing on disk; reading never creates anything. The asset folders and the config files are never documents, wherever they lie ([source scan](doc_page_impl_source.md#source-rules-and-collection)).
@@ -407,8 +407,8 @@ comp-mdx/media/excel-univer/                     ExcelUniver: an asset-only comp
 comp-mdx/test-case-table/                  TestCaseTable: a managed history on the object (TestCaseTableApi.js: the
                                            record route of the api and the guard of the generic head write)
 example_doc/.doc-page/asset.yaml           the asset store config of the demonstration doc page (its sub document
-                                           has none and uses its default folder, ~sub:sub-doc/asset in the store)
-example_doc/asset/, asset-archive/         the folders of the demonstration store
+                                           has none and uses its default folder, ~sub:sub-doc/.doc-page/asset in the store)
+example_doc/.doc-page/asset/, asset-archive/         the folders of the demonstration store
 example_doc/asset-store.md                 demonstration document (dependencies, version metadata, blocks sharing an
                                            object, backlinks, orphans, what a component knows)
 example_doc/mdx-usage/comp-excel-univer.md demonstration of an asset-only component (object w4r63zmeaor)

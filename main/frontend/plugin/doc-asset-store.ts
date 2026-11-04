@@ -242,6 +242,10 @@ export type AssetStoreConfig = {
   docPageList: AssetDocPage[];
   // every folder of every doc page, the page's own first, each once
   folderList: AssetFolder[];
+  // config.yaml folderManaged.isLazy (doc_page_impl_dir.md#managed-folders-made-when-first-used):
+  // a folder is made by the first object written to it, never when it is
+  // named; false: naming a folder makes it. absent: true
+  isFolderLazy?: boolean;
 };
 
 // what the store config reader needs of a doc page (plugin/doc-entry.ts DocPageLoaded)
@@ -287,8 +291,9 @@ export class AssetError extends Error {
 
 export const ASSET_CONFIG_FILE_NAME = 'asset.yaml';
 // the default folders of a doc page without an asset store config file,
-// relative to the doc page folder; the first is the default folder
-export const ASSET_FOLDER_DEFAULT_LIST = ['asset'];
+// relative to the doc page folder (inside its metadata folder, so that the
+// folder of the doc page shows its documents); the first is the default folder
+export const ASSET_FOLDER_DEFAULT_LIST = ['.doc-page/asset'];
 
 // config.yaml no longer names the store: a doc page does
 export function assetConfigFormerReject(configDoc: any, configFile: string) {
@@ -298,8 +303,8 @@ export function assetConfigFormerReject(configDoc: any, configFile: string) {
     `in .doc-page/asset.yaml beside its entry (or the file its entry names with "asset: { file }"),`,
     'as source paths:',
     '  folderList:',
-    '    - ~root/asset',
-    '  folderDefault: ~root/asset',
+    '    - ~root/.doc-page/asset',
+    '  folderDefault: ~root/.doc-page/asset',
     `without the file the doc page uses ${ASSET_FOLDER_DEFAULT_LIST.join(', ')} of its folder. (${configFile})`,
   ].join('\n'));
 }
@@ -587,9 +592,13 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     if (docPage.isConfigFileExists) fs.copyFileSync(docPage.configFile, `${docPage.configFile}.bak`);
     fs.mkdirSync(path.dirname(docPage.configFile), { recursive: true });
     fileWriteSafe(docPage.configFile, textNext);
-    for (const folderPath of folderListNext) {
-      const pathAbs = sourcePathAbsGet(folderPath, rootAbsPathByPath);
-      if (pathAbs) fs.mkdirSync(pathAbs, { recursive: true });
+    // a folder named is made only with folderManaged.isLazy off; otherwise
+    // the first object written to it makes it (objectCreate)
+    if (config.isFolderLazy === false) {
+      for (const folderPath of folderListNext) {
+        const pathAbs = sourcePathAbsGet(folderPath, rootAbsPathByPath);
+        if (pathAbs) fs.mkdirSync(pathAbs, { recursive: true });
+      }
     }
   }
 

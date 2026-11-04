@@ -1,0 +1,21 @@
+# The entry of the doc page, created by `react-doc init page`.
+# The doc page is this folder: its documents beside .doc-page/, its metadata
+# and its managed folders (components, asset objects, services) inside it.
+# design: main/doc_page_impl_dir.md (the layout), main/doc_page_impl_side_panel.md#the-document-entry
+docEntry:
+  title: {{title}}
+  homeDoc: ~{{alias}}/index.md
+
+# one file per section, named here (paths relative to this file)
+source:
+  file: ./source.yaml
+sidePanelById:
+  main:
+    file: ./side-panel.yaml
+
+# more sections, each found or named the same way when wanted:
+#   tag:     { file: ./tag.yaml }       tag definitions
+#   config:  [{ file: ./config.yaml }]  the config of the doc page
+#   asset, comp, service: absent, the folders .doc-page/asset/, .doc-page/comp-mdx/
+#   and .doc-page/service-*/ by convention; { file } names another config file,
+#   false says the doc page has none

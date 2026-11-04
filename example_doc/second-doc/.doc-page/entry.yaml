@@ -1,5 +1,5 @@
 # Entry of the second root-level doc page of the demonstration workspace
-# (workspace.yaml at the project root lists it beside "example"). With two
+# (.doc-workspace/workspace.yaml at the project root lists it beside "example"). With two
 # root doc pages the page side panel shows one section per doc page: its
 # alias as a muted heading, its own side panel below. A self-contained doc
 # page like the sub document; the demonstration doc page does not include

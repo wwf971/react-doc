@@ -6,15 +6,15 @@ language: en
 
 ## One section per root doc page
 
-This document belongs to a second **root-level doc page** of the demonstration workspace. `workspace.yaml`, at the root of the project, lists two doc pages:
+This document belongs to a second **root-level doc page** of the demonstration workspace. `workspace.yaml`, in the metadata folder of the workspace (`.doc-workspace/` at the root of the project), lists two doc pages:
 
 ```yaml
-# workspace.yaml (named by main/config.yaml: workspace.file: ../workspace.yaml)
+# .doc-workspace/workspace.yaml (found from main/config.yaml: workspace.dir: ..)
 docPageList:
   - alias: example            # the demonstration doc page
-    dir: ./example_doc
+    dir: ../example_doc
   - alias: second             # this doc page
-    dir: ./example_doc/second-doc
+    dir: ../example_doc/second-doc
     isRootVisible: false      # its sole wrapper item shows its children only
 ```
 

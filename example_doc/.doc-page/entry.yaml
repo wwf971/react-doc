@@ -1,5 +1,5 @@
 # Entry of the demonstration doc page. The workspace file of the deployment
-# (workspace.yaml at the project root) names the doc page by its folder under the alias
+# (.doc-workspace/workspace.yaml at the project root) names the doc page by its folder under the alias
 # "example", and the page finds this file as .doc-page/entry.yaml: the
 # metadata files of a doc page are kept in its .doc-page/ folder, apart from
 # its documents (design: doc_page_impl_dir.md, doc_page_impl_source.md#the-workspace).

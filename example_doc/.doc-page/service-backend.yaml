@@ -27,6 +27,6 @@ docPageList:
     isDefault: true
 # further folders, outside any doc page (kind app when absent):
 # templateFolderList:
-#   - { path: ../service-template-app, kind: app }
+#   - { path: ../../shared/service-template-app, kind: app }
 # instanceFolderList:
-#   - { path: ../service-app, kind: app, isDefault: true }
+#   - { path: ../../shared/service-app, kind: app, isDefault: true }

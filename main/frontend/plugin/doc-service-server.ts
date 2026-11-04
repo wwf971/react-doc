@@ -43,7 +43,7 @@ import { readYaml, type EntryFileSection } from './doc-entry.ts';
 //
 // the service folders of a doc page (doc_page_impl_dir.md, the backend's
 // service_kernel.py reads them the same way): the four convention folders
-// of the doc page folder, or those its service config file names
+// in the metadata folder of the doc page (.doc-page/service-*), or those its service config file names
 // (.doc-page/service.yaml beside the entry, or the file the entry names
 // with "service: { file }"; "service: false": none). they are never
 // documents, and a change in them never reloads the page.
@@ -61,12 +61,12 @@ export type ServiceFolderRole = 'template' | 'instance';
 export type ServiceKind = 'app' | 'infra';
 
 // the service folders of a doc page without a service config file,
-// relative to the doc page folder
+// relative to the doc page folder: inside its metadata folder
 export const SERVICE_FOLDER_DEFAULT_LIST: { path: string; role: ServiceFolderRole; kind: ServiceKind; isDefault: boolean }[] = [
-  { path: 'service-template-app', role: 'template', kind: 'app', isDefault: false },
-  { path: 'service-template-infra', role: 'template', kind: 'infra', isDefault: false },
-  { path: 'service-app', role: 'instance', kind: 'app', isDefault: true },
-  { path: 'service-infra', role: 'instance', kind: 'infra', isDefault: true },
+  { path: '.doc-page/service-template-app', role: 'template', kind: 'app', isDefault: false },
+  { path: '.doc-page/service-template-infra', role: 'template', kind: 'infra', isDefault: false },
+  { path: '.doc-page/service-app', role: 'instance', kind: 'app', isDefault: true },
+  { path: '.doc-page/service-infra', role: 'instance', kind: 'infra', isDefault: true },
 ];
 
 type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) => void;

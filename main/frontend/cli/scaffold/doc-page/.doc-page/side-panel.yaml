@@ -1,0 +1,8 @@
+# The side panel of the doc page (main/doc_page_impl_side_panel.md): a free
+# tree, not required to mirror the folder. Edited in place from the page in
+# edit mode (rename, move, insert a document).
+sidePanelById:
+  main:
+    tree:
+      - doc: ~{{alias}}/index.md
+        text: {{title}}

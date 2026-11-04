@@ -87,7 +87,7 @@ The registry reads folders of four origins, and every template and instance carr
 | --- | --- | --- |
 | `builtIn` | `built-in/service-template-app/`, `built-in/service-template-infra/` of the project | what the package ships: the example app template `note-db`, the built-in infra templates `logging` and `sqlite`, the connections. Templates only, never instances. Found by the backend beside itself (`built-in/` two levels above `service-backend/`), or named by the backend config (`builtIn: path`; `builtIn: false` for none) |
 | `package` | `service-template-app/`, `service-template-infra/` of a package the workspace imports ([packages](doc_page_impl_package.md)) | the templates a package carries, at fixed names; never instances. The page syncs the packages it loaded with its doc pages; an instance created from one goes to the main doc page, as for a built-in template |
-| `docPage` | the service folders of a doc page: by convention `service-template-app/`, `service-template-infra/`, `service-app/`, `service-infra/` of the doc page folder, or those its `.doc-page/service.yaml` names ([the doc page folder](doc_page_impl_dir.md#service-folders)) | a doc page's own templates and instances, part of the doc page like its documents and asset folders. The doc pages come from the backend config (`docPageList`) and from the page, which syncs the doc pages it loaded (included ones too) when the backend comes up |
+| `docPage` | the service folders of a doc page: by convention `service-template-app/`, `service-template-infra/`, `service-app/`, `service-infra/` in the metadata folder of the doc page (`.doc-page/service-*/`), or those its `.doc-page/service.yaml` names ([the doc page folder](doc_page_impl_dir.md#service-folders)) | a doc page's own templates and instances, part of the doc page like its documents and asset folders. The doc pages come from the backend config (`docPageList`) and from the page, which syncs the doc pages it loaded (included ones too) when the backend comes up |
 | `folder` | `templateFolderList`, `instanceFolderList` of the backend config, each with a kind | plain folders, outside any doc page |
 
 A doc page laid out by the convention needs no service configuration: its folders are found by their names (a folder that does not exist is simply empty, and is created when an instance is created in it). To keep them elsewhere, or under other names, the doc page writes `.doc-page/service.yaml`:
@@ -95,11 +95,12 @@ A doc page laid out by the convention needs no service configuration: its folder
 ```yaml
 # .doc-page/service.yaml: the service folders of this doc page (paths relative to this file)
 templateFolderList:
-  - { path: ../service-template-app, kind: app }
-  - { path: ../service-template-infra, kind: infra }
+  - { path: ./service-template-app, kind: app }                # these four are the convention
+  - { path: ./service-template-infra, kind: infra }
+  - { path: ../tool/service-template, kind: app }              # a folder of the doc page's own choice
 instanceFolderList:
-  - { path: ../service-app, kind: app, isDefault: true }       # where an app instance of this doc page is created
-  - { path: ../service-infra, kind: infra, isDefault: true }   # where an infra instance is created or provisioned
+  - { path: ./service-app, kind: app, isDefault: true }        # where an app instance of this doc page is created
+  - { path: ./service-infra, kind: infra, isDefault: true }    # where an infra instance is created or provisioned
 ```
 
 The entry may name the file (`service: { file: ./service.yaml }`) or say the doc page has no service folders (`service: false`). The same file is read by the backend (Python, `service_kernel.py`) to mount the folders and by the development server (`plugin/`) to keep them out of the source and to tell the backend which doc pages are loaded ([Doc page source service layer](doc_page_impl_source.md)); both read the convention when the file is absent.
@@ -177,9 +178,9 @@ comp-doc/settings/ServiceSettings.jsx  the Services tab: backend line, templates
                                        (dependencies, hooks, lifecycle, routes, config dashboard), the logs
 comp-doc/edit/edit-template.js         the Services entries of the insert menu
 example_doc/.doc-page/service-backend.yaml   the example's backend config (its doc page, the built-in folder found by itself)
-example_doc/service-template-app/      the example's own app template: w55iiudjq5y--todo-list/
-example_doc/service-app/               the example's app instances: note-db-inst-*/, todo-list-inst-*/, each a copy of its template
-example_doc/service-infra/             the infra instances the kernel provisions for the example (ignored by git)
+example_doc/.doc-page/service-template-app/      the example's own app template: w55iiudjq5y--todo-list/
+example_doc/.doc-page/service-app/               the example's app instances: note-db-inst-*/, todo-list-inst-*/, each a copy of its template
+example_doc/.doc-page/service-infra/             the infra instances the kernel provisions for the example (ignored by git)
 example_doc/.doc-page/service-backup/  the backups of the example's instances, made by its local-backup instance (ignored by git)
 example_doc/service-instance.md        the demonstration of templates, instances and dashboards (note-db)
 example_doc/service-kernel.md          the demonstration of app and infra services, the kernel, the storage and the logs (todo-list)

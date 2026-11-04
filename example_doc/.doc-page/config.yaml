@@ -27,7 +27,7 @@ config:
   # panel. "file-ext" is the label added by the demo SidePanelItem renderer.
   TagsDisplayAtSidePanelItemsList: [part, guide, reference, code, draft, sub, file-ext]
   # (TagsOverviewPopupAtSidePanelItemIsOn, a tag on a side-panel item
-  # opening the overview, is a choice of the deployment: workspace.yaml at
+  # opening the overview, is a choice of the deployment: the workspace file at
   # the project root sets it in its own "config", the workspace layer)
   TagsDisplayAtLinkPosition: before         # replaced by the declaration after this file in entry.yaml
   # component-level keys, by the component's tag name

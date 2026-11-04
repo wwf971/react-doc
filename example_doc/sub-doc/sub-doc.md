@@ -27,7 +27,7 @@ docEntry:
   dir: ../example_doc/sub-doc
   alias: sub
 
-# or workspace.yaml, named by config.yaml "workspace: { file: ../workspace.yaml }"
+# or workspace.yaml, found in .doc-workspace/ of the folder config.yaml names: "workspace: { dir: .. }"
 docPageList:
   - alias: sub
     dir: ../example_doc/sub-doc

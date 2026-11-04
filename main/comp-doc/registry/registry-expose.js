@@ -28,7 +28,7 @@ import {
 // (compDefine expose, doc_page_impl_mdx_comp.md#what-a-component-exposes),
 // for those whose exposure is not kept beside the component (Image,
 // ImageGrid keep theirs in their folders; a component of a doc page keeps
-// its define options beside itself, example_doc/comp-mdx/). Each one names
+// its define options beside itself, example_doc/.doc-page/comp-mdx/). Each one names
 // itself for the insert menu and its search, draws an icon, and creates
 // the source of a new block for the document it goes to
 // (sourceDefaultCreate(env), env = { compName, docPath, docFormat, compConfig }).

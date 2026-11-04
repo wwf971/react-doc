@@ -1,0 +1,6 @@
+# The components of the package (main/doc_page_impl_package.md), mounted
+# under the ids {{name}}/{tagName}. Groups are sub folders, each with a
+# comp.yaml of its own. An entry:
+#   - tagName: FlowChart           the tag documents write: <FlowChart />
+#     entry: ./FlowChart.jsx       the module, relative to this file
+compList: []

@@ -183,7 +183,7 @@ const compSwitchView = compDefine(SwitchView, { placementList: ['commentBlock'],
 // config.yaml. a doc page brings components of its own in its component
 // folders (comp-mdx/comp.yaml), mounted by the vite plugin
 // (doc_page_impl_mdx_comp.md#components-of-a-doc-page): the demonstration
-// components of example_doc/comp-mdx/ and SourceLink, bound to the
+// components of example_doc/.doc-page/comp-mdx/ and SourceLink, bound to the
 // demonstration's popup panel there, are not registered here. nor are the
 // components of the packages a workspace imports (the diagrams of
 // package/cloud-dev-vis: DiagramER, DiagramDataverseEntity ...), mounted

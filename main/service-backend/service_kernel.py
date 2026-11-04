@@ -28,13 +28,14 @@ INFRA_LOGGING_NAME = 'logging'
 # the files and folders of a doc page that concern the service backend
 # (doc_page_impl_dir.md): the config file in its metadata folder, and the
 # folders used when the file is absent, relative to the doc page folder
+# (inside its metadata folder, beside the config file)
 DOC_PAGE_META_DIR_NAME = '.doc-page'
 DOC_PAGE_SERVICE_CONFIG_FILE = 'service.yaml'
 DOC_PAGE_FOLDER_DEFAULT_LIST = [
-    {'path': 'service-template-app', 'role': 'template', 'kind': 'app'},
-    {'path': 'service-template-infra', 'role': 'template', 'kind': 'infra'},
-    {'path': 'service-app', 'role': 'instance', 'kind': 'app', 'isDefault': True},
-    {'path': 'service-infra', 'role': 'instance', 'kind': 'infra', 'isDefault': True},
+    {'path': '.doc-page/service-template-app', 'role': 'template', 'kind': 'app'},
+    {'path': '.doc-page/service-template-infra', 'role': 'template', 'kind': 'infra'},
+    {'path': '.doc-page/service-app', 'role': 'instance', 'kind': 'app', 'isDefault': True},
+    {'path': '.doc-page/service-infra', 'role': 'instance', 'kind': 'infra', 'isDefault': True},
 ]
 # the folders of the built-in folder (what the package ships), relative to the built-in folder
 BUILT_IN_FOLDER_LIST = [
@@ -157,11 +158,11 @@ def doc_page_service_folder_list_read(dir_page, service_file=''):
 
     The file:
         templateFolderList:
-          - { path: ../service-template-app, kind: app }
-          - { path: ../service-template-infra, kind: infra }
+          - { path: ./service-template-app, kind: app }
+          - { path: ./service-template-infra, kind: infra }
         instanceFolderList:
-          - { path: ../service-app, kind: app, isDefault: true }
-          - { path: ../service-infra, kind: infra, isDefault: true }
+          - { path: ./service-app, kind: app, isDefault: true }
+          - { path: ./service-infra, kind: infra, isDefault: true }
     paths relative to the file; kind app when absent; a list may be absent
     (no folders of that role).
     """

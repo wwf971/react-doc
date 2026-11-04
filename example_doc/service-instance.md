@@ -13,11 +13,11 @@ The instances are run by the **service backend**, a program of its own (`main/se
 
 ## Running the example
 
-The example template is `note-db`: notes kept in a sqlite database. It is one of the templates the package ships, in its **built-in** folder (`built-in/service-template-app/notes/w4wp4t0czko--note-db/`); the example doc's own template, `todo-list`, is in `example_doc/service-template-app/`, and the instances of both are in `example_doc/service-app/`. The dashboards of a template are a small Vite project (`dashboard/` in the template folder), and every instance has its own copy of the project; each copy is built once, and the builds are ignored by git:
+The example template is `note-db`: notes kept in a sqlite database. It is one of the templates the package ships, in its **built-in** folder (`built-in/service-template-app/notes/w4wp4t0czko--note-db/`); the example doc's own template, `todo-list`, is in `example_doc/.doc-page/service-template-app/`, and the instances of both are in `example_doc/.doc-page/service-app/`. The dashboards of a template are a small Vite project (`dashboard/` in the template folder), and every instance has its own copy of the project; each copy is built once, and the builds are ignored by git:
 
 ````bash
 pip install -r main/service-backend/requirements.txt
-for dir in built-in/service-template-app/notes/*--note-db/dashboard example_doc/service-template-app/productivity/task/*/dashboard example_doc/service-app/*/dashboard; do
+for dir in built-in/service-template-app/notes/*--note-db/dashboard example_doc/.doc-page/service-template-app/productivity/task/*/dashboard example_doc/.doc-page/service-app/*/dashboard; do
   (cd "$dir" && npm install && npm run build)
 done
 ````
@@ -26,7 +26,7 @@ done
 
 | | template | instance |
 | --- | --- | --- |
-| where | `built-in/service-template-app/`, or `example_doc/service-template-app/` | `example_doc/service-app/` |
+| where | `built-in/service-template-app/`, or `example_doc/.doc-page/service-template-app/` | `example_doc/.doc-page/service-app/` |
 | folder | `{templateId}--{name}`: `w4wp4t0czko--note-db` | `{templateName}-inst-{serviceId}`: `note-db-inst-w4veemd7i36` |
 | its file | `service-template.yaml`: id, name, version id, versions, initial config | `service.yaml`: id, name, the template it was created from, config |
 | script, dashboards | `service.py`, `dashboard/` | its own copies of them |
@@ -92,7 +92,7 @@ An instance answers one request at a time; a request waits until the ones before
 
 ## Instances own their copies
 
-Since an instance runs its own `service.py`, changing it is changing that instance only: edit the title check in `example_doc/service-app/note-db-inst-w4veemdrx8y/service.py` and only `reading list` is restarted (at the next listing) with the new code; `example notes` and the template are as they were. Rebuilding one instance's `dashboard/` changes that instance's dashboards only.
+Since an instance runs its own `service.py`, changing it is changing that instance only: edit the title check in `example_doc/.doc-page/service-app/note-db-inst-w4veemdrx8y/service.py` and only `reading list` is restarted (at the next listing) with the new code; `example notes` and the template are as they were. Rebuilding one instance's `dashboard/` changes that instance's dashboards only.
 
 ## One instance calling another
 
@@ -124,7 +124,7 @@ The settings panel (the gear in the side panel) has a **Services** tab. Its temp
 - **Service templates**: one card per template. A card shows the template: its origin (built-in, or the doc page it belongs to), its version id and the versions it had, its script, its initial config, the instances created from it (with the version each was created from when it is not the current one), and **New instance from note-db**. The `+` beside the version id records a new version id, with a note, after the template's files changed; the instances created before keep the version they recorded.
 - **Service instances**: one card each. A card shows the instance: the template it was created from and how that template stands now (the same version, a newer one, renamed, gone), its folder, its status and health, what it depends on, the apis of its own script, and its config dashboard. **New** creates an instance from a template chosen there.
 
-Creating an instance copies the template folder (not its `service-template.yaml`, not installed `node_modules`) into a new `{templateName}-inst-{serviceId}` folder: the instance folder of the template's kind (`service-app/` or `service-infra/`) of the doc page named, or of the default doc page. The infra names, the provisioning, the routes and the log, which the tab shows as well, are the [kernel's](service-kernel.md).
+Creating an instance copies the template folder (not its `service-template.yaml`, not installed `node_modules`) into a new `{templateName}-inst-{serviceId}` folder: the instance folder of the template's kind (`.doc-page/service-app/` or `.doc-page/service-infra/`) of the doc page named, or of the default doc page. The infra names, the provisioning, the routes and the log, which the tab shows as well, are the [kernel's](service-kernel.md).
 
 ## Placing a dashboard
 

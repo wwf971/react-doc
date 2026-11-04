@@ -60,6 +60,8 @@ DocEventRouter: component reports → host → local handler → domain route (n
 
 **Packages a workspace imports.** Beside the components the package ships (`built-in/`) and those a doc page carries in its folder, a workspace imports **packages**: folders of components and service templates, with documents of their own, named by folder in the workspace file (`packageList`), each bringing the packages it needs. A package has a fixed layout and a config file whose every key is required, holds no state, and its components are mounted like a doc page's under the ids `{packageName}/{tagName}`; the diagrams of the demonstration come from one, `package/cloud-dev-vis/`. Specified in [doc_page_impl_package.md](doc_page_impl_package.md).
 
+**Folders that show their documents, and a command that creates them.** A doc page folder shows its documents and little else: what the page keeps for a doc page (its entry and yaml files, its components, its asset objects, its service templates and instances) lives in its metadata folder `.doc-page/`, and a workspace keeps its workspace file in `.doc-workspace/` the same way ([The doc page folder](doc_page_impl_dir.md)). `react-doc init page | workspace | package <dir>`, a command of the package, creates an almost empty folder of each kind that loads as it is ([The command line](doc_page_impl_cli.md)).
+
 **A component block in a popup.** A component opts into the block popup by rendering itself inside `BlockPopupSurface`: the reader opens the block in a dialog (the host's panel component), maximizes it, and switches it between View and Edit there, in reading mode as in edit mode. The page owns the dialog and its state, outside the document body, so the dialog stays while the body under it is replaced (reading body to edit body, view renderer to editor); the component's rendered element moves between the page and the dialog, so it keeps its state. Edit and View are the edit layer's session (open, leave = save, cancel = drop), with a step the editor completes its draft with before a save. Specified in [doc_page_impl_popup.md](doc_page_impl_popup.md).
 
 **One api registry, three callers.** Everything that works the page programmatically is an **api**: a named operation with declared parameters, answered within the call, kept in one registry built like the component registry (the package's apis, the apis the doc pages declare in yaml, the host's, and at run time the apis the components expose and the apis of the running service instances). The **command palette** (⇧⌘P / Ctrl+Shift+P, F1) lists the apis that choose to be listed; the **keyboard maps**, yaml files in `.doc-page/hotkey/` of a doc page that include one another and are stacked over the package's default map, bind keys to apis and resolve a key when it is pressed, passing over a binding whose api is away; a **caller outside the page** (an AI agent) calls the apis through the development server, which forwards a request to a connected page over its socket. An api that changes the document reports through the event layer as a component would. Specified in [doc_page_impl_api.md](doc_page_impl_api.md), [doc_page_impl_api_command_palette.md](doc_page_impl_api_command_palette.md) and [doc_page_impl_api_hotkey.md](doc_page_impl_api_hotkey.md).
@@ -131,7 +133,7 @@ A kind offers a set of capabilities; a capability that needs an api is on only w
 
 ```yaml
 workspace:
-  file: ../workspace.yaml  # docPageList: [{ alias, dir | file, sidePanel? }], title?, homeDoc?, homeItem?
+  dir: ..                  # the workspace folder: .doc-workspace/workspace.yaml, docPageList: [{ alias, dir | file, sidePanel? }], title?, homeDoc?, homeItem?
 # or
 docEntry:
   dir: ../example_doc      # the entry is found in it: .doc-page/entry.yaml  (or file: <entry file>)
@@ -445,10 +447,15 @@ built-in/                  # what the package ships beside the page, laid out li
 package/                 # the packages of the project, imported by workspaces (doc_page_impl_package.md)
 └── cloud-dev-vis/       # node cards and connection lines on React Flow: a base series, a Power Platform series
 example_doc/             # the demonstration doc page, laid out as a doc page folder (doc_page_impl_dir.md)
-├── .doc-page/           # its metadata, never collected: entry.yaml (named by workspace.yaml) naming
-│                        #   source.yaml, tag.yaml, config.yaml and side-panel.yaml; the side panels of
-│                        #   parts (side-panel-mdx-usage.yaml, side-panel-move-sandbox.yaml); asset.yaml,
-│                        #   the local store of the asset service layer; service-backend.yaml, the config of the service backend
+├── .doc-page/           # its metadata and managed folders, never collected: entry.yaml (named by the
+│   │                    #   workspace file) naming source.yaml, tag.yaml, config.yaml and side-panel.yaml; the side panels of
+│   │                    #   parts (side-panel-mdx-usage.yaml, side-panel-move-sandbox.yaml); asset.yaml, the folders of the
+│   │                    #   local asset store; service-backend.yaml, the config of the service backend
+│   ├── asset/, asset-archive/ # folders of the store: one folder per object, {id}--{name} (object.yaml + version files)
+│   ├── comp-mdx/        # the doc page's own components, mounted by their comp.yaml (StockTable + StockTableEdit, the demo renderers)
+│   ├── service-template-app/  # its own app template: w55iiudjq5y--todo-list/ (a stateless app service on the sqlite infra)
+│   ├── service-app/     # its app instances: {templateName}-inst-{serviceId}, each a copy of its template
+│   └── service-infra/   # its infra instances: what the service runtime kernel provisions (sqlite, logging); ignored by git
 ├── sub-doc/             # a self-contained sub document: a doc page folder of its own (sub-doc/.doc-page/entry.yaml,
 │                        #   source, tag, config and side panel inline); included by its folder, deployable alone
 ├── second-doc/          # a second root doc page of the workspace
@@ -456,19 +463,16 @@ example_doc/             # the demonstration doc page, laid out as a doc page fo
 ├── comp-custom-list-el.md # components as list elements: rules and examples
 ├── mdx-doc-edit-in-place.md     # edit-mode playground (editable on the development server)
 ├── asset-store.md       # components reading their data from the asset service layer
-├── asset/, asset-archive/ # folders of the store: one folder per object, {id}--{name} (object.yaml + version files)
 ├── service-instance.md  # service templates, instances and dashboards (note-db)
 ├── service-kernel.md    # app and infra services, the service runtime kernel, storage and logs (todo-list)
 ├── comp-state.md        # the component state service layer: counts that stay, two blocks sharing one state, the states listed
-├── comp-mdx/            # the doc page's own components, mounted by their comp.yaml (StockTable + StockTableEdit, the demo renderers)
-├── service-template-app/    # the doc page's own app template: w55iiudjq5y--todo-list/ (a stateless app service on the sqlite infra)
-├── service-app/         # its app instances: {templateName}-inst-{serviceId}, each a copy of its template (service.yaml + its own script and dashboards)
-├── service-infra/       # its infra instances: what the service runtime kernel provisions (sqlite, logging); ignored by git
 ├── playground/          # a document for trying things out, ignored by git with everything in it
 ├── asset-file/image/    # a "referenced" source folder: where pasted images are created (nothing tracked)
 ├── mdx-usage/           # mdx component demonstrations (part with hosted index; its side panel is .doc-page/side-panel-mdx-usage.yaml)
 └── link-nav/            # link usage guide (sections by title / Anchor id), link and non-md display test docs
-workspace.yaml           # the workspace of the demonstration: its root-level doc pages (example, second)
+.doc-workspace/          # the metadata folder of the workspace of the demonstration (the project root, named by
+                         #   main/config.yaml workspace.dir): workspace.yaml (its root-level doc pages example, second;
+                         #   the package it imports), hotkey.yaml (its keyboard map)
 main/
 ├── config.yaml          # example config (tracked), actually runnable
 ├── config.0.yaml        # local override (untracked), entries overlay config.yaml
@@ -493,6 +497,7 @@ main/
 ├── package.json         # delegates dev/build to frontend/
 ├── service-backend/     # the service backend, a python program of its own: server.py, service_runtime.py (the kernel and the registry), service_kernel.py, service_define.py
 └── frontend/            # Vite app + embeddable component
+    ├── cli/             # the react-doc command: doc-cli.js (init page | workspace | package) and its scaffold/ folders (doc_page_impl_cli.md)
     ├── plugin/          # vite plugin: config load, the document entry and its yaml files (doc-entry.ts), rule scan and collect modes, source-step tags/config, source pruning, virtual module (the components of the doc pages mounted), watch, dev-only source api (in doc-source.ts), edit api (doc-edit-server.ts, doc-edit-lines.ts), the asset service layer and its api (doc-asset-store.ts, doc-asset-server.ts, id-ms48.ts), the service api forwarded to the backend and the doc page sync (doc-service-server.ts), the keyboard maps and declared apis of the doc pages (doc-hotkey.ts, doc-api-config.ts), the remote api bridged to the page (doc-api-server.ts)
     ├── UICommon.js      # package-local facade for shared visual components and icons
     ├── UICommonExternal.js # external UI-library exports used by the facade
@@ -504,7 +509,7 @@ main/
         └── lib/                 # mdx compile, nested Markdown renderer, doc-source-path (the path grammar), link classification and target resolution, remark plugins, page tree build, doc-tag-*, doc-config-*, doc-edit-* (block model, edit api client), doc-asset-* (reference, backends), doc-comp-state (state keys, line shifts), doc-service-* (backend client, federation loader), doc-event (event router), doc-api (api definitions and registry), doc-hotkey (key grammar and resolution), framework adapter
 ```
 
-Design documents: [doc page source service layer](doc_page_impl_source.md), [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [MDX document in-place editing](doc_page_impl_edit.md), [copy, move and paste](doc_page_impl_block_ops.md), [asset service layer](doc_page_impl_asset.md), [component state service layer](doc_page_impl_mdx_comp_state.md), [services](doc_page_impl_service.md) with its [backend](doc_page_impl_service_backend.md), [kernel](doc_page_impl_service_kernel.md), [storage infra services](doc_page_impl_service_storage.md) and [dashboards](doc_page_impl_service_dashboard.md), [objects and types](doc_page_impl_obj.md), [block popup](doc_page_impl_popup.md), [event layer](doc_page_impl_event.md), [packages](doc_page_impl_package.md), [unified api registry](doc_page_impl_api.md) with its [command palette](doc_page_impl_api_command_palette.md) and [keyboard maps](doc_page_impl_api_hotkey.md), [package usage](doc_page_impl_detail.md). What the design leaves for later: [TODO](doc_page_impl_TODO.md).
+Design documents: [doc page source service layer](doc_page_impl_source.md), [side panel](doc_page_impl_side_panel.md), [tag system](doc_page_impl_tag.md), [config system](doc_page_impl_config.md), [navigation](doc_page_impl_nav.md), [MDX components](doc_page_impl_mdx_comp.md), [components in lists](doc_page_impl_mdx_li.md), [multilingual content](doc_page_impl_multi-lang.md), [MDX document in-place editing](doc_page_impl_edit.md), [copy, move and paste](doc_page_impl_block_ops.md), [asset service layer](doc_page_impl_asset.md), [component state service layer](doc_page_impl_mdx_comp_state.md), [services](doc_page_impl_service.md) with its [backend](doc_page_impl_service_backend.md), [kernel](doc_page_impl_service_kernel.md), [storage infra services](doc_page_impl_service_storage.md) and [dashboards](doc_page_impl_service_dashboard.md), [objects and types](doc_page_impl_obj.md), [block popup](doc_page_impl_popup.md), [event layer](doc_page_impl_event.md), [packages](doc_page_impl_package.md), [unified api registry](doc_page_impl_api.md) with its [command palette](doc_page_impl_api_command_palette.md) and [keyboard maps](doc_page_impl_api_hotkey.md), [package usage](doc_page_impl_detail.md), [the command line](doc_page_impl_cli.md). What the design leaves for later: [TODO](doc_page_impl_TODO.md).
 
 Run `pnpm install` from the workspace root once, then `pnpm dev` from either this folder or `frontend/`. `pnpm build` produces one static deployable artifact (docs bundled as lazy chunks); any static file server works, no doc folders needed at runtime.
 

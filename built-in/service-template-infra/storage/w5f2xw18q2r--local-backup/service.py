@@ -132,10 +132,13 @@ class LocalBackup(Service):
 
     def start(self):
         self.backup_dir, self.is_backup_dir_default = self._backup_dir_resolve()
-        try:
-            os.makedirs(self.backup_dir, exist_ok=True)
-        except OSError as error:
-            raise RuntimeError(f'the backup folder cannot be made: {self.backup_dir}: {error}')
+        # the folder is made by the first backup, never empty (main/doc_page_impl_dir.md#managed-folders-made-when-first-used);
+        # that it can be made is checked now: the nearest folder that exists is writable
+        dir_existing = self.backup_dir
+        while not os.path.exists(dir_existing) and os.path.dirname(dir_existing) != dir_existing:
+            dir_existing = os.path.dirname(dir_existing)
+        if not os.path.isdir(dir_existing) or not os.access(dir_existing, os.W_OK):
+            raise RuntimeError(f'the backup folder cannot be made: {self.backup_dir}: {dir_existing} is not a writable folder')
         # the metadata read from a zip, by file name, valid while the file's size and mtime are the same
         self.meta_cache_by_name = {}
 
@@ -164,6 +167,11 @@ class LocalBackup(Service):
         file_path = os.path.join(self.backup_dir, file_name)
         path_temp = os.path.join(self.backup_dir, TEMP_PREFIX + file_name)
         version_id = file_name[:-len(BACKUP_FILE_EXT)]
+        # the first backup makes the folder
+        try:
+            os.makedirs(self.backup_dir, exist_ok=True)
+        except OSError as error:
+            raise ServiceError(-1, f'the backup folder cannot be made: {self.backup_dir}: {error}')
         caller = self.context.caller
         metadata = {
             'versionId': version_id,
@@ -436,8 +444,9 @@ class LocalBackup(Service):
         time, slug, size }], problemList }."""
         entry_list = []
         problem_list = []
+        # no folder yet: no backup has been made
         if not os.path.isdir(self.backup_dir):
-            return {'entryList': entry_list, 'problemList': [f'the backup folder does not exist: {self.backup_dir}']}
+            return {'entryList': entry_list, 'problemList': problem_list}
         for name in sorted(os.listdir(self.backup_dir)):
             if name.startswith('.'):
                 continue

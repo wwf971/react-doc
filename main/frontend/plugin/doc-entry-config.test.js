@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { docEntryFileFind, docEntryLoad, docWorkspaceLoad, docWorkspaceSpecRead } from './doc-entry.ts';
+import { docEntryFileFind, docEntryLoad, docWorkspaceFileFind, docWorkspaceLoad, docWorkspaceSpecRead } from './doc-entry.ts';
 import { docEditMiddlewareCreate } from './doc-edit-server.ts';
 import { lineOperationApply } from './doc-edit-lines.ts';
 import { yamlValueSetOperationBuild } from './doc-yaml-edit.ts';
@@ -381,4 +381,40 @@ test('isRootVisible must be a yaml boolean, not text', async () => {
   assert.throws(() => docPageSpecRead({ dir: './guide', isRootVisible: 0 }, '/tmp', 'workspace'), /"isRootVisible" must be a yaml boolean/);
   assert.equal(docPageSpecRead({ dir: './guide', isRootVisible: false }, '/tmp', 'workspace').isRootVisible, false);
   assert.equal(docPageSpecRead({ dir: './guide' }, '/tmp', 'workspace').isRootVisible, undefined);
+});
+
+// ---------- the workspace folder (doc_page_impl_dir.md#the-workspace-folder) ----------
+
+test('a workspace named by its folder: the file is found in .doc-workspace/, its paths relative to it', () => {
+  const dir = fixtureCreate();
+  // the folder itself first, as a former layout
+  fs.writeFileSync(path.join(dir, 'workspace.yaml'), 'docPageList:\n  - alias: guide\n    dir: ./guide\n');
+  assert.equal(docWorkspaceFileFind(dir), path.join(dir, 'workspace.yaml'));
+  fs.mkdirSync(path.join(dir, '.doc-workspace'));
+  fs.writeFileSync(path.join(dir, '.doc-workspace', 'workspace.yaml'), 'docPageList:\n  - alias: guide\n    dir: ../guide\nhotkey:\n  file: ./hotkey.yaml\n');
+  assert.equal(docWorkspaceFileFind(dir), path.join(dir, '.doc-workspace', 'workspace.yaml'));
+  const spec = docWorkspaceSpecRead({ dir: '.' }, dir, 'config.yaml');
+  assert.equal(spec.file, path.join(dir, '.doc-workspace', 'workspace.yaml'));
+  assert.equal(spec.dirBase, path.join(dir, '.doc-workspace'));
+  assert.equal(spec.hotkeyFile, path.join(dir, '.doc-workspace', 'hotkey.yaml'));
+  assert.equal(spec.docPageList[0].dir, path.join(dir, 'guide'));
+  // "dir" stands alone, like "file"; a folder without a workspace file is named
+  assert.throws(() => docWorkspaceSpecRead({ dir: '.', title: 'x' }, dir, 'config.yaml'), /"dir" names the workspace folder and stands alone/);
+  assert.throws(() => docWorkspaceSpecRead({ dir: './guide' }, dir, 'config.yaml'), /no workspace file in the workspace folder .*expected \.doc-workspace\/workspace\.yaml/);
+});
+
+test('a managed folder left beside the documents is reported once with where it goes, and not read', (context) => {
+  const dir = fixtureCreate();
+  fs.mkdirSync(path.join(dir, 'guide', 'comp-mdx'));
+  fs.mkdirSync(path.join(dir, 'guide', 'service-app'));
+  // a plain content folder named asset/ (no asset objects) is not reported
+  fs.mkdirSync(path.join(dir, 'guide', 'asset', 'img'), { recursive: true });
+  const warnList = [];
+  context.mock.method(console, 'warn', (text) => warnList.push(String(text)));
+  docEntryLoad(path.join(dir, 'guide'), dir, '', undefined, false);
+  docEntryLoad(path.join(dir, 'guide'), dir, '', undefined, false);
+  const formerList = warnList.filter((text) => text.includes('is not read'));
+  assert.equal(formerList.length, 2);
+  assert.match(formerList[0], /guide\/comp-mdx is not read: the comp-mdx\/ folder of a doc page is \.doc-page\/comp-mdx\/ now/);
+  assert.match(formerList[1], /guide\/service-app is not read: .*\.doc-page\/service\.yaml/);
 });

@@ -169,7 +169,7 @@ frontend/src/store/DocEditStore.ts          operationApply tells the layer the l
 frontend/src/DocPageMdx.jsx                 the store beside the others; init / dispose
 comp-mdx/media/excel-univer/                      ExcelUniver: engine selection and the shared draft in the state;
                                             ExcelUniverSheet restores and reports the selection
-example_doc/comp-mdx/DemoCounter.jsx        a count in the state (keyed by id or by place)
-example_doc/comp-mdx/CompStateListDemo.jsx  the states the layer holds, listed
+example_doc/.doc-page/comp-mdx/DemoCounter.jsx        a count in the state (keyed by id or by place)
+example_doc/.doc-page/comp-mdx/CompStateListDemo.jsx  the states the layer holds, listed
 example_doc/comp-state.md                   demonstration: counts that stay, two blocks on one object, the list
 ```

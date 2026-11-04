@@ -61,7 +61,7 @@ The maps are configuration, kept where the config of their level is kept, and ev
 
 - **The package's default map** is the package config layer of the keys: the default keys of the built-in apis are not in code but in a map file `config.yaml` names (`hotkey: { file: ./hotkey/default.yaml }`, [the default layer](doc_page_impl_config.md#the-default-layer) of the config keys is `configDefault` of the same file), so a deployment overrides them in `config.0.yaml` like any entry, and a package without the section binds no key. `main/hotkey/default.yaml`: the palette on `mod+shift+p` and `f1`, Back / Forward / Up / Home on `alt` with the arrows, edit mode on `mod+shift+e`, block selection on `mod+shift+b`, the settings on `mod+,`.
 - **A doc page's maps** live in `.doc-page/hotkey/` by convention ([The doc page folder](doc_page_impl_dir.md#keyboard-maps-and-declared-apis)), one file per map, and **`main.yaml` is the map it activates**; the other files are resources, included by the active map or chosen by the reader. The entry may name another file as the active map (`hotkey: { file: ./hotkey/vim.yaml }`) or say the doc page has none (`hotkey: false`). Unlike a doc page's config, which applies only for the main doc page ([the doc page layers](doc_page_impl_config.md#the-doc-page-layers)), the maps of **every** loaded doc page apply: a key is bound to an api, and the apis a doc page declares and the components it brings come along with it wherever it is included, so its keys for them do too; what an included doc page binds is seen in the table of the API tab under its alias, and the doc page that includes it, the workspace and the reader rebind it.
-- **The workspace's map** is named by the workspace file (`hotkey: { file: ./workspace-hotkey.yaml }`, [the workspace file](doc_page_impl_source.md#the-workspace-file)), one map file like the package's: the keys of the deployment, over every doc page's.
+- **The workspace's map** is named by the workspace file (`hotkey: { file: ./hotkey.yaml }`, beside it in `.doc-workspace/`, [the workspace file](doc_page_impl_source.md#the-workspace-file)), one map file like the package's: the keys of the deployment, over every doc page's.
 
 The **stack** (`DocHotkeyStore.mapListStack`), lowest first, follows the rule of the config layers, the container deciding over what it contains:
 
@@ -115,7 +115,7 @@ frontend/plugin/doc-hotkey.ts             the package's and the workspace's map 
                                           page: the maps, includes expanded, problems (configDoc.hotkey)
 frontend/src/lib/doc-hotkey.test.js, frontend/plugin/doc-hotkey.test.js   the grammar and resolution; the files
 example_doc/.doc-page/hotkey/             main.yaml (active), base.yaml (included), minimal.yaml (a choice)
-workspace.yaml, workspace-hotkey.yaml     the workspace's map of the demonstration
+.doc-workspace/hotkey.yaml                the workspace's map of the demonstration, named by workspace.yaml beside it
 ```
 
 Editing the keys from the page (a client map written in the browser, as the client config layer is) is in [TODO](doc_page_impl_TODO.md#api-hotkey-client-map).

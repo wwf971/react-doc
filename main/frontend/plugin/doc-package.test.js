@@ -35,8 +35,8 @@ function fixtureCreate({ configLines = ['packageList:', '  - dir: ./package/vis'
     '      - doc: ~docs/a.md',
     '',
   ].join('\n'));
-  fileWrite('page/comp-mdx/comp.yaml', 'tagName: Chart\nentry: ./Chart.jsx\n');
-  fileWrite('page/comp-mdx/Chart.jsx', 'export function Chart() { return null; }\n');
+  fileWrite('page/.doc-page/comp-mdx/comp.yaml', 'tagName: Chart\nentry: ./Chart.jsx\n');
+  fileWrite('page/.doc-page/comp-mdx/Chart.jsx', 'export function Chart() { return null; }\n');
   fileWrite('package/vis/doc-package.yaml', packageYamlByName.vis ?? 'name: vis\ndescription: Diagrams\npackageDependList:\n  - dir: ../base\n');
   fileWrite('package/vis/doc/README.md', '# vis\n');
   fileWrite('package/vis/comp-mdx/flow/comp.yaml', [

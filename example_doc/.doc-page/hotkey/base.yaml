@@ -15,6 +15,6 @@ hotkeyMap:
       description: the todo-list demonstration
     # unbind a package key: alt+home does nothing in this doc page (the
     # workspace of the demonstration binds it again above this map:
-    # workspace-hotkey.yaml at the project root)
+    # .doc-workspace/hotkey.yaml at the project root)
     - key: alt+home
       api: null

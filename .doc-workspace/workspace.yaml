@@ -1,0 +1,71 @@
+# The workspace of the demonstration: what the development server serves and
+# what a deployment builds. config.yaml names the workspace by its folder
+# (workspace.dir: the project root), and the file is found here, in the
+# metadata folder of the workspace, .doc-workspace/.
+# design: doc_page_impl_source.md#the-workspace, doc_page_impl_dir.md#the-workspace-folder
+#
+# a workspace is a list of root-level doc pages, in side-panel order. each is
+# named by its folder ("dir": the entry is found in its .doc-page/ folder)
+# or by its entry file ("file"), under an alias unique in the workspace: the
+# name its files carry in the full source path form, ~alias:root/path. a
+# doc page a root doc page includes through its side panels joins the
+# workspace under the alias that include gives it, and is one doc page
+# however often it is mentioned (a root-level mention decides its alias).
+# with one root doc page the page shows that doc page's side panel; with
+# several, one section per doc page: its alias as a muted heading, its side
+# panel below. "sidePanel" picks one of a doc page's side panels instead of
+# its default. paths are relative to this file, in .doc-workspace/ of the project root.
+# the Workspace tab of the settings panel edits this file in place, and
+# mounts further doc pages for as long as the development server runs.
+#
+# the sub document of the demonstration (example_doc/sub-doc) is not listed
+# here: the demonstration doc page includes it under the alias "sub"
+# (example_doc/.doc-page/side-panel.yaml). listed here as well, it would be
+# shown once, as a section of its own, and no longer under "example": a doc
+# page has one effective occurrence in the side panel, its root mount first
+# (doc_page_impl_side_panel.md#one-effective-occurrence-per-doc-page).
+docPageList:
+  - alias: example
+    dir: ../example_doc
+    # sidePanel: compact
+  # a second root doc page: the side panel shows a section for each. its
+  # side panel is one wrapper item holding its documents; isRootVisible:
+  # false shows them directly under the section heading, without the
+  # wrapper's row (doc_page_impl_side_panel.md#the-root-row-hidden). a
+  # yaml boolean: the text "false" is refused
+  - alias: second
+    dir: ../example_doc/second-doc
+    isRootVisible: false
+
+# the packages the workspace imports (main/doc_page_impl_package.md):
+# each named by its folder, relative to this file. a package brings its
+# components (mounted under the ids {packageName}/{tagName}) and its service
+# templates to every doc page of the workspace, and the packages it needs
+# itself. cloud-dev-vis carries the diagrams the demonstration shows:
+# CardDiagram, DiagramER, DiagramPowerAutomate, DiagramBusinessRule,
+# DiagramDataverseEntity
+packageList:
+  - dir: ../package/cloud-dev-vis
+
+# page values over those of the first doc page's entry (docEntry.title /
+# homeDoc / homeItem); left to the entry here
+# title: React Doc Test
+# homeDoc: ~example:example/doc.md
+
+# the workspace config layer (main/doc_page_impl_config.md#the-workspace-layer):
+# the deployment's values of the config keys, over those of the main doc
+# page (the first doc page listed above; the config of the other doc pages
+# is shown in the settings panel, not applied). the same forms as the
+# "config" of an entry: a mapping of keys, { file } (relative to this
+# file), or a list of both; a value is edited in place from the settings
+# panel (Workspace tab of the Config tab line).
+config:
+  # a tag on a side-panel item opens the tag overview too: a choice of this
+  # deployment (off by default, so that a click on an item navigates)
+  TagsOverviewPopupAtSidePanelItemIsOn: true
+
+# the keyboard map of the workspace (main/doc_page_impl_api_hotkey.md): the
+# deployment's keys, stacked over the maps of the doc pages and the
+# package's default map
+hotkey:
+  file: ./hotkey.yaml

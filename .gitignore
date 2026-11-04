@@ -15,16 +15,16 @@ third_party/shadcn/
 
 ai-dev*
 # backups and temporary files of the asset store (doc_page_impl_asset.md);
-# the folders themselves are content and are tracked. example_doc/asset has
+# the folders themselves are content and are tracked. example_doc/.doc-page/asset has
 # its own .gitignore, which keeps out everything not listed in it.
-example_doc/asset-archive/**/*.bak
-example_doc/asset-archive/**/*.tmp
+example_doc/.doc-page/asset-archive/**/*.bak
+example_doc/.doc-page/asset-archive/**/*.tmp
 example_doc/.doc-page/asset.yaml.bak
 example_doc/.doc-page/asset.yaml.tmp
 # backups the edit api keeps beside a configuration yaml file it rewrote
 # (doc_page_impl_edit.md): doc page config values, side-panel labels
 main/config*.yaml.bak
-/workspace.yaml.bak
+/.doc-workspace/*.yaml.bak
 **/.doc-page/*.yaml.bak
 
 

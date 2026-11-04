@@ -1,0 +1,20 @@
+# The workspace file, created by `react-doc init workspace`: the doc
+# pages one deployment serves. The page finds this file from the workspace
+# folder (config.yaml: workspace: { dir }); paths are relative to this file,
+# so ".." is the workspace folder.
+# design: main/doc_page_impl_source.md#the-workspace-file, main/doc_page_impl_dir.md#the-workspace-folder
+title: {{title}}
+
+# the root-level doc pages, in side-panel order, each under an alias unique
+# in the workspace; the first is the main doc page
+docPageList:
+  - alias: {{pageAlias}}
+    dir: ../{{pageAlias}}
+
+# optional:
+# packageList:            # packages of components and service templates
+#   - dir: ../../my-package
+# config:                 # the workspace config layer, over the main doc page's
+#   TagsDisplayAtLinkIsOn: true
+# hotkey:                 # the keyboard map of the workspace
+#   file: ./hotkey.yaml

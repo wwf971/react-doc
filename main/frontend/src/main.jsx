@@ -5,7 +5,7 @@ import { DocPageMdx } from './DocPageMdx.jsx';
 // the panel component that frames the popups of the page is host
 // configuration (compConfigHost.panelComponent), not a document component:
 // the demonstration keeps it beside its components, and imports it here
-import { TextPanelDemo } from '../../../example_doc/comp-mdx/panel/TextPanelDemo.jsx';
+import { TextPanelDemo } from '../../../example_doc/.doc-page/comp-mdx/panel/TextPanelDemo.jsx';
 import {
   indexLanguageListGet,
   indexStructuredDataGet,
@@ -34,10 +34,10 @@ createRoot(document.getElementById('root')).render(
       // the asset api of the development server is used instead
       assetSnapshot: docSource.assetSnapshot,
       // the components of the doc pages (doc_page_impl_mdx_comp.md#components-of-a-doc-page):
-      // found in their component folders (comp-mdx/ by convention) and
+      // found in their component folders (.doc-page/comp-mdx/ by convention) and
       // imported by the plugin; the page mounts them into its registry. the
       // demonstration components (StockTable, DemoCounter, the side-panel
-      // item hook ...) come this way, from example_doc/comp-mdx/comp.yaml
+      // item hook ...) come this way, from example_doc/.doc-page/comp-mdx/comp.yaml
       compMountList: docSource.docCompMountList,
     }}
     config={{

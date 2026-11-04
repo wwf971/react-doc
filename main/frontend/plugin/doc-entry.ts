@@ -35,7 +35,7 @@ import { sidePanelEffectiveGet, sidePanelRootHiddenApply } from './doc-sidebar-e
 //                            #   beside the entry, else the convention folders (doc-service-server.ts)
 //   comp:                    # optional, an entry only: the component folders of the doc page,
 //                            #   { file: ./comp.yaml } | false (none); absent: comp.yaml beside
-//                            #   the entry, else comp-mdx/ of the doc page (doc-comp-config.ts)
+//                            #   the entry, else .doc-page/comp-mdx/ (doc-comp-config.ts)
 //   sidePanelDefault: main   # optional when the file declares one side panel
 //   sidePanelById:
 //     main: { root?, tree }          # a side panel resource
@@ -383,12 +383,64 @@ export function docPageDirGet(entryFile: string): string {
   return path.basename(dirEntry) === DOC_PAGE_META_DIR_NAME ? path.dirname(dirEntry) : dirEntry;
 }
 
+// the managed folders a doc page kept beside its documents before they moved
+// into its metadata folder (doc_page_impl_dir.md#layout): a folder of the
+// former name that the convention would have read is reported once, with
+// where it goes now; it is not read
+const DOC_PAGE_FOLDER_FORMER_LIST = [
+  { name: 'comp-mdx', section: 'comp', configFile: 'comp.yaml' },
+  { name: 'service-template-app', section: 'service', configFile: 'service.yaml' },
+  { name: 'service-template-infra', section: 'service', configFile: 'service.yaml' },
+  { name: 'service-app', section: 'service', configFile: 'service.yaml' },
+  { name: 'service-infra', section: 'service', configFile: 'service.yaml' },
+  { name: 'asset', section: 'asset', configFile: 'asset.yaml' },
+] as const;
+const docPageFolderFormerWarnedSet = new Set<string>();
+
+function docPageFolderFormerWarn(docPage: DocPageLoaded) {
+  for (const former of DOC_PAGE_FOLDER_FORMER_LIST) {
+    if (docPage[former.section] !== undefined) continue;
+    if (fs.existsSync(path.join(path.dirname(docPage.entryFile), former.configFile))) continue;
+    const folderFormer = path.join(docPage.dirPage, former.name);
+    if (docPageFolderFormerWarnedSet.has(folderFormer) || !fs.existsSync(folderFormer)) continue;
+    // a folder named asset/ is content unless it holds asset objects
+    if (former.name === 'asset' && !fs.readdirSync(folderFormer).some((name) => fs.existsSync(path.join(folderFormer, name, 'object.yaml')))) continue;
+    docPageFolderFormerWarnedSet.add(folderFormer);
+    console.warn(
+      `[doc-source] ${folderFormer} is not read: the ${former.name}/ folder of a doc page is ${DOC_PAGE_META_DIR_NAME}/${former.name}/ now;`
+        + ` move it there, or name it in ${DOC_PAGE_META_DIR_NAME}/${former.configFile} (doc_page_impl_dir.md)`,
+    );
+  }
+}
+
 // the alias a doc page gets when none is given: the name of its folder
 export function docPageAliasDefaultGet(entryFile: string): string {
   return path.basename(docPageDirGet(entryFile));
 }
 
 // ---------- the workspace ----------
+
+// the folder of a workspace that holds its metadata files: the workspace
+// file and the files it names (its keyboard map, config files), so that the
+// workspace folder shows its doc pages. design: doc_page_impl_dir.md#the-workspace-folder
+export const WORKSPACE_META_DIR_NAME = '.doc-workspace';
+export const WORKSPACE_FILE_NAME = 'workspace.yaml';
+
+// the workspace file of a workspace given by its folder, first match:
+//   {dir}/.doc-workspace/workspace.yaml, {dir}/workspace.yaml
+export function docWorkspaceFileFind(dirPath: string): string {
+  const dirResolved = path.resolve(dirPath);
+  if (!fs.existsSync(dirResolved) || !fs.statSync(dirResolved).isDirectory()) {
+    throw new Error(`[doc-source] workspace folder not found: ${dirResolved}`);
+  }
+  for (const fileWorkspace of [path.join(dirResolved, WORKSPACE_META_DIR_NAME, WORKSPACE_FILE_NAME), path.join(dirResolved, WORKSPACE_FILE_NAME)]) {
+    if (fs.existsSync(fileWorkspace)) return fileWorkspace;
+  }
+  throw new Error(
+    `[doc-source] no workspace file in the workspace folder ${dirResolved}: expected ${WORKSPACE_META_DIR_NAME}/${WORKSPACE_FILE_NAME}`
+      + ` (or ${WORKSPACE_FILE_NAME} in the folder itself)`,
+  );
+}
 
 // the workspace file (design: doc_page_impl_source.md#the-workspace-file):
 //   title: ...               # optional page values, over those of the first doc page
@@ -409,12 +461,15 @@ export function docWorkspaceSpecRead(workspace: any, configDir: string, configFi
   let fileHash: string | undefined;
   let dirBase = configDir;
   const placeConfig = `config "workspace" (${configFile})`;
-  if (!mappingIs(content)) throw new Error(`[doc-source] ${placeConfig} must be { file } or { docPageList, packageList?, title?, homeDoc?, homeItem? }`);
-  if (content.file !== undefined) {
-    if (typeof content.file !== 'string' || !content.file.trim() || Object.keys(content).length !== 1) {
-      throw new Error(`[doc-source] ${placeConfig}: "file" names the workspace file and stands alone`);
+  if (!mappingIs(content)) throw new Error(`[doc-source] ${placeConfig} must be { dir }, { file } or { docPageList, packageList?, title?, homeDoc?, homeItem? }`);
+  if (content.file !== undefined || content.dir !== undefined) {
+    // "dir": the workspace folder, its file found in .doc-workspace/;
+    // "file": the workspace file itself
+    const key = content.file !== undefined ? 'file' : 'dir';
+    if (typeof content[key] !== 'string' || !content[key].trim() || Object.keys(content).length !== 1) {
+      throw new Error(`[doc-source] ${placeConfig}: "${key}" names the workspace ${key === 'dir' ? 'folder' : 'file'} and stands alone`);
     }
-    fileWorkspace = path.resolve(configDir, content.file);
+    fileWorkspace = key === 'dir' ? docWorkspaceFileFind(path.resolve(configDir, content.dir)) : path.resolve(configDir, content.file);
     content = readYaml(fileWorkspace);
     if (content !== undefined) fileHash = textHashGet(fs.readFileSync(fileWorkspace, 'utf-8'));
     if (content === undefined) throw new Error(`[doc-source] workspace file not found: ${fileWorkspace}`);
@@ -661,6 +716,7 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
     homeItem: spec.homeItem ?? fileFirst.entry.homeItem,
   };
   for (const warning of context.warningList) console.warn(`[doc-source] ${warning}`);
+  for (const docPage of docPageList) docPageFolderFormerWarn(docPage);
 
   return {
     entry,

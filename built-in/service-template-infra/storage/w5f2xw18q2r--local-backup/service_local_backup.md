@@ -15,7 +15,7 @@ Design and the place of this service among the storage infra services: `main/doc
 
 - **One zip file per backup**, named `{consumerServiceId}--{templateName}--{time}[--{note-slug}].zip`: the consumer instance first, so its backups sort together; the name of the template it was created from, for the reader of the disk; the time in the project's form (`20261102_23540104+09`); and the note turned into a slug (lowercase words joined by `-`, at most 40 characters), when the note has any. `--` separates the parts, as in a template folder's name: an id and a time never hold it, and the other parts are kept from holding it.
 - **The folder is the whole state.** Every listing reads it again; the instance keeps nothing beside it. Point an instance at another folder (`backupDir`), or delete the instance and let the kernel provision a new one, and the backups there are those of the same consumers. A file whose name has not the form, or a folder, is a problem the folder reports (`folderInfo`), never a backup; names starting with a dot are not read (a backup being written is `.tmp-…`, renamed when complete).
-- **The default folder** is `.doc-page/service-backup/` of the doc page the instance belongs to (the metadata folder, beside the other files the page keeps for itself; `*.zip` is ignored by git). `backupDir` of the instance's config names another: an absolute path, or one relative to the instance folder. An instance of a plain folder of the backend config (no doc page) uses `service-backup/` beside its own folder.
+- **The default folder** is `.doc-page/service-backup/` of the doc page the instance belongs to (the metadata folder, beside the other files the page keeps for itself; `*.zip` is ignored by git). `backupDir` of the instance's config names another: an absolute path, or one relative to the instance folder. An instance of a plain folder of the backend config (no doc page) uses `service-backup/` beside its own folder. The folder is made by the first backup, never before: until then the listing is empty.
 - **Inside a zip**: `service-backup.yaml`, the metadata, and `data/`, the consumer's files and folders as they were given, each under its own name:
 
 ```yaml
@@ -54,7 +54,7 @@ For the page and the kernel only (`callerKindList`): `folderInfo()` (the folder:
 
 ## A consumer: backup and restore round trip
 
-`todo-list` (`example_doc/service-template-app/productivity/task/w55iiudjq5y--todo-list/`) keeps its todos in `sqlite` and declares `local-backup` as an optional dependency; its own `backupCreate`, `backupList`, `backupCheckout` and `backupDelete` are these calls:
+`todo-list` (`example_doc/.doc-page/service-template-app/productivity/task/w55iiudjq5y--todo-list/`) keeps its todos in `sqlite` and declares `local-backup` as an optional dependency; its own `backupCreate`, `backupList`, `backupCheckout` and `backupDelete` are these calls:
 
 ```text
 backupCreate(note)

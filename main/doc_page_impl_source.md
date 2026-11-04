@@ -151,7 +151,7 @@ A pattern is matched against the path from the rule's folder (not the source pat
 
 ### The folders a doc page keeps out by convention
 
-Some folders of a doc page are never documents whatever rule collects the folder around them, so no `exclude` pattern is needed for them ([the doc page folder](doc_page_impl_dir.md)): the metadata folder `.doc-page/` (the configuration files, their `.bak` backups); the asset folders (`.doc-page/asset.yaml`, or `asset/`, [asset service layer](doc_page_impl_asset.md)); the service folders (`.doc-page/service.yaml` with `templateFolderList` / `instanceFolderList`, paths relative to the file, `kind` app by default, or the four convention folders `service-template-app/`, `service-template-infra/`, `service-app/`, `service-infra/`; the entry may say `service: { file }` or `service: false`; `plugin/doc-service-server.ts`, read the same way by the backend) together with the plain folders of the backend config `config.yaml` names; and the component folders (`.doc-page/comp.yaml` `folderList`, or `comp-mdx/`; `comp: { file }` / `comp: false`; `plugin/doc-comp-config.ts`, [components of a doc page](doc_page_impl_mdx_comp.md#components-of-a-doc-page)). Every doc page the page loads brings its own, included ones and temporary mounts too. The scan, the folder manifest and the file watcher apply one set (`sourceExcludeGet` in `plugin/doc-source.ts`): a file of these folders is not collected, not listed, and a change in it never reloads the page (an asset object written, a database of a service instance, a dashboard rebuilt, a component module, which vite's own hot module replacement handles); the config files themselves and the component manifests are configuration, whose change regenerates the manifest of the page.
+Some folders of a doc page are never documents whatever rule collects the folder around them, so no `exclude` pattern is needed for them ([the doc page folder](doc_page_impl_dir.md)): the metadata folder `.doc-page/` (the configuration files, their `.bak` backups, and the convention folders of the three managed kinds, which live inside it); the asset folders (`.doc-page/asset.yaml`, or `.doc-page/asset/`, [asset service layer](doc_page_impl_asset.md)); the service folders (`.doc-page/service.yaml` with `templateFolderList` / `instanceFolderList`, paths relative to the file, `kind` app by default, or the four convention folders `.doc-page/service-template-app/`, `service-template-infra/`, `service-app/`, `service-infra/`; the entry may say `service: { file }` or `service: false`; `plugin/doc-service-server.ts`, read the same way by the backend) together with the plain folders of the backend config `config.yaml` names; and the component folders (`.doc-page/comp.yaml` `folderList`, or `.doc-page/comp-mdx/`; `comp: { file }` / `comp: false`; `plugin/doc-comp-config.ts`, [components of a doc page](doc_page_impl_mdx_comp.md#components-of-a-doc-page)). Every doc page the page loads brings its own, included ones and temporary mounts too. The scan, the folder manifest and the file watcher apply one set (`sourceExcludeGet` in `plugin/doc-source.ts`): a file of these folders is not collected, not listed, and a change in it never reloads the page (an asset object written, a database of a service instance, a dashboard rebuilt, a component module, which vite's own hot module replacement handles); the config files themselves and the component manifests are configuration, whose change regenerates the manifest of the page.
 
 A file entry of the manifest is `{ docPageAlias, rootAlias, relPath, name, ext, internalPath, collect, title, contentHash, tagList, configSource, configFrontmatter, load }`; `internalPath` is the full source path. The **folder manifest** (`dirManifest`) lists the folders of the source, `{ docPageAlias, rootAlias, relPath, internalPath, collect }`: for every `addFolder` rule its folder and, for a recursive or referenced rule, every folder below it, minus what `removeByPath` rules cover. It is what path completion offers and where files can be created.
 
@@ -162,7 +162,8 @@ A file entry of the manifest is `{ docPageAlias, rootAlias, relPath, name, ext, 
 ```yaml
 # a workspace: its root-level doc pages, in a workspace file (or the same mapping in place)
 workspace:
-  file: ./workspace.yaml
+  dir: ..                   # the workspace folder: its file is .doc-workspace/workspace.yaml there
+  # file: ../.doc-workspace/workspace.yaml   (or name the file itself)
 
 # one doc page: a virtual workspace holding it alone (the former form, kept)
 docEntry:
@@ -174,7 +175,7 @@ docEntry:
 ### The workspace file
 
 ```yaml
-# workspace.yaml: paths relative to this file; by convention at the root of the project
+# .doc-workspace/workspace.yaml: paths relative to this file, so the workspace folder is ..
 title: My Site                      # optional page values, over those of the first doc page's entry
 homeDoc: ~guide:guide/overview.md   # a full source path, or a local path of the first doc page
 homeItem: ...
@@ -191,8 +192,10 @@ packageList:                        # optional: the packages the workspace impor
 config:                             # optional: the workspace config layer, the forms of a doc page's "config"
   TagsOverviewPopupIsOn: true       #   (doc_page_impl_config.md#the-workspace-layer); { file } relative to this file
 hotkey:                             # optional: the keyboard map of the workspace, over the doc pages' maps
-  file: ./workspace-hotkey.yaml     #   (doc_page_impl_api_hotkey.md)
+  file: ./hotkey.yaml              #   (doc_page_impl_api_hotkey.md)
 ```
+
+The workspace file is found from the workspace folder in its metadata folder, `.doc-workspace/`, or in the folder itself; the layout of a workspace folder is in [the workspace folder](doc_page_impl_dir.md#the-workspace-folder).
 
 `packageList` makes the components and service templates of each package (and of the packages it needs) available to every doc page of the workspace. A workspace given by `docEntry` of `config.yaml` names its packages in `config.yaml` beside it; with `workspace`, only the workspace does. `config` and `hotkey` are what the deployment decides for the whole page, over the doc pages it assembles: the first doc page of `docPageList` is the **main doc page**, the only one whose own config is applied, and the workspace's config sits over it; the workspace's keyboard map sits over the maps of every doc page. A workspace written in place in `config.yaml` (`workspace: { docPageList, config, hotkey }`) takes both the same way; a virtual workspace (`docEntry`) has neither.
 
@@ -345,7 +348,7 @@ A **source path specification** says what a path names, so completion lists the 
 kind        'dir' | 'file' | 'any'   folders, files, or both (a mixed list tells the kind of each candidate)
 extList     ['.png', '.jpg']         files with one of these extensions (the dot optional, case-insensitive)
 rootList    ['example', '~sub:sub-doc']   under these roots only: a root alias (that root of any doc page) or a full root path
-dirPath     '~example/asset'         under this folder only
+dirPath     '~example/.doc-page/asset'         under this folder only
 isMatch     (candidate) => boolean   anything else, decided by the caller
 ```
 
@@ -432,4 +435,4 @@ A backup is never collected, whatever the rules say (`sourceFileBackupNameIs`), 
 | `comp-doc/source/SourcePathInput.jsx`, `SourceTreeSelect.jsx`, `SourcePathPicker.jsx`, `SourceFilePrompt.jsx` | the path input with completion, the tree view, the two as one path picker, the location prompt |
 | `comp-doc/source/OsPathInput.jsx` | a path of the file system with completion |
 | `comp-doc/settings/WorkspaceSettings.jsx` | the Workspace tab of the settings panel |
-| `workspace.yaml` (the project root) | the workspace of the demonstration: the root doc pages `example` and `second` |
+| `.doc-workspace/workspace.yaml` (the project root) | the workspace of the demonstration: the root doc pages `example` and `second` |

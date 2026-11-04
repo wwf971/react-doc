@@ -8,7 +8,7 @@ import { assetStoreCreate } from './doc-asset-store.ts';
 import { yamlStringListSetBuild } from './doc-yaml-edit.ts';
 import { lineOperationListApply } from './doc-edit-lines.ts';
 import { docAssetMiddlewareCreate } from './doc-asset-server.ts';
-import { docAssetConfigLoad, docSourcePlugin } from './doc-source.ts';
+import { docAssetConfigLoad, docSourcePlugin, folderManagedEnsure, folderManagedListGet, loadConfigDoc } from './doc-source.ts';
 import { DocAssetStore } from '../src/store/DocAssetStore.ts';
 import { testCaseSourceDefaultCreate, testCaseTableParse } from '../../../built-in/comp-mdx/test-case-table/TestCaseTableData.js';
 
@@ -134,13 +134,13 @@ test('without asset.yaml every doc page has its default folder, the included one
   assert.equal(result.body.code, 0);
   assert.deepEqual(
     result.body.data.folderList.map((folder) => [folder.path, folder.isDefault, folder.isExists, folder.docEntryFile]),
-    [['~page:docs/asset', true, false, 'page/.doc-page/entry.yaml'], ['~sub:sub/asset', false, false, 'page/sub/.doc-page/entry.yaml']],
+    [['~page:docs/.doc-page/asset', true, false, 'page/.doc-page/entry.yaml'], ['~sub:sub/.doc-page/asset', false, false, 'page/sub/.doc-page/entry.yaml']],
   );
   assert.deepEqual(result.body.data.docPageList.map((docPage) => [docPage.configFileRelative, docPage.isConfigFileExists]), [
     ['page/.doc-page/asset.yaml', false], ['page/sub/.doc-page/asset.yaml', false],
   ]);
   // nothing is created by reading
-  assert.equal(fs.existsSync(path.join(dir, 'page', 'asset')), false);
+  assert.equal(fs.existsSync(path.join(dir, 'page', '.doc-page', 'asset')), false);
 });
 
 test('asset.yaml names folders by source path; a folder not named so is left out and reported', async () => {
@@ -152,7 +152,7 @@ test('asset.yaml names folders by source path; a folder not named so is left out
   const plugin = pluginCreate(dir);
   const result = await requestRun(middlewareCreate(plugin, dir), '/__doc-asset/status');
   assert.deepEqual(result.body.data.folderList.map((folder) => [folder.path, folder.isDefault]), [
-    ['~page:docs/store/a', false], ['~page:docs/store/b', true], ['~sub:sub/asset', false],
+    ['~page:docs/store/a', false], ['~page:docs/store/b', true], ['~sub:sub/.doc-page/asset', false],
   ]);
   const problemList = result.body.data.docPageList[0].problemList;
   assert.equal(problemList.length, 2);
@@ -168,7 +168,7 @@ test('config.yaml "asset" is refused with the doc page form', () => {
   const dir = fixtureCreate({ configLineList: ['asset:', '  file: ./asset.yaml'] });
   assert.throws(() => pluginCreate(dir), (error) => {
     assert.match(error.message, /config\.yaml "asset" is no longer read/);
-    assert.match(error.message, /~root\/asset/);
+    assert.match(error.message, /~root\/\.doc-page\/asset/);
     return true;
   });
 });
@@ -186,7 +186,8 @@ test('folder/set writes one doc page\'s file in place, or creates it', async () 
     fs.readFileSync(path.join(dir, 'page', '.doc-page', 'asset.yaml'), 'utf-8'),
     '# my folders\nfolderList:\n  - ~docs/asset   # main\n  - ~docs/new\nfolderDefault: ~docs/new\n',
   );
-  assert.equal(fs.existsSync(path.join(dir, 'page', 'new')), true);
+  // a folder named is not made: the first object written to it makes it (folderManaged.isLazy)
+  assert.equal(fs.existsSync(path.join(dir, 'page', 'new')), false);
   assert.equal(fs.readFileSync(path.join(dir, 'page', '.doc-page', 'asset.yaml.bak'), 'utf-8'), pageYaml);
 
   // the included doc page has no file yet: it is created
@@ -211,9 +212,9 @@ test('a new object goes to the default folder of the doc page of its document', 
   const middleware = middlewareCreate(plugin, dir);
   const inSub = await requestPost(middleware, '/__doc-asset/object/create', { store: 'local', text: 'x', lang: 'json', docPath: '~sub:sub/b.md' });
   assert.equal(inSub.body.code, 0);
-  assert.equal(inSub.body.data.object.folder, '~sub:sub/asset');
+  assert.equal(inSub.body.data.object.folder, '~sub:sub/.doc-page/asset');
   const inPage = await requestPost(middleware, '/__doc-asset/object/create', { store: 'local', text: 'y', lang: 'json' });
-  assert.equal(inPage.body.data.object.folder, '~page:docs/asset');
+  assert.equal(inPage.body.data.object.folder, '~page:docs/.doc-page/asset');
 });
 
 test('a build has no asset api: the store is bundled read-only', async () => {
@@ -404,4 +405,40 @@ test('assetTestCaseResultRequest goes to the backend with the hash the cell was 
   assert.equal(conflict.code, -2);
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(reloadList, ['o1']);
+});
+
+// ---------- managed folders made when first used (doc_page_impl_dir.md#managed-folders-made-when-first-used) ----------
+
+test('folderManaged.isLazy: by default nothing makes an empty managed folder; off, the missing ones of every doc page are made', async () => {
+  const dir = fixtureCreate();
+  const configFile = path.join(dir, 'config.yaml');
+  // the convention folders of both doc pages: asset, components, the four service folders
+  const relList = folderManagedListGet(loadConfigDoc(configFile), dir).map((folder) => path.relative(dir, folder).split(path.sep).join('/')).sort();
+  assert.deepEqual(relList.filter((rel) => rel.startsWith('page/.doc-page/')), [
+    'page/.doc-page/asset', 'page/.doc-page/comp-mdx', 'page/.doc-page/service-app', 'page/.doc-page/service-infra',
+    'page/.doc-page/service-template-app', 'page/.doc-page/service-template-infra',
+  ]);
+  assert.deepEqual(folderManagedEnsure(loadConfigDoc(configFile), dir), []);
+  assert.equal(fs.existsSync(path.join(dir, 'page/.doc-page/asset')), false);
+  // the first object makes its folder
+  const plugin = pluginCreate(dir);
+  const middleware = middlewareCreate(plugin, dir);
+  const created = await requestPost(middleware, '/__doc-asset/object/create', { store: 'local', name: 'first', lang: 'yaml', text: 'a: 1\n', docPath: '~page:docs/a.md' });
+  assert.equal(created.body.code, 0);
+  assert.equal(fs.existsSync(path.join(dir, 'page/.doc-page/asset')), true);
+
+  // off: made, and naming a folder makes it
+  fs.appendFileSync(configFile, 'folderManaged:\n  isLazy: false\n');
+  const madeList = folderManagedEnsure(loadConfigDoc(configFile), dir).map((folder) => path.relative(dir, folder).split(path.sep).join('/'));
+  assert.ok(madeList.includes('page/.doc-page/comp-mdx'));
+  assert.ok(madeList.includes('page/sub/.doc-page/service-app'));
+  assert.ok(!madeList.includes('page/.doc-page/asset'));
+  const written = await requestPost(middlewareCreate(pluginCreate(dir), dir), '/__doc-asset/folder/set', {
+    configFile: 'page/.doc-page/asset.yaml', folderList: ['~docs/.doc-page/asset', '~docs/more'],
+  });
+  assert.equal(written.body.code, 0);
+  assert.equal(fs.existsSync(path.join(dir, 'page', 'more')), true);
+
+  fs.writeFileSync(configFile, 'docEntry:\n  dir: ./page\nfolderManaged:\n  isLazy: "no"\n');
+  assert.throws(() => loadConfigDoc(configFile), /"folderManaged" is \{ isLazy: true \| false \}/);
 });

@@ -1375,7 +1375,7 @@ class ServiceRuntime:
                 break
         folder = self._instance_folder_default_get('infra', doc_page_alias)
         if folder is None:
-            return f'the infra service {name} cannot be provisioned from {template.name}: no folder for infra instances (a doc page service-infra/ folder, or instanceFolderList with kind infra)'
+            return f'the infra service {name} cannot be provisioned from {template.name}: no folder for infra instances (the .doc-page/service-infra/ folder of a doc page, or instanceFolderList with kind infra)'
         name_base = f'{template.name} (auto)'
         instance_name = name_base
         suffix = 2

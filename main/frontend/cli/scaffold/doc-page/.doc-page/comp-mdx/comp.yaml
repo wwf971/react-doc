@@ -1,0 +1,8 @@
+# The components of the doc page (main/doc_page_impl_mdx_comp.md#components-of-a-doc-page),
+# mounted into the component registry of the page when the doc page loads.
+# This folder is the component folder by convention; groups are sub folders,
+# each with a comp.yaml of its own. An entry:
+#   - tagName: StockTable          the tag documents write: <StockTable />
+#     entry: ./StockTable.jsx      the module, relative to this file
+#     export: StockTable           its export (default: the tag name)
+compList: []

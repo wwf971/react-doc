@@ -3,7 +3,7 @@ import { compDefine, compDefinitionNormalize } from './comp-registry.js';
 // The components of the doc pages, mounted into the component registry
 // (doc_page_impl_mdx_comp.md#components-of-a-doc-page). The vite plugin
 // finds them in the component folders of every doc page the page loads
-// (comp-mdx/ by convention, or the folders .doc-page/comp.yaml names),
+// (.doc-page/comp-mdx/ by convention, or the folders .doc-page/comp.yaml names),
 // reads their manifests (comp.yaml), imports every module a manifest names
 // and exports the mounts as docCompMountList of virtual:doc-source:
 //

@@ -1,14 +1,17 @@
 # doc system config (example layer; local overrides go to config.0.yaml)
 
 # the workspace this page serves: its root-level doc pages, each under an
-# alias unique in the workspace, in a workspace file (workspace.yaml at the
-# root of the project, beside main/ and example_doc/). a doc page is a self-contained folder whose entry is found in
+# alias unique in the workspace, in a workspace file. named here by the
+# workspace folder ("dir", the project root): its file is found in the
+# metadata folder of the workspace (.doc-workspace/workspace.yaml); "file"
+# names a workspace file directly. a doc page is a self-contained folder whose entry is found in
 # its .doc-page/ folder (.doc-page/entry.yaml) and declares the source
 # rules, the tag definitions, the config and the side panels of the doc
 # page; one doc page includes others through its side panels.
 # design: doc_page_impl_source.md#the-workspace, doc_page_impl_dir.md
 workspace:
-  file: ../workspace.yaml
+  dir: ..
+  # file: ../.doc-workspace/workspace.yaml
 # one doc page alone is a virtual workspace holding it: name it here
 # instead ("dir", its folder, or "file", its entry; "alias" its name in the
 # workspace, the folder name when absent; "sidePanel" one of its side panels)
@@ -17,9 +20,17 @@ workspace:
 #   alias: example
 #   sidePanel: compact
 
+# the managed folders of a doc page (.doc-page/asset/, comp-mdx/, service-*/):
+# isLazy (default true) leaves a folder away until its first item is
+# written (an asset object, a component, a service instance), so a doc page
+# holds no empty folders; false: the development server makes the missing
+# ones of every doc page it loads. design: doc_page_impl_dir.md#managed-folders-made-when-first-used
+folderManaged:
+  isLazy: true
+
 # page values. when absent, the workspace file, else the "docEntry" mapping
 # of its first doc page, supplies them (title, homeDoc, homeItem), so
-# another workspace deploys by changing workspace.file alone; the
+# another workspace deploys by changing workspace alone; the
 # demonstration leaves them to the entry.
 # siteTitle: React Doc Test
 # homeDoc: ~example:example/doc.md   # a full source path ~{docPageAlias}:{rootAlias}/path, or
@@ -95,7 +106,7 @@ configDefault:
 # apis (the palette on mod+shift+p and f1, Back / Forward / Up / Home on alt
 # with the arrows, the settings on mod+,), one map file. it is the lowest
 # map of the stack: the maps of the doc pages (.doc-page/hotkey/), the
-# workspace's map (workspace.yaml hotkey) and the host's rebind or unbind
+# workspace's map (.doc-workspace/workspace.yaml hotkey) and the host's rebind or unbind
 # any key of it. absent, the package binds no key.
 # design: doc_page_impl_api_hotkey.md
 hotkey:
@@ -123,7 +134,7 @@ compRegistry:
   DiagramMermaid: common/DiagramMermaid
   # DiagramER, DiagramDataverseEntity, DiagramPowerAutomate, DiagramBusinessRule
   # and CardDiagram are components of the package cloud-dev-vis, which the
-  # workspace imports (workspace.yaml packageList): its manifests map their
+  # workspace imports (.doc-workspace/workspace.yaml packageList): its manifests map their
   # tag names, under the ids cloud-dev-vis/{tagName}
   # asset-only: its data is a workbook in the asset service layer, the block a reference to it
   ExcelUniver: common/ExcelUniver
@@ -169,7 +180,7 @@ compRegistry:
   # built-in name of the tag overview (popup content and document component)
   TagOverview: common/TagOverview
   # the components of a doc page are not mapped here: the doc page declares
-  # them in the manifest of its component folder (example_doc/comp-mdx/comp.yaml:
+  # them in the manifest of its component folder (example_doc/.doc-page/comp-mdx/comp.yaml:
   # StockTable, DemoCounter, SourceLink, TagListAllDemo, CompStateListDemo,
   # DocConfigDemo, and the built-in name SidePanelItem replaced by the demo
   # renderer), and the plugin adds their tag names to this mapping, over an

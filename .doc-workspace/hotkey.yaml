@@ -1,0 +1,18 @@
+# The keyboard map of the demonstration workspace, named by workspace.yaml
+# beside it (hotkey.file): the deployment's keys, stacked over the maps of every doc
+# page and over the package's default map, so the deployment decides over
+# the doc pages it deploys. the same grammar as a doc page's map; it may
+# include other map files. design: doc_page_impl_api_hotkey.md
+hotkeyMap:
+  description: the keys of the demonstration workspace
+  bindingList:
+    # the Workspace tab of the settings panel: a key of the deployment
+    - key: mod+alt+w
+      api: settings/open
+      params: { tab: workspace }
+      description: the workspace
+    # the doc page "example" unbinds alt+home (its base.yaml); the workspace
+    # binds it again, above the doc page: the home document, as the package
+    # has it
+    - key: alt+home
+      api: nav/home

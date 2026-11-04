@@ -1,0 +1,11 @@
+# The source rules of the doc page (main/doc_page_impl_source.md): which files
+# are its documents. Paths are relative to this file, so ".." is the doc page
+# folder; .doc-page/ and the managed folders inside it are never collected.
+rules:
+  - action: addFolder
+    alias: {{alias}}            # the root: its files are written ~{{alias}}/... in this doc page
+    path: ..
+    collect: recursive
+    exclude:
+      - .gitignore
+      - .DS_Store

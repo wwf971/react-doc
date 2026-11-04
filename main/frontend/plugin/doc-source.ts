@@ -59,7 +59,7 @@ import { apiDeclaredConfigOfDocPageListGet } from './doc-api-config.ts';
 import { hotkeyConfigGet } from './doc-hotkey.ts';
 import {
   DOC_SERVICE_ENDPOINT_NAME, docServiceMiddlewareCreate, serviceBackendLaunch, serviceConfigGet, serviceFolderSetGet, servicePathIs,
-  serviceConfigFileGet, serviceSyncDocPageListBuild, problemListReport, type ServiceFolderSet,
+  serviceConfigFileGet, serviceConfigOfDocPageListGet, serviceSyncDocPageListBuild, problemListReport, type ServiceFolderSet,
 } from './doc-service-server.ts';
 import {
   compConfigOfDocPageListGet, compConfigurationFileListGet, compFolderListGet, compManifestPathIs, compPathIs,
@@ -467,6 +467,8 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       let sourceExclude: SourceExclude | undefined;
       const sourceExcludeSet = (configDocUpdated: any) => {
         sourceExclude = sourceExcludeGet(configDocUpdated, configDir);
+        // folderManaged.isLazy off: the managed folders of the doc pages loaded now
+        folderManagedEnsure(configDocUpdated, configDir);
       };
       // the configuration changed without a file write (a temporary doc
       // page mounted): watched again and reported as data
@@ -709,6 +711,10 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         }
         // the backup the edit api writes beside a configuration file is not a document
         if (configurationBackupPathIs(pathsConfiguration, filePath)) return;
+        // inside the metadata folder of a doc page only its yaml files are
+        // configuration: the rest (the managed folders, backups, the state
+        // of the kernel) is never source
+        if (docPageMetaPathIs(filePath) && !/\.ya?ml$/.test(filePath)) return;
         const isRelated = pathsWatched.some(
           (p) => filePath === p || filePath.startsWith(p + path.sep),
         );
@@ -1067,7 +1073,7 @@ function configLocalFileGet(configFile: string): string {
   return path.join(path.dirname(configFile), `${path.basename(configFile, extension)}.0${extension}`);
 }
 
-function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {}): any {
+export function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {}): any {
   const configDir = path.dirname(configFile);
   const configLocalFile = configLocalFileGet(configFile);
   const configBase = readYaml(configFile) ?? {};
@@ -1075,15 +1081,17 @@ function loadConfigDoc(configFile: string, options: DocSourcePluginOptions = {})
   const config = mergeDeep(configBase, configLocal);
   configFormerKeysReject(config, configFile);
   assetConfigFormerReject(config, configFile);
+  folderManagedIsLazyGet(config, configFile);
   // the workspace (doc_page_impl_source.md#the-workspace): config "workspace"
-  // names it (a workspace file, or its doc pages in place); config "docEntry"
+  // names it (a workspace folder, its file in .doc-workspace/; a workspace
+  // file; or its doc pages in place); config "docEntry"
   // names one doc page, which the page serves as a virtual workspace
   // holding it alone. exactly one of the two.
   const isWorkspaceGiven = config.workspace !== undefined;
   const isEntryGiven = config.docEntry !== undefined;
   if (isWorkspaceGiven === isEntryGiven) {
     throw new Error(
-      `[doc-source] config names either "workspace" ({ file } or { docPageList }) or "docEntry" (one doc page: "dir",`
+      `[doc-source] config names either "workspace" ({ dir }, { file } or { docPageList }) or "docEntry" (one doc page: "dir",`
         + ` its folder with its entry in ${DOC_PAGE_META_DIR_NAME}/, or "file", its entry file; "alias", "sidePanel" optional): ${configFile}`,
     );
   }
@@ -1431,6 +1439,11 @@ function compConfigGet(configDoc: any): CompConfig {
   return configDoc.docEntry?.compConfig ?? { docPageList: [], mountList: [] };
 }
 
+// a path inside the metadata folder of a doc page (.doc-page/)
+function docPageMetaPathIs(filePath: string): boolean {
+  return filePath.split(path.sep).includes(DOC_PAGE_META_DIR_NAME);
+}
+
 // the backup the edit api keeps beside a configuration file it rewrote
 function configurationBackupPathIs(pathsConfiguration: string[], filePath: string): boolean {
   return pathsConfiguration.some((configurationPath) => filePath === `${configurationPath}.bak`);
@@ -1465,7 +1478,57 @@ function assetConfigGet(configDoc: any, configDir: string): AssetStoreConfig | u
   const docPageList = configDoc.docEntry?.docPageList;
   if (!Array.isArray(docPageList)) return undefined;
   const assetConfig = assetConfigOfDocPageListGet(docPageList, sourceRootAbsPathByPathGet(configDoc, configDir), configDir);
+  assetConfig.isFolderLazy = folderManagedIsLazyGet(configDoc);
   return assetConfig.docPageList.length > 0 ? assetConfig : undefined;
+}
+
+// config "folderManaged" (doc_page_impl_dir.md#managed-folders-made-when-first-used):
+//   folderManaged:
+//     isLazy: true     default: a managed folder (asset, component, service
+//                      folders of a doc page) is made by the first item written
+//                      to it, never empty; false: the development server makes
+//                      the missing ones of every doc page it loads
+export function folderManagedIsLazyGet(configDoc: any, configFile = 'config.yaml'): boolean {
+  const section = configDoc?.folderManaged;
+  if (section === undefined || section === null) return true;
+  if (typeof section !== 'object' || Array.isArray(section) || Object.keys(section).some((key) => key !== 'isLazy')
+    || (section.isLazy !== undefined && typeof section.isLazy !== 'boolean')) {
+    throw new Error(`[doc-source] config "folderManaged" is { isLazy: true | false } (a yaml boolean): ${configFile}`);
+  }
+  return section.isLazy !== false;
+}
+
+// the managed folders of the doc pages the page loads, absolute, existing or
+// not: their asset folders, component folders and service folders (never a
+// package's, nor the plain folders of the backend config)
+export function folderManagedListGet(configDoc: any, configDir: string): string[] {
+  const docPageList = Array.isArray(configDoc.docEntry?.docPageList) ? configDoc.docEntry.docPageList : [];
+  const result = new Set<string>();
+  for (const folder of assetConfigGet(configDoc, configDir)?.folderList ?? []) result.add(folder.pathAbs);
+  for (const docPage of compConfigGet(configDoc).docPageList) {
+    if (docPage.kind === 'docPage') for (const folder of docPage.folderList) result.add(folder);
+  }
+  for (const docPage of serviceConfigOfDocPageListGet(docPageList).docPageList) {
+    for (const folder of docPage.folderList) result.add(folder.pathAbs);
+  }
+  return [...result];
+}
+
+// with folderManaged.isLazy off, the missing managed folders are made (on
+// the development server, at every configuration load); the folders made
+export function folderManagedEnsure(configDoc: any, configDir: string): string[] {
+  if (folderManagedIsLazyGet(configDoc)) return [];
+  const madeList: string[] = [];
+  for (const folder of folderManagedListGet(configDoc, configDir)) {
+    if (fs.existsSync(folder)) continue;
+    try {
+      fs.mkdirSync(folder, { recursive: true });
+      madeList.push(folder);
+    } catch (error: any) {
+      console.warn(`[doc-source] the managed folder ${folder} could not be made: ${String(error?.message ?? error)}`);
+    }
+  }
+  return madeList;
 }
 
 // the local store as the configuration file and the doc pages it reaches
@@ -2058,6 +2121,12 @@ function collectPathsToWatch(configDoc: any, configDir: string): string[] {
   // there changes the mounts (they usually lie inside a root already)
   for (const folder of compFolderListGet(compConfigGet(configDoc))) {
     if (fs.existsSync(folder)) result.push(folder);
+  }
+  // the metadata folder of every doc page, so that a managed folder made
+  // after the server started (its first component written) is seen too
+  for (const docPage of Array.isArray(configDoc.docEntry?.docPageList) ? configDoc.docEntry.docPageList : []) {
+    const dirMeta = path.dirname(docPage.entryFile);
+    if (path.basename(dirMeta) === DOC_PAGE_META_DIR_NAME && fs.existsSync(dirMeta)) result.push(dirMeta);
   }
   return result;
 }

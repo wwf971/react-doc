@@ -82,3 +82,4 @@ Before reporting a block-like component done, check each line:
 | ☐ | Every part of the box answers a click with a visible focus; unsupported actions are greyed out with their reason, not missing |
 | ☐ | The edit card is anchored to the principal (node or line) and its top edge does not move when its content changes (measured) |
 | ☐ | The rules of the component are written in its usage document, organized by reading and editing, and demonstrated in `example_doc/` |
+| ☐ | Its files are where the folder convention puts them: `built-in/comp-mdx/`, a package's `comp-mdx/`, or `.doc-page/comp-mdx/` of a doc page (a demonstration's own component); the demonstration document beside the other documents ([the doc page folder](doc_page_impl_dir.md#layout)) |

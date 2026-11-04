@@ -12,7 +12,7 @@ Both kinds come as templates and instances, in one registry, run by the same bac
 
 ## An app service: todo-list
 
-The template `todo-list` (`example_doc/service-template-app/productivity/task/w55iiudjq5y--todo-list/`, described for its users in `service_todo_list.md` beside its script) is a todo list. Its script declares two dependencies by infra name, `sqlite` for the todos and `local-backup` for their backups, and reaches each by that name; it never knows which instance provides it, nor where a file is:
+The template `todo-list` (`example_doc/.doc-page/service-template-app/productivity/task/w55iiudjq5y--todo-list/`, described for its users in `service_todo_list.md` beside its script) is a todo list. Its script declares two dependencies by infra name, `sqlite` for the todos and `local-backup` for their backups, and reaches each by that name; it never knows which instance provides it, nor where a file is:
 
 ```python
 expose = {
@@ -35,7 +35,7 @@ def todoCreate(self, title):
     return self._todo_get(result['lastRowId'])
 ```
 
-`example todos` is an instance created from it (`example_doc/service-app/todo-list-inst-w55j3ztn3rq/`). Its folder is a copy of the template's and stays one: no database ever appears in it. Its todos are a database the sqlite infra service holds for it, one file per consumer instance, `data/w55j3ztn3rq/current.sqlite` in the infra instance's folder. That folder, `example_doc/service-infra/`, is ignored by git, so a fresh checkout opens the dashboard below on an empty list; the todos and the version this document talks about are those of the machine the example was written on.
+`example todos` is an instance created from it (`example_doc/.doc-page/service-app/todo-list-inst-w55j3ztn3rq/`). Its folder is a copy of the template's and stays one: no database ever appears in it. Its todos are a database the sqlite infra service holds for it, one file per consumer instance, `data/w55j3ztn3rq/current.sqlite` in the infra instance's folder. That folder, `example_doc/.doc-page/service-infra/`, is ignored by git, so a fresh checkout opens the dashboard below on an empty list; the todos and the version this document talks about are those of the machine the example was written on.
 
 <!--renderComp=service/todo-list/default-->
 ```asset
@@ -68,7 +68,7 @@ The template's script declares the initial list (`expose.dependencyList`), copie
 
 ## Waiting and provisioning
 
-An instance whose required infra name has no instance providing it does not start: it is `waiting`, and the kernel starts it when the name is provided. Nobody has to provide it by hand. An infra template may say `provision: auto`, and the kernel then **provisions** an instance from it when the name is required and nobody provides it; the built-in `sqlite` and `logging` templates do. That is how the instances of `example_doc/service-infra/` came to be: `sqlite (auto)` and `local-backup (auto)` when the first todo list was created, `logging (auto)` when the kernel first started, since the kernel itself requires `logging` for its records. Each remembers why in its `service.yaml`:
+An instance whose required infra name has no instance providing it does not start: it is `waiting`, and the kernel starts it when the name is provided. Nobody has to provide it by hand. An infra template may say `provision: auto`, and the kernel then **provisions** an instance from it when the name is required and nobody provides it; the built-in `sqlite` and `logging` templates do. That is how the instances of `example_doc/.doc-page/service-infra/` came to be: `sqlite (auto)` and `local-backup (auto)` when the first todo list was created, `logging (auto)` when the kernel first started, since the kernel itself requires `logging` for its records. Each remembers why in its `service.yaml`:
 
 ```yaml
 provision:
@@ -127,10 +127,10 @@ The registry reads service folders of three origins, and every template and inst
 | origin | templates | instances |
 | --- | --- | --- |
 | **built-in**: what the package ships | `built-in/service-template-app/` (`note-db`), `built-in/service-template-infra/` (`sqlite`, `local-backup`, `logging`, the connections) | none |
-| **docPage**: a doc page's own | `service-template-app/`, `service-template-infra/` of the doc page folder | `service-app/`, `service-infra/` of the doc page folder |
+| **docPage**: a doc page's own | `.doc-page/service-template-app/`, `service-template-infra/` of the doc page | `.doc-page/service-app/`, `service-infra/` of the doc page |
 | **folder**: named in the backend config | `templateFolderList` | `instanceFolderList` |
 
-The convention folders of a doc page need no declaration: the backend reads them for every doc page its config names (`docPageList` of `example_doc/.doc-page/service-backend.yaml`), and for every doc page the page has loaded, which it tells the backend as it loads them. A doc page that keeps its services elsewhere names its folders in `.doc-page/service.yaml`, with the kind of each; one with none says `service: false` in its entry. An instance is created in the instance folder of its template's kind, of the doc page named in the creation, or else of the default doc page; the kernel provisions into the default doc page as well. The example doc has both of its own: `todo-list` in `example_doc/service-template-app/`, its instance in `example_doc/service-app/`, and the two note-db instances there too, created from the built-in template.
+The convention folders of a doc page need no declaration: the backend reads them for every doc page its config names (`docPageList` of `example_doc/.doc-page/service-backend.yaml`), and for every doc page the page has loaded, which it tells the backend as it loads them. A doc page that keeps its services elsewhere names its folders in `.doc-page/service.yaml`, with the kind of each; one with none says `service: false` in its entry. An instance is created in the instance folder of its template's kind, of the doc page named in the creation, or else of the default doc page; the kernel provisions into the default doc page as well. The example doc has both of its own: `todo-list` in `example_doc/.doc-page/service-template-app/`, its instance in `example_doc/.doc-page/service-app/`, and the two note-db instances there too, created from the built-in template.
 
 ## The log
 

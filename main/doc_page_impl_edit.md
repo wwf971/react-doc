@@ -467,6 +467,6 @@ comp-mdx/media/excel-univer/ExcelUniverEdit.jsx  mode `sheet` of an asset-only c
                                        cell before a save (submitPrepareSet)
 comp-mdx/test-case-table/TestCaseTable.jsx  mode `results`: a session that saves nothing, every result recorded at once
                                        through the asset domain (+ TestCaseTableStore)
-example_doc/comp-mdx/table/stock-table/StockTableEdit.jsx  host component edit mode demonstration, mode `cells`
+example_doc/.doc-page/comp-mdx/table/stock-table/StockTableEdit.jsx  host component edit mode demonstration, mode `cells`
 example_doc/mdx-doc-edit-in-place.md           playground document
 ```

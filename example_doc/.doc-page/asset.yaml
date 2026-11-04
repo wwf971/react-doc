@@ -7,6 +7,6 @@
 # beside the entry); the settings panel of the page (tab "Asset service")
 # rewrites the two values in place.
 folderList:
-  - ~example:example/asset
-  - ~example:example/asset-archive
-folderDefault: ~example:example/asset
+  - ~example:example/.doc-page/asset
+  - ~example:example/.doc-page/asset-archive
+folderDefault: ~example:example/.doc-page/asset

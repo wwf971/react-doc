@@ -6,15 +6,15 @@ language: en
 
 ## The workspace
 
-A **workspace** is what one deployment serves, or what the development server shows: a list of root-level **doc pages**, each a self-contained folder with its entry in `.doc-page/`. A doc page includes other doc pages through its side panels; they join the same workspace. The demonstration is served from `workspace.yaml` at the root of the project, which `main/config.yaml` names (`workspace.file: ../workspace.yaml`):
+A **workspace** is what one deployment serves, or what the development server shows: a list of root-level **doc pages**, each a self-contained folder with its entry in `.doc-page/`. A doc page includes other doc pages through its side panels; they join the same workspace. The demonstration is served from `workspace.yaml` in `.doc-workspace/` at the root of the project, the workspace folder `main/config.yaml` names (`workspace.dir: ..`):
 
 ```yaml
-# workspace.yaml
+# .doc-workspace/workspace.yaml
 docPageList:
   - alias: example          # the demonstration doc page
-    dir: ./example_doc
+    dir: ../example_doc
   - alias: second           # a second root doc page: a section of its own in the side panel
-    dir: ./example_doc/second-doc
+    dir: ../example_doc/second-doc
 ```
 
 ```text
@@ -49,7 +49,7 @@ Inside a doc page, the short forms are enough, and they always mean this doc pag
 | `~example:example/doc.md` | [the full form](~example:example/doc.md), exact wherever it is written |
 | `~sub:sub-doc/sub-doc.md` | [this doc page's home](~sub:sub-doc/sub-doc.md), the full form of a local file |
 
-A name that several documents of the same doc page share, like `notes.md` written in the demonstration doc page, shows a list to choose from; a name found in several other doc pages (and not in the local one) does the same. The page itself keeps every document under its full path, so the browser url and the asset folders (`~sub:sub-doc/asset` for this doc page) carry it.
+A name that several documents of the same doc page share, like `notes.md` written in the demonstration doc page, shows a list to choose from; a name found in several other doc pages (and not in the local one) does the same. The page itself keeps every document under its full path, so the browser url and the asset folders (`~sub:sub-doc/.doc-page/asset` for this doc page) carry it.
 
 ## Seeing the workspace
 
