@@ -16,16 +16,18 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --import tsx --import ./src/lib/node-test-register.js --test src/lib/*.test.js ../../built-in/comp-mdx/media/image/image/ImageData.test.js ../../built-in/comp-mdx/block/code-block/CodeBlockJsonData.test.js ../../built-in/comp-mdx/block/block-simple/BlockVariant.test.js ../../built-in/comp-mdx/block/block-simple/BlockSimpleState.test.js ../../built-in/comp-mdx/block/block-mdx/BlockMdxData.test.js ../../built-in/comp-mdx/hierarchy/table-hierarchy/TableHierarchyData.test.js ../../built-in/comp-mdx/test-case-table/TestCaseTableData.test.js ../../built-in/comp-mdx/switch-view/SwitchViewData.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramERData.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditStore.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditPath.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditIntegration.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/OperatorNodes.test.js ../../built-in/comp-mdx/source-link/SourceLink.test.js plugin/doc-source-dependency.test.js plugin/doc-edit-lines.test.js plugin/doc-asset-config.test.js plugin/doc-service-config.test.js plugin/doc-comp-config.test.js plugin/doc-package.test.js plugin/doc-entry-config.test.js plugin/doc-source-exclude.test.js plugin/doc-workspace-edit.test.js plugin/doc-hotkey.test.js plugin/doc-side-panel-node.test.js plugin/doc-object-frontend.test.js cli/doc-cli.test.js"
+    "test": "node --import tsx --import ./src/lib/node-test-register.js --test src/lib/*.test.js ../../built-in/comp-mdx/media/image/image/ImageData.test.js ../../built-in/comp-mdx/block/code-block/CodeBlockJsonData.test.js ../../built-in/comp-mdx/block/block-simple/BlockVariant.test.js ../../built-in/comp-mdx/block/block-simple/BlockSimpleState.test.js ../../built-in/comp-mdx/block/block-mdx/BlockMdxData.test.js ../../built-in/comp-mdx/hierarchy/table-hierarchy/TableHierarchyData.test.js ../../built-in/comp-mdx/test-case-table/TestCaseTableData.test.js ../../built-in/comp-mdx/switch-view/SwitchViewData.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramERData.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditStore.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditPath.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditIntegration.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram-animation/AnimationData.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/OperatorNodes.test.js ../../built-in/comp-mdx/source-link/SourceLink.test.js plugin/doc-source-dependency.test.js plugin/doc-edit-lines.test.js plugin/doc-asset-config.test.js plugin/doc-service-config.test.js plugin/doc-comp-config.test.js plugin/doc-package.test.js plugin/doc-entry-config.test.js plugin/doc-source-exclude.test.js plugin/doc-workspace-edit.test.js plugin/doc-hotkey.test.js plugin/doc-side-panel-node.test.js plugin/doc-object-frontend.test.js cli/doc-cli.test.js"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@mdx-js/mdx": "^3.1.1",
+    "@remotion/player": "4.0.487",
     "@xyflow/react": "^12.12.0",
     "fumadocs-core": "^16.15.1",
     "fumadocs-ui": "^16.15.1",
     "hast-util-to-jsx-runtime": "^2.3.6",
+    "html-to-image": "^1.11.13",
     "katex": "^0.16.47",
     "lucide-react": "^1.33.0",
     "mdast-util-to-hast": "^13.2.1",
@@ -34,6 +36,7 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "remark-mdx": "^3.1.1",
+    "remotion": "4.0.487",
     "shiki": "^4.4.3",
     "unist-util-visit": "^5.1.0",
     "vfile": "^6.0.3",

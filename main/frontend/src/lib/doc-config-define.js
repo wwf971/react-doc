@@ -64,6 +64,13 @@ export const configDefineListBuiltin = [
     description: 'Tag ids shown on side-panel items, comma separated. Empty shows every tag.',
   },
   {
+    key: 'FontMonoFamily',
+    type: 'string',
+    valueDefault: null,
+    scope: 'doc',
+    description: 'The font of code and of source being edited in a document, as a css font-family, for example to name a fallback for its language. Empty keeps the font of the page.',
+  },
+  {
     key: 'TagsDisplayAtLinkIsOn',
     type: 'boolean',
     valueDefault: false,

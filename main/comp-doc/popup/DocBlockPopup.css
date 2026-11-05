@@ -16,11 +16,11 @@
 
 /* the toolbar of a surface: the component's block actions and the open
    button, in one .doc-button-group (button.css), so every button has one
-   size. in the page it is hidden until the block is hovered or holds the
+   size, the size of the control group of an edited block. in the page it is hidden until the block is hovered or holds the
    focus, like the toolbar of an image, and does not catch the pointer while
    hidden; in the popup it stands at the top right of the slot */
 .doc-block-toolbar {
-  --doc-button-group-height: 1.6rem;
+  --doc-button-group-height: var(--doc-edit-toolbar-height, 1.75rem);
   position: absolute;
   z-index: 1;
   top: 0.25rem;
@@ -32,9 +32,40 @@
 
 .doc-block-toolbar > button {
   box-sizing: border-box;
-  width: 1.65rem;
-  min-width: 0;
+}
+
+/* the menu of a button of the toolbar */
+.doc-block-toolbar-menu {
   padding: 0;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  box-shadow: 0 2px 8px rgb(15 23 42 / 14%);
+}
+
+.doc-block-toolbar-menu > [role='menu'] {
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-block-toolbar-menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-fd-foreground);
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.doc-block-toolbar-menu button:hover,
+.doc-block-toolbar-menu button:focus-visible {
+  background: var(--color-fd-accent);
+  outline: none;
 }
 
 .doc-block-popup-surface:hover > .doc-block-toolbar,

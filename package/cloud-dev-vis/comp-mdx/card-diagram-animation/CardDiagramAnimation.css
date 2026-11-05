@@ -1,0 +1,206 @@
+/* the block: the control area over the viewport */
+.doc-anim-shell { margin-block: 1rem; }
+.doc-anim {
+	display: flex;
+	flex-direction: column;
+	height: var(--doc-anim-height, 480px);
+	margin: 0;
+	overflow: hidden;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.5rem;
+	background: var(--color-fd-background);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+}
+.doc-anim.is-popup { height: 100%; border: 0; border-radius: 0; }
+/* in the popup the toolbar stands over the control area: the states end before it */
+.doc-anim.is-popup .doc-anim-control { padding-right: 4.75rem; }
+
+/* the control area: compact, one line for a chain */
+.doc-anim-control {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	padding: 0.3rem 0.6rem;
+	border-bottom: 1px solid var(--color-fd-border);
+	background: color-mix(in srgb, var(--color-fd-muted) 45%, transparent);
+	font-size: 0.7rem;
+}
+.doc-anim-control-bar { flex: none; display: flex; align-items: center; gap: 0.45rem; }
+/* one height for what stands in the row: the group's and the speed's buttons fill
+   their frames, so their icons and text sit in the middle of them */
+.doc-anim-control-group {
+	--doc-button-group-height: 1.55rem;
+	box-sizing: border-box;
+	box-shadow: none;
+}
+.doc-anim-control-group > button { box-sizing: border-box; width: 1.6rem; min-width: 0; padding: 0; }
+.doc-anim-rate {
+	box-sizing: border-box;
+	display: inline-flex;
+	align-items: stretch;
+	height: 1.55rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 2px;
+	overflow: hidden;
+}
+.doc-anim-rate button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 1.45rem;
+	/* digits have no descender, so a centered line of them looks low */
+	padding: 0 0.25rem 1px;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.64rem;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+}
+.doc-anim-rate button[aria-pressed='true'] { background: var(--color-fd-foreground); color: var(--color-fd-background); }
+.doc-anim-states { flex: 1 1 0; min-width: 0; overflow-x: auto; overflow-y: hidden; padding-block: 0.1rem; }
+
+/* a state */
+.doc-anim-state {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	min-width: 0;
+	max-width: 13rem;
+	height: 1.55rem;
+	padding: 0 0.55rem;
+	border: 1px solid color-mix(in srgb, var(--color-fd-foreground) 22%, var(--color-fd-border));
+	border-radius: 0.4rem;
+	background: var(--color-fd-background);
+	color: var(--color-fd-foreground);
+	font-size: 0.7rem;
+	font-weight: 550;
+	line-height: 1;
+	cursor: pointer;
+	transition: background-color 120ms, color 120ms;
+}
+.doc-anim-state:hover { background: color-mix(in srgb, var(--color-fd-foreground) 7%, var(--color-fd-background)); }
+.doc-anim-state:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+.doc-anim-state[data-current] { border-color: var(--color-fd-foreground); background: var(--color-fd-foreground); color: var(--color-fd-background); }
+.doc-anim-state[data-target] { border-style: dashed; border-color: #2563eb; color: #1d4ed8; }
+.doc-anim-state-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+.doc-anim-tooltip {
+	display: grid;
+	gap: 0.15rem;
+	max-width: 22rem;
+	padding: 0.4rem 0.55rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.4rem;
+	background: var(--color-fd-popover, var(--color-fd-background));
+	box-shadow: 0 6px 18px rgb(15 23 42 / 16%);
+	color: var(--color-fd-foreground);
+	font-size: 0.72rem;
+	font-weight: 400;
+	line-height: 1.4;
+	text-align: left;
+	white-space: normal;
+}
+.doc-anim-tooltip em { color: var(--color-fd-muted-foreground); font-size: 0.64rem; font-style: normal; }
+
+/* the chain: state --> state --> state */
+.doc-anim-chain { display: flex; align-items: center; min-width: min-content; }
+.doc-anim-chain-item { display: flex; align-items: center; flex: 1 1 0; min-width: min-content; }
+.doc-anim-chain-item[data-last] { flex: 0 0 auto; }
+.doc-anim-chain-link { flex: 1 1 16px; display: flex; align-items: center; min-width: 16px; max-width: 110px; margin-inline: 0.15rem; }
+.doc-anim-chain-line { flex: 1 1 0; width: 0; min-width: 0; height: 12px; overflow: visible; }
+.doc-anim-chain-head { flex: none; width: 7.5px; height: 7.5px; fill: var(--doc-anim-line-color); cursor: pointer; }
+.doc-anim-chain-link:hover { --doc-anim-line-color: #2563eb; }
+
+/* the state machine */
+.doc-anim-graph { position: relative; margin: 0.15rem 0; }
+.doc-anim-graph .doc-anim-state { max-width: none; }
+.doc-anim-graph-line { position: absolute; inset: 0; overflow: visible; }
+
+/* a transition: the track, the part played, a wide line to click */
+/* one opaque color for a line and its head: nothing shows through where they meet */
+.doc-anim-control { --doc-anim-line-color: color-mix(in srgb, var(--color-fd-foreground) 40%, var(--color-fd-background)); }
+.doc-anim-line-track { fill: none; stroke: var(--doc-anim-line-color); stroke-width: 1.25; vector-effect: non-scaling-stroke; }
+.doc-anim-line-arrow { fill: var(--doc-anim-line-color); fill: context-stroke; }
+.doc-anim-line-progress { fill: none; stroke: #2563eb; stroke-width: 2.5; }
+.doc-anim-line-hit { fill: none; stroke: transparent; stroke-width: 14; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; }
+.doc-anim-line:hover { --doc-anim-line-color: #2563eb; }
+
+/* the viewport */
+.doc-anim-viewport { position: relative; flex: 1 1 0; min-height: 0; overflow: hidden; }
+.doc-anim-flow { width: 100%; height: 100%; }
+.doc-anim-caption {
+	position: absolute;
+	left: 50%;
+	bottom: 0.6rem;
+	z-index: 6;
+	transform: translateX(-50%);
+	width: max-content;
+	max-width: min(70%, 42rem);
+	padding: 0.3rem 0.55rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.4rem;
+	background: color-mix(in srgb, var(--color-fd-background) 92%, transparent);
+	color: var(--color-fd-foreground);
+	font-size: 0.74rem;
+	line-height: 1.4;
+	pointer-events: none;
+}
+.doc-anim-token {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 8;
+	border-radius: 999px;
+	box-shadow: 0 0 0 2px rgb(255 255 255 / 85%), 0 1px 4px rgb(15 23 42 / 30%);
+	pointer-events: none;
+}
+.doc-anim-token-label {
+	position: absolute;
+	left: 50%;
+	bottom: calc(100% + 3px);
+	transform: translateX(-50%);
+	font-size: 0.6rem;
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+/* what is read has no connection points to show */
+.doc-anim-flow .react-flow__handle { opacity: 0; pointer-events: none; }
+.doc-anim-flow .react-flow__node { cursor: default; }
+
+/* what a picture came to: over the viewport, taking no room, and in the middle,
+   where the tooltip of a state under the pointer after the menu does not cover it */
+.doc-anim-capture-hint {
+	position: absolute;
+	top: 0.5rem;
+	left: 50%;
+	z-index: 9;
+	transform: translateX(-50%);
+	width: max-content;
+	display: flex;
+	align-items: flex-start;
+	gap: 0.3rem;
+	max-width: min(80%, 30rem);
+	padding: 0.25rem 0.5rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.3rem;
+	background: var(--color-fd-background);
+	box-shadow: 0 2px 8px rgb(15 23 42 / 14%);
+	color: var(--color-fd-foreground);
+	font-size: 0.72rem;
+	line-height: 1.35;
+	pointer-events: none;
+}
+.doc-anim-capture-hint > svg { flex: none; margin-top: 0.1rem; }
+.doc-anim-capture-hint[data-status='working'] > svg { color: var(--color-fd-muted-foreground); animation: doc-anim-capture-spin 900ms linear infinite; }
+.doc-anim-capture-hint[data-status='done'] > svg { color: #16a34a; }
+.doc-anim-capture-hint[data-status='failed'] { border-color: #dc2626; }
+.doc-anim-capture-hint[data-status='failed'] > svg { color: #dc2626; }
+@keyframes doc-anim-capture-spin { to { transform: rotate(360deg); } }
+
+/* the actions of the block stand on it, over no state of the control area: their
+   bottom edge is the top edge of the block, whatever their height */
+.doc-anim-shell { margin-top: calc(var(--doc-edit-toolbar-height, 1.75rem) + 0.25rem); }
+.doc-anim-shell > .doc-block-toolbar { top: auto; right: 0; bottom: 100%; }

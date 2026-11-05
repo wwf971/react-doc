@@ -3,6 +3,8 @@ import { compDefine } from '../../../../main/comp-doc/registry/comp-registry.js'
 import { cardDiagramCompCreate } from '../card-diagram/CardDiagram.jsx';
 import { cardStandaloneCompCreate } from '../card-diagram/CardStandalone.jsx';
 import { cardDiagramDefineOptionsBuild } from '../card-diagram/card-diagram-comp.js';
+import { cardDiagramAnimationCompCreate } from '../card-diagram-animation/CardDiagramAnimation.jsx';
+import { cardDiagramAnimationDefineOptionsBuild } from '../card-diagram-animation/card-diagram-animation-comp.js';
 import { dataverseSourceDefaultCreate, diagramSourceDefaultCreate } from './DataverseCardSource.js';
 import { powerAutomateSourceDefaultCreate } from './PowerAutomateNodeSource.js';
 import { businessRuleSourceDefaultCreate } from './BusinessRuleNodeSource.js';
@@ -38,6 +40,13 @@ export const DiagramBusinessRule = compDefine(PowerPlatformDiagram, cardDiagramD
 	description: 'Dataverse conditions, actions, scope and target columns.',
 	icon: GitBranch,
 	sourceDefaultCreate: businessRuleSourceDefaultCreate,
+}));
+
+// the animation of the series (doc/card-diagram-animation.md): the same document as
+// CardDiagramAnimation, with every card of the registry
+export const DiagramERAnimation = compDefine(cardDiagramAnimationCompCreate(powerPlatformNodeRegistry, 'DiagramERAnimation'), cardDiagramAnimationDefineOptionsBuild({
+	label: 'Power Platform diagram animation',
+	description: 'A diagram of Dataverse tables, flows and operators moving between named states.',
 }));
 
 export const DiagramDataverseEntity = compDefine(

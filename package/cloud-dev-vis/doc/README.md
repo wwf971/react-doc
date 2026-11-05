@@ -14,11 +14,14 @@ cloud-dev-vis/
 │   ├── card-diagram-impl.md    the base series, design and implementation: data format, canvas, cards,
 │   │                           editor, history, node registries
 │   ├── power-platform.md       the Power Platform series, design
+│   ├── card-diagram-animation.md  the animation of a card diagram, design
 │   ├── comp-diagram-er.md      for authors: DiagramER, CardDiagram, DiagramDataverseEntity, reading and editing
-│   └── comp-powerplatform.md   for authors: DiagramPowerAutomate, DiagramBusinessRule
+│   ├── comp-powerplatform.md   for authors: DiagramPowerAutomate, DiagramBusinessRule
+│   └── comp-card-diagram-animation.md  for authors: CardDiagramAnimation, DiagramERAnimation
 ├── .doc-page/              makes the package a doc page: entry, source rules, side panel, assets of its demonstrations
 └── comp-mdx/
     ├── card-diagram/       the base series       CardDiagram
+    ├── card-diagram-animation/  animation        CardDiagramAnimation
     ├── demo/               what its documents demonstrate with: MigrationStep
     └── power-platform/     Power Platform        DiagramER, DiagramPowerAutomate, DiagramBusinessRule,
                                                   DiagramDataverseEntity
@@ -60,6 +63,7 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | understand the data format, the canvas, the editor, the history, or add a generic card | [card-diagram-impl.md](card-diagram-impl.md) |
 | change a Power Platform card or component | [power-platform.md](power-platform.md) |
 | write diagrams in a document | [Data diagrams](comp-diagram-er.md), [Power Platform diagrams](comp-powerplatform.md) |
+| make a diagram move between named states | for authors [Card Diagram Animation](comp-card-diagram-animation.md); the design [card-diagram-animation.md](card-diagram-animation.md) |
 | add a series for another platform | [Adding a series](card-diagram.md#adding-a-series), then [Node Registries](card-diagram-impl.md#node-registries): a folder with its kinds, its registry, its components and a `comp.yaml` |
 
 ## Implementation
@@ -67,7 +71,8 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | Place | Role |
 | --- | --- |
 | `comp-mdx/card-diagram/node-registry.js` | `nodeRegistryBuild`, `nodeRegistrySearch`: the registry mechanism |
-| `comp-mdx/card-diagram/card-diagram-node-registry.js` | the generic kinds (`table`, `operator`) and the registry of `CardDiagram` |
+| `comp-mdx/card-diagram/card-diagram-node-registry.js`, `CompactCard.jsx` | the generic kinds (`table`, `operator`, `card-note`, `card-brief`) and the registry of `CardDiagram` |
+| `comp-mdx/card-diagram-animation/` | the animation: [card-diagram-animation.md](card-diagram-animation.md#implementation) |
 | `comp-mdx/demo/migration-step/` | a registered node renderer the documents demonstrate |
 | `comp-mdx/card-diagram/CardDiagram.jsx`, `CardStandalone.jsx` | the canvas and the standalone card, and their factories `cardDiagramCompCreate`, `cardStandaloneCompCreate` |
 | `comp-mdx/card-diagram/DiagramERData.js`, `DiagramERStore.js`, `DiagramEdit*.js`, `DiagramRender.jsx` | normalization, the canvas model, the editor's draft and path, the node and edge components (their names keep the `DiagramER` prefix of the series they started in) |

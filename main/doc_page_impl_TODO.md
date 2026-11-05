@@ -24,6 +24,11 @@ How the list is kept (also in `AGENTS.md`):
 - <a id="cli-create"></a>**`npm create`.** `react-doc pack` stages the published package and the installed mode serves from it ([Two modes](doc_page_impl_cli.md#two-modes-a-checkout-an-installed-package)); a thin `create-react-doc` package would let `npm create react-doc@latest my-docs` work as `npm create vite` does, only calling `react-doc init workspace`.
 - <a id="cli-build"></a>**Building from the command line.** `react-doc dev` serves a folder; `react-doc build <path> --out <dir>` would make the static build of the same target with the same launch layer ([The launch layer](doc_page_impl_cli.md#the-launch-layer)), so a doc page lying anywhere deploys without a config file.
 
+## Card diagram animation
+
+- <a id="animation-visual-edit"></a>**A visual edit mode of an animation.** An animation is edited as its source ([Card Diagram Animation](../package/cloud-dev-vis/doc/comp-card-diagram-animation.md)). Editing the diagram with the framework's editor, and states and tracks from the control area, would be its visual mode; the diagram's part is `DiagramVisualEdit` on `document.diagram`.
+- <a id="animation-scrub"></a>**Scrubbing.** The progress on a line shows where a transition is but cannot be dragged; everything is a function of the frame, so a drag would be `seekTo`.
+
 ## Settings panel
 
 - <a id="settings-as-mdx"></a>**The settings panels as MDX documents.** The tabs of the settings panel are built in code from config items (`ConfigPanel`) and custom components (the Workspace graph, the Services tab). Written as MDX documents of a built-in doc page, with components for their parts, they would get everything a document has: blocks that open in the block popup, in-place editing, a layout an author changes without code. The Workspace graph already opens in the block popup through `BlockPopupSurface` with a `popupKey`, the step a block of such a document would take anyway.

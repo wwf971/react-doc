@@ -1,0 +1,7 @@
+# The animation of the base series (doc/card-diagram-animation.md): a card
+# diagram moving between named states, played by remotion's Player in the page.
+compList:
+  - tagName: CardDiagramAnimation
+    entry: ./card-diagram-animation-comp.js
+    export: cardDiagramAnimationDefine
+    dependencyCollect: { entry: ./AnimationSource.js, export: animationDependenciesCollect }

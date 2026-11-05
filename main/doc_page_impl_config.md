@@ -120,6 +120,7 @@ Built-in keys:
 | `TagsDisplayAtSidePanelItemIsOn` | page | `true` | Show tags on side-panel item labels. |
 | `TagsDisplayAtSidePanelItemsList` | page | all tags | Tag ids shown on side-panel items. Other tags are still attached and shown elsewhere. |
 | `TagsDisplayAtLinkIsOn` | doc | `false` | Show the target's tags beside document links in a document. |
+| `FontMonoFamily` | doc | not set | The font of code and of source being edited in the document, a css `font-family` over `--font-mono` of the page. A source rule sets it for the documents of one doc page, for example a fallback for their language. |
 | `TagsDisplayAtLinkPosition` | doc | `after` | `before` or `after` the link text. |
 | `TagsOverviewPopupIsOn` | page | `true` | Clicking a tag opens the tag overview popup. |
 | `TagsOverviewPopupAtSidePanelItemIsOn` | page | `false` | The popup also opens from a tag on a side-panel item. Off, a click there is a plain navigation gesture. |

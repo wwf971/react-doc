@@ -1,10 +1,11 @@
-import { useContext, useLayoutEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
 import { Expand } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { blockPopupKeyBuild, blockPopupPanelKeyBuild } from '../../frontend/src/store/DocBlockPopupStore.js';
 import { DocEditBlockFloatContext } from '../edit/DocEditDocContext.js';
+import { AnchoredPopover } from './AnchoredPopover.jsx';
 import './DocBlockPopup.css';
 
 // The part of a component block that can be shown in the block popup
@@ -27,7 +28,9 @@ import './DocBlockPopup.css';
 //               it is only shown there, without View / Edit, and config
 //               may then be empty
 //   actionList  optional: the component's own block actions (copy the
-//               source, download ...): [{ id, label, Icon, onClick }]. they
+//               source, download ...): [{ id, label, Icon, onClick }], or
+//               { id, label, Icon, menuItemList: [{ id, label, Icon, onClick }] }
+//               for a button opening a menu of them. they
 //               are drawn in the one toolbar of the surface, beside the
 //               open button, in the page and in the popup alike, so a
 //               component never draws a floating button group of its own
@@ -144,13 +147,86 @@ const BLOCK_TOOLBAR_ICON_SIZE = 14;
 function BlockToolbar({ actionList, children = null }) {
   return (
     <div className="doc-block-toolbar doc-button-group not-prose">
-      {actionList.map(({ id, label, Icon, onClick }) => (
-        <button key={id} type="button" title={label} aria-label={label} onClick={onClick}>
-          <Icon size={BLOCK_TOOLBAR_ICON_SIZE} aria-hidden="true" />
-        </button>
+      {actionList.map(({ id, label, Icon, onClick, menuItemList }) => (
+        menuItemList ? <BlockToolbarMenu key={id} label={label} Icon={Icon} menuItemList={menuItemList} /> : (
+          <button key={id} type="button" title={label} aria-label={label} onClick={onClick}>
+            <Icon size={BLOCK_TOOLBAR_ICON_SIZE} aria-hidden="true" />
+          </button>
+        )
       ))}
       {children}
     </div>
+  );
+}
+
+// a button of the toolbar opening a menu. the item runs in the click, so what it
+// does still counts as done by the user (the clipboard). a pointer going down
+// elsewhere closes the menu; Escape closes it and the arrows move in it
+function BlockToolbarMenu({ label, Icon, menuItemList }) {
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
+  const [isOpen, isOpenSet] = useState(false);
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    menuRef.current?.querySelector('button')?.focus({ preventScroll: true });
+    const pointerDown = (event) => {
+      if (!menuRef.current?.contains(event.target) && !buttonRef.current?.contains(event.target)) isOpenSet(false);
+    };
+    const { ownerDocument } = buttonRef.current;
+    ownerDocument.addEventListener('pointerdown', pointerDown, true);
+    return () => ownerDocument.removeEventListener('pointerdown', pointerDown, true);
+  }, [isOpen]);
+  const close = () => {
+    isOpenSet(false);
+    buttonRef.current?.focus({ preventScroll: true });
+  };
+  const keyDown = (event) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      close();
+      return;
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    const itemList = [...menuRef.current.querySelectorAll('button')];
+    const step = event.key === 'ArrowDown' ? 1 : -1;
+    itemList[(itemList.indexOf(event.target) + step + itemList.length) % itemList.length]?.focus();
+  };
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        title={label}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-pressed={isOpen}
+        onClick={() => isOpenSet(!isOpen)}
+      >
+        <Icon size={BLOCK_TOOLBAR_ICON_SIZE} aria-hidden="true" />
+      </button>
+      {isOpen ? (
+        <AnchoredPopover anchorRef={buttonRef} className="doc-block-toolbar-menu">
+          <span ref={menuRef} role="menu" aria-label={label} onKeyDown={keyDown}>
+            {menuItemList.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  close();
+                  item.onClick();
+                }}
+              >
+                <item.Icon size={BLOCK_TOOLBAR_ICON_SIZE} aria-hidden="true" />
+                {item.label}
+              </button>
+            ))}
+          </span>
+        </AnchoredPopover>
+      ) : null}
+    </>
   );
 }
 

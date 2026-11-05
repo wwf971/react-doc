@@ -10,10 +10,12 @@ sidePanelById:
         children:
           - doc: ~cloud-dev-vis/doc/comp-diagram-er.md
           - doc: ~cloud-dev-vis/doc/comp-powerplatform.md
+          - doc: ~cloud-dev-vis/doc/comp-card-diagram-animation.md
           - id: design
             text: Design
             defaultOpen: false
             children:
               - doc: ~cloud-dev-vis/doc/card-diagram.md
               - doc: ~cloud-dev-vis/doc/card-diagram-impl.md
+              - doc: ~cloud-dev-vis/doc/card-diagram-animation.md
               - doc: ~cloud-dev-vis/doc/power-platform.md

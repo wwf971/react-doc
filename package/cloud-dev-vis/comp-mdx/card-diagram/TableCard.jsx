@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripHorizontal, GripVertical, Plus, Trash2 } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
@@ -40,9 +40,10 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 	const isSelected = selection?.nodeId === nodeId;
 	const content = store?.nodeGet(nodeId)?.data ?? node.data;
 	const rows = node.data[schema.rowListKey] ?? [];
+	const rowGroupList = node.data.rowGroupList ?? [];
 	const isRowHandleAllowed = schema.isRowHandleAllowed?.(content) ?? true;
 	const isHeaderHandleAllowed = schema.isHeaderHandleAllowed(content);
-	const style = columnsStyle ?? { '--doc-card-columns': `repeat(${schema.fieldList.length}, minmax(0, 1fr))` };
+	const style = columnsStyle ?? { '--doc-card-columns': node.data.columnTemplate || `repeat(${schema.fieldList.length}, minmax(0, 1fr))` };
 	const handleSides = target => new Set((node.handles ?? []).filter(handle => handle.anchor.target === target).map(handle => handle.anchor.side));
 	const handleAdders = (target, sides) => editor ? ['left', 'right'].filter(side => !sides.has(side)).map(side => (
 		<button key={side} type="button" className={`doc-card-handle-add is-${side} nodrag nopan`} title={`Add a ${side} handle`} aria-label={`Add a ${side} handle`} disabled={editor.isLocked}
@@ -81,7 +82,7 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 		]} />;
 	const dropClass = (axis, index, count) => drop?.axis === axis ? `${drop.index === index ? ' is-drop-before' : ''}${index === count - 1 && drop.index === count ? ' is-drop-after' : ''}` : '';
 	return (
-		<div ref={root} data-node-id={nodeId} className={`doc-er-table doc-card ${className}${editor ? ' is-editable' : ''}${isCardSelected ? ' is-selected' : ''}`.trim()} style={style} tabIndex={editor ? 0 : undefined}
+		<div ref={root} data-node-id={nodeId} data-tone={node.data.tone || undefined} className={`doc-er-table doc-card ${className}${node.data.isCompact ? ' is-compact' : ''}${rowGroupList.length ? ' has-row-group' : ''}${editor ? ' is-editable' : ''}${isCardSelected ? ' is-selected' : ''}`.trim()} style={style} tabIndex={editor ? 0 : undefined}
 			onClick={select({})} onFocus={selectOnFocus({})}>
 			<div ref={anchorRef?.('header')} className="doc-er-table-title doc-card-title">
 				<span className="doc-er-table-title-name">
@@ -99,7 +100,7 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 					<CardCell editor={editor} nodeId={nodeId} field={field} value={content[field.id]} className="doc-card-head-value" />
 				</div>
 			))}
-			<div className="doc-er-table-column-header doc-card-fields nodrag nopan">
+			{node.data.isFieldHeaderHidden ? null : <div className="doc-er-table-column-header doc-card-fields nodrag nopan">
 				{schema.fieldList.map((field, index) => {
 					const isFieldSelected = isSelected && selection.fieldId === field.id && !selection.rowId;
 					return <span key={field.id} className={`doc-card-field${isFieldSelected ? ' is-selected' : ''}${dropClass('field', index, schema.fieldList.length)}`} tabIndex={editor ? 0 : undefined}
@@ -108,12 +109,13 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 						{isFieldSelected ? fieldToolbar(field, index) : null}
 					</span>;
 				})}
-			</div>
+			</div>}
 			{rows.map((row, index) => {
 				const rowContent = (content[schema.rowListKey] ?? []).find(item => item.id === row.id) ?? row;
 				const isRowSelected = isSelected && selection.rowId === row.id;
 				const target = cardRowAnchorBuild(schema, row.id);
-				return <div key={row.id} ref={anchorRef?.(target)} className={`doc-er-table-column doc-card-row nodrag nopan${isRowSelected && !selection.fieldId ? ' is-selected' : ''}${isRowSelected ? ' is-row-of-selection' : ''}${dropClass('row', index, rows.length)}`} tabIndex={editor ? 0 : undefined}
+				if (row.isEllipsis && !editor) return <div key={row.id} ref={anchorRef?.(target)} data-row-id={row.id} className="doc-er-table-column doc-card-row doc-card-row-ellipsis nodrag nopan">{row[schema.fieldList[0]?.id] || '⋮'}</div>;
+				return <div key={row.id} ref={anchorRef?.(target)} data-row-id={row.id} data-tone={row.tone || undefined} className={`doc-er-table-column doc-card-row nodrag nopan${isRowSelected && !selection.fieldId ? ' is-selected' : ''}${isRowSelected ? ' is-row-of-selection' : ''}${dropClass('row', index, rows.length)}`} tabIndex={editor ? 0 : undefined}
 					onClick={select({ rowId: row.id })} onFocus={selectOnFocus({ rowId: row.id })}>
 					{schema.fieldList.map(field => (
 						<CardCell key={field.id} editor={editor} nodeId={nodeId} rowId={row.id} field={field} value={rowContent[field.id]}
@@ -125,9 +127,40 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 					{isRowSelected ? rowToolbar(row, index) : null}
 				</div>;
 			})}
+			{rowGroupList.map(group => <CardRowGroup key={group.id} group={group} anchorRef={anchorRef} />)}
 		</div>
 	);
 });
+
+// the bracket of rows taken together (rowGroupList): it spans them, in the gutter
+// the card keeps on its right, and it is the anchor group/<id>, so a line leaves
+// from the middle of the rows. its place is read off the rows drawn
+function CardRowGroup({ group, anchorRef }) {
+	const element = useRef(null);
+	const [place, placeSet] = useState(null);
+	const anchorId = `group/${group.id}`;
+	const refSet = useCallback(value => {
+		element.current = value;
+		anchorRef?.(anchorId)(value);
+	}, [anchorRef, anchorId]);
+	useLayoutEffect(() => {
+		const card = element.current?.parentElement;
+		if (!card) return undefined;
+		const measure = () => {
+			const rowFrom = card.querySelector(`[data-row-id=${JSON.stringify(group.rowFrom)}]`);
+			const rowTo = card.querySelector(`[data-row-id=${JSON.stringify(group.rowTo)}]`);
+			if (!rowFrom || !rowTo) return;
+			const top = rowFrom.offsetTop + 2;
+			const height = rowTo.offsetTop + rowTo.offsetHeight - rowFrom.offsetTop - 4;
+			placeSet(previous => previous?.top === top && previous?.height === height ? previous : { top, height });
+		};
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(card);
+		return () => observer.disconnect();
+	}, [group.rowFrom, group.rowTo]);
+	return <div ref={refSet} data-group-id={group.id} data-tone={group.tone || undefined} className="doc-card-row-group" style={place ?? { visibility: 'hidden' }} title={group.label || undefined} />;
+}
 
 // the toolbar of a focused row or field: the control group of the edit
 // layer (.doc-button-group), floating beside the row (left of the card) or

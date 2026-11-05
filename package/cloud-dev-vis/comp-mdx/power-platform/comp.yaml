@@ -14,5 +14,8 @@ compList:
   - tagName: DiagramBusinessRule
     entry: ./power-platform-comp.js
     dependencyCollect: { entry: ../card-diagram/DiagramERSource.js, export: diagramDependenciesCollect }
+  - tagName: DiagramERAnimation
+    entry: ./power-platform-comp.js
+    dependencyCollect: { entry: ../card-diagram-animation/AnimationSource.js, export: animationDependenciesCollect }
   - tagName: DiagramDataverseEntity
     entry: ./power-platform-comp.js

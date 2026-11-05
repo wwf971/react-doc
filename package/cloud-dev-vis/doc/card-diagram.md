@@ -1,6 +1,6 @@
 # Card Diagram: Building on the Framework
 
-The base series of the package ([README](README.md)) is a framework: a React Flow canvas of node cards and connection lines, one YAML data format, one draft store with a history, one visual editor, and the node registry through which a series plugs its own cards in. This document is the **guidance** for anyone implementing on it: the standards every piece follows, the things most often forgotten, and the checklists to go through before a change is done. It does not describe how the framework works inside; that is the **design and implementation introduction, [card-diagram-impl.md](card-diagram-impl.md)**, to be read first for the data format, the canvas, the editor, the path, the history and the registries. The Power Platform series is the example of a series built on the framework ([power-platform.md](power-platform.md)); what authors see is in [comp-diagram-er.md](comp-diagram-er.md) and [comp-powerplatform.md](comp-powerplatform.md), beside this file.
+The base series of the package ([README](README.md)) is a framework: a React Flow canvas of node cards and connection lines, one YAML data format, one draft store with a history, one visual editor, and the node registry through which a series plugs its own cards in. This document is the **guidance** for anyone implementing on it: the standards every piece follows, the things most often forgotten, and the checklists to go through before a change is done. It does not describe how the framework works inside; that is the **design and implementation introduction, [card-diagram-impl.md](card-diagram-impl.md)**, to be read first for the data format, the canvas, the editor, the path, the history and the registries. The Power Platform series is the example of a series built on the framework ([power-platform.md](power-platform.md)); a diagram that moves between states is its wrapper [card-diagram-animation.md](card-diagram-animation.md); what authors see is in [comp-diagram-er.md](comp-diagram-er.md), [comp-powerplatform.md](comp-powerplatform.md) and [comp-card-diagram-animation.md](comp-card-diagram-animation.md), beside this file.
 
 What the page asks of every block-like component (the popup surface, the no-jitter rule, the editor contract) is not repeated here: [Block-like MDX components](../../../main/doc_page_impl_mdx_comp_block.md) and [Component edit mode](../../../main/doc_page_impl_edit.md#component-edit-mode) are read together with this document, and their checklists apply.
 
@@ -13,6 +13,7 @@ a new thing the author can do    a command of DiagramEditStore (and the control 
 a change of how cards are drawn  TableCard / ResourceNodeCard / OperatorCard and their css
 a change of the canvas           DiagramERStore, CardDiagram, DiagramRender
 a change of the data format      DiagramERData (normalization) first, then everything that reads it
+a diagram moving between states  the animation wrapper: card-diagram-animation.md
 ```
 
 Each kind of change has a checklist below. Most mistakes come from making one kind of change in the place of another: a card's styling in the engine, a command's validation in a control, a series' knowledge in the base.
@@ -58,7 +59,7 @@ A command is a method of `DiagramEditStore` (or of a store a series adds on the 
 | ☐ | A dependent of what is removed is rerouted or detached, never dropped |
 | ☐ | The control is greyed out with the reason as its title when the command cannot apply, never missing |
 | ☐ | The gesture, if any, sets `interaction` while it lasts (the edit card hides, undo waits) and clears it at its end, also when the drop is refused |
-| ☐ | The rule is written for authors in [comp-diagram-er.md](comp-diagram-er.md) (Visual Editing) and demonstrated in `example_doc/` |
+| ☐ | The rule is written for authors in [comp-diagram-er.md](comp-diagram-er.md) (Visual Editing), whose examples demonstrate it |
 
 ## Adding a kind
 
@@ -72,7 +73,7 @@ A command is a method of `DiagramEditStore` (or of a store a series adds on the 
 | ☐ | The cells use `CardCell` / the injected text control, so typing goes through `fieldSet` (and therefore the history); no input of its own |
 | ☐ | A fresh node from `create` is valid as it is, with explicit handles where the author would expect them |
 | ☐ | The kind has a test beside the registry (as `OperatorNodes.test.js`), covering normalization, the schema's rows and fields, a cell edit and its undo |
-| ☐ | The series document and the usage document describe it; `example_doc/` shows it |
+| ☐ | The series document and the usage document describe it, whose examples show it |
 
 ## Adding nodes that are not kinds
 
@@ -115,7 +116,7 @@ From `main/frontend`:
 node --import tsx --import ./src/lib/node-test-register.js --test ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramERData.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditStore.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditPath.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditIntegration.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/OperatorNodes.test.js
 ```
 
-The store is tested on the registry of the Power Platform series, which holds every card variant; a change of the engine is tested there, a change of a series beside the series. Every command has a test of its effect **and of its undo**. The page is then checked in the browser, in the demonstration (`example_doc/`, the documents of the MDX Components part): entering edit mode moves nothing, the command works from its control and from the keys, Ctrl/⌘ + Z takes it back, Save clears the bar's history buttons.
+The store is tested on the registry of the Power Platform series, which holds every card variant; a change of the engine is tested there, a change of a series beside the series. Every command has a test of its effect **and of its undo**. The page is then checked in the browser, in the doc page of the package (`react-doc dev package/cloud-dev-vis`; a package is read-only, so what writes is tried on a copy of a block in a doc page of your own): entering edit mode moves nothing, the command works from its control and from the keys, Ctrl/⌘ + Z takes it back, Save clears the bar's history buttons.
 
 Documents to keep in step, by what changed: a rule of the engine goes into [card-diagram-impl.md](card-diagram-impl.md) (what exists, integrated, never a changelog); a rule authors meet goes into [comp-diagram-er.md](comp-diagram-er.md) or the usage document of the series; a new file goes into the README's implementation table; a gap left for later goes into the project's [TODO](../../../main/doc_page_impl_TODO.md), not into a document as a note. The page-level documents in `main/` change only when the contract of every block-like component changes.
 
@@ -127,4 +128,4 @@ Documents to keep in step, by what changed: a rule of the engine goes into [card
 | ☐ | The checklist of [Block-like MDX components](../../../main/doc_page_impl_mdx_comp_block.md#checklist) still holds for every diagram component |
 | ☐ | Every change of the draft is undone and redone correctly, in the tests and in the browser; the selection is not a step; the history is empty when the block enters edit mode and gone after a save |
 | ☐ | The engine imports no series; the series imports only the base |
-| ☐ | Tests pass; the documents named above say what exists now |
+| ☐ | Tests pass (`AnimationData.test.js` too, when the animation is touched); the documents named above say what exists now |

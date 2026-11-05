@@ -130,6 +130,23 @@ export {
   Package,
   Plug,
   StickyNote,
+  Film,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  ImageDown,
+  ImagePlus,
+  FileImage,
+  Split,
+  FileCheck,
+  ArrowRightLeft,
+  RefreshCw,
+  Key,
+  Zap,
+  Send,
+  CircleAlert,
+  FileSpreadsheet,
 } from 'lucide-react';
 export { FrameworkProvider, usePathname } from 'fumadocs-core/framework';
 export { default as Link } from 'fumadocs-core/link';

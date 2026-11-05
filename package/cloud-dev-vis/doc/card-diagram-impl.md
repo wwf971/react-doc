@@ -40,8 +40,8 @@ registry = nodeRegistryBuild({ id, kindList, cardLegacyConvert? })
 ```
 
 ```text
-CardDiagram            registry card-diagram      table, operator
-DiagramER              registry power-platform    table, operator, dataverse-table, dataverse-choice,
+CardDiagram            registry card-diagram      table, operator, card-note, card-brief
+DiagramER              registry power-platform    table, operator, card-note, card-brief, dataverse-table, dataverse-choice,
 DiagramPowerAutomate     (one registry for the      power-automate, business-rule
 DiagramBusinessRule       three: one diagram may mix them)
                         plus operator-abandon, operator-text, operator-mapping
@@ -306,6 +306,32 @@ A custom edge uses the unified registry's `visualizationEdge` placement and `exp
 `TableCard` (`TableCard.jsx`) is the one card renderer: a title line (name and a subtitle), an optional description, head fields, a header of the card's **fields** and its **rows**, one cell per field, without any limit on their number. What a node type shows in it is the **schema** of its kind (`TableCardSchema.js`, `cardSchemaGet(node, registry)`): where the rows live (`columns`, `properties`, `rows`), the anchor prefix of a row, the fields (fixed for the Dataverse and resource cards, authored in `data.fields` for the generic `table`), the properties of the Table and Row tabs, how a new row starts, and whether rows and the title line take handles. This series has two generic cards on it: the `table` kind itself (fields authored in `data.fields`), and the **resource card** (`ResourceNodeCard.jsx`, `resourceCardSchemaBuild`): head fields under the title and property rows of name and value, with an accent color, which a series uses for the resources of its platform (a flow step, a business rule, a cloud service). The Dataverse card of the Power Platform series is the table card with a fixed schema and small render hooks (a badge, a key cell, a required star, a tooltip); a new card-like kind is a schema and, at most, a variant like these.
 
 The read and edit layouts of a card are one grid: without an editor a cell is text, with one it is a control in the same box, so a cell starting or ending editing moves nothing. Every row and the description are `nodrag nopan`, so a drag in them selects text and a drag on the title line pans the canvas (reading) or moves the node (editing); no part of a card is `nowheel`, so the wheel over a card zooms the canvas like the wheel over empty canvas and never scrolls the page.
+
+### Compact cards
+
+For diagrams of many cards read at a glance, the base series has a dense look of the table card and two cards of its own (`CompactCard.jsx`):
+
+```text
+table, isCompact           card-note                card-brief
+┌ name ───── subtitle ┐    ┌ T4  L  hard       ┐    ( ◉ Title        )
+│ row        type   ⎫ │    │ a line of text    │    (   a figure  b  )
+│ row        type   ⎭─┼─   │ 8h 02m     2      │
+│         ⋮         ⎫ │    └ runtime  retries ─┘
+│ row        type   ⎭─┼─
+└─────────────────────┘
+```
+
+| `table` data | Meaning |
+| --- | --- |
+| `isCompact` | small type, tight rows, a dark title line |
+| `tone` | the color of the title line: `blue`, `teal`, `green`, `amber`, `red`, `violet`, `slate` |
+| `columnTemplate` | the widths of the columns, as css grid columns (`5rem 1fr 4rem`) |
+| `isFieldHeaderHidden` | no line of field names |
+| a row's `isEllipsis` | it stands for rows left out: one `⋮`, so a table of any length shows in a few lines |
+| a row's `tone` | a tint of the row |
+| `rowGroupList: [{ id, rowFrom, rowTo, tone }]` | rows taken together: a bracket beside them in a gutter on the right, and the anchor `group/<id>`, so a line leaves from the middle of the rows; what a table split into batches is drawn with |
+
+`card-note` holds `title`, `tag`, `isTagHard`, `text`, `tone`, `metaList: [{ value, label }]`; `card-brief` holds `title`, `icon` (a word of `ICON_BY_NAME`), `tone`, `statList: [text]`. Neither has rows: a line joins the body. Every row of a table card carries `data-row-id`, which the [animation](card-diagram-animation.md) reaches it by.
 
 ## Card Editing
 

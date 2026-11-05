@@ -459,7 +459,17 @@ function headingAnchorGet(target) {
 }
 
 const DocsShell = observer(function DocsShell() {
-  const { docStore, sidePanelConfig, sourceStore } = useDocStores();
+  const { configStore, docStore, sidePanelConfig, sourceStore } = useDocStores();
+  // the code font of the document shown (FontMonoFamily), on the root so that what
+  // a document opens in the top layer or a popup has it too
+  const docPathCurrent = docStore.itemCurrent?.docPath;
+  const fontMonoFamily = docPathCurrent ? configStore.valueDocGet(docPathCurrent, 'FontMonoFamily') : null;
+  useEffect(() => {
+    if (!fontMonoFamily) return undefined;
+    const { style } = document.documentElement;
+    style.setProperty('--font-mono', fontMonoFamily);
+    return () => style.removeProperty('--font-mono');
+  }, [fontMonoFamily]);
   const sidePanelProps = useMemo(() => ({
     ...sidePanelConfig,
     components: {
