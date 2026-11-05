@@ -65,7 +65,7 @@ import {
   compConfigOfDocPageListGet, compConfigurationFileListGet, compFolderListGet, compManifestPathIs, compPathIs,
   type CompConfig, type CompMount,
 } from './doc-comp-config.ts';
-import { docPackageListLoad, docPackageSpecListRead, PACKAGE_SERVICE_TEMPLATE_FOLDER_LIST, type DocPackageLoaded } from './doc-package.ts';
+import { docPackageListLoad, docPackageSpecDirGet, docPackageSpecListRead, PACKAGE_SERVICE_TEMPLATE_FOLDER_LIST, type DocPackageLoaded, type DocPackageSpec } from './doc-package.ts';
 import {
   ASSET_OBJECT_META_NAME, assetConfigFormerReject, assetConfigOfDocPageListGet, assetStoreCreate, objectIdFromDirName,
   type AssetSnapshot, type AssetStore, type AssetStoreConfig, type AssetUsageDoc,
@@ -158,8 +158,40 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 const MODULE_ID_DEFAULT = 'virtual:doc-source';
 export const DOC_SOURCE_ENDPOINT_NAME = '__doc-source';
 
+// what the command line says over the config files (doc_page_impl_cli.md#the-launch-layer):
+// what to serve, in place of "workspace" / "docEntry" of the config files,
+// and where to find what it needs. every path absolute
+export type DocLaunch = {
+  // what was launched, as the page shows it
+  kind: 'page' | 'workspace' | 'package';
+  target: string;
+  // 'source': from a checkout; 'installed': from an npm package
+  mode: 'source' | 'installed';
+  command: string;
+  // the package config, when not main/config.yaml of this copy (--config)
+  configFile?: string;
+  docEntry?: { dir?: string; file?: string; alias?: string; sidePanel?: string };
+  workspace?: { dir?: string; file?: string };
+  // the temporary doc pages it starts with (--mount)
+  mountList?: WorkspaceMount[];
+  packageList?: ({ dir: string } | { name: string })[];
+  packageSearchDirList?: string[];
+  // the service backend: the config file it is started with, or none at all
+  backendConfigFile?: string;
+};
+
+export const DOC_LAUNCH_ENV_NAME = 'REACT_DOC_LAUNCH';
+
+// the launch layer the command line hands over to the vite config it starts
+export function docLaunchFromEnvGet(): DocLaunch | undefined {
+  const text = process.env[DOC_LAUNCH_ENV_NAME];
+  return text ? JSON.parse(text) : undefined;
+}
+
 export type DocSourcePluginOptions = {
   configFile?: string;
+  // the launch layer, over config.yaml and config.0.yaml
+  launch?: DocLaunch;
   moduleId?: string;
   excludeSidePanelItemIds?: string[];
   pruneSourceToSidePanel?: boolean;
@@ -220,6 +252,7 @@ export type SourceRoot = {
 export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
   let configDir = '';
   let configFile = '';
+  let viteRootDir = '';
   let isBuild = false;
   // url prefixes of the source, edit and asset apis; '' when no development
   // server answers them
@@ -309,6 +342,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       isBuild = viteConfig.command === 'build';
       configFile = findConfigFile(viteConfig.root, options.configFile);
       configDir = path.dirname(configFile);
+      viteRootDir = viteConfig.root;
       docSourceEndpoint = isBuild ? '' : endpointBuild(viteConfig.base, DOC_SOURCE_ENDPOINT_NAME);
       docEditEndpoint = isBuild ? '' : endpointBuild(viteConfig.base, DOC_EDIT_ENDPOINT_NAME);
       // the remote api of the page (doc_page_impl_api.md#remote-callers):
@@ -336,8 +370,17 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       await collectByCompIdMountLoad;
     },
 
-    resolveId(id) {
+    // a module of a doc page or a package lying outside this package's tree
+    // (launched from the command line) finds the dependencies of the page
+    // here when its own folders do not hold them (doc_page_impl_cli.md#the-launch-layer)
+    async resolveId(id, importer, resolveOptions) {
       if (id === moduleId) return moduleIdResolved;
+      if (!options.launch || !importer || !/^[@a-zA-Z]/.test(id) || id.startsWith('virtual:')) return undefined;
+      const importerPath = importer.split('?')[0];
+      if (!path.isAbsolute(importerPath) || importerPath.startsWith(`${viteRootDir}${path.sep}`)) return undefined;
+      const resolvedOwn = await this.resolve(id, importer, { ...resolveOptions, skipSelf: true });
+      if (resolvedOwn) return resolvedOwn;
+      return this.resolve(id, path.join(viteRootDir, 'index.html'), { ...resolveOptions, skipSelf: true });
     },
 
     load(id) {
@@ -435,6 +478,14 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
 
     configureServer(server) {
       const configDoc = loadConfigDoc(configFile, options);
+      // why a file may not be written: it lies in a read-only doc page, a
+      // package treated as a doc page (doc_page_impl_package.md#a-package-as-a-doc-page).
+      // the one question every write of the source, edit and asset apis asks
+      const readOnlyReasonGet = (absPath: string): string => {
+        const docPage = (loadConfigDoc(configFile, options).docEntry.docPageList as any[])
+          .find((item) => item.isReadOnly && (absPath === item.dirPage || absPath.startsWith(`${item.dirPage}${path.sep}`)));
+        return docPage ? `the doc page "${docPage.alias}" is read-only: it is the package ${docPage.packageName}` : '';
+      };
       let pathsWatched = collectPathsToWatch(configDoc, configDir);
       for (const p of pathsWatched) server.watcher.add(p);
 
@@ -497,6 +548,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         endpoint: docSourceEndpoint,
         fileEntryListGet,
         sourceRootListGet: () => sourceRootListGet(loadConfigDoc(configFile, options), configDir),
+        readOnlyReasonGet,
         onFileCreated: (filePath) => {
           pathsChangedByPage.add(filePath);
           configDataSend(loadConfigDoc(configFile, options));
@@ -596,6 +648,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       server.middlewares.use(docEditMiddlewareCreate({
         endpoint: docEditEndpoint,
         fileEntryListGet,
+        readOnlyReasonGet,
         sidePanel: {
           configDir,
           fileListGet: () => collectDocYamlFiles(loadConfigDoc(configFile, options)),
@@ -617,7 +670,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         // the file operations a write performs with it: a document created
         // for a new side-panel item, files deleted with a block or an item
         sourceFile: {
-          create: (body) => sourceFileCreate(body, sourceRootListGet(loadConfigDoc(configFile, options), configDir), fileEntryListGet()),
+          create: (body) => sourceFileCreate(body, sourceRootListGet(loadConfigDoc(configFile, options), configDir), fileEntryListGet(), readOnlyReasonGet),
           pathListMark: (absPathList) => {
             for (const absPath of absPathList) pathsChangedByPage.add(absPath);
           },
@@ -805,6 +858,8 @@ type SourceMiddlewareOptions = {
   endpoint: string;
   fileEntryListGet: () => FileEntry[];
   sourceRootListGet: () => SourceRoot[];
+  // why a file may not be written ('' when it may): a read-only doc page
+  readOnlyReasonGet: (absPath: string) => string;
   onFileCreated: (filePath: string) => void;
   // POST refresh: '' when the configuration loads, else why not
   onRefresh?: () => string;
@@ -818,7 +873,7 @@ type SourceMiddlewareOptions = {
 };
 
 export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
-  const { endpoint, fileEntryListGet, sourceRootListGet, onFileCreated, onRefresh, workspace } = options;
+  const { endpoint, fileEntryListGet, sourceRootListGet, onFileCreated, onRefresh, workspace, readOnlyReasonGet } = options;
   const textSend = (res: ServerResponse, statusCode: number, text: string) => {
     res.statusCode = statusCode;
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -884,7 +939,7 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
       }
       void jsonBodyRead(req)
         .then((body) => {
-          const result = sourceFileCreate(body, sourceRootListGet(), fileEntryListGet());
+          const result = sourceFileCreate(body, sourceRootListGet(), fileEntryListGet(), readOnlyReasonGet);
           if (result.code === 0) onFileCreated(result.data.entry.absPath);
           jsonSend(res, statusByCode[result.code] ?? 400, {
             code: result.code,
@@ -932,13 +987,14 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
   };
 }
 
-const statusByCode: Record<number, number> = { 0: 200, [-1]: 400, [-2]: 409, [-3]: 404 };
+const statusByCode: Record<number, number> = { 0: 200, [-1]: 400, [-2]: 409, [-3]: 404, [-4]: 403 };
 
 // the file of POST file/create, written; { code, data: { path, entry }, message }
 export function sourceFileCreate(
   body: any,
   sourceRootList: SourceRoot[],
   fileEntryList: FileEntry[],
+  readOnlyReasonGet: (absPath: string) => string = () => '',
 ): { code: number; data: any; message: string } {
   const dirPath = sourcePathNormalize(body?.dirPath ?? '');
   const name = String(body?.name ?? '').trim();
@@ -964,6 +1020,8 @@ export function sourceFileCreate(
   ));
   if (rootRuleList.length === 0) return { code: -3, data: null, message: `no source folder has the root ${sourcePathBuild(parsed.rootAlias, '', parsed.docPageAlias)}` };
   const dirAbs = path.resolve(rootRuleList[0].rootAbsPath, ...parsed.relPath.split('/').filter(Boolean));
+  const reasonReadOnly = readOnlyReasonGet(dirAbs);
+  if (reasonReadOnly) return { code: -4, data: null, message: reasonReadOnly };
   if (!pathIsInside(dirAbs, rootRuleList[0].rootAbsPath)) return { code: -1, data: null, message: `dirPath leaves its root: ${dirPath}` };
   // the folder must be collected by a folder rule: inside a recursive or
   // referenced folder, or the folder of a direct rule itself
@@ -1011,6 +1069,9 @@ function jsonBodyRead(req: IncomingMessage): Promise<any> {
 
 type WorkspaceMount = { alias?: string; dir?: string; file?: string; sidePanel?: string };
 const workspaceMountListByConfigFile = new Map<string, WorkspaceMount[]>();
+// the launch layers whose mounts were taken: they start the list once, and from
+// then on they are mounts like any other, which the Workspace tab can take away
+const workspaceMountLaunchTakenSet = new WeakSet<DocLaunch>();
 
 function workspaceMountListGet(configFile: string): WorkspaceMount[] {
   return workspaceMountListByConfigFile.get(configFile) ?? [];
@@ -1088,6 +1149,16 @@ function findConfigFile(viteRoot: string, configFileOption?: string): string {
   throw new Error(`[doc-source] config.yaml not found near ${viteRoot}`);
 }
 
+// config "packageSearchDirList": the folders holding packages, each package a
+// folder of its name, relative to the config file (doc_page_impl_package.md#importing-packages)
+function packageSearchDirListRead(value: any, configDir: string, configFile: string): string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string' && item.trim() !== '')) {
+    throw new Error(`[doc-source] config "packageSearchDirList" is a list of folders: ${configFile}`);
+  }
+  return value.map((item) => path.resolve(configDir, item));
+}
+
 // the local layer of config.yaml: config.0.yaml beside it, merged over it
 // key by key when it exists
 function configLocalFileGet(configFile: string): string {
@@ -1101,6 +1172,19 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
   const configBase = readYaml(configFile) ?? {};
   const configLocal = readYaml(configLocalFile) ?? {};
   const config = mergeDeep(configBase, configLocal);
+  // the launch layer names what is served, in place of what the files name,
+  // and which backend, if any: the backend of the files belongs to their workspace
+  const launch = options.launch;
+  if (launch) {
+    delete config.workspace;
+    delete config.docEntry;
+    delete config.packageList;
+    if (launch.docEntry) config.docEntry = launch.docEntry;
+    if (launch.workspace) config.workspace = launch.workspace;
+    if (launch.packageList) config.packageList = launch.packageList;
+    delete config.service;
+    if (launch.backendConfigFile) config.service = { backendConfigFile: launch.backendConfigFile, launch: true };
+  }
   configFormerKeysReject(config, configFile);
   assetConfigFormerReject(config, configFile);
   folderManagedIsLazyGet(config, configFile);
@@ -1120,25 +1204,40 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
   const workspaceSpec: DocWorkspaceSpec = isWorkspaceGiven
     ? docWorkspaceSpecRead(config.workspace, configDir, configFile)
     : { isVirtual: true, docPageList: [docPageSpecRead(config.docEntry, configDir, `config "docEntry" (${configFile})`)] };
-  // the doc pages mounted from the settings panel while this development
-  // server runs, after the ones written (doc_page_impl_source.md#temporary-doc-pages)
-  for (const mount of workspaceMountListGet(configFile)) workspaceSpec.docPageList.push({ ...mount, isTemporary: true });
-  // the packages the workspace imports (doc_page_impl_package.md):
-  // "packageList" of the workspace, or of config beside "docEntry"
-  if (isWorkspaceGiven && config.packageList !== undefined) {
-    throw new Error(`[doc-source] config "packageList" goes with "docEntry"; a workspace names its packages itself: ${configFile}`);
+  if (launch?.mountList && !workspaceMountLaunchTakenSet.has(launch)) {
+    workspaceMountLaunchTakenSet.add(launch);
+    workspaceMountListByConfigFile.set(configFile, [...launch.mountList]);
   }
-  const packageSpecList = isWorkspaceGiven
-    ? workspaceSpec.packageList ?? []
-    : docPackageSpecListRead(config.packageList, configDir, `config (${configFile})`);
-  const packageList = docPackageListLoad(packageSpecList, workspaceSpec.file ?? configFile);
-
+  // the doc pages mounted from the command line or the settings panel while this
+  // development server runs, after the ones written (doc_page_impl_source.md#temporary-doc-pages)
+  for (const mount of workspaceMountListGet(configFile)) workspaceSpec.docPageList.push({ ...mount, isTemporary: true });
   // the workspace loaded: the source rules of its doc pages, the page side
   // panel inlined (so the browser side never touches the file system), tag
   // definitions, config declarations, and the doc pages with their
   // includes. design: doc_page_impl_side_panel.md#the-document-entry
   const entryLoaded = docWorkspaceLoad(workspaceSpec, configDir);
   const entryFile = entryLoaded.entryFile;
+  if (launch) entryLoaded.workspace.launch = { kind: launch.kind, target: launch.target, mode: launch.mode, command: launch.command };
+  // the packages (doc_page_impl_package.md#importing-packages): those the
+  // workspace names ("packageList" of the workspace, or of config beside
+  // "docEntry"), those the doc pages name in their entries, and every package
+  // treated as a doc page. a name is looked for in the search folders
+  if (isWorkspaceGiven && config.packageList !== undefined) {
+    throw new Error(`[doc-source] config "packageList" goes with "docEntry"; a workspace names its packages itself: ${configFile}`);
+  }
+  const packageSearchDirList = [
+    ...(launch?.packageSearchDirList ?? []),
+    ...packageSearchDirListRead(config.packageSearchDirList, configDir, configFile),
+  ];
+  const packageSpecListWorkspace: DocPackageSpec[] = isWorkspaceGiven
+    ? workspaceSpec.packageList ?? []
+    : docPackageSpecListRead(config.packageList, configDir, `config (${configFile})`);
+  const packageSpecList: DocPackageSpec[] = [
+    ...entryLoaded.docPageList.filter((docPage) => docPage.packageName !== '').map((docPage): DocPackageSpec => ({ dir: docPage.dirPage })),
+    ...packageSpecListWorkspace,
+    ...entryLoaded.docPageList.flatMap((docPage) => docPage.packageList),
+  ];
+  const packageList = docPackageListLoad(packageSpecList, workspaceSpec.file ?? configFile, packageSearchDirList);
   config.source = entryLoaded.sourceRuleList;
   config.sidePanel = { ...(config.sidePanel ?? {}), tree: entryLoaded.sidePanel?.tree };
   config.workspace = entryLoaded.workspace;
@@ -1185,7 +1284,9 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
     enumerable: false,
     value: packageList,
   });
-  const packageDirNamedSet = new Set(packageSpecList.map((spec) => spec.dir));
+  // named by the workspace or one of its doc pages, each directly; else only
+  // another package needs it
+  const packageDirNamedSet = new Set(packageSpecList.map((spec) => docPackageSpecDirGet(spec, packageSearchDirList, configFile)));
   const packageNameByDir = new Map(packageList.map((item) => [item.dir, item.name]));
   config.packageList = packageList.map((item) => ({
     name: item.name,
@@ -2194,5 +2295,7 @@ function collectSourceRoots(configDoc: any, configDir: string): string[] {
     }
   }
   for (const folder of compFolderListGet(compConfigGet(configDoc))) result.add(folder);
+  // a package lying anywhere: its modules import each other beside the manifest
+  for (const item of (configDoc.docEntry?.packageList ?? []) as DocPackageLoaded[]) result.add(item.dir);
   return [...result];
 }

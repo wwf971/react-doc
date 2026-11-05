@@ -6,7 +6,7 @@ language: en
 
 Two components share one data model and one card renderer. `DiagramER` draws **nodes** and the **connections** between their **handles** on a pannable, zoomable canvas. `DiagramDataverseEntity` shows a single Dataverse table card in the flow of the document, without a canvas. Both read YAML, both open in the block popup, and both are edited visually in place: cells, rows, columns, handles, connections and node positions.
 
-These components are not part of the doc page package: they come from the package **cloud-dev-vis** (`package/cloud-dev-vis/` of the project), which the workspace imports (`packageList` in `workspace.yaml`). Each diagram component has a fixed **node registry**: the node types it can draw and offers to create. `DiagramER` (and `DiagramPowerAutomate`, `DiagramBusinessRule`) use the registry of the Power Platform series; [`CardDiagram`](#card-diagram) uses the one of the base series, generic tables and operators only.
+These components are not part of the doc page package: they come from the package **cloud-dev-vis** (`package/cloud-dev-vis/` of the project), which a workspace or a doc page imports (`packageList`). Each diagram component has a fixed **node registry**: the node types it can draw and offers to create. `DiagramER` (and `DiagramPowerAutomate`, `DiagramBusinessRule`) use the registry of the Power Platform series; [`CardDiagram`](#card-diagram) uses the one of the base series, generic tables and operators only.
 
 <!--renderComp=DiagramText-->
 ```text

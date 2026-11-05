@@ -297,11 +297,18 @@ export class ConfigLayerDeclared implements ConfigLayer {
   }
 
   get isWritable(): boolean {
-    return this.envStore.isCapable('edit');
+    return this.envStore.isCapable('edit') && this.readOnlyReason === '';
   }
 
   get disabledReason(): string {
-    return this.envStore.reasonGet('edit');
+    return this.readOnlyReason || this.envStore.reasonGet('edit');
+  }
+
+  // a read-only doc page keeps its config as written; a virtual workspace has
+  // no file to hold a config layer of its own
+  private get readOnlyReason(): string {
+    if (this.isDocPage) return this.sourceStore.docPageReadOnlyReasonGet?.(this.docPageAlias) ?? '';
+    return this.sourceStore.configDoc?.workspace?.isVirtual ? 'a virtual workspace has no config of its own: it has no workspace file' : '';
   }
 
   // the declarations as the configuration reported them

@@ -1,8 +1,8 @@
 import { useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { MaximizeIcon, RestoreIcon } from '@wwf971/react-comp-misc';
-import { X } from '../../../../main/frontend/UICommon.js';
-import './TextPanelDemo.css';
+import { X } from '../../frontend/UICommon.js';
+import './DocPanelStandalone.css';
 
 // minimal popup panel for the demo app. an embedding host supplies its own
 // panel implementation through config.panelComponent; this demo panel
@@ -27,7 +27,7 @@ const sizeMin = { width: 320, height: 180 };
 // what of a moved panel stays in the window: the header can always be grabbed
 const keepVisible = { x: 80, y: 32 };
 
-export function TextPanelDemo({ data = {}, config = {}, headerRightContent, content, onEvent }) {
+export function DocPanelStandalone({ data = {}, config = {}, headerRightContent, content, onEvent }) {
 	const panelRef = useRef(null);
 	const dragRef = useRef(null);
 	const isLayoutActive = !config.isExpanded;

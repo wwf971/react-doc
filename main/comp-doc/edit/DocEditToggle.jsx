@@ -13,7 +13,7 @@ import './DocEdit.css';
 // view-only mark (DocEditOfflineMark), and the page reads as a built page
 // would until the server answers again.
 export const DocEditToggle = observer(function DocEditToggle({ isCompact = false }) {
-  const { docStore, editStore, envStore } = useDocStores();
+  const { docStore, editStore, envStore, sourceStore } = useDocStores();
   if (!editStore.isAvailable) {
     const reason = envStore.editSuspendReasonGet();
     return reason ? <DocEditOfflineMark reason={reason} isCompact={isCompact} /> : null;
@@ -24,7 +24,7 @@ export const DocEditToggle = observer(function DocEditToggle({ isCompact = false
     ? 'Leave edit mode'
     : isDocEditable
       ? 'Edit this document in place'
-      : 'Edit mode (this page has no editable source file)';
+      : sourceStore.pathReadOnlyReasonGet(docStore.docCurrentPath) || 'Edit mode (this page has no editable source file)';
 
   return (
     <div className="doc-edit-toggle">

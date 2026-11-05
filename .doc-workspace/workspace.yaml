@@ -37,16 +37,19 @@ docPageList:
   # "isRootUnfolded: false" would draw the root as a folder instead
   - alias: second
     dir: ../example_doc/second-doc
-
-# the packages the workspace imports (main/doc_page_impl_package.md):
-# each named by its folder, relative to this file. a package brings its
-# components (mounted under the ids {packageName}/{tagName}) and its service
-# templates to every doc page of the workspace, and the packages it needs
-# itself. cloud-dev-vis carries the diagrams the demonstration shows:
-# CardDiagram, DiagramER, DiagramPowerAutomate, DiagramBusinessRule,
-# DiagramDataverseEntity
-packageList:
+  # a package listed as a doc page: a section of the side panel marked "package",
+  # read-only, and imported by being here. its documents demonstrate its
+  # components (main/doc_page_impl_package.md#a-package-as-a-doc-page)
   - dir: ../package/cloud-dev-vis
+
+# the packages the workspace imports beyond those above (main/doc_page_impl_package.md):
+# each named by its folder, relative to this file, or by its name (found in
+# config.yaml packageSearchDirList). a package brings its components (mounted
+# under the ids {packageName}/{tagName}) and its service templates to every
+# doc page of the workspace, and the packages it needs itself. a doc page names
+# what it needs in its own entry too.
+# packageList:
+#   - dir: ../package/cloud-dev-vis
 
 # page values over those of the first doc page's entry (docEntry.title /
 # homeDoc / homeItem); left to the entry here

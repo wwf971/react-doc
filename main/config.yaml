@@ -20,6 +20,12 @@ workspace:
 #   alias: example
 #   sidePanel: compact
 
+# the folders holding packages, where a package named by its name ({ name } in a
+# packageList) is looked for, then node_modules/ upward from the file naming it.
+# design: doc_page_impl_package.md#importing-packages
+packageSearchDirList:
+  - ../package
+
 # the managed folders of a doc page (.doc-page/asset/, comp-mdx/, service-*/):
 # isLazy (default true) leaves a folder away until its first item is
 # written (an asset object, a component, a service instance), so a doc page

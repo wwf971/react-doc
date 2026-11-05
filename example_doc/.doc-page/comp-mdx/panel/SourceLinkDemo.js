@@ -1,6 +1,6 @@
 import { LinkIcon } from '../../../../main/frontend/UICommon.js';
 import { SourceLink } from '../../../../built-in/comp-mdx/source-link/SourceLink.jsx';
-import { TextPanelDemo } from './TextPanelDemo.jsx';
+import { DocPanelStandalone } from '../../../../main/comp-doc/popup/DocPanelStandalone.jsx';
 
 // SourceLink (built-in/comp-mdx/source-link/) bound to the demonstration's
 // popup panel: the panel that frames the source popup is host
@@ -16,7 +16,7 @@ export const sourceLinkDefineOptions = {
     ...input,
     config: {
       ...input.config,
-      panelComponent: TextPanelDemo,
+      panelComponent: DocPanelStandalone,
     },
   }),
   placementList: ['mdx', 'commentBlock'],

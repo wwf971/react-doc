@@ -49,7 +49,7 @@ export class DocWorkspaceStore {
     if (!envStore.isCapable('edit')) return envStore.reasonGet('edit');
     if (!this.workspace?.file) {
       return this.workspace?.isVirtual
-        ? 'config.yaml names one doc page (docEntry); a workspace file (workspace.file) is edited here'
+        ? 'a virtual workspace has no workspace file to edit: it holds the one doc page it was started for'
         : 'the workspace is written in config.yaml; a workspace file of its own (workspace.file) is edited here';
     }
     return '';

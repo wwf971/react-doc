@@ -233,6 +233,10 @@ export type AssetFolder = {
   isDefault: boolean;
   // the doc page that names it: its entry, relative to the config directory
   docEntryFile: string;
+  // the folder of a read-only doc page (a package treated as a doc page,
+  // doc_page_impl_package.md#a-package-as-a-doc-page): every write is refused
+  // by the store itself (-4), whichever way it comes
+  isReadOnly?: boolean;
 };
 
 export type AssetFolderInfo = AssetFolder & { isExists: boolean; objectCount: number };
@@ -249,6 +253,8 @@ export type AssetDocPage = {
   // its folders, as source paths, in its order; its default folder ('' for none)
   folderList: string[];
   folderDefault: string;
+  // a read-only doc page: the store writes nothing into its folders or its config file
+  isReadOnly?: boolean;
   // the alias of the doc page, and the full paths of its roots
   // (~alias:root): a document of one of them creates its objects in this
   // doc page's default folder; its asset folders lie in them
@@ -276,6 +282,7 @@ export type AssetDocPageInput = {
   dirPage: string;
   rootList: { alias: string; path: string }[];
   asset: undefined | false | { file: string };
+  isReadOnly?: boolean;
 };
 
 // what names an object: its id, or its name
@@ -350,7 +357,7 @@ export function assetConfigOfDocPageListGet(
         }
         continue;
       }
-      folderList.push({ path: folderPath, pathAbs, isDefault: false, docEntryFile: docPage.entryFile });
+      folderList.push({ path: folderPath, pathAbs, isDefault: false, docEntryFile: docPage.entryFile, isReadOnly: docPageInput.isReadOnly === true });
     }
     for (const problem of docPage.problemList) console.warn(`[doc-asset] ${docPage.configFileRelative}: ${problem}`);
     docPageList.push(docPage);
@@ -373,6 +380,7 @@ function assetDocPageRead(input: AssetDocPageInput, rootAbsPathByPath: Map<strin
     isConfigFileExists: fs.existsSync(configFile),
     folderList: [],
     folderDefault: '',
+    isReadOnly: input.isReadOnly === true,
     alias: input.alias,
     rootPathList: input.rootList.map((root) => sourcePathBuild(root.alias, '', input.alias)),
     problemList: [],
@@ -610,6 +618,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   ): void {
     const docPage = config.docPageList.find((item) => item.configFileRelative === input.configFile);
     if (!docPage) throw new AssetError(-3, `not the asset store config of a doc page of this page: ${input.configFile}`);
+    if (docPage.isReadOnly) throw new AssetError(-4, `the asset folders of the doc page "${docPage.alias}" are read-only: it is a package`);
     const folderListNext: string[] = [];
     for (const item of input.folderList) {
       const pathText = sourcePathFullGet(sourcePathNormalize(String(item ?? '')), docPage.alias);
@@ -637,6 +646,20 @@ export function assetStoreCreate(config: AssetStoreConfig) {
         if (pathAbs) fs.mkdirSync(pathAbs, { recursive: true });
       }
     }
+  }
+
+  // a write into the folder of a read-only doc page is refused here, the one
+  // place every write of the store passes (objectWriteGuard below)
+  function folderWritableCheck(folderPath: string) {
+    if (folderList.find((item) => item.path === folderPath)?.isReadOnly) {
+      throw new AssetError(-4, `the asset folder ${folderPath} is read-only: its doc page is a package`);
+    }
+  }
+  function objectWriteGuard<Args extends any[], Result>(write: (objectId: string, ...rest: Args) => Result) {
+    return (objectId: string, ...rest: Args): Result => {
+      folderWritableCheck(objectGet(objectId).folder);
+      return write(objectId, ...rest);
+    };
   }
 
   // the folder a new object goes to: the one named, else the default folder
@@ -796,6 +819,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       if (metaExisting) return { object: metaExisting, version: versionDataGetOf(metaExisting, 'head'), isCreated: false };
     }
     const folder = folderForCreateGet(input.folder, input.docPath);
+    if (folder) folderWritableCheck(folder.path);
     if (!folder) {
       throw new AssetError(-1, input.folder ? `asset folder not in the store: ${input.folder}` : 'the local store has no folder');
     }
@@ -1239,21 +1263,27 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     versionDataGet,
     versionDataGetOf,
     objectCreate,
-    objectUpdate,
-    objectDelete,
-    objectRestore,
-    objectMetaSet,
-    objectMove,
-    groupMove,
-    versionCheckout,
-    versionDelete,
-    versionMetadataSet,
-    objectLockSet,
-    versionLockSet,
+    objectUpdate: (input: Parameters<typeof objectUpdate>[0]) => {
+      folderWritableCheck(objectGet(input.objectId).folder);
+      return objectUpdate(input);
+    },
+    objectDelete: objectWriteGuard(objectDelete),
+    objectRestore: objectWriteGuard(objectRestore),
+    objectMetaSet: objectWriteGuard(objectMetaSet),
+    objectMove: objectWriteGuard(objectMove),
+    groupMove: (folderPath: string, ...rest: any[]) => {
+      folderWritableCheck(folderPath);
+      return (groupMove as any)(folderPath, ...rest);
+    },
+    versionCheckout: objectWriteGuard(versionCheckout),
+    versionDelete: objectWriteGuard(versionDelete),
+    versionMetadataSet: objectWriteGuard(versionMetadataSet),
+    objectLockSet: objectWriteGuard(objectLockSet),
+    versionLockSet: objectWriteGuard(versionLockSet),
     dependencyListGet,
-    dependencyListSet,
-    dependencyAdd,
-    dependencyRemove,
+    dependencyListSet: objectWriteGuard(dependencyListSet),
+    dependencyAdd: objectWriteGuard(dependencyAdd),
+    dependencyRemove: objectWriteGuard(dependencyRemove),
     dependentListGet,
     dependencySourcePathList,
     snapshotBuild,

@@ -198,11 +198,26 @@ hotkey:                             # optional: the keyboard map of the workspac
 
 The workspace file is found from the workspace folder in its metadata folder, `.doc-workspace/`, or in the folder itself; the layout of a workspace folder is in [the workspace folder](doc_page_impl_dir.md#the-workspace-folder).
 
-`packageList` makes the components and service templates of each package (and of the packages it needs) available to every doc page of the workspace. A workspace given by `docEntry` of `config.yaml` names its packages in `config.yaml` beside it; with `workspace`, only the workspace does. `config` and `hotkey` are what the deployment decides for the whole page, over the doc pages it assembles: the first doc page of `docPageList` is the **main doc page**, the only one whose own config is applied, and the workspace's config sits over it; the workspace's keyboard map sits over the maps of every doc page. A workspace written in place in `config.yaml` (`workspace: { docPageList, config, hotkey }`) takes both the same way; a virtual workspace (`docEntry`) has neither.
+`packageList` makes the components and service templates of each package (and of the packages it needs) available to every doc page of the workspace. A workspace given by `docEntry` of `config.yaml` names its packages in `config.yaml` beside it; with `workspace`, only the workspace does; a doc page names what it needs in its entry in both ([importing packages](doc_page_impl_package.md#importing-packages)). `config` and `hotkey` are what the deployment decides for the whole page, over the doc pages it assembles: the first doc page of `docPageList` is the **main doc page**, the only one whose own config is applied, and the workspace's config sits over it; the workspace's keyboard map sits over the maps of every doc page. A workspace written in place in `config.yaml` (`workspace: { docPageList, config, hotkey }`) takes both the same way; a virtual workspace (`docEntry`) has neither.
 
 `isRootUnfolded` is an option of the mount, not of the entry, and **on by default**: a doc page whose side panel is one root item holding the rest (the usual shape) shows that item's children directly under its section, the root itself a marked root row when it is bound to a document; the same doc page can be drawn as a folder in another workspace (`isRootUnfolded: false`). What it does, and what it never does, is in [the sole root unfolded](doc_page_impl_side_panel.md#the-sole-root-unfolded); `docEntry` of `config.yaml` takes it as well. The former key `isRootVisible` is still read, as its opposite, with a warning.
 
-Loading a workspace (`docWorkspaceLoad`, `plugin/doc-entry.ts`) registers every root-level doc page under its alias first, then loads each entry with everything it reaches ([loading](doc_page_impl_side_panel.md#loading)): the source rules of every doc page, in order, each rule carrying the alias of its doc page; the tag definitions; the config declarations of every doc page, each with its doc page's alias (the page keeps one layer per doc page and applies the main doc page's, [the doc page layers](doc_page_impl_config.md#the-doc-page-layers)), then the workspace's own; and every side panel. The page shows, with one root doc page, that doc page's chosen side panel, exactly as before; with several, one **section** per root doc page: its alias as a muted heading, its side panel below at the depth of the tree's root, so its items look as they do when the doc page is served alone; the doc pages keep their side panels and the workspace only arranges them (a side panel of the workspace's own is a later addition). The tree node of a section carries `docPageSection` (`{ alias, title, isTemporary, isFirst }`); what the side panel does with it is in [a workspace of several doc pages](doc_page_impl_side_panel.md#a-workspace-of-several-doc-pages). `siteTitle`, `homeDoc` and `homeItem` come from `config.yaml`, else the workspace file, else the first root doc page's entry.
+Loading a workspace (`docWorkspaceLoad`, `plugin/doc-entry.ts`) registers every root-level doc page under its alias first, then loads each entry with everything it reaches ([loading](doc_page_impl_side_panel.md#loading)): the source rules of every doc page, in order, each rule carrying the alias of its doc page; the tag definitions; the config declarations of every doc page, each with its doc page's alias (the page keeps one layer per doc page and applies the main doc page's, [the doc page layers](doc_page_impl_config.md#the-doc-page-layers)), then the workspace's own; and every side panel. The page shows, with one root doc page, that doc page's chosen side panel, exactly as before; with several, one **section** per root doc page: its alias as a muted heading, its side panel below at the depth of the tree's root, so its items look as they do when the doc page is served alone; the doc pages keep their side panels and the workspace only arranges them (a side panel of the workspace's own is a later addition). The tree node of a section carries `docPageSection` (`{ alias, title, isTemporary, packageName, isFirst }`); what the side panel does with it is in [a workspace of several doc pages](doc_page_impl_side_panel.md#a-workspace-of-several-doc-pages). `siteTitle`, `homeDoc` and `homeItem` come from `config.yaml`, else the workspace file, else the first root doc page's entry.
+
+### The virtual workspace
+
+One doc page, or one package, can be served without a workspace of its own: `react-doc dev <its folder>` ([the command line](doc_page_impl_cli.md#serving-react-doc-dev)), or `docEntry` of `config.yaml`. The page always has a workspace, so this one is **virtual**: it holds that doc page, and it has no file.
+
+```text
+                         a workspace          a virtual workspace
+workspace file           edited in place      none: the list is shown, its edit refused with the reason
+workspace config layer   written in its file  none: the layer is not writable, with the reason
+its keyboard map         hotkey: { file }     none
+its doc pages            its list             the one, plus any mounted for a while
+its packages             packageList          those of the doc page's entry, --package, or config beside docEntry
+```
+
+It says so: a note at the top of the Workspace tab with the command that started it and the mode, the kind of its node in the graph, and its detail. Mounting a doc page for a while stays possible, since it writes nothing.
 
 ### Doc pages reached by includes
 
@@ -218,7 +233,8 @@ Its side panel is shown once as well: at its mount when it is a root doc page, e
 
 ```text
 workspace
-  isVirtual        config.yaml named one doc page
+  isVirtual        one doc page alone: config.yaml docEntry, or the command line
+  launch           launched from the command line: { kind, target, mode, command }
   title
   file, fileHash   the workspace file (relative to the config directory, '' when there is none) and the
                    hash of the version loaded, which an edit is built on
@@ -226,7 +242,7 @@ workspace
                    paths relative to it
   dirBaseAbs       the folder relative paths of the workspace are read from (the file's, else the config
                    directory), where os path completion starts
-  docPageList      [{ alias, entryFile, dirPage, title, isRoot, isTemporary,
+  docPageList      [{ alias, entryFile, dirPage, title, isRoot, isTemporary, packageName, isReadOnly,
                       rootList [{ alias, path, kind }],
                       mentionList [{ alias, isAliasGiven, fromAlias, file, place }] }]
                    the root doc pages first, then the included ones in order of first loading
@@ -240,7 +256,7 @@ workspace
 
 ### The Workspace tab
 
-The settings panel has a **Workspace** tab (`comp-doc/settings/WorkspaceSettings.jsx`) that draws the workspace with React Flow: a node for the workspace (marked virtual when `config.yaml` named one doc page), a node per doc page (alias, title, folder, the number of roots and of mentions, a "root" badge), and an edge per mention, from the workspace or from the doc page whose file holds the include, labeled with the alias that mention gives. Two mentions of one doc page are two edges into one node, which is how the de-duplication is seen; a mention whose alias is not the one kept is a dashed amber edge with an "alias conflict" badge on the node, and the warnings are listed under the graph. Choosing a node shows its folder, entry, roots (`~page:root → folder`) and mentions, the ignored ones marked. The packages the workspace imports are drawn too, in a tone of their own and **above** the workspace node: an edge `imports` to each package the workspace names, an edge `needs` from a package to each package it needs, a package one row above every package needing it, so the dependencies grow upward while the doc pages grow downward ([Packages: in the Workspace tab](doc_page_impl_package.md#in-the-workspace-tab)); choosing a package shows its description, folder, and what it needs and is needed by. Two toggles, **doc pages** and **packages**, show or hide either; with one of them alone, it grows below the workspace node.
+The settings panel has a **Workspace** tab (`comp-doc/settings/WorkspaceSettings.jsx`) that draws the workspace with React Flow: a node for the workspace (marked [virtual](#the-virtual-workspace) when it holds one doc page alone), a node per doc page (alias, title, folder, the number of roots and of mentions, a "root" badge, a "package" badge for [a package treated as a doc page](doc_page_impl_package.md#a-package-as-a-doc-page)), and an edge per mention, from the workspace or from the doc page whose file holds the include, labeled with the alias that mention gives. Two mentions of one doc page are two edges into one node, which is how the de-duplication is seen; a mention whose alias is not the one kept is a dashed amber edge with an "alias conflict" badge on the node, and the warnings are listed under the graph. Choosing a node shows its folder, entry, roots (`~page:root → folder`) and mentions, the ignored ones marked. The packages the workspace imports are drawn too, in a tone of their own and **above** the workspace node: an edge `imports` to each package the workspace names, an edge `needs` from a package to each package it needs, a package one row above every package needing it, so the dependencies grow upward while the doc pages grow downward ([Packages: in the Workspace tab](doc_page_impl_package.md#in-the-workspace-tab)); choosing a package shows its description, folder, and what it needs and is needed by. Two toggles, **doc pages** and **packages**, show or hide either; with one of them alone, it grows below the workspace node.
 
 ```text
    [base]  package                 packages: above, a package above everything needing it
@@ -276,7 +292,7 @@ Every change is one request of the edit api, `POST {edit}/workspace/edit` `{ req
 
 ### Temporary doc pages
 
-A doc page can join the workspace **for now**: mounted from the tab by its folder or its entry file (and an alias, else the folder name), it is one more root doc page after those written, with its section in the side panel (marked "temporary") and its node in the graph, but it is written in no file. The development server holds the list (by config file, in `plugin/doc-source.ts`) and adds it to the workspace every time the configuration loads, so it lasts as long as the server runs. A mount that does not load (the doc page is a root already, its alias is taken) is refused and forgotten.
+A doc page can join the workspace **for now**: mounted from the tab, or from the command line with [`--mount`](doc_page_impl_cli.md#mounting-for-one-run), by its folder or its entry file (and an alias, else the folder name), it is one more root doc page after those written, with its section in the side panel (marked "temporary") and its node in the graph, but it is written in no file. The development server holds the list (by config file, in `plugin/doc-source.ts`) and adds it to the workspace every time the configuration loads, so it lasts as long as the server runs. A mount that does not load (the doc page is a root already, its alias is taken) is refused and forgotten; one given on the command line stops the command instead, and starts the list again whenever that command is run.
 
 | Route of the source api | Answer |
 | --- | --- |
@@ -308,7 +324,7 @@ The development server answers `{base}/__doc-source` (exported as `docSourceEndp
 | --- | --- |
 | `GET /file?path=~page:root/a.md` | the current text of a collected file, `text/plain`, never cached (the page reads documents through it in development) |
 | `GET /data?path=~page:root/image/a.png` | the bytes of a collected file with their mime type, binary or text |
-| `POST /file/create` `{ dirPath, name, text \| dataBase64, isOverwrite? }` | writes a file into a folder of the source; `{ code: 0, data: { path, entry } }`, `-1` invalid, `-2` the file exists, `-3` the folder is not collected by any rule |
+| `POST /file/create` `{ dirPath, name, text \| dataBase64, isOverwrite? }` | writes a file into a folder of the source; `{ code: 0, data: { path, entry } }`, `-1` invalid, `-2` the file exists, `-3` the folder is not collected by any rule, `-4` the folder is in a [read-only doc page](doc_page_impl_package.md#a-package-as-a-doc-page) |
 | `POST /refresh` | the configuration and the source read again from disk and reported as data, without a reload: for a change the file watcher did not see ([reading an item again](doc_page_impl_side_panel.md#reading-an-item-again)) |
 | `GET /os/list?path=` | a folder of the file system, for [os path completion](#os-path-completion) |
 | `POST /workspace/mount`, `/workspace/unmount` | [temporary doc pages](#temporary-doc-pages) |

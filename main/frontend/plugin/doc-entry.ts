@@ -4,7 +4,7 @@ import { parse as parseYaml } from 'yaml';
 import { textHashGet } from './doc-edit-lines.ts';
 import { sourceAliasIsValid, sourcePathFullGet, sourcePathIsRooted } from '../src/lib/doc-source-path.js';
 import { excludePatternTextListRead } from './doc-source-exclude.ts';
-import { docPackageSpecListRead, type DocPackageSpec } from './doc-package.ts';
+import { PACKAGE_CONFIG_FILE_NAME, docPackageNameOfFolderGet, docPackageSpecListRead, type DocPackageSpec } from './doc-package.ts';
 import { sidePanelEffectiveGet, sidePanelRootUnfoldApply } from './doc-sidebar-effective.ts';
 
 // The workspace, its doc pages, the entry of each and the yaml files it reaches.
@@ -36,6 +36,8 @@ import { sidePanelEffectiveGet, sidePanelRootUnfoldApply } from './doc-sidebar-e
 //   comp:                    # optional, an entry only: the component folders of the doc page,
 //                            #   { file: ./comp.yaml } | false (none); absent: comp.yaml beside
 //                            #   the entry, else .doc-page/comp-mdx/ (doc-comp-config.ts)
+//   packageList:             # optional, an entry only: the packages the doc page needs, the
+//                            #   forms of a workspace's: { name } | { dir } (doc_page_impl_package.md)
 //   sidePanelDefault: main   # optional when the file declares one side panel
 //   sidePanelById:
 //     main: { root?, tree }          # a side panel resource
@@ -164,6 +166,13 @@ export type DocPageLoaded = {
   // mounted from the settings panel for as long as the development server
   // runs, not written in any file (a root doc page)
   isTemporary: boolean;
+  // a package treated as a doc page: its name ('' for a plain doc page). such a
+  // doc page is read-only: nothing of the page writes into its folder
+  // (doc_page_impl_package.md#a-package-as-a-doc-page)
+  packageName: string;
+  isReadOnly: boolean;
+  // the packages its entry names (doc_page_impl_package.md#importing-packages)
+  packageList: DocPackageSpec[];
   rootList: DocPageRoot[];
   mentionList: DocPageMention[];
   // "asset", "service", "comp", "hotkey", "api" and "objectFrontend" of the
@@ -193,13 +202,19 @@ export type DocPageInfo = {
   title: string;
   isRoot: boolean;
   isTemporary: boolean;
+  // a package treated as a doc page: its name, '' otherwise; isReadOnly: the
+  // page writes nothing into its folder
+  packageName: string;
+  isReadOnly: boolean;
   rootList: { alias: string; path: string; kind: 'folder' | 'file' }[];
   mentionList: { alias: string; isAliasGiven: boolean; fromAlias: string; file: string; place: string }[];
 };
 
 // the workspace as the page receives it (configDoc.workspace)
 export type DocWorkspaceInfo = {
-  // config.yaml named one doc page (docEntry), not a workspace
+  // config.yaml named one doc page (docEntry), or the command line launched one
+  // (a doc page, a package): the workspace holds it alone and has no file, no
+  // config layer and no keyboard map of its own
   isVirtual: boolean;
   title: string;
   // the workspace file, relative to the config directory ('' when the
@@ -220,6 +235,8 @@ export type DocWorkspaceInfo = {
   // the workspace config layer (doc_page_impl_config.md#the-workspace-layer):
   // the declarations of the "config" of the workspace, in stack order
   configDeclarationList: ConfigDeclaration[];
+  // launched from the command line: what, and how (doc_page_impl_cli.md#the-launch-layer)
+  launch?: { kind: string; target: string; mode: string; command: string };
 };
 
 // what config.yaml says about the workspace, normalized
@@ -328,7 +345,7 @@ type LoadContext = {
   warningList: string[];
 };
 
-const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'sidePanelDefault', 'sidePanelById'];
+const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'packageList', 'sidePanelDefault', 'sidePanelById'];
 // the sections an entry alone may hold: each names a config file of the doc
 // page (or switches the feature off), found beside the entry by convention
 const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'service', 'comp', 'hotkey', 'api', 'objectFrontend'] as const;
@@ -415,9 +432,11 @@ function docPageFolderFormerWarn(docPage: DocPageLoaded) {
   }
 }
 
-// the alias a doc page gets when none is given: the name of its folder
+// the alias a doc page gets when none is given: the name of its folder; a
+// package treated as a doc page goes by its name
 export function docPageAliasDefaultGet(entryFile: string): string {
-  return path.basename(docPageDirGet(entryFile));
+  const dirPage = docPageDirGet(entryFile);
+  return docPackageNameOfFolderGet(dirPage) || path.basename(dirPage);
 }
 
 // ---------- the workspace ----------
@@ -619,7 +638,7 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
   spec.docPageList.forEach((item, index) => {
     const entryFile = entryPathResolve(item.dir ?? item.file ?? '');
     let place = spec.isVirtual ? placeWorkspace : `${placeWorkspace} docPageList[${index}]`;
-    if (item.isTemporary) place = 'a temporary mount (settings panel, Workspace tab)';
+    if (item.isTemporary) place = 'a temporary mount (Workspace tab, or --mount of the command line)';
     if (entryFileRootList.includes(entryFile)) {
       throw new Error(`[doc-source] ${place} names a doc page the workspace holds already: ${entryFile}`);
     }
@@ -689,7 +708,7 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
         text: docPage.alias,
         children: treeOfRootGet(sidePanelRoot, index),
         docPageAlias: docPage.alias,
-        docPageSection: { alias: docPage.alias, title: docPage.title, isTemporary: docPage.isTemporary, isFirst: index === 0 },
+        docPageSection: { alias: docPage.alias, title: docPage.title, isTemporary: docPage.isTemporary, packageName: docPage.packageName, isFirst: index === 0 },
       };
       if (sidePanelRoot) {
         node.includeSource = { ...sidePanelRoot.treeSource, isDocEntry: true, docPageAlias: docPage.alias, isChildrenLocal: false };
@@ -781,6 +800,8 @@ function workspaceInfoBuild(
     title: docPage.title,
     isRoot: docPage.isRoot,
     isTemporary: docPage.isTemporary,
+    packageName: docPage.packageName,
+    isReadOnly: docPage.isReadOnly,
     rootList: docPage.rootList.map((root) => ({ alias: root.alias, path: relative(root.pathRule) || '.', kind: root.kind })),
     mentionList: docPage.mentionList.map((mention) => ({
       alias: mention.alias,
@@ -837,13 +858,18 @@ function docPageRegister(entryFile: string, mention: DocPageMention, isRoot: boo
         + ` (${mentionPlaceGet(docPageOther.mentionList[0], context)}); give ${fileRelativeGet(entryFile, context.configDir)} another alias`,
     );
   }
+  const dirPage = docPageDirGet(entryFile);
+  const packageName = docPackageNameOfFolderGet(dirPage);
   const docPage: DocPageLoaded = {
     alias: mention.alias,
     entryFile,
-    dirPage: docPageDirGet(entryFile),
+    dirPage,
     title: '',
     isRoot,
     isTemporary: false,
+    packageName,
+    isReadOnly: packageName !== '',
+    packageList: [],
     rootList: [],
     mentionList: [mention],
     asset: undefined,
@@ -922,8 +948,21 @@ function fileLoad(filePath: string, context: LoadContext, entryOwnerFrom: string
     context.entryFileList.push(filePathResolved);
     docPage.title = file.entry.title ?? '';
     for (const key of ENTRY_FILE_SECTION_KEY_LIST) docPage[key] = entryFileSectionRead(content[key], key, filePathResolved);
-  } else if (ENTRY_FILE_SECTION_KEY_LIST.some((key) => content[key] !== undefined)) {
-    const key = ENTRY_FILE_SECTION_KEY_LIST.find((keyItem) => content[keyItem] !== undefined);
+    docPage.packageList = docPackageSpecListRead(content.packageList, path.dirname(filePathResolved), filePathResolved);
+    // a package treated as a doc page: its components and templates are the
+    // package's (comp-mdx/, service-template-*/ at its top, read as those of a
+    // package), it has no folders of its own of those kinds and no instances
+    if (docPage.packageName) {
+      for (const key of ['comp', 'service', 'packageList'] as const) {
+        if (content[key] !== undefined) {
+          throw new Error(`[doc-source] "${key}" is not for a package treated as a doc page (doc_page_impl_package.md#a-package-as-a-doc-page; packageDependList of ${PACKAGE_CONFIG_FILE_NAME} names what it needs): ${filePathResolved}`);
+        }
+      }
+      docPage.comp = false;
+      docPage.service = false;
+    }
+  } else if (ENTRY_FILE_SECTION_KEY_LIST.some((key) => content[key] !== undefined) || content.packageList !== undefined) {
+    const key = ENTRY_FILE_SECTION_KEY_LIST.find((keyItem) => content[keyItem] !== undefined) ?? 'packageList';
     throw new Error(
       `[doc-source] "${key}" belongs to the entry of a doc page, not to a resource file: ${filePathResolved}`,
     );

@@ -1,0 +1,38 @@
+version: 1
+viewport:
+  size: { height: 460 }
+nodes:
+  - id: account
+    renderer: { type: dataverse-table }
+    position: { x: 0, y: 0 }
+    data:
+      name: Account
+      nameLogical: account
+      columns:
+        - { id: accountid, name: Account, nameLogical: accountid, type: Unique identifier, key: PK, isRequired: true }
+        - { id: name, name: Account Name, nameLogical: name, type: Text, isRequired: true }
+    handles:
+      - id: accountid-right
+        direction: both
+        anchor: { target: column/accountid, side: right }
+  - id: incident
+    renderer: { type: dataverse-table }
+    position: { x: 520, y: 0 }
+    data:
+      name: Case
+      nameLogical: incident
+      description: A customer service request.
+      columns:
+        - { id: incidentid, name: Case, nameLogical: incidentid, type: Unique identifier, key: PK, isRequired: true }
+        - { id: title, name: Case Title, nameLogical: title, type: Text, isRequired: true }
+        - { id: customerid, name: Customer, nameLogical: customerid, type: Customer, key: FK }
+        - { id: prioritycode, name: Priority, nameLogical: prioritycode, type: Choice }
+    handles:
+      - id: customerid-left
+        direction: both
+        anchor: { target: column/customerid, side: left }
+connections:
+  - id: case-customer
+    source: { nodeId: account, handleId: accountid-right }
+    target: { nodeId: incident, handleId: customerid-left }
+    label: { text: customer }

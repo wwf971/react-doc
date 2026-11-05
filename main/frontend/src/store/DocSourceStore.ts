@@ -124,6 +124,9 @@ export type DocPageInfo = {
   dirPage: string;
   title: string;
   isRoot: boolean;
+  // a package treated as a doc page: its name; nothing is written into its folder
+  packageName?: string;
+  isReadOnly?: boolean;
   rootList: { alias: string; path: string; kind: 'folder' | 'file' }[];
   mentionList: { alias: string; isAliasGiven: boolean; fromAlias: string; file: string; place: string }[];
 };
@@ -256,6 +259,20 @@ export class DocSourceStore {
 
   docPageGet(alias: string): DocPageInfo | undefined {
     return this.docPageList.find((docPage) => docPage.alias === alias);
+  }
+
+  // why a doc page cannot be written ('' when it can): it is a package
+  // treated as a doc page (doc_page_impl_package.md#a-package-as-a-doc-page).
+  // the server refuses such a write whatever asks; this is for the controls
+  docPageReadOnlyReasonGet(alias: string): string {
+    const docPage = this.docPageGet(alias);
+    return docPage?.isReadOnly ? `the doc page "${alias}" is read-only: it is the package ${docPage.packageName}` : '';
+  }
+
+  // the same for the doc page a source path lies in
+  pathReadOnlyReasonGet(pathSource: string): string {
+    const alias = /^~([^:/]+):/.exec(pathSource)?.[1];
+    return alias ? this.docPageReadOnlyReasonGet(alias) : '';
   }
 
   // the main doc page: the first root doc page of the workspace, whose

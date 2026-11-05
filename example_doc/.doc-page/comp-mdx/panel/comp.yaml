@@ -1,5 +1,5 @@
 # the panels of the demonstration: a group of the component folder
-# (comp-mdx/panel/), its manifest beside them. TextPanelDemo is host
+# (comp-mdx/panel/), its manifest beside them. DocPanelStandalone is host
 # configuration (compConfigHost.panelComponent, imported by main.jsx), not
 # a document component, so it is not listed.
 compList:

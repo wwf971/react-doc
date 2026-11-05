@@ -42,19 +42,6 @@ rules:
     alias: req                  # the folder main/, written ~req/...
     path: ../../main/doc_page_req.md
     tags: [reference]           # tags every file this rule collects
-  # the documents written for authors of the package cloud-dev-vis (the
-  # diagrams the demonstration shows): they live in the package's doc/
-  # folder beside its design documents, and a package's documents are not
-  # part of a doc page by themselves (main/doc_page_impl_package.md), so the
-  # demonstration collects the two it demonstrates, under the alias of the
-  # package, written ~cloud-dev-vis/...; the design documents beside them
-  # are not collected
-  - action: addFile
-    alias: cloud-dev-vis
-    path: ../../package/cloud-dev-vis/doc/comp-diagram-er.md
-  - action: addFile
-    alias: cloud-dev-vis
-    path: ../../package/cloud-dev-vis/doc/comp-powerplatform.md
   # the images of the demonstration: referenced files, bundled into a build
   # only when a document or an asset version uses them
   - action: addFolder

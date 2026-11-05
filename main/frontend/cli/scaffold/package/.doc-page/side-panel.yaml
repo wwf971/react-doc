@@ -1,0 +1,6 @@
+# The side panel of the package's doc page.
+sidePanelById:
+  main:
+    tree:
+      - doc: ~{{name}}/doc/README.md
+        text: {{title}}

@@ -71,6 +71,8 @@ import { sourcePathLocalGet } from '../src/lib/doc-source-path.js';
 //   -3  the path is not an editable document of the collected source, the
 //       file is not a loaded side-panel file, or the key path is not inside a
 //       config declaration the configuration loads
+//   -4  the file belongs to a read-only doc page (a package treated as a doc
+//       page, doc_page_impl_package.md#a-package-as-a-doc-page)
 //
 // only md/mdx files of the current file manifest can be read or written, so
 // the source rules of config.yaml also bound what the page may edit. only
@@ -135,6 +137,8 @@ export type DocEditWorkspaceOptions = {
 export type DocEditMiddlewareOptions = {
   endpoint: string;
   fileEntryListGet: () => DocEditFileEntry[];
+  // why a file may not be written ('' when it may): it is in a read-only doc page
+  readOnlyReasonGet?: (absPath: string) => string;
   sidePanel?: DocEditSidePanelOptions;
   config?: DocEditConfigOptions;
   workspace?: DocEditWorkspaceOptions;
@@ -161,6 +165,14 @@ export function docEditMiddlewareCreate(options: DocEditMiddlewareOptions): Midd
       jsonSend(res, 500, { code: -1, data: null, message: String(error?.message ?? error) });
     });
   };
+}
+
+// a write into a read-only doc page answered with its reason; true when refused
+function readOnlySend(res: ServerResponse, options: DocEditMiddlewareOptions, absPath: string): boolean {
+  const reason = options.readOnlyReasonGet?.(absPath) ?? '';
+  if (reason === '') return false;
+  jsonSend(res, 403, { code: -4, data: null, message: reason });
+  return true;
 }
 
 async function routeHandle(
@@ -196,6 +208,7 @@ async function routeHandle(
       jsonSend(res, 404, { code: -3, data: null, message: `not an editable document of the source: ${internalPath}` });
       return;
     }
+    if (readOnlySend(res, options, entry.absPath)) return;
     const operationList = Array.isArray(body?.operationList) ? body.operationList : undefined;
     const isOperationValid = operationList
       ? operationList.length > 0 && operationList.every((operation: unknown) => lineOperationIsValid(operation))
@@ -253,13 +266,13 @@ async function routeHandle(
 
   if (req.method === 'POST' && route === '/side-panel/text') {
     const body = await jsonBodyRead(req);
-    sidePanelTextRouteHandle(res, body, options.sidePanel);
+    sidePanelTextRouteHandle(res, body, options.sidePanel, options);
     return;
   }
 
   if (req.method === 'POST' && route === '/side-panel/move') {
     const body = await jsonBodyRead(req);
-    sidePanelMoveRouteHandle(res, body, options.sidePanel);
+    sidePanelMoveRouteHandle(res, body, options.sidePanel, options);
     return;
   }
 
@@ -271,7 +284,7 @@ async function routeHandle(
 
   if (req.method === 'POST' && route === '/config/value') {
     const body = await jsonBodyRead(req);
-    configValueRouteHandle(res, body, options.config);
+    configValueRouteHandle(res, body, options.config, options);
     return;
   }
 
@@ -331,12 +344,13 @@ function workspaceEditRouteHandle(res: ServerResponse, body: any, workspace: Doc
 //               declares it; when the file says otherwise now, the write is
 //               refused (-2)
 // the previous file is kept as {file}.bak before the write.
-function configValueRouteHandle(res: ServerResponse, body: any, config: DocEditConfigOptions | undefined) {
+function configValueRouteHandle(res: ServerResponse, body: any, config: DocEditConfigOptions | undefined, options: DocEditMiddlewareOptions) {
   if (!config) {
     jsonSend(res, 404, { code: -3, data: null, message: 'the page has no config declaration to write' });
     return;
   }
   const file = String(body?.file ?? '');
+  if (readOnlySend(res, options, path.resolve(config.configDir, file))) return;
   const keyPath = body?.keyPath;
   if (!Array.isArray(keyPath) || !keyPath.every((step) => (typeof step === 'string' && step.trim() !== '') || Number.isInteger(step))) {
     jsonSend(res, 400, { code: -1, data: null, message: 'keyPath must be a list of keys and list indexes' });
@@ -413,7 +427,7 @@ function fileWriteWithBackup(filePath: string, text: string) {
 // annotated it (relative to the config directory) and must be one of the
 // files the configuration loads; the operation is built from the parsed
 // yaml and applied line by line, so the rest of the file is untouched.
-function sidePanelTextRouteHandle(res: ServerResponse, body: any, sidePanel: DocEditSidePanelOptions | undefined) {
+function sidePanelTextRouteHandle(res: ServerResponse, body: any, sidePanel: DocEditSidePanelOptions | undefined, options: DocEditMiddlewareOptions) {
   if (!sidePanel) {
     jsonSend(res, 404, { code: -3, data: null, message: 'the page has no side panel file' });
     return;
@@ -424,6 +438,7 @@ function sidePanelTextRouteHandle(res: ServerResponse, body: any, sidePanel: Doc
     jsonSend(res, 404, { code: -3, data: null, message: `not a side panel file of the configuration: ${file}` });
     return;
   }
+  if (readOnlySend(res, options, filePath)) return;
   const textCurrent = fs.readFileSync(filePath, 'utf-8');
   const result = sidePanelTextOperationBuild(textCurrent, {
     nodePath: body?.nodePath,
@@ -449,7 +464,7 @@ function sidePanelTextRouteHandle(res: ServerResponse, body: any, sidePanel: Doc
 // written unless every file of the move can be; each written file is kept
 // as {file}.bak before. the answer names every file changed with its text
 // before and after, what a history of the page records to undo the move.
-function sidePanelMoveRouteHandle(res: ServerResponse, body: any, sidePanel: DocEditSidePanelOptions | undefined) {
+function sidePanelMoveRouteHandle(res: ServerResponse, body: any, sidePanel: DocEditSidePanelOptions | undefined, options: DocEditMiddlewareOptions) {
   if (!sidePanel) {
     jsonSend(res, 404, { code: -3, data: null, message: 'the page has no side panel file' });
     return;
@@ -468,6 +483,7 @@ function sidePanelMoveRouteHandle(res: ServerResponse, body: any, sidePanel: Doc
       jsonSend(res, 404, { code: -3, data: null, message: `not a side panel file of the configuration: ${file}` });
       return;
     }
+    if (readOnlySend(res, options, filePath)) return;
     const text = fs.readFileSync(filePath, 'utf-8');
     const hashBase = body?.hashBaseByFile?.[file];
     if (typeof hashBase !== 'string' || hashBase !== textHashGet(text)) {
@@ -536,6 +552,7 @@ function sidePanelNodeRouteHandle(res: ServerResponse, body: any, options: DocEd
     jsonSend(res, 404, { code: -3, data: null, message: `not a side panel file of the configuration: ${file}` });
     return;
   }
+  if (readOnlySend(res, options, filePath)) return;
   const request = body?.request;
   if (!sidePanelNodeRequestIsValid(request)) {
     jsonSend(res, 400, { code: -1, data: null, message: 'request needs an action (insert | remove | bind) with its yaml addresses' });

@@ -75,6 +75,8 @@ import {
 //   -1  bad request or unexpected failure
 //   -2  hashBase is not the hash of the head data (changed meanwhile)
 //   -3  store, object or version not found
+//   -4  the object or folder belongs to a read-only doc page (a package treated
+//       as a doc page, doc_page_impl_package.md#a-package-as-a-doc-page)
 //
 // object:  { objectId, name, lang, contentType, fileExt, component?, owner?, saveMode?, versionIdHead, isDeleted, isLocked,
 //            timeCreated, folder, dirName, groupPath,
@@ -158,7 +160,7 @@ export function docAssetMiddlewareCreate(options: {
   };
 }
 
-const statusByCode: Record<number, number> = { [-1]: 400, [-2]: 409, [-3]: 404 };
+const statusByCode: Record<number, number> = { [-1]: 400, [-2]: 409, [-3]: 404, [-4]: 403 };
 
 // the routes of the frontend object service layer: the store and the
 // declarations read for the request, the write, then the declarations read

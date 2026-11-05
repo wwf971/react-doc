@@ -61,3 +61,8 @@ sidePanelById:
         include: { dir: ../sub-doc, alias: sub }
       - doc: ~req/doc_page_req.md
         text: Requirement
+
+# the packages its documents use, found by name (main/doc_page_impl_package.md#importing-packages):
+# ObjectView nodes of a DiagramER in object-registry.md, the diagrams of its index
+packageList:
+  - name: cloud-dev-vis

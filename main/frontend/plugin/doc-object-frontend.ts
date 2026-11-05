@@ -75,6 +75,8 @@ export type ObjectFrontendType = {
 export type ObjectFrontendItem = { id: string; entry: string; docPageAlias: string };
 
 export type ObjectFrontendDocPage = {
+  // a package treated as a doc page: its objects are read, never written
+  isReadOnly?: boolean;
   alias: string;
   // relative to the config directory
   entryFile: string;
@@ -97,7 +99,7 @@ export type ObjectFrontendConfig = {
   pathList: string[];
 };
 
-export type ObjectFrontendDocPageInput = { alias: string; entryFile: string; objectFrontend?: EntryFileSection };
+export type ObjectFrontendDocPageInput = { alias: string; entryFile: string; objectFrontend?: EntryFileSection; isReadOnly?: boolean };
 
 const TOP_KEY_LIST = ['typeList', 'objectList'];
 const TYPE_KEY_LIST = ['id', 'label', 'description', 'icon', 'extendList', 'summaryKeyList', 'modeList'];
@@ -124,6 +126,7 @@ export function objectFrontendConfigOfDocPageListGet(
       ? path.resolve(path.dirname(input.entryFile), section.file)
       : path.join(path.dirname(input.entryFile), OBJECT_FRONTEND_CONFIG_FILE_NAME);
     const docPage: ObjectFrontendDocPage = {
+      isReadOnly: input.isReadOnly === true,
       alias: input.alias,
       entryFile: pathRelativeGet(input.entryFile, configDir),
       file: pathRelativeGet(file, configDir),
@@ -571,6 +574,7 @@ function docPageWritableGet(config: ObjectFrontendConfig, alias: string): Object
   const docPage = config.docPageList.find((item) => item.alias === alias);
   if (!docPage) throw new AssetError(-3, `not a doc page of this page: ${alias}`);
   if (docPage.isDisabled) throw new AssetError(-1, `the doc page ${alias} has no frontend objects (objectFrontend: false of its entry)`);
+  if (docPage.isReadOnly) throw new AssetError(-4, `the frontend objects of the doc page ${alias} are read-only: it is a package`);
   return docPage;
 }
 

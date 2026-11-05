@@ -1,0 +1,13 @@
+version: 1
+node:
+  id: contact
+  renderer: { type: dataverse-table }
+  data:
+    name: Contact
+    nameLogical: contact
+    description: A person the organization does business with.
+    columns:
+      - { id: contactid, name: Contact, nameLogical: contactid, type: Unique identifier, key: PK, isRequired: true }
+      - { id: fullname, name: Full Name, nameLogical: fullname, type: Text }
+      - { id: emailaddress1, name: Email, nameLogical: emailaddress1, type: Text, description: Primary email address }
+      - { id: parentcustomerid, name: Company Name, nameLogical: parentcustomerid, type: Customer, key: FK }

@@ -18,9 +18,20 @@ import { parse as parseYaml } from 'yaml';
 //     service-template-app/    its app service templates
 //     service-template-infra/  its infra service templates
 //
+//     .doc-page/               optional: makes the package a doc page too (below)
+//
 // the folders but doc/ may be absent (nothing of that kind). a package holds
-// no service instances and no asset objects: those are state, and belong to
-// a doc page.
+// no service instances: those are state, and belong to a doc page.
+//
+// a package with a .doc-page/entry.yaml can also be treated as a doc page:
+// listed in a workspace, mounted for a while, or launched alone, showing the
+// documents that demonstrate it. it is then a read-only doc page: nothing of
+// the page writes into its folder (doc_page_impl_package.md#a-package-as-a-doc-page).
+//
+// a package is named by its folder ({ dir }) or by its name ({ name }), which
+// is looked for in the search folders (config.yaml packageSearchDirList, the
+// command line's --package-dir), then in node_modules/ upward from the file
+// naming it.
 
 export const PACKAGE_CONFIG_FILE_NAME = 'doc-package.yaml';
 export const PACKAGE_DOC_ROOT_FILE = 'doc/README.md';
@@ -32,9 +43,10 @@ export const PACKAGE_SERVICE_TEMPLATE_FOLDER_LIST: { path: string; kind: 'app' |
 const PACKAGE_CONFIG_KEY_LIST = ['name', 'description', 'packageDependList'];
 const PACKAGE_NAME_REGEX = /^[a-z][a-z0-9-]*$/;
 
-// one package as the workspace names it: { dir }, relative to the file
-// that names it
-export type DocPackageSpec = { dir: string };
+// one package as the workspace names it: { dir }, relative to the file that
+// names it, or { name }, found by docPackageDirFind. dirBase: the folder of
+// the file naming it, where the search of node_modules/ starts
+export type DocPackageSpec = { dir: string; name?: undefined } | { name: string; dir?: undefined; dirBase: string };
 
 export type DocPackageLoaded = {
   name: string;
@@ -48,24 +60,67 @@ export type DocPackageLoaded = {
   place: string;
 };
 
-// the list of packages a workspace (or config, for one doc page) writes:
-// [{ dir }], paths relative to dirBase
+// the list of packages a workspace, a doc page entry (or config, for one doc
+// page) writes: [{ dir } | { name }], paths relative to dirBase
 export function docPackageSpecListRead(value: any, dirBase: string, place: string): DocPackageSpec[] {
   if (value === undefined) return [];
-  if (!Array.isArray(value)) throw new Error(`[doc-package] ${place}: packageList is a list of { dir }`);
+  if (!Array.isArray(value)) throw new Error(`[doc-package] ${place}: packageList is a list of { dir } or { name }`);
   return value.map((item: any, index: number) => {
-    if (!item || typeof item !== 'object' || Array.isArray(item) || typeof item.dir !== 'string' || item.dir.trim() === '' || Object.keys(item).length !== 1) {
-      throw new Error(`[doc-package] ${place} packageList[${index}]: a package is { dir }, the path of its folder`);
-    }
-    return { dir: path.resolve(dirBase, item.dir.trim()) };
+    const isMapping = item && typeof item === 'object' && !Array.isArray(item) && Object.keys(item).length === 1;
+    if (isMapping && typeof item.dir === 'string' && item.dir.trim() !== '') return { dir: path.resolve(dirBase, item.dir.trim()) };
+    if (isMapping && typeof item.name === 'string' && PACKAGE_NAME_REGEX.test(item.name)) return { name: item.name, dirBase };
+    throw new Error(`[doc-package] ${place} packageList[${index}]: a package is { dir }, the path of its folder, or { name }, found in the search folders`);
   });
+}
+
+// the folder of a package named by its name: the first of
+//   {search folder}/{name}            of the search folders, in order
+//   {folder}/node_modules/{name}      upward from dirBase
+// a folder counts when its doc-package.yaml holds that name
+export function docPackageDirFind(name: string, searchDirList: string[], dirBase: string, place: string): string {
+  const candidateList = searchDirList.map((dir) => path.join(dir, name));
+  for (let dir = dirBase; ; dir = path.dirname(dir)) {
+    candidateList.push(path.join(dir, 'node_modules', name));
+    if (dir === path.dirname(dir)) break;
+  }
+  for (const candidate of candidateList) {
+    const configFile = path.join(candidate, PACKAGE_CONFIG_FILE_NAME);
+    if (!fs.existsSync(configFile)) continue;
+    try {
+      if (parseYaml(fs.readFileSync(configFile, 'utf-8'))?.name === name) return candidate;
+    } catch {
+      // read again, with its message, when the folder is named by its path
+    }
+  }
+  throw new Error(
+    `[doc-package] ${place}: no package named "${name}" in the search folders (${searchDirList.join(', ') || 'none'}) nor in node_modules/ upward from ${dirBase};`
+      + ` name it by its folder ({ dir }), or give its folder with config packageSearchDirList or the command line's --package-dir`,
+  );
+}
+
+export function docPackageSpecDirGet(spec: DocPackageSpec, searchDirList: string[], place: string): string {
+  return spec.dir ?? docPackageDirFind(spec.name!, searchDirList, spec.dirBase, place);
+}
+
+// the name a folder gives itself as a package ('' when it is not a package,
+// or its config file cannot be read): a doc page folder asks, since a package
+// listed among the doc pages is annotated and read-only
+export function docPackageNameOfFolderGet(dir: string): string {
+  const configFile = path.join(dir, PACKAGE_CONFIG_FILE_NAME);
+  if (!fs.existsSync(configFile)) return '';
+  try {
+    const name = parseYaml(fs.readFileSync(configFile, 'utf-8'))?.name;
+    return typeof name === 'string' ? name : '';
+  } catch {
+    return '';
+  }
 }
 
 // every package the workspace needs, each once: the ones it names and,
 // before each, the ones that one needs (depth first), so a package comes
 // after the packages it depends on. two folders with one name, a cycle, or
 // a package that breaks the rules: an error
-export function docPackageListLoad(specList: DocPackageSpec[], place: string): DocPackageLoaded[] {
+export function docPackageListLoad(specList: DocPackageSpec[], place: string, searchDirList: string[] = []): DocPackageLoaded[] {
   const result: DocPackageLoaded[] = [];
   const packageByDir = new Map<string, DocPackageLoaded>();
   const packageByName = new Map<string, DocPackageLoaded>();
@@ -74,7 +129,7 @@ export function docPackageListLoad(specList: DocPackageSpec[], place: string): D
     if (chain.includes(dir)) {
       throw new Error(`[doc-package] the packages depend on each other in a cycle: ${[...chain, dir].map((item) => path.basename(item)).join(' -> ')}`);
     }
-    const loaded = docPackageRead(dir, placeNamed);
+    const loaded = docPackageRead(dir, placeNamed, searchDirList);
     for (const dependDir of loaded.dependDirList) visit(dependDir, loaded.configFile, [...chain, dir]);
     const samePackage = packageByName.get(loaded.name);
     if (samePackage) {
@@ -84,12 +139,12 @@ export function docPackageListLoad(specList: DocPackageSpec[], place: string): D
     packageByName.set(loaded.name, loaded);
     result.push(loaded);
   };
-  for (const spec of specList) visit(spec.dir, place, []);
+  for (const spec of specList) visit(docPackageSpecDirGet(spec, searchDirList, place), place, []);
   return result;
 }
 
 // one package folder, its config checked
-export function docPackageRead(dir: string, place: string): DocPackageLoaded {
+export function docPackageRead(dir: string, place: string, searchDirList: string[] = []): DocPackageLoaded {
   const configFile = path.join(dir, PACKAGE_CONFIG_FILE_NAME);
   if (!fs.existsSync(configFile)) {
     throw new Error(`[doc-package] ${place}: no package at ${dir} (a package has ${PACKAGE_CONFIG_FILE_NAME} at its root)`);
@@ -121,7 +176,7 @@ export function docPackageRead(dir: string, place: string): DocPackageLoaded {
     description: content.description.trim(),
     dir,
     configFile,
-    dependDirList: dependSpecList.map((spec) => spec.dir),
+    dependDirList: dependSpecList.map((spec) => docPackageSpecDirGet(spec, searchDirList, configFile)),
     place,
   };
 }

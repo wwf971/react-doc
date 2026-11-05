@@ -158,7 +158,7 @@ export function workspaceGraphBuild(workspace, packageListInput = [], { isDocPag
       // the workspace has a handle below (doc pages) and one above (packages)
       ...(include.fromAlias === '' ? { sourceHandle: 'down' } : {}),
       type: 'smoothstep',
-      label: include.fromAlias === '' ? (include.isAliasGiven ? include.alias : `${include.alias} (folder name)`) : `as ${include.alias}`,
+      label: include.fromAlias === '' ? (include.isAliasGiven ? include.alias : `${include.alias} (default)`) : `as ${include.alias}`,
       animated: false,
       className: isConflict ? 'is-conflict' : '',
       data: { ...include, isConflict },

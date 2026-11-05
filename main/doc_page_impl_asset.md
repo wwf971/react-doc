@@ -92,6 +92,9 @@ A lock protects what an author wants kept from a click in the panel, on two leve
 
 The store enforces both (`AssetError` -1 with the reason), so a lock holds whatever client writes; the panel greys out what a lock forbids and says why. Setting or removing a lock is recorded as a `lock` / `unlock` event.
 
+
+Beyond the locks of an object, a whole folder can be read-only: the folder of a [package treated as a doc page](doc_page_impl_package.md#a-package-as-a-doc-page). Every write of the store into it is refused with code `-4`, whichever way it comes (`objectWriteGuard`, `folderWritableCheck`), its config file included; its objects are read like any other, and the Asset service tab marks it.
+
 ### Deleting
 
 Deleting is of two kinds too. A version that is not the head can be deleted; the versions made from it are relinked to its predecessors, so the graph stays connected and the history of what remains stays readable. An object is deleted by a mark (`isDeleted`): its files stay, references to it keep resolving, and the mark is undone by restoring the object; the mark exists so that a reference is never broken by a click, and so that removing the files is a deliberate step taken outside the page (a cleanup of the folder). The head cannot be deleted; moving the head is a separate action (checkout).

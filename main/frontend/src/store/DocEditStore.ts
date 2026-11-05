@@ -489,6 +489,7 @@ export class DocEditStore {
   // and synthesized source-file pages have no file of their own.
   docIsEditable(path: string): boolean {
     if (!this.isAvailable || !path) return false;
+    if (this.sourceStore.pathReadOnlyReasonGet(path) !== '') return false;
     const entry = this.sourceStore.entryByInternalPath.get(path);
     return Boolean(entry) && (entry.ext === 'md' || entry.ext === 'mdx');
   }

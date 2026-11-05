@@ -1,0 +1,14 @@
+# The doc page of the package: what makes a package something that can be read
+# and launched (react-doc dev package/cloud-dev-vis), or listed in a workspace,
+# beside being imported. A package treated as a doc page is read-only: nothing
+# of the page writes into this folder. Its components and templates are the
+# package's own, read from comp-mdx/ and service-template-*/ at its top.
+# design: main/doc_page_impl_package.md#a-package-as-a-doc-page
+docEntry:
+  title: cloud-dev-vis
+  homeDoc: ~cloud-dev-vis/doc/README.md
+source:
+  file: ./source.yaml
+sidePanelById:
+  main:
+    file: ./side-panel.yaml

@@ -3,9 +3,9 @@ import { ConfigPanel, EditableValueComp, Menu, PathBar, PropEditor, ScrollHorizo
 import * as docSource from 'virtual:doc-source';
 import { DocPageMdx } from './DocPageMdx.jsx';
 // the panel component that frames the popups of the page is host
-// configuration (compConfigHost.panelComponent), not a document component:
-// the demonstration keeps it beside its components, and imports it here
-import { TextPanelDemo } from '../../../example_doc/.doc-page/comp-mdx/panel/TextPanelDemo.jsx';
+// configuration (compConfigHost.panelComponent), not a document component;
+// this standalone entry, which every launch uses, has one of its own
+import { DocPanelStandalone } from '../../comp-doc/popup/DocPanelStandalone.jsx';
 import {
   indexLanguageListGet,
   indexStructuredDataGet,
@@ -79,7 +79,7 @@ createRoot(document.getElementById('root')).render(
       compConfigHost: {
         mermaidLoad: () => import('mermaid'),
         univerLoad: () => import('./univer-load.js'),
-        panelComponent: TextPanelDemo,
+        panelComponent: DocPanelStandalone,
       },
       // the language selector and the page/part index switch both render
       // through this consumer-injected segmented control; the settings panel

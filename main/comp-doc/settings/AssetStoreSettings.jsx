@@ -151,6 +151,7 @@ const DocPageFolderState = observer(function DocPageFolderState({ entryFile, pro
           <span className="doc-settings-asset-path">{folder.path}</span>
           {folder.isDefault ? <span className="doc-badge-outline" data-primary="">store default</span> : null}
           {folder.isExists ? null : <span className="doc-badge-outline" data-error="">not on disk</span>}
+          {folder.isReadOnly ? <span className="doc-badge-outline" title="The folder of a package treated as a doc page: the store refuses every write to it">read-only</span> : null}
           <span className="doc-settings-asset-count">{folder.objectCount} object{folder.objectCount === 1 ? '' : 's'}</span>
         </span>
       ))}

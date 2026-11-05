@@ -304,7 +304,7 @@ Components that display authored Markdown inside themselves (`BlockSimple`, `Blo
 
 ### The panel contract
 
-`data.title`; `config.isPopup` (a modal dialog over the page), `config.isCloseVisible`, `config.className` / `config.bodyClassName`; `headerRightContent`, placed before the panel's own buttons; `content`; and the event `closeRequest`. A dialog sits at z-index 210; the menus a component's engine portals to the body must be above that (Univer's are at about 1080). `TextPanelDemo` of the example application implements the whole contract.
+`data.title`; `config.isPopup` (a modal dialog over the page), `config.isCloseVisible`, `config.className` / `config.bodyClassName`; `headerRightContent`, placed before the panel's own buttons; `content`; and the event `closeRequest`. A dialog sits at z-index 210; the menus a component's engine portals to the body must be above that (Univer's are at about 1080). `DocPanelStandalone` of the example application implements the whole contract.
 
 The panel's geometry is the caller's state, like everything else it shows, so it survives the panel's content being replaced; the panel only asks for a change:
 

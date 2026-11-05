@@ -3,9 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { DocCliError, docCliRun, docInit } from './doc-cli.js';
+import { DocCliError, docCliRun, docInit, docLaunchBuild, docMountRead, docTargetRead } from './doc-cli.js';
 import { docPackageRead } from '../plugin/doc-package.ts';
-import { docSourcePlugin } from '../plugin/doc-source.ts';
+import { docSourcePlugin, loadConfigDoc } from '../plugin/doc-source.ts';
+import { assetConfigOfDocPageListGet, assetStoreCreate } from '../plugin/doc-asset-store.ts';
 
 // the command line of the package (doc_page_impl_cli.md): what `init`
 // writes is loaded by the page itself, so a scaffold that drifts from the
@@ -85,13 +86,13 @@ test('--folder-empty writes the managed folders, with what the scaffold has in t
   assert.ok(plugin.load('\0virtual:doc-source').includes('~full:full/index.md'));
   // the package: its content folders
   docInit('package', 'kit', { cwd: dir, 'folder-empty': true });
-  assert.deepEqual(fs.readdirSync(path.join(dir, 'kit')).sort(), ['comp-mdx', 'doc', 'doc-package.yaml', 'package.json', 'service-template-app', 'service-template-infra']);
+  assert.deepEqual(fs.readdirSync(path.join(dir, 'kit')).sort(), ['.doc-page', 'comp-mdx', 'doc', 'doc-package.yaml', 'package.json', 'service-template-app', 'service-template-infra']);
 });
 
 test('init package: the fixed layout, read by the package loader', () => {
   const dir = dirTempCreate();
   docInit('package', 'chart-kit', { cwd: dir });
-  assert.deepEqual(fs.readdirSync(path.join(dir, 'chart-kit')).sort(), ['doc', 'doc-package.yaml', 'package.json']);
+  assert.deepEqual(fs.readdirSync(path.join(dir, 'chart-kit')).sort(), ['.doc-page', 'doc', 'doc-package.yaml', 'package.json']);
   const loaded = docPackageRead(path.join(dir, 'chart-kit'), 'test');
   assert.equal(loaded.name, 'chart-kit');
   assert.ok(fs.existsSync(path.join(dir, 'chart-kit/doc/README.md')));
@@ -103,7 +104,7 @@ test('the command line: help, an unknown command or kind, and the report of what
   const lineList = [];
   const out = (text) => lineList.push(text);
   assert.equal(docCliRun([], { out }), 0);
-  assert.match(lineList[0], /^react-doc: scaffold/);
+  assert.match(lineList[0], /^react-doc: create and serve/);
   assert.throws(() => docCliRun(['make', 'page', 'x'], { out }), /unknown command "make"/);
   assert.throws(() => docCliRun(['init', 'site', 'x'], { out }), /unknown kind "site"/);
   assert.throws(() => docCliRun(['init', 'page'], { out }), /the folder to create is missing/);
@@ -111,5 +112,191 @@ test('the command line: help, an unknown command or kind, and the report of what
   docCliRun(['init', 'workspace', 'ws', '--page', 'home'], { out, cwd: dir });
   assert.equal(lineList[0], `created a workspace in ${path.join(dir, 'ws')}`);
   assert.ok(lineList.includes(`  written  ${path.join('home', 'index.md')}`));
-  assert.ok(lineList.includes(`    workspace: { dir: ${path.join(dir, 'ws')} }`));
+  assert.ok(lineList.includes(`  serve it: react-doc dev ${path.join(dir, "ws")}`));
+});
+
+// ---------- dev: what a path is, the launch layer, read-only ----------
+
+function packageDocPageCreate(dir, name = 'kit') {
+  docInit('package', name, { cwd: dir });
+  const packageDir = path.join(dir, name);
+  // an asset of the package, for the refusals below
+  const objectDir = path.join(packageDir, '.doc-page', 'asset', 'w55rlprcjdy--shown');
+  fs.mkdirSync(objectDir, { recursive: true });
+  fs.writeFileSync(path.join(objectDir, 'w55rlpr1111.txt'), 'shown');
+  fs.writeFileSync(path.join(objectDir, 'object.yaml'), `objectId: w55rlprcjdy
+name: shown
+lang: text
+contentType: text/plain
+fileExt: txt
+versionIdHead: w55rlpr1111
+isDeleted: false
+isLocked: false
+timeCreated: "2026-01-01"
+versionList:
+  - { versionId: w55rlpr1111, versionIdPrevList: [], time: "2026-01-01", note: "", size: 5, hash: x, isLocked: false, dependencyList: [] }
+eventList: []
+`);
+  return packageDir;
+}
+
+test('dev: a path says what it is; a folder holding two kinds asks', () => {
+  const dir = dirTempCreate();
+  docInit('page', 'notes', { cwd: dir });
+  docInit('workspace', 'team', { cwd: dir });
+  const packageDir = packageDocPageCreate(dir);
+  assert.equal(docTargetRead(path.join(dir, 'notes')).kind, 'page');
+  assert.equal(docTargetRead(path.join(dir, 'team')).kind, 'workspace');
+  assert.equal(docTargetRead(packageDir).kind, 'package');
+  assert.equal(docTargetRead(path.join(dir, 'notes', '.doc-page', 'entry.yaml')).kind, 'page');
+  assert.equal(docTargetRead(path.join(dir, 'team', '.doc-workspace', 'workspace.yaml')).kind, 'workspace');
+  assert.throws(() => docTargetRead(path.join(dir, 'nothing')), /nothing at/);
+  fs.mkdirSync(path.join(dir, 'plain'));
+  assert.throws(() => docTargetRead(path.join(dir, 'plain')), /neither a doc page/);
+  fs.mkdirSync(path.join(dir, 'notes', '.doc-workspace'));
+  fs.writeFileSync(path.join(dir, 'notes', '.doc-workspace', 'workspace.yaml'), 'docPageList: [{ dir: .. }]\n');
+  assert.throws(() => docTargetRead(path.join(dir, 'notes')), /say which with --kind/);
+  assert.equal(docTargetRead(path.join(dir, 'notes'), 'page').kind, 'page');
+  assert.throws(() => docTargetRead(path.join(dir, 'team'), 'package'), /holds no package/);
+});
+
+test('dev: the launch layer names the target and where to find packages and a backend', () => {
+  const dir = dirTempCreate();
+  docInit('page', 'notes', { cwd: dir });
+  docInit('workspace', 'team', { cwd: dir });
+  const packageDir = packageDocPageCreate(dir);
+  const layout = { mode: 'source', dirPackage: path.join(dir, 'shipped') };
+  const launchPage = docLaunchBuild('notes', { cwd: dir, package: [packageDir, 'other'], 'package-dir': ['more'] }, layout);
+  assert.equal(launchPage.kind, 'page');
+  assert.deepEqual(launchPage.docEntry, { dir: path.join(dir, 'notes') });
+  assert.deepEqual(launchPage.packageList, [{ dir: packageDir }, { name: 'other' }]);
+  assert.deepEqual(launchPage.packageSearchDirList, [path.join(dir, 'more'), path.join(dir, 'shipped')]);
+  assert.equal(launchPage.backendConfigFile, undefined, 'no backend unless the doc page keeps a config for one');
+  assert.deepEqual(docLaunchBuild('team', { cwd: dir }, layout).workspace, { dir: path.join(dir, 'team') });
+  assert.throws(() => docLaunchBuild('team', { cwd: dir, package: [packageDir] }, layout), /--package is for a doc page/);
+  assert.throws(() => docLaunchBuild('notes', { cwd: dir, package: ['/no/such'] }, layout), /no package there/);
+  fs.writeFileSync(path.join(dir, 'notes', '.doc-page', 'service-backend.yaml'), 'host: 127.0.0.1\nport: 1\n');
+  assert.equal(docLaunchBuild('notes', { cwd: dir }, layout).backendConfigFile, path.join(dir, 'notes', '.doc-page', 'service-backend.yaml'));
+  assert.equal(docLaunchBuild('notes', { cwd: dir, 'no-backend': true }, layout).backendConfigFile, undefined);
+  assert.throws(() => docLaunchBuild('notes', { cwd: dir, backend: 'x', 'no-backend': true }, layout), /exclude each other/);
+});
+
+test('the launch layer over config.yaml: a virtual workspace, the file\'s workspace and backend left out', () => {
+  const dir = dirTempCreate();
+  docInit('page', 'notes', { cwd: dir });
+  const configFile = path.join(dir, 'config.yaml');
+  fs.writeFileSync(configFile, 'workspace: { dir: ./elsewhere }\nservice: { backendConfigFile: ./none.yaml }\n');
+  const launch = { kind: 'page', target: path.join(dir, 'notes'), mode: 'source', command: 'react-doc dev notes', docEntry: { dir: path.join(dir, 'notes') } };
+  const configDoc = loadConfigDoc(configFile, { launch });
+  assert.equal(configDoc.workspace.isVirtual, true);
+  assert.deepEqual(configDoc.workspace.launch, { kind: 'page', target: path.join(dir, 'notes'), mode: 'source', command: 'react-doc dev notes' });
+  assert.equal(configDoc.service, undefined);
+});
+
+test('dev --mount: what a value says, and what it refuses', () => {
+  const dir = dirTempCreate();
+  docInit('page', 'notes', { cwd: dir });
+  docInit('workspace', 'team', { cwd: dir });
+  const packageDir = packageDocPageCreate(dir);
+  const entryFile = path.join(dir, 'notes', '.doc-page', 'entry.yaml');
+  assert.deepEqual(docMountRead('notes', dir), { dir: path.join(dir, 'notes') });
+  assert.deepEqual(docMountRead('notes/.doc-page/entry.yaml', dir), { file: entryFile });
+  assert.deepEqual(docMountRead(packageDir, dir), { dir: packageDir });
+  assert.deepEqual(docMountRead('notes,alias=n,side-panel=dev', dir), { dir: path.join(dir, 'notes'), alias: 'n', sidePanel: 'dev' });
+  // a comma in a path that is there is part of the path
+  fs.cpSync(path.join(dir, 'notes'), path.join(dir, 'a,b'), { recursive: true });
+  assert.deepEqual(docMountRead('a,b', dir), { dir: path.join(dir, 'a,b') });
+  assert.deepEqual(docMountRead('a,b,alias=n', dir), { dir: path.join(dir, 'a,b'), alias: 'n' });
+  assert.throws(() => docMountRead('notes,alais=n', dir), /"alais=n" is not one of alias=<value>, side-panel=<value>/);
+  assert.throws(() => docMountRead('notes,alias=', dir), /is not one of/);
+  assert.throws(() => docMountRead('notes,alias=a,alias=b', dir), /alias is given twice/);
+  assert.throws(() => docMountRead('notes,alias=two words', dir), /is not one word/);
+  assert.throws(() => docMountRead('/no/such,alias=n', dir), /--mount .*nothing at \/no\/such/);
+  assert.throws(() => docMountRead('team', dir), /holds no page \(it holds: workspace\)/);
+  const layout = { mode: 'source', dirPackage: path.join(dir, 'shipped') };
+  const launch = docLaunchBuild('team', { cwd: dir, mount: ['notes', `${packageDir},alias=kit`] }, layout);
+  assert.deepEqual(launch.mountList, [{ dir: path.join(dir, 'notes') }, { dir: packageDir, alias: 'kit' }]);
+  assert.match(launch.command, /^react-doc dev team --mount notes --mount /);
+  assert.equal(docLaunchBuild('notes', { cwd: dir }, layout).mountList, undefined);
+});
+
+test('the mounts of the launch layer: temporary doc pages after those written, taken once', () => {
+  const dir = dirTempCreate();
+  docInit('workspace', 'team', { cwd: dir });
+  docInit('page', 'notes', { cwd: dir });
+  const packageDir = packageDocPageCreate(dir);
+  const configFile = path.join(dir, 'config.yaml');
+  fs.writeFileSync(configFile, '{}\n');
+  const layerGet = (mountText) => docLaunchBuild('team', { cwd: dir, mount: mountText }, { mode: 'source', dirPackage: path.join(dir, 'shipped') });
+  const launch = layerGet(['notes,alias=n', packageDir]);
+  for (let index = 0; index < 2; index += 1) {
+    const list = loadConfigDoc(configFile, { launch }).docEntry.docPageList;
+    assert.deepEqual(list.map((docPage) => [docPage.alias, docPage.isTemporary]), [['guide', false], ['n', true], [path.basename(packageDir), true]]);
+    assert.equal(list[2].isReadOnly, true, 'a package stays read-only when mounted');
+  }
+  // what it refuses is a reason to stop, naming the mount
+  const refusedGet = (mountText) => {
+    const configFileOther = path.join(fs.mkdtempSync(path.join(dir, 'config-')), 'config.yaml');
+    fs.writeFileSync(configFileOther, '{}\n');
+    return () => loadConfigDoc(configFileOther, { launch: layerGet(mountText) });
+  };
+  assert.throws(refusedGet(['team/guide']), /a temporary mount .*holds already/);
+  assert.throws(refusedGet(['notes,alias=guide']), /a temporary mount .*the alias "guide" names the doc page/);
+  assert.throws(refusedGet(['notes', 'notes,alias=other']), /a temporary mount .*holds already/);
+});
+
+test('a doc page names a package; it is found in the search folders, then in node_modules', () => {
+  const dir = dirTempCreate();
+  docInit('page', 'notes', { cwd: dir });
+  const shelf = path.join(dir, 'shelf');
+  fs.mkdirSync(shelf);
+  packageDocPageCreate(shelf, 'kit');
+  fs.appendFileSync(path.join(dir, 'notes', '.doc-page', 'entry.yaml'), '\npackageList:\n  - name: kit\n');
+  const configFile = path.join(dir, 'config.yaml');
+  fs.writeFileSync(configFile, 'docEntry: { dir: ./notes }\n');
+  assert.throws(() => loadConfigDoc(configFile), /no package named "kit"/);
+  fs.writeFileSync(configFile, 'docEntry: { dir: ./notes }\npackageSearchDirList: [./shelf]\n');
+  assert.deepEqual(loadConfigDoc(configFile).packageList.map((item) => [item.name, item.isWorkspaceNamed]), [['kit', true]]);
+  fs.writeFileSync(configFile, 'docEntry: { dir: ./notes }\n');
+  fs.mkdirSync(path.join(dir, 'node_modules'));
+  fs.renameSync(path.join(shelf, 'kit'), path.join(dir, 'node_modules', 'kit'));
+  assert.deepEqual(loadConfigDoc(configFile).packageList.map((item) => item.name), ['kit']);
+});
+
+test('a package as a doc page: annotated, imported by being there, and read-only in its store', () => {
+  const dir = dirTempCreate();
+  const packageDir = packageDocPageCreate(dir);
+  docInit('page', 'notes', { cwd: dir });
+  const configFile = path.join(dir, 'config.yaml');
+  fs.writeFileSync(configFile, `workspace:
+  docPageList:
+    - { dir: ./notes }
+    - { dir: ./kit }
+`);
+  const configDoc = loadConfigDoc(configFile);
+  const docPage = configDoc.workspace.docPageList.find((item) => item.alias === 'kit');
+  assert.equal(docPage.packageName, 'kit', 'it goes by the name of the package');
+  assert.equal(docPage.isReadOnly, true);
+  assert.equal(configDoc.workspace.docPageList.find((item) => item.alias === 'notes').isReadOnly, false);
+  assert.deepEqual(configDoc.packageList.map((item) => item.name), ['kit']);
+  assert.equal(configDoc.sidePanel.tree.find((node) => node.docPageSection?.alias === 'kit').docPageSection.packageName, 'kit');
+  // the store refuses every write into its folder, whichever way it comes
+  const docPageList = configDoc.docEntry.docPageList;
+  const rootAbsPathByPath = new Map(docPageList.flatMap((item) => item.rootList.map((root) => [`~${item.alias}:${root.alias}`, root.pathAbs ?? path.resolve(path.dirname(item.entryFile), root.path ?? '..')])));
+  const store = assetStoreCreate(assetConfigOfDocPageListGet(docPageList, rootAbsPathByPath, dir));
+  const refused = (write) => assert.throws(write, (error) => error.code === -4 && /read-only/.test(error.message));
+  const folderOfPackage = store.folderList.find((folder) => folder.isReadOnly);
+  assert.ok(folderOfPackage, 'its asset folder is in the store, marked');
+  assert.equal(store.objectGet('w55rlprcjdy').name, 'shown', 'it is read');
+  refused(() => store.objectCreate({ name: 'new', data: Buffer.from('x'), folder: folderOfPackage.path }));
+  refused(() => store.objectUpdate({ objectId: 'w55rlprcjdy', hashBase: 'x', data: Buffer.from('y') }));
+  refused(() => store.objectDelete('w55rlprcjdy'));
+  refused(() => store.objectMetaSet('w55rlprcjdy', { name: 'other' }));
+  refused(() => store.objectLockSet('w55rlprcjdy', true));
+  refused(() => store.folderSet({ configFile: store.config.docPageList.find((item) => item.isReadOnly).configFileRelative, folderList: [folderOfPackage.path] }, rootAbsPathByPath));
+  // the doc page of plain content writes as before
+  assert.equal(store.objectCreate({ name: 'mine', data: Buffer.from('x'), docPath: '~notes:notes/index.md' }).isCreated, true);
+  // a package's entry names no folders of its own for what it has at its top
+  fs.appendFileSync(path.join(packageDir, '.doc-page', 'entry.yaml'), '\ncomp: false\n');
+  assert.throws(() => loadConfigDoc(configFile), /"comp" is not for a package treated as a doc page/);
 });

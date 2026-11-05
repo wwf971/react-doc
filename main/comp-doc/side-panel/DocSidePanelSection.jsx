@@ -33,10 +33,11 @@ export const DocSidePanelSection = observer(function DocSidePanelSection({ item,
         className="doc-side-panel-section-head"
         aria-expanded={isOpen}
         aria-controls={contentId}
-        title={`${section.title ? `${section.title} · ` : ''}doc page "${section.alias}"${section.isTemporary ? ', mounted for now' : ''}: ${isOpen ? 'fold' : 'unfold'} its side panel`}
+        title={`${section.title ? `${section.title} · ` : ''}doc page "${section.alias}"${section.packageName ? ', a package: read-only' : ''}${section.isTemporary ? ', mounted for now' : ''}: ${isOpen ? 'fold' : 'unfold'} its side panel`}
         onClick={() => sidePanelStore.folderOpenSet(item.$id, !isOpen)}
       >
         <span className="doc-side-panel-section-alias">{section.alias}</span>
+        {section.packageName ? <span className="doc-side-panel-section-badge is-package">package</span> : null}
         {section.isTemporary ? <span className="doc-side-panel-section-badge">temporary</span> : null}
         <ChevronDown aria-hidden="true" className="doc-side-panel-section-chevron" />
       </button>

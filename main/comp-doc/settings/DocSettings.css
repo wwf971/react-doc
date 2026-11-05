@@ -561,6 +561,26 @@
   color: var(--color-fd-foreground);
 }
 
+.doc-workspace-virtual-note {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid color-mix(in srgb, #4f46e5 30%, var(--color-fd-border));
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, #4f46e5 6%, transparent);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.doc-workspace-virtual-note .doc-workspace-node-kind {
+  flex: 0 0 auto;
+}
+
+.doc-workspace-virtual-note code {
+  font-size: 0.72rem;
+}
+
 .doc-workspace-settings-line {
   display: flex;
   align-items: center;

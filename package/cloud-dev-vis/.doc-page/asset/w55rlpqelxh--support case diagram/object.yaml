@@ -1,0 +1,24 @@
+objectId: w55rlpqelxh
+name: support case diagram
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+component:
+  name: DiagramER
+versionIdHead: w55rlpqfsth
+isDeleted: false
+isLocked: false
+timeCreated: 20261029_08310299+09
+versionList:
+  - versionId: w55rlpqfsth
+    versionIdPrevList: []
+    time: 20261029_08310299+09
+    note: example data of the diagram examples
+    size: 1448
+    hash: 938f878733068543656749c953f6df7a74b931dd
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261029_08310299+09
+    versionId: w55rlpqfsth

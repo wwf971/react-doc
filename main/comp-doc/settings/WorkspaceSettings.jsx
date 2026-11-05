@@ -64,6 +64,7 @@ export const WorkspaceSettings = observer(function WorkspaceSettings() {
   const { graph } = workspaceStore;
   return (
     <div className="doc-workspace-settings">
+      <WorkspaceVirtualNote />
       <WorkspaceFileEdit />
       <WorkspaceMountEdit />
       <div className="doc-workspace-settings-line">
@@ -156,6 +157,25 @@ const WorkspaceCanvas = observer(function WorkspaceCanvas({ isInPopup = false })
   );
 });
 
+// a virtual workspace says so first, with what it means: what started it, and
+// what it cannot do (doc_page_impl_source.md#the-virtual-workspace)
+const WorkspaceVirtualNote = observer(function WorkspaceVirtualNote() {
+  const { workspaceStore } = useDocStores();
+  const { workspace } = workspaceStore;
+  if (!workspace?.isVirtual) return null;
+  const { launch } = workspace;
+  const kindLabel = launch?.kind === 'package' ? 'a package, as a read-only doc page' : 'one doc page';
+  return (
+    <div className="doc-workspace-virtual-note" role="note">
+      <span className="doc-workspace-node-kind">virtual workspace</span>
+      <span>
+        {launch ? <>Started by <code>{launch.command}</code> for {kindLabel} ({launch.mode} mode). </> : 'config.yaml names one doc page (docEntry). '}
+        There is no workspace file: no list of doc pages to edit, no workspace config and no workspace keyboard map. A doc page can still be mounted for as long as the server runs.
+      </span>
+    </div>
+  );
+});
+
 const WorkspaceNode = observer(function WorkspaceNode({ data, selected }) {
   return (
     <div className={`doc-workspace-node is-workspace${selected ? ' is-selected' : ''}`}>
@@ -164,7 +184,7 @@ const WorkspaceNode = observer(function WorkspaceNode({ data, selected }) {
         <span className="doc-workspace-node-title">{data.title || 'untitled'}</span>
       </div>
       <div className="doc-workspace-node-note">
-        {data.isVirtual ? 'config.yaml names one doc page' : `${data.docPageCount} doc page${data.docPageCount === 1 ? '' : 's'}`}
+        {data.isVirtual ? 'holds one doc page, no workspace file' : `${data.docPageCount} doc page${data.docPageCount === 1 ? '' : 's'}`}
         {data.packageCount > 0 ? ` · ${data.packageCount} package${data.packageCount === 1 ? '' : 's'}` : ''}
       </div>
       <Handle id="up" type="source" position={Position.Top} isConnectable={false} />
@@ -202,6 +222,7 @@ const DocPageNode = observer(function DocPageNode({ data, selected }) {
       <div className="doc-workspace-node-head">
         <span className="doc-workspace-node-alias">{docPage.alias}</span>
         {data.isRoot ? <span className="doc-badge-outline" data-primary="">root</span> : null}
+        {docPage.packageName ? <span className="doc-badge-outline" title="A package treated as a doc page: read-only">package</span> : null}
         {data.aliasConflictCount > 0 ? <span className="doc-badge-outline is-warning">alias conflict</span> : null}
       </div>
       <div className="doc-workspace-node-title">{docPage.title || <span className="doc-workspace-settings-muted">no title</span>}</div>
@@ -248,7 +269,9 @@ const WorkspaceDetail = observer(function WorkspaceDetail() {
         <div className="doc-workspace-settings-detail-title">{workspace?.isVirtual ? 'Virtual workspace' : 'Workspace'}</div>
         <p className="doc-workspace-settings-muted">
           {workspace?.isVirtual
-            ? 'config.yaml names one doc page (docEntry); the page serves it as a workspace holding that doc page alone. A workspace file (config.yaml workspace.file) lists several root-level doc pages.'
+            ? (workspace.launch
+              ? `Started by "${workspace.launch.command}" (${workspace.launch.mode} mode) for ${workspace.launch.target}: the page serves it as a workspace holding it alone, without a workspace file.`
+              : 'config.yaml names one doc page (docEntry); the page serves it as a workspace holding that doc page alone. A workspace file (config.yaml workspace.file) lists several root-level doc pages.')
             : 'The root-level doc pages are the ones the workspace file lists; every other doc page was reached through an include.'}
         </p>
       </div>
@@ -263,8 +286,11 @@ const WorkspaceDetail = observer(function WorkspaceDetail() {
         <span className="doc-workspace-node-alias">{docPage.alias}</span>
         {docPage.title ? <span className="doc-workspace-settings-muted">{docPage.title}</span> : null}
         {docPage.isRoot ? <span className="doc-badge-outline" data-primary="">root</span> : null}
+        {docPage.packageName ? <span className="doc-badge-outline">package</span> : null}
+        {docPage.isReadOnly ? <span className="doc-badge-outline">read-only</span> : null}
       </div>
       <dl className="doc-workspace-settings-grid">
+        {docPage.packageName ? <><dt>package</dt><dd>{docPage.packageName}: its documents, assets and side panels are read, never written from the page</dd></> : null}
         <dt>folder</dt><dd>{docPage.dirPage}</dd>
         <dt>entry</dt><dd>{docPage.entryFile}</dd>
         <dt>roots</dt>
@@ -310,7 +336,7 @@ const WorkspaceFileEdit = observer(function WorkspaceFileEdit() {
       <div className="doc-workspace-edit-head">
         <span className="doc-workspace-edit-title">Workspace file</span>
         <span className="doc-workspace-settings-muted doc-workspace-edit-file" title={workspace?.file || undefined}>
-          {workspace?.file || (workspace?.isVirtual ? 'none: config.yaml names one doc page' : 'written in config.yaml')}
+          {workspace?.file || (workspace?.isVirtual ? 'none: a virtual workspace' : 'written in config.yaml')}
         </span>
         <span className="doc-workspace-settings-spacer" />
         {isRequestOfFile ? <WorkspaceRequestState /> : null}

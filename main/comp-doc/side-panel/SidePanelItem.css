@@ -447,6 +447,11 @@ body[data-side-panel-dragging] #nd-sidebar-mobile {
   white-space: nowrap;
 }
 
+.doc-side-panel-section-badge.is-package {
+  border-color: color-mix(in srgb, #4f46e5 40%, var(--color-fd-border));
+  color: #4338ca;
+}
+
 .doc-side-panel-section-badge {
   flex: 0 0 auto;
   padding: 0 0.3rem;

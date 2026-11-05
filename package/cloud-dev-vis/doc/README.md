@@ -1,6 +1,6 @@
 # cloud-dev-vis
 
-A package of document components for drawing cloud architecture and the design of cloud resources. A workspace imports it by naming its folder (`packageList` of the workspace file); every doc page of that workspace can then write its components. What a package is, and the rules its folder follows, is in [Packages](../../../main/doc_page_impl_package.md).
+A package of document components for drawing cloud architecture and the design of cloud resources. A workspace or a doc page imports it by its folder or its name (`packageList`); every doc page of that workspace can then write its components. What a package is, and the rules its folder follows, is in [Packages](../../../main/doc_page_impl_package.md).
 
 Its main system draws **node cards** joined by **connection lines** on a React Flow canvas: one YAML data format, one look of cards and lines, one visual editor. The components are grouped in **series**, one folder each under `comp-mdx/`:
 
@@ -16,13 +16,15 @@ cloud-dev-vis/
 │   ├── power-platform.md       the Power Platform series, design
 │   ├── comp-diagram-er.md      for authors: DiagramER, CardDiagram, DiagramDataverseEntity, reading and editing
 │   └── comp-powerplatform.md   for authors: DiagramPowerAutomate, DiagramBusinessRule
+├── .doc-page/              makes the package a doc page: entry, source rules, side panel, assets of its demonstrations
 └── comp-mdx/
     ├── card-diagram/       the base series       CardDiagram
+    ├── demo/               what its documents demonstrate with: MigrationStep
     └── power-platform/     Power Platform        DiagramER, DiagramPowerAutomate, DiagramBusinessRule,
                                                   DiagramDataverseEntity
 ```
 
-The two documents written for authors are the usage documents of the components; the demonstration doc page of the project collects them into its MDX Components part (`example_doc/.doc-page/source.yaml`, under the alias `cloud-dev-vis`), so they are rendered with their live examples there while staying with the package they describe.
+The documents written for authors are the usage documents of the components, with live examples. The package is a doc page as well ([A package as a doc page](../../../main/doc_page_impl_package.md#a-package-as-a-doc-page)): `react-doc dev package/cloud-dev-vis` shows them alone, and the workspace of the project lists it beside its demonstration. Read so it is read-only, also its assets.
 
 ## Core concepts
 
@@ -66,6 +68,7 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | --- | --- |
 | `comp-mdx/card-diagram/node-registry.js` | `nodeRegistryBuild`, `nodeRegistrySearch`: the registry mechanism |
 | `comp-mdx/card-diagram/card-diagram-node-registry.js` | the generic kinds (`table`, `operator`) and the registry of `CardDiagram` |
+| `comp-mdx/demo/migration-step/` | a registered node renderer the documents demonstrate |
 | `comp-mdx/card-diagram/CardDiagram.jsx`, `CardStandalone.jsx` | the canvas and the standalone card, and their factories `cardDiagramCompCreate`, `cardStandaloneCompCreate` |
 | `comp-mdx/card-diagram/DiagramERData.js`, `DiagramERStore.js`, `DiagramEdit*.js`, `DiagramRender.jsx` | normalization, the canvas model, the editor's draft and path, the node and edge components (their names keep the `DiagramER` prefix of the series they started in) |
 | `comp-mdx/card-diagram/DiagramEditHistory.js` | `EditHistory`: the history of a draft (steps, typing groups, undo, redo), generic over the state its owner records; `DiagramEditStore` records in it from `changeApply` and `DiagramVisualEdit` offers it in the bar and on the keys |

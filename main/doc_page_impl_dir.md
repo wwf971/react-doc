@@ -2,7 +2,7 @@
 
 # The Doc Page Folder
 
-A doc page is self-contained: the documents it shows, the files that describe it (its entry, source rules, side panels, tags, config), the objects of its asset store, its own components, and its own service templates and instances can all live in one folder, and that folder is what another doc page includes and what a workspace names ([the workspace](doc_page_impl_source.md#the-workspace)). This document describes the recommended layout of such a folder, of a workspace folder, and of a package folder. It is a convention: the page reads any layout an entry file describes, but a folder laid out this way is found by its folder alone, needs no configuration for its asset, component and service folders, and reads the same everywhere. `react-doc init` creates a folder of each kind laid out this way ([The command line](doc_page_impl_cli.md)).
+A doc page is self-contained: the documents it shows, the files that describe it (its entry, source rules, side panels, tags, config), the objects of its asset store, its own components, and its own service templates and instances can all live in one folder, and that folder is what another doc page includes and what a workspace names ([the workspace](doc_page_impl_source.md#the-workspace)). This document describes the recommended layout of such a folder, of a workspace folder, and of a package folder. It is a convention: the page reads any layout an entry file describes, but a folder laid out this way is found by its folder alone, needs no configuration for its asset, component and service folders, and reads the same everywhere. `react-doc init` creates a folder of each kind laid out this way, and `react-doc dev` serves one ([The command line](doc_page_impl_cli.md)).
 
 The idea is the one of an Obsidian vault. A vault is a plain folder of notes, and everything the application keeps about the vault sits in one hidden folder, `.obsidian/`, beside the notes. A doc page folder keeps its documents as plain files and **everything the page manages for it in `.doc-page/`**: its metadata files, and also the folders of what it carries beyond documents, **code and running things** (components that its documents use, services that its dashboards show) and the objects of its asset store, each in a folder of a known name, mounted into the registry of its kind when the doc page is loaded. Opened in a file browser, a doc page folder therefore shows documents and the folders that hold documents, never the folders of the system.
 
@@ -28,6 +28,7 @@ my-doc/                          the doc page folder: give this to a workspace f
     ├── service.yaml             its service folders (optional: the four service-* below otherwise)
     ├── api.yaml                 the apis it declares without code (optional: none otherwise)
     ├── object-frontend.yaml     its frontend objects and their types (optional: none otherwise; made by its first object)
+    │                            (and packageList of the entry: the packages it needs, by name)
     ├── service-backend.yaml     the config of the service backend, when the page is the one a backend is started for
     ├── hotkey/                  its keyboard maps, one yaml file each (optional: none otherwise)
     │   ├── main.yaml            the map it activates by convention (entry: hotkey.file names another)
@@ -168,15 +169,20 @@ my-package/                      the package folder: give its path to a workspac
 │   └── {series}/comp.yaml         (Component folders above), grouped by function
 ├── service-template-app/        its app service templates, {templateId}--{name}/, grouped as in a doc page
 ├── service-template-infra/      its infra service templates
+├── .doc-page/                   optional: makes it a doc page too (below)
+│   ├── entry.yaml               title, homeDoc: ~{name}/doc/README.md
+│   ├── source.yaml              the package folder as its root; comp-mdx/ and the templates are never collected
+│   ├── side-panel.yaml          its documents, the demonstrations first
+│   └── asset/                   the objects its documents show: data of the package, read-only
 └── package.json                 optional: { "type": "module" }, so node reads its .js as ES modules
 ```
 
-- **Required**: `doc-package.yaml` and `doc/README.md`. The three content folders may be absent (nothing of that kind), never moved.
-- **Never there**: instance folders (`service-app/`, `service-infra/`), asset folders and `.doc-page/`: a package holds no state and is not a doc page.
+- **Required**: `doc-package.yaml` and `doc/README.md`. The content folders may be absent (nothing of that kind), never moved.
+- **Never there**: instance folders (`service-app/`, `service-infra/`): a package holds no running state. In its `.doc-page/`, no `comp-mdx/` and no service folders, and an entry naming `comp`, `service` or `packageList` is refused: its components and templates are the ones at its top, what it needs is `packageDependList`.
 
-Unlike a doc page, a package keeps its code folders at its top: code and templates are what a package is, and its documents, the ones a reader of the package looks for, are gathered in `doc/`.
+Unlike a doc page, a package keeps its code folders at its top: code and templates are what a package is, and its documents, the ones a reader of the package looks for, are gathered in `doc/`. A package with `.doc-page/entry.yaml` is also a **read-only doc page**: it can be launched, listed in a workspace, or mounted for a while, its documents demonstrating its components ([A package as a doc page](doc_page_impl_package.md#a-package-as-a-doc-page)). `react-doc init package` writes the three files.
 
-The packages of the project live in `package/` at its root, one folder each; `package/cloud-dev-vis/` is the one the demonstration imports ([its root document](../package/cloud-dev-vis/doc/README.md)).
+The packages of the project live in `package/` at its root, one folder each, which is where a package named by its name is looked for first (`packageSearchDirList` of `config.yaml`); `package/cloud-dev-vis/` is the one the demonstration imports ([its root document](../package/cloud-dev-vis/doc/README.md)).
 
 ## Finding the entry from a folder
 
@@ -198,7 +204,7 @@ docPageList:
   - alias: my-doc
     dir: ../my-doc              # or  file: ../my-doc/.doc-page/entry.yaml  (exactly one of the two)
 
-# config.yaml: one doc page alone, a virtual workspace
+# config.yaml: one doc page alone, a virtual workspace (react-doc dev ../my-doc says the same)
 docEntry:
   dir: ../my-doc
   alias: my-doc
@@ -208,7 +214,7 @@ docEntry:
   include: { dir: ../sub-page, alias: sub }    # relative to the file holding it, here .doc-page/side-panel.yaml
 ```
 
-Wherever a doc page is named, it gets its **alias** there, the name its files carry in the workspace (`~sub:sub-page/guide.md`); the folder name stands in when none is given, and `alias` is recommended so that the folder can be renamed freely. `configDoc.docEntry.file` is the entry file found, so everything after loading sees one entry file whichever way it was named. The grammar of the entry and of the files it reaches is the subject of [The document entry](doc_page_impl_side_panel.md#the-document-entry).
+Wherever a doc page is named, it gets its **alias** there, the name its files carry in the workspace (`~sub:sub-page/guide.md`); the folder name stands in when none is given (a package: its name), and `alias` is recommended so that the folder can be renamed freely. `configDoc.docEntry.file` is the entry file found, so everything after loading sees one entry file whichever way it was named. The grammar of the entry and of the files it reaches is the subject of [The document entry](doc_page_impl_side_panel.md#the-document-entry).
 
 ## One file per section, by convention
 
@@ -268,7 +274,7 @@ my-workspace/                    the workspace folder: config.yaml names it (wor
 
 ## The demonstration doc page
 
-`example_doc/` follows the convention, and its top shows documents only: its metadata is in `example_doc/.doc-page/` (an entry naming `source.yaml`, `tag.yaml`, `config.yaml` and `side-panel.yaml`, the side panels of two parts, `asset.yaml` naming its two asset folders `~example:example/.doc-page/asset` and `~example:example/.doc-page/asset-archive`, `object-frontend.yaml` declaring the reading lists, whose assets are the group folders `{id}--{name}` of its asset folder, `service-backend.yaml`), and so are its managed folders: its components in `.doc-page/comp-mdx/` with their manifests, grouped (`comp.yaml` at the top, `panel/comp.yaml` for the side-panel item and the source link, `table/stock-table/comp.yaml` a group in a group), its own app template in a group in a group (`.doc-page/service-template-app/productivity/task/`), its instances in `.doc-page/service-app/`, the infra instances the kernel provisions in `.doc-page/service-infra/`. Its sub document `example_doc/sub-doc/` is a doc page folder with its own `.doc-page/entry.yaml`, written inline. The root of the project is the workspace folder of the demonstration: `main/config.yaml` names it (`workspace: { dir: .. }`), and `.doc-workspace/workspace.yaml` there imports the package `package/cloud-dev-vis/` (whose diagrams the demonstration's documents use), names the demonstration as the first root doc page under the alias `example`, beside a second one, `example_doc/second-doc/` as `second`, and names the keyboard map of the workspace, `.doc-workspace/hotkey.yaml`. The side panel of `example` includes the sub document as `include: { dir: ../sub-doc, alias: sub }`, and its source rule excludes both folders (`exclude: [sub-doc/, second-doc/]`).
+`example_doc/` follows the convention, and its top shows documents only: its metadata is in `example_doc/.doc-page/` (an entry naming `source.yaml`, `tag.yaml`, `config.yaml` and `side-panel.yaml`, the side panels of two parts, `asset.yaml` naming its two asset folders `~example:example/.doc-page/asset` and `~example:example/.doc-page/asset-archive`, `object-frontend.yaml` declaring the reading lists, whose assets are the group folders `{id}--{name}` of its asset folder, `service-backend.yaml`), and so are its managed folders: its components in `.doc-page/comp-mdx/` with their manifests, grouped (`comp.yaml` at the top, `panel/comp.yaml` for the side-panel item and the source link, `table/stock-table/comp.yaml` a group in a group), its own app template in a group in a group (`.doc-page/service-template-app/productivity/task/`), its instances in `.doc-page/service-app/`, the infra instances the kernel provisions in `.doc-page/service-infra/`. Its sub document `example_doc/sub-doc/` is a doc page folder with its own `.doc-page/entry.yaml`, written inline. The root of the project is the workspace folder of the demonstration: `main/config.yaml` names it (`workspace: { dir: .. }`), and `.doc-workspace/workspace.yaml` there names the demonstration as the first root doc page under the alias `example`, beside a second one, `example_doc/second-doc/` as `second`, the package `package/cloud-dev-vis/` as a read-only doc page with the demonstrations of its components, and the keyboard map of the workspace, `.doc-workspace/hotkey.yaml`. The demonstration names what it uses of that package in its entry (`packageList: [{ name: cloud-dev-vis }]`). The side panel of `example` includes the sub document as `include: { dir: ../sub-doc, alias: sub }`, and its source rule excludes both folders (`exclude: [sub-doc/, second-doc/]`).
 
 ## Implementation
 
@@ -288,5 +294,5 @@ my-workspace/                    the workspace folder: config.yaml names it (wor
 | `plugin/doc-object-frontend.ts`, `src/lib/doc-object-frontend.js` | `OBJECT_FRONTEND_CONFIG_FILE_NAME` (`object-frontend.yaml`): the frontend objects and types a doc page declares |
 | `plugin/doc-asset-store.ts`, `plugin/doc-comp-config.ts`, `plugin/doc-service-server.ts` | the convention folders of the three managed kinds: `ASSET_FOLDER_DEFAULT_LIST`, `COMP_FOLDER_DEFAULT_LIST`, `SERVICE_FOLDER_DEFAULT_LIST`, all in `.doc-page/` |
 | `plugin/doc-source.ts` | `folderManagedIsLazyGet` (config `folderManaged`), `folderManagedListGet` (the managed folders of the loaded doc pages), `folderManagedEnsure` (made with `isLazy: false`) |
-| `frontend/cli/` | `react-doc init`: the scaffold of each folder kind ([The command line](doc_page_impl_cli.md)) |
-| `package/` | the packages of the project, `package/cloud-dev-vis/` the one the demonstration imports |
+| `frontend/cli/` | `react-doc`: the scaffold of each folder kind, serving a folder, the published package ([The command line](doc_page_impl_cli.md)) |
+| `package/` | the packages of the project (`packageSearchDirList` of `config.yaml`), `package/cloud-dev-vis/` the one the demonstration imports, itself a doc page |

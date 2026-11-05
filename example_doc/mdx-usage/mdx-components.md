@@ -117,42 +117,42 @@ subtopics:
         title:
           en: ER diagram
           jp: ER 図
-        target: ~cloud-dev-vis/comp-diagram-er.md#diagram-er-dataverse
+        target: ~cloud-dev-vis:cloud-dev-vis/doc/comp-diagram-er.md#diagram-er-dataverse
       - id: diagram-er-flow
         title:
           en: Operators and custom nodes
           jp: 処理ノードと独自ノード
-        target: ~cloud-dev-vis/comp-diagram-er.md#diagram-er-flow
+        target: ~cloud-dev-vis:cloud-dev-vis/doc/comp-diagram-er.md#diagram-er-flow
       - id: diagram-er-layout
         title:
           en: Layout and viewport
           jp: 配置とビューポート
-        target: ~cloud-dev-vis/comp-diagram-er.md#diagram-er-layout
+        target: ~cloud-dev-vis:cloud-dev-vis/doc/comp-diagram-er.md#diagram-er-layout
       - id: card-diagram
         title:
           en: Generic card diagram
           jp: 汎用カード図
-        target: ~cloud-dev-vis/comp-diagram-er.md#card-diagram
+        target: ~cloud-dev-vis:cloud-dev-vis/doc/comp-diagram-er.md#card-diagram
       - id: diagram-dataverse-entity
         title:
           en: Dataverse table card
           jp: Dataverse テーブルカード
-        target: ~cloud-dev-vis/comp-diagram-er.md#diagram-dataverse-entity
+        target: ~cloud-dev-vis:cloud-dev-vis/doc/comp-diagram-er.md#diagram-dataverse-entity
       - id: diagram-er-edit
         title:
           en: Visual editing
           jp: 視覚的な編集
-        target: ~cloud-dev-vis/comp-diagram-er.md#diagram-er-edit
+        target: ~cloud-dev-vis:cloud-dev-vis/doc/comp-diagram-er.md#diagram-er-edit
       - id: powerplatform-flow
         title:
           en: Power Automate flow design
           jp: Power Automate フロー設計
-        target: ~cloud-dev-vis/comp-powerplatform.md#powerplatform-flow
+        target: ~cloud-dev-vis:cloud-dev-vis/doc/comp-powerplatform.md#powerplatform-flow
       - id: powerplatform-business-rule
         title:
           en: Business rule design
           jp: ビジネスルール設計
-        target: ~cloud-dev-vis/comp-powerplatform.md#powerplatform-business-rule
+        target: ~cloud-dev-vis:cloud-dev-vis/doc/comp-powerplatform.md#powerplatform-business-rule
   - id: spreadsheets
     title:
       en: Spreadsheets
@@ -283,13 +283,13 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`DiagramER` draws Dataverse tables, global choices, processing steps, and registered components as nodes on a canvas, joined by connections between named handles. `DiagramDataverseEntity` shows one table card in the flow of the document. Both are edited visually in place, on inline YAML or on data in the asset service layer. `DiagramPowerAutomate` and `DiagramBusinessRule` are the same diagram with cards for the design of a Power Automate flow and of a Dataverse business rule. `CardDiagram` is the same canvas with generic tables and operators only. They come from the package cloud-dev-vis, which the workspace imports.
+`DiagramER` draws Dataverse tables, global choices, processing steps, and registered components as nodes on a canvas, joined by connections between named handles. `DiagramDataverseEntity` shows one table card in the flow of the document. Both are edited visually in place, on inline YAML or on data in the asset service layer. `DiagramPowerAutomate` and `DiagramBusinessRule` are the same diagram with cards for the design of a Power Automate flow and of a Dataverse business rule. `CardDiagram` is the same canvas with generic tables and operators only. They come from the package cloud-dev-vis, which is a doc page of this workspace as well: its documents are shown and demonstrated there, read-only.
 
-`DiagramER` は、Dataverse のテーブル、グローバル選択肢、処理ステップ、登録済みコンポーネントをキャンバス上のノードとして描き、名前付きハンドル間の接続線で結びます。`DiagramDataverseEntity` はテーブルカードを一枚、文書の流れの中に表示します。どちらも、インラインの YAML でもアセットサービス層のデータでも、その場で視覚的に編集できます。`DiagramPowerAutomate` と `DiagramBusinessRule` は同じ図で、Power Automate のフローと Dataverse のビジネスルールの設計をカードとして描きます。`CardDiagram` は汎用テーブルと処理ノードだけを持つ同じキャンバスです。これらはワークスペースが読み込むパッケージ cloud-dev-vis のコンポーネントです。
+`DiagramER` は、Dataverse のテーブル、グローバル選択肢、処理ステップ、登録済みコンポーネントをキャンバス上のノードとして描き、名前付きハンドル間の接続線で結びます。`DiagramDataverseEntity` はテーブルカードを一枚、文書の流れの中に表示します。どちらも、インラインの YAML でもアセットサービス層のデータでも、その場で視覚的に編集できます。`DiagramPowerAutomate` と `DiagramBusinessRule` は同じ図で、Power Automate のフローと Dataverse のビジネスルールの設計をカードとして描きます。`CardDiagram` は汎用テーブルと処理ノードだけを持つ同じキャンバスです。これらはパッケージ cloud-dev-vis のコンポーネントで、同パッケージはこのワークスペースの読み取り専用のドキュメントページでもあり、説明と実演はそちらにあります。
 ```
 
-- [Data diagrams](~cloud-dev-vis/comp-diagram-er.md)
-- [Power Platform design diagrams](~cloud-dev-vis/comp-powerplatform.md)
+- [Data diagrams](~cloud-dev-vis:cloud-dev-vis/doc/comp-diagram-er.md)
+- [Power Platform design diagrams](~cloud-dev-vis:cloud-dev-vis/doc/comp-powerplatform.md)
 
 <!--renderComp=MultiLang-->
 ## {en: "Spreadsheets", jp: "スプレッドシート"}
