@@ -29,6 +29,13 @@ How the list is kept (also in `AGENTS.md`):
 - <a id="animation-visual-edit"></a>**A visual edit mode of an animation.** An animation is edited as its source ([Card Diagram Animation](../package/cloud-dev-vis/doc/comp-card-diagram-animation.md)). Editing the diagram with the framework's editor, and states and tracks from the control area, would be its visual mode; the diagram's part is `DiagramVisualEdit` on `document.diagram`.
 - <a id="animation-scrub"></a>**Scrubbing.** The progress on a line shows where a transition is but cannot be dragged; everything is a function of the frame, so a drag would be `seekTo`.
 
+## Card diagram views
+
+- <a id="switch-animation-scene"></a>**A scene in a state of an animation over views.** A state of [an animation over views](../package/cloud-dev-vis/doc/card-diagram-flexible-switch.md#under-the-animation-layer) is a view and a region; it cannot yet ring a target, hide a node or send a token along a line, as a state of an animation of one diagram does. The targets would be those of the view shown.
+- <a id="switch-layout-drag"></a>**Moving the nodes of a generated view.** The reader adjusts the bounding box of a view; the nodes of a generated view stand where its generator puts them. Their positions could be kept in the same layout item.
+- <a id="switch-visual-edit"></a>**A visual edit mode of a switching block.** A block of views is edited as its source; one view at a time could open in the framework's editor.
+- <a id="migration-report-animate"></a>**The sequences of a run.** The reports of a migration are drawn as tables and cards; the sequence of requests and retries of a batch is not yet a view.
+
 ## Settings panel
 
 - <a id="settings-as-mdx"></a>**The settings panels as MDX documents.** The tabs of the settings panel are built in code from config items (`ConfigPanel`) and custom components (the Workspace graph, the Services tab). Written as MDX documents of a built-in doc page, with components for their parts, they would get everything a document has: blocks that open in the block popup, in-place editing, a layout an author changes without code. The Workspace graph already opens in the block popup through `BlockPopupSurface` with a `popupKey`, the step a block of such a document would take anyway.

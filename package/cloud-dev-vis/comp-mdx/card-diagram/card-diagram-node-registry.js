@@ -1,10 +1,11 @@
-import { Boxes, Table2 } from '../../../../main/frontend/UICommon.js';
+import { Boxes, SquareDashedMousePointer, Table2 } from '../../../../main/frontend/UICommon.js';
 import { nodeRegistryBuild } from './node-registry.js';
 import { tableCardNormalize, tableCardAnchorListGet } from './TableCardData.js';
 import { tableCardSchema } from './TableCardSchema.js';
 import { TableCard } from './TableCard.jsx';
 import { OperatorCard } from './OperatorCard.jsx';
 import { CardBrief, CardNote } from './CompactCard.jsx';
+import { ViewBoxCard } from './ViewBoxCard.jsx';
 
 // The node kinds of the base series (card-diagram-impl.md#node-registries): a
 // generic table card with authored fields and rows, without any limit on
@@ -74,6 +75,26 @@ export const cardBriefNodeKind = {
 	},
 };
 
-export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind];
+// the bounding box of a view (card-diagram-flexible-switch.md#the-bounding-box): the
+// part of the diagram a camera shows by default, and an embedding of the view shows.
+// a red frame an author places and resizes; it never appears in a picture, and in
+// reading mode it is drawn only while the box is being adjusted
+export const viewBoxNodeKind = {
+	type: 'view-box',
+	label: 'Bounding box',
+	contract: {
+		anchorListGet: () => [{ id: 'body', sideList: sideAllList }],
+		sizeDefault: { width: 480, height: 320 },
+		sizeMin: { width: 40, height: 40 },
+	},
+	schema: null,
+	Card: ViewBoxCard,
+	create: {
+		description: 'The part of this diagram shown by default, and when it is embedded.', icon: SquareDashedMousePointer, keywordList: ['bounding', 'frame', 'viewport', 'embed', 'region'],
+		nodeCreate: idNext => ({ id: idNext('view-box'), renderer: { type: 'view-box' }, size: { width: 480, height: 320 }, data: {}, handles: [] }),
+	},
+};
+
+export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, viewBoxNodeKind];
 
 export const cardDiagramNodeRegistry = nodeRegistryBuild({ id: 'card-diagram', label: 'Card diagram', kindList: cardDiagramNodeKindList });

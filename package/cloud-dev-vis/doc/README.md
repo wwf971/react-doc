@@ -15,16 +15,21 @@ cloud-dev-vis/
 │   │                           editor, history, node registries
 │   ├── power-platform.md       the Power Platform series, design
 │   ├── card-diagram-animation.md  the animation of a card diagram, design
+│   ├── card-diagram-flexible-switch.md  many views in one viewport, design
+│   ├── power-platform-migration.md  a database migration as data: its items, views and editors
 │   ├── comp-diagram-er.md      for authors: DiagramER, CardDiagram, DiagramDataverseEntity, reading and editing
 │   ├── comp-powerplatform.md   for authors: DiagramPowerAutomate, DiagramBusinessRule
-│   └── comp-card-diagram-animation.md  for authors: CardDiagramAnimation, DiagramERAnimation
+│   ├── comp-card-diagram-animation.md  for authors: CardDiagramAnimation, DiagramERAnimation
+│   └── comp-card-diagram-switch.md  for authors: CardDiagramSwitch, DiagramERSwitch
 ├── .doc-page/              makes the package a doc page: entry, source rules, side panel, assets of its demonstrations
 └── comp-mdx/
     ├── card-diagram/       the base series       CardDiagram
     ├── card-diagram-animation/  animation        CardDiagramAnimation
+    ├── card-diagram-switch/  views by path       CardDiagramSwitch
     ├── demo/               what its documents demonstrate with: MigrationStep
     └── power-platform/     Power Platform        DiagramER, DiagramPowerAutomate, DiagramBusinessRule,
-                                                  DiagramDataverseEntity
+                                                  DiagramDataverseEntity, DiagramERSwitch;
+                                                  migration/: the modes of a migration as a frontend object
 ```
 
 The documents written for authors are the usage documents of the components, with live examples. The package is a doc page as well ([A package as a doc page](../../../main/doc_page_impl_package.md#a-package-as-a-doc-page)): `react-doc dev package/cloud-dev-vis` shows them alone, and the workspace of the project lists it beside its demonstration. Read so it is read-only, also its assets.
@@ -64,6 +69,8 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | change a Power Platform card or component | [power-platform.md](power-platform.md) |
 | write diagrams in a document | [Data diagrams](comp-diagram-er.md), [Power Platform diagrams](comp-powerplatform.md) |
 | make a diagram move between named states | for authors [Card Diagram Animation](comp-card-diagram-animation.md); the design [card-diagram-animation.md](card-diagram-animation.md) |
+| show many diagrams in one viewport, by path, with smooth switching | for authors [Card Diagram Views](comp-card-diagram-switch.md); the design [card-diagram-flexible-switch.md](card-diagram-flexible-switch.md) |
+| keep a database migration as data and draw it | [power-platform-migration.md](power-platform-migration.md) |
 | add a series for another platform | [Adding a series](card-diagram.md#adding-a-series), then [Node Registries](card-diagram-impl.md#node-registries): a folder with its kinds, its registry, its components and a `comp.yaml` |
 
 ## Implementation
@@ -71,8 +78,10 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | Place | Role |
 | --- | --- |
 | `comp-mdx/card-diagram/node-registry.js` | `nodeRegistryBuild`, `nodeRegistrySearch`: the registry mechanism |
-| `comp-mdx/card-diagram/card-diagram-node-registry.js`, `CompactCard.jsx` | the generic kinds (`table`, `operator`, `card-note`, `card-brief`) and the registry of `CardDiagram` |
+| `comp-mdx/card-diagram/card-diagram-node-registry.js`, `CompactCard.jsx` | the generic kinds (`table`, `operator`, `card-note`, `card-brief`, `view-box`) and the registry of `CardDiagram` |
 | `comp-mdx/card-diagram-animation/` | the animation: [card-diagram-animation.md](card-diagram-animation.md#implementation) |
+| `comp-mdx/card-diagram-switch/` | views by path: [card-diagram-flexible-switch.md](card-diagram-flexible-switch.md#implementation) |
+| `comp-mdx/power-platform/migration/` | a migration as data: [power-platform-migration.md](power-platform-migration.md#implementation) |
 | `comp-mdx/demo/migration-step/` | a registered node renderer the documents demonstrate |
 | `comp-mdx/card-diagram/CardDiagram.jsx`, `CardStandalone.jsx` | the canvas and the standalone card, and their factories `cardDiagramCompCreate`, `cardStandaloneCompCreate` |
 | `comp-mdx/card-diagram/DiagramERData.js`, `DiagramERStore.js`, `DiagramEdit*.js`, `DiagramRender.jsx` | normalization, the canvas model, the editor's draft and path, the node and edge components (their names keep the `DiagramER` prefix of the series they started in) |

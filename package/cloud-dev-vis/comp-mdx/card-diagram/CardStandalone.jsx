@@ -30,7 +30,7 @@ export function cardStandaloneCompCreate(registry, name, titleDefault = 'Card') 
 	return CompRender;
 }
 
-const CardStandaloneView = observer(function CardStandaloneView({ data = {}, registry, editor, isInPopup = false }) {
+export const CardStandaloneView = observer(function CardStandaloneView({ data = {}, registry, editor, isInPopup = false }) {
 	const source = data.source || data.raw || '';
 	const [store] = useState(() => new CardStandaloneStore(source, registry));
 

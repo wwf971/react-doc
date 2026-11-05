@@ -20,6 +20,7 @@ import { compDefinitionNormalize, compIdResolve } from '../../../../main/comp-do
 import './DiagramER.css';
 import { DiagramVisualEdit } from './DiagramVisualEdit.jsx';
 import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
+import { useCanvasWheelGuard } from './CanvasWheelGuard.js';
 
 // A diagram of nodes and connections on a pannable, zoomable canvas
 // (card-diagram-impl.md), drawn with the node registry of its component type
@@ -55,7 +56,7 @@ export function cardDiagramCompCreate(registry, name) {
 	return CompRender;
 }
 
-const DiagramERView = observer(function DiagramERView({ data = {}, config = {}, onEvent, registry, editor, isInPopup = false }) {
+export const DiagramERView = observer(function DiagramERView({ data = {}, config = {}, onEvent, registry, editor, isInPopup = false }) {
 	const sourceDiagram = data.source || data.raw || '';
 	const { compById, sourceStore } = useDocStores();
 	const [viewState] = useState(() => diagramViewStateGet(sourceStore, config));
@@ -65,6 +66,8 @@ const DiagramERView = observer(function DiagramERView({ data = {}, config = {}, 
 		return definition.expose?.[placement];
 	}, heightGet(data.height ?? config.height), registry));
 	const edgeGeometry = useRef(new Map());
+	const viewportRef = useRef(null);
+	useCanvasWheelGuard(viewportRef);
 	// the height is an authored prop (data.height); config.height is the
 	// form a host passes it in
 	const heightDiagram = store.viewport.size.height === 'auto' ? 620 : store.viewport.size.height;
@@ -80,7 +83,7 @@ const DiagramERView = observer(function DiagramERView({ data = {}, config = {}, 
 			aria-label={data.title ?? 'Diagram'}
 			style={{ '--doc-er-diagram-height': `${heightDiagram}px`, width: isInPopup || store.viewport.size.width === 'auto' ? '100%' : store.viewport.size.width, maxWidth: '100%' }}
 		>
-			<div className="doc-er-diagram-viewport">
+			<div ref={viewportRef} className="doc-er-diagram-viewport">
 				<ReactFlowProvider>
 					<DiagramRenderContext.Provider value={context}><DiagramERCanvas store={store} viewState={viewState} isEditing={Boolean(editor)} /></DiagramRenderContext.Provider>
 				</ReactFlowProvider>

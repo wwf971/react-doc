@@ -1,6 +1,6 @@
 # Card Diagram: Building on the Framework
 
-The base series of the package ([README](README.md)) is a framework: a React Flow canvas of node cards and connection lines, one YAML data format, one draft store with a history, one visual editor, and the node registry through which a series plugs its own cards in. This document is the **guidance** for anyone implementing on it: the standards every piece follows, the things most often forgotten, and the checklists to go through before a change is done. It does not describe how the framework works inside; that is the **design and implementation introduction, [card-diagram-impl.md](card-diagram-impl.md)**, to be read first for the data format, the canvas, the editor, the path, the history and the registries. The Power Platform series is the example of a series built on the framework ([power-platform.md](power-platform.md)); a diagram that moves between states is its wrapper [card-diagram-animation.md](card-diagram-animation.md); what authors see is in [comp-diagram-er.md](comp-diagram-er.md), [comp-powerplatform.md](comp-powerplatform.md) and [comp-card-diagram-animation.md](comp-card-diagram-animation.md), beside this file.
+The base series of the package ([README](README.md)) is a framework: a React Flow canvas of node cards and connection lines, one YAML data format, one draft store with a history, one visual editor, and the node registry through which a series plugs its own cards in. This document is the **guidance** for anyone implementing on it: the standards every piece follows, the things most often forgotten, and the checklists to go through before a change is done. It does not describe how the framework works inside; that is the **design and implementation introduction, [card-diagram-impl.md](card-diagram-impl.md)**, to be read first for the data format, the canvas, the editor, the path, the history and the registries. The Power Platform series is the example of a series built on the framework ([power-platform.md](power-platform.md)); a diagram that moves between states is its wrapper [card-diagram-animation.md](card-diagram-animation.md); many views in one viewport is the layer [card-diagram-flexible-switch.md](card-diagram-flexible-switch.md); what authors see is in [comp-diagram-er.md](comp-diagram-er.md), [comp-powerplatform.md](comp-powerplatform.md) and [comp-card-diagram-animation.md](comp-card-diagram-animation.md), beside this file.
 
 What the page asks of every block-like component (the popup surface, the no-jitter rule, the editor contract) is not repeated here: [Block-like MDX components](../../../main/doc_page_impl_mdx_comp_block.md) and [Component edit mode](../../../main/doc_page_impl_edit.md#component-edit-mode) are read together with this document, and their checklists apply.
 
@@ -14,6 +14,7 @@ a change of how cards are drawn  TableCard / ResourceNodeCard / OperatorCard and
 a change of the canvas           DiagramERStore, CardDiagram, DiagramRender
 a change of the data format      DiagramERData (normalization) first, then everything that reads it
 a diagram moving between states  the animation wrapper: card-diagram-animation.md
+many diagrams in one viewport    the switching layer: card-diagram-flexible-switch.md
 ```
 
 Each kind of change has a checklist below. Most mistakes come from making one kind of change in the place of another: a card's styling in the engine, a command's validation in a control, a series' knowledge in the base.
@@ -102,18 +103,58 @@ Things to be careful about, each learned once:
 - **Identity.** Do not rebuild node or edge objects in render; decorate them once per flag set (`decorate` in `CardDiagram.jsx`). A new prop object per frame makes every card re-measure its anchors and dragging sluggish.
 - **Positions.** A dragged node's position lives in the canvas store until the drop writes it into the draft (`nodeMove`, read a frame after the drop). A draft reloaded keeps runtime positions for nodes whose authored position did not change, and takes the authored one when it did; `positionsTemporary` is forgotten for such a node. Keep this when touching `sourceLoad`, or an undo of a move will leave the node where it was dragged.
 - **Measurement.** Repeat layout only when automatic geometry changed (`measurementSet` ignores sub-pixel changes); never on camera movement or render.
-- **The wheel and the drag.** Every row of a card is `nodrag nopan` (a drag in it selects text), the title line is not (a drag pans or moves), nothing is `nowheel` (the wheel zooms everywhere in the box). A sub-area that must scroll itself opts out explicitly and scrolls itself.
+- **The wheel and the drag.** Every row of a card is `nodrag nopan` (a drag in it selects text), the title line is not (a drag pans or moves). For the wheel, read [the next section](#the-wheel-over-a-canvas): this bug has come back more than once.
 - **Handles.** Runtime handle ids derive from `direction` (a `both` handle has two runtime ids mapped back to one authored id); side and position are not part of an id; after rows reorder or an anchor moves, call `updateNodeInternals`.
 - **Free ends** are hidden point nodes (`~end:<role>:<id>`); authored ids may not start with `~`. A gesture ending on a point node is not a handle drop.
 - **Edit layout equals read layout.** A cell is text in one mode and a control of the same box in the other; a row or field toolbar floats beside the card and undoes the zoom (the custom property of the canvas), so it keeps its screen size.
 - **Styles** are the shared classes of the edit layer where one exists (`.doc-button-icon`, `.doc-button-group`, `.doc-path`, `.doc-note`); the series css holds what is the series' own (an accent, a header color), never a second button style.
+
+## The wheel over a canvas
+
+**Bug-prone.** The rule is one sentence: *the wheel over any part of a canvas zooms it, as over its empty space, and never scrolls the page.* It has been broken several times, each time the same way: the page scrolls while the pointer is over a card, which is the reader's whole experience of the bug, and the empty space keeps working, so a check made there sees nothing wrong.
+
+Why it is easy to break: React Flow zooms, and stops the page from scrolling, only for a wheel it takes. Anything else falls through to the page, silently:
+
+| What makes React Flow not take the wheel | What happened |
+| --- | --- |
+| `nowheel` on an element, or an ancestor | the wheel over that element scrolls it; when there is **nothing to scroll in it** (too short, or at its end) the browser passes the wheel on to the page. `overscroll-behavior: contain` does not help on an element with nothing to scroll |
+| a control over the canvas (the zoom buttons, a panel) | it is outside the part of the canvas React Flow listens on |
+
+So:
+
+- **Every canvas is under `useCanvasWheelGuard`** (`CanvasWheelGuard.js`), on its box: whatever reaches the box is stopped from reaching the page. A new canvas component uses it too.
+- **Do not use `nowheel` to make something scroll.** It is the opposite of what a reader expects over a card, and only one state of the element is right. An area that must scroll by itself listens to the wheel natively, and takes it (`stopPropagation`) only **while it can still scroll**, as `ViewStackCard` does; the end of that same gesture stops there instead of zooming; a pinch (`ctrlKey`) is always the canvas's; anything else goes on to the canvas.
+- **Something embedded takes no wheel.** A view inside a card is a picture of that view at that zoom: the wheel over it zooms the canvas around it. It scrolls by its scrollbar, and by the wheel once it is opened.
+- **Check it on what you changed, and not on empty space.** Point at a row, a title, an embedded view, a short scrolling area and a long one at its end, and the controls; compare the camera and the scroll position of the page before and after. Screenshots do not show this.
+
+## Drawing conventions
+
+What a diagram should look like, whoever draws it, by hand or from data:
+
+- **A list wraps.** Do not lay out many cards in one row, or the fit of the whole diagram makes them small. A list of things on a canvas breaks into lines at a small count (four or so), and a generator breaks them itself; a chain that must read in one direction may turn downward rather than run on. Stacking by a meaning (rows by rank, columns by depth) is better still.
+- **A margin around what is held.** A card holding other cards keeps a margin inside its border, so nothing inside touches it ([an embedded view](card-diagram-flexible-switch.md#one-canvas-no-canvas-inside-a-canvas) has this by default).
+- **What is long scrolls.** In a card of many sections, prefer a [scrolling stack](card-diagram-flexible-switch.md#a-scrolling-stack) to shrinking all of them to fit.
+
+### A matter of taste: show how it happens, then what came of it
+
+These are not rules a validator could check; they are what has been seen to read well and badly on real diagrams.
+
+| Better | Worse | Why |
+| --- | --- | --- |
+| a **process**: what goes in, what happens to it step by step, what comes out, each step a card joined by lines | a **pile of tables**, section after section | a reader looks at a report to understand what was done. Tables say what the numbers are and leave the reader to work out what they mean |
+| the figures **on the step they belong to**: a batch card saying `49 succeeded / 1 failed`, in red | the same figure in a row of a table | it answers "where did that happen", and the one thing wrong stands out in the picture |
+| a **short card of totals that opens the table** | the table itself, large, in the overview | the table is still there for whoever needs it: it is a view of its own, a click away. A detail is switched to, not stacked |
+| **one concrete case worked through**: one row, what its source holds, what is expected, what the target has | only the rule, or only the totals | a rule becomes clear on an example |
+| a **small vocabulary of shapes** that mean the same across diagrams: the table with its brackets, a card per batch, a red card for what was set aside | a new look per section | the second diagram is read with what was learned on the first |
+
+The first thing to draw for any report is therefore the diagram someone would sketch to explain it on a whiteboard, with the actual figures written on it. Tables come last. In the [migration](power-platform-migration.md#views), the run report and the verification report are drawn this way.
 
 ## Tests and documents
 
 From `main/frontend`:
 
 ```sh
-node --import tsx --import ./src/lib/node-test-register.js --test ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramERData.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditStore.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditPath.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditIntegration.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/OperatorNodes.test.js
+node --import tsx --import ./src/lib/node-test-register.js --test ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramERData.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditStore.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditPath.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditIntegration.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/OperatorNodes.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram-switch/SwitchData.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/migration/MigrationData.test.js
 ```
 
 The store is tested on the registry of the Power Platform series, which holds every card variant; a change of the engine is tested there, a change of a series beside the series. Every command has a test of its effect **and of its undo**. The page is then checked in the browser, in the doc page of the package (`react-doc dev package/cloud-dev-vis`; a package is read-only, so what writes is tried on a copy of a block in a doc page of your own): entering edit mode moves nothing, the command works from its control and from the keys, Ctrl/⌘ + Z takes it back, Save clears the bar's history buttons.
@@ -128,4 +169,5 @@ Documents to keep in step, by what changed: a rule of the engine goes into [card
 | ☐ | The checklist of [Block-like MDX components](../../../main/doc_page_impl_mdx_comp_block.md#checklist) still holds for every diagram component |
 | ☐ | Every change of the draft is undone and redone correctly, in the tests and in the browser; the selection is not a step; the history is empty when the block enters edit mode and gone after a save |
 | ☐ | The engine imports no series; the series imports only the base |
+| ☐ | The wheel over cards and controls zooms or does nothing, and never scrolls the page: [The wheel over a canvas](#the-wheel-over-a-canvas), measured |
 | ☐ | Tests pass (`AnimationData.test.js` too, when the animation is touched); the documents named above say what exists now |

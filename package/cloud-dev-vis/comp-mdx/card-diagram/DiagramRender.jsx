@@ -101,7 +101,7 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 
 // the content of a node: a registered component (renderer.component), or the
 // card of its kind in the node registry of the component
-const DiagramNodeContent = observer(function DiagramNodeContent({ id, node, config, registry, editor, anchorRef, visualization }) {
+export const DiagramNodeContent = observer(function DiagramNodeContent({ id, node, config, registry, editor, anchorRef, visualization }) {
 	if (node.renderer.component) return <RegisteredComp compName={node.renderer.component} placement="visualizationNode" input={{ data: node.data }} configRuntime={{ ...config, instanceId: `${config.instanceId ?? 'diagram'}:node:${id}`, isEdit: false, visualization }} />;
 	const Card = registry?.kindByType[node.renderer.type]?.Card;
 	if (!Card) return <div className="doc-vis-node-error" role="alert">No card draws a {node.renderer.type} node.</div>;
@@ -131,7 +131,7 @@ export const DiagramCreateNode = observer(function DiagramCreateNode({ data }) {
 	</div>;
 });
 
-function pathBuild(type, props) {
+export function pathBuild(type, props) {
 	if (type === 'polyline') {
 		const waypoints = props.waypoints ?? [];
 		return `M ${props.sourceX},${props.sourceY} ${[...waypoints, { x: props.targetX, y: props.targetY }].map(point => `L ${point.x},${point.y}`).join(' ')}`;

@@ -5,6 +5,8 @@ import { cardStandaloneCompCreate } from '../card-diagram/CardStandalone.jsx';
 import { cardDiagramDefineOptionsBuild } from '../card-diagram/card-diagram-comp.js';
 import { cardDiagramAnimationCompCreate } from '../card-diagram-animation/CardDiagramAnimation.jsx';
 import { cardDiagramAnimationDefineOptionsBuild } from '../card-diagram-animation/card-diagram-animation-comp.js';
+import { cardDiagramSwitchCompCreate } from '../card-diagram-switch/CardDiagramSwitch.jsx';
+import { cardDiagramSwitchDefineOptionsBuild } from '../card-diagram-switch/card-diagram-switch-comp.js';
 import { dataverseSourceDefaultCreate, diagramSourceDefaultCreate } from './DataverseCardSource.js';
 import { powerAutomateSourceDefaultCreate } from './PowerAutomateNodeSource.js';
 import { businessRuleSourceDefaultCreate } from './BusinessRuleNodeSource.js';
@@ -47,6 +49,13 @@ export const DiagramBusinessRule = compDefine(PowerPlatformDiagram, cardDiagramD
 export const DiagramERAnimation = compDefine(cardDiagramAnimationCompCreate(powerPlatformNodeRegistry, 'DiagramERAnimation'), cardDiagramAnimationDefineOptionsBuild({
 	label: 'Power Platform diagram animation',
 	description: 'A diagram of Dataverse tables, flows and operators moving between named states.',
+}));
+
+// the switching layer of the series (doc/card-diagram-flexible-switch.md): many views
+// by path in one viewport, with every card of the registry
+export const DiagramERSwitch = compDefine(cardDiagramSwitchCompCreate(powerPlatformNodeRegistry, 'DiagramERSwitch'), cardDiagramSwitchDefineOptionsBuild({
+	label: 'Power Platform diagram views',
+	description: 'Many diagrams of Dataverse tables, flows and operators in one viewport, by path, with smooth switching.',
 }));
 
 export const DiagramDataverseEntity = compDefine(

@@ -17,5 +17,34 @@ compList:
   - tagName: DiagramERAnimation
     entry: ./power-platform-comp.js
     dependencyCollect: { entry: ../card-diagram-animation/AnimationSource.js, export: animationDependenciesCollect }
+  - tagName: DiagramERSwitch
+    entry: ./power-platform-comp.js
+    dependencyCollect: { entry: ../card-diagram-switch/SwitchSource.js, export: switchDependenciesCollect }
   - tagName: DiagramDataverseEntity
     entry: ./power-platform-comp.js
+  # a database migration as a frontend object (doc/power-platform-migration.md): the
+  # modes its type names, never written as blocks themselves
+  - tagName: MigrationExplorer
+    entry: ./migration/migration-comp.js
+    export: MigrationExplorerDefine
+  - tagName: MigrationSchemaTableEdit
+    entry: ./migration/migration-comp.js
+    export: MigrationSchemaTableEditDefine
+  - tagName: MigrationSchemaChoiceEdit
+    entry: ./migration/migration-comp.js
+    export: MigrationSchemaChoiceEditDefine
+  - tagName: MigrationMappingTableEdit
+    entry: ./migration/migration-comp.js
+    export: MigrationMappingTableEditDefine
+  - tagName: MigrationMappingRowEdit
+    entry: ./migration/migration-comp.js
+    export: MigrationMappingRowEditDefine
+  - tagName: MigrationMappingChoiceEdit
+    entry: ./migration/migration-comp.js
+    export: MigrationMappingChoiceEditDefine
+  - tagName: MigrationItemList
+    entry: ./migration/migration-comp.js
+    export: MigrationItemListDefine
+  - tagName: MigrationTour
+    entry: ./migration/migration-comp.js
+    export: MigrationTourDefine

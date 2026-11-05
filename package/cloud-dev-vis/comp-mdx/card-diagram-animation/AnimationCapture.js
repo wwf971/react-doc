@@ -17,7 +17,7 @@ import { toBlob, toSvg } from 'html-to-image';
 // it exists only on https and localhost; a page reached over plain http can copy
 // text, not a picture, and says so.
 const CAPTURE_TIME_LIMIT_MS = 30000;
-const CAPTURE_SKIP_CLASS_LIST = ['react-flow__controls', 'react-flow__minimap', 'react-flow__attribution', 'react-flow__background', 'doc-anim-no-capture'];
+const CAPTURE_SKIP_CLASS_LIST = ['react-flow__controls', 'react-flow__minimap', 'react-flow__attribution', 'react-flow__background', 'doc-anim-no-capture', 'doc-vis-no-capture'];
 
 function captureOptionGet(element) {
 	const background = getComputedStyle(element).backgroundColor;

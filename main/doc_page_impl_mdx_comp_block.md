@@ -72,7 +72,7 @@ Before reporting a block-like component done, check each line:
 | --- | --- |
 | ☐ | Both modes render inside `BlockPopupSurface`; the surface's class carries the margins; the root has none |
 | ☐ | In the popup the component fills the dialog (`isInPopup`), and its state survives open / maximize / close |
-| ☐ | View mode: nothing writes; content is not movable or editable; text is selectable; the wheel over any part of the box behaves like the wheel over the box itself and never scrolls the page |
+| ☐ | View mode: nothing writes; content is not movable or editable; text is selectable; the wheel over any part of the box behaves like the wheel over the box itself and never scrolls the page, also over what it holds and its controls (measured over those parts, not over empty space: a canvas has broken this repeatedly, [The wheel over a canvas](../package/cloud-dev-vis/doc/card-diagram.md#the-wheel-over-a-canvas)) |
 | ☐ | `meta.isEditEnterButtonOnly` when the box takes clicks |
 | ☐ | Entering edit mode: block height, block top, camera, and the scroll container's `scrollTop` are unchanged (measured, not assumed) |
 | ☐ | Values are edited in place in the same layout; the bar floats; the edit card is a `doc-edit-popup` beside the selection and hides during gestures |

@@ -8,6 +8,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { Check, CircleAlert, LoaderCircle } from '../../../../main/frontend/UICommon.js';
 import { DiagramEdge, DiagramNode, DiagramPointNode, DiagramRenderContext } from '../card-diagram/DiagramRender.jsx';
+import { useCanvasWheelGuard } from '../card-diagram/CanvasWheelGuard.js';
 import '../card-diagram/DiagramER.css';
 import { animationPositionOffsetGet, animationProgressGet, animationSceneAtFrame, animationSceneStyleBuild, animationViewBetween } from './AnimationData.js';
 
@@ -221,6 +222,7 @@ const AnimationCaptureHint = observer(function AnimationCaptureHint({ store }) {
 export const AnimationCanvas = observer(function AnimationCanvas({ store, config, registry, playerRefOut, scope }) {
 	const boxRef = useRef(null);
 	const playerRef = useRef(null);
+	useCanvasWheelGuard(boxRef);
 	const { box, plan, spec, playToken, playbackRate } = store;
 	const context = useMemo(() => ({ config, registry, measurementSet: store.canvasStore.measurementSet, edgeGeometry: new Map() }), [config, registry, store]);
 	const inputProps = useMemo(() => ({ store, scope, context }), [store, scope, context]);

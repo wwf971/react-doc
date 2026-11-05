@@ -11,6 +11,7 @@ sidePanelById:
           - doc: ~cloud-dev-vis/doc/comp-diagram-er.md
           - doc: ~cloud-dev-vis/doc/comp-powerplatform.md
           - doc: ~cloud-dev-vis/doc/comp-card-diagram-animation.md
+          - doc: ~cloud-dev-vis/doc/comp-card-diagram-switch.md
           - id: design
             text: Design
             defaultOpen: false
@@ -18,4 +19,6 @@ sidePanelById:
               - doc: ~cloud-dev-vis/doc/card-diagram.md
               - doc: ~cloud-dev-vis/doc/card-diagram-impl.md
               - doc: ~cloud-dev-vis/doc/card-diagram-animation.md
+              - doc: ~cloud-dev-vis/doc/card-diagram-flexible-switch.md
+              - doc: ~cloud-dev-vis/doc/power-platform-migration.md
               - doc: ~cloud-dev-vis/doc/power-platform.md

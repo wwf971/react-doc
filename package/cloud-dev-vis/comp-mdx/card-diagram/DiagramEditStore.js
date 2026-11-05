@@ -618,6 +618,19 @@ export class DiagramEditStore {
 		return this.changeApply(documentNext => documentNext.setIn([...this.nodePathGet(nodeId), 'position'], { x: Math.round(position.x), y: Math.round(position.y) }));
 	}
 
+	// a node resized by its corners: its box, as one step. the kinds that are drawn
+	// to a size (the bounding box of a view) ask for this; a size below the minimum
+	// of the kind is refused by the validation of the draft
+	nodeResize(nodeId, { x, y, width, height }) {
+		const node = this.nodeGet(nodeId);
+		if (!node) return false;
+		return this.changeApply(documentNext => {
+			const path = this.nodePathGet(nodeId);
+			documentNext.setIn([...path, 'position'], { x: Math.round(x), y: Math.round(y) });
+			documentNext.setIn([...path, 'size'], { width: Math.round(width), height: Math.round(height) });
+		});
+	}
+
 	// ---------- connections ----------
 
 	connectionCreate(source, target) {

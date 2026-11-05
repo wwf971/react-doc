@@ -15,7 +15,7 @@ import { CardCell } from './TableCard.jsx';
 //
 // an icon is named by a word of ICON_BY_NAME; tone: blue, teal, green, amber, red,
 // violet, slate. a value is typed through CardCell, as in every card
-const ICON_BY_NAME = {
+export const CARD_ICON_BY_NAME = {
 	archive: Archive, 'arrow-right-left': ArrowRightLeft, boxes: Boxes, check: Check, alert: CircleAlert, cloud: Cloud, database: Database, 'file-check': FileCheck,
 	'file-spreadsheet': FileSpreadsheet, file: FileText, filter: Filter, hash: Hash, key: Key, layers: Layers, link: Link, 'list-checks': ListChecks, refresh: RefreshCw,
 	search: Search, send: Send, server: Server, shield: ShieldCheck, split: Split, table: Table2, warning: TriangleAlert, waypoints: Waypoints, workflow: Workflow, zap: Zap,
@@ -41,7 +41,7 @@ export const CardNote = observer(function CardNote({ node, editor, nodeId }) {
 
 export const CardBrief = observer(function CardBrief({ node, editor, nodeId }) {
 	const content = editor?.store.nodeGet(nodeId)?.data ?? node.data;
-	const Icon = ICON_BY_NAME[node.data.icon] ?? Boxes;
+	const Icon = CARD_ICON_BY_NAME[node.data.icon] ?? Boxes;
 	return (
 		<div data-node-id={nodeId} data-tone={node.data.tone || 'teal'} className="doc-card-brief" onClick={editor ? (event) => { event.stopPropagation(); editor.select(nodeId); } : undefined}>
 			<span className="doc-card-brief-icon"><Icon size={14} aria-hidden="true" /></span>

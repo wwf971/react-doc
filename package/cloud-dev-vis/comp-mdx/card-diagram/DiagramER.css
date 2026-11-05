@@ -592,3 +592,27 @@
 .doc-card.is-compact { line-height: 1.25; }
 .doc-card.is-compact .doc-er-table-title { line-height: 1.25; }
 .doc-card.is-compact .doc-er-table-column-header > span { line-height: 1.25; }
+
+/* the bounding box of a view: a red frame, never in a picture of the viewport */
+.doc-vis-view-box {
+	box-sizing: border-box;
+	position: relative;
+	width: 100%;
+	height: 100%;
+	border: 1.5px dashed #dc2626;
+	border-radius: 0.25rem;
+	background: rgb(220 38 38 / 4%);
+}
+.doc-vis-view-box.is-hidden { visibility: hidden; border: 0; background: none; pointer-events: none; }
+.doc-vis-view-box-label {
+	position: absolute;
+	left: 0.4rem;
+	top: -1.25rem;
+	padding: 0 0.3rem;
+	border-radius: 0.2rem;
+	background: #dc2626;
+	color: #fff;
+	font-size: 0.65rem;
+	line-height: 1.1rem;
+	white-space: nowrap;
+}

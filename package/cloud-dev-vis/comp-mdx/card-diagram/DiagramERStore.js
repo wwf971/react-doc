@@ -103,8 +103,12 @@ class DiagramERStore {
 					const before = previous.get(node.id);
 					const isPositionAuthoredChanged = Boolean(before) && !positionEquals(before.data.node.position, node.position);
 					if (isPositionAuthoredChanged) delete this.positionsTemporary[node.id];
+					// a size the draft now says otherwise: the width a resize left on
+					// the canvas node would hide it
+					const { width: _width, height: _height, ...beforeWithoutSize } = before ?? {};
+					const isSizeAuthoredChanged = Boolean(before) && (before.data.node.size.width !== node.size.width || before.data.node.size.height !== node.size.height);
 					return {
-						...before,
+						...(isSizeAuthoredChanged ? beforeWithoutSize : before),
 						id: node.id, type: 'visualizationNode', position: before && !isPositionAuthoredChanged ? before.position : positions.get(node.id),
 						style: { width: node.size.width === 'auto' ? node.sizeDefault.width : node.size.width, ...(node.size.height === 'auto' ? {} : { height: node.size.height }) },
 						data: { node },

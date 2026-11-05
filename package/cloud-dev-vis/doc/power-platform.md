@@ -15,6 +15,8 @@ power-platform-comp.js                             the four components (compDefi
 
 `DiagramER`, `DiagramPowerAutomate` and `DiagramBusinessRule` are one diagram component (`cardDiagramCompCreate(powerPlatformNodeRegistry)`) exposed three times with another label, icon and starting text, so that a diagram started as a flow may still hold a table. Their components are mounted from the package under the ids `cloud-dev-vis/{tagName}`.
 
+A database migration between two Dataverse databases is built on the series as data: [power-platform-migration.md](power-platform-migration.md).
+
 ## Dataverse Tables and Choices
 
 A `dataverse-table` card lists its columns with the fixed fields Key, Column, Logical name and Type (`dataverseTableSchema`, `DataverseCardSchema.js`); a required column is starred and its description is the tooltip of its name. A `dataverse-choice` card is a global choice: a purple header and a dashed border, its options as rows, and it is referenced as a whole. The ER grammar written before `version: 1` (`tables`, `relationships`) converts to these two kinds ([Existing ER Data](card-diagram-impl.md#existing-er-data)).
