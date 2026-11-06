@@ -27,6 +27,7 @@ const COLOR_LOOKUP = '#64748b';
 const COLOR_CHOICE = '#7c3aed';
 const COLOR_MAPPING = '#0d9488';
 const LABEL_DEFAULT = {
+	sourceDatabase: 'Source database', targetDatabase: 'Target database', migrationServer: 'Migration server', artifacts: 'Outputs',
 	overview: 'Overview', tabs: 'Reports in tabs', mapping: 'ER diagrams and mappings', choice: 'Option sets',
 	plan: 'Migration plan', run: 'Run report', verify: 'Verification report',
 	runFlow: 'How the rows were sent', runResult: 'Result of each batch', verifyFlow: 'How the result was checked', verifySample: 'One row compared', verifyResult: 'Result of the checks', detailHint: 'Click for the details',
@@ -441,9 +442,9 @@ const REPORT_HEIGHT = 620;
 
 // a report: its sections stacked in a scrolling area, each as wide as the area, so none
 // has to shrink for the others (card-diagram-flexible-switch.md#a-scrolling-stack)
-function reportStackBuild(id, itemList) {
+function reportStackBuild(model, id, itemList) {
 	return {
-		nodes: [{ id: `stack:${id}`, renderer: { type: 'view-stack' }, position: { x: 0, y: 0 }, size: { width: REPORT_WIDTH, height: REPORT_HEIGHT }, data: { isChromeHidden: true, itemList }, handles: [] }],
+		nodes: [{ id: `report:${id}`, renderer: { type: 'view-stack' }, position: { x: 0, y: 0 }, size: { width: REPORT_WIDTH, height: REPORT_HEIGHT }, data: { focusPath: `/overview/${id}`, isFrameVisibleFocused: true, tone: { plan: 'violet', run: 'amber', verify: 'green' }[id], titleBar: { text: labelOf(model, id), isVisibleEmbedded: true, isVisibleFocused: true }, itemList }, handles: [] }],
 		connections: [],
 	};
 }
@@ -461,7 +462,7 @@ function viewPlanBuild(model) {
 	}
 	itemList.push({ id: 'order', view: '/overview/plan/order', title: labelOf(model, 'planOrder'), icon: 'layers', tone: 'blue' });
 	if (model.plan) itemList.push({ id: 'batch', view: '/overview/plan/batch', title: labelOf(model, 'planBatch'), icon: 'split', tone: 'amber' });
-	return reportStackBuild('plan', itemList);
+	return reportStackBuild(model, 'plan', itemList);
 }
 
 // a list on a canvas wraps: at most this many in a row (a convention of the framework,
@@ -550,14 +551,14 @@ const metaOf = (model, stat, itemList) => itemList.map(([key, label]) => ({ valu
 function viewRunBuild(model) {
 	const stat = model.reportRun?.stat ?? {};
 	const dlqCount = model.reportRun?.dlqList?.length ?? 0;
-	return reportStackBuild('run', [
+	return reportStackBuild(model, 'run', [
 		{ id: 'flow', view: '/overview/run/flow', title: labelOf(model, 'runFlow'), icon: 'send', tone: 'amber' },
 		reportSummaryItemBuild(model, { id: 'result', title: labelOf(model, 'runResult'), text: `${model.reportRun?.batchList?.length ?? 0} ${labelOf(model, 'batchUnit')}`, tone: 'green', link: '/overview/run/batch', metaList: metaOf(model, stat, [['total', 'statTotal'], ['success', 'statSuccess'], ['dlq', 'statDlq']]) }),
 		reportSummaryItemBuild(model, { id: 'dlq', title: labelOf(model, 'runDlq'), text: model.reportRun?.dlqList?.[0]?.reason, tone: dlqCount > 0 ? 'red' : 'slate', link: '/overview/run/dlq', metaList: [{ value: dlqCount, label: labelOf(model, 'statDlq') }] }),
 	]);
 }
 
-const BATCH_TONE_LIST = ['blue', 'teal', 'violet', 'amber'];
+const FLOW_TABLE_TONE_LIST = ['blue', 'teal', 'violet', 'amber'];
 const FLOW_LINE = { stroke: '#94a3b8', strokeWidth: 1.25 };
 const FLOW_ROW_HEIGHT = 58;
 
@@ -574,7 +575,9 @@ function batchFlowBuild(model, { xBatch, widthBatch, resultOf, link }) {
 	const batchIdList = [];
 	const wordRow = labelOf(model, 'row');
 	let y = 0;
-	for (const { key, table, batchList } of batchTableListBuild(model)) {
+	for (const [tableIndex, { key, table, batchList }] of batchTableListBuild(model).entries()) {
+		// Color identifies the table: its header, row brackets and every batch share a tone, even with DLQ rows.
+		const tone = FLOW_TABLE_TONE_LIST[tableIndex % FLOW_TABLE_TONE_LIST.length];
 		const rows = [];
 		const rowGroupList = [];
 		const handles = [];
@@ -583,18 +586,18 @@ function batchFlowBuild(model, { xBatch, widthBatch, resultOf, link }) {
 			const end = start + Math.max(1, batch.rowCount ?? 1) - 1;
 			const groupId = `g${index}`;
 			rows.push({ id: `${groupId}-from`, name: `${wordRow} ${start}` }, { id: `${groupId}-gap`, isEllipsis: true }, { id: `${groupId}-to`, name: `${wordRow} ${end}` });
-			rowGroupList.push({ id: groupId, rowFrom: `${groupId}-from`, rowTo: `${groupId}-to`, tone: BATCH_TONE_LIST[index % BATCH_TONE_LIST.length] });
+			rowGroupList.push({ id: groupId, rowFrom: `${groupId}-from`, rowTo: `${groupId}-to`, tone });
 			handles.push(handleOf(groupId, 'out', 'right', `group/${groupId}`));
 			start = end + 1;
 		});
 		const tableId = `flow-table:${key}`;
-		nodes.push({ id: tableId, renderer: { type: 'table' }, position: { x: 0, y }, size: { width: 170, height: 'auto' }, data: { name: table?.name ?? key, nameLogical: labelOf(model, 'rowOrder'), isCompact: true, isFieldHeaderHidden: true, tone: 'blue', fields: [{ id: 'name', label: '' }], rows, rowGroupList }, handles });
+		nodes.push({ id: tableId, renderer: { type: 'table' }, position: { x: 0, y }, size: { width: 170, height: 'auto' }, data: { name: table?.name ?? key, nameLogical: labelOf(model, 'rowOrder'), isCompact: true, isFieldHeaderHidden: true, tone, fields: [{ id: 'name', label: '' }], rows, rowGroupList }, handles });
 		batchList.forEach((batch, index) => {
 			const id = `flow-batch:${batch.file}`;
 			const result = resultOf?.(batch);
 			nodes.push({
 				id, renderer: { type: 'card-brief' }, position: { x: xBatch, y: y + index * FLOW_ROW_HEIGHT }, size: { width: widthBatch, height: 'auto' }, link,
-				data: { title: batch.file, icon: 'file-spreadsheet', tone: result?.isProblem ? 'red' : BATCH_TONE_LIST[index % BATCH_TONE_LIST.length], statList: [`${batch.rowCount ?? ''} ${wordRow}`, result?.text ?? batch.range].filter(Boolean) },
+				data: { title: batch.file, icon: 'file-spreadsheet', tone, statList: [`${batch.rowCount ?? ''} ${wordRow}`, result?.text ?? batch.range].filter(Boolean) },
 				handles: [handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')],
 			});
 			connections.push(lineOf(`flow-split:${batch.file}`, [tableId, `g${index}`], [id, 'in'], { style: FLOW_LINE }));
@@ -606,6 +609,16 @@ function batchFlowBuild(model, { xBatch, widthBatch, resultOf, link }) {
 }
 
 const textOf = (group, key, fallback) => group?.[key] ?? fallback;
+
+function flowBlocksBuild(model, { xTarget, top, bottom, split }) {
+	const blockOf = (id, x, y, width, height, tone, itemList) => ({ id: `flow-area:${id}`, renderer: { type: 'color-block' }, position: { x, y }, size: { width, height }, data: { tone, itemList }, handles: [] });
+	return [
+		blockOf('source', -20, top, 210, bottom - top, 'blue', [{ id: 'source', icon: 'database', text: `${labelOf(model, 'sourceDatabase')} (${model.system.source.name})` }]),
+		blockOf('server', 205, top, xTarget - 245, bottom - top, 'amber', [{ id: 'server', icon: 'server', text: labelOf(model, 'migrationServer') }]),
+		blockOf('target', xTarget - 20, top, 210, split - top - 12, 'teal', [{ id: 'target', icon: 'database', text: `${labelOf(model, 'targetDatabase')} (${model.system.target.name})` }]),
+		blockOf('artifacts', xTarget - 20, split, 210, bottom - split, 'green', [{ id: 'artifacts', icon: 'file', text: labelOf(model, 'artifacts') }]),
+	];
+}
 
 // how a run goes, from the plan and the report: rows taken together into batches, batches
 // sent, what fails retried, what keeps failing set aside, all of it recorded
@@ -621,7 +634,7 @@ function viewRunFlowBuild(model) {
 		resultOf: (batch) => {
 			const result = resultByFile.get(batch.file);
 			if (!result) return null;
-			return { text: result.dlq ? `${result.success} ${wordSuccess} / ${result.dlq} ${wordDlq}` : `${result.success} ${wordSuccess}`, isProblem: Boolean(result.dlq) };
+			return { text: result.dlq ? `${result.success} ${wordSuccess} / ${result.dlq} ${wordDlq}` : `${result.success} ${wordSuccess}` };
 		},
 	});
 	const yMiddle = Math.max(0, height / 2 - 60);
@@ -629,10 +642,11 @@ function viewRunFlowBuild(model) {
 	const stat = model.reportRun?.stat ?? {};
 	nodes.push(
 		noteNodeBuild({ id: 'flow-send', x: 460, y: yMiddle, width: 160, title: textOf(flow.send, 'title', 'Send'), tag: textOf(flow.send, 'tag', ''), text: textOf(flow.send, 'text', 'Batch by batch, what is looked up first'), tone: 'amber', handleList: [handleOf('in', 'in', 'left'), handleOf('ok', 'out', 'right'), { id: 'retry-out', direction: 'out', anchor: { side: 'bottom', offset: 0.3 } }, { id: 'retry-in', direction: 'in', anchor: { side: 'bottom', offset: 0.7 } }] }),
-		{ id: 'flow-target', renderer: { type: 'card-brief' }, position: { x: 680, y: yMiddle + 6 }, size: { width: 170, height: 'auto' }, data: { title: target.name, icon: 'cloud', tone: 'green', statList: target.description ? [target.description] : [] }, handles: [handleOf('in', 'in', 'left'), handleOf('out', 'out', 'bottom')] },
+		{ id: 'flow-target', renderer: { type: 'card-brief' }, position: { x: 960, y: yMiddle + 6 }, size: { width: 170, height: 'auto' }, data: { title: target.name, icon: 'database', tone: 'green', statList: target.description ? [target.description] : [] }, handles: [handleOf('in', 'in', 'left'), handleOf('out', 'out', 'bottom')] },
 		noteNodeBuild({ id: 'flow-retry', x: 460, y: yMiddle + 120, width: 160, title: textOf(flow.retry, 'title', 'Retry'), tag: textOf(flow.retry, 'tag', ''), text: textOf(flow.retry, 'text', 'Waits, then tries again, up to a limit'), tone: 'slate', handleList: [{ id: 'in', direction: 'in', anchor: { side: 'top', offset: 0.3 } }, { id: 'back', direction: 'out', anchor: { side: 'top', offset: 0.7 } }, handleOf('over', 'out', 'right')] }),
 		noteNodeBuild({ id: 'flow-dlq', x: 680, y: yMiddle + 120, width: 170, title: textOf(flow.dlq, 'title', wordDlq), tag: textOf(flow.dlq, 'tag', ''), text: textOf(flow.dlq, 'text', 'Rows over the limit are kept apart'), tone: 'red', link: '/overview/run/dlq', handleList: [handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')] }),
-		noteNodeBuild({ id: 'flow-report', x: 900, y: yMiddle + 60, width: 130, title: labelOf(model, 'run'), tone: 'green', link: '/overview/run/batch', metaList: metaOf(model, stat, [['success', 'statSuccess'], ['dlq', 'statDlq']]), handleList: [handleOf('in', 'in', 'left')] }),
+		noteNodeBuild({ id: 'flow-report', x: 960, y: yMiddle + 140, width: 130, title: labelOf(model, 'run'), tone: 'green', link: '/overview/run/batch', metaList: metaOf(model, stat, [['success', 'statSuccess'], ['dlq', 'statDlq']]), handleList: [handleOf('in', 'in', 'left'), handleOf('top', 'in', 'top')] }),
+		...flowBlocksBuild(model, { xTarget: 960, top: -40, bottom: Math.max(height, yMiddle + 260) + 60, split: yMiddle + 110 }),
 	);
 	for (const id of batchIdList) connections.push(lineOf(`flow-send:${id}`, [id, 'out'], ['flow-send', 'in'], { style: FLOW_LINE }));
 	connections.push(
@@ -640,7 +654,7 @@ function viewRunFlowBuild(model) {
 		lineOf('flow-fail', ['flow-send', 'retry-out'], ['flow-retry', 'in'], { style: { stroke: '#d97706', strokeWidth: 1.25 } }),
 		lineOf('flow-back', ['flow-retry', 'back'], ['flow-send', 'retry-in'], { style: { stroke: '#64748b', strokeWidth: 1.25, strokeDasharray: '4 3' } }),
 		lineOf('flow-over', ['flow-retry', 'over'], ['flow-dlq', 'in'], { style: { stroke: '#dc2626', strokeWidth: 1.25 } }),
-		lineOf('flow-report-ok', ['flow-target', 'out'], ['flow-report', 'in'], { style: FLOW_LINE }),
+		lineOf('flow-report-ok', ['flow-target', 'out'], ['flow-report', 'top'], { style: FLOW_LINE }),
 		lineOf('flow-report-dlq', ['flow-dlq', 'out'], ['flow-report', 'in'], { style: FLOW_LINE }),
 	);
 	return { nodes, connections };
@@ -675,7 +689,7 @@ function viewRunDlqBuild(model) {
 function viewVerifyBuild(model) {
 	const stat = model.reportVerify?.stat ?? {};
 	const exceptionCount = model.reportVerify?.exceptionList?.length ?? 0;
-	return reportStackBuild('verify', [
+	return reportStackBuild(model, 'verify', [
 		{ id: 'flow', view: '/overview/verify/flow', title: labelOf(model, 'verifyFlow'), icon: 'file-check', tone: 'green' },
 		...(model.reportVerify?.sample ? [{ id: 'sample', view: '/overview/verify/sample', title: labelOf(model, 'verifySample'), subtitle: model.reportVerify.sample.key, icon: 'search', tone: 'blue' }] : []),
 		reportSummaryItemBuild(model, { id: 'result', title: labelOf(model, 'verifyResult'), text: `${model.reportVerify?.checkList?.length ?? 0} ${labelOf(model, 'columnCheck')}`, tone: 'green', link: '/overview/verify/check', metaList: metaOf(model, stat, [['total', 'statTotal'], ['matched', 'statMatched'], ['exception', 'statException']]) }),
@@ -699,9 +713,10 @@ function viewVerifyFlowBuild(model) {
 	nodes.push(
 		noteNodeBuild({ id: 'verify-set', x: 450, y: yMiddle, width: 150, title: textOf(flow.set, 'title', 'Compare the set'), text: textOf(flow.set, 'text', 'The rows of the batches against the outcome of the run'), tone: 'blue', metaList: metaOf(model, stat, [['total', 'statTotal'], ['matched', 'statMatched'], ['exception', 'statException']]), handleList: [handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right'), handleOf('down', 'out', 'bottom')] }),
 		noteNodeBuild({ id: 'verify-compare', x: 650, y: yMiddle, width: 150, title: textOf(flow.compare, 'title', 'Compare the values'), text: textOf(flow.compare, 'text', 'The CSV through the mappings, against the target'), tone: 'teal', handleList: [handleOf('in', 'in', 'left'), handleOf('read', 'in', 'top'), handleOf('out', 'out', 'right')] }),
-		{ id: 'verify-target', renderer: { type: 'card-brief' }, position: { x: 640, y: Math.max(-50, yMiddle - 110) }, size: { width: 170, height: 'auto' }, data: { title: target.name, icon: 'cloud', tone: 'green', statList: target.description ? [target.description] : [] }, handles: [handleOf('out', 'out', 'bottom')] },
+		{ id: 'verify-target', renderer: { type: 'card-brief' }, position: { x: 1110, y: -70 }, size: { width: 170, height: 'auto' }, data: { title: target.name, icon: 'database', tone: 'green', statList: target.description ? [target.description] : [] }, handles: [handleOf('out', 'out', 'left')] },
 		noteNodeBuild({ id: 'verify-exception', x: 450, y: heightAll + 30, width: 350, title: textOf(flow.exception, 'title', labelOf(model, 'verifyException')), text: model.reportVerify?.exceptionList?.map((item) => `${item.key}: ${item.reason} / ${item.status}`).join('\n') || '—', tone: 'red', link: '/overview/verify/exception', handleList: [handleOf('in', 'in', 'top'), handleOf('out', 'out', 'right')] }),
-		noteNodeBuild({ id: 'verify-report', x: 1090, y: yMiddle, width: 130, title: labelOf(model, 'verify'), tone: 'green', link: '/overview/verify/check', metaList: metaOf(model, stat, [['matched', 'statMatched'], ['exception', 'statException']]), handleList: [handleOf('in', 'in', 'left'), handleOf('bottom', 'in', 'bottom')] }),
+		noteNodeBuild({ id: 'verify-report', x: 1110, y: Math.max(150, yMiddle) + 30, width: 130, title: labelOf(model, 'verify'), tone: 'green', link: '/overview/verify/check', metaList: metaOf(model, stat, [['matched', 'statMatched'], ['exception', 'statException']]), handleList: [handleOf('in', 'in', 'left'), handleOf('bottom', 'in', 'bottom')] }),
+		...flowBlocksBuild(model, { xTarget: 1110, top: -100, bottom: heightAll + 200, split: 150 }),
 	);
 	for (const id of batchIdList) connections.push(lineOf(`verify-set:${id}`, [id, 'out'], ['verify-set', 'in'], { style: FLOW_LINE }));
 	connections.push(
@@ -775,6 +790,7 @@ function viewOverviewBuild(model) {
 	const { source, target, tool } = model.system;
 	const statOf = (dbId) => [`${migrationTableListOf(model, dbId).length} ${labelOf(model, 'tableUnit')}`, `${migrationChoiceListOf(model, dbId).length} ${labelOf(model, 'choiceUnit')}`];
 	const reportX = (index) => index * (OVERVIEW_REPORT_WIDTH + (OVERVIEW_TARGET_X + OVERVIEW_DB_WIDTH - 3 * OVERVIEW_REPORT_WIDTH) / 2);
+	const reportNodeOf = (id, index, handles) => ({ ...viewBuild(model, `/overview/${id}`).nodes[0], position: { x: reportX(index), y: OVERVIEW_REPORT_Y }, size: { width: OVERVIEW_REPORT_WIDTH, height: OVERVIEW_REPORT_HEIGHT }, link: `/overview/${id}`, handles });
 	const stepList = tool.stepList?.length ? tool.stepList : [{ id: 'plan', name: labelOf(model, 'plan') }, { id: 'run', name: labelOf(model, 'run') }, { id: 'verify', name: labelOf(model, 'verify') }];
 	const toolHandles = [handleOf('source', 'out', 'left'), handleOf('target', 'out', 'right'), ...stepList.map((step, index) => ({ id: `step-${step.id}`, direction: 'out', anchor: { target: 'body', side: 'bottom', offset: (index + 1) / (stepList.length + 1) } }))];
 	const nodes = [
@@ -786,9 +802,9 @@ function viewOverviewBuild(model) {
 			handles: toolHandles,
 		},
 		{ id: 'link:mapping', renderer: { type: 'card-brief' }, position: { x: OVERVIEW_TOOL_X + 20, y: 40 }, size: { width: OVERVIEW_TOOL_WIDTH - 40, height: 'auto' }, link: '/overview/mapping', data: { title: labelOf(model, 'mapping'), icon: 'arrow-right-left', tone: 'teal', statList: [`${model.mappingTableByKey.size} ${labelOf(model, 'tableUnit')}`] }, handles: [] },
-		embedNodeBuild({ id: 'report:plan', x: reportX(0), y: OVERVIEW_REPORT_Y, width: OVERVIEW_REPORT_WIDTH, height: OVERVIEW_REPORT_HEIGHT, view: '/overview/plan', title: labelOf(model, 'plan'), icon: 'list-checks', tone: 'violet', handleList: [handleOf('top', 'in', 'top'), handleOf('out', 'out', 'right')] }),
-		embedNodeBuild({ id: 'report:run', x: reportX(1), y: OVERVIEW_REPORT_Y, width: OVERVIEW_REPORT_WIDTH, height: OVERVIEW_REPORT_HEIGHT, view: '/overview/run', title: labelOf(model, 'run'), icon: 'send', tone: 'amber', statList: reportStatOf(model, 'run'), handleList: [handleOf('top', 'in', 'top'), handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')] }),
-		embedNodeBuild({ id: 'report:verify', x: reportX(2), y: OVERVIEW_REPORT_Y, width: OVERVIEW_REPORT_WIDTH, height: OVERVIEW_REPORT_HEIGHT, view: '/overview/verify', title: labelOf(model, 'verify'), icon: 'file-check', tone: 'green', statList: reportStatOf(model, 'verify'), handleList: [handleOf('top', 'in', 'top'), handleOf('in', 'in', 'left')] }),
+		reportNodeOf('plan', 0, [handleOf('top', 'in', 'top'), handleOf('out', 'out', 'right')]),
+		reportNodeOf('run', 1, [handleOf('top', 'in', 'top'), handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')]),
+		reportNodeOf('verify', 2, [handleOf('top', 'in', 'top'), handleOf('in', 'in', 'left')]),
 	];
 	const reportIdOf = (step, index) => `report:${step.report ?? ['plan', 'run', 'verify'][index]}`;
 	const labelStep = ['planMake', 'runMake', 'verifyMake'];
@@ -800,12 +816,6 @@ function viewOverviewBuild(model) {
 		lineOf('run-verify', ['report:run', 'out'], ['report:verify', 'in'], { style: { stroke: '#64748b', strokeWidth: 1.5 }, label: { text: labelOf(model, 'runToVerify') } }),
 	];
 	return { nodes, connections };
-}
-
-function reportStatOf(model, id) {
-	if (id === 'run' && model.reportRun?.stat) return [`${model.reportRun.stat.success ?? 0} ${labelOf(model, 'statSuccess')}`, `${model.reportRun.stat.dlq ?? 0} ${labelOf(model, 'statDlq')}`];
-	if (id === 'verify' && model.reportVerify?.stat) return [`${model.reportVerify.stat.matched ?? 0} ${labelOf(model, 'statMatched')}`, `${model.reportVerify.stat.exception ?? 0} ${labelOf(model, 'statException')}`];
-	return [];
 }
 
 const TAB_MEMBER_LIST = ['plan', 'run', 'verify'];

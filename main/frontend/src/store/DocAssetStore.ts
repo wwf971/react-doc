@@ -181,6 +181,21 @@ export type AssetRef = { store: string; objectId: string; name?: string; version
 
 type AssetObjectState = { status: 'loading' | 'done' | 'error'; object?: AssetObject; message?: string };
 
+// how many references one step of refListLoad reads
+const ASSET_LOAD_CHUNK_SIZE = 8;
+
+// after the next frame is painted, when there are frames to wait for (a page
+// out of sight has none; it just goes on)
+function frameNextWait(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame !== 'function' || document.hidden) setTimeout(resolve, 0);
+    else requestAnimationFrame(() => resolve());
+  });
+}
+
+// what a read marked as being read (versionLoadBegin), to settle when its answer comes
+type AssetVersionLoad = { isObjectKnown: boolean; versionIdKnown: string };
+
 type AssetNameLookupState = { status: 'loading' | 'error'; message: string };
 
 // the data of one version as the page holds it: the text when the bytes are
@@ -527,23 +542,80 @@ export class DocAssetStore {
   // one request reads the object and the data of one version
   private async versionLoad(store: string, objectId: string, versionIdRequested: string): Promise<void> {
     if (!this.backend) return;
-    const keyObject = objectKeyGet(store, objectId);
-    const isObjectKnown = Boolean(this.objectById[keyObject]?.object);
-    const versionIdKnown = versionIdRequested === 'head' ? this.objectGet(store, objectId)?.versionIdHead ?? '' : versionIdRequested;
-    runInAction(() => {
-      if (!isObjectKnown) this.objectById[keyObject] = { status: 'loading' };
-      if (versionIdKnown) this.versionByKey[versionKeyGet(store, objectId, versionIdKnown)] = { status: 'loading' };
-    });
+    const load = this.versionLoadBegin(store, objectId, versionIdRequested);
     const result = await this.backend.objectGet(store, objectId, versionIdRequested);
+    runInAction(() => this.versionLoadEnd(store, objectId, load, result));
+  }
+
+  // what refLoad does for many references at once, a few at a time (ASSET_LOAD_CHUNK_SIZE):
+  // one request and one change of the store per step, however many are asked, so what
+  // waits is drawn a few times and not once per reference, with a frame before each
+  // step so that a count of what is read is seen moving, even when the reads
+  // are answered at once (a built page). A reference by a name goes through refLoad.
+  async refListLoad(refList: AssetRef[]): Promise<void> {
+    if (!this.backend) return;
+    if (this.startPromise) await this.startPromise;
+    if (this.indexPromise) await this.indexPromise;
+    const refRestList: AssetRef[] = [];
+    const itemByStore = new Map<string, { objectId: string; versionId: string; load: AssetVersionLoad }[]>();
     runInAction(() => {
-      if (result.code !== 0) {
-        if (!isObjectKnown) this.objectById[keyObject] = { status: 'error', message: result.message };
-        if (versionIdKnown) this.versionByKey[versionKeyGet(store, objectId, versionIdKnown)] = { status: 'error', message: result.message };
-        return;
+      for (const ref of refList) {
+        if (this.storeIdList.length > 0 && !this.storeIdIs(ref.store)) continue;
+        const objectId = this.refObjectIdGet(ref);
+        if (!objectId) {
+          refRestList.push(ref);
+          continue;
+        }
+        const stateObject = this.objectById[objectKeyGet(ref.store, objectId)];
+        // being read, or known not to be readable
+        if (stateObject && stateObject.status !== 'done') continue;
+        const versionId = stateObject ? this.refVersionIdGet(ref) : ref.versionId;
+        if (stateObject && (!versionId || this.versionByKey[versionKeyGet(ref.store, objectId, versionId)])) continue;
+        const itemList = itemByStore.get(ref.store) ?? [];
+        itemList.push({ objectId, versionId, load: this.versionLoadBegin(ref.store, objectId, versionId) });
+        itemByStore.set(ref.store, itemList);
       }
-      this.objectAccept(store, result.data.object);
-      this.versionAccept(store, objectId, result.data.version);
     });
+    await Promise.all([
+      ...refRestList.map((ref) => this.refLoad(ref)),
+      ...[...itemByStore.entries()].map(async ([store, itemList]) => {
+        for (let start = 0; start < itemList.length; start += ASSET_LOAD_CHUNK_SIZE) {
+          await frameNextWait();
+          const chunk = itemList.slice(start, start + ASSET_LOAD_CHUNK_SIZE);
+          const result = await this.backend.objectGetList(store, chunk.map(({ objectId, versionId }) => ({ objectId, versionId })));
+          runInAction(() => {
+            chunk.forEach((item, index) => {
+              const answer = result.code === 0 ? result.data.itemList[index] : result;
+              this.versionLoadEnd(store, item.objectId, item.load, answer);
+            });
+          });
+        }
+      }),
+    ]);
+  }
+
+  // what is marked as being read until the answer comes
+  private versionLoadBegin(store: string, objectId: string, versionIdRequested: string): AssetVersionLoad {
+    const keyObject = objectKeyGet(store, objectId);
+    const load = {
+      isObjectKnown: Boolean(this.objectById[keyObject]?.object),
+      versionIdKnown: versionIdRequested === 'head' ? this.objectGet(store, objectId)?.versionIdHead ?? '' : versionIdRequested,
+    };
+    runInAction(() => {
+      if (!load.isObjectKnown) this.objectById[keyObject] = { status: 'loading' };
+      if (load.versionIdKnown) this.versionByKey[versionKeyGet(store, objectId, load.versionIdKnown)] = { status: 'loading' };
+    });
+    return load;
+  }
+
+  private versionLoadEnd(store: string, objectId: string, load: AssetVersionLoad, result: any) {
+    if (result.code !== 0) {
+      if (!load.isObjectKnown) this.objectById[objectKeyGet(store, objectId)] = { status: 'error', message: result.message };
+      if (load.versionIdKnown) this.versionByKey[versionKeyGet(store, objectId, load.versionIdKnown)] = { status: 'error', message: result.message };
+      return;
+    }
+    this.objectAccept(store, result.data.object);
+    this.versionAccept(store, objectId, result.data.version);
   }
 
   // the object changed on disk: its metadata and every version in use are
@@ -579,7 +651,13 @@ export class DocAssetStore {
   }
 
   private objectAccept(store: string, object: AssetObject) {
-    this.objectById[objectKeyGet(store, object.objectId)] = { status: 'done', object };
+    const key = objectKeyGet(store, object.objectId);
+    const stateBefore = this.objectById[key];
+    // an object read again as it was stays the same object: reading the data of
+    // an asset changes nothing for whoever depends on the index
+    if (stateBefore?.status !== 'done' || JSON.stringify(stateBefore.object) !== JSON.stringify(object)) {
+      this.objectById[key] = { status: 'done', object };
+    }
     // a reference by this name resolves now
     if (object.name) delete this.nameLookupByKey[nameKeyGet(store, object.name)];
     // versions that no longer exist (deleted) leave the cache

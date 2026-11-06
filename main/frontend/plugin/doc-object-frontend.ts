@@ -350,7 +350,7 @@ export function objectFrontendCreate(
     data: Buffer.from(entryText, 'utf-8'),
     note: `the entry of the frontend object ${name || id}`,
     folder: docPage.assetFolder,
-    groupPath: objectDirNameBuild(id, name),
+    groupPath: groupNameBuild(id, name, typeId),
     owner: { ref, role: OBJECT_FRONTEND_ROLE_ENTRY },
   });
   try {
@@ -418,7 +418,7 @@ export function objectFrontendMetaSet(
   };
   store.objectUpdate({ objectId: meta.objectId, hashBase: hash, data: Buffer.from(objectFrontendEntryTextBuild(entryNext), 'utf-8'), mode: 'inPlace' });
   if (nameNext !== entry.name && groupIsOwn(meta, item.id)) {
-    store.groupMove(meta.folder, meta.groupPath, groupPathRenamed(meta.groupPath, objectDirNameBuild(item.id, nameNext)));
+    store.groupMove(meta.folder, meta.groupPath, groupPathRenamed(meta.groupPath, groupNameBuild(item.id, nameNext, entryNext.type)));
   }
   return writeResultBuild(context, item.id, store.objectList().filter((one) => one.owner?.ref === objectFrontendRefBuild(item.id)));
 }
@@ -447,7 +447,7 @@ export function objectFrontendAssetCreate(
     data: Buffer.from(String(input.text ?? ''), 'utf-8'),
     note: input.note ?? `${kind || 'an asset'} of the frontend object ${entry.name || item.id}`,
     folder: meta.folder,
-    groupPath: groupIsOwn(meta, item.id) ? meta.groupPath : objectDirNameBuild(item.id, entry.name),
+    groupPath: groupIsOwn(meta, item.id) ? meta.groupPath : groupNameBuild(item.id, entry.name, entry.type),
     owner: { ref: objectFrontendRefBuild(item.id) },
     saveMode: input.saveMode,
   });
@@ -607,6 +607,14 @@ function objectIdOfOwnerGet(meta: AssetObjectMeta, role: string): string {
   const ref = meta.owner?.ref ?? '';
   if (!ref.startsWith('frontend:') || (meta.owner?.role ?? '') !== role) return '';
   return ref.slice('frontend:'.length);
+}
+
+// the group folder of an object: {id}--{name}, in ASCII like every folder of the store. a name
+// with no ASCII in it (データベース移行) gives way to the type, which always is, so that a person
+// browsing the disk still sees what the folder holds
+export function groupNameBuild(id: string, name: string, typeId: string): string {
+  const groupName = objectDirNameBuild(id, name);
+  return groupName === id ? objectDirNameBuild(id, typeId) : groupName;
 }
 
 // the entry is in the group folder of its object ({id} or {id}--{name}, the last folder of its group path)

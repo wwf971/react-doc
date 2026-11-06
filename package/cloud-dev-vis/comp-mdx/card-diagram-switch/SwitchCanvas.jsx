@@ -7,7 +7,7 @@ import { DiagramEdge, DiagramNode, DiagramPointNode, DiagramRenderContext, pathB
 import { useCanvasWheelGuard } from '../card-diagram/CanvasWheelGuard.js';
 import '../card-diagram/DiagramER.css';
 import { SwitchContext, SwitchStaticView, pathPointAt } from './SwitchStatic.jsx';
-import { SWITCH_ZOOM_MAX, SWITCH_ZOOM_MIN } from './SwitchData.js';
+import { SWITCH_ZOOM_MAX, SWITCH_ZOOM_MIN, switchPresentationBuild } from './SwitchData.js';
 
 // The one React Flow canvas of a switching viewport: the nodes of the view shown, or
 // of a transition, handed over by the store. Every frame of a transition goes through
@@ -167,7 +167,7 @@ export const SwitchCanvas = observer(function SwitchCanvas({ store, config, regi
 		edgeGeometry: new Map(),
 		viewBox: { get isAdjust() { return store.isBoxAdjust; }, resizeEnd: (nodeId, params) => store.boxCommit(nodeId, params) },
 	}), [config, registry, store]);
-	const switchContext = useMemo(() => ({ store, isStatic: false, depth: 0, pathChain: [] }), [store]);
+	const switchContext = useMemo(() => ({ store, isStatic: false, depth: 0, pathChain: [], get presentation() { return switchPresentationBuild(store.pathFlow); } }), [store]);
 	useLayoutEffect(() => {
 		const element = boxRef.current;
 		if (!element) return undefined;

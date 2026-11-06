@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { DocCliError, docCliRun, docInit, docLaunchBuild, docMountRead, docTargetRead } from './doc-cli.js';
+import { DocCliError, docBuildOneFileWrite, docCliRun, docInit, docLaunchBuild, docMountRead, docTargetRead } from './doc-cli.js';
 import { docPackageRead } from '../plugin/doc-package.ts';
 import { docSourcePlugin, loadConfigDoc } from '../plugin/doc-source.ts';
 import { assetConfigOfDocPageListGet, assetStoreCreate } from '../plugin/doc-asset-store.ts';
@@ -299,4 +299,38 @@ test('a package as a doc page: annotated, imported by being there, and read-only
   // a package's entry names no folders of its own for what it has at its top
   fs.appendFileSync(path.join(packageDir, '.doc-page', 'entry.yaml'), '\ncomp: false\n');
   assert.throws(() => loadConfigDoc(configFile), /"comp" is not for a package treated as a doc page/);
+});
+
+test('build: where it may put what it makes', async () => {
+  const dir = dirTempCreate();
+  docInit('page', 'notes', { cwd: dir });
+  const run = (...argList) => docCliRun(['build', ...argList], { cwd: dir, out: () => {} });
+  await assert.rejects(() => run('notes'), (error) => error instanceof DocCliError && /--out/.test(error.message));
+  await assert.rejects(() => run('notes', '--out', 'notes/page.html'), /inside what is being built/);
+  await assert.rejects(() => run('notes', '--out', 'notes/.doc-page/site'), /inside what is being built/);
+  fs.mkdirSync(path.join(dir, 'other'));
+  fs.writeFileSync(path.join(dir, 'other/keep.txt'), 'mine');
+  await assert.rejects(() => run('notes', '--out', 'other'), /not a build/);
+  assert.equal(fs.readFileSync(path.join(dir, 'other/keep.txt'), 'utf-8'), 'mine');
+  fs.rmSync(dir, { recursive: true });
+});
+
+test('build: one file holds the scripts and styles of a build, and refuses to lose one', () => {
+  const dir = dirTempCreate();
+  fs.mkdirSync(path.join(dir, 'assets'));
+  const htmlText = '<html><head><link rel="stylesheet" crossorigin href="./assets/a.css"><link rel="modulepreload" href="./assets/m.js"><script type="module" crossorigin src="./assets/a.js"></script></head><body><div id="root"></div></body></html>';
+  fs.writeFileSync(path.join(dir, 'index.html'), htmlText);
+  fs.writeFileSync(path.join(dir, 'assets/a.css'), '@font-face{src:url(data:font/woff2;base64,A)format("woff2"),url(data:font/ttf;base64,B)format("truetype")}');
+  fs.writeFileSync(path.join(dir, 'assets/a.js'), 'const text = "</script>";');
+  const outPath = path.join(dir, 'out/page.html');
+  docBuildOneFileWrite(dir, outPath, { isFontSlim: true });
+  const html = fs.readFileSync(outPath, 'utf-8');
+  assert.ok(html.includes('<style>@font-face{src:url(data:font/woff2;base64,A)format("woff2")}</style>'));
+  assert.ok(html.includes('<script type="module">const text = "<\\/script>";</script>'));
+  assert.ok(html.indexOf('<script') > html.indexOf('id="root"'), 'the script after the content of the body');
+  assert.ok(!html.includes('modulepreload'));
+  assert.ok(!html.includes('./assets/'));
+  fs.writeFileSync(path.join(dir, 'assets/extra.png'), 'x');
+  assert.throws(() => docBuildOneFileWrite(dir, outPath), /not put into the html/);
+  fs.rmSync(dir, { recursive: true });
 });

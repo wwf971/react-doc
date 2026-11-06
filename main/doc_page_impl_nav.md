@@ -101,7 +101,10 @@ Document replacement and place selection have different behavior:
 new document
 	-> reset the document scroll chain
 	-> wait for the compiled body
+	-> paint the title, the side panel and a loading mark
+	-> mount the body
 	-> find and align the requested fragment
+	-> keep it aligned while the body settles
 
 same fragment again
 	-> if already aligned and highlighted: no visual change
@@ -110,7 +113,9 @@ same fragment again
 
 `useDocDestinationNavigation()` owns this behavior. It scopes fragment lookup to the rendered document body, retries briefly while the destination is mounting, and calculates the destination position within the document viewport. Browser scroll anchoring is disabled on that viewport.
 
-The resolved destination receives `doc-navigation-target`. The package stylesheet displays this as a full-content-width yellow marker until navigation selects another document or place. Alignment runs again after the browser layout phase only when movement is needed. Pending images above the destination also request another alignment when they finish loading.
+The resolved destination receives `doc-navigation-target`. The package stylesheet displays this as a full-content-width yellow marker until navigation selects another document or place. Alignment runs again after the browser layout phase only when movement is needed. Pending images above the destination also request another alignment when they finish loading, and for a few seconds after a destination is reached, every change of the size of the body does too: blocks that draw later (a component reading its data, [a frontend object waiting for its turn](doc_page_impl_obj_frontend.md#reading-many-assets)) grow above it. The reader takes over by scrolling, clicking or pressing a key, which ends this at once.
+
+**A click is answered before the body mounts.** Mounting a document can take long, and nothing is painted while it runs. So `DocPageView` first commits the new document with its title, its table of contents and `DocPageBodyLoading` in place of the body, and sets `docStore.docBodyPathMounted` two animation frames later, once that frame is painted; only then the body mounts (and only then the destination is looked for). A recompile of the document on screen stays mounted. The mark fades in, so a light document shows no flash, and it holds the height of the body, so the footer does not jump. The table of contents gets a new list when the body mounts, since it looks for its headings when it receives its list.
 
 The same hook applies a navigation's focus after the fragment: the components of the focused block are told (`placeReveal`), the reference is looked for by the target and line its link carries, its paragraph is aligned and the link itself receives `doc-navigation-focus`, a ring in the primary color; a reference no longer in the body falls back to its nearest heading ([Going to a backlink](doc_page_impl_nav_backlink.md#going-to-a-backlink)).
 

@@ -6,6 +6,7 @@ import { TableCard } from './TableCard.jsx';
 import { OperatorCard } from './OperatorCard.jsx';
 import { CardBrief, CardNote } from './CompactCard.jsx';
 import { ViewBoxCard } from './ViewBoxCard.jsx';
+import { ColorBlock, colorBlockNormalize } from './ColorBlock.jsx';
 
 // The node kinds of the base series (card-diagram-impl.md#node-registries): a
 // generic table card with authored fields and rows, without any limit on
@@ -95,6 +96,18 @@ export const viewBoxNodeKind = {
 	},
 };
 
-export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, viewBoxNodeKind];
+export const colorBlockNodeKind = {
+	type: 'color-block',
+	label: 'Color block',
+	contract: { isBackground: true, dataNormalize: colorBlockNormalize, anchorListGet: () => [], sizeDefault: { width: 400, height: 300 }, sizeMin: { width: 80, height: 60 } },
+	schema: null,
+	Card: ColorBlock,
+	create: {
+		description: 'A light background rectangle with text and icons along the bottom.', icon: Boxes, keywordList: ['background', 'swimlane', 'group', 'area'],
+		nodeCreate: idNext => ({ id: idNext('block'), renderer: { type: 'color-block' }, size: { width: 400, height: 300 }, data: { tone: 'blue', itemList: [{ id: 'label', text: 'Group', icon: 'boxes' }] }, handles: [] }),
+	},
+};
+
+export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, viewBoxNodeKind, colorBlockNodeKind];
 
 export const cardDiagramNodeRegistry = nodeRegistryBuild({ id: 'card-diagram', label: 'Card diagram', kindList: cardDiagramNodeKindList });

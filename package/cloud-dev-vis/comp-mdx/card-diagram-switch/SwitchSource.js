@@ -1,4 +1,5 @@
 import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
+import { switchStackTitleBarNormalize } from './SwitchData.js';
 
 // the starting text of a block, and what its views depend on at build time
 const SWITCH_SOURCE_DEFAULT = `version: 1
@@ -46,12 +47,23 @@ export function switchSourceDefaultCreate() {
 export function switchDependenciesCollect(data, context) {
 	try {
 		const doc = data.source || data.raw ? yamlParse(data.source || data.raw) : data;
+    const nodeCollect = (node) => {
+      if (node.renderer?.component) context.componentCollect(node.renderer.component, node.data ?? {});
+      if (node.renderer?.type !== 'view-stack') return;
+      const title = switchStackTitleBarNormalize(node.data?.titleBar);
+      for (const item of title?.itemList ?? []) {
+        if (item.type === 'component') context.componentCollect(item.comp, item.data ?? {});
+      }
+      for (const item of node.data?.itemList ?? []) {
+        if (item.node) nodeCollect(item.node);
+      }
+    };
 		for (const view of doc.viewList ?? []) {
 			for (const node of view.diagram?.nodes ?? []) {
-				if (node.renderer?.component) context.componentCollect(node.renderer.component, node.data ?? {});
+        nodeCollect(node);
 			}
 		}
-	} catch {
-		// a block that does not read says so where it is drawn
+  } catch (error) {
+    context.warn?.(`Switch dependencies could not be collected: ${error.message}`);
 	}
 }

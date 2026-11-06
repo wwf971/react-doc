@@ -81,7 +81,7 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 	const connectionSelected = selection?.nodeId === id && selection.connectionId ? editor.store.connectionGet(selection.connectionId) : undefined;
 	const isConnectable = Boolean(editor) && !editor.isLocked;
 	return (
-		<div ref={root} className={`doc-vis-node${node.size.height === 'auto' ? ' is-height-auto' : ''}`} style={{ height: node.size.height === 'auto' ? 'auto' : '100%' }}>
+		<div ref={root} className={`doc-vis-node${node.isBackground && !editor ? ' is-background' : ''}${node.size.height === 'auto' ? ' is-height-auto' : ''}`} style={{ height: node.size.height === 'auto' ? 'auto' : '100%' }}>
 			<div className="doc-vis-node-content">
 				<DiagramNodeContent id={id} node={node} config={config} registry={registry} editor={editor} anchorRef={anchorRef} visualization={visualization} />
 			</div>

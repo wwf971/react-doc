@@ -35,7 +35,7 @@ my-doc/                          the doc page folder: give this to a workspace f
     │   └── base.yaml            a map main.yaml includes, or the reader picks instead
     │                            the managed folders, each made by its first item (below):
     ├── asset/                   the asset objects of the doc page: its default asset folder
-    │   └── {id}--{name}/        a group folder: the assets of one frontend object, its entry among them
+    │   └── {id}--{name}/        a group folder: the assets of one frontend object, its entry among them (ASCII only)
     ├── comp-mdx/                its components: comp.yaml manifests and the modules they name
     │   ├── comp.yaml            the components at the top of the folder
     │   └── table/stock-table/   a group in a group: any folders, each may hold a comp.yaml
@@ -146,6 +146,20 @@ A doc page binds keys to apis and declares apis of its own in its metadata folde
 - **`.doc-page/api.yaml`** holds the apis the doc page declares without code: aliases of apis of the page with fixed parameters, or sequences of calls ([Declared apis](doc_page_impl_api.md#declared-apis)), read when the file exists; `api: { file }` names another file, `api: false` none.
 
 Both are configuration, like the entry and the side-panel files: a change reloads the page, and they are never collected as documents.
+
+### Folder names of assets
+
+A folder holding the data of an asset object or of a frontend object is named in **ASCII only**. Other characters are what file systems, archives, version control and other machines disagree on (normalization on macOS, code pages on Windows), and these folders travel with a doc page. A name for readers is another matter: the name of an asset or a frontend object, a type's label and a document may be in any language; they are kept in the files, not in the folder name.
+
+```text
+name                    its folder
+My shelf                {id}--My shelf
+営業 report 2           {id}--report 2             the ASCII parts of the name
+データベース移行         {id}                       an asset with no ASCII in its name
+データベース移行         {id}--db-migration.project  a frontend object: its type, so the folder still says what it holds
+```
+
+The store builds these names itself (`objectDirNameBuild`, `groupNameBuild`), so this concerns whoever makes such a folder by hand or by a script of their own. A folder named otherwise by an older version is still read, its id being what counts; it may be renamed by hand, keeping the id at its start, as nothing refers to it by its path.
 
 ### Frontend objects
 

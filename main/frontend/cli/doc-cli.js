@@ -5,6 +5,7 @@
 //   react-doc init workspace <dir>  a workspace folder: .doc-workspace/workspace.yaml and a first doc page
 //   react-doc init package <dir>    a package folder: doc-package.yaml, doc/README.md, .doc-page/
 //   react-doc dev [<path>]          serves a doc page, a package or a workspace
+//   react-doc build [<path>] --out  the same as a static page: one html file, or a folder
 //   react-doc where                 where this copy of react-doc finds what it needs
 //   react-doc pack [--out <dir>]    the folder `npm publish` publishes (the installed mode)
 //
@@ -34,6 +35,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { docBuildFontSlim, docBuildSlimPlugin } from '../plugin/doc-build-slim.js';
 
 export const SCAFFOLD_DIR = fileURLToPath(new URL('./scaffold/', import.meta.url));
 
@@ -63,6 +65,7 @@ usage
   react-doc init workspace <dir>  [--page <alias>] [--title <title>]
   react-doc init package <dir>    [--name <name>] [--title <title>]
   react-doc dev [<path>]          [options below]
+  react-doc build [<path>] --out <file.html | dir>  [options below]
   react-doc where
   react-doc pack                  [--out <dir>]
 
@@ -95,6 +98,13 @@ dev options
   --host                 listen on every address
   --open                 open the browser
   --root <dir>           serve with the react-doc of this folder (a checkout) instead of this one
+
+build options (and --kind, --alias, --side-panel, --mount, --package, --package-dir, --config, --root above)
+  --out <file.html>      one html file holding everything: it opens from disk, offline. What no document
+                         seems to use is left out (mermaid, the spreadsheet engine, code languages)
+  --out <dir>            a folder of static files to put on a web server (a folder holding
+                         something else is refused without --force)
+  --keep-all             one file with everything the page can use, however large
 `;
 
 export class DocCliError extends Error {}
@@ -338,7 +348,7 @@ export function docLaunchBuild(pathText, option, layout = docLayoutGet()) {
     kind: target.kind,
     target: target.dir ?? target.file,
     mode: layout.mode,
-    command: ['react-doc dev', path.relative(cwd, target.dir ?? target.file) || '.', ...(option.mount ?? []).map((text) => `--mount ${text}`)].join(' '),
+    command: [option.commandName ?? 'react-doc dev', path.relative(cwd, target.dir ?? target.file) || '.', ...(option.mount ?? []).map((text) => `--mount ${text}`)].join(' '),
     packageSearchDirList,
   };
   if (option.config) {
@@ -461,6 +471,109 @@ async function docDev(pathText, option, out) {
   process.on('SIGINT', close);
   process.on('SIGTERM', close);
   return new Promise(() => {});
+}
+
+// `build`: vite builds the frontend of this copy with the launch layer, as `dev` serves it.
+// a built page has no backend, and no write reaches its files
+async function docBuild(pathText, option, out) {
+  const cwd = option.cwd ?? process.cwd();
+  if (!option.out) throw new DocCliError('react-doc build needs --out <file.html> or --out <dir>');
+  const outPath = path.resolve(cwd, option.out);
+  const isOneFile = outPath.toLowerCase().endsWith('.html');
+  const layout = docLayoutRunGet(docLayoutGet());
+  const launch = docLaunchBuild(pathText, { ...option, 'no-backend': true, commandName: 'react-doc build' }, layout);
+  // the source rules of a doc page collect its folder: a build put there would be built next time
+  const dirTarget = launch.target.toLowerCase().endsWith('.yaml') ? path.dirname(path.dirname(launch.target)) : launch.target;
+  const outRelative = path.relative(dirTarget, outPath);
+  if (!outRelative.startsWith('..') && !path.isAbsolute(outRelative)) {
+    throw new DocCliError(`--out ${option.out} is inside what is being built (${dirTarget}), whose source rules would collect it: put it outside`);
+  }
+  if (!isOneFile && fs.existsSync(outPath) && fs.readdirSync(outPath).length > 0 && !fs.existsSync(path.join(outPath, 'index.html')) && !option.force) {
+    throw new DocCliError(`--out ${option.out} holds files that are not a build, which would be deleted: name an empty folder, or give --force`);
+  }
+  process.env.REACT_DOC_LAUNCH = JSON.stringify(launch);
+  let vite;
+  try {
+    vite = await import('vite');
+  } catch (error) {
+    throw new DocCliError(`react-doc build needs the dependencies of the page, which are not installed beside ${layout.dirFrontend}: ${String(error?.message ?? error)}`);
+  }
+  const loadFailureReport = (error) => {
+    const message = String(error?.message ?? error);
+    throw /^\[doc-[a-z-]+\] /.test(message) ? new DocCliError(message.replace(/^\[doc-[a-z-]+\] /, '')) : error;
+  };
+  const configBase = {
+    root: layout.dirFrontend,
+    configFile: path.join(layout.dirFrontend, 'vite.config.ts'),
+    base: './',
+    logLevel: 'warn',
+  };
+  if (!isOneFile) {
+    await vite.build({ ...configBase, build: { outDir: outPath, emptyOutDir: true } }).catch(loadFailureReport);
+    out(`built ${launch.target}`);
+    out(`  into ${outPath}: static files for a web server (opened from disk, a browser refuses their scripts)`);
+    return 0;
+  }
+  const slim = option['keep-all'] ? undefined : docBuildSlimPlugin();
+  const dirOut = fs.mkdtempSync(path.join(os.tmpdir(), 'react-doc-build-'));
+  try {
+    await vite.build({
+      ...configBase,
+      plugins: slim ? [slim] : [],
+      build: {
+        outDir: dirOut,
+        emptyOutDir: true,
+        // fonts and images in the file; documents and assets are in the code (a built page has them as a snapshot)
+        assetsInlineLimit: 1024 * 1024 * 1024,
+        cssCodeSplit: false,
+        chunkSizeWarningLimit: 1e9,
+        // one chunk. a module also imported lazily is wrapped in an init function, and a static
+        // importer may not call it, leaving its bindings undefined at run time: without the strict
+        // order of execution, which makes every module run when the import graph says, the page crashes on load
+        rollupOptions: { output: { codeSplitting: false, strictExecutionOrder: true }, checks: { pluginTimings: false } },
+      },
+    }).catch(loadFailureReport);
+    docBuildOneFileWrite(dirOut, outPath, { isFontSlim: Boolean(slim) });
+  } finally {
+    fs.rmSync(dirOut, { recursive: true, force: true });
+  }
+  out(`built ${launch.target}`);
+  out(`  into ${outPath}: ${(fs.statSync(outPath).size / 1e6).toFixed(1)} MB, one file that opens from disk, offline`);
+  if (slim) {
+    const { omitList, langList, langLeftOutCount, themeLeftOutCount } = slim.report;
+    out(`  code languages kept: ${langList.join(', ') || 'none'} (${langLeftOutCount} left out, drawn as plain text; ${themeLeftOutCount} themes left out)`);
+    if (omitList.length > 0) out(`  left out, no document seems to use it: ${omitList.join(', ')}`);
+    out('  --keep-all keeps everything');
+  }
+  return 0;
+}
+
+// the html of a build with its scripts and styles put into it
+export function docBuildOneFileWrite(dirBuild, outPath, { isFontSlim = false } = {}) {
+  const inlined = [];
+  const fileRead = (href) => {
+    inlined.push(href);
+    return fs.readFileSync(path.join(dirBuild, href), 'utf-8');
+  };
+  let html = fs.readFileSync(path.join(dirBuild, 'index.html'), 'utf-8');
+  html = html.replace(/<link\s+rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/g, (_all, href) => {
+    const text = fileRead(href);
+    return `<style>${(isFontSlim ? docBuildFontSlim(text) : text).replace(/<\/style/gi, '<\\/style')}</style>`;
+  });
+  const scriptList = [];
+  html = html.replace(/<script\s+type="module"[^>]*src="([^"]+)"[^>]*><\/script>/g, (_all, src) => {
+    scriptList.push(fileRead(src).replace(/<\/script/gi, '<\\/script'));
+    return '';
+  });
+  html = html.replace(/<link\s+rel="modulepreload"[^>]*>/g, '');
+  // a module script runs after the page is parsed anyway; at the end of the body the text of the script cannot be taken for markup
+  const scriptTag = scriptList.map((text) => `<script type="module">${text}</script>`).join('\n');
+  const index = html.lastIndexOf('</body>');
+  html = `${html.slice(0, index)}${scriptTag}\n${html.slice(index)}`;
+  const leftover = fs.readdirSync(path.join(dirBuild, 'assets')).filter((name) => !inlined.some((href) => href.endsWith(name)));
+  if (leftover.length > 0) throw new DocCliError(`these files were not put into the html, so it would not be complete: ${leftover.join(', ')}`);
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, html);
 }
 
 function docWhere(out) {
@@ -630,6 +743,7 @@ export function docCliRun(argList, option = {}) {
         open: { type: 'boolean' },
         root: { type: 'string' },
         out: { type: 'string' },
+        'keep-all': { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
       },
     });
@@ -641,14 +755,14 @@ export function docCliRun(argList, option = {}) {
     out(USAGE_TEXT.trimEnd());
     return 0;
   }
-  if (command === 'dev') {
+  if (command === 'dev' || command === 'build') {
     if (parsed.values.root) {
       const scriptOther = path.join(path.resolve(option.cwd ?? process.cwd(), parsed.values.root), 'main', 'frontend', 'cli', 'doc-cli.js');
       if (!fs.existsSync(scriptOther)) throw new DocCliError(`--root: no react-doc at ${parsed.values.root}`);
       const argListOther = argList.filter((arg, index) => arg !== '--root' && argList[index - 1] !== '--root' && !arg.startsWith('--root='));
       return spawnSync(process.execPath, [scriptOther, ...argListOther], { stdio: 'inherit', cwd: option.cwd ?? process.cwd() }).status ?? 1;
     }
-    return docDev(kind, { ...parsed.values, cwd: option.cwd }, out);
+    return (command === 'dev' ? docDev : docBuild)(kind, { ...parsed.values, cwd: option.cwd }, out);
   }
   if (command === 'where') return docWhere(out);
   if (command === 'pack') {

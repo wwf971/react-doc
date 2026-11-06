@@ -132,6 +132,63 @@ A box written or named shows that part alone; what lies outside it stays out, un
 
 A card fits a whole view inside it, so a tall one gets small. A `view-stack` holds **views and cards one under another in a scrolling area**, each as wide as the area: nothing shrinks to make everything visible. Scroll it with the wheel, which zooms the canvas again once there is nothing left to scroll; click a section to open its view. The cards on the left scroll it from outside, by a link naming an item: `/list#part`.
 
+### The stack as the outer container
+
+When an overview card is a scrolling report, put a `view-stack` directly in the overview. Do not wrap it in a `view-embed` that contains another stack. Use the same node ID and content in its dedicated view, changing only its position, size, handles, and overview link. Switching between these views then moves and resizes the stack itself.
+
+```yaml
+id: report:run
+renderer: { type: view-stack }
+size: { width: 560, height: 420 }
+link: /overview/run
+data:
+  focusPath: /overview/run
+  isFrameVisibleFocused: true
+  titleBar: Run report
+  itemList: []
+```
+
+`focusPath` identifies the stack's dedicated view. Elsewhere it has embedded presentation; in that view it has focused presentation, including static masks and measurements. The overview title and its focus icon open that path. Custom title controls keep their own actions. Scrollbar dragging remains available in the overview; the wheel scrolls the stack in its focused view.
+
+Copies with the same node ID and `focusPath` share a saved scroll position. Their geometry remains separate, so overview and focused sizes may differ. A copy with less scrollable content clamps its displayed position without overwriting the saved position. Without `focusPath`, the existing per-view scroll behavior is unchanged.
+
+`isFrameVisibleFocused` defaults to `true`. Setting it to `false` hides the focused stack's border and background, not its scrolling behavior or items. Title visibility is controlled separately below. The three migration plan/report containers explicitly keep their frames and titles in both presentations.
+
+### The stack title bar
+
+The title bar stays above the scrolling items. Simple text can be written as `data.titleBar: Verification report`. To control its visibility independently in the two presentations:
+
+```yaml
+data:
+  titleBar:
+    text: Verification report
+    isVisibleEmbedded: false
+    isVisibleFocused: true
+  itemList: []
+```
+
+**Focused** means the stack belongs to the view drawn directly on the canvas, not keyboard focus. **Embedded** means its view is drawn inside another view's card or stack item. Both visibility flags default to `true`; setting both to `false` hides the title everywhere. A title bar wraps long text and takes space from the scrolling body without changing the outer node's size.
+
+For mixed content, use `itemList` instead of `text`:
+
+```yaml
+data:
+  titleBar:
+    isVisibleEmbedded: false
+    isVisibleFocused: true
+    itemList:
+      - { id: name, type: text, text: Verification report }
+      - id: status
+        type: component
+        comp: ReportStatus
+        data: { count: 299 }
+  itemList: []
+```
+
+Each title item needs a unique nonempty `id`. Text is plain text, not HTML. `ReportStatus` is an example component name: register your component with `placementList: ['visualizationTitle']`. Component items use the standard registry boundary and receive `{ data, config, onEvent }`; no function or import path is stored in the diagram. `config.visualization` supplies `nodeId`, `titleItemId`, `anchorRef`, and `presentation: { path, isEmbedded, isFocused }`. Components should fit their available width and use `onEvent` for the normal page event routing. Their controls neither drag the canvas nor trigger the surrounding view's click navigation.
+
+Omitting `titleBar` preserves the existing `title`, `subtitle`, `icon`, `statList`, and `isChromeHidden` behavior. An explicit `titleBar` takes precedence over those legacy chrome settings; if its `text` and `itemList` are both omitted, it uses `data.title` as text. The title's `itemList` is separate from the stack's scrolling `data.itemList`.
+
 <!--renderComp=CardDiagramSwitch,height=520,title=A stack-->
 ```yaml
 version: 1

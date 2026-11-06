@@ -19,6 +19,52 @@ export const SWITCH_SECOND_CAMERA = 0.5;
 export const SWITCH_SECOND_SCROLL = 0.4;
 export const SWITCH_STACK_ITEM_SCALE_MAX = 1.1;
 
+export function switchPresentationBuild(path, isEmbedded = false) {
+	return { path: switchPathNormalize(path), isEmbedded, isFocused: !isEmbedded };
+}
+
+export function switchStackPresentationBuild(data, presentation) {
+	if (!data.focusPath) return presentation;
+	const path = switchPathNormalize(data.focusPath);
+	return switchPresentationBuild(path, presentation.isEmbedded || presentation.path !== path);
+}
+
+export function switchStackFrameIsVisible(data, presentation) {
+	return !presentation.isFocused || data.isFrameVisibleFocused !== false;
+}
+
+export function switchStackTitleBarNormalize(value) {
+	if (value === undefined) return undefined;
+	const title = typeof value === 'string' ? { text: value } : mapping(value, 'titleBar');
+	for (const key of ['isVisibleEmbedded', 'isVisibleFocused']) {
+		if (title[key] !== undefined && typeof title[key] !== 'boolean') throw new Error(`titleBar.${key} must be a boolean.`);
+	}
+	if (title.text !== undefined && typeof title.text !== 'string') throw new Error('titleBar.text must be text.');
+	if (title.text !== undefined && title.itemList !== undefined) throw new Error('titleBar uses text or itemList, not both.');
+	if (title.itemList !== undefined) {
+		if (!Array.isArray(title.itemList)) throw new Error('titleBar.itemList must be a list.');
+		const idSet = new Set();
+		for (const item of title.itemList) {
+			if (!item || typeof item.id !== 'string' || !item.id.trim() || idSet.has(item.id)) throw new Error('Every titleBar item needs a unique nonempty id.');
+			idSet.add(item.id);
+			if (item.type === 'text') {
+				if (typeof item.text !== 'string') throw new Error(`titleBar item ${item.id} needs text.`);
+			} else if (item.type === 'component') {
+				if (typeof item.comp !== 'string' || !item.comp.trim()) throw new Error(`titleBar item ${item.id} needs comp.`);
+				if (item.data !== undefined) mapping(item.data, `titleBar item ${item.id}.data`);
+			} else throw new Error(`Unknown titleBar item type: ${item.type}.`);
+		}
+	}
+	return title;
+}
+
+export function switchStackTitleBarRead(data, presentation) {
+	const title = switchStackTitleBarNormalize(data.titleBar);
+	if (!title) return data.isChromeHidden ? null : { isLegacy: true, text: data.title };
+	const isVisible = presentation.isEmbedded ? title.isVisibleEmbedded : title.isVisibleFocused;
+	return isVisible === false ? null : { ...title, text: title.text ?? data.title ?? '' };
+}
+
 // ---------- paths ----------
 
 // a path of a view: "/" separates its segments, always from the root, as a path

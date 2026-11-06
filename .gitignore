@@ -48,3 +48,6 @@ update-*
 # hidden backups of files deleted from the page, .{name}.{uuid}.deleted
 # (doc_page_impl_source.md#creating-and-deleting-files)
 **/.*.deleted
+
+
+/temp*

@@ -110,6 +110,7 @@ class DiagramERStore {
 					return {
 						...(isSizeAuthoredChanged ? beforeWithoutSize : before),
 						id: node.id, type: 'visualizationNode', position: before && !isPositionAuthoredChanged ? before.position : positions.get(node.id),
+						zIndex: node.isBackground ? -1 : 0,
 						style: { width: node.size.width === 'auto' ? node.sizeDefault.width : node.size.width, ...(node.size.height === 'auto' ? {} : { height: node.size.height }) },
 						data: { node },
 					};

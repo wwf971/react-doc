@@ -29,6 +29,25 @@ const model = migrationModelBuild('example', itemList);
 const provider = migrationProviderBuild(model);
 const registry = switchRegistryBuild(powerPlatformNodeRegistry);
 
+test('run and verify flows place locations and outputs in base-layer color blocks', () => {
+	for (const kind of ['run', 'verify']) {
+		const diagram = provider.viewGet(`/overview/${kind}/flow`).diagram;
+		const blocks = diagram.nodes.filter(node => node.renderer.type === 'color-block');
+		assert.equal(blocks.length, 4);
+		const blockOf = id => blocks.find(node => node.id === `flow-area:${id}`);
+		const target = diagram.nodes.find(node => node.id === (kind === 'run' ? 'flow-target' : 'verify-target'));
+		const report = diagram.nodes.find(node => node.id === (kind === 'run' ? 'flow-report' : 'verify-report'));
+		const contains = (block, node) => node.position.x >= block.position.x && node.position.x + node.size.width <= block.position.x + block.size.width && node.position.y >= block.position.y && node.position.y < block.position.y + block.size.height - 40;
+		assert.ok(contains(blockOf('target'), target));
+		assert.ok(contains(blockOf('artifacts'), report));
+		assert.equal(target.data.icon, 'database');
+		for (const id of ['source', 'target']) assert.equal(blockOf(id).data.itemList[0].icon, 'database');
+		for (const node of diagram.nodes.filter(node => node.id.startsWith('flow-table:'))) assert.ok(contains(blockOf('source'), node));
+		for (const node of diagram.nodes.filter(node => node.id.startsWith('flow-batch:'))) assert.ok(contains(blockOf('server'), node));
+		assert.ok(target.position.x > blockOf('server').position.x + blockOf('server').size.width);
+	}
+});
+
 test('a path names its category and its item', () => {
 	assert.equal(migrationCategoryOf('/real/schema/pw/table/a'), 'real');
 	assert.equal(migrationPathBuild('real', 'schema-table', { db: 'pw', logical: 'a' }), '/real/schema/pw/table/a');
@@ -194,6 +213,33 @@ test('a report is a stack of its sections, each opening its view', () => {
 	assert.equal(nodes[0].data.itemList[0].view, '/overview/mapping/a--x');
 });
 
+test('report stacks show their localized simple title in overview and focus', () => {
+	const labels = { plan: 'Plan title', run: 'Run title', verify: 'Verify title' };
+	const modelTitle = migrationModelBuild('example', itemList.map((item) => item.kind === 'system' ? { ...item, data: { ...item.data, labels } } : item));
+	const providerTitle = migrationProviderBuild(modelTitle);
+	for (const id of ['plan', 'run', 'verify']) {
+		const { data } = providerTitle.viewGet(`/overview/${id}`).diagram.nodes[0];
+		assert.deepEqual(data.titleBar, { text: labels[id], isVisibleEmbedded: true, isVisibleFocused: true });
+	}
+});
+
+test('overview reports are the scrolling containers themselves, shared with focused views', () => {
+	const overview = provider.viewGet('/overview').diagram;
+	for (const id of ['plan', 'run', 'verify']) {
+		const parent = overview.nodes.find((node) => node.id === `report:${id}`);
+		const focused = provider.viewGet(`/overview/${id}`).diagram.nodes[0];
+		assert.equal(parent.renderer.type, 'view-stack');
+		assert.equal(parent.link, `/overview/${id}`);
+		assert.equal(parent.data.focusPath, `/overview/${id}`);
+		assert.equal(parent.data.isFrameVisibleFocused, true);
+		assert.equal(parent.id, focused.id);
+		assert.deepEqual(parent.data, focused.data);
+		assert.ok(!overview.nodes.some((node) => node.renderer.type === 'view-embed' && node.data.view === `/overview/${id}`));
+		const tab = provider.viewGet(`/overview/tabs/${id}`).diagram.nodes.find((node) => node.id === parent.id);
+		assert.equal(tab.renderer.type, 'view-stack');
+	}
+});
+
 test('a report shows how it goes first; its tables are a click away, not stacked', () => {
 	for (const [path, detailList] of [['/overview/run', ['/overview/run/batch', '/overview/run/dlq']], ['/overview/verify', ['/overview/verify/check', '/overview/verify/exception']]]) {
 		const { itemList } = provider.viewGet(path).diagram.nodes[0].data;
@@ -210,6 +256,35 @@ test('a report shows how it goes first; its tables are a click away, not stacked
 	assert.equal(run.nodes.find((node) => node.id === 'flow-dlq').link, '/overview/run/dlq');
 	const verify = provider.viewGet('/overview/verify/flow').diagram.nodes.map((node) => node.id);
 	for (const id of ['flow-batch:a-1.csv', 'verify-set', 'verify-compare', 'verify-target', 'verify-exception', 'verify-report']) assert.ok(verify.includes(id), id);
+});
+
+test('run and verify flows color each table and all its batches alike, including DLQ batches', () => {
+	const batchList = [
+		{ table: 'ex.pw.t.a', file: 'a-1.csv', range: '[0, 100)', rowCount: 100 },
+		{ table: 'ex.pw.t.a', file: 'a-2.csv', range: '[100, 150)', rowCount: 50 },
+		{ table: 'ex.pw.t.b', file: 'b-1.csv', range: '[0, 100)', rowCount: 100 },
+		{ table: 'ex.pw.t.b', file: 'b-2.csv', range: '[100, 150)', rowCount: 50 },
+	];
+	const modelFlow = migrationModelBuild('example', itemList.map((item) => {
+		if (item.kind === 'plan') return { ...item, data: { batchList } };
+		if (item.kind === 'report-run') return { ...item, data: { batchList: batchList.map((batch) => ({ ...batch, success: batch.rowCount - (batch.file === 'b-2.csv' ? 1 : 0), dlq: batch.file === 'b-2.csv' ? 1 : 0 })) } };
+		return item;
+	}));
+	const providerFlow = migrationProviderBuild(modelFlow);
+	for (const path of ['/overview/run/flow', '/overview/verify/flow']) {
+		const { nodes } = providerFlow.viewGet(path).diagram;
+		const nodeOf = (id) => nodes.find((node) => node.id === id);
+		assert.equal(nodeOf('flow-table:ex.pw.t.a').data.tone, 'blue');
+		assert.equal(nodeOf('flow-table:ex.pw.t.b').data.tone, 'teal');
+		for (const batch of batchList) {
+			const table = nodeOf(`flow-table:${batch.table}`);
+			const card = nodeOf(`flow-batch:${batch.file}`);
+			assert.equal(card.data.tone, table.data.tone, `${path}: ${batch.file}`);
+			assert.ok(table.data.rowGroupList.every((group) => group.tone === table.data.tone));
+			if (path === '/overview/verify/flow') assert.ok(card.data.statList.includes(batch.range));
+		}
+		if (path === '/overview/run/flow') assert.ok(nodeOf('flow-batch:b-2.csv').data.statList.includes('49 success / 1 dead letters'));
+	}
 });
 
 test('the order is drawn from the lookups of the target, wrapping long rows', () => {

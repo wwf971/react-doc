@@ -38,6 +38,14 @@ A block has one React Flow canvas (`SwitchCanvas`). It holds the nodes of one vi
 
 `SwitchStaticView` has two more uses, both for the same reason, that it needs nothing but a React tree: the **mask** that covers the canvas while its nodes are replaced, and the off-screen **measuring host**, which draws a view once so its sizes are known before a camera or a morph needs them (`viewsMeasured`).
 
+### Presentation context
+
+`SwitchContext.presentation` is `{ path, isEmbedded, isFocused }`: the owning view's path and how that view is being presented. Focused means directly on the canvas, not keyboard focus. The canvas provides focused presentation for `store.pathFlow`. `ViewEmbedCard` and `ViewStackItem` explicitly pass `isEmbedded` when drawing their child with `SwitchStaticView`; nested views stay embedded. A static root used for a transition mask or off-screen measurement defaults to focused presentation, matching the canvas it represents.
+
+Do not infer presentation from `isStatic`: that flag describes the rendering technique and still controls static pointer/wheel behavior. Cards can read the presentation from `SwitchContext`; registered title components receive it through `config.visualization.presentation` as well.
+
+A direct `view-stack` may declare `data.focusPath`. `switchStackPresentationBuild` derives the stack's presentation from that path: the same stack node is embedded in an overview and focused in its dedicated view, without an enclosing `view-embed`. Its node ID and data stay the same, so the switch is a morph, not a portal that removes an outer card. `isFrameVisibleFocused` defaults to true and controls only the focused frame's decoration; it never replaces or removes the scrolling stack.
+
 ## The ways of switching
 
 `switchRouteFind(from, to)` chooses the steps:
@@ -103,14 +111,16 @@ Each tab is a view of its own, one path per focus (`/overview/tabs/run`), so a t
 A `view-embed` fits a whole view in a card, so a tall view gets small. A **stack** (`view-stack`) holds items vertically in a scrolling area, each **as wide as the area and as tall as that makes it** (`switchStackItemLayout`): nothing shrinks to make everything visible, and the reader scrolls. An item is a view (`view`, with its own `box` and `padding`) or a card (`node`), with a title line of its own. A small view does not grow past a limit (`SWITCH_STACK_ITEM_SCALE_MAX`) and stands centered.
 
 ```text
-data: { title?, subtitle?, icon?, tone?, statList?, isChromeHidden?, itemList: [{ id, view | node, box?, padding?, link?, title?, subtitle?, icon?, tone? }] }
+data: { titleBar?, title?, subtitle?, icon?, tone?, statList?, isChromeHidden?, itemList: [{ id, view | node, box?, padding?, link?, title?, subtitle?, icon?, tone? }] }
 ```
 
 A stack is a kind of plain React like the embedded view, so it may stand on the canvas or inside an embedded view. A line may end on an item (the anchor `item/{id}`).
 
+**The stack's title bar** is outside the scrolling frame. `titleBar` is text, or `{ text | itemList, isVisibleEmbedded?, isVisibleFocused? }`; its visibility follows presentation, not static rendering. Both flags default to true. Absence preserves legacy chrome. `ViewStackTitleBar` renders text or registered `visualizationTitle` components, with stable per-node/item instance IDs and normal component event routing. It wraps content at a minimum height of 34 px; resizing the scrolling frame updates its measured geometry. The authoring contract and examples are in [The stack title bar](comp-card-diagram-switch.md#the-stack-title-bar). `switchDependenciesCollect` visits title components even when hidden and descends into stack item nodes, so their declared dependencies survive a build.
+
 **The wheel** follows [the rule of every canvas](card-diagram.md#the-wheel-over-a-canvas). In its own view a stack takes the wheel while it can still scroll, and the end of that gesture stops there; a stack with nothing left to scroll, a stack embedded in a card, and a pinch all leave the wheel to the canvas, which zooms. An embedded stack still scrolls by its scrollbar.
 
-**The scroll position is one, the store's.** A stack may be drawn several times at once (on the canvas, embedded in another view, over the canvas as the mask), so its position is kept by the view and the node (`stackKey`), every drawing follows it, and a switch never moves it. Programs set it the same way:
+**The scroll position is one, the store's.** A stack may be drawn several times at once (on the canvas, embedded in another view, over the canvas as the mask). `stackKey` identifies each view and node for geometry. An optional `focusPath` aliases only the saved scroll state to that path and node ID, allowing overview and focused copies to share it without mixing their measurements. `stackScrollGet` resolves this alias; registered copies follow writes. Native scroll anchoring is disabled, transition-generated scroll events are ignored, and a copy clamped by its smaller scroll range does not overwrite the saved position. Programs set it the same way:
 
 ```text
 store.scrollTo({ path?, nodeId?, itemId | top, isInstant? })    gliding, or at once; an item already in view stays where it is

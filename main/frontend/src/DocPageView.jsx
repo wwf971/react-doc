@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import {
   DocsPage,
@@ -18,6 +18,7 @@ import { MdxBody } from './lib/MdxBody.jsx';
 import { useDocDestinationNavigation } from './lib/use-doc-destination-navigation.js';
 import { DocPageToolbar } from '../../comp-doc/page/DocPageToolbar.jsx';
 import { DocPageSkeleton } from '../../comp-doc/page/DocPageSkeleton.jsx';
+import { DocPageBodyLoading } from '../../comp-doc/page/DocPageBodyLoading.jsx';
 import { DocPageToc } from '../../comp-doc/toc/DocPageToc.jsx';
 import { DocPageTagBar } from '../../comp-doc/tag/DocPageTagBar.jsx';
 import { DocEditBody } from '../../comp-doc/edit/DocEditBody.jsx';
@@ -44,8 +45,20 @@ export const DocPageView = observer(function DocPageView() {
     () => buildMdxComps(sourceStore.configDoc, compById),
     [sourceStore, compById],
   );
+  // a document opened shows its title and a loading mark first; its body mounts after that
+  // frame is painted, so the click is answered at once whatever the body costs to mount.
+  // a recompile of the document on screen stays mounted
+  const isBodyMounted = docStore.docBodyPathMounted === pathContent;
+  const isBodyWaiting = !isBodyMounted && !docEdit && compiled?.status === 'done';
+  useEffect(() => {
+    if (!isBodyWaiting) return undefined;
+    let frameId = requestAnimationFrame(() => {
+      frameId = requestAnimationFrame(() => docStore.docBodyPathMountedSet(pathContent));
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [docStore, isBodyWaiting, pathContent]);
   useDocDestinationNavigation({
-    compiledStatus: docEdit ? 'done' : compiled?.status,
+    compiledStatus: docEdit ? 'done' : isBodyWaiting ? 'loading' : compiled?.status,
     eventRouter,
     focus: docStore.docCurrentFocus,
     hash: docStore.docCurrentHash,
@@ -151,7 +164,8 @@ export const DocPageView = observer(function DocPageView() {
     <DocLanguageProvider language={docStore.languageDisplay}>
       <DocsPage
         breadcrumb={{ includePage: true }}
-        toc={compiled.toc}
+        // a new list when the body mounts: the toc looks for its headings when it gets its list
+        toc={isBodyMounted ? compiled.toc : [...compiled.toc]}
         className={`doc-page-with-toolbar${compiled.isSourceFile ? ' doc-page-source-file' : ''}`}
         slots={docsPageSlots}
       >
@@ -177,8 +191,10 @@ export const DocPageView = observer(function DocPageView() {
         <DocsBody data-doc-content="">
           {compiled.isContentEmpty ? (
             <p className="doc-content-empty">This Markdown file is empty. Content can be added later.</p>
-          ) : (
+          ) : isBodyMounted ? (
             <MdxBody key={pathContent} Body={Body} components={mdxComps} />
+          ) : (
+            <DocPageBodyLoading />
           )}
         </DocsBody>
       </DocsPage>

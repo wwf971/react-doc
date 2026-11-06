@@ -22,7 +22,6 @@ How the list is kept (also in `AGENTS.md`):
 ## Command line
 
 - <a id="cli-create"></a>**`npm create`.** `react-doc pack` stages the published package and the installed mode serves from it ([Two modes](doc_page_impl_cli.md#two-modes-a-checkout-an-installed-package)); a thin `create-react-doc` package would let `npm create react-doc@latest my-docs` work as `npm create vite` does, only calling `react-doc init workspace`.
-- <a id="cli-build"></a>**Building from the command line.** `react-doc dev` serves a folder; `react-doc build <path> --out <dir>` would make the static build of the same target with the same launch layer ([The launch layer](doc_page_impl_cli.md#the-launch-layer)), so a doc page lying anywhere deploys without a config file.
 
 ## Card diagram animation
 

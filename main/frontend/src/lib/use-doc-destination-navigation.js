@@ -15,6 +15,8 @@ const destinationFindAttemptMax = 12;
 // a focused reference may be inside a component that reveals it on request
 // (a tab, a folded answer): its mount is waited for longer than a heading's
 const focusFindAttemptMax = 60;
+// how long a destination is kept in place while the body above it settles
+const destinationHoldDuration = 5000;
 
 // Applies the destination of a navigation to the rendered document
 // (doc_page_impl_nav.md#fragment-scrolling-and-highlighting): the top of a
@@ -59,6 +61,7 @@ export function useDocDestinationNavigation({
     let attemptCount = 0;
     let imagePendingList = [];
     let isCanceled = false;
+    let destinationHoldStop = () => {};
     const destinationAlign = () => pageScrollDestinationAlign(pageElement, elementTarget);
     // the images above the destination that are still loading move it when
     // they get their size: the destination is aligned again after each
@@ -71,6 +74,23 @@ export function useDocDestinationNavigation({
         image.addEventListener('load', destinationAlign, { once: true });
         image.addEventListener('error', destinationAlign, { once: true });
       }
+    };
+    // blocks drawn later (a component reading its data, one waiting for its turn) grow above
+    // the destination and move it: it is aligned again whenever the body changes size, until
+    // the reader takes over the scrolling or the body has had time to settle
+    const destinationHold = (contentElement, align) => {
+      destinationHoldStop();
+      const observer = new ResizeObserver(() => align());
+      const eventTypeList = ['wheel', 'touchmove', 'pointerdown', 'keydown'];
+      const stop = () => {
+        observer.disconnect();
+        clearTimeout(timer);
+        for (const eventType of eventTypeList) pageElement.removeEventListener(eventType, stop);
+      };
+      const timer = setTimeout(stop, destinationHoldDuration);
+      for (const eventType of eventTypeList) pageElement.addEventListener(eventType, stop, { passive: true });
+      observer.observe(contentElement);
+      destinationHoldStop = stop;
     };
     const destinationFindAndApply = () => {
       if (!hash) {
@@ -99,6 +119,7 @@ export function useDocDestinationNavigation({
         frameId = requestAnimationFrame(destinationAlign);
       }
       imagePendingWatch(contentElement);
+      destinationHold(contentElement, destinationAlign);
     };
 
     // the focus: the components at its block are told first and may reveal
@@ -126,6 +147,7 @@ export function useDocDestinationNavigation({
         destinationAlign();
         frameId = requestAnimationFrame(destinationAlign);
         imagePendingWatch(contentElement);
+        destinationHold(contentElement, destinationAlign);
         return;
       }
       elementTarget = focusBlockGet(elementFocus);
@@ -134,6 +156,7 @@ export function useDocDestinationNavigation({
       focusAlign();
       frameId = requestAnimationFrame(focusAlign);
       imagePendingWatch(contentElement);
+      destinationHold(contentElement, focusAlign);
     };
     // published a frame later: this is a layout effect, and the components
     // of a newly rendered body subscribe in their own effects, after it
@@ -155,6 +178,7 @@ export function useDocDestinationNavigation({
     return () => {
       isCanceled = true;
       cancelAnimationFrame(frameId);
+      destinationHoldStop();
       for (const image of imagePendingList) {
         image.removeEventListener('load', destinationAlign);
         image.removeEventListener('error', destinationAlign);

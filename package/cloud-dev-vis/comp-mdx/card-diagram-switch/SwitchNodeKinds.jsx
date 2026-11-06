@@ -1,11 +1,12 @@
 import { useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Boxes, Layers } from '../../../../main/frontend/UICommon.js';
+import { Boxes, Expand, Layers } from '../../../../main/frontend/UICommon.js';
+import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
 import { nodeRegistryBuild } from '../card-diagram/node-registry.js';
 import { diagramNormalize } from '../card-diagram/DiagramERData.js';
 import { DiagramNodeContent, DiagramRenderContext } from '../card-diagram/DiagramRender.jsx';
 import { SwitchContext, SwitchStaticView } from './SwitchStatic.jsx';
-import { SWITCH_EMBED_CHROME_HEIGHT, switchBoxClipBuild, switchEmbedMapBuild, switchPathNormalize, switchStackItemLayout } from './SwitchData.js';
+import { SWITCH_EMBED_CHROME_HEIGHT, switchBoxClipBuild, switchEmbedMapBuild, switchPathNormalize, switchPresentationBuild, switchStackFrameIsVisible, switchStackItemLayout, switchStackPresentationBuild, switchStackTitleBarNormalize, switchStackTitleBarRead } from './SwitchData.js';
 import { CARD_ICON_BY_NAME } from '../card-diagram/CompactCard.jsx';
 
 // The two node kinds of the switching layer (card-diagram-flexible-switch.md):
@@ -67,7 +68,7 @@ export const ViewEmbedCard = observer(function ViewEmbedCard({ node, nodeId }) {
 					: isCycle ? <span className="doc-switch-embed-note">{view} embeds itself</span>
 					: map ? (
 						<div className="doc-switch-embed-world" style={{ transform: `translate(${map.tx}px, ${map.ty}px) scale(${map.scale})`, clipPath: store.viewBoxIsChosen(view, data.box) ? switchBoxClipBuild(box) : undefined }}>
-							<SwitchStaticView store={store} path={view} depth={(context?.depth ?? 0) + (context?.isStatic ? 1 : 0)} />
+							<SwitchStaticView store={store} path={view} depth={(context?.depth ?? 0) + (context?.isStatic ? 1 : 0)} isEmbedded />
 						</div>
 					) : null}
 			</div>
@@ -134,7 +135,7 @@ const ViewStackItem = observer(function ViewStackItem({ item, index, store, stac
 				{nodeCard ? <DiagramNodeContent id={item.id} node={nodeCard} config={config} registry={registry} anchorRef={anchorRefNone} visualization={visualization} /> : null}
 				{layout ? (
 					<div className="doc-switch-embed-world" style={{ transform: `translate(${layout.map.tx}px, ${layout.map.ty}px) scale(${layout.map.scale})`, clipPath: store.viewBoxIsChosen(view, item.box) ? switchBoxClipBuild(box) : undefined }}>
-						<SwitchStaticView store={store} path={view} depth={depth + 1} />
+						<SwitchStaticView store={store} path={view} depth={depth + 1} isEmbedded />
 					</div>
 				) : null}
 			</div>
@@ -145,6 +146,28 @@ const ViewStackItem = observer(function ViewStackItem({ item, index, store, stac
 // a scrolling area of items stacked vertically (card-diagram-flexible-switch.md#a-scrolling-stack):
 // nothing has to shrink for everything to be visible. its scroll position is the store's,
 // so every drawing of it agrees and a program can set it (SwitchStore.scrollTo)
+export const ViewStackTitleBar = observer(function ViewStackTitleBar({ data, nodeId, anchorRef, presentation, onFocus }) {
+	const { config = {} } = useContext(DiagramRenderContext);
+	const title = switchStackTitleBarRead(data, presentation);
+	if (!title) return null;
+	const Icon = CARD_ICON_BY_NAME[data.icon] ?? Boxes;
+	return (
+		<div className={`doc-switch-embed-chrome doc-switch-stack-chrome nopan nodrag${onFocus ? ' is-focusable' : ''}`} onClick={(event) => { event.stopPropagation(); if (!event.target.closest('button, a, input, [contenteditable], .is-component')) onFocus?.(); }}>
+			{title.isLegacy ? <span className="doc-switch-embed-icon"><Icon size={13} aria-hidden="true" /></span> : null}
+			{title.itemList ? title.itemList.map((item) => (
+				<div key={item.id} className={`doc-switch-stack-title-item is-${item.type}`}>
+					{item.type === 'text' ? <span className="doc-switch-stack-title-text">{item.text}</span> : (
+						<RegisteredComp compName={item.comp} placement="visualizationTitle" input={{ data: item.data ?? {} }} configRuntime={{ ...config, instanceId: `${config.instanceId ?? 'diagram'}:node:${nodeId}:title:${item.id}`, isEdit: false, visualization: { nodeId, titleItemId: item.id, anchorRef, presentation } }} />
+					)}
+				</div>
+			)) : <span className="doc-switch-stack-title-text">{title.text}</span>}
+			{title.isLegacy && data.subtitle ? <span className="doc-switch-embed-subtitle">{data.subtitle}</span> : null}
+			{title.isLegacy && data.statList?.length ? <span className="doc-switch-embed-stat">{data.statList.map((stat, index) => <span key={index}>{stat}</span>)}</span> : null}
+			{onFocus ? <button type="button" className="doc-switch-stack-focus" title="Focus this container" aria-label="Focus this container" onClick={onFocus}><Expand size={13} aria-hidden="true" /></button> : null}
+		</div>
+	);
+});
+
 export const ViewStackCard = observer(function ViewStackCard({ node, nodeId, anchorRef }) {
 	const context = useContext(SwitchContext);
 	const store = context?.store;
@@ -152,14 +175,19 @@ export const ViewStackCard = observer(function ViewStackCard({ node, nodeId, anc
 	const scrollRef = useRef(null);
 	const [widthBody, widthBodySet] = useState(0);
 	const stackKey = store ? store.stackKey(pathOwnerOf(context), nodeId) : '';
-	const isEmbedded = Boolean(context?.isStatic);
+	const presentation = switchStackPresentationBuild(data, context?.presentation ?? switchPresentationBuild(pathOwnerOf(context)));
+	const isEmbedded = presentation.isEmbedded;
+	const isStatic = Boolean(context?.isStatic);
+	const isTitleVisible = Boolean(switchStackTitleBarRead(data, presentation));
+	const isFrameVisible = switchStackFrameIsVisible(data, presentation);
+	const onFocus = store && data.focusPath && isEmbedded && !isStatic && !store.isBoxAdjust && !store.plan ? () => { void store.pathSet(data.focusPath); } : undefined;
 	// the wheel: over a stack embedded in a card it is the canvas's, as over any card (its
 	// scrollbar still works). in a stack's own view it scrolls the stack while the stack
 	// can scroll, and the end of that gesture stops here; then it is the canvas's again.
 	// a pinch is always the canvas's. never the page's (card-diagram.md#the-wheel-over-a-canvas)
 	useLayoutEffect(() => {
 		const element = scrollRef.current;
-		if (!element || isEmbedded) return undefined;
+		if (!element || isStatic || isEmbedded) return undefined;
 		let timeScrolled = 0;
 		const onWheel = (event) => {
 			if (event.ctrlKey) return;
@@ -176,7 +204,7 @@ export const ViewStackCard = observer(function ViewStackCard({ node, nodeId, anc
 		};
 		element.addEventListener('wheel', onWheel, { passive: false });
 		return () => element.removeEventListener('wheel', onWheel);
-	}, [isEmbedded]);
+	}, [isStatic, isEmbedded]);
 	useLayoutEffect(() => {
 		const element = scrollRef.current;
 		if (!element || !store) return undefined;
@@ -199,23 +227,15 @@ export const ViewStackCard = observer(function ViewStackCard({ node, nodeId, anc
 			observer.disconnect();
 			store.stackElementRemove(stackKey, element);
 		};
-	}, [store, stackKey]);
-	const Icon = CARD_ICON_BY_NAME[data.icon] ?? Boxes;
+	}, [store, stackKey, isTitleVisible]);
 	return (
-		<div className={`doc-switch-stack${data.isChromeHidden ? ' is-chrome-hidden' : ''}`} data-tone={data.tone || 'slate'}>
-			{data.isChromeHidden ? null : (
-				<div className="doc-switch-embed-chrome doc-switch-stack-chrome" style={{ height: SWITCH_EMBED_CHROME_HEIGHT }}>
-					<span className="doc-switch-embed-icon"><Icon size={13} aria-hidden="true" /></span>
-					<span className="doc-switch-embed-title">{data.title}</span>
-					{data.subtitle ? <span className="doc-switch-embed-subtitle">{data.subtitle}</span> : null}
-					{data.statList?.length ? <span className="doc-switch-embed-stat">{data.statList.map((stat, index) => <span key={index}>{stat}</span>)}</span> : null}
-				</div>
-			)}
+		<div className={`doc-switch-stack${isTitleVisible ? '' : ' is-chrome-hidden'}${isFrameVisible ? '' : ' is-frame-hidden'}`} data-tone={data.tone || 'slate'} data-presentation={isEmbedded ? 'embedded' : 'focused'}>
+			<ViewStackTitleBar data={data} nodeId={nodeId} anchorRef={anchorRef} presentation={presentation} onFocus={onFocus} />
 			<div className="doc-switch-stack-frame">
 				<div ref={scrollRef} className="doc-switch-stack-scroll nopan nodrag" onScroll={store ? (event) => store.stackScrollReport(stackKey, event.currentTarget) : undefined}>
 					<div className="doc-switch-stack-list">
 						{(data.itemList ?? []).map((item, index, list) => (
-							<ViewStackItem key={item.id} item={item} index={list.slice(0, index).filter((other) => other.title).length} store={store} stackKey={stackKey} scrollRef={scrollRef} widthBody={widthBody} anchorRef={anchorRef} isStatic={Boolean(context?.isStatic)} depth={context?.depth ?? 0} />
+							<ViewStackItem key={item.id} item={item} index={list.slice(0, index).filter((other) => other.title).length} store={store} stackKey={stackKey} scrollRef={scrollRef} widthBody={widthBody} anchorRef={anchorRef} isStatic={isStatic || isEmbedded} depth={context?.depth ?? 0} />
 						))}
 					</div>
 				</div>
@@ -279,6 +299,9 @@ export const viewStackNodeKind = {
 	contract: {
 		dataNormalize: (data) => {
 			if (!Array.isArray(data.itemList)) throw new Error('A stack needs data.itemList: its items, each a view or a card.');
+			switchStackTitleBarNormalize(data.titleBar);
+			if (data.focusPath !== undefined && (typeof data.focusPath !== 'string' || !data.focusPath.trim())) throw new Error('A stack focusPath must be a nonempty view path.');
+			if (data.isFrameVisibleFocused !== undefined && typeof data.isFrameVisibleFocused !== 'boolean') throw new Error('A stack isFrameVisibleFocused must be a boolean.');
 			const idSet = new Set();
 			for (const item of data.itemList) {
 				if (!item?.id) throw new Error('Every item of a stack needs an id.');

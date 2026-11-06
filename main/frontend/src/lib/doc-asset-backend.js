@@ -17,6 +17,8 @@
 //   objectGet(store, objectId, versionId)       { object, version: { versionId, size, hash, isText, text?, metadata } }
 //                                               metadata: the version's metadata mapping ({} when none)
 //   objectGetByName(store, name, versionId)     the same, the object found by its name
+//   objectGetList(store, itemList)              { itemList }: many objectGet in one call, [{ objectId, versionId }]
+//                                               answered in that order, each { code, data, message }
 //   dataUrlGet(store, objectId, versionId)      the url the bytes of a version are read from ('' when none)
 //   objectCreate({ store, name, lang, contentType, fileExt, text | dataBase64, note, folder, dependencyList,
 //                  saveMode, versionMetadata })
@@ -79,6 +81,7 @@ export function assetBackendApiCreate(endpoint) {
     statusGet: () => requestSend('/status'),
     objectList: (store) => requestSend(`/object/list?store=${encodeURIComponent(store)}`),
     objectGet: (store, objectId, versionId = 'head') => requestSend(`/object/get?${objectQueryBuild(store, objectId, versionId)}`),
+    objectGetList: (store, itemList) => requestPost('/object/get/list', { store, itemList }),
     objectGetByName: (store, name, versionId = 'head') => requestSend(
       `/object/get?store=${encodeURIComponent(store)}&name=${encodeURIComponent(name)}&versionId=${encodeURIComponent(versionId)}`,
     ),
@@ -180,6 +183,11 @@ export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
       message: '',
     }),
     objectGet,
+    objectGetList: async (store, itemList) => ({
+      code: 0,
+      data: { itemList: await Promise.all(itemList.map((item) => objectGet(store, item.objectId, item.versionId))) },
+      message: '',
+    }),
     objectGetByName: (store, name, versionIdRequested = 'head') => {
       const failureStore = storeCheck(store);
       if (failureStore) return Promise.resolve(failureStore);

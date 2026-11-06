@@ -159,7 +159,7 @@ The pieces of data of a frontend object could be called its objects, or its data
 
 An asset object may say it is a part of a larger object: `owner: { ref, role? }` in its `object.yaml`, a reference of the object registry and the part it plays (`role: entry` for the entry of a frontend object, nothing for its other assets). The asset store keeps the key like `component` ([Objects for components](doc_page_impl_asset.md#objects-for-components)) and checks nothing against it; `objectCreate` and `objectMetaSet` take it.
 
-The assets of one object are **gathered in a group folder** of the asset folder of its doc page, named like an asset object, `{id}--{name}` (its name changes the folder's), the entry among them. The asset store reads objects inside group folders at any depth ([Group folders](doc_page_impl_asset.md#group-folders)), so a group changes nothing of what an asset is or how it is referred to; it is where a person browsing the disk finds everything of one object.
+The assets of one object are **gathered in a group folder** of the asset folder of its doc page, named like an asset object, `{id}--{name}` (its name changes the folder's), the entry among them. Like every folder of the store its name is ASCII only ([Folder names of assets](doc_page_impl_dir.md#folder-names-of-assets)): the name of an object may be in any language, and one with no ASCII in it gives the folder its type instead (`{id}--db-migration.project`). The asset store reads objects inside group folders at any depth ([Group folders](doc_page_impl_asset.md#group-folders)), so a group changes nothing of what an asset is or how it is referred to; it is where a person browsing the disk finds everything of one object.
 
 What the page reports where the declarations disagree (on the object, in the overview mode and the settings tab):
 
@@ -207,12 +207,14 @@ config.objectFrontend                    the object and its api (getters: the co
   assetResolve(ref), assetGet(ref)       what an asset reference (/path, key, name:…, id:…) names, with its status
   assetSearch(text), assetComplete(text) the assets found by words; the candidates completing a typed path
   assetTextGet(ref), assetDataGet(ref)   { status, message, text, asset, assetStatus } / { ..., data } of an asset's head
-                                         (yaml read); loaded on demand
+                                         (yaml read, shared: to be read, not changed); loaded on demand
   assetCreate({ key?, kind?, name?, pathList?, lang?, text | data })   a new asset: { code, data: { key, objectId } }
   assetMetaSet(ref, { name?, pathList?, kind? })   how an asset is named and indexed
   assetWrite(ref, text | data)           the head of an asset replaced, by its save mode
   assetRemove(ref, { isAssetKept? })     an asset taken out (deleted softly, or kept and released)
   metadataSet(patch)                     the object's metadata, a key at a time (null removes one)
+  drawTurnAsk(id), drawTurnIs(id)        a turn to mount what is heavy, one block per frame (#reading-many-assets);
+                                         useObjectFrontendDrawTurn(service, isReady) is the hook over them
   modeSet(modeId, options), paramSet(paramChange, options), blockSet({ mode, param }, options)
                                          the block switched: another mode, other parameters (merged, null removes a key;
                                          isReplaced replaces them), or both
@@ -310,6 +312,7 @@ writeRun      the structural writes: create, register, delete, meta/set, asset/c
               each answers the asset objects it wrote (taken into DocAssetStore at once, objectListAccept) and the
               declarations as they are now
 assetWrite, metadataSet       the data of an asset, the metadata of the object
+assetDataGet, blockDrawAsk    the data of an asset, parsed once; a block's turn to draw (#reading-many-assets)
 settings, write               the tab's state, the write in progress
 ```
 
@@ -326,6 +329,15 @@ asset/attach  the owner set, the folder moved into the group  ->  the entry list
 meta/set      the entry rewritten  ->  the group folder renamed for a new name
 register      an orphan entry's line written into a doc page's file
 ```
+
+### Reading many assets
+
+A mode of an object made of many assets reads all of them in every render, and a page may hold several such blocks. So reading has to cost nothing once the data is in, and the data has to come in at once:
+
+- **The object is worked out once.** `objectGet` answers a computed value per object: the entry is parsed and the index of the assets built only when the declarations, the entry or the index of the store changed, never when the data of an asset arrives. It is the same state until then.
+- **The data of an asset is parsed once per text** (`assetDataGet`), and shared by whoever reads it.
+- **What a render asks for is read together**: the assets asked for in one tick go to the asset store as one list ([`refListLoad`](doc_page_impl_asset.md#loading-at-page-start)), which reads them a few at a time, one request and one change of the store per step, with a painted frame before each step. So the blocks waiting are drawn a few times, not once per asset, and a count of what is read (`Reading the data items (12 of 51)`) is really seen moving, on a built page too, whose reads are answered at once.
+- **The heavy part of a block waits for its turn.** A mode whose data takes long to mount asks for a turn once its data is ready (`useObjectFrontendDrawTurn`, over `drawTurnAsk` and `drawTurnIs` of its api) and goes on showing its count until then; the blocks get their turns one per frame, so a document of several is painted and answers between them instead of freezing while they all mount. A mode that mounts quickly does not need it. The migration modes also keep the height the block will take while they wait, from `param.height`, so what is below does not jump.
 
 A **built page** has no server: the declarations travel in the asset snapshot (`assetSnapshot.objectFrontend`), the objects and their data with the snapshot of the store, and every write is refused with the store's reason; a block's switches hold while the page is open.
 
@@ -345,10 +357,11 @@ frontend/plugin/doc-source.ts              the declarations for the asset api, w
 frontend/plugin/doc-object-frontend.test.js   declarations, inheritance, the writes, group folders
 frontend/src/lib/doc-asset-backend.js      objectFrontendConfigGet, objectFrontendWrite (api and snapshot), objectMove
 frontend/src/store/DocObjectFrontendStore.ts   the layer on the page
+frontend/src/lib/doc-object-frontend-store.test.js   reading many assets: one request, what is worked out once
 frontend/src/lib/doc-object-provider-frontend.js   its provider of the object registry, the writes among its capabilities
 frontend/src/store/DocEditStore.ts         dataReplaceRequest and blockPropSetRequest found by the block's line in reading
                                            mode; the pick step of the insert menu
-comp-doc/object-frontend/                  ObjectFrontend (the entry component and the api of a mode), ObjectFrontendEdit
+comp-doc/object-frontend/                  ObjectFrontend (the entry component and the api of a mode), useObjectFrontendDrawTurn, ObjectFrontendEdit
                                            (its edit mode), ObjectFrontendOverview (the mode overview), ObjectViewFrontend
                                            (the view of frontend.object), ObjectFrontendAssetPathInput and
                                            ObjectFrontendAssetSearchPanel (finding the assets of an object),

@@ -4,6 +4,155 @@ import {
 	SWITCH_STACK_ITEM_SCALE_MAX, SWITCH_TAB_HEADER_HEIGHT, switchBoxClipBuild, switchCameraBetween, switchCameraChildOf, switchCameraFit, switchCameraParentOf, switchDocNormalize, switchEmbedMapBuild, switchMaskClipBuild, switchMorphBuild, switchMorphFrameAt,
 	switchPathChain, switchPathHashRead, switchPathNormalize, switchPathParent, switchProviderFromDoc, switchRouteFind, switchStackItemLayout, switchStepSecondGet, switchTabsApply,
 } from './SwitchData.js';
+import { switchPresentationBuild, switchStackFrameIsVisible, switchStackPresentationBuild, switchStackTitleBarNormalize, switchStackTitleBarRead } from './SwitchData.js';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { ViewStackTitleBar, viewStackNodeKind, switchRegistryBuild } from './SwitchNodeKinds.jsx';
+import { SwitchStore } from './SwitchStore.js';
+import { cardDiagramNodeRegistry } from '../card-diagram/card-diagram-node-registry.js';
+import { ColorBlock, colorBlockNormalize } from '../card-diagram/ColorBlock.jsx';
+import { StoreContext } from '../../../../main/frontend/src/store/context.js';
+import { DiagramRenderContext } from '../card-diagram/DiagramRender.jsx';
+import { switchDependenciesCollect } from './SwitchSource.js';
+import { SwitchStaticView } from './SwitchStatic.jsx';
+
+test('base color blocks validate bottom labels and stay behind ordinary cards', () => {
+	const data = { tone: 'blue', itemList: [{ id: 'db', icon: 'database', text: 'Source' }, { id: 'note', text: 'PW' }] };
+	assert.equal(colorBlockNormalize(data), data);
+	assert.throws(() => colorBlockNormalize({ itemList: [{ id: 'same', text: 'One' }, { id: 'same', text: 'Two' }] }), /unique/);
+	assert.throws(() => colorBlockNormalize({ itemList: [{ id: 'bad', icon: 'unknown' }] }), /icon/);
+	const block = { id: 'area', renderer: { type: 'color-block' }, position: { x: -20, y: -20 }, size: { width: 400, height: 300 }, data };
+	const card = { id: 'card', renderer: { type: 'card-note' }, data: { title: 'Foreground' } };
+	const registry = switchRegistryBuild(cardDiagramNodeRegistry);
+	const store = new SwitchStore({ provider: { root: '/', viewGet: () => ({ diagram: { nodes: [card, block] } }) }, registry });
+	assert.equal(store.loadError, '');
+	const nodes = store.entryGet('/').canvas.nodeList;
+	assert.ok(nodes.find(node => node.id === 'area').zIndex < nodes.find(node => node.id === 'card').zIndex);
+	const html = renderToStaticMarkup(createElement(ColorBlock, { node: block }));
+	assert.match(html, /Source/);
+	assert.match(html, /PW/);
+	assert.equal((html.match(/class="doc-color-block-label"/g) ?? []).length, 2);
+});
+
+test('direct stacks share scroll state across views while keeping geometry and other stacks independent', () => {
+	const node = { id: 'report', renderer: { type: 'view-stack' }, data: { focusPath: '/report', itemList: [] }, size: { width: 300, height: 200 } };
+	const independent = { ...node, id: 'independent', data: { itemList: [] } };
+	const provider = { root: '/overview', viewGet: () => ({ diagram: { nodes: [node, independent], connections: [] } }) };
+	const store = new SwitchStore({ provider, registry: switchRegistryBuild({ id: 'test', kindList: [] }) });
+	const overview = store.stackKey('/overview', 'report');
+	const focused = store.stackKey('/report', 'report');
+	const elementOverview = { scrollTop: 0 };
+	const elementFocused = { scrollTop: 0 };
+	store.stackElementAdd(overview, elementOverview);
+	store.stackScrollSet(overview, 120);
+	store.stackElementAdd(focused, elementFocused);
+	assert.equal(elementFocused.scrollTop, 120);
+	store.stackScrollSet(focused, 180);
+	assert.equal(elementOverview.scrollTop, 180);
+	assert.equal(store.stackScrollGet(overview), 180);
+	store.stackAreaSet(overview, { width: 300 });
+	store.stackAreaSet(focused, { width: 800 });
+	assert.equal(store.stackAreaByKey.get(overview).width, 300);
+	assert.equal(store.stackAreaByKey.get(focused).width, 800);
+	store.plan = { steps: [] };
+	store.stackScrollReport(focused, { scrollTop: 178, clientHeight: 200, scrollHeight: 500, dataset: {} });
+	assert.equal(store.stackScrollGet(overview), 180);
+	store.plan = null;
+	store.stackScrollReport(focused, { scrollTop: 100, clientHeight: 200, scrollHeight: 300, dataset: { isSettled: '1' } });
+	assert.equal(store.stackScrollGet(overview), 180);
+	store.stackScrollReport(focused, { scrollTop: 80, clientHeight: 200, scrollHeight: 300, dataset: {} });
+	assert.equal(store.stackScrollGet(overview), 80);
+	const keyIndependent = store.stackKey('/overview', 'independent');
+	store.stackScrollSet(keyIndependent, 40);
+	assert.equal(store.stackScrollGet(store.stackKey('/report', 'independent')), 0);
+	assert.equal(store.stackScrollGet(overview), 80);
+});
+
+test('a direct stack focus path determines presentation and its focused frame defaults to visible', () => {
+	const data = { focusPath: '/report' };
+	const overview = switchStackPresentationBuild(data, switchPresentationBuild('/overview'));
+	const focused = switchStackPresentationBuild(data, switchPresentationBuild('/report'));
+	assert.equal(overview.isEmbedded, true);
+	assert.equal(focused.isFocused, true);
+	assert.equal(switchStackFrameIsVisible(data, focused), true);
+	assert.equal(switchStackFrameIsVisible({ ...data, isFrameVisibleFocused: false }, focused), false);
+	assert.equal(switchStackFrameIsVisible({ ...data, isFrameVisibleFocused: false }, overview), true);
+	assert.throws(() => viewStackNodeKind.contract.dataNormalize({ itemList: [], focusPath: 1 }), /focusPath/);
+	assert.throws(() => viewStackNodeKind.contract.dataNormalize({ itemList: [], isFrameVisibleFocused: 'true' }), /isFrameVisibleFocused/);
+	const html = renderToStaticMarkup(createElement(ViewStackTitleBar, { data: { titleBar: 'Report' }, nodeId: 'report', presentation: overview, onFocus: () => {} }));
+	assert.match(html, /aria-label="Focus this container"/);
+});
+
+test('static root snapshots use focused titles while embedded copies hide them', () => {
+	const node = { id: 'stack', renderer: { type: 'view-stack' }, position: { x: 0, y: 0 }, size: { width: 300, height: 200 }, data: { titleBar: { text: 'Focused title', isVisibleEmbedded: false }, itemList: [] }, handles: [] };
+	const store = { entryGet: () => ({ canvas: { graph: { nodes: [node], connections: [] } } }), entryPositionsGet: () => new Map(), stackKey: (path, id) => `${path}|${id}` };
+	const context = { config: {}, registry: { kindByType: { 'view-stack': viewStackNodeKind } } };
+	const render = (props = {}) => renderToStaticMarkup(createElement(DiagramRenderContext.Provider, { value: context }, createElement(SwitchStaticView, { store, path: '/report', ...props })));
+	assert.match(render(), /Focused title/);
+	assert.match(render(), /data-presentation="focused"/);
+	assert.doesNotMatch(render({ isEmbedded: true }), /Focused title/);
+	assert.match(render({ isEmbedded: true }), /data-presentation="embedded"/);
+});
+
+test('custom title items use the registry placement, data and presentation context', () => {
+	let received;
+	const stores = {
+		compById: { Status: { placementList: ['visualizationTitle'], CompRender: (props) => { received = props; return createElement('button', null, `Count ${props.data.count}`); } } },
+		compConfigHost: {}, configStore: { compConfigGet: () => ({}) }, docStore: { docCurrentPath: 'report.md' },
+		sourceStore: { configDoc: {}, sourceService: {} }, envStore: { envService: {} },
+	};
+	const presentation = switchPresentationBuild('/report', true);
+	const data = { titleBar: { itemList: [{ id: 'name', type: 'text', text: 'Report' }, { id: 'status', type: 'component', comp: 'Status', data: { count: 2 } }] } };
+	const html = renderToStaticMarkup(createElement(StoreContext.Provider, { value: stores }, createElement(DiagramRenderContext.Provider, { value: { config: { instanceId: 'block' } } }, createElement(ViewStackTitleBar, { data, nodeId: 'stack', presentation }))));
+	assert.match(html, /Report/);
+	assert.match(html, /Count 2/);
+	assert.equal(received.config.placement, 'visualizationTitle');
+	assert.equal(received.config.instanceId, 'block:node:stack:title:status');
+	assert.deepEqual(received.config.visualization.presentation, presentation);
+	assert.equal(typeof received.onEvent, 'function');
+});
+
+test('switch dependencies include title components in nested stacks, even when hidden', () => {
+	const stack = (comp, itemList = []) => ({ renderer: { type: 'view-stack' }, data: { titleBar: { isVisibleEmbedded: false, isVisibleFocused: false, itemList: [{ id: 'status', type: 'component', comp, data: { file: 'report.md' } }] }, itemList } });
+	const collected = [];
+	switchDependenciesCollect({ viewList: [{ diagram: { nodes: [stack('Outer', [{ id: 'nested', node: stack('Inner') }])] } }] }, { componentCollect: (...args) => collected.push(args), warn: (message) => assert.fail(message) });
+	assert.deepEqual(collected, [['Outer', { file: 'report.md' }], ['Inner', { file: 'report.md' }]]);
+});
+
+test('stack title renderer respects presentation and renders plain text safely', () => {
+	const data = { titleBar: { text: '<Report>', isVisibleEmbedded: false } };
+	const render = (isEmbedded) => renderToStaticMarkup(createElement(ViewStackTitleBar, { data, nodeId: 'stack', presentation: switchPresentationBuild('/report', isEmbedded) }));
+	assert.equal(render(true), '');
+	assert.match(render(false), /&lt;Report&gt;/);
+	assert.match(render(false), /nopan nodrag/);
+	assert.throws(() => viewStackNodeKind.contract.dataNormalize({ itemList: [], titleBar: { itemList: [{ id: 'bad', type: 'component' }] } }), /needs comp/);
+});
+
+test('stack titles choose visibility by presentation, independently of static rendering', () => {
+	const focused = switchPresentationBuild('/report');
+	const embedded = switchPresentationBuild('/report', true);
+	assert.deepEqual(focused, { path: '/report', isEmbedded: false, isFocused: true });
+	assert.deepEqual(embedded, { path: '/report', isEmbedded: true, isFocused: false });
+	for (const isVisibleEmbedded of [false, true]) {
+		for (const isVisibleFocused of [false, true]) {
+			const data = { titleBar: { text: 'Report', isVisibleEmbedded, isVisibleFocused } };
+			assert.equal(Boolean(switchStackTitleBarRead(data, embedded)), isVisibleEmbedded);
+			assert.equal(Boolean(switchStackTitleBarRead(data, focused)), isVisibleFocused);
+		}
+	}
+	assert.equal(switchStackTitleBarRead({ titleBar: 'Simple' }, focused).text, 'Simple');
+	assert.equal(switchStackTitleBarRead({ title: 'Old' }, focused).isLegacy, true);
+	assert.equal(switchStackTitleBarRead({ isChromeHidden: true }, focused), null);
+	assert.equal(switchStackTitleBarRead({ isChromeHidden: true, titleBar: 'New' }, embedded).text, 'New');
+});
+
+test('complex stack titles validate text and registered component items', () => {
+	const title = { itemList: [{ id: 'name', type: 'text', text: 'Report' }, { id: 'status', type: 'component', comp: 'Status', data: { count: 2 } }] };
+	assert.equal(switchStackTitleBarNormalize(title), title);
+	for (const invalid of [null, [], { text: 1 }, { text: 'x', itemList: [] }, { isVisibleFocused: 'false' }, { itemList: {} }, { itemList: [{ id: 'x', type: 'unknown' }] }, { itemList: [{ id: 'x', type: 'component' }] }, { itemList: [{ id: 'x', type: 'text', text: 'X' }, { id: 'x', type: 'text', text: 'Y' }] }]) {
+		assert.throws(() => switchStackTitleBarNormalize(invalid), /titleBar/);
+	}
+});
 
 test('a path is read from the root, its folders listed', () => {
 	assert.equal(switchPathNormalize('a//b/'), '/a/b');

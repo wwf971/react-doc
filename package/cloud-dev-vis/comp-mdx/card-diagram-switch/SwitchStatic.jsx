@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useId, useLayoutEffect, useMemo
 import { observer } from 'mobx-react-lite';
 import { DiagramNodeContent, DiagramRenderContext, pathBuild } from '../card-diagram/DiagramRender.jsx';
 import { endpointIsDangling } from '../card-diagram/DiagramERData.js';
+import { switchPresentationBuild } from './SwitchData.js';
 
 // A view drawn without React Flow (card-diagram-flexible-switch.md#embedding): the
 // same cards, placed absolutely, with its lines in one svg. This is what an embedded
@@ -66,7 +67,7 @@ const StaticNode = observer(function StaticNode({ id, node, position, config, re
 	const visualization = useMemo(() => ({ nodeId: id, size: node.size, isEdit: false, anchorRef }), [id, node.size, anchorRef]);
 	const width = node.size.width === 'auto' ? node.sizeDefault.width : node.size.width;
 	return (
-		<div ref={root} className="doc-switch-static-node" data-id={id} style={{ left: position.x, top: position.y, width, height: node.size.height === 'auto' ? undefined : node.size.height }}>
+		<div ref={root} className="doc-switch-static-node" data-id={id} style={{ left: position.x, top: position.y, width, height: node.size.height === 'auto' ? undefined : node.size.height, zIndex: node.isBackground ? -1 : undefined, pointerEvents: node.isBackground ? 'none' : undefined }}>
 			<div className="doc-vis-node-content">
 				<DiagramNodeContent id={id} node={node} config={config} registry={registry} anchorRef={anchorRef} visualization={visualization} />
 			</div>
@@ -95,7 +96,7 @@ function StaticLabel({ connection, source, target }) {
 	return <div className={`doc-switch-edge-label${connection.link ? ' is-link' : ''}`} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}>{connection.label.text}</div>;
 }
 
-export const SwitchStaticView = observer(function SwitchStaticView({ store, path, depth = 0 }) {
+export const SwitchStaticView = observer(function SwitchStaticView({ store, path, depth = 0, isEmbedded = false }) {
 	const parent = useContext(SwitchContext);
 	const { config, registry } = useContext(DiagramRenderContext);
 	const markerId = `doc-switch-arrow-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
@@ -108,7 +109,7 @@ export const SwitchStaticView = observer(function SwitchStaticView({ store, path
 			return JSON.stringify(previous[id]) === next ? previous : { ...previous, [id]: handleList };
 		});
 	}, [store, path]);
-	const context = useMemo(() => ({ store, isStatic: true, depth, pathChain: [...(parent?.pathChain ?? []), path] }), [store, depth, parent, path]);
+	const context = useMemo(() => ({ store, isStatic: true, depth, pathChain: [...(parent?.pathChain ?? []), path], presentation: switchPresentationBuild(path, isEmbedded) }), [store, depth, parent, path, isEmbedded]);
 	if (!entry?.canvas.graph) return null;
 	if (depth >= SWITCH_DEPTH_MAX) return null;
 	void store.measureVersion;

@@ -153,7 +153,9 @@ The local store is one store with one id, but on disk it is one or more **folder
 .doc-page/asset.yaml          the asset store config of one doc page: folderList [~root/path], folderDefault
 {folder}/
 └── {objectId}--{name}/       one folder per object: its id, the separator, its name
-    │                         ({objectId} alone for an object without a name)
+    │                         ({objectId} alone for an object without a name; ASCII only, so
+    │                         of a name in another language only its ASCII parts:
+    │                         doc_page_impl_dir.md#folder-names-of-assets; the name itself is in object.yaml)
     ├── object.yaml           the object: objectId, name, lang, contentType, fileExt, component, owner and saveMode (when set),
     │                         versionIdHead, isDeleted, isLocked, timeCreated,
     │                         versionList [{ versionId, versionIdPrevList, time, note, size, hash, isLocked,
@@ -290,7 +292,8 @@ init()
   -> GET /object/list     the index: the metadata of every object (no data)
   -> references resolve against the index
        by name        -> the id of the object of that name in the index (objectIdGetByName)
-       known object   -> GET /object/get for the one version it reads (data loaded on demand, once)
+       known object   -> GET /object/get for the one version it reads (data loaded on demand, once);
+                         POST /object/get/list for many read together (refListLoad)
        unknown object -> one GET /object/get to confirm it is missing (it may have appeared meanwhile)
        unknown name   -> one GET /object/get?name= the same way; a miss is remembered until the index is read again
   -> GET /usage/list      the usage index: the asset references of every document (#usage)
@@ -304,7 +307,7 @@ So a reference reading `head` knows its version id as soon as the index is in, a
 - `backend`, `isAvailable`, `isWritable`, `statusMessage`: the api backend when `config.asset.endpoint` is set, else the snapshot backend when `data.assetSnapshot` is set, else none (`backendKind`: `api`, `snapshot`, `none`); `isWritable` comes from `GET /status` and is false for a snapshot; `statusMessage` is the backend's message when `GET /status` failed. Why the store cannot be read or written is told apart, never reduced to "not writable": `unavailableReason` (no store: no `asset.file`, or a server started before it was added; the status request failed, with the backend's message) and `writeUnavailableReason` (those, or a built page's read-only snapshot, or a store still loading). Every refusal of a write, here and in the edit layer (an asset-only block's edit modes, creating an asset-only block, moving data into the store), and the settings tab use these texts.
 - `storeIdList`, `folderList`: from `GET /status`; `index`: the state of the index load.
 - `objectById`: the metadata of every object, keyed by store and object id, with its loading or error state; `versionByKey`: the data of every version read so far (`isText`, `text`, `size`, `hash`), keyed by store, object id and version id. A reference reading `head` resolves through `objectById[…].versionIdHead`, so a checkout changes what every frame shows with one object update. `nameLookupByKey`: the names looked up that the index did not have, loading or missing; it is emptied when the index is read again, and an entry is dropped when an object of that name arrives, so a reference by name recovers as soon as the object exists.
-- `refObjectIdGet(ref)` is the id a reference means (its own, or its name's); `refLoad(ref)` reads what `refQuery(ref)` is missing and nothing else; `dataUrlGet(store, objectId, versionId)` is the url of a version's bytes.
+- `refObjectIdGet(ref)` is the id a reference means (its own, or its name's); `refLoad(ref)` reads what `refQuery(ref)` is missing and nothing else; `refListLoad(refList)` does so for many references, a few at a time: one request (`POST /object/get/list`, each answer of its own, one that fails fails alone) and one change of the store per step, with a painted frame before each step, so whoever waits for all of them is drawn a few times and not once per reference, and can show how far the reading is; an object read again as it was stays the same object, so reading data does not disturb what depends on the index; `dataUrlGet(store, objectId, versionId)` is the url of a version's bytes.
 - Every write goes through `writeApply`: the backend answers, the returned object (and version) replace the loaded ones, the caller gets `{ code, data, message }`; a conflict (code -2) gets the standard message and reloads the object. `objectUpdate` sends the hash of the loaded head as `hashBase` and the mode the caller chose, or none, so the object's save mode applies; `objectCreate` and `objectUpdate` take the `dependencyList` of the data and the `versionMetadata` of the version written, and `objectCreate` a `saveMode`. `dependencyListGet` reads a loaded version's list from the metadata, `dependentListGet` asks the backend, and `dependencyListSet` / `dependencyAdd` / `dependencyRemove` / `versionMetadataSet` are writes like the others. A loaded version keeps its `metadata` beside its text.
 - `folderAdd`, `folderRemove`, `folderDefaultSet`: the folder list of the local store rewritten through `POST /folder/set`, then the index read again, since the set of objects changed with it; `folder` holds the pending state and message of the settings tab.
 - `usageIndex`, `usageByDocPath`, `isUsageReading`: the usage index and its state ([Usage](#usage)).
@@ -403,7 +406,7 @@ frontend/src/lib/doc-asset-ref.js          the reference: language, parse (by id
 frontend/src/lib/doc-place.js              a place in a document: build, navigation target, text
 frontend/src/lib/doc-asset-backend.js      api backend, snapshot backend (one interface)
 frontend/src/store/DocAssetStore.ts        backend, status and index, why the store cannot be read or written, objects and versions, names,
-                                           refLoad / refQuery, writes, dependencies, folders, the usage index and
+                                           refLoad / refListLoad / refQuery, writes, dependencies, folders, the usage index and
                                            its lists, assetRefreshRequest and assetTestCaseResultRequest, the two panels
 frontend/src/store/AssetPanelModel.ts      one asset panel: what it shows, its pending actions, its usage list
 frontend/src/store/DocEditStore.ts         blockAssetMoveConfirmSet / blockAssetMoveApply (with dependencies),

@@ -511,9 +511,20 @@ export function assetConfigTextApply(text: string, folderList: string[], folderD
 
 // ---------- the folder name of an object ----------
 
-// {objectId}--{name}, or {objectId} alone for an object without a name
+// {objectId}--{name}, or {objectId} alone for an object without a name. A folder name holds
+// ASCII only, whatever the name is, since other characters are what file systems, archives and
+// other machines disagree on: the rest of a name is left out of its folder, and stays in
+// object.yaml (doc_page_impl_asset.md#stores-objects-versions)
 export function objectDirNameBuild(objectId: string, name: string): string {
-  return name ? `${objectId}${ASSET_DIR_SEPARATOR}${name}` : objectId;
+  const nameAscii = dirNameAsciiBuild(name);
+  return nameAscii ? `${objectId}${ASSET_DIR_SEPARATOR}${nameAscii}` : objectId;
+}
+
+// what of a name can go in a folder name: a name in ASCII as it is; in any other, its
+// ASCII parts joined by "-" (営業 report 2 is "report 2"), '' when it has none
+function dirNameAsciiBuild(name: string): string {
+  if (/^[\x20-\x7E]*$/.test(name)) return name;
+  return name.replace(/[^\x20-\x7E]+/g, '-').replace(/^[-\s.]+|[-\s.]+$/g, '');
 }
 
 // the id part of a folder name; '' when the folder is not an object's

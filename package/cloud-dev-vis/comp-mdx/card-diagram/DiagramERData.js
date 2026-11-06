@@ -207,7 +207,7 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 			return { ...handle, attachPolicy, anchor: { target, side: anchor.side, offset } };
 		});
 		unique(handles, `${id}.handles`);
-		return { ...node, id, renderer, data, anchors, handles, size: sizeResolved, sizeDefault, position: node.position === undefined || node.position === 'auto' ? 'auto' : point(node.position, `${id}.position`) };
+		return { ...node, id, renderer, data, anchors, handles, isBackground: contract.isBackground === true, size: sizeResolved, sizeDefault, position: node.position === undefined || node.position === 'auto' ? 'auto' : point(node.position, `${id}.position`) };
 	});
 	const nodesById = unique(nodes, 'nodes');
 	const connectionDefault = mapping(defaults.connection ?? {}, 'defaults.connection');

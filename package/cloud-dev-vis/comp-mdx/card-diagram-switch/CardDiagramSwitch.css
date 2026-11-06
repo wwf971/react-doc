@@ -1,3 +1,4 @@
+.doc-switch-static { isolation: isolate; }
 /* the block: the path bar over the viewport */
 .doc-switch-shell { margin-block: 1rem; }
 .doc-switch {
@@ -289,6 +290,15 @@ button.doc-switch-edge-label:hover { background: #6d28d9; color: #fff; }
 .doc-switch-stack[data-tone='red'], .doc-switch-stack-item[data-tone='red'] { --doc-switch-tone: #dc2626; }
 .doc-switch-stack[data-tone='violet'], .doc-switch-stack-item[data-tone='violet'] { --doc-switch-tone: #7c3aed; }
 .doc-switch-stack-frame { flex: 1 1 0; min-height: 0; position: relative; }
+.doc-switch-stack-chrome { min-height: 34px; flex-wrap: wrap; padding-block: 0.35rem; white-space: normal; pointer-events: auto; cursor: default; }
+.doc-switch-stack-title-text { min-width: 0; overflow-wrap: anywhere; color: var(--color-fd-foreground); font-size: 0.82rem; font-weight: 700; }
+.doc-switch-stack-title-item { min-width: 0; max-width: 100%; }
+.doc-switch-stack-title-item.is-component { display: inline-flex; align-items: center; }
+.doc-switch-stack-chrome.is-focusable { cursor: pointer; }
+.doc-switch-stack-focus { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-left: auto; padding: 0; border: 0; border-radius: 3px; background: transparent; color: inherit; cursor: pointer; }
+.doc-switch-stack-focus:hover { background: var(--color-fd-accent); }
+.doc-switch-stack.is-frame-hidden { border-color: transparent; border-radius: 0; background: transparent; box-shadow: none; }
+.doc-switch-stack-scroll { overflow-anchor: none; }
 .doc-switch-stack-scroll {
 	box-sizing: border-box;
 	position: absolute;

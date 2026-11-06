@@ -5,10 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { parse as yamlParse } from 'yaml';
-import { assetStoreCreate } from './doc-asset-store.ts';
+import { assetStoreCreate, objectDirNameBuild } from './doc-asset-store.ts';
 import { docAssetMiddlewareCreate } from './doc-asset-server.ts';
 import { docAssetConfigLoad, loadConfigDoc } from './doc-source.ts';
-import { objectFrontendConfigOfDocPageListGet } from './doc-object-frontend.ts';
+import { groupNameBuild, objectFrontendConfigOfDocPageListGet } from './doc-object-frontend.ts';
 import {
   objectFrontendAssetIndexBuild, objectFrontendAssetPathBuild, objectFrontendAssetPathComplete, objectFrontendAssetPathNormalize,
   objectFrontendAssetRefResolve, objectFrontendAssetSearch,
@@ -269,4 +269,51 @@ test('the names and paths of assets are written into the entry; a path another a
   assert.deepEqual(entry.assetList[0], { key: 'book-1', kind: 'book', objectId: asset.body.data.objectId, pathList: ['/book/classic/dune'] });
   const bad = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/meta/set', { id, key: 'book-1', pathList: ['/..'] });
   assert.match(bad.body.message, /above the root/);
+});
+
+test('a folder name holds ASCII only, whatever the name is', () => {
+  assert.equal(objectDirNameBuild('w5abc', 'My shelf'), 'w5abc--My shelf');
+  assert.equal(objectDirNameBuild('w5abc', ''), 'w5abc');
+  assert.equal(objectDirNameBuild('w5abc', '\u55b6\u696d'), 'w5abc');
+  assert.equal(objectDirNameBuild('w5abc', '\u55b6\u696d report 2'), 'w5abc--report 2');
+  assert.equal(objectDirNameBuild('w5abc', 'a\u55b6\u696db'), 'w5abc--a-b');
+  // a group with no ASCII in its name is named after its type
+  assert.equal(groupNameBuild('w5abc', '\u55b6\u696d', 'db-migration.project'), 'w5abc--db-migration.project');
+  assert.equal(groupNameBuild('w5abc', 'Shelf', 'db-migration.project'), 'w5abc--Shelf');
+});
+
+test('an object named in any language keeps its name, and its folders are in ASCII', async () => {
+  const dir = fixtureCreate();
+  const middleware = middlewareCreate(dir);
+  const nameFirst = '\u30c7\u30fc\u30bf\u30d9\u30fc\u30b9\u79fb\u884c';
+  const created = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/create', { docPageAlias: 'page', typeId: 'frontend.object', name: nameFirst });
+  assert.equal(created.body.code, 0, created.body.message);
+  const { id, objectList } = created.body.data;
+  const entry = objectList[0];
+  assert.equal(entry.groupPath, `${id}--frontend.object`);
+  const store = assetStoreCreate(docAssetConfigLoad(path.join(dir, 'config.yaml')));
+  assert.equal(objectFrontendEntryParse(store.versionDataGet(entry.objectId).text).entry.name, nameFirst);
+
+  // another name in the same script: the folder stays
+  const renamed = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/meta/set', { id, name: '\u79fb\u884c' });
+  assert.equal(renamed.body.code, 0, renamed.body.message);
+  assert.equal(store.objectGet(entry.objectId).groupPath, `${id}--frontend.object`);
+  assert.equal(objectFrontendEntryParse(store.versionDataGet(entry.objectId).text).entry.name, '\u79fb\u884c');
+
+  // nothing on disk but ASCII
+  const pathList = fs.readdirSync(path.join(dir, 'page', '.doc-page', 'asset'), { recursive: true });
+  assert.ok(pathList.length > 0);
+  assert.ok(pathList.every((item) => /^[\x20-\x7E]*$/.test(item)), pathList.join(', '));
+});
+
+test('an object in a folder named before the rule is still read', async () => {
+  const dir = fixtureCreate();
+  const middleware = middlewareCreate(dir);
+  const created = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/create', { docPageAlias: 'page', typeId: 'frontend.object', name: 'Shelf' });
+  const { id, objectList } = created.body.data;
+  const dirAsset = path.join(dir, 'page', '.doc-page', 'asset');
+  const groupOld = `${id}--\u79fb\u884c`;
+  fs.renameSync(path.join(dirAsset, `${id}--Shelf`), path.join(dirAsset, groupOld));
+  const store = assetStoreCreate(docAssetConfigLoad(path.join(dir, 'config.yaml')));
+  assert.equal(store.objectGet(objectList[0].objectId).groupPath, groupOld);
 });

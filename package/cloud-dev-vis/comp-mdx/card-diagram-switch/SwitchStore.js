@@ -64,6 +64,7 @@ export class SwitchStore {
 		this.embedBodyByKey = new Map();
 		this.stackElementByKey = new Map();
 		this.stackScrollByKey = new Map();
+		this.stackScrollKeyByKey = new Map();
 		this.stackAreaByKey = new Map();
 		this.stackItemByKey = new Map();
 		this.itemInitial = '';
@@ -81,7 +82,7 @@ export class SwitchStore {
 		this.isSeekBusy = false;
 		makeAutoObservable(this, {
 			isSeekBusy: false, seek: false, seekEnd: false, showAt: false, planRun: false, stepEnter: false, stepExit: false, pathSet: false, stepRun: false, registry: false, resolve: false, scope: false, entryByPath: false, cameraByPath: false, embedBodyByKey: false, stackElementByKey: false, stackScrollByKey: false, stackAreaByKey: false, stackItemByKey: false, itemInitial: false, maskElement: false, maskWorldElement: false, styleElement: false, viewportApi: false,
-			captureHintTimer: false, flowWaiterList: false, measureWaiterList: false, morph: false, step: false, providerVersion: false, runToken: false,
+			captureHintTimer: false, flowWaiterList: false, measureWaiterList: false, morph: false, step: false, providerVersion: false, runToken: false, stackScrollKeyByKey: false,
 			provider: observable.ref, nodeListFlow: observable.shallow, edgeListFlow: observable.shallow, plan: observable.ref, mask: observable.ref, box: observable.ref,
 			historyList: observable.ref, measurePathList: observable.ref, captureHint: observable.ref,
 		}, { autoBind: true });
@@ -97,6 +98,7 @@ export class SwitchStore {
 		this.providerVersion += 1;
 		this.entryByPath.clear();
 		this.embedBodyByKey.clear();
+		this.stackScrollKeyByKey.clear();
 		this.runToken += 1;
 		this.plan = null;
 		this.step = null;
@@ -278,7 +280,7 @@ export class SwitchStore {
 			const area = this.stackAreaByKey.get(key);
 			const item = this.stackItemByKey.get(`${key}|${embed.itemId}`);
 			if (area && item) {
-				const scroll = this.stackScrollByKey.get(key) ?? 0;
+				const scroll = this.stackScrollGet(key);
 				const body = { x: position.x + area.x + item.x, y: position.y + area.y + item.y - scroll, width: item.width, height: item.height };
 				const top = Math.max(body.y, position.y + area.y);
 				const bottom = Math.min(body.y + body.height, position.y + area.y + area.height);
@@ -295,17 +297,25 @@ export class SwitchStore {
 	// a stack is drawn several times (on the canvas, embedded, over the canvas as the
 	// mask): its scroll position is one, here, by the view it belongs to and its node
 	stackKey(path, nodeId) {
-		return `${path}|${nodeId}`;
+		const key = `${path}|${nodeId}`;
+		const node = this.graphNodeListOf(this.entryGet(path)).find((item) => item.id === nodeId);
+		const focusPath = node?.renderer.type === VIEW_STACK_TYPE && node.data.focusPath;
+		this.stackScrollKeyByKey.set(key, focusPath ? `${switchPathNormalize(focusPath)}|${nodeId}` : key);
+		return key;
+	}
+
+	stackScrollGet(key) {
+		return this.stackScrollByKey.get(this.stackScrollKeyByKey.get(key) ?? key) ?? 0;
 	}
 
 	stackElementAdd(key, element) {
 		if (!this.stackElementByKey.has(key)) this.stackElementByKey.set(key, new Set());
 		this.stackElementByKey.get(key).add(element);
-		element.scrollTop = this.stackScrollByKey.get(key) ?? 0;
+		element.scrollTop = this.stackScrollGet(key);
 	}
 
 	stackElementSync(key, element) {
-		const top = this.stackScrollByKey.get(key) ?? 0;
+		const top = this.stackScrollGet(key);
 		if (Math.abs(element.scrollTop - top) >= 1) element.scrollTop = top;
 	}
 
@@ -325,18 +335,23 @@ export class SwitchStore {
 
 	// the reader scrolled one drawing: the others follow
 	stackScrollReport(key, element) {
-		const top = this.stackScrollByKey.get(key) ?? 0;
+		if (this.plan) return;
+		const top = this.stackScrollGet(key);
 		if (Math.abs(top - element.scrollTop) < 1) return;
 		// cut short while its items are still getting their height: not the reader's doing
-		if (element.scrollTop < top && element.scrollTop + element.clientHeight >= element.scrollHeight - 1 && element.dataset.isSettled !== '1') return;
+		if (element.scrollTop < top && element.scrollTop + element.clientHeight >= element.scrollHeight - 1) return;
 		element.dataset.isSettled = '1';
 		this.stackScrollSet(key, element.scrollTop);
 	}
 
 	stackScrollSet(key, top) {
-		this.stackScrollByKey.set(key, top);
-		for (const element of this.stackElementByKey.get(key) ?? []) {
-			if (Math.abs(element.scrollTop - top) >= 1) element.scrollTop = top;
+		const keyScroll = this.stackScrollKeyByKey.get(key) ?? key;
+		this.stackScrollByKey.set(keyScroll, top);
+		for (const [keyElement, elements] of this.stackElementByKey) {
+			if ((this.stackScrollKeyByKey.get(keyElement) ?? keyElement) !== keyScroll) continue;
+			for (const element of elements) {
+				if (Math.abs(element.scrollTop - top) >= 1) element.scrollTop = top;
+			}
 		}
 	}
 
@@ -349,7 +364,7 @@ export class SwitchStore {
 	stackScrollTargetGet(key, itemId) {
 		const area = this.stackAreaByKey.get(key);
 		const item = this.stackItemByKey.get(`${key}|${itemId}`);
-		const scroll = this.stackScrollByKey.get(key) ?? 0;
+		const scroll = this.stackScrollGet(key);
 		if (!area || !item) return scroll;
 		if (item.top >= scroll && item.top + item.fullHeight <= scroll + area.height) return scroll;
 		return Math.max(0, Math.min(area.contentHeight - area.height, item.top - STACK_ITEM_MARGIN));
@@ -667,7 +682,7 @@ export class SwitchStore {
 		} else if (stepInput.type === 'scroll') {
 			const nodeId = stepInput.nodeId ?? this.stackOfItem(stepInput.path, stepInput.itemId)?.id ?? '';
 			const key = this.stackKey(stepInput.path, nodeId);
-			const scrollFrom = this.stackScrollByKey.get(key) ?? 0;
+			const scrollFrom = this.stackScrollGet(key);
 			const scrollTo = stepInput.top ?? this.stackScrollTargetGet(key, stepInput.itemId);
 			step = { ...stepInput, key, scrollFrom, scrollTo, isNoop: Math.abs(scrollFrom - scrollTo) < 1, cameraFrom: cameraNow, cameraTo: cameraNow };
 		} else {

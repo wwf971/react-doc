@@ -1,4 +1,5 @@
-import { makeAutoObservable, observable, runInAction } from 'mobx';
+import { computed, makeAutoObservable, observable, runInAction, type IComputedValue } from 'mobx';
+import { parse as yamlParse } from 'yaml';
 import {
   OBJECT_FRONTEND_ROLE_ENTRY, OBJECT_FRONTEND_TYPE_ROOT,
   objectFrontendEntryParse, objectFrontendIdOfRefGet, objectFrontendModeChoose,
@@ -101,6 +102,19 @@ export class DocObjectFrontendStore {
   assetSearchSessionByKey = new Map<string, ObjectFrontendAssetSearchSession>();
   unsubscribe: (() => void) | undefined;
   configPromise: Promise<void> | undefined;
+  // the object as the files say now, by id: worked out only when what it is made of
+  // changed (the declarations, its entry, the index of the assets), not when the data
+  // of an asset arrives. every read of a mode goes through it, many times per render
+  objectStateById = new Map<string, IComputedValue<ObjectFrontendState>>();
+  // the data of an asset as last parsed, by object id
+  assetDataById = new Map<string, { text: string; data?: any; message?: string }>();
+  // the assets asked for in this tick, read together
+  loadRefByKey = new Map<string, any>();
+  // the heavy parts of the modes that have their turn, and those waiting for it: a document
+  // of many blocks mounts one per frame, so it is painted and answers meanwhile
+  blockDrawIdSet = observable.set<string>();
+  blockDrawQueue: string[] = [];
+  blockDrawFrameId: number | undefined;
 
   constructor(stores: Stores) {
     this.stores = stores;
@@ -110,6 +124,12 @@ export class DocObjectFrontendStore {
       assetSearchSessionByKey: false,
       unsubscribe: false,
       configPromise: false,
+      objectStateById: false,
+      assetDataById: false,
+      loadRefByKey: false,
+      blockDrawIdSet: false,
+      blockDrawQueue: false,
+      blockDrawFrameId: false,
       config: observable.ref,
     });
   }
@@ -232,12 +252,26 @@ export class DocObjectFrontendStore {
   // rendering), the way the object registry resolves a reference
   objectGet(idOrRef: string): ObjectFrontendState {
     const id = objectFrontendIdOfRefGet(idOrRef);
+    if (!id) return { ...this.objectStateBaseBuild(id), status: 'error', message: `${idOrRef || '(empty)'} names no frontend object: frontend:{id}` };
+    let state = this.objectStateById.get(id);
+    if (!state) {
+      state = computed(() => this.objectStateBuild(id), { keepAlive: true });
+      this.objectStateById.set(id, state);
+    }
+    return state.get();
+  }
+
+  private objectStateBaseBuild(id: string): ObjectFrontendState {
     const ref = objectFrontendRefBuild(id);
-    const base: ObjectFrontendState = {
+    return {
       id, ref, docPageAlias: '', entryObjectId: '', status: 'loading', message: '', name: '', typeId: OBJECT_FRONTEND_TYPE_ROOT,
       description: '', metadata: {}, assetList: [], assetIndex: objectFrontendAssetIndexBuild([]), strayList: [], problemList: [], entryObject: undefined,
     };
-    if (!id) return { ...base, status: 'error', message: `${idOrRef || '(empty)'} names no frontend object: frontend:{id}` };
+  }
+
+  private objectStateBuild(id: string): ObjectFrontendState {
+    const ref = objectFrontendRefBuild(id);
+    const base = this.objectStateBaseBuild(id);
     if (this.config.status === 'idle' || (this.config.status === 'loading' && this.itemList.length === 0)) return base;
     const item = this.itemGet(id);
     if (!item) return { ...base, status: 'missing', message: `no doc page lists the frontend object ${id} (object-frontend.yaml)` };
@@ -359,8 +393,64 @@ export class DocObjectFrontendStore {
     return { status: 'done', message: resolved.message, text: query.version.text, object: query.object, versionId: query.versionId, asset, assetStatus: 'found' };
   }
 
+  // the data of one asset read as yaml (or json), by an asset reference: what
+  // assetTextGet answers and { data }. parsed once per text of the asset: the same
+  // data comes back until the asset changes, so it is to be read and not changed
+  assetDataGet(idOrRef: string, assetRef: string) {
+    const result = this.assetTextGet(idOrRef, assetRef);
+    if (result.status !== 'done') return { ...result, data: undefined };
+    const objectId = result.object.objectId;
+    let parsed = this.assetDataById.get(objectId);
+    if (parsed?.text !== result.text) {
+      try {
+        parsed = { text: result.text, data: yamlParse(result.text) };
+      } catch (error) {
+        parsed = { text: result.text, message: String((error as any)?.message ?? error) };
+      }
+      this.assetDataById.set(objectId, parsed);
+    }
+    if (parsed.message !== undefined) return { ...result, status: 'error' as const, message: `the asset ${assetRef} is not yaml: ${parsed.message}`, data: undefined };
+    return { ...result, data: parsed.data };
+  }
+
+  // what a render asks for together is read together, by the asset store's steps,
+  // so the blocks waiting for it are drawn per step and not per asset
   private loadSchedule(ref: any) {
-    queueMicrotask(() => void this.stores.assetStore.refLoad(ref));
+    const isFirst = this.loadRefByKey.size === 0;
+    this.loadRefByKey.set(`${ref.store}\u0000${ref.objectId}\u0000${ref.versionId}`, ref);
+    if (!isFirst) return;
+    queueMicrotask(() => {
+      const refList = [...this.loadRefByKey.values()];
+      this.loadRefByKey.clear();
+      void this.stores.assetStore.refListLoad(refList);
+    });
+  }
+
+  // ---------- the turns of the blocks to draw ----------
+
+  // a mode asks for its turn when what it draws is ready to mount, and answers when it
+  // leaves; the frame between two blocks is what the browser paints and takes input in
+  blockDrawIs(blockId: string): boolean {
+    return this.blockDrawIdSet.has(blockId);
+  }
+
+  blockDrawAsk(blockId: string): () => void {
+    this.blockDrawQueue.push(blockId);
+    this.blockDrawNextSchedule();
+    return () => {
+      this.blockDrawQueue = this.blockDrawQueue.filter((id) => id !== blockId);
+      this.blockDrawIdSet.delete(blockId);
+    };
+  }
+
+  private blockDrawNextSchedule() {
+    if (this.blockDrawFrameId !== undefined) return;
+    this.blockDrawFrameId = requestAnimationFrame(() => {
+      this.blockDrawFrameId = undefined;
+      const blockId = this.blockDrawQueue.shift();
+      if (blockId !== undefined) this.blockDrawIdSet.add(blockId);
+      if (this.blockDrawQueue.length > 0) this.blockDrawNextSchedule();
+    });
   }
 
   // ---------- writes ----------

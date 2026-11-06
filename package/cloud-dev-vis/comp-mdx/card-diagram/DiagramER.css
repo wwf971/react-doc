@@ -1,3 +1,15 @@
+.doc-color-block { box-sizing: border-box; width: 100%; height: 100%; display: flex; align-items: flex-end; padding: 14px 16px; border: 1px solid #cbd5e1; border-radius: 4px; background: #f1f5f9cc; color: #475569; }
+.doc-color-block[data-tone="blue"] { background: #eff6ffcc; border-color: #bfdbfe; color: #1e40af; }
+.doc-color-block[data-tone="teal"] { background: #f0fdfacc; border-color: #99f6e4; color: #115e59; }
+.doc-color-block[data-tone="green"] { background: #f0fdf4cc; border-color: #bbf7d0; color: #166534; }
+.doc-color-block[data-tone="amber"] { background: #fffbebcc; border-color: #fde68a; color: #92400e; }
+.doc-color-block[data-tone="red"] { background: #fff1f2cc; border-color: #fecdd3; color: #9f1239; }
+.doc-color-block[data-tone="violet"] { background: #f5f3ffcc; border-color: #ddd6fe; color: #5b21b6; }
+.doc-color-block-labels { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 16px; width: 100%; min-width: 0; }
+.doc-color-block-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; font-size: 13px; font-weight: 600; }
+.doc-color-block-label > svg { flex: none; }
+.doc-color-block-label > span { min-width: 0; overflow-wrap: anywhere; }
+.react-flow__node:has(> .doc-vis-node.is-background) { pointer-events: none !important; }
 /* the outer box of the block (BlockPopupSurface) carries the margins of the
    diagram and of the standalone card; their own boxes have none, so they
    sit flush in the block popup and the geometry lock of an edit session
@@ -594,6 +606,8 @@
 .doc-card.is-compact .doc-er-table-column-header > span { line-height: 1.25; }
 
 /* the bounding box of a view: a red frame, never in a picture of the viewport */
+.react-flow__node:has(> .doc-vis-node > .doc-vis-node-content > .doc-vis-view-box.is-hidden) { pointer-events: none; }
+.doc-vis-node-content:has(> .doc-vis-view-box) { overflow: visible; }
 .doc-vis-view-box {
 	box-sizing: border-box;
 	position: relative;

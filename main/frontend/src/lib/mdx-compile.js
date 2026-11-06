@@ -105,7 +105,8 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
       // which shiki would otherwise take as a code block in an unknown language.
       rehypeKatex,
       rehypeCodeInline,
-      [rehypeCode, config.rehypeCodeOptions],
+      // a language shiki does not have is plain text, not a document that fails to render
+      [rehypeCode, { fallbackLanguage: 'text', ...config.rehypeCodeOptions }],
       ...(config.rehypePlugins ?? []),
       rehypeToc,
     ],

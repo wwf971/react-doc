@@ -18,6 +18,8 @@ import {
 //   GET  {endpoint}/status                                   -> { isWritable: true, storeIdList, folderList, docPageList }
 //   GET  {endpoint}/object/list?store=                        -> { objectList }
 //   GET  {endpoint}/object/get?store=&objectId=|name=&versionId=  -> { object, version }   versionId default head
+//   POST {endpoint}/object/get/list  { store, itemList: [{ objectId, versionId }] } -> { itemList: [{ code, data, message }] }
+//                                     many reads in one request, answered in that order; one that fails fails alone
 //   GET  {endpoint}/object/data?store=&objectId=|name=&versionId= -> the bytes of the version, with their content type
 //   GET  {endpoint}/dependency/list?store=&objectId=&versionId=   -> { versionId, dependencyList }   versionId default head
 //   GET  {endpoint}/dependent/list?store=&objectId=&versionId=    -> { dependentList }   the versions depending on the
@@ -239,6 +241,10 @@ async function routeHandle(
       return { ok: true };
     }
     storeIdCheck(body?.store);
+    if (route === '/object/get/list') {
+      if (!Array.isArray(body?.itemList)) throw new AssetError(-1, 'itemList is required');
+      return { itemList: body.itemList.map((item: any) => objectGetAnswerBuild(store, item)) };
+    }
     const objectId = String(body?.objectId ?? '');
     if (route === '/object/create') {
       const result = store.objectCreate({
@@ -357,6 +363,18 @@ function storeIdCheck(storeId: unknown) {
 function storeObjectKeyGet(searchParams: URLSearchParams): AssetObjectKey {
   storeIdCheck(searchParams.get('store'));
   return { objectId: searchParams.get('objectId') ?? '', name: searchParams.get('name') ?? '' };
+}
+
+// one read of a list, in the form of an answer of its own
+function objectGetAnswerBuild(store: AssetStore, item: any) {
+  try {
+    const object = store.objectFind({ objectId: String(item?.objectId ?? ''), name: '' });
+    const version = store.versionDataGetOf(object, String(item?.versionId ?? 'head'));
+    return { code: 0, data: { object, version: versionResponseBuild(version) }, message: '' };
+  } catch (error) {
+    if (error instanceof AssetError) return { code: error.code, data: null, message: error.message };
+    throw error;
+  }
 }
 
 // the data of a write: text (utf-8) or dataBase64 (any bytes)

@@ -85,6 +85,9 @@ export class DocStore {
   // destination again. Keep a separate request signal so the view can repeat
   // the requested top reset or fragment alignment and highlight.
   navigationRequestVersion = 0;
+  // the document whose body is mounted: another one shows its loading mark first,
+  // painted before its components start mounting (DocPageView)
+  docBodyPathMounted = '';
   navigationListenerSet = new Set<(snapshot: NavigationSnapshot) => void>();
   navigationSnapshotCurrent: NavigationSnapshot = Object.freeze({
     requestVersion: 0,
@@ -134,6 +137,10 @@ export class DocStore {
       navigationSnapshotCurrent: false,
       onInvalidBrowserRoute: false,
     });
+  }
+
+  docBodyPathMountedSet(path: string) {
+    this.docBodyPathMounted = path;
   }
 
   get contentCurrentPath(): string {

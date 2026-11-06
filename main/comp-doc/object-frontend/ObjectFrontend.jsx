@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
-import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
+import { stringify as yamlStringify } from 'yaml';
 import { LoaderCircle } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
@@ -141,15 +141,8 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
     // { status, message, text, asset, assetStatus } of an asset's head
     assetTextGet: (assetRef) => objectFrontendStore.assetTextGet(ref, assetRef),
     // { status, message, data, asset, assetStatus } of an asset whose text is yaml (or json)
-    assetDataGet: (assetRef) => {
-      const result = objectFrontendStore.assetTextGet(ref, assetRef);
-      if (result.status !== 'done') return { ...result, data: undefined };
-      try {
-        return { ...result, data: yamlParse(result.text) };
-      } catch (error) {
-        return { ...result, status: 'error', message: `the asset ${assetRef} is not yaml: ${String(error?.message ?? error)}`, data: undefined };
-      }
-    },
+    // (parsed once per text and shared: to be read, not changed)
+    assetDataGet: (assetRef) => objectFrontendStore.assetDataGet(ref, assetRef),
     // a new asset: { key?, kind?, name?, pathList?, lang?, text } or { ..., data } (written as yaml);
     // { code, data: { key, objectId } }. a path another asset has is refused
     assetCreate: (input) => objectFrontendStore.assetCreate(stateGet().id, {
@@ -172,6 +165,9 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
       return asset ? objectFrontendStore.assetRemove(stateGet().id, asset.key, options.isAssetKept === true) : Promise.resolve({ code: -1, message: `the object has no asset ${assetRef}` });
     },
     metadataSet: (patch) => objectFrontendStore.metadataSet(ref, patch),
+    // a turn to mount something heavy, one block per frame (useObjectFrontendDrawTurn)
+    drawTurnAsk: (id) => objectFrontendStore.blockDrawAsk(id),
+    drawTurnIs: (id) => objectFrontendStore.blockDrawIs(id),
     // the block switched to another mode / other parameters: the block's own
     // parameters, changed a key at a time (null removes one) unless isReplaced;
     // { isSaved: false } keeps the switch out of the document

@@ -2,6 +2,7 @@ import { useId, useMemo, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { LoaderCircle } from '../../../../../main/frontend/UICommon.js';
 import { BlockPopupSurface } from '../../../../../main/comp-doc/popup/BlockPopupSurface.jsx';
+import { useObjectFrontendDrawTurn } from '../../../../../main/comp-doc/object-frontend/use-object-frontend-draw-turn.js';
 import { SwitchViewport, switchCaptureActionBuild, SwitchBarMenu, useSwitchStore } from '../../card-diagram-switch/CardDiagramSwitch.jsx';
 import { switchRegistryBuild } from '../../card-diagram-switch/SwitchNodeKinds.jsx';
 import { SwitchAnimation } from '../../card-diagram-switch/SwitchAnimation.jsx';
@@ -31,7 +32,9 @@ export function migrationItemListRead(service, category) {
 	return { itemList, problemList, countLoading, countAll: assetList.length, signature: textList.join('\u0000') };
 }
 
-// the model of a category, built when its data changes
+// the model of a category, built when its data changes, and given once this block's turn to
+// draw has come (what is drawn from it is what takes long to mount). until then the block
+// shows what is read so far (MigrationLoading)
 export function useMigrationModel(service, category) {
 	const read = migrationItemListRead(service, category);
 	const isLoading = read.countLoading > 0;
@@ -41,7 +44,8 @@ export function useMigrationModel(service, category) {
 	// an item written is read again: what was drawn stays until it is
 	const modelLast = useRef(null);
 	if (modelBuilt) modelLast.current = modelBuilt;
-	return { read, model: modelLast.current?.category === category ? modelLast.current : null };
+	const isDrawTurn = useObjectFrontendDrawTurn(service, Boolean(modelLast.current));
+	return { read, model: isDrawTurn && modelLast.current?.category === category ? modelLast.current : null };
 }
 
 // a mode of a migration: the views of its data, the category chosen by the block.
@@ -55,17 +59,20 @@ export const MigrationExplorer = observer(function MigrationExplorer({ data = {}
 	const param = data.param ?? {};
 	const category = param.category ?? 'example';
 	const { read, model } = useMigrationModel(service, category);
-	if (!model) return <MigrationLoading read={read} />;
+	if (!model) return <MigrationLoading read={read} param={param} />;
 	if (read.countAll === 0) return <p className="doc-note">There are no items under /{category}.</p>;
 	return <MigrationExplorerBody service={service} model={model} read={read} param={param} config={config} category={category} />;
 });
 
-export function MigrationLoading({ read }) {
+// as tall as the block will be, so what is below does not jump when it is drawn
+export function MigrationLoading({ read, param = {} }) {
 	return (
-		<p className="doc-status doc-object-frontend-line">
-			<LoaderCircle aria-hidden="true" size={12} className="doc-spin" />
-			<span>Reading the data items ({read.countAll - read.countLoading} of {read.countAll})</span>
-		</p>
+		<div style={{ minHeight: Number(param.height) || undefined }}>
+			<p className="doc-status doc-object-frontend-line">
+				<LoaderCircle aria-hidden="true" size={12} className="doc-spin" />
+				<span>Reading the data items ({read.countAll - read.countLoading} of {read.countAll})</span>
+			</p>
+		</div>
 	);
 }
 
@@ -118,7 +125,7 @@ export const MigrationTour = observer(function MigrationTour({ data = {}, config
 	const param = data.param ?? {};
 	const category = param.category ?? 'example';
 	const { read, model } = useMigrationModel(service, category);
-	if (!model) return <MigrationLoading read={read} />;
+	if (!model) return <MigrationLoading read={read} param={param} />;
 	return <MigrationTourBody service={service} model={model} param={param} config={config} category={category} />;
 });
 

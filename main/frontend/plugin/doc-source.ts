@@ -324,6 +324,38 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
   return {
     name: `doc-source:${moduleId}`,
 
+    // what `react-doc build` reads to know what a build of one file needs (doc-build-slim.js):
+    // the text of what the build carries, and the components of the source of the page
+    api: {
+      buildTextListGet: (): string[] => {
+        const configDoc = loadConfigDoc(configFile, options);
+        const textList: string[] = [];
+        for (const entry of scanSource(configDoc, configDir)) {
+          if (!attachmentExtIsBinary(entry.ext)) textList.push(fs.readFileSync(entry.absPath, 'utf-8'));
+        }
+        const assetStore = assetStoreGet(configDoc);
+        for (const object of Object.values<any>(assetStore?.snapshotBuild().objectById ?? {})) {
+          const { versionDataById, ...meta } = object;
+          textList.push(JSON.stringify(meta));
+          for (const version of Object.values<any>(versionDataById)) if (version.isText) textList.push(version.text);
+        }
+        const fileRead = (dir: string) => {
+          if (!fs.existsSync(dir)) return;
+          for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+            const itemPath = path.join(dir, item.name);
+            if (item.isDirectory()) {
+              if (item.name !== 'node_modules') fileRead(itemPath);
+            } else if (/\.(?:[cm]?[jt]sx?|ya?ml|json|md)$/.test(item.name)) {
+              textList.push(fs.readFileSync(itemPath, 'utf-8'));
+            }
+          }
+        };
+        for (const docPage of compConfigGet(configDoc).docPageList) for (const dir of docPage.folderList) fileRead(dir);
+        return textList;
+      },
+      buildCompRegistryGet: (): Record<string, unknown> => loadConfigDoc(configFile, options).compRegistry ?? {},
+    },
+
     config(viteConfig) {
       const viteRoot = path.resolve(process.cwd(), viteConfig.root ?? '.');
       const configFileEarly = findConfigFile(viteRoot, options.configFile);

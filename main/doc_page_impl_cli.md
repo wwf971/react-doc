@@ -10,6 +10,7 @@ react-doc init workspace <dir>   a workspace: .doc-workspace/workspace.yaml and 
 react-doc init package <dir>     a package: doc-package.yaml, doc/README.md, .doc-page/
 
 react-doc dev [<path>]           serves it: a doc page, a package or a workspace
+react-doc build [<path>] --out   the same as a static page: one html file, or a folder
 react-doc where                  where this copy of react-doc finds what it needs
 react-doc pack [--out <dir>]     the folder npm publishes (the installed mode)
 ```
@@ -150,11 +151,47 @@ launch { kind, target, mode, command,          what was launched; configDoc.work
 
 The package defaults of `config.yaml` (components, config defaults, keyboard map) stay in force; its workspace and its backend belong to the demonstration, and do not. The development server of the project, `pnpm -C main dev`, has no launch layer and serves what `config.yaml` (or its local layer `config.0.yaml`) names, as before.
 
+## Building
+
+`react-doc build <path> --out <where>` makes the static page of what `dev` would serve, with the same launch layer, so a doc page lying anywhere deploys without a config file. A built page reads everything from a snapshot and writes nothing ([the asset service layer](doc_page_impl_asset.md), [frontend objects](doc_page_impl_obj_frontend.md)), so no backend is started. What `--out` names decides the form:
+
+```text
+--out site/         a folder of static files for a web server: the libraries in chunks of their own,
+                    each read only by a page that needs it. a folder holding anything else is refused
+                    without --force, since a build empties it
+--out page.html     one file holding everything: it opens from disk, offline (a browser refuses the
+                    module scripts of a folder opened from disk), to be handed to someone by itself
+```
+
+`--out` may not lie inside what is being built: its source rules would collect the build the next time.
+
+### One file
+
+One file has no chunks, so whatever it holds is read when it opens. Without care that is a file of 34 MB for a doc page with half a megabyte of its own, almost all of it libraries only some documents need:
+
+| what | size | needed by |
+| --- | --- | --- |
+| the spreadsheet engine (Univer) | 11 MB | `ExcelUniver` |
+| every language and theme of shiki | 10 MB | the code blocks, which use a few |
+| mermaid and its layout engines | 4.5 MB | `DiagramMermaid` |
+| fonts in three formats | 1 MB | every browser here reads the woff2 |
+
+The file of the same page is 6.7 MB after these steps, with `--keep-all` turning them off:
+
+- **Reading what the build needs.** `plugin/doc-build-slim.js`, a vite plugin of this command, reads the text the build carries (the documents, the data and metadata of the assets, the source of the components of the doc pages and packages) when the configuration is resolved. The reading is on the safe side: the name of a library anywhere keeps it, even a word of a document, and a name a doc page gives one of these components in its `compRegistry` counts too. A code language is kept when a fenced block names it, by its id or an alias.
+- **Leaving out a library at its lazy import.** The page reaches mermaid and Univer only through `import()` in its host config, so `resolveId` answers those imports with a module that only throws. Nothing else imports them, so the bundler drops all they pull in, their css included, and the stub runs only if something asks for the library after all.
+- **Filtering the lists of shiki.** Its languages and themes are arrays of entries, each with a lazy `import()` of a grammar. `transform` removes the entries not kept from the source of those lists, so those grammars are never reached. The wasm engine, which the default javascript engine does not need, goes the same way as a library.
+- **One font format.** The css has each font three times as base64 (woff2, woff, ttf); only woff2 stays, when the css is put into the html.
+
+What is left is the page itself: 5.7 MB of code, 1 MB of css. If something was left out wrongly it says so where it is used and the rest of the page works: a language is drawn as plain text (as any language shiki does not have is, on every page), and a library fails with a message naming `--keep-all`.
+
+The modules are merged with `output.strictExecutionOrder`: without it a module also imported lazily is wrapped in an init function that a static importer may not call, and the page crashes on load.
+
 ## Where the command lives
 
 The command is a `bin` of the package's own npm package (`@wwf971/react-doc`, `main/frontend/package.json`: `"bin": { "react-doc": "./cli/doc-cli.js" }`). This is the usual practice for a tool that comes with a library (`vite`, `astro`, `prisma` do the same): the command and the conventions it writes are versioned together, so a scaffold always matches the loader of the same version.
 
-`init`, `where` and `pack` use only node's own modules, so they run from a checkout without an install; `dev` imports vite when it runs, and says so when the dependencies are not there. There are three ways to call it, from the most local to the most general:
+`init`, `where` and `pack` use only node's own modules, so they run from a checkout without an install; `dev` and `build` import vite when they run, and says so when the dependencies are not there. There are three ways to call it, from the most local to the most general:
 
 ```text
 how                                              needs

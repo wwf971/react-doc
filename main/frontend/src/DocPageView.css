@@ -119,3 +119,22 @@
   font-family: var(--font-mono);
   font-size: 0.8rem;
 }
+
+/* the body of a document until it is mounted. it fades in, so a document that mounts within
+   a frame or two shows no flash; the height keeps the footer from jumping up meanwhile */
+.doc-page-body-loading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-height: 60vh;
+  padding-top: 0.5rem;
+  line-height: 18px;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.875rem;
+  animation: doc-page-body-loading-in 0.2s ease-in both;
+}
+
+@keyframes doc-page-body-loading-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
