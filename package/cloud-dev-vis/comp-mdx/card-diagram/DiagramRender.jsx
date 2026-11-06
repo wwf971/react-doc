@@ -1,18 +1,21 @@
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { BaseEdge, Handle, Position, getBezierPath, getSmoothStepPath, getStraightPath, useUpdateNodeInternals, useViewport } from '@xyflow/react';
+import { BaseEdge, Handle, Position, ViewportPortal, getBezierPath, getSmoothStepPath, getStraightPath, useUpdateNodeInternals, useViewport } from '@xyflow/react';
 import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
 import { DiagramCreatePanel } from './DiagramCreatePanel.jsx';
 import { cardSchemaGet } from './TableCardSchema.js';
 import { endpointIsDangling } from './DiagramERData.js';
+import { routeIsEmpty, routeResolve, routeTypeHasAnchors } from './DiagramRoute.js';
+import { DiagramRouteControls } from './DiagramRouteControls.jsx';
 
 // what every node and edge of a canvas shares: the component config, the
 // node registry of the component (registry, node-registry.js: the card of
 // each node type), the editor of the visual edit mode (undefined while reading), the measurement
 // callback of the canvas store, and the geometry every edge reports as it
 // draws (edgeGeometry: id -> { sourceX, sourceY, targetX, targetY,
-// sourcePosition, targetPosition, midX, midY }), which the editor uses to
-// place the edit card of a line and to draw a line being detached
+// sourcePosition, targetPosition, midX, midY, d }), which the editor uses to
+// place the edit card of a line, to draw a line being detached, and to find
+// lines lying on top of each other
 export const DiagramRenderContext = createContext({});
 const positions = { left: Position.Left, right: Position.Right, top: Position.Top, bottom: Position.Bottom };
 
@@ -131,7 +134,10 @@ export const DiagramCreateNode = observer(function DiagramCreateNode({ data }) {
 	</div>;
 });
 
+// the path of a line: its route when it has one (DiagramRoute.js), else what React
+// Flow's helper draws between the two ends
 export function pathBuild(type, props) {
+	if (routeTypeHasAnchors(type) && !routeIsEmpty(props.route)) return routeResolve(type, props.route, props).d;
 	if (type === 'polyline') {
 		const waypoints = props.waypoints ?? [];
 		return `M ${props.sourceX},${props.sourceY} ${[...waypoints, { x: props.targetX, y: props.targetY }].map(point => `L ${point.x},${point.y}`).join(' ')}`;
@@ -140,21 +146,38 @@ export function pathBuild(type, props) {
 	return helper({ ...props, ...(type === 'step' ? { borderRadius: 0 } : {}) })[0];
 }
 
+// the path of a connection between its two ends, wherever it is drawn: the canvas,
+// a static view, a label placed along it
+export function connectionPathBuild(connection, ends) {
+	return pathBuild(connection.renderer.type, {
+		...ends,
+		route: connection.route,
+		waypoints: connection.route?.waypoints,
+		isSourceFree: endpointIsDangling(connection.source),
+		isTargetFree: endpointIsDangling(connection.target),
+	});
+}
+
 export const DiagramEdge = observer(function DiagramEdge(props) {
 	const { config = {}, editor, edgeGeometry } = useContext(DiagramRenderContext);
 	const { connection } = props.data;
 	const pathRef = useRef(null);
 	const [labelPoint, labelPointSet] = useState(null);
-	const pathValue = pathBuild(connection.renderer.type, { ...props, waypoints: connection.route?.waypoints });
+	const isSelected = editor?.store.selection?.connectionId === props.id;
+	// while an anchor or a handle of this line is dragged, the route being dragged
+	// (the draft holds the route it had, until the drop)
+	const routeDraft = isSelected && editor.store.routeDraft?.connectionId === props.id ? editor.store.routeDraft.route : undefined;
+	const connectionDrawn = routeDraft === undefined ? connection : { ...connection, route: routeDraft };
+	const pathValue = connectionPathBuild(connectionDrawn, props);
 	useLayoutEffect(() => {
 		if (!pathRef.current) return;
 		const length = pathRef.current.getTotalLength();
 		const point = pathRef.current.getPointAtLength(length * connection.label.position);
-		const mid = pathRef.current.getPointAtLength(length / 2);
 		labelPointSet({ x: point.x, y: point.y });
-		edgeGeometry?.set(props.id, { sourceX: props.sourceX, sourceY: props.sourceY, targetX: props.targetX, targetY: props.targetY, sourcePosition: props.sourcePosition, targetPosition: props.targetPosition, midX: mid.x, midY: mid.y });
+		// the edit card stands at the middle of the two ends, not of the path: a
+		// change of the route does not move it (the card never moves under the author)
+		edgeGeometry?.set(props.id, { sourceX: props.sourceX, sourceY: props.sourceY, targetX: props.targetX, targetY: props.targetY, sourcePosition: props.sourcePosition, targetPosition: props.targetPosition, midX: (props.sourceX + props.targetX) / 2, midY: (props.sourceY + props.targetY) / 2, d: pathValue });
 	}, [pathValue, connection.label.position, props.id, edgeGeometry]);
-	const isSelected = editor?.store.selection?.connectionId === props.id;
 	const ends = ['source', 'target'].filter(role => endpointIsDangling(connection[role])).map(role => (
 		<circle key={role} className="doc-vis-edge-end" cx={role === 'source' ? props.sourceX : props.targetX} cy={role === 'source' ? props.sourceY : props.targetY} r={4} />
 	));
@@ -165,6 +188,7 @@ export const DiagramEdge = observer(function DiagramEdge(props) {
 		</>;
 	}
 	return <>
+		{isSelected && routeTypeHasAnchors(connection.renderer.type) && !editor.isLocked ? <ViewportPortal><DiagramRouteControls editor={editor} connection={connectionDrawn} ends={props} /></ViewportPortal> : null}
 		<path ref={pathRef} d={pathValue} fill="none" stroke="none" pointerEvents="none" />
 		{isSelected ? <path d={pathValue} fill="none" className="doc-vis-edge-selection" pointerEvents="none" /> : null}
 		<BaseEdge id={props.id} path={pathValue} markerStart={props.markerStart} markerEnd={props.markerEnd} style={connection.style} interactionWidth={props.interactionWidth ?? 24}

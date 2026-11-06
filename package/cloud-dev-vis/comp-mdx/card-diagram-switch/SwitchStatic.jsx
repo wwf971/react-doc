@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { DiagramNodeContent, DiagramRenderContext, pathBuild } from '../card-diagram/DiagramRender.jsx';
+import { DiagramNodeContent, DiagramRenderContext, connectionPathBuild } from '../card-diagram/DiagramRender.jsx';
 import { endpointIsDangling } from '../card-diagram/DiagramERData.js';
 import { switchPresentationBuild } from './SwitchData.js';
 
@@ -75,23 +75,16 @@ const StaticNode = observer(function StaticNode({ id, node, position, config, re
 	);
 });
 
+const staticEndsOf = (source, target) => ({ sourceX: source.x, sourceY: source.y, sourcePosition: source.side, targetX: target.x, targetY: target.y, targetPosition: target.side });
+
 function StaticLine({ connection, source, target, markerId }) {
-	const d = pathBuild(connection.renderer.type, {
-		sourceX: source.x, sourceY: source.y, sourcePosition: source.side,
-		targetX: target.x, targetY: target.y, targetPosition: target.side,
-		waypoints: connection.route?.waypoints,
-	});
+	const d = connectionPathBuild(connection, staticEndsOf(source, target));
 	return <path d={d} fill="none" style={connection.style} markerEnd={connection.markerEnd === 'none' ? undefined : `url(#${markerId})`} />;
 }
 
 function StaticLabel({ connection, source, target }) {
 	const point = useMemo(() => {
-		const d = pathBuild(connection.renderer.type, {
-			sourceX: source.x, sourceY: source.y, sourcePosition: source.side,
-			targetX: target.x, targetY: target.y, targetPosition: target.side,
-			waypoints: connection.route?.waypoints,
-		});
-		return pathPointAt(d, connection.label.position);
+		return pathPointAt(connectionPathBuild(connection, staticEndsOf(source, target)), connection.label.position);
 	}, [connection, source, target]);
 	return <div className={`doc-switch-edge-label${connection.link ? ' is-link' : ''}`} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}>{connection.label.text}</div>;
 }

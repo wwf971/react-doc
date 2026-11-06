@@ -610,7 +610,7 @@ const PACK_FILE_LIST = [
   'main/frontend/tsconfig.json',
 ];
 const PACK_SKIP_NAME_SET = new Set(['node_modules', 'dist', '__pycache__', '.DS_Store', '.git', '.vite']);
-const PACK_SKIP_NAME_REGEX = /\.(bak|tmp|pyc)$|^\..*\.deleted$|\.test\.js$/;
+const PACK_SKIP_NAME_REGEX = /\.(bak|tmp|pyc)$|^\..*\.deleted$|\.test\.js$|\.playground\.mdx?$/;
 // the devDependency of the checkout that is a local package, not on npm: it goes
 // into the published package itself (bundleDependencies)
 const PACK_BUNDLED_LIST = ['@wwf971/react-comp-misc'];

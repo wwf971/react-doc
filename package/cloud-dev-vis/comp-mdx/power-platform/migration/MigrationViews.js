@@ -1,6 +1,8 @@
 import {
 	migrationChoiceListOf, migrationChoicePairGet, migrationMappingRowListOf, migrationMappingTableOfPair, migrationPairGet, migrationRankBuild, migrationRowSegmentOf, migrationTableListOf, migrationBatchCountOf, migrationMasterReferListOf } from './MigrationData.js';
 import { switchPathLast, switchPathParent, switchRectRead, switchTabsApply } from '../../card-diagram-switch/SwitchData.js';
+import { diagramArrangeApply } from '../../card-diagram/DiagramArrange.js';
+import { erArrangerColumns, erArrangerLanes } from '../er-arrange/er-arranger-list.js';
 
 // The views of a migration, generated from its data items (power-platform-migration.md):
 // a provider of the switching layer. Every view is a diagram of the card diagram format,
@@ -21,7 +23,6 @@ const TABLE_HEIGHT_HEAD = 62;
 const TABLE_HEIGHT_ROW = 33;
 const CHOICE_WIDTH = TABLE_WIDTH;
 const GAP_COLUMN = 170;
-const GAP_ROW = 56;
 const COLOR_LOOKUP = '#64748b';
 const COLOR_CHOICE = '#7c3aed';
 const COLOR_MAPPING = '#0d9488';
@@ -119,32 +120,11 @@ const heightOfChoice = (choice) => TABLE_HEIGHT_HEAD + choice.optionList.length 
 
 // ---------- an ER diagram ----------
 
-// the tables in columns by their lookups (what is referred to at the right), the
-// option sets in a row below them. returns nodes and lines, placed from a point
+// the tables and option sets of a database and the lines between them, arranged by the rule
+// set of ER diagrams (card-diagram-arrange.md). returns nodes and lines, placed from a point
 function erBuild(model, dbId, { x = 0, y = 0, linkOf } = {}) {
 	const tableList = migrationTableListOf(model, dbId);
 	const choiceList = migrationChoiceListOf(model, dbId);
-	const depthByKey = new Map();
-	const depthOf = (table, chain = []) => {
-		if (depthByKey.has(table.key)) return depthByKey.get(table.key);
-		if (chain.includes(table.key)) return 0;
-		const lookupList = table.columnList.map((column) => model.tableByKey.get(column.lookup)).filter((item) => item && item.key !== table.key);
-		const depth = lookupList.length === 0 ? 0 : 1 + Math.max(...lookupList.map((item) => depthOf(item, [...chain, table.key])));
-		depthByKey.set(table.key, depth);
-		return depth;
-	};
-	tableList.forEach((table) => depthOf(table));
-	const depthMax = Math.max(0, ...depthByKey.values());
-	const columnOfTable = new Map();
-	const heightByColumn = new Map();
-	const placeByKey = new Map();
-	for (const table of tableList) {
-		const column = depthMax - depthByKey.get(table.key);
-		columnOfTable.set(table.key, column);
-		const top = heightByColumn.get(column) ?? 0;
-		placeByKey.set(table.key, { x: x + column * (TABLE_WIDTH + GAP_COLUMN), y: y + top });
-		heightByColumn.set(column, top + heightOfTable(table) + GAP_ROW);
-	}
 	const handleByNode = new Map();
 	const handleAdd = (nodeId, handle) => {
 		const list = handleByNode.get(nodeId) ?? [];
@@ -160,9 +140,8 @@ function erBuild(model, dbId, { x = 0, y = 0, linkOf } = {}) {
 				const refer = model.tableByKey.get(column.lookup);
 				const referId = tableNodeId(dbId, refer.logical);
 				const pk = refer.columnList.find((item) => item.key === 'PK') ?? refer.columnList[0];
-				const isForward = columnOfTable.get(refer.key) > columnOfTable.get(table.key);
-				const out = handleAdd(nodeId, handleOf(`lookup-${column.id}`, 'out', isForward ? 'right' : 'left', `column/${column.id}`));
-				const into = handleAdd(referId, handleOf(`pk-${isForward ? 'left' : 'right'}`, 'in', isForward ? 'left' : 'right', `column/${pk.id}`));
+				const out = handleAdd(nodeId, handleOf(`lookup-${column.id}`, 'out', 'right', `column/${column.id}`));
+				const into = handleAdd(referId, handleOf('pk', 'in', 'left', `column/${pk.id}`));
 				connections.push(lineOf(`lookup:${dbId}:${table.logical}:${column.id}`, [nodeId, out], [referId, into], { style: { stroke: COLOR_LOOKUP, strokeWidth: 1.25 } }));
 			}
 			if (column.choice && model.choiceByKey.has(column.choice)) {
@@ -174,26 +153,20 @@ function erBuild(model, dbId, { x = 0, y = 0, linkOf } = {}) {
 			}
 		}
 	}
-	const heightTables = Math.max(0, ...heightByColumn.values());
-	const nodes = tableList.map((table) => tableNodeBuild(table, { ...placeByKey.get(table.key), link: linkOf?.table(table), handleList: handleByNode.get(tableNodeId(dbId, table.logical)) ?? [] }));
-	// an option set stands below the first table using it, so its line stays short
-	const heightChoiceByColumn = new Map();
-	for (const choice of choiceList) {
-		const columnList = tableList.filter((table) => table.columnList.some((column) => column.choice === choice.key)).map((table) => columnOfTable.get(table.key));
-		const column = columnList.length > 0 ? Math.min(...columnList) : depthMax;
-		const top = heightChoiceByColumn.get(column) ?? 0;
-		nodes.push(choiceNodeBuild(choice, { x: x + column * (TABLE_WIDTH + GAP_COLUMN), y: y + heightTables + 60 + top, link: linkOf?.choice?.(choice), handleList: handleByNode.get(choiceNodeId(dbId, choice.logical)) ?? [] }));
-		heightChoiceByColumn.set(column, top + heightOfChoice(choice) + 40);
-	}
-	const width = (depthMax + 1) * TABLE_WIDTH + depthMax * GAP_COLUMN;
-	const height = heightTables + 60 + Math.max(0, ...heightChoiceByColumn.values());
-	return { nodes, connections, width, height };
+	const nodes = [
+		...tableList.map((table) => tableNodeBuild(table, { x, y, link: linkOf?.table(table), handleList: handleByNode.get(tableNodeId(dbId, table.logical)) ?? [] })),
+		...choiceList.map((choice) => choiceNodeBuild(choice, { x, y, link: linkOf?.choice?.(choice), handleList: handleByNode.get(choiceNodeId(dbId, choice.logical)) ?? [] })),
+	];
+	const { diagram } = diagramArrangeApply({ nodes, connections }, erArrangerColumns, { origin: { x, y } });
+	return { nodes: diagram.nodes, connections: diagram.connections, width: Math.max(0, ...diagram.nodes.map((node) => node.position.x + node.size.width)) - x };
 }
 
 function viewErBuild(model, dbId) {
 	const er = erBuild(model, dbId, { linkOf: { table: (table) => `/overview/${dbId}/${table.logical}` } });
 	return { nodes: er.nodes, connections: er.connections };
 }
+
+const TABLE_LANE_MIN = 16;
 
 // one table in the middle: what refers to it on the left, what it refers to on the right
 function viewTableBuild(model, dbId, logical) {
@@ -229,14 +202,15 @@ function viewTableBuild(model, dbId, logical) {
 	const referList = migrationTableListOf(model, dbId).flatMap((item) => item.columnList.filter((column) => column.lookup === table.key).map((column) => ({ table: item, column })));
 	const pk = table.columnList.find((column) => column.key === 'PK') ?? table.columnList[0];
 	if (referList.length > 0) handleList.push(handleOf('pk-left', 'in', 'left', `column/${pk.id}`));
+	const gapLeft = Math.max(80, TABLE_LANE_MIN * (referList.length + 1));
 	for (const { table: from, column } of referList) {
 		const id = `from:${from.logical}:${column.id}`;
-		nodes.push(noteNodeBuild({ id, x: -320, y: yLeft, width: 240, title: from.name, text: `${from.logical}.${column.logical ?? column.id}`, tone: 'slate', link: `/overview/${dbId}/${from.logical}`, handleList: [handleOf('out', 'out', 'right')] }));
+		nodes.push(noteNodeBuild({ id, x: -240 - gapLeft, y: yLeft, width: 240, title: from.name, text: `${from.logical}.${column.logical ?? column.id}`, tone: 'slate', link: `/overview/${dbId}/${from.logical}`, handleList: [handleOf('out', 'out', 'right')] }));
 		connections.push(lineOf(`from:${from.logical}:${column.id}`, [id, 'out'], [nodeId, 'pk-left'], { style: { stroke: COLOR_LOOKUP, strokeWidth: 1.25 } }));
 		yLeft += 80;
 	}
 	nodes.push(tableNodeBuild(table, { x: 0, y: 0, handleList }));
-	return { nodes, connections };
+	return diagramArrangeApply({ nodes, connections }, erArrangerLanes).diagram;
 }
 
 // ---------- mappings ----------
@@ -478,7 +452,7 @@ function viewPlanBuild(model) {
 }
 
 // a list on a canvas wraps: at most this many in a row (a convention of the framework,
-// card-diagram.md#drawing-conventions)
+// card-diagram-usage.md#drawing-conventions)
 const RANK_COLUMN_MAX = 4;
 const RANK_LABEL_WIDTH = 190;
 const RANK_CELL_WIDTH = 240;
@@ -553,7 +527,7 @@ function viewPlanBatchBuild(model) {
 }
 
 // a short card of figures that opens the table behind them: a table is a detail, one
-// click away (card-diagram.md#drawing-conventions)
+// click away (card-diagram-usage.md#drawing-conventions)
 function reportSummaryItemBuild(model, { id, title, text, tone, link, metaList }) {
 	return { id, link, node: { renderer: { type: 'card-note' }, size: { width: 'auto', height: 'auto' }, data: { title, text: text ? `${text} — ${labelOf(model, 'detailHint')}` : labelOf(model, 'detailHint'), tone, metaList } } };
 }
@@ -1110,6 +1084,7 @@ const OVERVIEW_REPORT_Y = OVERVIEW_DB_HEIGHT + 200;
 const OVERVIEW_REPORT_WIDTH = 560;
 const OVERVIEW_REPORT_HEIGHT = 420;
 const OVERVIEW_REPORT_GAP_MIN = 120;
+const OVERVIEW_LEVEL_GAP = 44;
 
 function viewOverviewBuild(model) {
 	const { source, target, tool } = model.system;
@@ -1140,10 +1115,24 @@ function viewOverviewBuild(model) {
 	const reportIdOf = (step, index) => `report:${step.report ?? ['plan', 'run', 'verify'][index]}`;
 	const labelStep = ['planMake', 'runMake', 'verifyMake', 'postMake'];
 	const stepShownList = stepList.filter((step, index) => reportIdList.includes(reportIdOf(step, index).slice('report:'.length)));
+	// the reports fan out from the tool: lines going one way share the space under it, so
+	// each has a level of its own, the one leaving farthest out the highest, so that they do
+	// not cross (card-diagram-usage.md#no-lines-on-top-of-each-other)
+	const toolX = (index) => OVERVIEW_TOOL_X + (OVERVIEW_TOOL_WIDTH * (index + 1)) / (stepList.length + 1);
+	const reportCenterX = (step, index) => reportX(reportIdList.indexOf(reportIdOf(step, index).slice('report:'.length))) + OVERVIEW_REPORT_WIDTH / 2;
+	const stepPlaceList = stepList.map((step, index) => ({ step, index, from: toolX(index), to: reportCenterX(step, index) })).filter(({ step, index }) => stepShownList.includes(step) && reportIdList.includes(reportIdOf(step, index).slice('report:'.length)));
+	const routeOfStep = (step) => {
+		const place = stepPlaceList.find((item) => item.step === step);
+		const side = Math.sign(place.to - place.from);
+		if (side === 0) return {};
+		const siblingList = stepPlaceList.filter((item) => Math.sign(item.to - item.from) === side).sort((a, b) => (a.from - b.from) * -side);
+		const level = siblingList.indexOf(place) - (siblingList.length - 1) / 2;
+		return level === 0 ? {} : { route: { anchorList: [{ id: 'level', along: 0.5, x: 0, y: level * OVERVIEW_LEVEL_GAP }] } };
+	};
 	const connections = [
 		lineOf('read-source', ['tool', 'source'], ['db:source', 'in'], { style: { stroke: '#2563eb', strokeWidth: 1.5 }, label: { text: labelOf(model, 'readSource') } }),
 		lineOf('write-target', ['tool', 'target'], ['db:target', 'in'], { style: { stroke: '#16a34a', strokeWidth: 1.5 }, label: { text: labelOf(model, 'write') } }),
-		...stepShownList.map((step, index) => lineOf(`make:${step.id}`, ['tool', `step-${step.id}`], [reportIdOf(step, index), 'top'], { style: { stroke: '#7c3aed', strokeWidth: 1.5 }, label: { text: labelOf(model, labelStep[index]), position: 0.62 } })),
+		...stepShownList.map((step, index) => lineOf(`make:${step.id}`, ['tool', `step-${step.id}`], [reportIdOf(step, index), 'top'], { style: { stroke: '#7c3aed', strokeWidth: 1.5 }, label: { text: labelOf(model, labelStep[index]), position: 0.62 }, ...routeOfStep(step) })),
 		lineOf('plan-run', ['report:plan', 'out'], ['report:run', 'in'], { style: { stroke: '#64748b', strokeWidth: 1.5 }, label: { text: labelOf(model, 'planToRun') } }),
 		lineOf('run-verify', ['report:run', 'out'], ['report:verify', 'in'], { style: { stroke: '#64748b', strokeWidth: 1.5 }, label: { text: labelOf(model, 'runToVerify') } }),
 		...(model.planPost ? [lineOf('verify-post', ['report:verify', 'out'], ['report:post', 'in'], { style: { stroke: '#64748b', strokeWidth: 1.5 }, label: { text: labelOf(model, 'verifyToPost') } })] : []),

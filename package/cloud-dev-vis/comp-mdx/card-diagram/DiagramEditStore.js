@@ -4,6 +4,8 @@ import { diagramLegacyConvert, diagramNormalize, cardStandaloneNormalize, endpoi
 import { cardSchemaGet, cardRowAnchorBuild } from './TableCardSchema.js';
 import { pathResolve, pathEquals, selectionPathBuild, tabPathGet, nodeLineListGet, cardTabList } from './DiagramEditPath.js';
 import { EditHistory } from './DiagramEditHistory.js';
+import { diagramArrangeRun } from './DiagramArrange.js';
+import { routeAnchorCoupleSet, routeAnchorHandleSet, routeAnchorHandlesPull, routeAnchorIdNext, routeAnchorInsertAt, routeAnchorMove, routeAnchorPlaceOf, routeAnchorRemove, routeCompact, routeEndHandleSet, routeNormalize, routeTypeFamilyGet, routeTypeHasAnchors } from './DiagramRoute.js';
 
 export { cardTabList };
 
@@ -48,6 +50,9 @@ export const strokeDashList = [
 //                moved, a node being dragged, the create panel): the edit
 //                card is hidden while it lasts
 //   create       the create panel, at a canvas position
+//   routeDraft   { connectionId, route }: the route of a line while one of its
+//                anchors or handles is dragged, drawn in place of the draft's
+//                until the drop writes it as one step (changeApply)
 export class DiagramEditStore {
 	rawInitial;
 	rawDraft;
@@ -61,6 +66,7 @@ export class DiagramEditStore {
 	cell = null;
 	interaction = null;
 	create = null;
+	routeDraft = null;
 	saveTarget = 'asset';
 	message = '';
 
@@ -86,7 +92,7 @@ export class DiagramEditStore {
 		// two states are one draft when their values are: the text may differ
 		// (the initial text keeps its comments and layout) and is restored with it
 		this.history = new EditHistory({ isSame: (a, b) => a.valueCurrent === b.valueCurrent });
-		makeAutoObservable(this, { documentDraft: false, resolve: false, registry: false, history: false, path: observable.ref, redirectRuleList: false }, { autoBind: true });
+		makeAutoObservable(this, { documentDraft: false, resolve: false, registry: false, history: false, path: observable.ref, redirectRuleList: false, routeDraft: observable.ref }, { autoBind: true });
 	}
 
 	// ---------- the draft ----------
@@ -236,13 +242,13 @@ export class DiagramEditStore {
 	get display() { return this.route.display; }
 
 	// the selection the cards highlight, read off the display: { nodeId,
-	// rowId, fieldId, connectionId, propId } for a card, { connectionId } for
-	// a line selected by itself, null for none
+	// rowId, fieldId, connectionId, propId, anchorId } for a card,
+	// { connectionId, anchorId } for a line selected by itself, null for none
 	get selection() {
 		const display = this.display;
 		if (!display) return null;
-		if (display.principal === 'connection') return { connectionId: display.connectionId };
-		return { nodeId: display.nodeId, rowId: display.rowId, fieldId: display.fieldId, connectionId: display.connectionId, propId: display.propId };
+		if (display.principal === 'connection') return { connectionId: display.connectionId, ...(display.anchorId ? { anchorId: display.anchorId } : {}) };
+		return { nodeId: display.nodeId, rowId: display.rowId, fieldId: display.fieldId, connectionId: display.connectionId, propId: display.propId, ...(display.anchorId ? { anchorId: display.anchorId } : {}) };
 	}
 
 	get cardTab() { return this.display?.tab ?? 'table'; }
@@ -680,11 +686,16 @@ export class DiagramEditStore {
 			const path = ['connections', index];
 			switch (field) {
 				case 'label': documentNext.setIn([...path, 'label', 'text'], String(value ?? '')); break;
-				case 'lineType':
+				case 'lineType': {
 					if (!lineTypeList.includes(value)) throw new Error('Unknown line type.');
+					// a route belongs to its family of line types: anchors are not
+					// carried over to another family (an undo brings them back)
+					const family = routeTypeFamilyGet(value);
+					const isRouteKept = value === this.connectionLineTypeGet(this.connections[index]) || (family !== '' && family === routeTypeFamilyGet(this.connectionLineTypeGet(this.connections[index])));
 					documentNext.setIn([...path, 'renderer'], documentNext.createNode({ type: value }));
-					if (value !== 'polyline') documentNext.deleteIn([...path, 'route']);
+					if (!isRouteKept) documentNext.deleteIn([...path, 'route']);
 					break;
+				}
 				case 'stroke': documentNext.setIn([...path, 'style', 'stroke'], String(value)); break;
 				case 'strokeWidth': {
 					const width = Number(value);
@@ -722,6 +733,167 @@ export class DiagramEditStore {
 			else this.selectionClear();
 		}
 		return isChanged;
+	}
+
+	// ---------- the route of a line (card-diagram-connection-line.md) ----------
+
+	// the line type a connection is drawn with: its own, the default of the diagram,
+	// or the default of the framework. '' for a line drawn by a component
+	connectionLineTypeGet(connection) {
+		const renderer = connection?.renderer ?? this.value.defaults?.connection?.renderer ?? { type: 'smoothstep' };
+		return renderer.component ? '' : renderer.type;
+	}
+
+	// why this line takes no route, '' when it does
+	connectionRouteReasonGet(connection) {
+		if (!connection) return 'Unknown connection.';
+		const type = this.connectionLineTypeGet(connection);
+		if (routeTypeHasAnchors(type)) return '';
+		return type ? `A ${type} line has no anchors: switch the line type to right-angled or curve.` : 'A line drawn by a component has no anchors.';
+	}
+
+	// the route of a line as the draft holds it, normalized; null when it has none
+	connectionRouteGet(connectionId) {
+		const connection = this.connectionGet(connectionId);
+		if (this.connectionRouteReasonGet(connection)) return null;
+		return routeNormalize(connection.route, this.connectionLineTypeGet(connection));
+	}
+
+	// the anchors of a connection of the draft; none when it has no route (or one that
+	// does not read: the validation of the draft says so)
+	connectionRouteAnchorListGet(connection) {
+		if (this.connectionRouteReasonGet(connection)) return [];
+		try {
+			return routeNormalize(connection.route, this.connectionLineTypeGet(connection))?.anchorList ?? [];
+		} catch {
+			return [];
+		}
+	}
+
+	// one change of the route of a line, as one step of the history. build gets the
+	// line type and the route, and answers the route; a refusal says why, here
+	connectionRouteChange(connectionId, build, { groupKey = null } = {}) {
+		const index = this.connections.findIndex(connection => connection.id === connectionId);
+		const connection = this.connections[index];
+		const reason = this.connectionRouteReasonGet(connection);
+		if (reason) { this.message = reason; return false; }
+		return this.changeApply(documentNext => {
+			const type = this.connectionLineTypeGet(connection);
+			const route = routeCompact(routeNormalize(build(type, routeNormalize(connection.route, type)), type, `${connectionId}.route`));
+			const path = ['connections', index, 'route'];
+			if (route) documentNext.setIn(path, documentNext.createNode(route));
+			else if (documentNext.hasIn(path)) documentNext.deleteIn(path);
+		}, { groupKey });
+	}
+
+	// an arranger applied to the draft, as one step of the history: an undo puts every card
+	// and every anchor back (card-diagram-arrange.md). answers its report, or null
+	arrangeApply(arranger, { geometry, ...options } = {}) {
+		let changes;
+		try {
+			changes = diagramArrangeRun(this.value, arranger, { geometry, ...options });
+		} catch (error) {
+			this.message = error.message;
+			return null;
+		}
+		const isChanged = this.changeApply(documentNext => {
+			for (const [nodeId, position] of Object.entries(changes.positionById)) documentNext.setIn([...this.nodePathGet(nodeId), 'position'], documentNext.createNode({ x: Math.round(position.x), y: Math.round(position.y) }));
+			for (const { nodeId, handleId, side } of changes.handleSideList) {
+				const index = this.nodeGet(nodeId).handles.findIndex(handle => handle.id === handleId);
+				documentNext.setIn([...this.nodePathGet(nodeId), 'handles', index, 'anchor', 'side'], side);
+			}
+			for (const [connectionId, route] of Object.entries(changes.routeById)) {
+				const path = ['connections', this.connections.findIndex(connection => connection.id === connectionId), 'route'];
+				if (route) documentNext.setIn(path, documentNext.createNode(route));
+				else if (documentNext.hasIn(path)) documentNext.deleteIn(path);
+			}
+		});
+		return isChanged ? changes.reportList : null;
+	}
+
+	// the path of a line: where the author is on it when they are, else the line by itself
+	linePathGet(connectionId) {
+		if (this.display?.connectionId !== connectionId) return [{ kind: 'connection', id: connectionId }];
+		const index = this.path.findIndex(segment => segment.kind === 'anchors');
+		return index < 0 ? this.path : this.path.slice(0, index);
+	}
+
+	anchorSelect(connectionId, anchorId) {
+		this.pathSet([...this.linePathGet(connectionId), { kind: 'anchors' }, { kind: 'anchor', id: anchorId }]);
+		this.message = '';
+	}
+
+	// a new anchor: where the line passes nearest to a point ({ point, ends }: the curve
+	// is split there, so it keeps its shape), or at a place given as the data keeps it
+	// ({ along, x, y, index?, id?, handleIn?, handleOut?, isCoupled? }). focused; returns its id
+	connectionAnchorAdd(connectionId, input) {
+		let anchorId = null;
+		const isChanged = this.connectionRouteChange(connectionId, (type, route) => {
+			if (input.point) {
+				if (!input.ends) throw new Error('A point on the canvas needs where the ends of the line are.');
+				const inserted = routeAnchorInsertAt(type, route, input.ends, input.point);
+				anchorId = inserted.anchorId;
+				return inserted.route;
+			}
+			const { index, ...anchor } = input;
+			anchorId = anchor.id ?? routeAnchorIdNext(route);
+			const anchorList = [...(route?.anchorList ?? [])];
+			anchorList.splice(index ?? anchorList.length, 0, { ...anchor, id: anchorId });
+			return { ...route, anchorList };
+		});
+		if (!isChanged) return null;
+		this.anchorSelect(connectionId, anchorId);
+		return anchorId;
+	}
+
+	// the place of an anchor: a point of the canvas ({ point, ends, along? }), or as the
+	// data keeps it ({ along?, x?, y? }). along alone changes which end it follows and
+	// keeps it where it is when the ends are known
+	connectionAnchorMove(connectionId, anchorId, input, { groupKey = null } = {}) {
+		return this.connectionRouteChange(connectionId, (_type, route) => routeAnchorMove(route, anchorId, input.point ? routeAnchorPlaceOf(input.point, input.ends, input.along) : input), { groupKey });
+	}
+
+	// the anchor goes; the neighbours keep their handles. the path goes back to the line
+	connectionAnchorRemove(connectionId, anchorId) {
+		const linePath = this.linePathGet(connectionId);
+		const isChanged = this.connectionRouteChange(connectionId, (_type, route) => routeAnchorRemove(route, anchorId));
+		if (isChanged && this.display?.connectionId === connectionId) this.pathSet(linePath);
+		return isChanged;
+	}
+
+	// side: in | out. value: a direction, or null for auto (right-angled); a vector { x, y },
+	// or null for none (curve). options.isDecouple: this handle moves alone from now on
+	connectionAnchorHandleSet(connectionId, anchorId, side, value, { isDecouple = false, groupKey = null } = {}) {
+		return this.connectionRouteChange(connectionId, (type, route) => routeAnchorHandleSet(type, route, anchorId, side, value, { isDecouple }), { groupKey });
+	}
+
+	connectionAnchorCoupleSet(connectionId, anchorId, isCoupled) {
+		return this.connectionRouteChange(connectionId, (type, route) => routeAnchorCoupleSet(type, route, anchorId, isCoupled));
+	}
+
+	connectionAnchorHandlesPull(connectionId, anchorId, ends) {
+		return this.connectionRouteChange(connectionId, (type, route) => routeAnchorHandlesPull(type, route, ends, anchorId));
+	}
+
+	// the one-sided handle of an end (role: source | target); null: none, the line
+	// leaves and arrives perpendicular to the border of the card
+	connectionEndHandleSet(connectionId, role, value, { groupKey = null } = {}) {
+		return this.connectionRouteChange(connectionId, (type, route) => routeEndHandleSet(type, route, role, value), { groupKey });
+	}
+
+	// the whole route at once (what an agent computed, a dragged route dropped);
+	// null: back to the route the line type draws by itself
+	connectionRouteSet(connectionId, route) {
+		return this.connectionRouteChange(connectionId, () => route);
+	}
+
+	routeDraftSet(connectionId, route) { this.routeDraft = { connectionId, route }; }
+	routeDraftClear() { this.routeDraft = null; }
+	// what was dragged, written as one step
+	routeDraftCommit() {
+		const draft = this.routeDraft;
+		this.routeDraft = null;
+		return draft ? this.connectionRouteSet(draft.connectionId, draft.route) : false;
 	}
 
 	// the dash preset a connection's style amounts to

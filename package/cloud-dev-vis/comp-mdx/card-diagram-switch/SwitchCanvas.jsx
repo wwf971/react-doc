@@ -3,8 +3,9 @@ import { observer } from 'mobx-react-lite';
 import { Background, Controls, EdgeLabelRenderer, ReactFlow, ReactFlowProvider, useNodesInitialized, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Check, CircleAlert, LoaderCircle } from '../../../../main/frontend/UICommon.js';
-import { DiagramEdge, DiagramNode, DiagramPointNode, DiagramRenderContext, pathBuild } from '../card-diagram/DiagramRender.jsx';
+import { DiagramEdge, DiagramNode, DiagramPointNode, DiagramRenderContext, connectionPathBuild } from '../card-diagram/DiagramRender.jsx';
 import { useCanvasWheelGuard } from '../card-diagram/CanvasWheelGuard.js';
+import { diagramCanvasLineListGet, diagramCanvasRegister } from '../card-diagram/DiagramCanvasRegistry.js';
 import '../card-diagram/DiagramER.css';
 import { SwitchContext, SwitchStaticView, pathPointAt } from './SwitchStatic.jsx';
 import { SWITCH_ZOOM_MAX, SWITCH_ZOOM_MIN, switchPresentationBuild } from './SwitchData.js';
@@ -27,7 +28,7 @@ const SwitchEdge = observer(function SwitchEdge(props) {
 	const dataBase = useMemo(() => (hasLabel ? { ...props.data, connection: { ...connection, label: { ...connection.label, text: '' } } } : props.data), [hasLabel, props.data, connection]);
 	const point = useMemo(() => {
 		if (!hasLabel) return null;
-		return pathPointAt(pathBuild(connection.renderer.type, { ...props, waypoints: connection.route?.waypoints }), connection.label.position);
+		return pathPointAt(connectionPathBuild(connection, props), connection.label.position);
 	}, [hasLabel, connection, props.sourceX, props.sourceY, props.targetX, props.targetY, props.sourcePosition, props.targetPosition]);
 	return <>
 		<DiagramEdge {...props} data={dataBase} />
@@ -167,6 +168,17 @@ export const SwitchCanvas = observer(function SwitchCanvas({ store, config, regi
 		edgeGeometry: new Map(),
 		viewBox: { get isAdjust() { return store.isBoxAdjust; }, resizeEnd: (nodeId, params) => store.boxCommit(nodeId, params) },
 	}), [config, registry, store]);
+	// the view shown, for the check of its lines (DiagramCanvasRegistry.js). only those it
+	// shows are looked at: the geometry of a view left stays behind
+	useEffect(() => diagramCanvasRegister({
+		sourcePath: config?.sourcePath ?? '',
+		store,
+		get title() { return store.pathFlow; },
+		sourceGet: () => '',
+		editorGet: () => null,
+		endsGet: () => null,
+		lineListGet: () => diagramCanvasLineListGet(context.edgeGeometry, store.entryGet(store.pathFlow)?.canvas.graph?.connections ?? []),
+	}), [store, config, context]);
 	const switchContext = useMemo(() => ({ store, isStatic: false, depth: 0, pathChain: [], get presentation() { return switchPresentationBuild(store.pathFlow); } }), [store]);
 	useLayoutEffect(() => {
 		const element = boxRef.current;

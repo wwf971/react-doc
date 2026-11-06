@@ -158,7 +158,7 @@ Every node can set a stable `id`, a custom `text`, a custom `display` component,
 
 ## Selecting documents
 
-A `doc` value is a source path (`~root/...`, a root of the node's doc page; `~page:root/...` for any doc page of the workspace), a path suffix, or a file name; a suffix or a name is looked up in the node's doc page first ([target resolution](doc_page_impl_nav.md#link-recognition-and-target-resolution)). When a suffix or name matches several files, the first match in source order is used and the document page shows a warning listing every match. A `doc` that matches nothing stays in the tree as a missing-document item, which shows a clear error instead of disappearing.
+A `doc` value is a source path (`~root/...`, a root of the node's doc page; `~page:root/...` for any doc page of the workspace), a path suffix, or a file name; a suffix or a name is looked up in the node's doc page first ([target resolution](doc_page_impl_nav.md#link-recognition-and-target-resolution)). When a suffix or name matches several files, the first match in source order is used and the document page shows a warning listing every match. A `doc` that matches nothing stays in the tree as a missing-document item, in its place and with its route, and clicking it opens an error page instead of the item disappearing ([A side panel item whose document is missing](doc_page_impl_test.md#a-side-panel-item-whose-document-is-missing), where a [playground](doc_page_impl_test.md#playground-documents) is the case in which this is expected).
 
 ## Including other side panels
 

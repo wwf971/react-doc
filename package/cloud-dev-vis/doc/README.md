@@ -10,7 +10,10 @@ cloud-dev-vis/
 ├── package.json            marks the .js files as ES modules for node (tests); not an npm package
 ├── doc/
 │   ├── README.md               this document
-│   ├── card-diagram.md         building on the framework: the standards, the checklists (read before changing anything)
+│   ├── card-diagram-usage.md   drawing with the framework: what to choose, the conventions, the checks
+│   ├── card-diagram.md         changing the framework: the standards, the checklists (read before changing anything)
+│   ├── card-diagram-connection-line.md  shaping a line by anchors and handles: design, implementation, usage
+│   ├── card-diagram-arrange.md          arrangers, which lay out a diagram by rules: for a generator, a first layout, or by hand
 │   ├── card-diagram-impl.md    the base series, design and implementation: data format, canvas, cards,
 │   │                           editor, history, node registries
 │   ├── power-platform.md       the Power Platform series, design
@@ -21,7 +24,8 @@ cloud-dev-vis/
 │   ├── comp-powerplatform.md   for authors: DiagramPowerAutomate, DiagramBusinessRule
 │   ├── comp-card-diagram-animation.md  for authors: CardDiagramAnimation, DiagramERAnimation
 │   └── comp-card-diagram-switch.md  for authors: CardDiagramSwitch, DiagramERSwitch
-├── .doc-page/              makes the package a doc page: entry, source rules, side panel, assets of its demonstrations
+├── .doc-page/              makes the package a doc page: entry, source rules, side panel, assets of its
+│                           demonstrations, the template of its playground
 └── comp-mdx/
     ├── card-diagram/       the base series       CardDiagram
     ├── card-diagram-animation/  animation        CardDiagramAnimation
@@ -32,7 +36,7 @@ cloud-dev-vis/
                                                   migration/: the modes of a migration as a frontend object
 ```
 
-The documents written for authors are the usage documents of the components, with live examples. The package is a doc page as well ([A package as a doc page](../../../main/doc_page_impl_package.md#a-package-as-a-doc-page)): `react-doc dev package/cloud-dev-vis` shows them alone, and the workspace of the project lists it beside its demonstration. Read so it is read-only, also its assets.
+The documents written for authors are the usage documents of the components, with live examples. The package is a doc page as well ([A package as a doc page](../../../main/doc_page_impl_package.md#a-package-as-a-doc-page)): `react-doc dev package/cloud-dev-vis` shows them alone, and the workspace of the project lists it beside its demonstration. Read so it is read-only, also its assets, except its playground.
 
 ## Core concepts
 
@@ -64,6 +68,10 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 
 | To ... | Read |
 | --- | --- |
+| **draw diagrams** (by hand or from a generator) | [card-diagram-usage.md](card-diagram-usage.md), which points to the rest |
+| try something out | the **Playground** of the side panel: a document git ignores ([Playground documents](../../../main/doc_page_impl_test.md#playground-documents)) |
+| shape a connection line, or keep lines off each other | [card-diagram-connection-line.md](card-diagram-connection-line.md) |
+| lay out a diagram by rules, or write an arranger | [card-diagram-arrange.md](card-diagram-arrange.md) |
 | change anything of the framework, add a kind, a series or a command | the guidance [card-diagram.md](card-diagram.md) first: the standards and the checklist of that kind of change |
 | understand the data format, the canvas, the editor, the history, or add a generic card | [card-diagram-impl.md](card-diagram-impl.md) |
 | change a Power Platform card or component | [power-platform.md](power-platform.md) |
@@ -85,6 +93,8 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | `comp-mdx/demo/migration-step/` | a registered node renderer the documents demonstrate |
 | `comp-mdx/card-diagram/CardDiagram.jsx`, `CardStandalone.jsx` | the canvas and the standalone card, and their factories `cardDiagramCompCreate`, `cardStandaloneCompCreate` |
 | `comp-mdx/card-diagram/DiagramERData.js`, `DiagramERStore.js`, `DiagramEdit*.js`, `DiagramRender.jsx` | normalization, the canvas model, the editor's draft and path, the node and edge components (their names keep the `DiagramER` prefix of the series they started in) |
+| `comp-mdx/card-diagram/DiagramRoute.js`, `DiagramRouteControls.jsx`, `DiagramApiList.js`, `DiagramCanvasRegistry.js` | the route of a line, its controls, and the apis of a diagram: [card-diagram-connection-line.md](card-diagram-connection-line.md#implementation) |
+| `comp-mdx/card-diagram/DiagramArrange.js`, `comp-mdx/power-platform/er-arrange/` | the contract of an arranger, and the arrangers of ER diagrams: [card-diagram-arrange.md](card-diagram-arrange.md) |
 | `comp-mdx/card-diagram/DiagramEditHistory.js` | `EditHistory`: the history of a draft (steps, typing groups, undo, redo), generic over the state its owner records; `DiagramEditStore` records in it from `changeApply` and `DiagramVisualEdit` offers it in the bar and on the keys |
 | `comp-mdx/card-diagram/TableCard*.js(x)`, `ResourceNodeCard.jsx`, `OperatorCard.jsx` | the generic cards and their schemas |
 | `comp-mdx/card-diagram/card-diagram-comp.js` | the exposure shared by every diagram component, and the definition of `CardDiagram` |

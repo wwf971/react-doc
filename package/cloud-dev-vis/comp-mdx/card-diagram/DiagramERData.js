@@ -1,3 +1,5 @@
+import { routeNormalize, routeTypeHasAnchors } from './DiagramRoute.js';
+
 const sides = ['left', 'right', 'top', 'bottom'];
 const lineTypes = ['straight', 'bezier', 'step', 'smoothstep', 'polyline'];
 const markerTypes = ['none', 'arrow', 'arrowClosed'];
@@ -235,9 +237,10 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 		if (style.strokeDasharray !== undefined && !/^\d+(?:\.\d+)?(?:[ ,]+\d+(?:\.\d+)?)*$/.test(String(style.strokeDasharray))) throw new Error(`${id}: invalid strokeDasharray.`);
 		const label = { text: '', position: 0.5, ...mapping(connectionDefault.label ?? {}, 'default label'), ...mapping(connection.label ?? {}, `${id}.label`) };
 		if (typeof label.text !== 'string' || number(label.position, `${id}.label.position`, 0) > 1) throw new Error(`${id}: invalid label.`);
-		const route = own(connection, 'route') ? connection.route : connectionDefault.route;
+		let route = own(connection, 'route') ? connection.route : connectionDefault.route;
 		if (route != null) {
 			if (renderer.type === 'polyline') list(mapping(route, `${id}.route`).waypoints, `${id}.waypoints`).forEach(item => point(item, `${id}.waypoint`));
+			else if (routeTypeHasAnchors(renderer.type)) route = routeNormalize(route, renderer.type, `${id}.route`);
 			else if (typeof contract.routeValidate === 'function') contract.routeValidate(route);
 			else throw new Error(`${id}: renderer does not accept route data.`);
 		}

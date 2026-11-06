@@ -22,7 +22,7 @@ test('the three spellings of a subject route to the same canonical path and disp
 	assert.deepEqual(byIndex.path, byId.path);
 	assert.deepEqual(byName.path, byId.path);
 	assert.equal(pathFormat(byId.path), 'node(id=customer) > rows > row(id=name)');
-	assert.deepEqual(byId.display, { principal: 'node', nodeId: 'customer', connectionId: null, rowId: 'name', fieldId: null, propId: null, tab: 'row', view: 'detail' });
+	assert.deepEqual(byId.display, { principal: 'node', nodeId: 'customer', connectionId: null, rowId: 'name', fieldId: null, propId: null, anchorId: null, tab: 'row', view: 'detail' });
 	// the card's own word for its fields, and the list with "all"
 	assert.equal(pathResolve(pathParse('node(id=order) > columns > all'), store).display.tab, 'column');
 	assert.equal(pathResolve(pathParse('node(id=order) > columns'), store).display.view, 'list');

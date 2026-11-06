@@ -22,6 +22,7 @@ import { DocPageBodyLoading } from '../../comp-doc/page/DocPageBodyLoading.jsx';
 import { DocPageToc } from '../../comp-doc/toc/DocPageToc.jsx';
 import { DocPageTagBar } from '../../comp-doc/tag/DocPageTagBar.jsx';
 import { DocEditBody } from '../../comp-doc/edit/DocEditBody.jsx';
+import { DocPlaygroundBar, DocPlaygroundMissing } from '../../comp-doc/playground/DocPlayground.jsx';
 import { RegisteredComp } from '../../comp-doc/registry/RegisteredComp.jsx';
 import { compIdResolve } from '../../comp-doc/registry/comp-registry.js';
 import { SidePanelItemSurfaceContext } from '../../comp-doc/side-panel/SidePanelItemHost.jsx';
@@ -99,6 +100,17 @@ export const DocPageView = observer(function DocPageView() {
     );
   }
 
+  const playgroundMissing = item?.type === 'missing-doc' ? sourceStore.playgroundOfReference(item.sourceReference) : undefined;
+  if (playgroundMissing) {
+    return (
+      <DocsPage breadcrumb={{ includePage: true }} className="doc-page-with-toolbar" slots={docsPageSlots}>
+        {warningNavigation}
+        <DocsTitle>Document source not found</DocsTitle>
+        <DocPlaygroundMissing playground={playgroundMissing} />
+      </DocsPage>
+    );
+  }
+
   if (item?.type === 'missing-doc') {
     return (
       <DocsPage breadcrumb={{ includePage: true }} className="doc-page-with-toolbar" slots={docsPageSlots}>
@@ -125,6 +137,7 @@ export const DocPageView = observer(function DocPageView() {
           slots={docsPageSlots}
         >
           {warningNavigation}
+          <DocPlaygroundBar path={pathContent} />
           {docEdit.titleFrontmatter ? <DocsTitle className="doc-page-title">{docEdit.titleFrontmatter}</DocsTitle> : null}
           {docEdit.description ? (
             <DocsDescription className="doc-page-description">{docEdit.description}</DocsDescription>
@@ -181,6 +194,7 @@ export const DocPageView = observer(function DocPageView() {
             </ul>
           </div>
         ) : null}
+        <DocPlaygroundBar path={pathContent} />
         {/* md files usually carry their own '# heading'; only frontmatter title gets the big page title */}
         {compiled.titleFrontmatter ? <DocsTitle className="doc-page-title">{compiled.titleFrontmatter}</DocsTitle> : null}
         {compiled.description ? (

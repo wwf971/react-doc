@@ -27,6 +27,8 @@ my-doc/                          the doc page folder: give this to a workspace f
     ├── comp.yaml                its component folders (optional: comp-mdx/ below otherwise)
     ├── service.yaml             its service folders (optional: the four service-* below otherwise)
     ├── api.yaml                 the apis it declares without code (optional: none otherwise)
+    ├── playground.yaml          its playground documents (optional: none otherwise), with their
+    ├── playground/              templates (doc_page_impl_test.md)
     ├── object-frontend.yaml     its frontend objects and their types (optional: none otherwise; made by its first object)
     │                            (and packageList of the entry: the packages it needs, by name)
     ├── service-backend.yaml     the config of the service backend, when the page is the one a backend is started for
@@ -144,6 +146,7 @@ A doc page binds keys to apis and declares apis of its own in its metadata folde
 
 - **`.doc-page/hotkey/`** holds its keyboard maps, one yaml file each ([Keyboard maps](doc_page_impl_api_hotkey.md)). `main.yaml` is the map the doc page activates; the other files are resources that the active map includes (`include: [./base.yaml]`), or that the reader picks instead in the settings panel. The entry names another file as the active map with `hotkey: { file: ./hotkey/vim.yaml }`, or `hotkey: false` for none. The maps of every loaded doc page are stacked over the package's default map (`main/hotkey/default.yaml`, named by `config.yaml`) and under the workspace's map (named by the workspace file), the included doc pages below the one that includes them.
 - **`.doc-page/api.yaml`** holds the apis the doc page declares without code: aliases of apis of the page with fixed parameters, or sequences of calls ([Declared apis](doc_page_impl_api.md#declared-apis)), read when the file exists; `api: { file }` names another file, `api: false` none.
+- **`.doc-page/playground.yaml`** lists its playground documents, documents for trying things out that git ignores, each with a template, normally in `.doc-page/playground/` ([Playground documents](doc_page_impl_test.md#playground-documents)), read when the file exists; `playground: { file }` names another file, `playground: false` none. The document itself lies among the documents, named `*.playground.md`, and is the one file of a doc page a clone is meant not to have.
 
 Both are configuration, like the entry and the side-panel files: a change reloads the page, and they are never collected as documents.
 

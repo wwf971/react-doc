@@ -72,6 +72,7 @@ export const SidePanelItemHost = observer(function SidePanelItemHost({
     eventRouter,
     onEvent: onEventPage,
     sidePanelStore,
+    sourceStore,
     tagStore,
   } = useDocStores();
   const surface = useContext(SidePanelItemSurfaceContext);
@@ -100,8 +101,9 @@ export const SidePanelItemHost = observer(function SidePanelItemHost({
   const refreshStatus = sidePanelStore.refresh?.itemId === itemId ? sidePanelStore.refresh.status : '';
   const refreshMessage = sidePanelStore.refresh?.itemId === itemId ? sidePanelStore.refresh.message : '';
   // the context menu needs the Menu the host application injects; in edit
-  // mode every item has one (what does not apply is disabled with a reason)
-  const isContextMenuAvailable = Boolean(componentConfig.Menu) && surface === 'sidebar' && sidePanelStore.isMoveAvailable;
+  // mode every item has one (what does not apply is disabled with a reason),
+  // and the item of a playground at any time (doc_page_impl_test.md)
+  const isContextMenuAvailable = Boolean(componentConfig.Menu) && surface === 'sidebar' && (sidePanelStore.isMoveAvailable || (sourceStore.isWritable && Boolean(sidePanelStore.itemPlaygroundGet(itemId))));
   const contextMenuOpen = (point) => sidePanelStore.contextMenuOpen(itemId, instanceId, { clientX: point.clientX, clientY: point.clientY });
   const moveDispatch = (position, targetItemId, point) => {
     const event = eventRouter.eventBuild({

@@ -139,6 +139,7 @@ type DocEvent = { type: string; data: Record<string, any>; source: Record<string
 //   sidePanelItemInsertRequest { kind: 'folder' | 'doc', position }
 //   sidePanelItemBindRequest   { kind: 'doc' | 'folder' | 'none' }
 //   sidePanelItemRemoveRequest, sidePanelItemRefreshRequest
+//   sidePanelItemPlaygroundRequest { action: 'create' | 'reset' | 'delete' }
 export const sidePanelEventTypeList = [
   'sidePanelItemMoveRequest',
   'sidePanelItemMovePickerOpenRequest',
@@ -146,6 +147,7 @@ export const sidePanelEventTypeList = [
   'sidePanelItemBindRequest',
   'sidePanelItemRemoveRequest',
   'sidePanelItemRefreshRequest',
+  'sidePanelItemPlaygroundRequest',
 ];
 
 export const sidePanelDocExtList = ['md', 'mdx'];
@@ -223,6 +225,28 @@ export class DocSidePanelStore {
   // items move in edit mode, with a development server writing the files
   get isMoveAvailable(): boolean {
     return this.editStore.isAvailable && this.editStore.isEditMode;
+  }
+
+  // the playground (doc_page_impl_test.md) an item is bound to, whether its file exists or not
+  itemPlaygroundGet(itemId: string): any {
+    const item = this.docStore.treeModel.itemById?.get(itemId);
+    return this.sourceStore.playgroundOfReference(item?.sourceReference ?? item?.docPath ?? item?.path ?? '');
+  }
+
+  // from the menu of the item: creating needs no second thought; a reset or a delete
+  // opens the document, whose bar asks
+  async playgroundRequest(itemId: string, action: string): Promise<EditResult> {
+    const playground = this.itemPlaygroundGet(itemId);
+    if (!playground) return { code: -1, message: 'this item is not bound to a playground' };
+    if (action === 'create') {
+      const result = await this.sourceStore.playgroundChange(playground.id, 'reset');
+      return { code: result.code, message: result.message };
+    }
+    if (action !== 'reset' && action !== 'delete') return { code: -1, message: `unknown action "${action}"` };
+    this.sourceStore.playgroundConfirmSet({ id: playground.id, action });
+    const route = this.docStore.treeModel.itemById?.get(itemId)?.route;
+    if (route) this.docStore.navigate(route);
+    return { code: 0, message: '' };
   }
 
   get isMoveSubmitting(): boolean {
@@ -713,6 +737,7 @@ export class DocSidePanelStore {
     }
     if (event.type === 'sidePanelItemRemoveRequest') return this.removeOpen(itemId, event.point);
     if (event.type === 'sidePanelItemRefreshRequest') return this.itemRefresh(itemId);
+    if (event.type === 'sidePanelItemPlaygroundRequest') return this.playgroundRequest(itemId, String(event.data.action ?? ''));
     if (event.type === 'sidePanelItemMovePickerOpenRequest') {
       const isOpened = this.pickerOpen(itemId, event.point);
       return isOpened ? { code: 0, message: '' } : { code: -1, message: 'this item cannot be moved' };

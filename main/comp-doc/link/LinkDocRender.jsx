@@ -53,7 +53,21 @@ export function LinkDocRender({ data = {}, config = {}, onEvent }) {
   );
 
   if (isBroken) {
-    return (
+    // a broken link that still leads somewhere has an href: a playground not created yet
+    return href ? (
+      <a
+        className={`doc-link-render${className ? ` ${className}` : ''} is-broken`}
+        href={href}
+        title={titleText}
+        onClick={(event) => {
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
+          onEvent?.('activateRequest', { event });
+        }}
+      >
+        {displayContent}
+      </a>
+    ) : (
       <span className={`doc-link-render${className ? ` ${className}` : ''} is-broken`} title={titleText}>
         {displayContent}
       </span>

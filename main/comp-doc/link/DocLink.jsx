@@ -55,6 +55,13 @@ export const DocLink = observer(function DocLink({
 
   const isBroken = targets.length === 0;
   const isMultiple = targets.length > 1;
+  // a link to a playground that does not exist in this checkout is broken, as it is, and
+  // still leads somewhere: the error page of its item, which offers to create it
+  // (doc_page_impl_test.md#what-each-place-shows)
+  const playgroundMissing = isBroken ? sourceStore?.playgroundOfLinkTarget(target) : undefined;
+  const itemPlaygroundMissing = playgroundMissing
+    ? docStore.treeModel.items?.find((item) => item.type === 'missing-doc' && sourceStore.playgroundOfReference(item.sourceReference)?.id === playgroundMissing.id)
+    : undefined;
   const targetFirst = targets[0];
   const isPopupTarget = (path) => {
     const entry = sourceStore?.entryByInternalPath.get(path);
@@ -82,14 +89,18 @@ export const DocLink = observer(function DocLink({
     displayContent: children ?? target,
     fromPath: from ?? '',
     hash,
-    href: pathFirst && !isNavigationUnavailable && !isPopup
-      ? docStore.toBrowserHref(pathFirst)
-      : undefined,
+    href: itemPlaygroundMissing
+      ? docStore.toBrowserHref(itemPlaygroundMissing.route)
+      : pathFirst && !isNavigationUnavailable && !isPopup
+        ? docStore.toBrowserHref(pathFirst)
+        : undefined,
     kind: kind ?? 'markdown',
     tagList,
     targetList: targets,
     targetRaw: target ?? '',
-    titleText: isBroken
+    titleText: playgroundMissing
+      ? `${playgroundMissing.title} does not exist in this checkout: open its page to create it`
+      : isBroken
       ? `doc not found in source: ${target}`
       : isNavigationUnavailable && !isMultiple
         ? `doc exists but is not included in the side panel: ${targetFirst.internalPath}`
@@ -100,7 +111,7 @@ export const DocLink = observer(function DocLink({
   const config = {
     activationElement: isPopup ? 'button' : 'anchor',
     isBroken,
-    isClickable: !isBroken,
+    isClickable: !isBroken || Boolean(itemPlaygroundMissing),
     isCurrent: !isMultiple
       && !isNavigationUnavailable && !isPopup
       && Boolean(targetFirst?.internalPath)
@@ -128,6 +139,10 @@ export const DocLink = observer(function DocLink({
 
   const eventHandle = async (eventType, eventData = {}) => {
     const event = eventData.event;
+    if (eventType === 'activateRequest' && itemPlaygroundMissing) {
+      docStore.navigate(itemPlaygroundMissing.route);
+      return { code: 0, message: '' };
+    }
     if (
       eventType === 'activateRequest'
       && !isMultiple

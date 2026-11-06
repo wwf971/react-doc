@@ -1,13 +1,14 @@
 import { useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Plus, Undo2 } from '../../../../main/frontend/UICommon.js';
+import { Plus, Undo2, Waypoints } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve } from '../../../../main/comp-doc/registry/comp-registry.js';
 import { EditActions } from '../../../../main/comp-doc/edit/EditActions.jsx';
 import { EditFloatingPanel } from '../../../../main/comp-doc/edit/EditFloatingPanel.jsx';
 import { DiagramEditStore } from './DiagramEditStore.js';
 import { DiagramEditCard } from './DiagramEditCard.jsx';
-import { ValueMenu } from './DiagramValueControls.jsx';
+import { ActionMenu, ValueMenu } from './DiagramValueControls.jsx';
+import { diagramCanvasListGet } from './DiagramCanvasRegistry.js';
 import { endpointIsDangling, pointNodeIdBuild } from './DiagramERData.js';
 import './DiagramVisualEdit.css';
 
@@ -108,6 +109,12 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			if (store.cell) editor.cancelCell();
 			else if (store.create) editor.createClose();
 			else if (store.display) editor.stepOut();
+		} else if ((event.key === 'Delete' || event.key === 'Backspace') && !isInTextField(event.target) && store?.selection?.anchorId && editor) {
+			// the anchor in focus (the only thing of a line a key removes)
+			event.preventDefault();
+			event.stopPropagation();
+			change(() => store.connectionAnchorRemove(store.selection.connectionId, store.selection.anchorId));
+			focusRoot();
 		}
 	};
 	const editor = store && isAllowed ? {
@@ -140,6 +147,18 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			return canvas.current?.edgeRectGet(display.connectionId) ?? null;
 		},
 		handlePositionGet: (nodeId, handleId) => canvas.current?.handlePositionGet(nodeId, handleId),
+		// ---- the route of a line ----
+		// where the ends of a line are as the canvas drew them, in the terms of DiagramRoute.js
+		connectionEndsGet: connectionId => canvas.current?.edgeEndsGet(connectionId, store.connectionGet(connectionId)),
+		// an anchor where the line passes nearest to a point (a double-click on it), or at
+		// the middle of the line
+		anchorAdd: (connectionId, point) => {
+			const ends = canvas.current?.edgeEndsGet(connectionId, store.connectionGet(connectionId));
+			if (!ends) return null;
+			return store.connectionAnchorAdd(connectionId, { point: point ?? { x: (ends.sourceX + ends.targetX) / 2, y: (ends.sourceY + ends.targetY) / 2 }, ends });
+		},
+		anchorSelect: (connectionId, anchorId) => { store.anchorSelect(connectionId, anchorId); focusRoot(); },
+		focusRoot,
 		nodePositionGet: nodeId => canvas.current?.positionGet(nodeId),
 		// a drag from a handle: a new line, or, when a connection at the handle
 		// is selected (or the handle takes one line and has it), that line
@@ -253,6 +272,12 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 				<button type="button" className="doc-button-icon is-mirrored" title="Redo (Ctrl/⌘ + Shift + Z)" aria-label="Redo" disabled={isLocked || !store.history.isRedoAvailable} onClick={() => editor.redo({ isFromControl: true })}><Undo2 size={14} /></button>
 			</span> : null}
 			{kind === 'diagram' && editor ? <button type="button" className="doc-button-icon" title="Add a node or a connection (or double-click the canvas)" aria-label="Add" disabled={isLocked} onClick={() => editor.createOpen(canvas.current?.centerGet())}><Plus size={14} /></button> : null}
+			{kind === 'diagram' && editor && registry?.arrangerList?.length ? <ActionMenu label="Arrange: replaces the anchors of the lines" isLocked={isLocked} actionList={registry.arrangerList.map(arranger => ({ id: arranger.id, label: arranger.label, title: arranger.description, isDisabled: arranger.isApplicable ? !arranger.isApplicable(store.value) : false }))} onAction={arrangerId => change(() => {
+				const arranger = registry.arrangerList.find(item => item.id === arrangerId);
+				const geometry = diagramCanvasListGet().find(item => item.editorGet()?.store === store)?.geometryGet?.();
+				const reportList = store.arrangeApply(arranger, { geometry });
+				if (reportList?.length) store.message = reportList.map(item => item.message).join(' · ');
+			})}><Waypoints size={14} /></ActionMenu> : null}
 			{isFromAsset ? <span className="doc-vis-save-target">
 				<span>Save to</span>
 				<ValueMenu label="Save to" value={store.saveTarget} values={['asset', 'inline']} valueLabels={saveTargetLabels} isLocked={isLocked || !isAllowed} onChange={value => change(() => store.saveTargetSet(value))} />

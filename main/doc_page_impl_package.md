@@ -128,6 +128,8 @@ documents, side panels,   the edit api asks readOnlyReasonGet(absPath), one func
 files of the source       POST file/create, the same function
 ```
 
+The one exception is the document of a [playground](doc_page_impl_test.md#writing-into-a-package), a file ignored by git that belongs to the checkout.
+
 The page asks too, to say so before it is refused: `DocSourceStore.docPageReadOnlyReasonGet(alias)` and `pathReadOnlyReasonGet(path)`; `DocEditStore.docIsEditable` answers no for its documents, a config layer of it is not writable, and a read-only asset folder has a badge. It is **annotated as a package** where it shows: the `package` badge of its side panel section, its node in the Workspace tab (`package`, and `read-only` in its detail), and the package node above the workspace remains what it is, the import.
 
 It has no components of a doc page and no services of a doc page (`comp: false`, `service: false`, an entry naming either is refused): what it has of those it has as a package. It may have assets (`.doc-page/asset/`) and frontend objects: data its documents show, read.

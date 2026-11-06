@@ -85,6 +85,26 @@ function ValuePicker({ value, values, valueLabels = {}, commonList, onChoose, on
 // a fixed set of values through the host's Menu; valueLabels names a value
 // where its stored form is not what the author should read; isSearchable
 // opens the picker above instead of a plain list
+// a button opening a list of things to do, each with what it does as its title: actionList
+// [{ id, label, title, isDisabled }]
+export function ActionMenu({ label, children, actionList, onAction, isLocked }) {
+	const { componentConfig } = useDocStores();
+	const Menu = componentConfig?.Menu;
+	const buttonRef = useRef(null);
+	const [isOpen, openSet] = useState(false);
+	return <>
+		<button ref={buttonRef} type="button" className="doc-button-icon nodrag nopan" title={label} aria-label={label} aria-haspopup="menu" aria-expanded={isOpen} disabled={isLocked || !Menu} onClick={event => { event.stopPropagation(); openSet(!isOpen); }}>{children}</button>
+		{isOpen && Menu ? <Menu data={{ items: actionList.map(action => ({ id: action.id, comp: ActionMenuItem, compProps: action })) }} config={{ isOpen: true, className: 'doc-edit-popup doc-vis-menu', isBackdropScrollPassThrough: true, isClickPropagationStopped: true, minWidth: 260, anchor: { getRect: () => buttonRef.current?.getBoundingClientRect(), getTargetEl: () => buttonRef.current, offsetY: (buttonRef.current?.offsetHeight ?? 0) + 2 } }} onEvent={(type, data) => {
+			if (type === 'itemClick' && !actionList.find(action => action.id === data.itemId)?.isDisabled) { onAction(data.itemId); openSet(false); }
+			if (type === 'closeRequest') openSet(false);
+		}} /> : null}
+	</>;
+}
+
+function ActionMenuItem({ label, title, isDisabled }) {
+	return <span className={`doc-vis-menu-action${isDisabled ? ' is-disabled' : ''}`} title={title}><strong>{label}</strong><small>{title}</small></span>;
+}
+
 export function ValueMenu({ label, value, values, valueLabels = {}, commonList, onChange, onOpen, isLocked, isCell = false, isSearchable = false, className = '' }) {
 	const { componentConfig } = useDocStores();
 	const Menu = componentConfig?.Menu;

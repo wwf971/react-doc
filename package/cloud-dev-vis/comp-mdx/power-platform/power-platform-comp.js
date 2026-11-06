@@ -28,6 +28,7 @@ export const DiagramER = compDefine(PowerPlatformDiagram, cardDiagramDefineOptio
 	// two tables and one connection between column handles: the smallest
 	// diagram that shows every part of the format
 	sourceDefaultCreate: diagramSourceDefaultCreate,
+	registry: powerPlatformNodeRegistry,
 }));
 
 export const DiagramPowerAutomate = compDefine(PowerPlatformDiagram, cardDiagramDefineOptionsBuild({
@@ -35,6 +36,7 @@ export const DiagramPowerAutomate = compDefine(PowerPlatformDiagram, cardDiagram
 	description: 'Trigger, actions, branches and configuration in a design diagram.',
 	icon: Workflow,
 	sourceDefaultCreate: powerAutomateSourceDefaultCreate,
+	registry: powerPlatformNodeRegistry,
 }));
 
 export const DiagramBusinessRule = compDefine(PowerPlatformDiagram, cardDiagramDefineOptionsBuild({
@@ -42,6 +44,7 @@ export const DiagramBusinessRule = compDefine(PowerPlatformDiagram, cardDiagramD
 	description: 'Dataverse conditions, actions, scope and target columns.',
 	icon: GitBranch,
 	sourceDefaultCreate: businessRuleSourceDefaultCreate,
+	registry: powerPlatformNodeRegistry,
 }));
 
 // the animation of the series (doc/card-diagram-animation.md): the same document as

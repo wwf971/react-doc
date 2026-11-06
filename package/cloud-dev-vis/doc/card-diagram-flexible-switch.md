@@ -163,7 +163,7 @@ The tracks of an animation of one diagram (rings, tokens, a target's properties)
 
 ## Drawing conventions
 
-What every view follows, beside [those of the framework](card-diagram.md#drawing-conventions):
+What every view follows, beside [those of the framework](card-diagram-usage.md#drawing-conventions):
 
 - **A margin inside what embeds.** A card or an item showing a view keeps a margin around it. Nothing of the inner view touches the border of what holds it, also for an embedding inside an embedding. Write `padding: 0` only where the inner view has no border of its own to touch it.
 - **What is long scrolls, it does not shrink.** Sections of different heights belong in a stack rather than in a grid of cards fitted to one size.

@@ -150,7 +150,7 @@ test('standalone card uses the same node and Dataverse data contract', () => {
 test('manual routes are explicit and reject incompatible line types', () => {
 	const input = diagramCreate();
 	input.connections[0].route = { waypoints: [{ x: 100, y: 200 }] };
-	assert.throws(() => diagramNormalize(input, registry), /does not accept/);
+	assert.throws(() => diagramNormalize(input, registry), /unknown key "waypoints"/);
 	input.connections[0].renderer = { type: 'polyline' };
 	assert.equal(diagramNormalize(input, registry).connections[0].route.waypoints.length, 1);
 	input.connections[0].route.waypoints[0].x = Infinity;

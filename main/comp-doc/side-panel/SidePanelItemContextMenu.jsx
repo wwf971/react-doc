@@ -39,7 +39,7 @@ export const SidePanelItemContextMenu = observer(function SidePanelItemContextMe
   const { componentConfig, editStore, eventRouter, onEvent: onEventPage, sidePanelStore } = useDocStores();
   const Menu = componentConfig.Menu;
   const menu = sidePanelStore.contextMenu;
-  const isOpen = Boolean(Menu && menu && editStore.isEditMode);
+  const isOpen = Boolean(Menu && menu && (editStore.isEditMode || sidePanelStore.itemPlaygroundGet(menu.itemId)));
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -90,11 +90,15 @@ export const SidePanelItemContextMenu = observer(function SidePanelItemContextMe
 // the entries of the menu for one item, each { id, isDisabled, comp,
 // compProps, action: { eventType, data } } or a group separator
 function menuItemListBuild(itemId, { editStore, sidePanelStore }) {
+  const playgroundItemList = playgroundMenuItemListBuild(itemId, sidePanelStore);
+  if (!sidePanelStore.isMoveAvailable) return playgroundItemList;
   const isBusy = sidePanelStore.isMoveSubmitting || sidePanelStore.isNodeChangeSubmitting;
   const isRenameAvailable = editStore.sidePanelTextIsEditable(itemId);
   const isMoveAvailable = sidePanelStore.itemIsMovable(itemId) && !sidePanelStore.isMoveSubmitting;
   const isRefreshAvailable = sidePanelStore.itemIsRefreshable(itemId) && !sidePanelStore.isRefreshSubmitting;
   const itemList = [
+    ...playgroundItemList,
+    ...(playgroundItemList.length ? [separatorBuild('separator-playground')] : []),
     entryBuild('rename', Pencil, 'Rename', isRenameAvailable ? '' : 'this label is not written in a side panel file',
       'Edit the label in place', { eventType: 'sidePanelTextEditStartRequest' }),
     entryBuild('move', Move, 'Move…', isMoveAvailable ? '' : 'this item cannot be moved',
@@ -143,6 +147,21 @@ function menuItemListBuild(itemId, { editStore, sidePanelStore }) {
   itemList.push(entryBuild('remove', Trash2, 'Remove…', isBusy ? 'another change is being written' : (removed.code !== 0 ? removed.message : ''),
     'Remove the item from the side panel (asks first)', { eventType: 'sidePanelItemRemoveRequest' }, true));
   return itemList;
+}
+
+// what the item of a playground offers (doc_page_impl_test.md): created when it is not
+// there, reset and deleted when it is. the last two open the document, whose bar asks
+function playgroundMenuItemListBuild(itemId, sidePanelStore) {
+  const playground = sidePanelStore.itemPlaygroundGet(itemId);
+  if (!playground || !sidePanelStore.sourceStore.isWritable) return [];
+  const actionOf = (action) => ({ eventType: 'sidePanelItemPlaygroundRequest', data: { action } });
+  if (!sidePanelStore.sourceStore.playgroundIsPresent(playground)) {
+    return [entryBuild('playground-create', FilePlus, 'Create playground', '', 'Write the document from its template', actionOf('create'))];
+  }
+  return [
+    entryBuild('playground-reset', RotateCw, 'Reset playground…', '', 'Back to its template; what is there now is kept as a hidden backup', actionOf('reset')),
+    entryBuild('playground-delete', Trash2, 'Delete playground…', '', 'As after a fresh clone: the item stays, the document is gone', actionOf('delete'), true),
+  ];
 }
 
 const bindEntrySpecByAction = {

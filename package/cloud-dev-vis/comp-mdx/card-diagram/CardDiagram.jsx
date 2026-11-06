@@ -21,6 +21,7 @@ import './DiagramER.css';
 import { DiagramVisualEdit } from './DiagramVisualEdit.jsx';
 import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
 import { useCanvasWheelGuard } from './CanvasWheelGuard.js';
+import { diagramCanvasGeometryBuild, diagramCanvasLineListGet, diagramCanvasRegister, diagramCanvasEndsGet } from './DiagramCanvasRegistry.js';
 
 // A diagram of nodes and connections on a pannable, zoomable canvas
 // (card-diagram-impl.md), drawn with the node registry of its component type
@@ -58,7 +59,8 @@ export function cardDiagramCompCreate(registry, name) {
 
 export const DiagramERView = observer(function DiagramERView({ data = {}, config = {}, onEvent, registry, editor, isInPopup = false }) {
 	const sourceDiagram = data.source || data.raw || '';
-	const { compById, sourceStore } = useDocStores();
+	const { compById, docStore, sourceStore } = useDocStores();
+	const sourceStoreDocPathGet = () => docStore.docCurrentPath;
 	const [viewState] = useState(() => diagramViewStateGet(sourceStore, config));
 	const [store] = useState(() => new DiagramERStore(sourceDiagram, (name, placement) => {
 		const definition = compDefinitionNormalize(compById[compIdResolve(sourceStore.configDoc, name)]);
@@ -76,6 +78,19 @@ export const DiagramERView = observer(function DiagramERView({ data = {}, config
 	useEffect(() => {
 		if (store.source !== sourceDiagram) store.sourceLoad(sourceDiagram, Boolean(editor));
 	}, [sourceDiagram, store]);
+
+	// the canvas, for what works a diagram from outside it: the apis of its lines (DiagramApiList.js)
+	const canvasEditor = useRef(editor);
+	canvasEditor.current = editor;
+	useEffect(() => diagramCanvasRegister({
+		sourcePath: config.sourcePath ?? sourceStoreDocPathGet(),
+		title: data.title ?? '',
+		sourceGet: () => store.source,
+		editorGet: () => canvasEditor.current,
+		endsGet: (connectionId, connection) => diagramCanvasEndsGet(edgeGeometry.current, connectionId, connection),
+		lineListGet: () => diagramCanvasLineListGet(edgeGeometry.current, store.graph?.connections ?? []),
+		geometryGet: () => diagramCanvasGeometryBuild(store, edgeGeometry.current),
+	}), [store, config.sourcePath, data.title]);
 
 	return (
 		<figure
@@ -170,9 +185,17 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			edgeRectGet: id => {
 				const geometry = edgeGeometry?.get(id);
 				if (!geometry) return null;
-				const point = flowToScreenPosition({ x: geometry.midX, y: geometry.midY });
-				return { left: point.x - 6, right: point.x + 6, top: point.y - 6, bottom: point.y + 6, width: 12, height: 12 };
+				// the box of the two ends: the card stands beside the line and not on it, and
+				// a change of the route does not move it
+				const source = flowToScreenPosition({ x: geometry.sourceX, y: geometry.sourceY });
+				const target = flowToScreenPosition({ x: geometry.targetX, y: geometry.targetY });
+				const left = Math.min(source.x, target.x);
+				const right = Math.max(source.x, target.x);
+				const top = Math.min(source.y, target.y);
+				const bottom = Math.max(source.y, target.y);
+				return { left, right, top, bottom, width: right - left, height: bottom - top };
 			},
+			edgeEndsGet: (id, connection) => diagramCanvasEndsGet(edgeGeometry, id, connection),
 			centerGet: () => {
 				const rect = wrapper.current?.getBoundingClientRect();
 				return rect ? screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) : null;
@@ -256,7 +279,12 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			// stays selectable while reading and a drag on its title line pans
 			onNodeMouseEnter={nodeMouseEnterNoop}
 			onNodeClick={isEditing ? (event, node) => { if (node.type === 'visualizationNode' && !event.target.closest('.doc-card, .doc-vis-operator')) editor.select(node.id); } : undefined}
-			onEdgeClick={isEditing ? (_event, edge) => editor.selectConnection(edge.id) : undefined}
+			onEdgeClick={isEditing ? (_event, edge) => { if (editor.store.selection?.connectionId !== edge.id) editor.selectConnection(edge.id); } : undefined}
+			onEdgeDoubleClick={isEditing && !isLocked ? (event, edge) => {
+				// the browser takes a double-click for selecting the word nearest to it
+				window.getSelection()?.removeAllRanges();
+				editor.change(() => editor.anchorAdd(edge.id, screenToFlowPosition({ x: event.clientX, y: event.clientY })));
+			} : undefined}
 			onPaneClick={isEditing ? () => { editor.clearSelection(); editor.createClose(); } : undefined}
 			onDoubleClick={isEditing ? event => { if (event.target.classList?.contains('react-flow__pane')) editor.createOpen(screenToFlowPosition({ x: event.clientX, y: event.clientY })); } : undefined}
 			onConnectStart={isEditing ? (_event, params) => editor.connectStart(params.nodeId, params.handleId) : undefined}

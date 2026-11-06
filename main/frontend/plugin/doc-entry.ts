@@ -175,17 +175,19 @@ export type DocPageLoaded = {
   packageList: DocPackageSpec[];
   rootList: DocPageRoot[];
   mentionList: DocPageMention[];
-  // "asset", "service", "comp", "hotkey", "api" and "objectFrontend" of the
-  // entry as written: undefined (the convention), false (none), or { file }
+  // "asset", "service", "comp", "hotkey", "api", "objectFrontend" and "playground"
+  // of the entry as written: undefined (the convention), false (none), or { file }
   // (relative to the entry). hotkey: the active keyboard map (doc-hotkey.ts);
   // api: the declared apis (doc-api-config.ts); objectFrontend: the frontend
-  // objects and their types (doc-object-frontend.ts)
+  // objects and their types (doc-object-frontend.ts); playground: its playground
+  // documents (doc-playground.ts)
   asset: EntryFileSection;
   service: EntryFileSection;
   comp: EntryFileSection;
   hotkey: EntryFileSection;
   api: EntryFileSection;
   objectFrontend: EntryFileSection;
+  playground: EntryFileSection;
 };
 
 // a section of the entry that names a config file of the doc page, or
@@ -345,10 +347,10 @@ type LoadContext = {
   warningList: string[];
 };
 
-const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'packageList', 'sidePanelDefault', 'sidePanelById'];
+const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'playground', 'packageList', 'sidePanelDefault', 'sidePanelById'];
 // the sections an entry alone may hold: each names a config file of the doc
 // page (or switches the feature off), found beside the entry by convention
-const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'service', 'comp', 'hotkey', 'api', 'objectFrontend'] as const;
+const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'playground'] as const;
 const CONFIG_FILE_KEY_LIST = ['config', 'variable'];
 const WORKSPACE_FILE_KEY_LIST = ['title', 'homeDoc', 'homeItem', 'docPageList', 'packageList', 'config', 'hotkey'];
 const ENTRY_FILE_SUFFIX = '-entry.yaml';
@@ -878,6 +880,7 @@ function docPageRegister(entryFile: string, mention: DocPageMention, isRoot: boo
     hotkey: undefined,
     api: undefined,
     objectFrontend: undefined,
+    playground: undefined,
   };
   context.docPageByEntryFile.set(entryFile, docPage);
   return docPage;
@@ -1135,7 +1138,8 @@ function pathIsInside(filePath: string, folder: string): boolean {
 // (doc_page_impl_mdx_comp.md#components-of-a-doc-page), the active keyboard
 // map (doc_page_impl_api_hotkey.md: hotkey/main.yaml) and the declared apis
 // (doc_page_impl_api.md: api.yaml), the frontend objects and their types
-// (doc_page_impl_obj_frontend.md: object-frontend.yaml). each is { file }, relative to the entry,
+// (doc_page_impl_obj_frontend.md: object-frontend.yaml), the playground documents
+// (doc_page_impl_test.md: playground.yaml). each is { file }, relative to the entry,
 // or false for none. absent: the convention file beside the entry, read
 // when it exists, the defaults of the feature otherwise
 

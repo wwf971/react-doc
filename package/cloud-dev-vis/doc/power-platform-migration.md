@@ -40,7 +40,7 @@ An item names another by its **key**, which never changes, not by its path, as [
 | --- | --- |
 | `/overview` | the databases (their ER diagrams, embedded), the tool, the three reports (embedded) |
 | `/overview/tabs/{plan,run,verify}` | the same, the reports in tabs |
-| `/overview/{db}` | the ER diagram: tables by their lookups, option sets below, lines from each column |
+| `/overview/{db}` | the ER diagram, arranged by `er-columns` ([Arrangers](card-diagram-arrange.md)): tables by their lookups, option sets below, lines from each column |
 | `/overview/{db}/{table}` | one table, what it refers to, what refers to it |
 | `/overview/mapping` | both ER diagrams; a line per mapping of tables and of option sets, whose label opens it |
 | `/overview/mapping/{pair}` | two tables; a line per row mapping, whose label opens it |
@@ -55,7 +55,7 @@ An item names another by its **key**, which never changes, not by its path, as [
 | `/overview/verify/sample` | one row worked through, column by column |
 | `/overview/plan/batch`, `/overview/run/{batch,dlq}`, `/overview/verify/{check,exception}` | the tables, each a view of its own |
 
-**A report shows how it went, then what came of it** ([a matter of taste](card-diagram.md#a-matter-of-taste-show-how-it-happens-then-what-came-of-it)). The run report and the verification report start with their process, a diagram with the actual figures on it, and hold short cards of totals; the tables are views of their own which those cards, and the steps of the diagram, open.
+**A report shows how it went, then what came of it** ([a matter of taste](card-diagram-usage.md#a-matter-of-taste-show-how-it-happens-then-what-came-of-it)). The run report and the verification report start with their process, a diagram with the actual figures on it, and hold short cards of totals; the tables are views of their own which those cards, and the steps of the diagram, open.
 
 **The order of loading is computed, not written** (`migrationRankBuild`), from the lookups of the target, where the rows are loaded: a table can load once what it looks up has loaded, so its rank is one past the highest rank it looks up, and a table looking up nothing has rank 1. The view draws how that comes about: the tables as labels, one line per pair of tables where one looks up the other (however many columns do), in bands by rank, wrapping as [a list on a canvas should](card-diagram.md#drawing-conventions). A lookup closing a cycle cannot be honored by an order: it is drawn dashed with a word from the data, to be filled in by a later pass.
 

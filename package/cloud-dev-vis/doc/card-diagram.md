@@ -1,6 +1,8 @@
 # Card Diagram: Building on the Framework
 
-The base series of the package ([README](README.md)) is a framework: a React Flow canvas of node cards and connection lines, one YAML data format, one draft store with a history, one visual editor, and the node registry through which a series plugs its own cards in. This document is the **guidance** for anyone implementing on it: the standards every piece follows, the things most often forgotten, and the checklists to go through before a change is done. It does not describe how the framework works inside; that is the **design and implementation introduction, [card-diagram-impl.md](card-diagram-impl.md)**, to be read first for the data format, the canvas, the editor, the path, the history and the registries. The Power Platform series is the example of a series built on the framework ([power-platform.md](power-platform.md)); a diagram that moves between states is its wrapper [card-diagram-animation.md](card-diagram-animation.md); many views in one viewport is the layer [card-diagram-flexible-switch.md](card-diagram-flexible-switch.md); what authors see is in [comp-diagram-er.md](comp-diagram-er.md), [comp-powerplatform.md](comp-powerplatform.md) and [comp-card-diagram-animation.md](comp-card-diagram-animation.md), beside this file.
+The base series of the package ([README](README.md)) is a framework: a React Flow canvas of node cards and connection lines, one YAML data format, one draft store with a history, one visual editor, and the node registry through which a series plugs its own cards in.
+
+**To draw with it** (by hand or from a generator), read [card-diagram-usage.md](card-diagram-usage.md); you do not need this document. This document is the **guidance** for anyone changing the framework or extending it: the standards every piece follows, the things most often forgotten, and the checklists to go through before a change is done. It does not describe how the framework works inside; that is the **design and implementation introduction, [card-diagram-impl.md](card-diagram-impl.md)**, to be read first for the data format, the canvas, the editor, the path, the history and the registries. The Power Platform series is the example of a series built on the framework ([power-platform.md](power-platform.md)); a diagram that moves between states is its wrapper [card-diagram-animation.md](card-diagram-animation.md); many views in one viewport is the layer [card-diagram-flexible-switch.md](card-diagram-flexible-switch.md); the anchors and handles of a line are [card-diagram-connection-line.md](card-diagram-connection-line.md); what authors see is in [comp-diagram-er.md](comp-diagram-er.md), [comp-powerplatform.md](comp-powerplatform.md) and [comp-card-diagram-animation.md](comp-card-diagram-animation.md), beside this file.
 
 What the page asks of every block-like component (the popup surface, the no-jitter rule, the editor contract) is not repeated here: [Block-like MDX components](../../../main/doc_page_impl_mdx_comp_block.md) and [Component edit mode](../../../main/doc_page_impl_edit.md#component-edit-mode) are read together with this document, and their checklists apply.
 
@@ -15,6 +17,8 @@ a change of the canvas           DiagramERStore, CardDiagram, DiagramRender
 a change of the data format      DiagramERData (normalization) first, then everything that reads it
 a diagram moving between states  the animation wrapper: card-diagram-animation.md
 many diagrams in one viewport    the switching layer: card-diagram-flexible-switch.md
+how a line runs (anchors, routes) DiagramRoute: card-diagram-connection-line.md
+arranging a whole diagram          DiagramArrange: card-diagram-arrange.md
 ```
 
 Each kind of change has a checklist below. Most mistakes come from making one kind of change in the place of another: a card's styling in the engine, a command's validation in a control, a series' knowledge in the base.
@@ -45,33 +49,9 @@ Each kind of change has a checklist below. Most mistakes come from making one ki
 
 **12. Reading writes nothing.** In view mode nothing is draggable or editable; the wheel over a card is the wheel over the canvas; the camera is remembered for the block and dropped with the page.
 
-## Background color blocks
+## Background blocks
 
-The base registry includes `card-three-dots`, three dots vertical or horizontal with an optional line of text (`data: { direction?: vertical | horizontal, text?, tone? }`, `vertical` by default), for what is left out of a long series of cards; a generator of views writes it, the editor does not offer it. A table card takes `data.badge`, a short word before its name.
-
-The base registry includes `color-block`: a lightly colored rectangle with a list of text/icon labels, at its bottom or, with `labelSide: top`, at its top. Use it for locations, swimlanes, output groups, or other diagram backgrounds. It is not a Power Platform kind and does not impose a horizontal arrangement. Blocks use ordinary node positions and numeric sizes; place them beside, above, below, or overlapping one another as the diagram requires.
-
-```yaml
-id: source-area
-renderer: { type: color-block }
-position: { x: -20, y: -40 }
-size: { width: 240, height: 400 }
-data:
-	tone: blue
-	itemList:
-		- id: database
-			icon: database
-			text: Source database
-		- id: name
-			text: PW
-handles: []
-```
-
-`itemList` is required but may be empty for an unlabeled block. Each item has a unique nonempty `id` and `text`, `icon`, or both; `level: 1` or `2` makes it a title, larger and on a line of its own. `columnList: [{ id, x, width, text?, icon? }]` with `columnTop` draws columns inside the block, in the block's own pixels, for what is read as columns without a block in the block: a heading at the top of each, a dashed divider before all but the first. Icons use the framework's `CARD_ICON_BY_NAME` vocabulary, including `database`, `server`, `file`, `archive`, and `cloud`. Text is plain text, not markup. Labels stay near the bottom, centered as a wrapping list; leave room there when positioning foreground cards. Tones are `blue`, `teal`, `green`, `amber`, `red`, `violet`, and `slate` (default), with light fills and restrained borders.
-
-Background blocks have no connection anchors and do not own or move other nodes. They contribute to diagram bounds. Their `contract.isBackground: true` is a generic registry capability, resolved by normalization; canvas and static renderers place such nodes behind connections and ordinary cards regardless of array order. Static views establish an isolated stacking context so backgrounds remain visible. In reading mode backgrounds are pointer-transparent, including React Flow's node wrapper; in editing mode the block can be selected and positioned like another node. No platform IDs or location rules belong in the canvas renderer.
-
-The migration execution and verification flow generators use this base kind for the source database, migration server, target database, and a separately positioned outputs block. These placements and localized label choices belong to that generator and its system data, not to the color-block renderer.
+What `color-block` looks like and how it is written is in [the usage document](card-diagram-usage.md#background-color-blocks). For the framework, it is a kind like any other with one generic capability: `contract.isBackground: true`, resolved by normalization. Canvas and static renderers place such nodes behind connections and ordinary cards regardless of array order, static views establish an isolated stacking context so backgrounds remain visible, and in reading mode backgrounds are pointer-transparent, including React Flow's node wrapper. No platform ids or location rules belong in the canvas renderer: where blocks go is the business of whoever generates the diagram.
 
 ## Adding a command to the editor
 
@@ -89,6 +69,7 @@ A command is a method of `DiagramEditStore` (or of a store a series adds on the 
 | ☐ | The control is greyed out with the reason as its title when the command cannot apply, never missing |
 | ☐ | The gesture, if any, sets `interaction` while it lasts (the edit card hides, undo waits) and clears it at its end, also when the drop is refused |
 | ☐ | The rule is written for authors in [comp-diagram-er.md](comp-diagram-er.md) (Visual Editing), whose examples demonstrate it |
+| ☐ | An agent can do it too: if it is a thing to do to a diagram from outside, it has an api ([DiagramApiList.js](card-diagram-connection-line.md#the-apis)) over the same command |
 
 ## Adding a kind
 
@@ -155,39 +136,19 @@ So:
 - **Something embedded takes no wheel.** A view inside a card is a picture of that view at that zoom: the wheel over it zooms the canvas around it. It scrolls by its scrollbar, and by the wheel once it is opened.
 - **Check it on what you changed, and not on empty space.** Point at a row, a title, an embedded view, a short scrolling area and a long one at its end, and the controls; compare the camera and the scroll position of the page before and after. Screenshots do not show this.
 
-## Drawing conventions
-
-What a diagram should look like, whoever draws it, by hand or from data:
-
-- **A list wraps.** Do not lay out many cards in one row, or the fit of the whole diagram makes them small. A list of things on a canvas breaks into lines at a small count (four or so), and a generator breaks them itself; a chain that must read in one direction may turn downward rather than run on. Stacking by a meaning (rows by rank, columns by depth) is better still.
-- **A margin around what is held.** A card holding other cards keeps a margin inside its border, so nothing inside touches it ([an embedded view](card-diagram-flexible-switch.md#one-canvas-no-canvas-inside-a-canvas) has this by default).
-- **What is long scrolls.** In a card of many sections, prefer a [scrolling stack](card-diagram-flexible-switch.md#a-scrolling-stack) to shrinking all of them to fit.
-
-### A matter of taste: show how it happens, then what came of it
-
-These are not rules a validator could check; they are what has been seen to read well and badly on real diagrams.
-
-| Better | Worse | Why |
-| --- | --- | --- |
-| a **process**: what goes in, what happens to it step by step, what comes out, each step a card joined by lines | a **pile of tables**, section after section | a reader looks at a report to understand what was done. Tables say what the numbers are and leave the reader to work out what they mean |
-| the figures **on the step they belong to**: a batch card saying `49 succeeded / 1 failed`, in red | the same figure in a row of a table | it answers "where did that happen", and the one thing wrong stands out in the picture |
-| a **short card of totals that opens the table** | the table itself, large, in the overview | the table is still there for whoever needs it: it is a view of its own, a click away. A detail is switched to, not stacked |
-| **one concrete case worked through**: one row, what its source holds, what is expected, what the target has | only the rule, or only the totals | a rule becomes clear on an example |
-| a **small vocabulary of shapes** that mean the same across diagrams: the table with its brackets, a card per batch, a red card for what was set aside | a new look per section | the second diagram is read with what was learned on the first |
-
-The first thing to draw for any report is therefore the diagram someone would sketch to explain it on a whiteboard, with the actual figures written on it. Tables come last. In the [migration](power-platform-migration.md#views), the run report and the verification report are drawn this way.
-
 ## Tests and documents
 
 From `main/frontend`:
 
 ```sh
-node --import tsx --import ./src/lib/node-test-register.js --test ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramERData.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditStore.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditPath.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditIntegration.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/OperatorNodes.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram-switch/SwitchData.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/migration/MigrationData.test.js
+node --import tsx --import ./src/lib/node-test-register.js --test ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramERData.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramRoute.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditStore.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditPath.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditIntegration.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/OperatorNodes.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram-switch/SwitchData.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/migration/MigrationData.test.js
 ```
 
-The store is tested on the registry of the Power Platform series, which holds every card variant; a change of the engine is tested there, a change of a series beside the series. Every command has a test of its effect **and of its undo**. The page is then checked in the browser, in the doc page of the package (`react-doc dev package/cloud-dev-vis`; a package is read-only, so what writes is tried on a copy of a block in a doc page of your own): entering edit mode moves nothing, the command works from its control and from the keys, Ctrl/⌘ + Z takes it back, Save clears the bar's history buttons.
+The store is tested on the registry of the Power Platform series, which holds every card variant; a change of the engine is tested there, a change of a series beside the series. Every command has a test of its effect **and of its undo**. The page is then checked in the browser, in the doc page of the package (`react-doc dev package/cloud-dev-vis`), on its [playground](../../../main/doc_page_impl_test.md#playground-documents), the one document of the package that can be written: entering edit mode moves nothing, the command works from its control and from the keys, Ctrl/⌘ + Z takes it back, Save clears the bar's history buttons.
 
 Documents to keep in step, by what changed: a rule of the engine goes into [card-diagram-impl.md](card-diagram-impl.md) (what exists, integrated, never a changelog); a rule authors meet goes into [comp-diagram-er.md](comp-diagram-er.md) or the usage document of the series; a new file goes into the README's implementation table; a gap left for later goes into the project's [TODO](../../../main/doc_page_impl_TODO.md), not into a document as a note. The page-level documents in `main/` change only when the contract of every block-like component changes.
+
+**Review [card-diagram-usage.md](card-diagram-usage.md) for every new feature or extension, and change it only when it needs it.** It is the one document someone reads who only wants to draw, so it stays short. Ask whether the feature changes what such a person should choose, do, or check. If yes, say so there in a few lines and point to the document holding the details. If it is a detail of something the document already points to, the document pointed to is the place, and the usage document stays as it is. A new section of syntax or of options does not belong there.
 
 ## Definition of done
 
@@ -199,3 +160,5 @@ Documents to keep in step, by what changed: a rule of the engine goes into [card
 | ☐ | The engine imports no series; the series imports only the base |
 | ☐ | The wheel over cards and controls zooms or does nothing, and never scrolls the page: [The wheel over a canvas](#the-wheel-over-a-canvas), measured |
 | ☐ | Tests pass (`AnimationData.test.js` too, when the animation is touched); the documents named above say what exists now |
+| ☐ | [card-diagram-usage.md](card-diagram-usage.md) was reviewed: changed if someone drawing needs to know, left alone otherwise |
+| ☐ | What the feature adds can be tried on the [playground](../../../main/doc_page_impl_test.md#playground-documents): its template shows it, if it is something to try |

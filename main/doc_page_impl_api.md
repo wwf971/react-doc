@@ -149,6 +149,7 @@ An api that changes the document does not call a store where a component would r
 | `settings/open { tab? }`, `settings/close`, `settings/toggle`; `search/open`; `palette/open`, `palette/close`, `palette/toggle` | the dialogs of the page | |
 | `language/set { language }` | one of the authored languages of the document | |
 | `type/list { typeList? }`, `type/get { typeId }`; `object/search`, `object/query`, `object/resolve`, `object/read`, `object/open`; `object/create`, `object/update`, `object/delete`; `relation/query`, `relation/create`, `relation/update`, `relation/delete` | the standard apis of the object service layer, one vocabulary for every kind of object (a document, an asset, a frontend object and its assets, a todo of a service), each answered by the provider that owns what it is about ([The apis](doc_page_impl_obj.md#the-apis)) | the provider offers the write |
+| `playground/listGet`, `playground/reset { id? }`, `playground/delete { id? }` | the playground documents, created or reset from their templates, and deleted ([Playground documents](doc_page_impl_test.md#the-apis)) | the development server serves the page |
 | `api/listGet`, `hotkey/listGet` | the registry itself: every api with its parameters and availability; every key with the binding that answers it and those it passes over | |
 
 **Locating a block.** The `block` parameter of a document api is the index of the block among the root-level blocks of the document, or the `id` of its marker (`<!--renderComp=TestCaseTable,id=login-asset-->`, the identity [`dataRef`](doc_page_impl_mdx_comp.md#component-data-reference) uses); without it, the block the author is at. `doc` is any link target form; without it, the current document. The block model comes from the edit layer and is read through the edit api, so these apis exist on the development server; a built page keeps the apis that need no server.
@@ -163,6 +164,8 @@ A component's api is about the blocks of that component in a document, so it loc
 - `common/TestCaseTable/resultRecord { caseId, testerId, result, operator, evidence?, block?, doc? }`: one result appended to the history of a cell of a table whose data is an asset object, by the same event a click on the cell sends, so the server writes the time and the id, resolves the evidence, and refuses a record over somebody else's ([the managed history](../built-in/comp-mdx/test-case-table/comp_test_case_table.md)).
 
 This is what an AI agent that checked a feature does to record its check: read the table, record the result with its own name as the operator and the document of its evidence.
+
+The diagram components of the package `cloud-dev-vis` expose in the same way what the edit card of a connection line does ([Connection Lines](../package/cloud-dev-vis/doc/card-diagram-connection-line.md#the-apis)). A write goes into the draft when an edit session is open on the block, so it is undoable there, and into the data of the block otherwise.
 
 ## The apis of a service instance
 
@@ -246,7 +249,8 @@ frontend/src/lib/doc-api.js                apiDefine, apiByIdBuild, params check
                                            apiDeclaredDefine (yaml aliases)
 frontend/src/store/DocApiStore.ts          the registry (layers + providers), the context, call, the call records,
                                            the notice, the remote bridge of the page, uiHandle (search)
-comp-doc/api/api-registry.js               the package's apis by id, from api-nav.js, api-doc.js, api-edit.js, api-page.js
+comp-doc/api/api-registry.js               the package's apis by id, from api-nav.js, api-doc.js, api-edit.js, api-page.js,
+                                           api-object.js, api-playground.js
 comp-doc/api/api-service.js                the provider of the service instances' apis
 comp-doc/api/DocApiNotice.jsx, DocApi.css  the notice of a failed or answered call
 comp-doc/settings/ApiSettings.jsx          the API tab of the settings panel

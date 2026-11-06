@@ -514,3 +514,39 @@ test('the reports are at full height, in the overview and on their own; without 
 	assert.ok(!providerBare.viewGet('/overview').diagram.connections.some((line) => line.id === 'make:post' || line.id === 'verify-post'));
 });
 
+
+test('every line of an ER diagram has a lane of its own', () => {
+	const tableOf = (logical, lookupList = [], choiceList = []) => ({ key: `t.${logical}`, kind: 'schema-table', path: `/example/schema/pw/table/${logical}`, data: { db: 'pw', logical, name: logical, columnList: [
+		{ id: 'id', name: 'Id', type: 'Unique identifier', key: 'PK' },
+		...lookupList.map((target) => ({ id: `to-${target}`, name: target, type: 'Lookup', lookup: `t.${target}` })),
+		...choiceList.map((choice) => ({ id: `of-${choice}`, name: choice, type: 'Choice', choice: `c.${choice}` })),
+	] } });
+	const lanes = migrationModelBuild('example', [
+		{ key: 'sys', kind: 'system', path: '/example/system', data: { source: { id: 'pw', name: 'PW' }, target: { id: 'connect', name: 'Connect' }, labels: {} } },
+		tableOf('one', ['user', 'area'], ['state']),
+		tableOf('two', ['user', 'area'], ['state']),
+		tableOf('user'),
+		tableOf('area'),
+		{ key: 'c.state', kind: 'schema-choice', path: '/example/schema/pw/choice/state', data: { db: 'pw', logical: 'state', name: 'state', optionList: [{ value: 1, label: 'A' }] } },
+	]);
+	const lineList = migrationProviderBuild(lanes).viewGet('/overview/pw').diagram.connections;
+	const lookupList = lineList.filter((line) => line.id.startsWith('lookup:'));
+	assert.equal(lookupList.length, 4);
+	for (const line of lookupList) assert.equal(line.route.anchorList[0].along, 1, 'the lane follows the table referred to');
+	assert.equal(new Set(lookupList.map((line) => line.route.anchorList[0].x)).size, 4, 'lines to one place too');
+	// lines to one option set: a lane and a level each
+	const choiceLineList = lineList.filter((line) => line.id.startsWith('choice:'));
+	assert.equal(choiceLineList.length, 2);
+	assert.equal(new Set(choiceLineList.map((line) => line.route.anchorList[0].x)).size, 2);
+	assert.equal(new Set(choiceLineList.map((line) => line.route.anchorList[0].y)).size, 2);
+	// the view of one table: a lane per line at each side
+	const user = migrationProviderBuild(lanes).viewGet('/overview/pw/user').diagram.connections;
+	assert.equal(new Set(user.map((line) => line.route.anchorList[0].x)).size, user.length);
+});
+
+test('the lines fanning out of the tool each have a level of their own, the farthest out the highest', () => {
+	const lineList = migrationProviderBuild(migrationModelBuild('example', itemPostListBuild())).viewGet('/overview').diagram.connections;
+	const levelOf = (id) => lineList.find((line) => line.id === id).route.anchorList[0].y;
+	assert.ok(levelOf('make:plan') < levelOf('make:run'));
+	assert.ok(levelOf('make:post') < levelOf('make:verify'));
+});

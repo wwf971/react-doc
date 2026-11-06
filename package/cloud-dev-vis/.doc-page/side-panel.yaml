@@ -8,15 +8,22 @@ sidePanelById:
         doc: ~cloud-dev-vis/doc/README.md
         defaultOpen: true
         children:
+          - doc: ~cloud-dev-vis/doc/card-diagram-usage.md
           - doc: ~cloud-dev-vis/doc/comp-diagram-er.md
           - doc: ~cloud-dev-vis/doc/comp-powerplatform.md
           - doc: ~cloud-dev-vis/doc/comp-card-diagram-animation.md
           - doc: ~cloud-dev-vis/doc/comp-card-diagram-switch.md
+          # a document of this checkout only: a clone has none, and this item then opens
+          # an error page that offers to create it (main/doc_page_impl_test.md)
+          - id: card-diagram-playground
+            text: Playground
+            doc: ~cloud-dev-vis/doc/card-diagram.playground.md
           - id: design
             text: Design
             defaultOpen: false
             children:
               - doc: ~cloud-dev-vis/doc/card-diagram.md
+              - doc: ~cloud-dev-vis/doc/card-diagram-connection-line.md
               - doc: ~cloud-dev-vis/doc/card-diagram-impl.md
               - doc: ~cloud-dev-vis/doc/card-diagram-animation.md
               - doc: ~cloud-dev-vis/doc/card-diagram-flexible-switch.md

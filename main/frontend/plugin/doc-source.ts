@@ -56,6 +56,7 @@ import { excludeMatcherBuild, type ExcludeMatcher } from './doc-source-exclude.t
 import { DOC_ASSET_ENDPOINT_NAME, docAssetMiddlewareCreate } from './doc-asset-server.ts';
 import { DOC_API_ENDPOINT_NAME, docApiBridgeCreate } from './doc-api-server.ts';
 import { apiDeclaredConfigOfDocPageListGet } from './doc-api-config.ts';
+import { playgroundApply, playgroundConfigOfDocPageListGet } from './doc-playground.ts';
 import { hotkeyConfigGet } from './doc-hotkey.ts';
 import {
   DOC_SERVICE_ENDPOINT_NAME, docServiceMiddlewareCreate, serviceBackendLaunch, serviceConfigGet, serviceFolderSetGet, servicePathIs,
@@ -419,7 +420,10 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       if (id !== moduleIdResolved) return;
       const configDoc = loadConfigDoc(configFile, options);
       const assetStore = assetStoreGet(configDoc);
-      const fileEntriesAll = scanSource(configDoc, configDir);
+      // a built page has no playground: what a checkout holds of one stays out of it,
+      // and its side panel item goes (doc_page_impl_test.md#a-built-page)
+      const playgroundDocSet = new Set<string>(isBuild ? configDoc.playgroundList.map((item: any) => item.doc) : []);
+      const fileEntriesAll = scanSource(configDoc, configDir).filter((entry) => !playgroundDocSet.has(entry.internalPath));
       const fileEntries = entriesVisibleGet(configDoc, fileEntriesAll);
       const dirEntries = scanSourceDirs(configDoc, configDir);
       // the files a component names (an Image src) and the source files the
@@ -447,7 +451,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
             objectFrontend: objectFrontendConfigForPage(objectFrontendConfigGet(configDoc, configDir)),
           }
         : null;
-      return generateModuleCode(configDoc, fileEntries, dirEntries, attachmentList, isBuild, {
+      return generateModuleCode(isBuild ? playgroundLeaveOut(configDoc) : configDoc, fileEntries, dirEntries, attachmentList, isBuild, {
         linkIndex: linkIndexGet(configDoc, fileEntries),
         docSourceEndpoint,
         docEditEndpoint,
@@ -514,9 +518,13 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       // package treated as a doc page (doc_page_impl_package.md#a-package-as-a-doc-page).
       // the one question every write of the source, edit and asset apis asks
       const readOnlyReasonGet = (absPath: string): string => {
-        const docPage = (loadConfigDoc(configFile, options).docEntry.docPageList as any[])
+        const configDocNow = loadConfigDoc(configFile, options);
+        const docPage = (configDocNow.docEntry.docPageList as any[])
           .find((item) => item.isReadOnly && (absPath === item.dirPage || absPath.startsWith(`${item.dirPage}${path.sep}`)));
-        return docPage ? `the doc page "${docPage.alias}" is read-only: it is the package ${docPage.packageName}` : '';
+        if (!docPage) return '';
+        // the document of a playground belongs to the checkout, not to the package (doc_page_impl_test.md)
+        if ([...configDocNow.playgroundConfig.itemByIdGet().values()].some((item: any) => item.docAbs === absPath)) return '';
+        return `the doc page "${docPage.alias}" is read-only: it is the package ${docPage.packageName}`;
       };
       let pathsWatched = collectPathsToWatch(configDoc, configDir);
       for (const p of pathsWatched) server.watcher.add(p);
@@ -584,6 +592,17 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         onFileCreated: (filePath) => {
           pathsChangedByPage.add(filePath);
           configDataSend(loadConfigDoc(configFile, options));
+        },
+        // a playground created, reset or deleted (doc_page_impl_test.md): the
+        // source reported as data, so its item and its page follow without a reload
+        playgroundChange: (body) => {
+          const item = loadConfigDoc(configFile, options).playgroundConfig.itemByIdGet().get(String(body?.id ?? ''));
+          if (!item) return { code: -3, data: null, message: `no playground has the id "${body?.id}"` };
+          const result = playgroundApply(item, String(body?.action ?? ''));
+          if (result.code !== 0) return { code: result.code, data: null, message: result.message };
+          pathsChangedByPage.add(result.docAbs);
+          configDataSend(loadConfigDoc(configFile, options));
+          return { code: 0, data: { doc: item.doc }, message: '' };
         },
         // the source read again as it is on disk now and reported as data,
         // for a change the watcher did not see (a network folder)
@@ -893,6 +912,8 @@ type SourceMiddlewareOptions = {
   // why a file may not be written ('' when it may): a read-only doc page
   readOnlyReasonGet: (absPath: string) => string;
   onFileCreated: (filePath: string) => void;
+  // POST playground: { id, action: reset | delete }
+  playgroundChange?: (body: any) => { code: number; data: any; message: string };
   // POST refresh: '' when the configuration loads, else why not
   onRefresh?: () => string;
   // the folder a relative path typed in the page is read from (os/list,
@@ -905,7 +926,7 @@ type SourceMiddlewareOptions = {
 };
 
 export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
-  const { endpoint, fileEntryListGet, sourceRootListGet, onFileCreated, onRefresh, workspace, readOnlyReasonGet } = options;
+  const { endpoint, fileEntryListGet, sourceRootListGet, onFileCreated, onRefresh, workspace, readOnlyReasonGet, playgroundChange } = options;
   const textSend = (res: ServerResponse, statusCode: number, text: string) => {
     res.statusCode = statusCode;
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -920,7 +941,7 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const route = url.pathname.startsWith(`${endpoint}/`) ? url.pathname.slice(endpoint.length) : '';
     const isWorkspaceRoute = route === '/os/list' || route === '/workspace/mount' || route === '/workspace/unmount';
-    const isOwnRoute = route === '/file' || route === '/data' || route === '/file/create' || route === '/refresh';
+    const isOwnRoute = route === '/file' || route === '/data' || route === '/file/create' || route === '/refresh' || route === '/playground';
     if (!isOwnRoute && !isWorkspaceRoute) {
       next();
       return;
@@ -936,6 +957,21 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
       }
       const message = onRefresh ? onRefresh() : 'the server cannot read the source again';
       jsonSend(res, message === '' ? 200 : 400, { code: message === '' ? 0 : -1, data: null, message });
+      return;
+    }
+
+    if (route === '/playground') {
+      if (req.method !== 'POST' || !playgroundChange) {
+        res.setHeader('Allow', 'POST');
+        jsonSend(res, 405, { code: -1, data: null, message: 'playground answers POST only' });
+        return;
+      }
+      void jsonBodyRead(req)
+        .then((body) => {
+          const result = playgroundChange(body);
+          jsonSend(res, statusByCode[result.code] ?? 400, result);
+        })
+        .catch((error) => jsonSend(res, 400, { code: -1, data: null, message: String(error?.message ?? error) }));
       return;
     }
 
@@ -1364,6 +1400,10 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
   const apiDeclaredConfig = apiDeclaredConfigOfDocPageListGet(entryLoaded.docPageList, configDir);
   for (const problem of apiDeclaredConfig.problemList) problemListReport('doc-api', problem.file, [problem.message]);
   config.apiDeclared = { list: apiDeclaredConfig.list, problemList: apiDeclaredConfig.problemList };
+  const playgroundConfig = playgroundConfigOfDocPageListGet(entryLoaded.docPageList, configDir);
+  for (const problem of playgroundConfig.problemList) problemListReport('doc-playground', problem.file, [problem.message]);
+  config.playgroundList = playgroundConfig.list;
+  Object.defineProperty(config, 'playgroundConfig', { enumerable: false, value: playgroundConfig });
   // page values the workspace or its first doc page supplies when
   // config.yaml does not set them, so that a doc page used in another
   // deployment brings its own. a home document written in config.yaml is a
@@ -1413,9 +1453,19 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
   // the map files of the package and the workspace, the hotkey folders and
   // the api files of the doc pages: a change there reloads the page with
   // the new maps / apis
-  fileListConfiguration.push(...hotkeyConfig.pathList, ...apiDeclaredConfig.pathList);
+  fileListConfiguration.push(...hotkeyConfig.pathList, ...apiDeclaredConfig.pathList, ...playgroundConfig.pathList);
   Object.defineProperty(config, 'fileListConfiguration', { enumerable: false, value: fileListConfiguration });
   return config;
+}
+
+// the configuration as a built page gets it: no playground, no item of one
+function playgroundLeaveOut(configDoc: any): any {
+  const referenceSet = new Set<string>(configDoc.playgroundList.flatMap((item: any) => [item.doc, item.docLocal]));
+  if (referenceSet.size === 0) return configDoc;
+  const treeFilter = (list: any[]): any[] => list
+    .filter((node) => !referenceSet.has(node?.doc))
+    .map((node) => (Array.isArray(node?.children) ? { ...node, children: treeFilter(node.children) } : node));
+  return { ...configDoc, playgroundList: [], sidePanel: { ...configDoc.sidePanel, tree: treeFilter(configDoc.sidePanel?.tree ?? []) } };
 }
 
 // the keys of the former configuration, which named the source rules and the

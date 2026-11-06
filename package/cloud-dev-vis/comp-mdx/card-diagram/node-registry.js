@@ -23,13 +23,15 @@ import { Waypoints } from '../../../../main/frontend/UICommon.js';
 //                 returns the authored node without its position, idNext(prefix)
 //                 gives an id unused in the diagram
 //
-//   registry = nodeRegistryBuild({ id, label, kindList, cardLegacyConvert? })
+//   registry = nodeRegistryBuild({ id, label, kindList, cardLegacyConvert?, arrangerList? })
 //     kindByType        type -> kind
 //     createEntryList   the entries of the create panel: the kinds with a
 //                       create entry, in kind order, then a connection
 //     cardLegacyConvert optional: the authored data of a standalone card
 //                       without `version`, turned into { version: 1, node }
-export function nodeRegistryBuild({ id, label, kindList, cardLegacyConvert }) {
+//     arrangerList      the arrangers the editor and the apis of the component
+//                       offer (card-diagram-arrange.md); none by default
+export function nodeRegistryBuild({ id, label, kindList, cardLegacyConvert, arrangerList = [] }) {
 	const kindByType = {};
 	for (const kind of kindList) {
 		if (kindByType[kind.type]) throw new Error(`Node registry ${id}: the type ${kind.type} is declared twice.`);
@@ -44,7 +46,7 @@ export function nodeRegistryBuild({ id, label, kindList, cardLegacyConvert }) {
 		create: kind.create.nodeCreate,
 	}));
 	createEntryList.push({ id: 'connection', label: 'Connection', description: 'A line with two free ends; drag an end onto a handle.', icon: Waypoints, keywordList: ['line', 'edge', 'relationship'], isConnection: true });
-	return { id, label, kindList, kindByType, createEntryList, cardLegacyConvert };
+	return { id, label, kindList, kindByType, createEntryList, cardLegacyConvert, arrangerList };
 }
 
 // the create entries of a registry matching what is typed: label first, then

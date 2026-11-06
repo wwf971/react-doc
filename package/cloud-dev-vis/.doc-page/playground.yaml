@@ -1,0 +1,8 @@
+# The playground documents of the package's doc page (main/doc_page_impl_test.md): each lives
+# at `doc`, ignored by git, written from `template`, which is what git keeps.
+playgroundList:
+  - id: card-diagram
+    title: The card diagram playground
+    description: Connection lines (anchors, handles, line types), animation and view switching, to try and to break.
+    doc: ~cloud-dev-vis/doc/card-diagram.playground.md
+    template: ./playground/card-diagram.md

@@ -104,7 +104,7 @@ viewList:
 
 A diagram is the [usual format](comp-diagram-er.md), with one more field on a node and on a connection: **`link`**, the path a click on it opens (`/path#item` also scrolls to an item of a stack there). On a connection, the label becomes the button.
 
-Two conventions keep a view readable, in a generator as by hand: a list of cards **wraps** instead of running on in one row, and what is long **scrolls** in a stack instead of shrinking ([Drawing conventions](card-diagram.md#drawing-conventions)).
+Two conventions keep a view readable, in a generator as by hand: a list of cards **wraps** instead of running on in one row, and what is long **scrolls** in a stack instead of shrinking ([Drawing conventions](card-diagram-usage.md#drawing-conventions)).
 
 ## Showing a view inside a card
 

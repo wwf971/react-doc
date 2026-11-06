@@ -2,6 +2,7 @@ import { lineTypeList, markerTypeList, endpointIsDangling } from './DiagramERDat
 import { cardSchemaGet, cardRowAnchorBuild } from './TableCardSchema.js';
 import { strokeDashList } from './DiagramEditStore.js';
 import { cardTabList, tabPathGet, pathLabelListGet, rowNameGet, selectionPathBuild } from './DiagramEditPath.js';
+import { routeAnchorPointGet, routeDirectionFacingList, routeEndPointGet, routeResolve, routeTypeHasAnchors, routeTypeIsBezier, ROUTE_DIRECTION_LIST } from './DiagramRoute.js';
 
 // The content of the edit card for the current path (DiagramEditCard.jsx),
 // as data. The card renders it with the host's PropEditor, or with a plain
@@ -22,7 +23,9 @@ import { cardTabList, tabPathGet, pathLabelListGet, rowNameGet, selectionPathBui
 //                values?, valueLabels?, isSearchable?, isMultiline?, isReadOnly?,
 //                min?, max?, step?, set(value) -> boolean }
 //   action     { id, label, kind?: 'danger', isDisabled?, reason?, act() }
-const lineTypeLabels = { smoothstep: 'Smooth step', step: 'Step', bezier: 'Curve', straight: 'Straight', polyline: 'Polyline' };
+const lineTypeLabels = { smoothstep: 'Right-angled', step: 'Right-angled, sharp', bezier: 'Curve', straight: 'Straight', polyline: 'Polyline' };
+const directionLabels = { auto: 'Auto', 'x+': 'Right (x+)', 'x-': 'Left (x-)', 'y+': 'Down (y+)', 'y-': 'Up (y-)' };
+const endHandleVectorSize = 60;
 const markerLabels = { none: 'None', arrow: 'Arrow', arrowClosed: 'Filled arrow' };
 
 export function cardModelBuild(editor) {
@@ -93,6 +96,7 @@ export function cardModelBuild(editor) {
 				{ id: 'markerEnd', label: 'End arrow', kind: 'enum', value: lineConnection.markerEnd ?? 'arrowClosed', values: markerTypeList, valueLabels: markerLabels, set: value => lineSet('markerEnd', value) },
 				{ id: 'isAnimated', label: 'Animated', kind: 'bool', value: Boolean(lineConnection.isAnimated), set: value => lineSet('isAnimated', value) },
 			], actionList: [] },
+			...routeSectionList(lineConnection),
 			{ id: 'ends', label: 'Ends', note: 'Drag an end of the line to move it to another handle, or let it go free.', propertyList: [
 				{ id: 'source', label: 'From', kind: 'text', value: endText(lineConnection.source), isReadOnly: true, set: () => false },
 				{ id: 'target', label: 'To', kind: 'text', value: endText(lineConnection.target), isReadOnly: true, set: () => false },
@@ -103,9 +107,150 @@ export function cardModelBuild(editor) {
 		];
 	};
 
+	// ---- the route of a line (card-diagram-connection-line.md) ----
+	// the two ends where the canvas drew them; undefined when it has not (the card
+	// then offers what needs no geometry)
+	const endsGet = lineConnection => editor.connectionEndsGet?.(lineConnection.id);
+	const directionProperty = (id, label, value, allowedList, set) => ({
+		id, label, kind: 'enum', value: value ?? 'auto',
+		values: ['auto', ...ROUTE_DIRECTION_LIST.filter(direction => allowedList.includes(direction) || direction === value)],
+		valueLabels: directionLabels,
+		set: next => change(() => set(next === 'auto' ? null : next)),
+	});
+	const vectorPropertyList = (id, label, vector, set) => ['x', 'y'].map(axis => ({
+		id: `${id}-${axis}`, label: `${label} ${axis.toUpperCase()}`, kind: 'number', value: vector[axis], step: 1,
+		set: value => { const size = Number(value); return Number.isFinite(size) && change(() => set({ ...vector, [axis]: size }, `route:${id}-${axis}`)); },
+	}));
+	const routeSectionList = lineConnection => {
+		const lineType = store.connectionLineTypeGet(lineConnection);
+		if (!routeTypeHasAnchors(lineType)) return [{ id: 'route', label: 'Route', note: store.connectionRouteReasonGet(lineConnection), propertyList: [], actionList: [] }];
+		const lineId = lineConnection.id;
+		const route = store.connectionRouteGet(lineId);
+		const ends = endsGet(lineConnection);
+		const resolved = ends ? routeResolve(lineType, route, ends) : null;
+		const count = route?.anchorList?.length ?? 0;
+		const pointNeighbour = role => {
+			if (!ends) return null;
+			const anchorList = resolved.anchorList;
+			if (role === 'source') return anchorList[0] ?? routeEndPointGet(ends, 'target');
+			return anchorList[anchorList.length - 1] ?? routeEndPointGet(ends, 'source');
+		};
+		const propertyList = [];
+		for (const [role, label] of [['source', 'Start handle'], ['target', 'End handle']]) {
+			const handle = route?.[role]?.handle;
+			const setEnd = (value, groupKey) => store.connectionEndHandleSet(lineId, role, value, groupKey ? { groupKey: `${groupKey}:${lineId}` } : undefined);
+			if (routeTypeIsBezier(lineType)) {
+				propertyList.push({ id: `${role}-handle`, label, kind: 'bool', value: Boolean(handle), set: value => change(() => setEnd(value ? endHandleDefaultGet(role, ends) : null)) });
+				if (handle) propertyList.push(...vectorPropertyList(`${role}-handle`, label, handle, setEnd));
+			} else {
+				const neighbour = pointNeighbour(role);
+				propertyList.push(directionProperty(`${role}-handle`, label, handle, neighbour ? routeDirectionFacingList(routeEndPointGet(ends, role), neighbour) : ROUTE_DIRECTION_LIST, setEnd));
+			}
+		}
+		return [{
+			id: 'route', label: 'Route',
+			note: 'Double-click the line to add an anchor. Drag an anchor to move it; select one and press Delete to remove it. Drag a handle at an end to set the way the line leaves or arrives.',
+			propertyList,
+			actionList: [
+				{ id: 'anchors-open', label: `Anchors (${count})`, act: () => { editor.navigate([...store.linePathGet(lineId), { kind: 'anchors' }]); return true; } },
+				{ id: 'anchor-add', label: 'Add anchor', isDisabled: !ends, reason: 'The line is not drawn yet.', act: () => change(() => Boolean(editor.anchorAdd(lineId))) },
+				{ id: 'route-clear', label: 'Reset route', isDisabled: !route, reason: 'The line has no route to reset.', act: () => change(() => store.connectionRouteSet(lineId, null)) },
+			],
+		}];
+	};
+	const endHandleDefaultGet = (role, ends) => {
+		const side = ends ? (role === 'source' ? ends.sourcePosition : ends.targetPosition) : null;
+		return { left: { x: -endHandleVectorSize, y: 0 }, right: { x: endHandleVectorSize, y: 0 }, top: { x: 0, y: -endHandleVectorSize }, bottom: { x: 0, y: endHandleVectorSize } }[side] ?? { x: endHandleVectorSize, y: 0 };
+	};
+	const anchorListViewBuild = lineConnection => {
+		const lineId = lineConnection.id;
+		const anchorList = store.connectionRouteGet(lineId)?.anchorList ?? [];
+		const linePath = store.linePathGet(lineId);
+		const ends = endsGet(lineConnection);
+		return {
+			type: 'list', id: 'anchors', label: `Anchors (${anchorList.length})`,
+			itemList: anchorList.map(anchor => {
+				const point = ends ? routeAnchorPointGet(anchor, ends) : null;
+				return { id: anchor.id, name: anchor.id, sub: point ? `${Math.round(point.x)}, ${Math.round(point.y)}` : `along ${anchor.along}`, isSelected: false, path: [...linePath, { kind: 'anchors' }, { kind: 'anchor', id: anchor.id }], isRemovable: true, removeReason: '' };
+			}),
+			isReorderable: false, reorderReason: 'Anchors follow the line in order; a new one is placed where it is added.',
+			move: () => false,
+			remove: id => change(() => store.connectionAnchorRemove(lineId, id)),
+			add: { id: 'anchor-add', label: 'Add anchor', isDisabled: !ends, reason: 'The line is not drawn yet.', act: () => change(() => Boolean(editor.anchorAdd(lineId))) },
+			note: anchorList.length ? '' : 'Double-click the line to add an anchor where it runs.',
+			sectionList: [],
+		};
+	};
+	const anchorSectionList = (lineConnection, anchorId) => {
+		const lineId = lineConnection.id;
+		const lineType = store.connectionLineTypeGet(lineConnection);
+		const route = store.connectionRouteGet(lineId);
+		const anchorList = route?.anchorList ?? [];
+		const anchorIndex = anchorList.findIndex(item => item.id === anchorId);
+		const anchor = anchorList[anchorIndex];
+		if (!anchor) return [];
+		const ends = endsGet(lineConnection);
+		const point = ends ? routeAnchorPointGet(anchor, ends) : null;
+		const moveGroup = axis => ({ groupKey: `route:${lineId}/${anchorId}/${axis}` });
+		const place = {
+			id: 'anchor', label: 'Anchor', actionList: [],
+			note: 'Along says which end it follows: 0 moves with the start, 1 with the end, between takes a share of each.',
+			propertyList: [
+				...(point ? ['x', 'y'].map(axis => ({
+					id: axis, label: axis.toUpperCase(), kind: 'number', value: Math.round(point[axis] * 100) / 100, step: 1,
+					set: value => { const size = Number(value); return Number.isFinite(size) && change(() => store.connectionAnchorMove(lineId, anchorId, { point: { ...point, [axis]: size }, ends, along: anchor.along }, moveGroup(axis))); },
+				})) : []),
+				{ id: 'along', label: 'Along', kind: 'number', value: anchor.along, min: 0, max: 1, step: 0.05, set: value => {
+					const along = Number(value);
+					if (!Number.isFinite(along)) return false;
+					return change(() => store.connectionAnchorMove(lineId, anchorId, point ? { point, ends, along } : { along }, moveGroup('along')));
+				} },
+			],
+		};
+		const remove = { id: 'anchor-remove', label: 'Remove anchor', kind: 'danger', act: () => change(() => store.connectionAnchorRemove(lineId, anchorId)) };
+		if (!routeTypeIsBezier(lineType)) {
+			const resolved = ends ? routeResolve(lineType, route, ends) : null;
+			const neighbourOf = index => (index < 0 ? routeEndPointGet(ends, 'source') : index >= anchorList.length ? routeEndPointGet(ends, 'target') : resolved.anchorList[index]);
+			const allowed = index => (ends ? routeDirectionFacingList(point, neighbourOf(index)) : ROUTE_DIRECTION_LIST);
+			const handleSet = side => value => store.connectionAnchorHandleSet(lineId, anchorId, side, value);
+			return [place, {
+				id: 'anchor-handles', label: 'Handles', actionList: [remove],
+				note: 'A handle says which way the line runs from the anchor. Auto takes the direction that gives the whole line the fewest bends.',
+				propertyList: [
+					directionProperty('in', 'In', anchor.handleIn, allowed(anchorIndex - 1), handleSet('in')),
+					directionProperty('out', 'Out', anchor.handleOut, allowed(anchorIndex + 1), handleSet('out')),
+				],
+			}];
+		}
+		const isCoupled = anchor.isCoupled !== false;
+		const handleSet = side => (value, groupKey) => store.connectionAnchorHandleSet(lineId, anchorId, side, value, { groupKey: groupKey ? `${groupKey}:${lineId}/${anchorId}` : null });
+		return [place, {
+			id: 'anchor-handles', label: 'Handles',
+			note: 'Coupled handles stay on one straight line: the curve is smooth through the anchor. Alt + drag a handle to decouple it.',
+			propertyList: [
+				{ id: 'coupled', label: 'Coupled', kind: 'bool', value: isCoupled, set: value => change(() => store.connectionAnchorCoupleSet(lineId, anchorId, value)) },
+				...(anchor.handleIn ? vectorPropertyList('in', 'In', anchor.handleIn, handleSet('in')) : []),
+				...(anchor.handleOut ? vectorPropertyList('out', 'Out', anchor.handleOut, handleSet('out')) : []),
+			],
+			actionList: [
+				{ id: 'handles-pull', label: 'Pull out handles', isDisabled: !ends, reason: 'The line is not drawn yet.', act: () => change(() => store.connectionAnchorHandlesPull(lineId, anchorId, ends)) },
+				{ id: 'handle-in-remove', label: 'Remove in handle', isDisabled: !anchor.handleIn, reason: 'It has none.', act: () => change(() => store.connectionAnchorHandleSet(lineId, anchorId, 'in', null)) },
+				{ id: 'handle-out-remove', label: 'Remove out handle', isDisabled: !anchor.handleOut, reason: 'It has none.', act: () => change(() => store.connectionAnchorHandleSet(lineId, anchorId, 'out', null)) },
+				remove,
+			],
+		}];
+	};
+	// the view of a line: its settings, the list of its anchors, or one anchor
+	const lineViewBuild = lineConnection => {
+		if (!lineConnection) return { type: 'detail', sectionList: [] };
+		if (display.view === 'list' && display.isAnchors) return anchorListViewBuild(lineConnection);
+		if (display.anchorId) return { type: 'detail', sectionList: anchorSectionList(lineConnection, display.anchorId) };
+		return { type: 'detail', sectionList: lineSectionList(lineConnection) };
+	};
+
 	// ---- a line by itself ----
 	if (!node) {
-		model.view = { type: 'detail', sectionList: connection ? lineSectionList(connection) : [] };
+		model.view = lineViewBuild(connection);
 		return model;
 	}
 
@@ -217,7 +362,7 @@ export function cardModelBuild(editor) {
 			return model;
 		}
 		case 'line': {
-			if (display.view === 'list') {
+			if (display.view === 'list' && !display.isAnchors) {
 				const lineList = store.nodeLineListGet(nodeId);
 				const endName = endpoint => endpointIsDangling(endpoint) ? 'free end' : endpoint.nodeId === nodeId ? endpoint.handleId : String(store.nodeGet(endpoint.nodeId)?.data?.name ?? endpoint.nodeId);
 				model.view = {
@@ -232,7 +377,7 @@ export function cardModelBuild(editor) {
 				};
 				return model;
 			}
-			model.view = { type: 'detail', sectionList: connection ? lineSectionList(connection) : [] };
+			model.view = lineViewBuild(connection);
 			return model;
 		}
 		default:

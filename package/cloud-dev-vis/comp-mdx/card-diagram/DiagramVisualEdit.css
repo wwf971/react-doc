@@ -1078,3 +1078,97 @@ body:has(.doc-block-popup .doc-vis-edit) .prop-editor-color-popover {
 	gap: 0.35rem;
 	padding: 0.15rem 0.4rem;
 }
+
+/* the anchors and handles of the focused line (DiagramRouteControls.jsx): smaller than
+   the handles of a card and of another shape, at one screen size at any zoom */
+.doc-vis-route {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 0;
+	height: 0;
+	pointer-events: none;
+	z-index: 1100;
+}
+
+.doc-vis-route-stems {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 1px;
+	height: 1px;
+	overflow: visible;
+	pointer-events: none;
+}
+
+.doc-vis-route-stem {
+	stroke: #2563eb;
+	stroke-width: 1px;
+	stroke-dasharray: 3 3;
+	vector-effect: non-scaling-stroke;
+	opacity: 0.7;
+}
+
+.doc-vis-route-stem.is-set {
+	stroke-dasharray: none;
+	opacity: 1;
+}
+
+.doc-vis-route-anchor,
+.doc-vis-route-tip {
+	position: absolute;
+	pointer-events: auto;
+	box-sizing: border-box;
+	touch-action: none;
+}
+
+.doc-vis-route-anchor {
+	width: 7px;
+	height: 7px;
+	margin: -3.5px 0 0 -3.5px;
+	background: var(--color-fd-background);
+	border: 1.5px solid #2563eb;
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1))) rotate(45deg);
+	cursor: move;
+}
+
+.doc-vis-route-anchor:hover,
+.doc-vis-route-anchor.is-selected {
+	background: #2563eb;
+}
+
+.doc-vis-route-tip {
+	width: 7px;
+	height: 7px;
+	margin: -3.5px 0 0 -3.5px;
+	border-radius: 50%;
+	border: 1.5px solid #2563eb;
+	background: var(--color-fd-background);
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1)));
+	cursor: grab;
+	opacity: 0.75;
+}
+
+.doc-vis-route-tip.is-in {
+	border-color: #d97706;
+}
+
+.doc-vis-route-tip.is-set {
+	opacity: 1;
+	background: #2563eb;
+}
+
+.doc-vis-route-tip.is-in.is-set {
+	background: #d97706;
+}
+
+.doc-vis-route-tip:hover {
+	opacity: 1;
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-fd-primary) 30%, transparent);
+}
+
+/* the items of a menu of actions: what it is, and what it does under it */
+.doc-vis-menu-action { display: flex; flex-direction: column; gap: 2px; padding: 2px 0; white-space: normal; max-width: 340px; }
+.doc-vis-menu-action strong { font-weight: 500; }
+.doc-vis-menu-action small { opacity: 0.7; font-size: 0.85em; }
+.doc-vis-menu-action.is-disabled { opacity: 0.5; }

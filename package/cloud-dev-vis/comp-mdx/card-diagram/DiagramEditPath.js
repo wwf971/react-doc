@@ -20,6 +20,8 @@ import { endpointIsDangling } from './DiagramERData.js';
 //     fields      { kind: 'fields' }                          the fields of the card (its columns)
 //     lines       { kind: 'lines' }                           the connections at the handles of the card
 //     line        { kind: 'line', id | index }                one of them
+//     anchors     { kind: 'anchors' }                         under a line: its anchor points
+//     anchor      { kind: 'anchor', id | index }              one of them (card-diagram-connection-line.md)
 //
 // A segment names its subject by id, or by index or name instead: the three
 // spellings route to the same display, and the path the store keeps is the
@@ -29,7 +31,7 @@ import { endpointIsDangling } from './DiagramERData.js';
 //
 //   display   what the card shows for a path
 //     principal      'node' | 'connection'
-//     nodeId, connectionId, rowId, fieldId, propId   the subjects, null when none
+//     nodeId, connectionId, rowId, fieldId, propId, anchorId   the subjects, null when none
 //     tab            table | row | column | cell | line
 //     view           'detail' | 'list'
 export const cardTabList = ['table', 'row', 'column', 'cell', 'line'];
@@ -69,6 +71,28 @@ function fieldFind(fieldList, segment) {
 	return undefined;
 }
 
+function anchorFind(anchorList, segment) {
+	if (segment.id !== undefined) return anchorList.find(anchor => anchor.id === segment.id);
+	if (segment.index !== undefined) return anchorList[Number(segment.index)];
+	return undefined;
+}
+
+// what follows a line in a path: its anchors, or one of them. the path of the line
+// and the display it stands for are given; a segment naming nothing goes up one level
+function lineRestResolve(linePath, display, connection, restList, store) {
+	const [first, second] = restList;
+	if (!first) return { path: linePath, display };
+	if (!segmentIs(first, 'anchors')) return { redirect: linePath };
+	const listPath = [...linePath, { kind: 'anchors' }];
+	if (!second) return { path: listPath, display: { ...display, view: 'list', isAnchors: true } };
+	if (!segmentIsItem(second, 'anchor')) return { redirect: listPath };
+	const anchor = anchorFind(store.connectionRouteAnchorListGet(connection), second);
+	if (!anchor) return { redirect: listPath };
+	const canonical = [...listPath, { kind: 'anchor', id: anchor.id }];
+	if (restList.length > 2) return { redirect: canonical };
+	return { path: canonical, display: { ...display, anchorId: anchor.id } };
+}
+
 function lineFind(lineList, segment) {
 	if (segment.id !== undefined) return lineList.find(connection => connection.id === segment.id);
 	if (segment.index !== undefined) return lineList[Number(segment.index)];
@@ -95,7 +119,7 @@ function collectionKindGet(segment, schema) {
 	return null;
 }
 
-const displayOf = (base, extra) => ({ principal: 'node', connectionId: null, rowId: null, fieldId: null, propId: null, view: 'detail', ...base, ...extra });
+const displayOf = (base, extra) => ({ principal: 'node', connectionId: null, rowId: null, fieldId: null, propId: null, anchorId: null, view: 'detail', ...base, ...extra });
 
 // one resolution step: the display of a path, or where the path redirects
 // to when a segment names nothing (the parent collection, the root, or
@@ -104,10 +128,9 @@ export function pathResolveStep(path, store) {
 	if (!path?.length) return { path: [], display: null };
 	const [root, ...rest] = path;
 	if (segmentIs(root, 'connection')) {
-		if (!store.connectionGet(root.id)) return { redirect: [] };
-		const canonical = [{ kind: 'connection', id: root.id }];
-		if (rest.length) return { redirect: canonical };
-		return { path: canonical, display: { principal: 'connection', nodeId: null, connectionId: root.id, rowId: null, fieldId: null, propId: null, tab: 'line', view: 'detail' } };
+		const connection = store.connectionGet(root.id);
+		if (!connection) return { redirect: [] };
+		return lineRestResolve([{ kind: 'connection', id: root.id }], { principal: 'connection', nodeId: null, connectionId: root.id, rowId: null, fieldId: null, propId: null, anchorId: null, tab: 'line', view: 'detail' }, connection, rest, store);
 	}
 	if (!segmentIs(root, 'node')) return { redirect: [] };
 	const node = store.nodeGet(root.id);
@@ -131,9 +154,7 @@ export function pathResolveStep(path, store) {
 		if (!segmentIsItem(third, 'line')) return { redirect: listPath };
 		const connection = lineFind(lineList, third);
 		if (!connection) return { redirect: listPath };
-		const canonical = [...listPath, { kind: 'line', id: connection.id }];
-		if (fourth) return { redirect: canonical };
-		return { path: canonical, display: displayOf({ nodeId, connectionId: connection.id, tab: 'line' }) };
+		return lineRestResolve([...listPath, { kind: 'line', id: connection.id }], displayOf({ nodeId, connectionId: connection.id, tab: 'line' }), connection, rest.slice(2), store);
 	}
 	if (!schema) return { redirect: [nodeSegment] };
 	if (collection === 'fields') {
@@ -223,6 +244,8 @@ export function pathLabelListGet(path, store) {
 			case 'row': return rowNameGet(node ? store.rowGet(node.id, segment.id) : undefined, schema) || String(segment.id);
 			case 'field': return String(schema?.fieldList.find(field => field.id === segment.id)?.label ?? segment.id);
 			case 'line': { const connection = store.connectionGet(segment.id); return String(connection?.label?.text || segment.id); }
+			case 'anchors': return 'Anchors';
+			case 'anchor': return String(segment.id);
 			default: return String(segment.kind);
 		}
 	});

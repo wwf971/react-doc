@@ -144,6 +144,8 @@ export class DocSourceStore {
   // ('' in a build: the source is read-only, and the bytes of a file come
   // from fileUrlByPath)
   sourceEndpoint: string;
+  playgroundConfirm: { id: string; action: string } | null = null;
+  playgroundMessage = '';
   // source path (or the spelling a document used) -> url of the file's bytes,
   // as the vite plugin collected them (fileUrlByPath of the virtual module)
   fileUrlByPath: Record<string, string>;
@@ -269,8 +271,10 @@ export class DocSourceStore {
     return docPage?.isReadOnly ? `the doc page "${alias}" is read-only: it is the package ${docPage.packageName}` : '';
   }
 
-  // the same for the doc page a source path lies in
+  // the same for the doc page a source path lies in. the document of a playground
+  // may be written wherever it lies (doc_page_impl_test.md)
   pathReadOnlyReasonGet(pathSource: string): string {
+    if (this.playgroundOfReference(pathSource)) return '';
     const alias = /^~([^:/]+):/.exec(pathSource)?.[1];
     return alias ? this.docPageReadOnlyReasonGet(alias) : '';
   }
@@ -681,6 +685,61 @@ export class DocSourceStore {
     }
     if (payload.code !== 0) return { code: payload.code, message: payload.message };
     return { code: 0, data: payload.data, message: '' };
+  }
+
+  // ---------- playground documents (doc_page_impl_test.md) ----------
+
+  get playgroundList(): any[] {
+    const list = this.configDoc?.playgroundList;
+    return Array.isArray(list) ? list : [];
+  }
+
+  // the playground a source path or a reference written in a side panel names
+  playgroundOfReference(reference: string): any {
+    const text = String(reference ?? '').trim();
+    if (!text) return undefined;
+    return this.playgroundList.find((item) => item.doc === text || item.docLocal === text);
+  }
+
+  // the playground whose missing document a link names, by any spelling that ends like its
+  // path (a link in a document is relative, or just the file name)
+  playgroundOfLinkTarget(target: string): any {
+    const text = String(target ?? '').split('#')[0].replace(/^\.\//, '').trim();
+    if (!text) return undefined;
+    return this.playgroundOfReference(text) ?? this.playgroundList.find((item) => item.doc.endsWith(`/${text}`));
+  }
+
+  playgroundIsPresent(playground: any): boolean {
+    return this.entryByInternalPath.has(playground?.doc);
+  }
+
+  // the change a reader is asked to confirm: { id, action }, shown by the bar of the document
+  playgroundConfirmSet(confirm: { id: string; action: string } | null) {
+    this.playgroundConfirm = confirm;
+  }
+
+  // create or reset (action reset: the document as its template says, what was there
+  // kept as a hidden backup), or delete. the server reports the source as data, so the
+  // side panel item and the page follow
+  async playgroundChange(id: string, action: 'reset' | 'delete'): Promise<SourceResult> {
+    if (!this.isWritable) return { code: -1, message: 'A playground is changed through the development server only.' };
+    this.playgroundConfirm = null;
+    this.playgroundMessage = '';
+    let payload: any;
+    try {
+      const response = await fetch(`${this.sourceEndpoint}/playground`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action }),
+        cache: 'no-store',
+      });
+      payload = await response.json().catch(() => undefined);
+      if (!payload || typeof payload.code !== 'number') payload = { code: -1, message: `the source api answered ${response.status} without a result` };
+    } catch (error: any) {
+      payload = { code: -1, message: `the source api is not reachable: ${String(error?.message ?? error)}` };
+    }
+    runInAction(() => { this.playgroundMessage = payload.code === 0 ? '' : String(payload.message ?? ''); });
+    return payload.code === 0 ? { code: 0, data: payload.data, message: '' } : { code: payload.code, message: payload.message };
   }
 
   // ---------- reading the source again ----------

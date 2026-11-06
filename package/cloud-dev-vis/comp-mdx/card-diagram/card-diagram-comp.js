@@ -3,6 +3,8 @@ import { compDefine } from '../../../../main/comp-doc/registry/comp-registry.js'
 import { diagramEditModeList } from './DiagramEditStore.js';
 import { cardDiagramSourceDefaultCreate } from './DiagramERSource.js';
 import { CardDiagram } from './CardDiagram.jsx';
+import { diagramApiListBuild } from './DiagramApiList.js';
+import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
 
 // What a card diagram and a standalone card expose through their registry
 // definitions (compDefine expose, doc_page_impl_mdx_comp.md#what-a-component-exposes),
@@ -23,8 +25,9 @@ export const cardDiagramEditModeList = diagramEditModeList.map((mode) => ({ ...m
 
 // the options of compDefine for a card diagram component of any series:
 // it draws with @xyflow/react, and learns whether its data is an asset
-// (isAssetAware) since its visual edit mode also edits asset data
-export function cardDiagramDefineOptionsBuild({ label, description, icon = Waypoints, sourceDefaultCreate }) {
+// (isAssetAware) since its visual edit mode also edits asset data. registry: its node
+// registry, when it draws a diagram: its connection lines get apis (DiagramApiList.js)
+export function cardDiagramDefineOptionsBuild({ label, description, icon = Waypoints, sourceDefaultCreate, registry }) {
 	return {
 		placementList: ['mdx', 'commentBlock'],
 		isAssetAware: true,
@@ -33,6 +36,7 @@ export function cardDiagramDefineOptionsBuild({ label, description, icon = Waypo
 			icon,
 			editModeList: cardDiagramEditModeList,
 			sourceDefaultCreate,
+			...(registry ? { apiList: diagramApiListBuild(registry) } : {}),
 		},
 	};
 }
@@ -43,4 +47,5 @@ export const cardDiagramDefine = compDefine(CardDiagram, cardDiagramDefineOption
 	label: 'Card diagram',
 	description: 'Generic table cards and operators joined by connections on a canvas.',
 	sourceDefaultCreate: cardDiagramSourceDefaultCreate,
+	registry: cardDiagramNodeRegistry,
 }));
