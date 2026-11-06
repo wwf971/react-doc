@@ -47,7 +47,9 @@ Each kind of change has a checklist below. Most mistakes come from making one ki
 
 ## Background color blocks
 
-The base registry includes `color-block`: a lightly colored rectangle with a bottom list of text/icon labels. Use it for locations, swimlanes, output groups, or other diagram backgrounds. It is not a Power Platform kind and does not impose a horizontal arrangement. Blocks use ordinary node positions and numeric sizes; place them beside, above, below, or overlapping one another as the diagram requires.
+The base registry includes `card-three-dots`, three dots vertical or horizontal with an optional line of text (`data: { direction?: vertical | horizontal, text?, tone? }`, `vertical` by default), for what is left out of a long series of cards; a generator of views writes it, the editor does not offer it. A table card takes `data.badge`, a short word before its name.
+
+The base registry includes `color-block`: a lightly colored rectangle with a list of text/icon labels, at its bottom or, with `labelSide: top`, at its top. Use it for locations, swimlanes, output groups, or other diagram backgrounds. It is not a Power Platform kind and does not impose a horizontal arrangement. Blocks use ordinary node positions and numeric sizes; place them beside, above, below, or overlapping one another as the diagram requires.
 
 ```yaml
 id: source-area
@@ -65,7 +67,7 @@ data:
 handles: []
 ```
 
-`itemList` is required but may be empty for an unlabeled block. Each item has a unique nonempty `id` and `text`, `icon`, or both. Icons use the framework's `CARD_ICON_BY_NAME` vocabulary, including `database`, `server`, `file`, `archive`, and `cloud`. Text is plain text, not markup. Labels stay near the bottom, centered as a wrapping list; leave room there when positioning foreground cards. Tones are `blue`, `teal`, `green`, `amber`, `red`, `violet`, and `slate` (default), with light fills and restrained borders.
+`itemList` is required but may be empty for an unlabeled block. Each item has a unique nonempty `id` and `text`, `icon`, or both; `level: 1` or `2` makes it a title, larger and on a line of its own. `columnList: [{ id, x, width, text?, icon? }]` with `columnTop` draws columns inside the block, in the block's own pixels, for what is read as columns without a block in the block: a heading at the top of each, a dashed divider before all but the first. Icons use the framework's `CARD_ICON_BY_NAME` vocabulary, including `database`, `server`, `file`, `archive`, and `cloud`. Text is plain text, not markup. Labels stay near the bottom, centered as a wrapping list; leave room there when positioning foreground cards. Tones are `blue`, `teal`, `green`, `amber`, `red`, `violet`, and `slate` (default), with light fills and restrained borders.
 
 Background blocks have no connection anchors and do not own or move other nodes. They contribute to diagram bounds. Their `contract.isBackground: true` is a generic registry capability, resolved by normalization; canvas and static renderers place such nodes behind connections and ordinary cards regardless of array order. Static views establish an isolated stacking context so backgrounds remain visible. In reading mode backgrounds are pointer-transparent, including React Flow's node wrapper; in editing mode the block can be selected and positioned like another node. No platform IDs or location rules belong in the canvas renderer.
 

@@ -6,8 +6,7 @@ import { diagramPositionsGet } from '../card-diagram/DiagramERData.js';
 import {
 	SWITCH_EMBED_CHROME_HEIGHT, switchCameraBetween, switchCameraChildOf, switchCameraFit, switchCameraParentOf, switchEase, switchEmbedMapBuild, switchMaskClipBuild, switchMorphBuild,
 	switchMorphFrameAt, switchMorphStyleBuild, switchPathChain, switchPathHashRead, switchPathNormalize, switchPathParent, switchPortalItemStyleBuild, switchPortalStyleBuild, switchRectUnion,
-	switchRouteFind, switchStackItemLayout, switchStepSecondGet,
-} from './SwitchData.js';
+	switchRouteFind, switchStackItemLayout, switchStepSecondGet, switchPresentationBuild, switchStackHeightIsFull, switchStackPresentationBuild } from './SwitchData.js';
 
 const VIEW_BOX_TYPE = 'view-box';
 const VIEW_EMBED_TYPE = 'view-embed';
@@ -67,6 +66,8 @@ export class SwitchStore {
 		this.stackScrollKeyByKey = new Map();
 		this.stackAreaByKey = new Map();
 		this.stackItemByKey = new Map();
+		this.stackHeightFullByKey = new Map();
+		this.stackFullKeySet = new Set();
 		this.itemInitial = '';
 		this.maskElement = null;
 		this.maskWorldElement = null;
@@ -82,7 +83,7 @@ export class SwitchStore {
 		this.isSeekBusy = false;
 		makeAutoObservable(this, {
 			isSeekBusy: false, seek: false, seekEnd: false, showAt: false, planRun: false, stepEnter: false, stepExit: false, pathSet: false, stepRun: false, registry: false, resolve: false, scope: false, entryByPath: false, cameraByPath: false, embedBodyByKey: false, stackElementByKey: false, stackScrollByKey: false, stackAreaByKey: false, stackItemByKey: false, itemInitial: false, maskElement: false, maskWorldElement: false, styleElement: false, viewportApi: false,
-			captureHintTimer: false, flowWaiterList: false, measureWaiterList: false, morph: false, step: false, providerVersion: false, runToken: false, stackScrollKeyByKey: false,
+			captureHintTimer: false, flowWaiterList: false, measureWaiterList: false, morph: false, step: false, providerVersion: false, runToken: false, stackScrollKeyByKey: false, stackHeightFullByKey: false, stackFullKeySet: false,
 			provider: observable.ref, nodeListFlow: observable.shallow, edgeListFlow: observable.shallow, plan: observable.ref, mask: observable.ref, box: observable.ref,
 			historyList: observable.ref, measurePathList: observable.ref, captureHint: observable.ref,
 		}, { autoBind: true });
@@ -138,7 +139,8 @@ export class SwitchStore {
 	// the one form the rest of the layer reads
 	entrySourceLoad(entry) {
 		const { diagram, box } = entry.desc;
-		const nodes = [...(diagram.nodes ?? [])];
+		// a stack at full height is a node as tall as what it holds
+		const nodes = (diagram.nodes ?? []).map((node) => (node.renderer?.type === VIEW_STACK_TYPE && this.stackHeightIsFullOf(entry.path, node) ? { ...node, size: { ...node.size, height: 'auto' } } : node));
 		if (box && !nodes.some((node) => node.renderer?.type === VIEW_BOX_TYPE)) {
 			nodes.push({ id: 'view-box', renderer: { type: VIEW_BOX_TYPE }, position: { x: box.x, y: box.y }, size: { width: box.width, height: box.height }, data: {} });
 		}
@@ -208,6 +210,11 @@ export class SwitchStore {
 		entry.canvas.measurementSet(nodeId, size);
 		this.measureVersion += 1;
 		this.measureWaiterCheck();
+		// a stack at full height gets its height as its items are drawn: the camera follows,
+		// until the reader has moved it
+		if (this.isCameraReady && !this.plan && path === this.pathCurrent && !this.cameraByPath.has(path) && this.graphNodeListOf(entry).some((node) => node.renderer.type === VIEW_STACK_TYPE && node.size.height === 'auto')) {
+			this.cameraApply(this.cameraDefaultGet(path));
+		}
 	}
 
 	nodeSizeOf(entry, node) {
@@ -301,10 +308,56 @@ export class SwitchStore {
 		const node = this.graphNodeListOf(this.entryGet(path)).find((item) => item.id === nodeId);
 		const focusPath = node?.renderer.type === VIEW_STACK_TYPE && node.data.focusPath;
 		this.stackScrollKeyByKey.set(key, focusPath ? `${switchPathNormalize(focusPath)}|${nodeId}` : key);
+		if (node?.renderer.type === VIEW_STACK_TYPE && node.size.height === 'auto') this.stackFullKeySet.add(key);
+		else this.stackFullKeySet.delete(key);
 		return key;
 	}
 
+	// which height a stack has is one for the copies of one presentation, by the view
+	// it belongs to and its node, as its scroll position is
+	stackHeightKeyOf(path, node) {
+		const presentation = switchStackPresentationBuild(node.data ?? {}, switchPresentationBuild(path));
+		const owner = node.data?.focusPath ? switchPathNormalize(node.data.focusPath) : path;
+		return { key: `${owner}|${node.id}|${presentation.isEmbedded ? 'embedded' : 'focused'}`, presentation };
+	}
+
+	stackHeightIsFullOf(path, node) {
+		const { key, presentation } = this.stackHeightKeyOf(path, node);
+		return switchStackHeightIsFull(node.data ?? {}, presentation, this.stackHeightFullByKey.get(key));
+	}
+
+	// whether a stack of a view is at full height
+	stackHeightIsFull({ path = this.pathCurrent, nodeId }) {
+		const node = this.graphNodeListOf(this.entryGet(path)).find((item) => item.id === nodeId);
+		return node?.renderer.type === VIEW_STACK_TYPE && node.size.height === 'auto';
+	}
+
+	// a stack set to full height, or back to the height of its node, by a program or its
+	// button: for the presentation it has in that view. the views drawing it are read again
+	stackHeightFullSet({ path = this.pathCurrent, nodeId, isFull }) {
+		const nodeOf = (entry) => (entry.desc.diagram.nodes ?? []).find((node) => node.id === nodeId && node.renderer?.type === VIEW_STACK_TYPE);
+		const entryAsked = this.entryGet(path);
+		const nodeAsked = entryAsked && nodeOf(entryAsked);
+		if (!nodeAsked) return false;
+		const { key } = this.stackHeightKeyOf(path, nodeAsked);
+		this.stackHeightFullByKey.set(key, isFull);
+		for (const entry of this.entryByPath.values()) {
+			const node = nodeOf(entry);
+			if (!node || this.stackHeightKeyOf(entry.path, node).key !== key) continue;
+			this.entrySourceLoad(entry);
+			this.stackAreaByKey.delete(`${entry.path}|${nodeId}`);
+			this.cameraByPath.delete(entry.path);
+			// on the canvas the camera stays: the top of the stack and the button just pressed
+			// do not move, and only the bottom edge does. kept as the reader's own, nothing refits it
+			if (entry.path === this.pathCurrent && this.viewportApi && this.isCameraReady && !this.plan) this.cameraByPath.set(entry.path, { ...this.viewportApi.viewportGet() });
+			if (entry.path === this.pathFlow) this.flowRefresh(entry.path);
+		}
+		this.measureVersion += 1;
+		return true;
+	}
+
 	stackScrollGet(key) {
+		if (this.stackFullKeySet.has(key)) return 0;
 		return this.stackScrollByKey.get(this.stackScrollKeyByKey.get(key) ?? key) ?? 0;
 	}
 
@@ -416,6 +469,16 @@ export class SwitchStore {
 		this.edgeListFlow = edgeList;
 		this.flowVersion += 1;
 		this.flowIsInitialized = false;
+	}
+
+	// the view on the canvas read again. its nodes keep what React Flow measured of them: a
+	// node it has not measured is hidden until it has, which would make them flash
+	flowRefresh(path) {
+		const { nodeList, edgeList } = this.flowListOf(path);
+		const measuredById = new Map(this.nodeListFlow.map((node) => [node.id, node.measured]));
+		this.nodeListFlow = nodeList.map((node) => (measuredById.get(node.id) ? { ...node, measured: measuredById.get(node.id) } : node));
+		this.edgeListFlow = edgeList;
+		this.flowVersion += 1;
 	}
 
 	// what React Flow reports of its nodes: measured sizes, the drag of the box

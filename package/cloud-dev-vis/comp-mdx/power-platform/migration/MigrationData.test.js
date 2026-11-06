@@ -35,12 +35,16 @@ test('run and verify flows place locations and outputs in base-layer color block
 		const blocks = diagram.nodes.filter(node => node.renderer.type === 'color-block');
 		assert.equal(blocks.length, 4);
 		const blockOf = id => blocks.find(node => node.id === `flow-area:${id}`);
-		const target = diagram.nodes.find(node => node.id === (kind === 'run' ? 'flow-target' : 'verify-target'));
+		const target = diagram.nodes.find(node => node.id === `${kind === 'run' ? 'flow-target' : 'verify-target'}:ex.cn.t.x`);
 		const report = diagram.nodes.find(node => node.id === (kind === 'run' ? 'flow-report' : 'verify-report'));
 		const contains = (block, node) => node.position.x >= block.position.x && node.position.x + node.size.width <= block.position.x + block.size.width && node.position.y >= block.position.y && node.position.y < block.position.y + block.size.height - 40;
 		assert.ok(contains(blockOf('target'), target));
 		assert.ok(contains(blockOf('artifacts'), report));
-		assert.equal(target.data.icon, 'database');
+		assert.equal(target.renderer.type, 'table');
+		assert.equal(target.data.name, 'X');
+		// the outputs block only holds the report and its label
+		assert.ok(blockOf('artifacts').size.height < blockOf('target').size.height);
+		assert.equal(blockOf('artifacts').position.y + blockOf('artifacts').size.height, blockOf('source').position.y + blockOf('source').size.height);
 		for (const id of ['source', 'target']) assert.equal(blockOf(id).data.itemList[0].icon, 'database');
 		for (const node of diagram.nodes.filter(node => node.id.startsWith('flow-table:'))) assert.ok(contains(blockOf('source'), node));
 		for (const node of diagram.nodes.filter(node => node.id.startsWith('flow-batch:'))) assert.ok(contains(blockOf('server'), node));
@@ -252,10 +256,10 @@ test('a report shows how it goes first; its tables are a click away, not stacked
 	}
 	const run = provider.viewGet('/overview/run/flow').diagram;
 	const idList = run.nodes.map((node) => node.id);
-	for (const id of ['flow-table:ex.pw.t.a', 'flow-batch:a-1.csv', 'flow-send', 'flow-target', 'flow-retry', 'flow-dlq', 'flow-report']) assert.ok(idList.includes(id), id);
+	for (const id of ['flow-table:ex.pw.t.a', 'flow-batch:a-1.csv', 'flow-send', 'flow-target:ex.cn.t.x', 'flow-retry', 'flow-dlq', 'flow-report']) assert.ok(idList.includes(id), id);
 	assert.equal(run.nodes.find((node) => node.id === 'flow-dlq').link, '/overview/run/dlq');
 	const verify = provider.viewGet('/overview/verify/flow').diagram.nodes.map((node) => node.id);
-	for (const id of ['flow-batch:a-1.csv', 'verify-set', 'verify-compare', 'verify-target', 'verify-exception', 'verify-report']) assert.ok(verify.includes(id), id);
+	for (const id of ['flow-batch:a-1.csv', 'verify-set', 'verify-compare', 'verify-target:ex.cn.t.x', 'verify-exception', 'verify-report']) assert.ok(verify.includes(id), id);
 });
 
 test('run and verify flows color each table and all its batches alike, including DLQ batches', () => {
@@ -299,3 +303,214 @@ test('the order is drawn from the lookups of the target, wrapping long rows', ()
 	assert.equal(connections[0].source.nodeId, 'rank-table:f');
 	assert.equal(connections[0].target.nodeId, 'rank-table:a');
 });
+
+test('the flows end in the tables of the target, in the tone of the tables they come from', () => {
+	const tableOf = (key, name, db) => ({ key, kind: 'schema-table', path: `/example/schema/${db}/table/${name}`, data: { db, logical: name, name: name.toUpperCase(), columnList: [] } });
+	const mappingOf = (source, target) => ({ key: `map.${source}`, kind: 'mapping-table', path: `/example/mapping/table/${source}`, data: { source, target, rowKeyList: [] } });
+	const modelTwo = migrationModelBuild('example', [
+		tableOf('s.a', 'a', 'pw'), tableOf('s.b', 'b', 'pw'), tableOf('t.a', 'ta', 'connect'), tableOf('t.b', 'tb', 'connect'),
+		mappingOf('s.a', 't.a'), mappingOf('s.b', 't.b'),
+		{ key: 'plan', kind: 'plan', path: '/example/plan', data: { batchList: [{ table: 's.a', file: 'a-1.csv', rowCount: 100 }, { table: 's.a', file: 'a-2.csv', rowCount: 50 }, { table: 's.b', file: 'b-1.csv', rowCount: 150 }] } },
+		{ key: 'run', kind: 'report-run', path: '/example/report/run', data: { stat: {}, batchList: [{ file: 'a-1.csv', success: 100 }, { file: 'a-2.csv', success: 50 }, { file: 'b-1.csv', success: 149 }] } },
+		{ key: 'verify', kind: 'report-verify', path: '/example/report/verify', data: { stat: {}, checkList: [], exceptionList: [] } },
+	]);
+	const providerTwo = migrationProviderBuild(modelTwo);
+	const run = providerTwo.viewGet('/overview/run/flow').diagram;
+	const nodeOf = (diagram, id) => diagram.nodes.find((node) => node.id === id);
+	assert.equal(nodeOf(run, 'flow-target:t.a').data.tone, nodeOf(run, 'flow-table:s.a').data.tone);
+	assert.equal(nodeOf(run, 'flow-target:t.b').data.tone, nodeOf(run, 'flow-table:s.b').data.tone);
+	assert.equal(nodeOf(run, 'flow-target:t.a').data.rows[0].name, '150 row');
+	assert.equal(nodeOf(run, 'flow-target:t.b').data.rows[0].name, '149 row');
+	for (const id of ['t.a', 't.b']) {
+		assert.ok(run.connections.some((line) => line.source.nodeId === 'flow-send' && line.target.nodeId === `flow-target:${id}`));
+		assert.ok(run.connections.some((line) => line.source.nodeId === `flow-target:${id}` && line.target.nodeId === 'flow-report'));
+	}
+	const verify = providerTwo.viewGet('/overview/verify/flow').diagram;
+	for (const id of ['t.a', 't.b']) assert.ok(verify.connections.some((line) => line.source.nodeId === `verify-target:${id}` && line.target.nodeId === 'verify-compare'));
+	assert.doesNotThrow(() => diagramNormalize({ version: 1, ...run }, registry));
+});
+
+test('a plan whose tables have no mapping yet ends in the database itself', () => {
+	const modelBare = migrationModelBuild('example', [
+		{ key: 's.a', kind: 'schema-table', path: '/example/schema/pw/table/a', data: { db: 'pw', logical: 'a', name: 'A', columnList: [] } },
+		{ key: 'plan', kind: 'plan', path: '/example/plan', data: { batchList: [{ table: 's.a', file: 'a-1.csv', rowCount: 1 }] } },
+		{ key: 'run', kind: 'report-run', path: '/example/report/run', data: { stat: {}, batchList: [] } },
+	]);
+	const diagram = migrationProviderBuild(modelBare).viewGet('/overview/run/flow').diagram;
+	assert.equal(diagram.nodes.find((node) => node.id === 'flow-target').renderer.type, 'card-brief');
+});
+
+test('the patterns of finding a row: a title, then lanes of data titled with the tables they apply to', () => {
+	const tableOf = (key, db, logical, columnIdList) => ({ key, kind: 'schema-table', path: `/example/schema/${db}/table/${logical}`, data: { db, logical, name: logical.toUpperCase(), columnList: columnIdList.map((id) => ({ id, name: id, logical: id, type: 'Text' })) } });
+	const mappingOf = (source, target, match) => ({ key: `map.${source}`, kind: 'mapping-table', path: `/example/mapping/table/${source}`, data: { source, target, rowKeyList: [], ...(match ? { match } : {}) } });
+	const modelMatch = migrationModelBuild('example', [
+		tableOf('s.a', 'pw', 'a', ['id']), tableOf('t.a', 'connect', 'ta', ['id']),
+		tableOf('s.u', 'pw', 'u', ['id', 'domain']), tableOf('t.u', 'connect', 'tu', ['id', 'domain']),
+		tableOf('s.n', 'pw', 'n', ['tableid', 'u', 'a']), tableOf('t.n', 'connect', 'tn', ['tableid', 'u', 'a']),
+		mappingOf('s.a', 't.a'), mappingOf('s.u', 't.u', 'key'), mappingOf('s.n', 't.n', 'pair'),
+		{ key: 'verify', kind: 'report-verify', path: '/example/report/verify', data: { stat: {}, checkList: [], exceptionList: [], matchIntro: 'What this is about.', matchList: [
+			{ id: 'guid', title: 'Same GUID', source: { table: 's.a', rowList: [{ column: 'id', value: 'x', isKey: true }] }, target: { table: 't.a', rowList: [{ column: 'id', value: 'x', isKey: true }] }, stepList: [{ id: 'read', title: 'Read', from: 'id', to: 'id' }], result: { title: 'Found' } },
+			{ id: 'key', title: 'Another column', source: { table: 's.u', rowList: [{ column: 'domain', value: 'A', isKey: true }] }, target: { table: 't.u', rowList: [{ column: 'domain', value: 'a', isKey: true }] }, stepList: [{ id: 'find', title: 'Find', from: 'domain', to: 'domain' }], result: { title: 'GUID map' } },
+			{ id: 'pair', title: 'The pair', source: { table: 's.n', rowList: [{ column: 'tableid', value: 't' }, { column: 'u', value: '1', isKey: true }, { column: 'a', value: '2', isKey: true }] }, target: { table: 't.n', rowList: [{ column: 'tableid', value: 't' }, { column: 'u', value: '9', isKey: true }, { column: 'a', value: '2', isKey: true }] }, stepList: [{ id: 'u', title: 'User', from: 'u', to: 'u' }, { id: 'a', title: 'Area', from: 'a', to: 'a' }], result: { title: 'Pair found' } },
+		] } },
+	]);
+	const providerMatch = migrationProviderBuild(modelMatch);
+	const registryMatch = switchRegistryBuild(powerPlatformNodeRegistry);
+	const all = providerMatch.viewGet('/overview/verify/match').diagram;
+	assert.doesNotThrow(() => diagramNormalize({ version: 1, ...all }, registryMatch));
+	const nodeOf = (diagram, id) => diagram.nodes.find((node) => node.id === id);
+	const laneTextOf = (id) => nodeOf(all, `match:${id}:lane`).data.itemList.map((item) => item.text).join(' | ');
+	assert.equal(laneTextOf('guid'), 'Pattern 1: Same GUID | Tables: TA');
+	assert.equal(laneTextOf('key'), 'Pattern 2: Another column | Tables: TU');
+	assert.equal(laneTextOf('pair'), 'Pattern 3: The pair | Tables: TN');
+	// the title of what this part is about comes first, the title of a pattern above its lane
+	const intro = nodeOf(all, 'match:intro');
+	assert.deepEqual(intro.data.itemList.map((item) => [item.level, item.text]), [[1, 'Finding the row in the target'], [undefined, 'What this is about.']]);
+	assert.ok(intro.position.y + intro.size.height <= nodeOf(all, 'match:guid:lane').position.y);
+	assert.equal(nodeOf(all, 'match:guid:lane').data.labelSide, 'top');
+	assert.equal(nodeOf(all, 'match:guid:lane').data.itemList[0].level, 2);
+	assert.ok(nodeOf(all, 'match:guid:source').position.y > nodeOf(all, 'match:guid:lane').position.y + 40);
+	// the key is what the lines join, and what is not the key has no line
+	const rowOf = (id) => nodeOf(all, 'match:pair:source').data.rows.find((row) => row.id === id);
+	assert.ok(rowOf('u').tone);
+	assert.ok(!rowOf('tableid').tone);
+	assert.ok(all.connections.some((line) => line.source.nodeId === 'match:pair:source' && line.target.nodeId === 'match:pair:step:u'));
+	assert.ok(!nodeOf(all, 'match:pair:source').handles.some((handle) => handle.anchor.target === 'row/tableid'));
+	// the columns of the flows: their headings, each card inside its column, what the server does in one column
+	const lane = nodeOf(all, 'match:pair:lane');
+	assert.deepEqual(lane.data.columnList.map((column) => [column.icon, column.text]), [['database', 'Source database (Source)'], ['server', 'Migration server'], ['database', 'Target database (Target)']]);
+	assert.ok(nodeOf(all, 'match:pair:source').data.nameLogical === 'n', 'the database is said by the column');
+	const inColumn = (node, column) => node.position.x >= lane.position.x + column.x && node.position.x + node.size.width <= lane.position.x + column.x + column.width;
+	const [columnSource, columnServer, columnTarget] = lane.data.columnList;
+	assert.ok(inColumn(nodeOf(all, 'match:pair:source'), columnSource));
+	assert.ok(inColumn(nodeOf(all, 'match:pair:target'), columnTarget));
+	const serverNodeList = ['step:u', 'step:a', 'result'].map((part) => nodeOf(all, `match:pair:${part}`));
+	for (const node of serverNodeList) assert.ok(inColumn(node, columnServer), node.id);
+	assert.equal(new Set(serverNodeList.map((node) => node.position.x)).size, 1);
+	assert.ok(serverNodeList[0].position.y < serverNodeList[1].position.y && serverNodeList[1].position.y < serverNodeList[2].position.y);
+	assert.ok(all.connections.some((line) => line.source.nodeId === 'match:pair:target' && line.target.nodeId === 'match:pair:result'));
+	// the lines stay in their pattern
+	for (const line of all.connections) assert.equal(line.source.nodeId.split(':')[1], line.target.nodeId.split(':')[1], line.id);
+	// lanes do not overlap
+	const laneList = ['guid', 'key', 'pair'].map((id) => nodeOf(all, `match:${id}:lane`));
+	for (let index = 1; index < laneList.length; index += 1) assert.ok(laneList[index].position.y >= laneList[index - 1].position.y + laneList[index - 1].size.height);
+	// a pattern alone keeps its node ids, so a switch or an animation moves them
+	const one = providerMatch.viewGet('/overview/verify/match/pair').diagram;
+	assert.doesNotThrow(() => diagramNormalize({ version: 1, ...one }, registryMatch));
+	assert.ok(nodeOf(one, 'match:pair:source'));
+	assert.ok(!nodeOf(one, 'match:guid:source'));
+	assert.ok(!nodeOf(one, 'match:intro'));
+	assert.equal(providerMatch.labelGet('/overview/verify/match/key'), 'Another column');
+	assert.deepEqual(providerMatch.childListGet('/overview/verify/match').map((item) => item.path), ['guid', 'key', 'pair'].map((id) => `/overview/verify/match/${id}`));
+	// in the report, after its flow; and the step comparing values opens it
+	const stack = providerMatch.viewGet('/overview/verify').diagram.nodes[0].data.itemList;
+	assert.deepEqual(stack.slice(0, 2).map((item) => item.id), ['flow', 'match']);
+	assert.equal(nodeOf(providerMatch.viewGet('/overview/verify/flow').diagram, 'verify-compare').link, '/overview/verify/match');
+	assert.equal(providerMatch.viewGet('/overview/verify/nothing'), null);
+});
+
+test('a report with no patterns has no such section', () => {
+	const provider = migrationProviderBuild(migrationModelBuild('example', [{ key: 'verify', kind: 'report-verify', path: '/example/report/verify', data: { stat: {}, checkList: [], exceptionList: [] } }]));
+	assert.equal(provider.viewGet('/overview/verify/match'), null);
+	assert.ok(!provider.viewGet('/overview/verify').diagram.nodes[0].data.itemList.some((item) => item.id === 'match'));
+});
+
+// many batches, a master table, the plan after the migration
+const itemPostListBuild = () => {
+	const tableOf = (key, db, logical, columnList, extra = {}) => ({ key, kind: 'schema-table', path: `/example/schema/${db}/table/${logical}`, data: { db, logical, name: logical.toUpperCase(), columnList, ...extra } });
+	const column = (id, extra = {}) => ({ id, name: id, logical: id, type: 'Text', ...extra });
+	const rowsOf = (...idList) => ({ rowList: idList.map((id, index) => ({ column: id, value: `v${index}`, isKey: index === 0 })) });
+	return [
+		{ key: 'sys', kind: 'system', path: '/example/system', data: { source: { id: 'pw', name: 'PW' }, target: { id: 'connect', name: 'Connect' }, tool: { name: 'Tool', stepList: [{ id: 'plan', name: 'p', report: 'plan' }, { id: 'run', name: 'r', report: 'run' }, { id: 'verify', name: 'v', report: 'verify' }, { id: 'post', name: 'x', report: 'post' }] }, labels: {} } },
+		tableOf('s.m', 'pw', 'm', [column('mid', { key: 'PK' }), column('code')], { isMaster: true }),
+		tableOf('t.m', 'connect', 'tm', [column('mid', { key: 'PK' }), column('code')], { isMaster: true }),
+		tableOf('s.a', 'pw', 'a', [column('aid', { key: 'PK' }), column('m', { lookup: 's.m', key: 'FK' })]),
+		tableOf('t.a', 'connect', 'ta', [column('aid', { key: 'PK' }), column('m', { lookup: 't.m', key: 'FK' }), column('createdon')]),
+		{ key: 'map.m', kind: 'mapping-table', path: '/example/mapping/table/m--tm', data: { source: 's.m', target: 't.m', isTableLevel: true, match: 'key', label: 'As a table', rowKeyList: [] } },
+		{ key: 'map.a', kind: 'mapping-table', path: '/example/mapping/table/a--ta', data: { source: 's.a', target: 't.a', rowKeyList: [] } },
+		{ key: 'plan', kind: 'plan', path: '/example/plan', data: { batchList: [{ table: 's.a', file: 'a-001.csv', rowCount: 100 }, { table: 's.a', isOmitted: true, count: 298, rowCount: 29800 }, { table: 's.a', file: 'a-300.csv', rowCount: 50 }] } },
+		{ key: 'run', kind: 'report-run', path: '/example/report/run', data: { stat: { success: 29950, dlq: 0 }, batchList: [{ file: 'a-001.csv', rowCount: 100, success: 100, dlq: 0 }, { isOmitted: true, count: 298, rowCount: 29800, success: 29800, dlq: 0 }, { file: 'a-300.csv', rowCount: 50, success: 50, dlq: 0 }] } },
+		{ key: 'verify', kind: 'report-verify', path: '/example/report/verify', data: { stat: {}, checkList: [], exceptionList: [] } },
+		{ key: 'post', kind: 'plan-post', path: '/example/plan-post', data: {
+			intro: 'After it all.',
+			master: { title: 'Fix references', source: { table: 's.m', ...rowsOf('code', 'mid') }, target: { table: 't.m', ...rowsOf('code', 'mid') }, referSource: { table: 's.a', ...rowsOf('m', 'aid') }, referTarget: { table: 't.a', ...rowsOf('m', 'aid') }, stepList: [{ id: 'map', title: 'Map' }, { id: 'find', title: 'Find' }, { id: 'write', title: 'Write' }] },
+			audit: { title: 'System columns', source: { table: 's.a', ...rowsOf('aid') }, targetRun: { table: 't.a', label: 'Loaded', rowList: [{ column: 'createdon', value: 'now', tone: 'red' }] }, targetPost: { table: 't.a', label: 'After', rowList: [{ column: 'createdon', value: 'then', tone: 'green' }] }, stepRun: { title: 'Create' }, stepPost: { title: 'Script' } },
+		} },
+	];
+};
+
+test('many batches: the first, the last, and dots between them in the rows and the cards', () => {
+	const provider = migrationProviderBuild(migrationModelBuild('example', itemPostListBuild()));
+	for (const kind of ['run', 'verify']) {
+		const diagram = provider.viewGet(`/overview/${kind}/flow`).diagram;
+		const nodeOf = (id) => diagram.nodes.find((node) => node.id === id);
+		const dots = diagram.nodes.filter((node) => node.renderer.type === 'card-three-dots');
+		assert.equal(dots.length, 1);
+		assert.equal(dots[0].data.text, '298 batches');
+		assert.ok(nodeOf('flow-batch:a-001.csv').position.y < dots[0].position.y && dots[0].position.y < nodeOf('flow-batch:a-300.csv').position.y);
+		const table = nodeOf('flow-table:s.a');
+		const rowNameList = table.data.rows.map((row) => (row.isEllipsis ? '...' : row.name));
+		assert.deepEqual(rowNameList, ['row 1', '...', 'row 100', '...', '...', '...', 'row 29,901', '...', 'row 29,950']);
+		assert.equal(table.data.rowGroupList.length, 2);
+		assert.ok(diagram.connections.some((line) => line.source.nodeId === 'flow-table:s.a' && line.target.nodeId === dots[0].id && line.style.strokeDasharray));
+		assert.equal(nodeOf(`${kind === 'run' ? 'flow' : 'verify'}-target:t.a`).data.rows[0].name, '29,950 row');
+	}
+	assert.ok(provider.viewGet('/overview/run').diagram.nodes[0].data.itemList.find((item) => item.id === 'result').node.data.text.startsWith('300 batches'));
+	assert.ok(provider.viewGet('/overview/run/batch').diagram.nodes[0].data.rows[1].file.includes('298'));
+	assert.ok(provider.viewGet('/overview/plan/batch').diagram.nodes.find((node) => node.id === 'batch:s.a').data.rows[1].file.includes('298'));
+});
+
+test('a master table is told apart wherever it is drawn, and maps as a whole table', () => {
+	const provider = migrationProviderBuild(migrationModelBuild('example', itemPostListBuild()));
+	const er = provider.viewGet('/overview/pw').diagram;
+	const master = er.nodes.find((node) => node.id === 'table:pw:m');
+	assert.equal(master.data.badge, 'Master');
+	assert.equal(master.data.tone, 'amber');
+	assert.equal(er.nodes.find((node) => node.id === 'table:pw:a').data.badge, undefined);
+	const mapping = provider.viewGet('/overview/mapping/m--tm').diagram;
+	assert.deepEqual(mapping.connections.map((line) => [line.source.nodeId, line.target.nodeId, line.label.text]), [['table:pw:m', 'table:connect:tm', 'As a table']]);
+	assert.deepEqual(provider.childListGet('/overview/mapping/m--tm'), []);
+	assert.equal(provider.viewGet('/overview/plan/order').diagram.nodes.find((node) => node.data?.title === 'TM').data.tone, 'amber');
+});
+
+test('the plan after the migration: a report of its own, in the overview and the tabs', () => {
+	const provider = migrationProviderBuild(migrationModelBuild('example', itemPostListBuild()));
+	const registryPost = switchRegistryBuild(powerPlatformNodeRegistry);
+	for (const path of ['/overview', '/overview/tabs/post', '/overview/post', '/overview/post/master', '/overview/post/audit']) {
+		assert.doesNotThrow(() => diagramNormalize({ version: 1, ...provider.viewGet(path).diagram }, registryPost), path);
+	}
+	assert.deepEqual(provider.viewGet('/overview/post').diagram.nodes[0].data.itemList.map((item) => item.id), ['intro', 'master', 'audit']);
+	assert.equal(provider.labelGet('/overview/post/master'), 'Fix references');
+	assert.ok(provider.childListGet('/overview').some((item) => item.path === '/overview/post'));
+	const overview = provider.viewGet('/overview').diagram;
+	const reportList = ['plan', 'run', 'verify', 'post'].map((id) => overview.nodes.find((node) => node.id === `report:${id}`));
+	for (let index = 1; index < reportList.length; index += 1) assert.ok(reportList[index].position.x >= reportList[index - 1].position.x + reportList[index - 1].size.width + 100);
+	assert.ok(overview.connections.some((line) => line.id === 'verify-post'));
+	assert.ok(overview.connections.some((line) => line.id === 'make:post' && line.target.nodeId === 'report:post'));
+	// its server is one of its own
+	const master = provider.viewGet('/overview/post/master').diagram;
+	const block = master.nodes.find((node) => node.id === 'post-master:block');
+	assert.deepEqual(block.data.columnList.map((column) => column.text), ['Source database (PW)', 'Post-processing server', 'Target database (Connect)']);
+	assert.match(block.data.itemList.at(-1).text, /Columns to update: TA\.m/);
+	assert.equal(master.nodes.find((node) => node.id === 'post-master:source').data.badge, 'Master');
+	assert.equal(master.nodes.find((node) => node.id === 'post-master:refer-source').data.badge, undefined);
+	const audit = provider.viewGet('/overview/post/audit').diagram;
+	assert.deepEqual(audit.nodes.find((node) => node.id === 'post-audit:block').data.columnList.map((column) => column.text), ['Source database (PW)', 'Migration server', 'Post-processing server', 'Target database (Connect)']);
+	assert.equal(audit.nodes.find((node) => node.id === 'post-audit:target-run').data.rows[0].tone, 'red');
+	assert.equal(audit.nodes.find((node) => node.id === 'post-audit:target-post').data.rows[0].tone, 'green');
+	assert.match(audit.nodes.find((node) => node.id === 'post-audit:target-run').data.nameLogical, /^Loaded \/ /);
+});
+
+test('the reports are at full height, in the overview and on their own; without the item there is no such report', () => {
+	const provider = migrationProviderBuild(migrationModelBuild('example', itemPostListBuild()));
+	for (const id of ['plan', 'run', 'verify', 'post']) {
+		const { data } = provider.viewGet(`/overview/${id}`).diagram.nodes[0];
+		assert.equal(data.isHeightFullEmbedded, true);
+		assert.equal(data.isHeightFullFocused, true);
+	}
+	const providerBare = migrationProviderBuild(migrationModelBuild('example', itemPostListBuild().filter((item) => item.kind !== 'plan-post')));
+	assert.equal(providerBare.viewGet('/overview/post'), null);
+	assert.ok(!providerBare.viewGet('/overview').diagram.nodes.some((node) => node.id === 'report:post'));
+	assert.ok(!providerBare.viewGet('/overview').diagram.connections.some((line) => line.id === 'make:post' || line.id === 'verify-post'));
+});
+

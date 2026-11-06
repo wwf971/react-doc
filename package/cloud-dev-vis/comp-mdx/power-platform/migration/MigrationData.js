@@ -9,6 +9,7 @@
 //   /{category}/mapping/row/{source}--{target}/{id}   one column: how it is carried over, or abandoned
 //   /{category}/mapping/choice/{source}--{target}     a pair of option sets: value to value
 //   /{category}/plan                                  a note on the order of loading, batches
+//   /{category}/plan-post                             what is done after the migration
 //   /{category}/report/run                            what a run did
 //   /{category}/report/verify                         what the check found
 //   /{category}/layout                                the bounding boxes of the views
@@ -18,7 +19,7 @@
 // kinds; nothing reads a category by name except the block choosing it. An item names
 // another by its key, which never changes, not by its path.
 
-export const MIGRATION_KIND_LIST = ['system', 'schema-table', 'schema-choice', 'mapping-table', 'mapping-row', 'mapping-choice', 'plan', 'report-run', 'report-verify', 'layout'];
+export const MIGRATION_KIND_LIST = ['system', 'schema-table', 'schema-choice', 'mapping-table', 'mapping-row', 'mapping-choice', 'plan', 'plan-post', 'report-run', 'report-verify', 'layout'];
 
 export function migrationSegmentBuild(text) {
 	return String(text ?? '').trim().replace(/[\s/]+/g, '-');
@@ -37,6 +38,7 @@ export function migrationPathBuild(category, kind, part = {}) {
 	if (kind === 'mapping-row') return `${root}/mapping/row/${migrationPairBuild(part.source, part.target)}/${migrationSegmentBuild(part.id)}`;
 	if (kind === 'mapping-choice') return `${root}/mapping/choice/${migrationPairBuild(part.source, part.target)}`;
 	if (kind === 'plan') return `${root}/plan`;
+	if (kind === 'plan-post') return `${root}/plan-post`;
 	if (kind === 'report-run') return `${root}/report/run`;
 	if (kind === 'report-verify') return `${root}/report/verify`;
 	if (kind === 'layout') return `${root}/layout`;
@@ -59,6 +61,7 @@ export function migrationModelBuild(category, itemList) {
 		mappingRowByKey: new Map(),
 		mappingChoiceByKey: new Map(),
 		plan: null,
+		planPost: null,
 		reportRun: null,
 		reportVerify: null,
 		layout: { viewByPath: {} },
@@ -77,6 +80,7 @@ export function migrationModelBuild(category, itemList) {
 		else if (item.kind === 'mapping-row') model.mappingRowByKey.set(item.key, { ...record, stepList: record.stepList ?? [] });
 		else if (item.kind === 'mapping-choice') model.mappingChoiceByKey.set(item.key, { ...record, optionList: record.optionList ?? [] });
 		else if (item.kind === 'plan') model.plan = record;
+		else if (item.kind === 'plan-post') model.planPost = record;
 		else if (item.kind === 'report-run') model.reportRun = record;
 		else if (item.kind === 'report-verify') model.reportVerify = record;
 		else if (item.kind === 'layout') { model.layout = { viewByPath: {}, ...data }; model.layoutKey = item.key; }
@@ -117,6 +121,18 @@ export function migrationTableListOf(model, dbId) {
 
 export function migrationChoiceListOf(model, dbId) {
 	return [...model.choiceByKey.values()].filter((choice) => choice.db === dbId);
+}
+
+// how many batches a list of them stands for: an entry may leave many out (isOmitted, count)
+export function migrationBatchCountOf(batchList) {
+	return (batchList ?? []).reduce((sum, batch) => sum + (batch.isOmitted ? batch.count ?? 0 : 1), 0);
+}
+
+// the columns looking up a master table: { table, column, master }, of one database
+export function migrationMasterReferListOf(model, dbId) {
+	return migrationTableListOf(model, dbId).flatMap((table) => table.columnList
+		.filter((column) => model.tableByKey.get(column.lookup)?.isMaster)
+		.map((column) => ({ table, column, master: model.tableByKey.get(column.lookup) })));
 }
 
 export function migrationMappingRowListOf(model, mapping) {

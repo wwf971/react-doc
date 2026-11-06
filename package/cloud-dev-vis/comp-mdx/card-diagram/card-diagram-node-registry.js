@@ -4,7 +4,7 @@ import { tableCardNormalize, tableCardAnchorListGet } from './TableCardData.js';
 import { tableCardSchema } from './TableCardSchema.js';
 import { TableCard } from './TableCard.jsx';
 import { OperatorCard } from './OperatorCard.jsx';
-import { CardBrief, CardNote } from './CompactCard.jsx';
+import { CardBrief, CardNote, CardThreeDots } from './CompactCard.jsx';
 import { ViewBoxCard } from './ViewBoxCard.jsx';
 import { ColorBlock, colorBlockNormalize } from './ColorBlock.jsx';
 
@@ -76,6 +76,16 @@ export const cardBriefNodeKind = {
 	},
 };
 
+// what is left out between two cards of a long series. written by a generator of
+// views, not offered by the editor
+export const cardThreeDotsNodeKind = {
+	type: 'card-three-dots',
+	label: 'Left out',
+	contract: compactContract({ width: 170, height: 40 }),
+	schema: null,
+	Card: CardThreeDots,
+};
+
 // the bounding box of a view (card-diagram-flexible-switch.md#the-bounding-box): the
 // part of the diagram a camera shows by default, and an embedding of the view shows.
 // a red frame an author places and resizes; it never appears in a picture, and in
@@ -108,6 +118,6 @@ export const colorBlockNodeKind = {
 	},
 };
 
-export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, viewBoxNodeKind, colorBlockNodeKind];
+export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, cardThreeDotsNodeKind, viewBoxNodeKind, colorBlockNodeKind];
 
 export const cardDiagramNodeRegistry = nodeRegistryBuild({ id: 'card-diagram', label: 'Card diagram', kindList: cardDiagramNodeKindList });

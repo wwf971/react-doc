@@ -14,7 +14,7 @@ export const DataverseCard = observer(function DataverseCard({ node, schema, anc
 	return (
 		<TableCard
 			node={node} schema={schema} editor={editor} nodeId={nodeId} anchorRef={anchorRef}
-			className={isChoice ? 'is-choice' : ''}
+			className={isChoice ? 'is-choice' : node.data.isMaster ? 'is-master' : ''}
 			columnsStyle={dataverseColumnsStyle}
 			titleLeading={isChoice ? <span className="doc-er-table-badge">Global Choice</span> : null}
 			cellClassName={(field, row) => field.id === 'key' ? `doc-er-table-key${row.key ? ' is-set' : ''}` : field.id === 'name' ? 'doc-er-table-column-name' : field.id === 'nameLogical' ? 'doc-er-table-column-logical' : 'doc-er-table-column-type'}

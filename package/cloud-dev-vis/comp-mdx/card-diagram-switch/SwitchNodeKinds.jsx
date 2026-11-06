@@ -1,6 +1,6 @@
 import { useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Boxes, Expand, Layers } from '../../../../main/frontend/UICommon.js';
+import { Boxes, Expand, FoldVertical, Layers, UnfoldVertical } from '../../../../main/frontend/UICommon.js';
 import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
 import { nodeRegistryBuild } from '../card-diagram/node-registry.js';
 import { diagramNormalize } from '../card-diagram/DiagramERData.js';
@@ -19,7 +19,9 @@ import { CARD_ICON_BY_NAME } from '../card-diagram/CompactCard.jsx';
 //   view-stack   a scrolling area of items stacked vertically: each an embedded view
 //                as wide as the area, or a card. data: itemList: [{ id, view?, box?,
 //                padding?, node?, link?, title?, subtitle?, icon?, tone? }], title?,
-//                subtitle?, icon?, tone?, statList?, isChromeHidden?
+//                subtitle?, icon?, tone?, statList?, isChromeHidden?, isHeightFullEmbedded?,
+//                isHeightFullFocused? (as tall as its items, no scrollbar; a button of its
+//                title bar and SwitchStore.stackHeightFullSet change it)
 //   view-tabs    the header of views arranged in tabs. data: tabList, focus. written by
 //                switchTabsApply, never by hand
 //
@@ -146,7 +148,7 @@ const ViewStackItem = observer(function ViewStackItem({ item, index, store, stac
 // a scrolling area of items stacked vertically (card-diagram-flexible-switch.md#a-scrolling-stack):
 // nothing has to shrink for everything to be visible. its scroll position is the store's,
 // so every drawing of it agrees and a program can set it (SwitchStore.scrollTo)
-export const ViewStackTitleBar = observer(function ViewStackTitleBar({ data, nodeId, anchorRef, presentation, onFocus }) {
+export const ViewStackTitleBar = observer(function ViewStackTitleBar({ data, nodeId, anchorRef, presentation, onFocus, isHeightFull, onHeightToggle }) {
 	const { config = {} } = useContext(DiagramRenderContext);
 	const title = switchStackTitleBarRead(data, presentation);
 	if (!title) return null;
@@ -163,7 +165,12 @@ export const ViewStackTitleBar = observer(function ViewStackTitleBar({ data, nod
 			)) : <span className="doc-switch-stack-title-text">{title.text}</span>}
 			{title.isLegacy && data.subtitle ? <span className="doc-switch-embed-subtitle">{data.subtitle}</span> : null}
 			{title.isLegacy && data.statList?.length ? <span className="doc-switch-embed-stat">{data.statList.map((stat, index) => <span key={index}>{stat}</span>)}</span> : null}
-			{onFocus ? <button type="button" className="doc-switch-stack-focus" title="Focus this container" aria-label="Focus this container" onClick={onFocus}><Expand size={13} aria-hidden="true" /></button> : null}
+			{onFocus || onHeightToggle ? (
+				<span className="doc-switch-stack-action-list">
+					{onFocus ? <button type="button" className="doc-switch-stack-focus" title="Focus this container" aria-label="Focus this container" onClick={onFocus}><Expand size={13} aria-hidden="true" /></button> : null}
+					{onHeightToggle ? <button type="button" className="doc-switch-stack-focus doc-switch-stack-height" title={isHeightFull ? 'Scroll in a fixed height' : 'Show at full height'} aria-label={isHeightFull ? 'Scroll in a fixed height' : 'Show at full height'} aria-pressed={isHeightFull} onClick={onHeightToggle}>{isHeightFull ? <FoldVertical size={13} aria-hidden="true" /> : <UnfoldVertical size={13} aria-hidden="true" />}</button> : null}
+				</span>
+			) : null}
 		</div>
 	);
 });
@@ -181,6 +188,8 @@ export const ViewStackCard = observer(function ViewStackCard({ node, nodeId, anc
 	const isTitleVisible = Boolean(switchStackTitleBarRead(data, presentation));
 	const isFrameVisible = switchStackFrameIsVisible(data, presentation);
 	const onFocus = store && data.focusPath && isEmbedded && !isStatic && !store.isBoxAdjust && !store.plan ? () => { void store.pathSet(data.focusPath); } : undefined;
+	const isHeightFull = node.size?.height === 'auto';
+	const onHeightToggle = store && !isStatic && !store.isBoxAdjust && !store.plan ? () => { store.stackHeightFullSet({ path: pathOwnerOf(context), nodeId, isFull: !isHeightFull }); } : undefined;
 	// the wheel: over a stack embedded in a card it is the canvas's, as over any card (its
 	// scrollbar still works). in a stack's own view it scrolls the stack while the stack
 	// can scroll, and the end of that gesture stops here; then it is the canvas's again.
@@ -229,8 +238,8 @@ export const ViewStackCard = observer(function ViewStackCard({ node, nodeId, anc
 		};
 	}, [store, stackKey, isTitleVisible]);
 	return (
-		<div className={`doc-switch-stack${isTitleVisible ? '' : ' is-chrome-hidden'}${isFrameVisible ? '' : ' is-frame-hidden'}`} data-tone={data.tone || 'slate'} data-presentation={isEmbedded ? 'embedded' : 'focused'}>
-			<ViewStackTitleBar data={data} nodeId={nodeId} anchorRef={anchorRef} presentation={presentation} onFocus={onFocus} />
+		<div className={`doc-switch-stack${isTitleVisible ? '' : ' is-chrome-hidden'}${isFrameVisible ? '' : ' is-frame-hidden'}${isHeightFull ? ' is-height-full' : ''}`} data-tone={data.tone || 'slate'} data-presentation={isEmbedded ? 'embedded' : 'focused'}>
+			<ViewStackTitleBar data={data} nodeId={nodeId} anchorRef={anchorRef} presentation={presentation} onFocus={onFocus} isHeightFull={isHeightFull} onHeightToggle={onHeightToggle} />
 			<div className="doc-switch-stack-frame">
 				<div ref={scrollRef} className="doc-switch-stack-scroll nopan nodrag" onScroll={store ? (event) => store.stackScrollReport(stackKey, event.currentTarget) : undefined}>
 					<div className="doc-switch-stack-list">
@@ -302,6 +311,9 @@ export const viewStackNodeKind = {
 			switchStackTitleBarNormalize(data.titleBar);
 			if (data.focusPath !== undefined && (typeof data.focusPath !== 'string' || !data.focusPath.trim())) throw new Error('A stack focusPath must be a nonempty view path.');
 			if (data.isFrameVisibleFocused !== undefined && typeof data.isFrameVisibleFocused !== 'boolean') throw new Error('A stack isFrameVisibleFocused must be a boolean.');
+			for (const key of ['isHeightFullEmbedded', 'isHeightFullFocused']) {
+				if (data[key] !== undefined && typeof data[key] !== 'boolean') throw new Error(`A stack ${key} must be a boolean.`);
+			}
 			const idSet = new Set();
 			for (const item of data.itemList) {
 				if (!item?.id) throw new Error('Every item of a stack needs an id.');

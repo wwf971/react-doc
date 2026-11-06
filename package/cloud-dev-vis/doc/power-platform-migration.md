@@ -19,14 +19,15 @@ The first folder of a path is the **category**: `/example` holds small, sanitize
 | Kind | Path | Holds |
 | --- | --- | --- |
 | `system` | `/{category}/system` | the two databases, the tool and its steps, `labels`: every word of the views |
-| `schema-table` | `/{category}/schema/{db}/table/{logical}` | `db`, `logical`, `name`, `columnList` |
+| `schema-table` | `/{category}/schema/{db}/table/{logical}` | `db`, `logical`, `name`, `columnList`, `isMaster?`: a master table, marked in every view |
 | `schema-choice` | `/{category}/schema/{db}/choice/{logical}` | `db`, `logical`, `name`, `optionList: [{ value, label }]` |
-| `mapping-table` | `/{category}/mapping/table/{source}--{target}` | `source`, `target` (keys of tables), `rowKeyList` (keys of its row mappings), `label?` |
+| `mapping-table` | `/{category}/mapping/table/{source}--{target}` | `source`, `target` (keys of tables), `rowKeyList` (keys of its row mappings), `label?`, `match?`: the id of the [pattern](#finding-a-row-in-the-target) that finds its rows in the target (the first pattern when absent), `isTableLevel?`: mapped as a whole table, with no row mappings: one line between the tables |
 | `mapping-row` | `/{category}/mapping/row/{source}--{target}/{id}` | `table`, `source`, `target` (column ids; `null` target: abandoned, `null` source: a default), `kind`, `label`, `stepList` |
 | `mapping-choice` | `/{category}/mapping/choice/{source}--{target}` | `source`, `target` (keys of option sets), `label`, `optionList: [{ from, to }]` (`null`: not carried over) |
-| `plan` | `/{category}/plan` | `orderNote`, `batchList` |
+| `plan` | `/{category}/plan` | `orderNote`, `batchList`: `{ table, file, range, rowCount }`, or `{ table, isOmitted: true, count, rowCount }` for the many batches a drawing leaves out |
+| `plan-post` | `/{category}/plan-post` | [what is done after the migration](#after-the-migration): `intro`, `master`, `audit` |
 | `report-run` | `/{category}/report/run` | `stat`, `batchList`, `dlqList`, `flow`: the words of its steps (`send`, `retry`, `dlq`: `{ title, tag, text }`) |
-| `report-verify` | `/{category}/report/verify` | `stat`, `checkList`, `exceptionList`, `flow` (`set`, `compare`, `exception`), `sample`: one row worked through (`{ key, note, rowList: [{ column, source, expected, actual, result, isProblem? }] }`) |
+| `report-verify` | `/{category}/report/verify` | `stat`, `checkList`, `exceptionList`, `flow` (`set`, `compare`, `exception`), `sample`: one row worked through (`{ key, note, rowList: [{ column, source, expected, actual, result, isProblem? }] }`), `matchIntro`, `matchList`: [the patterns of finding a row](#finding-a-row-in-the-target) |
 | `layout` | `/{category}/layout` | `viewByPath: { path: { box } }`, written by the viewer |
 
 **A column** is `{ id, name, logical, type, key?, isRequired?, description?, lookup?: key of a table, choice?: key of an option set }`. **A step** of a row mapping is `{ op: text, name, description }`, `{ op: mapping, name, rows: [{ key, value }] }`, `{ op: choice, mapping: key of a mapping-choice }` or `{ op: abandon }`.
@@ -45,16 +46,46 @@ An item names another by its **key**, which never changes, not by its path, as [
 | `/overview/mapping/{pair}` | two tables; a line per row mapping, whose label opens it |
 | `/overview/mapping/{pair}/{row}` | one column through its operators, the rest of the tables abbreviated |
 | `/overview/choice`, `/overview/choice/{pair}` | the mappings of option sets; value to value |
-| `/overview/plan`, `/overview/run`, `/overview/verify` | a report: its sections in a [scrolling stack](card-diagram-flexible-switch.md#a-scrolling-stack) |
+| `/overview/plan`, `/overview/run`, `/overview/verify`, `/overview/post` | a report: its sections in a [stack](card-diagram-flexible-switch.md#a-scrolling-stack), at full height both in the overview and on its own |
+| `/overview/post/master`, `/overview/post/audit` | [after the migration](#after-the-migration): the references to master tables, the system columns |
 | `/overview/plan/order` | the order of loading, as its ranks |
-| `/overview/run/flow` | how the rows were sent: each table with its rows bracketed into batches, a card per batch with its result, send, retry, dead letters, the report |
-| `/overview/verify/flow` | how the result was checked: the same batches as the reference, the set compared, the values compared with what is read back, the checks, the exceptions |
+| `/overview/run/flow` | how the rows were sent: each table with its rows bracketed into batches, a card per batch with its result, send, retry, dead letters, the tables of the target with the rows that reached them (found through the table mappings; the database itself when a table has no mapping yet), the report |
+| `/overview/verify/flow` | how the result was checked: the same batches as the reference, the set compared, the values compared with what is read back from the tables of the target, the checks, the exceptions |
+| `/overview/verify/match`, `/overview/verify/match/{id}` | how a row of the source is found in the target: the patterns one under another, or one alone |
 | `/overview/verify/sample` | one row worked through, column by column |
 | `/overview/plan/batch`, `/overview/run/{batch,dlq}`, `/overview/verify/{check,exception}` | the tables, each a view of its own |
 
 **A report shows how it went, then what came of it** ([a matter of taste](card-diagram.md#a-matter-of-taste-show-how-it-happens-then-what-came-of-it)). The run report and the verification report start with their process, a diagram with the actual figures on it, and hold short cards of totals; the tables are views of their own which those cards, and the steps of the diagram, open.
 
 **The order of loading is computed, not written** (`migrationRankBuild`), from the lookups of the target, where the rows are loaded: a table can load once what it looks up has loaded, so its rank is one past the highest rank it looks up, and a table looking up nothing has rank 1. The view draws how that comes about: the tables as labels, one line per pair of tables where one looks up the other (however many columns do), in bands by rank, wrapping as [a list on a canvas should](card-diagram.md#drawing-conventions). A lookup closing a cycle cannot be honored by an order: it is drawn dashed with a word from the data, to be filled in by a later pass.
+
+### Finding a row in the target
+
+A row can be checked only once its counterpart in the target is found, and how differs by table, so the report says it as **patterns**. The view opens with a title saying what this is about (`matchIntro`), and each pattern is a lane under a title of its own, in the columns of the flows, seen by dashed dividers rather than blocks inside the block: one row of the source, what the migration server does with its key and what comes of it (one column of cards), the row found in the target.
+
+```text
+matchList: [{ id, title, icon?,
+  source, target: { table: key of a table, rowList: [{ column: id of a column, value, isKey?, label? }] },
+  stepList: [{ id, title, tag?, text?, from: column of the source, to: column of the target }],
+  result?: { title, tag?, text } }]
+```
+
+The migration project has three, none of them known to the views:
+
+| Pattern | When | How |
+| --- | --- | --- |
+| The same GUID | a table loaded with the GUIDs of the source | the row is read by the GUID |
+| Certain columns | a table whose rows are not created by the migration, so their GUIDs differ: users, by `domainname` | the column is compared, with its form made the same (`DOMAIN\user` and a UPN), which gives a table of GUIDs from source to target |
+| The ids of both sides | the intersect table of an N:N relationship, which has nothing to compare but those ids | each id is carried over the way its own table's rows are, and the row holding both is looked for |
+
+The tables under a pattern come from `match` of the table mappings. A line never leaves its lane: a lane reads as one pattern, so where one pattern uses what another gives (an intersect table needs the table of GUIDs of the users), its step says so in words. A pattern shown alone keeps its node ids, so an animation can move through them.
+
+### After the migration
+
+Some columns cannot get their value when the rows are loaded. `plan-post` describes the run that sets them, on a server of its own, as a report beside the others (`/overview/post`); without the item there is no such report.
+
+- **References to master tables** (`master`). A master table (`isMaster`) is loaded as a whole table, without its GUIDs (`isTableLevel`, no row mappings), so a lookup of it cannot be carried over: it stays empty at the load. Afterwards a table of GUIDs is made from another column, and the lookups are set. The columns concerned are found from the schemas (`migrationMasterReferListOf`). `{ title, text?, source, target, referSource, referTarget, stepList: [{ id: map | find | write, title, tag?, text? }] }`, where the four tables are `{ table, label?, rowList: [{ column, value, isKey?, tone?, label? }] }`.
+- **System columns** (`audit`). The system sets who and when at creation, so the load cannot give the values of the source; a script writes them afterwards. `{ title, text?, source, targetRun, targetPost, stepRun, stepPost }`.
 
 Every view is a pure function of the model. A table keeps its node id (`table:{db}:{logical}`) in every view drawing it, which is what lets a switch move it.
 

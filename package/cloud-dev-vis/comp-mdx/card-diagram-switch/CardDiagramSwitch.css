@@ -297,6 +297,8 @@ button.doc-switch-edge-label:hover { background: #6d28d9; color: #fff; }
 .doc-switch-stack-chrome.is-focusable { cursor: pointer; }
 .doc-switch-stack-focus { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-left: auto; padding: 0; border: 0; border-radius: 3px; background: transparent; color: inherit; cursor: pointer; }
 .doc-switch-stack-focus:hover { background: var(--color-fd-accent); }
+.doc-switch-stack-action-list { flex: none; display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
+.doc-switch-stack-action-list .doc-switch-stack-focus { margin-left: 0; }
 .doc-switch-stack.is-frame-hidden { border-color: transparent; border-radius: 0; background: transparent; box-shadow: none; }
 .doc-switch-stack-scroll { overflow-anchor: none; }
 .doc-switch-stack-scroll {
@@ -311,6 +313,11 @@ button.doc-switch-edge-label:hover { background: #6d28d9; color: #fff; }
 	pointer-events: auto;
 	cursor: default;
 }
+/* at full height the stack is as tall as its items, and nothing scrolls */
+.doc-switch-stack.is-height-full { height: auto; }
+.doc-switch-stack.is-height-full .doc-switch-stack-frame { flex: none; }
+/* the room of the scrollbar stays: its items keep their width, and their scale, in both heights */
+.doc-switch-stack.is-height-full .doc-switch-stack-scroll { position: relative; inset: auto; overflow: hidden; scrollbar-gutter: stable; overscroll-behavior: auto; }
 .doc-switch-stack-list { display: flex; flex-direction: column; gap: 0.75rem; }
 .doc-switch-stack-item {
 	--doc-switch-tone: #475569;

@@ -1,6 +1,5 @@
 import {
-	migrationChoiceListOf, migrationChoicePairGet, migrationMappingRowListOf, migrationMappingTableOfPair, migrationPairGet, migrationRankBuild, migrationRowSegmentOf, migrationTableListOf,
-} from './MigrationData.js';
+	migrationChoiceListOf, migrationChoicePairGet, migrationMappingRowListOf, migrationMappingTableOfPair, migrationPairGet, migrationRankBuild, migrationRowSegmentOf, migrationTableListOf, migrationBatchCountOf, migrationMasterReferListOf } from './MigrationData.js';
 import { switchPathLast, switchPathParent, switchRectRead, switchTabsApply } from '../../card-diagram-switch/SwitchData.js';
 
 // The views of a migration, generated from its data items (power-platform-migration.md):
@@ -30,7 +29,7 @@ const LABEL_DEFAULT = {
 	sourceDatabase: 'Source database', targetDatabase: 'Target database', migrationServer: 'Migration server', artifacts: 'Outputs',
 	overview: 'Overview', tabs: 'Reports in tabs', mapping: 'ER diagrams and mappings', choice: 'Option sets',
 	plan: 'Migration plan', run: 'Run report', verify: 'Verification report',
-	runFlow: 'How the rows were sent', runResult: 'Result of each batch', verifyFlow: 'How the result was checked', verifySample: 'One row compared', verifyResult: 'Result of the checks', detailHint: 'Click for the details',
+	runFlow: 'How the rows were sent', runResult: 'Result of each batch', post: 'After the migration', postMake: 'Fix references and system columns', verifyToPost: 'After verifying', postServer: 'Post-processing server', postTarget: 'Columns to update', labelJustLoaded: 'Just loaded', verifyFlow: 'How the result was checked', verifyMatch: 'Finding the row in the target', matchUnit: 'patterns', matchName: 'Pattern', matchTable: 'Tables', verifySample: 'One row compared', verifyResult: 'Result of the checks', detailHint: 'Click for the details',
 	row: 'row', rowOrder: 'the rows in GUID order', batchUnit: 'batches', exceptionUnit: 'exceptions', columnColumn: 'Column', columnSource: 'In the CSV', columnExpected: 'Expected', columnActual: 'In the target',
 	planOrder: 'Order of loading', rank: 'Rank', rankRoot: 'looks up nothing', rankNext: 'after what it looks up', rankRule: 'The rank of a table is one past the highest rank it looks up; a table looking up nothing has rank 1. Tables of one rank may load side by side.', cycle: 'a cycle: filled in by a later pass', planBatch: 'Batches', runBatch: 'Batches run', runDlq: 'Dead letters',
 	verifySet: 'Sets compared', verifyValue: 'Values compared', verifyException: 'Open exceptions',
@@ -45,6 +44,11 @@ const LABEL_DEFAULT = {
 function labelOf(model, id) {
 	return model.system.labels?.[id] ?? LABEL_DEFAULT[id] ?? id;
 }
+
+// a master table is told apart wherever it is drawn: a tone, and a badge, as a global choice has
+const MASTER_TONE = 'amber';
+const MASTER_BADGE = 'Master';
+const numberText = (value) => (typeof value === 'number' ? value.toLocaleString('en-US') : value);
 
 const tableNodeId = (dbId, logical) => `table:${dbId}:${logical}`;
 const choiceNodeId = (dbId, logical) => `choice:${dbId}:${logical}`;
@@ -62,6 +66,7 @@ function tableNodeBuild(table, { x, y, handleList = [], link, width = TABLE_WIDT
 		data: {
 			name: table.name,
 			nameLogical: table.logical,
+			...(table.isMaster ? { tone: MASTER_TONE, badge: MASTER_BADGE, isMaster: true } : {}),
 			columns: (columnList ?? table.columnList).map((column) => ({
 				id: column.id, name: column.name, nameLogical: column.logical ?? column.id, type: column.type, key: column.key, isRequired: column.isRequired, description: column.description, isEllipsis: column.isEllipsis, tone: column.tone,
 			})),
@@ -324,6 +329,12 @@ function viewMappingTableBuild(model, pair) {
 			connections.push(lineOf(`row:${row.key}`, [id, 'right'], [tableNodeId(target.db, target.logical), `row-${row.target}`], { style, label: { text: '', position: 0.5 }, link }));
 		}
 	});
+	// a mapping of the table as a whole, with no mapping of its rows: one line between the tables
+	if (rowList.length === 0 && mapping.isTableLevel) {
+		handleSource.push(handleOf('table', 'out', 'right'));
+		handleTarget.push(handleOf('table', 'in', 'left'));
+		connections.push(lineOf(`table:${mapping.key}`, [tableNodeId(source.db, source.logical), 'table'], [tableNodeId(target.db, target.logical), 'table'], { style: { stroke: COLOR_MAPPING, strokeWidth: 2 }, label: { text: mapping.label ?? '', position: 0.5 } }));
+	}
 	nodes.unshift(
 		tableNodeBuild(source, { x: 0, y: 0, handleList: handleSource }),
 		tableNodeBuild(target, { x: xTarget, y: 0, handleList: handleTarget }),
@@ -437,6 +448,7 @@ function viewChoiceAllBuild(model) {
 
 // ---------- the reports ----------
 
+const REPORT_TONE_BY_ID = { plan: 'violet', run: 'amber', verify: 'green', post: 'teal' };
 const REPORT_WIDTH = 896;
 const REPORT_HEIGHT = 620;
 
@@ -444,7 +456,7 @@ const REPORT_HEIGHT = 620;
 // has to shrink for the others (card-diagram-flexible-switch.md#a-scrolling-stack)
 function reportStackBuild(model, id, itemList) {
 	return {
-		nodes: [{ id: `report:${id}`, renderer: { type: 'view-stack' }, position: { x: 0, y: 0 }, size: { width: REPORT_WIDTH, height: REPORT_HEIGHT }, data: { focusPath: `/overview/${id}`, isFrameVisibleFocused: true, tone: { plan: 'violet', run: 'amber', verify: 'green' }[id], titleBar: { text: labelOf(model, id), isVisibleEmbedded: true, isVisibleFocused: true }, itemList }, handles: [] }],
+		nodes: [{ id: `report:${id}`, renderer: { type: 'view-stack' }, position: { x: 0, y: 0 }, size: { width: REPORT_WIDTH, height: REPORT_HEIGHT }, data: { focusPath: `/overview/${id}`, isFrameVisibleFocused: true, isHeightFullEmbedded: true, isHeightFullFocused: true, tone: REPORT_TONE_BY_ID[id], titleBar: { text: labelOf(model, id), isVisibleEmbedded: true, isVisibleFocused: true }, itemList }, handles: [] }],
 		connections: [],
 	};
 }
@@ -505,7 +517,7 @@ function viewPlanOrderBuild(model) {
 				position: { x: RANK_LABEL_WIDTH + 70 + (index % RANK_COLUMN_MAX) * RANK_CELL_WIDTH, y: y + Math.floor(index / RANK_COLUMN_MAX) * RANK_CELL_HEIGHT },
 				size: { width: RANK_CELL_WIDTH - 50, height: 'auto' },
 				link: `/overview/${dbId}/${table.logical}`,
-				data: { title: table.name, icon: 'table', tone: 'blue' },
+				data: { title: table.name, icon: 'table', tone: table.isMaster ? MASTER_TONE : 'blue' },
 				handles: handleByNode.get(id) ?? [],
 			});
 		});
@@ -531,7 +543,7 @@ function viewPlanBatchBuild(model) {
 		nodes.push(genericTableNodeBuild({
 			id: `batch:${key}`, x: 320, y, width: 520, name: labelOf(model, 'planBatch'), tone: 'amber',
 			fieldList: [{ id: 'file', label: labelOf(model, 'columnFile') }, { id: 'range', label: labelOf(model, 'columnRange') }, { id: 'rowCount', label: labelOf(model, 'columnRows') }],
-			rowList: list.map((batch, position) => ({ id: `b${position}`, file: batch.file, range: batch.range, rowCount: String(batch.rowCount ?? '') })),
+			rowList: list.map((batch, position) => ({ id: `b${position}`, file: batch.isOmitted ? `⋮ ${numberText(batch.count)} ${labelOf(model, 'batchUnit')}` : batch.file, range: batch.range ?? '', rowCount: String(numberText(batch.rowCount) ?? '') })),
 			columnTemplate: '1fr 8rem 4rem',
 			handleList: [handleOf('in', 'in', 'left')],
 		}));
@@ -546,21 +558,26 @@ function reportSummaryItemBuild(model, { id, title, text, tone, link, metaList }
 	return { id, link, node: { renderer: { type: 'card-note' }, size: { width: 'auto', height: 'auto' }, data: { title, text: text ? `${text} — ${labelOf(model, 'detailHint')}` : labelOf(model, 'detailHint'), tone, metaList } } };
 }
 
-const metaOf = (model, stat, itemList) => itemList.map(([key, label]) => ({ value: stat[key] ?? '—', label: labelOf(model, label) }));
+const metaOf = (model, stat, itemList) => itemList.map(([key, label]) => ({ value: numberText(stat[key]) ?? '—', label: labelOf(model, label) }));
 
 function viewRunBuild(model) {
 	const stat = model.reportRun?.stat ?? {};
 	const dlqCount = model.reportRun?.dlqList?.length ?? 0;
 	return reportStackBuild(model, 'run', [
 		{ id: 'flow', view: '/overview/run/flow', title: labelOf(model, 'runFlow'), icon: 'send', tone: 'amber' },
-		reportSummaryItemBuild(model, { id: 'result', title: labelOf(model, 'runResult'), text: `${model.reportRun?.batchList?.length ?? 0} ${labelOf(model, 'batchUnit')}`, tone: 'green', link: '/overview/run/batch', metaList: metaOf(model, stat, [['total', 'statTotal'], ['success', 'statSuccess'], ['dlq', 'statDlq']]) }),
+		reportSummaryItemBuild(model, { id: 'result', title: labelOf(model, 'runResult'), text: `${numberText(migrationBatchCountOf(model.reportRun?.batchList))} ${labelOf(model, 'batchUnit')}`, tone: 'green', link: '/overview/run/batch', metaList: metaOf(model, stat, [['total', 'statTotal'], ['success', 'statSuccess'], ['dlq', 'statDlq']]) }),
 		reportSummaryItemBuild(model, { id: 'dlq', title: labelOf(model, 'runDlq'), text: model.reportRun?.dlqList?.[0]?.reason, tone: dlqCount > 0 ? 'red' : 'slate', link: '/overview/run/dlq', metaList: [{ value: dlqCount, label: labelOf(model, 'statDlq') }] }),
 	]);
 }
 
+const FLOW_X_TARGET = 960;
+const VERIFY_X_TARGET = 1110;
 const FLOW_TABLE_TONE_LIST = ['blue', 'teal', 'violet', 'amber'];
 const FLOW_LINE = { stroke: '#94a3b8', strokeWidth: 1.25 };
 const FLOW_ROW_HEIGHT = 58;
+const FLOW_OMIT_HEIGHT = 44;
+const FLOW_LINE_OMIT = { stroke: '#94a3b8', strokeWidth: 1.25, strokeDasharray: '3 3' };
+const flowLineOf = (id) => (id.startsWith('flow-omit:') ? FLOW_LINE_OMIT : FLOW_LINE);
 
 // the batches of the plan by table: a card per table with its rows taken together by
 // brackets, a card per batch, one line per bracket. the rows are the plan's figures, in order
@@ -583,9 +600,16 @@ function batchFlowBuild(model, { xBatch, widthBatch, resultOf, link }) {
 		const handles = [];
 		let start = 1;
 		batchList.forEach((batch, index) => {
+			// the batches left out: more dots in the rows, joined to the dots between the cards
+			if (batch.isOmitted) {
+				rows.push({ id: `omit${index}-a`, isEllipsis: true }, { id: `omit${index}-b`, isEllipsis: true }, { id: `omit${index}-c`, isEllipsis: true });
+				handles.push(handleOf(`omit${index}`, 'out', 'right', `row/omit${index}-b`));
+				start += Math.max(0, batch.rowCount ?? 0);
+				return;
+			}
 			const end = start + Math.max(1, batch.rowCount ?? 1) - 1;
 			const groupId = `g${index}`;
-			rows.push({ id: `${groupId}-from`, name: `${wordRow} ${start}` }, { id: `${groupId}-gap`, isEllipsis: true }, { id: `${groupId}-to`, name: `${wordRow} ${end}` });
+			rows.push({ id: `${groupId}-from`, name: `${wordRow} ${numberText(start)}` }, { id: `${groupId}-gap`, isEllipsis: true }, { id: `${groupId}-to`, name: `${wordRow} ${numberText(end)}` });
 			rowGroupList.push({ id: groupId, rowFrom: `${groupId}-from`, rowTo: `${groupId}-to`, tone });
 			handles.push(handleOf(groupId, 'out', 'right', `group/${groupId}`));
 			start = end + 1;
@@ -593,6 +617,13 @@ function batchFlowBuild(model, { xBatch, widthBatch, resultOf, link }) {
 		const tableId = `flow-table:${key}`;
 		nodes.push({ id: tableId, renderer: { type: 'table' }, position: { x: 0, y }, size: { width: 170, height: 'auto' }, data: { name: table?.name ?? key, nameLogical: labelOf(model, 'rowOrder'), isCompact: true, isFieldHeaderHidden: true, tone, fields: [{ id: 'name', label: '' }], rows, rowGroupList }, handles });
 		batchList.forEach((batch, index) => {
+			if (batch.isOmitted) {
+				const id = `flow-omit:${key}:${index}`;
+				nodes.push({ id, renderer: { type: 'card-three-dots' }, position: { x: xBatch, y: y + index * FLOW_ROW_HEIGHT }, size: { width: widthBatch, height: FLOW_OMIT_HEIGHT }, data: { text: `${numberText(batch.count)} ${labelOf(model, 'batchUnit')}`, tone }, handles: [handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')] });
+				connections.push(lineOf(`flow-split:${id}`, [tableId, `omit${index}`], [id, 'in'], { style: FLOW_LINE_OMIT }));
+				batchIdList.push(id);
+				return;
+			}
 			const id = `flow-batch:${batch.file}`;
 			const result = resultOf?.(batch);
 			nodes.push({
@@ -610,14 +641,49 @@ function batchFlowBuild(model, { xBatch, widthBatch, resultOf, link }) {
 
 const textOf = (group, key, fallback) => group?.[key] ?? fallback;
 
-function flowBlocksBuild(model, { xTarget, top, bottom, split }) {
+const FLOW_TARGET_WIDTH = 190;
+const FLOW_TARGET_ROW_HEIGHT = 72;
+const FLOW_BLOCK_TARGET_WIDTH = 240;
+// the outputs block: as tall as the report in it and its label
+const FLOW_BLOCK_ARTIFACTS_HEIGHT = 140;
+
+function flowBlocksBuild(model, { xTarget, top, bottom }) {
+	const split = bottom - FLOW_BLOCK_ARTIFACTS_HEIGHT;
 	const blockOf = (id, x, y, width, height, tone, itemList) => ({ id: `flow-area:${id}`, renderer: { type: 'color-block' }, position: { x, y }, size: { width, height }, data: { tone, itemList }, handles: [] });
 	return [
 		blockOf('source', -20, top, 210, bottom - top, 'blue', [{ id: 'source', icon: 'database', text: `${labelOf(model, 'sourceDatabase')} (${model.system.source.name})` }]),
 		blockOf('server', 205, top, xTarget - 245, bottom - top, 'amber', [{ id: 'server', icon: 'server', text: labelOf(model, 'migrationServer') }]),
-		blockOf('target', xTarget - 20, top, 210, split - top - 12, 'teal', [{ id: 'target', icon: 'database', text: `${labelOf(model, 'targetDatabase')} (${model.system.target.name})` }]),
-		blockOf('artifacts', xTarget - 20, split, 210, bottom - split, 'green', [{ id: 'artifacts', icon: 'file', text: labelOf(model, 'artifacts') }]),
+		blockOf('target', xTarget - 20, top, FLOW_BLOCK_TARGET_WIDTH, split - top - 12, 'teal', [{ id: 'target', icon: 'database', text: `${labelOf(model, 'targetDatabase')} (${model.system.target.name})` }]),
+		blockOf('artifacts', xTarget - 20, split, FLOW_BLOCK_TARGET_WIDTH, FLOW_BLOCK_ARTIFACTS_HEIGHT, 'green', [{ id: 'artifacts', icon: 'file', text: labelOf(model, 'artifacts') }]),
 	];
+}
+
+// the tables of the target the batches end up in, each in the tone of the table it comes from,
+// with the rows that reached it. a plan whose tables have no mapping yet shows the database itself
+function flowTargetNodesBuild(model, { prefix, x, y, handles }) {
+	const mappingList = [...model.mappingTableByKey.values()];
+	const countByFile = new Map((model.reportRun?.batchList ?? []).map((batch) => [batch.file, batch.success]));
+	const wordRow = labelOf(model, 'row');
+	const targetByKey = new Map();
+	batchTableListBuild(model).forEach(({ key, batchList }, tableIndex) => {
+		const target = model.tableByKey.get(mappingList.find((mapping) => mapping.source === key)?.target);
+		if (!target) return;
+		const item = targetByKey.get(target.key) ?? { target, tone: FLOW_TABLE_TONE_LIST[tableIndex % FLOW_TABLE_TONE_LIST.length], count: 0 };
+		for (const batch of batchList) item.count += countByFile.get(batch.file) ?? batch.rowCount ?? 0;
+		targetByKey.set(target.key, item);
+	});
+	if (targetByKey.size === 0) {
+		const { target } = model.system;
+		return [{ id: prefix, renderer: { type: 'card-brief' }, position: { x, y }, size: { width: FLOW_TARGET_WIDTH, height: 'auto' }, data: { title: target.name, icon: 'database', tone: 'green', statList: target.description ? [target.description] : [] }, handles }];
+	}
+	return [...targetByKey.values()].map(({ target, tone, count }, index) => ({
+		id: `${prefix}:${target.key}`,
+		renderer: { type: 'table' },
+		position: { x, y: y + index * FLOW_TARGET_ROW_HEIGHT },
+		size: { width: FLOW_TARGET_WIDTH, height: 'auto' },
+		data: { name: target.name ?? target.logical, nameLogical: target.logical, isCompact: true, isFieldHeaderHidden: true, tone, fields: [{ id: 'name', label: '' }], rows: [{ id: 'count', name: `${numberText(count)} ${wordRow}` }] },
+		handles,
+	}));
 }
 
 // how a run goes, from the plan and the report: rows taken together into batches, batches
@@ -638,23 +704,25 @@ function viewRunFlowBuild(model) {
 		},
 	});
 	const yMiddle = Math.max(0, height / 2 - 60);
-	const { target } = model.system;
 	const stat = model.reportRun?.stat ?? {};
+	const top = -40;
+	const bottom = Math.max(height, yMiddle + 260) + 60;
+	const targetList = flowTargetNodesBuild(model, { prefix: 'flow-target', x: FLOW_X_TARGET, y: Math.max(top + 20, yMiddle - 20), handles: [handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')] });
 	nodes.push(
 		noteNodeBuild({ id: 'flow-send', x: 460, y: yMiddle, width: 160, title: textOf(flow.send, 'title', 'Send'), tag: textOf(flow.send, 'tag', ''), text: textOf(flow.send, 'text', 'Batch by batch, what is looked up first'), tone: 'amber', handleList: [handleOf('in', 'in', 'left'), handleOf('ok', 'out', 'right'), { id: 'retry-out', direction: 'out', anchor: { side: 'bottom', offset: 0.3 } }, { id: 'retry-in', direction: 'in', anchor: { side: 'bottom', offset: 0.7 } }] }),
-		{ id: 'flow-target', renderer: { type: 'card-brief' }, position: { x: 960, y: yMiddle + 6 }, size: { width: 170, height: 'auto' }, data: { title: target.name, icon: 'database', tone: 'green', statList: target.description ? [target.description] : [] }, handles: [handleOf('in', 'in', 'left'), handleOf('out', 'out', 'bottom')] },
+		...targetList,
 		noteNodeBuild({ id: 'flow-retry', x: 460, y: yMiddle + 120, width: 160, title: textOf(flow.retry, 'title', 'Retry'), tag: textOf(flow.retry, 'tag', ''), text: textOf(flow.retry, 'text', 'Waits, then tries again, up to a limit'), tone: 'slate', handleList: [{ id: 'in', direction: 'in', anchor: { side: 'top', offset: 0.3 } }, { id: 'back', direction: 'out', anchor: { side: 'top', offset: 0.7 } }, handleOf('over', 'out', 'right')] }),
 		noteNodeBuild({ id: 'flow-dlq', x: 680, y: yMiddle + 120, width: 170, title: textOf(flow.dlq, 'title', wordDlq), tag: textOf(flow.dlq, 'tag', ''), text: textOf(flow.dlq, 'text', 'Rows over the limit are kept apart'), tone: 'red', link: '/overview/run/dlq', handleList: [handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')] }),
-		noteNodeBuild({ id: 'flow-report', x: 960, y: yMiddle + 140, width: 130, title: labelOf(model, 'run'), tone: 'green', link: '/overview/run/batch', metaList: metaOf(model, stat, [['success', 'statSuccess'], ['dlq', 'statDlq']]), handleList: [handleOf('in', 'in', 'left'), handleOf('top', 'in', 'top')] }),
-		...flowBlocksBuild(model, { xTarget: 960, top: -40, bottom: Math.max(height, yMiddle + 260) + 60, split: yMiddle + 110 }),
+		noteNodeBuild({ id: 'flow-report', x: FLOW_X_TARGET, y: bottom - FLOW_BLOCK_ARTIFACTS_HEIGHT + 20, width: FLOW_TARGET_WIDTH, title: labelOf(model, 'run'), tone: 'green', link: '/overview/run/batch', metaList: metaOf(model, stat, [['success', 'statSuccess'], ['dlq', 'statDlq']]), handleList: [handleOf('in', 'in', 'left'), handleOf('right', 'in', 'right')] }),
+		...flowBlocksBuild(model, { xTarget: FLOW_X_TARGET, top, bottom }),
 	);
-	for (const id of batchIdList) connections.push(lineOf(`flow-send:${id}`, [id, 'out'], ['flow-send', 'in'], { style: FLOW_LINE }));
+	for (const id of batchIdList) connections.push(lineOf(`flow-send:${id}`, [id, 'out'], ['flow-send', 'in'], { style: flowLineOf(id) }));
 	connections.push(
-		lineOf('flow-ok', ['flow-send', 'ok'], ['flow-target', 'in'], { style: FLOW_LINE }),
+		...targetList.map((node) => lineOf(`flow-ok:${node.id}`, ['flow-send', 'ok'], [node.id, 'in'], { style: FLOW_LINE })),
+		...targetList.map((node) => lineOf(`flow-report-ok:${node.id}`, [node.id, 'out'], ['flow-report', 'right'], { style: FLOW_LINE })),
 		lineOf('flow-fail', ['flow-send', 'retry-out'], ['flow-retry', 'in'], { style: { stroke: '#d97706', strokeWidth: 1.25 } }),
 		lineOf('flow-back', ['flow-retry', 'back'], ['flow-send', 'retry-in'], { style: { stroke: '#64748b', strokeWidth: 1.25, strokeDasharray: '4 3' } }),
 		lineOf('flow-over', ['flow-retry', 'over'], ['flow-dlq', 'in'], { style: { stroke: '#dc2626', strokeWidth: 1.25 } }),
-		lineOf('flow-report-ok', ['flow-target', 'out'], ['flow-report', 'top'], { style: FLOW_LINE }),
 		lineOf('flow-report-dlq', ['flow-dlq', 'out'], ['flow-report', 'in'], { style: FLOW_LINE }),
 	);
 	return { nodes, connections };
@@ -666,7 +734,7 @@ function viewRunBatchBuild(model) {
 		nodes: [genericTableNodeBuild({
 			id: 'run-batch', x: 0, y: 0, width: 620, name: labelOf(model, 'runBatch'), tone: 'amber',
 			fieldList: [{ id: 'file', label: labelOf(model, 'columnFile') }, { id: 'rowCount', label: labelOf(model, 'columnRows') }, { id: 'success', label: labelOf(model, 'statSuccess') }, { id: 'dlq', label: labelOf(model, 'statDlq') }],
-			rowList: list.map((batch, index) => ({ id: `b${index}`, file: batch.file, rowCount: String(batch.rowCount ?? ''), success: String(batch.success ?? ''), dlq: String(batch.dlq ?? ''), tone: batch.dlq ? 'red' : undefined })),
+			rowList: list.map((batch, index) => ({ id: `b${index}`, file: batch.isOmitted ? `⋮ ${numberText(batch.count)} ${labelOf(model, 'batchUnit')}` : batch.file, rowCount: String(numberText(batch.rowCount) ?? ''), success: String(numberText(batch.success) ?? ''), dlq: String(batch.dlq ?? ''), tone: batch.dlq ? 'red' : undefined })),
 			columnTemplate: '1fr 4rem 4rem 4rem',
 		})],
 		connections: [],
@@ -691,6 +759,7 @@ function viewVerifyBuild(model) {
 	const exceptionCount = model.reportVerify?.exceptionList?.length ?? 0;
 	return reportStackBuild(model, 'verify', [
 		{ id: 'flow', view: '/overview/verify/flow', title: labelOf(model, 'verifyFlow'), icon: 'file-check', tone: 'green' },
+		...(model.reportVerify?.matchList?.length ? [{ id: 'match', view: '/overview/verify/match', title: labelOf(model, 'verifyMatch'), subtitle: `${model.reportVerify.matchList.length} ${labelOf(model, 'matchUnit')}`, icon: 'key', tone: 'teal' }] : []),
 		...(model.reportVerify?.sample ? [{ id: 'sample', view: '/overview/verify/sample', title: labelOf(model, 'verifySample'), subtitle: model.reportVerify.sample.key, icon: 'search', tone: 'blue' }] : []),
 		reportSummaryItemBuild(model, { id: 'result', title: labelOf(model, 'verifyResult'), text: `${model.reportVerify?.checkList?.length ?? 0} ${labelOf(model, 'columnCheck')}`, tone: 'green', link: '/overview/verify/check', metaList: metaOf(model, stat, [['total', 'statTotal'], ['matched', 'statMatched'], ['exception', 'statException']]) }),
 		reportSummaryItemBuild(model, { id: 'exception', title: labelOf(model, 'verifyException'), text: model.reportVerify?.exceptionList?.[0]?.status, tone: exceptionCount > 0 ? 'red' : 'slate', link: '/overview/verify/exception', metaList: [{ value: exceptionCount, label: labelOf(model, 'statException') }] }),
@@ -709,21 +778,24 @@ function viewVerifyFlowBuild(model) {
 	const heightChecks = Math.max(1, checkList.length) * VERIFY_CHECK_HEIGHT;
 	const heightAll = Math.max(height, heightChecks);
 	const yMiddle = Math.max(0, heightAll / 2 - 50);
-	const { target } = model.system;
+	// the lines reading the target tables pass above the checks
+	const top = Math.min(-100, yMiddle + 40 - heightChecks / 2 - 30 - batchTableListBuild(model).length * FLOW_TARGET_ROW_HEIGHT);
+	const bottom = heightAll + 150;
+	const targetList = flowTargetNodesBuild(model, { prefix: 'verify-target', x: VERIFY_X_TARGET, y: top + 30, handles: [handleOf('out', 'out', 'left')] });
 	nodes.push(
 		noteNodeBuild({ id: 'verify-set', x: 450, y: yMiddle, width: 150, title: textOf(flow.set, 'title', 'Compare the set'), text: textOf(flow.set, 'text', 'The rows of the batches against the outcome of the run'), tone: 'blue', metaList: metaOf(model, stat, [['total', 'statTotal'], ['matched', 'statMatched'], ['exception', 'statException']]), handleList: [handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right'), handleOf('down', 'out', 'bottom')] }),
-		noteNodeBuild({ id: 'verify-compare', x: 650, y: yMiddle, width: 150, title: textOf(flow.compare, 'title', 'Compare the values'), text: textOf(flow.compare, 'text', 'The CSV through the mappings, against the target'), tone: 'teal', handleList: [handleOf('in', 'in', 'left'), handleOf('read', 'in', 'top'), handleOf('out', 'out', 'right')] }),
-		{ id: 'verify-target', renderer: { type: 'card-brief' }, position: { x: 1110, y: -70 }, size: { width: 170, height: 'auto' }, data: { title: target.name, icon: 'database', tone: 'green', statList: target.description ? [target.description] : [] }, handles: [handleOf('out', 'out', 'left')] },
+		noteNodeBuild({ id: 'verify-compare', x: 650, y: yMiddle, width: 150, link: model.reportVerify?.matchList?.length ? '/overview/verify/match' : undefined, title: textOf(flow.compare, 'title', 'Compare the values'), text: textOf(flow.compare, 'text', 'The CSV through the mappings, against the target'), tone: 'teal', handleList: [handleOf('in', 'in', 'left'), handleOf('read', 'in', 'top'), handleOf('out', 'out', 'right')] }),
+		...targetList,
 		noteNodeBuild({ id: 'verify-exception', x: 450, y: heightAll + 30, width: 350, title: textOf(flow.exception, 'title', labelOf(model, 'verifyException')), text: model.reportVerify?.exceptionList?.map((item) => `${item.key}: ${item.reason} / ${item.status}`).join('\n') || '—', tone: 'red', link: '/overview/verify/exception', handleList: [handleOf('in', 'in', 'top'), handleOf('out', 'out', 'right')] }),
-		noteNodeBuild({ id: 'verify-report', x: 1110, y: Math.max(150, yMiddle) + 30, width: 130, title: labelOf(model, 'verify'), tone: 'green', link: '/overview/verify/check', metaList: metaOf(model, stat, [['matched', 'statMatched'], ['exception', 'statException']]), handleList: [handleOf('in', 'in', 'left'), handleOf('bottom', 'in', 'bottom')] }),
-		...flowBlocksBuild(model, { xTarget: 1110, top: -100, bottom: heightAll + 200, split: 150 }),
+		noteNodeBuild({ id: 'verify-report', x: VERIFY_X_TARGET, y: bottom - FLOW_BLOCK_ARTIFACTS_HEIGHT + 20, width: FLOW_TARGET_WIDTH, title: labelOf(model, 'verify'), tone: 'green', link: '/overview/verify/check', metaList: metaOf(model, stat, [['matched', 'statMatched'], ['exception', 'statException']]), handleList: [handleOf('in', 'in', 'left')] }),
+		...flowBlocksBuild(model, { xTarget: VERIFY_X_TARGET, top, bottom }),
 	);
-	for (const id of batchIdList) connections.push(lineOf(`verify-set:${id}`, [id, 'out'], ['verify-set', 'in'], { style: FLOW_LINE }));
+	for (const id of batchIdList) connections.push(lineOf(`verify-set:${id}`, [id, 'out'], ['verify-set', 'in'], { style: flowLineOf(id) }));
 	connections.push(
-		lineOf('verify-go', ['verify-set', 'out'], ['verify-compare', 'in'], { style: { stroke: '#16a34a', strokeWidth: 1.25 }, label: { text: String(stat.matched ?? '') } }),
-		lineOf('verify-read', ['verify-target', 'out'], ['verify-compare', 'read'], { style: FLOW_LINE, label: { text: textOf(flow.compare, 'readLabel', '') } }),
-		lineOf('verify-out', ['verify-set', 'down'], ['verify-exception', 'in'], { style: { stroke: '#dc2626', strokeWidth: 1.25 }, label: { text: String(stat.exception ?? '') } }),
-		lineOf('verify-report-exception', ['verify-exception', 'out'], ['verify-report', 'bottom'], { style: FLOW_LINE }),
+		lineOf('verify-go', ['verify-set', 'out'], ['verify-compare', 'in'], { style: { stroke: '#16a34a', strokeWidth: 1.25 }, label: { text: String(numberText(stat.matched) ?? '') } }),
+		...targetList.map((node, index) => lineOf(`verify-read:${node.id}`, [node.id, 'out'], ['verify-compare', 'read'], { style: FLOW_LINE, ...(index === 0 ? { label: { text: textOf(flow.compare, 'readLabel', '') } } : {}) })),
+		lineOf('verify-out', ['verify-set', 'down'], ['verify-exception', 'in'], { style: { stroke: '#dc2626', strokeWidth: 1.25 }, label: { text: String(numberText(stat.exception) ?? '') } }),
+		lineOf('verify-report-exception', ['verify-exception', 'out'], ['verify-report', 'in'], { style: FLOW_LINE }),
 	);
 	const yStart = yMiddle + 40 - heightChecks / 2;
 	checkList.forEach((check, index) => {
@@ -735,6 +807,258 @@ function viewVerifyFlowBuild(model) {
 }
 
 // one row, column by column: what the CSV holds, what the mappings make of it, what the target has
+const MATCH_TONE_LIST = ['blue', 'green', 'violet', 'amber'];
+// the columns of a lane, as in the flows: the source, the migration server, the target
+const MATCH_TABLE_WIDTH = 370;
+const MATCH_STEP_WIDTH = 240;
+const MATCH_STEP_HEIGHT = 80;
+const MATCH_X_DIVIDER_SERVER = 400;
+const MATCH_X_STEP = 420;
+const MATCH_X_DIVIDER_TARGET = 680;
+const MATCH_X_TARGET = 700;
+const MATCH_LANE_LEFT = -20;
+const MATCH_LANE_WIDTH = MATCH_X_TARGET + MATCH_TABLE_WIDTH - MATCH_LANE_LEFT * 2;
+// the title of a lane, the headings of its columns under it, what it holds, a margin below
+const MATCH_COLUMN_TOP = 78;
+const MATCH_LANE_HEAD = 112;
+const MATCH_LANE_FOOT = 20;
+const MATCH_LANE_GAP = 16;
+const MATCH_INTRO_HEIGHT = 96;
+const MATCH_ROW_HEIGHT = 20;
+
+// the tables a pattern applies to: a mapping of tables says which (match), the first by default
+function matchTableNameListOf(model, match) {
+	const matchList = model.reportVerify?.matchList ?? [];
+	return [...model.mappingTableByKey.values()]
+		.filter((mapping) => (mapping.match ?? matchList[0]?.id) === match.id)
+		.map((mapping) => model.tableByKey.get(mapping.target)?.name ?? mapping.target);
+}
+
+// some rows of one table: spec { table: key, label?, rowList: [{ column, value, isKey?, label?, tone? }] }
+function rowTableNodeBuild(model, { id, spec, tone, x, y, width = MATCH_TABLE_WIDTH, handleList }) {
+	const { table: key, rowList = [], label } = spec ?? {};
+	const table = model.tableByKey.get(key);
+	const columnOf = (columnId) => table?.columnList.find((column) => column.id === columnId);
+	const node = genericTableNodeBuild({
+		id, x, y, width, name: table?.name ?? key, subtitle: [label, table?.logical].filter(Boolean).join(' / '), tone: table?.isMaster ? MASTER_TONE : tone,
+		fieldList: [{ id: 'name', label: labelOf(model, 'columnColumn') }, { id: 'value', label: labelOf(model, 'columnValue') }],
+		// a column by its name and logical name, or the words of the row (a long logical name)
+		rowList: rowList.map((row) => {
+			const column = columnOf(row.column);
+			const nameFull = column?.logical && column.logical !== column.name ? `${column.name} (${column.logical})` : column?.name ?? row.column;
+			const toneRow = row.tone ?? (row.isKey ? tone : undefined);
+			return { id: row.column, name: row.label ?? nameFull, value: String(row.value ?? ''), ...(toneRow ? { tone: toneRow } : {}) };
+		}),
+		columnTemplate: '1.15fr 1fr',
+		handleList,
+	});
+	if (table?.isMaster) node.data.badge = MASTER_BADGE;
+	return node;
+}
+
+function matchTableNodeBuild(model, match, side, tone, { x, y, handleList }) {
+	return rowTableNodeBuild(model, { id: `match:${match.id}:${side}`, spec: match[side], tone, x, y, handleList });
+}
+
+// one pattern as one lane, in the columns of the flows: a row of the source, in the middle what
+// the migration server does with its key and what comes of it, the row found in the target.
+// isLinked: each step opens the pattern alone
+function matchLaneBuild(model, match, index, { y, isLinked }) {
+	const tone = MATCH_TONE_LIST[index % MATCH_TONE_LIST.length];
+	const stepList = match.stepList ?? [];
+	const rowCount = Math.max(match.source?.rowList?.length ?? 0, match.target?.rowList?.length ?? 0);
+	const heightContent = Math.max(30 + rowCount * MATCH_ROW_HEIGHT, (stepList.length + (match.result ? 1 : 0) - 1) * MATCH_STEP_HEIGHT + 70);
+	const height = MATCH_LANE_HEAD + heightContent + MATCH_LANE_FOOT;
+	const yTop = y + MATCH_LANE_HEAD;
+	const idOf = (part) => `match:${match.id}:${part}`;
+	const line = { stroke: '#64748b', strokeWidth: 1.25 };
+	const handleSourceList = stepList.map((step) => handleOf(`key-${step.id}`, 'out', 'right', `row/${step.from}`));
+	const handleTargetList = [...stepList.map((step) => handleOf(`key-${step.id}`, 'in', 'left', `row/${step.to}`)), handleOf('out', 'out', 'bottom')];
+	const nameList = matchTableNameListOf(model, match);
+	const { source, target } = model.system;
+	const nodes = [
+		{
+			id: idOf('lane'), renderer: { type: 'color-block' }, position: { x: MATCH_LANE_LEFT, y },
+			size: { width: MATCH_LANE_WIDTH, height }, handles: [],
+			data: { tone, labelSide: 'top', columnTop: MATCH_COLUMN_TOP, columnList: [
+				{ id: 'source', x: 0, width: MATCH_X_DIVIDER_SERVER - MATCH_LANE_LEFT, icon: 'database', text: `${labelOf(model, 'sourceDatabase')} (${source.name})` },
+				{ id: 'server', x: MATCH_X_DIVIDER_SERVER - MATCH_LANE_LEFT, width: MATCH_X_DIVIDER_TARGET - MATCH_X_DIVIDER_SERVER, icon: 'server', text: labelOf(model, 'migrationServer') },
+				{ id: 'target', x: MATCH_X_DIVIDER_TARGET - MATCH_LANE_LEFT, width: MATCH_LANE_WIDTH - (MATCH_X_DIVIDER_TARGET - MATCH_LANE_LEFT), icon: 'database', text: `${labelOf(model, 'targetDatabase')} (${target.name})` },
+			], itemList: [{ id: 'title', level: 2, icon: match.icon ?? 'key', text: `${labelOf(model, 'matchName')} ${index + 1}: ${match.title ?? match.id}` }, ...(nameList.length > 0 ? [{ id: 'table', text: `${labelOf(model, 'matchTable')}: ${nameList.join(', ')}` }] : [])] },
+		},
+		matchTableNodeBuild(model, match, 'source', tone, { x: 0, y: yTop, handleList: handleSourceList }),
+		...stepList.map((step, indexStep) => noteNodeBuild({
+			id: idOf(`step:${step.id}`), x: MATCH_X_STEP, y: yTop + indexStep * MATCH_STEP_HEIGHT, width: MATCH_STEP_WIDTH, title: step.title, tag: step.tag, text: step.text, tone,
+			link: isLinked ? `/overview/verify/match/${match.id}` : undefined,
+			handleList: [handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')],
+		})),
+		matchTableNodeBuild(model, match, 'target', tone, { x: MATCH_X_TARGET, y: yTop, handleList: handleTargetList }),
+		...(match.result ? [noteNodeBuild({ id: idOf('result'), x: MATCH_X_STEP, y: yTop + stepList.length * MATCH_STEP_HEIGHT, width: MATCH_STEP_WIDTH, title: match.result.title, tag: match.result.tag, text: match.result.text, tone: 'green', handleList: [handleOf('in', 'in', 'right')] })] : []),
+	];
+	const connections = [
+		...stepList.flatMap((step) => [
+			lineOf(idOf(`from:${step.id}`), [idOf('source'), `key-${step.id}`], [idOf(`step:${step.id}`), 'in'], { style: line }),
+			lineOf(idOf(`to:${step.id}`), [idOf(`step:${step.id}`), 'out'], [idOf('target'), `key-${step.id}`], { style: line }),
+		]),
+		...(match.result ? [lineOf(idOf('found'), [idOf('target'), 'out'], [idOf('result'), 'in'], { style: line })] : []),
+	];
+	return { nodes, connections, height };
+}
+
+// how one row of the source is found in the target: what this is about at the top, then the
+// patterns one under another
+function viewVerifyMatchBuild(model, matchId) {
+	const matchList = model.reportVerify?.matchList ?? [];
+	const isOne = matchId !== undefined;
+	const shownList = isOne ? matchList.filter((match) => match.id === matchId) : matchList;
+	if (shownList.length === 0) return null;
+	const nodes = [];
+	const connections = [];
+	let y = 0;
+	if (!isOne) {
+		const textIntro = model.reportVerify?.matchIntro;
+		nodes.push({
+			id: 'match:intro', renderer: { type: 'color-block' }, position: { x: MATCH_LANE_LEFT, y }, size: { width: MATCH_LANE_WIDTH, height: MATCH_INTRO_HEIGHT }, handles: [],
+			data: { tone: 'slate', labelSide: 'top', itemList: [{ id: 'title', level: 1, text: labelOf(model, 'verifyMatch') }, ...(textIntro ? [{ id: 'text', text: textIntro }] : [])] },
+		});
+		y += MATCH_INTRO_HEIGHT + MATCH_LANE_GAP;
+	}
+	for (const match of shownList) {
+		const lane = matchLaneBuild(model, match, matchList.indexOf(match), { y, isLinked: !isOne });
+		nodes.push(...lane.nodes);
+		connections.push(...lane.connections);
+		y += lane.height + MATCH_LANE_GAP;
+	}
+	return { nodes, connections };
+}
+
+// ---------- after the migration ----------
+
+const POST_TONE = REPORT_TONE_BY_ID.post;
+const POST_TABLE_WIDTH = 350;
+const POST_STEP_WIDTH = 230;
+const POST_HEAD = 118;
+const POST_COLUMN_TOP = 84;
+const POST_MARGIN = 20;
+const POST_LINE_HEIGHT = 30;
+
+function postBlockBuild(model, id, { title, text, width, height, columnList, columnTop = POST_COLUMN_TOP, itemList = [] }) {
+	return {
+		id: `${id}:block`, renderer: { type: 'color-block' }, position: { x: -POST_MARGIN, y: 0 }, size: { width, height }, handles: [],
+		data: { tone: POST_TONE, labelSide: 'top', columnTop, columnList, itemList: [{ id: 'title', level: 2, text: title }, ...(text ? [{ id: 'text', text }] : []), ...itemList] },
+	};
+}
+
+const postColumnOf = (model, role) => {
+	const { source, target } = model.system;
+	if (role === 'source') return { icon: 'database', text: `${labelOf(model, 'sourceDatabase')} (${source.name})` };
+	if (role === 'target') return { icon: 'database', text: `${labelOf(model, 'targetDatabase')} (${target.name})` };
+	if (role === 'server') return { icon: 'server', text: labelOf(model, 'migrationServer') };
+	return { icon: 'server', text: labelOf(model, 'postServer') };
+};
+
+const postKeyColumnOf = (spec) => spec?.rowList?.find((row) => row.isKey)?.column;
+
+// a master table loaded without its GUIDs: a table of GUIDs by another column, then the
+// lookups of the tables referring to it, empty since the load, are set
+function viewPostMasterBuild(model) {
+	const master = model.planPost?.master;
+	if (!master) return null;
+	const idOf = (part) => `post-master:${part}`;
+	const stepById = new Map((master.stepList ?? []).map((step) => [step.id, step]));
+	const line = { stroke: '#64748b', strokeWidth: 1.25 };
+	const xStep = POST_TABLE_WIDTH + 50;
+	const xTarget = xStep + POST_STEP_WIDTH + 50;
+	const width = xTarget + POST_TABLE_WIDTH + POST_MARGIN * 2;
+	const referList = migrationMasterReferListOf(model, model.system.target.id);
+	// a line more above the columns, for the columns to update
+	const headExtra = referList.length ? POST_LINE_HEIGHT : 0;
+	const yTop = POST_HEAD + headExtra;
+	const yRefer = yTop + 124;
+	const yOf = { map: yTop, find: yTop + 96, write: yTop + 192 };
+	const height = yOf.write + 80 + POST_MARGIN;
+	const stepNodeOf = (id, handleList) => noteNodeBuild({ id: idOf(`step:${id}`), x: xStep, y: yOf[id], width: POST_STEP_WIDTH, title: stepById.get(id)?.title, tag: stepById.get(id)?.tag, text: stepById.get(id)?.text, tone: POST_TONE, handleList });
+	const nodes = [
+		postBlockBuild(model, 'post-master', {
+			title: master.title, text: master.text, width, height, columnTop: POST_COLUMN_TOP + headExtra,
+			columnList: [
+				{ id: 'source', x: 0, width: POST_TABLE_WIDTH + 25 + POST_MARGIN, ...postColumnOf(model, 'source') },
+				{ id: 'post', x: POST_TABLE_WIDTH + 25 + POST_MARGIN, width: POST_STEP_WIDTH + 50, ...postColumnOf(model, 'post') },
+				{ id: 'target', x: xTarget - 25 + POST_MARGIN, width: POST_TABLE_WIDTH + 25 + POST_MARGIN, ...postColumnOf(model, 'target') },
+			],
+			itemList: referList.length ? [{ id: 'refer', text: `${labelOf(model, 'postTarget')}: ${referList.map(({ table, column }) => `${table.name}.${column.name}`).join(', ')}` }] : [],
+		}),
+		rowTableNodeBuild(model, { id: idOf('source'), spec: master.source, tone: POST_TONE, x: 0, y: yTop, width: POST_TABLE_WIDTH, handleList: [handleOf('key', 'out', 'right', `row/${postKeyColumnOf(master.source)}`)] }),
+		rowTableNodeBuild(model, { id: idOf('refer-source'), spec: master.referSource, tone: POST_TONE, x: 0, y: yRefer, width: POST_TABLE_WIDTH, handleList: [handleOf('key', 'out', 'right', `row/${postKeyColumnOf(master.referSource)}`)] }),
+		rowTableNodeBuild(model, { id: idOf('target'), spec: master.target, tone: POST_TONE, x: xTarget, y: yTop, width: POST_TABLE_WIDTH, handleList: [handleOf('key', 'out', 'left', `row/${postKeyColumnOf(master.target)}`)] }),
+		rowTableNodeBuild(model, { id: idOf('refer-target'), spec: master.referTarget, tone: POST_TONE, x: xTarget, y: yRefer, width: POST_TABLE_WIDTH, handleList: [handleOf('key', 'in', 'left', `row/${postKeyColumnOf(master.referTarget)}`)] }),
+		stepNodeOf('map', [handleOf('left', 'in', 'left'), handleOf('right', 'in', 'right'), handleOf('down', 'out', 'bottom')]),
+		stepNodeOf('find', [handleOf('left', 'in', 'left'), handleOf('up', 'in', 'top'), handleOf('down', 'out', 'bottom')]),
+		stepNodeOf('write', [handleOf('up', 'in', 'top'), handleOf('out', 'out', 'right')]),
+	];
+	const connections = [
+		lineOf(idOf('read-source'), [idOf('source'), 'key'], [idOf('step:map'), 'left'], { style: line }),
+		lineOf(idOf('read-target'), [idOf('target'), 'key'], [idOf('step:map'), 'right'], { style: line }),
+		lineOf(idOf('map-find'), [idOf('step:map'), 'down'], [idOf('step:find'), 'up'], { style: line }),
+		lineOf(idOf('read-refer'), [idOf('refer-source'), 'key'], [idOf('step:find'), 'left'], { style: line }),
+		lineOf(idOf('find-write'), [idOf('step:find'), 'down'], [idOf('step:write'), 'up'], { style: line }),
+		lineOf(idOf('write'), [idOf('step:write'), 'out'], [idOf('refer-target'), 'key'], { style: { stroke: '#16a34a', strokeWidth: 1.5 } }),
+	];
+	return { nodes, connections };
+}
+
+// the columns the system sets: a row created by the migration has the values of that moment,
+// which no write can avoid at creation; a script then writes those of the source
+function viewPostAuditBuild(model) {
+	const audit = model.planPost?.audit;
+	if (!audit) return null;
+	const idOf = (part) => `post-audit:${part}`;
+	const line = { stroke: '#64748b', strokeWidth: 1.25 };
+	const stepWidth = 210;
+	const xRun = POST_TABLE_WIDTH + 44;
+	const xPost = xRun + stepWidth + 44;
+	const xTarget = xPost + stepWidth + 44;
+	const width = xTarget + POST_TABLE_WIDTH + POST_MARGIN * 2;
+	const yTop = POST_HEAD;
+	const yTargetPost = yTop + 170;
+	const height = yTargetPost + 150 + POST_MARGIN;
+	const stepOf = (id, step, x, y, handleList) => noteNodeBuild({ id: idOf(id), x, y, width: stepWidth, title: step?.title, tag: step?.tag, text: step?.text, tone: id === 'step-run' ? 'amber' : POST_TONE, handleList });
+	const nodes = [
+		postBlockBuild(model, 'post-audit', {
+			title: audit.title, text: audit.text, width, height,
+			columnList: [
+				{ id: 'source', x: 0, width: xRun - 22 + POST_MARGIN, ...postColumnOf(model, 'source') },
+				{ id: 'server', x: xRun - 22 + POST_MARGIN, width: stepWidth + 44, ...postColumnOf(model, 'server') },
+				{ id: 'post', x: xPost - 22 + POST_MARGIN, width: stepWidth + 44, ...postColumnOf(model, 'post') },
+				{ id: 'target', x: xTarget - 22 + POST_MARGIN, width: POST_TABLE_WIDTH + 22 + POST_MARGIN, ...postColumnOf(model, 'target') },
+			],
+		}),
+		rowTableNodeBuild(model, { id: idOf('source'), spec: audit.source, tone: POST_TONE, x: 0, y: yTop, width: POST_TABLE_WIDTH, handleList: [handleOf('out', 'out', 'right'), handleOf('down', 'out', 'bottom')] }),
+		stepOf('step-run', audit.stepRun, xRun, yTop, [handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')]),
+		stepOf('step-post', audit.stepPost, xPost, yTargetPost, [handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')]),
+		rowTableNodeBuild(model, { id: idOf('target-run'), spec: audit.targetRun, tone: POST_TONE, x: xTarget, y: yTop, width: POST_TABLE_WIDTH, handleList: [handleOf('in', 'in', 'left'), handleOf('down', 'out', 'bottom')] }),
+		rowTableNodeBuild(model, { id: idOf('target-post'), spec: audit.targetPost, tone: POST_TONE, x: xTarget, y: yTargetPost, width: POST_TABLE_WIDTH, handleList: [handleOf('in', 'in', 'left'), handleOf('up', 'in', 'top')] }),
+	];
+	const connections = [
+		lineOf(idOf('create'), [idOf('source'), 'out'], [idOf('step-run'), 'in'], { style: line }),
+		lineOf(idOf('created'), [idOf('step-run'), 'out'], [idOf('target-run'), 'in'], { style: line }),
+		lineOf(idOf('read'), [idOf('source'), 'down'], [idOf('step-post'), 'in'], { style: line }),
+		lineOf(idOf('write'), [idOf('step-post'), 'out'], [idOf('target-post'), 'in'], { style: { stroke: '#16a34a', strokeWidth: 1.5 } }),
+		lineOf(idOf('then'), [idOf('target-run'), 'down'], [idOf('target-post'), 'up'], { style: { stroke: '#94a3b8', strokeWidth: 1.25, strokeDasharray: '4 3' } }),
+	];
+	return { nodes, connections };
+}
+
+function viewPostBuild(model) {
+	const post = model.planPost;
+	if (!post) return null;
+	return reportStackBuild(model, 'post', [
+		...(post.intro ? [{ id: 'intro', node: { renderer: { type: 'card-note' }, size: { width: 'auto', height: 'auto' }, data: { title: labelOf(model, 'post'), text: post.intro, tone: POST_TONE } } }] : []),
+		...(post.master ? [{ id: 'master', view: '/overview/post/master', title: post.master.title, icon: 'key', tone: POST_TONE }] : []),
+		...(post.audit ? [{ id: 'audit', view: '/overview/post/audit', title: post.audit.title, icon: 'refresh', tone: POST_TONE }] : []),
+	]);
+}
+
 function viewVerifySampleBuild(model) {
 	const sample = model.reportVerify?.sample;
 	if (!sample) return null;
@@ -785,11 +1109,17 @@ const OVERVIEW_TARGET_X = OVERVIEW_TOOL_X + OVERVIEW_TOOL_WIDTH + 210;
 const OVERVIEW_REPORT_Y = OVERVIEW_DB_HEIGHT + 200;
 const OVERVIEW_REPORT_WIDTH = 560;
 const OVERVIEW_REPORT_HEIGHT = 420;
+const OVERVIEW_REPORT_GAP_MIN = 120;
 
 function viewOverviewBuild(model) {
 	const { source, target, tool } = model.system;
 	const statOf = (dbId) => [`${migrationTableListOf(model, dbId).length} ${labelOf(model, 'tableUnit')}`, `${migrationChoiceListOf(model, dbId).length} ${labelOf(model, 'choiceUnit')}`];
-	const reportX = (index) => index * (OVERVIEW_REPORT_WIDTH + (OVERVIEW_TARGET_X + OVERVIEW_DB_WIDTH - 3 * OVERVIEW_REPORT_WIDTH) / 2);
+	// the reports under the databases, centered, as many as there are
+	const reportIdList = reportIdListOf(model);
+	const widthAll = OVERVIEW_TARGET_X + OVERVIEW_DB_WIDTH;
+	const reportGap = Math.max(OVERVIEW_REPORT_GAP_MIN, (widthAll - reportIdList.length * OVERVIEW_REPORT_WIDTH) / (reportIdList.length - 1));
+	const reportLeft = (widthAll - reportIdList.length * OVERVIEW_REPORT_WIDTH - (reportIdList.length - 1) * reportGap) / 2;
+	const reportX = (index) => reportLeft + index * (OVERVIEW_REPORT_WIDTH + reportGap);
 	const reportNodeOf = (id, index, handles) => ({ ...viewBuild(model, `/overview/${id}`).nodes[0], position: { x: reportX(index), y: OVERVIEW_REPORT_Y }, size: { width: OVERVIEW_REPORT_WIDTH, height: OVERVIEW_REPORT_HEIGHT }, link: `/overview/${id}`, handles });
 	const stepList = tool.stepList?.length ? tool.stepList : [{ id: 'plan', name: labelOf(model, 'plan') }, { id: 'run', name: labelOf(model, 'run') }, { id: 'verify', name: labelOf(model, 'verify') }];
 	const toolHandles = [handleOf('source', 'out', 'left'), handleOf('target', 'out', 'right'), ...stepList.map((step, index) => ({ id: `step-${step.id}`, direction: 'out', anchor: { target: 'body', side: 'bottom', offset: (index + 1) / (stepList.length + 1) } }))];
@@ -804,31 +1134,33 @@ function viewOverviewBuild(model) {
 		{ id: 'link:mapping', renderer: { type: 'card-brief' }, position: { x: OVERVIEW_TOOL_X + 20, y: 40 }, size: { width: OVERVIEW_TOOL_WIDTH - 40, height: 'auto' }, link: '/overview/mapping', data: { title: labelOf(model, 'mapping'), icon: 'arrow-right-left', tone: 'teal', statList: [`${model.mappingTableByKey.size} ${labelOf(model, 'tableUnit')}`] }, handles: [] },
 		reportNodeOf('plan', 0, [handleOf('top', 'in', 'top'), handleOf('out', 'out', 'right')]),
 		reportNodeOf('run', 1, [handleOf('top', 'in', 'top'), handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')]),
-		reportNodeOf('verify', 2, [handleOf('top', 'in', 'top'), handleOf('in', 'in', 'left')]),
+		reportNodeOf('verify', 2, [handleOf('top', 'in', 'top'), handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')]),
+		...(model.planPost ? [reportNodeOf('post', 3, [handleOf('top', 'in', 'top'), handleOf('in', 'in', 'left')])] : []),
 	];
 	const reportIdOf = (step, index) => `report:${step.report ?? ['plan', 'run', 'verify'][index]}`;
-	const labelStep = ['planMake', 'runMake', 'verifyMake'];
+	const labelStep = ['planMake', 'runMake', 'verifyMake', 'postMake'];
+	const stepShownList = stepList.filter((step, index) => reportIdList.includes(reportIdOf(step, index).slice('report:'.length)));
 	const connections = [
 		lineOf('read-source', ['tool', 'source'], ['db:source', 'in'], { style: { stroke: '#2563eb', strokeWidth: 1.5 }, label: { text: labelOf(model, 'readSource') } }),
 		lineOf('write-target', ['tool', 'target'], ['db:target', 'in'], { style: { stroke: '#16a34a', strokeWidth: 1.5 }, label: { text: labelOf(model, 'write') } }),
-		...stepList.map((step, index) => lineOf(`make:${step.id}`, ['tool', `step-${step.id}`], [reportIdOf(step, index), 'top'], { style: { stroke: '#7c3aed', strokeWidth: 1.5 }, label: { text: labelOf(model, labelStep[index]), position: 0.62 } })),
+		...stepShownList.map((step, index) => lineOf(`make:${step.id}`, ['tool', `step-${step.id}`], [reportIdOf(step, index), 'top'], { style: { stroke: '#7c3aed', strokeWidth: 1.5 }, label: { text: labelOf(model, labelStep[index]), position: 0.62 } })),
 		lineOf('plan-run', ['report:plan', 'out'], ['report:run', 'in'], { style: { stroke: '#64748b', strokeWidth: 1.5 }, label: { text: labelOf(model, 'planToRun') } }),
 		lineOf('run-verify', ['report:run', 'out'], ['report:verify', 'in'], { style: { stroke: '#64748b', strokeWidth: 1.5 }, label: { text: labelOf(model, 'runToVerify') } }),
+		...(model.planPost ? [lineOf('verify-post', ['report:verify', 'out'], ['report:post', 'in'], { style: { stroke: '#64748b', strokeWidth: 1.5 }, label: { text: labelOf(model, 'verifyToPost') } })] : []),
 	];
 	return { nodes, connections };
 }
 
-const TAB_MEMBER_LIST = ['plan', 'run', 'verify'];
+const reportIdListOf = (model) => ['plan', 'run', 'verify', ...(model.planPost ? ['post'] : [])];
 const TAB_WIDTH = 1120;
 const TAB_HEIGHT = 810;
 
 function viewOverviewTabsBuild(model, focus) {
 	const diagram = viewOverviewBuild(model);
-	const toneOf = { plan: 'violet', run: 'amber', verify: 'green' };
 	const widthAll = OVERVIEW_TARGET_X + OVERVIEW_DB_WIDTH;
 	return switchTabsApply(diagram, {
 		id: 'tabs',
-		memberList: TAB_MEMBER_LIST.map((id) => ({ id: `report:${id}`, label: labelOf(model, id), tone: toneOf[id], link: `/overview/tabs/${id}` })),
+		memberList: reportIdListOf(model).map((id) => ({ id: `report:${id}`, label: labelOf(model, id), tone: REPORT_TONE_BY_ID[id], link: `/overview/tabs/${id}` })),
 		position: { x: (widthAll - TAB_WIDTH) / 2, y: OVERVIEW_REPORT_Y },
 		size: { width: TAB_WIDTH, height: TAB_HEIGHT },
 	}, `report:${focus}`);
@@ -843,7 +1175,7 @@ function viewBuild(model, path) {
 	const [, first, second, third] = segmentList;
 	const { source, target } = model.system;
 	if (!first) return viewOverviewBuild(model);
-	if (first === 'tabs') return viewOverviewTabsBuild(model, TAB_MEMBER_LIST.includes(second) ? second : 'plan');
+	if (first === 'tabs') return viewOverviewTabsBuild(model, reportIdListOf(model).includes(second) ? second : 'plan');
 	if (first === source.id || first === target.id) return second ? viewTableBuild(model, first, second) : viewErBuild(model, first);
 	if (first === 'mapping') {
 		if (third) return viewMappingRowBuild(model, second, third);
@@ -852,7 +1184,8 @@ function viewBuild(model, path) {
 	if (first === 'choice') return second ? viewMappingChoiceBuild(model, second) : viewChoiceAllBuild(model);
 	if (first === 'plan') return second === 'order' ? viewPlanOrderBuild(model) : second === 'batch' ? viewPlanBatchBuild(model) : second ? null : viewPlanBuild(model);
 	if (first === 'run') return second === 'flow' ? viewRunFlowBuild(model) : second === 'batch' ? viewRunBatchBuild(model) : second === 'dlq' ? viewRunDlqBuild(model) : second ? null : viewRunBuild(model);
-	if (first === 'verify') return second === 'flow' ? viewVerifyFlowBuild(model) : second === 'sample' ? viewVerifySampleBuild(model) : second === 'check' ? viewVerifyCheckBuild(model) : second === 'exception' ? viewVerifyExceptionBuild(model) : second ? null : viewVerifyBuild(model);
+	if (first === 'post') return second === 'master' ? viewPostMasterBuild(model) : second === 'audit' ? viewPostAuditBuild(model) : second ? null : viewPostBuild(model);
+	if (first === 'verify') return second === 'flow' ? viewVerifyFlowBuild(model) : second === 'match' ? viewVerifyMatchBuild(model, third) : second === 'sample' ? viewVerifySampleBuild(model) : second === 'check' ? viewVerifyCheckBuild(model) : second === 'exception' ? viewVerifyExceptionBuild(model) : second ? null : viewVerifyBuild(model);
 	return null;
 }
 
@@ -887,14 +1220,16 @@ function pathLabelGet(model, path) {
 	}
 	if (first === 'plan') return second === 'order' ? labelOf(model, 'planOrder') : second === 'batch' ? labelOf(model, 'planBatch') : labelOf(model, 'plan');
 	if (first === 'run') return second === 'flow' ? labelOf(model, 'runFlow') : second === 'batch' ? labelOf(model, 'runBatch') : second === 'dlq' ? labelOf(model, 'runDlq') : labelOf(model, 'run');
-	if (first === 'verify') return second === 'flow' ? labelOf(model, 'verifyFlow') : second === 'sample' ? labelOf(model, 'verifySample') : second === 'check' ? labelOf(model, 'verifySet') : second === 'exception' ? labelOf(model, 'verifyException') : labelOf(model, 'verify');
+	if (first === 'post') return second === 'master' ? model.planPost?.master?.title ?? second : second === 'audit' ? model.planPost?.audit?.title ?? second : labelOf(model, 'post');
+	if (first === 'verify') return second === 'flow' ? labelOf(model, 'verifyFlow') : second === 'match' ? (third ? model.reportVerify?.matchList?.find((match) => match.id === third)?.title ?? third : labelOf(model, 'verifyMatch')) : second === 'sample' ? labelOf(model, 'verifySample') : second === 'check' ? labelOf(model, 'verifySet') : second === 'exception' ? labelOf(model, 'verifyException') : labelOf(model, 'verify');
 	return last;
 }
 
 function childPathListGet(model, path) {
 	const { source, target } = model.system;
-	if (path === '/overview') return [`/overview/tabs`, `/overview/${source.id}`, `/overview/${target.id}`, '/overview/mapping', '/overview/choice', '/overview/plan', '/overview/run', '/overview/verify'];
-	if (path === '/overview/tabs') return TAB_MEMBER_LIST.map((id) => `/overview/tabs/${id}`);
+	if (path === '/overview') return [`/overview/tabs`, `/overview/${source.id}`, `/overview/${target.id}`, '/overview/mapping', '/overview/choice', '/overview/plan', '/overview/run', '/overview/verify', ...(model.planPost ? ['/overview/post'] : [])];
+	if (path === '/overview/tabs') return reportIdListOf(model).map((id) => `/overview/tabs/${id}`);
+	if (path === '/overview/post') return [...(model.planPost?.master ? ['/overview/post/master'] : []), ...(model.planPost?.audit ? ['/overview/post/audit'] : [])];
 	if (path === `/overview/${source.id}`) return migrationTableListOf(model, source.id).map((table) => `${path}/${table.logical}`);
 	if (path === `/overview/${target.id}`) return migrationTableListOf(model, target.id).map((table) => `${path}/${table.logical}`);
 	if (path === '/overview/mapping') return [...model.mappingTableByKey.values()].map((mapping) => `${path}/${migrationPairGet(model, mapping)}`);
@@ -905,7 +1240,8 @@ function childPathListGet(model, path) {
 	if (path === '/overview/choice') return [...model.mappingChoiceByKey.values()].map((mapping) => `${path}/${migrationChoicePairGet(model, mapping)}`);
 	if (path === '/overview/plan') return ['/overview/plan/order', '/overview/plan/batch'];
 	if (path === '/overview/run') return ['/overview/run/flow', '/overview/run/batch', '/overview/run/dlq'];
-	if (path === '/overview/verify') return ['/overview/verify/flow', ...(model.reportVerify?.sample ? ['/overview/verify/sample'] : []), '/overview/verify/check', '/overview/verify/exception'];
+	if (path === '/overview/verify/match') return (model.reportVerify?.matchList ?? []).map((match) => `${path}/${match.id}`);
+	if (path === '/overview/verify') return ['/overview/verify/flow', ...(model.reportVerify?.matchList?.length ? ['/overview/verify/match'] : []), ...(model.reportVerify?.sample ? ['/overview/verify/sample'] : []), '/overview/verify/check', '/overview/verify/exception'];
 	return [];
 }
 

@@ -63,7 +63,7 @@ test('a component type draws and creates the kinds of its own registry only', ()
 	const base = yamlParse(cardDiagramSourceDefaultCreate().raw);
 	assert.equal(diagramNormalize(base, cardDiagramNodeRegistry).nodes.length, 3);
 	// the base series does not know the Dataverse kinds, and says what it knows
-	assert.throws(() => diagramNormalize(diagramCreate(), cardDiagramNodeRegistry), /unknown node type "dataverse-table" \(this diagram knows: table, operator, card-note, card-brief, view-box, color-block\)/);
+	assert.throws(() => diagramNormalize(diagramCreate(), cardDiagramNodeRegistry), /unknown node type "dataverse-table" \(this diagram knows: table, operator, card-note, card-brief, card-three-dots, view-box, color-block\)/);
 	assert.deepEqual(cardDiagramNodeRegistry.createEntryList.map(entry => entry.id), ['table', 'operator', 'card-note', 'card-brief', 'view-box', 'color-block', 'connection']);
 	assert.deepEqual(registry.createEntryList.map(entry => entry.id), ['table', 'operator', 'card-note', 'card-brief', 'view-box', 'color-block', 'operator-abandon', 'operator-text', 'operator-mapping', 'dataverse-table', 'dataverse-choice', 'power-automate', 'business-rule', 'connection']);
 	// the standalone Dataverse card takes a Dataverse table alone, and its older form
@@ -164,4 +164,16 @@ test('existing choice row handles resolve to the header without mutating authore
 	assert.deepEqual(graph.nodes[1].handles[0].anchor, { target: 'header', side: 'left', offset: 0.5 });
 	assert.equal(graph.connections[0].target.handleId, input.connections[0].target.handleId);
 	assert.equal(input.nodes[1].handles[0].anchor.target, 'column/value');
+});
+
+test('a color block says where its labels go, and which of them are titles', () => {
+	const diagramOf = (data) => ({ version: 1, nodes: [{ id: 'b', renderer: { type: 'color-block' }, position: { x: 0, y: 0 }, size: { width: 100, height: 100 }, data, handles: [] }], connections: [] });
+	assert.doesNotThrow(() => diagramNormalize(diagramOf({ labelSide: 'top', itemList: [{ id: 't', text: 'T', level: 1 }, { id: 'u', text: 'U' }] }), cardDiagramNodeRegistry));
+	assert.throws(() => diagramNormalize(diagramOf({ labelSide: 'left', itemList: [] }), cardDiagramNodeRegistry), /top or the bottom/);
+	assert.throws(() => diagramNormalize(diagramOf({ itemList: [{ id: 't', text: 'T', level: 3 }] }), cardDiagramNodeRegistry), /level 1 or 2/);
+	const columnList = [{ id: 'a', x: 0, width: 50, icon: 'database', text: 'A' }, { id: 'b', x: 50, width: 50 }];
+	assert.doesNotThrow(() => diagramNormalize(diagramOf({ itemList: [], columnTop: 10, columnList }), cardDiagramNodeRegistry));
+	assert.throws(() => diagramNormalize(diagramOf({ itemList: [], columnList }), cardDiagramNodeRegistry), /columnTop/);
+	assert.throws(() => diagramNormalize(diagramOf({ itemList: [], columnTop: 10, columnList: [{ id: 'a', x: 0 }] }), cardDiagramNodeRegistry), /x and width/);
+	assert.throws(() => diagramNormalize(diagramOf({ itemList: [], columnTop: 10, columnList: [{ id: 'a', x: 0, width: 1, icon: 'nothing' }] }), cardDiagramNodeRegistry), /supported icon/);
 });

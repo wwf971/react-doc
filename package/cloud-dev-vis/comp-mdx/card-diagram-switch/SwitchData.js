@@ -33,6 +33,14 @@ export function switchStackFrameIsVisible(data, presentation) {
 	return !presentation.isFocused || data.isFrameVisibleFocused !== false;
 }
 
+// a stack at the height of its items, with no scrollbar, or scrolling in the height of its
+// node. isHeightFullEmbedded and isHeightFullFocused say which by presentation, as the frame
+// and the title do; what a program or the reader chose (override) goes first
+export function switchStackHeightIsFull(data, presentation, override) {
+	if (override !== undefined) return override;
+	return (presentation.isEmbedded ? data.isHeightFullEmbedded : data.isHeightFullFocused) === true;
+}
+
 export function switchStackTitleBarNormalize(value) {
 	if (value === undefined) return undefined;
 	const title = typeof value === 'string' ? { text: value } : mapping(value, 'titleBar');

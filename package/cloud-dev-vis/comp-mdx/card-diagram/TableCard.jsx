@@ -87,6 +87,7 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 			<div ref={anchorRef?.('header')} className="doc-er-table-title doc-card-title">
 				<span className="doc-er-table-title-name">
 					{titleLeading}
+					{node.data.badge ? <span className="doc-er-table-badge">{node.data.badge}</span> : null}
 					<CardCell editor={editor} nodeId={nodeId} field={{ id: 'name', kind: 'text' }} value={content.name} className="doc-er-table-title-text" />
 				</span>
 				{node.data.nameLogical || editor ? <CardCell editor={editor} nodeId={nodeId} field={{ id: 'nameLogical', kind: 'text' }} value={content.nameLogical} className="doc-er-table-title-logical" /> : null}

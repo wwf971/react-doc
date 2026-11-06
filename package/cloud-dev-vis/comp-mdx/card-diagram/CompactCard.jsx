@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import {
-	Archive, ArrowRightLeft, Boxes, Check, CircleAlert, Cloud, Database, FileCheck, FileSpreadsheet, FileText, Filter, Hash, Key, Layers, Link, ListChecks, RefreshCw, Search, Send, Server, ShieldCheck, Split, Table2, TriangleAlert, Waypoints, Workflow, Zap,
+	Archive, ArrowRightLeft, Ellipsis, EllipsisVertical, Boxes, Check, CircleAlert, Cloud, Database, FileCheck, FileSpreadsheet, FileText, Filter, Hash, Key, Layers, Link, ListChecks, RefreshCw, Search, Send, Server, ShieldCheck, Split, Table2, TriangleAlert, Waypoints, Workflow, Zap,
 } from '../../../../main/frontend/UICommon.js';
 import { CardCell } from './TableCard.jsx';
 
@@ -49,6 +49,18 @@ export const CardBrief = observer(function CardBrief({ node, editor, nodeId }) {
 				<span className="doc-card-brief-title"><CardCell editor={editor} nodeId={nodeId} field={{ id: 'title', kind: 'text', label: 'Title' }} value={content.title ?? ''}>{node.data.title}</CardCell></span>
 				{node.data.statList?.length ? <span className="doc-card-brief-stat">{node.data.statList.map((stat, index) => <span key={index}>{stat}</span>)}</span> : null}
 			</span>
+		</div>
+	);
+});
+
+// what is left out between two cards of a long series: three dots, up to down or left
+// to right (data.direction), and how many
+export const CardThreeDots = observer(function CardThreeDots({ node, nodeId }) {
+	const Icon = node.data.direction === 'horizontal' ? Ellipsis : EllipsisVertical;
+	return (
+		<div data-node-id={nodeId} data-tone={node.data.tone || 'slate'} className="doc-card-three-dots">
+			<Icon size={22} aria-hidden="true" />
+			{node.data.text ? <span className="doc-card-three-dots-text">{node.data.text}</span> : null}
 		</div>
 	);
 });

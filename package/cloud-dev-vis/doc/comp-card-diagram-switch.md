@@ -154,6 +154,23 @@ Copies with the same node ID and `focusPath` share a saved scroll position. Thei
 
 `isFrameVisibleFocused` defaults to `true`. Setting it to `false` hides the focused stack's border and background, not its scrolling behavior or items. Title visibility is controlled separately below. The three migration plan/report containers explicitly keep their frames and titles in both presentations.
 
+### The height of a stack
+
+A stack scrolls inside the height of its node, or takes the height of its items, with no scrollbar. Which one follows the presentation, like the frame and the title:
+
+```yaml
+id: report:run
+renderer: { type: view-stack }
+size: { width: 560, height: 420 }   # the height it scrolls in, kept for when it is switched back
+data:
+  focusPath: /overview/run
+  isHeightFullEmbedded: true
+  isHeightFullFocused: false
+  itemList: []
+```
+
+Both flags default to `false`. A stack showing a title bar has a button at its right end to switch; in a program, `store.stackHeightFullSet({ path, nodeId, isFull })` and `store.stackHeightIsFull({ path, nodeId })`, `path` defaulting to the current view. A switch holds for the presentation the stack has in that view while the block lives, and the other presentation keeps its own. At full height a view opens fitted to the whole stack, so a tall one starts small, and the reader zooms in; a position to scroll to has no effect there. Switching on the canvas moves nothing but the bottom edge of the stack: the camera stays, the button stays under the pointer, and the items keep their width and scale, so what grows past the canvas is reached by panning. `height: auto` in `size` is another way to write a stack always at full height until switched. Which height applies is decided per view: a stack without `focusPath` is focused in its own view wherever that view is shown, so only `isHeightFullFocused` applies to it.
+
 ### The stack title bar
 
 The title bar stays above the scrolling items. Simple text can be written as `data.titleBar: Verification report`. To control its visibility independently in the two presentations:

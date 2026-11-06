@@ -2,9 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	SWITCH_STACK_ITEM_SCALE_MAX, SWITCH_TAB_HEADER_HEIGHT, switchBoxClipBuild, switchCameraBetween, switchCameraChildOf, switchCameraFit, switchCameraParentOf, switchDocNormalize, switchEmbedMapBuild, switchMaskClipBuild, switchMorphBuild, switchMorphFrameAt,
-	switchPathChain, switchPathHashRead, switchPathNormalize, switchPathParent, switchProviderFromDoc, switchRouteFind, switchStackItemLayout, switchStepSecondGet, switchTabsApply,
-} from './SwitchData.js';
-import { switchPresentationBuild, switchStackFrameIsVisible, switchStackPresentationBuild, switchStackTitleBarNormalize, switchStackTitleBarRead } from './SwitchData.js';
+	switchPathChain, switchPathHashRead, switchPathNormalize, switchPathParent, switchProviderFromDoc, switchRouteFind, switchStackItemLayout, switchStepSecondGet, switchTabsApply } from './SwitchData.js';
+import { switchPresentationBuild, switchStackFrameIsVisible, switchStackHeightIsFull, switchStackPresentationBuild, switchStackTitleBarNormalize, switchStackTitleBarRead } from './SwitchData.js';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ViewStackTitleBar, viewStackNodeKind, switchRegistryBuild } from './SwitchNodeKinds.jsx';
@@ -343,3 +342,56 @@ test('a chosen box clips the world to it, with a margin a portal opens', () => {
 	assert.match(clip, /^inset\(calc\(20px - var\(--doc-switch-open, 0px\)\) calc\(-110px - /);
 	assert.match(clip, /calc\(-70px - var\(--doc-switch-open, 0px\)\) calc\(10px - /);
 });
+
+test('a stack at full height: by presentation, what is chosen first, a node as tall as its items', () => {
+	const embedded = switchPresentationBuild('/', true);
+	const focused = switchPresentationBuild('/');
+	assert.equal(switchStackHeightIsFull({}, focused), false);
+	assert.equal(switchStackHeightIsFull({ isHeightFullFocused: true }, focused), true);
+	assert.equal(switchStackHeightIsFull({ isHeightFullFocused: true }, embedded), false);
+	assert.equal(switchStackHeightIsFull({ isHeightFullEmbedded: true }, embedded), true);
+	assert.equal(switchStackHeightIsFull({ isHeightFullEmbedded: true }, embedded, false), false);
+	assert.equal(switchStackHeightIsFull({}, focused, true), true);
+
+	const stack = { id: 'report', renderer: { type: 'view-stack' }, position: { x: 0, y: 0 }, size: { width: 500, height: 300 }, data: { focusPath: '/report', isHeightFullFocused: true, itemList: [] }, handles: [] };
+	const viewByPath = { '/': { nodes: [stack] }, '/report': { nodes: [stack] } };
+	const provider = { root: '/', viewGet: (path) => (viewByPath[path] ? { path, diagram: viewByPath[path] } : null), labelGet: (path) => path, childListGet: () => [] };
+	const store = new SwitchStore({ provider, registry: switchRegistryBuild({ id: 'test', kindList: [] }) });
+	// the same node: scrolling where it is embedded, at full height in its own view
+	assert.equal(store.stackHeightIsFull({ path: '/', nodeId: 'report' }), false);
+	assert.equal(store.stackHeightIsFull({ path: '/report', nodeId: 'report' }), true);
+	const nodeOf = (path) => store.entryGet(path).canvas.graph.nodes[0];
+	assert.equal(nodeOf('/').size.height, 300);
+	assert.equal(nodeOf('/report').size.height, 'auto');
+	// a stack at full height does not scroll, whatever position its other copy keeps
+	const keyEmbedded = store.stackKey('/', 'report');
+	const keyFocused = store.stackKey('/report', 'report');
+	store.stackScrollSet(keyEmbedded, 80);
+	assert.equal(store.stackScrollGet(keyEmbedded), 80);
+	assert.equal(store.stackScrollGet(keyFocused), 0);
+	// set by a program: for one presentation, the other keeps its own
+	assert.equal(store.stackHeightFullSet({ path: '/', nodeId: 'report', isFull: true }), true);
+	assert.equal(store.stackHeightIsFull({ path: '/', nodeId: 'report' }), true);
+	assert.equal(nodeOf('/').size.height, 'auto');
+	store.stackHeightFullSet({ path: '/report', nodeId: 'report', isFull: false });
+	assert.equal(nodeOf('/report').size.height, 300);
+	assert.equal(nodeOf('/').size.height, 'auto');
+	assert.equal(store.stackHeightFullSet({ path: '/', nodeId: 'nothing', isFull: true }), false);
+	// the written height is kept for going back
+	store.stackHeightFullSet({ path: '/', nodeId: 'report', isFull: false });
+	assert.equal(nodeOf('/').size.height, 300);
+	// switched on the canvas: the camera is left where it is, and kept from being refitted;
+	// the nodes keep what React Flow measured, or it would hide them until it measures again
+	const cameraList = [];
+	store.viewportApiSet({ viewportGet: () => ({ x: 12, y: 34, zoom: 0.5 }), viewportSet: (camera) => cameraList.push(camera) });
+	store.isCameraReady = true;
+	store.nodeListFlow = store.nodeListFlow.map((node) => ({ ...node, measured: { width: 560, height: 300 } }));
+	store.stackHeightFullSet({ nodeId: 'report', path: store.pathCurrent, isFull: true });
+	assert.deepEqual(store.cameraOf(store.pathCurrent), { x: 12, y: 34, zoom: 0.5 });
+	store.measurementSet(store.pathCurrent, 'report', { width: 560, height: 900 });
+	assert.deepEqual(cameraList, []);
+	assert.equal(store.nodeListFlow.find((node) => node.id === 'report').measured.height, 300);
+	store.viewportApiSet(null);
+	assert.throws(() => viewStackNodeKind.contract.dataNormalize({ itemList: [], isHeightFullFocused: 'yes' }), /isHeightFullFocused must be a boolean/);
+});
+
