@@ -54,10 +54,10 @@ export const DiagramERAnimation = compDefine(cardDiagramAnimationCompCreate(powe
 	description: 'A diagram of Dataverse tables, flows and operators moving between named states.',
 }));
 
-// the switching layer of the series (doc/card-diagram-flexible-switch.md): many views
+// the switching layer of the series (doc/card-diagram-flexible-switch.md): many scenes
 // by path in one viewport, with every card of the registry
 export const DiagramERSwitch = compDefine(cardDiagramSwitchCompCreate(powerPlatformNodeRegistry, 'DiagramERSwitch'), cardDiagramSwitchDefineOptionsBuild({
-	label: 'Power Platform diagram views',
+	label: 'Power Platform diagram scenes',
 	description: 'Many diagrams of Dataverse tables, flows and operators in one viewport, by path, with smooth switching.',
 }));
 

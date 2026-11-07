@@ -9,13 +9,13 @@ import { SwitchAnimation } from '../../card-diagram-switch/SwitchAnimation.jsx';
 import { switchAnimationNormalize } from '../../card-diagram-switch/SwitchAnimationStore.js';
 import { powerPlatformNodeRegistry } from '../power-platform-node-registry.js';
 import { MIGRATION_KIND_LIST, migrationCategoryOf, migrationModelBuild, migrationPathBuild } from './MigrationData.js';
-import { migrationProviderBuild } from './MigrationViews.js';
+import { migrationProviderBuild } from './MigrationScenes.js';
 import './Migration.css';
 
 export const migrationSwitchRegistry = switchRegistryBuild(powerPlatformNodeRegistry);
 
 // the data items of one category, as the object's assets say now: what is still being
-// read, and what is read. signature: their text, what the views depend on
+// read, and what is read. signature: their text, what the scenes depend on
 export function migrationItemListRead(service, category) {
 	const assetList = service.assetList().filter((asset) => MIGRATION_KIND_LIST.includes(asset.kind) && migrationCategoryOf(asset.pathList?.[0]) === category);
 	const itemList = [];
@@ -48,10 +48,10 @@ export function useMigrationModel(service, category) {
 	return { read, model: isDrawTurn && modelLast.current?.category === category ? modelLast.current : null };
 }
 
-// a mode of a migration: the views of its data, the category chosen by the block.
+// a mode of a migration: the scenes of its data, the category chosen by the block.
 //
 //   param.category   example (default), or real: the first folder of the items
-//   param.path       the view shown first
+//   param.path       the scene shown first
 //   param.height     the height of the block
 export const MigrationExplorer = observer(function MigrationExplorer({ data = {}, config = {} }) {
 	const service = config.objectFrontend;
@@ -80,7 +80,7 @@ export function MigrationLoading({ read, param = {} }) {
 export function migrationBoxSaveBuild(service, model, category) {
 	return async (path, rect) => {
 		if (!service.isWritable) return { code: -1, message: service.writeUnavailableReason };
-		const layout = { ...model.layout, viewByPath: { ...model.layout.viewByPath, [path]: { ...model.layout.viewByPath?.[path], box: rect } } };
+		const layout = { ...model.layout, sceneByPath: { ...model.layout.sceneByPath, [path]: { ...model.layout.sceneByPath?.[path], box: rect } } };
 		if (model.layoutKey) return service.assetWrite(model.layoutKey, layout, `the bounding box of ${path}`);
 		return service.assetCreate({ key: `${category}.layout`, kind: 'layout', name: 'Layout', pathList: [migrationPathBuild(category, 'layout')], data: layout });
 	};
@@ -113,11 +113,11 @@ const MigrationExplorerBody = observer(function MigrationExplorerBody({ service,
 	);
 });
 
-// a mode of a migration: a tour of its views under the animation layer. the states are
-// written in the block; every view they name comes from the data.
+// a mode of a migration: a tour of its scenes under the animation layer. the states are
+// written in the block; every scene they name comes from the data.
 //
 //   param.category, param.height    as in MigrationExplorer
-//   param.stateList                 [{ id, name, description?, view: a path, box?: a region }]
+//   param.stateList                 [{ id, name, description?, scene: a path, box?: a region }]
 //   param.transitionList, param.fps as in an animation
 export const MigrationTour = observer(function MigrationTour({ data = {}, config = {} }) {
 	const service = config.objectFrontend;

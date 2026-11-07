@@ -1,11 +1,11 @@
 import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
 import { switchStackTitleBarNormalize } from './SwitchData.js';
 
-// the starting text of a block, and what its views depend on at build time
+// the starting text of a block, and what its scenes depend on at build time
 const SWITCH_SOURCE_DEFAULT = `version: 1
-title: Views
+title: Scenes
 height: 520
-viewList:
+sceneList:
   - path: /overview
     label: Overview
     diagram:
@@ -16,13 +16,13 @@ viewList:
           renderer: { type: card-note }
           position: { x: 0, y: 120 }
           size: { width: 180, height: auto }
-          data: { title: A card, text: Beside an embedded view, tone: blue }
+          data: { title: A card, text: Beside an embedded scene, tone: blue }
           handles: [{ id: out, direction: out, anchor: { side: right } }]
         - id: b
-          renderer: { type: view-embed }
+          renderer: { type: scene-embed }
           position: { x: 320, y: 0 }
           size: { width: 420, height: 300 }
-          data: { view: /overview/detail, title: Detail, tone: green }
+          data: { scene: /overview/detail, title: Detail, tone: green }
           handles: [{ id: in, direction: in, anchor: { side: left } }]
   - path: /overview/detail
     label: Detail
@@ -43,13 +43,13 @@ export function switchSourceDefaultCreate() {
 }
 
 // the build-time dependencies of a block: the data of the registered components
-// drawing the nodes of its views, as for a diagram
+// drawing the nodes of its scenes, as for a diagram
 export function switchDependenciesCollect(data, context) {
 	try {
 		const doc = data.source || data.raw ? yamlParse(data.source || data.raw) : data;
     const nodeCollect = (node) => {
       if (node.renderer?.component) context.componentCollect(node.renderer.component, node.data ?? {});
-      if (node.renderer?.type !== 'view-stack') return;
+      if (node.renderer?.type !== 'scene-stack') return;
       const title = switchStackTitleBarNormalize(node.data?.titleBar);
       for (const item of title?.itemList ?? []) {
         if (item.type === 'component') context.componentCollect(item.comp, item.data ?? {});
@@ -58,9 +58,9 @@ export function switchDependenciesCollect(data, context) {
         if (item.node) nodeCollect(item.node);
       }
     };
-		for (const view of doc.viewList ?? []) {
-			for (const node of view.diagram?.nodes ?? []) {
-        nodeCollect(node);
+		for (const scene of doc.sceneList ?? []) {
+			for (const holder of [scene, ...(scene.viewList ?? [])]) {
+				for (const node of holder.diagram?.nodes ?? []) nodeCollect(node);
 			}
 		}
   } catch (error) {

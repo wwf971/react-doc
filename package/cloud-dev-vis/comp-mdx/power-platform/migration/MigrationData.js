@@ -2,7 +2,7 @@
 // kind of item holds, how its paths are built, and the model all of them form once
 // read. Pure: the items come from anywhere (the assets of a frontend object, a test).
 //
-//   /{category}/system                                the two databases, the tool, the words of the views
+//   /{category}/system                                the two databases, the tool, the words of the scenes
 //   /{category}/schema/{db}/table/{logical}           one table
 //   /{category}/schema/{db}/choice/{logical}          one option set; isGlobal: false when only one column uses it
 //   /{category}/mapping/table/{source}--{target}      a pair of tables: the keys of its column mappings
@@ -12,7 +12,7 @@
 //   /{category}/plan-post                             what is done after the migration
 //   /{category}/report/run                            what a run did
 //   /{category}/report/verify                         what the check found
-//   /{category}/layout                                the bounding boxes of the views
+//   /{category}/layout                                the bounding boxes of the scenes
 //
 // the first folder is the category: `example` for small sanitized data the
 // illustrations are drawn from, `real` for the data of the project. Both hold the same
@@ -64,7 +64,7 @@ export function migrationModelBuild(category, itemList) {
 		planPost: null,
 		reportRun: null,
 		reportVerify: null,
-		layout: { viewByPath: {} },
+		layout: { sceneByPath: {} },
 		layoutKey: '',
 		problemList: [],
 		unverifiedList: [],
@@ -83,7 +83,7 @@ export function migrationModelBuild(category, itemList) {
 		else if (item.kind === 'plan-post') model.planPost = record;
 		else if (item.kind === 'report-run') model.reportRun = record;
 		else if (item.kind === 'report-verify') model.reportVerify = record;
-		else if (item.kind === 'layout') { model.layout = { viewByPath: {}, ...data }; model.layoutKey = item.key; }
+		else if (item.kind === 'layout') { model.layout = { sceneByPath: {}, ...data }; model.layoutKey = item.key; }
 	}
 	migrationModelCheck(model);
 	return model;
@@ -103,8 +103,8 @@ function migrationModelCheck(model) {
 		}
 	}
 	for (const choice of model.choiceByKey.values()) {
-		// a view of a database names both by their logical names
-		if (migrationTableListOf(model, choice.db).some((table) => table.logical === choice.logical)) problem(`${choice.key}: a table of ${choice.db} has the same logical name, and its view is the one shown.`);
+		// a scene of a database names both by their logical names
+		if (migrationTableListOf(model, choice.db).some((table) => table.logical === choice.logical)) problem(`${choice.key}: a table of ${choice.db} has the same logical name, and its scene is the one shown.`);
 		if (!migrationChoiceIsGlobal(choice)) {
 			const useCount = [...model.tableByKey.values()].reduce((sum, table) => sum + table.columnList.filter((column) => column.choice === choice.key).length, 0);
 			if (useCount > 1) problem(`${choice.key}: isGlobal is false, but ${useCount} columns use it.`);

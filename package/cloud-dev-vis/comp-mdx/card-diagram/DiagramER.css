@@ -641,9 +641,9 @@
 .doc-card.is-compact .doc-er-table-column-header > span { line-height: 1.25; }
 
 /* the bounding box of a view: a red frame, never in a picture of the viewport */
-.react-flow__node:has(> .doc-vis-node > .doc-vis-node-content > .doc-vis-view-box.is-hidden) { pointer-events: none; }
-.doc-vis-node-content:has(> .doc-vis-view-box) { overflow: visible; }
-.doc-vis-view-box {
+.react-flow__node:has(> .doc-vis-node > .doc-vis-node-content > .doc-vis-scene-box.is-hidden) { pointer-events: none; }
+.doc-vis-node-content:has(> .doc-vis-scene-box) { overflow: visible; }
+.doc-vis-scene-box {
 	box-sizing: border-box;
 	position: relative;
 	width: 100%;
@@ -652,8 +652,8 @@
 	border-radius: 0.25rem;
 	background: rgb(220 38 38 / 4%);
 }
-.doc-vis-view-box.is-hidden { visibility: hidden; border: 0; background: none; pointer-events: none; }
-.doc-vis-view-box-label {
+.doc-vis-scene-box.is-hidden { visibility: hidden; border: 0; background: none; pointer-events: none; }
+.doc-vis-scene-box-label {
 	position: absolute;
 	left: 0.4rem;
 	top: -1.25rem;
@@ -674,3 +674,46 @@
 .doc-er-table[data-tone='amber'] .doc-er-table-badge { border-color: #fcd34d; background: #fef3c7; color: #92400e; }
 .doc-er-table.is-master { border-color: #f59e0b; }
 .doc-er-table.is-master .doc-er-table-title { background: #fef3c7; }
+
+/* the matrix card: rows and columns with headers, a mark where they meet */
+.doc-card-matrix { box-sizing: border-box; width: 100%; overflow: hidden; border: 1px solid var(--color-fd-border); border-radius: 0.5rem; background: var(--color-fd-card); color: var(--color-fd-foreground); font-size: 0.75rem; }
+.doc-card-matrix-title { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-fd-border); }
+.doc-card-matrix-name { font-size: 0.82rem; font-weight: 600; }
+.doc-card-matrix-subtitle { color: var(--color-fd-muted-foreground); font-size: 0.72rem; }
+.doc-card-matrix-table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 0; font-size: inherit; }
+.doc-card-matrix-col-head { width: var(--doc-card-matrix-row-head); }
+.doc-card-matrix-col { width: var(--doc-card-matrix-cell); }
+.doc-card-matrix-table th, .doc-card-matrix-table td { border: 1px solid var(--color-fd-border); padding: 0; font-weight: 500; }
+.doc-card-matrix-table tr > :first-child { border-left: 0; }
+.doc-card-matrix-table tr > :last-child { border-right: 0; }
+.doc-card-matrix-table thead tr:first-child > * { border-top: 0; }
+.doc-card-matrix-table tbody tr:last-child > * { border-bottom: 0; }
+.doc-card-matrix-corner { vertical-align: bottom; padding: 0.3rem 0.5rem !important; background: color-mix(in srgb, var(--color-fd-muted) 70%, transparent); text-align: left; }
+.doc-card-matrix-axis { display: block; color: var(--color-fd-muted-foreground); font-size: 0.68rem; font-weight: 500; line-height: 1.4; }
+.doc-card-matrix-axis.is-column { text-align: right; }
+.doc-card-matrix-column { background: color-mix(in srgb, var(--color-fd-muted) 70%, transparent); text-align: center; vertical-align: bottom; }
+.doc-card-matrix.is-head-vertical .doc-card-matrix-column > span { display: inline-block; padding: 0.4rem 0; writing-mode: vertical-rl; line-height: var(--doc-card-matrix-cell); white-space: nowrap; }
+.doc-card-matrix.is-head-horizontal .doc-card-matrix-column > span { display: block; padding: 0.25rem; overflow-wrap: anywhere; line-height: 1.25; }
+.doc-card-matrix-row { height: var(--doc-card-matrix-cell); padding: 0 0.5rem !important; background: color-mix(in srgb, var(--color-fd-muted) 70%, transparent); overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.doc-card-matrix-cell { height: var(--doc-card-matrix-cell); text-align: center; line-height: 1; white-space: nowrap; }
+.doc-card-matrix-cell.is-diagonal { background: color-mix(in srgb, var(--color-fd-muted) 45%, transparent); }
+.doc-card-matrix-table tbody tr:hover > td:not(.is-diagonal) { background: color-mix(in srgb, var(--color-fd-primary) 8%, transparent); }
+.doc-card-matrix [data-tone='amber'] { color: var(--color-fd-warning, #b45309); }
+.doc-switch-flow .doc-card-matrix .is-link { cursor: pointer; }
+.doc-switch-flow .doc-card-matrix .is-link:hover { color: var(--color-fd-primary); text-decoration: underline; }
+
+/* the database card: a cylinder with its name inside */
+.doc-card-database { --doc-card-database-tone: #475569; position: relative; box-sizing: border-box; width: 100%; }
+.doc-card-database[data-tone='blue'] { --doc-card-database-tone: #3f51b5; }
+.doc-card-database[data-tone='teal'] { --doc-card-database-tone: #0f766e; }
+.doc-card-database[data-tone='green'] { --doc-card-database-tone: #15803d; }
+.doc-card-database[data-tone='amber'] { --doc-card-database-tone: #b45309; }
+.doc-card-database[data-tone='red'] { --doc-card-database-tone: #b91c1c; }
+.doc-card-database[data-tone='violet'] { --doc-card-database-tone: #6d28d9; }
+.doc-card-database-drawing { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.doc-card-database-body { fill: color-mix(in srgb, var(--doc-card-database-tone) 12%, var(--color-fd-card)); stroke: var(--doc-card-database-tone); stroke-width: 2.5; }
+.doc-card-database-top { fill: color-mix(in srgb, var(--doc-card-database-tone) 24%, var(--color-fd-card)); stroke: var(--doc-card-database-tone); stroke-width: 2.5; }
+.doc-card-database-band { fill: none; stroke: color-mix(in srgb, var(--doc-card-database-tone) 35%, transparent); stroke-width: 2; }
+.doc-card-database-text { position: absolute; left: 8%; right: 8%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; text-align: center; }
+.doc-card-database-title { color: var(--doc-card-database-tone); font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+.doc-card-database-note { color: var(--color-fd-muted-foreground); font-size: 0.8rem; line-height: 1.3; }

@@ -1,7 +1,7 @@
 import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
 
 // The pure part of the switching layer (card-diagram-flexible-switch.md): paths,
-// documents, the tabs of a view, bounding boxes and cameras, the way from one view
+// documents, the tabs of a scene, bounding boxes and cameras, the way from one scene
 // to another, and what a frame of that way looks like. Nothing here knows a store,
 // React Flow or a clock: a frame is a function of a step and a progress, so a
 // requestAnimationFrame loop and remotion's frame drive it alike.
@@ -19,14 +19,18 @@ export const SWITCH_SECOND_CAMERA = 0.5;
 export const SWITCH_SECOND_SCROLL = 0.4;
 export const SWITCH_STACK_ITEM_SCALE_MAX = 1.1;
 
-export function switchPresentationBuild(path, isEmbedded = false) {
-	return { path: switchPathNormalize(path), isEmbedded, isFocused: !isEmbedded };
+// how a scene is being presented: which scene and which of its views, embedded or focused,
+// and when embedded, the scene directly holding it. pathEmbedder is not the parent in the
+// tree of paths: a scene may embed one that lies anywhere
+export function switchPresentationBuild(path, isEmbedded = false, pathEmbedder = null) {
+	const { path: scene, view } = switchPathViewRead(path);
+	return { path: scene, view, isEmbedded, isFocused: !isEmbedded, pathEmbedder: isEmbedded && pathEmbedder ? switchPathViewRead(pathEmbedder).path : null };
 }
 
 export function switchStackPresentationBuild(data, presentation) {
 	if (!data.focusPath) return presentation;
 	const path = switchPathNormalize(data.focusPath);
-	return switchPresentationBuild(path, presentation.isEmbedded || presentation.path !== path);
+	return switchPresentationBuild(path, presentation.isEmbedded || presentation.path !== path, presentation.isEmbedded ? presentation.pathEmbedder : presentation.path);
 }
 
 export function switchStackFrameIsVisible(data, presentation) {
@@ -75,7 +79,7 @@ export function switchStackTitleBarRead(data, presentation) {
 
 // ---------- paths ----------
 
-// a path of a view: "/" separates its segments, always from the root, as a path
+// a path of a scene: "/" separates its segments, always from the root, as a path
 // of the assets of a frontend object is read
 export function switchPathNormalize(path) {
 	const segmentList = String(path ?? '').split('/').map((segment) => segment.trim()).filter(Boolean);
@@ -99,15 +103,142 @@ export function switchPathChain(path) {
 	return chain;
 }
 
-// a path may name an item of a scrolling stack of its view: /overview/plan#batch
+// a path may name an item of a scrolling stack of its scene: /overview/plan#batch
 export function switchPathHashRead(path) {
 	const [pathOnly, itemId] = String(path ?? '').split('#');
 	return { path: switchPathNormalize(pathOnly), itemId: itemId || '' };
 }
 
+// a path may name a view of its scene: /overview/er@matrix
+export function switchPathViewRead(path) {
+	const text = String(path ?? '');
+	const index = text.lastIndexOf('@');
+	return index < 0 ? { path: switchPathNormalize(text), view: '' } : { path: switchPathNormalize(text.slice(0, index)), view: text.slice(index + 1).trim() };
+}
+
+export function switchPathViewBuild(path, view) {
+	return view ? `${path}@${view}` : path;
+}
+
 export function switchPathLast(path) {
 	const normalized = switchPathNormalize(path);
 	return normalized.slice(normalized.lastIndexOf('/') + 1);
+}
+
+// ---------- the views of a scene ----------
+
+// A scene has one or more views and shows one at a time, as a table card does. A scene
+// without a viewList has one view, its diagram, and nothing here applies to it.
+//
+//   viewList      [{ id, label?, description?, diagram, box?, isAvailableEmbedded?, isAvailableFocused?, isFrameHiddenEmbedded? }]
+//                 isFrameHiddenEmbedded: a card showing this view is this view alone: no frame, no
+//                 title line, no margin, the view filling the whole card
+//   viewDefault   the id of a view; an ordered list of rules, the first match wins:
+//                 [{ when?: { isEmbedded?, isFocused?, embedder? }, view }], embedder being a
+//                 path, /a/* for what lies below a path, or a list of those; or, in code,
+//                 a function of the presentation answering an id
+//   viewHover     the view shown while a pointer rests on a card embedding the scene, in the
+//                 same forms as viewDefault; none without one
+export function switchViewListCheck(desc, path) {
+	if (!Array.isArray(desc.viewList) || desc.viewList.length === 0) throw new Error(`The viewList of ${path} must list at least one view.`);
+	const idSet = new Set();
+	for (const view of desc.viewList) {
+		mapping(view, `a view of ${path}`);
+		if (typeof view.id !== 'string' || !/^[^\s/@#]+$/.test(view.id)) throw new Error(`Every view of ${path} needs an id without spaces, /, @ or #.`);
+		if (idSet.has(view.id)) throw new Error(`The scene ${path} has two views of the id "${view.id}".`);
+		if (!view.diagram) throw new Error(`The view ${view.id} of ${path} needs a diagram.`);
+		idSet.add(view.id);
+	}
+	for (const field of ['viewDefault', 'viewHover']) switchViewChoiceCheck(desc[field], field, idSet, path);
+}
+
+function switchViewChoiceCheck(value, field, idSet, path) {
+	if (value === undefined || typeof value === 'function') return;
+	const named = (id) => {
+		if (!idSet.has(id)) throw new Error(`The ${field} of ${path} names a view it does not have: ${id}.`);
+	};
+	if (typeof value === 'string') { named(value); return; }
+	if (!Array.isArray(value)) throw new Error(`The ${field} of ${path} must be the id of a view, or a list of rules.`);
+	for (const rule of value) {
+		mapping(rule, `a rule of the ${field} of ${path}`);
+		named(rule.view);
+		if (rule.when === undefined) continue;
+		mapping(rule.when, `when of a rule of the ${field} of ${path}`);
+		for (const key of Object.keys(rule.when)) {
+			if (!['isEmbedded', 'isFocused', 'embedder'].includes(key)) throw new Error(`A rule of the ${field} of ${path} has an unknown condition: ${key}.`);
+		}
+	}
+}
+
+// what viewDefault or viewHover answers in a presentation, best first
+function switchViewChoiceIdListOf(value, presentation) {
+	if (typeof value === 'function') return [value(presentation)];
+	if (Array.isArray(value)) return value.filter((rule) => switchViewRuleMatch(rule.when, presentation)).map((rule) => rule.view);
+	return [value];
+}
+
+// the views a reader may switch to in a presentation. a scene hiding them all from a
+// presentation would have nothing to show, so then they are all there
+export function switchViewListOf(desc, presentation) {
+	const list = desc.viewList.filter((view) => (presentation.isEmbedded ? view.isAvailableEmbedded : view.isAvailableFocused) !== false);
+	return list.length > 0 ? list : desc.viewList;
+}
+
+function switchViewEmbedderMatch(embedder, pathEmbedder) {
+	if (!pathEmbedder) return false;
+	return [].concat(embedder).some((pattern) => {
+		const text = String(pattern);
+		return text.endsWith('/*') ? pathEmbedder.startsWith(`${switchPathNormalize(text.slice(0, -2))}/`) : pathEmbedder === switchPathNormalize(text);
+	});
+}
+
+function switchViewRuleMatch(when = {}, presentation) {
+	if (when.isEmbedded !== undefined && when.isEmbedded !== presentation.isEmbedded) return false;
+	if (when.isFocused !== undefined && when.isFocused !== presentation.isFocused) return false;
+	return when.embedder === undefined || switchViewEmbedderMatch(when.embedder, presentation.pathEmbedder);
+}
+
+// which view a scene shows in a presentation: the first of wantedList available there (a
+// reader's choice, what the embedding asks for), then viewDefault, then the first available
+export function switchViewResolve(desc, presentation, wantedList = []) {
+	const list = switchViewListOf(desc, presentation);
+	const isAvailable = (id) => list.some((view) => view.id === id);
+	const wanted = wantedList.find(isAvailable);
+	if (wanted) return wanted;
+	return switchViewChoiceIdListOf(desc.viewDefault, presentation).find(isAvailable) ?? list[0].id;
+}
+
+// the view shown while a pointer rests on a card embedding a scene, '' for none. viewAsked:
+// what that card asks for, which goes first; false: none on this card
+export function switchViewHoverResolve(desc, presentation, viewAsked) {
+	if (viewAsked === false) return '';
+	const list = switchViewListOf(desc, presentation);
+	const isAvailable = (id) => list.some((view) => view.id === id);
+	return [viewAsked, ...switchViewChoiceIdListOf(desc.viewHover, presentation)].find(isAvailable) ?? '';
+}
+
+export function switchViewSwitcherIsShown(desc, presentation) {
+	if (desc.isViewSwitcherHidden) return false;
+	return !(presentation.isEmbedded ? desc.isViewSwitcherHiddenEmbedded : desc.isViewSwitcherHiddenFocused);
+}
+
+export function switchViewFrameIsHidden(desc, viewId) {
+	return Boolean(desc?.viewList?.find((view) => view.id === viewId)?.isFrameHiddenEmbedded);
+}
+
+// the whole of a card in the coordinates of its body, given the body: its border on the sides
+// and below as on the left, and the title line above
+export function switchEmbedCardRectOf(body) {
+	return { x: 0, y: 0, width: body.width + 2 * body.x, height: body.y + body.height + body.x };
+}
+
+// what the canvas draws of a scene at a view: one diagram, as a scene without views has.
+// null: the scene has no such view
+export function switchViewDescGet(desc, viewId) {
+	if (!desc.viewList) return viewId ? null : desc;
+	const view = desc.viewList.find((item) => item.id === viewId);
+	if (!view) return null;
+	return { path: switchPathViewBuild(desc.path, viewId), label: desc.label, description: view.description ?? desc.description, diagram: view.diagram, box: view.box };
 }
 
 // ---------- the document of a block ----------
@@ -117,7 +248,7 @@ function mapping(value, field) {
 	return value;
 }
 
-// the box of a view written by hand: { x, y, width, height }
+// the box of a scene written by hand: { x, y, width, height }
 export function switchRectRead(value, field) {
 	mapping(value, field);
 	const rect = { x: Number(value.x), y: Number(value.y), width: Number(value.width), height: Number(value.height) };
@@ -127,62 +258,66 @@ export function switchRectRead(value, field) {
 	return rect;
 }
 
-// the document of a CardDiagramSwitch block: its views by path. A view holds a
-// diagram of the card diagram format, or names another view and arranges some of
-// its nodes in tabs (one more view per tab, below its path).
+// the document of a CardDiagramSwitch block: its scenes by path. A scene holds a
+// diagram of the card diagram format, or names another scene and arranges some of
+// its nodes in tabs (one more scene per tab, below its path).
 export function switchDocNormalize(input) {
 	const value = typeof input === 'string' ? yamlParse(input) : input;
 	mapping(value, 'the document');
 	if (value.version !== 1) throw new Error('A switch document needs version: 1.');
-	if (!Array.isArray(value.viewList) || value.viewList.length === 0) throw new Error('A switch document needs a viewList with at least one view.');
-	const viewByPath = new Map();
-	for (const view of value.viewList) {
-		mapping(view, 'a view');
-		if (typeof view.path !== 'string' || !view.path.trim()) throw new Error('Every view needs a path.');
-		const path = switchPathNormalize(view.path);
-		if (viewByPath.has(path)) throw new Error(`The view ${path} is written twice.`);
-		if (!view.diagram && !view.tabs) throw new Error(`The view ${path} needs a diagram, or tabs.`);
-		if (view.tabs) switchTabsRead(view.tabs, path);
-		viewByPath.set(path, {
-			...view,
+	if (!Array.isArray(value.sceneList) || value.sceneList.length === 0) throw new Error('A switch document needs a sceneList with at least one scene.');
+	const sceneByPath = new Map();
+	for (const scene of value.sceneList) {
+		mapping(scene, 'a scene');
+		if (typeof scene.path !== 'string' || !scene.path.trim()) throw new Error('Every scene needs a path.');
+		if (/[@#]/.test(scene.path)) throw new Error(`The path ${scene.path} has @ or #, which name a view or an item of a scene.`);
+		const path = switchPathNormalize(scene.path);
+		if (sceneByPath.has(path)) throw new Error(`The scene ${path} is written twice.`);
+		if ([scene.diagram, scene.tabs, scene.viewList].filter(Boolean).length !== 1) throw new Error(`The scene ${path} needs one of a diagram, tabs or a viewList.`);
+		if (scene.viewList) switchViewListCheck(scene, path);
+		if (scene.tabs) switchTabsRead(scene.tabs, path);
+		sceneByPath.set(path, {
+			...scene,
 			path,
-			label: String(view.label ?? switchPathLast(path)),
-			description: String(view.description ?? ''),
-			labelItemList: view.labelItemList,
-			box: view.box === undefined ? undefined : switchRectRead(view.box, `${path}.box`),
+			label: String(scene.label ?? switchPathLast(path)),
+			description: String(scene.description ?? ''),
+			labelItemList: scene.labelItemList,
+			box: scene.box === undefined ? undefined : switchRectRead(scene.box, `${path}.box`),
+			viewList: scene.viewList?.map((view) => ({ ...view, box: view.box === undefined ? undefined : switchRectRead(view.box, `${path}@${view.id}.box`) })),
 		});
 	}
-	for (const view of viewByPath.values()) {
-		if (view.tabs && !viewByPath.has(switchPathNormalize(view.tabs.of))) throw new Error(`The tabs of ${view.path} name a view that does not exist: ${view.tabs.of}.`);
+	for (const scene of sceneByPath.values()) {
+		if (scene.tabs && !sceneByPath.has(switchPathNormalize(scene.tabs.of))) throw new Error(`The tabs of ${scene.path} name a scene that does not exist: ${scene.tabs.of}.`);
+		if (scene.tabs && !sceneByPath.get(switchPathNormalize(scene.tabs.of)).diagram) throw new Error(`The tabs of ${scene.path} arrange the nodes of one diagram, and ${scene.tabs.of} has views.`);
 	}
-	const root = switchPathNormalize(value.root ?? value.viewList[0].path);
-	if (!viewByPath.has(root)) throw new Error(`The root ${root} is not a view.`);
-	return { title: String(value.title ?? ''), root, height: value.height, transition: value.transition ?? {}, defaults: value.defaults, viewByPath };
+	const root = switchPathNormalize(value.root ?? value.sceneList[0].path);
+	if (!sceneByPath.has(root)) throw new Error(`The root ${root} is not a scene.`);
+	return { title: String(value.title ?? ''), root, height: value.height, transition: value.transition ?? {}, defaults: value.defaults, sceneByPath };
 }
 
-// the views of a document, as the layer asks for them. onBoxSave: what a box the
+// the scenes of a document, as the layer asks for them. onBoxSave: what a box the
 // reader adjusted does (rewrites the block, when the block can be written)
 export function switchProviderFromDoc(spec, { onBoxSave } = {}) {
 	const tabsOwnerOf = (path) => {
 		const parent = switchPathParent(path);
-		const view = spec.viewByPath.get(parent);
-		return view?.tabs && view.tabs.memberList.some((member) => member.id === switchPathLast(path)) ? view : null;
+		const scene = spec.sceneByPath.get(parent);
+		return scene?.tabs && scene.tabs.memberList.some((member) => member.id === switchPathLast(path)) ? scene : null;
 	};
-	const diagramOf = (view, focus) => {
-		if (!view.tabs) return view.diagram;
-		const base = spec.viewByPath.get(switchPathNormalize(view.tabs.of));
-		return switchTabsApply(base.diagram, view.tabs, focus, view.path);
+	const diagramOf = (scene, focus) => {
+		if (!scene.tabs) return scene.diagram;
+		const base = spec.sceneByPath.get(switchPathNormalize(scene.tabs.of));
+		return switchTabsApply(base.diagram, scene.tabs, focus, scene.path);
 	};
 	const childPathList = (path) => {
-		const list = [...spec.viewByPath.keys()].filter((key) => switchPathParent(key) === path);
-		const view = spec.viewByPath.get(path);
-		if (view?.tabs) list.push(...view.tabs.memberList.map((member) => `${path}/${member.id}`));
+		const list = [...spec.sceneByPath.keys()].filter((key) => switchPathParent(key) === path);
+		const scene = spec.sceneByPath.get(path);
+		if (scene?.tabs) list.push(...scene.tabs.memberList.map((member) => `${path}/${member.id}`));
 		return list;
 	};
 	const descriptionOf = (path) => {
 		const owner = tabsOwnerOf(path);
 		if (owner) return owner.tabs.memberList.find((member) => member.id === switchPathLast(path))?.description ?? '';
-		return spec.viewByPath.get(path)?.description ?? '';
+		return spec.sceneByPath.get(path)?.description ?? '';
 	};
 	const provider = {
 		root: spec.root,
@@ -191,32 +326,36 @@ export function switchProviderFromDoc(spec, { onBoxSave } = {}) {
 		labelGet: (path) => {
 			const owner = tabsOwnerOf(path);
 			if (owner) return owner.tabs.memberList.find((member) => member.id === switchPathLast(path))?.label ?? switchPathLast(path);
-			return spec.viewByPath.get(path)?.label ?? switchPathLast(path);
+			return spec.sceneByPath.get(path)?.label ?? switchPathLast(path);
 		},
-		childListGet: (path) => childPathList(path).map((child) => ({ path: child, label: provider.labelGet(child), description: descriptionOf(child), labelItemList: spec.viewByPath.get(child)?.labelItemList })),
-		viewGet: (path) => {
+		childListGet: (path) => childPathList(path).map((child) => ({ path: child, label: provider.labelGet(child), description: descriptionOf(child), labelItemList: spec.sceneByPath.get(child)?.labelItemList })),
+		sceneGet: (path) => {
 			const owner = tabsOwnerOf(path);
-			const view = owner ?? spec.viewByPath.get(path);
-			if (!view) return null;
-			const diagram = diagramOf(view, owner ? switchPathLast(path) : undefined);
-			return { path, label: provider.labelGet(path), description: descriptionOf(path), diagram: { defaults: spec.defaults, ...diagram }, box: owner ? undefined : view.box };
+			const scene = owner ?? spec.sceneByPath.get(path);
+			if (!scene) return null;
+			if (scene.viewList) {
+				const { viewDefault, viewHover, isViewSwitcherHidden, isViewSwitcherHiddenEmbedded, isViewSwitcherHiddenFocused } = scene;
+				return { path, label: provider.labelGet(path), description: descriptionOf(path), viewDefault, viewHover, isViewSwitcherHidden, isViewSwitcherHiddenEmbedded, isViewSwitcherHiddenFocused, viewList: scene.viewList.map((view) => ({ ...view, diagram: { defaults: spec.defaults, ...view.diagram } })) };
+			}
+			const diagram = diagramOf(scene, owner ? switchPathLast(path) : undefined);
+			return { path, label: provider.labelGet(path), description: descriptionOf(path), diagram: { defaults: spec.defaults, ...diagram }, box: owner ? undefined : scene.box };
 		},
 		boxSave: onBoxSave,
 	};
 	return provider;
 }
 
-// ---------- the tabs of a view ----------
+// ---------- the tabs of a scene ----------
 
 function switchTabsRead(tabs, path) {
 	mapping(tabs, `${path}.tabs`);
-	if (typeof tabs.of !== 'string') throw new Error(`The tabs of ${path} need "of": the view whose nodes they arrange.`);
+	if (typeof tabs.of !== 'string') throw new Error(`The tabs of ${path} need "of": the scene whose nodes they arrange.`);
 	if (!Array.isArray(tabs.memberList) || tabs.memberList.length < 2) throw new Error(`The tabs of ${path} need a memberList of at least two nodes.`);
 	mapping(tabs.position, `${path}.tabs.position`);
 	mapping(tabs.size, `${path}.tabs.size`);
 	const idSet = new Set();
 	for (const member of tabs.memberList) {
-		if (!member?.id) throw new Error(`A member of the tabs of ${path} needs an id: a node of the view.`);
+		if (!member?.id) throw new Error(`A member of the tabs of ${path} needs an id: a node of the scene.`);
 		if (idSet.has(member.id)) throw new Error(`The tabs of ${path} name the node ${member.id} twice.`);
 		idSet.add(member.id);
 	}
@@ -228,14 +367,14 @@ function switchTabsRead(tabs, path) {
 // a line whose two ends left runs between the two tabs, dashed.
 //
 //   tabs   { id?, memberList: [{ id, label, tone?, link? }], position, size: { width, height? } }
-export function switchTabsApply(diagram, tabs, focusInput, viewPath) {
+export function switchTabsApply(diagram, tabs, focusInput, scenePath) {
 	const { memberList, position, size } = tabs;
 	const headerId = tabs.id ?? 'tabs';
 	const focus = memberList.some((member) => member.id === focusInput) ? focusInput : memberList[0].id;
 	const memberSet = new Set(memberList.map((member) => member.id));
 	const nodeById = new Map((diagram.nodes ?? []).map((node) => [node.id, node]));
 	for (const member of memberList) {
-		if (!nodeById.has(member.id)) throw new Error(`The tabs name a node the view does not have: ${member.id}.`);
+		if (!nodeById.has(member.id)) throw new Error(`The tabs name a node the scene does not have: ${member.id}.`);
 	}
 	const handleById = new Map();
 	const tabEndpoint = (memberId, side) => {
@@ -263,12 +402,12 @@ export function switchTabsApply(diagram, tabs, focusInput, viewPath) {
 	});
 	const header = {
 		id: headerId,
-		renderer: { type: 'view-tabs' },
+		renderer: { type: 'scene-tabs' },
 		position: { x: position.x, y: position.y },
 		size: { width: size.width, height: SWITCH_TAB_HEADER_HEIGHT },
 		data: {
 			focus,
-			tabList: memberList.map((member) => ({ id: member.id, label: member.label ?? member.id, tone: member.tone, link: member.link ?? (viewPath ? `${viewPath}/${member.id}` : undefined) })),
+			tabList: memberList.map((member) => ({ id: member.id, label: member.label ?? member.id, tone: member.tone, link: member.link ?? (scenePath ? `${scenePath}/${member.id}` : undefined) })),
 		},
 		handles: [...handleById.values()],
 	};
@@ -305,7 +444,7 @@ export function switchCameraFit(box, viewport, { padding = SWITCH_FIT_PADDING, z
 	return { x: viewport.width / 2 - (box.x + box.width / 2) * zoom, y: viewport.height / 2 - (box.y + box.height / 2) * zoom, zoom };
 }
 
-// how the world of an embedded view is placed in the body of its card: the box
+// how the world of an embedded scene is placed in the body of its card: the box
 // fits the body with a small margin, centered. local = scale * child + (tx, ty)
 export function switchEmbedMapBuild(body, box, padding = SWITCH_EMBED_PADDING) {
 	const inner = 1 - 2 * padding;
@@ -313,8 +452,8 @@ export function switchEmbedMapBuild(body, box, padding = SWITCH_EMBED_PADDING) {
 	return { scale, tx: (body.width - box.width * scale) / 2 - box.x * scale, ty: (body.height - box.height * scale) / 2 - box.y * scale };
 }
 
-// how an item of a scrolling stack holds a view: the box fits the width of the item
-// and the item is as tall as that makes it, so a stack never shrinks a view to make
+// how an item of a scrolling stack holds a scene: the box fits the width of the item
+// and the item is as tall as that makes it, so a stack never shrinks a scene to make
 // everything visible at once; a wide box does not enlarge past a limit.
 export function switchStackItemLayout(width, box, padding = SWITCH_EMBED_PADDING) {
 	const pad = width * padding;
@@ -325,20 +464,20 @@ export function switchStackItemLayout(width, box, padding = SWITCH_EMBED_PADDING
 	};
 }
 
-// an embedding names a part of a view: what lies outside that box stays out. the margin
+// an embedding names a part of a scene: what lies outside that box stays out. the margin
 // is opened by a portal (--doc-switch-open), so the rest comes into view as the box grows
 export function switchBoxClipBuild(box) {
 	const open = 'var(--doc-switch-open, 0px)';
 	return `inset(calc(${box.y}px - ${open}) calc(${-(box.x + box.width)}px - ${open}) calc(${-(box.y + box.height)}px - ${open}) calc(${box.x}px - ${open}))`;
 }
 
-// the inverse of switchCameraParentOf: the camera of the embedded view at a camera of the parent
+// the inverse of switchCameraParentOf: the camera of the embedded scene at a camera of the parent
 export function switchCameraChildOf(cameraParent, body, map) {
 	return { x: cameraParent.x + (body.x + map.tx) * cameraParent.zoom, y: cameraParent.y + (body.y + map.ty) * cameraParent.zoom, zoom: cameraParent.zoom * map.scale };
 }
 
-// the camera of the parent view which draws an embedded view exactly where the
-// camera of that view would: what makes the swap between the two invisible.
+// the camera of the parent scene which draws an embedded scene exactly where the
+// camera of that scene would: what makes the swap between the two invisible.
 //   body     the body of the card, in the coordinates of the parent
 //   map      switchEmbedMapBuild(body, box)
 export function switchCameraParentOf(cameraChild, body, map) {
@@ -369,29 +508,43 @@ function partOf(progress, start, end) {
 	return Math.max(0, Math.min(1, (progress - start) / (end - start)));
 }
 
-// ---------- the way from one view to another ----------
+// ---------- the way from one scene to another ----------
 
-// The steps from one view to another:
-//   a view embedded in the one shown      a portal in: into the card, then the view
-//   the view shown embedded in the other  a portal out: the same way back
+// The steps from one scene to another:
+//   a scene embedded in the one shown      a portal in: into the card, then the scene
+//   the scene shown embedded in the other  a portal out: the same way back
 //   nodes in common                       a morph: they move, the others fade
-//   a view embedding both, above them     out to it, then in
+//   a scene embedding both, above them     out to it, then in
+//   two views of one scene                 a morph
 //   nothing in common                     a morph still: one fades out, the other in
 //
-//   embedOf(from, to)     the node of the view `from` embedding `to`, or undefined
-//   isShared(from, to)    whether the two views have nodes in common
-//   embedderOf(path)      the nearest view above a path that embeds it, or ''
+// A card may show another view of a scene than the one focusing it arrives at, and the end
+// of a portal is exactly what the card shows. So a portal goes to what the card shows, and
+// a morph follows to the view asked for; on the way out, in the opposite order. A card with
+// a hover view opens through it, and shows it for as long as the portal lasts.
+//
+//   embedOf(from, to)     the node of the scene `from` embedding `to`, or undefined;
+//                         its `path` says the view the card shows for a portal
+//   isShared(from, to)    whether the two scenes have nodes in common
+//   embedderOf(path)      the nearest scene above a path that embeds it, or ''
 export function switchRouteFind(from, to, { embedOf, isShared, embedderOf }) {
 	if (from === to) return [];
-	const portalOf = (direction, parent, child) => {
+	const morphOf = (start, end) => ({ type: 'morph', from: start, to: end });
+	const portalOf = (direction, parent, child, embed) => ({ type: 'portal', direction, parent, child, nodeId: embed.id, ...(embed.itemId ? { itemId: embed.itemId } : {}) });
+	const portalIn = (parent, child) => {
 		const embed = embedOf(parent, child);
-		return { type: 'portal', direction, parent, child, nodeId: embed.id, ...(embed.itemId ? { itemId: embed.itemId } : {}) };
+		const shown = embed.path ?? child;
+		return [portalOf('in', parent, shown, embed), ...(shown === child ? [] : [morphOf(shown, child)])];
 	};
-	const portalIn = (parent, child) => portalOf('in', parent, child);
-	const portalOut = (parent, child) => portalOf('out', parent, child);
-	if (embedOf(from, to)) return [portalIn(from, to)];
-	if (embedOf(to, from)) return [portalOut(to, from)];
-	if (isShared(from, to)) return [{ type: 'morph', from, to }];
+	const portalOut = (parent, child) => {
+		const embed = embedOf(parent, child);
+		const shown = embed.path ?? child;
+		return [...(shown === child ? [] : [morphOf(child, shown)]), portalOf('out', parent, shown, embed)];
+	};
+	if (switchPathViewRead(from).path === switchPathViewRead(to).path) return [morphOf(from, to)];
+	if (embedOf(from, to)) return portalIn(from, to);
+	if (embedOf(to, from)) return portalOut(to, from);
+	if (isShared(from, to)) return [morphOf(from, to)];
 	const chainOf = (path) => {
 		const chain = [path];
 		for (let current = embedderOf(path); current && chain.length < 6 && !chain.includes(current); current = embedderOf(current)) chain.push(current);
@@ -400,11 +553,11 @@ export function switchRouteFind(from, to, { embedOf, isShared, embedderOf }) {
 	const chainFrom = chainOf(from);
 	const chainTo = chainOf(to);
 	const common = chainFrom.find((path) => chainTo.includes(path));
-	if (!common) return [{ type: 'morph', from, to }];
+	if (!common) return [morphOf(from, to)];
 	const stepList = [];
-	for (let index = 0; chainFrom[index] !== common; index += 1) stepList.push(portalOut(chainFrom[index + 1], chainFrom[index]));
+	for (let index = 0; chainFrom[index] !== common; index += 1) stepList.push(...portalOut(chainFrom[index + 1], chainFrom[index]));
 	const indexTo = chainTo.indexOf(common);
-	for (let index = indexTo; index > 0; index -= 1) stepList.push(portalIn(chainTo[index], chainTo[index - 1]));
+	for (let index = indexTo; index > 0; index -= 1) stepList.push(...portalIn(chainTo[index], chainTo[index - 1]));
 	return stepList;
 }
 
@@ -436,7 +589,7 @@ function edgeSignature(edge) {
 
 // the nodes and edges of a morph: what is in both moves; what is in one fades. the
 // node handed to React Flow is the target's, with the handles of both, so the lines
-// of the view left still have a handle while they fade
+// of the scene left still have a handle while they fade
 export function switchMorphBuild({ nodeListFrom, edgeListFrom, nodeListTo, edgeListTo, registry }) {
 	const nodeFromById = new Map(nodeListFrom.map((node) => [node.id, node]));
 	const nodeToById = new Map(nodeListTo.map((node) => [node.id, node]));
@@ -487,7 +640,7 @@ export function switchMorphBuild({ nodeListFrom, edgeListFrom, nodeListTo, edgeL
 // that move, and the opacities of those that fade.
 export function switchMorphFrameAt(morph, progress) {
 	const isShared = morph.sharedCount > 0;
-	// without a node in common the two views do not overlap: one leaves, then the other comes
+	// without a node in common the two scenes do not overlap: one leaves, then the other comes
 	const fadeOut = 1 - partOf(progress, 0, isShared ? 0.55 : 0.45);
 	const fadeIn = partOf(progress, isShared ? 0.35 : 0.55, 1);
 	const moveList = [];
@@ -527,7 +680,7 @@ export function switchMorphStyleBuild(morph, frame, scope) {
 // a frame of a portal as a stylesheet: `amount` runs from 0, the parent as it is, to
 // 1, the card opened over the whole viewport: the others fade, the card loses its
 // frame and its title, and its clip opens by `clipOpen` (in its local pixels), so
-// what lay outside the box of the embedded view comes into view.
+// what lay outside the box of the embedded scene comes into view.
 export function switchPortalStyleBuild(nodeId, amount, clipOpen, scope) {
 	const node = `${scope} .react-flow__node[data-id=${idSelector(nodeId)}]`;
 	const fade = 1 - partOf(amount, 0.05, 0.7);
@@ -545,7 +698,7 @@ export function switchPortalStyleBuild(nodeId, amount, clipOpen, scope) {
 }
 
 // a frame of a portal into an item of a scrolling stack. the scroll area clips what is
-// inside it, so the embedded view is not opened in place: its static drawing stands
+// inside it, so the embedded scene is not opened in place: its static drawing stands
 // over the canvas (the mask), and here the item it left and everything else fade.
 export function switchPortalItemStyleBuild(nodeId, itemId, amount, scope) {
 	const node = `${scope} .react-flow__node[data-id=${idSelector(nodeId)}]`;

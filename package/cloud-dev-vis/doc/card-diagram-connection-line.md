@@ -78,7 +78,7 @@ place = source + along × (target − source) + (x, y)
 
 The result, whichever line type it is:
 
-- **Both ends move by the same vector** (two cards moved together, a view translated): the whole line moves as it is, with nothing changed in its shape.
+- **Both ends move by the same vector** (two cards moved together, a scene translated): the whole line moves as it is, with nothing changed in its shape.
 - **One end moves by d**: each anchor moves by its share of d: `along × d` when the target moved, `(1 − along) × d` when the source did. An anchor near the end that moved follows it nearly all the way, and one near the other end hardly moves.
 - **Handles never change.** A vector of a curve stays the same vector and a direction stays the same direction. Nothing rotates and nothing scales, so a bend keeps its size in pixels however far the cards go.
 
@@ -178,7 +178,7 @@ Routes are how lines are kept off each other. The check and the way of working a
 | --- | --- |
 | `comp-mdx/card-diagram/DiagramRoute.js` | everything pure: reading a route, where an anchor is, the router of a right-angled line and the choice of auto handles, the pieces of a curve, the changes of a route (insert, move, handles, coupling), the overlap check. No React and no React Flow |
 | `comp-mdx/card-diagram/DiagramERData.js` | validates a route with the connection |
-| `comp-mdx/card-diagram/DiagramRender.jsx` | `connectionPathBuild`: the path of a line wherever it is drawn (the canvas, a static view, a label), which is why animation and view switching need nothing else. `DiagramEdge` draws the focused line from `routeDraft` during a gesture |
+| `comp-mdx/card-diagram/DiagramRender.jsx` | `connectionPathBuild`: the path of a line wherever it is drawn (the canvas, a static scene, a label), which is why animation and scene switching need nothing else. `DiagramEdge` draws the focused line from `routeDraft` during a gesture |
 | `comp-mdx/card-diagram/DiagramRouteControls.jsx` | the anchors and tips over the cards, and their gestures |
 | `comp-mdx/card-diagram/DiagramEditStore.js` | the commands (`connectionAnchorAdd` ...), through `changeApply`, so they have validation and undo |
 | `comp-mdx/card-diagram/DiagramEditPath.js`, `DiagramEditCardModel.js` | the path segments `anchors` and `anchor`, and the card's sections |

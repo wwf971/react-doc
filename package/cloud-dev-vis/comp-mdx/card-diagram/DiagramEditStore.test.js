@@ -409,7 +409,7 @@ test('an undo keeps the comments of the initial text and the canvas follows an u
 });
 
 test('a node resized is one step of the draft, undone whole; a size below its minimum is refused', () => {
-	const source = JSON.stringify({ version: 1, nodes: [{ id: 'box', renderer: { type: 'view-box' }, position: { x: 10, y: 20 }, size: { width: 300, height: 200 }, data: {} }] });
+	const source = JSON.stringify({ version: 1, nodes: [{ id: 'box', renderer: { type: 'scene-box' }, position: { x: 10, y: 20 }, size: { width: 300, height: 200 }, data: {} }] });
 	const store = new DiagramEditStore(source, 'diagram', undefined, registry);
 	assert.equal(store.nodeResize('box', { x: 15.4, y: 25, width: 400.2, height: 250 }), true);
 	assert.deepEqual(store.nodes[0].position, { x: 15, y: 25 });
@@ -425,7 +425,7 @@ test('a node resized is one step of the draft, undone whole; a size below its mi
 });
 
 test('the canvas follows a size the draft says otherwise, over what a resize left on the node', () => {
-	const sourceOf = (width) => JSON.stringify({ version: 1, nodes: [{ id: 'box', renderer: { type: 'view-box' }, position: { x: 0, y: 0 }, size: { width, height: 200 }, data: {} }] });
+	const sourceOf = (width) => JSON.stringify({ version: 1, nodes: [{ id: 'box', renderer: { type: 'scene-box' }, position: { x: 0, y: 0 }, size: { width, height: 200 }, data: {} }] });
 	const canvas = new DiagramERStore(sourceOf(300), undefined, 620, registry);
 	canvas.nodeListChange([{ id: 'box', type: 'dimensions', dimensions: { width: 240, height: 200 }, setAttributes: true }]);
 	assert.equal(canvas.nodeList[0].width, 240);

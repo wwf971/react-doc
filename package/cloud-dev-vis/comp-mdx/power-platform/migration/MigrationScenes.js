@@ -3,17 +3,19 @@ import {
 import { switchPathLast, switchPathParent, switchRectRead, switchTabsApply } from '../../card-diagram-switch/SwitchData.js';
 import { diagramArrangeApply } from '../../card-diagram/DiagramArrange.js';
 import { cardRowDisplayKeepBuild } from '../../card-diagram/TableCardData.js';
+import { cardMatrixWidthGet } from '../../card-diagram/CardMatrixData.js';
 import { erGeometryEstimateBuild } from '../er-arrange/ErGeometry.js';
 import { erArrangerColumns, erArrangerLanes } from '../er-arrange/er-arranger-list.js';
 
-// The views of a migration, generated from its data items (power-platform-migration.md):
-// a provider of the switching layer. Every view is a diagram of the card diagram format,
+// The scenes of a migration, generated from its data items (power-platform-migration.md):
+// a provider of the switching layer. Every scene is a diagram of the card diagram format,
 // a function of the model and nothing else; the same table keeps its node id in every
-// view drawing it, which is what lets a switch move it instead of replacing it.
+// scene drawing it, which is what lets a switch move it instead of replacing it.
 //
 //   /overview                         the databases, the tool, the three reports
 //   /overview/tabs/{report}           the same, the reports in tabs
-//   /overview/{db}                    the ER diagram of a database
+//   /overview/{db}                    a database, in three views: a cylinder on its card, its ER
+//                                     diagram while a pointer rests there and focused, its lookup matrix
 //   /overview/{db}/{table}            one table and what it refers to
 //   /overview/{db}/{choice}           one option set and the columns using it
 //   /overview/mapping                 both ER diagrams, the mappings of tables as lines
@@ -43,6 +45,7 @@ const LABEL_DEFAULT = {
 	planToRun: 'batches', runToVerify: 'success, dead letters', planToVerify: 'keys and expected values',
 	abandon: 'Abandon', defaultValue: 'Default value', columnOrder: 'Order', columnTable: 'Table', columnFile: 'File', columnRange: 'Range', columnRows: 'Rows',
 	columnStatus: 'Status', columnTry: 'Tries', columnReason: 'Reason', columnKey: 'Key', columnCheck: 'Check', columnResult: 'Result', columnNote: 'Note',
+	viewDiagram: 'ER diagram', viewLookupMatrix: 'Lookup matrix', lookupFrom: 'Looks up', lookupTo: 'Is looked up',
 	columnValue: 'Value', columnLabel: 'Label', columnUnit: 'columns', tableUnit: 'tables', choiceUnit: 'option sets', source: 'source', target: 'target', statSuccess: 'success', statDlq: 'dead letters', statTotal: 'total', statMatched: 'matched', statException: 'exceptions',
 };
 
@@ -114,8 +117,8 @@ function noteNodeBuild({ id, x, y, width = 220, title, text, tone, metaList, tag
 	return { id, renderer: { type: 'card-note' }, position: { x, y }, size: { width, height: 'auto' }, link, data: { title, text, tone, metaList, tag }, handles: handleList };
 }
 
-function embedNodeBuild({ id, x, y, width, height, view, title, subtitle, icon, tone, statList, handleList = [] }) {
-	return { id, renderer: { type: 'view-embed' }, position: { x, y }, size: { width, height }, data: { view, title, subtitle, icon, tone, statList }, handles: handleList };
+function embedNodeBuild({ id, x, y, width, height, scene, title, subtitle, icon, tone, statList, handleList = [] }) {
+	return { id, renderer: { type: 'scene-embed' }, position: { x, y }, size: { width, height }, data: { scene, title, subtitle, icon, tone, statList }, handles: handleList };
 }
 
 const handleOf = (id, direction, side, target = 'body') => ({ id, direction, anchor: { target, side } });
@@ -170,15 +173,45 @@ function erBuild(model, dbId, { x = 0, y = 0, linkOf } = {}) {
 
 const linkOfDb = (dbId) => ({ table: (table) => `/overview/${dbId}/${table.logical}`, choice: (choice) => `/overview/${dbId}/${choice.logical}` });
 
-function viewErBuild(model, dbId) {
+function sceneErBuild(model, dbId) {
 	const er = erBuild(model, dbId, { linkOf: linkOfDb(dbId) });
 	return { nodes: er.nodes, connections: er.connections };
+}
+
+// the lookups of a database as a matrix: a mark where the table of a row looks up the table
+// of a column, with how many of its columns do when more than one
+function sceneLookupMatrixBuild(model, dbId) {
+	const { source, target } = model.system;
+	const tableList = migrationTableListOf(model, dbId);
+	const keySet = new Set(tableList.map((table) => table.key));
+	const linkOf = linkOfDb(dbId).table;
+	const axisOf = (table) => ({ id: table.logical, label: table.name, link: linkOf(table), ...(table.isMaster ? { tone: MASTER_TONE } : {}) });
+	const cellList = tableList.flatMap((table) => {
+		const nameListByKey = new Map();
+		for (const column of table.columnList) {
+			if (keySet.has(column.lookup)) nameListByKey.set(column.lookup, [...(nameListByKey.get(column.lookup) ?? []), column.name]);
+		}
+		return [...nameListByKey].map(([key, nameList]) => {
+			const refer = model.tableByKey.get(key);
+			return { row: table.logical, column: refer.logical, title: `${table.name} → ${refer.name}: ${nameList.join(', ')}`, ...(nameList.length > 1 ? { mark: `● ${nameList.length}` } : {}) };
+		});
+	});
+	const data = {
+		title: `${dbId === source.id ? source.name : target.name}: ${labelOf(model, 'viewLookupMatrix')}`,
+		rowAxisLabel: labelOf(model, 'lookupFrom'),
+		columnAxisLabel: labelOf(model, 'lookupTo'),
+		rowList: tableList.map(axisOf),
+		columnList: tableList.map(axisOf),
+		cellList,
+		isDiagonalMarked: true,
+	};
+	return { nodes: [{ id: `matrix:${dbId}`, renderer: { type: 'card-matrix' }, position: { x: 0, y: 0 }, size: { width: cardMatrixWidthGet(data), height: 'auto' }, data }], connections: [] };
 }
 
 const TABLE_LANE_MIN = 16;
 
 // one table in the middle: what refers to it on the left, what it refers to on the right
-function viewTableBuild(model, dbId, logical) {
+function sceneTableBuild(model, dbId, logical) {
 	const table = migrationTableListOf(model, dbId).find((item) => item.logical === logical);
 	if (!table) return null;
 	const nodes = [];
@@ -225,7 +258,7 @@ function viewTableBuild(model, dbId, logical) {
 
 // one option set at the right; at the left each table using it, its rows cut down to its
 // key and the columns using the option set, which point to it
-function viewChoiceBuild(model, dbId, logical) {
+function sceneChoiceBuild(model, dbId, logical) {
 	const choice = migrationChoiceListOf(model, dbId).find((item) => item.logical === logical);
 	if (!choice) return null;
 	const choiceId = choiceNodeId(dbId, logical);
@@ -290,7 +323,7 @@ function localChoiceBuild(model, { columnMappingList, source, target, xTarget, y
 // ---------- mappings ----------
 
 // both ER diagrams; a mapping of tables is a line between them, whose label opens it
-function viewMappingAllBuild(model) {
+function sceneMappingAllBuild(model) {
 	const idSource = dbIdOfRole(model, 'source');
 	const idTarget = dbIdOfRole(model, 'target');
 	const erSource = erBuild(model, idSource, { linkOf: linkOfDb(idSource) });
@@ -340,7 +373,7 @@ const OPERATOR_WIDTH = { abandon: 96, text: 210, mapping: 240, choice: 240, look
 
 // two tables, the column mappings between them as lines with a label. a column abandoned
 // ends on the abandon card; a target column filled with a default starts from a card
-function viewMappingTableBuild(model, pair) {
+function sceneMappingTableBuild(model, pair) {
 	const mapping = migrationMappingTableOfPair(model, pair);
 	if (!mapping) return null;
 	const source = model.tableByKey.get(mapping.source);
@@ -394,7 +427,7 @@ function viewMappingTableBuild(model, pair) {
 	return diagramArrangeApply({ nodes, connections }, erArrangerLanes, { connectionIdList: local.idList }).diagram;
 }
 
-// a table in the view of one column: that column and its neighbours, a break for the others
+// a table in the scene of one column: that column and its neighbours, a break for the others
 function tableAroundOf(model, table, columnId) {
 	const index = table.columnList.findIndex((column) => column.id === columnId);
 	const keepList = index < 0 ? table.columnList.slice(0, 4) : table.columnList.slice(Math.max(0, index - 1), index + 2);
@@ -405,7 +438,7 @@ function tableAroundOf(model, table, columnId) {
 }
 
 // one column: source -> operator -> ... -> target. each step is a node of its own
-function viewMappingColumnBuild(model, pair, columnSegment) {
+function sceneMappingColumnBuild(model, pair, columnSegment) {
 	const mapping = migrationMappingTableOfPair(model, pair);
 	if (!mapping) return null;
 	const columnMapping = migrationMappingColumnListOf(model, mapping).find((item) => migrationColumnSegmentOf(item) === columnSegment);
@@ -471,7 +504,7 @@ function operatorNodeBuild(model, step, { id, x, y, width }) {
 }
 
 // an option set to another: each value a line
-function viewMappingChoiceBuild(model, pair) {
+function sceneMappingChoiceBuild(model, pair) {
 	const mapping = [...model.mappingChoiceByKey.values()].find((item) => migrationChoicePairGet(model, item) === pair);
 	if (!mapping) return null;
 	const source = model.choiceByKey.get(mapping.source);
@@ -495,11 +528,11 @@ function viewMappingChoiceBuild(model, pair) {
 	return { nodes, connections };
 }
 
-function viewChoiceAllBuild(model) {
+function sceneChoiceAllBuild(model) {
 	const list = [...model.mappingChoiceByKey.values()];
 	const nodes = list.map((mapping, index) => {
 		const pair = migrationChoicePairGet(model, mapping);
-		return embedNodeBuild({ id: `embed:${pair}`, x: (index % 2) * 640, y: Math.floor(index / 2) * 420, width: 600, height: 380, view: `/overview/choice/${pair}`, title: mapping.label ?? pair, icon: 'list-checks', tone: 'violet' });
+		return embedNodeBuild({ id: `embed:${pair}`, x: (index % 2) * 640, y: Math.floor(index / 2) * 420, width: 600, height: 380, scene: `/overview/choice/${pair}`, title: mapping.label ?? pair, icon: 'list-checks', tone: 'violet' });
 	});
 	return { nodes, connections: [] };
 }
@@ -514,24 +547,24 @@ const REPORT_HEIGHT = 620;
 // has to shrink for the others (card-diagram-flexible-switch.md#a-scrolling-stack)
 function reportStackBuild(model, id, itemList) {
 	return {
-		nodes: [{ id: `report:${id}`, renderer: { type: 'view-stack' }, position: { x: 0, y: 0 }, size: { width: REPORT_WIDTH, height: REPORT_HEIGHT }, data: { focusPath: `/overview/${id}`, isFrameVisibleFocused: true, isHeightFullEmbedded: true, isHeightFullFocused: true, tone: REPORT_TONE_BY_ID[id], titleBar: { text: labelOf(model, id), isVisibleEmbedded: true, isVisibleFocused: true }, itemList }, handles: [] }],
+		nodes: [{ id: `report:${id}`, renderer: { type: 'scene-stack' }, position: { x: 0, y: 0 }, size: { width: REPORT_WIDTH, height: REPORT_HEIGHT }, data: { focusPath: `/overview/${id}`, isFrameVisibleFocused: true, isHeightFullEmbedded: true, isHeightFullFocused: true, tone: REPORT_TONE_BY_ID[id], titleBar: { text: labelOf(model, id), isVisibleEmbedded: true, isVisibleFocused: true }, itemList }, handles: [] }],
 		connections: [],
 	};
 }
 
-function viewPlanBuild(model) {
+function scenePlanBuild(model) {
 	const itemList = [];
 	for (const mapping of model.mappingTableByKey.values()) {
 		const pair = migrationPairGet(model, mapping);
 		const nameOf = (key) => model.tableByKey.get(key)?.name ?? key;
-		itemList.push({ id: `mapping:${pair}`, view: `/overview/mapping/${pair}`, title: `${nameOf(mapping.source)} → ${nameOf(mapping.target)}`, subtitle: labelOf(model, 'mapping'), icon: 'arrow-right-left', tone: 'teal' });
+		itemList.push({ id: `mapping:${pair}`, scene: `/overview/mapping/${pair}`, title: `${nameOf(mapping.source)} → ${nameOf(mapping.target)}`, subtitle: labelOf(model, 'mapping'), icon: 'arrow-right-left', tone: 'teal' });
 	}
 	for (const mapping of model.mappingChoiceByKey.values()) {
 		const pair = migrationChoicePairGet(model, mapping);
-		itemList.push({ id: `choice:${pair}`, view: `/overview/choice/${pair}`, title: mapping.label ?? pair, subtitle: labelOf(model, 'choice'), icon: 'list-checks', tone: 'violet' });
+		itemList.push({ id: `choice:${pair}`, scene: `/overview/choice/${pair}`, title: mapping.label ?? pair, subtitle: labelOf(model, 'choice'), icon: 'list-checks', tone: 'violet' });
 	}
-	itemList.push({ id: 'order', view: '/overview/plan/order', title: labelOf(model, 'planOrder'), icon: 'layers', tone: 'blue' });
-	if (model.plan) itemList.push({ id: 'batch', view: '/overview/plan/batch', title: labelOf(model, 'planBatch'), icon: 'split', tone: 'amber' });
+	itemList.push({ id: 'order', scene: '/overview/plan/order', title: labelOf(model, 'planOrder'), icon: 'layers', tone: 'blue' });
+	if (model.plan) itemList.push({ id: 'batch', scene: '/overview/plan/batch', title: labelOf(model, 'planBatch'), icon: 'split', tone: 'amber' });
 	return reportStackBuild(model, 'plan', itemList);
 }
 
@@ -545,7 +578,7 @@ const RANK_CELL_HEIGHT = 96;
 // how the order of loading comes about: the tables as labels, one line per pair where one
 // looks up the other, in bands by their rank. what the order is is computed from the
 // lookups of the target, where the rows are loaded
-function viewPlanOrderBuild(model) {
+function scenePlanOrderBuild(model) {
 	const dbId = dbIdOfRole(model, 'target');
 	const { groupList, lineList } = migrationRankBuild(model, dbId);
 	const nodes = [];
@@ -587,7 +620,7 @@ function viewPlanOrderBuild(model) {
 	return { nodes, connections };
 }
 
-function viewPlanBatchBuild(model) {
+function scenePlanBatchBuild(model) {
 	const batchList = model.plan?.batchList ?? [];
 	const tableKeyList = [...new Set(batchList.map((batch) => batch.table))];
 	const nodes = [];
@@ -618,11 +651,11 @@ function reportSummaryItemBuild(model, { id, title, text, tone, link, metaList }
 
 const metaOf = (model, stat, itemList) => itemList.map(([key, label]) => ({ value: numberText(stat[key]) ?? '—', label: labelOf(model, label) }));
 
-function viewRunBuild(model) {
+function sceneRunBuild(model) {
 	const stat = model.reportRun?.stat ?? {};
 	const dlqCount = model.reportRun?.dlqList?.length ?? 0;
 	return reportStackBuild(model, 'run', [
-		{ id: 'flow', view: '/overview/run/flow', title: labelOf(model, 'runFlow'), icon: 'send', tone: 'amber' },
+		{ id: 'flow', scene: '/overview/run/flow', title: labelOf(model, 'runFlow'), icon: 'send', tone: 'amber' },
 		reportSummaryItemBuild(model, { id: 'result', title: labelOf(model, 'runResult'), text: `${numberText(migrationBatchCountOf(model.reportRun?.batchList))} ${labelOf(model, 'batchUnit')}`, tone: 'green', link: '/overview/run/batch', metaList: metaOf(model, stat, [['total', 'statTotal'], ['success', 'statSuccess'], ['dlq', 'statDlq']]) }),
 		reportSummaryItemBuild(model, { id: 'dlq', title: labelOf(model, 'runDlq'), text: model.reportRun?.dlqList?.[0]?.reason, tone: dlqCount > 0 ? 'red' : 'slate', link: '/overview/run/dlq', metaList: [{ value: dlqCount, label: labelOf(model, 'statDlq') }] }),
 	]);
@@ -746,7 +779,7 @@ function flowTargetNodesBuild(model, { prefix, x, y, handles }) {
 
 // how a run goes, from the plan and the report: rows taken together into batches, batches
 // sent, what fails retried, what keeps failing set aside, all of it recorded
-function viewRunFlowBuild(model) {
+function sceneRunFlowBuild(model) {
 	const flow = model.reportRun?.flow ?? {};
 	const resultByFile = new Map((model.reportRun?.batchList ?? []).map((batch) => [batch.file, batch]));
 	const wordSuccess = labelOf(model, 'statSuccess');
@@ -786,7 +819,7 @@ function viewRunFlowBuild(model) {
 	return { nodes, connections };
 }
 
-function viewRunBatchBuild(model) {
+function sceneRunBatchBuild(model) {
 	const list = model.reportRun?.batchList ?? [];
 	return {
 		nodes: [genericTableNodeBuild({
@@ -799,7 +832,7 @@ function viewRunBatchBuild(model) {
 	};
 }
 
-function viewRunDlqBuild(model) {
+function sceneRunDlqBuild(model) {
 	const list = model.reportRun?.dlqList ?? [];
 	return {
 		nodes: [genericTableNodeBuild({
@@ -812,13 +845,13 @@ function viewRunDlqBuild(model) {
 	};
 }
 
-function viewVerifyBuild(model) {
+function sceneVerifyBuild(model) {
 	const stat = model.reportVerify?.stat ?? {};
 	const exceptionCount = model.reportVerify?.exceptionList?.length ?? 0;
 	return reportStackBuild(model, 'verify', [
-		{ id: 'flow', view: '/overview/verify/flow', title: labelOf(model, 'verifyFlow'), icon: 'file-check', tone: 'green' },
-		...(model.reportVerify?.matchList?.length ? [{ id: 'match', view: '/overview/verify/match', title: labelOf(model, 'verifyMatch'), subtitle: `${model.reportVerify.matchList.length} ${labelOf(model, 'matchUnit')}`, icon: 'key', tone: 'teal' }] : []),
-		...(model.reportVerify?.sample ? [{ id: 'sample', view: '/overview/verify/sample', title: labelOf(model, 'verifySample'), subtitle: model.reportVerify.sample.key, icon: 'search', tone: 'blue' }] : []),
+		{ id: 'flow', scene: '/overview/verify/flow', title: labelOf(model, 'verifyFlow'), icon: 'file-check', tone: 'green' },
+		...(model.reportVerify?.matchList?.length ? [{ id: 'match', scene: '/overview/verify/match', title: labelOf(model, 'verifyMatch'), subtitle: `${model.reportVerify.matchList.length} ${labelOf(model, 'matchUnit')}`, icon: 'key', tone: 'teal' }] : []),
+		...(model.reportVerify?.sample ? [{ id: 'sample', scene: '/overview/verify/sample', title: labelOf(model, 'verifySample'), subtitle: model.reportVerify.sample.key, icon: 'search', tone: 'blue' }] : []),
 		reportSummaryItemBuild(model, { id: 'result', title: labelOf(model, 'verifyResult'), text: `${model.reportVerify?.checkList?.length ?? 0} ${labelOf(model, 'columnCheck')}`, tone: 'green', link: '/overview/verify/check', metaList: metaOf(model, stat, [['total', 'statTotal'], ['matched', 'statMatched'], ['exception', 'statException']]) }),
 		reportSummaryItemBuild(model, { id: 'exception', title: labelOf(model, 'verifyException'), text: model.reportVerify?.exceptionList?.[0]?.status, tone: exceptionCount > 0 ? 'red' : 'slate', link: '/overview/verify/exception', metaList: [{ value: exceptionCount, label: labelOf(model, 'statException') }] }),
 	]);
@@ -828,7 +861,7 @@ const VERIFY_CHECK_HEIGHT = 74;
 
 // how a verification goes: the batches the run used are the reference; the set of their rows
 // is compared first, then each row's expected values with what is read back from the target
-function viewVerifyFlowBuild(model) {
+function sceneVerifyFlowBuild(model) {
 	const flow = model.reportVerify?.flow ?? {};
 	const stat = model.reportVerify?.stat ?? {};
 	const { nodes, connections, batchIdList, height } = batchFlowBuild(model, { xBatch: 225, widthBatch: 170 });
@@ -965,7 +998,7 @@ function matchLaneBuild(model, match, index, { y, isLinked }) {
 
 // how one row of the source is found in the target: what this is about at the top, then the
 // patterns one under another
-function viewVerifyMatchBuild(model, matchId) {
+function sceneVerifyMatchBuild(model, matchId) {
 	const matchList = model.reportVerify?.matchList ?? [];
 	const isOne = matchId !== undefined;
 	const shownList = isOne ? matchList.filter((match) => match.id === matchId) : matchList;
@@ -1019,7 +1052,7 @@ const postKeyColumnOf = (spec) => spec?.rowList?.find((row) => row.isKey)?.colum
 
 // a master table loaded without its GUIDs: a table of GUIDs by another column, then the
 // lookups of the tables referring to it, empty since the load, are set
-function viewPostMasterBuild(model) {
+function scenePostMasterBuild(model) {
 	const master = model.planPost?.master;
 	if (!master) return null;
 	const idOf = (part) => `post-master:${part}`;
@@ -1067,7 +1100,7 @@ function viewPostMasterBuild(model) {
 
 // the columns the system sets: a row created by the migration has the values of that moment,
 // which no write can avoid at creation; a script then writes those of the source
-function viewPostAuditBuild(model) {
+function scenePostAuditBuild(model) {
 	const audit = model.planPost?.audit;
 	if (!audit) return null;
 	const idOf = (part) => `post-audit:${part}`;
@@ -1107,17 +1140,17 @@ function viewPostAuditBuild(model) {
 	return { nodes, connections };
 }
 
-function viewPostBuild(model) {
+function scenePostBuild(model) {
 	const post = model.planPost;
 	if (!post) return null;
 	return reportStackBuild(model, 'post', [
 		...(post.intro ? [{ id: 'intro', node: { renderer: { type: 'card-note' }, size: { width: 'auto', height: 'auto' }, data: { title: labelOf(model, 'post'), text: post.intro, tone: POST_TONE } } }] : []),
-		...(post.master ? [{ id: 'master', view: '/overview/post/master', title: post.master.title, icon: 'key', tone: POST_TONE }] : []),
-		...(post.audit ? [{ id: 'audit', view: '/overview/post/audit', title: post.audit.title, icon: 'refresh', tone: POST_TONE }] : []),
+		...(post.master ? [{ id: 'master', scene: '/overview/post/master', title: post.master.title, icon: 'key', tone: POST_TONE }] : []),
+		...(post.audit ? [{ id: 'audit', scene: '/overview/post/audit', title: post.audit.title, icon: 'refresh', tone: POST_TONE }] : []),
 	]);
 }
 
-function viewVerifySampleBuild(model) {
+function sceneVerifySampleBuild(model) {
 	const sample = model.reportVerify?.sample;
 	if (!sample) return null;
 	return {
@@ -1131,7 +1164,7 @@ function viewVerifySampleBuild(model) {
 	};
 }
 
-function viewVerifyCheckBuild(model) {
+function sceneVerifyCheckBuild(model) {
 	const list = model.reportVerify?.checkList ?? [];
 	return {
 		nodes: [genericTableNodeBuild({
@@ -1144,7 +1177,7 @@ function viewVerifyCheckBuild(model) {
 	};
 }
 
-function viewVerifyExceptionBuild(model) {
+function sceneVerifyExceptionBuild(model) {
 	const list = model.reportVerify?.exceptionList ?? [];
 	return {
 		nodes: [genericTableNodeBuild({
@@ -1170,7 +1203,7 @@ const OVERVIEW_REPORT_HEIGHT = 420;
 const OVERVIEW_REPORT_GAP_MIN = 120;
 const OVERVIEW_LEVEL_GAP = 44;
 
-function viewOverviewBuild(model) {
+function sceneOverviewBuild(model) {
 	const { source, target, tool } = model.system;
 	const statOf = (dbId) => [`${migrationTableListOf(model, dbId).length} ${labelOf(model, 'tableUnit')}`, `${migrationChoiceListOf(model, dbId).length} ${labelOf(model, 'choiceUnit')}`];
 	// the reports under the databases, centered, as many as there are
@@ -1179,12 +1212,12 @@ function viewOverviewBuild(model) {
 	const reportGap = Math.max(OVERVIEW_REPORT_GAP_MIN, (widthAll - reportIdList.length * OVERVIEW_REPORT_WIDTH) / (reportIdList.length - 1));
 	const reportLeft = (widthAll - reportIdList.length * OVERVIEW_REPORT_WIDTH - (reportIdList.length - 1) * reportGap) / 2;
 	const reportX = (index) => reportLeft + index * (OVERVIEW_REPORT_WIDTH + reportGap);
-	const reportNodeOf = (id, index, handles) => ({ ...viewBuild(model, `/overview/${id}`).nodes[0], position: { x: reportX(index), y: OVERVIEW_REPORT_Y }, size: { width: OVERVIEW_REPORT_WIDTH, height: OVERVIEW_REPORT_HEIGHT }, link: `/overview/${id}`, handles });
+	const reportNodeOf = (id, index, handles) => ({ ...sceneBuild(model, `/overview/${id}`).nodes[0], position: { x: reportX(index), y: OVERVIEW_REPORT_Y }, size: { width: OVERVIEW_REPORT_WIDTH, height: OVERVIEW_REPORT_HEIGHT }, link: `/overview/${id}`, handles });
 	const stepList = tool.stepList?.length ? tool.stepList : [{ id: 'plan', name: labelOf(model, 'plan') }, { id: 'run', name: labelOf(model, 'run') }, { id: 'verify', name: labelOf(model, 'verify') }];
 	const toolHandles = [handleOf('source', 'out', 'left'), handleOf('target', 'out', 'right'), ...stepList.map((step, index) => ({ id: `step-${step.id}`, direction: 'out', anchor: { target: 'body', side: 'bottom', offset: (index + 1) / (stepList.length + 1) } }))];
 	const nodes = [
-		embedNodeBuild({ id: 'db:source', x: 0, y: 0, width: OVERVIEW_DB_WIDTH, height: OVERVIEW_DB_HEIGHT, view: `/overview/${source.id}`, title: source.name, subtitle: source.description, icon: 'database', tone: 'blue', statList: statOf(source.id), handleList: [handleOf('in', 'in', 'right')] }),
-		embedNodeBuild({ id: 'db:target', x: OVERVIEW_TARGET_X, y: 0, width: OVERVIEW_DB_WIDTH, height: OVERVIEW_DB_HEIGHT, view: `/overview/${target.id}`, title: target.name, subtitle: target.description, icon: 'cloud', tone: 'green', statList: statOf(target.id), handleList: [handleOf('in', 'in', 'left')] }),
+		embedNodeBuild({ id: 'db:source', x: 0, y: 0, width: OVERVIEW_DB_WIDTH, height: OVERVIEW_DB_HEIGHT, scene: `/overview/${source.id}`, title: source.name, subtitle: source.description, icon: 'database', tone: 'blue', statList: statOf(source.id), handleList: [handleOf('in', 'in', 'right')] }),
+		embedNodeBuild({ id: 'db:target', x: OVERVIEW_TARGET_X, y: 0, width: OVERVIEW_DB_WIDTH, height: OVERVIEW_DB_HEIGHT, scene: `/overview/${target.id}`, title: target.name, subtitle: target.description, icon: 'cloud', tone: 'green', statList: statOf(target.id), handleList: [handleOf('in', 'in', 'left')] }),
 		{
 			id: 'tool', renderer: { type: 'table' }, position: { x: OVERVIEW_TOOL_X, y: 150 }, size: { width: OVERVIEW_TOOL_WIDTH, height: 'auto' },
 			data: { name: tool.name, nameLogical: tool.description ?? '', tone: 'violet', isFieldHeaderHidden: true, fields: [{ id: 'tag', label: '' }, { id: 'name', label: '' }], columnTemplate: '2.6rem 1fr', rows: stepList.map((step, index) => ({ id: step.id, tag: String(index + 1).padStart(2, '0'), name: step.name })) },
@@ -1228,8 +1261,8 @@ const reportIdListOf = (model) => ['plan', 'run', 'verify', ...(model.planPost ?
 const TAB_WIDTH = 1120;
 const TAB_HEIGHT = 810;
 
-function viewOverviewTabsBuild(model, focus) {
-	const diagram = viewOverviewBuild(model);
+function sceneOverviewTabsBuild(model, focus) {
+	const diagram = sceneOverviewBuild(model);
 	const widthAll = OVERVIEW_TARGET_X + OVERVIEW_DB_WIDTH;
 	return switchTabsApply(diagram, {
 		id: 'tabs',
@@ -1242,23 +1275,23 @@ function viewOverviewTabsBuild(model, focus) {
 // ---------- the provider ----------
 
 // what a path shows: a pure function of the model. null for a path that names nothing
-function viewBuild(model, path) {
+function sceneBuild(model, path) {
 	const segmentList = path.split('/').filter(Boolean);
 	if (segmentList[0] !== 'overview') return null;
 	const [, first, second, third] = segmentList;
 	const { source, target } = model.system;
-	if (!first) return viewOverviewBuild(model);
-	if (first === 'tabs') return viewOverviewTabsBuild(model, reportIdListOf(model).includes(second) ? second : 'plan');
-	if (first === source.id || first === target.id) return second ? viewTableBuild(model, first, second) ?? viewChoiceBuild(model, first, second) : viewErBuild(model, first);
+	if (!first) return sceneOverviewBuild(model);
+	if (first === 'tabs') return sceneOverviewTabsBuild(model, reportIdListOf(model).includes(second) ? second : 'plan');
+	if (first === source.id || first === target.id) return second ? sceneTableBuild(model, first, second) ?? sceneChoiceBuild(model, first, second) : sceneErBuild(model, first);
 	if (first === 'mapping') {
-		if (third) return viewMappingColumnBuild(model, second, third);
-		return second ? viewMappingTableBuild(model, second) : viewMappingAllBuild(model);
+		if (third) return sceneMappingColumnBuild(model, second, third);
+		return second ? sceneMappingTableBuild(model, second) : sceneMappingAllBuild(model);
 	}
-	if (first === 'choice') return second ? viewMappingChoiceBuild(model, second) : viewChoiceAllBuild(model);
-	if (first === 'plan') return second === 'order' ? viewPlanOrderBuild(model) : second === 'batch' ? viewPlanBatchBuild(model) : second ? null : viewPlanBuild(model);
-	if (first === 'run') return second === 'flow' ? viewRunFlowBuild(model) : second === 'batch' ? viewRunBatchBuild(model) : second === 'dlq' ? viewRunDlqBuild(model) : second ? null : viewRunBuild(model);
-	if (first === 'post') return second === 'master' ? viewPostMasterBuild(model) : second === 'audit' ? viewPostAuditBuild(model) : second ? null : viewPostBuild(model);
-	if (first === 'verify') return second === 'flow' ? viewVerifyFlowBuild(model) : second === 'match' ? viewVerifyMatchBuild(model, third) : second === 'sample' ? viewVerifySampleBuild(model) : second === 'check' ? viewVerifyCheckBuild(model) : second === 'exception' ? viewVerifyExceptionBuild(model) : second ? null : viewVerifyBuild(model);
+	if (first === 'choice') return second ? sceneMappingChoiceBuild(model, second) : sceneChoiceAllBuild(model);
+	if (first === 'plan') return second === 'order' ? scenePlanOrderBuild(model) : second === 'batch' ? scenePlanBatchBuild(model) : second ? null : scenePlanBuild(model);
+	if (first === 'run') return second === 'flow' ? sceneRunFlowBuild(model) : second === 'batch' ? sceneRunBatchBuild(model) : second === 'dlq' ? sceneRunDlqBuild(model) : second ? null : sceneRunBuild(model);
+	if (first === 'post') return second === 'master' ? scenePostMasterBuild(model) : second === 'audit' ? scenePostAuditBuild(model) : second ? null : scenePostBuild(model);
+	if (first === 'verify') return second === 'flow' ? sceneVerifyFlowBuild(model) : second === 'match' ? sceneVerifyMatchBuild(model, third) : second === 'sample' ? sceneVerifySampleBuild(model) : second === 'check' ? sceneVerifyCheckBuild(model) : second === 'exception' ? sceneVerifyExceptionBuild(model) : second ? null : sceneVerifyBuild(model);
 	return null;
 }
 
@@ -1321,7 +1354,7 @@ function childPathListGet(model, path) {
 	return [];
 }
 
-// what a menu shows beside the words of a view: a database, an option set among the tables
+// what a menu shows beside the words of a scene: a database, an option set among the tables
 function labelItemListOf(model, path) {
 	const { source, target } = model.system;
 	const [, first, second] = path.split('/').filter(Boolean);
@@ -1332,8 +1365,29 @@ function labelItemListOf(model, path) {
 }
 
 // the box a reader adjusted, kept in the layout item
+const diagramOfScene = (diagram) => ({ defaults: { connection: { renderer: { type: 'smoothstep' }, markerEnd: 'arrowClosed' } }, ...diagram });
+
+// the views of a database. embedded, a cylinder alone, filling the card so that the line
+// arriving at the side of the card ends on its wall; and the diagram, in the frame of the card,
+// while a pointer rests on it, which is also what a click opens. focused, the diagram or the
+// matrix, which cannot be read at the size of a card
+function sceneDbViewsBuild(model, dbId, path) {
+	const { source, target } = model.system;
+	const icon = { nodes: [{ id: `db-icon:${dbId}`, renderer: { type: 'card-database' }, position: { x: 0, y: 0 }, size: { width: OVERVIEW_DB_WIDTH, height: OVERVIEW_DB_HEIGHT }, data: { title: dbId === source.id ? source.name : target.name, tone: dbId === source.id ? 'blue' : 'green' } }], connections: [] };
+	return {
+		viewList: [
+			{ id: 'diagram', label: labelOf(model, 'viewDiagram'), diagram: diagramOfScene(sceneErBuild(model, dbId)), box: boxOf(model, `${path}@diagram`) },
+			{ id: 'matrix', label: labelOf(model, 'viewLookupMatrix'), isAvailableEmbedded: false, diagram: diagramOfScene(sceneLookupMatrixBuild(model, dbId)), box: boxOf(model, `${path}@matrix`) },
+			{ id: 'icon', label: dbId === source.id ? source.name : target.name, isAvailableFocused: false, isFrameHiddenEmbedded: true, diagram: diagramOfScene(icon) },
+		],
+		viewDefault: [{ when: { isEmbedded: true }, view: 'icon' }, { view: 'diagram' }],
+		viewHover: 'diagram',
+		isViewSwitcherHiddenEmbedded: true,
+	};
+}
+
 function boxOf(model, path) {
-	const box = model.layout.viewByPath?.[path]?.box;
+	const box = model.layout.sceneByPath?.[path]?.box;
 	if (!box) return undefined;
 	try {
 		return switchRectRead(box, path);
@@ -1348,18 +1402,13 @@ export function migrationProviderBuild(model, { onBoxSave } = {}) {
 		title: model.system.title ?? '',
 		labelGet: (path) => pathLabelGet(model, path),
 		childListGet: (path) => childPathListGet(model, path).map((child) => ({ path: child, label: pathLabelGet(model, child), labelItemList: labelItemListOf(model, child) })),
-		viewGet: (path) => {
-			const diagram = viewBuild(model, path);
+		sceneGet: (path) => {
+			const { source, target } = model.system;
+			const dbId = [source.id, target.id].find((id) => path === `/overview/${id}`);
+			if (dbId) return { path, label: pathLabelGet(model, path), ...sceneDbViewsBuild(model, dbId, path) };
+			const diagram = sceneBuild(model, path);
 			if (!diagram) return null;
-			return {
-				path,
-				label: pathLabelGet(model, path),
-				box: boxOf(model, path),
-				diagram: {
-					defaults: { connection: { renderer: { type: 'smoothstep' }, markerEnd: 'arrowClosed' } },
-					...diagram,
-				},
-			};
+			return { path, label: pathLabelGet(model, path), box: boxOf(model, path), diagram: diagramOfScene(diagram) };
 		},
 		boxSave: onBoxSave,
 	};

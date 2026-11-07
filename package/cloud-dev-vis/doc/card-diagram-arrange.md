@@ -3,7 +3,7 @@
 An **arranger** arranges a diagram by a set of rules: it decides how lines run and, if it wants, where cards stand. It is a pure function from a diagram to a list of changes, kept apart from whatever asks for it. So one arranger serves three kinds of caller, and any arranger can change without them knowing.
 
 ```text
- a generator of a read-only view ─┐
+ a generator of a read-only scene ─┐
  a generator of a first layout  ──┼──► arranger ──► changes ──► the diagram
  the editor or an api, by hand  ──┘   (pure)
 ```
@@ -12,7 +12,7 @@ The contract is in `comp-mdx/card-diagram/DiagramArrange.js` and knows no kind o
 
 ## Using one
 
-**A view generated from data, not editable.** Build the nodes and lines, without caring where they go, and apply it every time:
+**A scene generated from data, not editable.** Build the nodes and lines, without caring where they go, and apply it every time:
 
 ```js
 import { diagramArrangeApply } from '../card-diagram/DiagramArrange.js';

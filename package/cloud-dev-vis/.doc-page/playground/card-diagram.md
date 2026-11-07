@@ -188,14 +188,14 @@ stateList:
       to: { y: -280 }
 ```
 
-## Switching views
+## Switching scenes
 
-A card opens a view of its own; lines keep their routes in a view shown inside a card too.
+A card opens a scene of its own; lines keep their routes in a scene shown inside a card too.
 
-<!--renderComp=CardDiagramSwitch,height=480,title=Views by path-->
+<!--renderComp=CardDiagramSwitch,height=480,title=Scenes by path-->
 ```yaml
 version: 1
-viewList:
+sceneList:
   - path: /overview
     label: Overview
     diagram:
@@ -204,13 +204,13 @@ viewList:
           renderer: { type: card-note }
           position: { x: 0, y: 100 }
           size: { width: 180, height: auto }
-          data: { title: Start here, text: The card on the right holds a view, tone: blue }
+          data: { title: Start here, text: The card on the right holds a scene, tone: blue }
           handles: [{ id: out, direction: out, anchor: { side: right } }]
         - id: detail
-          renderer: { type: view-embed }
+          renderer: { type: scene-embed }
           position: { x: 340, y: 0 }
           size: { width: 460, height: 320 }
-          data: { view: /overview/detail, title: Detail, icon: table, tone: green }
+          data: { scene: /overview/detail, title: Detail, icon: table, tone: green }
           handles: [{ id: in, direction: in, anchor: { side: left } }]
       connections:
         - { id: into, source: { nodeId: note, handleId: out }, target: { nodeId: detail, handleId: in }, label: { text: open it }, link: /overview/detail }
@@ -237,6 +237,98 @@ viewList:
           route:
             anchorList:
               - { id: a1, along: 0.5, x: 0, y: -24 }
+```
+
+## Views of a scene
+
+One scene, shown differently by how it is presented: the cards in the overview and the matrix while the pointer rests there, a cylinder alone in the summary with a line arriving at it, the detail when focused. Use the menus in the title lines and the path bar; a menu's choice lasts while the block is on the page.
+
+<!--renderComp=CardDiagramSwitch,height=520,title=A scene with views-->
+```yaml
+version: 1
+title: A scene with views
+height: 520
+sceneList:
+  - path: /overview
+    label: Overview
+    diagram:
+      nodes:
+        - id: orders
+          renderer: { type: scene-embed }
+          position: { x: 0, y: 0 }
+          size: { width: 560, height: 340 }
+          data: { scene: /overview/orders, title: Orders, icon: table, tone: blue }
+        - id: other
+          renderer: { type: card-note }
+          position: { x: 620, y: 140 }
+          size: { width: 200, height: auto }
+          link: /overview/summary
+          data: { title: Open the summary, text: The same scene in another card, tone: teal }
+  - path: /overview/summary
+    label: Summary
+    diagram:
+      nodes:
+        - id: note
+          renderer: { type: card-note }
+          position: { x: 0, y: 100 }
+          size: { width: 180, height: auto }
+          data: { title: A line arrives, text: At the wall of the cylinder, tone: teal }
+          handles: [{ id: out, direction: out, anchor: { side: right } }]
+        - id: orders
+          renderer: { type: scene-embed }
+          position: { x: 300, y: 0 }
+          size: { width: 320, height: 260 }
+          data: { scene: /overview/orders, viewHover: false, title: Orders, icon: table, tone: green }
+          handles: [{ id: in, direction: in, anchor: { side: left } }]
+      connections:
+        - { id: into, source: { nodeId: note, handleId: out }, target: { nodeId: orders, handleId: in } }
+  - path: /overview/orders
+    label: Orders
+    viewDefault:
+      - { when: { embedder: /overview/summary }, view: icon }
+      - { when: { isEmbedded: true }, view: cards }
+      - { view: detail }
+    viewHover: matrix
+    viewList:
+      - id: icon
+        label: Icon
+        isFrameHiddenEmbedded: true
+        isAvailableFocused: false
+        diagram:
+          nodes:
+            - { id: icon, renderer: { type: card-database }, position: { x: 0, y: 0 }, size: { width: 320, height: 260 }, data: { title: Orders, tone: green } }
+      - id: cards
+        label: Cards
+        diagram:
+          nodes:
+            - { id: order, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 160, height: auto }, data: { title: Order, tone: blue } }
+            - { id: customer, renderer: { type: card-note }, position: { x: 240, y: 0 }, size: { width: 160, height: auto }, data: { title: Customer, tone: amber } }
+      - id: matrix
+        label: Matrix
+        diagram:
+          nodes:
+            - id: matrix
+              renderer: { type: card-matrix }
+              position: { x: 0, y: 0 }
+              size: { width: 320, height: auto }
+              data:
+                title: Who refers to whom
+                rowAxisLabel: From
+                columnAxisLabel: To
+                rowHeadWidth: 200
+                cellSize: 40
+                isDiagonalMarked: true
+                rowList: [{ id: order, label: Order }, { id: customer, label: Customer }, { id: item, label: Item }]
+                columnList: [{ id: order, label: Order }, { id: customer, label: Customer }, { id: item, label: Item }]
+                cellList: [{ row: order, column: customer, title: An order has a customer }, { row: item, column: order, title: An item belongs to an order }]
+      - id: detail
+        label: Detail
+        isAvailableEmbedded: false
+        diagram:
+          nodes:
+            - { id: order, renderer: { type: card-note }, position: { x: 0, y: 160 }, size: { width: 200, height: auto }, data: { title: Order, text: Moves when you switch, tone: blue } }
+            - { id: customer, renderer: { type: card-note }, position: { x: 320, y: 0 }, size: { width: 200, height: auto }, data: { title: Customer, text: Moves too, tone: amber } }
+            - { id: item, renderer: { type: card-note }, position: { x: 320, y: 320 }, size: { width: 200, height: auto }, data: { title: Item, text: Only in this view, tone: green } }
 ```
 
 ## Arrangers

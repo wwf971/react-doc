@@ -4,14 +4,14 @@ import { DiagramNodeContent, DiagramRenderContext, connectionPathBuild } from '.
 import { endpointIsDangling } from '../card-diagram/DiagramERData.js';
 import { switchPresentationBuild } from './SwitchData.js';
 
-// A view drawn without React Flow (card-diagram-flexible-switch.md#embedding): the
+// A scene drawn without React Flow (card-diagram-flexible-switch.md#embedding): the
 // same cards, placed absolutely, with its lines in one svg. This is what an embedded
-// view is, what covers the canvas while its nodes are replaced, and what measures a
-// view before it is shown. There is never a second React Flow canvas: a view inside
-// a view is plain React, scaled by a transform of its parent.
+// scene is, what covers the canvas while its nodes are replaced, and what measures a
+// scene before it is shown. There is never a second React Flow canvas: a scene inside
+// a scene is plain React, scaled by a transform of its parent.
 //
-// `pathOwner` reaches the cards below: the view they belong to; `depth` stops a
-// view embedding itself.
+// `pathOwner` reaches the cards below: the scene they belong to; `depth` stops a
+// scene embedding itself.
 export const SwitchContext = createContext(null);
 
 const SWITCH_DEPTH_MAX = 3;
@@ -25,7 +25,7 @@ export function pathPointAt(d, part) {
 	return path.getPointAtLength(length * part);
 }
 
-// one card: placed by the view, measuring its anchors; the geometry goes up once, not per frame
+// one card: placed by the scene, measuring its anchors; the geometry goes up once, not per frame
 const StaticNode = observer(function StaticNode({ id, node, position, config, registry, onGeometry }) {
 	const root = useRef(null);
 	const anchors = useRef(new Map());
@@ -89,7 +89,7 @@ function StaticLabel({ connection, source, target }) {
 	return <div className={`doc-switch-edge-label${connection.link ? ' is-link' : ''}`} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}>{connection.label.text}</div>;
 }
 
-export const SwitchStaticView = observer(function SwitchStaticView({ store, path, depth = 0, isEmbedded = false }) {
+export const SwitchStaticScene = observer(function SwitchStaticScene({ store, path, depth = 0, isEmbedded = false, pathEmbedder = null }) {
 	const parent = useContext(SwitchContext);
 	const { config, registry } = useContext(DiagramRenderContext);
 	const markerId = `doc-switch-arrow-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
@@ -102,12 +102,12 @@ export const SwitchStaticView = observer(function SwitchStaticView({ store, path
 			return JSON.stringify(previous[id]) === next ? previous : { ...previous, [id]: handleList };
 		});
 	}, [store, path]);
-	const context = useMemo(() => ({ store, isStatic: true, depth, pathChain: [...(parent?.pathChain ?? []), path], presentation: switchPresentationBuild(path, isEmbedded) }), [store, depth, parent, path, isEmbedded]);
+	const context = useMemo(() => ({ store, isStatic: true, depth, pathChain: [...(parent?.pathChain ?? []), path], presentation: switchPresentationBuild(path, isEmbedded, pathEmbedder) }), [store, depth, parent, path, isEmbedded, pathEmbedder]);
 	if (!entry?.canvas.graph) return null;
 	if (depth >= SWITCH_DEPTH_MAX) return null;
 	void store.measureVersion;
 	const positions = store.entryPositionsGet(entry);
-	const nodeList = entry.canvas.graph.nodes.filter((node) => node.renderer.type !== 'view-box');
+	const nodeList = entry.canvas.graph.nodes.filter((node) => node.renderer.type !== 'scene-box');
 	const endOf = (endpoint) => {
 		if (endpointIsDangling(endpoint)) return { x: endpoint.position.x, y: endpoint.position.y, side: 'left' };
 		const position = positions.get(endpoint.nodeId);

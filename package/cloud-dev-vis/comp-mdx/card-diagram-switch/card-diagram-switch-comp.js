@@ -19,6 +19,6 @@ export function cardDiagramSwitchDefineOptionsBuild({ label, description, source
 }
 
 export const cardDiagramSwitchDefine = compDefine(CardDiagramSwitch, cardDiagramSwitchDefineOptionsBuild({
-	label: 'Card diagram views',
-	description: 'Many card diagrams in one viewport: a path, embedded views, smooth switching between them.',
+	label: 'Card diagram scenes',
+	description: 'Many card diagrams in one viewport: a path, embedded scenes, smooth switching between them.',
 }));

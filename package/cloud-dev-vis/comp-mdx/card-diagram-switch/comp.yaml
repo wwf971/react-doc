@@ -1,6 +1,6 @@
 # The switching layer of the card diagram framework
-# (doc/card-diagram-flexible-switch.md): many views by path in one React Flow canvas,
-# one view embedded in another as plain React, and smooth switching between them.
+# (doc/card-diagram-flexible-switch.md): many scenes by path in one React Flow canvas,
+# one scene embedded in another as plain React, and smooth switching between them.
 compList:
   - tagName: CardDiagramSwitch
     entry: ./card-diagram-switch-comp.js

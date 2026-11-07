@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { yamlParse } from '../../../../../main/frontend/src/lib/yaml.js';
 import { diagramNormalize } from '../../card-diagram/DiagramERData.js';
 import { switchRegistryBuild } from '../../card-diagram-switch/SwitchNodeKinds.jsx';
+import { switchPresentationBuild, switchViewHoverResolve, switchViewListOf, switchViewResolve } from '../../card-diagram-switch/SwitchData.js';
 import { powerPlatformNodeRegistry } from '../power-platform-node-registry.js';
 import { migrationCategoryOf, migrationModelBuild, migrationPathBuild, migrationRankBuild } from './MigrationData.js';
-import { migrationProviderBuild } from './MigrationViews.js';
+import { migrationProviderBuild } from './MigrationScenes.js';
 import { migrationEditAdapterByKind, migrationItemNewBuild } from './MigrationEditData.js';
 
 const itemList = [
@@ -25,13 +26,18 @@ const itemList = [
 	{ key: 'ex.report.run', kind: 'report-run', path: '/example/report/run', data: { stat: { total: 1, success: 1, dlq: 0 }, batchList: [{ file: 'a-1.csv', rowCount: 1, success: 1, dlq: 0 }], dlqList: [] } },
 	{ key: 'ex.report.verify', kind: 'report-verify', path: '/example/report/verify', data: { stat: { total: 1, matched: 1, exception: 0 }, checkList: [], exceptionList: [] } },
 ];
+// the diagram a scene shows by default: of its first view, if it has views
+const diagramShownOf = (providerOf, path) => {
+	const scene = providerOf.sceneGet(path);
+	return scene.diagram ?? scene.viewList[0].diagram;
+};
 const model = migrationModelBuild('example', itemList);
 const provider = migrationProviderBuild(model);
 const registry = switchRegistryBuild(powerPlatformNodeRegistry);
 
 test('run and verify flows place locations and outputs in base-layer color blocks', () => {
 	for (const kind of ['run', 'verify']) {
-		const diagram = provider.viewGet(`/overview/${kind}/flow`).diagram;
+		const diagram = provider.sceneGet(`/overview/${kind}/flow`).diagram;
 		const blocks = diagram.nodes.filter(node => node.renderer.type === 'color-block');
 		assert.equal(blocks.length, 4);
 		const blockOf = id => blocks.find(node => node.id === `flow-area:${id}`);
@@ -71,43 +77,46 @@ function pathAllGet(path, list = []) {
 	return list;
 }
 
-test('every view of the tree is a valid diagram', () => {
+test('every scene of the tree is a valid diagram', () => {
 	const pathList = pathAllGet(provider.root);
 	assert.ok(pathList.includes('/overview/mapping/a--x/state'));
 	assert.ok(pathList.includes('/overview/tabs/run'));
 	assert.ok(pathList.includes('/overview/pw/a'));
 	for (const path of pathList) {
-		const view = provider.viewGet(path);
-		assert.ok(view, path);
-		assert.doesNotThrow(() => diagramNormalize({ version: 1, ...view.diagram }, registry), path);
+		const scene = provider.sceneGet(path);
+		assert.ok(scene, path);
+		for (const holder of scene.viewList ?? [scene]) assert.doesNotThrow(() => diagramNormalize({ version: 1, ...holder.diagram }, registry), path);
 		assert.ok(provider.labelGet(path), path);
 	}
 	assert.equal(provider.labelGet('/overview'), 'All');
-	assert.equal(provider.viewGet('/overview/nothing'), null);
+	assert.equal(provider.sceneGet('/overview/nothing'), null);
 });
 
-test('a table keeps its node id across the views, so a switch moves it', () => {
-	const idOf = (path) => provider.viewGet(path).diagram.nodes.map((node) => node.id);
+test('a table keeps its node id across the scenes, so a switch moves it', () => {
+	const idOf = (path) => diagramShownOf(provider, path).nodes.map((node) => node.id);
 	const id = 'table:pw:a';
 	for (const path of ['/overview/pw', '/overview/mapping', '/overview/mapping/a--x', '/overview/mapping/a--x/state', '/overview/pw/a']) assert.ok(idOf(path).includes(id), path);
 });
 
 test('ER: lookups end on the primary key, option sets on their card, mappings carry a link', () => {
-	const { connections } = provider.viewGet('/overview/pw').diagram;
+	const { connections } = diagramShownOf(provider, '/overview/pw');
 	const lookup = connections.find((item) => item.id === 'lookup:pw:a:bid');
 	assert.equal(lookup.target.nodeId, 'table:pw:b');
 	assert.ok(connections.some((item) => item.id === 'choice:pw:a:st' && item.target.nodeId === 'choice:pw:st'));
-	const mapping = provider.viewGet('/overview/mapping').diagram.connections.find((item) => item.id === 'map:a--x');
+	const mapping = provider.sceneGet('/overview/mapping').diagram.connections.find((item) => item.id === 'map:a--x');
 	assert.equal(mapping.link, '/overview/mapping/a--x');
-	const row = provider.viewGet('/overview/mapping/a--x').diagram.connections.find((item) => item.id === 'column:ex.map.column.a--x.state');
+	const row = provider.sceneGet('/overview/mapping/a--x').diagram.connections.find((item) => item.id === 'column:ex.map.column.a--x.state');
 	assert.equal(row.link, '/overview/mapping/a--x/state');
 	assert.equal(row.label.text, 'choice');
 });
 
-test('a bounding box in the layout item is the box of its view', () => {
-	const modelBox = migrationModelBuild('example', [...itemList, { key: 'ex.layout', kind: 'layout', path: '/example/layout', data: { viewByPath: { '/overview/pw': { box: { x: 1, y: 2, width: 30, height: 40 } } } } }]);
-	assert.deepEqual(migrationProviderBuild(modelBox).viewGet('/overview/pw').box, { x: 1, y: 2, width: 30, height: 40 });
-	assert.equal(migrationProviderBuild(modelBox).viewGet('/overview').box, undefined);
+test('a bounding box in the layout item is the box of its scene', () => {
+	const modelBox = migrationModelBuild('example', [...itemList, { key: 'ex.layout', kind: 'layout', path: '/example/layout', data: { sceneByPath: { '/overview/pw/a': { box: { x: 1, y: 2, width: 30, height: 40 } }, '/overview/pw@matrix': { box: { x: 5, y: 6, width: 70, height: 80 } } } } }]);
+	assert.deepEqual(migrationProviderBuild(modelBox).sceneGet('/overview/pw/a').box, { x: 1, y: 2, width: 30, height: 40 });
+	const { viewList } = migrationProviderBuild(modelBox).sceneGet('/overview/pw');
+	assert.equal(viewList[0].box, undefined, 'a box is of one view');
+	assert.deepEqual(viewList[1].box, { x: 5, y: 6, width: 70, height: 80 });
+	assert.equal(migrationProviderBuild(modelBox).sceneGet('/overview').box, undefined);
 });
 
 // an item through its draft unchanged writes what it was
@@ -209,12 +218,12 @@ test('the rank of a table is one past the highest rank it looks up', () => {
 	assert.ok(rankByKey.has('loop-a') && rankByKey.has('loop-b'));
 });
 
-test('a report is a stack of its sections, each opening its view', () => {
-	const { nodes } = provider.viewGet('/overview/plan').diagram;
-	assert.equal(nodes[0].renderer.type, 'view-stack');
+test('a report is a stack of its sections, each opening its scene', () => {
+	const { nodes } = provider.sceneGet('/overview/plan').diagram;
+	assert.equal(nodes[0].renderer.type, 'scene-stack');
 	const idList = nodes[0].data.itemList.map((item) => item.id);
 	assert.deepEqual(idList, ['mapping:a--x', 'choice:st--state', 'order', 'batch']);
-	assert.equal(nodes[0].data.itemList[0].view, '/overview/mapping/a--x');
+	assert.equal(nodes[0].data.itemList[0].scene, '/overview/mapping/a--x');
 });
 
 test('report stacks show their localized simple title in overview and focus', () => {
@@ -222,43 +231,43 @@ test('report stacks show their localized simple title in overview and focus', ()
 	const modelTitle = migrationModelBuild('example', itemList.map((item) => item.kind === 'system' ? { ...item, data: { ...item.data, labels } } : item));
 	const providerTitle = migrationProviderBuild(modelTitle);
 	for (const id of ['plan', 'run', 'verify']) {
-		const { data } = providerTitle.viewGet(`/overview/${id}`).diagram.nodes[0];
+		const { data } = providerTitle.sceneGet(`/overview/${id}`).diagram.nodes[0];
 		assert.deepEqual(data.titleBar, { text: labels[id], isVisibleEmbedded: true, isVisibleFocused: true });
 	}
 });
 
-test('overview reports are the scrolling containers themselves, shared with focused views', () => {
-	const overview = provider.viewGet('/overview').diagram;
+test('overview reports are the scrolling containers themselves, shared with focused scenes', () => {
+	const overview = provider.sceneGet('/overview').diagram;
 	for (const id of ['plan', 'run', 'verify']) {
 		const parent = overview.nodes.find((node) => node.id === `report:${id}`);
-		const focused = provider.viewGet(`/overview/${id}`).diagram.nodes[0];
-		assert.equal(parent.renderer.type, 'view-stack');
+		const focused = provider.sceneGet(`/overview/${id}`).diagram.nodes[0];
+		assert.equal(parent.renderer.type, 'scene-stack');
 		assert.equal(parent.link, `/overview/${id}`);
 		assert.equal(parent.data.focusPath, `/overview/${id}`);
 		assert.equal(parent.data.isFrameVisibleFocused, true);
 		assert.equal(parent.id, focused.id);
 		assert.deepEqual(parent.data, focused.data);
-		assert.ok(!overview.nodes.some((node) => node.renderer.type === 'view-embed' && node.data.view === `/overview/${id}`));
-		const tab = provider.viewGet(`/overview/tabs/${id}`).diagram.nodes.find((node) => node.id === parent.id);
-		assert.equal(tab.renderer.type, 'view-stack');
+		assert.ok(!overview.nodes.some((node) => node.renderer.type === 'scene-embed' && node.data.scene === `/overview/${id}`));
+		const tab = provider.sceneGet(`/overview/tabs/${id}`).diagram.nodes.find((node) => node.id === parent.id);
+		assert.equal(tab.renderer.type, 'scene-stack');
 	}
 });
 
 test('a report shows how it goes first; its tables are a click away, not stacked', () => {
 	for (const [path, detailList] of [['/overview/run', ['/overview/run/batch', '/overview/run/dlq']], ['/overview/verify', ['/overview/verify/check', '/overview/verify/exception']]]) {
-		const { itemList } = provider.viewGet(path).diagram.nodes[0].data;
+		const { itemList } = provider.sceneGet(path).diagram.nodes[0].data;
 		assert.equal(itemList[0].id, 'flow');
-		assert.equal(itemList[0].view, `${path}/flow`);
+		assert.equal(itemList[0].scene, `${path}/flow`);
 		for (const detail of detailList) {
 			assert.ok(itemList.some((item) => item.link === detail && item.node), detail);
-			assert.ok(!itemList.some((item) => item.view === detail), `${detail} is not stacked as a table`);
+			assert.ok(!itemList.some((item) => item.scene === detail), `${detail} is not stacked as a table`);
 		}
 	}
-	const run = provider.viewGet('/overview/run/flow').diagram;
+	const run = provider.sceneGet('/overview/run/flow').diagram;
 	const idList = run.nodes.map((node) => node.id);
 	for (const id of ['flow-table:ex.pw.t.a', 'flow-batch:a-1.csv', 'flow-send', 'flow-target:ex.cn.t.x', 'flow-retry', 'flow-dlq', 'flow-report']) assert.ok(idList.includes(id), id);
 	assert.equal(run.nodes.find((node) => node.id === 'flow-dlq').link, '/overview/run/dlq');
-	const verify = provider.viewGet('/overview/verify/flow').diagram.nodes.map((node) => node.id);
+	const verify = provider.sceneGet('/overview/verify/flow').diagram.nodes.map((node) => node.id);
 	for (const id of ['flow-batch:a-1.csv', 'verify-set', 'verify-compare', 'verify-target:ex.cn.t.x', 'verify-exception', 'verify-report']) assert.ok(verify.includes(id), id);
 });
 
@@ -276,7 +285,7 @@ test('run and verify flows color each table and all its batches alike, including
 	}));
 	const providerFlow = migrationProviderBuild(modelFlow);
 	for (const path of ['/overview/run/flow', '/overview/verify/flow']) {
-		const { nodes } = providerFlow.viewGet(path).diagram;
+		const { nodes } = providerFlow.sceneGet(path).diagram;
 		const nodeOf = (id) => nodes.find((node) => node.id === id);
 		assert.equal(nodeOf('flow-table:ex.pw.t.a').data.tone, 'blue');
 		assert.equal(nodeOf('flow-table:ex.pw.t.b').data.tone, 'teal');
@@ -294,7 +303,7 @@ test('run and verify flows color each table and all its batches alike, including
 test('the order is drawn from the lookups of the target, wrapping long rows', () => {
 	const tableOf = (logical, lookup) => ({ key: logical, kind: 'schema-table', path: `/example/schema/connect/table/${logical}`, data: { db: 'connect', logical, name: logical, columnList: lookup ? [{ id: 'c', lookup }] : [] } });
 	const modelMany = migrationModelBuild('example', [itemList[0], tableOf('a'), tableOf('b'), tableOf('c'), tableOf('d'), tableOf('e'), tableOf('f', 'a')]);
-	const { nodes, connections } = migrationProviderBuild(modelMany).viewGet('/overview/plan/order').diagram;
+	const { nodes, connections } = migrationProviderBuild(modelMany).sceneGet('/overview/plan/order').diagram;
 	const yOf = (id) => nodes.find((node) => node.id === `rank-table:${id}`).position.y;
 	assert.equal(yOf('a'), yOf('d'));
 	assert.ok(yOf('e') > yOf('a'), 'the fifth of a rank is on the next line');
@@ -315,7 +324,7 @@ test('the flows end in the tables of the target, in the tone of the tables they 
 		{ key: 'verify', kind: 'report-verify', path: '/example/report/verify', data: { stat: {}, checkList: [], exceptionList: [] } },
 	]);
 	const providerTwo = migrationProviderBuild(modelTwo);
-	const run = providerTwo.viewGet('/overview/run/flow').diagram;
+	const run = providerTwo.sceneGet('/overview/run/flow').diagram;
 	const nodeOf = (diagram, id) => diagram.nodes.find((node) => node.id === id);
 	assert.equal(nodeOf(run, 'flow-target:t.a').data.tone, nodeOf(run, 'flow-table:s.a').data.tone);
 	assert.equal(nodeOf(run, 'flow-target:t.b').data.tone, nodeOf(run, 'flow-table:s.b').data.tone);
@@ -325,7 +334,7 @@ test('the flows end in the tables of the target, in the tone of the tables they 
 		assert.ok(run.connections.some((line) => line.source.nodeId === 'flow-send' && line.target.nodeId === `flow-target:${id}`));
 		assert.ok(run.connections.some((line) => line.source.nodeId === `flow-target:${id}` && line.target.nodeId === 'flow-report'));
 	}
-	const verify = providerTwo.viewGet('/overview/verify/flow').diagram;
+	const verify = providerTwo.sceneGet('/overview/verify/flow').diagram;
 	for (const id of ['t.a', 't.b']) assert.ok(verify.connections.some((line) => line.source.nodeId === `verify-target:${id}` && line.target.nodeId === 'verify-compare'));
 	assert.doesNotThrow(() => diagramNormalize({ version: 1, ...run }, registry));
 });
@@ -336,7 +345,7 @@ test('a plan whose tables have no mapping yet ends in the database itself', () =
 		{ key: 'plan', kind: 'plan', path: '/example/plan', data: { batchList: [{ table: 's.a', file: 'a-1.csv', rowCount: 1 }] } },
 		{ key: 'run', kind: 'report-run', path: '/example/report/run', data: { stat: {}, batchList: [] } },
 	]);
-	const diagram = migrationProviderBuild(modelBare).viewGet('/overview/run/flow').diagram;
+	const diagram = migrationProviderBuild(modelBare).sceneGet('/overview/run/flow').diagram;
 	assert.equal(diagram.nodes.find((node) => node.id === 'flow-target').renderer.type, 'card-brief');
 });
 
@@ -356,7 +365,7 @@ test('the patterns of finding a row: a title, then lanes of data titled with the
 	]);
 	const providerMatch = migrationProviderBuild(modelMatch);
 	const registryMatch = switchRegistryBuild(powerPlatformNodeRegistry);
-	const all = providerMatch.viewGet('/overview/verify/match').diagram;
+	const all = providerMatch.sceneGet('/overview/verify/match').diagram;
 	assert.doesNotThrow(() => diagramNormalize({ version: 1, ...all }, registryMatch));
 	const nodeOf = (diagram, id) => diagram.nodes.find((node) => node.id === id);
 	const laneTextOf = (id) => nodeOf(all, `match:${id}:lane`).data.itemList.map((item) => item.text).join(' | ');
@@ -395,7 +404,7 @@ test('the patterns of finding a row: a title, then lanes of data titled with the
 	const laneList = ['guid', 'key', 'pair'].map((id) => nodeOf(all, `match:${id}:lane`));
 	for (let index = 1; index < laneList.length; index += 1) assert.ok(laneList[index].position.y >= laneList[index - 1].position.y + laneList[index - 1].size.height);
 	// a pattern alone keeps its node ids, so a switch or an animation moves them
-	const one = providerMatch.viewGet('/overview/verify/match/pair').diagram;
+	const one = providerMatch.sceneGet('/overview/verify/match/pair').diagram;
 	assert.doesNotThrow(() => diagramNormalize({ version: 1, ...one }, registryMatch));
 	assert.ok(nodeOf(one, 'match:pair:source'));
 	assert.ok(!nodeOf(one, 'match:guid:source'));
@@ -403,16 +412,16 @@ test('the patterns of finding a row: a title, then lanes of data titled with the
 	assert.equal(providerMatch.labelGet('/overview/verify/match/key'), 'Another column');
 	assert.deepEqual(providerMatch.childListGet('/overview/verify/match').map((item) => item.path), ['guid', 'key', 'pair'].map((id) => `/overview/verify/match/${id}`));
 	// in the report, after its flow; and the step comparing values opens it
-	const stack = providerMatch.viewGet('/overview/verify').diagram.nodes[0].data.itemList;
+	const stack = providerMatch.sceneGet('/overview/verify').diagram.nodes[0].data.itemList;
 	assert.deepEqual(stack.slice(0, 2).map((item) => item.id), ['flow', 'match']);
-	assert.equal(nodeOf(providerMatch.viewGet('/overview/verify/flow').diagram, 'verify-compare').link, '/overview/verify/match');
-	assert.equal(providerMatch.viewGet('/overview/verify/nothing'), null);
+	assert.equal(nodeOf(providerMatch.sceneGet('/overview/verify/flow').diagram, 'verify-compare').link, '/overview/verify/match');
+	assert.equal(providerMatch.sceneGet('/overview/verify/nothing'), null);
 });
 
 test('a report with no patterns has no such section', () => {
 	const provider = migrationProviderBuild(migrationModelBuild('example', [{ key: 'verify', kind: 'report-verify', path: '/example/report/verify', data: { stat: {}, checkList: [], exceptionList: [] } }]));
-	assert.equal(provider.viewGet('/overview/verify/match'), null);
-	assert.ok(!provider.viewGet('/overview/verify').diagram.nodes[0].data.itemList.some((item) => item.id === 'match'));
+	assert.equal(provider.sceneGet('/overview/verify/match'), null);
+	assert.ok(!provider.sceneGet('/overview/verify').diagram.nodes[0].data.itemList.some((item) => item.id === 'match'));
 });
 
 // many batches, a master table, the plan after the migration
@@ -442,7 +451,7 @@ const itemPostListBuild = () => {
 test('many batches: the first, the last, and dots between them in the rows and the cards', () => {
 	const provider = migrationProviderBuild(migrationModelBuild('example', itemPostListBuild()));
 	for (const kind of ['run', 'verify']) {
-		const diagram = provider.viewGet(`/overview/${kind}/flow`).diagram;
+		const diagram = provider.sceneGet(`/overview/${kind}/flow`).diagram;
 		const nodeOf = (id) => diagram.nodes.find((node) => node.id === id);
 		const dots = diagram.nodes.filter((node) => node.renderer.type === 'card-three-dots');
 		assert.equal(dots.length, 1);
@@ -455,46 +464,46 @@ test('many batches: the first, the last, and dots between them in the rows and t
 		assert.ok(diagram.connections.some((line) => line.source.nodeId === 'flow-table:s.a' && line.target.nodeId === dots[0].id && line.style.strokeDasharray));
 		assert.equal(nodeOf(`${kind === 'run' ? 'flow' : 'verify'}-target:t.a`).data.rows[0].name, '29,950 row');
 	}
-	assert.ok(provider.viewGet('/overview/run').diagram.nodes[0].data.itemList.find((item) => item.id === 'result').node.data.text.startsWith('300 batches'));
-	assert.ok(provider.viewGet('/overview/run/batch').diagram.nodes[0].data.rows[1].file.includes('298'));
-	assert.ok(provider.viewGet('/overview/plan/batch').diagram.nodes.find((node) => node.id === 'batch:s.a').data.rows[1].file.includes('298'));
+	assert.ok(provider.sceneGet('/overview/run').diagram.nodes[0].data.itemList.find((item) => item.id === 'result').node.data.text.startsWith('300 batches'));
+	assert.ok(provider.sceneGet('/overview/run/batch').diagram.nodes[0].data.rows[1].file.includes('298'));
+	assert.ok(provider.sceneGet('/overview/plan/batch').diagram.nodes.find((node) => node.id === 'batch:s.a').data.rows[1].file.includes('298'));
 });
 
 test('a master table is told apart wherever it is drawn, and maps as a whole table', () => {
 	const provider = migrationProviderBuild(migrationModelBuild('example', itemPostListBuild()));
-	const er = provider.viewGet('/overview/pw').diagram;
+	const er = diagramShownOf(provider, '/overview/pw');
 	const master = er.nodes.find((node) => node.id === 'table:pw:m');
 	assert.equal(master.data.badge, 'Master');
 	assert.equal(master.data.tone, 'amber');
 	assert.equal(er.nodes.find((node) => node.id === 'table:pw:a').data.badge, undefined);
-	const mapping = provider.viewGet('/overview/mapping/m--tm').diagram;
+	const mapping = provider.sceneGet('/overview/mapping/m--tm').diagram;
 	assert.deepEqual(mapping.connections.map((line) => [line.source.nodeId, line.target.nodeId, line.label.text]), [['table:pw:m', 'table:connect:tm', 'As a table']]);
 	assert.deepEqual(provider.childListGet('/overview/mapping/m--tm'), []);
-	assert.equal(provider.viewGet('/overview/plan/order').diagram.nodes.find((node) => node.data?.title === 'TM').data.tone, 'amber');
+	assert.equal(provider.sceneGet('/overview/plan/order').diagram.nodes.find((node) => node.data?.title === 'TM').data.tone, 'amber');
 });
 
 test('the plan after the migration: a report of its own, in the overview and the tabs', () => {
 	const provider = migrationProviderBuild(migrationModelBuild('example', itemPostListBuild()));
 	const registryPost = switchRegistryBuild(powerPlatformNodeRegistry);
 	for (const path of ['/overview', '/overview/tabs/post', '/overview/post', '/overview/post/master', '/overview/post/audit']) {
-		assert.doesNotThrow(() => diagramNormalize({ version: 1, ...provider.viewGet(path).diagram }, registryPost), path);
+		assert.doesNotThrow(() => diagramNormalize({ version: 1, ...provider.sceneGet(path).diagram }, registryPost), path);
 	}
-	assert.deepEqual(provider.viewGet('/overview/post').diagram.nodes[0].data.itemList.map((item) => item.id), ['intro', 'master', 'audit']);
+	assert.deepEqual(provider.sceneGet('/overview/post').diagram.nodes[0].data.itemList.map((item) => item.id), ['intro', 'master', 'audit']);
 	assert.equal(provider.labelGet('/overview/post/master'), 'Fix references');
 	assert.ok(provider.childListGet('/overview').some((item) => item.path === '/overview/post'));
-	const overview = provider.viewGet('/overview').diagram;
+	const overview = provider.sceneGet('/overview').diagram;
 	const reportList = ['plan', 'run', 'verify', 'post'].map((id) => overview.nodes.find((node) => node.id === `report:${id}`));
 	for (let index = 1; index < reportList.length; index += 1) assert.ok(reportList[index].position.x >= reportList[index - 1].position.x + reportList[index - 1].size.width + 100);
 	assert.ok(overview.connections.some((line) => line.id === 'verify-post'));
 	assert.ok(overview.connections.some((line) => line.id === 'make:post' && line.target.nodeId === 'report:post'));
 	// its server is one of its own
-	const master = provider.viewGet('/overview/post/master').diagram;
+	const master = provider.sceneGet('/overview/post/master').diagram;
 	const block = master.nodes.find((node) => node.id === 'post-master:block');
 	assert.deepEqual(block.data.columnList.map((column) => column.text), ['Source database (PW)', 'Post-processing server', 'Target database (Connect)']);
 	assert.match(block.data.itemList.at(-1).text, /Columns to update: TA\.m/);
 	assert.equal(master.nodes.find((node) => node.id === 'post-master:source').data.badge, 'Master');
 	assert.equal(master.nodes.find((node) => node.id === 'post-master:refer-source').data.badge, undefined);
-	const audit = provider.viewGet('/overview/post/audit').diagram;
+	const audit = provider.sceneGet('/overview/post/audit').diagram;
 	assert.deepEqual(audit.nodes.find((node) => node.id === 'post-audit:block').data.columnList.map((column) => column.text), ['Source database (PW)', 'Migration server', 'Post-processing server', 'Target database (Connect)']);
 	assert.equal(audit.nodes.find((node) => node.id === 'post-audit:target-run').data.rows[0].tone, 'red');
 	assert.equal(audit.nodes.find((node) => node.id === 'post-audit:target-post').data.rows[0].tone, 'green');
@@ -504,14 +513,14 @@ test('the plan after the migration: a report of its own, in the overview and the
 test('the reports are at full height, in the overview and on their own; without the item there is no such report', () => {
 	const provider = migrationProviderBuild(migrationModelBuild('example', itemPostListBuild()));
 	for (const id of ['plan', 'run', 'verify', 'post']) {
-		const { data } = provider.viewGet(`/overview/${id}`).diagram.nodes[0];
+		const { data } = provider.sceneGet(`/overview/${id}`).diagram.nodes[0];
 		assert.equal(data.isHeightFullEmbedded, true);
 		assert.equal(data.isHeightFullFocused, true);
 	}
 	const providerBare = migrationProviderBuild(migrationModelBuild('example', itemPostListBuild().filter((item) => item.kind !== 'plan-post')));
-	assert.equal(providerBare.viewGet('/overview/post'), null);
-	assert.ok(!providerBare.viewGet('/overview').diagram.nodes.some((node) => node.id === 'report:post'));
-	assert.ok(!providerBare.viewGet('/overview').diagram.connections.some((line) => line.id === 'make:post' || line.id === 'verify-post'));
+	assert.equal(providerBare.sceneGet('/overview/post'), null);
+	assert.ok(!providerBare.sceneGet('/overview').diagram.nodes.some((node) => node.id === 'report:post'));
+	assert.ok(!providerBare.sceneGet('/overview').diagram.connections.some((line) => line.id === 'make:post' || line.id === 'verify-post'));
 });
 
 
@@ -529,7 +538,7 @@ test('every line of an ER diagram has a lane of its own', () => {
 		tableOf('area'),
 		{ key: 'c.state', kind: 'schema-choice', path: '/example/schema/pw/choice/state', data: { db: 'pw', logical: 'state', name: 'state', optionList: [{ value: 1, label: 'A' }] } },
 	]);
-	const lineList = migrationProviderBuild(lanes).viewGet('/overview/pw').diagram.connections;
+	const lineList = diagramShownOf(migrationProviderBuild(lanes), '/overview/pw').connections;
 	const lookupList = lineList.filter((line) => line.id.startsWith('lookup:'));
 	assert.equal(lookupList.length, 4);
 	for (const line of lookupList) assert.equal(line.route.anchorList[0].along, 1, 'the lane follows the table referred to');
@@ -539,13 +548,13 @@ test('every line of an ER diagram has a lane of its own', () => {
 	assert.equal(choiceLineList.length, 2);
 	assert.equal(new Set(choiceLineList.map((line) => line.route.anchorList[0].x)).size, 2);
 	assert.equal(new Set(choiceLineList.map((line) => line.route.anchorList[0].y)).size, 2);
-	// the view of one table: a lane per line at each side
-	const user = migrationProviderBuild(lanes).viewGet('/overview/pw/user').diagram.connections;
+	// the scene of one table: a lane per line at each side
+	const user = migrationProviderBuild(lanes).sceneGet('/overview/pw/user').diagram.connections;
 	assert.equal(new Set(user.map((line) => line.route.anchorList[0].x)).size, user.length);
 });
 
 test('the lines fanning out of the tool each have a level of their own, the farthest out the highest', () => {
-	const lineList = migrationProviderBuild(migrationModelBuild('example', itemPostListBuild())).viewGet('/overview').diagram.connections;
+	const lineList = migrationProviderBuild(migrationModelBuild('example', itemPostListBuild())).sceneGet('/overview').diagram.connections;
 	const levelOf = (id) => lineList.find((line) => line.id === id).route.anchorList[0].y;
 	assert.ok(levelOf('make:plan') < levelOf('make:run'));
 	assert.ok(levelOf('make:post') < levelOf('make:verify'));
@@ -569,9 +578,9 @@ function modelOptionSetBuild() {
 	]);
 }
 
-test('an option set has a view: the tables using it cut down to the columns pointing to it', () => {
+test('an option set has a scene: the tables using it cut down to the columns pointing to it', () => {
 	const provider = migrationProviderBuild(modelOptionSetBuild());
-	const { diagram } = provider.viewGet('/overview/pw/shared');
+	const { diagram } = provider.sceneGet('/overview/pw/shared');
 	assert.equal(provider.labelGet('/overview/pw/shared'), 'shared');
 	assert.doesNotThrow(() => diagramNormalize({ version: 1, ...diagram }, registry));
 	assert.deepEqual(diagram.nodes.map((node) => node.id), ['table:pw:a', 'table:pw:b', 'choice:pw:shared']);
@@ -581,26 +590,26 @@ test('an option set has a view: the tables using it cut down to the columns poin
 	assert.deepEqual(diagram.nodes[1].data.rowDisplay, ['id', 'shared', { break: '5 cols' }]);
 	assert.deepEqual(diagram.connections.map((line) => line.target.nodeId), ['choice:pw:shared', 'choice:pw:shared']);
 	for (const line of diagram.connections) assert.ok(line.route.anchorList.length, 'an arranger gave it a lane');
-	assert.equal(provider.viewGet('/overview/pw').diagram.nodes.find((node) => node.id === 'choice:pw:shared').link, '/overview/pw/shared');
+	assert.equal(diagramShownOf(provider, '/overview/pw').nodes.find((node) => node.id === 'choice:pw:shared').link, '/overview/pw/shared');
 	assert.ok(provider.childListGet('/overview/pw').some((item) => item.path === '/overview/pw/shared'));
 });
 
 test('an option set of one column is drawn with its table, not in the ER diagram', () => {
 	const provider = migrationProviderBuild(modelOptionSetBuild());
-	const nodeIdOf = (path) => provider.viewGet(path).diagram.nodes.map((node) => node.id);
+	const nodeIdOf = (path) => diagramShownOf(provider, path).nodes.map((node) => node.id);
 	assert.ok(!nodeIdOf('/overview/pw').includes('choice:pw:own'));
 	assert.ok(nodeIdOf('/overview/pw').includes('choice:pw:shared'));
 	assert.ok(nodeIdOf('/overview/pw/a').includes('choice:pw:own'));
-	assert.equal(provider.viewGet('/overview/pw/a').diagram.nodes.find((node) => node.id === 'choice:pw:own').data.isGlobal, false);
-	assert.equal(provider.viewGet('/overview/pw/own').diagram.nodes.length, 2, 'it has a view too');
+	assert.equal(provider.sceneGet('/overview/pw/a').diagram.nodes.find((node) => node.id === 'choice:pw:own').data.isGlobal, false);
+	assert.equal(provider.sceneGet('/overview/pw/own').diagram.nodes.length, 2, 'it has a scene too');
 	for (const path of ['/overview/mapping/a--x', '/overview/mapping/a--x/ownx']) {
-		const { diagram } = provider.viewGet(path);
+		const diagram = diagramShownOf(provider, path);
 		assert.doesNotThrow(() => diagramNormalize({ version: 1, ...diagram }, registry), path);
 		for (const id of ['choice:pw:own', 'choice:connect:ownx']) assert.ok(diagram.nodes.some((node) => node.id === id), `${path} ${id}`);
 		assert.ok(diagram.connections.some((line) => line.source.nodeId === 'table:pw:a' && line.target.nodeId === 'choice:pw:own'), path);
 	}
-	assert.equal(provider.viewGet('/overview/mapping/a--x').diagram.connections.find((line) => line.id === 'map-choice:m.o').link, '/overview/choice/own--ownx');
-	assert.ok(!provider.viewGet('/overview/mapping/a--x/ownx').diagram.connections.some((line) => line.id === 'map-choice:m.o'));
+	assert.equal(provider.sceneGet('/overview/mapping/a--x').diagram.connections.find((line) => line.id === 'map-choice:m.o').link, '/overview/choice/own--ownx');
+	assert.ok(!provider.sceneGet('/overview/mapping/a--x/ownx').diagram.connections.some((line) => line.id === 'map-choice:m.o'));
 });
 
 test('the menu shows an icon beside a database and an option set', () => {
@@ -617,4 +626,46 @@ test('what does not fit about an option set is said', () => {
 	assert.ok(list({}).some((text) => text.includes('same logical name')));
 	assert.ok(list({ isGlobal: false }).some((text) => text.includes('2 columns use it')));
 	assert.equal(base.problemList.length, 0);
+});
+
+test('a database has three views: a cylinder on its card, the ER diagram on hover and focused, its lookups as a matrix', () => {
+	const scene = provider.sceneGet('/overview/pw');
+	assert.deepEqual(scene.viewList.map((view) => view.id), ['diagram', 'matrix', 'icon']);
+	assert.equal(switchViewResolve(scene, switchPresentationBuild('/overview/pw', true, '/overview')), 'icon');
+	assert.equal(switchViewResolve(scene, switchPresentationBuild('/overview/pw')), 'diagram');
+	assert.equal(switchViewHoverResolve(scene, switchPresentationBuild('/overview/pw', true, '/overview')), 'diagram');
+	assert.deepEqual(switchViewListOf(scene, switchPresentationBuild('/overview/pw')).map((view) => view.id), ['diagram', 'matrix']);
+	assert.deepEqual(switchViewListOf(scene, switchPresentationBuild('/overview/pw', true, '/overview')).map((view) => view.id), ['diagram', 'icon']);
+	const [icon] = scene.viewList[2].diagram.nodes;
+	assert.equal(icon.renderer.type, 'card-database');
+	assert.equal(icon.data.title, 'PW');
+	assert.equal(scene.viewList[2].isFrameHiddenEmbedded, true);
+	// it fills the card embedding it, so a line arriving at the side of the card ends on its wall
+	const card = provider.sceneGet('/overview').diagram.nodes.find((node) => node.id === 'db:source');
+	assert.deepEqual(icon.size, card.size);
+	assert.ok(scene.viewList[0].diagram.nodes.some((node) => node.id === 'table:pw:a'), 'the ER diagram keeps the node ids of its tables');
+	const [matrix] = scene.viewList[1].diagram.nodes;
+	assert.equal(matrix.renderer.type, 'card-matrix');
+	assert.deepEqual(matrix.data.rowList.map((row) => row.id), ['a', 'b']);
+	assert.deepEqual(matrix.data.columnList.map((column) => column.id), ['a', 'b']);
+	assert.equal(matrix.data.rowList[0].link, '/overview/pw/a');
+	const tableList = itemList.filter((item) => item.kind === 'schema-table' && item.data.db === 'pw');
+	const lookupCount = tableList.reduce((sum, item) => sum + new Set(item.data.columnList.map((column) => column.lookup).filter(Boolean)).size, 0);
+	assert.equal(matrix.data.cellList.length, lookupCount);
+	assert.ok(matrix.size.width > 0 && matrix.size.height === 'auto');
+	// the other scenes have one view, their diagram
+	assert.equal(provider.sceneGet('/overview/pw/a').viewList, undefined);
+});
+
+test('a lookup matrix counts the columns behind a mark, and leaves out what is not a table of the database', () => {
+	const table = (logical, columnList) => ({ key: `t.${logical}`, kind: 'schema-table', path: `/example/schema/pw/table/${logical}`, data: { db: 'pw', logical, name: logical.toUpperCase(), columnList } });
+	const list = [
+		{ key: 'sys', kind: 'system', path: '/example/system', data: { source: { id: 'pw', name: 'PW' }, target: { id: 'cn', name: 'CN' }, labels: { viewLookupMatrix: 'M' } } },
+		table('p', [{ id: 'pid', name: 'P', key: 'PK' }]),
+		table('q', [{ id: 'one', name: 'One', lookup: 't.p' }, { id: 'two', name: 'Two', lookup: 't.p' }, { id: 'far', name: 'Far', lookup: 't.r' }, { id: 'lost', name: 'Lost', lookup: 'nothing' }]),
+		{ ...table('r', [{ id: 'rid', name: 'R', key: 'PK' }]), data: { db: 'cn', logical: 'r', name: 'R', columnList: [{ id: 'rid', name: 'R', key: 'PK' }] } },
+	];
+	const [matrix] = migrationProviderBuild(migrationModelBuild('example', list)).sceneGet('/overview/pw').viewList[1].diagram.nodes;
+	assert.equal(matrix.data.title, 'PW: M');
+	assert.deepEqual(matrix.data.cellList, [{ row: 'q', column: 'p', title: 'Q → P: One, Two', mark: '● 2' }]);
 });

@@ -7,10 +7,10 @@ import { DiagramEdge, DiagramNode, DiagramPointNode, DiagramRenderContext, conne
 import { useCanvasWheelGuard } from '../card-diagram/CanvasWheelGuard.js';
 import { diagramCanvasLineListGet, diagramCanvasRegister } from '../card-diagram/DiagramCanvasRegistry.js';
 import '../card-diagram/DiagramER.css';
-import { SwitchContext, SwitchStaticView, pathPointAt } from './SwitchStatic.jsx';
+import { SwitchContext, SwitchStaticScene, pathPointAt } from './SwitchStatic.jsx';
 import { SWITCH_ZOOM_MAX, SWITCH_ZOOM_MIN, switchPresentationBuild } from './SwitchData.js';
 
-// The one React Flow canvas of a switching viewport: the nodes of the view shown, or
+// The one React Flow canvas of a switching viewport: the nodes of the scene shown, or
 // of a transition, handed over by the store. Every frame of a transition goes through
 // the store (SwitchStore.frameApply): a camera, a few positions, one stylesheet. No card
 // renders per frame.
@@ -19,7 +19,7 @@ import { SWITCH_ZOOM_MAX, SWITCH_ZOOM_MIN, switchPresentationBuild } from './Swi
 const nodeMouseEnterNoop = () => {};
 const errorNoop = () => {};
 
-// a line of a view: the line of the framework, with its label as html, which a
+// a line of a scene: the line of the framework, with its label as html, which a
 // link makes a button (the label of a table mapping opens the mapping of that column)
 const SwitchEdge = observer(function SwitchEdge(props) {
 	const { connection } = props.data;
@@ -103,10 +103,11 @@ const SwitchFlow = observer(function SwitchFlow({ store, children }) {
 			onNodeClick={(event, node) => {
 				if (isMoving || store.isBoxAdjust) return;
 				const nodeGraph = node.data?.node;
-				const link = nodeGraph?.link ?? (nodeGraph?.renderer.type === 'view-embed' ? nodeGraph.data.view : undefined);
+				// a part of a card may open something of its own (data-switch-link)
+				const link = event.target.closest?.('[data-switch-link]')?.dataset.switchLink ?? nodeGraph?.link ?? (nodeGraph?.renderer.type === 'scene-embed' ? nodeGraph.data.scene : undefined);
 				if (link && !event.target.closest?.('button')) void store.pathSet(link);
 			}}
-			onNodeDragStop={(_event, node) => { if (node.data?.node?.renderer.type === 'view-box') store.boxCommit(node.id); }}
+			onNodeDragStop={(_event, node) => { if (node.data?.node?.renderer.type === 'scene-box') store.boxCommit(node.id); }}
 		>
 			<Background gap={18} size={1} />
 			<Controls showInteractive={false} />
@@ -115,7 +116,7 @@ const SwitchFlow = observer(function SwitchFlow({ store, children }) {
 	);
 });
 
-// what covers the canvas while its nodes are replaced: the view drawn statically, at the camera of the canvas
+// what covers the canvas while its nodes are replaced: the scene drawn statically, at the camera of the canvas
 const SwitchMask = observer(function SwitchMask({ store }) {
 	const { mask } = store;
 	const rootRef = useRef(null);
@@ -128,17 +129,17 @@ const SwitchMask = observer(function SwitchMask({ store }) {
 	return (
 		<div ref={rootRef} className="doc-switch-mask" aria-hidden="true" style={{ clipPath: mask.clip }}>
 			<div ref={worldRef} className="doc-switch-embed-world" style={{ transform: `translate(${mask.camera.x}px, ${mask.camera.y}px) scale(${mask.camera.zoom})` }}>
-				<SwitchStaticView store={store} path={mask.path} />
+				<SwitchStaticScene store={store} path={mask.path} />
 			</div>
 		</div>
 	);
 });
 
-// the views a transition is about to show, measured once, out of sight
+// the scenes a transition is about to show, measured once, out of sight
 const SwitchMeasureHost = observer(function SwitchMeasureHost({ store }) {
 	return (
 		<div className="doc-switch-measure" aria-hidden="true">
-			{store.measurePathList.map((path) => <SwitchStaticView key={path} store={store} path={path} />)}
+			{store.measurePathList.map((path) => <SwitchStaticScene key={path} store={store} path={path} />)}
 		</div>
 	);
 });
@@ -166,10 +167,10 @@ export const SwitchCanvas = observer(function SwitchCanvas({ store, config, regi
 		registry,
 		measurementSet: (id, size) => store.measurementSet(store.pathFlow, id, size),
 		edgeGeometry: new Map(),
-		viewBox: { get isAdjust() { return store.isBoxAdjust; }, resizeEnd: (nodeId, params) => store.boxCommit(nodeId, params) },
+		sceneBox: { get isAdjust() { return store.isBoxAdjust; }, resizeEnd: (nodeId, params) => store.boxCommit(nodeId, params) },
 	}), [config, registry, store]);
-	// the view shown, for the check of its lines (DiagramCanvasRegistry.js). only those it
-	// shows are looked at: the geometry of a view left stays behind
+	// the scene shown, for the check of its lines (DiagramCanvasRegistry.js). only those it
+	// shows are looked at: the geometry of a scene left stays behind
 	useEffect(() => diagramCanvasRegister({
 		sourcePath: config?.sourcePath ?? '',
 		store,
@@ -208,7 +209,7 @@ export const SwitchCanvas = observer(function SwitchCanvas({ store, config, regi
 			</ReactFlowProvider>
 			{store.loadError ? (
 				<div className="doc-er-diagram-message is-error doc-switch-error" role="alert">
-					<strong>This view could not be drawn.</strong>
+					<strong>This scene could not be drawn.</strong>
 					<span>{store.loadError}</span>
 				</div>
 			) : null}

@@ -1,6 +1,6 @@
 # A Database Migration as Data: Design
 
-The migration components of the [Power Platform series](power-platform.md), in `comp-mdx/power-platform/migration/`: what a migration between two Dataverse databases holds as **data items**, the [views](card-diagram-flexible-switch.md) generated from them, and the editors of each kind of item. They are the **modes** of a [frontend object](../../../main/doc_page_impl_obj_frontend.md): a doc page declares a type naming them, lists one object, and places blocks of it. Nothing here knows a project or a language: every word on screen comes from the items.
+The migration components of the [Power Platform series](power-platform.md), in `comp-mdx/power-platform/migration/`: what a migration between two Dataverse databases holds as **data items**, the [scenes](card-diagram-flexible-switch.md) generated from them, and the editors of each kind of item. They are the **modes** of a [frontend object](../../../main/doc_page_impl_obj_frontend.md): a doc page declares a type naming them, lists one object, and places blocks of it. Nothing here knows a project or a language: every word on screen comes from the items.
 
 ```text
 .doc-page/object-frontend.yaml   a type whose modes are the components below; one object
@@ -9,7 +9,7 @@ assets of the object             the data items, one asset per item, each with a
         │  migrationModelBuild
 the model                        tables, option sets, mappings, plan, reports, and what does not fit together
         │  migrationProviderBuild                    │  migrationEditAdapterByKind
-views by path (the switching layer)                 an item <-> the draft of a card or a diagram (the visual editor)
+scenes by path (the switching layer)                 an item <-> the draft of a card or a diagram (the visual editor)
 ```
 
 ## Data items
@@ -18,8 +18,8 @@ The first folder of a path is the **category**: `/example` holds small, sanitize
 
 | Kind | Path | Holds |
 | --- | --- | --- |
-| `system` | `/{category}/system` | the two databases, the tool and its steps, `labels`: every word of the views |
-| `schema-table` | `/{category}/schema/{db}/table/{logical}` | `db`, `logical`, `name`, `columnList`, `isMaster?`: a master table, marked in every view |
+| `system` | `/{category}/system` | the two databases, the tool and its steps, `labels`: every word of the scenes |
+| `schema-table` | `/{category}/schema/{db}/table/{logical}` | `db`, `logical`, `name`, `columnList`, `isMaster?`: a master table, marked in every scene |
 | `schema-choice` | `/{category}/schema/{db}/choice/{logical}` | `db`, `logical`, `name`, `optionList: [{ value, label }]`, `isGlobal?` (`false`: [only one column uses it](#option-sets)) |
 | `mapping-table` | `/{category}/mapping/table/{source}--{target}` | `source`, `target` (keys of tables), `columnKeyList` (keys of its column mappings), `label?`, `match?`: the id of the [pattern](#finding-a-row-in-the-target) that finds its rows in the target (the first pattern when absent), `isTableLevel?`: mapped as a whole table, with no column mappings: one line between the tables |
 | `mapping-column` | `/{category}/mapping/column/{source}--{target}/{id}` | `table`, `source`, `target` (column ids; `null` target: abandoned, `null` source: a default), `kind`, `label`, `stepList` |
@@ -28,20 +28,20 @@ The first folder of a path is the **category**: `/example` holds small, sanitize
 | `plan-post` | `/{category}/plan-post` | [what is done after the migration](#after-the-migration): `intro`, `master`, `audit` |
 | `report-run` | `/{category}/report/run` | `stat`, `batchList`, `dlqList`, `flow`: the words of its steps (`send`, `retry`, `dlq`: `{ title, tag, text }`) |
 | `report-verify` | `/{category}/report/verify` | `stat`, `checkList`, `exceptionList`, `flow` (`set`, `compare`, `exception`), `sample`: one row worked through (`{ key, note, rowList: [{ column, source, expected, actual, result, isProblem? }] }`), `matchIntro`, `matchList`: [the patterns of finding a row](#finding-a-row-in-the-target) |
-| `layout` | `/{category}/layout` | `viewByPath: { path: { box } }`, written by the viewer |
+| `layout` | `/{category}/layout` | `sceneByPath: { path: { box } }`, written by the viewer |
 
 **A column** is `{ id, name, logical, type, key?, isRequired?, description?, lookup?: key of a table, choice?: key of an option set }`. **A step** of a column mapping is `{ op: text, name, description }`, `{ op: mapping, name, rows: [{ key, value }] }`, `{ op: choice, mapping: key of a mapping-choice }` or `{ op: abandon }`.
 
 An item names another by its **key**, which never changes, not by its path, as [the frontend object layer recommends](../../../main/doc_page_impl_obj_frontend.md#the-entry-asset). What does not fit together (a lookup naming a table not found) is listed under the viewer and leaves the rest drawn. Any item may say `isUnverified: true`; the viewer says how many are.
 
-## Views
+## Scenes
 
-| Path | View |
+| Path | Scene |
 | --- | --- |
 | `/overview` | the databases (their ER diagrams, embedded), the tool, the three reports (embedded) |
 | `/overview/tabs/{plan,run,verify}` | the same, the reports in tabs |
 | `/overview/{db}/{choice}` | one option set, with each table using it, cut down to its key and those columns, which point to it |
-| `/overview/{db}` | the ER diagram, arranged by `er-columns` ([Arrangers](card-diagram-arrange.md)): tables by their lookups, option sets below, lines from each column |
+| `/overview/{db}` | the database, in [three views](#the-views-of-a-database): a cylinder on its card; the ER diagram, arranged by `er-columns` ([Arrangers](card-diagram-arrange.md)): tables by their lookups, option sets below, lines from each column; and its lookup matrix |
 | `/overview/{db}/{table}` | one table, what it refers to, what refers to it |
 | `/overview/mapping` | both ER diagrams; a line per mapping of tables and of option sets, whose label opens it |
 | `/overview/mapping/{pair}` | two tables; a line per column mapping, whose label opens it |
@@ -54,15 +54,27 @@ An item names another by its **key**, which never changes, not by its path, as [
 | `/overview/verify/flow` | how the result was checked: the same batches as the reference, the set compared, the values compared with what is read back from the tables of the target, the checks, the exceptions |
 | `/overview/verify/match`, `/overview/verify/match/{id}` | how a row of the source is found in the target: the patterns one under another, or one alone |
 | `/overview/verify/sample` | one row worked through, column by column |
-| `/overview/plan/batch`, `/overview/run/{batch,dlq}`, `/overview/verify/{check,exception}` | the tables, each a view of its own |
+| `/overview/plan/batch`, `/overview/run/{batch,dlq}`, `/overview/verify/{check,exception}` | the tables, each a scene of its own |
 
-**A report shows how it went, then what came of it** ([a matter of taste](card-diagram-usage.md#a-matter-of-taste-show-how-it-happens-then-what-came-of-it)). The run report and the verification report start with their process, a diagram with the actual figures on it, and hold short cards of totals; the tables are views of their own which those cards, and the steps of the diagram, open.
+**A report shows how it went, then what came of it** ([a matter of taste](card-diagram-usage.md#a-matter-of-taste-show-how-it-happens-then-what-came-of-it)). The run report and the verification report start with their process, a diagram with the actual figures on it, and hold short cards of totals; the tables are scenes of their own which those cards, and the steps of the diagram, open.
 
-**The order of loading is computed, not written** (`migrationRankBuild`), from the lookups of the target, where the rows are loaded: a table can load once what it looks up has loaded, so its rank is one past the highest rank it looks up, and a table looking up nothing has rank 1. The view draws how that comes about: the tables as labels, one line per pair of tables where one looks up the other (however many columns do), in bands by rank, wrapping as [a list on a canvas should](card-diagram.md#drawing-conventions). A lookup closing a cycle cannot be honored by an order: it is drawn dashed with a word from the data, to be filled in by a later pass.
+**The order of loading is computed, not written** (`migrationRankBuild`), from the lookups of the target, where the rows are loaded: a table can load once what it looks up has loaded, so its rank is one past the highest rank it looks up, and a table looking up nothing has rank 1. The scene draws how that comes about: the tables as labels, one line per pair of tables where one looks up the other (however many columns do), in bands by rank, wrapping as [a list on a canvas should](card-diagram.md#drawing-conventions). A lookup closing a cycle cannot be honored by an order: it is drawn dashed with a word from the data, to be filled in by a later pass.
+
+### The views of a database
+
+`/overview/{db}` has three [views](card-diagram-flexible-switch.md#the-views-of-a-scene), built from the same items:
+
+| View | Shows | Where |
+| --- | --- | --- |
+| `icon` | a [`card-database`](card-diagram-impl.md#node-registries) with the name of the database | the default embedded, as in the overview: alone in its card, at the size of the card, so the line from the tool ends on its wall; never focused |
+| `diagram` | the ER diagram | the default focused, and the hover view of the card, so a click opens what the pointer already shows |
+| `matrix` | a [`card-matrix`](card-diagram-impl.md#node-registries): the tables as rows and columns in one order, a mark where the table of a row looks up the table of a column, with the number of its columns when more than one; a header opens that table | focused only, since it cannot be read at the size of a card |
+
+The words of the menu are in `labels` of the `system` item: `viewDiagram`, `viewLookupMatrix`, `lookupFrom`, `lookupTo`. A bounding box is kept per view, under `{path}@{view}` in the layout item.
 
 ### Finding a row in the target
 
-A row can be checked only once its counterpart in the target is found, and how differs by table, so the report says it as **patterns**. The view opens with a title saying what this is about (`matchIntro`), and each pattern is a lane under a title of its own, in the columns of the flows, seen by dashed dividers rather than blocks inside the block: one row of the source, what the migration server does with its key and what comes of it (one column of cards), the row found in the target.
+A row can be checked only once its counterpart in the target is found, and how differs by table, so the report says it as **patterns**. The scene opens with a title saying what this is about (`matchIntro`), and each pattern is a lane under a title of its own, in the columns of the flows, seen by dashed dividers rather than blocks inside the block: one row of the source, what the migration server does with its key and what comes of it (one column of cards), the row found in the target.
 
 ```text
 matchList: [{ id, title, icon?,
@@ -71,7 +83,7 @@ matchList: [{ id, title, icon?,
   result?: { title, tag?, text } }]
 ```
 
-The migration project has three, none of them known to the views:
+The migration project has three, none of them known to the scenes:
 
 | Pattern | When | How |
 | --- | --- | --- |
@@ -88,14 +100,14 @@ Some columns cannot get their value when the rows are loaded. `plan-post` descri
 - **References to master tables** (`master`). A master table (`isMaster`) is loaded as a whole table, without its GUIDs (`isTableLevel`, no column mappings), so a lookup of it cannot be carried over: it stays empty at the load. Afterwards a table of GUIDs is made from another column, and the lookups are set. The columns concerned are found from the schemas (`migrationMasterReferListOf`). `{ title, text?, source, target, referSource, referTarget, stepList: [{ id: map | find | write, title, tag?, text? }] }`, where the four tables are `{ table, label?, rowList: [{ column, value, isKey?, tone?, label? }] }`.
 - **System columns** (`audit`). The system sets who and when at creation, so the load cannot give the values of the source; a script writes them afterwards. `{ title, text?, source, targetRun, targetPost, stepRun, stepPost }`.
 
-Every view is a pure function of the model. A table keeps its node id (`table:{db}:{logical}`) in every view drawing it, which is what lets a switch move it.
+Every scene is a pure function of the model. A table keeps its node id (`table:{db}:{logical}`) in every scene drawing it, which is what lets a switch move it.
 
 
 ### Option sets
 
 An option set is an item of its own, whether or not it is shared. Most are **global**, used by any number of columns. One with `isGlobal: false` belongs to one column (the model says so if more use it), and is drawn with its table rather than on its own:
 
-| View | A global option set | One with `isGlobal: false` |
+| Scene | A global option set | One with `isGlobal: false` |
 | --- | --- | --- |
 | the ER diagram, `/overview/mapping` | a card below the tables, with a line from each column | not drawn |
 | `/overview/{db}/{table}` | a card beside the table | the same |
@@ -109,8 +121,8 @@ A table and an option set of one database share the namespace of `/overview/{db}
 
 | Component | Mode of | `param` |
 | --- | --- | --- |
-| `MigrationExplorer` | the views | `category`, `path` (the view first shown; `#item` scrolls a stack to an item), `height` |
-| `MigrationTour` | the views under the animation layer | `category`, `height`, `stateList`, `transitionList`, `fps` |
+| `MigrationExplorer` | the scenes | `category`, `path` (the scene first shown; `#item` scrolls a stack to an item), `height` |
+| `MigrationTour` | the scenes under the animation layer | `category`, `height`, `stateList`, `transitionList`, `fps` |
 | `MigrationItemList` | every item by category and kind | `category` |
 | `MigrationSchemaTableEdit`, `MigrationSchemaChoiceEdit`, `MigrationMappingTableEdit`, `MigrationMappingColumnEdit`, `MigrationMappingChoiceEdit` | editing one item | `category`, `item` (a path, a key, `name:…`) |
 
@@ -144,9 +156,9 @@ An editor shows the item as the framework's card or diagram; **Edit** opens the 
 | Place | Role |
 | --- | --- |
 | `migration/MigrationData.js` | the kinds, the paths, the model |
-| `migration/MigrationViews.js` | the provider: every view |
+| `migration/MigrationScenes.js` | the provider: every scene |
 | `migration/MigrationEditData.js` | the adapters, a new item |
 | `migration/MigrationExplorer.jsx` | reading the items; `MigrationExplorer`, `MigrationTour` |
 | `migration/MigrationEdit.jsx` | the host of an editor; `MigrationItemList` |
 | `migration/migration-comp.js`, `Migration.css` | the registration, the style |
-| `migration/MigrationData.test.js` | every view of the tree is a valid diagram; items through their drafts |
+| `migration/MigrationData.test.js` | every scene of the tree is a valid diagram; items through their drafts |

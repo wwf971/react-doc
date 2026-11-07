@@ -335,6 +335,10 @@ table, isCompact           card-note                card-brief
 
 `card-note` holds `title`, `tag`, `isTagHard`, `text`, `tone`, `metaList: [{ value, label }]`; `card-brief` holds `title`, `icon` (a word of `ICON_BY_NAME`), `tone`, `statList: [text]`. Neither has rows: a line joins the body. Every row of a table card carries `data-row-id`, which the [animation](card-diagram-animation.md) reaches it by.
 
+`card-database` holds `title`, `text`, `tone`: a cylinder drawn at the size of its node with its name inside, the title as large as fits. A line joins its body.
+
+`card-matrix` holds rows and columns with headers and a mark where they meet: `rowList`, `columnList` (`[{ id, label, link?, tone? }]`), `cellList` (`[{ row, column, mark?, title? }]`, a dot by default), `title`, `subtitle`, `rowAxisLabel`, `columnAxisLabel`, `columnHeadDirection` (`vertical` by default, or `horizontal`), `rowHeadWidth`, `cellSize`, `isDiagonalMarked`. It knows nothing of what they are. `cardMatrixWidthGet` gives its width without drawing it, and a line joins its body.
+
 ## Card Editing
 
 `visual` edits inline YAML and, with `meta.isEditAssetAccepted: true`, writable, unlocked asset data at its head version. Every diagram and standalone card shares the editor (`DiagramVisualEdit.jsx`) and its store (`DiagramEditStore.js`), alongside source editing. The editor renders the same view as reading and hands it an `editor` object; the store holds the draft and the selection; the canvas interactions are translated into store commands by the editor.

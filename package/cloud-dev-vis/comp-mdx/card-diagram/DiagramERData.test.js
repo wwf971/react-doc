@@ -64,9 +64,9 @@ test('a component type draws and creates the kinds of its own registry only', ()
 	const base = yamlParse(cardDiagramSourceDefaultCreate().raw);
 	assert.equal(diagramNormalize(base, cardDiagramNodeRegistry).nodes.length, 3);
 	// the base series does not know the Dataverse kinds, and says what it knows
-	assert.throws(() => diagramNormalize(diagramCreate(), cardDiagramNodeRegistry), /unknown node type "dataverse-table" \(this diagram knows: table, operator, card-note, card-brief, card-three-dots, view-box, color-block\)/);
-	assert.deepEqual(cardDiagramNodeRegistry.createEntryList.map(entry => entry.id), ['table', 'operator', 'card-note', 'card-brief', 'view-box', 'color-block', 'connection']);
-	assert.deepEqual(registry.createEntryList.map(entry => entry.id), ['table', 'operator', 'card-note', 'card-brief', 'view-box', 'color-block', 'operator-abandon', 'operator-text', 'operator-mapping', 'dataverse-table', 'dataverse-choice', 'power-automate', 'business-rule', 'connection']);
+	assert.throws(() => diagramNormalize(diagramCreate(), cardDiagramNodeRegistry), /unknown node type "dataverse-table" \(this diagram knows: table, operator, card-note, card-brief, card-three-dots, card-database, card-matrix, scene-box, color-block\)/);
+	assert.deepEqual(cardDiagramNodeRegistry.createEntryList.map(entry => entry.id), ['table', 'operator', 'card-note', 'card-brief', 'card-database', 'card-matrix', 'scene-box', 'color-block', 'connection']);
+	assert.deepEqual(registry.createEntryList.map(entry => entry.id), ['table', 'operator', 'card-note', 'card-brief', 'card-database', 'card-matrix', 'scene-box', 'color-block', 'operator-abandon', 'operator-text', 'operator-mapping', 'dataverse-table', 'dataverse-choice', 'power-automate', 'business-rule', 'connection']);
 	// the standalone Dataverse card takes a Dataverse table alone, and its older form
 	assert.throws(() => cardStandaloneNormalize({ version: 1, node: { id: 'x', renderer: { type: 'table' }, data: {} } }, dataverseEntityNodeRegistry), /unknown node type "table"/);
 	assert.equal(cardStandaloneNormalize({ entity: { id: 'customer', name: 'Customer', columns: [] } }, dataverseEntityNodeRegistry).id, 'customer');

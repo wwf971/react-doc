@@ -12,7 +12,7 @@ import { SwitchStore } from './SwitchStore.js';
 import { SwitchCanvas } from './SwitchCanvas.jsx';
 import { SwitchPathBar } from './SwitchPathBar.jsx';
 import { switchRegistryBuild } from './SwitchNodeKinds.jsx';
-import { switchDocNormalize, switchPathNormalize, switchProviderFromDoc } from './SwitchData.js';
+import { switchDocNormalize, switchPathNormalize, switchPathViewRead, switchProviderFromDoc } from './SwitchData.js';
 import '../card-diagram-animation/CardDiagramAnimation.css';
 import './CardDiagramSwitch.css';
 
@@ -25,7 +25,7 @@ export function useSwitchResolve() {
 	}, [compById, sourceStore]);
 }
 
-// the store of a switching viewport, given its views: one per block, its views
+// the store of a switching viewport, given its scenes: one per block, its scenes
 // replaced when the provider changes
 export function useSwitchStore({ provider, registry, pathInitial, scope }) {
 	const resolve = useSwitchResolve();
@@ -52,9 +52,9 @@ function switchScrollFreeze(element) {
 	return () => restoreList.forEach((restore) => restore());
 }
 
-// the toolbar's picture button of a switching viewport: the view as it stands now
+// the toolbar's picture button of a switching viewport: the scene as it stands now
 export function switchCaptureActionBuild({ store, rootRef, titleGet }) {
-	const nameGet = (format) => `${(titleGet() || 'view').replace(/[\\/:*?"<>|\s]+/g, '-')}-${store.pathCurrent.replace(/\//g, '_').replace(/^_/, '')}.${format}`;
+	const nameGet = (format) => `${(titleGet() || 'scene').replace(/[\\/:*?"<>|\s]+/g, '-')}-${store.pathCurrent.replace(/\//g, '_').replace(/^_/, '')}.${format}`;
 	const run = (format, isDownload) => {
 		const element = rootRef.current?.querySelector('.react-flow');
 		if (!element) return;
@@ -77,7 +77,7 @@ export function switchCaptureActionBuild({ store, rootRef, titleGet }) {
 	};
 	return {
 		id: 'capture',
-		label: 'Copy or download the view as a picture',
+		label: 'Copy or download the scene as a picture',
 		Icon: ImageDown,
 		menuItemList: [
 			{ id: 'copy-png', label: 'Copy as PNG', Icon: Copy, onClick: () => run('png', false) },
@@ -88,9 +88,9 @@ export function switchCaptureActionBuild({ store, rootRef, titleGet }) {
 	};
 }
 
-// A viewport of many views (card-diagram-flexible-switch.md): the path bar over one
-// canvas. Whoever has views makes one of these with a provider: a document
-// (CardDiagramSwitch below), or a component generating its views from data.
+// A viewport of many scenes (card-diagram-flexible-switch.md): the path bar over one
+// canvas. Whoever has scenes makes one of these with a provider: a document
+// (CardDiagramSwitch below), or a component generating its scenes from data.
 //
 //   [path bar]        overview > tables > account           ←  fit  box
 //   [react-flow viewport]
@@ -121,12 +121,12 @@ const CardDiagramSwitchBase = observer(function CardDiagramSwitchBase({ data = {
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [source]);
-	const title = data.title || load.spec?.title || 'Views';
+	const title = data.title || load.spec?.title || 'Scenes';
 	return (
 		<BlockPopupSurface config={config} title={title} className="doc-switch-shell not-prose">
 			{({ isInPopup }) => (load.message ? (
 				<div className="doc-er-diagram-message is-error" role="alert">
-					<strong>The views could not be read.</strong>
+					<strong>The scenes could not be read.</strong>
 					<span>{load.message}</span>
 				</div>
 			) : (
@@ -171,19 +171,21 @@ export const SwitchBarMenu = observer(function SwitchBarMenu({ action }) {
 	);
 });
 
-// the document written again with the box of one view. inline data is rewritten by
+// the document written again with the box of one scene. inline data is rewritten by
 // the page, in reading mode too; an asset-backed block is left as it is, and says so
 async function switchDocBoxSave(source, path, rect, onEvent, config) {
 	if (config.assetInfo?.isFromAsset) return { code: -1, message: 'The data of this block is an asset: the bounding box holds while the page is open.' };
 	const doc = yamlParse(source);
-	const view = doc.viewList.find((item) => switchPathNormalize(item.path) === path);
-	if (!view) return { code: 0 };
-	const boxNode = view.diagram?.nodes?.find((node) => node.renderer?.type === 'view-box');
+	const { path: scenePath, view } = switchPathViewRead(path);
+	const scene = doc.sceneList.find((item) => switchPathNormalize(item.path) === scenePath);
+	const holder = view ? scene?.viewList?.find((item) => item.id === view) : scene;
+	if (!holder) return { code: 0 };
+	const boxNode = holder.diagram?.nodes?.find((node) => node.renderer?.type === 'scene-box');
 	if (boxNode) {
 		boxNode.position = { x: rect.x, y: rect.y };
 		boxNode.size = { width: rect.width, height: rect.height };
 	} else {
-		view.box = rect;
+		holder.box = rect;
 	}
 	return (await onEvent?.('dataReplaceRequest', { raw: yamlStringify(doc) })) ?? { code: -1, message: 'This block cannot be written.' };
 }

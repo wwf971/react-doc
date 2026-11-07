@@ -12,7 +12,7 @@ import './CardDiagramSwitch.css';
 // The switching layer wrapped in the animation layer
 // (card-diagram-flexible-switch.md#under-the-animation-layer): the control area of an
 // animation over the path bar and the canvas of a switching viewport. A state names a
-// view; a transition plays the way between two views. remotion's Player is the clock:
+// scene; a transition plays the way between two scenes. remotion's Player is the clock:
 // each segment of the plan writes its frame into the switching store, which draws it
 // with the same frames as the clock of a plain block.
 const SwitchAnimationSegment = observer(function SwitchAnimationSegment({ store, segment }) {

@@ -1,21 +1,21 @@
 ---
-title: Card Diagram Views
+title: Card Diagram Scenes
 description: CardDiagramSwitch shows many card diagrams in one viewport, by path, moving smoothly between them.
 language: en
 ---
 
-One viewport, many diagrams. `CardDiagramSwitch` holds **views**, each a [card diagram](comp-diagram-er.md) with a **path**. The path bar above the viewport shows where you are: click a segment to go there, or the chevron before it to see the views beside it. A view can show another view inside a card; clicking the card zooms into it. At any view you can pan and zoom, and copy or download what you see as PNG or SVG. `DiagramERSwitch` is the same block with every card of the [Power Platform](comp-powerplatform.md) series.
+One viewport, many diagrams. `CardDiagramSwitch` holds **scenes**, each a [card diagram](comp-diagram-er.md) with a **path**. The path bar above the viewport shows where you are: click a segment to go there, or the chevron before it to see the scenes beside it. A scene can show another scene inside a card; clicking the card zooms into it. At any scene you can pan and zoom, and copy or download what you see as PNG or SVG. `DiagramERSwitch` is the same block with every card of the [Power Platform](comp-powerplatform.md) series.
 
 The design is in [card-diagram-flexible-switch.md](card-diagram-flexible-switch.md).
 
 ## An overview with a card to zoom into
 
-Click the card **Detail** (or the segment of the path bar, after that). The line's label and the note below it open views too.
+Click the card **Detail** (or the segment of the path bar, after that). The line's label and the note below it open scenes too.
 
 <!--renderComp=CardDiagramSwitch,height=520,title=An overview-->
 ```yaml
 version: 1
-viewList:
+sceneList:
   - path: /overview
     label: Overview
     diagram:
@@ -33,12 +33,12 @@ viewList:
           position: { x: 0, y: 240 }
           size: { width: 200, height: auto }
           link: /overview/moved
-          data: { title: Open a view with nodes in common, icon: arrow-right-left, tone: teal }
+          data: { title: Open a scene with nodes in common, icon: arrow-right-left, tone: teal }
         - id: detail
-          renderer: { type: view-embed }
+          renderer: { type: scene-embed }
           position: { x: 360, y: 0 }
           size: { width: 480, height: 360 }
-          data: { view: /overview/detail, title: Detail, subtitle: another view, inside a card, icon: table, tone: green }
+          data: { scene: /overview/detail, title: Detail, subtitle: another scene, inside a card, icon: table, tone: green }
           handles: [{ id: in, direction: in, anchor: { side: left } }]
       connections:
         - id: source-detail
@@ -96,49 +96,176 @@ viewList:
 
 | Key | Meaning |
 | --- | --- |
-| `viewList` | the views: `path`, `label`, `description`, `diagram`, optionally `box`, `tabs`, or `labelItemList` for [more than words in the menu](card-diagram-flexible-switch.md#the-path-bar) |
-| `root` | the view shown first; the first of the list by default |
-| `title`, `height` | the block; `data.height` of the marker wins, as `data.path` names another first view |
+| `sceneList` | the scenes: `path`, `label`, `description`, `diagram`, or [`viewList`](#views-of-a-scene) for more than one view of it, optionally `box`, `tabs`, or `labelItemList` for [more than words in the menu](card-diagram-flexible-switch.md#the-path-bar) |
+| `root` | the scene shown first; the first of the list by default |
+| `title`, `height` | the block; `data.height` of the marker wins, as `data.path` names another first scene |
 | `defaults` | what every `diagram` starts with |
 | `transition` | `secondPortal`, `secondMorph`, `secondCamera`, `secondScroll`: how long a step lasts |
 
 A diagram is the [usual format](comp-diagram-er.md), with one more field on a node and on a connection: **`link`**, the path a click on it opens (`/path#item` also scrolls to an item of a stack there). On a connection, the label becomes the button.
 
-Two conventions keep a view readable, in a generator as by hand: a list of cards **wraps** instead of running on in one row, and what is long **scrolls** in a stack instead of shrinking ([Drawing conventions](card-diagram-usage.md#drawing-conventions)).
+Two conventions keep a scene readable, in a generator as by hand: a list of cards **wraps** instead of running on in one row, and what is long **scrolls** in a stack instead of shrinking ([Drawing conventions](card-diagram-usage.md#drawing-conventions)).
 
-## Showing a view inside a card
+## Showing a scene inside a card
 
 ```yaml
 - id: detail
-  renderer: { type: view-embed }
+  renderer: { type: scene-embed }
   position: { x: 360, y: 0 }
-  size: { width: 480, height: 360 }           # a numeric size: the view fits inside it
+  size: { width: 480, height: 360 }           # a numeric size: the scene fits inside it
   data:
-    view: /overview/detail                     # the path of the view
+    scene: /overview/detail                     # the path of the scene
     box: focus                                 # optional: a region of it (below), or { x, y, width, height }
-    title: Detail                              # optional; the label of the view by default
-    subtitle: another view
+    title: Detail                              # optional; the label of the scene by default
+    subtitle: another scene
     icon: table
     tone: green                                # blue, teal, green, amber, red, violet, slate
     statList: [12 rows]
-    isChromeHidden: false                      # true: only the view, no title line
+    isChromeHidden: false                      # true: only the scene, no title line
     padding: 0.03                              # the margin inside the card, a part of its size; this is the default
   handles: [{ id: in, direction: in, anchor: { side: left } }]
 ```
 
-A box written or named shows that part alone; what lies outside it stays out, until a click opens the view. A view keeps a margin inside its card by default, so nothing of it touches the border of the card, also for a view inside a view inside a view. The nodes of a view keep their ids when several views show them: a switch between two views with nodes in common moves those nodes instead of replacing them.
+A box written or named shows that part alone; what lies outside it stays out, until a click opens the scene. A scene keeps a margin inside its card by default, so nothing of it touches the border of the card, also for a scene inside a scene inside a scene. The nodes of a scene keep their ids when several scenes show them: a switch between two scenes with nodes in common moves those nodes instead of replacing them.
 
-## A scrolling stack of views
+## Views of a scene
 
-A card fits a whole view inside it, so a tall one gets small. A `view-stack` holds **views and cards one under another in a scrolling area**, each as wide as the area: nothing shrinks to make everything visible. Scroll it with the wheel, which zooms the canvas again once there is nothing left to scroll; click a section to open its view. The cards on the left scroll it from outside, by a link naming an item: `/list#part`.
+A scene can have more than one view and shows one at a time, as [a table card](comp-diagram-er.md#table-card-views) does. Which one depends on how the scene is presented: focused on the canvas, or embedded, and if embedded, in which scene.
+
+Below, **Orders** shows its cards in this overview, and its matrix while the pointer rests on it. Click the card to focus it: it opens at its detail view. Open **the summary** to see the same scene in another card, as a cylinder with no frame around it. The menu in a title line or the path bar switches between views.
+
+<!--renderComp=CardDiagramSwitch,height=520,title=A scene with views-->
+```yaml
+version: 1
+title: A scene with views
+height: 520
+sceneList:
+  - path: /overview
+    label: Overview
+    diagram:
+      nodes:
+        - id: orders
+          renderer: { type: scene-embed }
+          position: { x: 0, y: 0 }
+          size: { width: 560, height: 340 }
+          data: { scene: /overview/orders, title: Orders, icon: table, tone: blue }
+        - id: other
+          renderer: { type: card-note }
+          position: { x: 620, y: 140 }
+          size: { width: 200, height: auto }
+          link: /overview/summary
+          data: { title: Open the summary, text: The same scene in another card, tone: teal }
+  - path: /overview/summary
+    label: Summary
+    diagram:
+      nodes:
+        - id: note
+          renderer: { type: card-note }
+          position: { x: 0, y: 100 }
+          size: { width: 180, height: auto }
+          data: { title: A line arrives, text: At the wall of the cylinder, tone: teal }
+          handles: [{ id: out, direction: out, anchor: { side: right } }]
+        - id: orders
+          renderer: { type: scene-embed }
+          position: { x: 300, y: 0 }
+          size: { width: 320, height: 260 }
+          data: { scene: /overview/orders, viewHover: false, title: Orders, icon: table, tone: green }
+          handles: [{ id: in, direction: in, anchor: { side: left } }]
+      connections:
+        - { id: into, source: { nodeId: note, handleId: out }, target: { nodeId: orders, handleId: in } }
+  - path: /overview/orders
+    label: Orders
+    viewDefault:
+      - { when: { embedder: /overview/summary }, view: icon }
+      - { when: { isEmbedded: true }, view: cards }
+      - { view: detail }
+    viewHover: matrix
+    viewList:
+      - id: icon
+        label: Icon
+        isFrameHiddenEmbedded: true
+        isAvailableFocused: false
+        diagram:
+          nodes:
+            - { id: icon, renderer: { type: card-database }, position: { x: 0, y: 0 }, size: { width: 320, height: 260 }, data: { title: Orders, tone: green } }
+      - id: cards
+        label: Cards
+        diagram:
+          nodes:
+            - { id: order, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 160, height: auto }, data: { title: Order, tone: blue } }
+            - { id: customer, renderer: { type: card-note }, position: { x: 240, y: 0 }, size: { width: 160, height: auto }, data: { title: Customer, tone: amber } }
+      - id: matrix
+        label: Matrix
+        diagram:
+          nodes:
+            - id: matrix
+              renderer: { type: card-matrix }
+              position: { x: 0, y: 0 }
+              size: { width: 320, height: auto }
+              data:
+                title: Who refers to whom
+                rowAxisLabel: From
+                columnAxisLabel: To
+                rowHeadWidth: 200
+                cellSize: 40
+                isDiagonalMarked: true
+                rowList: [{ id: order, label: Order }, { id: customer, label: Customer }, { id: item, label: Item }]
+                columnList: [{ id: order, label: Order }, { id: customer, label: Customer }, { id: item, label: Item }]
+                cellList: [{ row: order, column: customer, title: An order has a customer }, { row: item, column: order, title: An item belongs to an order }]
+      - id: detail
+        label: Detail
+        isAvailableEmbedded: false
+        diagram:
+          nodes:
+            - { id: order, renderer: { type: card-note }, position: { x: 0, y: 160 }, size: { width: 200, height: auto }, data: { title: Order, text: Moves when you switch, tone: blue } }
+            - { id: customer, renderer: { type: card-note }, position: { x: 320, y: 0 }, size: { width: 200, height: auto }, data: { title: Customer, text: Moves too, tone: amber } }
+            - { id: item, renderer: { type: card-note }, position: { x: 320, y: 320 }, size: { width: 200, height: auto }, data: { title: Item, text: Only in this view, tone: green } }
+```
+
+| Key of a scene | Meaning |
+| --- | --- |
+| `viewList` | `[{ id, label?, description?, diagram, box?, isAvailableEmbedded?, isAvailableFocused?, isFrameHiddenEmbedded? }]`, in place of the `diagram` of the scene. A scene without one has one view, its diagram |
+| `viewDefault` | the view shown: an id, or the rules below; the first available view without one |
+| `viewHover` | the view shown while a pointer rests on a card embedding the scene: an id, or the rules below. None without one |
+| `isViewSwitcherHidden`, `isViewSwitcherHiddenEmbedded`, `isViewSwitcherHiddenFocused` | no menu: anywhere, in what embeds it, in the path bar |
+
+**The rules** are read in order and the first match wins. A view not available in that presentation is passed over.
+
+```yaml
+viewDefault:
+  - { when: { embedder: /overview/summary }, view: matrix }     # embedded directly in this scene
+  - { when: { embedder: [/reports/*, /plan] }, view: brief }    # below /reports, or in /plan
+  - { when: { isEmbedded: true }, view: cards }                 # embedded anywhere else
+  - { view: detail }                                            # otherwise: focused
+```
+
+`when` takes `isEmbedded`, `isFocused` and `embedder`. The embedder is the scene **directly** holding this one, which need not be its parent among the paths. In code, `viewDefault` may also be a function of the [presentation](card-diagram-flexible-switch.md#presentation-context).
+
+**What is shown**, first to last: a view the reader chose there, what the embedding asks for (`view` on a `scene-embed` or an item of a stack), `viewDefault`, the first available. What the reader chose lasts while the block is on the page, separately for focused and for each scene embedding it.
+
+**A hover view** replaces what a `scene-embed` shows while a pointer rests on it. A card may ask for another with `viewHover` in its data, or for none with `viewHover: false`. It is a preview of opening the card: a click zooms in through the hover view, and on the way back it stays on the card until the camera has left. A view the reader chose on a card stands, with no hover over it. Nothing happens on a touch screen, a card inside an embedded scene, or an item of a stack, whose height follows its view and would jump.
+
+**A view alone in its card** (`isFrameHiddenEmbedded: true`) has no frame, title line or margin: a card showing it is just that view, filling the card. A line still ends at the side of the card, where a handle is, so **draw the view at the size of the card** and it reaches what the line arrives at; a `card-database` does, its wall being at the side and its curve at the top and the bottom. The title line keeps its room, so a card going between this view and a framed one moves nothing, and the frame fades in.
+
+**A path can name a view**, wherever a path is written: `link: /overview/orders@matrix`, `data.path`, a state of an animation. A path naming no view opens the view chosen for focusing it.
+
+```yaml
+- id: orders
+  renderer: { type: scene-embed }
+  data: { scene: /overview/orders, view: matrix, title: Orders }    # this card asks for a view
+```
+
+## A scrolling stack of scenes
+
+A card fits a whole scene inside it, so a tall one gets small. A `scene-stack` holds **scenes and cards one under another in a scrolling area**, each as wide as the area: nothing shrinks to make everything visible. Scroll it with the wheel, which zooms the canvas again once there is nothing left to scroll; click a section to open its scene. The cards on the left scroll it from outside, by a link naming an item: `/list#part`.
 
 ### The stack as the outer container
 
-When an overview card is a scrolling report, put a `view-stack` directly in the overview. Do not wrap it in a `view-embed` that contains another stack. Use the same node ID and content in its dedicated view, changing only its position, size, handles, and overview link. Switching between these views then moves and resizes the stack itself.
+When an overview card is a scrolling report, put a `scene-stack` directly in the overview. Do not wrap it in a `scene-embed` that contains another stack. Use the same node ID and content in its dedicated scene, changing only its position, size, handles, and overview link. Switching between these scenes then moves and resizes the stack itself.
 
 ```yaml
 id: report:run
-renderer: { type: view-stack }
+renderer: { type: scene-stack }
 size: { width: 560, height: 420 }
 link: /overview/run
 data:
@@ -148,9 +275,9 @@ data:
   itemList: []
 ```
 
-`focusPath` identifies the stack's dedicated view. Elsewhere it has embedded presentation; in that view it has focused presentation, including static masks and measurements. The overview title and its focus icon open that path. Custom title controls keep their own actions. Scrollbar dragging remains available in the overview; the wheel scrolls the stack in its focused view.
+`focusPath` identifies the stack's dedicated scene. Elsewhere it has embedded presentation; in that scene it has focused presentation, including static masks and measurements. The overview title and its focus icon open that path. Custom title controls keep their own actions. Scrollbar dragging remains available in the overview; the wheel scrolls the stack in its focused scene.
 
-Copies with the same node ID and `focusPath` share a saved scroll position. Their geometry remains separate, so overview and focused sizes may differ. A copy with less scrollable content clamps its displayed position without overwriting the saved position. Without `focusPath`, the existing per-view scroll behavior is unchanged.
+Copies with the same node ID and `focusPath` share a saved scroll position. Their geometry remains separate, so overview and focused sizes may differ. A copy with less scrollable content clamps its displayed position without overwriting the saved position. Without `focusPath`, the existing per-scene scroll behavior is unchanged.
 
 `isFrameVisibleFocused` defaults to `true`. Setting it to `false` hides the focused stack's border and background, not its scrolling behavior or items. Title visibility is controlled separately below. The three migration plan/report containers explicitly keep their frames and titles in both presentations.
 
@@ -160,7 +287,7 @@ A stack scrolls inside the height of its node, or takes the height of its items,
 
 ```yaml
 id: report:run
-renderer: { type: view-stack }
+renderer: { type: scene-stack }
 size: { width: 560, height: 420 }   # the height it scrolls in, kept for when it is switched back
 data:
   focusPath: /overview/run
@@ -169,7 +296,7 @@ data:
   itemList: []
 ```
 
-Both flags default to `false`. A stack showing a title bar has a button at its right end to switch; in a program, `store.stackHeightFullSet({ path, nodeId, isFull })` and `store.stackHeightIsFull({ path, nodeId })`, `path` defaulting to the current view. A switch holds for the presentation the stack has in that view while the block lives, and the other presentation keeps its own. At full height a view opens fitted to the whole stack, so a tall one starts small, and the reader zooms in; a position to scroll to has no effect there. Switching on the canvas moves nothing but the bottom edge of the stack: the camera stays, the button stays under the pointer, and the items keep their width and scale, so what grows past the canvas is reached by panning. `height: auto` in `size` is another way to write a stack always at full height until switched. Which height applies is decided per view: a stack without `focusPath` is focused in its own view wherever that view is shown, so only `isHeightFullFocused` applies to it.
+Both flags default to `false`. A stack showing a title bar has a button at its right end to switch; in a program, `store.stackHeightFullSet({ path, nodeId, isFull })` and `store.stackHeightIsFull({ path, nodeId })`, `path` defaulting to the current scene. A switch holds for the presentation the stack has in that scene while the block lives, and the other presentation keeps its own. At full height a scene opens fitted to the whole stack, so a tall one starts small, and the reader zooms in; a position to scroll to has no effect there. Switching on the canvas moves nothing but the bottom edge of the stack: the camera stays, the button stays under the pointer, and the items keep their width and scale, so what grows past the canvas is reached by panning. `height: auto` in `size` is another way to write a stack always at full height until switched. Which height applies is decided per scene: a stack without `focusPath` is focused in its own scene wherever that scene is shown, so only `isHeightFullFocused` applies to it.
 
 ### The stack title bar
 
@@ -184,7 +311,7 @@ data:
   itemList: []
 ```
 
-**Focused** means the stack belongs to the view drawn directly on the canvas, not keyboard focus. **Embedded** means its view is drawn inside another view's card or stack item. Both visibility flags default to `true`; setting both to `false` hides the title everywhere. A title bar wraps long text and takes space from the scrolling body without changing the outer node's size.
+**Focused** means the stack belongs to the scene drawn directly on the canvas, not keyboard focus. **Embedded** means its scene is drawn inside another scene's card or stack item. Both visibility flags default to `true`; setting both to `false` hides the title everywhere. A title bar wraps long text and takes space from the scrolling body without changing the outer node's size.
 
 For mixed content, use `itemList` instead of `text`:
 
@@ -202,14 +329,14 @@ data:
   itemList: []
 ```
 
-Each title item needs a unique nonempty `id`. Text is plain text, not HTML. `ReportStatus` is an example component name: register your component with `placementList: ['visualizationTitle']`. Component items use the standard registry boundary and receive `{ data, config, onEvent }`; no function or import path is stored in the diagram. `config.visualization` supplies `nodeId`, `titleItemId`, `anchorRef`, and `presentation: { path, isEmbedded, isFocused }`. Components should fit their available width and use `onEvent` for the normal page event routing. Their controls neither drag the canvas nor trigger the surrounding view's click navigation.
+Each title item needs a unique nonempty `id`. Text is plain text, not HTML. `ReportStatus` is an example component name: register your component with `placementList: ['visualizationTitle']`. Component items use the standard registry boundary and receive `{ data, config, onEvent }`; no function or import path is stored in the diagram. `config.visualization` supplies `nodeId`, `titleItemId`, `anchorRef`, and `presentation: { path, isEmbedded, isFocused }`. Components should fit their available width and use `onEvent` for the normal page event routing. Their controls neither drag the canvas nor trigger the surrounding scene's click navigation.
 
 Omitting `titleBar` preserves the existing `title`, `subtitle`, `icon`, `statList`, and `isChromeHidden` behavior. An explicit `titleBar` takes precedence over those legacy chrome settings; if its `text` and `itemList` are both omitted, it uses `data.title` as text. The title's `itemList` is separate from the stack's scrolling `data.itemList`.
 
 <!--renderComp=CardDiagramSwitch,height=520,title=A stack-->
 ```yaml
 version: 1
-viewList:
+sceneList:
   - path: /list
     label: Sections
     diagram:
@@ -227,7 +354,7 @@ viewList:
           link: /list#part
           data: { title: To the last, icon: arrow-right-left, tone: teal }
         - id: stack
-          renderer: { type: view-stack }
+          renderer: { type: scene-stack }
           position: { x: 230, y: 0 }
           size: { width: 620, height: 460 }
           data:
@@ -236,10 +363,10 @@ viewList:
             tone: blue
             statList: [4 items]
             itemList:
-              - { id: first, view: /list/first, title: A wide table, icon: table, tone: teal }
+              - { id: first, scene: /list/first, title: A wide table, icon: table, tone: teal }
               - { id: figures, node: { renderer: { type: card-note }, data: { title: A card, text: An item may be a card too, tone: amber } } }
-              - { id: second, view: /list/second, title: Two cards, icon: layers, tone: violet }
-              - { id: part, view: /list/first, box: { x: 0, y: 0, width: 620, height: 110 }, title: A part of the first, icon: table, tone: green }
+              - { id: second, scene: /list/second, title: Two cards, icon: layers, tone: violet }
+              - { id: part, scene: /list/first, box: { x: 0, y: 0, width: 620, height: 110 }, title: A part of the first, icon: table, tone: green }
   - path: /list/first
     label: The first
     diagram:
@@ -268,35 +395,35 @@ viewList:
 | Key of an item | Meaning |
 | --- | --- |
 | `id` | unique in the stack; `/path#id` scrolls to it |
-| `view`, or `node` | a view, as wide as the item; or a card written as a node of a diagram |
-| `box`, `padding` | a region of the view; the margin around it |
-| `link` | what a click opens; the view of the item by default |
+| `scene`, or `node` | a scene, as wide as the item; or a card written as a node of a diagram |
+| `box`, `padding` | a region of the scene; the margin around it |
+| `link` | what a click opens; the scene of the item by default |
 | `title`, `subtitle`, `icon`, `tone` | its title line, with its number among the titled items; without a title, no line |
 
-The stack itself takes `title`, `subtitle`, `icon`, `tone`, `statList` and `isChromeHidden`, and a numeric `size`. A state of an [animation over views](#under-the-animation-layer) may name an `item` too.
+The stack itself takes `title`, `subtitle`, `icon`, `tone`, `statList` and `isChromeHidden`, and a numeric `size`. A state of an [animation over scenes](#under-the-animation-layer) may name an `item` too.
 
 ## The bounding box
 
-The **box** of a view is the part shown by default, and shown when the view is embedded. Without one, it is everything drawn. The button at the right of the path bar shows it as a red frame, to drag and resize; a view without one gets one around what it draws. In a block with inline data the box is written into the block; the red frame never appears in a picture.
+The **box** of a scene is the part shown by default, and shown when the scene is embedded. Without one, it is everything drawn. The button at the right of the path bar shows it as a red frame, to drag and resize; a scene without one gets one around what it draws. In a block with inline data the box is written into the block; the red frame never appears in a picture.
 
-Write it as `box: { x, y, width, height }` of the view, or as a node, which is also how a view has **regions** for its embeddings to name:
+Write it as `box: { x, y, width, height }` of the scene, or as a node, which is also how a scene has **regions** for its embeddings to name:
 
 ```yaml
-- { id: whole, renderer: { type: view-box }, position: { x: 0, y: 0 }, size: { width: 900, height: 600 } }
-- { id: focus, renderer: { type: view-box }, position: { x: 100, y: 80 }, size: { width: 300, height: 200 }, data: { name: Orders only } }
+- { id: whole, renderer: { type: scene-box }, position: { x: 0, y: 0 }, size: { width: 900, height: 600 } }
+- { id: focus, renderer: { type: scene-box }, position: { x: 100, y: 80 }, size: { width: 300, height: 200 }, data: { name: Orders only } }
 ```
 
 The first node is the default box; `data.box: focus` of an embedding shows the other one. In a diagram being edited visually, the bounding box is in the panel of new nodes, and resized by its corners.
 
 ## Tabs
 
-A view can arrange nodes of another view in tabs. Each tab has a path of its own, below the path of the view:
+A scene can arrange nodes of another scene in tabs. Each tab has a path of its own, below the path of the scene:
 
 ```yaml
 - path: /overview/tabs
   label: In tabs
   tabs:
-    of: /overview                                # the view whose nodes are arranged
+    of: /overview                                # the scene whose nodes are arranged
     id: reports                                  # the id of the header node
     position: { x: 0, y: 500 }
     size: { width: 1200, height: 700 }           # of the member shown; no height: its own
@@ -312,7 +439,7 @@ A line to a member not shown goes to its tab; a line between two members not sho
 version: 1
 defaults:
   connection: { renderer: { type: smoothstep }, markerEnd: arrowClosed }
-viewList:
+sceneList:
   - path: /report
     label: Three reports
     diagram:
@@ -362,12 +489,13 @@ viewList:
 
 ## Under the animation layer
 
-A switching viewport can move between **states** under the clock of the [animation](comp-card-diagram-animation.md): a state names a view, and a transition plays the way between two views. A component generating its views passes them to `SwitchAnimation` with this part of the document:
+A switching viewport can move between **states** under the clock of the [animation](comp-card-diagram-animation.md): a state names a scene, and a transition plays the way between two scenes. A component generating its scenes passes them to `SwitchAnimation` with this part of the document:
 
 ```yaml
 stateList:
-  - { id: overview, name: Overview, view: /overview, description: All of it }
-  - { id: detail, name: Detail, view: /overview/detail, box: focus }
+  - { id: overview, name: Overview, scene: /overview, description: All of it }
+  - { id: detail, name: Detail, scene: /overview/detail, box: focus }
+  - { id: matrix, name: Matrix, scene: /overview/orders, view: matrix }   # a view of a scene with views
 transitionList:                                  # absent: the states run as a chain
   - { from: overview, to: detail, name: Open, second: 1.2 }
 ```

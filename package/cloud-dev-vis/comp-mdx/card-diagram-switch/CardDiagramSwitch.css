@@ -14,7 +14,7 @@
 }
 .doc-switch.is-popup { height: 100%; border: 0; border-radius: 0; }
 
-/* the path bar: the segments of the path at the left, what acts on the view at the right */
+/* the path bar: the segments of the path at the left, what acts on the scene at the right */
 .doc-switch-bar {
 	flex: none;
 	display: flex;
@@ -144,12 +144,12 @@
 .doc-switch-mask { position: absolute; inset: 0; z-index: 6; overflow: hidden; pointer-events: none; }
 .doc-switch-measure { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
 
-/* a card with a link: a view opens from it */
+/* a card with a link: a scene opens from it */
 .doc-switch-flow .react-flow__node.is-linked { cursor: pointer; }
 .doc-switch-flow .react-flow__node.is-linked:hover > .doc-vis-node > .doc-vis-node-content > * { box-shadow: 0 0 0 2px color-mix(in srgb, #2563eb 55%, transparent), 0 6px 18px rgb(15 23 42 / 14%); }
-.doc-switch.is-box-adjust .react-flow__node:not([data-id*='view-box']) { opacity: 0.55; }
+.doc-switch.is-box-adjust .react-flow__node:not([data-id*='scene-box']) { opacity: 0.55; }
 
-/* a label on a line, html so that a link is a button; the same in a static view */
+/* a label on a line, html so that a link is a button; the same in a static scene */
 .doc-switch-edge-label {
 	position: absolute;
 	padding: 0.1rem 0.45rem;
@@ -173,13 +173,13 @@
 button.doc-switch-edge-label { pointer-events: all; cursor: pointer; }
 button.doc-switch-edge-label:hover { background: #6d28d9; color: #fff; }
 
-/* a view drawn without a canvas */
+/* a scene drawn without a canvas */
 .doc-switch-static { position: relative; width: 0; height: 0; }
 .doc-switch-static-lines { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
 .doc-switch-static-node { position: absolute; }
 .doc-switch-static-node .doc-vis-node-content { height: 100%; }
 
-/* a card showing another view */
+/* a card showing another scene */
 .doc-switch-embed {
 	--doc-switch-tone: #475569;
 	box-sizing: border-box;
@@ -220,7 +220,7 @@ button.doc-switch-edge-label:hover { background: #6d28d9; color: #fff; }
 .doc-switch-embed-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; }
 .doc-switch-embed-note { position: absolute; inset: 0; display: grid; place-items: center; color: var(--color-fd-muted-foreground); font-size: 0.75rem; }
 
-/* the header of views in tabs */
+/* the header of scenes in tabs */
 .doc-switch-tabs {
 	box-sizing: border-box;
 	display: flex;
@@ -268,7 +268,7 @@ button.doc-switch-edge-label:hover { background: #6d28d9; color: #fff; }
 .doc-switch-player .doc-switch-viewport { height: 100%; }
 .doc-switch > .doc-anim-control { flex: none; }
 
-/* a scrolling stack of views and cards */
+/* a scrolling stack of scenes and cards */
 .doc-switch-stack {
 	--doc-switch-tone: #475569;
 	box-sizing: border-box;
@@ -309,7 +309,7 @@ button.doc-switch-edge-label:hover { background: #6d28d9; color: #fff; }
 	overscroll-behavior: contain;
 	padding: 0.75rem;
 	background: color-mix(in srgb, var(--color-fd-muted) 28%, transparent);
-	/* inside an embedded view, whose world takes no pointer: this area still scrolls */
+	/* inside an embedded scene, whose world takes no pointer: this area still scrolls */
 	pointer-events: auto;
 	cursor: default;
 }
@@ -347,3 +347,25 @@ button.doc-switch-edge-label:hover { background: #6d28d9; color: #fff; }
 /* an item of a menu with more than words in it (labelItemList) */
 .doc-switch-path-menu-label { display: inline-flex; align-items: center; gap: 0.4rem; }
 .doc-switch-path-menu-label svg { flex: none; color: var(--color-fd-muted-foreground); }
+
+/* the views of a scene: the control of a table card, in the path bar and in a title line */
+.doc-switch-view-switcher { flex: none; display: inline-flex; align-items: center; }
+.doc-switch-path .doc-switch-view-switcher { margin-inline: 0.15rem; }
+.doc-switch-path .doc-switch-view-switcher .doc-card-view-switcher { margin-inline-start: 0; }
+.doc-switch-embed-chrome > .doc-switch-view-switcher, .doc-switch-stack-item-chrome > .doc-switch-view-switcher { margin-inline-start: auto; }
+
+/* a card with a hover view: both views drawn, one seen */
+.doc-switch-embed.has-layers .doc-switch-embed-world { transition: opacity 0.14s ease, visibility 0.14s; }
+.doc-switch-embed-world.is-layer-hidden { opacity: 0; visibility: hidden; }
+@media (prefers-reduced-motion: reduce) {
+	.doc-switch-embed.has-layers .doc-switch-embed-world { transition: none; }
+}
+
+/* a card showing a view alone: no frame, no title line, which keeps its room so nothing moves */
+.doc-switch-embed.has-layers, .doc-switch-embed.has-layers .doc-switch-embed-chrome, .doc-switch-embed.has-layers .doc-switch-embed-body { transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease; }
+.doc-switch-embed.is-frame-hidden { background: none !important; border-color: transparent !important; box-shadow: none !important; }
+.doc-switch-embed.is-frame-hidden .doc-switch-embed-chrome { opacity: 0 !important; pointer-events: none; }
+.doc-switch-embed.is-frame-hidden .doc-switch-embed-body { background: none; }
+@media (prefers-reduced-motion: reduce) {
+	.doc-switch-embed.has-layers, .doc-switch-embed.has-layers .doc-switch-embed-chrome, .doc-switch-embed.has-layers .doc-switch-embed-body { transition: none; }
+}

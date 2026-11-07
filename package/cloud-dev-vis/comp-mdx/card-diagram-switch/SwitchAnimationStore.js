@@ -1,25 +1,26 @@
 import { makeAutoObservable, observable } from 'mobx';
 import { animationIsLinear, animationPathFind, animationPlanBuild } from '../card-diagram-animation/AnimationData.js';
-import { switchPathNormalize } from './SwitchData.js';
+import { switchPathViewBuild, switchPathViewRead } from './SwitchData.js';
 
 const FPS_DEFAULT = 30;
 const SECOND_MIN = 0.1;
 
-// the document of an animation over views (card-diagram-flexible-switch.md#under-the-animation-layer):
+// the document of an animation over scenes (card-diagram-flexible-switch.md#under-the-animation-layer):
 //
-//   stateList        [{ id, name, description?, view: a path, box?: a region of it, item?: an item of a scrolling stack of it }]
+//   stateList        [{ id, name, description?, scene: a path, view?: a view of that scene, box?: a region of it, item?: an item of a scrolling stack of it }]
 //   transitionList   [{ from, to, name?, second? }]; absent, the states run as a chain
 //   fps, control     as in an animation of one diagram
 export function switchAnimationNormalize(input) {
 	const value = input ?? {};
-	if (!Array.isArray(value.stateList) || value.stateList.length === 0) throw new Error('The animation needs "stateList", at least one state, each naming a view.');
+	if (!Array.isArray(value.stateList) || value.stateList.length === 0) throw new Error('The animation needs "stateList", at least one state, each naming a scene.');
 	const idSet = new Set();
 	const stateList = value.stateList.map((state, index) => {
 		if (!state?.id) throw new Error(`State ${index + 1} needs an id.`);
 		if (idSet.has(state.id)) throw new Error(`Two states have the id "${state.id}".`);
-		if (!state.view) throw new Error(`State "${state.id}" needs "view", the path of a view.`);
+		if (!state.scene) throw new Error(`State "${state.id}" needs "scene", the path of a scene.`);
 		idSet.add(state.id);
-		return { id: String(state.id), name: String(state.name ?? state.id), description: String(state.description ?? ''), path: switchPathNormalize(state.view), box: state.box, item: state.item ? String(state.item) : '' };
+		const named = switchPathViewRead(state.scene);
+		return { id: String(state.id), name: String(state.name ?? state.id), description: String(state.description ?? ''), path: switchPathViewBuild(named.path, state.view === undefined ? named.view : String(state.view)), box: state.box, item: state.item ? String(state.item) : '' };
 	});
 	const transitionInput = value.transitionList ?? stateList.slice(0, -1).map((state, index) => ({ from: state.id, to: stateList[index + 1].id }));
 	const transitionList = transitionInput.map((transition, index) => {
@@ -29,7 +30,7 @@ export function switchAnimationNormalize(input) {
 	return { title: String(value.title ?? ''), fps: Number(value.fps) || FPS_DEFAULT, stateList, transitionList, control: { layout: value.control?.layout ?? 'auto' }, stateIdInitial: value.initial ?? stateList[stateList.length - 1].id };
 }
 
-// The state of a block moving between views under remotion's clock: the interface
+// The state of a block moving between scenes under remotion's clock: the interface
 // AnimationControl reads (the same as AnimationStore), over a SwitchStore it drives.
 // A way between two states of the plan is drawn by the frame (SwitchStore.seek), so
 // seeking gives the same picture as playing.
@@ -59,15 +60,17 @@ export class SwitchAnimationStore {
 		for (const transition of spec.transitionList) {
 			const from = stateById.get(transition.from);
 			const to = stateById.get(transition.to);
-			const timeline = this.switchStore.routeTimelineGet(from.path, to.path, { itemId: to.item });
+			const pathFrom = this.switchStore.pathFocusedOf(from.path);
+			const pathTo = this.switchStore.pathFocusedOf(to.path);
+			const timeline = this.switchStore.routeTimelineGet(pathFrom, pathTo, { itemId: to.item });
 			const second = Math.max(SECOND_MIN, Number(transition.second) || timeline.second);
 			this.compiledById.set(transition.id, { frameCount: Math.max(2, Math.round(second * spec.fps)) });
-			this.wayById.set(transition.id, { id: transition.id, from: from.path, to: to.path, timeline, region: to.box });
+			this.wayById.set(transition.id, { id: transition.id, from: pathFrom, to: pathTo, timeline, region: to.box });
 		}
 		if (!spec.stateList.some((state) => state.id === this.stateIdCurrent)) this.stateIdCurrent = spec.stateIdInitial;
 		if (!spec.stateList.some((state) => state.id === this.stateIdTarget)) this.stateIdTarget = '';
 		this.plan = animationPlanBuild(this.compiledById, [], this.stateIdCurrent);
-		this.switchStore.viewsMeasured([...new Set(spec.stateList.map((state) => state.path))]);
+		this.switchStore.scenesMeasured([...new Set(spec.stateList.map((state) => state.path))]);
 	}
 
 	stateOf(stateId) {

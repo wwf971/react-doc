@@ -80,7 +80,7 @@ Animations are many and small, each about one aspect, and share their cards:
 - **`nodeDefineById`** writes a card once in a document, placed by `use` with its own position and data over it.
 - **Several scenes sharing their cards** are a component of the doc page putting a shared yaml file and a scene's file together, and handing the text to the animation through `RegisteredComp` (see `.doc-page/comp-mdx/migration-animation/` of a doc page doing so).
 
-- **Moving between whole views** rather than within one diagram is the switching layer played by this clock ([Under the animation layer](card-diagram-flexible-switch.md#under-the-animation-layer)).
+- **Moving between whole scenes** rather than within one diagram is the switching layer played by this clock ([Under the animation layer](card-diagram-flexible-switch.md#under-the-animation-layer)).
 
 ## Adding to it
 

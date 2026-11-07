@@ -4,8 +4,10 @@ import { tableCardNormalize, tableCardAnchorListGet } from './TableCardData.js';
 import { tableCardSchema } from './TableCardSchema.js';
 import { TableCard } from './TableCard.jsx';
 import { OperatorCard } from './OperatorCard.jsx';
-import { CardBrief, CardNote, CardThreeDots } from './CompactCard.jsx';
-import { ViewBoxCard } from './ViewBoxCard.jsx';
+import { CardBrief, CardDatabase, CardNote, CardThreeDots } from './CompactCard.jsx';
+import { SceneBoxCard } from './SceneBoxCard.jsx';
+import { CardMatrix } from './CardMatrix.jsx';
+import { cardMatrixNormalize, cardMatrixWidthGet } from './CardMatrixData.js';
 import { ColorBlock, colorBlockNormalize } from './ColorBlock.jsx';
 
 // The node kinds of the base series (card-diagram-impl.md#node-registries): a
@@ -86,12 +88,44 @@ export const cardThreeDotsNodeKind = {
 	Card: CardThreeDots,
 };
 
-// the bounding box of a view (card-diagram-flexible-switch.md#the-bounding-box): the
-// part of the diagram a camera shows by default, and an embedding of the view shows.
+// a cylinder with its name inside: a database as someone would sketch it
+export const cardDatabaseNodeKind = {
+	type: 'card-database',
+	label: 'Database',
+	contract: compactContract({ width: 320, height: 260 }),
+	schema: null,
+	Card: CardDatabase,
+	create: {
+		description: 'A cylinder with the name of a database inside.', icon: Boxes, keywordList: ['database', 'cylinder', 'storage', 'icon'],
+		nodeCreate: idNext => ({ id: idNext('database'), renderer: { type: 'card-database' }, size: { width: 320, height: 260 }, data: { title: 'Database', tone: 'blue' }, handles: [
+			{ id: 'in', direction: 'in', anchor: { side: 'left' } },
+			{ id: 'out', direction: 'out', anchor: { side: 'right' } },
+		] }),
+	},
+};
+
+// rows and columns with headers, and a mark where they meet (CardMatrixData.js)
+export const cardMatrixNodeKind = {
+	type: 'card-matrix',
+	label: 'Matrix',
+	contract: { dataNormalize: cardMatrixNormalize, anchorListGet: () => [{ id: 'body', sideList: sideAllList }], sizeDefault: { width: 520, height: 240 } },
+	schema: null,
+	Card: CardMatrix,
+	create: {
+		description: 'Rows and columns with headers, and a mark where they meet.', icon: Table2, keywordList: ['matrix', 'grid', 'relationship', 'cross'],
+		nodeCreate: (idNext) => {
+			const data = { title: 'Matrix', rowList: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], columnList: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], cellList: [{ row: 'b', column: 'a' }], isDiagonalMarked: true };
+			return { id: idNext('matrix'), renderer: { type: 'card-matrix' }, size: { width: cardMatrixWidthGet(data), height: 'auto' }, data, handles: [] };
+		},
+	},
+};
+
+// the bounding box of a scene (card-diagram-flexible-switch.md#the-bounding-box): the
+// part of the diagram a camera shows by default, and an embedding of the scene shows.
 // a red frame an author places and resizes; it never appears in a picture, and in
 // reading mode it is drawn only while the box is being adjusted
-export const viewBoxNodeKind = {
-	type: 'view-box',
+export const sceneBoxNodeKind = {
+	type: 'scene-box',
 	label: 'Bounding box',
 	contract: {
 		anchorListGet: () => [{ id: 'body', sideList: sideAllList }],
@@ -99,10 +133,10 @@ export const viewBoxNodeKind = {
 		sizeMin: { width: 40, height: 40 },
 	},
 	schema: null,
-	Card: ViewBoxCard,
+	Card: SceneBoxCard,
 	create: {
 		description: 'The part of this diagram shown by default, and when it is embedded.', icon: SquareDashedMousePointer, keywordList: ['bounding', 'frame', 'viewport', 'embed', 'region'],
-		nodeCreate: idNext => ({ id: idNext('view-box'), renderer: { type: 'view-box' }, size: { width: 480, height: 320 }, data: {}, handles: [] }),
+		nodeCreate: idNext => ({ id: idNext('scene-box'), renderer: { type: 'scene-box' }, size: { width: 480, height: 320 }, data: {}, handles: [] }),
 	},
 };
 
@@ -118,6 +152,6 @@ export const colorBlockNodeKind = {
 	},
 };
 
-export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, cardThreeDotsNodeKind, viewBoxNodeKind, colorBlockNodeKind];
+export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, cardThreeDotsNodeKind, cardDatabaseNodeKind, cardMatrixNodeKind, sceneBoxNodeKind, colorBlockNodeKind];
 
 export const cardDiagramNodeRegistry = nodeRegistryBuild({ id: 'card-diagram', label: 'Card diagram', kindList: cardDiagramNodeKindList });
