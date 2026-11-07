@@ -54,7 +54,7 @@ Rules:
 
 ```sh
 react-doc dev ../react-doc-db-migration           # a doc page, alone, in a virtual workspace
-react-doc dev package/cloud-dev-vis               # a package, as a read-only doc page
+react-doc dev package/cloud-dev-vis               # a package, as a doc page: editable, since it is served alone
 react-doc dev ../team                             # a workspace
 react-doc dev ../notes/.doc-page/entry.yaml       # by its entry; a workspace by its workspace file
 react-doc dev ../team --mount ../notes            # a workspace, and one more doc page for this run
@@ -62,7 +62,7 @@ react-doc dev ../team --mount ../notes            # a workspace, and one more do
 
 What a path is, is read from what it holds (`docTargetRead`): `.doc-workspace/workspace.yaml` is a workspace, `doc-package.yaml` a package, `.doc-page/` a doc page; a folder holding two asks for `--kind page | package | workspace`. The current folder is the default.
 
-A **doc page or a package** is served in a [virtual workspace](doc_page_impl_source.md#the-virtual-workspace): one holding it alone, without a workspace file, shown as such in the Workspace tab, with what needs a file refused.
+A **doc page or a package** is served in a [virtual workspace](doc_page_impl_source.md#the-virtual-workspace): one holding it alone, without a workspace file, shown as such in the Workspace tab, with what needs a file refused. A package served so is the one being worked on and is **editable**, its sample data included; listed in a workspace or mounted it is read-only, as for whoever imports it ([A package as a doc page](doc_page_impl_package.md#a-package-as-a-doc-page)).
 
 | Option | Meaning | Default |
 | --- | --- | --- |
@@ -88,7 +88,7 @@ react-doc dev ../team --mount ../notes                                 # a doc p
 react-doc dev ../team --mount ../notes/.doc-page/entry.yaml            # by its entry
 react-doc dev ../team --mount ../notes,alias=n                         # under another alias
 react-doc dev ../team --mount ../notes,alias=n,side-panel=dev          # and one of its side panels
-react-doc dev ../team --mount ../notes --mount ../chart-kit            # several; a package folder is a read-only doc page
+react-doc dev ../team --mount ../notes --mount ../chart-kit            # several; a package mounted is a read-only doc page
 react-doc dev ../notes --mount ../chart-kit                            # beside a doc page, in its virtual workspace
 ```
 
@@ -189,7 +189,7 @@ The modules are merged with `output.strictExecutionOrder`: without it a module a
 
 ## Migrating a doc page
 
-`react-doc migrate <path>` rewrites the doc pages below a folder into the form this react-doc reads, for pages written before asset items were called items and before a frontend object had a folder of its own ([what changed](update-20261107-repl.md)). The page does not read the former form: a store folder holding one reports it once in the console and names this command.
+`react-doc migrate <path>` rewrites the doc pages below a folder into the form this react-doc reads, for pages written before asset items were called items, before a frontend object had a folder of its own ([what changed](update-20261107-repl.md)), and before its assets were recorded in item lists ([The item lists](doc_page_impl_obj_frontend.md#the-item-lists)). The page does not read the former form: a store folder holding one reports it once in the console and names this command.
 
 ```text
 {itemId}--{name}/object.yaml   ->  item.yaml, objectId -> itemId, in dependencies too
@@ -198,6 +198,9 @@ a fenced block asset           ->  objectId: -> itemId:   (the prose and the dat
 objectList of a doc page       ->  .doc-page/object-frontend/{id}--{name}/, object.yaml, its assets in item/
 typeList of object-frontend.yaml  ->  .doc-page/type.yaml
 typeList of an object.yaml        ->  type.yaml beside it
+assetList of the entry of an object with a folder of its own
+                                  ->  item-list.yaml in its item folder: each record in the list nearest
+                                      to its item, a list made in the first folder of its path when none
 ```
 
 `--dry-run` lists what it would change. A second run changes nothing. Nothing is committed: `git add` the folder, and git sees the moves as renames. Stop a running server of the doc page first: an old copy of the code reads the old form.
@@ -237,7 +240,7 @@ Changing what a new doc page looks like is therefore editing a file of `scaffold
 | `frontend/cli/doc-cli.js` | the command: argument parsing (`node:util` `parseArgs`); `docInit` (checks, copy, placeholders), the report and the next steps; `docLayoutGet` (the folders of this copy, its mode), `docLayoutRunGet` (the installed mode served out of `node_modules/`), `docTargetRead` (what a path is), `docMountRead` (a `--mount` value), `docLaunchBuild` (the launch layer), `docDev`; `docWhere`; `docPack` |
 | `frontend/cli/doc-migrate.js` | `react-doc migrate`: only reads and rewrites files of the folder it is given |
 | `frontend/cli/scaffold/` | the scaffold folders: `doc-page/`, `workspace/`, `package/` |
-| `frontend/cli/doc-cli.test.js` | each kind created in a temporary folder and loaded by the plugin; `--force`, refusals, the report; what a path is, the launch layer over `config.yaml`, `--mount` values and refusals, a package found by name, a package as a read-only doc page |
+| `frontend/cli/doc-cli.test.js` | each kind created in a temporary folder and loaded by the plugin; `--force`, refusals, the report; what a path is, the launch layer over `config.yaml`, `--mount` values and refusals, a package found by name, a package as a read-only doc page, a package served alone as an editable one |
 | `frontend/package.json` | `bin.react-doc` |
 | `frontend/vite.config.ts` | the launch layer from the environment; `@wwf971/react-doc` resolved to the page, wherever the importing module lies |
 | `plugin/doc-source.ts` | `DocLaunch`, `docLaunchFromEnvGet`, the launch layer in `loadConfigDoc` (`mountList` starts the list of temporary doc pages, once), `packageSearchDirList`; a module outside the tree falling back to the dependencies of the page (`resolveId`) |

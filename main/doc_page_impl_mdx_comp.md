@@ -462,6 +462,26 @@ A component may change its own block without an editor session: its data (`dataR
 
 The props are the block's in both data forms: the marker keeps them when the data is an asset reference, so an asset-backed block takes props, and changes them, exactly as an inline one; its data, shared by every block reading the item, is not touched by them. This is the place for a parameter of one block (a title, a view, a filter) over data that several blocks share. The apis `doc/blockDataSet` and `doc/blockPropSet` make the same two changes from the palette or a caller outside the page ([Unified api registry](doc_page_impl_api.md)). The entry component of the frontend objects keeps the mode and the parameters of its item in its data and switches them this way ([Switching what the block shows](doc_page_impl_obj_frontend.md#the-entry-component)).
 
+## The state of the document
+
+A component is told the state of the document it is in by **`config.docState`**, whatever its placement, so it can match what it offers to what the reader is doing:
+
+```text
+config.docState
+  path              the document (its internal source path; '' outside a document)
+  mode              'read' | 'edit' | 'select': the page in edit mode or block selection mode, for a document the
+                    page can edit; 'read' otherwise (a built page, a server gone, an inline side-panel item)
+  isEditing         mode is 'edit'
+  isEditAvailable   the document can enter edit mode (the edit layer is there and the document is a file it writes)
+  editReason        why the document is not being edited ('' while it is), for the title of a control left out
+```
+
+It is one object per document (`DocEditStore.docStateServiceGet`), read through getters, so an observer reading it re-renders when the page switches mode and nothing else does; a page without the edit layer hands a fixed reading state. It is not `config.isEdit`: that one is given only to the block whose edit session is open, and switches the component to its editor ([Component edit mode](doc_page_impl_edit.md#component-edit-mode)); `docState` is the same for every block of the document, open or not.
+
+**The convention.** In reading mode a block reads: it shows its content, and not the controls that change data (an Edit button of its own, a form adding something, a value editable in place); in edit mode it offers them. Where the document is edited but the component cannot write what it shows (a read-only package, a server gone), the controls show greyed, with the reason as their title. What only changes what is shown (a filter, a tab, another mode of a frontend object) is not an edit and works in both. A component holding its own editing state (an edit session of its own inside the block) leaves it when the document leaves edit mode.
+
+`docState` is where more of the document's state goes when components need it: a key added here, not a key of its own in `config`.
+
 ## A place the page asks to see
 
 The page can tell a component something, the other way round from `onEvent`: an event delivered at the component's place in the document ([Events delivered to components](doc_page_impl_event.md#events-delivered-to-components)). The one such event today is `placeReveal`: a reader followed a backlink to a reference written in the component's block ([Going to a backlink](doc_page_impl_nav_backlink.md#going-to-a-backlink)), and the page is about to look for that link in the rendered body and mark it. A component that always shows all of its content has nothing to do. A component that holds some of its content out of sight, folded, in a tab or a view, behind a switch, should reveal the part holding the reference first:

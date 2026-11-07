@@ -94,7 +94,7 @@ A lock protects what an author wants kept from a click in the panel, on two leve
 The store enforces both (`AssetError` -1 with the reason), so a lock holds whatever client writes; the panel greys out what a lock forbids and says why. Setting or removing a lock is recorded as a `lock` / `unlock` event.
 
 
-Beyond the locks of an item, a whole folder can be read-only: the folder of a [package treated as a doc page](doc_page_impl_package.md#a-package-as-a-doc-page). Every write of the store into it is refused with code `-4`, whichever way it comes (`itemWriteGuard`, `folderWritableCheck`), its config file included; its items are read like any other, and the Asset service tab marks it.
+Beyond the locks of an item, a whole folder can be read-only: the folder of a [package treated as a doc page](doc_page_impl_package.md#a-package-as-a-doc-page), unless the package is served alone. Every write of the store into it is refused with code `-4`, whichever way it comes (`itemWriteGuard`, `folderWritableCheck`), its config file included; its items are read like any other, and the Asset service tab marks it.
 
 ### Deleting
 

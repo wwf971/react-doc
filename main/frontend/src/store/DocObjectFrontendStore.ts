@@ -1,11 +1,11 @@
 import { computed, makeAutoObservable, observable, runInAction, type IComputedValue } from 'mobx';
 import { parse as yamlParse } from 'yaml';
 import {
-  OBJECT_FRONTEND_ROLE_ENTRY, OBJECT_FRONTEND_TYPE_ROOT,
-  objectFrontendEntryParse, objectFrontendIdOfRefGet, objectFrontendModeChoose,
+  OBJECT_FRONTEND_LIST_NAME, OBJECT_FRONTEND_ROLE_ENTRY, OBJECT_FRONTEND_TYPE_ROOT,
+  objectFrontendAssetListMerge, objectFrontendEntryParse, objectFrontendListCovers, objectFrontendIdOfRefGet, objectFrontendModeChoose,
   objectFrontendModeListResolve, objectFrontendParamMerge, objectFrontendRefBuild,
   objectFrontendAssetIndexBuild, objectFrontendAssetPathComplete, objectFrontendAssetRefResolve, objectFrontendAssetSearch,
-  objectFrontendAssetKindListResolve,
+  objectFrontendAssetKindListResolve, objectFrontendPartitionListBuild, objectFrontendPartitionListResolve, objectFrontendPartitionOf,
 } from '../lib/doc-object-frontend.js';
 import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
 
@@ -55,6 +55,12 @@ export type ObjectFrontendAsset = {
   // how people and the object's modes find it (doc_page_impl_obj_frontend.md#naming-and-finding-the-assets)
   name?: string;
   pathList?: string[];
+  // the item list holding its record: its folder in the item folder ('' the top), null for the
+  // entry (doc_page_impl_obj_frontend.md#the-item-lists)
+  listGroupPath: string | null;
+  // the partition it lies in ('' none): the first folder of its place, when the object has such a
+  // partition (doc_page_impl_obj_frontend.md#partitions)
+  partition: string;
   // the asset item as the index knows it; undefined when the store has none
   item: any;
   status: 'found' | 'missing' | 'deleted';
@@ -89,6 +95,9 @@ export type ObjectFrontendState = {
   outsideList: ObjectFrontendAsset[];
   // the folders inside its item folder, with how many items they hold
   groupList: { groupPath: string; count: number }[];
+  // the folders its items are split into: declared by its type, then those found with an item list
+  // ({ id, label, description, isGitIgnored, isDeclared, isPresent })
+  partitionList: any[];
   problemList: string[];
   // the entry asset item (folder, groupPath, versions)
   entryItem: any;
@@ -300,7 +309,7 @@ export class DocObjectFrontendStore {
     const ref = objectFrontendRefBuild(id);
     return {
       id, ref, docPageAlias: '', entryItemId: '', status: 'loading', message: '', name: '', typeId: OBJECT_FRONTEND_TYPE_ROOT,
-      description: '', metadata: {}, assetList: [], assetIndex: objectFrontendAssetIndexBuild([]), strayList: [], unknownList: [], outsideList: [], groupList: [], problemList: [], entryItem: undefined,
+      description: '', metadata: {}, assetList: [], assetIndex: objectFrontendAssetIndexBuild([]), strayList: [], unknownList: [], outsideList: [], groupList: [], partitionList: [], problemList: [], entryItem: undefined,
     };
   }
 
@@ -327,7 +336,22 @@ export class DocObjectFrontendStore {
       problemList.push(`the entry asset does not declare the object (owner: { ref: ${ref}, role: entry })`);
     }
     if (!this.typeIsFrontend(entry.type)) problemList.push(`the type ${entry.type} is not a frontend object type: it is drawn as ${OBJECT_FRONTEND_TYPE_ROOT}`);
-    const assetList: ObjectFrontendAsset[] = entry.assetList.map((asset: any) => {
+    // the records: of the entry (an object without a folder of its own, or one written before item
+    // lists), then of the item lists the server read in its folder
+    const merged = objectFrontendAssetListMerge(entry.assetList, decl.listList ?? []);
+    const partitionDeclaredList = this.partitionListOfTypeGet(entry.type);
+    const groupPathInFolderList = assetStore.itemList.filter((item: any) => item.folderOwner?.ref === ref && !item.isDeleted && item.itemId !== decl.entry).map((item: any) => item.groupPath ?? '');
+    const partitionList = decl.dir ? objectFrontendPartitionListBuild(partitionDeclaredList, (decl.listList ?? []).map((list: any) => list.groupPath), groupPathInFolderList) : [];
+    // a type declaring partitions keeps every asset in one of them (doc_page_impl_obj_frontend.md#partitions)
+    if (decl.dir && partitionDeclaredList?.length) {
+      const outsideCount = groupPathInFolderList.filter((groupPath: string) => !partitionDeclaredList.some((one: any) => groupPath === one.id || groupPath.startsWith(`${one.id}/`))).length;
+      if (outsideCount > 0) problemList.push(`${outsideCount} asset(s) lie outside the partitions of its type (${partitionDeclaredList.map((one: any) => one.id).join(', ')}): move them into one`);
+    }
+    problemList.push(...merged.problemList);
+    if (decl.dir && entry.assetList.length > 0) {
+      problemList.push(`its entry lists ${entry.assetList.length} asset(s), the place of the list before item lists: "react-doc migrate" moves them to item-list.yaml`);
+    }
+    const assetList: ObjectFrontendAsset[] = merged.assetList.map((asset: any) => {
       const item = assetStore.itemGet(ASSET_STORE_ID_LOCAL, asset.itemId);
       return {
         ...asset,
@@ -335,11 +359,18 @@ export class DocObjectFrontendStore {
         status: !item ? 'missing' : item.isDeleted ? 'deleted' : 'found',
         isOwnerMatch: item?.owner?.ref === ref,
         isInFolder: item?.folderOwner?.ref === ref,
+        partition: item?.folderOwner?.ref === ref ? objectFrontendPartitionOf(partitionList, item.groupPath) : '',
       };
     });
+    // a record kept in a list away from its item: a folder kept out of git would then keep a
+    // record of nothing, or leave a record behind in a list git keeps
+    for (const asset of assetList) {
+      if (asset.listGroupPath === null || !asset.isInFolder || objectFrontendListCovers(asset.listGroupPath, asset.item?.groupPath ?? '')) continue;
+      problemList.push(`${asset.name || asset.key} lies in ${asset.item.groupPath || 'the top'}, and is recorded in ${asset.listGroupPath}/${OBJECT_FRONTEND_LIST_NAME}, a list of another folder: Move it to bring the record along`);
+    }
     const assetIndex = objectFrontendAssetIndexBuild(assetList);
     problemList.push(...assetIndex.problemList);
-    const itemIdListed = new Set([decl.entry, ...entry.assetList.map((asset: any) => asset.itemId)]);
+    const itemIdListed = new Set([decl.entry, ...merged.assetList.map((asset: any) => asset.itemId)]);
     const strayList = assetStore.itemList.filter((item: any) => item.owner?.ref === ref && !item.isDeleted && !itemIdListed.has(item.itemId));
     const itemInFolderList = assetStore.itemList.filter((item: any) => item.folderOwner?.ref === ref);
     const unknownList = itemInFolderList.filter((item: any) => item.owner?.ref !== ref && !item.isDeleted && !itemIdListed.has(item.itemId));
@@ -361,6 +392,7 @@ export class DocObjectFrontendStore {
       unknownList,
       outsideList,
       groupList,
+      partitionList,
       problemList,
     };
   }
@@ -553,7 +585,7 @@ export class DocObjectFrontendStore {
     return this.writeRun('meta/set', { id, ...change });
   }
 
-  assetCreate(id: string, input: { key?: string; kind?: string; name?: string; pathList?: string[]; lang?: string; text: string; note?: string; saveMode?: string }) {
+  assetCreate(id: string, input: { key?: string; kind?: string; name?: string; pathList?: string[]; lang?: string; text: string; note?: string; saveMode?: string; groupPath?: string; partition?: string }) {
     return this.writeRun('asset/create', { id, ...input });
   }
 
@@ -596,6 +628,24 @@ export class DocObjectFrontendStore {
 
   assetKindListOfTypeGet(typeId: string): any[] | undefined {
     return objectFrontendAssetKindListResolve(typeId, this.typeDeclaredList);
+  }
+
+  // the partitions a type declares; undefined: none
+  partitionListOfTypeGet(typeId: string): any[] | undefined {
+    return objectFrontendPartitionListResolve(typeId, this.typeDeclaredList);
+  }
+
+  // the apis of partitions, every object has them (doc_page_impl_obj_frontend.md#the-apis-of-partitions)
+  partitionCreate(id: string, partition: string) {
+    return this.writeRun('partition/create', { id, partition });
+  }
+
+  partitionRename(id: string, partitionFrom: string, partitionTo: string) {
+    return this.writeRun('partition/rename', { id, partitionFrom, partitionTo });
+  }
+
+  partitionDelete(id: string, partition: string) {
+    return this.writeRun('partition/delete', { id, partition });
   }
 
   // the answer of this layer to a move of the asset store touching the folder of an object

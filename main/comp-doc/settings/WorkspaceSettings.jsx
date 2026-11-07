@@ -222,7 +222,7 @@ const DocPageNode = observer(function DocPageNode({ data, selected }) {
       <div className="doc-workspace-node-head">
         <span className="doc-workspace-node-alias">{docPage.alias}</span>
         {data.isRoot ? <span className="doc-badge-outline" data-primary="">root</span> : null}
-        {docPage.packageName ? <span className="doc-badge-outline" title="A package treated as a doc page: read-only">package</span> : null}
+        {docPage.packageName ? <span className="doc-badge-outline" title={`A package treated as a doc page: ${docPage.isReadOnly ? 'read-only' : 'served alone, so editable'}`}>package</span> : null}
         {data.aliasConflictCount > 0 ? <span className="doc-badge-outline is-warning">alias conflict</span> : null}
       </div>
       <div className="doc-workspace-node-title">{docPage.title || <span className="doc-workspace-settings-muted">no title</span>}</div>
@@ -290,7 +290,7 @@ const WorkspaceDetail = observer(function WorkspaceDetail() {
         {docPage.isReadOnly ? <span className="doc-badge-outline">read-only</span> : null}
       </div>
       <dl className="doc-workspace-settings-grid">
-        {docPage.packageName ? <><dt>package</dt><dd>{docPage.packageName}: its documents, assets and side panels are read, never written from the page</dd></> : null}
+        {docPage.packageName ? <><dt>package</dt><dd>{docPage.packageName}: {docPage.isReadOnly ? 'its documents, assets and side panels are read, never written from the page' : 'served alone, so it is edited like any doc page; in a workspace or mounted it is read-only'}</dd></> : null}
         <dt>folder</dt><dd>{docPage.dirPage}</dd>
         <dt>entry</dt><dd>{docPage.entryFile}</dd>
         <dt>roots</dt>

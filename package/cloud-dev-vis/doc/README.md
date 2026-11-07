@@ -36,7 +36,7 @@ cloud-dev-vis/
                                                   migration/: the modes of a migration as a frontend object
 ```
 
-The documents written for authors are the usage documents of the components, with live examples. The package is a doc page as well ([A package as a doc page](../../../main/doc_page_impl_package.md#a-package-as-a-doc-page)): `react-doc dev package/cloud-dev-vis` shows them alone, and the workspace of the project lists it beside its demonstration. Read so it is read-only, also its assets, except its playground.
+The documents written for authors are the usage documents of the components, with live examples. The package is a doc page as well ([A package as a doc page](../../../main/doc_page_impl_package.md#a-package-as-a-doc-page)): `react-doc dev package/cloud-dev-vis` shows them alone, and the workspace of the project lists it beside its demonstration. Served alone it is edited like any doc page; in the workspace it is read-only, also its assets, except its playground.
 
 ## Core concepts
 

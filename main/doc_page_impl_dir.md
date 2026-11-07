@@ -28,7 +28,7 @@ my-doc/                          the doc page folder: give this to a workspace f
     ├── service.yaml             its service folders (optional: the four service-* below otherwise)
     ├── api.yaml                 the apis it declares without code (optional: none otherwise)
     ├── playground.yaml          its playground documents (optional: none otherwise), with their
-    ├── playground/              templates (doc_page_impl_test.md)
+    ├── playground/              templates (#local-content-kept-out-of-git)
     ├── type.yaml                the types it declares (optional: none otherwise; entry: type, a { file } or a list)
     ├── object-frontend.yaml     other folders for its frontend objects (optional)
     │                            (and packageList of the entry: the packages it needs, by name)
@@ -39,7 +39,8 @@ my-doc/                          the doc page folder: give this to a workspace f
     │                            the managed folders, each made by its first item (below):
     ├── asset/                   the asset items of the doc page: its default asset folder
     ├── object-frontend/         its frontend objects, one self-contained folder each (#frontend-objects)
-    │   └── {id}--{name}/        object.yaml, and item/: the asset items of the object (ASCII only)
+    │   └── {id}--{name}/        object.yaml, and item/: the asset items of the object and their
+    │                            item lists, in partitions git may keep out (ASCII only)
     ├── comp-mdx/                its components: comp.yaml manifests and the modules they name
     │   ├── comp.yaml            the components at the top of the folder
     │   └── table/stock-table/   a group in a group: any folders, each may hold a comp.yaml
@@ -55,7 +56,7 @@ What belongs where:
 
 - **The folder itself** is content: documents and the files they use, which the source rules collect, and the doc pages inside it.
 - **`.doc-page/`** holds two things, neither of them ever a document. The **metadata files**: the entry and every yaml file it names, and the config files of the services the page uses. The page writes some of them itself (a side-panel label, a moved item, a config value, the folders of the asset store), always in place and with a `{file}.bak` beside the file. And the **managed folders**: the asset folder, the component folder, the service folders, the backups of the service instances (`service-backup/`, the default folder of the local-backup infra service, [the local-backup infra service](doc_page_impl_service_storage.md#the-local-backup-infra-service)). They belong to the doc page as much as its documents do, but are kept by the page, not written by hand, so they sit with the metadata, out of sight.
-- What a run writes into `.doc-page/` (the backups, the state of the service runtime kernel `service-kernel.yaml`, `service-backup/`, the provisioned `service-infra/`) is ignored by git; `react-doc init page` writes the `.gitignore` for it.
+- What a run writes into `.doc-page/` (the backups, the state of the service runtime kernel `service-kernel.yaml`, `service-backup/`, the provisioned `service-infra/`) is ignored by git; `react-doc init page` writes the `.gitignore` for it. So are playground documents and the partitions of frontend objects holding private data ([Local content kept out of git](#local-content-kept-out-of-git)).
 
 The source scan never enters `.doc-page/`, so a rule collecting the doc page folder recursively (`path: ..`) needs no rule to exclude anything. A managed folder may also be kept elsewhere, named by its config file in `.doc-page/`; such a folder is skipped by the scan all the same. A metadata file names the content by paths relative to itself, so the doc page folder is `..` from `.doc-page/` and a managed folder of the convention is `./comp-mdx`; the asset folders are named by source path instead (`~my-doc/.doc-page/asset`, a root of the doc page by its alias), so that renaming the folder changes nothing inside it ([source paths](doc_page_impl_source.md#source-paths)).
 
@@ -173,16 +174,19 @@ Each [frontend object](doc_page_impl_obj_frontend.md) of a doc page has **a fold
 ```text
 .doc-page/object-frontend/       the folders of the doc page's frontend objects (made by the first one)
 └── {id}--{name}/                one object; the name in ASCII (below), and the folder follows it
-    ├── object.yaml              what makes the folder an object: id, entry, and optionally typeList, the types it brings along
+    ├── object.yaml              what makes the folder an object: id, entry
+    ├── type.yaml                optional: the types it brings along
     └── item/                    its asset items: an asset folder of the store, owned by the object
         ├── {entryId}/           its entry asset: item.yaml, {versionId}.yaml
+        ├── item-list.yaml       an item list: the records of the assets lying here and below
         ├── {itemId}(--{name})/  its other assets, each an ordinary asset item
-        └── book/sci-fi/{itemId}/  in folders of any depth, whose names may say something
+        └── book/sci-fi/{itemId}/  in folders of any depth, whose names may say something; a folder may
+                                 keep a list of its own (a partition of the object, which git may keep out)
 ```
 
 **Whatever belongs to an object lies in its folder.** That is the convention the page keeps: a new asset is created in `item/`, one that comes from elsewhere moves there, and one found lying outside is reported. An item could technically lie in any asset folder of the doc page, since an object names its items by id, but only a folder holding everything can be copied, and a person looking for what an object holds should have one place to look. Being in the folder does not make an item part of the object, though: an item put there by hand is reported as of unknown source until the object adopts it, and the same goes for a file dropped into any other folder of the page ([How an asset comes to belong](doc_page_impl_obj_frontend.md#how-an-asset-comes-to-belong)).
 
-The folder **is** the object: nothing else names it, so copying it into the `.doc-page/object-frontend/` of another doc page moves the object, its data and its history with it, as long as that doc page has the components its modes name (the same components, or the package that holds them). It is the reason a type used by one object belongs in its `object.yaml`.
+The folder **is** the object: nothing else names it, so copying it into the `.doc-page/object-frontend/` of another doc page moves the object, its data and its history with it, as long as that doc page has the components its modes name (the same components, or the package that holds them). It is the reason a type used by one object belongs in the `type.yaml` beside its `object.yaml`, and why its item lists lie among its items ([The item lists](doc_page_impl_obj_frontend.md#the-item-lists)).
 
 **`.doc-page/object-frontend.yaml`** is there for the exceptions: other folders for the object folders (`folderList`, relative to the file; the first is where a new object goes), and objects without a folder of their own (`objectList [{ id, entry }]`), whose items lie in an asset folder of the doc page, gathered in a group folder `{id}--{name}`. The file is read when it exists; `objectFrontend: { file }` of the entry names another file, `objectFrontend: false` says the doc page has no frontend objects. It is written by a person and never collected as a document; a change of it, or of an `object.yaml`, is read again by the page without a reload, as `asset.yaml` is.
 
@@ -201,6 +205,72 @@ built-in/type.yaml                          the types of the page itself
 ```
 
 Which one depends on who needs the type: several objects or documents of a doc page, one object that may be copied elsewhere, or everyone using a package's components, in which case no copy of it is kept in a doc page. A type of a service template is the exception: it is declared in its script, since a template is code. The entry says `type: { file }`, `type: [...]`, `type: { typeList }` in place, or `type: false`; as for the files beside it, nothing is needed when the convention is followed. A change of a type file reloads the page, as a change of the apis or the tags does, and the file is never collected as a document.
+
+## Local content kept out of git
+
+Some content belongs to one checkout and not to the project: what a person tries out, and what is private (their own CV, the real data of a client). It is kept in the folders of the doc page like the rest, so the page shows and edits it the same way, and git keeps it out. One rule makes that safe:
+
+**What git keeps out is kept out whole: the content and everything that names it lie in the same ignored place.** The tracked part then never names what a clone lacks (a clone shows nothing broken), and nothing of the private content reaches a commit through a list or an index that git keeps.
+
+```text
+what                        where it lies                               what git ignores
+a playground document       doc/card-diagram.playground.md              the name *.playground.md (its template,
+                                                                        .doc-page/playground/, is tracked)
+a partition of a frontend   .doc-page/object-frontend/{id}--{name}/     a folder of item/: its items and the
+object                        item/real/   items, item-list.yaml          item list naming them
+what a run writes           *.bak, service-kernel.yaml, service-backup/  the .gitignore of .doc-page/
+```
+
+### Playground documents
+
+A [playground](doc_page_impl_test.md#playground-documents) is a document for trying things out, and two files make one up:
+
+```text
+.doc-page/playground/card-diagram.md      the template: tracked by git, what a playground starts from
+doc/card-diagram.playground.md            the document: ignored by git, what a reader sees and edits
+```
+
+**The name is what keeps it out of git.** The document of a playground must be named `*.playground.md` or `*.playground.mdx`, and a doc page declaring another name gets a problem reported (`[doc-playground]`), with the item skipped. A repository needs one rule in its `.gitignore`, whatever the number of playgrounds; this project has it at its root:
+
+```text
+**/*.playground.md
+**/*.playground.mdx
+```
+
+A doc page in a repository of its own adds the same two lines to its own `.gitignore`. A test (`plugin/doc-playground.test.js`) checks the rule in this project with `git check-ignore`. The template lies in `.doc-page/`, so the source rules never collect it as a document. What names the document (its side panel item, its line in `playground.yaml`) is tracked, and reads a missing document as the normal state of a clone: the item stays and offers to create it from the template.
+
+**A built page** has no development server and nothing to create a document with, so a playground does not exist there at all: `react-doc build` leaves out the document, if the checkout has one, and the side panel item (`playgroundLeaveOut`, `plugin/doc-source.ts`). What one person tried out cannot reach a published page. `react-doc pack` leaves the document out of the npm package in the same way.
+
+### Partitions of a frontend object
+
+A [frontend object](doc_page_impl_obj_frontend.md) may split its items into **partitions**, folders at the top of its item folder, each holding its items and the [item list](doc_page_impl_obj_frontend.md#the-item-lists) recording them. Its type declares them, and says which are kept out of git ([Partitions](doc_page_impl_obj_frontend.md#partitions) has the design conventions):
+
+```text
+.doc-page/object-frontend/{id}--Profile/
+├── object.yaml
+└── item/
+    ├── {entryId}/               the entry: name, type, metadata                  tracked
+    ├── example/                 the data of the demonstration                    tracked
+    │   ├── item-list.yaml
+    │   └── {itemId}/ ...
+    ├── real/                    the private data of this checkout                ignored
+    │   ├── item-list.yaml
+    │   └── {itemId}/ ...
+    └── playground/              what is tried out without touching the example   ignored
+        └── item-list.yaml
+```
+
+```text
+# .gitignore of the repository: the partitions kept out, of every object, wherever the doc page lies
+**/.doc-page/object-frontend/*/item/real/
+**/.doc-page/object-frontend/*/item/playground/
+```
+
+- **Write the rule with `**/`.** A pattern holding a `/` is read from the folder of its `.gitignore`, so `.doc-page/object-frontend/...` alone misses a doc page that is not at the top of the repository.
+- **The page checks it.** A write into a partition its type keeps out of git (`isGitIgnored`) is refused while git does not ignore that folder, so private data never lands where a commit would take it.
+- **Every record goes to the list of its partition.** The page records an asset in the nearest list above it, and makes one in the first folder of its path when there is none, so a partition has its own list from its first asset on, also in a fresh clone where the ignored folder did not exist yet. An object split into partitions keeps **no list at the top** of its item folder: an asset of a partition without a list of its own would be recorded there.
+- **A clone has the tracked partitions only**, and the object works with them: no record names a missing item, the modes see fewer assets.
+- **A built page carries what the checkout holds.** Unlike a playground document, a partition kept out of git is in the snapshot of a static build made in a checkout that has it; build from a clone, or move the partition away first, to publish a page without it ([TODO](doc_page_impl_TODO.md#object-frontend-partition-build)).
 
 ## The built-in folder
 
@@ -225,14 +295,14 @@ my-package/                      the package folder: give its path to a workspac
 │   ├── entry.yaml               title, homeDoc: ~{name}/doc/README.md
 │   ├── source.yaml              the package folder as its root; comp-mdx/ and the templates are never collected
 │   ├── side-panel.yaml          its documents, the demonstrations first
-│   └── asset/                   the items its documents show: data of the package, read-only
+│   └── asset/                   the items its documents show: data of the package, read-only unless it is served alone
 └── package.json                 optional: { "type": "module" }, so node reads its .js as ES modules
 ```
 
 - **Required**: `doc-package.yaml` and `doc/README.md`. The content folders may be absent (nothing of that kind), never moved.
 - **Never there**: instance folders (`service-app/`, `service-infra/`): a package holds no running state. In its `.doc-page/`, no `comp-mdx/` and no service folders, and an entry naming `comp`, `service` or `packageList` is refused: its components and templates are the ones at its top, what it needs is `packageDependList`.
 
-Unlike a doc page, a package keeps its code folders at its top: code and templates are what a package is, and its documents, the ones a reader of the package looks for, are gathered in `doc/`. A package with `.doc-page/entry.yaml` is also a **read-only doc page**: it can be launched, listed in a workspace, or mounted for a while, its documents demonstrating its components ([A package as a doc page](doc_page_impl_package.md#a-package-as-a-doc-page)). `react-doc init package` writes the three files.
+Unlike a doc page, a package keeps its code folders at its top: code and templates are what a package is, and its documents, the ones a reader of the package looks for, are gathered in `doc/`. A package with `.doc-page/entry.yaml` is also a **doc page**, read-only except while it is served alone: it can be launched, listed in a workspace, or mounted for a while, its documents demonstrating its components ([A package as a doc page](doc_page_impl_package.md#a-package-as-a-doc-page)). `react-doc init package` writes the three files.
 
 The packages of the project live in `package/` at its root, one folder each, which is where a package named by its name is looked for first (`packageSearchDirList` of `config.yaml`); `package/cloud-dev-vis/` is the one the demonstration imports ([its root document](../package/cloud-dev-vis/doc/README.md)).
 

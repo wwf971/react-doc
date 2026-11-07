@@ -305,13 +305,26 @@ export const editEventTypeList = [
 
 const messageConflict = 'The document changed on disk since it was loaded. Re-read the file, then edit again.';
 
+// the mode of a document for its components: reading, editing, selecting blocks
+export type DocMode = 'read' | 'edit' | 'select';
+
+// config.docState: what a component knows of the document it is in
+// (doc_page_impl_mdx_comp.md#the-state-of-the-document)
+export type DocStateService = {
+  readonly path: string;
+  readonly mode: DocMode;
+  readonly isEditing: boolean;
+  readonly isEditAvailable: boolean;
+  readonly editReason: string;
+};
+
 export class DocEditStore {
   sourceStore: DocSourceStore;
   docStore: DocStore;
   configStore: DocConfigStore;
   api: ReturnType<typeof docEditApiCreate> | undefined;
   // the environment of the page; only isCapable / endpointGet are used
-  envStore: Pick<DocEnvStore, 'isCapable' | 'endpointGet'> & Partial<Pick<DocEnvStore, 'serverLostReport'>>;
+  envStore: Pick<DocEnvStore, 'isCapable' | 'endpointGet'> & Partial<Pick<DocEnvStore, 'serverLostReport' | 'reasonGet'>>;
   isEditMode = false;
   isBlockSelectMode = false;
   sourceByPath: Record<string, EditSource> = {};
@@ -327,6 +340,8 @@ export class DocEditStore {
   // the text a block was just saved as, shown in its place until the document
   // is compiled again, so the saved block never flashes back to its old text
   blockTextPending: { path: string; blockIndex: number; text: string } | undefined = undefined;
+  // the state of a document as its components see it (config.docState), one per document
+  docStateServiceByPath = new Map<string, DocStateService>();
   sidePanelText: EditSidePanelText | undefined = undefined;
   // the rendered label whose request to start editing is waiting for the
   // open block session to be left; a later request replaces it
@@ -389,6 +404,8 @@ export class DocEditStore {
       reactionDispose: false,
       reactionConfigDispose: false,
       historyRecordList: false,
+      docStateServiceByPath: false,
+      docStateServiceGet: false,
     });
   }
 
@@ -483,6 +500,46 @@ export class DocEditStore {
   // 'button': the Edit button of the block toolbar only
   get blockEnterMode(): 'button' | 'click' {
     return this.configStore.valueGlobalGet('EditBlockEnterMode') === 'button' ? 'button' : 'click';
+  }
+
+  // ---------- the state of a document, for its components ----------
+  // (doc_page_impl_mdx_comp.md#the-state-of-the-document)
+
+  // what a component is told of the document it is in (config.docState): read through getters,
+  // so an observer re-renders when the document changes mode. the same object for a document
+  // across renders. a component asks it before showing what changes data: in reading mode a
+  // block shows its content read-only, whatever it could write
+  docStateServiceGet(path: string): DocStateService {
+    let service = this.docStateServiceByPath.get(path);
+    if (!service) {
+      const store = this;
+      service = Object.freeze({
+        path,
+        get mode() { return store.docModeGet(path); },
+        get isEditing() { return store.docModeGet(path) === 'edit'; },
+        get isEditAvailable() { return store.docIsEditable(path); },
+        get editReason() { return store.docEditReasonGet(path); },
+      });
+      this.docStateServiceByPath.set(path, service);
+    }
+    return service;
+  }
+
+  // the mode of a document: 'edit' or 'select' while the page is in that mode and the document
+  // can be edited, 'read' otherwise (a built page, a server gone, a document of no file)
+  docModeGet(path: string): DocMode {
+    if (!this.docIsEditable(path)) return 'read';
+    if (this.isEditMode) return 'edit';
+    if (this.isBlockSelectMode) return 'select';
+    return 'read';
+  }
+
+  // why the document is not in edit mode ('' when it is), for the title of a control left out of reading
+  docEditReasonGet(path: string): string {
+    if (this.docModeGet(path) === 'edit') return '';
+    if (!this.isAvailable) return this.envStore.reasonGet?.('edit') || 'this page cannot be edited';
+    if (!this.docIsEditable(path)) return 'this document has no file the page can write';
+    return 'the document is in reading mode: switch Edit on to change it';
   }
 
   // an md/mdx file of the collected source. inline items, component panels

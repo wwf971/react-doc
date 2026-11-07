@@ -2,7 +2,7 @@
 
 # Packages: Design
 
-A **package** is a folder of components and service templates, with documents of its own, that a workspace or a doc page imports, so that one set of components (the diagrams of a domain, the dashboards of a platform) serves several doc pages and several workspaces without being copied into each. It can also be read and launched as a doc page, read-only.
+A **package** is a folder of components and service templates, with documents of its own, that a workspace or a doc page imports, so that one set of components (the diagrams of a domain, the dashboards of a platform) serves several doc pages and several workspaces without being copied into each. It can also be read and launched as a doc page: read-only where others use it, editable when it is served alone.
 
 (Elsewhere in these documents "the package" alone means react-doc itself, the npm package shipping the page and `built-in/`. A package in the sense of this document is always named as one: "a package", "the package cloud-dev-vis".)
 
@@ -119,9 +119,21 @@ react-doc dev package/cloud-dev-vis        # alone, in a virtual workspace
 
 or for a while, mounted from the Workspace tab or with `--mount` like any doc page ([temporary doc pages](doc_page_impl_source.md#temporary-doc-pages)). Being there imports the package too; nothing has to name it twice.
 
-**What makes it one is the folder.** A doc page's entry found in a folder holding `doc-package.yaml` is a package: `docPageRegister` marks it (`packageName`, `isReadOnly`), and the page receives both (`workspace.docPageList`, the `docPageSection` of its side panel section). There is no key to set, in the workspace or in the package, so a package cannot be a writable doc page by being named another way.
+**What makes it one is the folder.** A doc page's entry found in a folder holding `doc-package.yaml` is a package: `docPageRegister` marks it (`packageName`, `isReadOnly`), and the page receives both (`workspace.docPageList`, the `docPageSection` of its side panel section). There is no key to set, in the workspace or in the package, so a package cannot be a writable doc page by being named another way; whether it is written follows from how it is served (below).
 
-**It is read-only, at the level of the system.** A package is code and data others rely on, not something edited from a page that happens to show it. Every write into its folder is refused by what does the write, with code `-4`, whichever caller asks:
+**Served alone, it is the work at hand, and is written like any doc page.** A package that is the doc page of a virtual workspace, which is what `react-doc dev <package>` serves (or `docEntry` of a config naming it), is the one being developed: its documents, side panels, assets and frontend objects are edited from the page, in its own folder, and `isReadOnly` is false. It keeps its badge `package`, and the components and service templates it has as a package are unchanged. `docWorkspaceLoad` decides it, once, for the root doc page of a virtual workspace that is not a temporary mount.
+
+```text
+react-doc dev package/cloud-dev-vis               the package alone: editable
+react-doc dev package/cloud-dev-vis --mount ../notes   the same; the mounted doc page as usual
+react-doc dev ../team                             a package in the workspace's docPageList: read-only
+react-doc dev ../notes --mount package/cloud-dev-vis  a package mounted: read-only
+a package named in packageList                    imported only, no doc page: nothing to write
+```
+
+So a package needs no doc page of another kind to demonstrate editing: its own demonstration is edited while it is developed, and the same documents are read-only for whoever imports it.
+
+**Everywhere else it is read-only, at the level of the system.** A package is code and data others rely on, not something edited from a page that happens to show it. Every write into its folder is refused by what does the write, with code `-4`, whichever caller asks:
 
 ```text
 the asset store           every write of AssetStore checks the folder (objectWriteGuard, folderWritableCheck);
@@ -132,11 +144,11 @@ documents, side panels,   the edit api asks readOnlyReasonGet(absPath), one func
 files of the source       POST file/create, the same function
 ```
 
-The one exception is the document of a [playground](doc_page_impl_test.md#writing-into-a-package), a file ignored by git that belongs to the checkout.
+The one exception there is the document of a [playground](doc_page_impl_test.md#writing-into-a-package), a file ignored by git that belongs to the checkout.
 
-The page asks too, to say so before it is refused: `DocSourceStore.docPageReadOnlyReasonGet(alias)` and `pathReadOnlyReasonGet(path)`; `DocEditStore.docIsEditable` answers no for its documents, a config layer of it is not writable, and a read-only asset folder has a badge. It is **annotated as a package** where it shows: the `package` badge of its side panel section, its node in the Workspace tab (`package`, and `read-only` in its detail), and the package node above the workspace remains what it is, the import.
+The page asks too, to say so before it is refused: `DocSourceStore.docPageReadOnlyReasonGet(alias)` and `pathReadOnlyReasonGet(path)`; `DocEditStore.docIsEditable` answers no for its documents, a config layer of it is not writable, and a read-only asset folder has a badge. It is **annotated as a package** where it shows: the `package` badge of its side panel section (its tooltip says whether it is read-only, from `docPageSection.isReadOnly`), its node in the Workspace tab (`package`, and `read-only` in its detail when it is), and the package node above the workspace remains what it is, the import.
 
-It has no components of a doc page and no services of a doc page (`comp: false`, `service: false`, an entry naming either is refused): what it has of those it has as a package. It may have assets (`.doc-page/asset/`) and frontend objects: data its documents show, read.
+It has no components of a doc page and no services of a doc page (`comp: false`, `service: false`, an entry naming either is refused): what it has of those it has as a package. It may have assets (`.doc-page/asset/`) and frontend objects: data its documents show, read, and written only while the package is served alone.
 
 ## In the Workspace tab
 

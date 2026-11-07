@@ -27,3 +27,9 @@ eventList:
     placeFrom: ~example:example/.doc-page/object-frontend/w5j7ozoijzl--Reading list/item
     placeTo: ~example:example/.doc-page/object-frontend/w5j7ozoijzl--Reading
       list/item/note
+  - eventType: move
+    time: 20261108_07505051+09
+    placeFrom: ~example_doc:example/.doc-page/object-frontend/w5j7ozoijzl--Reading
+      list/item/note
+    placeTo: ~example_doc:example/.doc-page/object-frontend/w5j7ozoijzl--Reading
+      list/item/example/note

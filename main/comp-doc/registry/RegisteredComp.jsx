@@ -13,6 +13,9 @@ import { compStateKeyBuild } from '../../frontend/src/lib/doc-comp-state.js';
 // Registered render components always receive { data, config, onEvent }.
 // An observer, so a component follows its component-level config values
 // (the reader may change them in the settings panel).
+// the state of a document where nothing can be edited (no edit layer: an embedding without it)
+const DOC_STATE_READ = Object.freeze({ path: '', mode: 'read', isEditing: false, isEditAvailable: false, editReason: 'this page cannot be edited' });
+
 export const RegisteredComp = observer(function RegisteredComp(props) {
   const {
     compDefinition,
@@ -180,8 +183,12 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
     sourceLine: configRuntime.sourceLine,
     instanceId,
   });
+  // the state of the document the component is in (doc_page_impl_mdx_comp.md#the-state-of-the-document):
+  // its mode (read, edit, select), read through getters; a page without the edit layer reads
+  const docState = editStore?.docStateServiceGet(sourcePath) ?? DOC_STATE_READ;
   const config = {
     assetUrlGet,
+    docState,
     // the environment of the page: env.isCapable('edit'), env.reasonGet(...),
     // env.kindGet() (doc_page_impl.md#the-environment)
     env: envStore.envService,

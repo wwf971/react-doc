@@ -33,7 +33,7 @@ export const DocSidePanelSection = observer(function DocSidePanelSection({ item,
         className="doc-side-panel-section-head"
         aria-expanded={isOpen}
         aria-controls={contentId}
-        title={`${section.title ? `${section.title} · ` : ''}doc page "${section.alias}"${section.packageName ? ', a package: read-only' : ''}${section.isTemporary ? ', mounted for now' : ''}: ${isOpen ? 'fold' : 'unfold'} its side panel`}
+        title={`${section.title ? `${section.title} · ` : ''}doc page "${section.alias}"${section.packageName ? `, a package${section.isReadOnly ? ': read-only' : ', served alone: editable'}` : ''}${section.isTemporary ? ', mounted for now' : ''}: ${isOpen ? 'fold' : 'unfold'} its side panel`}
         onClick={() => sidePanelStore.folderOpenSet(item.$id, !isOpen)}
       >
         <span className="doc-side-panel-section-alias">{section.alias}</span>

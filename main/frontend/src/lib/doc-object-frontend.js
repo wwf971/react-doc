@@ -8,12 +8,15 @@ import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 //                        keeps itself, in assets of the asset store: one entry
 //                        asset that describes it, and any number of assets of
 //                        its own. its reference is frontend:{id}
-//   the entry asset      yaml: { name, type, description, assetList, metadata }
-//                          assetList [{ key, kind, itemId, name?, pathList? }]  its assets, by a
-//                                    key unique in the object; kind groups them ("book"); a name
-//                                    for people, and paths (/book/sci-fi/dune) indexing them, any
-//                                    number of them, each unique in the object
+//   the entry asset      yaml: { name, type, description, metadata }
 //                          metadata  a free mapping, the type's own
+//   the item lists       item-list.yaml in the item folder of the object or in a folder inside
+//                        it: { assetList }, the assets lying there and below, each a record
+//                          { key, kind, itemId, name?, pathList? }  by a key unique in the object;
+//                          kind groups them ("book"); a name for people, and paths
+//                          (/book/sci-fi/dune) indexing them, each unique in the object
+//                        an object without a folder of its own lists them in its entry
+//                        (assetList), as every object did before item lists
 //   an asset of it       declares it in its own metadata (item.yaml):
 //                          owner: { ref: frontend:{id}, role: entry }   the entry
 //                          owner: { ref: frontend:{id} }                any other
@@ -36,11 +39,16 @@ export const OBJECT_FRONTEND_CONFIG_FILE_NAME = 'object-frontend.yaml';
 export const OBJECT_FRONTEND_FOLDER_NAME = 'object-frontend';
 export const OBJECT_FRONTEND_META_NAME = 'object.yaml';
 export const OBJECT_FRONTEND_ITEM_FOLDER_NAME = 'item';
+// the list of the assets lying in a folder of an object's item folder and below it, down to
+// the folders holding a list of their own (doc_page_impl_obj_frontend.md#the-item-lists)
+export const OBJECT_FRONTEND_LIST_NAME = 'item-list.yaml';
 // the placement a mode's component is rendered in
 export const OBJECT_FRONTEND_PLACEMENT = 'objectFrontend';
 
 export const OBJECT_FRONTEND_KEY_REGEX = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 export const OBJECT_FRONTEND_MODE_ID_REGEX = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+// a partition is a folder of the item folder: an ASCII name (doc_page_impl_obj_frontend.md#partitions)
+export const OBJECT_FRONTEND_PARTITION_REGEX = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 export const OBJECT_FRONTEND_TYPE_ID_REGEX = /^[a-z][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/;
 // the first part of a type id names who defines it; these are the page's own
 export const OBJECT_FRONTEND_TYPE_PREFIX_RESERVED_LIST = ['core', 'doc', 'docPage', 'docDir', 'asset', 'service', 'serviceTemplate', 'serviceConfig', 'frontend'];
@@ -93,17 +101,28 @@ export function objectFrontendEntryParse(text) {
   entry.description = typeof content.description === 'string' ? content.description : '';
   if (content.metadata !== undefined && !mappingIs(content.metadata)) problemList.push('metadata is not a mapping');
   else entry.metadata = content.metadata ?? {};
+  entry.assetList = assetRecordListRead(content.assetList, 'assetList', problemList);
+  return { entry, problemList };
+}
+
+// the records { key, kind, itemId, name?, pathList? } of a list, every one read as far as it
+// can be; place: what a problem says the list is ("assetList", "history/item-list.yaml")
+function assetRecordListRead(value, place, problemList) {
+  const recordList = [];
+  if (value === undefined || value === null) return recordList;
+  if (!Array.isArray(value)) {
+    problemList.push(`${place} is not a list`);
+    return recordList;
+  }
   const keySet = new Set();
-  const assetListRaw = Array.isArray(content.assetList) ? content.assetList : [];
-  if (content.assetList !== undefined && !Array.isArray(content.assetList)) problemList.push('assetList is not a list');
-  assetListRaw.forEach((item, index) => {
+  value.forEach((item, index) => {
     if (!mappingIs(item) || typeof item.itemId !== 'string' || !item.itemId) {
-      problemList.push(`assetList[${index}] is not { key, kind, itemId }`);
+      problemList.push(`${place}[${index}] is not { key, kind, itemId }`);
       return;
     }
     const key = typeof item.key === 'string' && item.key ? item.key : item.itemId;
     if (keySet.has(key)) {
-      problemList.push(`assetList[${index}]: the key ${key} is used twice; this one is left out`);
+      problemList.push(`${place}[${index}]: the key ${key} is used twice; this one is left out`);
       return;
     }
     keySet.add(key);
@@ -112,14 +131,25 @@ export function objectFrontendEntryParse(text) {
     const pathList = [];
     for (const pathText of Array.isArray(item.pathList) ? item.pathList : []) {
       const { path, message } = objectFrontendAssetPathNormalize(pathText);
-      if (message) problemList.push(`assetList[${index}] (${key}): the path ${JSON.stringify(pathText)} is left out: ${message}`);
+      if (message) problemList.push(`${place}[${index}] (${key}): the path ${JSON.stringify(pathText)} is left out: ${message}`);
       else if (!pathList.includes(path)) pathList.push(path);
     }
-    if (item.pathList !== undefined && !Array.isArray(item.pathList)) problemList.push(`assetList[${index}] (${key}): pathList is a list of paths`);
+    if (item.pathList !== undefined && !Array.isArray(item.pathList)) problemList.push(`${place}[${index}] (${key}): pathList is a list of paths`);
     if (pathList.length > 0) asset.pathList = pathList;
-    entry.assetList.push(asset);
+    recordList.push(asset);
   });
-  return { entry, problemList };
+  return recordList;
+}
+
+// a record as it is written: the keys in one order, a name and paths only when there are some
+function assetRecordBuild(item) {
+  return {
+    key: item.key,
+    kind: item.kind ?? '',
+    itemId: item.itemId,
+    ...(item.name ? { name: item.name } : {}),
+    ...(Array.isArray(item.pathList) && item.pathList.length > 0 ? { pathList: item.pathList } : {}),
+  };
 }
 
 // the text of an entry asset. the entry is data the layer keeps (like the
@@ -129,17 +159,90 @@ export function objectFrontendEntryTextBuild(entry) {
     name: String(entry.name ?? ''),
     type: String(entry.type || OBJECT_FRONTEND_TYPE_ROOT),
     description: String(entry.description ?? ''),
-    assetList: (entry.assetList ?? []).map((item) => ({
-      key: item.key,
-      kind: item.kind ?? '',
-      itemId: item.itemId,
-      // written when there is one: an entry of assets without names stays as short as before
-      ...(item.name ? { name: item.name } : {}),
-      ...(Array.isArray(item.pathList) && item.pathList.length > 0 ? { pathList: item.pathList } : {}),
-    })),
+    // the list of an object without a folder of its own; one with a folder keeps item lists
+    ...((entry.assetList ?? []).length > 0 ? { assetList: entry.assetList.map(assetRecordBuild) } : {}),
     metadata: mappingIs(entry.metadata) ? entry.metadata : {},
   };
   return yamlStringify(content);
+}
+
+// ---------- the item lists ----------
+// an object with a folder of its own lists its assets in item-list.yaml files inside its item
+// folder: each lists the assets lying in its folder and below. so a folder kept out of git
+// takes its items and their records along, and what is left is an object without them
+// (doc_page_impl_obj_frontend.md#the-item-lists)
+
+// { assetList, problemList } of the text of an item list; groupPath: where it lies ('' the top)
+export function objectFrontendListParse(text, groupPath = '') {
+  const place = groupPath ? `${groupPath}/${OBJECT_FRONTEND_LIST_NAME}` : OBJECT_FRONTEND_LIST_NAME;
+  let content;
+  try {
+    content = yamlParse(String(text ?? '')) ?? {};
+  } catch (error) {
+    return { assetList: [], problemList: [`${place} does not parse: ${String(error?.message ?? error)}`] };
+  }
+  if (!mappingIs(content)) return { assetList: [], problemList: [`${place} holds a mapping { assetList }`] };
+  const problemList = Object.keys(content).filter((key) => key !== 'assetList').map((key) => `${place}: unknown key "${key}" (known: assetList)`);
+  return { assetList: assetRecordListRead(content.assetList, place, problemList), problemList };
+}
+
+export function objectFrontendListTextBuild(assetList) {
+  return [
+    '# the assets of the frontend object lying in this folder and below, down to a folder with an',
+    `# ${OBJECT_FRONTEND_LIST_NAME} of its own: written by the page (doc_page_impl_obj_frontend.md#the-item-lists)`,
+    yamlStringify({ assetList: (assetList ?? []).map(assetRecordBuild) }),
+  ].join('\n');
+}
+
+// the list an asset lying at groupPath is recorded in: the nearest folder holding a list, from
+// its own folder up to the top of the item folder. with none, a list is made in the first
+// folder of its path (the top for an asset at the top), never above it: an asset of a folder
+// kept out of git is then never recorded in a list git keeps. listGroupPathList: the lists there are
+export function objectFrontendListGroupPathGet(listGroupPathList, groupPath) {
+  const listSet = new Set(listGroupPathList ?? []);
+  const partList = String(groupPath ?? '').split('/').filter(Boolean);
+  for (let length = partList.length; length >= 0; length--) {
+    const groupPathUp = partList.slice(0, length).join('/');
+    if (listSet.has(groupPathUp)) return groupPathUp;
+  }
+  return partList[0] ?? '';
+}
+
+// whether a list at listGroupPath covers an asset lying at groupPath (in its folder or below)
+export function objectFrontendListCovers(listGroupPath, groupPath) {
+  return !listGroupPath || groupPath === listGroupPath || String(groupPath ?? '').startsWith(`${listGroupPath}/`);
+}
+
+// the assets of an object, from the list in its entry and its item lists, each record with the
+// list it is in (listGroupPath: null for the entry): { assetList, problemList }. a key or an item
+// listed twice keeps its first record; the entry comes first, then the lists by their folder
+export function objectFrontendAssetListMerge(entryAssetList, listList) {
+  const assetList = [];
+  const problemList = [];
+  const keySet = new Set();
+  const itemIdSet = new Set();
+  const sourceList = [
+    { listGroupPath: null, assetList: entryAssetList ?? [], place: 'the entry' },
+    ...[...(listList ?? [])].sort((a, b) => String(a.groupPath).localeCompare(String(b.groupPath)))
+      .map((list) => ({ listGroupPath: list.groupPath ?? '', assetList: list.assetList ?? [], place: list.groupPath ? `${list.groupPath}/${OBJECT_FRONTEND_LIST_NAME}` : OBJECT_FRONTEND_LIST_NAME })),
+  ];
+  for (const list of listList ?? []) problemList.push(...(list.problemList ?? []));
+  for (const source of sourceList) {
+    for (const record of source.assetList) {
+      if (keySet.has(record.key)) {
+        problemList.push(`${source.place}: the key ${record.key} is listed already; this record is left out`);
+        continue;
+      }
+      if (itemIdSet.has(record.itemId)) {
+        problemList.push(`${source.place}: the item ${record.itemId} is listed already; this record is left out`);
+        continue;
+      }
+      keySet.add(record.key);
+      itemIdSet.add(record.itemId);
+      assetList.push({ ...record, listGroupPath: source.listGroupPath });
+    }
+  }
+  return { assetList, problemList };
 }
 
 // a key unique among the assets of an entry, from what is asked for (the
@@ -160,6 +263,17 @@ export function objectFrontendAssetKeyFree(entry, keyWanted, kind) {
 // ancestor that has one; undefined when none says, and then any asset is accepted
 // (doc_page_impl_obj_frontend.md#what-a-type-accepts)
 export function objectFrontendAssetKindListResolve(typeId, typeList) {
+  return typeKeyResolve(typeId, typeList, 'assetKindList');
+}
+
+// the partitions a type declares: partitionList of its declaration or of the nearest ancestor that
+// has one; undefined when none says (doc_page_impl_obj_frontend.md#partitions)
+export function objectFrontendPartitionListResolve(typeId, typeList) {
+  return typeKeyResolve(typeId, typeList, 'partitionList');
+}
+
+// a list a type declares under key, or the nearest ancestor's
+function typeKeyResolve(typeId, typeList, key) {
   const typeById = new Map((typeList ?? []).map((type) => [type.id, type]));
   const visitedSet = new Set();
   const queue = [typeId];
@@ -169,10 +283,74 @@ export function objectFrontendAssetKindListResolve(typeId, typeList) {
     visitedSet.add(id);
     const type = typeById.get(id);
     if (!type) continue;
-    if (Array.isArray(type.assetKindList)) return type.assetKindList;
+    if (Array.isArray(type[key])) return type[key];
     queue.push(...(type.extendList ?? []));
   }
   return undefined;
+}
+
+// ---------- partitions ----------
+// the folders of the item folder an object splits its items into, each with its own item list
+// (doc_page_impl_obj_frontend.md#partitions)
+
+// the partitions of an object: those its type declares, then the folders at the top of its item
+// folder holding an item list. each { id, label, description, isGitIgnored, isDeclared, isPresent }
+// isDefault: where a write naming none goes; assetCount: the assets lying in it (groupPathList: the
+// places of the object's assets)
+export function objectFrontendPartitionListBuild(partitionDeclaredList, listGroupPathList, groupPathList = []) {
+  const presentSet = new Set((listGroupPathList ?? []).map((groupPath) => String(groupPath).split('/')[0]).filter(Boolean));
+  const partitionDefault = objectFrontendPartitionDefaultGet(partitionDeclaredList);
+  const partitionList = (partitionDeclaredList ?? []).map((one) => ({ ...one, isDefault: one === partitionDefault, isDeclared: true, isPresent: presentSet.has(one.id) }));
+  for (const id of presentSet) {
+    if (partitionList.some((one) => one.id === id)) continue;
+    partitionList.push({ id, label: id, description: '', isGitIgnored: false, isDefault: false, isDeclared: false, isPresent: true });
+  }
+  const countById = new Map();
+  for (const groupPath of groupPathList ?? []) {
+    const first = String(groupPath ?? '').split('/')[0];
+    countById.set(first, (countById.get(first) ?? 0) + 1);
+  }
+  return partitionList.map((one) => ({ ...one, assetCount: countById.get(one.id) ?? 0 }));
+}
+
+// the partition an item lying at groupPath is in: the first folder of its path when that is a
+// partition of the object, '' otherwise
+export function objectFrontendPartitionOf(partitionList, groupPath) {
+  const first = String(groupPath ?? '').split('/')[0];
+  return first && (partitionList ?? []).some((one) => one.id === first) ? first : '';
+}
+
+// what a form making something says of where it goes (doc_page_impl_obj_frontend.md#partitions):
+// "item/playground/book, kept out of git". partition: one of partitionList, or undefined for none
+export function objectFrontendPartitionPlaceText(partition, groupPathInside = '') {
+  const folder = ['item', partition?.id, groupPathInside].filter(Boolean).join('/');
+  if (!partition) return `${folder}/`;
+  return `${folder}/, ${partition.isGitIgnored ? 'kept out of git' : 'tracked by git'}`;
+}
+
+// the partition a write naming none goes to: the one declared isDefault, else the first; undefined
+// when the type declares none
+export function objectFrontendPartitionDefaultGet(partitionDeclaredList) {
+  return (partitionDeclaredList ?? []).find((one) => one.isDefault) ?? (partitionDeclaredList ?? [])[0];
+}
+
+// the folder a write places an item in: groupPath inside the partition named; naming none, the
+// default partition of a type that declares some (a groupPath already starting with a declared
+// partition is taken as it is). { groupPath, message }, message '' when the partition is one the
+// object may use
+export function objectFrontendPartitionGroupPathBuild(partitionDeclaredList, partition, groupPathInside) {
+  const inside = String(groupPathInside ?? '').split('/').filter(Boolean).join('/');
+  if (partition === undefined || partition === null || partition === '') {
+    const isPlaced = (partitionDeclaredList ?? []).some((one) => inside === one.id || inside.startsWith(`${one.id}/`));
+    const partitionDefault = isPlaced ? undefined : objectFrontendPartitionDefaultGet(partitionDeclaredList);
+    if (!partitionDefault) return { groupPath: inside, message: '' };
+    return { groupPath: inside ? `${partitionDefault.id}/${inside}` : partitionDefault.id, message: '' };
+  }
+  if (!OBJECT_FRONTEND_PARTITION_REGEX.test(partition)) return { groupPath: '', message: `a partition is a folder name: letters, digits, "_", "-" and "." (${JSON.stringify(partition)})` };
+  if (partitionDeclaredList && !partitionDeclaredList.some((one) => one.id === partition)) {
+    return { groupPath: '', message: `the type declares no partition ${partition} (its partitions: ${partitionDeclaredList.map((one) => one.id).join(', ')})` };
+  }
+  return { groupPath: inside ? `${partition}/${inside}` : partition, message: '' };
 }
 
 // whether an object of that type takes an asset: { message, kind, kindDeclared }; message is

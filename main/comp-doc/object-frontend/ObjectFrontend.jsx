@@ -68,10 +68,10 @@ export const ObjectFrontendBody = observer(function ObjectFrontendBody({ data = 
   };
 
   const service = useMemo(
-    () => objectFrontendServiceBuild({ objectFrontendStore, ref: state.ref, mode, modeList, param, paramBlock: block.param, blockSwitch }),
+    () => objectFrontendServiceBuild({ objectFrontendStore, ref: state.ref, mode, modeList, param, paramBlock: block.param, blockSwitch, docState: config.docState }),
     // the service is rebuilt with what it describes; its getters read the store
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [objectFrontendStore, state.ref, mode?.id, JSON.stringify(param), modeList.length, data.raw, compState.value.override],
+    [objectFrontendStore, state.ref, mode?.id, JSON.stringify(param), modeList.length, data.raw, compState.value.override, config.docState],
   );
 
   if (blockAuthored.message && !blockDraft) return <p className="doc-error doc-object-frontend-line">ObjectFrontend: {blockAuthored.message}</p>;
@@ -114,7 +114,7 @@ export const ObjectFrontendBody = observer(function ObjectFrontendBody({ data = 
 // object as the files say now (getters: it is an observer and re-renders),
 // its assets by key, and the switches of its block. it never reaches the
 // asset store or the document itself
-export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, modeList, param, paramBlock = {}, blockSwitch }) {
+export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, modeList, param, paramBlock = {}, blockSwitch, docState }) {
   const stateGet = () => objectFrontendStore.objectGet(ref);
   return Object.freeze({
     ref,
@@ -125,6 +125,14 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
     param,
     get isWritable() { return objectFrontendStore.writeUnavailableReasonOf(ref) === ''; },
     get writeUnavailableReason() { return objectFrontendStore.writeUnavailableReasonOf(ref); },
+    // whether the mode offers what changes the object now: the object can be written, and the
+    // document is in edit mode. in reading mode a mode shows its object read-only, without its
+    // edit controls (doc_page_impl_obj_frontend.md#reading-and-editing)
+    get isEditable() { return objectFrontendStore.writeUnavailableReasonOf(ref) === '' && docState?.isEditing === true; },
+    // why not ('' when it is): the reason the object cannot be written, else the document's
+    get editUnavailableReason() { return objectFrontendStore.writeUnavailableReasonOf(ref) || (docState?.isEditing ? '' : docState?.editReason ?? 'the document is in reading mode'); },
+    // the state of the document the block is in (config.docState)
+    docState,
     // the structural write in progress (an asset being created or removed)
     get write() { return objectFrontendStore.write; },
     // every read and write of one asset takes an asset reference: a path
@@ -143,7 +151,8 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
     // { status, message, data, asset, assetStatus } of an asset whose text is yaml (or json)
     // (parsed once per text and shared: to be read, not changed)
     assetDataGet: (assetRef) => objectFrontendStore.assetDataGet(ref, assetRef),
-    // a new asset: { key?, kind?, name?, pathList?, lang?, text } or { ..., data } (written as yaml);
+    // a new asset: { key?, kind?, name?, pathList?, lang?, text } or { ..., data } (written as yaml),
+    // placed in { partition?, groupPath? } (inside the partition; absent: the folder of its kind);
     // { code, data: { key, itemId } }. a path another asset has is refused
     assetCreate: (input) => objectFrontendStore.assetCreate(stateGet().id, {
       key: input.key,
@@ -154,7 +163,19 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
       text: input.text ?? yamlStringify(input.data ?? {}),
       note: input.note,
       groupPath: input.groupPath,
+      partition: input.partition,
     }),
+    // the folders the object splits its items into ({ id, label, description, isGitIgnored, isDefault,
+    // isDeclared, isPresent, assetCount }): what a mode creating something offers and names; with one,
+    // nothing is asked (doc_page_impl_obj_frontend.md#partitions). an asset made without a partition
+    // goes to the default one
+    get partitionList() { return stateGet().partitionList; },
+    get partitionDefault() { return stateGet().partitionList.find((one) => one.isDefault); },
+    // { code, message }: a partition made (its folder and an empty list), renamed (its folder moved
+    // with what it holds), deleted (its assets off their lists and deleted softly)
+    partitionCreate: (partition) => objectFrontendStore.partitionCreate(stateGet().id, partition),
+    partitionRename: (partitionFrom, partitionTo) => objectFrontendStore.partitionRename(stateGet().id, partitionFrom, partitionTo),
+    partitionDelete: (partition) => objectFrontendStore.partitionDelete(stateGet().id, partition),
     // the assets its type holds, and where one lies on disk, which nothing else depends on:
     // its folder inside the object's folder ('' the top), or a whole folder renamed
     get assetKindList() { return objectFrontendStore.assetKindListGet(ref); },

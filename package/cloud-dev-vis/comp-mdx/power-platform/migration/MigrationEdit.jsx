@@ -8,7 +8,8 @@ import { DiagramERView } from '../../card-diagram/CardDiagram.jsx';
 import { CardStandaloneView } from '../../card-diagram/CardStandalone.jsx';
 import { DiagramVisualEdit } from '../../card-diagram/DiagramVisualEdit.jsx';
 import { MigrationLoading, useMigrationModel } from './MigrationExplorer.jsx';
-import { MIGRATION_KIND_LIST, migrationCategoryOf } from './MigrationData.js';
+import { MIGRATION_KIND_LIST, migrationCategoryOf, migrationPartitionOf } from './MigrationData.js';
+import { objectFrontendPartitionPlaceText } from '../../../../../main/frontend/src/lib/doc-object-frontend.js';
 import { migrationDbListOf, migrationEditAdapterByKind, migrationItemNewBuild, migrationItemOf } from './MigrationEditData.js';
 import './Migration.css';
 
@@ -106,9 +107,9 @@ async function resultCheck(promise) {
 }
 
 // the writes of a draft, in an order leaving nothing half done: what is new first, the
-// lists naming it next, what left last
-async function writesRun(service, { createList = [], writeList = [], removeList = [] }) {
-	for (const item of createList) await resultCheck(service.assetCreate(item));
+// lists naming it next, what left last. what is new goes to the partition of its category
+async function writesRun(service, { createList = [], writeList = [], removeList = [] }, partition) {
+	for (const item of createList) await resultCheck(service.assetCreate({ ...item, ...(partition ? { partition } : {}) }));
 	for (const item of writeList) await resultCheck(service.assetWrite(item.ref, item.data, item.note));
 	for (const ref of removeList) await resultCheck(service.assetRemove(ref));
 }
@@ -129,7 +130,7 @@ const MigrationEditView = observer(function MigrationEditView({ store, service, 
 		else if (eventType === 'editSubmitRequest') {
 			void store.save(async () => {
 				if (!payload.isDirty) return;
-				await writesRun(service, adapter.writesBuild(payload.raw, item, model));
+				await writesRun(service, adapter.writesBuild(payload.raw, item, model), migrationPartitionOf(service.assetList(), model.category));
 			});
 		}
 		return Promise.resolve({ code: 0 });
@@ -155,9 +156,12 @@ const MigrationNewForm = observer(function MigrationNewForm({ store, service, ki
 	const map = isTable ? model.tableByKey : model.choiceByKey;
 	const listOf = (dbId) => [...map.values()].filter((item) => item.db === dbId);
 	const { source, target } = model.system;
+	// where the new item goes: the partition of its category, said beside the button
+	const partitionId = migrationPartitionOf(service.assetList(), model.category);
+	const partition = (service.partitionList ?? []).find((one) => one.id === partitionId);
 	const create = () => store.formCreate(async () => {
 		const item = migrationItemNewBuild(kind, model, { db: source.id, ...form });
-		await resultCheck(service.assetCreate(item));
+		await resultCheck(service.assetCreate({ ...item, ...(partitionId ? { partition: partitionId } : {}) }));
 		return item.pathList[0];
 	});
 	return (
@@ -179,6 +183,7 @@ const MigrationNewForm = observer(function MigrationNewForm({ store, service, ki
 				</select>
 			</>}
 			<button type="button" className="doc-button" onClick={create}>Create</button>
+			<span className="doc-migration-new-place">goes to {objectFrontendPartitionPlaceText(partition)}</span>
 			{store.formMessage ? <span className="doc-migration-new-message" role="alert">{store.formMessage}</span> : null}
 		</div>
 	);
@@ -204,20 +209,22 @@ function migrationItemEditCreate(kind, name, isCreateOffered = true) {
 			<div className="doc-migration-edit not-prose">
 				<div className="doc-migration-edit-head">
 					<ObjectFrontendAssetPathInput object={service.ref} value={path} kindList={[kind]} base={`/${category}/`} isMissingWarned onChoose={(pathChosen) => store.itemRefSet(typeof pathChosen === 'string' ? pathChosen : pathChosen?.path ?? '')} />
-					{item ? (
-						<button type="button" className={`doc-button${store.isEditing ? ' is-room-kept' : ''}`} disabled={!service.isWritable} title={service.isWritable ? 'Edit this item' : service.writeUnavailableReason} onClick={store.editStart}>
+					{/* the controls that change data show while the document is edited (react-doc:
+					    main/doc_page_impl_obj_frontend.md#reading-and-editing) */}
+					{item && service.docState?.isEditing ? (
+						<button type="button" className={`doc-button${store.isEditing ? ' is-room-kept' : ''}`} disabled={!service.isEditable} title={service.isEditable ? 'Edit this item' : service.editUnavailableReason} onClick={store.editStart}>
 							<Pencil size={12} aria-hidden="true" /><span>Edit</span>
 						</button>
 					) : null}
-					{isCreateOffered ? (
-						<button type="button" className={`doc-button${store.isEditing ? ' is-room-kept' : ''}`} disabled={!service.isWritable} aria-expanded={store.isFormOpen} onClick={store.formToggle}>
+					{isCreateOffered && service.docState?.isEditing ? (
+						<button type="button" className={`doc-button${store.isEditing ? ' is-room-kept' : ''}`} disabled={!service.isEditable} title={service.isEditable ? 'A new item' : service.editUnavailableReason} aria-expanded={store.isFormOpen} onClick={store.formToggle}>
 							<Plus size={12} aria-hidden="true" /><span>New</span>
 						</button>
 					) : null}
 					{/* the bar of the editor stands over this line, so entering moves nothing */}
 					<div ref={store.floatElementSet} className="doc-migration-edit-float" />
 				</div>
-				{store.isFormOpen ? <MigrationNewForm store={store} service={service} kind={kind} model={model} /> : null}
+				{store.isFormOpen && service.docState?.isEditing ? <MigrationNewForm store={store} service={service} kind={kind} model={model} /> : null}
 				{item ? <MigrationEditView key={item.key} store={store} service={service} kind={kind} item={item} model={model} adapter={adapter} />
 					: <p className="doc-note">{store.itemRef ? `There is no ${kind} at ${store.itemRef}.` : `There is no ${kind} under /${category} yet.`}</p>}
 			</div>
@@ -256,7 +263,7 @@ export const MigrationItemList = observer(function MigrationItemList({ data = {}
 											<span className="doc-migration-list-name">{asset.name || asset.key}</span>
 											<span className="doc-migration-list-path">{asset.pathList?.[0]}</span>
 											<span className={`doc-migration-list-state${asset.status === 'found' ? '' : ' is-problem'}`}>{asset.status === 'found' ? '' : asset.status}</span>
-											<button type="button" className="doc-button-icon" title={service.isWritable ? 'Remove this item' : service.writeUnavailableReason} aria-label={`Remove ${asset.key}`} disabled={!service.isWritable} onClick={() => void service.assetRemove(asset.key)}><Trash2 size={12} aria-hidden="true" /></button>
+											{service.docState?.isEditing ? <button type="button" className="doc-button-icon" title={service.isEditable ? 'Remove this item' : service.editUnavailableReason} aria-label={`Remove ${asset.key}`} disabled={!service.isEditable} onClick={() => void service.assetRemove(asset.key)}><Trash2 size={12} aria-hidden="true" /></button> : null}
 										</li>
 									))}
 								</ul>

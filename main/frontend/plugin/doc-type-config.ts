@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readYaml } from './doc-entry.ts';
 import {
-  OBJECT_FRONTEND_MODE_ID_REGEX, OBJECT_FRONTEND_TYPE_ID_REGEX, OBJECT_FRONTEND_TYPE_PREFIX_RESERVED_LIST, OBJECT_FRONTEND_TYPE_ROOT,
+  OBJECT_FRONTEND_MODE_ID_REGEX, OBJECT_FRONTEND_PARTITION_REGEX, OBJECT_FRONTEND_TYPE_ID_REGEX, OBJECT_FRONTEND_TYPE_PREFIX_RESERVED_LIST, OBJECT_FRONTEND_TYPE_ROOT,
 } from '../src/lib/doc-object-frontend.js';
 
 // The types declared in yaml (design: doc_page_impl_type.md#declaring-a-type): what doc pages,
@@ -26,6 +26,8 @@ import {
 //       summaryKeyList: [isDone]             what the summary of an object of it promises
 //       modeList: [{ id, label, comp, ... }]       below frontend.object: the components drawing it
 //       assetKindList: [{ id, label, ... }]        below frontend.object: what it accepts
+//       partitionList: [{ id, label, ... }]        below frontend.object: the folders its items are split
+//                                                  into, some kept out of git (doc_page_impl_obj_frontend.md#partitions)
 //
 // every problem is reported with the file and skips the item, never the page. the same
 // declaration twice is one type (objects carry theirs); a different one is a problem, and the
@@ -33,9 +35,10 @@ import {
 
 export const TYPE_CONFIG_FILE_NAME = 'type.yaml';
 const TOP_KEY_LIST = ['typeList'];
-const TYPE_KEY_LIST = ['id', 'kind', 'label', 'description', 'icon', 'extendList', 'summaryKeyList', 'modeList', 'assetKindList'];
+const TYPE_KEY_LIST = ['id', 'kind', 'label', 'description', 'icon', 'extendList', 'summaryKeyList', 'modeList', 'assetKindList', 'partitionList'];
 const MODE_KEY_LIST = ['id', 'label', 'description', 'category', 'comp', 'param', 'isDefault'];
 const ASSET_KIND_KEY_LIST = ['id', 'label', 'langList', 'pathPrefix', 'groupPath', 'isIncomingRefused'];
+const PARTITION_KEY_LIST = ['id', 'label', 'description', 'isGitIgnored', 'isDefault'];
 
 export type TypeSection = undefined | false | { file: string } | { typeList: unknown } | ({ file: string } | { typeList: unknown })[];
 
@@ -60,6 +63,10 @@ export type TypeAssetKind = {
   isIncomingRefused?: boolean;
 };
 
+// a partition: a folder of the item folder of an object, holding its items and their item list;
+// isGitIgnored: kept out of git, its data the checkout's own (real data, what is tried out)
+export type TypePartition = { id: string; label: string; description: string; isGitIgnored: boolean; isDefault: boolean };
+
 export type TypeDeclared = {
   id: string;
   kind: 'object' | 'relation';
@@ -70,6 +77,7 @@ export type TypeDeclared = {
   summaryKeyList: string[];
   modeList?: TypeMode[];
   assetKindList?: TypeAssetKind[];
+  partitionList?: TypePartition[];
   definedBy: { kind: 'docPage'; alias: string; file: string } | { kind: 'package'; name: string; file: string };
 };
 
@@ -198,7 +206,7 @@ function typeRead(item: any, place: string, problem: (message: string) => void):
     return undefined;
   }
   const kind = item.kind === 'relation' ? 'relation' : 'object';
-  const isOfFrontend = item.modeList !== undefined || item.assetKindList !== undefined;
+  const isOfFrontend = item.modeList !== undefined || item.assetKindList !== undefined || item.partitionList !== undefined;
   const extendDefault = kind === 'relation' ? 'core.relation' : (isOfFrontend ? OBJECT_FRONTEND_TYPE_ROOT : 'core.object');
   return {
     id,
@@ -210,7 +218,40 @@ function typeRead(item: any, place: string, problem: (message: string) => void):
     summaryKeyList: Array.isArray(item.summaryKeyList) ? item.summaryKeyList.map(String) : [],
     ...(item.modeList === undefined ? {} : { modeList: modeListRead(item.modeList, `${place}.modeList`, problem) }),
     ...(item.assetKindList === undefined ? {} : { assetKindList: assetKindListRead(item.assetKindList, `${place}.assetKindList`, problem) }),
+    ...(item.partitionList === undefined ? {} : { partitionList: partitionListRead(item.partitionList, `${place}.partitionList`, problem) }),
   };
+}
+
+// the partitions of a type: each a folder name of ASCII (doc_page_impl_dir.md#folder-names-of-assets)
+function partitionListRead(value: unknown, place: string, problem: (message: string) => void): TypePartition[] {
+  if (!Array.isArray(value)) {
+    problem(`${place}: a list of partitions { id, label, description, isGitIgnored, isDefault }`);
+    return [];
+  }
+  const partitionList: TypePartition[] = [];
+  value.forEach((item: any, index: number) => {
+    const placeOne = `${place}[${index}]`;
+    if (!mappingIs(item) || typeof item.id !== 'string' || !OBJECT_FRONTEND_PARTITION_REGEX.test(item.id)) {
+      problem(`${placeOne}: a partition is a mapping whose "id" is its folder: letters, digits, "_", "-" and "."`);
+      return;
+    }
+    for (const key of Object.keys(item)) {
+      if (!PARTITION_KEY_LIST.includes(key)) problem(`${placeOne}: unknown key "${key}" (known: ${PARTITION_KEY_LIST.join(', ')})`);
+    }
+    if (partitionList.some((one) => one.id === item.id)) {
+      problem(`${placeOne}: the partition ${item.id} is declared twice; this one is left out`);
+      return;
+    }
+    partitionList.push({
+      id: item.id,
+      label: typeof item.label === 'string' && item.label ? item.label : item.id,
+      description: typeof item.description === 'string' ? item.description : '',
+      isGitIgnored: item.isGitIgnored === true,
+      isDefault: item.isDefault === true,
+    });
+  });
+  if (partitionList.filter((one) => one.isDefault).length > 1) problem(`${place}: one partition is the default (isDefault); the first is used`);
+  return partitionList;
 }
 
 function modeListRead(value: unknown, place: string, problem: (message: string) => void): TypeMode[] {
@@ -297,10 +338,11 @@ export function typeDeclaredIsFrontend(typeList: { id: string; extendList: strin
 // modes and kinds of assets mean something for a frontend object only
 function frontendKeyListCheck(config: TypeDeclaredConfig) {
   for (const type of config.typeList) {
-    if ((type.modeList === undefined && type.assetKindList === undefined) || typeDeclaredIsFrontend(config.typeList, type.id)) continue;
+    if ((type.modeList === undefined && type.assetKindList === undefined && type.partitionList === undefined) || typeDeclaredIsFrontend(config.typeList, type.id)) continue;
     const owner = type.definedBy.kind === 'package' ? type.definedBy.name : type.definedBy.alias;
     config.problemList.push({ alias: owner, file: type.definedBy.file, message: `the type ${type.id} has modes or kinds of assets, which are for types below ${OBJECT_FRONTEND_TYPE_ROOT}; they are left out` });
     delete type.modeList;
     delete type.assetKindList;
+    delete type.partitionList;
   }
 }

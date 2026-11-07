@@ -42,9 +42,10 @@ export const ObjectFrontendSettings = observer(function ObjectFrontendSettings()
   return (
     <div className="doc-settings-tab not-prose">
       <p className="doc-note">
-        Objects the page keeps itself, in assets of the asset store: each has an entry asset (its name, type, assets and metadata)
-        and assets of its own, all in a folder of its own, .doc-page/object-frontend/{'{id}--{name}'}, which can be copied to another
-        doc page. Types are declared in type.yaml of the doc page, of an object folder, or of a package.
+        Objects the page keeps itself, in assets of the asset store: each has an entry asset (its name, type and metadata)
+        and assets of its own, recorded in item-list.yaml files among them, all in a folder of its own,
+        .doc-page/object-frontend/{'{id}--{name}'}, which can be copied to another doc page. Types are declared in type.yaml of
+        the doc page, of an object folder, or of a package.
       </p>
 
       <h3>New object</h3>
@@ -221,6 +222,45 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
         <span>{modeList.map((mode) => `${mode.label} (${mode.category}${mode.isDefault ? ', default' : ''})`).join(' · ') || '—'}</span>
       </div>
       {state.status !== 'found' ? <p className="doc-error">{state.message}</p> : null}
+
+      <h4>Partitions ({state.partitionList.length})</h4>
+      {state.partitionList.length === 0 ? (
+        <p className="doc-note">
+          Its type declares no partition, so its assets lie anywhere in its item folder. Declaring at least one is recommended
+          (partitionList of the type): what is created goes there, and data kept out of git gets a folder of its own.
+        </p>
+      ) : (
+        <div className="doc-asset-table-scroll">
+          <table className="doc-asset-table">
+            <thead><tr><th>partition</th><th>label</th><th>git</th><th className="doc-asset-version-size">assets</th><th aria-label="actions" /></tr></thead>
+            <tbody>
+              {state.partitionList.map((partition) => {
+                const confirmKey = `partitionDelete:${partition.id}`;
+                return (
+                  <tr key={partition.id}>
+                    <td>item/{partition.id}/{partition.isDefault ? <span className="doc-asset-muted"> (default)</span> : null}</td>
+                    <td>{partition.label}{partition.isDeclared ? '' : <span className="doc-settings-tab-issue"> not declared by its type</span>}</td>
+                    <td className="doc-asset-muted">{partition.isGitIgnored ? 'kept out' : 'tracked'}</td>
+                    <td className="doc-asset-muted doc-asset-version-size">{partition.isPresent ? partition.assetCount : '—'}</td>
+                    <td className="doc-settings-tab-actions">
+                      {!isWritable ? null : !partition.isPresent ? (
+                        <button type="button" className="doc-button" disabled={isWriting} title="make its folder, with an empty item list" onClick={() => void store.partitionCreate(id, partition.id)}>Create</button>
+                      ) : confirm === confirmKey ? (
+                        <>
+                          <button type="button" className="doc-button" data-danger="" disabled={isWriting} title="its assets off their lists and deleted softly (their files stay), then its folder when empty" onClick={() => void store.partitionDelete(id, partition.id).then(() => store.settingsConfirmSet(''))}>Delete {partition.assetCount} asset(s)</button>
+                          <button type="button" className="doc-button" onClick={() => store.settingsConfirmSet('')}>Cancel</button>
+                        </>
+                      ) : (
+                        <button type="button" className="doc-button" disabled={isWriting} onClick={() => store.settingsConfirmSet(confirmKey)}>Delete</button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <h4>Assets ({state.assetList.length})</h4>
       {state.assetList.length > 0 ? (

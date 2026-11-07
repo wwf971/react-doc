@@ -1,28 +1,12 @@
-# the frontend objects of object-frontend.md (doc_page_impl_obj_frontend.md#the-folder-of-an-object): each folder
-# here is one object. everything new is ignored, as in .doc-page/asset/: only the files listed below are
-# part of the example; what trying the page writes (new objects, new assets, backups) stays out.
+# the frontend objects of object-frontend.md (main/doc_page_impl_dir.md#local-content-kept-out-of-git):
+# the two objects of the demonstration are tracked, their partition example/ with them; what trying
+# the page writes stays out: their partition playground/ (its items and its item list together),
+# any object created from the page, and the backups of what the store rewrites.
 
-*
-!*/
+/*/
+!/w5j7ozoijzl--Reading list/
+!/w5j7pn0lh5o--Short list/
 
-!/w5j7ozoijzl--Reading list/object.yaml
-!/w5j7ozoijzl--Reading list/item/book/w5j7pmxa7fw/item.yaml
-!/w5j7ozoijzl--Reading list/item/book/w5j7pmxa7fw/w5j7pmxbx1o.yaml
-!/w5j7ozoijzl--Reading list/item/book/w5j7pmy0gul/item.yaml
-!/w5j7ozoijzl--Reading list/item/book/w5j7pmy0gul/w5j7pmy13gw.yaml
-!/w5j7ozoijzl--Reading list/item/book/w5j7pmym0fx/item.yaml
-!/w5j7ozoijzl--Reading list/item/book/w5j7pmym0fx/w5j7pmylhmt.yaml
-!/w5j7ozoijzl--Reading list/item/book/w5j7pmz5o32/item.yaml
-!/w5j7ozoijzl--Reading list/item/book/w5j7pmz5o32/w5j7pmz69r9.yaml
-!/w5j7ozoijzl--Reading list/item/note/w5j7pmznvdq/item.yaml
-!/w5j7ozoijzl--Reading list/item/note/w5j7pmznvdq/w5j7pmzol69.yaml
-!/w5j7ozoijzl--Reading list/item/note/w5j7pn05cwa/item.yaml
-!/w5j7ozoijzl--Reading list/item/note/w5j7pn05cwa/w5j7pn04r71.yaml
-!/w5j7ozoijzl--Reading list/item/w5j7ozokr1x/item.yaml
-!/w5j7ozoijzl--Reading list/item/w5j7ozokr1x/w5j7ozomfuf.yaml
-
-!/w5j7pn0lh5o--Short list/object.yaml
-!/w5j7pn0lh5o--Short list/item/book/w5j7pn121sr/item.yaml
-!/w5j7pn0lh5o--Short list/item/book/w5j7pn121sr/w5j7pn1320z.yaml
-!/w5j7pn0lh5o--Short list/item/w5j7pn0m41l/item.yaml
-!/w5j7pn0lh5o--Short list/item/w5j7pn0m41l/w5j7pn0lmnu.yaml
+*/item/playground/
+*.bak
+*.tmp

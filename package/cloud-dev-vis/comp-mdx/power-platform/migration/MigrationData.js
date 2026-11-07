@@ -49,6 +49,16 @@ export function migrationCategoryOf(path) {
 	return String(path ?? '').split('/').filter(Boolean)[0] ?? '';
 }
 
+// the partition what is made in a category goes to: the one its items lie in, since what is made
+// next to existing items joins their folder (react-doc: main/doc_page_impl_obj_frontend.md#partitions).
+// a category and a partition are two things: the category is the first folder of a path, the
+// partition a folder on disk; the illustration's /real items lie in the partition example.
+// undefined: none (the object is not split, or the category has no item yet)
+export function migrationPartitionOf(assetList, category) {
+	const asset = (assetList ?? []).find((one) => one.partition && migrationCategoryOf(one.pathList?.[0]) === category);
+	return asset?.partition || undefined;
+}
+
 // the items of a category, from an object's asset list: an item belongs to the first
 // folder of its first path. itemList: [{ key, kind, path, data }]
 export function migrationModelBuild(category, itemList) {

@@ -223,8 +223,8 @@ test('a doc page is one thing however often it is reached: the root-level alias 
     ['doc-page-guide', 'guide', 'guide', 1], ['doc-page-extra', 'extra', 'extra', 1],
   ]);
   assert.deepEqual(loaded.sidePanel.tree.map((node) => node.docPageSection), [
-    { alias: 'guide', title: 'Guide', isTemporary: false, packageName: '', isFirst: true },
-    { alias: 'extra', title: loaded.workspace.docPageList[1].title, isTemporary: false, packageName: '', isFirst: false },
+    { alias: 'guide', title: 'Guide', isTemporary: false, packageName: '', isReadOnly: false, isFirst: true },
+    { alias: 'extra', title: loaded.workspace.docPageList[1].title, isTemporary: false, packageName: '', isReadOnly: false, isFirst: false },
   ]);
   assert.equal(loaded.sidePanel.tree[0].children[0].doc, '~guide:guide/a.md');
   assert.equal(loaded.sidePanel.tree[1].children[0].doc, '~extra:sub/b.md');

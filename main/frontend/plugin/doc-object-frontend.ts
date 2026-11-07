@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseDocument, stringify as yamlStringify } from 'yaml';
@@ -7,14 +8,15 @@ import { idMs48Create, idMs48Is } from './id-ms48.ts';
 import { lineOperationListApply } from './doc-edit-lines.ts';
 import { yamlSeqItemInsertBuild, yamlSeqItemRemoveBuild } from './doc-yaml-edit.ts';
 import {
-  AssetError, fileWriteSafe, groupPathNormalize, itemDirNameBuild, itemIdFromDirName, nameNormalize,
+  ASSET_GROUP_DEPTH_MAX, ASSET_ITEM_META_NAME, AssetError, fileWriteSafe, groupPathNormalize, itemDirNameBuild, itemIdFromDirName, nameNormalize,
   type AssetItemMeta, type AssetOwner, type AssetStore,
 } from './doc-asset-store.ts';
 import {
-  OBJECT_FRONTEND_CONFIG_FILE_NAME, OBJECT_FRONTEND_FOLDER_NAME, OBJECT_FRONTEND_ITEM_FOLDER_NAME, OBJECT_FRONTEND_KEY_REGEX, OBJECT_FRONTEND_META_NAME, OBJECT_FRONTEND_ROLE_ENTRY,
-  OBJECT_FRONTEND_TYPE_ROOT,
-  objectFrontendAssetAcceptCheck, objectFrontendAssetKeyFree, objectFrontendAssetKindListResolve, objectFrontendAssetPathNormalize, objectFrontendEntryParse, objectFrontendEntryTextBuild,
-  objectFrontendRefBuild,
+  OBJECT_FRONTEND_CONFIG_FILE_NAME, OBJECT_FRONTEND_FOLDER_NAME, OBJECT_FRONTEND_ITEM_FOLDER_NAME, OBJECT_FRONTEND_KEY_REGEX, OBJECT_FRONTEND_LIST_NAME, OBJECT_FRONTEND_META_NAME,
+  OBJECT_FRONTEND_PARTITION_REGEX, OBJECT_FRONTEND_ROLE_ENTRY, OBJECT_FRONTEND_TYPE_ROOT,
+  objectFrontendAssetAcceptCheck, objectFrontendAssetKeyFree, objectFrontendAssetKindListResolve, objectFrontendAssetListMerge, objectFrontendAssetPathNormalize,
+  objectFrontendEntryParse, objectFrontendEntryTextBuild, objectFrontendListCovers, objectFrontendListGroupPathGet, objectFrontendListParse, objectFrontendListTextBuild, objectFrontendRefBuild,
+  objectFrontendPartitionGroupPathBuild, objectFrontendPartitionListResolve,
 } from '../src/lib/doc-object-frontend.js';
 
 // The frontend object service layer on the development server (design:
@@ -42,20 +44,27 @@ import {
 //     item/                            its asset items: a folder of the asset store owned by the
 //                                      object, the entry among them, at any depth in folders of its own;
 //                                      each declares the object in its owner
+//       item-list.yaml                 the item lists: in item/ or a folder inside it, each listing the
+//       {folder}/item-list.yaml          assets lying there and below (an object without a folder of its
+//                                      own lists them in its entry, assetList)
 //
-// the list of its assets in the entry (assetList) says what belongs to an object: not the
-// folder, not the owner of an item. every write here keeps the three in agreement, and what
-// disagrees because somebody worked on the files is reported by the page, never repaired
-// unasked (doc_page_impl_obj_frontend.md#how-an-asset-comes-to-belong).
+// the lists say what belongs to an object: not the folder, not the owner of an item. every write
+// here keeps the three in agreement, a record in the list nearest to its item, and what disagrees
+// because somebody worked on the files is reported by the page, never repaired unasked
+// (doc_page_impl_obj_frontend.md#how-an-asset-comes-to-belong).
 //
-// the yaml files are written in place (doc-yaml-edit.ts), with a .bak beside them.
+// the yaml files of the doc page and object.yaml are written in place (doc-yaml-edit.ts), with a
+// .bak beside them; an item list is data the layer keeps, written whole.
 //
 // every problem of a file is reported with the file ([doc-object-frontend])
 // and skips the item, never the page.
 
 // one object a doc page declares; dir: its folder relative to the config
-// directory ('' when it is listed in objectList)
-export type ObjectFrontendDecl = { id: string; entry: string; docPageAlias: string; dir: string };
+// directory ('' when it is listed in objectList); listList: its item lists, as read
+export type ObjectFrontendDecl = { id: string; entry: string; docPageAlias: string; dir: string; listList: ObjectFrontendList[] };
+
+// an item list: where it lies in the item folder ('' its top), its records, what could not be read
+export type ObjectFrontendList = { groupPath: string; assetList: any[]; problemList: string[] };
 
 export type ObjectFrontendDocPage = {
   // a package treated as a doc page: its objects are read, never written
@@ -160,7 +169,9 @@ export function objectFrontendConfigOfDocPageListGet(
           docPage.objectIdDeletedList.push(meta.id);
           continue;
         }
-        docPage.objectList.push({ id: meta.id, entry: meta.entry, docPageAlias: docPage.alias, dir: pathRelativeGet(meta.dirAbs, configDir) });
+        const listList = objectListListRead(path.join(meta.dirAbs, OBJECT_FRONTEND_ITEM_FOLDER_NAME));
+        for (const list of listList) pathList.push(listFileGet(path.join(meta.dirAbs, OBJECT_FRONTEND_ITEM_FOLDER_NAME), list.groupPath));
+        docPage.objectList.push({ id: meta.id, entry: meta.entry, docPageAlias: docPage.alias, dir: pathRelativeGet(meta.dirAbs, configDir), listList });
       }
     }
   }
@@ -242,6 +253,33 @@ function objectDirListRead(folder: string, docPage: ObjectFrontendDocPage) {
   return result;
 }
 
+// the item lists of an item folder: item-list.yaml in it and in the folders inside it that are
+// not items (an item is a folder holding item.yaml), as deep as the store reads groups
+export function objectListListRead(itemDirAbs: string): ObjectFrontendList[] {
+  const listList: ObjectFrontendList[] = [];
+  const visit = (groupPath: string, depth: number) => {
+    const dirAbs = path.join(itemDirAbs, ...groupPath.split('/').filter(Boolean));
+    if (!fs.existsSync(dirAbs)) return;
+    const file = path.join(dirAbs, OBJECT_FRONTEND_LIST_NAME);
+    if (fs.existsSync(file)) {
+      const { assetList, problemList } = objectFrontendListParse(fs.readFileSync(file, 'utf-8'), groupPath);
+      listList.push({ groupPath, assetList, problemList });
+    }
+    if (depth >= ASSET_GROUP_DEPTH_MAX) return;
+    for (const one of fs.readdirSync(dirAbs, { withFileTypes: true })) {
+      if (!one.isDirectory() || one.name.startsWith('.')) continue;
+      if (fs.existsSync(path.join(dirAbs, one.name, ASSET_ITEM_META_NAME))) continue;
+      visit(groupPath ? `${groupPath}/${one.name}` : one.name, depth + 1);
+    }
+  };
+  visit('', 0);
+  return listList;
+}
+
+function listFileGet(itemDirAbs: string, groupPath: string): string {
+  return path.join(itemDirAbs, ...groupPath.split('/').filter(Boolean), OBJECT_FRONTEND_LIST_NAME);
+}
+
 // what the asset store reads for a doc page: the item folder of each object it holds,
 // deleted ones too, whose items stay findable until a person removes the files
 export function objectFrontendFolderOwnedListGet(input: ObjectFrontendDocPageInput): { pathAbs: string; owner: AssetOwner }[] {
@@ -293,7 +331,7 @@ function objectListRead(value: unknown, docPage: ObjectFrontendDocPage, objectId
       return;
     }
     objectIdSet.add(id);
-    objectList.push({ id, entry, docPageAlias: docPage.alias, dir: '' });
+    objectList.push({ id, entry, docPageAlias: docPage.alias, dir: '', listList: [] });
   });
   return objectList;
 }
@@ -459,26 +497,29 @@ function assetAcceptRequire(context: WriteContext, entry: any, input: { kind?: u
 }
 
 // a new asset of an object: created in its item folder (at groupPath, or the folder of its
-// kind), declaring the object, then listed in the entry under a key unique in the object
+// kind), declaring the object, then recorded under a key unique in the object, in the list
+// nearest to where it lies
 export function objectFrontendAssetCreate(
   context: WriteContext,
   input: {
     id: string; key?: string; kind?: string; name?: string; pathList?: unknown; lang?: string; text: string; note?: string;
-    saveMode?: 'inPlace' | 'newVersion'; groupPath?: string;
+    saveMode?: 'inPlace' | 'newVersion'; groupPath?: string; partition?: string;
   },
 ): ObjectFrontendWriteResult & { key: string; itemId: string } {
   const { store } = context;
   const decl = declGet(context.config, input.id);
-  const { meta, entry, hash } = entryRead(store, decl);
+  const listing = listingRead(context, decl);
+  const { meta, entry } = listing;
   const lang = String(input.lang ?? 'yaml');
   const { kind, kindDeclared } = assetAcceptRequire(context, entry, { kind: input.kind, lang, pathList: input.pathList });
   if (input.key !== undefined && input.key !== '' && !OBJECT_FRONTEND_KEY_REGEX.test(input.key)) {
     throw new AssetError(-1, 'a key is letters, digits, "_", "-" and "."');
   }
-  const key = objectFrontendAssetKeyFree(entry, input.key ?? '', kind);
+  const key = objectFrontendAssetKeyFree(listing, input.key ?? '', kind);
   if (!key) throw new AssetError(-1, `the object has an asset of the key ${input.key} already`);
-  const naming = assetNamingRead(entry, '', input);
-  const place = itemPlaceOfObjectGet(store, decl, meta, entry, input.groupPath ?? kindDeclared?.groupPath);
+  const naming = assetNamingRead(listing.assetList, '', input);
+  const groupPath = partitionPlaceRequire(context, listing, input.partition, input.groupPath ?? kindDeclared?.groupPath);
+  const place = itemPlaceOfObjectGet(store, decl, meta, entry, groupPath);
   const { item } = store.itemCreate({
     lang,
     data: Buffer.from(String(input.text ?? ''), 'utf-8'),
@@ -489,9 +530,9 @@ export function objectFrontendAssetCreate(
     saveMode: input.saveMode,
     asLayer: OBJECT_FRONTEND_LAYER,
   });
-  const entryNext = { ...entry, assetList: [...entry.assetList, { key, kind, itemId: item.itemId, ...naming }] };
+  const record = { key, kind, itemId: item.itemId, ...naming, listGroupPath: listGroupPathFor(listing, place.groupPath) };
   try {
-    store.itemUpdate({ itemId: meta.itemId, hashBase: hash, data: Buffer.from(objectFrontendEntryTextBuild(entryNext), 'utf-8'), mode: 'inPlace' });
+    listingWrite(store, listing, [...listing.assetList, record]);
   } catch (error) {
     store.itemDelete(item.itemId);
     throw error;
@@ -500,24 +541,22 @@ export function objectFrontendAssetCreate(
 }
 
 // an asset taken out of an object, or an item of its folder sent away (named by itemId: it is
-// not listed): out of the entry's list, then deleted (softly), or, with isAssetKept, released
-// (its owner removed, its folder moved to folder and groupPath, by default the top of the
-// default asset folder of the doc page). what declares another object is only moved out
+// not listed): off its list, then deleted (softly), or, with isAssetKept, released (its owner
+// removed, its folder moved to folder and groupPath, by default the top of the default asset
+// folder of the doc page). what declares another object is only moved out
 export function objectFrontendAssetRemove(
   context: WriteContext,
   input: { id: string; key?: string; itemId?: string; isAssetKept?: boolean; folder?: string; groupPath?: string },
 ): ObjectFrontendWriteResult {
   const { store } = context;
   const decl = declGet(context.config, input.id);
-  const { meta, entry, hash } = entryRead(store, decl);
-  const asset = entry.assetList.find((one: any) => (input.key ? one.key === input.key : one.itemId === input.itemId));
+  const listing = listingRead(context, decl);
+  const { meta } = listing;
+  const asset = listing.assetList.find((one: any) => (input.key ? one.key === input.key : one.itemId === input.itemId));
   const itemId = asset?.itemId ?? String(input.itemId ?? '');
   if (!asset && !(itemId && idMs48Is(itemId))) throw new AssetError(-3, `the object has no asset ${input.key ?? input.itemId}`);
   if (itemId === meta.itemId) throw new AssetError(-1, 'the entry of an object does not leave it; delete the object');
-  if (asset) {
-    const entryNext = { ...entry, assetList: entry.assetList.filter((one: any) => one !== asset) };
-    store.itemUpdate({ itemId: meta.itemId, hashBase: hash, data: Buffer.from(objectFrontendEntryTextBuild(entryNext), 'utf-8'), mode: 'inPlace' });
-  }
+  if (asset) listingWrite(store, listing, listing.assetList.filter((one: any) => one !== asset));
   const itemList = [store.itemGet(meta.itemId)];
   if (!idMs48Is(itemId)) return writeResultBuild(context, decl.id, itemList);
   let assetMeta: AssetItemMeta;
@@ -549,17 +588,19 @@ export function objectFrontendAssetRemove(
 
 // an item of the store made an asset of an object: what comes in, through the one door. the
 // type says whether it takes it; then the item declares the object, moves into its folder, and
-// is listed in the entry, which is what makes it belong. covers an item coming from elsewhere,
-// a stray (it declares the object, the entry lost it), and an item of unknown source (found in
-// the folder, declaring nothing). an item of another object comes only with isOwnerReplaced
+// is recorded in the list nearest to where it lies, which is what makes it belong. covers an
+// item coming from elsewhere, a stray (it declares the object, the lists lost it), and an item
+// of unknown source (found in the folder, declaring nothing). an item of another object comes
+// only with isOwnerReplaced
 export function objectFrontendAssetAttach(
   context: WriteContext,
-  input: { id: string; itemId: string; key?: string; kind?: string; name?: string; pathList?: unknown; groupPath?: string; isOwnerReplaced?: boolean },
+  input: { id: string; itemId: string; key?: string; kind?: string; name?: string; pathList?: unknown; groupPath?: string; partition?: string; isOwnerReplaced?: boolean },
 ): ObjectFrontendWriteResult {
   const { store } = context;
   const decl = declGet(context.config, input.id);
-  const { meta, entry, hash } = entryRead(store, decl);
-  if (entry.assetList.some((one: any) => one.itemId === input.itemId)) throw new AssetError(-1, 'the item is an asset of the object already');
+  const listing = listingRead(context, decl);
+  const { meta, entry } = listing;
+  if (listing.assetList.some((one: any) => one.itemId === input.itemId)) throw new AssetError(-1, 'the item is an asset of the object already');
   const assetMeta = store.itemGet(String(input.itemId ?? ''));
   const ref = objectFrontendRefBuild(decl.id);
   if (assetMeta.itemId === meta.itemId) throw new AssetError(-1, 'the entry is not one of the assets it lists');
@@ -569,87 +610,172 @@ export function objectFrontendAssetAttach(
   const ownerOther = assetMeta.owner && assetMeta.owner.ref !== ref ? assetMeta.owner.ref : '';
   if (ownerOther && input.isOwnerReplaced !== true) throw new AssetError(-1, `the item belongs to ${ownerOther}: it is taken from there with isOwnerReplaced`);
   const { kind, kindDeclared } = assetAcceptRequire(context, entry, { kind: input.kind, lang: assetMeta.lang, pathList: input.pathList, isIncoming: true });
-  const key = objectFrontendAssetKeyFree(entry, input.key ?? '', kind);
+  const key = objectFrontendAssetKeyFree(listing, input.key ?? '', kind);
   if (!key) throw new AssetError(-1, `the object has an asset of the key ${input.key} already`);
-  const naming = assetNamingRead(entry, '', input);
-  const declOther = ownerOther ? declFind(context.config, ownerOther.slice('frontend:'.length)) : undefined;
-  if (declOther) assetListRemove(store, declOther, assetMeta.itemId);
-  if (assetMeta.owner?.ref !== ref) store.itemMetaSet(assetMeta.itemId, { owner: { ref } });
-  // an item already in the folder keeps its place unless a place is named
+  const naming = assetNamingRead(listing.assetList, '', input);
+  // an item already in the folder keeps its place unless a place is named; the place is checked
+  // before anything is written
   const isInFolder = assetMeta.folderOwner?.ref === ref;
-  if (!isInFolder || input.groupPath !== undefined) {
-    const place = itemPlaceOfObjectGet(store, decl, meta, entry, input.groupPath ?? kindDeclared?.groupPath);
+  const isPlaced = !isInFolder || input.groupPath !== undefined || input.partition !== undefined;
+  const groupPathPlaced = isPlaced ? partitionPlaceRequire(context, listing, input.partition, input.groupPath ?? kindDeclared?.groupPath) : '';
+  const declOther = ownerOther ? declFind(context.config, ownerOther.slice('frontend:'.length)) : undefined;
+  if (declOther) assetListRemove(context, declOther, assetMeta.itemId);
+  if (assetMeta.owner?.ref !== ref) store.itemMetaSet(assetMeta.itemId, { owner: { ref } });
+  let groupPathNow = assetMeta.groupPath;
+  if (isPlaced) {
+    const place = itemPlaceOfObjectGet(store, decl, meta, entry, groupPathPlaced);
     store.itemMove(assetMeta.itemId, { folder: place.folder, groupPath: place.groupPath, asLayer: OBJECT_FRONTEND_LAYER });
+    groupPathNow = place.groupPath;
   }
-  const entryNext = { ...entry, assetList: [...entry.assetList, { key, kind, itemId: assetMeta.itemId, ...naming }] };
-  store.itemUpdate({ itemId: meta.itemId, hashBase: hash, data: Buffer.from(objectFrontendEntryTextBuild(entryNext), 'utf-8'), mode: 'inPlace' });
+  listingWrite(store, listing, [...listing.assetList, { key, kind, itemId: assetMeta.itemId, ...naming, listGroupPath: listGroupPathFor(listing, groupPathNow) }]);
   const itemList = [store.itemGet(assetMeta.itemId), store.itemGet(meta.itemId)];
   if (declOther) itemList.push(store.itemGet(declOther.entry));
   return writeResultBuild(context, decl.id, itemList);
 }
 
-// an item leaves the list of the object that had it
-function assetListRemove(store: AssetStore, decl: ObjectFrontendDecl, itemId: string) {
-  const { meta, entry, hash } = entryRead(store, decl);
-  const entryNext = { ...entry, assetList: entry.assetList.filter((one: any) => one.itemId !== itemId) };
-  store.itemUpdate({ itemId: meta.itemId, hashBase: hash, data: Buffer.from(objectFrontendEntryTextBuild(entryNext), 'utf-8'), mode: 'inPlace' });
+// an item leaves the lists of the object that had it
+function assetListRemove(context: WriteContext, decl: ObjectFrontendDecl, itemId: string) {
+  const listing = listingRead(context, decl);
+  listingWrite(context.store, listing, listing.assetList.filter((one: any) => one.itemId !== itemId));
 }
 
 // where a listed asset lies on disk: the folder of the object, at groupPath ('' its top). it
 // also brings home an asset lying elsewhere, and declares the object when the asset does not.
-// the place on disk says nothing to the object: its key, name and paths do not change
+// its record follows it to the list nearest to its new place; its key, name and paths do not change
 export function objectFrontendAssetMove(context: WriteContext, input: { id: string; key: string; groupPath?: string }): ObjectFrontendWriteResult {
   const { store } = context;
   const decl = declGet(context.config, input.id);
-  const { meta, entry } = entryRead(store, decl);
-  const asset = entry.assetList.find((one: any) => one.key === input.key);
+  const listing = listingRead(context, decl);
+  const { meta, entry } = listing;
+  const asset = listing.assetList.find((one: any) => one.key === input.key);
   if (!asset) throw new AssetError(-3, `the object has no asset ${input.key}`);
   const assetMeta = store.itemGet(asset.itemId);
   const ref = objectFrontendRefBuild(decl.id);
   if (assetMeta.owner && assetMeta.owner.ref !== ref) throw new AssetError(-1, `the item declares ${assetMeta.owner.ref}: remove it from this object, or take it with attach`);
   if (assetMeta.isLocked) throw new AssetError(-1, 'the item is locked: unlock it first');
+  partitionGitIgnoreRequire(context, listing, input.groupPath ?? '');
   if (!assetMeta.owner) store.itemMetaSet(assetMeta.itemId, { owner: { ref } });
   const place = itemPlaceOfObjectGet(store, decl, meta, entry, input.groupPath ?? '');
   const item = store.itemMove(assetMeta.itemId, { folder: place.folder, groupPath: place.groupPath, asLayer: OBJECT_FRONTEND_LAYER });
-  return writeResultBuild(context, decl.id, [item]);
+  const listGroupPath = listGroupPathFor(listing, place.groupPath);
+  if (listGroupPath !== asset.listGroupPath) {
+    listingWrite(store, listing, listing.assetList.map((one: any) => (one === asset ? { ...asset, listGroupPath } : one)));
+  }
+  return writeResultBuild(context, decl.id, [item, store.itemGet(meta.itemId)]);
 }
 
-// a folder inside the item folder of an object renamed or moved, with every asset in it
+// a folder inside the item folder of an object renamed or moved, with every asset in it and the
+// lists it holds; the records of its assets kept in a list above it follow them to the list
+// nearest to their new place
 export function objectFrontendAssetGroupMove(context: WriteContext, input: { id: string; groupFrom: string; groupTo: string }): ObjectFrontendWriteResult {
   const { store } = context;
   const decl = declGet(context.config, input.id);
   const { meta, entry } = entryRead(store, decl);
+  partitionGitIgnoreRequire(context, listingRead(context, decl), input.groupTo);
   const placeFrom = itemPlaceOfObjectGet(store, decl, meta, entry, input.groupFrom);
   const placeTo = itemPlaceOfObjectGet(store, decl, meta, entry, input.groupTo);
   store.groupMove(placeFrom.folder, placeFrom.groupPath, placeTo.groupPath, { asLayer: OBJECT_FRONTEND_LAYER });
   const storeNow = context.storeGet?.() ?? store;
   const ref = objectFrontendRefBuild(decl.id);
+  const listing = listingRead({ ...context, store: storeNow }, decl);
+  if (listing.itemDirAbs) {
+    const assetListNext = listing.assetList.map((one: any) => {
+      const item = storeNow.itemList().find((itemOne) => itemOne.itemId === one.itemId);
+      const isMoved = item?.folderOwner?.ref === ref && objectFrontendListCovers(placeTo.groupPath, item.groupPath);
+      return isMoved ? { ...one, listGroupPath: listGroupPathFor(listing, item!.groupPath) } : one;
+    });
+    listingWrite(storeNow, listing, assetListNext);
+  }
   return writeResultBuild(context, decl.id, storeNow.itemList().filter((one) => one.owner?.ref === ref || one.folderOwner?.ref === ref));
 }
 
-// how an asset of an object is named and indexed, in its entry: its name,
-// its paths (replaced whole; [] removes them), its kind. a path another
-// asset of the object has is refused
+// how an asset of an object is named and indexed, in its record: its name, its paths (replaced
+// whole; [] removes them), its kind. a path another asset of the object has is refused
 export function objectFrontendAssetMetaSet(
   context: WriteContext,
   input: { id: string; key: string; name?: string | null; pathList?: unknown; kind?: string },
 ): ObjectFrontendWriteResult {
   const { store } = context;
   const decl = declGet(context.config, input.id);
-  const { meta, entry, hash } = entryRead(store, decl);
-  const asset = entry.assetList.find((one) => one.key === input.key);
+  const listing = listingRead(context, decl);
+  const asset = listing.assetList.find((one: any) => one.key === input.key);
   if (!asset) throw new AssetError(-3, `the object has no asset ${input.key}`);
-  const naming = assetNamingRead(entry, asset.key, { name: input.name === null ? '' : input.name ?? asset.name, pathList: input.pathList ?? asset.pathList ?? [] });
-  const assetNext: any = { key: asset.key, kind: input.kind ?? asset.kind, itemId: asset.itemId, ...naming };
-  const entryNext = { ...entry, assetList: entry.assetList.map((one) => (one === asset ? assetNext : one)) };
-  store.itemUpdate({ itemId: meta.itemId, hashBase: hash, data: Buffer.from(objectFrontendEntryTextBuild(entryNext), 'utf-8'), mode: 'inPlace' });
-  return writeResultBuild(context, decl.id, [store.itemGet(meta.itemId)]);
+  const naming = assetNamingRead(listing.assetList, asset.key, { name: input.name === null ? '' : input.name ?? asset.name, pathList: input.pathList ?? asset.pathList ?? [] });
+  const assetNext: any = { key: asset.key, kind: input.kind ?? asset.kind, itemId: asset.itemId, ...naming, listGroupPath: asset.listGroupPath };
+  listingWrite(store, listing, listing.assetList.map((one: any) => (one === asset ? assetNext : one)));
+  return writeResultBuild(context, decl.id, [store.itemGet(listing.meta.itemId)]);
+}
+
+// ---------- the partitions of an object ----------
+// what every frontend object offers for its partitions, whatever its type
+// (doc_page_impl_obj_frontend.md#the-apis-of-partitions): made, renamed, deleted. the list is read
+// with the object (its declarations carry the item lists, the page counts the assets)
+
+// a partition made: its folder with an empty item list, so that a record never lands above it.
+// a type declaring partitions names the ones there may be; one kept out of git must be ignored first
+export function objectFrontendPartitionCreate(context: WriteContext, input: { id: string; partition: string }): ObjectFrontendWriteResult {
+  const decl = declGet(context.config, input.id);
+  const listing = listingRead(context, decl);
+  if (!listing.itemDirAbs) throw new AssetError(-1, `the object ${decl.id} has no folder of its own: it has no partitions`);
+  docPageWritableGet(context.config, decl.docPageAlias);
+  const groupPath = partitionPlaceRequire(context, listing, partitionIdRequire(input.partition), '');
+  const file = listFileGet(listing.itemDirAbs, groupPath);
+  if (fs.existsSync(file)) throw new AssetError(-1, `the partition ${groupPath} exists already`);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fileWriteSafe(file, objectFrontendListTextBuild([]));
+  return writeResultBuild(context, decl.id, []);
+}
+
+// a partition renamed: its folder moved with its items and its lists, so every record follows;
+// the paths of the assets are the object's and do not change. the new name must not be in use
+export function objectFrontendPartitionRename(context: WriteContext, input: { id: string; partitionFrom: string; partitionTo: string }): ObjectFrontendWriteResult {
+  const decl = declGet(context.config, input.id);
+  const listing = listingRead(context, decl);
+  if (!listing.itemDirAbs) throw new AssetError(-1, `the object ${decl.id} has no folder of its own: it has no partitions`);
+  const from = partitionIdRequire(input.partitionFrom);
+  const to = partitionPlaceRequire(context, listing, partitionIdRequire(input.partitionTo), '');
+  if (!fs.existsSync(path.join(listing.itemDirAbs, from))) throw new AssetError(-3, `the object has no partition ${from}`);
+  if (fs.existsSync(path.join(listing.itemDirAbs, to))) throw new AssetError(-1, `the partition ${to} exists already: move its assets one by one, or rename it first`);
+  const hasItem = context.store.itemList().some((one) => one.folderOwner?.ref === objectFrontendRefBuild(decl.id) && (one.groupPath === from || one.groupPath.startsWith(`${from}/`)));
+  if (hasItem) return objectFrontendAssetGroupMove(context, { id: decl.id, groupFrom: from, groupTo: to });
+  // nothing in it but its list: the folder is moved as it is
+  fs.renameSync(path.join(listing.itemDirAbs, from), path.join(listing.itemDirAbs, to));
+  return writeResultBuild(context, decl.id, []);
+}
+
+// a partition deleted: its assets off their lists and deleted softly (their files stay, as for an
+// object deleted), then its list and its folder, when nothing is left in them
+export function objectFrontendPartitionDelete(context: WriteContext, input: { id: string; partition: string }): ObjectFrontendWriteResult {
+  const { store } = context;
+  const decl = declGet(context.config, input.id);
+  const listing = listingRead(context, decl);
+  if (!listing.itemDirAbs) throw new AssetError(-1, `the object ${decl.id} has no folder of its own: it has no partitions`);
+  docPageWritableGet(context.config, decl.docPageAlias);
+  const partition = partitionIdRequire(input.partition);
+  const dirAbs = path.join(listing.itemDirAbs, partition);
+  if (!fs.existsSync(dirAbs)) throw new AssetError(-3, `the object has no partition ${partition}`);
+  const ref = objectFrontendRefBuild(decl.id);
+  const isIn = (groupPath: string) => groupPath === partition || groupPath.startsWith(`${partition}/`);
+  const itemList = store.itemList().filter((one) => one.folderOwner?.ref === ref && isIn(one.groupPath));
+  if (itemList.some((one) => one.isLocked && !one.isDeleted)) throw new AssetError(-1, `the partition ${partition} holds a locked asset: unlock it first`);
+  const itemIdSet = new Set(itemList.map((one) => one.itemId));
+  listingWrite(store, listing, listing.assetList.filter((one: any) => !itemIdSet.has(one.itemId) && !(one.listGroupPath !== null && isIn(one.listGroupPath))));
+  const itemListDeleted = itemList.filter((one) => !one.isDeleted).map((one) => store.itemDelete(one.itemId));
+  for (const file of [path.join(dirAbs, OBJECT_FRONTEND_LIST_NAME), path.join(dirAbs, `${OBJECT_FRONTEND_LIST_NAME}.bak`)]) fs.rmSync(file, { force: true });
+  if (fs.existsSync(dirAbs) && fs.readdirSync(dirAbs).length === 0) fs.rmdirSync(dirAbs);
+  return writeResultBuild(context, decl.id, itemListDeleted);
+}
+
+function partitionIdRequire(value: unknown): string {
+  const id = String(value ?? '');
+  if (!OBJECT_FRONTEND_PARTITION_REGEX.test(id)) throw new AssetError(-1, `a partition is a folder name: letters, digits, "_", "-" and "." (${JSON.stringify(value)})`);
+  return id;
 }
 
 // { name?, pathList? } of an asset as a write gives them: the name trimmed,
 // the paths in their canonical form, each once, none another asset of the
 // object (other than keyOwn) has
-function assetNamingRead(entry: any, keyOwn: string, input: { name?: unknown; pathList?: unknown }): { name?: string; pathList?: string[] } {
+function assetNamingRead(assetList: any[], keyOwn: string, input: { name?: unknown; pathList?: unknown }): { name?: string; pathList?: string[] } {
   const naming: { name?: string; pathList?: string[] } = {};
   const name = String(input.name ?? '').trim();
   if (name.length > 200) throw new AssetError(-1, 'the name of an asset is at most 200 characters');
@@ -661,7 +787,7 @@ function assetNamingRead(entry: any, keyOwn: string, input: { name?: unknown; pa
     const { path, message } = objectFrontendAssetPathNormalize(pathText);
     if (message) throw new AssetError(-1, `the path ${JSON.stringify(pathText)}: ${message}`);
     if (!path || pathList.includes(path)) continue;
-    const owner = entry.assetList.find((one: any) => one.key !== keyOwn && (one.pathList ?? []).includes(path));
+    const owner = assetList.find((one: any) => one.key !== keyOwn && (one.pathList ?? []).includes(path));
     if (owner) throw new AssetError(-1, `the path ${path} is the path of ${owner.name || owner.key} already`);
     pathList.push(path);
   }
@@ -670,6 +796,117 @@ function assetNamingRead(entry: any, keyOwn: string, input: { name?: unknown; pa
 }
 
 // ---------- helpers ----------
+
+// ---------- the lists of an object ----------
+// an object with a folder of its own records its assets in item lists (item-list.yaml) in its
+// item folder; one without, in its entry. a write reads them all, changes the records it must
+// (each with listGroupPath: the folder of its list, null for the entry) and writes back only
+// the lists that changed (doc_page_impl_obj_frontend.md#the-item-lists)
+
+type Listing = {
+  meta: AssetItemMeta;
+  entry: any;
+  hash: string;
+  // the item folder of the object; '' for an object without a folder of its own
+  itemDirAbs: string;
+  // every record, merged, each with listGroupPath
+  assetList: any[];
+  // the folders holding a list
+  listGroupPathList: string[];
+};
+
+function listingRead(context: WriteContext, decl: ObjectFrontendDecl): Listing {
+  const { meta, entry, hash } = entryRead(context.store, decl);
+  const dirAbs = context.config.objectDirAbsById.get(decl.id);
+  const itemDirAbs = dirAbs ? path.join(dirAbs, OBJECT_FRONTEND_ITEM_FOLDER_NAME) : '';
+  const listList = itemDirAbs ? objectListListRead(itemDirAbs) : [];
+  const { assetList } = objectFrontendAssetListMerge(entry.assetList, listList);
+  return { meta, entry, hash, itemDirAbs, assetList, listGroupPathList: listList.map((list) => list.groupPath) };
+}
+
+// ---------- partitions ----------
+// the folders an object splits its items into, declared by its type (partitionList), some kept out of
+// git (doc_page_impl_obj_frontend.md#partitions)
+
+// the folder a write places an item in: groupPathInside within the partition named, which the type
+// must declare when it declares any; a partition kept out of git must be ignored by git already
+function partitionPlaceRequire(context: WriteContext, listing: Listing, partition: string | undefined, groupPathInside: string | undefined): string {
+  const partitionDeclaredList = objectFrontendPartitionListResolve(listing.entry.type, context.config.typeList);
+  const { groupPath, message } = objectFrontendPartitionGroupPathBuild(partitionDeclaredList, partition, groupPathInside);
+  if (message) throw new AssetError(-1, message);
+  partitionGitIgnoreRequire(context, listing, groupPath);
+  return groupPath;
+}
+
+// a write into a partition its type keeps out of git (isGitIgnored) is refused while git does not
+// ignore that folder: private data never lands where a commit takes it. outside a repository, or
+// without git, there is nothing to check
+function partitionGitIgnoreRequire(context: WriteContext, listing: Listing, groupPath: string) {
+  if (!listing.itemDirAbs) return;
+  const first = String(groupPath ?? '').split('/')[0];
+  const partition = (objectFrontendPartitionListResolve(listing.entry.type, context.config.typeList) ?? []).find((one: any) => one.id === first);
+  if (!partition?.isGitIgnored) return;
+  const probe = path.join(listing.itemDirAbs, first, OBJECT_FRONTEND_LIST_NAME);
+  let status = 0;
+  try {
+    execFileSync('git', ['check-ignore', '-q', probe], { cwd: listing.itemDirAbs, stdio: 'ignore' });
+  } catch (error: any) {
+    status = typeof error?.status === 'number' ? error.status : 128;
+  }
+  if (status === 1) {
+    throw new AssetError(-1, `the partition ${first} is kept out of git (isGitIgnored of its type), but git does not ignore ${path.join(listing.itemDirAbs, first)}: add it to the .gitignore first`);
+  }
+}
+
+// the list the record of an asset lying at groupPath (in the item folder) goes to; null: the entry
+function listGroupPathFor(listing: Listing, groupPath: string): string | null {
+  return listing.itemDirAbs ? objectFrontendListGroupPathGet(listing.listGroupPathList, groupPath) : null;
+}
+
+// the lists whose records differ from the listing written: the entry (in place), an item list
+// (whole; one left empty is removed, so a folder keeps no list of nothing)
+function listingWrite(store: AssetStore, listing: Listing, assetListNext: any[]) {
+  const ENTRY = '\u0000entry';
+  const byList = (assetList: any[]) => {
+    const map = new Map<string, any[]>();
+    for (const one of assetList) {
+      const id = one.listGroupPath === null || one.listGroupPath === undefined ? ENTRY : one.listGroupPath;
+      map.set(id, [...(map.get(id) ?? []), one]);
+    }
+    return map;
+  };
+  const before = byList(listing.assetList);
+  const after = byList(assetListNext);
+  const recordOf = ({ listGroupPath, ...record }: any) => record;
+  for (const id of new Set([...before.keys(), ...after.keys()])) {
+    // the records a list keeps stay in its order; one coming from another list goes last
+    const afterList = after.get(id) ?? [];
+    const keyBeforeList = (before.get(id) ?? []).map((one) => one.key);
+    const recordList = [
+      ...keyBeforeList.map((key) => afterList.find((one) => one.key === key)).filter(Boolean),
+      ...afterList.filter((one) => !keyBeforeList.includes(one.key)),
+    ].map(recordOf);
+    if (JSON.stringify((before.get(id) ?? []).map(recordOf)) === JSON.stringify(recordList)) continue;
+    if (id === ENTRY) {
+      const entryNext = { ...listing.entry, assetList: recordList };
+      store.itemUpdate({ itemId: listing.meta.itemId, hashBase: listing.hash, data: Buffer.from(objectFrontendEntryTextBuild(entryNext), 'utf-8'), mode: 'inPlace' });
+      continue;
+    }
+    const file = listFileGet(listing.itemDirAbs, id);
+    if (recordList.length === 0) {
+      // with its backup, and the folders it leaves empty, up to the item folder
+      fs.rmSync(file, { force: true });
+      fs.rmSync(`${file}.bak`, { force: true });
+      for (let dirAbs = path.dirname(file); dirAbs.startsWith(`${listing.itemDirAbs}${path.sep}`); dirAbs = path.dirname(dirAbs)) {
+        if (!fs.existsSync(dirAbs) || fs.readdirSync(dirAbs).length > 0) break;
+        fs.rmdirSync(dirAbs);
+      }
+      continue;
+    }
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fileWriteSafe(file, objectFrontendListTextBuild(recordList));
+  }
+}
 
 function writeResultBuild(context: WriteContext, id: string, itemList: AssetItemMeta[]): ObjectFrontendWriteResult {
   return { id, itemList, config: objectFrontendConfigForPage(context.config) };

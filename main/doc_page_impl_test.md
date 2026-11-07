@@ -6,16 +6,9 @@ What the page offers for trying its features out. Today this is one thing, the *
 
 ## Playground documents
 
-A **playground** is a document for trying things out: press every button, save, break it, start over. A playground belongs to one checkout and not to the project, so what is done in it is never committed, and a fresh clone has none.
+A **playground** is a document for trying things out: press every button, save, break it, start over. A playground belongs to one checkout and not to the project, so what is done in it is never committed, and a fresh clone has none. It is a document git ignores and a tracked template it starts from; how the two are named and kept out of git, and why a build leaves the document out, is part of the folder conventions ([Playground documents](doc_page_impl_dir.md#playground-documents), among the [local content kept out of git](doc_page_impl_dir.md#local-content-kept-out-of-git)).
 
-Two things make one up:
-
-```text
-.doc-page/playground/card-diagram.md      the template: tracked by git, what a playground starts from
-doc/card-diagram.playground.md            the document: ignored by git, what a reader sees and edits
-```
-
-Everything else about a playground follows from the document being able to be missing.
+Everything about a playground on the page follows from the document being able to be missing.
 
 ```text
                     create from the template
@@ -47,14 +40,7 @@ The side panel names the document like any other, with an `id` so that its route
   doc: ~cloud-dev-vis/doc/card-diagram.playground.md
 ```
 
-**The name is what keeps it out of git.** The document of a playground must be named `*.playground.md` or `*.playground.mdx`, and a doc page declaring another name gets a problem reported (`[doc-playground]`), with the item skipped. A repository needs one rule in its `.gitignore`, whatever the number of playgrounds; this project has it at its root:
-
-```text
-**/*.playground.md
-**/*.playground.mdx
-```
-
-A doc page in a repository of its own adds the same two lines to its own `.gitignore`. A test (`plugin/doc-playground.test.js`) checks the rule in this project with `git check-ignore`. The template lies in `.doc-page/`, so the source rules never collect it as a document.
+The document must be named `*.playground.md` or `*.playground.mdx`, which is what git ignores ([the rule of the `.gitignore`](doc_page_impl_dir.md#playground-documents)); a doc page declaring another name gets a problem reported (`[doc-playground]`), with the item skipped.
 
 ### What each place shows
 
@@ -85,13 +71,13 @@ Nothing reloads in either direction. When the file appears or goes, the source i
 
 ### Writing into a package
 
-A package treated as a doc page is read-only ([A package as a doc page](doc_page_impl_package.md#a-package-as-a-doc-page)), and its playground is the **one exception**, for the one file: a package is where its features are best tried. `readOnlyReasonGet`, the function every write of the server asks, answers no reason for the document of a declared playground, and `DocSourceStore.pathReadOnlyReasonGet` says the same to the controls of the page. So the document can be edited and saved, block by block, while every other write into the package is still refused with `-4`.
+A package treated as a doc page is read-only wherever it is not served alone ([A package as a doc page](doc_page_impl_package.md#a-package-as-a-doc-page)), and there its playground is the **one exception**, for the one file: a package is where its features are best tried. `readOnlyReasonGet`, the function every write of the server asks, answers no reason for the document of a declared playground, and `DocSourceStore.pathReadOnlyReasonGet` says the same to the controls of the page. So the document can be edited and saved, block by block, while every other write into the package is still refused with `-4`.
 
 Since a playground in a package writes only into its own document, its blocks keep their data inline. An asset written from it would go into the read-only asset folder, and is refused like any other.
 
 ### A built page
 
-A static build has no development server and nothing to create a document with, so a playground does not exist there at all: `react-doc build` leaves out the document, if the checkout has one, and the side panel item (`playgroundLeaveOut`, `plugin/doc-source.ts`). What one person tried out cannot reach a published page. `react-doc pack` leaves the document out of the npm package in the same way.
+A static build has no playground at all: the document and its item are left out ([Playground documents](doc_page_impl_dir.md#playground-documents)).
 
 ### The apis
 
@@ -110,7 +96,9 @@ The server's route is `POST {source endpoint}/playground { id, action: reset | d
 1. Write the template, normally `.doc-page/playground/{name}.md`. It is an ordinary document, and it is what a clone will see, so it says how to use what it shows.
 2. Add it to `.doc-page/playground.yaml`, with a document named `*.playground.md`.
 3. Add its item to the side panel, with an `id`.
-4. Check the rule of the `.gitignore` of the repository.
+4. Check the rule of the `.gitignore` of the repository ([Playground documents](doc_page_impl_dir.md#playground-documents)).
+
+A frontend object tried out without touching its example data does the same with a folder: its partition `playground/`, ignored by git ([Partitions](doc_page_impl_obj_frontend.md#partitions)).
 
 When a feature is worth trying out by hand, add it to the template of the playground of its area. The document of a checkout does not follow its template: **Reset** picks up what changed.
 

@@ -168,8 +168,9 @@ export type DocPageLoaded = {
   // runs, not written in any file (a root doc page)
   isTemporary: boolean;
   // a package treated as a doc page: its name ('' for a plain doc page). such a
-  // doc page is read-only: nothing of the page writes into its folder
-  // (doc_page_impl_package.md#a-package-as-a-doc-page)
+  // doc page is read-only, nothing of the page writing into its folder, unless it
+  // is served alone (docEntry: `react-doc dev <package>`), where it is the work
+  // at hand (doc_page_impl_package.md#a-package-as-a-doc-page)
   packageName: string;
   isReadOnly: boolean;
   // the packages its entry names (doc_page_impl_package.md#importing-packages)
@@ -208,7 +209,7 @@ export type DocPageInfo = {
   isRoot: boolean;
   isTemporary: boolean;
   // a package treated as a doc page: its name, '' otherwise; isReadOnly: the
-  // page writes nothing into its folder
+  // page writes nothing into its folder (a package, unless served alone)
   packageName: string;
   isReadOnly: boolean;
   rootList: { alias: string; path: string; kind: 'folder' | 'file' }[];
@@ -656,6 +657,10 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
       place,
     }, true, context);
     docPage.isTemporary = item.isTemporary === true;
+    // a package served alone (config docEntry, which is what `react-doc dev
+    // <package>` gives) is the one being worked on, so it is written like any
+    // doc page; listed in a workspace, mounted or imported, it stays read-only
+    if (spec.isVirtual && !docPage.isTemporary && docPage.packageName !== '') docPage.isReadOnly = false;
   });
 
   // load every root doc page; the first one's files come first
@@ -713,7 +718,7 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
         text: docPage.alias,
         children: treeOfRootGet(sidePanelRoot, index),
         docPageAlias: docPage.alias,
-        docPageSection: { alias: docPage.alias, title: docPage.title, isTemporary: docPage.isTemporary, packageName: docPage.packageName, isFirst: index === 0 },
+        docPageSection: { alias: docPage.alias, title: docPage.title, isTemporary: docPage.isTemporary, packageName: docPage.packageName, isReadOnly: docPage.isReadOnly, isFirst: index === 0 },
       };
       if (sidePanelRoot) {
         node.includeSource = { ...sidePanelRoot.treeSource, isDocEntry: true, docPageAlias: docPage.alias, isChildrenLocal: false };

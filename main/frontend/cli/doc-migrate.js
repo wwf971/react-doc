@@ -10,6 +10,9 @@
 //
 //   typeList of .doc-page/object-frontend.yaml   -> .doc-page/type.yaml
 //   typeList of the object.yaml of an object     -> type.yaml beside it
+//   assetList of the entry of an object with a folder of its own
+//                                                -> item-list.yaml files in its item folder, each record in
+//                                                   the list nearest to its item, as the page records one
 //
 // It runs on a folder holding doc pages, any number of them, and a second run changes
 // nothing.
@@ -190,6 +193,69 @@ function objectListMigrate(dirMeta, yaml, report, isDryRun) {
 
 // typeList of a file moved into the type file beside it, as it is written; the file is removed
 // when it holds nothing else
+// the list in the entry of an object with a folder of its own, moved to its item lists: every
+// record to the list nearest to its item, as the page records a new one, a list made in the
+// first folder of the item's path when there is none (main/doc_page_impl_obj_frontend.md#the-item-lists).
+// the head of the entry is rewritten in place, its size and hash with it
+function objectEntryListMigrate(dirObject, yaml, lib, report, isDryRun) {
+  const dirItemFolder = path.join(dirObject, OBJECT_ITEM_FOLDER_NAME);
+  let line;
+  try {
+    line = yaml.parse(fs.readFileSync(path.join(dirObject, OBJECT_META_NAME), 'utf-8')) ?? {};
+  } catch {
+    return;
+  }
+  if (!fs.existsSync(dirItemFolder)) return;
+  const itemDirById = itemDirByIdGet(dirItemFolder);
+  const dirEntry = itemDirById.get(String(line.entry ?? ''));
+  if (!dirEntry) return;
+  const metaEntry = yaml.parse(fs.readFileSync(path.join(dirEntry, ITEM_META_NAME), 'utf-8'));
+  const fileHead = path.join(dirEntry, `${metaEntry.versionIdHead}.${metaEntry.fileExt || 'yaml'}`);
+  if (!fs.existsSync(fileHead)) return;
+  const { entry } = lib.objectFrontendEntryParse(fs.readFileSync(fileHead, 'utf-8'));
+  if (entry.assetList.length === 0) return;
+  // the lists there are, then each record where the page would put it
+  const groupPathOf = (dir) => path.relative(dirItemFolder, dir).split(path.sep).filter(Boolean).join('/');
+  const recordListByGroup = new Map();
+  for (const dir of [dirItemFolder, ...dirListWalk(dirItemFolder)]) {
+    const file = path.join(dir, lib.OBJECT_FRONTEND_LIST_NAME);
+    if (fs.existsSync(file)) recordListByGroup.set(groupPathOf(dir), lib.objectFrontendListParse(fs.readFileSync(file, 'utf-8')).assetList);
+  }
+  const groupChangedSet = new Set();
+  for (const record of entry.assetList) {
+    const dirOfItem = itemDirById.get(record.itemId);
+    const groupPath = dirOfItem ? groupPathOf(path.dirname(dirOfItem)) : '';
+    const groupList = lib.objectFrontendListGroupPathGet([...recordListByGroup.keys()], groupPath);
+    const recordList = recordListByGroup.get(groupList) ?? [];
+    if (!recordList.some((one) => one.key === record.key)) recordList.push(record);
+    recordListByGroup.set(groupList, recordList);
+    groupChangedSet.add(groupList);
+  }
+  report.entryListList.push(dirObject);
+  if (isDryRun) return;
+  for (const groupPath of groupChangedSet) {
+    const file = path.join(dirItemFolder, ...groupPath.split('/').filter(Boolean), lib.OBJECT_FRONTEND_LIST_NAME);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, lib.objectFrontendListTextBuild(recordListByGroup.get(groupPath)));
+  }
+  const data = Buffer.from(lib.objectFrontendEntryTextBuild({ ...entry, assetList: [] }), 'utf-8');
+  fs.writeFileSync(fileHead, data);
+  const versionHead = (metaEntry.versionList ?? []).find((one) => one.versionId === metaEntry.versionIdHead);
+  if (versionHead) {
+    versionHead.size = data.length;
+    versionHead.hash = createHash('sha1').update(data).digest('hex');
+    fs.writeFileSync(path.join(dirEntry, ITEM_META_NAME), yaml.stringify(metaEntry));
+  }
+}
+
+function objectEntryListMigrateAll(dirMeta, yaml, lib, report, isDryRun) {
+  const dirFolder = path.join(dirMeta, OBJECT_FOLDER_NAME);
+  if (!fs.existsSync(dirFolder)) return;
+  for (const one of fs.readdirSync(dirFolder, { withFileTypes: true })) {
+    if (one.isDirectory() && !one.name.startsWith('.')) objectEntryListMigrate(path.join(dirFolder, one.name), yaml, lib, report, isDryRun);
+  }
+}
+
 function typeListMigrate(file, fileType, yaml, report, isDryRun) {
   if (!fs.existsSync(file)) return;
   const source = fs.readFileSync(file, 'utf-8');
@@ -223,10 +289,11 @@ function typeFileListMigrate(dirMeta, yaml, report, isDryRun) {
   }
 }
 
-// the migration of everything below dirTarget: { itemList, documentList, objectList, typeFileList, problemList }
+// the migration of everything below dirTarget: { itemList, documentList, objectList, typeFileList, entryListList, problemList }
 export async function docMigrate(dirTarget, { isDryRun = false } = {}) {
   const yaml = await import('yaml');
-  const report = { itemList: [], documentList: [], objectList: [], typeFileList: [], problemList: [] };
+  const lib = await import('../src/lib/doc-object-frontend.js');
+  const report = { itemList: [], documentList: [], objectList: [], typeFileList: [], entryListList: [], problemList: [] };
   const dirList = [dirTarget, ...dirListWalk(dirTarget)];
   for (const dir of dirList) {
     const base = path.basename(dir);
@@ -247,6 +314,8 @@ export async function docMigrate(dirTarget, { isDryRun = false } = {}) {
     if (path.basename(dir) !== '.doc-page') continue;
     objectListMigrate(dir, yaml, report, isDryRun);
     typeFileListMigrate(dir, yaml, report, isDryRun);
+    // after objectList: an object just given a folder of its own moves its list too
+    objectEntryListMigrateAll(dir, yaml, lib, report, isDryRun);
   }
   return report;
 }

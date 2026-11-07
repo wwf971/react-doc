@@ -72,7 +72,7 @@ import {
   type AssetSnapshot, type AssetStore, type AssetStoreConfig, type AssetUsageDoc,
 } from './doc-asset-store.ts';
 import { assetBlockTextExpand, assetUsageListScan } from '../src/lib/doc-asset-ref.js';
-import { OBJECT_FRONTEND_META_NAME } from '../src/lib/doc-object-frontend.js';
+import { OBJECT_FRONTEND_LIST_NAME, OBJECT_FRONTEND_META_NAME } from '../src/lib/doc-object-frontend.js';
 import { objectFrontendConfigForPage, objectFrontendConfigOfDocPageListGet, objectFrontendFolderOwnedListGet, objectFrontendTypeFileListGet, type ObjectFrontendConfig } from './doc-object-frontend.ts';
 import { TYPE_CONFIG_FILE_NAME, typeDeclaredConfigGet, type TypeDeclaredConfig } from './doc-type-config.ts';
 import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
@@ -788,6 +788,12 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         };
         const assetChangeSend = (filePath: string) => {
           if (path.basename(filePath) === OBJECT_FRONTEND_META_NAME && objectFrontendFolderList.includes(path.dirname(path.dirname(filePath)))) {
+            assetObjectFrontendFolderReload();
+            return;
+          }
+          // an item list of an object, written, appearing or going (a folder kept out of git
+          // checked out or removed): the declarations carry the lists, read again
+          if (path.basename(filePath) === OBJECT_FRONTEND_LIST_NAME && objectFrontendFolderList.some((folder) => pathIsInside(filePath, folder))) {
             assetObjectFrontendFolderReload();
             return;
           }

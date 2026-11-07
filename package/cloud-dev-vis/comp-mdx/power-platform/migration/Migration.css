@@ -14,6 +14,7 @@
 .doc-migration-new { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; padding: 0.5rem 0.75rem; border: 1px solid var(--color-fd-border); border-radius: 0.4rem; background: color-mix(in srgb, var(--color-fd-muted) 40%, transparent); }
 .doc-migration-new > input, .doc-migration-new > select { padding: 0.2rem 0.45rem; border: 1px solid var(--color-fd-border); border-radius: 0.3rem; background: var(--color-fd-background); color: var(--color-fd-foreground); font: inherit; font-size: 0.78rem; }
 .doc-migration-new-message { color: #b91c1c; font-size: 0.75rem; }
+.doc-migration-new-place { color: var(--color-fd-muted-foreground); font-size: 0.75rem; }
 
 /* the list of the data items */
 .doc-migration-list { margin-block: 0.75rem; font-family: ui-sans-serif, system-ui, sans-serif; }

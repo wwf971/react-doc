@@ -302,6 +302,28 @@ test('a package as a doc page: annotated, imported by being there, and read-only
   assert.throws(() => loadConfigDoc(configFile), /"comp" is not for a package treated as a doc page/);
 });
 
+test('a package served alone is the one being worked on: written like a doc page; a package mounted beside it stays read-only', () => {
+  const dir = dirTempCreate();
+  const packageDir = packageDocPageCreate(dir);
+  const otherDir = packageDocPageCreate(dir, 'other');
+  const configFile = path.join(dir, 'config.yaml');
+  fs.writeFileSync(configFile, '{}\n');
+  const launch = docLaunchBuild(packageDir, { cwd: dir, mount: [otherDir] }, { mode: 'source', dirPackage: path.join(dir, 'shipped') });
+  assert.equal(launch.kind, 'package');
+  const configDoc = loadConfigDoc(configFile, { launch });
+  const docPageList = configDoc.docEntry.docPageList;
+  assert.deepEqual(docPageList.map((item) => [item.alias, item.packageName, item.isTemporary, item.isReadOnly]), [['kit', 'kit', false, false], ['other', 'other', true, true]]);
+  assert.equal(configDoc.sidePanel.tree.find((node) => node.docPageSection?.alias === 'kit').docPageSection.isReadOnly, false, 'the side panel says so');
+  const rootAbsPathByPath = new Map(docPageList.flatMap((item) => item.rootList.map((root) => [`~${item.alias}:${root.alias}`, root.pathAbs ?? path.resolve(path.dirname(item.entryFile), root.path ?? '..')])));
+  const store = assetStoreCreate(assetConfigOfDocPageListGet(docPageList, rootAbsPathByPath, dir));
+  assert.ok(store.folderList.every((folder) => folder.isReadOnly === folder.pathAbs.startsWith(otherDir)), 'only the mounted package is marked');
+  store.itemMetaSet('w55rlprcjdy', { name: 'renamed' });
+  assert.equal(store.itemGet('w55rlprcjdy').name, 'renamed', 'its own asset is written');
+  // the same package in a workspace is read-only, as before
+  fs.writeFileSync(configFile, `workspace:\n  docPageList:\n    - { dir: ./kit }\n`);
+  assert.equal(loadConfigDoc(configFile).workspace.docPageList.find((item) => item.alias === 'kit').isReadOnly, true);
+});
+
 test('build: where it may put what it makes', async () => {
   const dir = dirTempCreate();
   docInit('page', 'notes', { cwd: dir });
@@ -369,7 +391,12 @@ test('migrate: item.yaml and itemId, the fences of documents, and frontend objec
   assert.ok(!alone.includes('objectId'));
   const dirObject = path.join(dirMeta, 'object-frontend', 'w5aaaaaaaaa--Shelf');
   assert.match(fs.readFileSync(path.join(dirObject, 'object.yaml'), 'utf-8'), /id: w5aaaaaaaaa\nentry: w5aaaaaaaab\n/);
-  assert.match(fs.readFileSync(path.join(dirObject, 'item', 'w5aaaaaaaab', 'vw5aaaaaaaab.yaml'), 'utf-8'), /itemId: w5aaaaaaaac/);
+  // the list of the entry moved to an item list at the top of the item folder, where its asset lies
+  const entryText = fs.readFileSync(path.join(dirObject, 'item', 'w5aaaaaaaab', 'vw5aaaaaaaab.yaml'), 'utf-8');
+  assert.ok(!entryText.includes('assetList'), 'the entry lists nothing');
+  assert.match(fs.readFileSync(path.join(dirObject, 'item', 'item-list.yaml'), 'utf-8'), /- key: book-1\n {4}kind: book\n {4}itemId: w5aaaaaaaac\n/);
+  assert.match(fs.readFileSync(path.join(dirObject, 'item', 'w5aaaaaaaab', 'item.yaml'), 'utf-8'), new RegExp(`size: ${Buffer.byteLength(entryText)}\n`), 'the size of the head follows its text');
+  assert.deepEqual(report.entryListList, [dirObject]);
   assert.equal(fs.readFileSync(path.join(dirObject, 'item', 'w5aaaaaaaac', 'vw5aaaaaaaac.yaml'), 'utf-8'), 'objectId: mine\n', 'the data of an asset is not touched');
   assert.equal(fs.existsSync(dirGroup), false);
   assert.equal(fs.readFileSync(path.join(dirMeta, 'type.yaml'), 'utf-8'), '# types of this doc page (doc_page_impl_type.md#declaring-a-type)\ntypeList:\n  - { id: demo.a, label: A }\n');
@@ -377,5 +404,5 @@ test('migrate: item.yaml and itemId, the fences of documents, and frontend objec
   assert.equal(fs.readFileSync(path.join(dir, 'doc.md'), 'utf-8'), 'objectId: prose\n\n<!--renderComp=Image-->\n```asset\r\nstore: local\r\nitemId: w5ccccccccc\r\n```\r\n');
 
   const again = await docMigrate(dir);
-  assert.deepEqual([again.itemList.length, again.documentList.length, again.objectList.length, again.typeFileList.length], [0, 0, 0, 0]);
+  assert.deepEqual([again.itemList.length, again.documentList.length, again.objectList.length, again.typeFileList.length, again.entryListList.length], [0, 0, 0, 0, 0]);
 });

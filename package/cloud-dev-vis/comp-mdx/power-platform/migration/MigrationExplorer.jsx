@@ -8,7 +8,7 @@ import { switchRegistryBuild } from '../../card-diagram-switch/SwitchNodeKinds.j
 import { SwitchAnimation } from '../../card-diagram-switch/SwitchAnimation.jsx';
 import { switchAnimationNormalize } from '../../card-diagram-switch/SwitchAnimationStore.js';
 import { powerPlatformNodeRegistry } from '../power-platform-node-registry.js';
-import { MIGRATION_KIND_LIST, migrationCategoryOf, migrationModelBuild, migrationPathBuild } from './MigrationData.js';
+import { MIGRATION_KIND_LIST, migrationCategoryOf, migrationModelBuild, migrationPartitionOf, migrationPathBuild } from './MigrationData.js';
 import { migrationProviderBuild } from './MigrationScenes.js';
 import './Migration.css';
 
@@ -79,10 +79,11 @@ export function MigrationLoading({ read, param = {} }) {
 // a box adjusted by the reader: written in the layout item of the category
 export function migrationBoxSaveBuild(service, model, category) {
 	return async (path, rect) => {
-		if (!service.isWritable) return { code: -1, message: service.writeUnavailableReason };
+		if (!service.isEditable) return { code: -1, message: service.editUnavailableReason };
 		const layout = { ...model.layout, sceneByPath: { ...model.layout.sceneByPath, [path]: { ...model.layout.sceneByPath?.[path], box: rect } } };
 		if (model.layoutKey) return service.assetWrite(model.layoutKey, layout, `the bounding box of ${path}`);
-		return service.assetCreate({ key: `${category}.layout`, kind: 'layout', name: 'Layout', pathList: [migrationPathBuild(category, 'layout')], data: layout });
+		const partition = migrationPartitionOf(service.assetList(), category);
+		return service.assetCreate({ key: `${category}.layout`, kind: 'layout', name: 'Layout', pathList: [migrationPathBuild(category, 'layout')], ...(partition ? { partition } : {}), data: layout });
 	};
 }
 

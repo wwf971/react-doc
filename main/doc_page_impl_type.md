@@ -74,6 +74,9 @@ typeList:
       - { id: shelf, label: Shelf, comp: ReadingList, param: { layout: table }, category: view, isDefault: true }
     assetKindList:
       - { id: book, label: Book, langList: [yaml], pathPrefix: /book/, groupPath: book }
+    partitionList:                  # optional: the folders its items are split into (doc_page_impl_obj_frontend.md#partitions)
+      - { id: example, label: Example, isDefault: true }          # where a write naming none goes (else the first)
+      - { id: playground, label: Playground, isGitIgnored: true }
 ```
 
 **Where to put one.** Types are declared in a file of their own, not in the file of what uses them. Choose by who needs the type:
@@ -92,7 +95,7 @@ typeList:
 - a different declaration of an id is a problem of the file, and the first is kept;
 - a problem (an unknown key, a reserved prefix, a mode without a component, modes on a type not below `frontend.object`) leaves out that item, never the page, and is listed in the Frontend objects tab and the console.
 
-Declaring is not limited to frontend objects: `example.ticket` extending `core.task` is a type like any other, for whichever provider answers with it. The registry takes what is declared directly, as configuration of the page; it does not go through a layer's provider, since it belongs to no layer. A layer reads the keys of its own tree from the same declaration: `modeList` and `assetKindList` are the frontend object layer's, and mean nothing elsewhere.
+Declaring is not limited to frontend objects: `example.ticket` extending `core.task` is a type like any other, for whichever provider answers with it. The registry takes what is declared directly, as configuration of the page; it does not go through a layer's provider, since it belongs to no layer. A layer reads the keys of its own tree from the same declaration: `modeList`, `assetKindList` and `partitionList` are the frontend object layer's, and mean nothing elsewhere.
 
 **Types of the templates** are declared in code, because a template is code: `expose.typeList` of its script ([Services](doc_page_impl_obj.md#services)), under its own name (`todo-list.todo`). The kernel refuses a type of another name with a problem, so two templates never collide. The kernel rebuilds its registry whenever a script changes: the built-in types, then the templates' (the oldest template id first; a second definition of an id is reported and left out), then those of instances whose template is gone. The page takes the backend's list over its own built-in copy when there is a backend.
 

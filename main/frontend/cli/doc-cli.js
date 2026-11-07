@@ -129,6 +129,7 @@ async function docMigrateRun(parsed, option, out) {
   for (const file of report.documentList) say(`  document ${path.relative(dirTarget, file)}`);
   for (const dir of report.objectList) say(`  object   ${path.relative(dirTarget, dir)}`);
   for (const file of report.typeFileList) say(`  types    ${path.relative(dirTarget, file)}`);
+  for (const dir of report.entryListList) say(`  lists    ${path.relative(dirTarget, dir)}: the list of its entry moved to item-list.yaml`);
   for (const problem of report.problemList) say(`  problem  ${problem}`);
   return 0;
 }
@@ -261,7 +262,7 @@ function nextStepLineList(result) {
   }
   return [
     'next',
-    `  see it as a read-only doc page: react-doc dev ${dirText}`,
+    `  work on it as a doc page (editable when served alone): react-doc dev ${dirText}`,
     '  import it from a workspace file',
     `    packageList: [{ dir: ${dirText} }]`,
   ];
@@ -482,7 +483,7 @@ async function docDev(pathText, option, out) {
     },
   }).catch(loadFailureReport);
   await server.listen();
-  const kindLabel = { page: 'doc page', package: 'package, as a read-only doc page', workspace: 'workspace' }[launch.kind];
+  const kindLabel = { page: 'doc page', package: 'package, as a doc page you can edit (read-only where it is imported)', workspace: 'workspace' }[launch.kind];
   out(`react-doc (${layout.mode} mode, ${layout.dirInstalled ?? layout.dirRoot})`);
   out(`  serving the ${kindLabel} ${launch.target}${launch.kind === 'workspace' ? '' : ', in a virtual workspace'}`);
   for (const mount of launch.mountList ?? []) {

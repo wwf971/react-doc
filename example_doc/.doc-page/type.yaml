@@ -17,6 +17,11 @@ typeList:
     assetKindList:
       - { id: book, label: Book, langList: [yaml], pathPrefix: /book/, groupPath: book }
       - { id: note, label: Note, langList: [yaml], pathPrefix: /note/, groupPath: note }
+    # where its items lie: the books of the demonstration in example/, tracked; what trying the page
+    # adds in playground/, kept out of git with its item list (main/doc_page_impl_obj_frontend.md#partitions)
+    partitionList:
+      - { id: example, label: Example, description: the books and notes of the demonstration }
+      - { id: playground, label: Playground, description: what is added while trying the page, isGitIgnored: true }
     modeList:
       - id: shelf
         label: Shelf

@@ -4,7 +4,7 @@ import { useCompState } from '../../../../../main/comp-doc/registry/use-comp-sta
 import { EditValueInline } from '../../../../../main/comp-doc/edit/EditValueInline.jsx';
 import { ObjectFrontendAssetPathInput } from '../../../../../main/comp-doc/object-frontend/ObjectFrontendAssetPathInput.jsx';
 import { ObjectFrontendAssetSearchPanel } from '../../../../../main/comp-doc/object-frontend/ObjectFrontendAssetSearchPanel.jsx';
-import { objectFrontendAssetPathBuild } from '../../../../../main/frontend/src/lib/doc-object-frontend.js';
+import { objectFrontendAssetPathBuild, objectFrontendPartitionPlaceText } from '../../../../../main/frontend/src/lib/doc-object-frontend.js';
 import './ReadingList.css';
 
 // The modes of the frontend object type example.reading-list of the
@@ -92,9 +92,13 @@ export const ReadingList = observer(function ReadingList({ data = {}, config = {
                     <td>{book.data?.author ?? ''}</td>
                     <td className="doc-note">{book.data?.genre ?? ''}</td>
                     <td>
-                      <button type="button" className="doc-badge-outline reading-list-status" disabled={!service.isWritable} title={service.isWritable ? 'the next status, written into the book asset' : service.writeUnavailableReason} onClick={() => void bookStatusNext(service, book)}>
-                        {STATUS_LABEL[book.data?.status] ?? book.data?.status ?? ''}
-                      </button>
+                      {/* a control that changes the book only while the document is edited
+                          (main/doc_page_impl_obj_frontend.md#reading-and-editing) */}
+                      {service.docState?.isEditing ? (
+                        <button type="button" className="doc-badge-outline reading-list-status" disabled={!service.isEditable} title={service.isEditable ? 'the next status, written into the book asset' : service.editUnavailableReason} onClick={() => void bookStatusNext(service, book)}>
+                          {STATUS_LABEL[book.data?.status] ?? book.data?.status ?? ''}
+                        </button>
+                      ) : <span className="doc-badge-outline reading-list-status">{STATUS_LABEL[book.data?.status] ?? book.data?.status ?? ''}</span>}
                     </td>
                     <td className="doc-note">{noteCountByBook[book.key] ?? 0}</td>
                   </>
@@ -110,9 +114,13 @@ export const ReadingList = observer(function ReadingList({ data = {}, config = {
 
 export const ReadingListAdd = observer(function ReadingListAdd({ config = {} }) {
   const service = config.objectFrontend;
-  const draft = useCompState(config, { title: '', author: '', genre: '', message: '', isSubmitting: false });
+  const draft = useCompState(config, { title: '', author: '', genre: '', partition: '', message: '', isSubmitting: false });
   if (!service) return null;
   const value = draft.value;
+  // the partition the book goes to, said beside the form: trying the page adds to the playground,
+  // which git keeps out, so the books of the demonstration stay as they are (doc_page_impl_obj_frontend.md#partitions)
+  const partitionList = service.partitionList ?? [];
+  const partition = partitionList.find((one) => one.id === value.partition) ?? partitionList.find((one) => one.id === 'playground') ?? partitionList[0];
   // the paths of the new book, the recommended pattern: kind first
   const pathList = value.title.trim()
     ? [objectFrontendAssetPathBuild('book', value.genre || 'unsorted', value.title), ...(value.author.trim() ? [objectFrontendAssetPathBuild('author', value.author, value.title)] : [])]
@@ -127,6 +135,7 @@ export const ReadingListAdd = observer(function ReadingListAdd({ config = {} }) 
       kind: 'book',
       name: value.title.trim(),
       pathList,
+      ...(partition ? { partition: partition.id } : {}),
       data: { title: value.title.trim(), author: value.author.trim(), genre: value.genre.trim(), status: 'want' },
     });
     draft.patch({ isSubmitting: false, ...(result.code === 0 ? { title: '', author: '', genre: '', message: `added as ${pathList[0]}` } : { message: result.message }) });
@@ -137,7 +146,7 @@ export const ReadingListAdd = observer(function ReadingListAdd({ config = {} }) 
         <Plus size={15} aria-hidden="true" />
         <span className="reading-list-title">Add a book to {service.object.name || 'the list'}</span>
       </div>
-      {!service.isWritable ? <p className="doc-note">{service.writeUnavailableReason}</p> : (
+      {!service.isEditable ? <p className="doc-note">{service.editUnavailableReason}</p> : (
         <div className="reading-list-form">
           <span className="doc-note">title</span>
           <EditValueInline value={value.title} placeholder="(the title)" isLocked={value.isSubmitting} onCommit={(text) => draft.patch({ title: text })} />
@@ -147,6 +156,20 @@ export const ReadingListAdd = observer(function ReadingListAdd({ config = {} }) 
           <EditValueInline value={value.genre} placeholder="(sci-fi, non-fiction, …)" isLocked={value.isSubmitting} onCommit={(text) => draft.patch({ genre: text })} />
           <span className="doc-note">paths</span>
           <span className="doc-note">{pathList.length > 0 ? pathList.join(' · ') : 'made from the title, the genre and the author'}</span>
+          {partitionList.length > 0 ? (
+            <>
+              <span className="doc-note">partition</span>
+              <span className="reading-list-form-actions">
+                {/* one partition: nothing to choose, only where it goes */}
+                {partitionList.length > 1 ? (
+                  <select aria-label="The partition of the book" value={partition?.id ?? ''} disabled={value.isSubmitting} onChange={(event) => draft.patch({ partition: event.target.value })}>
+                    {partitionList.map((one) => <option key={one.id} value={one.id}>{one.label}</option>)}
+                  </select>
+                ) : null}
+                <span className="doc-note">goes to {objectFrontendPartitionPlaceText(partition, 'book')}</span>
+              </span>
+            </>
+          ) : null}
           <span />
           <span className="reading-list-form-actions">
             <button type="button" className="doc-button" data-primary="" disabled={value.isSubmitting} onClick={() => void submit()}>Add the book</button>
@@ -171,6 +194,7 @@ export const ReadingListBook = observer(function ReadingListBook({ data = {}, co
   const noteList = key
     ? service.assetList('note').map((asset) => ({ asset, ...service.assetDataGet(asset.key) })).filter((note) => note.data?.book === key)
     : [];
+  const notePartition = (service.partitionList ?? []).find((one) => one.id === resolved.asset?.partition);
   const back = () => void service.blockSet({ mode: data.param?.back || 'shelf', param: {} }, { isSaved: false });
   const noteAdd = async () => {
     const text = draft.value.text.trim();
@@ -181,6 +205,8 @@ export const ReadingListBook = observer(function ReadingListBook({ data = {}, co
       name: text.split(/\s+/).slice(0, 5).join(' '),
       pathList: [objectFrontendAssetPathBuild('note', bookSegment, String(noteList.length + 1))],
       data: { book: key, text },
+      // a note goes where its book is: what is made from an existing asset joins its partition
+      ...(notePartition ? { partition: notePartition.id } : {}),
     });
     draft.patch(result.code === 0 ? { text: '', message: '' } : { message: result.message });
   };
@@ -202,12 +228,13 @@ export const ReadingListBook = observer(function ReadingListBook({ data = {}, co
           {noteList.length === 0 ? <li className="doc-note">No note on this book yet.</li> : noteList.map((note) => <li key={note.asset.key}>{note.data?.text ?? note.message}</li>)}
         </ul>
       ) : null}
-      {service.isWritable && book?.status === 'done' ? (
+      {service.isEditable && book?.status === 'done' ? (
         <div className="reading-list-form">
           <span className="doc-note">note</span>
           <span className="reading-list-form-actions">
             <EditValueInline value={draft.value.text} placeholder="(a note on the book)" onCommit={(text) => draft.patch({ text })} />
             <button type="button" className="doc-button" onClick={() => void noteAdd()}>Add the note</button>
+            <span className="doc-note">goes to {objectFrontendPartitionPlaceText(notePartition, 'note')}, beside its book</span>
             {draft.value.message ? <span className="doc-error">{draft.value.message}</span> : null}
           </span>
         </div>

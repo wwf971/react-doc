@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -9,6 +10,7 @@ import { assetStoreCreate, itemDirNameBuild } from './doc-asset-store.ts';
 import { docAssetMiddlewareCreate } from './doc-asset-server.ts';
 import { docAssetConfigLoad, loadConfigDoc } from './doc-source.ts';
 import { objectFrontendConfigOfDocPageListGet, objectFrontendDirNameBuild } from './doc-object-frontend.ts';
+import { objectFrontendAssetListMerge, objectFrontendListGroupPathGet } from '../src/lib/doc-object-frontend.js';
 import {
   objectFrontendAssetIndexBuild, objectFrontendAssetPathBuild, objectFrontendAssetPathComplete, objectFrontendAssetPathNormalize,
   objectFrontendAssetRefResolve, objectFrontendAssetSearch,
@@ -55,6 +57,11 @@ function configGet(dir) {
 const typeDeclaredOf = (dir) => loadConfigDoc(path.join(dir, 'config.yaml')).typeDeclared;
 const typeYamlWrite = (dir, text) => fs.writeFileSync(path.join(dir, 'page', '.doc-page', 'type.yaml'), text);
 
+// the records of an object's item lists as the files say now, each with the folder of its list
+function recordListOf(dir, id) {
+  const decl = configGet(dir).docPageList.flatMap((docPage) => docPage.objectList).find((one) => one.id === id);
+  return objectFrontendAssetListMerge([], decl.listList).assetList;
+}
 function middlewareCreate(dir) {
   return docAssetMiddlewareCreate({
     endpoint: '/__doc-asset',
@@ -205,14 +212,16 @@ test('create: a folder of its own, the entry asset in item/, and object.yaml bes
   assert.equal(folderOwned.itemCount, 1);
   assert.equal(folderOwned.isDefault, false);
 
-  // an asset of the object: in its item folder, declaring it, listed in the entry
+  // an asset of the object: in its item folder, declaring it, recorded in an item list
   const asset = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/create', { id, kind: 'book', text: 'title: Dune\n' });
   assert.equal(asset.body.code, 0, asset.body.message);
   assert.equal(asset.body.data.key, 'book-1');
   const assetMeta = storeOf(dir).itemGet(asset.body.data.itemId);
   assert.equal(assetMeta.folder, folderOwned.path);
   assert.deepEqual(assetMeta.owner, { ref: `frontend:${id}` });
-  assert.deepEqual(objectFrontendEntryParse(storeOf(dir).versionDataGet(entry.itemId).text).entry.assetList, [{ key: 'book-1', kind: 'book', itemId: assetMeta.itemId }]);
+  assert.deepEqual(recordListOf(dir, id), [{ key: 'book-1', kind: 'book', itemId: assetMeta.itemId, listGroupPath: '' }]);
+  assert.ok(fs.existsSync(path.join(dirObject, 'item', 'item-list.yaml')), 'an asset at the top is recorded in the list at the top');
+  assert.equal(objectFrontendEntryParse(storeOf(dir).versionDataGet(entry.itemId).text).entry.assetList.length, 0, 'the entry lists nothing');
 
   // a new name renames the folder of the object with everything in it, and the answer says where the items are now
   const renamed = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/meta/set', { id, name: 'Shelf two' });
@@ -388,7 +397,7 @@ test('the paths of assets are read as os paths; the folders they imply complete 
   assert.deepEqual(objectFrontendAssetSearch(assetList, 'path:/book sol').hitList.map((hit) => hit.asset.key), ['book-2']);
 });
 
-test('the names and paths of assets are written into the entry; a path another asset has is refused', async () => {
+test('the names and paths of assets are written into their records; a path another asset has is refused', async () => {
   const dir = fixtureCreate();
   const middleware = middlewareCreate(dir);
   const created = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/create', { docPageAlias: 'page', typeId: 'frontend.object', name: 'Shelf' });
@@ -400,9 +409,7 @@ test('the names and paths of assets are written into the entry; a path another a
   assert.match(taken.body.message, /is the path of Dune/);
   const metaSet = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/meta/set', { id, key: 'book-1', name: null, pathList: ['/book/classic/dune'] });
   assert.equal(metaSet.body.code, 0, metaSet.body.message);
-  const store = assetStoreCreate(docAssetConfigLoad(path.join(dir, 'config.yaml')));
-  const entry = objectFrontendEntryParse(store.versionDataGet(itemList[0].itemId).text).entry;
-  assert.deepEqual(entry.assetList[0], { key: 'book-1', kind: 'book', itemId: asset.body.data.itemId, pathList: ['/book/classic/dune'] });
+  assert.deepEqual(recordListOf(dir, id)[0], { key: 'book-1', kind: 'book', itemId: asset.body.data.itemId, pathList: ['/book/classic/dune'], listGroupPath: '' });
   const bad = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/meta/set', { id, key: 'book-1', pathList: ['/..'] });
   assert.match(bad.body.message, /above the root/);
 });
@@ -578,7 +585,7 @@ test('an item dropped into the folder by hand is no asset until adopted, and can
   fs.renameSync(path.join(dir, 'page', '.doc-page', 'asset', dropped.itemId), path.join(dirItem, 'deep', 'er', dropped.itemId));
   const found = statusOf(dir).itemGet(dropped.itemId);
   assert.deepEqual([found.folderOwner.ref, found.owner, found.groupPath], [ref, undefined, 'deep/er']);
-  assert.deepEqual(objectFrontendEntryParse(statusOf(dir).versionDataGet(itemList[0].itemId).text).entry.assetList, []);
+  assert.deepEqual(recordListOf(dir, id), []);
   // adopted: it keeps its place, declares the object, is listed
   const adopted = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/attach', { id, itemId: dropped.itemId, kind: 'book' });
   assert.equal(adopted.body.code, 0, adopted.body.message);
@@ -607,7 +614,7 @@ test('the folders inside an object are a place on disk: its keys and paths do no
   const moved = await post('asset/move', { key: 'dune', groupPath: 'a/b' });
   assert.equal(moved.body.code, 0, moved.body.message);
   assert.equal(statusOf(dir).itemGet(itemId).groupPath, 'a/b');
-  const entryOf = () => objectFrontendEntryParse(statusOf(dir).versionDataGet(itemList[0].itemId).text).entry.assetList[0];
+  const entryOf = () => recordListOf(dir, id)[0];
   assert.deepEqual(entryOf().pathList, ['/book/dune']);
   const grouped = await post('asset/group/move', { groupFrom: 'a', groupTo: 'c/d' });
   assert.equal(grouped.body.code, 0, grouped.body.message);
@@ -643,7 +650,7 @@ test('an item goes from one object to another only when asked, off the first lis
   assert.equal(taken.body.code, 0, taken.body.message);
   const moved = statusOf(dir).itemGet(itemId);
   assert.deepEqual([moved.owner.ref, moved.folderOwner.ref], [`frontend:${second.id}`, `frontend:${second.id}`]);
-  assert.deepEqual(objectFrontendEntryParse(statusOf(dir).versionDataGet(first.itemList[0].itemId).text).entry.assetList, []);
+  assert.deepEqual(recordListOf(dir, first.id), []);
   const entryRefused = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/attach', { id: second.id, itemId: first.itemList[0].itemId, isOwnerReplaced: true });
   assert.match(entryRefused.body.message, /the entry of/);
 });
@@ -663,3 +670,129 @@ test('the same type carried by two objects is one type; a different one is a pro
   assert.equal(typeList.length, 1);
   assert.match(problemList.map((one) => one.message).join(), /declared already, otherwise/);
 });
+
+test('item lists: a record goes to the list nearest to its item, a folder without one gets its own, and a folder removed takes its records along', async () => {
+  const dir = fixtureCreate();
+  const middleware = middlewareCreate(dir);
+  const { id } = (await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/create', { docPageAlias: 'page', typeId: 'frontend.object', name: 'Profile' })).body.data;
+  const post = (route, body) => requestRun(middleware, 'POST', `/__doc-asset/object-frontend/${route}`, { id, ...body });
+  const dirItem = path.join(objectFolderOf(dir, `${id}--Profile`), 'item');
+  const listOf = (groupPath) => recordListOf(dir, id).filter((one) => one.listGroupPath === groupPath).map((one) => one.key);
+  // two partitions, as an object keeps an example and real data: each folder gets a list of its own
+  assert.equal((await post('asset/create', { key: 'ex-name', groupPath: 'example/info', pathList: ['/example/info/name'], text: 'a: 1\n' })).body.code, 0);
+  assert.equal((await post('asset/create', { key: 'real-name', groupPath: 'real/info', pathList: ['/real/info/name'], text: 'b: 1\n' })).body.code, 0);
+  assert.deepEqual([listOf('example'), listOf('real')], [['ex-name'], ['real-name']]);
+  assert.equal(fs.existsSync(path.join(dirItem, 'item-list.yaml')), false, 'nothing is recorded at the top');
+  // inside a set, the nearest list above: a folder below with a list of its own takes its items
+  fs.writeFileSync(path.join(dirItem, 'example', 'info', 'item-list.yaml'), 'assetList: []\n');
+  assert.equal((await post('asset/create', { key: 'ex-birth', groupPath: 'example/info', text: 'c: 1\n' })).body.code, 0);
+  assert.deepEqual(listOf('example/info'), ['ex-birth']);
+  // moved to the other set, a record follows its item; a list left empty is removed
+  assert.equal((await post('asset/move', { key: 'ex-birth', groupPath: 'real' })).body.code, 0);
+  assert.deepEqual([listOf('real'), listOf('example/info')], [['real-name', 'ex-birth'], []]);
+  assert.equal(fs.existsSync(path.join(dirItem, 'example', 'info', 'item-list.yaml')), false, 'a list left empty is removed');
+  // a folder moved whole carries its list; records kept above follow their items
+  assert.equal((await post('asset/group/move', { groupFrom: 'real', groupTo: 'private' })).body.code, 0);
+  assert.deepEqual(listOf('private'), ['real-name', 'ex-birth']);
+  // a folder left empty by its list goes with it
+  assert.equal((await post('asset/move', { key: 'ex-name', groupPath: 'example' })).body.code, 0);
+  assert.equal(fs.existsSync(path.join(dirItem, 'example', 'info')), false, 'its last item gone, the folder goes');
+  fs.mkdirSync(path.join(dirItem, 'example', 'info'));
+  fs.writeFileSync(path.join(dirItem, 'example', 'info', 'item-list.yaml'), 'assetList: []\n');
+  assert.equal((await post('asset/create', { key: 'ex-tmp', groupPath: 'example/info', text: 'x: 1\n' })).body.code, 0);
+  assert.equal((await post('asset/move', { key: 'ex-tmp', groupPath: 'example' })).body.code, 0);
+  assert.equal(fs.existsSync(path.join(dirItem, 'example', 'info')), false);
+  // the folder of a partition removed (as git does for an ignored one in a clone): its items and their records are gone, nothing dangles
+  fs.rmSync(path.join(dirItem, 'private'), { recursive: true });
+  assert.deepEqual(recordListOf(dir, id).map((one) => one.key), ['ex-name', 'ex-tmp']);
+  assert.deepEqual(statusOf(dir).itemList().filter((one) => one.folderOwner?.ref === `frontend:${id}`).length, 3, 'the entry and the two of the example');
+  // keys stay unique across the lists
+  assert.match((await post('asset/create', { key: 'ex-name', groupPath: 'example', text: 'd: 1\n' })).body.message, /key ex-name already/);
+});
+
+test('the list of an asset: the nearest above its folder, else the first folder of its path', () => {
+  assert.equal(objectFrontendListGroupPathGet([], ''), '');
+  assert.equal(objectFrontendListGroupPathGet([], 'real/info/x'), 'real');
+  assert.equal(objectFrontendListGroupPathGet(['real'], 'real/info/x'), 'real');
+  assert.equal(objectFrontendListGroupPathGet(['real', 'real/info'], 'real/info/x'), 'real/info');
+  assert.equal(objectFrontendListGroupPathGet([''], 'real/info'), '', 'a list at the top covers every folder without one');
+  const merged = objectFrontendAssetListMerge([{ key: 'a', kind: '', itemId: 'w1' }], [{ groupPath: 'x', assetList: [{ key: 'a', kind: '', itemId: 'w2' }, { key: 'b', kind: '', itemId: 'w1' }], problemList: [] }]);
+  assert.deepEqual(merged.assetList.map((one) => [one.key, one.listGroupPath]), [['a', null]]);
+  assert.equal(merged.problemList.length, 2);
+});
+
+test('partitions: declared by the type, a write names one, and one kept out of git must be ignored by git first', async () => {
+  const dir = fixtureCreate();
+  typeYamlWrite(dir, [
+    'typeList:',
+    '  - id: demo.profile',
+    '    assetKindList:',
+    '      - { id: info, groupPath: info }',
+    '    partitionList:',
+    '      - { id: example, label: Example }',
+    '      - { id: real, label: My data, isGitIgnored: true }',
+    '      - { id: Bad name! }',
+    '',
+  ].join('\n'));
+  const { typeList, problemList } = typeDeclaredOf(dir);
+  assert.deepEqual(typeList.find((one) => one.id === 'demo.profile').partitionList.map((one) => [one.id, one.isGitIgnored]), [['example', false], ['real', true]]);
+  assert.ok(problemList.some((one) => /a partition is a mapping whose "id" is its folder/.test(one.message)));
+  const middleware = middlewareCreate(dir);
+  const { id } = (await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/create', { docPageAlias: 'page', typeId: 'demo.profile', name: 'Me' })).body.data;
+  const post = (route, body) => requestRun(middleware, 'POST', `/__doc-asset/object-frontend/${route}`, { id, ...body });
+  // the folder of its kind, inside the partition named
+  const made = await post('asset/create', { kind: 'info', partition: 'example', pathList: ['/example/info/name'], text: 'a: 1\n' });
+  assert.equal(made.body.code, 0, made.body.message);
+  assert.equal(statusOf(dir).itemGet(made.body.data.itemId).groupPath, 'example/info');
+  assert.match((await post('asset/create', { kind: 'info', partition: 'other', text: 'b: 1\n' })).body.message, /declares no partition other/);
+  // outside a repository there is no git to ask
+  assert.equal((await post('asset/create', { kind: 'info', partition: 'real', text: 'c: 1\n' })).body.code, 0);
+  // in a repository, a partition kept out of git is written only once git ignores it
+  execFileSync('git', ['init', '-q'], { cwd: dir });
+  const refused = await post('asset/create', { kind: 'info', partition: 'real', text: 'd: 1\n' });
+  assert.match(refused.body.message, /kept out of git .* but git does not ignore/);
+  fs.writeFileSync(path.join(dir, '.gitignore'), '**/.doc-page/object-frontend/*/item/real/\n');
+  assert.equal((await post('asset/create', { kind: 'info', partition: 'real', text: 'e: 1\n' })).body.code, 0);
+});
+
+test('the apis of partitions: a default one for a write naming none, made, renamed, deleted', async () => {
+  const dir = fixtureCreate();
+  typeYamlWrite(dir, [
+    'typeList:',
+    '  - id: demo.notes',
+    '    assetKindList:',
+    '      - { id: note, groupPath: note }',
+    '    partitionList:',
+    '      - { id: example }',
+    '      - { id: mine, isDefault: true }',
+    '      - { id: old }',
+    '',
+  ].join('\n'));
+  const middleware = middlewareCreate(dir);
+  const { id } = (await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/create', { docPageAlias: 'page', typeId: 'demo.notes', name: 'Notes' })).body.data;
+  const post = (route, body) => requestRun(middleware, 'POST', `/__doc-asset/object-frontend/${route}`, { id, ...body });
+  const dirItem = path.join(objectFolderOf(dir, `${id}--Notes`), 'item');
+  // naming no partition: the default one, the folder of the kind inside it
+  const made = await post('asset/create', { kind: 'note', key: 'n1', text: 'a: 1\n' });
+  assert.equal(statusOf(dir).itemGet(made.body.data.itemId).groupPath, 'mine/note');
+  // a place already in a partition is taken as it is
+  const placed = await post('asset/create', { kind: 'note', key: 'n2', groupPath: 'example/note', text: 'b: 1\n' });
+  assert.equal(statusOf(dir).itemGet(placed.body.data.itemId).groupPath, 'example/note');
+  // made: its folder and an empty list; once only; a partition the type does not declare is refused
+  assert.equal((await post('partition/create', { partition: 'old' })).body.code, 0);
+  assert.equal(fs.readFileSync(path.join(dirItem, 'old', 'item-list.yaml'), 'utf-8').includes('assetList: []'), true);
+  assert.match((await post('partition/create', { partition: 'old' })).body.message, /exists already/);
+  assert.match((await post('partition/create', { partition: 'other' })).body.message, /declares no partition other/);
+  // renamed: an empty one by its folder; one holding assets with them, their records following
+  assert.match((await post('partition/rename', { partitionFrom: 'mine', partitionTo: 'example' })).body.message, /exists already/);
+  assert.equal((await post('partition/delete', { partition: 'old' })).body.code, 0);
+  assert.equal(fs.existsSync(path.join(dirItem, 'old')), false);
+  assert.equal((await post('partition/rename', { partitionFrom: 'mine', partitionTo: 'old' })).body.code, 0);
+  assert.equal(statusOf(dir).itemGet(made.body.data.itemId).groupPath, 'old/note');
+  assert.deepEqual(recordListOf(dir, id).map((one) => [one.key, one.listGroupPath]), [['n2', 'example'], ['n1', 'old']]);
+  // deleted: its assets off the lists and deleted softly; the files stay
+  assert.equal((await post('partition/delete', { partition: 'old' })).body.code, 0);
+  assert.deepEqual(recordListOf(dir, id).map((one) => one.key), ['n2']);
+  assert.equal(statusOf(dir).itemGet(made.body.data.itemId).isDeleted, true);
+});
+

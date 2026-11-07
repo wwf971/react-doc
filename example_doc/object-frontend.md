@@ -23,7 +23,7 @@ object: frontend:w5j7ozoijzl
 object: frontend:w5j7ozoijzl
 ```
 
-Without a `mode`, the block draws the type's default mode, here the shelf. Its status filter is a parameter of the block: the buttons write it into this document (`param: { status: reading }`), through the api the mode is given (`paramSet`), in reading mode as in edit mode; a click on a status moves the book on (`want` → `reading` → `read`) and writes the book's asset. Opening a book switches the block for as long as the page is open, without writing the document (`{ isSaved: false }`).
+Without a `mode`, the block draws the type's default mode, here the shelf. Its status filter is a parameter of the block: the buttons write it into this document (`param: { status: reading }`), through the api the mode is given (`paramSet`), in reading mode as in edit mode; in edit mode, a click on a status moves the book on (`want` → `reading` → `read`) and writes the book's asset; in reading mode the status only reads, as a block of a frontend object shows no control that changes data while its document is read (`main/doc_page_impl_obj_frontend.md`, Reading and editing). Opening a book switches the block for as long as the page is open, without writing the document (`{ isSaved: false }`).
 
 ## One object, several modes
 
@@ -142,9 +142,12 @@ example_doc/.doc-page/
     └── w5j7ozoijzl--Reading list/         the folder of the object: copied elsewhere, the object is there
         ├── object.yaml                    id, entry
         └── item/                          its asset items
-            ├── w5j7ozokr1x/               its entry: name, type, assetList, metadata
-            ├── book/w5j7pmxa7fw/          book-1: folders of any depth, here one per kind
-            └── note/…                     the notes
+            ├── w5j7ozokr1x/               its entry: name, type, metadata
+            ├── example/                   the partition of the demonstration, tracked
+            │   ├── item-list.yaml         the records of its books and notes: key, kind, name, paths
+            │   ├── book/w5j7pmxa7fw/      book-1: folders of any depth, here one per kind
+            │   └── note/…
+            └── playground/                what Add a book adds while trying the page, kept out of git
 ```
 
-The folder is where the items lie, not what makes them belong: the object says that, in the list of its entry. The type `example.reading-list` declares what it holds (`assetKindList` in `.doc-page/type.yaml`): a book goes to `item/book/`, and something of another kind is refused. A file moved into `item/` by hand shows in the tab **Frontend objects** as of unknown source, not as a book, until it is adopted there or moved out. Where a book lies on disk and its paths above (`/book/sci-fi/dune`) do not depend on each other. An item of the store moves with **move…** in its asset panel; into an object, that goes through the object.
+The folder is where the items lie, not what makes them belong: the object says that, in its item lists, each recording the assets lying in its folder and below. Its type splits them into two **partitions** (`partitionList` in `.doc-page/type.yaml`): `example/`, the books above, tracked by git, and `playground/`, kept out of git with its own list. **Add a book** says where the book goes and adds it to the playground unless another partition is chosen, so trying the page leaves the demonstration as committed; a note goes where its book is. The package cv keeps the real data of a person the same way (`main/doc_page_impl_obj_frontend.md`, Partitions). The type `example.reading-list` declares what it holds (`assetKindList` in `.doc-page/type.yaml`): a book goes to `item/book/`, and something of another kind is refused. A file moved into `item/` by hand shows in the tab **Frontend objects** as of unknown source, not as a book, until it is adopted there or moved out. Where a book lies on disk and its paths above (`/book/sci-fi/dune`) do not depend on each other. An item of the store moves with **move…** in its asset panel; into an object, that goes through the object.

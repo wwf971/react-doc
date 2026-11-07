@@ -5,7 +5,7 @@ import {
 } from './doc-asset-store.ts';
 import { testCaseAssetResultSet, testCaseAssetWriteCheck } from '../../../built-in/comp-mdx/test-case-table/TestCaseTableApi.js';
 import {
-  objectFrontendAssetAttach, objectFrontendAssetGroupMove, objectFrontendAssetMove, objectFrontendAssetCreate, objectFrontendAssetRemove, objectFrontendConfigForPage,
+  objectFrontendAssetAttach, objectFrontendAssetGroupMove, objectFrontendPartitionCreate, objectFrontendPartitionDelete, objectFrontendPartitionRename, objectFrontendAssetMove, objectFrontendAssetCreate, objectFrontendAssetRemove, objectFrontendConfigForPage,
   objectFrontendAssetMetaSet, objectFrontendCreate, objectFrontendDelete, objectFrontendMetaSet, objectFrontendRegister, type ObjectFrontendConfig,
 } from './doc-object-frontend.ts';
 
@@ -190,6 +190,9 @@ async function objectFrontendRouteHandle(
     '/object-frontend/asset/move': () => objectFrontendAssetMove(context, body),
     '/object-frontend/asset/group/move': () => objectFrontendAssetGroupMove(context, body),
     '/object-frontend/asset/meta/set': () => objectFrontendAssetMetaSet(context, body),
+    '/object-frontend/partition/create': () => objectFrontendPartitionCreate(context, body),
+    '/object-frontend/partition/rename': () => objectFrontendPartitionRename(context, body),
+    '/object-frontend/partition/delete': () => objectFrontendPartitionDelete(context, body),
   };
   const write = writeByRoute[route];
   if (!write) throw new AssetError(-1, `unknown frontend object route: ${method} ${route}`);

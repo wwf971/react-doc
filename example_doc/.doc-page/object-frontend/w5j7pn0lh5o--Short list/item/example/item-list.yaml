@@ -1,0 +1,10 @@
+# the assets of the frontend object lying in this folder and below, down to a folder with an
+# item-list.yaml of its own: written by the page (doc_page_impl_obj_frontend.md#the-item-lists)
+assetList:
+  - key: book-1
+    kind: book
+    itemId: w5j7pn121sr
+    name: Invisible Cities
+    pathList:
+      - /book/fiction/invisible-cities
+      - /author/italo-calvino/invisible-cities
