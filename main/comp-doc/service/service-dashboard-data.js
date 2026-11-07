@@ -1,7 +1,7 @@
 import { yamlParse, yamlStringify } from '../../frontend/src/lib/yaml.js';
 
 // The data of a dashboard block (doc_page_impl_service_dashboard.md#dashboard-state):
-// the text of its asset object, yaml.
+// the text of its asset item, yaml.
 //
 //   serviceId: w4veemd7i36      the instance the dashboard shows; '' when not chosen yet
 //   state:                      the dashboard's own state, whatever it keeps

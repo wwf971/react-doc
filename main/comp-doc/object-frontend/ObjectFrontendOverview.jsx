@@ -37,7 +37,7 @@ export const ObjectFrontendOverview = observer(function ObjectFrontendOverview({
             <tr key={asset.key}>
               <td>{asset.key}</td>
               <td>{asset.kind}</td>
-              <td className="doc-object-frontend-muted">{asset.object?.name ? `${asset.object.name} · ` : ''}{asset.objectId}</td>
+              <td className="doc-object-frontend-muted">{asset.item?.name ? `${asset.item.name} · ` : ''}{asset.itemId}</td>
               <td data-error={asset.status !== 'found' || !asset.isOwnerMatch ? '' : undefined}>
                 {asset.status}{asset.status === 'found' && !asset.isOwnerMatch ? ', declares another owner' : ''}
               </td>
@@ -68,10 +68,12 @@ export const ObjectFrontendOverview = observer(function ObjectFrontendOverview({
           </button>
         ))}
       </div>
-      {state.problemList.length > 0 || state.strayList.length > 0 ? (
+      {state.problemList.length + state.strayList.length + state.unknownList.length + state.outsideList.length > 0 ? (
         <ul className="doc-error doc-object-frontend-problem">
           {state.problemList.map((problem) => <li key={problem}>{problem}</li>)}
-          {state.strayList.map((object) => <li key={object.objectId}>the asset {object.objectId} declares the object but its entry does not list it</li>)}
+          {state.unknownList.map((item) => <li key={item.itemId}>the item {item.itemId} lies in the folder of the object, of unknown source: the Frontend objects tab adopts it or sends it away</li>)}
+          {state.outsideList.map((asset) => <li key={asset.key}>the asset {asset.key} lies outside the folder of the object</li>)}
+          {state.strayList.map((item) => <li key={item.itemId}>the asset {item.itemId} declares the object but its entry does not list it</li>)}
         </ul>
       ) : null}
     </div>

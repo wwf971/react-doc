@@ -258,7 +258,7 @@ const ImageRender = observer(function ImageRender({ data, config, onEvent, capti
 	// doc_page_impl_mdx_comp.md#component-awareness)
 	const assetInfo = config.assetInfo;
 	const replaceNote = assetInfo?.isFromAsset
-		? `The data is asset "${assetInfo.name || assetInfo.objectId}": the paste ${assetInfo.saveMode === 'newVersion' ? 'adds a version' : 'replaces its head version in place'}.`
+		? `The data is asset "${assetInfo.name || assetInfo.itemId}": the paste ${assetInfo.saveMode === 'newVersion' ? 'adds a version' : 'replaces its head version in place'}.`
 		: '';
 
 	// the floating controls of the paste flow: the confirmation over an

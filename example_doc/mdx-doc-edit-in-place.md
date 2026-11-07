@@ -188,11 +188,11 @@ Components that expose no edit mode are edited as source, like any other block. 
 
 ## Components backed by the asset service layer
 
-A component block whose code block is written in the language `asset` holds a reference into the asset service layer instead of its data (see [Asset Service Layer](asset-store.md)). In edit mode such a block is edited as source, whatever its component declares: the block is the reference, and the editor shows the reference, labeled `Image (asset)`. The data belongs to the object and is changed through the asset panel, opened with the **asset** button that the toolbar of such a block shows next to Edit; the panel saves the head text in place or as a new version.
+A component block whose code block is written in the language `asset` holds a reference into the asset service layer instead of its data (see [Asset Service Layer](asset-store.md)). In edit mode such a block is edited as source, whatever its component declares: the block is the reference, and the editor shows the reference, labeled `Image (asset)`. The data belongs to the item and is changed through the asset panel, opened with the **asset** button that the toolbar of such a block shows next to Edit; the panel saves the head text in place or as a new version.
 
 <!--renderComp=Image-->
 ```asset
-objectId: w4laejhlzjh
+itemId: w4laejhlzjh
 ```
 
 ## Pasting blocks

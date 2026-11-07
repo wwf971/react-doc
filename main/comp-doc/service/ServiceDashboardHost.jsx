@@ -51,7 +51,7 @@ export const ServiceDashboardHost = observer(function ServiceDashboardHost({ dat
   const dashboardDefine = serviceStore.dashboardDefineGet(serviceId, dashboardId);
   const problem = serviceStore.dashboardProblemGet({ templateName, dashboardId, serviceId });
   // the Services tab keeps the state itself (its local handler answers);
-  // in a document the state is the block's asset object
+  // in a document the state is the block's asset item
   const isPlacementSettings = config.placement === 'serviceSettings';
   const stateUnavailableReason = isPlacementSettings ? '' : serviceStore.stateUnavailableReasonGet(config.assetInfo);
 

@@ -1,19 +1,21 @@
-import typeBuiltinFile from '../../../../built-in/object-type/object-type-builtin.json';
+import { parse as yamlParse } from 'yaml';
+import typeBuiltinText from '../../../../built-in/type.yaml?raw';
 
-// The type registry of the page (design: doc_page_impl_obj.md#types). The
+// The type registry of the page (design: doc_page_impl_type.md). The
 // same semantics as the backend's (service_object.py TypeRegistry): a type
 // is { id, kind: object | relation, label, description, extendList, icon,
 // summaryKeyList, definedBy }, a type extends any number of types of its
 // kind, the roots are core.object and core.relation, and a type nobody
 // defines is taken as a child of both roots (every object is a core.object).
 //
-// The page reads the built-in types from the JSON file the kernel reads too,
-// and the backend's list when there is a backend (the built-in types and
-// those the service templates define), so both registries agree.
+// The page reads the built-in types from the file the kernel reads too, the
+// backend's list when there is a backend (the built-in types and those the
+// service templates define), and the types declared in yaml by the doc pages,
+// their objects and the packages (DocObjectStore.typeDeclaredList).
 
 export const TYPE_ROOT_BY_KIND = { object: 'core.object', relation: 'core.relation' };
 
-export const typeBuiltinList = (typeBuiltinFile.typeList ?? []).map((item) => typeDefineNormalize(item, { kind: 'builtIn' }));
+export const typeBuiltinList = (yamlParse(typeBuiltinText)?.typeList ?? []).map((item) => typeDefineNormalize(item, { kind: 'builtIn' }));
 
 export function typeDefineNormalize(item, definedBy = { kind: 'builtIn' }) {
   const kind = item.kind === 'relation' ? 'relation' : 'object';
@@ -40,7 +42,11 @@ export function typeRegistryBuild(typeList) {
   const typeById = new Map();
   const problemList = [];
   for (const item of typeList) {
-    if (typeById.has(item.id)) continue;
+    if (typeById.has(item.id)) {
+      // the backend's list repeats the built-in types; a declared one shadowing them says so
+      if (['docPage', 'package'].includes(item.definedBy?.kind)) problemList.push(`the type ${item.id} declared in ${item.definedBy.file} is defined already; it is left out`);
+      continue;
+    }
     typeById.set(item.id, { ...item, extendList: [...item.extendList] });
   }
   for (const type of typeById.values()) {

@@ -1,6 +1,6 @@
 // A place in a document (design: doc_page_impl_nav.md#places-in-a-document):
 // where something of a document is, for a list that points back at it (the
-// blocks that use an asset object) and for a link that takes the reader there.
+// blocks that use an asset item) and for a link that takes the reader there.
 //
 //   { docPath, sourceLine, fragment }
 //

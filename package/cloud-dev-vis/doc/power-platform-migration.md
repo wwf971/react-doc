@@ -3,7 +3,7 @@
 The migration components of the [Power Platform series](power-platform.md), in `comp-mdx/power-platform/migration/`: what a migration between two Dataverse databases holds as **data items**, the [scenes](card-diagram-flexible-switch.md) generated from them, and the editors of each kind of item. They are the **modes** of a [frontend object](../../../main/doc_page_impl_obj_frontend.md): a doc page declares a type naming them, lists one object, and places blocks of it. Nothing here knows a project or a language: every word on screen comes from the items.
 
 ```text
-.doc-page/object-frontend.yaml   a type whose modes are the components below; one object
+type.yaml of the object's folder  a type whose modes are the components below; one object
         │
 assets of the object             the data items, one asset per item, each with a path
         │  migrationModelBuild
@@ -128,7 +128,7 @@ A table and an option set of one database share the namespace of `/overview/{db}
 | `MigrationSchemaTableEdit`, `MigrationSchemaChoiceEdit`, `MigrationMappingTableEdit`, `MigrationMappingColumnEdit`, `MigrationMappingChoiceEdit` | editing one item | `category`, `item` (a path, a key, `name:…`) |
 
 ```yaml
-# .doc-page/object-frontend.yaml
+# type.yaml beside the object.yaml of the object
 typeList:
   - id: my.migration
     label: Migration

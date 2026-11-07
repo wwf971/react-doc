@@ -7,7 +7,7 @@ import { diagramEditModeList } from './DiagramEditStore.js';
 function fixtureCreate() {
 	const writes = [];
 	const path = '/test.md';
-	const raw = 'store: local\nobjectId: table';
+	const raw = 'store: local\nitemId: table';
 	const markerText = '<!--renderComp=Card,title=Example-->';
 	const nodeText = `\`\`\`asset\n${raw}\n\`\`\``;
 	const block = { index: 0, kind: 'component', lineStart: 1, lineEnd: 5, text: `${markerText}\n${nodeText}`, component: { compName: 'Card', lang: 'asset', raw, nodeType: 'code', markerText, textBefore: '', textBetween: '\n', nodeText, props: { title: 'Example' } } };
@@ -15,11 +15,11 @@ function fixtureCreate() {
 	store.sourceStore = { configDoc: { compRegistry: { Card: 'test/Card' } } };
 	store.docStore = { compById: { 'test/Card': compDefine(() => null, { isAssetAware: true, expose: { meta: { isEditAssetAccepted: true }, editModeList: diagramEditModeList } }) } };
 	store.docEditByPath = { [path]: { model: { blockList: [block] } } };
-	store.assetStore = { isWritable: true, objectUpdate: async (...args) => { writes.push({ target: 'asset', args }); return { code: 0 }; } };
+	store.assetStore = { isWritable: true, itemUpdate: async (...args) => { writes.push({ target: 'asset', args }); return { code: 0 }; } };
 	store.blockDependencyListGet = () => [];
 	store.operationApply = async (path, operation, options) => { writes.push({ target: 'inline', operation }); options.onApplied(); return { code: 0 }; };
 	store.session = { type: 'block', path, blockIndex: 0, editModeId: 'visual', textInitial: block.text, textDraft: block.text, status: 'editing', message: '' };
-	const event = (type, data = {}) => store.eventHandle({ type, data, source: { sourcePath: path, blockIndex: 0, asset: { isFromAsset: true, store: 'local', objectId: 'table' } } });
+	const event = (type, data = {}) => store.eventHandle({ type, data, source: { sourcePath: path, blockIndex: 0, asset: { isFromAsset: true, store: 'local', itemId: 'table' } } });
 	return { store, block, writes, event, path };
 }
 
@@ -62,12 +62,12 @@ test('typing drafts performs no writes and Cancel discards them', async () => {
 test('normal exit saves once to the asset and failed saves retain the draft', async () => {
 	const { store, writes, event } = fixtureCreate();
 	await event('editDraftChange', { raw: 'name: Draft', isDirty: true, saveTarget: 'asset' });
-	const update = store.assetStore.objectUpdate;
-	store.assetStore.objectUpdate = async () => ({ code: -1, message: 'Conflict' });
+	const update = store.assetStore.itemUpdate;
+	store.assetStore.itemUpdate = async () => ({ code: -1, message: 'Conflict' });
 	assert.equal(await store.sessionLeave(), false);
 	assert.equal(store.session.status, 'error');
 	assert.equal(store.session.assetDraft.raw, 'name: Draft');
-	store.assetStore.objectUpdate = update;
+	store.assetStore.itemUpdate = update;
 	assert.equal(await store.sessionLeave(), true);
 	assert.equal(writes.length, 1);
 	assert.equal(writes[0].target, 'asset');

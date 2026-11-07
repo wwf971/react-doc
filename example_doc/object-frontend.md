@@ -3,7 +3,7 @@ title: Frontend Objects
 description: Objects the page keeps itself, in assets, drawn in the modes their types declare; a small system of its own in each object
 ---
 
-A **frontend object** is an object of the [object registry](object-registry.md) whose data the page keeps itself, in the asset service layer: think of it as a service that runs in the page, hosting objects as free as their types make them. Each object has an **entry asset** that says what it is (its name, its type, its assets, its metadata) and any number of **assets of its own**, each declaring the object it belongs to. A doc page lists its objects, and declares their **types**, in `.doc-page/object-frontend.yaml`. The design is `main/doc_page_impl_obj_frontend.md`.
+A **frontend object** is an object of the [object registry](object-registry.md) whose data the page keeps itself, in the asset service layer: think of it as a service that runs in the page, hosting objects as free as their types make them. Each object has an **entry asset** that says what it is (its name, its type, its assets, its metadata) and any number of **assets of its own**, each declaring the object it belongs to. A doc page lists its objects, and declares their **types**, in `.doc-page/type.yaml`. The design is `main/doc_page_impl_obj_frontend.md`.
 
 The objects below are reading lists: a type of this doc page, `example.reading-list`. One reading list holds two kinds of data, each piece one asset: **books** (a title, an author, a genre, a status) and **notes** (a text, naming the book it is about). Its type declares the ways to work with it, its **modes**: a shelf, cards, a form adding a book, one book with its notes, a search, some numbers.
 
@@ -133,14 +133,18 @@ layout: grid
 - **From a document**, in edit mode: the insert menu's **Frontend Object** asks for the object first, a search of the registry limited to frontend objects, or creates one of a type with the **New** buttons, and writes the block for it. The block's edit mode chooses the object, the mode and the parameters.
 - **In the settings panel**, the tab **Frontend objects** lists the objects of every doc page with their assets, creates one in a doc page of a type, renames it (its folder follows), removes an asset, attaches an asset that declares the object but is not listed, deletes an object with its assets or keeping them, and lists the types the doc pages declare and the problems of their files.
 
-On disk an object is a folder of its doc page's asset folder, named like an asset object, `{id}--{name}`, holding its entry and its other assets; the asset store reads objects inside such group folders at any depth, and each asset declares its object in its own `object.yaml` (`owner: { ref: frontend:{id} }`, `role: entry` for the entry):
+On disk an object is a folder of its own, named `{id}--{name}` (ASCII only), holding `object.yaml` and its asset items in `item/`; the asset store reads `item/` as one of its folders, and each asset declares the object in its `owner`.
 
 ```text
 example_doc/.doc-page/
-├── object-frontend.yaml                   the types, and objectList [{ id, entry }]
-└── asset/
-    └── w5j7ozoijzl--Reading list/         the group folder of the object
-        ├── w5j7ozokr1x/                   its entry: name, type, assetList, metadata
-        ├── w5j7pmxa7fw/                   book-1
-        └── …                              the other books and the notes
+├── type.yaml                              the types the reading lists share
+└── object-frontend/
+    └── w5j7ozoijzl--Reading list/         the folder of the object: copied elsewhere, the object is there
+        ├── object.yaml                    id, entry
+        └── item/                          its asset items
+            ├── w5j7ozokr1x/               its entry: name, type, assetList, metadata
+            ├── book/w5j7pmxa7fw/          book-1: folders of any depth, here one per kind
+            └── note/…                     the notes
 ```
+
+The folder is where the items lie, not what makes them belong: the object says that, in the list of its entry. The type `example.reading-list` declares what it holds (`assetKindList` in `.doc-page/type.yaml`): a book goes to `item/book/`, and something of another kind is refused. A file moved into `item/` by hand shows in the tab **Frontend objects** as of unknown source, not as a book, until it is adopted there or moved out. Where a book lies on disk and its paths above (`/book/sci-fi/dune`) do not depend on each other. An item of the store moves with **move…** in its asset panel; into an object, that goes through the object.

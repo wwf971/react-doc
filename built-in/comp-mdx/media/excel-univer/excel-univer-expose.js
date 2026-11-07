@@ -4,7 +4,7 @@ import { excelUniverWorkbookDefaultCreate, excelUniverWorkbookTextBuild } from '
 // What ExcelUniver exposes through its registry definition (compDefine
 // expose, doc_page_impl_mdx_comp.md#what-a-component-exposes). It is
 // asset-only: its data is never written inline, a new block's starting
-// data becomes an asset object and the block a reference to it. It saves
+// data becomes an asset item and the block a reference to it. It saves
 // in place: a workbook is edited cell by cell, and each save becoming a
 // version would bury the history in versions nobody asked for. Its data is
 // edited with the spreadsheet only, never as text (no source mode). A click

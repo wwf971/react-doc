@@ -1,0 +1,32 @@
+itemId: w5j7pmxa7fw
+name: ""
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+owner:
+  ref: frontend:w5j7ozoijzl
+versionIdHead: w5j7pmxbx1o
+isDeleted: false
+isLocked: false
+timeCreated: 20261105_01185251+09
+versionList:
+  - versionId: w5j7pmxbx1o
+    versionIdPrevList: []
+    time: 20261105_01185251+09
+    note: book of the frontend object Reading list
+    size: 61
+    hash: 6dd183718d5ddcb47d9509d7729ad5e7ab95dd72
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261105_01185251+09
+    versionId: w5j7pmxbx1o
+  - eventType: updateInPlace
+    time: 20261105_03374811+09
+    versionId: w5j7pmxbx1o
+  - eventType: move
+    time: 20261108_02172666+09
+    placeFrom: ~example:example/.doc-page/object-frontend/w5j7ozoijzl--Reading list/item
+    placeTo: ~example:example/.doc-page/object-frontend/w5j7ozoijzl--Reading
+      list/item/book

@@ -30,7 +30,7 @@ import './DocEdit.css';
 // choosing an entry writes its text to the document as the new block, at
 // the border of the open menu (DocEditStore.insertMenu), and opens it in
 // edit mode in its place (DocEditStore.blockCreate). an entry of an
-// isAssetOnly component creates its asset object first and writes a
+// isAssetOnly component creates its asset item first and writes a
 // reference block to it (DocEditStore.blockCreateAsAsset).
 //
 // an entry whose component names an object (meta.insertObjectPick: the

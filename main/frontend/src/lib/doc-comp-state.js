@@ -4,28 +4,28 @@
 // by a key. The key names the block the component stands for, by the most
 // stable identity the page has for it:
 //
-//   asset:{store}/{objectId}     the data comes from the asset service layer
+//   asset:{store}/{itemId}     the data comes from the asset service layer
 //                                (every block reading the object shares the state)
 //   id:{docPath}#{id}            the block declares an id prop
 //   place:{docPath}:{sourceLine} a comment block, by its marker line
 //                                (doc_page_impl_nav.md#places-in-a-document)
 //   instance:{instanceId}        anything else: the instance id of the mount
 //
-// the earlier form wins: an asset-backed block is keyed by its object even
+// the earlier form wins: an asset-backed block is keyed by its item even
 // when it has an id. a line-keyed state follows the lines the edit layer
 // moves itself (lineShiftListGet); a change made outside the page leaves it
 // behind, idle, until the store collects it.
 
 export const COMP_STATE_KIND_LIST = ['asset', 'id', 'place', 'instance'];
 
-//   assetInfo   config.assetInfo of the component (isFromAsset, store, objectId)
+//   assetInfo   config.assetInfo of the component (isFromAsset, store, itemId)
 //   docPath     the source path of the document the component is in
 //   id          the id prop of the block, when it has one
 //   sourceLine  the marker line of a comment block, when it is one
 //   instanceId  the instance id of the mount (always there)
 export function compStateKeyBuild({ assetInfo, docPath = '', id, sourceLine, instanceId = '' } = {}) {
-  if (assetInfo?.isFromAsset && assetInfo.store && assetInfo.objectId) {
-    return `asset:${assetInfo.store}/${assetInfo.objectId}`;
+  if (assetInfo?.isFromAsset && assetInfo.store && assetInfo.itemId) {
+    return `asset:${assetInfo.store}/${assetInfo.itemId}`;
   }
   const idText = typeof id === 'string' ? id.trim() : '';
   if (docPath && idText !== '') return `id:${docPath}#${idText}`;
@@ -33,14 +33,14 @@ export function compStateKeyBuild({ assetInfo, docPath = '', id, sourceLine, ins
   return `instance:${instanceId}`;
 }
 
-// { kind, store?, objectId?, docPath?, id?, sourceLine?, instanceId? } of a key;
+// { kind, store?, itemId?, docPath?, id?, sourceLine?, instanceId? } of a key;
 // kind 'instance' with the whole text for a key of an unknown form
 export function compStateKeyParse(key) {
   const text = String(key ?? '');
   if (text.startsWith('asset:')) {
     const rest = text.slice('asset:'.length);
     const indexSlash = rest.indexOf('/');
-    return { kind: 'asset', store: rest.slice(0, indexSlash), objectId: rest.slice(indexSlash + 1) };
+    return { kind: 'asset', store: rest.slice(0, indexSlash), itemId: rest.slice(indexSlash + 1) };
   }
   if (text.startsWith('id:')) {
     const rest = text.slice('id:'.length);

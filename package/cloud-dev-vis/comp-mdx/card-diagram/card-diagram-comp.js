@@ -11,7 +11,7 @@ import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
 // shared by every series: the visual edit mode (card-diagram-impl.md#card-editing)
 // beside the built-in source mode. The visual mode edits inline data like any
 // other component mode, and also the data of an asset reference
-// (isEditAssetAccepted): the draft then goes to the asset object, or into the
+// (isEditAssetAccepted): the draft then goes to the asset item, or into the
 // block when the author picks "Save to inline". A click on the canvas pans or
 // drags, so it never opens the editor: only the Edit button does.
 export const cardDiagramMetaShared = {

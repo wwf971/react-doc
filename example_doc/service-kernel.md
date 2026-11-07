@@ -40,10 +40,10 @@ def todoCreate(self, title):
 <!--renderComp=service/todo-list/default-->
 ```asset
 store: local
-objectId: w55j4vdm1uw
+itemId: w55j4vdm1uw
 ```
 
-Add a todo (Enter adds it), check one off, edit a title in place (the pencil), remove one. The filter is the dashboard's own state, written into its asset object, as the search of the notes dashboard is. Everything else is asked from the instance, which asks the infra service. Disable the sqlite instance (in the Services tab, or `POST /instance/enable` with `isEnabled: false`) and every action answers that `sqlite` is unavailable (code -7), where it was asked for; the instance stays `ready` but its health turns `unhealthy`, with the reason. Enable it again and the next action works. The app service noticed nothing: it has nothing to lose.
+Add a todo (Enter adds it), check one off, edit a title in place (the pencil), remove one. The filter is the dashboard's own state, written into its asset item, as the search of the notes dashboard is. Everything else is asked from the instance, which asks the infra service. Disable the sqlite instance (in the Services tab, or `POST /instance/enable` with `isEnabled: false`) and every action answers that `sqlite` is unavailable (code -7), where it was asked for; the instance stays `ready` but its health turns `unhealthy`, with the reason. Enable it again and the next action works. The app service noticed nothing: it has nothing to lose.
 
 ## Dependencies
 
@@ -92,7 +92,7 @@ An infra service that stores things says what it can do with them (`expose.infra
 <!--renderComp=service/todo-list/config-->
 ```asset
 store: local
-objectId: w55j4vfa50k
+itemId: w55j4vfa50k
 ```
 
 The first rows are the instance as the kernel sees it: what it depends on, with the status of each name and the infra instance answering it, and its health. Then the database itself: the file in the infra instance's folder, its size and tables, and the versions. **Create version** keeps the todos as they are now, with a note; the example was written with one version, `first todos`. **Check out** makes the todos those of a version: the database as it is now is kept as a version first, so a checkout loses nothing and can be undone by checking that one out. The version list is the infra service's, in its folder, and `versionKeepMax` of the sqlite instance's config says how many it keeps.
@@ -115,7 +115,7 @@ Its own dashboard shows the folder and what it holds, by consumer. A consumer wh
 <!--renderComp=service/local-backup/default-->
 ```asset
 store: local
-objectId: w5f3p2e9xsm
+itemId: w5f3p2e9xsm
 ```
 
 The same dashboard is shown in the Services tab under the local-backup instance (its `config` dashboard, with the instance's config above it). A consumer reaches its own backups only, even another instance of the same template; the page names the consumer it works on. The folder layout, the apis and the round trip of a consumer are in `service_local_backup.md` of the template (`built-in/service-template-infra/storage/w5f2xw18q2r--local-backup/`).

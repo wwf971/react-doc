@@ -7,7 +7,7 @@ const FILTER_LIST = ['all', 'open', 'done'];
 // ones first; added, checked off, edited in place and removed.
 //
 //   data.state           { filter }: all | open | done, what the dashboard
-//                        shows, kept in the dashboard's asset object, so a
+//                        shows, kept in the dashboard's asset item, so a
 //                        document opens on the same filter
 //   config.state         { isWritable, unavailableReason }: whether the
 //                        state can be saved (a pinned asset version cannot)

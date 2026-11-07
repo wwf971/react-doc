@@ -1,5 +1,5 @@
 # the asset store config of the demonstration doc page (design:
-# doc_page_impl_asset.md): the folders its asset objects live in, as source
+# doc_page_impl_asset.md): the folders its asset items live in, as source
 # paths of its roots, in the full form ~docPageAlias:rootAlias/path (the
 # local form ~root/path is read as this doc page's too; the settings panel
 # writes the full form). a new object of one of its documents is

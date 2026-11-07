@@ -1,7 +1,7 @@
 // Backends of the asset service layer in the browser (design: doc_page_impl_asset.md).
 // DocAssetStore talks to one backend; every backend answers the same calls
 // with { code, data, message } (code 0 success, negative failure), so the
-// store and the ui do not know where the objects live:
+// store and the ui do not know where the items live:
 //
 //   assetBackendApiCreate(endpoint)        the asset api of the development
 //                                          server (plugin/doc-asset-server.ts):
@@ -10,47 +10,47 @@
 //                                          the vite plugin: read-only
 //
 // a further backend (a remote object storage) implements the same calls.
-// every object call names the store (the id written in a reference).
+// every item call names the store (the id written in a reference).
 //
 //   statusGet()                                 { isWritable, storeIdList, folderList }
-//   objectList(store)                           { objectList }
-//   objectGet(store, objectId, versionId)       { object, version: { versionId, size, hash, isText, text?, metadata } }
+//   itemList(store)                           { itemList }
+//   itemGet(store, itemId, versionId)       { item, version: { versionId, size, hash, isText, text?, metadata } }
 //                                               metadata: the version's metadata mapping ({} when none)
-//   objectGetByName(store, name, versionId)     the same, the object found by its name
-//   objectGetList(store, itemList)              { itemList }: many objectGet in one call, [{ objectId, versionId }]
+//   itemGetByName(store, name, versionId)     the same, the item found by its name
+//   itemGetList(store, requestList)              { answerList }: many itemGet in one call, [{ itemId, versionId }]
 //                                               answered in that order, each { code, data, message }
-//   dataUrlGet(store, objectId, versionId)      the url the bytes of a version are read from ('' when none)
-//   objectCreate({ store, name, lang, contentType, fileExt, text | dataBase64, note, folder, dependencyList,
+//   dataUrlGet(store, itemId, versionId)      the url the bytes of a version are read from ('' when none)
+//   itemCreate({ store, name, lang, contentType, fileExt, text | dataBase64, note, folder, dependencyList,
 //                  saveMode, versionMetadata })
-//                                               { object, version, isCreated }; isCreated false when an
-//                                               object of that name exists: it is answered, nothing is created
-//   objectUpdate({ store, objectId, hashBase, text | dataBase64, mode, note, dependencyList, versionMetadata })
-//   testCaseResultSet({ store, objectId, hashBase, docPath, caseId, testerId, operator, result, timeTimezone,
-//                       evidence, versionId })   { object, version }: one test result appended to the
-//                                               history of a TestCaseTable object, at its head
-//   versionMetadataSet(store, objectId, versionId, versionMetadata)  { object, version }
-//   dependencyListGet(store, objectId, versionId)      { versionId, dependencyList }
-//   dependentListGet(store, objectId, versionId)       { dependentList }   versionId '' for the whole object
-//   dependencyListSet(store, objectId, versionId, dependencyList)   { object }
-//   dependencyAdd(store, objectId, versionId, dependency)           { object }
-//   dependencyRemove(store, objectId, versionId, dependency)        { object }
-//   objectDelete(store, objectId) / objectRestore(store, objectId)
-//   objectMetaSet(store, objectId, { name, lang, contentType, saveMode, component })
+//                                               { item, version, isCreated }; isCreated false when an
+//                                               item of that name exists: it is answered, nothing is created
+//   itemUpdate({ store, itemId, hashBase, text | dataBase64, mode, note, dependencyList, versionMetadata })
+//   testCaseResultSet({ store, itemId, hashBase, docPath, caseId, testerId, operator, result, timeTimezone,
+//                       evidence, versionId })   { item, version }: one test result appended to the
+//                                               history of a TestCaseTable item, at its head
+//   versionMetadataSet(store, itemId, versionId, versionMetadata)  { item, version }
+//   dependencyListGet(store, itemId, versionId)      { versionId, dependencyList }
+//   dependentListGet(store, itemId, versionId)       { dependentList }   versionId '' for the whole item
+//   dependencyListSet(store, itemId, versionId, dependencyList)   { item }
+//   dependencyAdd(store, itemId, versionId, dependency)           { item }
+//   dependencyRemove(store, itemId, versionId, dependency)        { item }
+//   itemDelete(store, itemId) / itemRestore(store, itemId)
+//   itemMetaSet(store, itemId, { name, lang, contentType, saveMode, component })
 //   usageList(docPathList)                      { docList: [{ docPath, contentHash, usageList }] }
 //                                               the asset references of the documents (all when the
 //                                               list is empty; doc_page_impl_asset.md#usage)
-//   versionCheckout(store, objectId, versionId)
-//   versionDelete(store, objectId, versionId)
-//   objectLockSet(store, objectId, isLocked)
-//   versionLockSet(store, objectId, versionId, isLocked)
+//   versionCheckout(store, itemId, versionId)
+//   versionDelete(store, itemId, versionId)
+//   itemLockSet(store, itemId, isLocked)
+//   versionLockSet(store, itemId, versionId, isLocked)
 //   folderSet(configFile, folderList, folderDefault)  the folders of one doc page (~root/path, or ~page:root/path),
 //                                               written into its asset store config
-//   objectMove(store, objectId, groupPath)      the object's folder moved into group folders
+//   itemMove(store, itemId, { groupPath, folder? })  the item's folder moved: into group folders, or another store folder
 //   objectFrontendConfigGet()                   { docPageList }: the frontend objects and types the doc
 //                                               pages declare (doc_page_impl_obj_frontend.md)
 //   objectFrontendWrite(route, body)            a write of the frontend object service layer (create,
 //                                               register, delete, meta/set, asset/create, asset/remove,
-//                                               asset/attach): { id, objectList, config }
+//                                               asset/attach): { id, itemList, config }
 
 export function assetBackendApiCreate(endpoint) {
   const endpointNormalized = String(endpoint ?? '').replace(/\/+$/, '');
@@ -72,38 +72,38 @@ export function assetBackendApiCreate(endpoint) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  const objectQueryBuild = (store, objectId, versionId) => (
-    `store=${encodeURIComponent(store)}&objectId=${encodeURIComponent(objectId)}&versionId=${encodeURIComponent(versionId)}`
+  const itemQueryBuild = (store, itemId, versionId) => (
+    `store=${encodeURIComponent(store)}&itemId=${encodeURIComponent(itemId)}&versionId=${encodeURIComponent(versionId)}`
   );
 
   return {
     kind: 'api',
     statusGet: () => requestSend('/status'),
-    objectList: (store) => requestSend(`/object/list?store=${encodeURIComponent(store)}`),
-    objectGet: (store, objectId, versionId = 'head') => requestSend(`/object/get?${objectQueryBuild(store, objectId, versionId)}`),
-    objectGetList: (store, itemList) => requestPost('/object/get/list', { store, itemList }),
-    objectGetByName: (store, name, versionId = 'head') => requestSend(
-      `/object/get?store=${encodeURIComponent(store)}&name=${encodeURIComponent(name)}&versionId=${encodeURIComponent(versionId)}`,
+    itemList: (store) => requestSend(`/item/list?store=${encodeURIComponent(store)}`),
+    itemGet: (store, itemId, versionId = 'head') => requestSend(`/item/get?${itemQueryBuild(store, itemId, versionId)}`),
+    itemGetList: (store, requestList) => requestPost('/item/get/list', { store, requestList }),
+    itemGetByName: (store, name, versionId = 'head') => requestSend(
+      `/item/get?store=${encodeURIComponent(store)}&name=${encodeURIComponent(name)}&versionId=${encodeURIComponent(versionId)}`,
     ),
-    dataUrlGet: (store, objectId, versionId = 'head') => `${endpointNormalized}/object/data?${objectQueryBuild(store, objectId, versionId)}`,
-    objectCreate: (input) => requestPost('/object/create', input),
-    objectUpdate: (input) => requestPost('/object/update', input),
+    dataUrlGet: (store, itemId, versionId = 'head') => `${endpointNormalized}/item/data?${itemQueryBuild(store, itemId, versionId)}`,
+    itemCreate: (input) => requestPost('/item/create', input),
+    itemUpdate: (input) => requestPost('/item/update', input),
     testCaseResultSet: (input) => requestPost('/test-case/result/set', input),
-    objectDelete: (store, objectId) => requestPost('/object/delete', { store, objectId }),
-    objectRestore: (store, objectId) => requestPost('/object/restore', { store, objectId }),
-    objectMetaSet: (store, objectId, change) => requestPost('/object/meta/set', { store, objectId, ...change }),
-    versionCheckout: (store, objectId, versionId) => requestPost('/version/checkout', { store, objectId, versionId }),
-    versionDelete: (store, objectId, versionId) => requestPost('/version/delete', { store, objectId, versionId }),
-    versionMetadataSet: (store, objectId, versionId, versionMetadata) => requestPost('/version/metadata/set', { store, objectId, versionId, versionMetadata }),
-    objectLockSet: (store, objectId, isLocked) => requestPost('/object/lock/set', { store, objectId, isLocked }),
-    versionLockSet: (store, objectId, versionId, isLocked) => requestPost('/version/lock/set', { store, objectId, versionId, isLocked }),
-    dependencyListGet: (store, objectId, versionId = 'head') => requestSend(`/dependency/list?${objectQueryBuild(store, objectId, versionId)}`),
-    dependentListGet: (store, objectId, versionId = '') => requestSend(`/dependent/list?${objectQueryBuild(store, objectId, versionId)}`),
-    dependencyListSet: (store, objectId, versionId, dependencyList) => requestPost('/dependency/set', { store, objectId, versionId, dependencyList }),
-    dependencyAdd: (store, objectId, versionId, dependency) => requestPost('/dependency/add', { store, objectId, versionId, dependency }),
-    dependencyRemove: (store, objectId, versionId, dependency) => requestPost('/dependency/remove', { store, objectId, versionId, dependency }),
+    itemDelete: (store, itemId) => requestPost('/item/delete', { store, itemId }),
+    itemRestore: (store, itemId) => requestPost('/item/restore', { store, itemId }),
+    itemMetaSet: (store, itemId, change) => requestPost('/item/meta/set', { store, itemId, ...change }),
+    versionCheckout: (store, itemId, versionId) => requestPost('/version/checkout', { store, itemId, versionId }),
+    versionDelete: (store, itemId, versionId) => requestPost('/version/delete', { store, itemId, versionId }),
+    versionMetadataSet: (store, itemId, versionId, versionMetadata) => requestPost('/version/metadata/set', { store, itemId, versionId, versionMetadata }),
+    itemLockSet: (store, itemId, isLocked) => requestPost('/item/lock/set', { store, itemId, isLocked }),
+    versionLockSet: (store, itemId, versionId, isLocked) => requestPost('/version/lock/set', { store, itemId, versionId, isLocked }),
+    dependencyListGet: (store, itemId, versionId = 'head') => requestSend(`/dependency/list?${itemQueryBuild(store, itemId, versionId)}`),
+    dependentListGet: (store, itemId, versionId = '') => requestSend(`/dependent/list?${itemQueryBuild(store, itemId, versionId)}`),
+    dependencyListSet: (store, itemId, versionId, dependencyList) => requestPost('/dependency/set', { store, itemId, versionId, dependencyList }),
+    dependencyAdd: (store, itemId, versionId, dependency) => requestPost('/dependency/add', { store, itemId, versionId, dependency }),
+    dependencyRemove: (store, itemId, versionId, dependency) => requestPost('/dependency/remove', { store, itemId, versionId, dependency }),
     folderSet: (configFile, folderList, folderDefault) => requestPost('/folder/set', { configFile, folderList, folderDefault }),
-    objectMove: (store, objectId, groupPath) => requestPost('/object/move', { store, objectId, groupPath }),
+    itemMove: (store, itemId, place) => requestPost('/item/move', { store, itemId, groupPath: place.groupPath ?? '', folder: place.folder }),
     objectFrontendConfigGet: () => requestSend('/object-frontend/config'),
     objectFrontendWrite: (route, body) => requestPost(`/object-frontend/${route}`, body),
     usageList: (docPathList = []) => requestSend(
@@ -112,109 +112,109 @@ export function assetBackendApiCreate(endpoint) {
   };
 }
 
-// snapshot: { objectById: { [objectId]: { ...object, versionDataById:
+// snapshot: { itemById: { [itemId]: { ...item, versionDataById:
 // { [versionId]: { size, hash, isText, text | dataBase64, metadata } } } } },
 // usageDocList }, the local store as it was at build time, with the asset
 // references of the documents of the build
 export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
-  const objectById = snapshot?.objectById ?? {};
+  const itemById = snapshot?.itemById ?? {};
   const usageDocList = Array.isArray(snapshot?.usageDocList) ? snapshot.usageDocList : [];
   const readOnly = () => Promise.resolve({ code: -1, data: null, message: 'the asset service layer of a built page is read-only' });
-  const objectMetaGet = (objectId) => {
-    const entry = objectById[objectId];
+  const itemMetaGet = (itemId) => {
+    const entry = itemById[itemId];
     if (!entry) return undefined;
-    const { versionDataById: _versionData, ...object } = entry;
-    return object;
+    const { versionDataById: _versionData, ...item } = entry;
+    return item;
   };
   const storeCheck = (store) => (
     store === storeIdLocal ? undefined : { code: -3, data: null, message: `unknown asset store: ${store}` }
   );
-  const versionResolve = (store, objectId, versionIdRequested) => {
+  const versionResolve = (store, itemId, versionIdRequested) => {
     const failureStore = storeCheck(store);
     if (failureStore) return { failure: failureStore };
-    const entry = objectById[objectId];
-    if (!entry) return { failure: { code: -3, data: null, message: `asset object not found: ${objectId}` } };
+    const entry = itemById[itemId];
+    if (!entry) return { failure: { code: -3, data: null, message: `asset item not found: ${itemId}` } };
     const versionId = versionIdRequested === '' || versionIdRequested === 'head' ? entry.versionIdHead : versionIdRequested;
     const versionData = entry.versionDataById[versionId];
-    if (!versionData) return { failure: { code: -3, data: null, message: `version ${versionId} not found in object ${objectId}` } };
+    if (!versionData) return { failure: { code: -3, data: null, message: `version ${versionId} not found in item ${itemId}` } };
     return { entry, versionId, versionData };
   };
   // the dependencies are part of the version metadata the snapshot carries
-  const dependencyListGet = (store, objectId, versionIdRequested = 'head') => {
-    const resolved = versionResolve(store, objectId, versionIdRequested);
+  const dependencyListGet = (store, itemId, versionIdRequested = 'head') => {
+    const resolved = versionResolve(store, itemId, versionIdRequested);
     if (resolved.failure) return Promise.resolve(resolved.failure);
     const versionMeta = resolved.entry.versionList.find((version) => version.versionId === resolved.versionId);
     return Promise.resolve({ code: 0, data: { versionId: resolved.versionId, dependencyList: versionMeta?.dependencyList ?? [] }, message: '' });
   };
-  const dependentListGet = (store, objectId, versionIdRequested = '') => {
+  const dependentListGet = (store, itemId, versionIdRequested = '') => {
     const failureStore = storeCheck(store);
     if (failureStore) return Promise.resolve(failureStore);
-    const entryTarget = objectById[objectId];
-    if (!entryTarget) return Promise.resolve({ code: -3, data: null, message: `asset object not found: ${objectId}` });
+    const entryTarget = itemById[itemId];
+    if (!entryTarget) return Promise.resolve({ code: -3, data: null, message: `asset item not found: ${itemId}` });
     const versionIdWanted = versionIdRequested === '' ? '' : (versionIdRequested === 'head' ? entryTarget.versionIdHead : versionIdRequested);
     const dependentList = [];
-    for (const entry of Object.values(objectById)) {
+    for (const entry of Object.values(itemById)) {
       for (const version of entry.versionList) {
         for (const dependency of version.dependencyList ?? []) {
-          if (dependency.type !== 'asset' || dependency.objectId !== objectId) continue;
+          if (dependency.type !== 'asset' || dependency.itemId !== itemId) continue;
           const versionIdDepended = dependency.versionId ?? entryTarget.versionIdHead;
           if (versionIdWanted !== '' && versionIdDepended !== versionIdWanted) continue;
-          dependentList.push({ objectId: entry.objectId, versionId: version.versionId, dependency });
+          dependentList.push({ itemId: entry.itemId, versionId: version.versionId, dependency });
         }
       }
     }
     return Promise.resolve({ code: 0, data: { dependentList }, message: '' });
   };
-  const objectGet = (store, objectId, versionIdRequested = 'head') => {
-    const resolved = versionResolve(store, objectId, versionIdRequested);
+  const itemGet = (store, itemId, versionIdRequested = 'head') => {
+    const resolved = versionResolve(store, itemId, versionIdRequested);
     if (resolved.failure) return Promise.resolve(resolved.failure);
     const { versionId, versionData } = resolved;
     const version = { versionId, size: versionData.size, hash: versionData.hash, isText: versionData.isText, metadata: versionData.metadata ?? {} };
     if (versionData.isText) version.text = versionData.text;
-    return Promise.resolve({ code: 0, data: { object: objectMetaGet(objectId), version }, message: '' });
+    return Promise.resolve({ code: 0, data: { item: itemMetaGet(itemId), version }, message: '' });
   };
 
   return {
     kind: 'snapshot',
     statusGet: () => Promise.resolve({ code: 0, data: { isWritable: false, storeIdList: [storeIdLocal], folderList: [] }, message: '' }),
-    objectList: (store) => Promise.resolve(storeCheck(store) ?? {
+    itemList: (store) => Promise.resolve(storeCheck(store) ?? {
       code: 0,
-      data: { objectList: Object.keys(objectById).map(objectMetaGet) },
+      data: { itemList: Object.keys(itemById).map(itemMetaGet) },
       message: '',
     }),
-    objectGet,
-    objectGetList: async (store, itemList) => ({
+    itemGet,
+    itemGetList: async (store, requestList) => ({
       code: 0,
-      data: { itemList: await Promise.all(itemList.map((item) => objectGet(store, item.objectId, item.versionId))) },
+      data: { answerList: await Promise.all(requestList.map((one) => itemGet(store, one.itemId, one.versionId))) },
       message: '',
     }),
-    objectGetByName: (store, name, versionIdRequested = 'head') => {
+    itemGetByName: (store, name, versionIdRequested = 'head') => {
       const failureStore = storeCheck(store);
       if (failureStore) return Promise.resolve(failureStore);
-      const entry = Object.values(objectById).find((item) => item.name === name);
-      if (!entry) return Promise.resolve({ code: -3, data: null, message: `asset object not found by name: ${name}` });
-      return objectGet(store, entry.objectId, versionIdRequested);
+      const entry = Object.values(itemById).find((one) => one.name === name);
+      if (!entry) return Promise.resolve({ code: -3, data: null, message: `asset item not found by name: ${name}` });
+      return itemGet(store, entry.itemId, versionIdRequested);
     },
     // the bytes of a binary version as a data url; a text version has no url of its own
-    dataUrlGet: (store, objectId, versionIdRequested = 'head') => {
-      const resolved = versionResolve(store, objectId, versionIdRequested);
+    dataUrlGet: (store, itemId, versionIdRequested = 'head') => {
+      const resolved = versionResolve(store, itemId, versionIdRequested);
       if (resolved.failure || resolved.versionData.isText) return '';
       return `data:${resolved.entry.contentType || 'application/octet-stream'};base64,${resolved.versionData.dataBase64}`;
     },
-    objectCreate: readOnly,
-    objectUpdate: readOnly,
-    objectMove: readOnly,
+    itemCreate: readOnly,
+    itemUpdate: readOnly,
+    itemMove: readOnly,
     // the declarations the build carried
     objectFrontendConfigGet: () => Promise.resolve({ code: 0, data: { docPageList: snapshot?.objectFrontend?.docPageList ?? [] }, message: '' }),
     objectFrontendWrite: readOnly,
     testCaseResultSet: readOnly,
-    objectDelete: readOnly,
-    objectRestore: readOnly,
-    objectMetaSet: readOnly,
+    itemDelete: readOnly,
+    itemRestore: readOnly,
+    itemMetaSet: readOnly,
     versionCheckout: readOnly,
     versionDelete: readOnly,
     versionMetadataSet: readOnly,
-    objectLockSet: readOnly,
+    itemLockSet: readOnly,
     versionLockSet: readOnly,
     dependencyListGet,
     dependentListGet,

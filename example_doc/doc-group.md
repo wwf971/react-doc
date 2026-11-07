@@ -9,7 +9,7 @@
 
 ## Group Data
 
-- `groupId`: object-storage `objectId`.
+- `groupId`: object-storage `itemId`.
 - `name`: editable group name.
 - `docIds`: ordered list of doc ids in this group.
 - `createdAt`, `updatedAt`.

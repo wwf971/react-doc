@@ -1,0 +1,37 @@
+itemId: w5j7pn0m41l
+name: ""
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+owner:
+  ref: frontend:w5j7pn0lh5o
+  role: entry
+versionIdHead: w5j7pn0lmnu
+isDeleted: false
+isLocked: false
+timeCreated: 20261105_01185259+09
+versionList:
+  - versionId: w5j7pn0lmnu
+    versionIdPrevList: []
+    time: 20261105_01185259+09
+    note: the entry of the frontend object Short list
+    size: 299
+    hash: 5aa67e4f0ad2254e599ce6e4408ddbd391d0f9a9
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261105_01185259+09
+    versionId: w5j7pn0lmnu
+  - eventType: updateInPlace
+    time: 20261105_01185261+09
+    versionId: w5j7pn0lmnu
+  - eventType: updateInPlace
+    time: 20261105_03374823+09
+    versionId: w5j7pn0lmnu
+  - eventType: updateInPlace
+    time: 20261105_03410662+09
+    versionId: w5j7pn0lmnu
+  - eventType: updateInPlace
+    time: 20261105_03410669+09
+    versionId: w5j7pn0lmnu

@@ -8,18 +8,18 @@ import {
 // A component on the page may hold more than it renders: a draft not yet
 // saved, which sheet is active and which cells are selected, which folders
 // are open, a count. That is its state: not its data (the document or the
-// asset object holds that), not persisted, and lost with the page. This
+// asset item holds that), not persisted, and lost with the page. This
 // store keeps it in state objects outside the mounted component, so that
 //
 //   - it survives the component's unmount: a reader navigates away and
 //     back, and the block is as it was left
 //   - every mount of the same block shares it: the block shown twice (two
-//     blocks reading one asset object today, the same document in two tabs
+//     blocks reading one asset item today, the same document in two tabs
 //     later) renders one state, so what one changes the other shows at once
 //
 // a state object is found by a key, chosen by the registry boundary from
 // the most stable identity the block has (doc-comp-state.js,
-// compStateKeyBuild): the asset object, the block's id prop, its place
+// compStateKeyBuild): the asset item, the block's id prop, its place
 // (document and marker line), else the instance id of the mount.
 //
 //   stateByKey    key -> CompStateObject

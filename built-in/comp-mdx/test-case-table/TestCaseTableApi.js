@@ -6,7 +6,7 @@ import { testCaseResultAppend, testCaseTableParse } from './TestCaseTableData.js
 // The server side of the managed result history (comp_test_case_table.md),
 // used by the asset api of the development server (plugin/doc-asset-server.ts):
 // a result is recorded through POST /test-case/result/set, and the generic
-// head write (POST /object/update) may not change the history. Node only
+// head write (POST /item/update) may not change the history. Node only
 // (node:util); the browser never imports this module.
 
 const typeMark = 'test-case-table';
@@ -35,17 +35,17 @@ export function testCaseAssetWriteCheck(textBefore, textAfter) {
   }
 }
 
-// one result recorded on the head of the object: { object, version }, what
-// store.objectUpdate answers. the time and the id of the entry are made
+// one result recorded on the head of the item: { item, version }, what
+// store.itemUpdate answers. the time and the id of the entry are made
 // here; the evidence must name one md/mdx document of the doc page of
 // docPath (the document the block is in), resolved like a link written
 // there, and is kept as a source dependency of the version.
-//   input   { objectId, hashBase, docPath, caseId, testerId, operator, result,
+//   input   { itemId, hashBase, docPath, caseId, testerId, operator, result,
 //             timeTimezone?, evidence?, versionId? ('head' when given) }
 //   fileEntryList   the collected files, { internalPath, name } at least
 export function testCaseAssetResultSet(store, input, fileEntryList) {
   if (input.versionId !== undefined && input.versionId !== 'head') {
-    throw new Error('A result is recorded at the head of the object; a pinned version cannot record.');
+    throw new Error('A result is recorded at the head of the item; a pinned version cannot record.');
   }
   const sourceIndex = sourceIndexBuild(fileEntryList);
   const docPath = String(input.docPath ?? '');
@@ -53,8 +53,8 @@ export function testCaseAssetResultSet(store, input, fileEntryList) {
   if (!docEntry || !/\.mdx?$/i.test(docEntry.internalPath)) {
     throw new Error('docPath must name the collected md/mdx document the table is in.');
   }
-  const object = store.objectFind({ objectId: input.objectId });
-  const version = store.versionDataGetOf(object, 'head');
+  const item = store.itemFind({ itemId: input.itemId });
+  const version = store.versionDataGetOf(item, 'head');
   if (!version.isText) throw new Error('TestCaseTable data must be a text version.');
   const docPageAlias = sourcePathDocPageAliasGet(docPath);
   const result = testCaseResultAppend(version.text, input, {
@@ -66,12 +66,12 @@ export function testCaseAssetResultSet(store, input, fileEntryList) {
       return isDocument ? entry.internalPath : undefined;
     },
   });
-  const dependencyListHead = store.dependencyListGet(object.objectId, 'head').dependencyList;
+  const dependencyListHead = store.dependencyListGet(item.itemId, 'head').dependencyList;
   const evidence = result.entry.evidence;
-  const isEvidenceListed = !evidence || dependencyListHead.some((item) => item.type === 'source' && item.path === evidence);
+  const isEvidenceListed = !evidence || dependencyListHead.some((one) => one.type === 'source' && one.path === evidence);
   const dependencyList = isEvidenceListed ? dependencyListHead : [...dependencyListHead, { type: 'source', path: evidence }];
-  return store.objectUpdate({
-    objectId: object.objectId,
+  return store.itemUpdate({
+    itemId: item.itemId,
     hashBase: input.hashBase,
     data: Buffer.from(result.text, 'utf8'),
     dependencyList,

@@ -187,6 +187,21 @@ What is left is the page itself: 5.7 MB of code, 1 MB of css. If something was l
 
 The modules are merged with `output.strictExecutionOrder`: without it a module also imported lazily is wrapped in an init function that a static importer may not call, and the page crashes on load.
 
+## Migrating a doc page
+
+`react-doc migrate <path>` rewrites the doc pages below a folder into the form this react-doc reads, for pages written before asset items were called items and before a frontend object had a folder of its own ([what changed](update-20261107-repl.md)). The page does not read the former form: a store folder holding one reports it once in the console and names this command.
+
+```text
+{itemId}--{name}/object.yaml   ->  item.yaml, objectId -> itemId, in dependencies too
+                                   the entry of a frontend object: assetList [{ objectId }] -> { itemId }, in every version
+a fenced block asset           ->  objectId: -> itemId:   (the prose and the data of a document are not touched)
+objectList of a doc page       ->  .doc-page/object-frontend/{id}--{name}/, object.yaml, its assets in item/
+typeList of object-frontend.yaml  ->  .doc-page/type.yaml
+typeList of an object.yaml        ->  type.yaml beside it
+```
+
+`--dry-run` lists what it would change. A second run changes nothing. Nothing is committed: `git add` the folder, and git sees the moves as renames. Stop a running server of the doc page first: an old copy of the code reads the old form.
+
 ## Where the command lives
 
 The command is a `bin` of the package's own npm package (`@wwf971/react-doc`, `main/frontend/package.json`: `"bin": { "react-doc": "./cli/doc-cli.js" }`). This is the usual practice for a tool that comes with a library (`vite`, `astro`, `prisma` do the same): the command and the conventions it writes are versioned together, so a scaffold always matches the loader of the same version.
@@ -220,6 +235,7 @@ Changing what a new doc page looks like is therefore editing a file of `scaffold
 | Place | Role |
 | --- | --- |
 | `frontend/cli/doc-cli.js` | the command: argument parsing (`node:util` `parseArgs`); `docInit` (checks, copy, placeholders), the report and the next steps; `docLayoutGet` (the folders of this copy, its mode), `docLayoutRunGet` (the installed mode served out of `node_modules/`), `docTargetRead` (what a path is), `docMountRead` (a `--mount` value), `docLaunchBuild` (the launch layer), `docDev`; `docWhere`; `docPack` |
+| `frontend/cli/doc-migrate.js` | `react-doc migrate`: only reads and rewrites files of the folder it is given |
 | `frontend/cli/scaffold/` | the scaffold folders: `doc-page/`, `workspace/`, `package/` |
 | `frontend/cli/doc-cli.test.js` | each kind created in a temporary folder and loaded by the plugin; `--force`, refusals, the report; what a path is, the launch layer over `config.yaml`, `--mount` values and refusals, a package found by name, a package as a read-only doc page |
 | `frontend/package.json` | `bin.react-doc` |

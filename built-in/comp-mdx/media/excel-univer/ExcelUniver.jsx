@@ -20,7 +20,7 @@ import './ExcelUniver.css';
 //   <!--renderComp=ExcelUniver-->
 //   ```asset
 //   store: local
-//   objectId: m2x1k9q4z0a1b
+//   itemId: m2x1k9q4z0a1b
 //   ```
 //
 // view mode shows what the version's metadata names (view: a range on one
@@ -37,7 +37,7 @@ import './ExcelUniver.css';
 //
 // what the component keeps beyond its data lives in its state object of the
 // component state service layer (doc_page_impl_mdx_comp_state.md), keyed by
-// the asset object, so it survives the block's unmount and is shared by
+// the asset item, so it survives the block's unmount and is shared by
 // every block reading the object:
 //
 //   state.value.engine   { sheetId, range }: the active sheet and the selected

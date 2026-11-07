@@ -24,7 +24,7 @@ doc-group -> doc -> comp -> resource
 
 ## DocumentBasic Data
 
-- `docId`: object-storage `objectId`.
+- `docId`: object-storage `itemId`.
 - `docType`: fixed string `DocumentBasic`.
 - `name`: doc title.
 - `metadata`:
@@ -34,7 +34,7 @@ doc-group -> doc -> comp -> resource
 
 ## TextBasic Data
 
-- `compId`: object-storage `objectId`.
+- `compId`: object-storage `itemId`.
 - `compType`: fixed string `TextBasic`.
 - `text`: current string.
 - `caret`:

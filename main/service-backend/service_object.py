@@ -9,7 +9,7 @@ are separate concerns.
 
 - a type is a JSON definition { id, kind: object | relation, label,
   extendList, ... }; the type registry holds the built-in types (the JSON
-  file of built-in/object-type/, shared with the page) and the types the
+  file built-in/type.yaml, shared with the page) and the types the
   service templates define (expose.typeList, under the template's name), and
   answers which type is assignable to which (a DAG: a type extends any
   number of types of its kind)
@@ -33,6 +33,8 @@ import os
 import threading
 import time
 
+import yaml
+
 from service_define import (
     OBJECT_CACHE_SECOND_DEFAULT,
     REGEX_TYPE_ID,
@@ -51,7 +53,7 @@ from service_define import (
 # they are part of the protocol of the registry, so they are read whatever
 # builtIn the backend config says
 OBJECT_TYPE_BUILTIN_FILE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'built-in',
-                                                         'object-type', 'object-type-builtin.json'))
+                                                         'type.yaml'))
 
 # the namespaces of the kernel's own provider
 KERNEL_NAMESPACE_LIST = ['service', 'serviceTemplate', 'serviceConfig']
@@ -191,11 +193,11 @@ def builtin_type_list_read():
                  type_define_normalize({'id': 'core.relation', 'kind': 'relation', 'label': 'Relation'}, 'the built-in types')]
     try:
         with open(OBJECT_TYPE_BUILTIN_FILE, encoding='utf-8') as file:
-            raw = json.load(file)
+            raw = yaml.safe_load(file)
         type_list = [type_define_normalize(item, f'{OBJECT_TYPE_BUILTIN_FILE} typeList[{index}]')
                      for index, item in enumerate(raw.get('typeList') or [])]
         return type_list, ''
-    except (OSError, ValueError, ServiceDefineError) as error:
+    except (OSError, ValueError, yaml.YAMLError, ServiceDefineError) as error:
         return root_list, f'the built-in types cannot be read from {OBJECT_TYPE_BUILTIN_FILE}: {error}'
 
 

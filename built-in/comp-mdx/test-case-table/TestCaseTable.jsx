@@ -22,13 +22,13 @@ import './TestCaseTable.css';
 // operator, its time and its evidence document (a SourceLink in render
 // mode).
 //
-// the results are a managed history on the asset object of the block: in
+// the results are a managed history on the asset item of the block: in
 // the edit mode `results` the popup also has the form of a new record (OK,
 // NG, Clear, the operator, an optional evidence document), and Save result
 // records it at once through assetTestCaseResultRequest (DocAssetStore):
 // nothing waits for the session, so Done (editCancelRequest) only leaves
 // the mode, and the session itself writes nothing (its draft is reported
-// clean). with the data inline, or on a pinned or locked object, the mode
+// clean). with the data inline, or on a pinned or locked item, the mode
 // says why nothing can be recorded.
 //
 //   config.assetInfo        where the data is (isAssetAware): the hash a
@@ -80,11 +80,11 @@ const TestCaseTableView = observer(function TestCaseTableView({ parsed, config, 
   const asset = config.assetInfo;
   const Panel = config.panelComponent;
   const reasonUnrecordable = !asset?.isFromAsset
-    ? 'The data is written inline: a result is recorded on an asset object. Move the block into the asset service layer ("to asset") first.'
+    ? 'The data is written inline: a result is recorded on an asset item. Move the block into the asset service layer ("to asset") first.'
     : asset.versionIdRef !== 'head'
       ? `The block reads version ${asset.versionIdRef} of its asset, not the head; a result is recorded at the head.`
       : asset.isLocked
-        ? 'The asset object is locked.'
+        ? 'The asset item is locked.'
         : !assetStore.isWritable
           ? assetStore.writeUnavailableReason
           : '';

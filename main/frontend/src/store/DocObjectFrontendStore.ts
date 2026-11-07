@@ -5,6 +5,7 @@ import {
   objectFrontendEntryParse, objectFrontendIdOfRefGet, objectFrontendModeChoose,
   objectFrontendModeListResolve, objectFrontendParamMerge, objectFrontendRefBuild,
   objectFrontendAssetIndexBuild, objectFrontendAssetPathComplete, objectFrontendAssetRefResolve, objectFrontendAssetSearch,
+  objectFrontendAssetKindListResolve,
 } from '../lib/doc-object-frontend.js';
 import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
 
@@ -18,7 +19,7 @@ import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
 //   the doc page's yaml     object-frontend.yaml: that the object exists (objectList
 //                           [{ id, entry }]), and the types (typeList, with their modes)
 //   the entry asset         what the object is: name, type, description, its assets
-//                           ({ key, kind, objectId }), metadata
+//                           ({ key, kind, itemId }), metadata
 //   its other assets        its data, each declaring the object (owner.ref)
 //
 // The store holds what the development server read of the yaml files
@@ -50,22 +51,25 @@ export type ObjectFrontendMode = {
 export type ObjectFrontendAsset = {
   key: string;
   kind: string;
-  objectId: string;
+  itemId: string;
   // how people and the object's modes find it (doc_page_impl_obj_frontend.md#naming-and-finding-the-assets)
   name?: string;
   pathList?: string[];
-  // the asset object as the index knows it; undefined when the store has none
-  object: any;
+  // the asset item as the index knows it; undefined when the store has none
+  item: any;
   status: 'found' | 'missing' | 'deleted';
   // the asset declares this object (owner.ref)
   isOwnerMatch: boolean;
+  // it lies in the object's folder; false for one lying elsewhere in the store (or an object
+  // without a folder of its own, which has no such place)
+  isInFolder: boolean;
 };
 
 export type ObjectFrontendState = {
   id: string;
   ref: string;
   docPageAlias: string;
-  entryObjectId: string;
+  entryItemId: string;
   status: 'loading' | 'found' | 'missing' | 'error';
   message: string;
   name: string;
@@ -78,9 +82,16 @@ export type ObjectFrontendState = {
   assetIndex: any;
   // assets declaring the object that its entry does not list
   strayList: any[];
+  // items found in its folder that its entry does not list and that do not declare it: put
+  // there without the layer knowing (doc_page_impl_obj_frontend.md#what-disagrees)
+  unknownList: any[];
+  // assets it lists that lie outside its folder
+  outsideList: ObjectFrontendAsset[];
+  // the folders inside its item folder, with how many items they hold
+  groupList: { groupPath: string; count: number }[];
   problemList: string[];
-  // the entry asset object (folder, groupPath, versions)
-  entryObject: any;
+  // the entry asset item (folder, groupPath, versions)
+  entryItem: any;
 };
 
 export class DocObjectFrontendStore {
@@ -88,6 +99,8 @@ export class DocObjectFrontendStore {
   config = { status: 'idle' as 'idle' | 'loading' | 'done' | 'error', message: '', docPageList: [] as any[] };
   write = { status: 'idle' as 'idle' | 'submitting' | 'error', route: '', id: '', message: '' };
   settings = {
+    // the kind chosen for an item coming in, by its id
+    kindByItem: {} as Record<string, string>,
     idSelected: '',
     createDocPageAlias: '',
     createTypeId: '',
@@ -140,6 +153,14 @@ export class DocObjectFrontendStore {
     const { assetStore } = this.stores;
     if (!assetStore.backend) return;
     void (assetStore.startPromise ?? Promise.resolve()).then(() => this.configLoad());
+    assetStore.folderOwnerHandlerSet?.('frontend', {
+      kindListGet: (ownerRef: string) => this.assetKindListGet(ownerRef),
+      labelGet: (ownerRef: string) => {
+        const state = this.objectGet(ownerRef);
+        return state.name || ownerRef;
+      },
+      itemMove: (input: any) => this.folderOwnerItemMove(input),
+    });
     this.unsubscribe = assetStore.subscribe?.((change: any) => {
       if (change?.isObjectFrontendChanged || change?.isStoreChanged) void this.configLoad();
     });
@@ -196,28 +217,42 @@ export class DocObjectFrontendStore {
     return this.stores.assetStore.writeUnavailableReason;
   }
 
+  // why this object cannot be written: as the page, or as the read-only doc page holding it (a package)
+  writeUnavailableReasonOf(idOrRef: string): string {
+    const docPage = this.docPageList.find((one: any) => one.alias === this.declGet(objectFrontendIdOfRefGet(idOrRef))?.docPageAlias);
+    return docPage?.isReadOnly ? `the objects of the package ${docPage.alias} are read-only` : this.writeUnavailableReason;
+  }
+
   get docPageList(): any[] {
     return this.config.docPageList;
   }
 
-  // every type the doc pages declare, in loading order
+  // the declared types that are types of a frontend object, in the order they are read
+  // (doc_page_impl_type.md#declaring-a-type: the registry holds them, this layer reads their modes)
   get typeDeclaredList(): any[] {
-    return this.config.docPageList.flatMap((docPage: any) => docPage.typeList ?? []);
+    return (this.stores.objectStore?.typeDeclaredList ?? []).filter((type: any) => this.typeIsFrontend(type.id));
+  }
+
+  // the components the modes of a type name that no registered component answers to
+  typeCompMissingListGet(typeId: string): string[] {
+    const objectStore = this.stores.objectStore;
+    if (!objectStore?.compIsKnown) return [];
+    return [...new Set(this.modeListGet(typeId).map((mode: any) => mode.comp))].filter((comp: any) => !objectStore.compIsKnown(comp)) as string[];
   }
 
   // the types the layer offers for new objects: the root, then the declared ones
   get typeOfferList(): { id: string; label: string; docPageAlias: string }[] {
     return [
       { id: OBJECT_FRONTEND_TYPE_ROOT, label: this.typeLabelGet(OBJECT_FRONTEND_TYPE_ROOT), docPageAlias: '' },
-      ...this.typeDeclaredList.map((type) => ({ id: type.id, label: type.label, docPageAlias: type.definedBy?.alias ?? '' })),
+      ...this.typeDeclaredList.map((type) => ({ id: type.id, label: type.label, docPageAlias: type.definedBy?.alias ?? type.definedBy?.name ?? '' })),
     ];
   }
 
   get problemList(): { alias: string; file: string; message: string }[] {
-    return this.config.docPageList.flatMap((docPage: any) => (docPage.problemList ?? []).map((message: string) => ({ alias: docPage.alias, file: docPage.file, message })));
+    return (this.stores.objectStore?.typeDeclaredProblemList ?? []).concat(this.config.docPageList.flatMap((docPage: any) => (docPage.problemList ?? []).map((message: string) => ({ alias: docPage.alias, file: docPage.file, message }))));
   }
 
-  get itemList(): { id: string; entry: string; docPageAlias: string }[] {
+  get declList(): { id: string; entry: string; docPageAlias: string; dir?: string }[] {
     return this.config.docPageList.flatMap((docPage: any) => docPage.objectList ?? []);
   }
 
@@ -243,8 +278,8 @@ export class DocObjectFrontendStore {
 
   // ---------- the objects ----------
 
-  itemGet(id: string) {
-    return this.itemList.find((item) => item.id === id);
+  declGet(id: string) {
+    return this.declList.find((decl) => decl.id === id);
   }
 
   // the object as the files say now. read in an observer, it asks the asset
@@ -264,51 +299,58 @@ export class DocObjectFrontendStore {
   private objectStateBaseBuild(id: string): ObjectFrontendState {
     const ref = objectFrontendRefBuild(id);
     return {
-      id, ref, docPageAlias: '', entryObjectId: '', status: 'loading', message: '', name: '', typeId: OBJECT_FRONTEND_TYPE_ROOT,
-      description: '', metadata: {}, assetList: [], assetIndex: objectFrontendAssetIndexBuild([]), strayList: [], problemList: [], entryObject: undefined,
+      id, ref, docPageAlias: '', entryItemId: '', status: 'loading', message: '', name: '', typeId: OBJECT_FRONTEND_TYPE_ROOT,
+      description: '', metadata: {}, assetList: [], assetIndex: objectFrontendAssetIndexBuild([]), strayList: [], unknownList: [], outsideList: [], groupList: [], problemList: [], entryItem: undefined,
     };
   }
 
   private objectStateBuild(id: string): ObjectFrontendState {
     const ref = objectFrontendRefBuild(id);
     const base = this.objectStateBaseBuild(id);
-    if (this.config.status === 'idle' || (this.config.status === 'loading' && this.itemList.length === 0)) return base;
-    const item = this.itemGet(id);
-    if (!item) return { ...base, status: 'missing', message: `no doc page lists the frontend object ${id} (object-frontend.yaml)` };
+    if (this.config.status === 'idle' || (this.config.status === 'loading' && this.declList.length === 0)) return base;
+    const decl = this.declGet(id);
+    if (!decl) return { ...base, status: 'missing', message: `no doc page holds the frontend object ${id} (a folder in .doc-page/object-frontend/, or a line of object-frontend.yaml)` };
     const { assetStore } = this.stores;
-    const refEntry = { store: ASSET_STORE_ID_LOCAL, objectId: item.entry, versionId: 'head' };
+    const refEntry = { store: ASSET_STORE_ID_LOCAL, itemId: decl.entry, versionId: 'head' };
     const query = assetStore.refQuery(refEntry);
-    const stateBase = { ...base, docPageAlias: item.docPageAlias, entryObjectId: item.entry };
+    const stateBase = { ...base, docPageAlias: decl.docPageAlias, entryItemId: decl.entry };
     if (query.status === 'loading') {
       this.loadSchedule(refEntry);
       return stateBase;
     }
-    if (query.status === 'error') return { ...stateBase, status: 'error', message: `its entry asset ${item.entry}: ${query.message}` };
-    const entryObject = query.object;
-    if (entryObject.isDeleted) return { ...stateBase, entryObject, status: 'missing', message: `its entry asset ${item.entry} is deleted` };
-    if (!query.version?.isText) return { ...stateBase, entryObject, status: 'error', message: `its entry asset ${item.entry} is not text` };
+    if (query.status === 'error') return { ...stateBase, status: 'error', message: `its entry asset ${decl.entry}: ${query.message}` };
+    const entryItem = query.item;
+    if (entryItem.isDeleted) return { ...stateBase, entryItem, status: 'missing', message: `its entry asset ${decl.entry} is deleted` };
+    if (!query.version?.isText) return { ...stateBase, entryItem, status: 'error', message: `its entry asset ${decl.entry} is not text` };
     const { entry, problemList } = objectFrontendEntryParse(query.version.text);
-    if (entryObject.owner?.ref !== ref || entryObject.owner?.role !== OBJECT_FRONTEND_ROLE_ENTRY) {
+    if (entryItem.owner?.ref !== ref || entryItem.owner?.role !== OBJECT_FRONTEND_ROLE_ENTRY) {
       problemList.push(`the entry asset does not declare the object (owner: { ref: ${ref}, role: entry })`);
     }
     if (!this.typeIsFrontend(entry.type)) problemList.push(`the type ${entry.type} is not a frontend object type: it is drawn as ${OBJECT_FRONTEND_TYPE_ROOT}`);
     const assetList: ObjectFrontendAsset[] = entry.assetList.map((asset: any) => {
-      const object = assetStore.objectGet(ASSET_STORE_ID_LOCAL, asset.objectId);
+      const item = assetStore.itemGet(ASSET_STORE_ID_LOCAL, asset.itemId);
       return {
         ...asset,
-        object,
-        status: !object ? 'missing' : object.isDeleted ? 'deleted' : 'found',
-        isOwnerMatch: object?.owner?.ref === ref,
+        item,
+        status: !item ? 'missing' : item.isDeleted ? 'deleted' : 'found',
+        isOwnerMatch: item?.owner?.ref === ref,
+        isInFolder: item?.folderOwner?.ref === ref,
       };
     });
     const assetIndex = objectFrontendAssetIndexBuild(assetList);
     problemList.push(...assetIndex.problemList);
-    const objectIdListed = new Set([item.entry, ...entry.assetList.map((asset: any) => asset.objectId)]);
-    const strayList = assetStore.objectList.filter((object: any) => object.owner?.ref === ref && !object.isDeleted && !objectIdListed.has(object.objectId));
+    const itemIdListed = new Set([decl.entry, ...entry.assetList.map((asset: any) => asset.itemId)]);
+    const strayList = assetStore.itemList.filter((item: any) => item.owner?.ref === ref && !item.isDeleted && !itemIdListed.has(item.itemId));
+    const itemInFolderList = assetStore.itemList.filter((item: any) => item.folderOwner?.ref === ref);
+    const unknownList = itemInFolderList.filter((item: any) => item.owner?.ref !== ref && !item.isDeleted && !itemIdListed.has(item.itemId));
+    const outsideList = decl.dir ? assetList.filter((asset: any) => asset.status === 'found' && !asset.isInFolder) : [];
+    const countByGroup = new Map<string, number>();
+    for (const item of itemInFolderList) countByGroup.set(item.groupPath ?? '', (countByGroup.get(item.groupPath ?? '') ?? 0) + 1);
+    const groupList = [...countByGroup.entries()].map(([groupPath, count]) => ({ groupPath, count })).sort((a, b) => a.groupPath.localeCompare(b.groupPath));
     return {
       ...stateBase,
       status: 'found',
-      entryObject,
+      entryItem,
       name: entry.name,
       typeId: this.typeIsFrontend(entry.type) ? entry.type : OBJECT_FRONTEND_TYPE_ROOT,
       description: entry.description,
@@ -316,18 +358,21 @@ export class DocObjectFrontendStore {
       assetList,
       assetIndex,
       strayList,
+      unknownList,
+      outsideList,
+      groupList,
       problemList,
     };
   }
 
   // the entry assets no doc page lists any more: declared with role entry, not deleted
-  get orphanEntryList(): { id: string; object: any }[] {
-    const idSet = new Set(this.itemList.map((item) => item.id));
-    const list: { id: string; object: any }[] = [];
-    for (const object of this.stores.assetStore.objectList) {
-      if (object.isDeleted || object.owner?.role !== OBJECT_FRONTEND_ROLE_ENTRY) continue;
-      const id = objectFrontendIdOfRefGet(object.owner.ref);
-      if (id && object.owner.ref.startsWith('frontend:') && !idSet.has(id)) list.push({ id, object });
+  get orphanEntryList(): { id: string; item: any }[] {
+    const idSet = new Set(this.declList.map((decl) => decl.id));
+    const list: { id: string; item: any }[] = [];
+    for (const item of this.stores.assetStore.itemList) {
+      if (item.isDeleted || item.owner?.role !== OBJECT_FRONTEND_ROLE_ENTRY) continue;
+      const id = objectFrontendIdOfRefGet(item.owner.ref);
+      if (id && item.owner.ref.startsWith('frontend:') && !idSet.has(id)) list.push({ id, item });
     }
     return list;
   }
@@ -376,21 +421,21 @@ export class DocObjectFrontendStore {
   // the data of one asset of an object, by an asset reference: { status, text, object, versionId, assetStatus };
   // asks the asset store for it when it is not loaded yet. an asset the object
   // lists and the store lacks is an error saying so (assetStatus missing | deleted)
-  assetTextGet(idOrRef: string, assetRef: string): { status: 'loading' | 'done' | 'error'; message: string; text: string; object?: any; versionId?: string; asset?: ObjectFrontendAsset; assetStatus?: string } {
+  assetTextGet(idOrRef: string, assetRef: string): { status: 'loading' | 'done' | 'error'; message: string; text: string; item?: any; versionId?: string; asset?: ObjectFrontendAsset; assetStatus?: string } {
     const resolved = this.assetResolve(idOrRef, assetRef);
     if (resolved.status === 'loading') return { status: 'loading', message: '', text: '' };
     if (resolved.status !== 'found') return { status: 'error', message: resolved.message, text: '', asset: resolved.asset, assetStatus: resolved.status };
     const asset = resolved.asset!;
     const key = asset.key;
-    const refAsset = { store: ASSET_STORE_ID_LOCAL, objectId: asset.objectId, versionId: 'head' };
+    const refAsset = { store: ASSET_STORE_ID_LOCAL, itemId: asset.itemId, versionId: 'head' };
     const query = this.stores.assetStore.refQuery(refAsset);
     if (query.status === 'loading') {
       this.loadSchedule(refAsset);
       return { status: 'loading', message: '', text: '' };
     }
     if (query.status === 'error') return { status: 'error', message: query.message, text: '' };
-    if (!query.version?.isText) return { status: 'error', message: `the asset ${key} is not text`, text: '', object: query.object, asset };
-    return { status: 'done', message: resolved.message, text: query.version.text, object: query.object, versionId: query.versionId, asset, assetStatus: 'found' };
+    if (!query.version?.isText) return { status: 'error', message: `the asset ${key} is not text`, text: '', item: query.item, asset };
+    return { status: 'done', message: resolved.message, text: query.version.text, item: query.item, versionId: query.versionId, asset, assetStatus: 'found' };
   }
 
   // the data of one asset read as yaml (or json), by an asset reference: what
@@ -399,15 +444,15 @@ export class DocObjectFrontendStore {
   assetDataGet(idOrRef: string, assetRef: string) {
     const result = this.assetTextGet(idOrRef, assetRef);
     if (result.status !== 'done') return { ...result, data: undefined };
-    const objectId = result.object.objectId;
-    let parsed = this.assetDataById.get(objectId);
+    const itemId = result.item.itemId;
+    let parsed = this.assetDataById.get(itemId);
     if (parsed?.text !== result.text) {
       try {
         parsed = { text: result.text, data: yamlParse(result.text) };
       } catch (error) {
         parsed = { text: result.text, message: String((error as any)?.message ?? error) };
       }
-      this.assetDataById.set(objectId, parsed);
+      this.assetDataById.set(itemId, parsed);
     }
     if (parsed.message !== undefined) return { ...result, status: 'error' as const, message: `the asset ${assetRef} is not yaml: ${parsed.message}`, data: undefined };
     return { ...result, data: parsed.data };
@@ -417,7 +462,7 @@ export class DocObjectFrontendStore {
   // so the blocks waiting for it are drawn per step and not per asset
   private loadSchedule(ref: any) {
     const isFirst = this.loadRefByKey.size === 0;
-    this.loadRefByKey.set(`${ref.store}\u0000${ref.objectId}\u0000${ref.versionId}`, ref);
+    this.loadRefByKey.set(`${ref.store}\u0000${ref.itemId}\u0000${ref.versionId}`, ref);
     if (!isFirst) return;
     queueMicrotask(() => {
       const refList = [...this.loadRefByKey.values()];
@@ -455,7 +500,7 @@ export class DocObjectFrontendStore {
 
   // ---------- writes ----------
 
-  // a structural write on the development server; the asset objects it
+  // a structural write on the development server; the asset items it
   // wrote and the declarations as they are now come back with the answer
   async writeRun(route: string, body: Record<string, any>): Promise<{ code: number; data?: any; message: string }> {
     const { assetStore } = this.stores;
@@ -472,7 +517,7 @@ export class DocObjectFrontendStore {
         return;
       }
       this.write = { status: 'idle', route: '', id: '', message: '' };
-      assetStore.objectListAccept(ASSET_STORE_ID_LOCAL, result.data?.objectList ?? []);
+      assetStore.itemListAccept(ASSET_STORE_ID_LOCAL, result.data?.itemList ?? []);
     });
     if (result.code === 0 && result.data?.config) this.configAccept({ status: 'done', message: '', docPageList: result.data.config.docPageList ?? [] });
     if (result.code === 0) this.stores.objectStore?.changed('frontend');
@@ -522,8 +567,55 @@ export class DocObjectFrontendStore {
     return this.writeRun('asset/remove', { id, key, isAssetKept });
   }
 
-  assetAttach(id: string, objectId: string, input: { key?: string; kind?: string; name?: string; pathList?: string[] } = {}) {
-    return this.writeRun('asset/attach', { id, objectId, ...input });
+  // the one door for an item coming in: from elsewhere, a stray, or of unknown source. the type
+  // of the object decides (#what-a-type-accepts)
+  assetAttach(id: string, itemId: string, input: { key?: string; kind?: string; name?: string; pathList?: string[]; groupPath?: string; isOwnerReplaced?: boolean } = {}) {
+    return this.writeRun('asset/attach', { id, itemId, ...input });
+  }
+
+  // an item of its folder that it does not list sent away, kept in the store or deleted softly
+  itemSendAway(id: string, itemId: string, input: { isAssetKept: boolean; folder?: string; groupPath?: string }) {
+    return this.writeRun('asset/remove', { id, itemId, ...input });
+  }
+
+  // where a listed asset lies on disk, inside the folder of the object: its key, name and paths stay
+  assetMove(id: string, key: string, groupPath: string) {
+    return this.writeRun('asset/move', { id, key, groupPath });
+  }
+
+  // a folder inside the item folder renamed or moved, with what it holds
+  assetGroupMove(id: string, groupFrom: string, groupTo: string) {
+    return this.writeRun('asset/group/move', { id, groupFrom, groupTo });
+  }
+
+  // the assets the type of an object holds; undefined: any
+  assetKindListGet(idOrRef: string): any[] | undefined {
+    const state = this.objectGet(idOrRef);
+    return state.status === 'found' ? this.assetKindListOfTypeGet(state.typeId) : undefined;
+  }
+
+  assetKindListOfTypeGet(typeId: string): any[] | undefined {
+    return objectFrontendAssetKindListResolve(typeId, this.typeDeclaredList);
+  }
+
+  // the answer of this layer to a move of the asset store touching the folder of an object
+  // (doc_page_impl_asset.md#moving-an-item): into an object through its door, out through its
+  // removal, inside it as a place on disk; an item of another object is taken from it
+  folderOwnerItemMove(input: { item: any; folder: string; groupPath: string; kind?: string; ownerFrom?: string; ownerTo?: string }) {
+    const { item, folder, groupPath, kind, ownerFrom, ownerTo } = input;
+    if (item.owner?.role === OBJECT_FRONTEND_ROLE_ENTRY) return Promise.resolve({ code: -1, message: 'the entry of an object stays at the top of its folder' });
+    const place = groupPath.trim() === '' ? undefined : groupPath;
+    if (ownerTo && ownerTo === ownerFrom) {
+      const id = objectFrontendIdOfRefGet(ownerTo);
+      const asset = this.objectGet(id).assetList?.find((one: any) => one.itemId === item.itemId);
+      if (!asset) return Promise.resolve({ code: -1, message: 'the object does not list this item: adopt it first (the Frontend objects tab)' });
+      return this.assetMove(id, asset.key, groupPath);
+    }
+    if (ownerTo) {
+      const isOwnerReplaced = Boolean(item.owner) && item.owner.ref !== ownerTo;
+      return this.assetAttach(objectFrontendIdOfRefGet(ownerTo), item.itemId, { kind: kind || undefined, groupPath: place, isOwnerReplaced });
+    }
+    return this.itemSendAway(objectFrontendIdOfRefGet(ownerFrom!), item.itemId, { isAssetKept: true, folder, groupPath });
   }
 
   // the data of one asset replaced, by the asset's save mode: an ordinary
@@ -535,8 +627,8 @@ export class DocObjectFrontendStore {
     const asset = resolved.asset!;
     const key = asset.key;
     const { assetStore } = this.stores;
-    await assetStore.refLoad({ store: ASSET_STORE_ID_LOCAL, objectId: asset.objectId, versionId: 'head' });
-    const result = await assetStore.objectUpdate(ASSET_STORE_ID_LOCAL, asset.objectId, { text }, undefined, note || `${key} of ${state.name || state.id}`);
+    await assetStore.refLoad({ store: ASSET_STORE_ID_LOCAL, itemId: asset.itemId, versionId: 'head' });
+    const result = await assetStore.itemUpdate(ASSET_STORE_ID_LOCAL, asset.itemId, { text }, undefined, note || `${key} of ${state.name || state.id}`);
     return { code: result.code, message: result.message };
   }
 
@@ -597,6 +689,10 @@ export class DocObjectFrontendStore {
     Object.assign(this.settings, change);
   }
 
+  settingsKindSet(itemId: string, kind: string) {
+    this.settings.kindByItem = { ...this.settings.kindByItem, [itemId]: kind };
+  }
+
   settingsConfirmSet(confirm: string) {
     this.settings.confirm = confirm;
   }
@@ -624,8 +720,8 @@ export class DocObjectFrontendStore {
   // an object created from a block's creation (the insert menu): of a type, named after it
   async createForInsert(typeId: string, docPath: string): Promise<{ code: number; ref?: string; message: string }> {
     const alias = docPath.startsWith('~') && docPath.includes(':') ? docPath.slice(1, docPath.indexOf(':')) : '';
-    const docPage = this.docPageList.find((item: any) => item.alias === alias && !item.isDisabled && item.assetFolder)
-      ?? this.docPageList.find((item: any) => !item.isDisabled && item.assetFolder);
+    const docPage = this.docPageList.find((docPage: any) => docPage.alias === alias && !docPage.isDisabled && docPage.assetFolder)
+      ?? this.docPageList.find((docPage: any) => !docPage.isDisabled && docPage.assetFolder);
     if (!docPage) return { code: -1, message: 'no doc page here can hold a frontend object (it needs an asset folder)' };
     const result = await this.create({ docPageAlias: docPage.alias, typeId, name: `New ${this.typeLabelGet(typeId).toLowerCase()}` });
     return result.code === 0 ? { code: 0, ref: objectFrontendRefBuild(result.data.id), message: '' } : { code: result.code, message: result.message };

@@ -8,6 +8,7 @@
 //   react-doc build [<path>] --out  the same as a static page: one html file, or a folder
 //   react-doc where                 where this copy of react-doc finds what it needs
 //   react-doc pack [--out <dir>]    the folder `npm publish` publishes (the installed mode)
+//   react-doc migrate <path>        a doc page of an older form rewritten (doc-migrate.js)
 //
 // Each kind is a folder of scaffold/ copied with its placeholders filled
 // ({{alias}}, {{title}}, {{name}}, {{pageAlias}}; a "_gitignore" becomes
@@ -44,7 +45,7 @@ export const INIT_KIND_LIST = ['page', 'workspace', 'package'];
 const SCAFFOLD_DIR_NAME_BY_KIND = { page: 'doc-page', workspace: 'workspace', package: 'package' };
 // the managed folders of each scaffold, relative to it (doc_page_impl_dir.md)
 const FOLDER_MANAGED_LIST_BY_KIND = {
-  page: ['asset', 'comp-mdx', 'service-template-app', 'service-template-infra', 'service-app', 'service-infra'].map((name) => `.doc-page/${name}`),
+  page: ['asset', 'object-frontend', 'comp-mdx', 'service-template-app', 'service-template-infra', 'service-app', 'service-infra'].map((name) => `.doc-page/${name}`),
   workspace: [],
   package: ['comp-mdx', 'service-template-app', 'service-template-infra'],
 };
@@ -68,6 +69,12 @@ usage
   react-doc build [<path>] --out <file.html | dir>  [options below]
   react-doc where
   react-doc pack                  [--out <dir>]
+  react-doc migrate <path>        [--dry-run]
+
+migrate
+  rewrites the doc pages below <path> into the form this react-doc reads: asset items
+  (item.yaml, itemId), frontend objects in folders of their own, types in type.yaml. --dry-run only lists
+  what it would change. Nothing is committed; a second run changes nothing
 
 init options
   --alias  the alias of the doc page and of its root  (default: the folder name)
@@ -108,6 +115,23 @@ build options (and --kind, --alias, --side-panel, --mount, --package, --package-
 `;
 
 export class DocCliError extends Error {}
+
+async function docMigrateRun(parsed, option, out) {
+  const target = parsed.positionals[1];
+  if (!target) throw new DocCliError('react-doc migrate <path>: name a folder holding doc pages');
+  const dirTarget = path.resolve(option.cwd ?? process.cwd(), target);
+  if (!fs.existsSync(dirTarget) || !fs.statSync(dirTarget).isDirectory()) throw new DocCliError(`not a folder: ${dirTarget}`);
+  const { docMigrate } = await import('./doc-migrate.js');
+  const isDryRun = parsed.values['dry-run'] === true;
+  const report = await docMigrate(dirTarget, { isDryRun });
+  const say = (line) => out(line);
+  say(`${isDryRun ? 'would rewrite' : 'rewrote'}: ${report.itemList.length} asset item(s), ${report.documentList.length} document(s), ${report.objectList.length} frontend object(s) into a folder of their own`);
+  for (const file of report.documentList) say(`  document ${path.relative(dirTarget, file)}`);
+  for (const dir of report.objectList) say(`  object   ${path.relative(dirTarget, dir)}`);
+  for (const file of report.typeFileList) say(`  types    ${path.relative(dirTarget, file)}`);
+  for (const problem of report.problemList) say(`  problem  ${problem}`);
+  return 0;
+}
 
 // "my-notes_2" -> "My Notes 2"
 function titleFromName(name) {
@@ -744,6 +768,7 @@ export function docCliRun(argList, option = {}) {
         root: { type: 'string' },
         out: { type: 'string' },
         'keep-all': { type: 'boolean' },
+        'dry-run': { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
       },
     });
@@ -765,6 +790,7 @@ export function docCliRun(argList, option = {}) {
     return (command === 'dev' ? docDev : docBuild)(kind, { ...parsed.values, cwd: option.cwd }, out);
   }
   if (command === 'where') return docWhere(out);
+  if (command === 'migrate') return docMigrateRun(parsed, option, out);
   if (command === 'pack') {
     const result = docPack({ ...parsed.values, cwd: option.cwd });
     out(`staged ${result.name}@${result.version} in ${result.dirOut}`);

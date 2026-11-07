@@ -9,7 +9,7 @@ import { AssetFrame } from './AssetFrame.jsx';
 // The runtime boundary of a component whose data lives in the asset service layer
 // (design: doc_page_impl_asset.md). RegisteredComp hands a comment-block
 // invocation here when its fenced block is written in the language "asset":
-// the block holds a reference { store, objectId | name, versionId }, not the data.
+// the block holds a reference { store, itemId | name, versionId }, not the data.
 // The host resolves the reference through DocAssetStore and renders the
 // component again with the text and language of that version in place of
 // the reference, so the component sees exactly the input it would see with
@@ -21,7 +21,7 @@ import { AssetFrame } from './AssetFrame.jsx';
 //   <!--renderComp=Image-->
 //   ```asset
 //   store: local
-//   name: hero image        (or objectId: m2x1k9q4z0a1b)
+//   name: hero image        (or itemId: m2x1k9q4z0a1b)
 //   ```
 //
 //   input            the invocation input: { raw: reference yaml, lang: 'asset', propsAuthored }
@@ -37,7 +37,7 @@ export const CompAssetHost = observer(function CompAssetHost({ input, registered
   const result = reference.message ? undefined : assetStore.refQuery(reference);
   const resultStatus = result?.status;
   const resultVersionId = result?.versionId;
-  // the object decides the version a "head" reference means; the effect runs
+  // the item decides the version a "head" reference means; the effect runs
   // again once it is known, to read that version's data
   useEffect(() => {
     if (!reference.message) void assetStore.refLoad(reference);
@@ -55,15 +55,15 @@ export const CompAssetHost = observer(function CompAssetHost({ input, registered
   if (result.status === 'loading') {
     return <AssetFrame {...frameProps} />;
   }
-  if (assetRefLangIs(result.object.lang)) {
-    return <AssetFrame {...frameProps} message={`asset object ${result.object.objectId} has lang "asset", which is reserved for references`} />;
+  if (assetRefLangIs(result.item.lang)) {
+    return <AssetFrame {...frameProps} message={`asset item ${result.item.itemId} has lang "asset", which is reserved for references`} />;
   }
   if (!result.version.isText) {
     const sizeText = `${result.version.size ?? 0} bytes`;
     return (
       <AssetFrame
         {...frameProps}
-        message={`version ${result.versionId} of the asset is not text (${result.object.contentType}, ${sizeText}); ${label} reads a ${result.object.lang || 'text'} block`}
+        message={`version ${result.versionId} of the asset is not text (${result.item.contentType}, ${sizeText}); ${label} reads a ${result.item.lang || 'text'} block`}
       />
     );
   }
@@ -72,17 +72,17 @@ export const CompAssetHost = observer(function CompAssetHost({ input, registered
   const assetInfo = {
     isFromAsset: true,
     store: reference.store,
-    objectId: result.object.objectId,
-    name: result.object.name,
+    itemId: result.item.itemId,
+    name: result.item.name,
     // what the reference asks for: 'head' follows the head, an id is pinned
     versionIdRef: reference.versionId,
     versionId: result.versionId,
-    versionIdHead: result.object.versionIdHead,
-    isHead: result.versionId === result.object.versionIdHead,
+    versionIdHead: result.item.versionIdHead,
+    isHead: result.versionId === result.item.versionIdHead,
     // the hash of the bytes read, so a refresh can tell whether they changed
     hash: result.version.hash ?? '',
-    saveMode: assetSaveModeGet(result.object),
-    isLocked: result.object.isLocked,
+    saveMode: assetSaveModeGet(result.item),
+    isLocked: result.item.isLocked,
     // what the writer of the data said about it ({versionId}.metadata.yaml)
     versionMetadata: result.version.metadata ?? {},
   };
@@ -91,7 +91,7 @@ export const CompAssetHost = observer(function CompAssetHost({ input, registered
       <RegisteredComp
         {...registeredProps}
         configRuntime={{ ...(registeredProps.configRuntime ?? {}), assetInfo }}
-        input={{ ...input, raw: result.version.text, lang: result.object.lang }}
+        input={{ ...input, raw: result.version.text, lang: result.item.lang }}
       />
     </AssetFrame>
   );

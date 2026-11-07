@@ -6,6 +6,7 @@ import { sourceAliasIsValid, sourcePathFullGet, sourcePathIsRooted } from '../sr
 import { excludePatternTextListRead } from './doc-source-exclude.ts';
 import { PACKAGE_CONFIG_FILE_NAME, docPackageNameOfFolderGet, docPackageSpecListRead, type DocPackageSpec } from './doc-package.ts';
 import { sidePanelEffectiveGet, sidePanelRootUnfoldApply } from './doc-sidebar-effective.ts';
+import { typeSectionRead, type TypeSection } from './doc-type-config.ts';
 
 // The workspace, its doc pages, the entry of each and the yaml files it reaches.
 // design: doc_page_impl_source.md#the-workspace, doc_page_impl_side_panel.md#the-document-entry
@@ -188,6 +189,8 @@ export type DocPageLoaded = {
   api: EntryFileSection;
   objectFrontend: EntryFileSection;
   playground: EntryFileSection;
+  // "type" of the entry: the types it declares (doc-type-config.ts); undefined: type.yaml beside it
+  type: TypeSection;
 };
 
 // a section of the entry that names a config file of the doc page, or
@@ -347,7 +350,7 @@ type LoadContext = {
   warningList: string[];
 };
 
-const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'playground', 'packageList', 'sidePanelDefault', 'sidePanelById'];
+const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'type', 'playground', 'packageList', 'sidePanelDefault', 'sidePanelById'];
 // the sections an entry alone may hold: each names a config file of the doc
 // page (or switches the feature off), found beside the entry by convention
 const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'playground'] as const;
@@ -424,8 +427,8 @@ function docPageFolderFormerWarn(docPage: DocPageLoaded) {
     if (fs.existsSync(path.join(path.dirname(docPage.entryFile), former.configFile))) continue;
     const folderFormer = path.join(docPage.dirPage, former.name);
     if (docPageFolderFormerWarnedSet.has(folderFormer) || !fs.existsSync(folderFormer)) continue;
-    // a folder named asset/ is content unless it holds asset objects
-    if (former.name === 'asset' && !fs.readdirSync(folderFormer).some((name) => fs.existsSync(path.join(folderFormer, name, 'object.yaml')))) continue;
+    // a folder named asset/ is content unless it holds asset items
+    if (former.name === 'asset' && !fs.readdirSync(folderFormer).some((name) => fs.existsSync(path.join(folderFormer, name, 'item.yaml')) || fs.existsSync(path.join(folderFormer, name, 'object.yaml')))) continue;
     docPageFolderFormerWarnedSet.add(folderFormer);
     console.warn(
       `[doc-source] ${folderFormer} is not read: the ${former.name}/ folder of a doc page is ${DOC_PAGE_META_DIR_NAME}/${former.name}/ now;`
@@ -881,6 +884,7 @@ function docPageRegister(entryFile: string, mention: DocPageMention, isRoot: boo
     api: undefined,
     objectFrontend: undefined,
     playground: undefined,
+    type: undefined,
   };
   context.docPageByEntryFile.set(entryFile, docPage);
   return docPage;
@@ -951,12 +955,13 @@ function fileLoad(filePath: string, context: LoadContext, entryOwnerFrom: string
     context.entryFileList.push(filePathResolved);
     docPage.title = file.entry.title ?? '';
     for (const key of ENTRY_FILE_SECTION_KEY_LIST) docPage[key] = entryFileSectionRead(content[key], key, filePathResolved);
+    docPage.type = typeSectionRead(content.type, filePathResolved);
     docPage.packageList = docPackageSpecListRead(content.packageList, path.dirname(filePathResolved), filePathResolved);
     // a package treated as a doc page: its components and templates are the
     // package's (comp-mdx/, service-template-*/ at its top, read as those of a
     // package), it has no folders of its own of those kinds and no instances
     if (docPage.packageName) {
-      for (const key of ['comp', 'service', 'packageList'] as const) {
+      for (const key of ['comp', 'service', 'packageList', 'type'] as const) {
         if (content[key] !== undefined) {
           throw new Error(`[doc-source] "${key}" is not for a package treated as a doc page (doc_page_impl_package.md#a-package-as-a-doc-page; packageDependList of ${PACKAGE_CONFIG_FILE_NAME} names what it needs): ${filePathResolved}`);
         }
@@ -964,8 +969,8 @@ function fileLoad(filePath: string, context: LoadContext, entryOwnerFrom: string
       docPage.comp = false;
       docPage.service = false;
     }
-  } else if (ENTRY_FILE_SECTION_KEY_LIST.some((key) => content[key] !== undefined) || content.packageList !== undefined) {
-    const key = ENTRY_FILE_SECTION_KEY_LIST.find((keyItem) => content[keyItem] !== undefined) ?? 'packageList';
+  } else if (ENTRY_FILE_SECTION_KEY_LIST.some((key) => content[key] !== undefined) || content.packageList !== undefined || content.type !== undefined) {
+    const key = ENTRY_FILE_SECTION_KEY_LIST.find((keyItem) => content[keyItem] !== undefined) ?? (content.packageList !== undefined ? 'packageList' : 'type');
     throw new Error(
       `[doc-source] "${key}" belongs to the entry of a doc page, not to a resource file: ${filePathResolved}`,
     );
@@ -1138,7 +1143,8 @@ function pathIsInside(filePath: string, folder: string): boolean {
 // (doc_page_impl_mdx_comp.md#components-of-a-doc-page), the active keyboard
 // map (doc_page_impl_api_hotkey.md: hotkey/main.yaml) and the declared apis
 // (doc_page_impl_api.md: api.yaml), the frontend objects and their types
-// (doc_page_impl_obj_frontend.md: object-frontend.yaml), the playground documents
+// (doc_page_impl_obj_frontend.md: object-frontend.yaml; their types are the section "type",
+// doc-type-config.ts), the playground documents
 // (doc_page_impl_test.md: playground.yaml). each is { file }, relative to the entry,
 // or false for none. absent: the convention file beside the entry, read
 // when it exists, the defaults of the feature otherwise

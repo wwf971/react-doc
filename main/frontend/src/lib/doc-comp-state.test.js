@@ -10,8 +10,8 @@ import { DocCompStateStore } from '../store/DocCompStateStore.ts';
 
 // ---------- keys ----------
 
-test('the key rule: asset object, then id prop, then place, then instance', () => {
-  const assetInfo = { isFromAsset: true, store: 'local', objectId: 'w4r63zmeaor' };
+test('the key rule: asset item, then id prop, then place, then instance', () => {
+  const assetInfo = { isFromAsset: true, store: 'local', itemId: 'w4r63zmeaor' };
   assert.equal(
     compStateKeyBuild({ assetInfo, docPath: '~example/a.md', id: 'x', sourceLine: 12, instanceId: 'i' }),
     'asset:local/w4r63zmeaor',
@@ -25,7 +25,7 @@ test('the key rule: asset object, then id prop, then place, then instance', () =
 });
 
 test('a key parses back to what it was built from', () => {
-  assert.deepEqual(compStateKeyParse('asset:local/w4r63zmeaor'), { kind: 'asset', store: 'local', objectId: 'w4r63zmeaor' });
+  assert.deepEqual(compStateKeyParse('asset:local/w4r63zmeaor'), { kind: 'asset', store: 'local', itemId: 'w4r63zmeaor' });
   assert.deepEqual(compStateKeyParse('id:~example/a.md#tree'), { kind: 'id', docPath: '~example/a.md', id: 'tree' });
   assert.deepEqual(compStateKeyParse('place:~example/a.md:12'), { kind: 'place', docPath: '~example/a.md', sourceLine: 12 });
   assert.deepEqual(compStateKeyParse('instance:Comp:33'), { kind: 'instance', instanceId: 'Comp:33' });

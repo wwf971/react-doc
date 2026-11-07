@@ -33,12 +33,12 @@ import './DocEdit.css';
 // going down outside the toolbar closes the menu, the confirmation or a
 // failure message. the asset button exists for a component block whose data
 // is a reference into the asset service layer (doc_page_impl_asset.md): it opens
-// the asset panel of that object, the one place the panel is reached from.
+// the asset panel of that item, the one place the panel is reached from.
 // a component block whose data is written inline in a fenced block has the
 // "to asset" button instead: confirmed in the toolbar like a deletion, the
 // data becomes an object of the local store (in its default folder) and the
 // block is rewritten as the reference, the last step of the move.
-// deleting a block whose data is an asset object asks whether the object
+// deleting a block whose data is an asset item asks whether the item
 // goes too ("Delete block only" / "Delete block and asset"); kept, it is
 // listed as an orphan in the settings panel (doc_page_impl_asset.md#usage).
 // deleting a block of a component that offers files with its deletion
@@ -74,8 +74,8 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
   const isAssetPanelAvailable = useAssetPanelIsAvailable();
   const component = model?.blockList?.[blockIndex]?.component;
   const assetReference = component && assetRefLangIs(component.lang) ? assetRefParse(component.raw) : undefined;
-  // a reference by name opens the panel once the name is resolved to an object
-  const assetObjectId = assetReference && !assetReference.message ? assetStore.refObjectIdGet(assetReference) : '';
+  // a reference by name opens the panel once the name is resolved to an item
+  const assetItemId = assetReference && !assetReference.message ? assetStore.refItemIdGet(assetReference) : '';
   const isSubmitting = editStore.isSubmitting;
   const menu = editStore.insertMenu;
   const isMenuHere = editStore.insertMenuIs(path, blockIndex);
@@ -88,8 +88,8 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
   const isAssetMoveConfirmHere = editStore.blockAssetMoveConfirmIs(path, blockIndex);
   const isAssetMoveAvailable = editStore.blockAssetMoveIsAvailable(path, blockIndex);
   const isReadOnly = editStore.blockIsReadOnly(path, blockIndex);
-  // the asset object the block's data is: its deletion asks about it too
-  const assetObject = isConfirmHere ? editStore.blockAssetObjectGet(path, blockIndex) : undefined;
+  // the asset item the block's data is: its deletion asks about it too
+  const assetItem = isConfirmHere ? editStore.blockAssetItemGet(path, blockIndex) : undefined;
   // the pointer down that closes what is open only closes it: the click
   // that follows does not also enter the block it lands on; a click on a
   // control still works. entering takes another click.
@@ -133,10 +133,10 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
           <Pencil aria-hidden="true" size={ICON_SIZE} strokeWidth={2} />
         </button>
         {assetReference && isAssetPanelAvailable ? (
-          <button type="button" disabled={isSubmitting || !assetObjectId}
-            title={assetReference.message || (assetObjectId ? 'Asset: versions and history' : 'Asset: the object is not resolved yet')}
+          <button type="button" disabled={isSubmitting || !assetItemId}
+            title={assetReference.message || (assetItemId ? 'Asset: versions and history' : 'Asset: the item is not resolved yet')}
             aria-label="Asset: versions and history"
-            onClick={() => assetStore.panelOpen(assetReference.store, assetObjectId, assetReference.versionId, {
+            onClick={() => assetStore.panelOpen(assetReference.store, assetItemId, assetReference.versionId, {
               compName: component.compName,
               propsAuthored: component.props ?? {},
               sourcePath: path,
@@ -186,17 +186,17 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
       </div>
       {isConfirmHere ? (
         <ToolbarConfirm
-          question={deleteQuestionGet(assetObject, confirm)}
-          actionLabel={deleteActionLabelGet(assetObject, confirm, false)}
+          question={deleteQuestionGet(assetItem, confirm)}
+          actionLabel={deleteActionLabelGet(assetItem, confirm, false)}
           isDanger
           confirm={confirm}
           isActionLocked={Boolean(confirm.isFileLoading)}
           onConfirm={() => void editStore.blockDelete(path, blockIndex)}
           onCancel={() => editStore.deleteConfirmClear()}
-          actionExtra={assetObject ? {
-            label: deleteActionLabelGet(assetObject, confirm, true),
-            title: assetDeleteReasonGet(assetObject) || 'the asset object is marked deleted with the block; it can be restored in the asset panel',
-            isDisabled: Boolean(assetDeleteReasonGet(assetObject)),
+          actionExtra={assetItem ? {
+            label: deleteActionLabelGet(assetItem, confirm, true),
+            title: assetDeleteReasonGet(assetItem) || 'the asset item is marked deleted with the block; it can be restored in the asset panel',
+            isDisabled: Boolean(assetDeleteReasonGet(assetItem)),
             onConfirm: () => void editStore.blockDelete(path, blockIndex, { isAssetDeleted: true }),
           } : undefined}
         >
@@ -224,25 +224,25 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
   );
 });
 
-// the question of a deletion: for a block whose data is an asset object,
+// the question of a deletion: for a block whose data is an asset item,
 // what the object is and who else reads it; for a block whose component
 // offers files, whether they go too
-function deleteQuestionGet(assetObject, confirm) {
+function deleteQuestionGet(assetItem, confirm) {
   const questionFile = confirm?.fileList ? ' Also delete any referenced files?' : '';
-  if (!assetObject) return `Delete this block?${questionFile}`;
-  const objectText = assetObject.name ? `"${assetObject.name}"` : assetObject.objectId;
-  if (assetObject.usageCountOther === 0) return `Delete this block? Its data is the asset object ${objectText}.${questionFile}`;
-  const blockText = assetObject.usageCountOther === 1 ? '1 other block' : `${assetObject.usageCountOther} other blocks`;
-  return `Delete this block? Its data is the asset object ${objectText}, also used by ${blockText}.${questionFile}`;
+  if (!assetItem) return `Delete this block?${questionFile}`;
+  const objectText = assetItem.name ? `"${assetItem.name}"` : assetItem.itemId;
+  if (assetItem.usageCountOther === 0) return `Delete this block? Its data is the asset item ${objectText}.${questionFile}`;
+  const blockText = assetItem.usageCountOther === 1 ? '1 other block' : `${assetItem.usageCountOther} other blocks`;
+  return `Delete this block? Its data is the asset item ${objectText}, also used by ${blockText}.${questionFile}`;
 }
 
 // the label of the two delete actions says what goes: the block alone,
-// with its asset object, with the chosen files, or both
-function deleteActionLabelGet(assetObject, confirm, isAssetDeleted) {
+// with its asset item, with the chosen files, or both
+function deleteActionLabelGet(assetItem, confirm, isAssetDeleted) {
   const fileCount = confirm?.filePathDeleteList?.length ?? 0;
   if (isAssetDeleted) return fileCount > 0 ? 'Delete block, data asset and selected files' : 'Delete block and asset';
   if (fileCount > 0) return 'Delete block and selected files';
-  return assetObject || confirm?.fileList ? 'Delete block only' : 'Delete';
+  return assetItem || confirm?.fileList ? 'Delete block only' : 'Delete';
 }
 
 // the files a component offered with the deletion of its block, as
@@ -316,11 +316,11 @@ const FileDeleteChoices = observer(function FileDeleteChoices() {
   );
 });
 
-// why the asset object cannot go with the block ('' when it can)
-function assetDeleteReasonGet(assetObject) {
-  if (assetObject.isDeleted) return 'the asset object is already marked deleted';
-  if (assetObject.isLocked) return 'the asset object is locked';
-  if (assetObject.usageCountOther > 0) return 'other blocks use the asset object; delete it from its asset panel if that is meant';
+// why the asset item cannot go with the block ('' when it can)
+function assetDeleteReasonGet(assetItem) {
+  if (assetItem.isDeleted) return 'the asset item is already marked deleted';
+  if (assetItem.isLocked) return 'the asset item is locked';
+  if (assetItem.usageCountOther > 0) return 'other blocks use the asset item; delete it from its asset panel if that is meant';
   return '';
 }
 

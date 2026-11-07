@@ -43,8 +43,8 @@ export const ObjectFrontendSettings = observer(function ObjectFrontendSettings()
     <div className="doc-settings-tab not-prose">
       <p className="doc-note">
         Objects the page keeps itself, in assets of the asset store: each has an entry asset (its name, type, assets and metadata)
-        and assets of its own, gathered in the folder {'{id}--{name}'} of its doc page&apos;s asset folder. The doc pages list them
-        and declare their types in object-frontend.yaml.
+        and assets of its own, all in a folder of its own, .doc-page/object-frontend/{'{id}--{name}'}, which can be copied to another
+        doc page. Types are declared in type.yaml of the doc page, of an object folder, or of a package.
       </p>
 
       <h3>New object</h3>
@@ -78,24 +78,24 @@ export const ObjectFrontendSettings = observer(function ObjectFrontendSettings()
       )}
       {store.write.status === 'error' && !store.write.id ? <p className="doc-error" role="alert">{store.write.message}</p> : null}
 
-      <h3>Objects ({store.itemList.length})</h3>
-      {store.itemList.length === 0 ? <p className="doc-note">No doc page lists a frontend object yet.</p> : (
+      <h3>Objects ({store.declList.length})</h3>
+      {store.declList.length === 0 ? <p className="doc-note">No doc page lists a frontend object yet.</p> : (
         <div className="doc-asset-table-scroll">
           <table className="doc-asset-table">
             <thead>
               <tr><th>name</th><th>type</th><th>doc page</th><th className="doc-asset-version-size">assets</th><th>id</th><th>state</th></tr>
             </thead>
             <tbody>
-              {store.itemList.map((item) => {
-                const state = store.objectGet(item.id);
-                const issueCount = state.problemList.length + state.strayList.length + state.assetList.filter((asset) => asset.status !== 'found').length;
+              {store.declList.map((decl) => {
+                const state = store.objectGet(decl.id);
+                const issueCount = state.problemList.length + state.strayList.length + state.unknownList.length + state.outsideList.length + state.assetList.filter((asset) => asset.status !== 'found').length;
                 return (
-                  <tr key={item.id} className="doc-asset-version" data-selected={store.settings.idSelected === item.id ? '' : undefined} onClick={() => store.settingsSelect(item.id)}>
+                  <tr key={decl.id} className="doc-asset-version" data-selected={store.settings.idSelected === decl.id ? '' : undefined} onClick={() => store.settingsSelect(decl.id)}>
                     <td>{state.name || <span className="doc-asset-muted">(no name)</span>}</td>
                     <td>{store.typeLabelGet(state.typeId)}</td>
-                    <td className="doc-asset-muted">{item.docPageAlias}</td>
+                    <td className="doc-asset-muted">{decl.docPageAlias}</td>
                     <td className="doc-asset-muted doc-asset-version-size">{state.assetList.length}</td>
-                    <td className="doc-asset-mono doc-asset-muted">{item.id}</td>
+                    <td className="doc-asset-mono doc-asset-muted">{decl.id}</td>
                     <td className={state.status !== 'found' || issueCount > 0 ? 'doc-settings-tab-issue' : 'doc-asset-muted'}>
                       {state.status !== 'found' ? state.status : issueCount > 0 ? `${issueCount} to look at` : 'found'}
                     </td>
@@ -106,21 +106,24 @@ export const ObjectFrontendSettings = observer(function ObjectFrontendSettings()
           </table>
         </div>
       )}
-      {store.settings.idSelected && store.itemGet(store.settings.idSelected) ? <ObjectFrontendDetail id={store.settings.idSelected} /> : null}
+      {store.settings.idSelected && store.declGet(store.settings.idSelected) ? <ObjectFrontendDetail id={store.settings.idSelected} /> : null}
 
       <h3>Types ({store.typeDeclaredList.length})</h3>
-      {store.typeDeclaredList.length === 0 ? <p className="doc-note">No doc page declares a type; every object is a Frontend object, drawn in its overview.</p> : (
+      {store.typeDeclaredList.length === 0 ? <p className="doc-note">No type is declared; every object is a Frontend object, drawn in its overview.</p> : (
         <div className="doc-asset-table-scroll">
           <table className="doc-asset-table">
-            <thead><tr><th>type</th><th>label</th><th>extends</th><th>modes</th><th>doc page</th></tr></thead>
+            <thead><tr><th>type</th><th>label</th><th>extends</th><th>modes</th><th>declared in</th></tr></thead>
             <tbody>
               {store.typeDeclaredList.map((type) => (
                 <tr key={type.id}>
                   <td className="doc-asset-mono">{type.id}</td>
                   <td>{type.label}</td>
                   <td className="doc-asset-muted">{type.extendList.join(', ')}</td>
-                  <td>{store.modeListGet(type.id).map((mode) => `${mode.label}${mode.typeId !== type.id ? ' ↑' : ''}`).join(', ')}</td>
-                  <td className="doc-asset-muted">{type.definedBy?.alias}</td>
+                  <td>
+                    {store.modeListGet(type.id).map((mode) => `${mode.label}${mode.typeId !== type.id ? ' ↑' : ''}`).join(', ')}
+                    {store.typeCompMissingListGet(type.id).length > 0 ? <span className="doc-error"> no component: {store.typeCompMissingListGet(type.id).join(', ')}</span> : null}
+                  </td>
+                  <td className="doc-asset-muted" title={type.definedBy?.file}>{type.definedBy?.alias ?? type.definedBy?.name}</td>
                 </tr>
               ))}
             </tbody>
@@ -141,12 +144,12 @@ export const ObjectFrontendSettings = observer(function ObjectFrontendSettings()
         <>
           <h3>Orphan entries ({store.orphanEntryList.length})</h3>
           <p className="doc-note">Entry assets of objects no doc page lists (their line was removed, or the object was deleted keeping its assets).</p>
-          {store.orphanEntryList.map(({ id, object }) => (
-            <div key={object.objectId} className="doc-settings-tab-row">
+          {store.orphanEntryList.map(({ id, item }) => (
+            <div key={item.itemId} className="doc-settings-tab-row">
               <span className="doc-asset-mono">{id}</span>
-              <span className="doc-asset-muted">entry {object.objectId} · {object.groupPath || object.folder}</span>
+              <span className="doc-asset-muted">entry {item.itemId} · {item.groupPath || item.folder}</span>
               {writeReason ? null : docPageCreateList.map((docPage) => (
-                <button key={docPage.alias} type="button" className="doc-button" disabled={isWriting} onClick={() => void store.register(docPage.alias, object.objectId)}>
+                <button key={docPage.alias} type="button" className="doc-button" disabled={isWriting} onClick={() => void store.register(docPage.alias, item.itemId)}>
                   List it in {docPage.alias}
                 </button>
               ))}
@@ -158,17 +161,46 @@ export const ObjectFrontendSettings = observer(function ObjectFrontendSettings()
   );
 });
 
+// an item the object does not list: its kind chosen, it comes in through the door of the
+// object, or it is sent away to the default asset folder of the doc page
+const ObjectFrontendIncomingRow = observer(function ObjectFrontendIncomingRow({ id, item, isWritable, isWriting, actionLabel, isSentAway = false }) {
+  const { objectFrontendStore: store } = useDocStores();
+  const kindList = store.assetKindListGet(id);
+  const kind = store.settings.kindByItem?.[item.itemId] ?? '';
+  const kindSet = (value) => store.settingsKindSet(item.itemId, value);
+  return (
+    <div className="doc-settings-tab-row">
+      <span className="doc-asset-mono">{item.itemId}</span>
+      <span className="doc-asset-muted">{item.name || '(no name)'} · {item.lang}{item.owner ? ` · declares ${item.owner.ref}` : ''}{item.groupPath ? ` · ${item.groupPath}` : ''}</span>
+      {isWritable ? (
+        <>
+          {kindList
+            ? (
+              <select aria-label="Its kind" value={kind} onChange={(event) => kindSet(event.target.value)}>
+                <option value="">(kind)</option>
+                {kindList.map((one) => <option key={one.id} value={one.id}>{one.label}</option>)}
+              </select>
+            )
+            : <EditValueInline value={kind} placeholder="(its kind)" onCommit={kindSet} />}
+          <button type="button" className="doc-button" disabled={isWriting} onClick={() => void store.assetAttach(id, item.itemId, { kind: kind || undefined, isOwnerReplaced: Boolean(item.owner) && item.owner.ref !== `frontend:${id}` })}>{actionLabel}</button>
+          {isSentAway ? <button type="button" className="doc-button" disabled={isWriting} title="to the top of the default asset folder of the doc page; nothing of it changes" onClick={() => void store.itemSendAway(id, item.itemId, { isAssetKept: true })}>Move out</button> : null}
+        </>
+      ) : null}
+    </div>
+  );
+});
+
 // the object chosen in the table: what its entry says, its assets, what does
 // not agree, and its changes
 const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
   const { objectFrontendStore: store, assetStore } = useDocStores();
   const state = store.objectGet(id);
-  const isWritable = store.writeUnavailableReason === '';
+  const isWritable = store.writeUnavailableReasonOf(id) === '';
   const isWriting = store.write.status === 'submitting';
   const confirm = store.settings.confirm;
   const modeList = state.status === 'found' ? store.modeListGet(state.typeId) : [];
   const writeMessage = store.write.status === 'error' && store.write.id === id ? store.write.message : '';
-  const entryPanelOpen = () => assetStore.panelOpen(ASSET_STORE_ID_LOCAL, state.entryObjectId);
+  const entryPanelOpen = () => assetStore.panelOpen(ASSET_STORE_ID_LOCAL, state.entryItemId);
   return (
     <div className="doc-settings-tab-detail">
       <div className="doc-asset-fields">
@@ -182,8 +214,8 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
         <span>{store.typeLabelGet(state.typeId)} <span className="doc-asset-muted">{state.typeId}</span></span>
         <span className="doc-asset-muted">entry asset</span>
         <span>
-          <button type="button" className="doc-settings-asset-link" onClick={entryPanelOpen} title="open its asset panel">{state.entryObjectId}</button>
-          {state.entryObject ? <span className="doc-asset-muted"> · {state.entryObject.folder}/{state.entryObject.groupPath}</span> : null}
+          <button type="button" className="doc-settings-asset-link" onClick={entryPanelOpen} title="open its asset panel">{state.entryItemId}</button>
+          {state.entryItem ? <span className="doc-asset-muted"> · {state.entryItem.folder}{state.entryItem.groupPath ? `/${state.entryItem.groupPath}` : ''}</span> : null}
         </span>
         <span className="doc-asset-muted">modes</span>
         <span>{modeList.map((mode) => `${mode.label} (${mode.category}${mode.isDefault ? ', default' : ''})`).join(' · ') || '—'}</span>
@@ -202,7 +234,7 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
       {state.assetList.length === 0 ? <p className="doc-note">No asset yet: the modes of its type create them, or attach one of the store.</p> : (
         <div className="doc-asset-table-scroll">
           <table className="doc-asset-table">
-            <thead><tr><th>key</th><th>name</th><th>paths</th><th>kind</th><th>object</th><th className="doc-asset-version-size">versions</th><th>state</th><th aria-label="actions" /></tr></thead>
+            <thead><tr><th>key</th><th>name</th><th>paths</th><th>kind</th><th>folder</th><th>item</th><th className="doc-asset-version-size">versions</th><th>state</th><th aria-label="actions" /></tr></thead>
             <tbody>
               {state.assetList.map((asset) => {
                 const confirmKey = `assetRemove:${asset.key}`;
@@ -226,17 +258,22 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
                       />
                     </td>
                     <td className="doc-asset-muted">{asset.kind}</td>
-                    <td>
-                      <button type="button" className="doc-settings-asset-link" disabled={!asset.object} onClick={() => assetStore.panelOpen(ASSET_STORE_ID_LOCAL, asset.objectId)}>{asset.object?.name || asset.objectId}</button>
+                    <td title="where it lies inside the folder of the object: its key, name and paths do not depend on it">
+                      {asset.isInFolder
+                        ? <EditValueInline value={asset.item?.groupPath ?? ''} placeholder="(top)" isLocked={isLocked} onCommit={(value) => void store.assetMove(id, asset.key, value.trim())} />
+                        : <span className="doc-asset-muted">{asset.item?.folder ?? ''}</span>}
                     </td>
-                    <td className="doc-asset-muted doc-asset-version-size">{asset.object?.versionList?.length ?? ''}</td>
+                    <td>
+                      <button type="button" className="doc-settings-asset-link" disabled={!asset.item} onClick={() => assetStore.panelOpen(ASSET_STORE_ID_LOCAL, asset.itemId)}>{asset.item?.name || asset.itemId}</button>
+                    </td>
+                    <td className="doc-asset-muted doc-asset-version-size">{asset.item?.versionList?.length ?? ''}</td>
                     <td className={asset.status !== 'found' || !asset.isOwnerMatch ? 'doc-settings-tab-issue' : 'doc-asset-muted'}>
                       {asset.status}{asset.status === 'found' && !asset.isOwnerMatch ? ', declares no owner' : ''}
                     </td>
                     <td className="doc-settings-tab-actions">
                       {!isWritable ? null : confirm === confirmKey ? (
                         <>
-                          <button type="button" className="doc-button" data-danger="" disabled={isWriting} title={`delete the asset ${asset.objectId} (softly: its files stay)`} onClick={() => void store.assetRemove(id, asset.key, false)}>Delete</button>
+                          <button type="button" className="doc-button" data-danger="" disabled={isWriting} title={`delete the asset ${asset.itemId} (softly: its files stay)`} onClick={() => void store.assetRemove(id, asset.key, false)}>Delete</button>
                           <button type="button" className="doc-button" disabled={isWriting} title="take it out of the object, keep it in the store (its folder moves to the top of the asset folder)" onClick={() => void store.assetRemove(id, asset.key, true)}>Keep in store</button>
                           <button type="button" className="doc-button" onClick={() => store.settingsConfirmSet('')}>Cancel</button>
                         </>
@@ -251,15 +288,45 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
           </table>
         </div>
       )}
+      {state.groupList.length > 1 || state.groupList.some((group) => group.groupPath !== '') ? (
+        <>
+          <h4>Folders on disk</h4>
+          <p className="doc-note">Where the items lie inside its folder, for whoever browses the files. Nothing depends on it: the paths above index the assets on their own.</p>
+          {state.groupList.filter((group) => group.groupPath !== '').map((group) => (
+            <div key={group.groupPath} className="doc-settings-tab-row">
+              <EditValueInline value={group.groupPath} isLocked={!isWritable || isWriting} onCommit={(value) => void store.assetGroupMove(id, group.groupPath, value.trim())} />
+              <span className="doc-asset-muted">{group.count} item{group.count === 1 ? '' : 's'}</span>
+            </div>
+          ))}
+        </>
+      ) : null}
+      {state.outsideList.length > 0 ? (
+        <>
+          <h4>Listed, lying outside its folder ({state.outsideList.length})</h4>
+          {state.outsideList.map((asset) => (
+            <div key={asset.key} className="doc-settings-tab-row">
+              <span>{asset.name || asset.key}</span>
+              <span className="doc-asset-muted">{asset.item?.folder}</span>
+              {isWritable ? <button type="button" className="doc-button" disabled={isWriting} onClick={() => void store.assetMove(id, asset.key, '')}>Move in</button> : null}
+            </div>
+          ))}
+        </>
+      ) : null}
       {state.strayList.length > 0 ? (
         <>
           <h4>Declaring it, not listed ({state.strayList.length})</h4>
-          {state.strayList.map((object) => (
-            <div key={object.objectId} className="doc-settings-tab-row">
-              <span className="doc-asset-mono">{object.objectId}</span>
-              <span className="doc-asset-muted">{object.name || '(no name)'} · {object.lang}</span>
-              {isWritable ? <button type="button" className="doc-button" disabled={isWriting} onClick={() => void store.assetAttach(id, object.objectId)}>Attach</button> : null}
-            </div>
+          <p className="doc-note">An entry restored to an older version, or a write that stopped halfway: the item says it belongs here, the list does not.</p>
+          {state.strayList.map((item) => (
+            <ObjectFrontendIncomingRow key={item.itemId} id={id} item={item} isWritable={isWritable} isWriting={isWriting} actionLabel="Attach" />
+          ))}
+        </>
+      ) : null}
+      {state.unknownList.length > 0 ? (
+        <>
+          <h4>In its folder, of unknown source ({state.unknownList.length})</h4>
+          <p className="doc-note">Put there without going through the object. It is not an asset of the object until it is adopted, and its modes do not see it.</p>
+          {state.unknownList.map((item) => (
+            <ObjectFrontendIncomingRow key={item.itemId} id={id} item={item} isWritable={isWritable} isWriting={isWriting} actionLabel="Adopt" isSentAway />
           ))}
         </>
       ) : null}
@@ -276,7 +343,7 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
         <div className="doc-settings-tab-row">
           {confirm === 'deleteObject' ? (
             <>
-              <span title={`its line leaves ${state.docPageAlias}'s object-frontend.yaml`}>Delete {state.name || id}?</span>
+              <span title={`its object.yaml says it is deleted (in ${state.docPageAlias}); its files stay`}>Delete {state.name || id}?</span>
               <button type="button" className="doc-button" data-danger="" disabled={isWriting} title="its assets are deleted softly: their files stay" onClick={() => void store.delete(id, false)}>With its assets</button>
               <button type="button" className="doc-button" disabled={isWriting} title="its assets stay, declaring it: an orphan entry, listed again from this tab" onClick={() => void store.delete(id, true)}>Keep the assets</button>
               <button type="button" className="doc-button" onClick={() => store.settingsConfirmSet('')}>Cancel</button>

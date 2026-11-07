@@ -65,7 +65,7 @@ test('the time keeps its milliseconds; the text shows hundredths and a whole-hou
   assert.throws(() => testCaseTimeFormat(clock.time, 5.5), /minutes/);
 });
 
-test('the evidence of every record is a dependency, of the build and of the asset object', () => {
+test('the evidence of every record is a dependency, of the build and of the asset item', () => {
   const first = testCaseResultAppend(raw, { ...change, evidence: 'evidence.md' }, { ...clock, evidenceResolve: () => '~wiki:docs/evidence.md' });
   const second = testCaseResultAppend(first.text, { ...change, result: null }, { ...clock, id: 'event-2' });
   const targetList = [];

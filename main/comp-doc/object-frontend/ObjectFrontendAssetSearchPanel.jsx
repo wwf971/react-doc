@@ -98,7 +98,7 @@ export const ObjectFrontendAssetSearchPanel = observer(function ObjectFrontendAs
               role="option"
               aria-selected={index === session.indexActive}
               data-active={index === session.indexActive ? '' : undefined}
-              title={`${hit.asset.key} · ${hit.asset.objectId}${(hit.asset.pathList ?? []).length > 1 ? `\n${hit.asset.pathList.join('\n')}` : ''}`}
+              title={`${hit.asset.key} · ${hit.asset.itemId}${(hit.asset.pathList ?? []).length > 1 ? `\n${hit.asset.pathList.join('\n')}` : ''}`}
               // a pointer down would take the focus from the search field
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => choose(hit)}

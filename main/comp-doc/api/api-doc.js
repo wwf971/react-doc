@@ -85,11 +85,11 @@ export async function blockDataGet(context, block) {
   if (result.status !== 'done') return { message: result.message || `the asset of the block is ${result.status}` };
   const asset = {
     store: ref.store,
-    objectId: result.object?.objectId ?? ref.objectId,
-    name: result.object?.name ?? ref.name,
+    itemId: result.item?.itemId ?? ref.itemId,
+    name: result.item?.name ?? ref.name,
     versionIdRef: ref.versionId,
     versionId: result.versionId,
-    versionIdHead: result.object?.versionIdHead,
+    versionIdHead: result.item?.versionIdHead,
     hash: result.version?.hash ?? '',
     isHead: ref.versionId === 'head',
   };
@@ -166,7 +166,7 @@ export const apiByIdDoc = {
   }),
   'doc/blockDataSet': apiDefine({
     label: 'Replace the data of a component block',
-    description: 'Writes the complete new data text of a component block: into the document when the data is inline, into the head of its asset object when the block is a reference (dataReplaceRequest).',
+    description: 'Writes the complete new data text of a component block: into the document when the data is inline, into the head of its asset item when the block is a reference (dataReplaceRequest).',
     icon: SquarePen,
     palette: false,
     paramList: [{ name: 'raw', type: 'string', isRequired: true, description: 'the new data text' }, blockParam, docParam],
@@ -248,7 +248,7 @@ export const apiByIdDoc = {
   }),
   'doc/blockDelete': apiDefine({
     label: 'Delete a block',
-    description: 'Removes one block from the document (its asset object stays).',
+    description: 'Removes one block from the document (its asset item stays).',
     icon: SquarePen,
     palette: false,
     paramList: [blockParam, docParam],

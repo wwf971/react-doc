@@ -138,7 +138,7 @@ An api that changes the document does not call a store where a component would r
 | `doc/currentGet`, `doc/listGet { docPage? }` | the current document; every md / mdx document of the source with its title and whether the side panel reaches it | |
 | `doc/blockListGet { doc? }` | the root-level blocks of a document as the edit layer models them ([The block model](doc_page_impl_edit.md)) | the edit api answers (development server) |
 | `doc/blockGet { block?, doc? }` | one block with its text and, for a component block, its data (an asset reference read) | the same |
-| `doc/blockDataSet { raw, block?, doc? }` | the complete new data of a component block, inline or in its asset object (`dataReplaceRequest`) | editing is available |
+| `doc/blockDataSet { raw, block?, doc? }` | the complete new data of a component block, inline or in its asset item (`dataReplaceRequest`) | editing is available |
 | `doc/blockPropSet { props, block?, doc? }` | the props of a component block's marker changed, inline or asset-backed (`blockPropSetRequest`, [Changing its own block](doc_page_impl_mdx_comp.md#changing-its-own-block)) | editing is available |
 | `doc/blockTextSet { text, block?, doc? }` | the lines of one block rewritten, as a session typed and saved | edit mode is on |
 | `doc/blockInsert { text, borderIndex?, doc? }`, `doc/blockDelete { block?, doc? }` | blocks inserted at a border, a block removed ([Block-level operations](doc_page_impl_block_ops.md)) | editing is available |
@@ -161,7 +161,7 @@ A component offers apis the way it offers everything else about itself, through 
 A component's api is about the blocks of that component in a document, so it locates its block like the document apis do, and reads and writes through the same paths. `TestCaseTable` is the demonstration (`built-in/comp-mdx/test-case-table/TestCaseTableApiList.js`):
 
 - `common/TestCaseTable/tableGet { block?, doc? }`: the cases, the testers and the current result of every cell of a table; without `block`, the first table of the document.
-- `common/TestCaseTable/resultRecord { caseId, testerId, result, operator, evidence?, block?, doc? }`: one result appended to the history of a cell of a table whose data is an asset object, by the same event a click on the cell sends, so the server writes the time and the id, resolves the evidence, and refuses a record over somebody else's ([the managed history](../built-in/comp-mdx/test-case-table/comp_test_case_table.md)).
+- `common/TestCaseTable/resultRecord { caseId, testerId, result, operator, evidence?, block?, doc? }`: one result appended to the history of a cell of a table whose data is an asset item, by the same event a click on the cell sends, so the server writes the time and the id, resolves the evidence, and refuses a record over somebody else's ([the managed history](../built-in/comp-mdx/test-case-table/comp_test_case_table.md)).
 
 This is what an AI agent that checked a feature does to record its check: read the table, record the result with its own name as the operator and the document of its evidence.
 
@@ -222,7 +222,7 @@ GET  /list                          what can be called now, with parameters
 POST /call nav/goTo                 open the document to work on
 POST /call doc/blockListGet         find the block (its index, or the id of its marker)
 POST /call doc/blockGet             read its data (an asset reference is read for it)
-POST /call doc/blockDataSet         write the data back: the inline block, or the head of its object
+POST /call doc/blockDataSet         write the data back: the inline block, or the head of its item
 POST /call common/TestCaseTable/resultRecord   record what was checked, as the operator, with the evidence
 ```
 

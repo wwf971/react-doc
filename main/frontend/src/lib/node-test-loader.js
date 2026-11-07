@@ -25,6 +25,14 @@ export async function resolve(specifier, context, nextResolve) {
 }
 
 export async function load(url, context, nextLoad) {
+  // what vite does for "?raw": the text of the file
+  if (url.startsWith('file:') && url.endsWith('?raw')) {
+    return {
+      format: 'module',
+      source: `export default ${JSON.stringify(readFileSync(fileURLToPath(url.slice(0, -'?raw'.length)), 'utf8'))};`,
+      shortCircuit: true,
+    };
+  }
   if (url.endsWith('.css')) {
     return {
       format: 'module',

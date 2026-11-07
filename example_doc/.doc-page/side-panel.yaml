@@ -78,7 +78,7 @@ sidePanelById:
         text: Objects and Types
         tags: [guide]
       # objects the page keeps itself in assets, drawn in the modes of the
-      # types this doc page declares (.doc-page/object-frontend.yaml)
+      # types this doc page declares (.doc-page/type.yaml)
       - doc: ~example/object-frontend.md
         text: Frontend Objects
         tags: [guide]

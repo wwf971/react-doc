@@ -166,7 +166,7 @@ export const RegisteredComp = observer(function RegisteredComp(props) {
     ? (blockIndex !== undefined ? editStore?.blockViewModeGet(sourcePath, blockIndex) : undefined) ?? compViewModeDefaultIdGet(definition)
     : undefined;
   // the key of the component's state object in the component state service
-  // layer (doc_page_impl_mdx_comp_state.md): the asset object its data comes
+  // layer (doc_page_impl_mdx_comp_state.md): the asset item its data comes
   // from, else the block's id, else its place, else this mount. what the
   // component keeps between renders and across its unmount is found by it
   // (useCompState), and every mount of the same block shares it. only a

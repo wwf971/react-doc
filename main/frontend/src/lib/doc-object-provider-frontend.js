@@ -7,7 +7,7 @@ import { typeDefineNormalize } from './doc-object-type.js';
 // (design: doc_page_impl_obj_frontend.md#in-the-object-registry): every object
 // a doc page lists is frontend:{id}, of the type its entry names (a type of
 // a doc page, below frontend.object), with its assets as members (core.member
-// to asset:local/{objectId}, keyed by their key). The layer keeps its own
+// to asset:local/{itemId}, keyed by their key). The layer keeps its own
 // representation (DocObjectFrontendStore over the asset store); the registry
 // asks it, and it brings the types the doc pages declare.
 //
@@ -21,13 +21,13 @@ import { typeDefineNormalize } from './doc-object-type.js';
 //                               a new asset of the object, listed under its key
 //   update frontend:{id} { name?, description?, typeId?, metadata? }   metadata a key at a time, null removes one
 //   delete frontend:{id} { isMemberKept? }                            its assets deleted too, or kept
-//   relationCreate { fromRef: frontend:{id}, type: core.member, toRef: asset:local/{objectId}, key?, data: { kind } }
+//   relationCreate { fromRef: frontend:{id}, type: core.member, toRef: asset:local/{itemId}, key?, data: { kind } }
 //                               an asset of the store attached to it
 //   relationUpdate { fromRef, key | toRef, data: { kind?, name?, pathList? } }   how an asset is named and indexed
 //   relationDelete { fromRef, key | toRef, isTargetDeleted? }        an asset taken out (kept, or deleted)
 //   relationQuery { fromRef, text? }                                 its assets; with text, those the asset search finds
 // the data of one asset is written by the asset store's own provider
-// (update asset:local/{objectId} { text | data }).
+// (update asset:local/{itemId} { text | data }).
 
 export function objectProviderFrontendCreate({ objectFrontendStore }) {
   const descriptorBuild = (state) => ({
@@ -49,17 +49,24 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
       description: state.description,
       metadata: state.metadata,
       docPageAlias: state.docPageAlias,
-      entryObjectId: state.entryObjectId,
-      assetList: state.assetList.map(({ key, kind, name, pathList, objectId, status }) => ({
-        key, kind, name: name ?? '', pathList: pathList ?? [], objectId, ref: `asset:local/${objectId}`, status,
+      entryItemId: state.entryItemId,
+      assetList: state.assetList.map(({ key, kind, name, pathList, itemId, status }) => ({
+        key, kind, name: name ?? '', pathList: pathList ?? [], itemId, ref: `asset:local/${itemId}`, status,
       })),
       modeList: objectFrontendStore.modeListGet(state.typeId).map(({ id, label, category, comp }) => ({ id, label, category, comp })),
+      assetKindList: objectFrontendStore.assetKindListGet(state.id),
+      // what does not agree (doc_page_impl_obj_frontend.md#what-disagrees)
+      disagreement: {
+        strayList: state.strayList.map((item) => item.itemId),
+        unknownList: state.unknownList.map((item) => item.itemId),
+        outsideList: state.outsideList.map((asset) => asset.key),
+      },
     },
   });
 
   // the objects whose entries are read: the others are loaded by the asking
-  const stateFoundList = () => objectFrontendStore.itemList
-    .map((item) => objectFrontendStore.objectGet(item.id))
+  const stateFoundList = () => objectFrontendStore.declList
+    .map((decl) => objectFrontendStore.objectGet(decl.id))
     .filter((state) => state.status === 'found');
 
   // waits for the declarations and the entries of the objects asked for
@@ -69,8 +76,8 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
     if (objectFrontendStore.config.status !== 'done') await objectFrontendStore.configLoad();
     const { assetStore } = objectFrontendStore.stores;
     await assetStore.indexLoad();
-    const itemList = objectFrontendStore.itemList.filter((item) => !idList || idList.includes(item.id));
-    await Promise.all(itemList.map((item) => assetStore.refLoad({ store: 'local', objectId: item.entry, versionId: 'head' })));
+    const declList = objectFrontendStore.declList.filter((decl) => !idList || idList.includes(decl.id));
+    await Promise.all(declList.map((decl) => assetStore.refLoad({ store: 'local', itemId: decl.entry, versionId: 'head' })));
   };
 
   const idOfRef = (ref) => {
@@ -91,26 +98,13 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
     capabilityList: ['query', 'resolve', 'read', 'relationQuery', 'relationText', 'create', 'update', 'delete', 'relationCreate', 'relationUpdate', 'relationDelete'],
     // objects of frontend.object and every type below it
     createTypeList: [OBJECT_FRONTEND_TYPE_ROOT],
-    versionGet: () => [objectFrontendStore.config, objectFrontendStore.stores.assetStore.objectById],
+    versionGet: () => [objectFrontendStore.config, objectFrontendStore.stores.assetStore.itemById],
     cacheSecond: 300,
     statusGet: () => (objectFrontendStore.isAvailable
       ? { status: 'ready', message: '' }
       : { status: 'unavailable', message: objectFrontendStore.unavailableReason || 'the page has no asset service layer' }),
 
     // the types the doc pages declare, defined by this provider
-    typeDefineGet: () => ({
-      typeList: objectFrontendStore.typeDeclaredList.map((type) => typeDefineNormalize({
-        id: type.id,
-        kind: 'object',
-        label: type.label,
-        description: type.description,
-        icon: type.icon,
-        extendList: type.extendList,
-        summaryKeyList: type.summaryKeyList,
-      }, type.definedBy)),
-      problemList: [],
-    }),
-
     // an object opens in the Frontend objects tab of the settings panel
     open: (descriptor) => {
       if (descriptor.open?.kind !== 'objectFrontend') return false;
@@ -145,6 +139,7 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
     typeInfoGet: (typeId) => {
       if (!objectFrontendStore.typeIsFrontend(typeId)) return undefined;
       return {
+        assetKindList: objectFrontendStore.assetKindListOfTypeGet(typeId),
         modeList: objectFrontendStore.modeListGet(typeId).map(({ id, label, description, category, comp, param, isDefault, typeId: typeIdDeclared }) => ({
           id, label, description, category, comp, param, isDefault, typeId: typeIdDeclared,
         })),
@@ -156,14 +151,14 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
       if (memberOf) {
         const id = idOfRef(memberOf.ref);
         if (!id) throw codeError(-1, `${memberOf.ref} is not a frontend object`);
-        if (spec.typeId && spec.typeId !== 'asset.object') throw codeError(-1, `a member of a frontend object is an asset (asset.object), not a ${spec.typeId}`);
+        if (spec.typeId && spec.typeId !== 'asset.item') throw codeError(-1, `a member of a frontend object is an asset (asset.item), not a ${spec.typeId}`);
         const content = spec.content ?? {};
         const result = resultCheck(await objectFrontendStore.assetCreate(id, {
           key: memberOf.key, kind: memberOf.data?.kind ?? content.kind, name: memberOf.data?.name, pathList: memberOf.data?.pathList,
           lang: content.lang ?? 'yaml', text: textOfContent(content), note: content.note,
         }));
         return {
-          descriptor: { ref: `asset:local/${result.data.objectId}`, typeList: ['asset.object'], label: result.data.key },
+          descriptor: { ref: `asset:local/${result.data.itemId}`, typeList: ['asset.item'], label: result.data.key },
           content: { key: result.data.key, memberOf: objectFrontendRefBuild(id), relationKey: `member/${result.data.key}` },
         };
       }
@@ -210,10 +205,10 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
 
     relationCreate: async (spec) => {
       if (spec.type !== 'core.member') throw codeError(-1, `a frontend object keeps core.member relations only (its assets), not ${spec.type}`);
-      const objectId = assetObjectIdOfRef(spec.toRef);
-      if (!objectId) throw codeError(-1, `the member of a frontend object is an asset: asset:local/{objectId}, not ${spec.toRef}`);
-      resultCheck(await objectFrontendStore.assetAttach(idOfRef(spec.fromRef), objectId, {
-        key: spec.key, kind: spec.data?.kind, name: spec.data?.name, pathList: spec.data?.pathList,
+      const itemId = assetItemIdOfRef(spec.toRef);
+      if (!itemId) throw codeError(-1, `the member of a frontend object is an asset: asset:local/{itemId}, not ${spec.toRef}`);
+      resultCheck(await objectFrontendStore.assetAttach(idOfRef(spec.fromRef), itemId, {
+        key: spec.key, kind: spec.data?.kind, name: spec.data?.name, pathList: spec.data?.pathList, groupPath: spec.data?.groupPath, isOwnerReplaced: spec.data?.isOwnerReplaced,
       }));
       return { relation: { fromRef: spec.fromRef, toRef: spec.toRef, type: 'core.member' } };
     },
@@ -222,7 +217,7 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
       const id = idOfRef(spec.fromRef);
       await ready([id]);
       const state = objectFrontendStore.objectGet(id);
-      const keyOfTarget = spec.toRef ? state.assetList.find((asset) => `asset:local/${asset.objectId}` === spec.toRef)?.key : undefined;
+      const keyOfTarget = spec.toRef ? state.assetList.find((asset) => `asset:local/${asset.itemId}` === spec.toRef)?.key : undefined;
       const key = String(spec.key ?? '').replace(/^member\//, '') || keyOfTarget;
       if (!key) throw codeError(-3, `${spec.fromRef} has no member ${spec.key ?? spec.toRef}`);
       resultCheck(await objectFrontendStore.assetRemove(id, key, spec.isTargetDeleted !== true));
@@ -236,13 +231,14 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
       const id = idOfRef(spec.fromRef);
       await ready([id]);
       const state = objectFrontendStore.objectGet(id);
-      const keyOfTarget = spec.toRef ? state.assetList.find((asset) => `asset:local/${asset.objectId}` === spec.toRef)?.key : undefined;
+      const keyOfTarget = spec.toRef ? state.assetList.find((asset) => `asset:local/${asset.itemId}` === spec.toRef)?.key : undefined;
       const key = String(spec.key ?? '').replace(/^member\//, '') || keyOfTarget;
       if (!key) throw codeError(-3, `${spec.fromRef} has no member ${spec.key ?? spec.toRef}`);
-      const data = spec.data ?? {};
+      const { groupPath, ...data } = spec.data ?? {};
       const keyUnknownList = Object.keys(data).filter((item) => !['kind', 'name', 'pathList'].includes(item));
       if (keyUnknownList.length > 0) throw codeError(-1, `the entry of an asset holds kind, name, pathList (not ${keyUnknownList.join(', ')}); its data is the asset's own (object/update)`);
-      resultCheck(await objectFrontendStore.assetMetaSet(id, key, data));
+      if (groupPath !== undefined) resultCheck(await objectFrontendStore.assetMove(id, key, String(groupPath)));
+      if (Object.keys(data).length > 0) resultCheck(await objectFrontendStore.assetMetaSet(id, key, data));
       return { relation: { fromRef: spec.fromRef, key: `member/${key}`, type: 'core.member' } };
     },
 
@@ -258,7 +254,7 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
         if (state.status !== 'found') continue;
         const assetList = text ? objectFrontendAssetSearch(state.assetList, text).hitList.map((hit) => hit.asset) : state.assetList;
         assetList.forEach((asset, index) => {
-          const toRefAsset = `asset:local/${asset.objectId}`;
+          const toRefAsset = `asset:local/${asset.itemId}`;
           if (toRef && toRef !== toRefAsset) return;
           relationList.push({
             key: `member/${asset.key}`,
@@ -297,7 +293,7 @@ function textOfContent(content) {
   return '';
 }
 
-function assetObjectIdOfRef(ref) {
+function assetItemIdOfRef(ref) {
   const match = /^asset:local\/([0-9a-z]+)$/.exec(String(ref ?? ''));
   return match ? match[1] : '';
 }

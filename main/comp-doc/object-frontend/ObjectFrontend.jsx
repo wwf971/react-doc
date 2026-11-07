@@ -123,8 +123,8 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
     mode: mode ? { id: mode.id, label: mode.label, category: mode.category, typeId: mode.typeId } : undefined,
     modeList: modeList.map(({ id, label, description, category, typeId }) => ({ id, label, description, category, typeId })),
     param,
-    get isWritable() { return objectFrontendStore.writeUnavailableReason === ''; },
-    get writeUnavailableReason() { return objectFrontendStore.writeUnavailableReason; },
+    get isWritable() { return objectFrontendStore.writeUnavailableReasonOf(ref) === ''; },
+    get writeUnavailableReason() { return objectFrontendStore.writeUnavailableReasonOf(ref); },
     // the structural write in progress (an asset being created or removed)
     get write() { return objectFrontendStore.write; },
     // every read and write of one asset takes an asset reference: a path
@@ -144,7 +144,7 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
     // (parsed once per text and shared: to be read, not changed)
     assetDataGet: (assetRef) => objectFrontendStore.assetDataGet(ref, assetRef),
     // a new asset: { key?, kind?, name?, pathList?, lang?, text } or { ..., data } (written as yaml);
-    // { code, data: { key, objectId } }. a path another asset has is refused
+    // { code, data: { key, itemId } }. a path another asset has is refused
     assetCreate: (input) => objectFrontendStore.assetCreate(stateGet().id, {
       key: input.key,
       kind: input.kind,
@@ -153,7 +153,16 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
       lang: input.lang ?? 'yaml',
       text: input.text ?? yamlStringify(input.data ?? {}),
       note: input.note,
+      groupPath: input.groupPath,
     }),
+    // the assets its type holds, and where one lies on disk, which nothing else depends on:
+    // its folder inside the object's folder ('' the top), or a whole folder renamed
+    get assetKindList() { return objectFrontendStore.assetKindListGet(ref); },
+    assetMove: (assetRef, groupPath) => {
+      const asset = objectFrontendStore.assetResolve(ref, assetRef).asset;
+      return asset ? objectFrontendStore.assetMove(stateGet().id, asset.key, groupPath) : Promise.resolve({ code: -1, message: `the object has no asset ${assetRef}` });
+    },
+    assetGroupMove: (groupFrom, groupTo) => objectFrontendStore.assetGroupMove(stateGet().id, groupFrom, groupTo),
     assetWrite: (assetRef, textOrData, note) => objectFrontendStore.assetWrite(ref, assetRef, typeof textOrData === 'string' ? textOrData : yamlStringify(textOrData ?? {}), note),
     // how an asset is named and indexed: { name?, pathList?, kind? } (paths replaced whole)
     assetMetaSet: (assetRef, change) => {
@@ -180,5 +189,14 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
       return blockSwitch({ param: paramNext }, options);
     },
     open: () => objectFrontendStore.settingsOpen(stateGet().id),
+    // the api of another frontend object, for a mode whose data lies in two objects (a CV
+    // reading a profile): the same reads and writes, without the switches of a block
+    otherGet: (refOther) => objectFrontendServiceBuild({
+      objectFrontendStore,
+      ref: refOther,
+      modeList: [],
+      param: {},
+      blockSwitch: () => Promise.resolve({ code: -1, message: 'another object has no block to switch' }),
+    }),
   });
 }

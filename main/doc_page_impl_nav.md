@@ -157,7 +157,7 @@ Raw `<span id="..." />` markers before a heading are deprecated. `remarkAnchor` 
 
 ### Places in a document
 
-A list that points back into documents (the blocks that use an asset object, [Usage](doc_page_impl_asset.md#usage)) names a block by a **place** (`lib/doc-place.js`):
+A list that points back into documents (the blocks that use an asset item, [Usage](doc_page_impl_asset.md#usage)) names a block by a **place** (`lib/doc-place.js`):
 
 ```text
 { docPath, sourceLine, fragment }

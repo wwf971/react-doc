@@ -13,7 +13,7 @@ import { DASHBOARD_DATA_LANG, dashboardDataParse, dashboardDataTextBuild } from 
 //   <!--renderComp=service/note-db/default-->
 //   ```asset
 //   store: local
-//   objectId: w4veeme6sff
+//   itemId: w4veeme6sff
 //   ```
 //
 // The definition is built from the id alone, the same for every template:

@@ -8,6 +8,7 @@ rules:
     collect: recursive
     exclude:
       - doc-package.yaml
+      - type.yaml
       - package.json
       - .gitignore
       - .DS_Store

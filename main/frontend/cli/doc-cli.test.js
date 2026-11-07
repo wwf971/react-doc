@@ -7,6 +7,7 @@ import { DocCliError, docBuildOneFileWrite, docCliRun, docInit, docLaunchBuild, 
 import { docPackageRead } from '../plugin/doc-package.ts';
 import { docSourcePlugin, loadConfigDoc } from '../plugin/doc-source.ts';
 import { assetConfigOfDocPageListGet, assetStoreCreate } from '../plugin/doc-asset-store.ts';
+import { docMigrate } from './doc-migrate.js';
 
 // the command line of the package (doc_page_impl_cli.md): what `init`
 // writes is loaded by the page itself, so a scaffold that drifts from the
@@ -124,7 +125,7 @@ function packageDocPageCreate(dir, name = 'kit') {
   const objectDir = path.join(packageDir, '.doc-page', 'asset', 'w55rlprcjdy--shown');
   fs.mkdirSync(objectDir, { recursive: true });
   fs.writeFileSync(path.join(objectDir, 'w55rlpr1111.txt'), 'shown');
-  fs.writeFileSync(path.join(objectDir, 'object.yaml'), `objectId: w55rlprcjdy
+  fs.writeFileSync(path.join(objectDir, 'item.yaml'), `itemId: w55rlprcjdy
 name: shown
 lang: text
 contentType: text/plain
@@ -287,15 +288,15 @@ test('a package as a doc page: annotated, imported by being there, and read-only
   const refused = (write) => assert.throws(write, (error) => error.code === -4 && /read-only/.test(error.message));
   const folderOfPackage = store.folderList.find((folder) => folder.isReadOnly);
   assert.ok(folderOfPackage, 'its asset folder is in the store, marked');
-  assert.equal(store.objectGet('w55rlprcjdy').name, 'shown', 'it is read');
-  refused(() => store.objectCreate({ name: 'new', data: Buffer.from('x'), folder: folderOfPackage.path }));
-  refused(() => store.objectUpdate({ objectId: 'w55rlprcjdy', hashBase: 'x', data: Buffer.from('y') }));
-  refused(() => store.objectDelete('w55rlprcjdy'));
-  refused(() => store.objectMetaSet('w55rlprcjdy', { name: 'other' }));
-  refused(() => store.objectLockSet('w55rlprcjdy', true));
+  assert.equal(store.itemGet('w55rlprcjdy').name, 'shown', 'it is read');
+  refused(() => store.itemCreate({ name: 'new', data: Buffer.from('x'), folder: folderOfPackage.path }));
+  refused(() => store.itemUpdate({ itemId: 'w55rlprcjdy', hashBase: 'x', data: Buffer.from('y') }));
+  refused(() => store.itemDelete('w55rlprcjdy'));
+  refused(() => store.itemMetaSet('w55rlprcjdy', { name: 'other' }));
+  refused(() => store.itemLockSet('w55rlprcjdy', true));
   refused(() => store.folderSet({ configFile: store.config.docPageList.find((item) => item.isReadOnly).configFileRelative, folderList: [folderOfPackage.path] }, rootAbsPathByPath));
   // the doc page of plain content writes as before
-  assert.equal(store.objectCreate({ name: 'mine', data: Buffer.from('x'), docPath: '~notes:notes/index.md' }).isCreated, true);
+  assert.equal(store.itemCreate({ name: 'mine', data: Buffer.from('x'), docPath: '~notes:notes/index.md' }).isCreated, true);
   // a package's entry names no folders of its own for what it has at its top
   fs.appendFileSync(path.join(packageDir, '.doc-page', 'entry.yaml'), '\ncomp: false\n');
   assert.throws(() => loadConfigDoc(configFile), /"comp" is not for a package treated as a doc page/);
@@ -333,4 +334,48 @@ test('build: one file holds the scripts and styles of a build, and refuses to lo
   fs.writeFileSync(path.join(dir, 'assets/extra.png'), 'x');
   assert.throws(() => docBuildOneFileWrite(dir, outPath), /not put into the html/);
   fs.rmSync(dir, { recursive: true });
+});
+
+test('migrate: item.yaml and itemId, the fences of documents, and frontend objects in folders of their own', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-migrate-'));
+  const dirMeta = path.join(dir, '.doc-page');
+  const dirGroup = path.join(dirMeta, 'asset', 'w5aaaaaaaaa--Shelf');
+  const itemFormerWrite = (dirItem, itemId, owner, text) => {
+    fs.mkdirSync(dirItem, { recursive: true });
+    fs.writeFileSync(path.join(dirItem, 'object.yaml'), [
+      `objectId: ${itemId}`, 'name: ""', 'lang: yaml', 'contentType: text/yaml', 'fileExt: yaml',
+      ...(owner ? ['owner:', `  ref: ${owner.ref}`, ...(owner.role ? [`  role: ${owner.role}`] : [])] : []),
+      `versionIdHead: v${itemId}`, 'isDeleted: false', 'isLocked: false', 'timeCreated: 20261105_13012598+09',
+      'versionList:', `  - versionId: v${itemId}`, '    versionIdPrevList: []', '    time: 20261105_13012598+09', '    note: ""', '    size: 1', '    hash: x', '    isLocked: false',
+      '    dependencyList:', '      - { type: asset, objectId: w5ccccccccc }', 'eventList: []', '',
+    ].join('\n'));
+    fs.writeFileSync(path.join(dirItem, `v${itemId}.yaml`), text);
+  };
+  itemFormerWrite(path.join(dirGroup, 'w5aaaaaaaab'), 'w5aaaaaaaab', { ref: 'frontend:w5aaaaaaaaa', role: 'entry' }, 'name: Shelf\ntype: frontend.object\nassetList:\n  - { key: book-1, kind: book, objectId: w5aaaaaaaac }\n');
+  itemFormerWrite(path.join(dirGroup, 'w5aaaaaaaac'), 'w5aaaaaaaac', { ref: 'frontend:w5aaaaaaaaa' }, 'objectId: mine\n');
+  itemFormerWrite(path.join(dirMeta, 'asset', 'w5ccccccccc--alone'), 'w5ccccccccc', null, 'a: 1\n');
+  fs.writeFileSync(path.join(dirMeta, 'object-frontend.yaml'), '# my types\ntypeList:\n  - { id: demo.a, label: A }\nobjectList:\n  - id: w5aaaaaaaaa\n    entry: w5aaaaaaaab\n');
+  fs.writeFileSync(path.join(dir, 'doc.md'), 'objectId: prose\n\n<!--renderComp=Image-->\n```asset\r\nstore: local\r\nobjectId: w5ccccccccc\r\n```\r\n');
+
+  const dry = await docMigrate(dir, { isDryRun: true });
+  assert.equal(dry.itemList.length, 3);
+  assert.ok(fs.existsSync(path.join(dirMeta, 'asset', 'w5ccccccccc--alone', 'object.yaml')), 'a dry run changes nothing');
+
+  const report = await docMigrate(dir);
+  assert.deepEqual([report.itemList.length, report.documentList.length, report.objectList.length, report.problemList.length], [3, 1, 1, 0]);
+  const alone = fs.readFileSync(path.join(dirMeta, 'asset', 'w5ccccccccc--alone', 'item.yaml'), 'utf-8');
+  assert.match(alone, /^itemId: w5ccccccccc/);
+  assert.match(alone, /itemId: w5ccccccccc\n/);
+  assert.ok(!alone.includes('objectId'));
+  const dirObject = path.join(dirMeta, 'object-frontend', 'w5aaaaaaaaa--Shelf');
+  assert.match(fs.readFileSync(path.join(dirObject, 'object.yaml'), 'utf-8'), /id: w5aaaaaaaaa\nentry: w5aaaaaaaab\n/);
+  assert.match(fs.readFileSync(path.join(dirObject, 'item', 'w5aaaaaaaab', 'vw5aaaaaaaab.yaml'), 'utf-8'), /itemId: w5aaaaaaaac/);
+  assert.equal(fs.readFileSync(path.join(dirObject, 'item', 'w5aaaaaaaac', 'vw5aaaaaaaac.yaml'), 'utf-8'), 'objectId: mine\n', 'the data of an asset is not touched');
+  assert.equal(fs.existsSync(dirGroup), false);
+  assert.equal(fs.readFileSync(path.join(dirMeta, 'type.yaml'), 'utf-8'), '# types of this doc page (doc_page_impl_type.md#declaring-a-type)\ntypeList:\n  - { id: demo.a, label: A }\n');
+  assert.equal(fs.existsSync(path.join(dirMeta, 'object-frontend.yaml')), false, 'it held nothing else');
+  assert.equal(fs.readFileSync(path.join(dir, 'doc.md'), 'utf-8'), 'objectId: prose\n\n<!--renderComp=Image-->\n```asset\r\nstore: local\r\nitemId: w5ccccccccc\r\n```\r\n');
+
+  const again = await docMigrate(dir);
+  assert.deepEqual([again.itemList.length, again.documentList.length, again.objectList.length, again.typeFileList.length], [0, 0, 0, 0]);
 });

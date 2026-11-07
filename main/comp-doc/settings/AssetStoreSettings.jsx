@@ -6,7 +6,7 @@ import { ASSET_STORE_ID_LOCAL } from '../../frontend/src/lib/doc-asset-ref.js';
 import { docPlaceTargetGet } from '../../frontend/src/lib/doc-place.js';
 import { useEditOutsidePointer } from '../edit/use-edit-outside-pointer.js';
 import { AssetPanel } from '../asset/AssetPanel.jsx';
-import { AssetObjectTable } from '../asset/AssetObjectTable.jsx';
+import { AssetItemTable } from '../asset/AssetItemTable.jsx';
 import { AssetUsageTable } from '../asset/AssetUsageTable.jsx';
 import '../edit/DocEdit.css';
 import './DocSettings.css';
@@ -20,8 +20,8 @@ import './DocSettings.css';
 //     Folders          [~example/.doc-page/asset   ] Remove    ones it includes)
 //                      [~root/path       ] Add       stringList
 //     Default folder   [~example/.doc-page/asset ▾]            select
-//     On disk          ~example/.doc-page/asset  store default  13 objects
-//   Objects and references ⟳                         group: AssetOrphanArea
+//     On disk          ~example/.doc-page/asset  store default  13 items
+//   Items and references ⟳                         group: AssetOrphanArea
 //
 // Every doc page names its asset folders in its asset store config
 // (.doc-page/asset.yaml beside its entry), as source paths; a doc page
@@ -76,7 +76,7 @@ export function assetStoreItemListBuild({ stores, data, writeByItemId, assetRequ
           id: folderDefaultId,
           type: 'select',
           label: 'Default folder',
-          description: 'where its new objects go',
+          description: 'where its new items go',
           options: docPage.folderList,
           isDisabled: isLocked || docPage.folderList.length < 2,
           disabledReason: docPage.folderList.length < 2 ? 'the only folder is the default' : lockedReason,
@@ -85,7 +85,7 @@ export function assetStoreItemListBuild({ stores, data, writeByItemId, assetRequ
           id: `${groupId}OnDisk`,
           type: 'custom',
           label: 'On disk',
-          description: 'objects per folder',
+          description: 'items per folder',
           comp: DocPageFolderState,
           compProps: { entryFile: docPage.entryFile, problemList: docPage.problemList },
         },
@@ -93,10 +93,10 @@ export function assetStoreItemListBuild({ stores, data, writeByItemId, assetRequ
     };
   });
   itemList.push({
-    id: 'assetObjects',
+    id: 'assetItems',
     type: 'group',
-    label: <AssetObjectsGroupLabel />,
-    description: 'objects nothing uses, and references whose data cannot be read',
+    label: <AssetItemsGroupLabel />,
+    description: 'items nothing uses, and references whose data cannot be read',
     children: [{ id: 'assetOrphan', type: 'custom', comp: AssetOrphanArea, isFullWidth: true }],
   });
 
@@ -110,6 +110,13 @@ export function assetStoreItemListBuild({ stores, data, writeByItemId, assetRequ
   }
   return { itemList, requestStateByPath };
 }
+
+// how many items a folder holds: from the index once it is read, so it follows a move
+const AssetFolderCount = observer(function AssetFolderCount({ folder }) {
+  const { assetStore } = useDocStores();
+  const count = assetStore.index.status === 'done' ? assetStore.folderItemListGet(folder.path).length : folder.itemCount;
+  return <span className="doc-settings-asset-count">{count} item{count === 1 ? '' : 's'}</span>;
+});
 
 const AssetUnavailableNote = observer(function AssetUnavailableNote() {
   const { assetStore } = useDocStores();
@@ -140,19 +147,21 @@ function docPageGroupDescriptionGet(docPage) {
 // what each folder of a doc page holds on disk, then what is wrong with its
 // config
 //
-//   ~example/.doc-page/asset  [store default]  13 objects
-//   ~example/.doc-page/asset-archive           1 object
+//   ~example/.doc-page/asset  [store default]  13 items
+//   ~example/.doc-page/asset-archive           1 item
 const DocPageFolderState = observer(function DocPageFolderState({ entryFile, problemList }) {
   const { assetStore } = useDocStores();
   return (
     <div className="doc-settings-asset-state">
       {assetStore.folderListOfDocPageGet(entryFile).map((folder) => (
         <span key={folder.path} className="doc-settings-asset-state-folder" title={folder.pathAbs}>
-          <span className="doc-settings-asset-path">{folder.path}</span>
+          {/* the item folder of an object is known by the folder of its object: the rest of the path is the same for all */}
+          <span className="doc-settings-asset-path">{folder.owner ? folder.path.split('/').slice(-2).join('/') : folder.path}</span>
           {folder.isDefault ? <span className="doc-badge-outline" data-primary="">store default</span> : null}
+          {folder.owner ? <span className="doc-badge-outline" title={`A folder owned by ${folder.owner.ref}: found through its object, no asset.yaml names it`}>of a frontend object</span> : null}
           {folder.isExists ? null : <span className="doc-badge-outline" data-error="">not on disk</span>}
           {folder.isReadOnly ? <span className="doc-badge-outline" title="The folder of a package treated as a doc page: the store refuses every write to it">read-only</span> : null}
-          <span className="doc-settings-asset-count">{folder.objectCount} object{folder.objectCount === 1 ? '' : 's'}</span>
+          <AssetFolderCount folder={folder} />
         </span>
       ))}
       {problemList.map((problem) => <span key={problem} className="doc-error doc-settings-asset-problem">{problem}</span>)}
@@ -160,13 +169,13 @@ const DocPageFolderState = observer(function DocPageFolderState({ entryFile, pro
   );
 });
 
-// the group title of the objects: "Read again" reads every document again,
+// the group title of the items: "Read again" reads every document again,
 // for what changed while the page did not watch
-const AssetObjectsGroupLabel = observer(function AssetObjectsGroupLabel() {
+const AssetItemsGroupLabel = observer(function AssetItemsGroupLabel() {
   const { assetStore } = useDocStores();
   return (
     <span className="doc-settings-asset-group-label">
-      Objects and references
+      Items and references
       <button
         type="button"
         className="doc-asset-icon-button"
@@ -192,11 +201,11 @@ function docPageDirTextGet(entryFile) {
 }
 
 // what the usage index finds wrong between the documents and the store
-// (doc_page_impl_asset.md#usage): objects declared as a component's data
-// that no block references (orphans), objects no block references that
+// (doc_page_impl_asset.md#usage): items declared as a component's data
+// that no block references (orphans), items no block references that
 // declare nothing (data of another purpose, or from before the
 // declaration), and references whose data cannot be read. a click on an
-// object shows its asset panel below the lists (DocAssetStore.settingsPanel,
+// item shows its asset panel below the lists (DocAssetStore.settingsPanel,
 // the same AssetPanel as the popup's); a click on it again, or a pointer
 // going down outside the area, closes it.
 const AssetOrphanArea = observer(function AssetOrphanArea() {
@@ -208,8 +217,8 @@ const AssetOrphanArea = observer(function AssetOrphanArea() {
   useEditOutsidePointer(areaRef, settingsPanel !== undefined, () => {
     if (!settingsPanel.edit) assetStore.settingsPanelClose();
   });
-  const objectIdSelected = settingsPanel?.objectId ?? '';
-  const objectSelect = (objectId) => assetStore.settingsPanelToggle(ASSET_STORE_ID_LOCAL, objectId);
+  const itemIdSelected = settingsPanel?.itemId ?? '';
+  const itemSelect = (itemId) => assetStore.settingsPanelToggle(ASSET_STORE_ID_LOCAL, itemId);
   const brokenList = assetStore.usageBrokenList;
 
   const usageNavigate = (place) => {
@@ -224,28 +233,41 @@ const AssetOrphanArea = observer(function AssetOrphanArea() {
       {usageIndex.status === 'done' ? (
         <>
           <p className="doc-settings-asset-note">
-            Orphans: objects that declare a component no block uses them for (a block removed without its data, or changed outside the page).
+            Orphans: items that declare a component no block uses them for (a block removed without its data, or changed outside the page).
           </p>
-          {assetStore.orphanObjectList.length > 0
-            ? <AssetObjectTable objectList={assetStore.orphanObjectList} objectIdSelected={objectIdSelected} onSelect={objectSelect} />
+          {assetStore.orphanItemList.length > 0
+            ? <AssetItemTable itemList={assetStore.orphanItemList} itemIdSelected={itemIdSelected} onSelect={itemSelect} />
             : <p className="doc-settings-asset-note">None.</p>}
           <p className="doc-settings-asset-note">
-            Not referenced: objects no block uses that declare no component; they may serve another purpose.
+            Not referenced: items no block uses that declare no component; they may serve another purpose.
           </p>
-          {assetStore.unreferencedObjectList.length > 0
-            ? <AssetObjectTable objectList={assetStore.unreferencedObjectList} objectIdSelected={objectIdSelected} onSelect={objectSelect} />
+          {assetStore.unreferencedItemList.length > 0
+            ? <AssetItemTable itemList={assetStore.unreferencedItemList} itemIdSelected={itemIdSelected} onSelect={itemSelect} />
             : <p className="doc-settings-asset-note">None.</p>}
           <p className="doc-settings-asset-note">Broken references: blocks whose asset data cannot be read.</p>
           {brokenList.length > 0 ? (
             <AssetUsageTable
               usageList={brokenList}
-              isObjectShown
+              isItemShown
               docPathRefreshing={undefined}
               onDocRefresh={(docPath) => void assetStore.usageDocListRead([docPath])}
               onNavigate={usageNavigate}
             />
           ) : <p className="doc-settings-asset-note">None.</p>}
           {navigateMessage ? <p className="doc-error doc-edit-message">{navigateMessage}</p> : null}
+          <p className="doc-settings-asset-note">
+            The items of a folder: choose one to see where it lies and to move it. The items of a frontend object move through that object.
+          </p>
+          <select
+            className="doc-settings-asset-folder-select"
+            aria-label="The folder whose items are listed"
+            value={assetStore.settingsFolderPath}
+            onChange={(event) => assetStore.settingsFolderSet(event.target.value)}
+          >
+            <option value="">(choose a folder)</option>
+            {assetStore.folderList.map((folder) => <option key={folder.path} value={folder.path}>{folder.path}</option>)}
+          </select>
+          {assetStore.settingsFolderPath ? <AssetItemTable itemList={assetStore.folderItemListGet(assetStore.settingsFolderPath)} itemIdSelected={itemIdSelected} onSelect={itemSelect} /> : null}
         </>
       ) : null}
       {usageIndex.status === 'loading' || usageIndex.status === 'idle' ? (

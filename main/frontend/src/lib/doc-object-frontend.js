@@ -9,16 +9,16 @@ import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 //                        asset that describes it, and any number of assets of
 //                        its own. its reference is frontend:{id}
 //   the entry asset      yaml: { name, type, description, assetList, metadata }
-//                          assetList [{ key, kind, objectId, name?, pathList? }]  its assets, by a
+//                          assetList [{ key, kind, itemId, name?, pathList? }]  its assets, by a
 //                                    key unique in the object; kind groups them ("book"); a name
 //                                    for people, and paths (/book/sci-fi/dune) indexing them, any
 //                                    number of them, each unique in the object
 //                          metadata  a free mapping, the type's own
-//   an asset of it       declares it in its own metadata (object.yaml):
+//   an asset of it       declares it in its own metadata (item.yaml):
 //                          owner: { ref: frontend:{id}, role: entry }   the entry
 //                          owner: { ref: frontend:{id} }                any other
 //   a type               frontend.object or a type a doc page declares
-//                        (object-frontend.yaml), extending it; its modes are
+//                        (type.yaml, doc_page_impl_type.md), extending it; its modes are
 //                        the ways it is drawn: { id, label, comp, param, category }
 //   a mode               a component and the parameters it starts with; a
 //                        type has its own modes and those of its ancestors
@@ -31,6 +31,11 @@ export const OBJECT_FRONTEND_TYPE_ROOT = 'frontend.object';
 export const OBJECT_FRONTEND_ROLE_ENTRY = 'entry';
 export const OBJECT_FRONTEND_COMP_NAME = 'ObjectFrontend';
 export const OBJECT_FRONTEND_CONFIG_FILE_NAME = 'object-frontend.yaml';
+// the folder of the doc page holding its object folders, and inside an object folder
+// {id}--{name}: the file that makes it an object, the folder of its asset items
+export const OBJECT_FRONTEND_FOLDER_NAME = 'object-frontend';
+export const OBJECT_FRONTEND_META_NAME = 'object.yaml';
+export const OBJECT_FRONTEND_ITEM_FOLDER_NAME = 'item';
 // the placement a mode's component is rendered in
 export const OBJECT_FRONTEND_PLACEMENT = 'objectFrontend';
 
@@ -92,17 +97,17 @@ export function objectFrontendEntryParse(text) {
   const assetListRaw = Array.isArray(content.assetList) ? content.assetList : [];
   if (content.assetList !== undefined && !Array.isArray(content.assetList)) problemList.push('assetList is not a list');
   assetListRaw.forEach((item, index) => {
-    if (!mappingIs(item) || typeof item.objectId !== 'string' || !item.objectId) {
-      problemList.push(`assetList[${index}] is not { key, kind, objectId }`);
+    if (!mappingIs(item) || typeof item.itemId !== 'string' || !item.itemId) {
+      problemList.push(`assetList[${index}] is not { key, kind, itemId }`);
       return;
     }
-    const key = typeof item.key === 'string' && item.key ? item.key : item.objectId;
+    const key = typeof item.key === 'string' && item.key ? item.key : item.itemId;
     if (keySet.has(key)) {
       problemList.push(`assetList[${index}]: the key ${key} is used twice; this one is left out`);
       return;
     }
     keySet.add(key);
-    const asset = { key, kind: typeof item.kind === 'string' ? item.kind : '', objectId: item.objectId };
+    const asset = { key, kind: typeof item.kind === 'string' ? item.kind : '', itemId: item.itemId };
     if (typeof item.name === 'string' && item.name !== '') asset.name = item.name;
     const pathList = [];
     for (const pathText of Array.isArray(item.pathList) ? item.pathList : []) {
@@ -127,7 +132,7 @@ export function objectFrontendEntryTextBuild(entry) {
     assetList: (entry.assetList ?? []).map((item) => ({
       key: item.key,
       kind: item.kind ?? '',
-      objectId: item.objectId,
+      itemId: item.itemId,
       // written when there is one: an entry of assets without names stays as short as before
       ...(item.name ? { name: item.name } : {}),
       ...(Array.isArray(item.pathList) && item.pathList.length > 0 ? { pathList: item.pathList } : {}),
@@ -147,6 +152,52 @@ export function objectFrontendAssetKeyFree(entry, keyWanted, kind) {
     const key = `${base}-${index}`;
     if (!keySet.has(key)) return key;
   }
+}
+
+// ---------- what a type accepts ----------
+
+// the assets a type declares it holds: assetKindList of its declaration, or of the nearest
+// ancestor that has one; undefined when none says, and then any asset is accepted
+// (doc_page_impl_obj_frontend.md#what-a-type-accepts)
+export function objectFrontendAssetKindListResolve(typeId, typeList) {
+  const typeById = new Map((typeList ?? []).map((type) => [type.id, type]));
+  const visitedSet = new Set();
+  const queue = [typeId];
+  while (queue.length > 0) {
+    const id = queue.shift();
+    if (visitedSet.has(id)) continue;
+    visitedSet.add(id);
+    const type = typeById.get(id);
+    if (!type) continue;
+    if (Array.isArray(type.assetKindList)) return type.assetKindList;
+    queue.push(...(type.extendList ?? []));
+  }
+  return undefined;
+}
+
+// whether an object of that type takes an asset: { message, kind, kindDeclared }; message is
+// '' when it does. isIncoming: it comes from outside the object (attached, adopted), not
+// made by a mode. a kind left out is the only kind there is
+export function objectFrontendAssetAcceptCheck(kindList, input) {
+  const kindText = String(input.kind ?? '');
+  if (kindList === undefined) return { message: '', kind: kindText, kindDeclared: undefined };
+  const kind = kindText || (kindList.length === 1 ? kindList[0].id : '');
+  const kindDeclared = kindList.find((one) => one.id === kind);
+  const kindAll = kindList.map((one) => one.id).join(', ') || '(none)';
+  if (!kind) return { message: `say the kind of the asset: ${kindAll}`, kind, kindDeclared };
+  if (!kindDeclared) return { message: `this type holds no asset of the kind ${kind} (it holds ${kindAll})`, kind, kindDeclared };
+  if (input.isIncoming && kindDeclared.isIncomingRefused === true) return { message: `an asset of the kind ${kind} is made by the modes of this type, it cannot come from elsewhere`, kind, kindDeclared };
+  const lang = String(input.lang ?? '');
+  if (Array.isArray(kindDeclared.langList) && kindDeclared.langList.length > 0 && !kindDeclared.langList.includes(lang)) {
+    return { message: `an asset of the kind ${kind} is in ${kindDeclared.langList.join(', ')}, not ${lang || 'bytes without a language'}`, kind, kindDeclared };
+  }
+  const pathPrefix = String(kindDeclared.pathPrefix ?? '');
+  // paths index an asset several ways: one of them, when it has any, files it under its kind
+  const pathList = input.pathList ?? [];
+  if (pathPrefix && pathList.length > 0 && !pathList.some((path) => String(path).startsWith(pathPrefix))) {
+    return { message: `one path of the kind ${kind} starts with ${pathPrefix}, not ${pathList.join(', ')}`, kind, kindDeclared };
+  }
+  return { message: '', kind, kindDeclared };
 }
 
 // ---------- the assets of an object: names, paths, references ----------
@@ -216,7 +267,7 @@ export function objectFrontendAssetIndexBuild(assetList) {
   const byKey = new Map();
   const byPath = new Map();
   const byName = new Map();
-  const byObjectId = new Map();
+  const byItemId = new Map();
   // folder path -> { path, folderSet: Set of child folder paths, assetPathList }
   const folderByPath = new Map([['/', { path: '/', folderSet: new Set(), assetPathList: [] }]]);
   const problemList = [];
@@ -229,7 +280,7 @@ export function objectFrontendAssetIndexBuild(assetList) {
   };
   for (const asset of assetList ?? []) {
     byKey.set(asset.key, asset);
-    byObjectId.set(asset.objectId, asset);
+    byItemId.set(asset.itemId, asset);
     if (asset.name) byName.set(asset.name, [...(byName.get(asset.name) ?? []), asset]);
     for (const path of asset.pathList ?? []) {
       if (byPath.has(path)) {
@@ -240,7 +291,7 @@ export function objectFrontendAssetIndexBuild(assetList) {
       folderEnsure(objectFrontendAssetPathParentGet(path)).assetPathList.push(path);
     }
   }
-  return { byKey, byPath, byName, byObjectId, folderByPath, problemList };
+  return { byKey, byPath, byName, byItemId, folderByPath, problemList };
 }
 
 export function objectFrontendAssetPathParentGet(path) {
@@ -272,14 +323,14 @@ export function objectFrontendAssetRefResolve(index, refInput) {
     if (list.length > 1) message = `${list.length} assets are named ${ref.slice(5).trim()}: ${list.map((item) => item.key).join(', ')}; the first is answered`;
   } else if (ref.startsWith('id:')) {
     by = 'id';
-    asset = index.byObjectId.get(ref.slice('id:'.length).trim());
+    asset = index.byItemId.get(ref.slice('id:'.length).trim());
   } else {
     by = 'key';
     asset = index.byKey.get(ref.startsWith('key:') ? ref.slice('key:'.length).trim() : ref);
   }
   if (!asset) return { status: 'unknown', by, message: `the object has no asset ${ref}` };
   if (asset.status && asset.status !== 'found') {
-    return { status: asset.status, by, asset, message: `${asset.name || asset.key} is ${asset.status === 'deleted' ? 'deleted in' : 'missing from'} the asset store (${asset.objectId})` };
+    return { status: asset.status, by, asset, message: `${asset.name || asset.key} is ${asset.status === 'deleted' ? 'deleted in' : 'missing from'} the asset store (${asset.itemId})` };
   }
   return { status: 'found', by, asset, message };
 }
@@ -408,7 +459,7 @@ function assetTokenMatch(asset, token) {
   }
   if (is('key') && String(asset.key).toLowerCase().includes(valueLower)) return { field: 'key', score: 3 };
   if (is('kind') && String(asset.kind ?? '').toLowerCase().startsWith(valueLower)) return { field: 'kind', score: 2 };
-  if (is('id') && String(asset.objectId ?? '').startsWith(valueLower)) return { field: 'id', score: 1 };
+  if (is('id') && String(asset.itemId ?? '').startsWith(valueLower)) return { field: 'id', score: 1 };
   return undefined;
 }
 

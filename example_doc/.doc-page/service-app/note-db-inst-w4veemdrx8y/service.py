@@ -61,7 +61,7 @@ class NoteDb(Service):
             'container': 'serviceNoteDb',
             'module': './dashboard',
         },
-        # the types the template defines, under its name (doc_page_impl_obj.md#types)
+        # the types the template defines, under its name (doc_page_impl_type.md)
         'typeList': [
             {'id': 'note-db.note', 'label': 'Note', 'extendList': ['core.document'], 'icon': 'sticky-note',
              'summaryKeyList': ['length', 'timeUpdated'],

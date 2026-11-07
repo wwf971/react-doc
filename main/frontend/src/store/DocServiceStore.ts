@@ -41,7 +41,7 @@ import { dashboardDataTextBuild } from '../../../comp-doc/service/service-dashbo
 //                     unavailable | notProvided, message, isRouteExplicit, providerList, consumerList,
 //                     templateList, storage }
 //   objectTypeList    the types of the backend's object registry: { typeList, problemList } (the
-//                     built-in types and those the templates define, doc_page_impl_obj.md#types)
+//                     built-in types and those the templates define, doc_page_impl_type.md)
 //   objectProviderList the object providers of the backend (the kernel, the instances whose
 //                     script declares expose.objectProvide): { id, label, namespaceList, typeList,
 //                     relationTypeList, capabilityList, status, ... }
@@ -156,7 +156,7 @@ type DocEvent = { type: string; data: Record<string, any>; source: Record<string
 type AssetInfo = {
   isFromAsset: boolean;
   store?: string;
-  objectId?: string;
+  itemId?: string;
   versionIdRef?: string;
   isLocked?: boolean;
 };
@@ -164,7 +164,7 @@ type AssetInfo = {
 // the part of DocAssetStore the dashboards' state needs
 type AssetStoreWriter = {
   writeUnavailableReason: string;
-  objectUpdate: (store: string, objectId: string, data: { text: string }, mode: 'inPlace', note: string) => Promise<ServiceResult>;
+  itemUpdate: (store: string, itemId: string, data: { text: string }, mode: 'inPlace', note: string) => Promise<ServiceResult>;
 };
 
 // the part of DocSourceStore the store needs: the main doc page (where an
@@ -219,7 +219,7 @@ export class DocServiceStore {
   refreshPromise: Promise<void> | undefined;
   // the writes of each dashboard object, one after another: a write needs
   // the hash of the head the previous one made
-  writeChainByObjectKey = new Map<string, Promise<ServiceResult>>();
+  writeChainByItemKey = new Map<string, Promise<ServiceResult>>();
   // the next refresh (BACKEND_RETRY_MS, BACKEND_POLL_MS)
   refreshTimer: ReturnType<typeof setTimeout> | undefined;
   // whether the loaded doc pages are to be synced into the kernel at the
@@ -244,7 +244,7 @@ export class DocServiceStore {
       assetStore: false,
       sourceStore: false,
       refreshPromise: false,
-      writeChainByObjectKey: false,
+      writeChainByItemKey: false,
       refreshTimer: false,
       isDocPageSyncPending: false,
       docPageSyncPromise: false,
@@ -817,33 +817,33 @@ export class DocServiceStore {
 
   // why the state of a dashboard block cannot be written ('' when it can)
   stateUnavailableReasonGet(assetInfo: AssetInfo | undefined): string {
-    if (!assetInfo?.isFromAsset) return 'The dashboard keeps its state in an asset object, and this block has none.';
+    if (!assetInfo?.isFromAsset) return 'The dashboard keeps its state in an asset item, and this block has none.';
     if (assetInfo.versionIdRef !== 'head') {
       return `The block reads the version ${assetInfo.versionIdRef} of its asset, which is never changed; a reference to the head keeps the state.`;
     }
-    if (assetInfo.isLocked) return 'The asset object of the dashboard is locked.';
+    if (assetInfo.isLocked) return 'The asset item of the dashboard is locked.';
     if (!this.assetStore) return 'The page has no asset service layer.';
     return this.assetStore.writeUnavailableReason;
   }
 
-  // the whole data of a dashboard block written into its asset object, in
+  // the whole data of a dashboard block written into its asset item, in
   // place: the state is the dashboard's present, not a history of versions
   dashboardDataWrite(assetInfo: AssetInfo | undefined, data: { serviceId: string; state: any }): Promise<ServiceResult> {
     const reason = this.stateUnavailableReasonGet(assetInfo);
     if (reason) return Promise.resolve({ code: -1, message: reason });
-    const { store, objectId } = assetInfo as Required<AssetInfo>;
-    const key = `${store}/${objectId}`;
-    const previous = this.writeChainByObjectKey.get(key) ?? Promise.resolve({ code: 0, message: '' });
-    const write = previous.then(() => this.assetStore!.objectUpdate(
+    const { store, itemId } = assetInfo as Required<AssetInfo>;
+    const key = `${store}/${itemId}`;
+    const previous = this.writeChainByItemKey.get(key) ?? Promise.resolve({ code: 0, message: '' });
+    const write = previous.then(() => this.assetStore!.itemUpdate(
       store,
-      objectId,
+      itemId,
       { text: dashboardDataTextBuild(data) },
       'inPlace',
       'dashboard state',
     ));
-    this.writeChainByObjectKey.set(key, write);
+    this.writeChainByItemKey.set(key, write);
     void write.finally(() => {
-      if (this.writeChainByObjectKey.get(key) === write) this.writeChainByObjectKey.delete(key);
+      if (this.writeChainByItemKey.get(key) === write) this.writeChainByItemKey.delete(key);
     });
     return write;
   }
@@ -856,7 +856,7 @@ export class DocServiceStore {
   // call goes to that instance, or to the one data.target names
   // (doc_page_impl_service_kernel.md#calls-between-services: an instance, a
   // template, or an infra name), the dashboard's instance sent as the
-  // caller. the bind and the state are written into the block's asset object
+  // caller. the bind and the state are written into the block's asset item
   // (source.asset); a place that keeps them elsewhere (the Services tab)
   // answers them first, as the local handler.
   async eventHandle(event: DocEvent): Promise<ServiceResult | undefined> {

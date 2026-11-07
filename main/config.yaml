@@ -28,7 +28,7 @@ packageSearchDirList:
 
 # the managed folders of a doc page (.doc-page/asset/, comp-mdx/, service-*/):
 # isLazy (default true) leaves a folder away until its first item is
-# written (an asset object, a component, a service instance), so a doc page
+# written (an asset item, a component, a service instance), so a doc page
 # holds no empty folders; false: the development server makes the missing
 # ones of every doc page it loads. design: doc_page_impl_dir.md#managed-folders-made-when-first-used
 folderManaged:

@@ -308,7 +308,7 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`TableHierarchy` and `ListHierarchy` show rows grouped at any depth, with registered components for cells and rows. `SwitchView` shows the same data through several of them, chosen by tabs. `TestCaseTable` is a test specification on the hierarchy table: a confirmation column per tester, and results recorded as a history on the block's asset object.
+`TableHierarchy` and `ListHierarchy` show rows grouped at any depth, with registered components for cells and rows. `SwitchView` shows the same data through several of them, chosen by tabs. `TestCaseTable` is a test specification on the hierarchy table: a confirmation column per tester, and results recorded as a history on the block's asset item.
 
 `TableHierarchy` と `ListHierarchy` は、任意の深さでグループ化した行を、セルや行に登録済みコンポーネントを使って表示します。`SwitchView` は、同じデータをそれらの複数の表示でタブ切り替えします。`TestCaseTable` は階層テーブルによる試験仕様書で、確認者ごとの確認列を持ち、結果はブロックのアセットオブジェクトに履歴として記録します。
 ```

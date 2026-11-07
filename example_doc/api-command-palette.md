@@ -19,7 +19,7 @@ Try: type `edit` and run **Edit: Toggle edit mode**; type `settings` and open th
 Open the settings panel and its **API** tab: it lists every api registered now, its parameters, whether it can run and the key bound to it. The apis come from several sources, and the list changes as they come and go:
 
 - the **page's own layers**: navigation (`nav/back`, `nav/goTo`), the document and its blocks (`doc/blockListGet`, `doc/blockGet`, `doc/blockDataSet`), the edit layer (`edit/modeToggle`, `edit/blockEnter`), the page (`settings/open`, `search/open`, `page/contextGet`, `api/listGet`);
-- the **components** of the registry that expose apis: `common/TestCaseTable/tableGet` and `common/TestCaseTable/resultRecord` read a [test case table](mdx-usage/comp-test-case-table.md) and record a result on its asset object, the same way a click on a cell does;
+- the **components** of the registry that expose apis: `common/TestCaseTable/tableGet` and `common/TestCaseTable/resultRecord` read a [test case table](mdx-usage/comp-test-case-table.md) and record a result on its asset item, the same way a click on a cell does;
 - the **service instances**: while the service backend runs an instance of `todo-list`, its apis are registered as `service/todo-list/todoList`, `service/todo-list/todoCreate`, …, and leave the registry when the instance stops;
 - the **declared apis** of this doc page, written in `.doc-page/api.yaml` without code: `example/openGuide` opens the document model, `example/editPlayground` opens the editing playground and turns edit mode on, two calls in one.
 

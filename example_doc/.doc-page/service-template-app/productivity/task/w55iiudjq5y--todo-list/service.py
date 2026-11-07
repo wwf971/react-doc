@@ -102,7 +102,7 @@ class TodoList(Service):
             'container': 'serviceTodoList',
             'module': './dashboard',
         },
-        # the types the template defines, under its name (doc_page_impl_obj.md#types)
+        # the types the template defines, under its name (doc_page_impl_type.md)
         'typeList': [
             {'id': 'todo-list.todo', 'label': 'Todo', 'extendList': ['core.task'], 'icon': 'square-check',
              'summaryKeyList': ['isDone'],

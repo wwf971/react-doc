@@ -1,5 +1,5 @@
 import { comparer, makeAutoObservable, observable, reaction, runInAction } from 'mobx';
-import { typeBuiltinList, typeRegistryBuild } from '../lib/doc-object-type.js';
+import { typeBuiltinList, typeDefineNormalize, typeRegistryBuild } from '../lib/doc-object-type.js';
 import {
   OBJECT_VIEW_CONTEXT_LIST,
   objectDescriptorNormalize,
@@ -12,6 +12,7 @@ import {
 } from '../lib/doc-object-ref.js';
 import { compDefinitionNormalize } from '../../../comp-doc/registry/comp-registry.js';
 import { compDefinitionGet } from '../../../comp-doc/registry/comp-definition.js';
+import { compIdResolve } from '../../../comp-doc/registry/comp-registry.js';
 import { compObjectViewGet } from '../../../comp-doc/registry/comp-expose.js';
 import { DocObjectSearchStore } from './DocObjectSearchStore.js';
 
@@ -318,7 +319,25 @@ export class DocObjectStore {
   // of a built-in type (the same file) is the one kept
   get typeRegistry(): any {
     const typeListProvided = this.providerList.flatMap((provider) => provider.typeDefineGet?.()?.typeList ?? []);
-    return typeRegistryBuild(typeListProvided.length > 0 ? [...typeListProvided, ...typeBuiltinList] : typeBuiltinList);
+    return typeRegistryBuild([...typeListProvided, ...typeBuiltinList, ...this.typeDeclaredList]);
+  }
+
+  // the types declared in yaml by the doc pages, their objects and the packages
+  // (doc_page_impl_type.md#declaring-a-type): configuration of the page, no layer's
+  get typeDeclaredList(): any[] {
+    const list = this.stores.docStore?.sourceStore?.configDoc?.typeDeclared?.typeList ?? [];
+    return list.map((item: any) => typeDefineNormalize(item, item.definedBy));
+  }
+
+  // whether a component of the registry answers to a name: a mode of a type names one
+  compIsKnown(compName: string): boolean {
+    const compById = this.stores.docStore?.compById ?? {};
+    const compId = compIdResolve(this.stores.docStore?.sourceStore?.configDoc, compName);
+    return compDefinitionGet(compById, compId) !== undefined || compDefinitionGet(compById, compName) !== undefined;
+  }
+
+  get typeDeclaredProblemList(): { alias: string; file: string; message: string }[] {
+    return this.stores.docStore?.sourceStore?.configDoc?.typeDeclared?.problemList ?? [];
   }
 
   get typeList(): any[] {

@@ -35,6 +35,7 @@ config:
   # a declaration written in place, after the file, so it wins over it
   - TagsDisplayAtLinkPosition: after
 
+# the types (.doc-page/type.yaml) are found beside this entry by convention too.
 # the keyboard maps (.doc-page/hotkey/, main.yaml active) and the declared
 # apis (.doc-page/api.yaml) of this doc page are found beside this entry by
 # convention; "hotkey: { file }" / "api: { file }" would name other files,

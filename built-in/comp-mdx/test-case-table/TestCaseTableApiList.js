@@ -99,7 +99,7 @@ export const testCaseTableApiList = [
   apiDefine({
     name: 'resultRecord',
     label: 'Record a test result',
-    description: 'Appends one result to the history of a cell of a test case table whose data is an asset object, with the name of who confirms it and an optional evidence document.',
+    description: 'Appends one result to the history of a cell of a test case table whose data is an asset item, with the name of who confirms it and an optional evidence document.',
     paramList: [
       { name: 'caseId', type: 'string', isRequired: true, description: 'the id of the test case (a row with cells)' },
       { name: 'testerId', type: 'string', isRequired: true, description: 'the id of the tester column' },
@@ -113,7 +113,7 @@ export const testCaseTableApiList = [
     run: async (context, params) => {
       const table = await tableLocate(context, params);
       if (table.message) return { code: -1, message: table.message };
-      if (!table.asset) return { code: -1, message: 'the data of the table is written inline: a result is recorded on an asset object ("to asset" in edit mode moves it there)' };
+      if (!table.asset) return { code: -1, message: 'the data of the table is written inline: a result is recorded on an asset item ("to asset" in edit mode moves it there)' };
       if (!table.asset.isHead) return { code: -1, message: `the block reads version ${table.asset.versionIdRef} of its asset, not the head; a result is recorded at the head` };
       if (!table.parsed.caseIdSet.has(params.caseId)) return { code: -1, message: `no test case ${params.caseId} (cases: ${[...table.parsed.caseIdSet].join(', ')})` };
       if (!table.parsed.testerIdSet.has(params.testerId)) return { code: -1, message: `no tester ${params.testerId} (testers: ${[...table.parsed.testerIdSet].join(', ')})` };

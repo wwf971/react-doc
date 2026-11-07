@@ -12,10 +12,10 @@ const OBJECT_ID = 'w5k6testobj';
 const ENTRY_ID = 'entry-1';
 const ASSET_COUNT = 40;
 
-function assetEntryBuild(objectId, text, role) {
-  const versionId = `${objectId}-v1`;
+function assetEntryBuild(itemId, text, role) {
+  const versionId = `${itemId}-v1`;
   return {
-    objectId, name: '', lang: 'yaml', contentType: 'text/yaml', fileExt: 'yaml', versionIdHead: versionId,
+    itemId, name: '', lang: 'yaml', contentType: 'text/yaml', fileExt: 'yaml', versionIdHead: versionId,
     isDeleted: false, isLocked: false, timeCreated: '20261106_00000000+09',
     owner: { ref: `frontend:${OBJECT_ID}`, ...(role ? { role } : {}) },
     versionList: [{ versionId, versionIdPrevList: [], time: '', note: '', size: text.length, hash: 'h', isLocked: false, dependencyList: [] }],
@@ -25,23 +25,23 @@ function assetEntryBuild(objectId, text, role) {
 }
 
 function entryTextBuild(count) {
-  const lineList = Array.from({ length: count }, (_, index) => `  - { key: item-${index}, kind: item, objectId: asset-${index} }`);
+  const lineList = Array.from({ length: count }, (_, index) => `  - { key: item-${index}, kind: item, itemId: asset-${index} }`);
   return `name: Sample\ntype: frontend.object\nassetList:\n${lineList.join('\n')}\n`;
 }
 
 async function fixtureCreate() {
-  const objectById = { [ENTRY_ID]: assetEntryBuild(ENTRY_ID, entryTextBuild(ASSET_COUNT), 'entry') };
-  for (let index = 0; index < ASSET_COUNT; index += 1) objectById[`asset-${index}`] = assetEntryBuild(`asset-${index}`, `value: ${index}\n`);
+  const itemById = { [ENTRY_ID]: assetEntryBuild(ENTRY_ID, entryTextBuild(ASSET_COUNT), 'entry') };
+  for (let index = 0; index < ASSET_COUNT; index += 1) itemById[`asset-${index}`] = assetEntryBuild(`asset-${index}`, `value: ${index}\n`);
   const assetStore = new DocAssetStore({
     snapshot: {
-      objectById,
+      itemById,
       objectFrontend: { docPageList: [{ alias: 'page', typeList: [], objectList: [{ id: OBJECT_ID, entry: ENTRY_ID, docPageAlias: 'page' }] }] },
     },
   });
   const count = { list: 0, single: 0 };
-  const { objectGetList, objectGet } = assetStore.backend;
-  assetStore.backend.objectGetList = (...args) => { count.list += 1; return objectGetList(...args); };
-  assetStore.backend.objectGet = (...args) => { count.single += 1; return objectGet(...args); };
+  const { itemGetList, itemGet } = assetStore.backend;
+  assetStore.backend.itemGetList = (...args) => { count.list += 1; return itemGetList(...args); };
+  assetStore.backend.itemGet = (...args) => { count.single += 1; return itemGet(...args); };
   assetStore.init();
   await assetStore.startPromise;
   const store = new DocObjectFrontendStore({ assetStore });
@@ -101,19 +101,19 @@ test('a change of the entry or of an asset is seen at the next read', async () =
   await tickWait();
   const stateBefore = store.objectGet(OBJECT_ID);
   const dataBefore = store.assetDataGet(OBJECT_ID, 'item-3').data;
-  const { objectGet } = assetStore.backend;
-  const answerWithText = async (objectId, text) => {
-    const answer = await objectGet('local', objectId, 'head');
+  const { itemGet } = assetStore.backend;
+  const answerWithText = async (itemId, text) => {
+    const answer = await itemGet('local', itemId, 'head');
     return { ...answer, data: { ...answer.data, version: { ...answer.data.version, text } } };
   };
-  assetStore.backend.objectGet = () => answerWithText('asset-3', 'value: changed\n');
-  await assetStore.objectReload('local', 'asset-3');
+  assetStore.backend.itemGet = () => answerWithText('asset-3', 'value: changed\n');
+  await assetStore.itemReload('local', 'asset-3');
   assert.equal(store.assetDataGet(OBJECT_ID, 'item-3').data.value, 'changed');
   assert.notEqual(store.assetDataGet(OBJECT_ID, 'item-3').data, dataBefore);
   assert.equal(store.objectGet(OBJECT_ID), stateBefore);
 
-  assetStore.backend.objectGet = () => answerWithText(ENTRY_ID, entryTextBuild(ASSET_COUNT - 1));
-  await assetStore.objectReload('local', ENTRY_ID);
+  assetStore.backend.itemGet = () => answerWithText(ENTRY_ID, entryTextBuild(ASSET_COUNT - 1));
+  await assetStore.itemReload('local', ENTRY_ID);
   assert.notEqual(store.objectGet(OBJECT_ID), stateBefore);
   assert.equal(store.objectGet(OBJECT_ID).assetList.length, ASSET_COUNT - 1);
   dispose();
@@ -121,15 +121,15 @@ test('a change of the entry or of an asset is seen at the next read', async () =
 
 test('an asset that cannot be read or parsed fails alone', async () => {
   const { assetStore, store } = await fixtureCreate();
-  const { objectGetList } = assetStore.backend;
-  assetStore.backend.objectGetList = async (storeId, itemList) => {
-    const result = await objectGetList(storeId, itemList);
+  const { itemGetList } = assetStore.backend;
+  assetStore.backend.itemGetList = async (storeId, requestList) => {
+    const result = await itemGetList(storeId, requestList);
     return {
       ...result,
       data: {
-        itemList: result.data.itemList.map((answer, index) => {
-          if (itemList[index].objectId === 'asset-1') return { code: -3, data: null, message: 'gone' };
-          if (itemList[index].objectId !== 'asset-2') return answer;
+        answerList: result.data.answerList.map((answer, index) => {
+          if (requestList[index].itemId === 'asset-1') return { code: -3, data: null, message: 'gone' };
+          if (requestList[index].itemId !== 'asset-2') return answer;
           return { ...answer, data: { ...answer.data, version: { ...answer.data.version, text: 'a: [' } } };
         }),
       },
@@ -146,3 +146,34 @@ test('an asset that cannot be read or parsed fails alone', async () => {
   assert.match(resultBroken.message, /not yaml/);
   dispose();
 });
+
+test('what disagrees: an item of unknown source in the folder, an asset lying outside, a stray', async () => {
+  const ref = `frontend:${OBJECT_ID}`;
+  const entryText = `name: Sample\ntype: frontend.object\nassetList:\n  - { key: in, kind: k, itemId: asset-in }\n  - { key: out, kind: k, itemId: asset-out }\n`;
+  const entry = { ...assetEntryBuild(ENTRY_ID, entryText, 'entry'), folderOwner: { ref } };
+  const itemById = {
+    [ENTRY_ID]: entry,
+    'asset-in': { ...assetEntryBuild('asset-in', 'a: 1\n'), folderOwner: { ref }, groupPath: 'deep/er' },
+    'asset-out': assetEntryBuild('asset-out', 'a: 1\n'),
+    'asset-stray': { ...assetEntryBuild('asset-stray', 'a: 1\n'), folderOwner: { ref } },
+    'asset-dropped': { ...assetEntryBuild('asset-dropped', 'a: 1\n'), owner: undefined, folderOwner: { ref } },
+    'asset-other': { ...assetEntryBuild('asset-other', 'a: 1\n'), owner: { ref: 'frontend:elsewhere' }, folderOwner: { ref } },
+  };
+  const assetStore = new DocAssetStore({
+    snapshot: { itemById, objectFrontend: { docPageList: [{ alias: 'page', typeList: [], objectList: [{ id: OBJECT_ID, entry: ENTRY_ID, docPageAlias: 'page', dir: 'page/x' }] }] } },
+  });
+  assetStore.init();
+  await assetStore.startPromise;
+  const store = new DocObjectFrontendStore({ assetStore });
+  await store.configLoad();
+  await assetStore.refLoad({ store: 'local', itemId: ENTRY_ID, versionId: 'head' });
+  const state = store.objectGet(OBJECT_ID);
+  assert.deepEqual(state.assetList.map((asset) => [asset.key, asset.isInFolder]), [['in', true], ['out', false]]);
+  assert.deepEqual(state.outsideList.map((asset) => asset.key), ['out']);
+  assert.deepEqual(state.strayList.map((item) => item.itemId), ['asset-stray']);
+  assert.deepEqual(state.unknownList.map((item) => item.itemId).sort(), ['asset-dropped', 'asset-other']);
+  assert.deepEqual(state.groupList.find((group) => group.groupPath === 'deep/er'), { groupPath: 'deep/er', count: 1 });
+  // what lies in the folder and is not listed is no asset of the object: its modes do not see it
+  assert.equal(store.assetResolve(OBJECT_ID, 'id:asset-dropped').status, 'unknown');
+});
+

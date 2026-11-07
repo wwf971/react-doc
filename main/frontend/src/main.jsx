@@ -30,7 +30,7 @@ createRoot(document.getElementById('root')).render(
       // empty in development, where the source api answers them
       fileUrlByPath: docSource.fileUrlByPath,
       subscribe: docSource.subscribeDocSource,
-      // the asset objects bundled into a build; null in development, where
+      // the asset items bundled into a build; null in development, where
       // the asset api of the development server is used instead
       assetSnapshot: docSource.assetSnapshot,
       // the components of the doc pages (doc_page_impl_mdx_comp.md#components-of-a-doc-page):

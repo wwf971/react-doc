@@ -16,46 +16,46 @@ import { yamlScalarTextBuild, yamlStringListSetBuild, yamlValueSetOperationBuild
 import { timeTextGet } from '../src/lib/time-text.js';
 
 // The local store of the asset service layer, on disk (design: doc_page_impl_asset.md). A general
-// store of objects with a version history, modeled after an object storage
-// (s3): an object is a key with metadata, a version is a sequence of bytes
+// store of items with a version history, modeled after an object storage
+// (s3): an item is a key with metadata, a version is a sequence of bytes
 // under that key, and the store does not care whether the bytes are text.
-// There is one local store; its objects live in the folders of the doc
+// There is one local store; its items live in the folders of the doc
 // pages the page loads (its own and the ones it includes), each doc page
 // naming its folders in its asset store config file (.doc-page/asset.yaml
-// beside its entry by convention), and a new object is created in the
+// beside its entry by convention), and a new item is created in the
 // default folder of the doc page of the document it is created from.
 // Everything is a file: the folders and their files are the whole state.
 //
 //   .doc-page/asset.yaml              the asset store config of one doc page:
 //                                     folderList [~root/path], folderDefault
 //   {folder}/
-//     {objectId}--{name}/             one folder per object: its id (ms_48), and its name
-//       object.yaml                   when it has one, after the separator "--"
-//     {group}/.../{objectId}--{name}/ or inside group folders, to any depth (8 levels
-//                                     are read): a folder without object.yaml is a group,
-//                                     read in turn; a group changes nothing of its objects
-//                                     (the objects of a frontend object are kept in the group
-//                                     {id}--{name} of that object, doc_page_impl_obj_frontend.md)
-//       object.yaml.bak               the previous object.yaml, before the last rewrite
+//     {itemId}--{name}/             one folder per item: its id (ms_48), and its name
+//       item.yaml                   when it has one, after the separator "--"
+//     {group}/.../{itemId}--{name}/ or inside group folders, to any depth (8 levels
+//                                     are read): a folder without item.yaml is a group,
+//                                     read in turn; a group changes nothing of its items
+//                                     (the items of a frontend object are kept in the group
+//                                     {id}--{name} of that item, doc_page_impl_obj_frontend.md)
+//       item.yaml.bak               the previous item.yaml, before the last rewrite
 //       {versionId}.{fileExt}         the bytes of one version
 //       {versionId}.{fileExt}.bak     the previous bytes, before an in-place update
 //       {versionId}.metadata.yaml     the metadata of one version's data, when it has any
 //       {versionId}.metadata.yaml.bak the previous metadata, before it was rewritten
 //
-// object.yaml:
-//   objectId, name, lang, contentType, fileExt, component?, saveMode?, versionIdHead,
+// item.yaml:
+//   itemId, name, lang, contentType, fileExt, component?, saveMode?, versionIdHead,
 //   isDeleted, isLocked, timeCreated,
 //   versionList: [{ versionId, versionIdPrevList, time, note, size, hash, isLocked, dependencyList }]
-//   eventList:   [{ eventType, time, versionId?, userId? }]
+//   eventList:   [{ eventType, time, versionId?, userId?, placeFrom?, placeTo? }]
 //
-// what each file records: object.yaml is what the store itself keeps and
-// answers questions with, the object and, for every version, its place in
+// what each file records: item.yaml is what the store itself keeps and
+// answers questions with, the item and, for every version, its place in
 // the history (predecessors, time, note), what identifies its bytes (size,
 // hash), its lock and its dependencies: everything the store needs without
 // reading any version file. {versionId}.metadata.yaml is what the writer of
 // the data says about that data, a mapping the store never interprets (the
 // version of the engine that wrote it, how a component displays it). it is
-// read and written with the version's bytes, not with the object: listing
+// read and written with the version's bytes, not with the item: listing
 // the store reads no version file. a version without metadata has no file.
 //
 // dependencies (doc_page_impl_asset.md#dependencies): the data of a version
@@ -64,34 +64,34 @@ import { timeTextGet } from '../src/lib/time-text.js';
 // records what its data depends on as dependencyList, one mapping per
 // dependency with a type:
 //   { type: source, path }                          a file of the source, by source path (~page:root/...)
-//   { type: asset, objectId, versionId? }           a version of another object of this store;
+//   { type: asset, itemId, versionId? }           a version of another item of this store;
 //                                                   no versionId means the head
 // the list is declared by whoever writes the data (the page knows which
 // component the data is for, the store does not) and kept with the version:
 // a new version copies the list of the version it is made from unless the
 // write names one. the store answers the other direction too (the versions
-// that depend on an object or a version), the base of resolving a deletion.
+// that depend on an item or a version), the base of resolving a deletion.
 //
 // locks: a locked version cannot be rewritten in place or deleted (a new
 // version can still be made from it, and the head can still move to it or
-// away). a locked object cannot be changed at all, its versions, head,
+// away). a locked item cannot be changed at all, its versions, head,
 // metadata and deletion mark included, until it is unlocked; unlocking is
 // the one write it accepts.
 //
-// an object has a random id and may have a name a person chooses. the name
-// is unique in the store (every folder, deleted objects included), so a
-// reference may name the object by either; creating an object with the name
-// of an existing one returns that object and creates nothing. the id and
+// an item has a random id and may have a name a person chooses. the name
+// is unique in the store (every folder, deleted items included), so a
+// reference may name the item by either; creating an item with the name
+// of an existing one returns that item and creates nothing. the id and
 // the name never contain the separator "--" of the folder name, so the id
 // of a folder is what stands before the first "--".
 //
-// the history is a DAG kept in the object metadata: a version names the
+// the history is a DAG kept in the item metadata: a version names the
 // versions it was made from (versionIdPrevList: none for the first version,
 // one for an ordinary update, several for a merge). the head is the version
 // a document reading "head" receives; it can be moved to any version
 // (checkout), and the next new version then branches from there.
 //
-// eventList is what happened to the object, in order: create, updateInPlace
+// eventList is what happened to the item, in order: create, updateInPlace
 // (the head bytes rewritten, versionId says which version), versionCreate,
 // checkout, versionDelete, metaSet, delete, restore, lock, unlock (with
 // versionId for the lock of one version). every event is a
@@ -106,9 +106,9 @@ import { timeTextGet } from '../src/lib/time-text.js';
 //
 // component says which component the data is for, when it is the data of a
 // component block: { name } (the tag name the page created it for). it is a
-// record for recovering an object no block references any more, not a rule:
+// record for recovering an item no block references any more, not a rule:
 // the store does not check it and a block of another component may read the
-// object. absent for data that serves another purpose.
+// item. absent for data that serves another purpose.
 //
 // saveMode says what a save of the head does when the caller names no mode:
 // inPlace (the head version is rewritten; the default when the key is not
@@ -116,17 +116,34 @@ import { timeTextGet } from '../src/lib/time-text.js';
 //
 // every rewrite of an existing file first copies it to {file}.bak, then
 // writes a temporary file and renames it into place, so an interrupted
-// write never leaves a half-written object.yaml or data file behind.
+// write never leaves a half-written item.yaml or data file behind.
+//
+// a folder may be owned by an object (the item folder of a frontend object): the place of an
+// item there belongs to the layer of that object. a write that makes an item arrive, leave or
+// change its place in such a folder says which layer it is (asLayer), and any other is refused
+// with -5, whichever way it comes (doc_page_impl_asset.md#folders-owned-by-an-object). data,
+// versions and locks are not places: they are written as for any item.
 //
 // errors are AssetError with the codes of the api:
-//   -1 bad request, -2 conflict (the data changed since it was read), -3 not found
+//   -1 bad request, -2 conflict (the data changed since it was read), -3 not found,
+//   -4 a read-only folder, -5 a place that belongs to the layer of an object
 
-export const ASSET_OBJECT_META_NAME = 'object.yaml';
+export const ASSET_ITEM_META_NAME = 'item.yaml';
+// the name the file had when items were called objects: an item folder holding
+// it is not read, and is reported once (react-doc migrate rewrites it)
+export const ASSET_ITEM_META_NAME_FORMER = 'object.yaml';
+const assetFormerWarnedSet = new Set<string>();
+
+function assetFormerWarn(folderAbs: string) {
+  if (assetFormerWarnedSet.has(folderAbs)) return;
+  assetFormerWarnedSet.add(folderAbs);
+  console.warn(`[doc-asset] ${folderAbs} holds asset items in the former form (object.yaml), which is not read: run "react-doc migrate <doc page folder>" (main/update-20261107-repl.md)`);
+}
 
 // the id of the local store in a reference (store: local)
 export const ASSET_STORE_ID_LOCAL = 'local';
 
-// between the id and the name in the folder name of an object. an id is
+// between the id and the name in the folder name of an item. an id is
 // base 36, so it never holds it; a name is refused when it does.
 export const ASSET_DIR_SEPARATOR = '--';
 
@@ -136,11 +153,11 @@ export const ASSET_GROUP_DEPTH_MAX = 8;
 
 export type AssetSaveMode = 'inPlace' | 'newVersion';
 
-// the component the data of an object is for (doc_page_impl_asset.md#objects-for-components);
+// the component the data of an item is for (doc_page_impl_asset.md#items-for-components);
 // name only for now, an id and a version of the component are expected later
 export type AssetComponent = { name: string };
 
-// the object the data belongs to (doc_page_impl_obj_frontend.md#assets-and-their-owner):
+// the object the data belongs to (doc_page_impl_obj_frontend.md#how-an-asset-comes-to-belong):
 // a reference of the object registry, and the part it plays there
 export type AssetOwner = { ref: string; role?: string };
 
@@ -155,10 +172,10 @@ export type AssetVersionMetadata = Record<string, unknown>;
 // what the data of a version depends on
 export type AssetDependency =
   | { type: 'source'; path: string }
-  | { type: 'asset'; objectId: string; versionId?: string };
+  | { type: 'asset'; itemId: string; versionId?: string };
 
-// a version that depends on an object (or one of its versions)
-export type AssetDependent = { objectId: string; versionId: string; dependency: AssetDependency };
+// a version that depends on an item (or one of its versions)
+export type AssetDependent = { itemId: string; versionId: string; dependency: AssetDependency };
 
 export type AssetEvent = {
   eventType: AssetEventType;
@@ -166,6 +183,9 @@ export type AssetEvent = {
   time: string;
   // the version the event is about, for the events that concern one
   versionId?: string;
+  // a move: where the item's folder was and is now ({folder}/{groupPath})
+  placeFrom?: string;
+  placeTo?: string;
   // reserved: who did it, once a store knows its users
   userId?: string;
 };
@@ -182,8 +202,8 @@ export type AssetVersionMeta = {
   dependencyList: AssetDependency[];
 };
 
-export type AssetObjectMeta = {
-  objectId: string;
+export type AssetItemMeta = {
+  itemId: string;
   // '' or a name unique in the store; see nameNormalize for what a name may hold
   name: string;
   // the fence language a component reads the data as ('' when it is not for a code block)
@@ -198,17 +218,21 @@ export type AssetObjectMeta = {
   saveMode?: AssetSaveMode;
   versionIdHead: string;
   isDeleted: boolean;
-  // nothing of the object changes until it is unlocked
+  // nothing of the item changes until it is unlocked
   isLocked: boolean;
   timeCreated: string;
   versionList: AssetVersionMeta[];
   eventList: AssetEvent[];
-  // where the object was found (not written into object.yaml): the folder
-  // of the store, as written in asset.yaml, the object's folder in it (a
+  // where the item was found (not written into item.yaml): the folder
+  // of the store, as written in asset.yaml, the item's folder in it (a
   // path with "/" when it is inside groups), and the groups ('' at the top)
   folder: string;
   dirName: string;
   groupPath: string;
+  // the object whose folder holds the item, read from where it was found: a fact of the
+  // scan, beside owner, which is what the item itself declares. neither decides that the
+  // item belongs to the object: the object says that
+  folderOwner?: AssetOwner;
 };
 
 // the bytes of one version, with the text when the bytes are valid utf-8,
@@ -226,7 +250,7 @@ export type AssetVersionData = {
 export type AssetFolder = {
   // the full source path that names it (~page:root/path; asset.yaml writes
   // the local form ~root/path of its doc page): its identity in the store
-  // and in object metadata
+  // and in item metadata
   path: string;
   pathAbs: string;
   // the default folder of the store: the default folder of the page's own doc page
@@ -237,9 +261,12 @@ export type AssetFolder = {
   // doc_page_impl_package.md#a-package-as-a-doc-page): every write is refused
   // by the store itself (-4), whichever way it comes
   isReadOnly?: boolean;
+  // a folder owned by an object of the registry, not named in any asset.yaml:
+  // the item folder of a frontend object (doc_page_impl_asset.md#folders-owned-by-an-object)
+  owner?: AssetOwner;
 };
 
-export type AssetFolderInfo = AssetFolder & { isExists: boolean; objectCount: number };
+export type AssetFolderInfo = AssetFolder & { isExists: boolean; itemCount: number };
 
 // the asset store config of one doc page
 export type AssetDocPage = {
@@ -256,7 +283,7 @@ export type AssetDocPage = {
   // a read-only doc page: the store writes nothing into its folders or its config file
   isReadOnly?: boolean;
   // the alias of the doc page, and the full paths of its roots
-  // (~alias:root): a document of one of them creates its objects in this
+  // (~alias:root): a document of one of them creates its items in this
   // doc page's default folder; its asset folders lie in them
   alias: string;
   rootPathList: string[];
@@ -270,9 +297,12 @@ export type AssetStoreConfig = {
   // every folder of every doc page, the page's own first, each once
   folderList: AssetFolder[];
   // config.yaml folderManaged.isLazy (doc_page_impl_dir.md#managed-folders-made-when-first-used):
-  // a folder is made by the first object written to it, never when it is
+  // a folder is made by the first item written to it, never when it is
   // named; false: naming a folder makes it. absent: true
   isFolderLazy?: boolean;
+  // the roots of the source rules, which name the folders; absent in a config
+  // without owned folders
+  rootAbsPathByPath?: Map<string, string>;
 };
 
 // what the store config reader needs of a doc page (plugin/doc-entry.ts DocPageLoaded)
@@ -283,10 +313,13 @@ export type AssetDocPageInput = {
   rootList: { alias: string; path: string }[];
   asset: undefined | false | { file: string };
   isReadOnly?: boolean;
+  // the folders objects of the doc page own: the layer owning them says which
+  // (doc-object-frontend.ts), the store only reads them like the others
+  folderOwnedList?: { pathAbs: string; owner: AssetOwner }[];
 };
 
-// what names an object: its id, or its name
-export type AssetObjectKey = { objectId?: string; name?: string };
+// what names an item: its id, or its name
+export type AssetItemKey = { itemId?: string; name?: string };
 
 export class AssetError extends Error {
   code: number;
@@ -312,7 +345,7 @@ export class AssetError extends Error {
 //   no file    the default folders: ASSET_FOLDER_DEFAULT_LIST, relative to the
 //              folder of the doc page, named by the root of the doc page that
 //              holds that folder. a folder that does not exist is created when
-//              the first object is written to it
+//              the first item is written to it
 //
 // a folder named by two doc pages belongs to the first (the page's own
 // first, then the included ones in loading order).
@@ -359,13 +392,38 @@ export function assetConfigOfDocPageListGet(
       }
       folderList.push({ path: folderPath, pathAbs, isDefault: false, docEntryFile: docPage.entryFile, isReadOnly: docPageInput.isReadOnly === true });
     }
+    for (const owned of docPageInput.folderOwnedList ?? []) {
+      const folderPath = sourcePathOfAbsGet(owned.pathAbs, docPage, rootAbsPathByPath);
+      if (!folderPath) {
+        docPage.problemList.push(`no root of the doc page holds ${owned.pathAbs}, the folder of ${owned.owner.ref}`);
+        continue;
+      }
+      if (folderList.some((folder) => folder.pathAbs === owned.pathAbs)) continue;
+      folderList.push({
+        path: folderPath, pathAbs: owned.pathAbs, isDefault: false, docEntryFile: docPage.entryFile,
+        isReadOnly: docPageInput.isReadOnly === true, owner: owned.owner,
+      });
+    }
     for (const problem of docPage.problemList) console.warn(`[doc-asset] ${docPage.configFileRelative}: ${problem}`);
     docPageList.push(docPage);
   }
   const docPageOwn = docPageList[0];
-  const folderDefault = folderList.find((folder) => folder.path === docPageOwn?.folderDefault) ?? folderList[0];
+  const folderDefault = folderList.find((folder) => folder.path === docPageOwn?.folderDefault) ?? folderList.find((folder) => !folder.owner);
   if (folderDefault) folderDefault.isDefault = true;
-  return { docPageList, folderList };
+  return { docPageList, folderList, rootAbsPathByPath };
+}
+
+// the full source path of a folder of a doc page: named by its first root holding it
+function sourcePathOfAbsGet(pathAbs: string, docPage: AssetDocPage, rootAbsPathByPath: Map<string, string>): string {
+  for (const rootPath of docPage.rootPathList) {
+    const rootAbs = rootAbsPathByPath.get(rootPath);
+    const parsed = sourcePathParse(rootPath);
+    if (!rootAbs || !parsed) continue;
+    const relative = path.relative(rootAbs, pathAbs);
+    if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) continue;
+    return sourcePathBuild(parsed.rootAlias, relative.split(path.sep).join('/'), parsed.docPageAlias);
+  }
+  return '';
 }
 
 // the asset store config of one doc page: its file when it exists, its
@@ -405,10 +463,10 @@ function assetDocPageRead(input: AssetDocPageInput, rootAbsPathByPath: Map<strin
   if (content.folderList !== undefined && !Array.isArray(content.folderList)) {
     throw new Error(`[doc-source] "folderList" of the asset store config ${configFile} must be a list of source paths (~root/path)`);
   }
-  for (const item of content.folderList ?? []) {
+  for (const one of content.folderList ?? []) {
     // the former form { path, isDefault } is still read. a local path is a
     // root of this doc page
-    const pathText = sourcePathFullGet(sourcePathNormalize(typeof item === 'string' ? item : String(item?.path ?? '')), input.alias);
+    const pathText = sourcePathFullGet(sourcePathNormalize(typeof one === 'string' ? one : String(one?.path ?? '')), input.alias);
     if (pathText === '') continue;
     const problem = assetFolderPathProblemGet(pathText, rootAbsPathByPath);
     if (problem) {
@@ -417,7 +475,7 @@ function assetDocPageRead(input: AssetDocPageInput, rootAbsPathByPath: Map<strin
     }
     if (docPage.folderList.includes(pathText)) continue;
     docPage.folderList.push(pathText);
-    if (typeof item === 'object' && item?.isDefault === true && docPage.folderDefault === '') docPage.folderDefault = pathText;
+    if (typeof one === 'object' && one?.isDefault === true && docPage.folderDefault === '') docPage.folderDefault = pathText;
   }
   if (typeof content.folderDefault === 'string' && content.folderDefault.trim() !== '') {
     const folderDefault = sourcePathFullGet(sourcePathNormalize(content.folderDefault), input.alias);
@@ -487,8 +545,8 @@ function pathRelativeGet(filePath: string, configDir: string): string {
 export function assetConfigTextBuild(folderList: string[], folderDefault: string): string {
   return [
     '# the asset store config of this doc page (doc_page_impl_asset.md): the folders',
-    '# its asset objects live in, as source paths (~root/path, a root of this doc',
-    '# page; ~page:root/path names a root of another doc page). a new object of a',
+    '# its asset items live in, as source paths (~root/path, a root of this doc',
+    '# page; ~page:root/path names a root of another doc page). a new item of a',
     '# document of this doc page is created in folderDefault. rewritten in place by',
     '# the settings panel of the page (Asset service tab).',
     'folderList:',
@@ -509,15 +567,15 @@ export function assetConfigTextApply(text: string, folderList: string[], folderD
   return lineOperationApply(textList, defaultResult.data.operation);
 }
 
-// ---------- the folder name of an object ----------
+// ---------- the folder name of an item ----------
 
-// {objectId}--{name}, or {objectId} alone for an object without a name. A folder name holds
+// {itemId}--{name}, or {itemId} alone for an item without a name. A folder name holds
 // ASCII only, whatever the name is, since other characters are what file systems, archives and
 // other machines disagree on: the rest of a name is left out of its folder, and stays in
-// object.yaml (doc_page_impl_asset.md#stores-objects-versions)
-export function objectDirNameBuild(objectId: string, name: string): string {
+// item.yaml (doc_page_impl_asset.md#stores-items-versions)
+export function itemDirNameBuild(itemId: string, name: string): string {
   const nameAscii = dirNameAsciiBuild(name);
-  return nameAscii ? `${objectId}${ASSET_DIR_SEPARATOR}${nameAscii}` : objectId;
+  return nameAscii ? `${itemId}${ASSET_DIR_SEPARATOR}${nameAscii}` : itemId;
 }
 
 // what of a name can go in a folder name: a name in ASCII as it is; in any other, its
@@ -527,11 +585,11 @@ function dirNameAsciiBuild(name: string): string {
   return name.replace(/[^\x20-\x7E]+/g, '-').replace(/^[-\s.]+|[-\s.]+$/g, '');
 }
 
-// the id part of a folder name; '' when the folder is not an object's
-export function objectIdFromDirName(dirName: string): string {
+// the id part of a folder name; '' when the folder is not an item's
+export function itemIdFromDirName(dirName: string): string {
   const indexSeparator = dirName.indexOf(ASSET_DIR_SEPARATOR);
-  const objectId = indexSeparator === -1 ? dirName : dirName.slice(0, indexSeparator);
-  return idMs48Is(objectId) ? objectId : '';
+  const itemId = indexSeparator === -1 ? dirName : dirName.slice(0, indexSeparator);
+  return idMs48Is(itemId) ? itemId : '';
 }
 
 // a name as the store accepts it: trimmed, at most ASSET_NAME_LENGTH_MAX
@@ -549,44 +607,61 @@ export function nameNormalize(nameInput: unknown): string {
   return name;
 }
 
+// where an item's folder lies, for the record of a move
+function placeTextBuild(folder: string, groupPath: string): string {
+  return groupPath ? `${folder}/${groupPath}` : folder;
+}
+
+// a folder moved; folders of two disks cannot be renamed one into the other
+function dirMove(dirFrom: string, dirTo: string) {
+  try {
+    fs.renameSync(dirFrom, dirTo);
+  } catch (error: any) {
+    if (error?.code !== 'EXDEV') throw error;
+    fs.cpSync(dirFrom, dirTo, { recursive: true });
+    fs.rmSync(dirFrom, { recursive: true, force: true });
+  }
+}
+
 // ---------- the store ----------
 
 export function assetStoreCreate(config: AssetStoreConfig) {
   const folderList = config.folderList;
   const folderDefault = folderList.find((folder) => folder.isDefault);
-  const objectDirGet = (meta: AssetObjectMeta) => path.join(folderAbsGet(meta.folder), ...meta.dirName.split('/'));
-  const objectMetaPathGet = (meta: AssetObjectMeta) => path.join(objectDirGet(meta), ASSET_OBJECT_META_NAME);
-  const versionPathGet = (meta: AssetObjectMeta, versionId: string) => path.join(objectDirGet(meta), `${versionId}.${meta.fileExt}`);
+  const itemDirGet = (meta: AssetItemMeta) => path.join(folderAbsGet(meta.folder), ...meta.dirName.split('/'));
+  const itemMetaPathGet = (meta: AssetItemMeta) => path.join(itemDirGet(meta), ASSET_ITEM_META_NAME);
+  const versionPathGet = (meta: AssetItemMeta, versionId: string) => path.join(itemDirGet(meta), `${versionId}.${meta.fileExt}`);
   // always yaml, whatever the extension of the data file
-  const versionMetadataPathGet = (meta: AssetObjectMeta, versionId: string) => path.join(objectDirGet(meta), `${versionId}.metadata.yaml`);
+  const versionMetadataPathGet = (meta: AssetItemMeta, versionId: string) => path.join(itemDirGet(meta), `${versionId}.metadata.yaml`);
 
   function folderAbsGet(folderPath: string): string {
-    const folder = folderList.find((item) => item.path === folderPath);
+    const folder = folderList.find((one) => one.path === folderPath);
     if (!folder) throw new AssetError(-3, `asset folder not in the store: ${folderPath}`);
     return folder.pathAbs;
   }
 
-  // the object folders of a store folder: [{ dirName, objectId, groupPath }],
+  // the item folders of a store folder: [{ dirName, itemId, groupPath }],
   // a folder before the folders inside it, in name order. a folder holding
-  // object.yaml whose name starts with an id is an object (nothing inside it
-  // is read for objects); any other folder is a group and is read in turn,
+  // item.yaml whose name starts with an id is an item (nothing inside it
+  // is read for items); any other folder is a group and is read in turn,
   // to ASSET_GROUP_DEPTH_MAX levels; dot folders are never read
-  function objectDirList(folder: AssetFolder): { dirName: string; objectId: string; groupPath: string }[] {
-    const list: { dirName: string; objectId: string; groupPath: string }[] = [];
+  function itemDirList(folder: AssetFolder): { dirName: string; itemId: string; groupPath: string }[] {
+    const list: { dirName: string; itemId: string; groupPath: string }[] = [];
     const visit = (groupPath: string, depth: number) => {
       const dirAbs = groupPath ? path.join(folder.pathAbs, ...groupPath.split('/')) : folder.pathAbs;
       if (!fs.existsSync(dirAbs)) return;
-      const itemList = fs.readdirSync(dirAbs, { withFileTypes: true })
-        .filter((item) => item.isDirectory() && !item.name.startsWith('.'))
+      const entryList = fs.readdirSync(dirAbs, { withFileTypes: true })
+        .filter((one) => one.isDirectory() && !one.name.startsWith('.'))
         .sort((a, b) => a.name.localeCompare(b.name));
       const groupList: string[] = [];
-      for (const item of itemList) {
-        const dirName = groupPath ? `${groupPath}/${item.name}` : item.name;
-        const objectId = objectIdFromDirName(item.name);
-        if (objectId && fs.existsSync(path.join(dirAbs, item.name, ASSET_OBJECT_META_NAME))) {
-          list.push({ dirName, objectId, groupPath });
+      for (const one of entryList) {
+        const dirName = groupPath ? `${groupPath}/${one.name}` : one.name;
+        const itemId = itemIdFromDirName(one.name);
+        if (itemId && fs.existsSync(path.join(dirAbs, one.name, ASSET_ITEM_META_NAME))) {
+          list.push({ dirName, itemId, groupPath });
           continue;
         }
+        if (itemId && fs.existsSync(path.join(dirAbs, one.name, ASSET_ITEM_META_NAME_FORMER))) assetFormerWarn(folder.pathAbs);
         groupList.push(dirName);
       }
       if (depth >= ASSET_GROUP_DEPTH_MAX) return;
@@ -596,9 +671,9 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     return list;
   }
 
-  // the folder of an object in one store folder; undefined when it is not there
-  function objectDirFind(folder: AssetFolder, objectId: string): string | undefined {
-    return objectDirList(folder).find((item) => item.objectId === objectId)?.dirName;
+  // the folder of an item in one store folder; undefined when it is not there
+  function itemDirFind(folder: AssetFolder, itemId: string): string | undefined {
+    return itemDirList(folder).find((one) => one.itemId === itemId)?.dirName;
   }
 
   // ---------- the folders ----------
@@ -607,7 +682,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     return folderList.map((folder) => ({
       ...folder,
       isExists: fs.existsSync(folder.pathAbs),
-      objectCount: objectDirList(folder).length,
+      itemCount: itemDirList(folder).length,
     }));
   }
 
@@ -619,7 +694,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   // the folders of one doc page rewritten in its asset store config file, in
   // place (a file that does not exist yet is created); the folders are
   // created on disk (a folder added from the page is meant to receive
-  // objects). rootAbsPathByPath: the roots of the page, to check the paths.
+  // items). rootAbsPathByPath: the roots of the page, to check the paths.
   // a path in the local form is a root of the doc page; the file is written
   // in that form for the doc page's own roots. the store created from the
   // config read again sees the new folders.
@@ -627,12 +702,12 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     input: { configFile: string; folderList: string[]; folderDefault?: string },
     rootAbsPathByPath: Map<string, string>,
   ): void {
-    const docPage = config.docPageList.find((item) => item.configFileRelative === input.configFile);
+    const docPage = config.docPageList.find((one) => one.configFileRelative === input.configFile);
     if (!docPage) throw new AssetError(-3, `not the asset store config of a doc page of this page: ${input.configFile}`);
     if (docPage.isReadOnly) throw new AssetError(-4, `the asset folders of the doc page "${docPage.alias}" are read-only: it is a package`);
     const folderListNext: string[] = [];
-    for (const item of input.folderList) {
-      const pathText = sourcePathFullGet(sourcePathNormalize(String(item ?? '')), docPage.alias);
+    for (const one of input.folderList) {
+      const pathText = sourcePathFullGet(sourcePathNormalize(String(one ?? '')), docPage.alias);
       if (pathText === '' || folderListNext.includes(pathText)) continue;
       const problem = assetFolderPathProblemGet(pathText, rootAbsPathByPath);
       if (problem) throw new AssetError(-1, problem);
@@ -650,7 +725,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     fs.mkdirSync(path.dirname(docPage.configFile), { recursive: true });
     fileWriteSafe(docPage.configFile, textNext);
     // a folder named is made only with folderManaged.isLazy off; otherwise
-    // the first object written to it makes it (objectCreate)
+    // the first item written to it makes it (itemCreate)
     if (config.isFolderLazy === false) {
       for (const folderPath of folderListNext) {
         const pathAbs = sourcePathAbsGet(folderPath, rootAbsPathByPath);
@@ -659,44 +734,65 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     }
   }
 
+  // a folder a new object owns, known to this store from now on (the config
+  // read again finds it by the object's file); nothing is made on disk until
+  // the first item is written to it
+  function folderOwnedAdd(input: { pathAbs: string; owner: AssetOwner; docPageAlias: string }): AssetFolder {
+    const docPage = config.docPageList.find((one) => one.alias === input.docPageAlias);
+    const folderPath = docPage ? sourcePathOfAbsGet(input.pathAbs, docPage, config.rootAbsPathByPath ?? new Map()) : '';
+    if (!docPage || !folderPath) throw new AssetError(-1, `no root of the doc page ${input.docPageAlias} holds ${input.pathAbs}`);
+    const folder: AssetFolder = { path: folderPath, pathAbs: input.pathAbs, isDefault: false, docEntryFile: docPage.entryFile, isReadOnly: docPage.isReadOnly === true, owner: input.owner };
+    folderList.push(folder);
+    return folder;
+  }
+
+  // a place in a folder owned by an object is its layer's: asLayer says which layer asks
+  // (frontend, of the references frontend:{id})
+  function folderOwnerPlaceCheck(folderPath: string, asLayer: string | undefined, what: string) {
+    const owner = folderList.find((one) => one.path === folderPath)?.owner;
+    if (!owner) return;
+    if (asLayer && owner.ref.startsWith(`${asLayer}:`)) return;
+    throw new AssetError(-5, `${folderPath} is owned by ${owner.ref}: ${what} goes through the layer of that object (doc_page_impl_asset.md#folders-owned-by-an-object)`);
+  }
+
   // a write into the folder of a read-only doc page is refused here, the one
-  // place every write of the store passes (objectWriteGuard below)
+  // place every write of the store passes (itemWriteGuard below)
   function folderWritableCheck(folderPath: string) {
-    if (folderList.find((item) => item.path === folderPath)?.isReadOnly) {
+    if (folderList.find((one) => one.path === folderPath)?.isReadOnly) {
       throw new AssetError(-4, `the asset folder ${folderPath} is read-only: its doc page is a package`);
     }
   }
-  function objectWriteGuard<Args extends any[], Result>(write: (objectId: string, ...rest: Args) => Result) {
-    return (objectId: string, ...rest: Args): Result => {
-      folderWritableCheck(objectGet(objectId).folder);
-      return write(objectId, ...rest);
+  function itemWriteGuard<Args extends any[], Result>(write: (itemId: string, ...rest: Args) => Result) {
+    return (itemId: string, ...rest: Args): Result => {
+      folderWritableCheck(itemGet(itemId).folder);
+      return write(itemId, ...rest);
     };
   }
 
-  // the folder a new object goes to: the one named, else the default folder
+  // the folder a new item goes to: the one named, else the default folder
   // of the doc page the document it is created from belongs to, else the
   // default folder of the store
   function folderForCreateGet(folderPath: string | undefined, docPath: string | undefined): AssetFolder | undefined {
-    if (folderPath) return folderList.find((item) => item.path === sourcePathFullGet(folderPath, docPageAliasOfPath(docPath)));
+    if (folderPath) return folderList.find((one) => one.path === sourcePathFullGet(folderPath, docPageAliasOfPath(docPath)));
     const docPageAlias = docPageAliasOfPath(docPath);
-    const docPage = docPageAlias ? config.docPageList.find((item) => item.alias === docPageAlias) : undefined;
-    const folderOfDocPage = docPage ? folderList.find((item) => item.path === docPage.folderDefault) : undefined;
+    const docPage = docPageAlias ? config.docPageList.find((one) => one.alias === docPageAlias) : undefined;
+    const folderOfDocPage = docPage ? folderList.find((one) => one.path === docPage.folderDefault) : undefined;
     return folderOfDocPage ?? folderDefault;
   }
 
   // ---------- reading ----------
 
-  // every object of every folder; an id present in two folders is read from
+  // every item of every folder; an id present in two folders is read from
   // the first folder that has it (the folder order of asset.yaml)
-  function objectList(): AssetObjectMeta[] {
-    const metaList: AssetObjectMeta[] = [];
-    const objectIdSeen = new Set<string>();
+  function itemList(): AssetItemMeta[] {
+    const metaList: AssetItemMeta[] = [];
+    const itemIdSeen = new Set<string>();
     for (const folder of folderList) {
-      for (const item of objectDirList(folder)) {
-        if (objectIdSeen.has(item.objectId)) continue;
-        const meta = objectMetaRead(folder, item.dirName);
+      for (const one of itemDirList(folder)) {
+        if (itemIdSeen.has(one.itemId)) continue;
+        const meta = itemMetaRead(folder, one.dirName);
         if (!meta) continue;
-        objectIdSeen.add(item.objectId);
+        itemIdSeen.add(one.itemId);
         metaList.push(meta);
       }
     }
@@ -704,40 +800,40 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     return metaList;
   }
 
-  function objectGet(objectId: string): AssetObjectMeta {
-    if (!idMs48Is(objectId)) throw new AssetError(-1, `not an object id: ${String(objectId)}`);
+  function itemGet(itemId: string): AssetItemMeta {
+    if (!idMs48Is(itemId)) throw new AssetError(-1, `not an item id: ${String(itemId)}`);
     for (const folder of folderList) {
-      const dirName = objectDirFind(folder, objectId);
+      const dirName = itemDirFind(folder, itemId);
       if (!dirName) continue;
-      const meta = objectMetaRead(folder, dirName);
+      const meta = itemMetaRead(folder, dirName);
       if (meta) return meta;
     }
-    throw new AssetError(-3, `asset object not found: ${objectId}`);
+    throw new AssetError(-3, `asset item not found: ${itemId}`);
   }
 
-  // the object with that name; names are unique in the store
-  function objectGetByName(name: string): AssetObjectMeta {
+  // the item with that name; names are unique in the store
+  function itemGetByName(name: string): AssetItemMeta {
     const nameWanted = nameNormalize(name);
     if (!nameWanted) throw new AssetError(-1, 'name is required');
-    const meta = objectList().find((item) => item.name === nameWanted);
-    if (!meta) throw new AssetError(-3, `asset object not found by name: ${nameWanted}`);
+    const meta = itemList().find((one) => one.name === nameWanted);
+    if (!meta) throw new AssetError(-3, `asset item not found by name: ${nameWanted}`);
     return meta;
   }
 
   // by id when the key has one, else by name
-  function objectFind(key: AssetObjectKey): AssetObjectMeta {
-    if (key.objectId) return objectGet(key.objectId);
-    if (key.name) return objectGetByName(key.name);
-    throw new AssetError(-1, 'objectId or name is required');
+  function itemFind(key: AssetItemKey): AssetItemMeta {
+    if (key.itemId) return itemGet(key.itemId);
+    if (key.name) return itemGetByName(key.name);
+    throw new AssetError(-1, 'itemId or name is required');
   }
 
   // versionId 'head' or '' reads the head version
-  function versionDataGet(objectId: string, versionIdRequested = 'head'): AssetVersionData {
-    const meta = objectGet(objectId);
+  function versionDataGet(itemId: string, versionIdRequested = 'head'): AssetVersionData {
+    const meta = itemGet(itemId);
     return versionDataGetOf(meta, versionIdRequested);
   }
 
-  function versionDataGetOf(meta: AssetObjectMeta, versionIdRequested = 'head'): AssetVersionData {
+  function versionDataGetOf(meta: AssetItemMeta, versionIdRequested = 'head'): AssetVersionData {
     const versionId = versionIdResolve(meta, versionIdRequested);
     const filePath = versionPathGet(meta, versionId);
     if (!fs.existsSync(filePath)) {
@@ -750,7 +846,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
 
   // the mapping of {versionId}.metadata.yaml; {} when the file is missing or
   // does not hold a mapping
-  function versionMetadataRead(meta: AssetObjectMeta, versionId: string): AssetVersionMetadata {
+  function versionMetadataRead(meta: AssetItemMeta, versionId: string): AssetVersionMetadata {
     const filePath = versionMetadataPathGet(meta, versionId);
     if (!fs.existsSync(filePath)) return {};
     const content = yamlParse(fs.readFileSync(filePath, 'utf-8'));
@@ -759,7 +855,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   }
 
   // an empty mapping removes the file (its previous content is kept as .bak)
-  function versionMetadataWrite(meta: AssetObjectMeta, versionId: string, metadata: AssetVersionMetadata) {
+  function versionMetadataWrite(meta: AssetItemMeta, versionId: string, metadata: AssetVersionMetadata) {
     const filePath = versionMetadataPathGet(meta, versionId);
     if (Object.keys(metadata).length === 0) {
       if (fs.existsSync(filePath)) {
@@ -773,33 +869,34 @@ export function assetStoreCreate(config: AssetStoreConfig) {
 
   // the metadata of one version replaced; versionId 'head' or '' is the head.
   // it describes the version's data, so a locked version keeps it, like its bytes
-  function versionMetadataSet(objectId: string, versionIdRequested: string, metadataInput: unknown): { object: AssetObjectMeta; version: AssetVersionData } {
+  function versionMetadataSet(itemId: string, versionIdRequested: string, metadataInput: unknown): { item: AssetItemMeta; version: AssetVersionData } {
     const metadata = versionMetadataNormalize(metadataInput);
-    const meta = objectGet(objectId);
-    objectUnlockedCheck(meta);
+    const meta = itemGet(itemId);
+    itemUnlockedCheck(meta);
     const versionId = versionIdResolve(meta, versionIdRequested);
     versionUnlockedCheck(meta, versionId, 'given other metadata');
     versionMetadataWrite(meta, versionId, metadata);
     meta.eventList.push({ eventType: 'versionMetadataSet', time: timeTextGet(), versionId });
-    objectMetaWrite(meta);
-    return { object: meta, version: versionDataGetOf(meta, versionId) };
+    itemMetaWrite(meta);
+    return { item: meta, version: versionDataGetOf(meta, versionId) };
   }
 
   // ---------- writing ----------
 
-  // a new object with its first version. when the name is the name of an
-  // object of the store, that object is returned (isCreated false) and
-  // nothing is written: a name means one object.
-  //   folder           the folder the object is created in (its source path, as in asset.yaml)
-  //   docPath          absent folder: the document the object is created from; the object goes
+  // a new item with its first version. when the name is the name of an
+  // item of the store, that item is returned (isCreated false) and
+  // nothing is written: a name means one item.
+  //   folder           the folder the item is created in (its source path, as in asset.yaml)
+  //   docPath          absent folder: the document the item is created from; the item goes
   //                    to the default folder of that document's doc page (the store's default otherwise)
   //   dependencyList   what the data of the first version depends on (none when absent)
-  //   saveMode         written into the object when given; absent: the key is not written
+  //   saveMode         written into the item when given; absent: the key is not written
   //   versionMetadata  the metadata of the first version (none when absent)
   //   component        { name }: the component the data is for; absent: not written
   //   groupPath        the group folders it is created in ("a/b", made when missing); '' or absent: the top
   //   owner            { ref, role? }: the object it is a part of; absent: not written
-  function objectCreate(input: {
+  //   asLayer          the layer asking, for a folder an object owns (folderOwnerPlaceCheck)
+  function itemCreate(input: {
     name?: string;
     lang?: string;
     contentType?: string;
@@ -814,7 +911,8 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     component?: unknown;
     groupPath?: string;
     owner?: unknown;
-  }): { object: AssetObjectMeta; version: AssetVersionData; isCreated: boolean } {
+    asLayer?: string;
+  }): { item: AssetItemMeta; version: AssetVersionData; isCreated: boolean } {
     if (!Buffer.isBuffer(input.data)) throw new AssetError(-1, 'data is required');
     const groupPath = groupPathNormalize(input.groupPath);
     const owner = ownerNormalize(input.owner ?? null);
@@ -826,23 +924,24 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     }
     const name = nameNormalize(input.name);
     if (name) {
-      const metaExisting = objectList().find((item) => item.name === name);
-      if (metaExisting) return { object: metaExisting, version: versionDataGetOf(metaExisting, 'head'), isCreated: false };
+      const metaExisting = itemList().find((one) => one.name === name);
+      if (metaExisting) return { item: metaExisting, version: versionDataGetOf(metaExisting, 'head'), isCreated: false };
     }
     const folder = folderForCreateGet(input.folder, input.docPath);
     if (folder) folderWritableCheck(folder.path);
     if (!folder) {
       throw new AssetError(-1, input.folder ? `asset folder not in the store: ${input.folder}` : 'the local store has no folder');
     }
+    folderOwnerPlaceCheck(folder.path, input.asLayer, 'a new item');
     const lang = langNormalize(input.lang);
     fs.mkdirSync(folder.pathAbs, { recursive: true });
-    const isObjectIdUsed = (id: string) => folderList.some((item) => objectDirFind(item, id) !== undefined);
-    const objectId = idMs48Create(isObjectIdUsed);
+    const isItemIdUsed = (id: string) => folderList.some((one) => itemDirFind(one, id) !== undefined);
+    const itemId = idMs48Create(isItemIdUsed);
     const versionId = idMs48Create();
     const time = timeTextGet();
     const fileExt = fileExtNormalize(input.fileExt) || fileExtByLang[lang] || 'bin';
-    const meta: AssetObjectMeta = {
-      objectId,
+    const meta: AssetItemMeta = {
+      itemId,
       name,
       lang,
       contentType: String(input.contentType ?? '').trim() || contentTypeByLang[lang] || 'application/octet-stream',
@@ -854,43 +953,44 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       versionList: [versionMetaBuild(versionId, [], time, input.note, input.data, dependencyList)],
       eventList: [{ eventType: 'create', time, versionId }],
       folder: folder.path,
-      dirName: dirNameInGroupBuild(groupPath, objectDirNameBuild(objectId, name)),
+      dirName: dirNameInGroupBuild(groupPath, itemDirNameBuild(itemId, name)),
       groupPath,
     };
     if (component) meta.component = component;
     if (owner) meta.owner = owner;
+    if (folder.owner) meta.folderOwner = folder.owner;
     if (input.saveMode === 'inPlace' || input.saveMode === 'newVersion') meta.saveMode = input.saveMode;
-    fs.mkdirSync(objectDirGet(meta), { recursive: true });
+    fs.mkdirSync(itemDirGet(meta), { recursive: true });
     fileWriteSafe(versionPathGet(meta, versionId), input.data);
     versionMetadataWrite(meta, versionId, versionMetadata);
-    objectMetaWrite(meta);
-    return { object: meta, version: versionDataBuild(versionId, input.data, versionMetadata), isCreated: true };
+    itemMetaWrite(meta);
+    return { item: meta, version: versionDataBuild(versionId, input.data, versionMetadata), isCreated: true };
   }
 
   // hashBase: the hash of the head data the caller changed; a different
   // head on disk means somebody else wrote meanwhile (code -2).
   //   mode   inPlace: the head version's data is rewritten (its .bak keeps the old one)
   //          newVersion: a new version is created from the head and becomes the head
-  //          absent: the object's saveMode, inPlace when none is written
+  //          absent: the item's saveMode, inPlace when none is written
   //   dependencyList   what the new data depends on; absent: the list of the
   //                    version the data replaces or is made from is kept
   //   versionMetadata  the metadata of the new data; absent: the metadata of
   //                    the version the data replaces or is made from is kept
-  function objectUpdate(input: {
-    objectId: string;
+  function itemUpdate(input: {
+    itemId: string;
     hashBase: string;
     data: Buffer;
     mode?: AssetSaveMode;
     note?: string;
     dependencyList?: unknown;
     versionMetadata?: unknown;
-  }): { object: AssetObjectMeta; version: AssetVersionData } {
+  }): { item: AssetItemMeta; version: AssetVersionData } {
     if (!Buffer.isBuffer(input.data)) throw new AssetError(-1, 'data is required');
     const dependencyListNext = input.dependencyList === undefined ? undefined : dependencyListNormalize(input.dependencyList);
     const versionMetadataNext = input.versionMetadata === undefined ? undefined : versionMetadataNormalize(input.versionMetadata);
-    const meta = objectGet(input.objectId);
-    objectUnlockedCheck(meta);
-    if (meta.isDeleted) throw new AssetError(-1, 'the object is deleted; restore it first');
+    const meta = itemGet(input.itemId);
+    itemUnlockedCheck(meta);
+    if (meta.isDeleted) throw new AssetError(-1, 'the item is deleted; restore it first');
     const mode = input.mode ?? saveModeGet(meta);
     if (mode !== 'inPlace' && mode !== 'newVersion') {
       throw new AssetError(-1, `mode must be inPlace or newVersion, got ${String(mode)}`);
@@ -906,7 +1006,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     const versionMetadata = versionMetadataNext ?? head.metadata;
     if (mode === 'newVersion') {
       versionId = idMs48Create((id) => meta.versionList.some((version) => version.versionId === id));
-      const dependencyList = dependencyListNext ?? versionHead.dependencyList.map((item) => ({ ...item }));
+      const dependencyList = dependencyListNext ?? versionHead.dependencyList.map((one) => ({ ...one }));
       meta.versionList.push(versionMetaBuild(versionId, [head.versionId], time, input.note, input.data, dependencyList));
       meta.versionIdHead = versionId;
       meta.eventList.push({ eventType: 'versionCreate', time, versionId });
@@ -921,52 +1021,52 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     // a new version always gets its own file; in place, the file is written
     // only when the update names metadata
     if (mode === 'newVersion' || versionMetadataNext !== undefined) versionMetadataWrite(meta, versionId, versionMetadata);
-    objectMetaWrite(meta);
-    return { object: meta, version: versionDataBuild(versionId, input.data, versionMetadata) };
+    itemMetaWrite(meta);
+    return { item: meta, version: versionDataBuild(versionId, input.data, versionMetadata) };
   }
 
-  // soft delete: the folder and every version stay; the object reads as
+  // soft delete: the folder and every version stay; the item reads as
   // deleted until it is restored
-  function objectDelete(objectId: string): AssetObjectMeta {
-    const meta = objectGet(objectId);
-    objectUnlockedCheck(meta);
+  function itemDelete(itemId: string): AssetItemMeta {
+    const meta = itemGet(itemId);
+    itemUnlockedCheck(meta);
     meta.isDeleted = true;
     meta.eventList.push({ eventType: 'delete', time: timeTextGet() });
-    objectMetaWrite(meta);
+    itemMetaWrite(meta);
     return meta;
   }
 
-  function objectRestore(objectId: string): AssetObjectMeta {
-    const meta = objectGet(objectId);
-    objectUnlockedCheck(meta);
+  function itemRestore(itemId: string): AssetItemMeta {
+    const meta = itemGet(itemId);
+    itemUnlockedCheck(meta);
     meta.isDeleted = false;
     meta.eventList.push({ eventType: 'restore', time: timeTextGet() });
-    objectMetaWrite(meta);
+    itemMetaWrite(meta);
     return meta;
   }
 
-  // name, lang, content type and save mode of the object. the file extension
+  // name, lang, content type and save mode of the item. the file extension
   // of the data files is decided at creation and kept, so nothing is renamed
-  // for it; a new name renames the object's folder, and must not be the
-  // name of another object. saveMode null removes the key (the object falls
+  // for it; a new name renames the item's folder, and must not be the
+  // name of another item. saveMode null removes the key (the item falls
   // back to in place); component null removes the component the data is for.
-  function objectMetaSet(
-    objectId: string,
+  function itemMetaSet(
+    itemId: string,
     change: { name?: string; lang?: string; contentType?: string; saveMode?: AssetSaveMode | null; component?: unknown; owner?: unknown },
-  ): AssetObjectMeta {
-    const meta = objectGet(objectId);
-    objectUnlockedCheck(meta);
+  ): AssetItemMeta {
+    const meta = itemGet(itemId);
+    itemUnlockedCheck(meta);
     if (change.name !== undefined) {
       const nameNext = nameNormalize(change.name);
       if (nameNext !== meta.name) {
         if (nameNext) {
-          const metaOther = objectList().find((item) => item.name === nameNext && item.objectId !== meta.objectId);
-          if (metaOther) throw new AssetError(-1, `the name "${nameNext}" is taken by object ${metaOther.objectId}`);
+          const metaOther = itemList().find((one) => one.name === nameNext && one.itemId !== meta.itemId);
+          if (metaOther) throw new AssetError(-1, `the name "${nameNext}" is taken by item ${metaOther.itemId}`);
         }
-        const dirPrevious = objectDirGet(meta);
+        const dirPrevious = itemDirGet(meta);
         meta.name = nameNext;
-        meta.dirName = dirNameInGroupBuild(meta.groupPath, objectDirNameBuild(meta.objectId, nameNext));
-        fs.renameSync(dirPrevious, objectDirGet(meta));
+        meta.dirName = dirNameInGroupBuild(meta.groupPath, itemDirNameBuild(meta.itemId, nameNext));
+        fs.renameSync(dirPrevious, itemDirGet(meta));
       }
     }
     if (change.lang !== undefined) meta.lang = langNormalize(change.lang);
@@ -987,52 +1087,70 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       else delete meta.owner;
     }
     meta.eventList.push({ eventType: 'metaSet', time: timeTextGet() });
-    objectMetaWrite(meta);
+    itemMetaWrite(meta);
     return meta;
   }
 
-  // the object's folder moved into other group folders of its store folder
-  // ('' the top); the groups it needs are made, the one it left is removed
-  // when nothing is left in it. what the object is does not change: a group
-  // is only where its folder is
-  function objectMove(objectId: string, change: { groupPath: string }): AssetObjectMeta {
-    const meta = objectGet(objectId);
-    objectUnlockedCheck(meta);
+  // the item's folder moved into other groups ('' the top), of its store folder or of another
+  // one named by folder, of any doc page; the groups it needs are made, the one it left is
+  // removed when nothing is left in it. what the item is does not change: a group, like a store
+  // folder, is only where its folder is, and every reference names the item by its id or name.
+  // refused for a locked item, into a read-only folder, and in or out of a folder an object
+  // owns unless its layer asks (asLayer)
+  function itemMove(itemId: string, change: { groupPath: string; folder?: string; asLayer?: string }): AssetItemMeta {
+    const meta = itemGet(itemId);
+    itemUnlockedCheck(meta);
     const groupPath = groupPathNormalize(change.groupPath);
-    if (groupPath === meta.groupPath) return meta;
-    const dirPrevious = objectDirGet(meta);
+    const folderNext = change.folder ?? meta.folder;
+    if (groupPath === meta.groupPath && folderNext === meta.folder) return meta;
+    folderWritableCheck(folderNext);
+    folderOwnerPlaceCheck(meta.folder, change.asLayer, 'moving an item');
+    folderOwnerPlaceCheck(folderNext, change.asLayer, 'moving an item');
+    const dirPrevious = itemDirGet(meta);
+    const folderPrevious = meta.folder;
     const groupPathPrevious = meta.groupPath;
+    const placeFrom = placeTextBuild(meta.folder, meta.groupPath);
+    const dirNameNext = dirNameInGroupBuild(groupPath, path.basename(dirPrevious));
+    const dirNext = path.join(folderAbsGet(folderNext), ...dirNameNext.split('/'));
+    if (fs.existsSync(dirNext)) throw new AssetError(-1, `${dirNameNext} exists already in ${folderNext}`);
+    fs.mkdirSync(path.dirname(dirNext), { recursive: true });
+    dirMove(dirPrevious, dirNext);
+    meta.folder = folderNext;
     meta.groupPath = groupPath;
-    meta.dirName = dirNameInGroupBuild(groupPath, path.basename(dirPrevious));
-    fs.mkdirSync(path.dirname(objectDirGet(meta)), { recursive: true });
-    fs.renameSync(dirPrevious, objectDirGet(meta));
-    groupEmptyRemove(meta.folder, groupPathPrevious);
-    meta.eventList.push({ eventType: 'move', time: timeTextGet() });
-    objectMetaWrite(meta);
+    meta.dirName = dirNameNext;
+    const folderOwnerNext = folderList.find((one) => one.path === folderNext)?.owner;
+    if (folderOwnerNext) meta.folderOwner = folderOwnerNext;
+    else delete meta.folderOwner;
+    groupEmptyRemove(folderPrevious, groupPathPrevious);
+    meta.eventList.push({ eventType: 'move', time: timeTextGet(), placeFrom, placeTo: placeTextBuild(folderNext, groupPath) });
+    itemMetaWrite(meta);
     return meta;
   }
 
   // a group folder renamed or moved (groupPathFrom -> groupPathTo, both in
-  // the store folder folderPath); every object inside goes with it. refused
-  // when the target exists, or when a locked object is inside
-  function groupMove(folderPath: string, groupPathFromInput: string, groupPathToInput: string): void {
+  // the store folder folderPath); every item inside goes with it. refused
+  // when the target exists, or when a locked item is inside
+  function groupMove(folderPath: string, groupPathFromInput: string, groupPathToInput: string, options: { asLayer?: string } = {}): void {
     const groupPathFrom = groupPathNormalize(groupPathFromInput);
     const groupPathTo = groupPathNormalize(groupPathToInput);
     if (!groupPathFrom || !groupPathTo) throw new AssetError(-1, 'a group is named by a path of folders inside the store folder');
     if (groupPathFrom === groupPathTo) return;
+    folderWritableCheck(folderPath);
+    folderOwnerPlaceCheck(folderPath, options.asLayer, 'moving a group');
     const folderAbs = folderAbsGet(folderPath);
     const dirFrom = path.join(folderAbs, ...groupPathFrom.split('/'));
     const dirTo = path.join(folderAbs, ...groupPathTo.split('/'));
     if (!fs.existsSync(dirFrom)) return;
     if (fs.existsSync(dirTo)) throw new AssetError(-1, `the group ${groupPathTo} exists already`);
-    const folder = folderList.find((item) => item.path === folderPath)!;
-    for (const item of objectDirList(folder)) {
-      if (item.groupPath !== groupPathFrom && !item.groupPath.startsWith(`${groupPathFrom}/`)) continue;
-      const meta = objectMetaRead(folder, item.dirName);
-      if (meta?.isLocked) throw new AssetError(-1, `the object ${meta.objectId} in the group is locked`);
+    const folder = folderList.find((one) => one.path === folderPath)!;
+    for (const one of itemDirList(folder)) {
+      if (one.groupPath !== groupPathFrom && !one.groupPath.startsWith(`${groupPathFrom}/`)) continue;
+      const meta = itemMetaRead(folder, one.dirName);
+      if (meta?.isLocked) throw new AssetError(-1, `the item ${meta.itemId} in the group is locked`);
     }
     fs.mkdirSync(path.dirname(dirTo), { recursive: true });
     fs.renameSync(dirFrom, dirTo);
+    groupEmptyRemove(folderPath, groupPathFrom.split('/').slice(0, -1).join('/'));
   }
 
   // a group folder that holds nothing any more (no file, no folder) is removed,
@@ -1050,38 +1168,38 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   }
 
   // the head moves to an existing version; a later new version branches from it
-  function versionCheckout(objectId: string, versionId: string): AssetObjectMeta {
-    const meta = objectGet(objectId);
-    objectUnlockedCheck(meta);
+  function versionCheckout(itemId: string, versionId: string): AssetItemMeta {
+    const meta = itemGet(itemId);
+    itemUnlockedCheck(meta);
     versionMetaGet(meta, versionId);
     meta.versionIdHead = versionId;
     meta.eventList.push({ eventType: 'checkout', time: timeTextGet(), versionId });
-    objectMetaWrite(meta);
+    itemMetaWrite(meta);
     return meta;
   }
 
   // removes a version and its data file. the head cannot be removed. the
   // versions made from the removed one now name its own previous versions,
   // so the ancestry of every remaining version is kept.
-  function versionDelete(objectId: string, versionId: string): AssetObjectMeta {
-    const meta = objectGet(objectId);
-    objectUnlockedCheck(meta);
+  function versionDelete(itemId: string, versionId: string): AssetItemMeta {
+    const meta = itemGet(itemId);
+    itemUnlockedCheck(meta);
     const version = versionMetaGet(meta, versionId);
     versionUnlockedCheck(meta, versionId, 'deleted');
     if (meta.versionIdHead === versionId) throw new AssetError(-1, 'the head version cannot be deleted; set another head first');
-    if (meta.versionList.length === 1) throw new AssetError(-1, 'the only version of an object cannot be deleted; delete the object');
-    meta.versionList = meta.versionList.filter((item) => item.versionId !== versionId);
-    for (const item of meta.versionList) {
-      if (!item.versionIdPrevList.includes(versionId)) continue;
+    if (meta.versionList.length === 1) throw new AssetError(-1, 'the only version of an item cannot be deleted; delete the item');
+    meta.versionList = meta.versionList.filter((one) => one.versionId !== versionId);
+    for (const one of meta.versionList) {
+      if (!one.versionIdPrevList.includes(versionId)) continue;
       const prevListNext: string[] = [];
-      for (const prevId of item.versionIdPrevList) {
+      for (const prevId of one.versionIdPrevList) {
         const replacementList = prevId === versionId ? version.versionIdPrevList : [prevId];
         for (const id of replacementList) if (!prevListNext.includes(id)) prevListNext.push(id);
       }
-      item.versionIdPrevList = prevListNext;
+      one.versionIdPrevList = prevListNext;
     }
     meta.eventList.push({ eventType: 'versionDelete', time: timeTextGet(), versionId });
-    objectMetaWrite(meta);
+    itemMetaWrite(meta);
     const filePath = versionPathGet(meta, versionId);
     const metadataPath = versionMetadataPathGet(meta, versionId);
     for (const file of [filePath, `${filePath}.bak`, metadataPath, `${metadataPath}.bak`]) {
@@ -1090,96 +1208,96 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     return meta;
   }
 
-  // the object lock: the one write a locked object accepts is its unlock
-  function objectLockSet(objectId: string, isLocked: boolean): AssetObjectMeta {
-    const meta = objectGet(objectId);
+  // the item lock: the one write a locked item accepts is its unlock
+  function itemLockSet(itemId: string, isLocked: boolean): AssetItemMeta {
+    const meta = itemGet(itemId);
     if (typeof isLocked !== 'boolean') throw new AssetError(-1, 'isLocked must be true or false');
     if (meta.isLocked === isLocked) return meta;
     meta.isLocked = isLocked;
     meta.eventList.push({ eventType: isLocked ? 'lock' : 'unlock', time: timeTextGet() });
-    objectMetaWrite(meta);
+    itemMetaWrite(meta);
     return meta;
   }
 
-  // the lock of one version; changing it is a change of the object, so a
-  // locked object refuses it
-  function versionLockSet(objectId: string, versionId: string, isLocked: boolean): AssetObjectMeta {
-    const meta = objectGet(objectId);
-    objectUnlockedCheck(meta);
+  // the lock of one version; changing it is a change of the item, so a
+  // locked item refuses it
+  function versionLockSet(itemId: string, versionId: string, isLocked: boolean): AssetItemMeta {
+    const meta = itemGet(itemId);
+    itemUnlockedCheck(meta);
     if (typeof isLocked !== 'boolean') throw new AssetError(-1, 'isLocked must be true or false');
     const version = versionMetaGet(meta, versionId);
     if (version.isLocked === isLocked) return meta;
     version.isLocked = isLocked;
     meta.eventList.push({ eventType: isLocked ? 'lock' : 'unlock', time: timeTextGet(), versionId });
-    objectMetaWrite(meta);
+    itemMetaWrite(meta);
     return meta;
   }
 
   // ---------- dependencies ----------
 
   // what the data of a version depends on; versionId 'head' or '' reads the head
-  function dependencyListGet(objectId: string, versionIdRequested = 'head'): { versionId: string; dependencyList: AssetDependency[] } {
-    const meta = objectGet(objectId);
+  function dependencyListGet(itemId: string, versionIdRequested = 'head'): { versionId: string; dependencyList: AssetDependency[] } {
+    const meta = itemGet(itemId);
     const versionId = versionIdResolve(meta, versionIdRequested);
     return { versionId, dependencyList: versionMetaGet(meta, versionId).dependencyList };
   }
 
   // the list replaced. the dependencies describe the data of the version, so
   // a locked version keeps them as they are, like its bytes.
-  function dependencyListSet(objectId: string, versionIdRequested: string, dependencyListInput: unknown): AssetObjectMeta {
-    const meta = objectGet(objectId);
-    objectUnlockedCheck(meta);
+  function dependencyListSet(itemId: string, versionIdRequested: string, dependencyListInput: unknown): AssetItemMeta {
+    const meta = itemGet(itemId);
+    itemUnlockedCheck(meta);
     const versionId = versionIdResolve(meta, versionIdRequested);
     versionUnlockedCheck(meta, versionId, 'given other dependencies');
     const version = versionMetaGet(meta, versionId);
     version.dependencyList = dependencyListNormalize(dependencyListInput);
     meta.eventList.push({ eventType: 'dependencySet', time: timeTextGet(), versionId });
-    objectMetaWrite(meta);
+    itemMetaWrite(meta);
     return meta;
   }
 
   // one dependency added, unless the version has it already
-  function dependencyAdd(objectId: string, versionIdRequested: string, dependencyInput: unknown): AssetObjectMeta {
+  function dependencyAdd(itemId: string, versionIdRequested: string, dependencyInput: unknown): AssetItemMeta {
     const dependency = dependencyNormalize(dependencyInput);
-    const { versionId, dependencyList } = dependencyListGet(objectId, versionIdRequested);
-    if (dependencyList.some((item) => dependencyIsSame(item, dependency))) return objectGet(objectId);
-    return dependencyListSet(objectId, versionId, [...dependencyList, dependency]);
+    const { versionId, dependencyList } = dependencyListGet(itemId, versionIdRequested);
+    if (dependencyList.some((one) => dependencyIsSame(one, dependency))) return itemGet(itemId);
+    return dependencyListSet(itemId, versionId, [...dependencyList, dependency]);
   }
 
-  function dependencyRemove(objectId: string, versionIdRequested: string, dependencyInput: unknown): AssetObjectMeta {
+  function dependencyRemove(itemId: string, versionIdRequested: string, dependencyInput: unknown): AssetItemMeta {
     const dependency = dependencyNormalize(dependencyInput);
-    const { versionId, dependencyList } = dependencyListGet(objectId, versionIdRequested);
-    const dependencyListNext = dependencyList.filter((item) => !dependencyIsSame(item, dependency));
-    if (dependencyListNext.length === dependencyList.length) return objectGet(objectId);
-    return dependencyListSet(objectId, versionId, dependencyListNext);
+    const { versionId, dependencyList } = dependencyListGet(itemId, versionIdRequested);
+    const dependencyListNext = dependencyList.filter((one) => !dependencyIsSame(one, dependency));
+    if (dependencyListNext.length === dependencyList.length) return itemGet(itemId);
+    return dependencyListSet(itemId, versionId, dependencyListNext);
   }
 
-  // the versions of the store (deleted objects included) whose data depends
-  // on the object; with a versionId, on that version: a dependency without
+  // the versions of the store (deleted items included) whose data depends
+  // on the item; with a versionId, on that version: a dependency without
   // versionId means the head, so it counts when the head is that version
-  function dependentListGet(objectId: string, versionIdRequested = ''): AssetDependent[] {
-    if (!idMs48Is(objectId)) throw new AssetError(-1, `not an object id: ${String(objectId)}`);
-    const metaTarget = objectGet(objectId);
+  function dependentListGet(itemId: string, versionIdRequested = ''): AssetDependent[] {
+    if (!idMs48Is(itemId)) throw new AssetError(-1, `not an item id: ${String(itemId)}`);
+    const metaTarget = itemGet(itemId);
     const versionIdWanted = versionIdRequested === '' ? '' : versionIdResolve(metaTarget, versionIdRequested);
     const result: AssetDependent[] = [];
-    for (const meta of objectList()) {
+    for (const meta of itemList()) {
       for (const version of meta.versionList) {
         for (const dependency of version.dependencyList) {
-          if (dependency.type !== 'asset' || dependency.objectId !== objectId) continue;
+          if (dependency.type !== 'asset' || dependency.itemId !== itemId) continue;
           const versionIdDepended = dependency.versionId ?? metaTarget.versionIdHead;
           if (versionIdWanted !== '' && versionIdDepended !== versionIdWanted) continue;
-          result.push({ objectId: meta.objectId, versionId: version.versionId, dependency });
+          result.push({ itemId: meta.itemId, versionId: version.versionId, dependency });
         }
       }
     }
     return result;
   }
 
-  // the source files the versions of the live objects depend on, each once;
+  // the source files the versions of the live items depend on, each once;
   // a build collects them (doc_page_impl_source.md#files-in-a-build)
   function dependencySourcePathList(): string[] {
     const pathSet = new Set<string>();
-    for (const meta of objectList()) {
+    for (const meta of itemList()) {
       if (meta.isDeleted) continue;
       for (const version of meta.versionList) {
         for (const dependency of version.dependencyList) {
@@ -1192,12 +1310,12 @@ export function assetStoreCreate(config: AssetStoreConfig) {
 
   // ---------- build ----------
 
-  // everything a built page needs: the live objects with the data of every
+  // everything a built page needs: the live items with the data of every
   // version (text as text, other bytes base64), so pinned versions keep
   // working without a server
   function snapshotBuild(): AssetSnapshot {
-    const objectById: AssetSnapshot['objectById'] = {};
-    for (const meta of objectList()) {
+    const itemById: AssetSnapshot['itemById'] = {};
+    for (const meta of itemList()) {
       if (meta.isDeleted) continue;
       const versionDataById: Record<string, AssetSnapshotVersion> = {};
       for (const version of meta.versionList) {
@@ -1208,17 +1326,17 @@ export function assetStoreCreate(config: AssetStoreConfig) {
           ? { size: data.size, hash: data.hash, isText: true, text: data.text, metadata: data.metadata }
           : { size: data.size, hash: data.hash, isText: false, dataBase64: data.bytes.toString('base64'), metadata: data.metadata };
       }
-      objectById[meta.objectId] = { ...meta, versionDataById };
+      itemById[meta.itemId] = { ...meta, versionDataById };
     }
-    return { objectById };
+    return { itemById };
   }
 
   // text of a reference for build-time scans; undefined when it cannot be
   // read, or when the data is not text
-  function referenceTextGet(reference: { store?: string; objectId?: string; name?: string; versionId: string }): { lang: string; text: string } | undefined {
+  function referenceTextGet(reference: { store?: string; itemId?: string; name?: string; versionId: string }): { lang: string; text: string } | undefined {
     if (reference.store !== undefined && reference.store !== ASSET_STORE_ID_LOCAL) return undefined;
     try {
-      const meta = objectFind(reference);
+      const meta = itemFind(reference);
       const version = versionDataGetOf(meta, reference.versionId);
       if (!version.isText) return undefined;
       return { lang: meta.lang, text: version.text ?? '' };
@@ -1229,21 +1347,23 @@ export function assetStoreCreate(config: AssetStoreConfig) {
 
   // ---------- files ----------
 
-  // dirName: the object's folder in the store folder, through its groups ("a/b/{id}--{name}")
-  function objectMetaRead(folder: AssetFolder, dirName: string): AssetObjectMeta | undefined {
+  // dirName: the item's folder in the store folder, through its groups ("a/b/{id}--{name}")
+  function itemMetaRead(folder: AssetFolder, dirName: string): AssetItemMeta | undefined {
     const partList = dirName.split('/');
-    const filePath = path.join(folder.pathAbs, ...partList, ASSET_OBJECT_META_NAME);
+    const filePath = path.join(folder.pathAbs, ...partList, ASSET_ITEM_META_NAME);
     if (!fs.existsSync(filePath)) return undefined;
     const content = yamlParse(fs.readFileSync(filePath, 'utf-8'));
-    return objectMetaNormalize(content, objectIdFromDirName(partList[partList.length - 1]), folder.path, dirName, partList.slice(0, -1).join('/'));
+    const meta = itemMetaNormalize(content, itemIdFromDirName(partList[partList.length - 1]), folder.path, dirName, partList.slice(0, -1).join('/'));
+    if (folder.owner) meta.folderOwner = folder.owner;
+    return meta;
   }
 
   // the file keeps one key order whatever the order the keys were set in;
-  // folder and dirName are where the object was found, not part of the
-  // object; component and saveMode are written only when they were set
-  function objectMetaWrite(meta: AssetObjectMeta) {
+  // folder and dirName are where the item was found, not part of the
+  // item; component and saveMode are written only when they were set
+  function itemMetaWrite(meta: AssetItemMeta) {
     const metaFile: Record<string, unknown> = {
-      objectId: meta.objectId,
+      itemId: meta.itemId,
       name: meta.name,
       lang: meta.lang,
       contentType: meta.contentType,
@@ -1258,43 +1378,44 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     metaFile.timeCreated = meta.timeCreated;
     metaFile.versionList = meta.versionList;
     metaFile.eventList = meta.eventList;
-    fileWriteSafe(objectMetaPathGet(meta), yamlStringify(metaFile));
+    fileWriteSafe(itemMetaPathGet(meta), yamlStringify(metaFile));
   }
 
   return {
     config,
     folderList,
+    folderOwnedAdd,
     folderInfoList,
     docPageInfoList,
     folderSet,
-    objectList,
-    objectGet,
-    objectGetByName,
-    objectFind,
+    itemList,
+    itemGet,
+    itemGetByName,
+    itemFind,
     versionDataGet,
     versionDataGetOf,
-    objectCreate,
-    objectUpdate: (input: Parameters<typeof objectUpdate>[0]) => {
-      folderWritableCheck(objectGet(input.objectId).folder);
-      return objectUpdate(input);
+    itemCreate,
+    itemUpdate: (input: Parameters<typeof itemUpdate>[0]) => {
+      folderWritableCheck(itemGet(input.itemId).folder);
+      return itemUpdate(input);
     },
-    objectDelete: objectWriteGuard(objectDelete),
-    objectRestore: objectWriteGuard(objectRestore),
-    objectMetaSet: objectWriteGuard(objectMetaSet),
-    objectMove: objectWriteGuard(objectMove),
+    itemDelete: itemWriteGuard(itemDelete),
+    itemRestore: itemWriteGuard(itemRestore),
+    itemMetaSet: itemWriteGuard(itemMetaSet),
+    itemMove: itemWriteGuard(itemMove),
     groupMove: (folderPath: string, ...rest: any[]) => {
       folderWritableCheck(folderPath);
       return (groupMove as any)(folderPath, ...rest);
     },
-    versionCheckout: objectWriteGuard(versionCheckout),
-    versionDelete: objectWriteGuard(versionDelete),
-    versionMetadataSet: objectWriteGuard(versionMetadataSet),
-    objectLockSet: objectWriteGuard(objectLockSet),
-    versionLockSet: objectWriteGuard(versionLockSet),
+    versionCheckout: itemWriteGuard(versionCheckout),
+    versionDelete: itemWriteGuard(versionDelete),
+    versionMetadataSet: itemWriteGuard(versionMetadataSet),
+    itemLockSet: itemWriteGuard(itemLockSet),
+    versionLockSet: itemWriteGuard(versionLockSet),
     dependencyListGet,
-    dependencyListSet: objectWriteGuard(dependencyListSet),
-    dependencyAdd: objectWriteGuard(dependencyAdd),
-    dependencyRemove: objectWriteGuard(dependencyRemove),
+    dependencyListSet: itemWriteGuard(dependencyListSet),
+    dependencyAdd: itemWriteGuard(dependencyAdd),
+    dependencyRemove: itemWriteGuard(dependencyRemove),
     dependentListGet,
     dependencySourcePathList,
     snapshotBuild,
@@ -1313,7 +1434,7 @@ export type AssetSnapshotVersion =
 export type AssetUsageDoc = { docPath: string; contentHash: string; usageList: unknown[] };
 
 export type AssetSnapshot = {
-  objectById: Record<string, AssetObjectMeta & { versionDataById: Record<string, AssetSnapshotVersion> }>;
+  itemById: Record<string, AssetItemMeta & { versionDataById: Record<string, AssetSnapshotVersion> }>;
   // the references of the documents of the build, added by the plugin
   usageDocList?: AssetUsageDoc[];
   // the frontend objects and types the doc pages declare, added by the plugin
@@ -1323,7 +1444,7 @@ export type AssetSnapshot = {
 // ---------- helpers ----------
 
 // the effective save mode: the written one, else in place
-export function saveModeGet(meta: Pick<AssetObjectMeta, 'saveMode'>): AssetSaveMode {
+export function saveModeGet(meta: Pick<AssetItemMeta, 'saveMode'>): AssetSaveMode {
   return meta.saveMode === 'newVersion' ? 'newVersion' : 'inPlace';
 }
 
@@ -1368,7 +1489,7 @@ const eventTypeList: AssetEventType[] = [
 // ---------- version metadata ----------
 
 // a mapping of plain values (what yaml can hold); a copy, so the caller's
-// object is not kept
+// item is not kept
 export function versionMetadataNormalize(input: unknown): AssetVersionMetadata {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new AssetError(-1, 'versionMetadata must be a mapping');
@@ -1381,37 +1502,37 @@ export function versionMetadataNormalize(input: unknown): AssetVersionMetadata {
 export function dependencyListNormalize(listInput: unknown): AssetDependency[] {
   if (!Array.isArray(listInput)) throw new AssetError(-1, 'dependencyList must be a list');
   const result: AssetDependency[] = [];
-  for (const item of listInput) {
-    const dependency = dependencyNormalize(item);
+  for (const one of listInput) {
+    const dependency = dependencyNormalize(one);
     if (!result.some((kept) => dependencyIsSame(kept, dependency))) result.push(dependency);
   }
   return result;
 }
 
-export function dependencyNormalize(item: any): AssetDependency {
-  if (!item || typeof item !== 'object') throw new AssetError(-1, 'a dependency must be a mapping with a type');
-  if (item.type === 'source') {
-    const pathText = sourcePathNormalize(item.path ?? '');
+export function dependencyNormalize(one: any): AssetDependency {
+  if (!one || typeof one !== 'object') throw new AssetError(-1, 'a dependency must be a mapping with a type');
+  if (one.type === 'source') {
+    const pathText = sourcePathNormalize(one.path ?? '');
     if (!sourcePathIsRooted(pathText)) {
-      throw new AssetError(-1, `a source dependency names a file by its source path (~page:root/...): ${JSON.stringify(item.path)}`);
+      throw new AssetError(-1, `a source dependency names a file by its source path (~page:root/...): ${JSON.stringify(one.path)}`);
     }
     return { type: 'source', path: pathText };
   }
-  if (item.type === 'asset') {
-    const objectId = String(item.objectId ?? '');
-    if (!idMs48Is(objectId)) throw new AssetError(-1, `an asset dependency names an object by id: ${JSON.stringify(item.objectId)}`);
-    const versionId = item.versionId === undefined || item.versionId === null || item.versionId === '' || item.versionId === 'head'
+  if (one.type === 'asset') {
+    const itemId = String(one.itemId ?? '');
+    if (!idMs48Is(itemId)) throw new AssetError(-1, `an asset dependency names an item by id: ${JSON.stringify(one.itemId)}`);
+    const versionId = one.versionId === undefined || one.versionId === null || one.versionId === '' || one.versionId === 'head'
       ? undefined
-      : String(item.versionId);
-    return versionId === undefined ? { type: 'asset', objectId } : { type: 'asset', objectId, versionId };
+      : String(one.versionId);
+    return versionId === undefined ? { type: 'asset', itemId } : { type: 'asset', itemId, versionId };
   }
-  throw new AssetError(-1, `unknown dependency type: ${JSON.stringify(item.type)} (source or asset)`);
+  throw new AssetError(-1, `unknown dependency type: ${JSON.stringify(one.type)} (source or asset)`);
 }
 
 export function dependencyIsSame(a: AssetDependency, b: AssetDependency): boolean {
   if (a.type !== b.type) return false;
   if (a.type === 'source' && b.type === 'source') return a.path === b.path;
-  if (a.type === 'asset' && b.type === 'asset') return a.objectId === b.objectId && (a.versionId ?? '') === (b.versionId ?? '');
+  if (a.type === 'asset' && b.type === 'asset') return a.itemId === b.itemId && (a.versionId ?? '') === (b.versionId ?? '');
   return false;
 }
 
@@ -1419,9 +1540,9 @@ export function dependencyIsSame(a: AssetDependency, b: AssetDependency): boolea
 function dependencyListRead(listInput: unknown): AssetDependency[] {
   if (!Array.isArray(listInput)) return [];
   const result: AssetDependency[] = [];
-  for (const item of listInput) {
+  for (const one of listInput) {
     try {
-      result.push(dependencyNormalize(item));
+      result.push(dependencyNormalize(one));
     } catch {
       // not a dependency
     }
@@ -1429,24 +1550,24 @@ function dependencyListRead(listInput: unknown): AssetDependency[] {
   return result;
 }
 
-function objectUnlockedCheck(meta: AssetObjectMeta) {
-  if (meta.isLocked) throw new AssetError(-1, `object ${meta.objectId} is locked; unlock it first`);
+function itemUnlockedCheck(meta: AssetItemMeta) {
+  if (meta.isLocked) throw new AssetError(-1, `item ${meta.itemId} is locked; unlock it first`);
 }
 
 //   action   what the locked version cannot be, for the message
-function versionUnlockedCheck(meta: AssetObjectMeta, versionId: string, action: string) {
+function versionUnlockedCheck(meta: AssetItemMeta, versionId: string, action: string) {
   if (versionMetaGet(meta, versionId).isLocked) throw new AssetError(-1, `version ${versionId} is locked and cannot be ${action}`);
 }
 
-function versionIdResolve(meta: AssetObjectMeta, versionIdRequested: string): string {
+function versionIdResolve(meta: AssetItemMeta, versionIdRequested: string): string {
   const versionId = versionIdRequested === '' || versionIdRequested === 'head' ? meta.versionIdHead : versionIdRequested;
   versionMetaGet(meta, versionId);
   return versionId;
 }
 
-function versionMetaGet(meta: AssetObjectMeta, versionId: string): AssetVersionMeta {
-  const version = meta.versionList.find((item) => item.versionId === versionId);
-  if (!version) throw new AssetError(-3, `version ${versionId} not found in object ${meta.objectId}`);
+function versionMetaGet(meta: AssetItemMeta, versionId: string): AssetVersionMeta {
+  const version = meta.versionList.find((one) => one.versionId === versionId);
+  if (!version) throw new AssetError(-3, `version ${versionId} not found in item ${meta.itemId}`);
   return version;
 }
 
@@ -1495,19 +1616,19 @@ function fileExtNormalize(fileExt: unknown): string {
 
 // the metadata as the file holds it. a file without eventList (written
 // before events were recorded) gets the one event its creation was.
-function objectMetaNormalize(content: any, objectId: string, folder: string, dirName: string, groupPath = ''): AssetObjectMeta {
+function itemMetaNormalize(content: any, itemId: string, folder: string, dirName: string, groupPath = ''): AssetItemMeta {
   const versionList = Array.isArray(content?.versionList) ? content.versionList : [];
   const lang = String(content?.lang ?? '');
   const timeCreated = String(content?.timeCreated ?? '');
   const eventListRaw: unknown[] = Array.isArray(content?.eventList) ? content.eventList : [];
   const eventList: AssetEvent[] = [];
-  for (const item of eventListRaw) {
-    const event = eventNormalize(item);
+  for (const one of eventListRaw) {
+    const event = eventNormalize(one);
     if (event) eventList.push(event);
   }
   if (eventList.length === 0) eventList.push({ eventType: 'create', time: timeCreated });
-  const meta: AssetObjectMeta = {
-    objectId,
+  const meta: AssetItemMeta = {
+    itemId,
     name: String(content?.name ?? ''),
     lang,
     contentType: String(content?.contentType ?? '') || contentTypeByLang[lang] || 'application/octet-stream',
@@ -1548,7 +1669,7 @@ function objectMetaNormalize(content: any, objectId: string, folder: string, dir
   return meta;
 }
 
-// the component the data of an object is for: { name } with a name, or
+// the component the data of an item is for: { name } with a name, or
 // undefined for null; anything else is a bad request
 export function componentNormalize(value: unknown): AssetComponent | undefined {
   if (value === null) return undefined;
@@ -1560,7 +1681,7 @@ export function componentNormalize(value: unknown): AssetComponent | undefined {
   return { name };
 }
 
-// the object an object's data belongs to: { ref, role? } with a reference
+// the item an item's data belongs to: { ref, role? } with a reference
 // {namespace}:{local}, or undefined for null; anything else is a bad request
 export function ownerNormalize(value: unknown): AssetOwner | undefined {
   if (value === null) return undefined;
@@ -1568,7 +1689,7 @@ export function ownerNormalize(value: unknown): AssetOwner | undefined {
     throw new AssetError(-1, 'owner must be a mapping { ref, role? }, or null to remove it');
   }
   const ref = String((value as { ref?: unknown }).ref ?? '').trim();
-  if (!/^[a-zA-Z][a-zA-Z0-9.-]*:.+$/.test(ref)) throw new AssetError(-1, 'owner.ref must be an object reference {namespace}:{local}');
+  if (!/^[a-zA-Z][a-zA-Z0-9.-]*:.+$/.test(ref)) throw new AssetError(-1, 'owner.ref must be an item reference {namespace}:{local}');
   const role = String((value as { role?: unknown }).role ?? '').trim();
   return role ? { ref, role } : { ref };
 }
@@ -1585,6 +1706,7 @@ export function groupPathNormalize(value: unknown): string {
     if (part === '' || part.startsWith('.') || /[\\:*?"<>|\u0000-\u001f]/.test(part)) {
       throw new AssetError(-1, `not a group folder name: "${part}"`);
     }
+    if (/[^\x20-\x7E]/.test(part)) throw new AssetError(-1, `a group folder name is in ASCII only: "${part}"`);
   }
   return partList.join('/');
 }
@@ -1593,13 +1715,15 @@ function dirNameInGroupBuild(groupPath: string, dirNameOwn: string): string {
   return groupPath ? `${groupPath}/${dirNameOwn}` : dirNameOwn;
 }
 
-function eventNormalize(item: any): AssetEvent | undefined {
-  if (!item || typeof item !== 'object') return undefined;
-  const eventType = String(item.eventType ?? '') as AssetEventType;
+function eventNormalize(one: any): AssetEvent | undefined {
+  if (!one || typeof one !== 'object') return undefined;
+  const eventType = String(one.eventType ?? '') as AssetEventType;
   if (!eventTypeList.includes(eventType)) return undefined;
-  const event: AssetEvent = { eventType, time: String(item.time ?? '') };
-  if (item.versionId !== undefined && item.versionId !== null && item.versionId !== '') event.versionId = String(item.versionId);
-  if (item.userId !== undefined && item.userId !== null && item.userId !== '') event.userId = String(item.userId);
+  const event: AssetEvent = { eventType, time: String(one.time ?? '') };
+  if (one.versionId !== undefined && one.versionId !== null && one.versionId !== '') event.versionId = String(one.versionId);
+  if (one.userId !== undefined && one.userId !== null && one.userId !== '') event.userId = String(one.userId);
+  if (typeof one.placeFrom === 'string') event.placeFrom = one.placeFrom;
+  if (typeof one.placeTo === 'string') event.placeTo = one.placeTo;
   return event;
 }
 

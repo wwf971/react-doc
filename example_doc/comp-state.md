@@ -23,7 +23,7 @@ In edit mode, insert a paragraph above the second counter: its marker moves down
 
 ## One state, two blocks
 
-Both spreadsheets below read the asset object `quarterly sales`, so they share one state object, keyed by the object. Open the editor on either one (the **Edit** button of its toolbar in edit mode): the other block shows the workbook as it is edited, cell by cell, and the range typed in the editor's panel. Save or cancel, and both show the object again. Select some cells or switch the sheet in one of them, go to another document and come back: the selection is restored, in both.
+Both spreadsheets below read the asset item `quarterly sales`, so they share one state object, keyed by the item. Open the editor on either one (the **Edit** button of its toolbar in edit mode): the other block shows the workbook as it is edited, cell by cell, and the range typed in the editor's panel. Save or cancel, and both show the item again. Select some cells or switch the sheet in one of them, go to another document and come back: the selection is restored, in both.
 
 <!--renderComp=ExcelUniver-->
 ```asset
@@ -31,7 +31,7 @@ store: local
 name: quarterly sales
 ```
 
-The draft is in the state only while the editor is open; what is saved is still written into the asset object when the session ends, as for every asset-only component. The state is not a place for anything that must survive a reload of the page.
+The draft is in the state only while the editor is open; what is saved is still written into the asset item when the session ends, as for every asset-only component. The state is not a place for anything that must survive a reload of the page.
 
 ## What the layer holds
 

@@ -1,12 +1,12 @@
 ---
 title: Test case table
-description: TestCaseTable is a test specification with nested cases and a confirmation column per tester; results are recorded as a history on its asset object
+description: TestCaseTable is a test specification with nested cases and a confirmation column per tester; results are recorded as a history on its asset item
 language: en
 ---
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`TestCaseTable` is a test specification table (試験仕様書): test cases grouped at any depth, drawn by the hierarchy table, with one confirmation column per tester after the authored columns. A confirmation cell shows the current result and how many records it has; clicking it opens the history. A result is never typed into the data: it is **recorded** with the name of who confirms it, the time of the server and an optional evidence document, on the asset object of the block.
+`TestCaseTable` is a test specification table (試験仕様書): test cases grouped at any depth, drawn by the hierarchy table, with one confirmation column per tester after the authored columns. A confirmation cell shows the current result and how many records it has; clicking it opens the history. A result is never typed into the data: it is **recorded** with the name of who confirms it, the time of the server and an optional evidence document, on the asset item of the block.
 
 `TestCaseTable` は試験仕様書の表です。階層テーブルで任意の深さにグループ化したテストケースに、記述列の後ろへ確認者ごとの確認列が並びます。確認セルには現在の結果と記録数が表示され、クリックすると履歴が開きます。結果はデータに直接書くものではなく、確認者の名前、サーバーの時刻、任意の証跡文書とともに、ブロックのアセットオブジェクトに**記録**します。
 ```
@@ -97,9 +97,9 @@ results:
 ```
 
 <!--renderComp=Anchor,id=test-case-table-asset-->
-## As an asset object
+## As an asset item
 
-The table of this section reads the asset object `login test cases` of the [asset service layer](../asset-store.md); the block in the document is only the reference. Its records are **component checks of this demonstration**, recorded through the page while the component was checked, not the acceptance of any system. The marker carries an `id`, so an api call names this table by it (`block: login-asset`; see [Command Palette and Apis](../api-command-palette.md)).
+The table of this section reads the asset item `login test cases` of the [asset service layer](../asset-store.md); the block in the document is only the reference. Its records are **component checks of this demonstration**, recorded through the page while the component was checked, not the acceptance of any system. The marker carries an `id`, so an api call names this table by it (`block: login-asset`; see [Command Palette and Apis](../api-command-palette.md)).
 
 <!--renderComp=TestCaseTable,id=login-asset-->
 ```asset
@@ -114,7 +114,7 @@ name: login test cases
 3. **Save result** records at once: the page appends the record to the history of the object, with the time of the server, and the table shows the new result. The operator and the evidence are cleared, so a second record is a deliberate one. **Cancel** closes the popup and discards what was typed, never a record.
 4. **Done** in the floating bar leaves the mode. Nothing waits for it: the session writes nothing, and the document is not written at all.
 
-A record is based on the data the cell was opened with. When somebody else recorded on the same object meanwhile, the save is refused, the table shows the latest history, and the cell has to be closed and opened again before recording over it. The asset panel of the block (its **asset** button) shows the object and its versions as for any object; its text editor refuses a change of the history, and accepts a change of the cases, columns and testers.
+A record is based on the data the cell was opened with. When somebody else recorded on the same item meanwhile, the save is refused, the table shows the latest history, and the cell has to be closed and opened again before recording over it. The asset panel of the block (its **asset** button) shows the item and its versions as for any object; its text editor refuses a change of the history, and accepts a change of the cases, columns and testers.
 
 ## Evidence
 

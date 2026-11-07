@@ -173,13 +173,13 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       subscribe: config.asset?.subscribe,
       manifestGet: () => sourceStore.fileManifest,
     });
-    // the edit store creates asset objects when a block's inline data is
+    // the edit store creates asset items when a block's inline data is
     // moved into the asset service layer (doc_page_impl_asset.md)
     const editStore = new DocEditStore(sourceStore, docStore, configStore, { envStore, assetStore, compStateStore });
     // a component block shown in a popup, in View or in Edit (doc_page_impl_popup.md)
     const blockPopupStore = new DocBlockPopupStore({ docStore, editStore, sourceStore, assetStore });
     // the services of the service backend; a dashboard block keeps its
-    // instance and its state in its asset object. the source store tells it
+    // instance and its state in its asset item. the source store tells it
     // the doc pages loaded, synced into the kernel's registry
     // (doc_page_impl_service.md)
     const serviceStore = new DocServiceStore({ endpoint: envStore.endpointGet('service'), assetStore, sourceStore });

@@ -1,94 +1,94 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
-  ASSET_STORE_ID_LOCAL, AssetError, type AssetObjectKey, type AssetStore, type AssetUsageDoc, type AssetVersionData,
+  ASSET_STORE_ID_LOCAL, AssetError, type AssetItemKey, type AssetStore, type AssetUsageDoc, type AssetVersionData,
   textDecodeTry,
 } from './doc-asset-store.ts';
 import { testCaseAssetResultSet, testCaseAssetWriteCheck } from '../../../built-in/comp-mdx/test-case-table/TestCaseTableApi.js';
 import {
-  objectFrontendAssetAttach, objectFrontendAssetCreate, objectFrontendAssetRemove, objectFrontendConfigForPage,
+  objectFrontendAssetAttach, objectFrontendAssetGroupMove, objectFrontendAssetMove, objectFrontendAssetCreate, objectFrontendAssetRemove, objectFrontendConfigForPage,
   objectFrontendAssetMetaSet, objectFrontendCreate, objectFrontendDelete, objectFrontendMetaSet, objectFrontendRegister, type ObjectFrontendConfig,
 } from './doc-object-frontend.ts';
 
 // Asset api of the development server (design: doc_page_impl_asset.md). Like
 // the edit api, it exists only while `vite` serves the page; a built page
 // reads the bundled snapshot of the store instead and cannot write. The api
-// serves the local store; every object route names the store it means
+// serves the local store; every item route names the store it means
 // (store=local), the way a reference does.
 //
 //   GET  {endpoint}/status                                   -> { isWritable: true, storeIdList, folderList, docPageList }
-//   GET  {endpoint}/object/list?store=                        -> { objectList }
-//   GET  {endpoint}/object/get?store=&objectId=|name=&versionId=  -> { object, version }   versionId default head
-//   POST {endpoint}/object/get/list  { store, itemList: [{ objectId, versionId }] } -> { itemList: [{ code, data, message }] }
+//   GET  {endpoint}/item/list?store=                        -> { itemList }
+//   GET  {endpoint}/item/get?store=&itemId=|name=&versionId=  -> { item, version }   versionId default head
+//   POST {endpoint}/item/get/list  { store, requestList: [{ itemId, versionId }] } -> { answerList: [{ code, data, message }] }
 //                                     many reads in one request, answered in that order; one that fails fails alone
-//   GET  {endpoint}/object/data?store=&objectId=|name=&versionId= -> the bytes of the version, with their content type
-//   GET  {endpoint}/dependency/list?store=&objectId=&versionId=   -> { versionId, dependencyList }   versionId default head
-//   GET  {endpoint}/dependent/list?store=&objectId=&versionId=    -> { dependentList }   the versions depending on the
-//                                                                    object (with versionId: on that version)
+//   GET  {endpoint}/item/data?store=&itemId=|name=&versionId= -> the bytes of the version, with their content type
+//   GET  {endpoint}/dependency/list?store=&itemId=&versionId=   -> { versionId, dependencyList }   versionId default head
+//   GET  {endpoint}/dependent/list?store=&itemId=&versionId=    -> { dependentList }   the versions depending on the
+//                                                                    item (with versionId: on that version)
 //   GET  {endpoint}/usage/list?docPath=&docPath=               -> { docList: [{ docPath, contentHash, usageList }] }
 //                                     the asset references of the collected documents, read from disk now; with
 //                                     docPath (repeatable) only those documents (a document that is gone is absent)
-//   POST {endpoint}/object/create    { store, name, lang, contentType, fileExt, text | dataBase64, note, folder | docPath, dependencyList,
-//                                       saveMode, versionMetadata, component, groupPath, owner }  -> { object, version, isCreated }
-//                                     isCreated false: an object of that name exists and is answered, nothing is created
-//   POST {endpoint}/object/update    { store, objectId, hashBase, text | dataBase64, mode, note, dependencyList, versionMetadata }
-//                                                                 -> { object, version }
-//                                     mode: inPlace | newVersion; absent: the object's saveMode
+//   POST {endpoint}/item/create    { store, name, lang, contentType, fileExt, text | dataBase64, note, folder | docPath, dependencyList,
+//                                       saveMode, versionMetadata, component, groupPath, owner }  -> { item, version, isCreated }
+//                                     isCreated false: an item of that name exists and is answered, nothing is created
+//   POST {endpoint}/item/update    { store, itemId, hashBase, text | dataBase64, mode, note, dependencyList, versionMetadata }
+//                                                                 -> { item, version }
+//                                     mode: inPlace | newVersion; absent: the item's saveMode
 //                                     dependencyList, versionMetadata absent: those of the version written over / made from are kept
 //                                     a text of a TestCaseTable whose result history differs from the head's is
 //                                     refused (-1): the history is managed, written by /test-case/result/set only
-//   POST {endpoint}/test-case/result/set { store, objectId, hashBase, docPath, caseId, testerId, operator, result,
-//                                       timeTimezone?, evidence?, versionId? } -> { object, version }
-//                                     one result appended to the history of a TestCaseTable object
+//   POST {endpoint}/test-case/result/set { store, itemId, hashBase, docPath, caseId, testerId, operator, result,
+//                                       timeTimezone?, evidence?, versionId? } -> { item, version }
+//                                     one result appended to the history of a TestCaseTable item
 //                                     (comp-mdx/test-case-table/TestCaseTableApi.js): the time and the id of the
 //                                     entry are made here, evidence must name one md/mdx document of the doc page of
 //                                     docPath (the document the block is in), and the write is the normal head
 //                                     update (hashBase, locks, save mode); versionId other than head is refused
-//   POST {endpoint}/version/metadata/set { store, objectId, versionId, versionMetadata } -> { object, version }
-//   POST {endpoint}/dependency/set    { store, objectId, versionId, dependencyList }  -> { object }
-//   POST {endpoint}/dependency/add    { store, objectId, versionId, dependency }      -> { object }
-//   POST {endpoint}/dependency/remove { store, objectId, versionId, dependency }      -> { object }
-//   POST {endpoint}/object/delete    { store, objectId }                                 -> { object }   (soft)
-//   POST {endpoint}/object/restore   { store, objectId }                                 -> { object }
-//   POST {endpoint}/object/meta/set  { store, objectId, name?, lang?, contentType?, saveMode?, component?, owner? } -> { object }
+//   POST {endpoint}/version/metadata/set { store, itemId, versionId, versionMetadata } -> { item, version }
+//   POST {endpoint}/dependency/set    { store, itemId, versionId, dependencyList }  -> { item }
+//   POST {endpoint}/dependency/add    { store, itemId, versionId, dependency }      -> { item }
+//   POST {endpoint}/dependency/remove { store, itemId, versionId, dependency }      -> { item }
+//   POST {endpoint}/item/delete    { store, itemId }                                 -> { item }   (soft)
+//   POST {endpoint}/item/restore   { store, itemId }                                 -> { item }
+//   POST {endpoint}/item/meta/set  { store, itemId, name?, lang?, contentType?, saveMode?, component?, owner? } -> { item }
 //                                     component: { name }, owner: { ref, role? }; null removes either
-//   POST {endpoint}/version/checkout { store, objectId, versionId }                      -> { object }   head moves
-//   POST {endpoint}/version/delete   { store, objectId, versionId }                      -> { object }
-//   POST {endpoint}/object/lock/set  { store, objectId, isLocked }                       -> { object }
-//   POST {endpoint}/version/lock/set { store, objectId, versionId, isLocked }            -> { object }
+//   POST {endpoint}/version/checkout { store, itemId, versionId }                      -> { item }   head moves
+//   POST {endpoint}/version/delete   { store, itemId, versionId }                      -> { item }
+//   POST {endpoint}/item/lock/set  { store, itemId, isLocked }                       -> { item }
+//   POST {endpoint}/version/lock/set { store, itemId, versionId, isLocked }            -> { item }
 //   POST {endpoint}/folder/set       { configFile, folderList: [~root/path | ~page:root/path], folderDefault } -> { ok }
 //                                     the folders of one doc page, written into its asset store config in place
-//   POST {endpoint}/object/move      { store, objectId, groupPath }                      -> { object }
-//                                     the object's folder moved into group folders of its store folder ('' the top)
+//   POST {endpoint}/item/move      { store, itemId, groupPath, folder? }             -> { item }   -5: a folder an object owns
+//                                     the item's folder moved into group folders of its store folder ('' the top)
 //
 // the frontend object service layer (doc_page_impl_obj_frontend.md, doc-object-frontend.ts), whose
-// objects keep their data in this store; every write answers { id, objectList, config }: the
-// asset objects it wrote, and the declarations of the doc pages as the files say now
+// items keep their data in this store; every write answers { id, itemList, config }: the
+// asset items it wrote, and the declarations of the doc pages as the files say now
 //   GET  {endpoint}/object-frontend/config                       -> { docPageList }
 //   POST {endpoint}/object-frontend/create       { docPageAlias, typeId, name, description?, metadata? }
 //   POST {endpoint}/object-frontend/register     { docPageAlias, entry }        an orphan entry listed again
 //   POST {endpoint}/object-frontend/delete       { id, isAssetKept? }
 //   POST {endpoint}/object-frontend/meta/set     { id, name?, description?, typeId?, metadata? }
-//   POST {endpoint}/object-frontend/asset/create { id, key?, kind?, name?, pathList?, lang?, text, note?, saveMode? }  (+ key, objectId)
+//   POST {endpoint}/object-frontend/asset/create { id, key?, kind?, name?, pathList?, lang?, text, note?, saveMode? }  (+ key, itemId)
 //   POST {endpoint}/object-frontend/asset/meta/set { id, key, name?, pathList?, kind? }   how an asset is named and indexed
-//   POST {endpoint}/object-frontend/asset/remove { id, key | objectId, isAssetKept? }
-//   POST {endpoint}/object-frontend/asset/attach { id, objectId, key?, kind?, name?, pathList? }
+//   POST {endpoint}/object-frontend/asset/remove { id, key | itemId, isAssetKept? }
+//   POST {endpoint}/object-frontend/asset/attach { id, itemId, key?, kind?, name?, pathList? }
 //
 // every json response is { code, data, message }. code 0 is success; negative codes:
 //   -1  bad request or unexpected failure
 //   -2  hashBase is not the hash of the head data (changed meanwhile)
-//   -3  store, object or version not found
-//   -4  the object or folder belongs to a read-only doc page (a package treated
+//   -3  store, item or version not found
+//   -4  the item or folder belongs to a read-only doc page (a package treated
 //       as a doc page, doc_page_impl_package.md#a-package-as-a-doc-page)
 //
-// object:  { objectId, name, lang, contentType, fileExt, component?, owner?, saveMode?, versionIdHead, isDeleted, isLocked,
+// item:  { itemId, name, lang, contentType, fileExt, component?, owner?, saveMode?, versionIdHead, isDeleted, isLocked,
 //            timeCreated, folder, dirName, groupPath,
 //            versionList: [{ versionId, versionIdPrevList, time, note, size, hash, isLocked, dependencyList }],
 //            eventList: [{ eventType, time, versionId?, userId? }] }
-// dependency: { type: source, path } | { type: asset, objectId, versionId? }   (doc_page_impl_asset.md#dependencies)
-// dependent:  { objectId, versionId, dependency }
+// dependency: { type: source, path } | { type: asset, itemId, versionId? }   (doc_page_impl_asset.md#dependencies)
+// dependent:  { itemId, versionId, dependency }
 // version: { versionId, size, hash, isText, text?, metadata }   text only when the bytes are utf-8 text;
 //          metadata: the mapping of {versionId}.metadata.yaml, {} when the version has none
-// folder:  { path (~page:root/path), pathAbs, isDefault, docEntryFile, isExists, objectCount }
+// folder:  { path (~page:root/path), pathAbs, isDefault, docEntryFile, isExists, itemCount }
 // docPage: { alias, entryFile, configFileRelative, isConfigFileExists, folderList, folderDefault, rootPathList, problemList }
 
 export const DOC_ASSET_ENDPOINT_NAME = '__doc-asset';
@@ -127,13 +127,13 @@ export function docAssetMiddlewareCreate(options: {
       }
       jsonSend(res, 500, { code: -1, data: null, message: String(error?.message ?? error) });
     };
-    if (req.method === 'GET' && route === '/object/data') {
+    if (req.method === 'GET' && route === '/item/data') {
       try {
         const store = storeGet();
-        const object = store.objectFind(storeObjectKeyGet(url.searchParams));
-        const version = store.versionDataGetOf(object, url.searchParams.get('versionId') ?? 'head');
+        const item = store.itemFind(storeItemKeyGet(url.searchParams));
+        const version = store.versionDataGetOf(item, url.searchParams.get('versionId') ?? 'head');
         res.statusCode = 200;
-        res.setHeader('Content-Type', object.contentType || 'application/octet-stream');
+        res.setHeader('Content-Type', item.contentType || 'application/octet-stream');
         res.setHeader('Content-Length', String(version.size));
         res.setHeader('Cache-Control', 'no-store');
         res.end(version.bytes);
@@ -151,7 +151,7 @@ export function docAssetMiddlewareCreate(options: {
       return;
     }
     if (route.startsWith('/object-frontend/')) {
-      void objectFrontendRouteHandle(req, route, storeGet(), objectFrontendConfigGet)
+      void objectFrontendRouteHandle(req, route, storeGet, objectFrontendConfigGet)
         .then((data) => jsonSend(res, 200, { code: 0, data, message: '' }))
         .catch(failureSend);
       return;
@@ -162,7 +162,7 @@ export function docAssetMiddlewareCreate(options: {
   };
 }
 
-const statusByCode: Record<number, number> = { [-1]: 400, [-2]: 409, [-3]: 404, [-4]: 403 };
+const statusByCode: Record<number, number> = { [-1]: 400, [-2]: 409, [-3]: 404, [-4]: 403, [-5]: 409 };
 
 // the routes of the frontend object service layer: the store and the
 // declarations read for the request, the write, then the declarations read
@@ -170,7 +170,7 @@ const statusByCode: Record<number, number> = { [-1]: 400, [-2]: 409, [-3]: 404, 
 async function objectFrontendRouteHandle(
   req: IncomingMessage,
   route: string,
-  store: AssetStore,
+  storeGet: () => AssetStore,
   configGet: (() => ObjectFrontendConfig) | undefined,
 ): Promise<any> {
   if (!configGet) throw new AssetError(-1, 'the page has no frontend object service layer');
@@ -178,7 +178,7 @@ async function objectFrontendRouteHandle(
   if (method === 'GET' && route === '/object-frontend/config') return objectFrontendConfigForPage(configGet());
   if (method !== 'POST') throw new AssetError(-1, `unknown frontend object route: ${method} ${route}`);
   const body = (await jsonBodyRead(req)) ?? {};
-  const context = { store, config: configGet() };
+  const context = { store: storeGet(), config: configGet(), storeGet };
   const writeByRoute: Record<string, () => any> = {
     '/object-frontend/create': () => objectFrontendCreate(context, body),
     '/object-frontend/register': () => objectFrontendRegister(context, body),
@@ -187,6 +187,8 @@ async function objectFrontendRouteHandle(
     '/object-frontend/asset/create': () => objectFrontendAssetCreate(context, body),
     '/object-frontend/asset/remove': () => objectFrontendAssetRemove(context, body),
     '/object-frontend/asset/attach': () => objectFrontendAssetAttach(context, body),
+    '/object-frontend/asset/move': () => objectFrontendAssetMove(context, body),
+    '/object-frontend/asset/group/move': () => objectFrontendAssetGroupMove(context, body),
     '/object-frontend/asset/meta/set': () => objectFrontendAssetMetaSet(context, body),
   };
   const write = writeByRoute[route];
@@ -209,22 +211,22 @@ async function routeHandle(
     if (route === '/status') {
       return { isWritable: true, storeIdList: [ASSET_STORE_ID_LOCAL], folderList: store.folderInfoList(), docPageList: store.docPageInfoList() };
     }
-    if (route === '/object/list') {
+    if (route === '/item/list') {
       storeIdCheck(url.searchParams.get('store'));
-      return { objectList: store.objectList() };
+      return { itemList: store.itemList() };
     }
-    if (route === '/object/get') {
-      const object = store.objectFind(storeObjectKeyGet(url.searchParams));
-      const version = store.versionDataGetOf(object, url.searchParams.get('versionId') ?? 'head');
-      return { object, version: versionResponseBuild(version) };
+    if (route === '/item/get') {
+      const item = store.itemFind(storeItemKeyGet(url.searchParams));
+      const version = store.versionDataGetOf(item, url.searchParams.get('versionId') ?? 'head');
+      return { item, version: versionResponseBuild(version) };
     }
     if (route === '/dependency/list') {
-      const object = store.objectFind(storeObjectKeyGet(url.searchParams));
-      return store.dependencyListGet(object.objectId, url.searchParams.get('versionId') ?? 'head');
+      const item = store.itemFind(storeItemKeyGet(url.searchParams));
+      return store.dependencyListGet(item.itemId, url.searchParams.get('versionId') ?? 'head');
     }
     if (route === '/dependent/list') {
-      const object = store.objectFind(storeObjectKeyGet(url.searchParams));
-      return { dependentList: store.dependentListGet(object.objectId, url.searchParams.get('versionId') ?? '') };
+      const item = store.itemFind(storeItemKeyGet(url.searchParams));
+      return { dependentList: store.dependentListGet(item.itemId, url.searchParams.get('versionId') ?? '') };
     }
   }
   if (method === 'POST') {
@@ -241,13 +243,13 @@ async function routeHandle(
       return { ok: true };
     }
     storeIdCheck(body?.store);
-    if (route === '/object/get/list') {
-      if (!Array.isArray(body?.itemList)) throw new AssetError(-1, 'itemList is required');
-      return { itemList: body.itemList.map((item: any) => objectGetAnswerBuild(store, item)) };
+    if (route === '/item/get/list') {
+      if (!Array.isArray(body?.requestList)) throw new AssetError(-1, 'requestList is required');
+      return { answerList: body.requestList.map((one: any) => itemGetAnswerBuild(store, one)) };
     }
-    const objectId = String(body?.objectId ?? '');
-    if (route === '/object/create') {
-      const result = store.objectCreate({
+    const itemId = String(body?.itemId ?? '');
+    if (route === '/item/create') {
+      const result = store.itemCreate({
         name: body?.name,
         lang: body?.lang,
         contentType: body?.contentType,
@@ -263,13 +265,13 @@ async function routeHandle(
         groupPath: body?.groupPath ? String(body.groupPath) : undefined,
         owner: body?.owner,
       });
-      return { object: result.object, version: versionResponseBuild(result.version), isCreated: result.isCreated };
+      return { item: result.item, version: versionResponseBuild(result.version), isCreated: result.isCreated };
     }
-    if (route === '/object/update') {
+    if (route === '/item/update') {
       const data = bodyDataGet(body);
-      testCaseHistoryGuard(store, objectId, data);
-      const result = store.objectUpdate({
-        objectId,
+      testCaseHistoryGuard(store, itemId, data);
+      const result = store.itemUpdate({
+        itemId,
         hashBase: body?.hashBase,
         data,
         mode: body?.mode,
@@ -277,13 +279,13 @@ async function routeHandle(
         dependencyList: body?.dependencyList,
         versionMetadata: body?.versionMetadata,
       });
-      return { object: result.object, version: versionResponseBuild(result.version) };
+      return { item: result.item, version: versionResponseBuild(result.version) };
     }
     if (route === '/test-case/result/set') {
       let result;
       try {
         result = testCaseAssetResultSet(store, {
-          objectId,
+          itemId,
           hashBase: body?.hashBase,
           docPath: String(body?.docPath ?? ''),
           caseId: String(body?.caseId ?? ''),
@@ -299,26 +301,26 @@ async function routeHandle(
         if (error instanceof AssetError) throw error;
         throw new AssetError(-1, String((error as any)?.message ?? error));
       }
-      return { object: result.object, version: versionResponseBuild(result.version) };
+      return { item: result.item, version: versionResponseBuild(result.version) };
     }
     if (route === '/version/metadata/set') {
-      const result = store.versionMetadataSet(objectId, String(body?.versionId ?? ''), body?.versionMetadata);
-      return { object: result.object, version: versionResponseBuild(result.version) };
+      const result = store.versionMetadataSet(itemId, String(body?.versionId ?? ''), body?.versionMetadata);
+      return { item: result.item, version: versionResponseBuild(result.version) };
     }
     if (route === '/dependency/set') {
-      return { object: store.dependencyListSet(objectId, String(body?.versionId ?? ''), body?.dependencyList) };
+      return { item: store.dependencyListSet(itemId, String(body?.versionId ?? ''), body?.dependencyList) };
     }
     if (route === '/dependency/add') {
-      return { object: store.dependencyAdd(objectId, String(body?.versionId ?? ''), body?.dependency) };
+      return { item: store.dependencyAdd(itemId, String(body?.versionId ?? ''), body?.dependency) };
     }
     if (route === '/dependency/remove') {
-      return { object: store.dependencyRemove(objectId, String(body?.versionId ?? ''), body?.dependency) };
+      return { item: store.dependencyRemove(itemId, String(body?.versionId ?? ''), body?.dependency) };
     }
-    if (route === '/object/delete') return { object: store.objectDelete(objectId) };
-    if (route === '/object/restore') return { object: store.objectRestore(objectId) };
-    if (route === '/object/meta/set') {
+    if (route === '/item/delete') return { item: store.itemDelete(itemId) };
+    if (route === '/item/restore') return { item: store.itemRestore(itemId) };
+    if (route === '/item/meta/set') {
       return {
-        object: store.objectMetaSet(objectId, {
+        item: store.itemMetaSet(itemId, {
           name: body?.name,
           lang: body?.lang,
           contentType: body?.contentType,
@@ -328,23 +330,25 @@ async function routeHandle(
         }),
       };
     }
-    if (route === '/object/move') return { object: store.objectMove(objectId, { groupPath: String(body?.groupPath ?? '') }) };
-    if (route === '/version/checkout') return { object: store.versionCheckout(objectId, String(body?.versionId ?? '')) };
-    if (route === '/version/delete') return { object: store.versionDelete(objectId, String(body?.versionId ?? '')) };
-    if (route === '/object/lock/set') return { object: store.objectLockSet(objectId, body?.isLocked) };
+    if (route === '/item/move') {
+      return { item: store.itemMove(itemId, { groupPath: String(body?.groupPath ?? ''), folder: typeof body?.folder === 'string' && body.folder ? body.folder : undefined }) };
+    }
+    if (route === '/version/checkout') return { item: store.versionCheckout(itemId, String(body?.versionId ?? '')) };
+    if (route === '/version/delete') return { item: store.versionDelete(itemId, String(body?.versionId ?? '')) };
+    if (route === '/item/lock/set') return { item: store.itemLockSet(itemId, body?.isLocked) };
     if (route === '/version/lock/set') {
-      return { object: store.versionLockSet(objectId, String(body?.versionId ?? ''), body?.isLocked) };
+      return { item: store.versionLockSet(itemId, String(body?.versionId ?? ''), body?.isLocked) };
     }
   }
   throw new AssetError(-1, `unknown asset api route: ${method} ${route}`);
 }
 
 // the generic head write may not rewrite the result history of a
-// TestCaseTable object (comp-mdx/test-case-table/comp_test_case_table.md):
+// TestCaseTable item (comp-mdx/test-case-table/comp_test_case_table.md):
 // the history is appended through /test-case/result/set, with an operator
 // and a time of the server. a structural edit that keeps the history passes
-function testCaseHistoryGuard(store: AssetStore, objectId: string, data: Buffer) {
-  const head = store.versionDataGetOf(store.objectGet(objectId), 'head');
+function testCaseHistoryGuard(store: AssetStore, itemId: string, data: Buffer) {
+  const head = store.versionDataGetOf(store.itemGet(itemId), 'head');
   const textNext = textDecodeTry(data);
   try {
     testCaseAssetWriteCheck(head.isText ? head.text ?? '' : '', textNext ?? '');
@@ -359,18 +363,18 @@ function storeIdCheck(storeId: unknown) {
   if (storeId !== ASSET_STORE_ID_LOCAL) throw new AssetError(-3, `unknown asset store: ${String(storeId)}`);
 }
 
-// the object a read names: by objectId, or by name
-function storeObjectKeyGet(searchParams: URLSearchParams): AssetObjectKey {
+// the item a read names: by itemId, or by name
+function storeItemKeyGet(searchParams: URLSearchParams): AssetItemKey {
   storeIdCheck(searchParams.get('store'));
-  return { objectId: searchParams.get('objectId') ?? '', name: searchParams.get('name') ?? '' };
+  return { itemId: searchParams.get('itemId') ?? '', name: searchParams.get('name') ?? '' };
 }
 
 // one read of a list, in the form of an answer of its own
-function objectGetAnswerBuild(store: AssetStore, item: any) {
+function itemGetAnswerBuild(store: AssetStore, one: any) {
   try {
-    const object = store.objectFind({ objectId: String(item?.objectId ?? ''), name: '' });
-    const version = store.versionDataGetOf(object, String(item?.versionId ?? 'head'));
-    return { code: 0, data: { object, version: versionResponseBuild(version) }, message: '' };
+    const item = store.itemFind({ itemId: String(one?.itemId ?? ''), name: '' });
+    const version = store.versionDataGetOf(item, String(one?.versionId ?? 'head'));
+    return { code: 0, data: { item, version: versionResponseBuild(version) }, message: '' };
   } catch (error) {
     if (error instanceof AssetError) return { code: error.code, data: null, message: error.message };
     throw error;
@@ -384,7 +388,7 @@ function bodyDataGet(body: any): Buffer {
   throw new AssetError(-1, 'text or dataBase64 is required');
 }
 
-// the version without its bytes; the bytes are read through /object/data
+// the version without its bytes; the bytes are read through /item/data
 function versionResponseBuild(version: AssetVersionData) {
   return {
     versionId: version.versionId,

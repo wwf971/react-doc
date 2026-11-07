@@ -1,79 +1,58 @@
 # the default folder of the demonstration local store of the asset service layer (doc_page_impl_asset.md).
-# trying the asset panel writes here: new versions, new objects, backups.
+# trying the asset panel writes here: new versions, new items, backups.
 # everything new is ignored; only the files listed below are part of the
-# example. to add an object or a version to the example on purpose, list its
+# example. to add an item or a version to the example on purpose, list its
 # files here (or `git add -f` them).
 #
 # an ignore file cannot hide changes of files git already tracks: an edited
-# object.yaml, or a version rewritten in place, still shows as modified.
+# item.yaml, or a version rewritten in place, still shows as modified.
 # `git restore example_doc/.doc-page/asset` undoes those.
 
 *
 !*/
 !/.gitignore
 
-!/w4okcncucnu--hero image/object.yaml
+!/w4okcncucnu--hero image/item.yaml
 !/w4okcncucnu--hero image/w4okcnctumh.yaml
 !/w4okcncucnu--hero image/w4okcoobv98.yaml
 
-!/w4okcpzk7k5--gallery/object.yaml
+!/w4okcpzk7k5--gallery/item.yaml
 !/w4okcpzk7k5--gallery/w4okcpzk5gp.yaml
 
-!/w4okcraoqic--warehouse B stock/object.yaml
+!/w4okcraoqic--warehouse B stock/item.yaml
 !/w4okcraoqic--warehouse B stock/w4okcraofnf.md
 !/w4okcraoqic--warehouse B stock/w4okcsly2p7.md
 
-!/w4r63zmeaor--quarterly sales/object.yaml
+!/w4r63zmeaor--quarterly sales/item.yaml
 !/w4r63zmeaor--quarterly sales/w4r63zmf1ga.json
 !/w4r63zmeaor--quarterly sales/w4r63zmf1ga.metadata.yaml
 
-# an orphan (declares Image, no block references it) and an object that is
+# an orphan (declares Image, no block references it) and an item that is
 # not a component's data: the asset tab of the settings panel lists both
-!/w4v9ulp8y4h--removed banner/object.yaml
+!/w4v9ulp8y4h--removed banner/item.yaml
 !/w4v9ulp8y4h--removed banner/w4v9ulp8h0j.yaml
 
-!/w4v9ulpgv2u--style notes/object.yaml
+!/w4v9ulpgv2u--style notes/item.yaml
 !/w4v9ulpgv2u--style notes/w4v9ulpgmtl.md
 
 # the dashboards of service-instance.md: their data is the instance they
 # show and their state, rewritten in place while they are used
-!/w4veeme6sff--notes dashboard/object.yaml
+!/w4veeme6sff--notes dashboard/item.yaml
 !/w4veeme6sff--notes dashboard/w4vfc1v33ce.yaml
-!/w4veemesqgt--notes statistics/object.yaml
+!/w4veemesqgt--notes statistics/item.yaml
 !/w4veemesqgt--notes statistics/w4vfc1vlosy.yaml
-!/w4veemfcx8m--dashboard of a missing instance/object.yaml
+!/w4veemfcx8m--dashboard of a missing instance/item.yaml
 !/w4veemfcx8m--dashboard of a missing instance/w4vfc1w5hq0.yaml
-!/w4vfc1twaj6--dashboard of an unknown template/object.yaml
+!/w4vfc1twaj6--dashboard of an unknown template/item.yaml
 !/w4vfc1twaj6--dashboard of an unknown template/w4vfc1uhcec.yaml
 
 # the dashboards of service-kernel.md: the todos of an app service and the
 # storage (the sqlite infra service) they live in
-!/w55j4vdm1uw--todos dashboard/object.yaml
+!/w55j4vdm1uw--todos dashboard/item.yaml
 !/w55j4vdm1uw--todos dashboard/w55j4vefjq0.yaml
-!/w55j4vfa50k--todos storage/object.yaml
+!/w55j4vfa50k--todos storage/item.yaml
 !/w55j4vfa50k--todos storage/w55j4vg6ufb.yaml
 # the Backups dashboard of the local-backup infra instance (provisioned, so
 # bound to the instance of the machine the example was written on)
-!/w5f3p2e9xsm--backups of the example/object.yaml
+!/w5f3p2e9xsm--backups of the example/item.yaml
 !/w5f3p2e9xsm--backups of the example/w5f3p2ea8t0.yaml
-
-# the frontend objects of object-frontend.md (doc_page_impl_obj_frontend.md): every asset of
-# an object, its entry among them, gathered in the group folder {id}--{name} of the object
-!/w5j7ozoijzl--Reading list/w5j7ozokr1x/object.yaml
-!/w5j7ozoijzl--Reading list/w5j7ozokr1x/w5j7ozomfuf.yaml
-!/w5j7ozoijzl--Reading list/w5j7pmxa7fw/object.yaml
-!/w5j7ozoijzl--Reading list/w5j7pmxa7fw/w5j7pmxbx1o.yaml
-!/w5j7ozoijzl--Reading list/w5j7pmy0gul/object.yaml
-!/w5j7ozoijzl--Reading list/w5j7pmy0gul/w5j7pmy13gw.yaml
-!/w5j7ozoijzl--Reading list/w5j7pmym0fx/object.yaml
-!/w5j7ozoijzl--Reading list/w5j7pmym0fx/w5j7pmylhmt.yaml
-!/w5j7ozoijzl--Reading list/w5j7pmz5o32/object.yaml
-!/w5j7ozoijzl--Reading list/w5j7pmz5o32/w5j7pmz69r9.yaml
-!/w5j7ozoijzl--Reading list/w5j7pmznvdq/object.yaml
-!/w5j7ozoijzl--Reading list/w5j7pmznvdq/w5j7pmzol69.yaml
-!/w5j7ozoijzl--Reading list/w5j7pn05cwa/object.yaml
-!/w5j7ozoijzl--Reading list/w5j7pn05cwa/w5j7pn04r71.yaml
-!/w5j7pn0lh5o--Short list/w5j7pn0m41l/object.yaml
-!/w5j7pn0lh5o--Short list/w5j7pn0m41l/w5j7pn0lmnu.yaml
-!/w5j7pn0lh5o--Short list/w5j7pn121sr/object.yaml
-!/w5j7pn0lh5o--Short list/w5j7pn121sr/w5j7pn1320z.yaml

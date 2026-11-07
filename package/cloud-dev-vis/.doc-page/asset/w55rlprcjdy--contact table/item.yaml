@@ -1,0 +1,24 @@
+itemId: w55rlprcjdy
+name: contact table
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+component:
+  name: DiagramDataverseEntity
+versionIdHead: w55rlprb99w
+isDeleted: false
+isLocked: false
+timeCreated: 20261029_08310302+09
+versionList:
+  - versionId: w55rlprb99w
+    versionIdPrevList: []
+    time: 20261029_08310302+09
+    note: example data of the diagram examples
+    size: 618
+    hash: d1df5f5db10b36fa86bb34e01a2cb2c34d8e5855
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261029_08310302+09
+    versionId: w55rlprb99w

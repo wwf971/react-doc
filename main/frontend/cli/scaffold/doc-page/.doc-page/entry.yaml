@@ -1,6 +1,6 @@
 # The entry of the doc page, created by `react-doc init page`.
 # The doc page is this folder: its documents beside .doc-page/, its metadata
-# and its managed folders (components, asset objects, services) inside it.
+# and its managed folders (components, asset items, services) inside it.
 # design: main/doc_page_impl_dir.md (the layout), main/doc_page_impl_side_panel.md#the-document-entry
 docEntry:
   title: {{title}}

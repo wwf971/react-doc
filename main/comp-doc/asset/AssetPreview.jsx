@@ -19,8 +19,8 @@ import './DocAsset.css';
 //
 //   panel   the AssetPanelModel shown
 export const AssetPreview = observer(function AssetPreview({ panel }) {
-  const object = panel?.object;
-  if (!panel || !object) return null;
+  const item = panel?.item;
+  if (!panel || !item) return null;
   const preview = panel.previewData;
   const block = panel.block;
 
@@ -36,13 +36,13 @@ export const AssetPreview = observer(function AssetPreview({ panel }) {
         <span className="doc-asset-muted"> — {block ? <>{block.compName} with </> : null}{subject}</span>
       </p>
       <div className="doc-asset-preview-body">
-        <PreviewBody object={object} panel={panel} preview={preview} block={block} />
+        <PreviewBody item={item} panel={panel} preview={preview} block={block} />
       </div>
     </aside>
   );
 });
 
-const PreviewBody = observer(function PreviewBody({ object, panel, preview, block }) {
+const PreviewBody = observer(function PreviewBody({ item, panel, preview, block }) {
   const { assetStore } = useDocStores();
   if (!preview.versionId) return <p className="doc-asset-muted">Select a version, or edit the head, to see what it renders as.</p>;
   const version = preview.version;
@@ -51,13 +51,13 @@ const PreviewBody = observer(function PreviewBody({ object, panel, preview, bloc
   }
   if (version.status === 'error') return <p className="doc-error doc-edit-message">{version.message}</p>;
   if (!version.isText) {
-    const url = assetStore.dataUrlGet(panel.store, object.objectId, preview.versionId);
-    if (object.contentType.startsWith('image/')) {
-      return <img className="doc-asset-binary-preview" src={url} alt={object.name || object.objectId} />;
+    const url = assetStore.dataUrlGet(panel.store, item.itemId, preview.versionId);
+    if (item.contentType.startsWith('image/')) {
+      return <img className="doc-asset-binary-preview" src={url} alt={item.name || item.itemId} />;
     }
     return (
       <p className="doc-asset-muted">
-        The data is not text ({object.contentType}, {sizeTextGet(version.size)}); a component block reads text, so it has no rendering.
+        The data is not text ({item.contentType}, {sizeTextGet(version.size)}); a component block reads text, so it has no rendering.
       </p>
     );
   }
@@ -70,23 +70,23 @@ const PreviewBody = observer(function PreviewBody({ object, panel, preview, bloc
   const assetInfo = {
     isFromAsset: true,
     store: panel.store,
-    objectId: object.objectId,
-    name: object.name,
+    itemId: item.itemId,
+    name: item.name,
     versionIdRef: panel.versionIdRef || 'head',
     versionId: preview.versionId,
-    versionIdHead: object.versionIdHead,
-    isHead: preview.versionId === object.versionIdHead,
+    versionIdHead: item.versionIdHead,
+    isHead: preview.versionId === item.versionIdHead,
     hash: version.hash ?? '',
-    saveMode: assetSaveModeGet(object),
-    isLocked: object.isLocked,
+    saveMode: assetSaveModeGet(item),
+    isLocked: item.isLocked,
     versionMetadata: version.metadata ?? {},
   };
   return (
     <DocsBody>
       <RegisteredComp
         compName={block.compName}
-        configRuntime={{ instanceId: `asset-preview:${object.objectId}`, sourcePath: block.sourcePath, assetInfo }}
-        input={{ lang: object.lang, raw: preview.text, propsAuthored: block.propsAuthored }}
+        configRuntime={{ instanceId: `asset-preview:${item.itemId}`, sourcePath: block.sourcePath, assetInfo }}
+        input={{ lang: item.lang, raw: preview.text, propsAuthored: block.propsAuthored }}
         placement="commentBlock"
       />
     </DocsBody>

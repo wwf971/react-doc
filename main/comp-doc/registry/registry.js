@@ -168,7 +168,7 @@ const compFileDownload = compDefine(FileDownload, {
 const compTableHierarchy = compDefine(TableHierarchy, { placementList: ['commentBlock'], expose: tableHierarchyExpose });
 const compListHierarchy = compDefine(ListHierarchy, { placementList: ['commentBlock'], expose: listHierarchyExpose });
 // a test specification table drawn by the hierarchy view, whose results are
-// a managed history recorded on its asset object (comp_test_case_table.md):
+// a managed history recorded on its asset item (comp_test_case_table.md):
 // it reads its asset (the hash a record is based on) and names the evidence
 // documents of its history as the dependencies of the object
 const compTestCaseTable = compDefine(TestCaseTable, {

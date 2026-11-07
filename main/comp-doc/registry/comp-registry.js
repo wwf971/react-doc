@@ -9,7 +9,7 @@ import { compExposeNormalize } from './comp-expose.js';
 //   isAssetAware      the component receives config.assetInfo telling whether
 //                     its data is inline or an asset-store object
 //                     (doc_page_impl_mdx_comp.md#component-awareness)
-//   assetDependencyListGet(data) -> [{ type, path | objectId }] the source files
+//   assetDependencyListGet(data) -> [{ type, path | itemId }] the source files
 //                     and assets the component's data refers to; recorded as the
 //                     dependencies of an asset created from the data
 //   deleteFileListGet(data) -> [{ path, reason? }] optional: the source files

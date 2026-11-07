@@ -1,0 +1,61 @@
+itemId: w5j7ozokr1x
+name: ""
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+owner:
+  ref: frontend:w5j7ozoijzl
+  role: entry
+versionIdHead: w5j7ozomfuf
+isDeleted: false
+isLocked: false
+timeCreated: 20261105_01183107+09
+versionList:
+  - versionId: w5j7ozomfuf
+    versionIdPrevList: []
+    time: 20261105_01183107+09
+    note: the entry of the frontend object Reading list
+    size: 1165
+    hash: 2e1d26ac39cbe05049c8e0e045e4ba6fad3df986
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261105_01183107+09
+    versionId: w5j7ozomfuf
+  - eventType: updateInPlace
+    time: 20261105_01185251+09
+    versionId: w5j7ozomfuf
+  - eventType: updateInPlace
+    time: 20261105_01185253+09
+    versionId: w5j7ozomfuf
+  - eventType: updateInPlace
+    time: 20261105_01185254+09
+    versionId: w5j7ozomfuf
+  - eventType: updateInPlace
+    time: 20261105_01185256+09
+    versionId: w5j7ozomfuf
+  - eventType: updateInPlace
+    time: 20261105_01185257+09
+    versionId: w5j7ozomfuf
+  - eventType: updateInPlace
+    time: 20261105_01185258+09
+    versionId: w5j7ozomfuf
+  - eventType: updateInPlace
+    time: 20261105_03374814+09
+    versionId: w5j7ozomfuf
+  - eventType: updateInPlace
+    time: 20261105_03374815+09
+    versionId: w5j7ozomfuf
+  - eventType: updateInPlace
+    time: 20261105_03374817+09
+    versionId: w5j7ozomfuf
+  - eventType: updateInPlace
+    time: 20261105_03374818+09
+    versionId: w5j7ozomfuf
+  - eventType: updateInPlace
+    time: 20261105_03374819+09
+    versionId: w5j7ozomfuf
+  - eventType: updateInPlace
+    time: 20261105_03374821+09
+    versionId: w5j7ozomfuf

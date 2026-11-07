@@ -43,7 +43,7 @@ const templateTextList = [
 
 // A component declared isNotInDoc is never offered. One declared isAssetOnly
 // is offered with isAssetOnly and its starting data (assetSource: { lang,
-// raw, props }): choosing it creates an asset object with that data first
+// raw, props }): choosing it creates an asset item with that data first
 // and writes a reference block to it (DocEditStore blockCreateAsAsset); its
 // text is the block as the data would be written inline, for the search.
 //

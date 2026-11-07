@@ -124,19 +124,19 @@ export type EditSession = {
   // the draft of the asset data, for a block whose data is a reference into
   // the asset service layer, open in an edit mode of its component (an isAssetOnly
   // component): the component edits the asset, not the lines of the block.
-  // a leave writes it into the asset object; undefined while unchanged
+  // a leave writes it into the asset item; undefined while unchanged
   assetDraft?: EditAssetDraft;
-  // the asset object created for this block when it was created from the
+  // the asset item created for this block when it was created from the
   // insert menu (an isAssetOnly component); canceling the creation deletes
   // it (softly) with the block
-  assetObjectIdCreated?: string;
+  assetItemIdCreated?: string;
   status: 'editing' | 'submitting' | 'error';
   message: string;
 };
 
 export type EditAssetDraft = {
   store: string;
-  objectId: string;
+  itemId: string;
   raw: string;
   // the metadata of the version the data is saved as; undefined keeps the head's
   versionMetadata?: Record<string, unknown>;
@@ -1002,8 +1002,8 @@ export class DocEditStore {
   // leaves the other one written:
   //   isDirty: false         the data is as it was; a leave writes nothing
   //   saveTarget: 'inline'   the data is written into the block in place of
-  //                          the reference; the asset object is not touched
-  //   otherwise              the asset object (the block keeps its reference)
+  //                          the reference; the asset item is not touched
+  //   otherwise              the asset item (the block keeps its reference)
   // both fields are compared strictly, so an editor that reports neither
   // keeps saving to the asset.
   private sessionAssetDraftSet(event: DocEvent) {
@@ -1029,7 +1029,7 @@ export class DocEditStore {
     const versionMetadata = event.data.versionMetadata;
     session.assetDraft = {
       store: String(asset.store),
-      objectId: String(asset.objectId),
+      itemId: String(asset.itemId),
       raw: String(event.data.raw ?? session.assetDraft?.raw ?? ''),
       versionMetadata: versionMetadata && typeof versionMetadata === 'object' ? { ...versionMetadata } : session.assetDraft?.versionMetadata,
     };
@@ -1056,9 +1056,9 @@ export class DocEditStore {
       session.status = 'submitting';
       session.message = '';
     });
-    const result = await this.assetStore.objectUpdate(
+    const result = await this.assetStore.itemUpdate(
       assetDraft.store,
-      assetDraft.objectId,
+      assetDraft.itemId,
       { text: assetDraft.raw },
       undefined,
       `${block.component.compName} edited in ${session.path}`,
@@ -1108,8 +1108,8 @@ export class DocEditStore {
       }
       // the object made for the block is referenced by nothing now; deleted
       // softly, so it can still be restored from the asset service layer
-      if (session.assetObjectIdCreated && this.assetStore) {
-        await this.assetStore.objectDelete(ASSET_STORE_ID_LOCAL, session.assetObjectIdCreated);
+      if (session.assetItemIdCreated && this.assetStore) {
+        await this.assetStore.itemDelete(ASSET_STORE_ID_LOCAL, session.assetItemIdCreated);
       }
       return true;
     }
@@ -1565,7 +1565,7 @@ export class DocEditStore {
   // deletes the blocks at blockIndexList of a document, chosen in the text
   // of hash sourceHash (the block menu of block selection mode,
   // doc_page_impl_block_ops.md#selecting-blocks): one write, the runs of
-  // blocks taken out with their blank lines. asset objects the blocks
+  // blocks taken out with their blank lines. asset items the blocks
   // reference are left to the asset service layer, as orphans when nothing else
   // references them.
   async blockListDelete(path: string, sourceHash: string, blockIndexList: number[]): Promise<EditResult> {
@@ -1642,7 +1642,7 @@ export class DocEditStore {
     });
     const compId = compIdResolve(this.sourceStore.configDoc, template.compName);
     const definition = compDefinitionNormalize(compDefinitionGet(this.docStore.compById, compId));
-    const resultCreate = await this.assetStore.objectCreate({
+    const resultCreate = await this.assetStore.itemCreate({
       store: ASSET_STORE_ID_LOCAL,
       lang: template.assetSource.lang,
       text: template.assetSource.raw,
@@ -1651,14 +1651,14 @@ export class DocEditStore {
       saveMode: compMetaGet(definition).assetSaveMode,
       component: { name: template.compName },
     });
-    const objectId: string = resultCreate.data?.object?.objectId ?? '';
-    if (resultCreate.code !== 0 || !objectId) {
-      failSet(resultCreate.message || 'The asset object of the new block was not created.');
+    const itemId: string = resultCreate.data?.item?.itemId ?? '';
+    if (resultCreate.code !== 0 || !itemId) {
+      failSet(resultCreate.message || 'The asset item of the new block was not created.');
       return false;
     }
     const text = componentTemplateTextBuild(template.compName, {
       lang: ASSET_REF_LANG,
-      raw: assetRefTextBuild({ store: ASSET_STORE_ID_LOCAL, objectId }),
+      raw: assetRefTextBuild({ store: ASSET_STORE_ID_LOCAL, itemId }),
       props: template.assetSource.props,
     });
     const result = await this.operationApply(path, blockInsertOperationBuild(model, menu.borderIndex, text), {
@@ -1668,7 +1668,7 @@ export class DocEditStore {
       },
     });
     if (result.code !== 0) {
-      await this.assetStore.objectDelete(ASSET_STORE_ID_LOCAL, objectId);
+      await this.assetStore.itemDelete(ASSET_STORE_ID_LOCAL, itemId);
       failSet(result.message);
       return false;
     }
@@ -1676,7 +1676,7 @@ export class DocEditStore {
     const isStarted = await this.sessionBlockStart(path, menu.borderIndex, { isCreated: true, selectionInitial: 'all' });
     if (isStarted) {
       runInAction(() => {
-        if (this.session) this.session.assetObjectIdCreated = objectId;
+        if (this.session) this.session.assetItemIdCreated = itemId;
       });
     }
     return isStarted;
@@ -1828,7 +1828,7 @@ export class DocEditStore {
       this.blockAssetMove = { path, blockIndex, status: 'submitting', message: '' };
       return this.blockAssetMove!;
     });
-    const resultCreate = await this.assetStore.objectCreate({
+    const resultCreate = await this.assetStore.itemCreate({
       store: ASSET_STORE_ID_LOCAL,
       lang: block.component.lang,
       text: block.component.raw,
@@ -1838,15 +1838,15 @@ export class DocEditStore {
       saveMode: compMetaGet(this.blockDefinitionGet(path, blockIndex)).assetSaveMode,
       component: { name: block.component.compName },
     });
-    const objectId: string = resultCreate.data?.object?.objectId ?? '';
-    if (resultCreate.code !== 0 || !objectId) {
+    const itemId: string = resultCreate.data?.item?.itemId ?? '';
+    if (resultCreate.code !== 0 || !itemId) {
       runInAction(() => {
         move.status = 'error';
-        move.message = resultCreate.message || 'The asset object was not created.';
+        move.message = resultCreate.message || 'The asset item was not created.';
       });
       return false;
     }
-    const referenceText = assetRefTextBuild({ store: ASSET_STORE_ID_LOCAL, objectId });
+    const referenceText = assetRefTextBuild({ store: ASSET_STORE_ID_LOCAL, itemId });
     const text = componentBlockTextBuild(block, { raw: referenceText, lang: ASSET_REF_LANG });
     const result = await this.operationApply(path, blockReplaceOperationBuild(block, text), {
       messageFailure: 'The block was not rewritten as a reference.',
@@ -1858,7 +1858,7 @@ export class DocEditStore {
     if (result.code !== 0) {
       runInAction(() => {
         move.status = 'error';
-        move.message = `${result.message} The data is in the asset service layer as object ${objectId}.`;
+        move.message = `${result.message} The data is in the asset service layer as object ${itemId}.`;
       });
       return false;
     }
@@ -2027,7 +2027,7 @@ export class DocEditStore {
   // data (the text of its asset version for a reference block) normalized as
   // the component sees it, the candidates of deleteFileListGet resolved
   // against the document and listed once each. a file cannot be chosen when
-  // the block's asset object is used by other blocks (they may read the
+  // the block's asset item is used by other blocks (they may read the
   // file), when it is not a file of the collected source, or when the
   // component says so. the result reaches the confirmation only while it
   // is still the open one: a confirmation closed or replaced meanwhile is
@@ -2050,13 +2050,13 @@ export class DocEditStore {
           throw new Error(state.message || 'The asset data of the block is not loaded.');
         }
         raw = state.version.text;
-        // the data of an asset object is yaml, the format the edit layer
+        // the data of an asset item is yaml, the format the edit layer
         // writes a block's data into the store as
         lang = 'yaml';
       }
       const { data } = compInputNormalize(definition, { raw, lang, propsAuthored: component.props ?? {} });
       const candidateList: any[] = definition.deleteFileListGet(data) ?? [];
-      const assetObject = this.blockAssetObjectGet(path, blockIndex);
+      const assetItem = this.blockAssetItemGet(path, blockIndex);
       const fileByPath = new Map<string, EditDeleteFile>();
       for (const candidate of candidateList) {
         const reference = String(candidate?.path ?? '').trim();
@@ -2064,8 +2064,8 @@ export class DocEditStore {
         const entry = this.sourceStore.fileResolve(reference, path);
         const filePath = entry?.internalPath ?? reference;
         if (fileByPath.has(filePath)) continue;
-        const reason = assetObject && assetObject.usageCountOther > 0
-          ? 'other blocks use the asset object of this block and may show this file'
+        const reason = assetItem && assetItem.usageCountOther > 0
+          ? 'other blocks use the asset item of this block and may show this file'
           : !entry
             ? 'not a file of the collected source'
             : String(candidate?.reason ?? '');
@@ -2113,27 +2113,27 @@ export class DocEditStore {
     return this.deleteConfirm?.path === path && this.deleteConfirm.blockIndex === blockIndex;
   }
 
-  // the asset object a component block's data comes from, when the block is
+  // the asset item a component block's data comes from, when the block is
   // a reference that resolves to one: what deleting the block may delete
-  // with it (doc_page_impl_asset.md#objects-for-components).
+  // with it (doc_page_impl_asset.md#items-for-components).
   //   usageCountOther   the other blocks of the documents that reference it
-  blockAssetObjectGet(path: string, blockIndex: number): {
-    store: string; objectId: string; name: string; isDeleted: boolean; isLocked: boolean; usageCountOther: number;
+  blockAssetItemGet(path: string, blockIndex: number): {
+    store: string; itemId: string; name: string; isDeleted: boolean; isLocked: boolean; usageCountOther: number;
   } | undefined {
     const component = this.docEditByPath[path]?.model?.blockList[blockIndex]?.component;
     if (!component || !assetRefLangIs(component.lang) || !this.assetStore) return undefined;
     const reference = assetRefParse(component.raw);
     if (reference.message) return undefined;
-    const objectId = this.assetStore.refObjectIdGet(reference);
-    const object = objectId ? this.assetStore.objectGet(reference.store, objectId) : undefined;
-    if (!object) return undefined;
-    const usageCountOther = this.assetStore.usageListGet(reference.store, objectId)
+    const itemId = this.assetStore.refItemIdGet(reference);
+    const assetItem = itemId ? this.assetStore.itemGet(reference.store, itemId) : undefined;
+    if (!assetItem) return undefined;
+    const usageCountOther = this.assetStore.usageListGet(reference.store, itemId)
       .filter((usage) => !(usage.place.docPath === path && usage.place.sourceLine === component.markerLine))
       .length;
-    return { store: reference.store, objectId, name: object.name, isDeleted: object.isDeleted, isLocked: object.isLocked, usageCountOther };
+    return { store: reference.store, itemId, name: assetItem.name, isDeleted: assetItem.isDeleted, isLocked: assetItem.isLocked, usageCountOther };
   }
 
-  // deletes the confirmed block. isAssetDeleted: the asset object the
+  // deletes the confirmed block. isAssetDeleted: the asset item the
   // block's data comes from is deleted with it (softly: the deletion mark,
   // restorable in its panel). the object is marked first and the document
   // written last, the write being the step that makes the deletion happen:
@@ -2170,16 +2170,16 @@ export class DocEditStore {
     });
     const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
     const usageChange = blockUsageLinesGet(this.docEditByPath[path]?.model, block);
-    const assetObject = options.isAssetDeleted ? this.blockAssetObjectGet(path, blockIndex) : undefined;
-    const isAssetMarked = Boolean(assetObject && !assetObject.isDeleted);
-    if (options.isAssetDeleted && !assetObject) {
-      failSet('The asset object of the block is not known, so it was not deleted; the block was kept.');
+    const assetItem = options.isAssetDeleted ? this.blockAssetItemGet(path, blockIndex) : undefined;
+    const isAssetMarked = Boolean(assetItem && !assetItem.isDeleted);
+    if (options.isAssetDeleted && !assetItem) {
+      failSet('The asset item of the block is not known, so it was not deleted; the block was kept.');
       return false;
     }
     if (isAssetMarked) {
-      const resultAsset = await this.assetStore!.objectDelete(assetObject!.store, assetObject!.objectId);
+      const resultAsset = await this.assetStore!.itemDelete(assetItem!.store, assetItem!.itemId);
       if (resultAsset.code !== 0) {
-        failSet(`The asset object was not deleted, so the block was kept: ${resultAsset.message}`);
+        failSet(`The asset item was not deleted, so the block was kept: ${resultAsset.message}`);
         return false;
       }
     }
@@ -2187,7 +2187,7 @@ export class DocEditStore {
       if (this.deleteConfirm === confirm) this.deleteConfirm = undefined;
     }, filePathDeleteList);
     if (result.code !== 0) {
-      if (isAssetMarked) await this.assetStore!.objectRestore(assetObject!.store, assetObject!.objectId);
+      if (isAssetMarked) await this.assetStore!.itemRestore(assetItem!.store, assetItem!.itemId);
       failSet(result.message);
       return false;
     }
@@ -2200,7 +2200,7 @@ export class DocEditStore {
   // a component asks for its data to be replaced with new text
   // (dataReplaceRequest { raw, dependencyList? }; doc_page_impl_mdx_comp.md
   // #component-awareness). the block is named by event.source; when the
-  // block's data is an asset (event.source.asset), the asset object is
+  // block's data is an asset (event.source.asset), the asset item is
   // updated in its save mode and the block is untouched; otherwise the
   // fenced block of the component is rewritten in the document. the
   // dependencies recorded with asset data are what the component's
@@ -2217,9 +2217,9 @@ export class DocEditStore {
     const asset = event.source.asset;
     if (asset?.isFromAsset) {
       if (!this.assetStore?.isWritable) return { code: -1, message: this.assetWriteUnavailableReasonGet() };
-      const result = await this.assetStore.objectUpdate(
+      const result = await this.assetStore.itemUpdate(
         asset.store,
-        asset.objectId,
+        asset.itemId,
         { text: raw },
         undefined,
         `${block.component.compName} data replaced from ${path}`,
@@ -2315,8 +2315,8 @@ export class DocEditStore {
         if (entry) dependencyList.push({ type: 'source', path: entry.internalPath });
         continue;
       }
-      if (dependency?.type === 'asset' && dependency.objectId) {
-        dependencyList.push({ type: 'asset', objectId: dependency.objectId, ...(dependency.versionId ? { versionId: dependency.versionId } : {}) });
+      if (dependency?.type === 'asset' && dependency.itemId) {
+        dependencyList.push({ type: 'asset', itemId: dependency.itemId, ...(dependency.versionId ? { versionId: dependency.versionId } : {}) });
       }
     }
     return dependencyList;

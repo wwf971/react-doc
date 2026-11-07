@@ -3,7 +3,7 @@ import { makeAutoObservable, runInAction } from 'mobx';
 // The state of one TestCaseTable while it is shown (TestCaseTable.jsx): the
 // confirmation cell whose popup is open, and the form of a new result in
 // it. The data of the table is not here: it is the block's data, rendered
-// again by the page after every record (the asset object changed).
+// again by the page after every record (the asset item changed).
 //
 //   cellOpen        { caseId, testerId, testerName, hashBase }: the cell
 //                   whose history is shown. hashBase is the hash of the data

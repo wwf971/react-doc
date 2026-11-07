@@ -4,13 +4,13 @@
 
 An asset is data: a versioned object that a component reads, which the page can copy, bundle into a build, and resolve before the component renders ([Asset service layer](doc_page_impl_asset.md)). A **service instance** is a running thing: a database, a crawler, a queue of jobs, a connection to an outside system, anything that answers requests and keeps something between them. What it keeps is not the document's and cannot be bundled; the document only places **dashboards** that show and work an instance. The distinction decides everything below:
 
-| | asset object | service instance |
+| | asset item | service instance |
 | --- | --- | --- |
 | what it is | data, with a history of versions | a process, with state only it can change |
 | who reads it | the page resolves it before the component renders | the dashboard asks the instance, through its apis |
 | who writes it | the page, through the asset api | the instance itself, when an api asks it to |
 | in a build | bundled, read-only | absent: a build has no backend |
-| in a document | a reference in place of the block's data | a dashboard block, whose own data (which instance, the dashboard's state) is an asset object |
+| in a document | a reference in place of the block's data | a dashboard block, whose own data (which instance, the dashboard's state) is an asset item |
 
 ## The concepts
 
@@ -38,7 +38,7 @@ DocServiceStore                            plugin/doc-service-server.ts     serv
   │    serviceJobGetRequest, serviceResolveRequest                          /instance/resolve  one api at a time
   │    serviceBindRequest ─┐                                                     ▲
   │                        │          another instance: context.service_call; an infra: context.infra(name)
-  │    dashboardStateSetRequest ─► DocAssetStore.objectUpdate (in place)
+  │    dashboardStateSetRequest ─► DocAssetStore.itemUpdate (in place)
   └─ dashboardProblemGet: why a dashboard cannot show                      the kernel: scan, reconcile (provision, route,
                                                                             health), hooks, log ──► the logging infra instance
 

@@ -229,7 +229,7 @@ export const ObjectFrontendAssetPathInput = observer(function ObjectFrontendAsse
                 : <span className="doc-object-frontend-path-option-note">{candidate.asset.name || candidate.asset.key}</span>}
               {candidate.kind === 'asset' && candidate.asset.kind ? <span className="doc-badge">{candidate.asset.kind}</span> : null}
               {candidate.kind === 'asset' && candidate.asset.status !== 'found'
-                ? <span className="doc-badge-outline" data-error="" title={`the asset ${candidate.asset.objectId} is ${candidate.asset.status} in the store`}>{candidate.asset.status}</span>
+                ? <span className="doc-badge-outline" data-error="" title={`the asset ${candidate.asset.itemId} is ${candidate.asset.status} in the store`}>{candidate.asset.status}</span>
                 : null}
             </li>
           ))}

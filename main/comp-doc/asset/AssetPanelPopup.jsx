@@ -6,7 +6,7 @@ import { AssetPanel } from './AssetPanel.jsx';
 import { AssetPreview } from './AssetPreview.jsx';
 import './DocAsset.css';
 
-// Popup with the asset panel of one object, opened from the toolbar of a
+// Popup with the asset panel of one item, opened from the toolbar of a
 // component block whose data comes from the asset service layer. Open state lives
 // in DocAssetStore (panel, an AssetPanelModel). The popup frame is the host's text panel
 // component (config.compConfigHost.panelComponent), as for the tag
@@ -30,11 +30,11 @@ export const AssetPanelPopup = observer(function AssetPanelPopup() {
   }, [isOpen, assetStore]);
 
   if (!isOpen) return null;
-  const object = panel.object;
+  const item = panel.item;
   const isPreviewOpen = panel.isPreviewOpen;
   return (
     <Panel
-      data={{ title: `Asset: ${object?.name || panel.objectId}` }}
+      data={{ title: `Asset: ${item?.name || panel.itemId}` }}
       config={{
         isPopup: true,
         isCloseVisible: true,

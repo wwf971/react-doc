@@ -206,7 +206,7 @@ const sourceFiles = [
   '<!--renderComp=PhotoSet-->',
   '```asset',
   'store: local',
-  'objectId: w1',
+  'itemId: w1',
   '```',
   '',
 ].join('\n');
@@ -365,8 +365,8 @@ function assetStoreCreate() {
   const assetStore = {
     isWritable: true,
     writeUnavailableReason: '',
-    refObjectIdGet: (ref) => ref.objectId,
-    objectGet: () => ({ name: 'photos', isDeleted: false, isLocked: false, versionIdHead: 'v1' }),
+    refItemIdGet: (ref) => ref.itemId,
+    itemGet: () => ({ name: 'photos', isDeleted: false, isLocked: false, versionIdHead: 'v1' }),
     usageListGet: () => [],
     refLoad: () => loadPromise,
     refQuery: () => ({ status: 'done', message: '', versionId: 'v1', version: { text: 'files: [dog.png, notes.pdf]' } }),

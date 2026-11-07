@@ -68,11 +68,13 @@ import {
 } from './doc-comp-config.ts';
 import { docPackageListLoad, docPackageSpecDirGet, docPackageSpecListRead, PACKAGE_SERVICE_TEMPLATE_FOLDER_LIST, type DocPackageLoaded, type DocPackageSpec } from './doc-package.ts';
 import {
-  ASSET_OBJECT_META_NAME, assetConfigFormerReject, assetConfigOfDocPageListGet, assetStoreCreate, objectIdFromDirName,
+  ASSET_ITEM_META_NAME, assetConfigFormerReject, assetConfigOfDocPageListGet, assetStoreCreate, itemIdFromDirName,
   type AssetSnapshot, type AssetStore, type AssetStoreConfig, type AssetUsageDoc,
 } from './doc-asset-store.ts';
 import { assetBlockTextExpand, assetUsageListScan } from '../src/lib/doc-asset-ref.js';
-import { objectFrontendConfigForPage, objectFrontendConfigOfDocPageListGet, type ObjectFrontendConfig } from './doc-object-frontend.ts';
+import { OBJECT_FRONTEND_META_NAME } from '../src/lib/doc-object-frontend.js';
+import { objectFrontendConfigForPage, objectFrontendConfigOfDocPageListGet, objectFrontendFolderOwnedListGet, objectFrontendTypeFileListGet, type ObjectFrontendConfig } from './doc-object-frontend.ts';
+import { TYPE_CONFIG_FILE_NAME, typeDeclaredConfigGet, type TypeDeclaredConfig } from './doc-type-config.ts';
 import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
 import { sourceFileBackupNameIs } from './doc-source-file.ts';
 import { textLocalizedGet } from '../src/lib/text-localized.js';
@@ -335,8 +337,8 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
           if (!attachmentExtIsBinary(entry.ext)) textList.push(fs.readFileSync(entry.absPath, 'utf-8'));
         }
         const assetStore = assetStoreGet(configDoc);
-        for (const object of Object.values<any>(assetStore?.snapshotBuild().objectById ?? {})) {
-          const { versionDataById, ...meta } = object;
+        for (const assetItem of Object.values<any>(assetStore?.snapshotBuild().itemById ?? {})) {
+          const { versionDataById, ...meta } = assetItem;
           textList.push(JSON.stringify(meta));
           for (const version of Object.values<any>(versionDataById)) if (version.isText) textList.push(version.text);
         }
@@ -740,7 +742,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       // the asset api works on the store as its config file says now; a
       // change on disk (an external editor, a git checkout, the panel's own
       // write) is reported to the page as a custom hmr event, see
-      // generateModuleCode: { objectId } for an object, { isStoreChanged }
+      // generateModuleCode: { itemId } for an object, { isStoreChanged }
       // when the folder list changed
       let assetConfig = assetConfigGet(configDoc, configDir);
       if (docAssetEndpoint && assetConfig) {
@@ -758,16 +760,39 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         // not: one created from the page is seen) and every folder
         // the frontend object files of the doc pages: a change is told to the
         // page, which reads them again (no reload)
-        let objectFrontendPathList = objectFrontendConfigGet(configDoc, configDir).pathList;
+        const objectFrontendConfigNow = objectFrontendConfigGet(configDoc, configDir);
+        let objectFrontendPathList = objectFrontendConfigNow.pathList;
+        let objectFrontendFolderList = objectFrontendConfigNow.folderList;
         const assetWatch = () => {
           for (const docPage of assetConfig!.docPageList) server.watcher.add(docPage.configFile);
           for (const folder of assetConfig!.folderList) server.watcher.add(folder.pathAbs);
           for (const file of objectFrontendPathList) server.watcher.add(file);
+          for (const folder of objectFrontendFolderList) server.watcher.add(folder);
         };
         assetWatch();
+        // the object.yaml of an object folder appearing, changing or going (made from
+        // the page, renamed with its object, or a folder copied in): the store has
+        // other folders now, and the page reads both again
+        const assetObjectFrontendFolderReload = () => {
+          try {
+            assetConfig = assetConfigCurrentGet();
+            const config = objectFrontendConfigGet(loadConfigDoc(configFile, options), configDir);
+            objectFrontendPathList = config.pathList;
+            objectFrontendFolderList = config.folderList;
+          } catch (error: any) {
+            console.warn(String(error?.message ?? error));
+            return;
+          }
+          assetWatch();
+          server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { itemId: '', isStoreChanged: true, isObjectFrontendChanged: true } });
+        };
         const assetChangeSend = (filePath: string) => {
+          if (path.basename(filePath) === OBJECT_FRONTEND_META_NAME && objectFrontendFolderList.includes(path.dirname(path.dirname(filePath)))) {
+            assetObjectFrontendFolderReload();
+            return;
+          }
           if (objectFrontendPathList.includes(filePath)) {
-            server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { objectId: '', isStoreChanged: false, isObjectFrontendChanged: true } });
+            server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { itemId: '', isStoreChanged: false, isObjectFrontendChanged: true } });
             return;
           }
           if (assetConfig!.docPageList.some((docPage) => docPage.configFile === filePath)) {
@@ -779,23 +804,25 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
               return;
             }
             try {
-              objectFrontendPathList = objectFrontendConfigGet(loadConfigDoc(configFile, options), configDir).pathList;
+              const config = objectFrontendConfigGet(loadConfigDoc(configFile, options), configDir);
+              objectFrontendPathList = config.pathList;
+              objectFrontendFolderList = config.folderList;
             } catch {
               // the last list is kept
             }
             assetWatch();
-            server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { objectId: '', isStoreChanged: true } });
+            server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { itemId: '', isStoreChanged: true } });
             return;
           }
           const folder = assetConfig!.folderList.find((item) => pathIsInside(filePath, item.pathAbs));
           if (!folder) return;
-          // the object's folder is {objectId}--{name}, at the top of the store
+          // the object's folder is {itemId}--{name}, at the top of the store
           // folder or inside group folders: the first folder of the path
-          // holding object.yaml whose name starts with an id. a file right in
+          // holding item.yaml whose name starts with an id. a file right in
           // the store folder or in a group is not an object's
-          const objectId = assetObjectIdOfPathGet(folder.pathAbs, filePath);
-          if (!objectId) return;
-          server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { objectId, isStoreChanged: false } });
+          const itemId = assetItemIdOfPathGet(folder.pathAbs, filePath);
+          if (!itemId) return;
+          server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { itemId, isStoreChanged: false } });
         };
         server.watcher.on('add', assetChangeSend);
         server.watcher.on('change', assetChangeSend);
@@ -828,8 +855,10 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       sourceExcludeSet(configDoc);
       const invalidateManifest = (filePath: string) => {
         // a comp config file or a manifest of a component folder is
-        // configuration: the mounts change with it
-        if (!compManifestPathIs(sourceExclude!.compConfig, filePath)) {
+        // configuration: the mounts change with it. so is the type file of an object folder
+        const isTypeFileOfObject = path.basename(filePath) === TYPE_CONFIG_FILE_NAME
+          && sourceExclude!.objectFrontendFolderList.includes(path.dirname(path.dirname(filePath)));
+        if (!compManifestPathIs(sourceExclude!.compConfig, filePath) && !isTypeFileOfObject) {
           // files of the asset service layer, of the service layer (a
           // database, a built dashboard) and of the component folders (code,
           // with vite's own hmr) are not documents, even inside a source folder
@@ -1400,6 +1429,9 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
   const apiDeclaredConfig = apiDeclaredConfigOfDocPageListGet(entryLoaded.docPageList, configDir);
   for (const problem of apiDeclaredConfig.problemList) problemListReport('doc-api', problem.file, [problem.message]);
   config.apiDeclared = { list: apiDeclaredConfig.list, problemList: apiDeclaredConfig.problemList };
+  const typeDeclaredConfig = typeDeclaredConfigOfDocGet(entryLoaded.docPageList, config.docEntry?.packageList ?? [], configDir);
+  for (const problem of typeDeclaredConfig.problemList) problemListReport('doc-type', problem.file, [problem.message]);
+  config.typeDeclared = { typeList: typeDeclaredConfig.typeList, problemList: typeDeclaredConfig.problemList };
   const playgroundConfig = playgroundConfigOfDocPageListGet(entryLoaded.docPageList, configDir);
   for (const problem of playgroundConfig.problemList) problemListReport('doc-playground', problem.file, [problem.message]);
   config.playgroundList = playgroundConfig.list;
@@ -1453,7 +1485,7 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
   // the map files of the package and the workspace, the hotkey folders and
   // the api files of the doc pages: a change there reloads the page with
   // the new maps / apis
-  fileListConfiguration.push(...hotkeyConfig.pathList, ...apiDeclaredConfig.pathList, ...playgroundConfig.pathList);
+  fileListConfiguration.push(...hotkeyConfig.pathList, ...apiDeclaredConfig.pathList, ...typeDeclaredConfig.pathList, ...playgroundConfig.pathList);
   Object.defineProperty(config, 'fileListConfiguration', { enumerable: false, value: fileListConfiguration });
   return config;
 }
@@ -1600,6 +1632,9 @@ type SourceExclude = {
   compConfig: CompConfig;
   // the frontend object files of the doc pages (and their backups), read by the asset api
   objectFrontendPathList: string[];
+  // the folders holding their object folders: whatever appears inside is never a document,
+  // nor a reason to reload the page (an object made from the page, a folder copied in)
+  objectFrontendFolderList: string[];
 };
 
 function sourceExcludeGet(configDoc: any, configDir: string): SourceExclude {
@@ -1609,17 +1644,20 @@ function sourceExcludeGet(configDoc: any, configDir: string): SourceExclude {
   for (const item of (configDoc.docEntry?.packageList ?? []) as DocPackageLoaded[]) {
     for (const folder of PACKAGE_SERVICE_TEMPLATE_FOLDER_LIST) serviceFolderSet.folderList.push(path.join(item.dir, folder.path));
   }
+  const objectFrontendConfig = objectFrontendConfigGet(configDoc, configDir);
   return {
     assetConfig: assetConfigGet(configDoc, configDir),
     serviceFolderSet,
     compConfig: compConfigGet(configDoc),
-    objectFrontendPathList: objectFrontendConfigGet(configDoc, configDir).pathList,
+    objectFrontendPathList: objectFrontendConfig.pathList,
+    objectFrontendFolderList: objectFrontendConfig.folderList,
   };
 }
 
 function sourceExcludePathIs(exclude: SourceExclude, filePath: string): boolean {
   return (exclude.assetConfig !== undefined && assetPathIs(exclude.assetConfig, filePath))
     || exclude.objectFrontendPathList.some((file) => filePath === file || filePath === `${file}.bak` || filePath === `${file}.tmp`)
+    || exclude.objectFrontendFolderList.some((folder) => pathIsInside(filePath, folder))
     || servicePathIs(exclude.serviceFolderSet, filePath)
     || compPathIs(exclude.compConfig, filePath);
 }
@@ -1690,13 +1728,20 @@ function objectFrontendConfigGet(configDoc: any, configDir: string): ObjectFront
   const docPageList = Array.isArray(configDoc.docEntry?.docPageList) ? configDoc.docEntry.docPageList : [];
   const assetFolderByAlias = new Map<string, string>();
   for (const docPage of assetConfigGet(configDoc, configDir)?.docPageList ?? []) assetFolderByAlias.set(docPage.alias, docPage.folderDefault);
-  return objectFrontendConfigOfDocPageListGet(docPageList, configDir, assetFolderByAlias);
+  return objectFrontendConfigOfDocPageListGet(docPageList, configDir, assetFolderByAlias, typeDeclaredConfigOfDocGet(docPageList, configDoc.docEntry?.packageList ?? [], configDir).typeList);
+}
+
+// the types the doc pages, their objects and the packages declare (doc_page_impl_type.md#declaring-a-type)
+function typeDeclaredConfigOfDocGet(docPageList: any[], packageList: any[], configDir: string): TypeDeclaredConfig {
+  const inputList = docPageList.map((docPage: any) => ({ ...docPage, typeFileOfObjectList: objectFrontendTypeFileListGet(docPage) }));
+  return typeDeclaredConfigGet(inputList, packageList, configDir);
 }
 
 function assetConfigGet(configDoc: any, configDir: string): AssetStoreConfig | undefined {
   const docPageList = configDoc.docEntry?.docPageList;
   if (!Array.isArray(docPageList)) return undefined;
-  const assetConfig = assetConfigOfDocPageListGet(docPageList, sourceRootAbsPathByPathGet(configDoc, configDir), configDir);
+  const docPageInputList = docPageList.map((docPage: any) => ({ ...docPage, folderOwnedList: objectFrontendFolderOwnedListGet(docPage) }));
+  const assetConfig = assetConfigOfDocPageListGet(docPageInputList, sourceRootAbsPathByPathGet(configDoc, configDir), configDir);
   assetConfig.isFolderLazy = folderManagedIsLazyGet(configDoc);
   return assetConfig.docPageList.length > 0 ? assetConfig : undefined;
 }
@@ -1724,6 +1769,7 @@ export function folderManagedListGet(configDoc: any, configDir: string): string[
   const docPageList = Array.isArray(configDoc.docEntry?.docPageList) ? configDoc.docEntry.docPageList : [];
   const result = new Set<string>();
   for (const folder of assetConfigGet(configDoc, configDir)?.folderList ?? []) result.add(folder.pathAbs);
+  for (const folder of objectFrontendConfigGet(configDoc, configDir).folderList) result.add(folder);
   for (const docPage of compConfigGet(configDoc).docPageList) {
     if (docPage.kind === 'docPage') for (const folder of docPage.folderList) result.add(folder);
   }
@@ -1777,16 +1823,16 @@ function assetPathIs(assetConfig: AssetStoreConfig, filePath: string): boolean {
 }
 
 // the object a file of a store folder belongs to: walking down the path,
-// the first folder named {objectId}(--{name}) that holds object.yaml (or the
-// last folder of the path, for the object.yaml being written or removed)
-function assetObjectIdOfPathGet(folderAbs: string, filePath: string): string {
+// the first folder named {itemId}(--{name}) that holds item.yaml (or the
+// last folder of the path, for the item.yaml being written or removed)
+function assetItemIdOfPathGet(folderAbs: string, filePath: string): string {
   const partList = path.relative(folderAbs, filePath).split(path.sep);
   for (let index = 0; index < partList.length - 1; index++) {
-    const objectId = objectIdFromDirName(partList[index]);
-    if (!objectId) continue;
+    const itemId = itemIdFromDirName(partList[index]);
+    if (!itemId) continue;
     const dirAbs = path.join(folderAbs, ...partList.slice(0, index + 1));
-    const isObjectFile = index === partList.length - 2 && partList[partList.length - 1].startsWith(ASSET_OBJECT_META_NAME);
-    if (isObjectFile || fs.existsSync(path.join(dirAbs, ASSET_OBJECT_META_NAME))) return objectId;
+    const isObjectFile = index === partList.length - 2 && partList[partList.length - 1].startsWith(ASSET_ITEM_META_NAME);
+    if (isObjectFile || fs.existsSync(path.join(dirAbs, ASSET_ITEM_META_NAME))) return itemId;
   }
   return '';
 }
@@ -2264,7 +2310,7 @@ export function generateModuleCode(
     lines.push('    sourceState.current = dataNext;');
     lines.push('    for (const listener of listenersDocSource) listener(dataNext);');
     lines.push('  });');
-    // the asset service layer changed on disk: listeners get { objectId, isStoreChanged }
+    // the asset service layer changed on disk: listeners get { itemId, isStoreChanged }
     lines.push("  import.meta.hot.on('doc-asset-change', (dataChange) => {");
     lines.push('    for (const listener of listenersDocAsset) listener(dataChange);');
     lines.push('  });');

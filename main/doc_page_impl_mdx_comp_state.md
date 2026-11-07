@@ -2,7 +2,7 @@
 
 # Component State Service Layer: Design
 
-A component on the page renders its data, which the document or an [asset object](doc_page_impl_asset.md) holds. Many components hold something more while they are on the page: a count, which cells are selected and which sheet is active, which folders are open, a draft being edited that is not saved yet. That is the component's **state**. Left in the component (`useState`, a store created per mount), it lives exactly as long as the mount: navigating to another document and back starts the block from scratch, and the same block shown twice holds two states that know nothing of each other.
+A component on the page renders its data, which the document or an [asset item](doc_page_impl_asset.md) holds. Many components hold something more while they are on the page: a count, which cells are selected and which sheet is active, which folders are open, a draft being edited that is not saved yet. That is the component's **state**. Left in the component (`useState`, a store created per mount), it lives exactly as long as the mount: navigating to another document and back starts the block from scratch, and the same block shown twice holds two states that know nothing of each other.
 
 The **component state service layer** keeps the state outside the component, in one **state object** per block, found by a **key**. A component asks for its state object and gets the one that exists, or a new one; the state outlives the mount, and every mount of the same block shares it. For the components themselves, refer to [MDX components](doc_page_impl_mdx_comp.md); for the overall architecture, [Document Page: Design](doc_page_impl.md).
 
@@ -10,7 +10,7 @@ The **component state service layer** keeps the state outside the component, in 
 component (an observer)                  DocCompStateStore                            who decides the key
 useCompState(config, initial)  ──────►   stateByKey: key -> state object              RegisteredComp
   │                                         { key, kind, value, holdCount, ... }        compStateKeyBuild:
-  │  state.value.count  (observable)        ensure: the one there, or a new one           asset object
+  │  state.value.count  (observable)        ensure: the one there, or a new one           asset item
   │  state.patch({ count })                 hold / release: how many mounts have it        > id prop
   │                                         idle: nobody holds it, kept, collected        > place (doc, marker line)
   └─ unmount ───────────► release           by a cap and with the document                > the mount
@@ -23,13 +23,13 @@ useCompState(config, initial)  ──────►   stateByKey: key -> state 
 The layer answers three questions a component should not answer alone:
 
 - **Where does the state live while the block is not rendered?** In the store. A reader navigates away and back, a block is opened in the [block popup](doc_page_impl_popup.md) and closed, a component switches between its view and its editor: the next mount finds the state the last one left.
-- **What do two renderings of one block share?** The state object. Two blocks reading one asset object, the block and its preview in the asset panel, and later the same document open in two tabs: they ask for the same key, get the same object, and what one changes the others render at once, since the object is observable.
+- **What do two renderings of one block share?** The state object. Two blocks reading one asset item, the block and its preview in the asset panel, and later the same document open in two tabs: they ask for the same key, get the same object, and what one changes the others render at once, since the object is observable.
 - **When is a state thrown away?** When nothing will come back for it: its document left the source, the page itself removed the block, or the store is full and the state has been idle longest. The rule is deliberately loose, [below](#lifecycle-hold-idle-collect).
 
 Three things the state is **not**:
 
-- **Not data.** The data is the document's lines or the asset object's version; a state is what the component makes of it while it is shown. A draft may sit in the state while a session lasts ([Drafts and sharing](#drafts-and-sharing)), but what is saved goes where the data goes.
-- **Not persistent.** It lives with the page and is empty after a reload. What must survive a reload is written into the data (a [dashboard writes its state into its asset object](doc_page_impl_service_dashboard.md#dashboard-state)) or into a config layer ([the client layer](doc_page_impl_config.md#the-client-layer)).
+- **Not data.** The data is the document's lines or the asset item's version; a state is what the component makes of it while it is shown. A draft may sit in the state while a session lasts ([Drafts and sharing](#drafts-and-sharing)), but what is saved goes where the data goes.
+- **Not persistent.** It lives with the page and is empty after a reload. What must survive a reload is written into the data (a [dashboard writes its state into its asset item](doc_page_impl_service_dashboard.md#dashboard-state)) or into a config layer ([the client layer](doc_page_impl_config.md#the-client-layer)).
 - **Not guaranteed.** A state can be lost: the cap, a document edited outside the page. A component keeps in it what it can afford to lose and recompute: a selection, a draft the session will save anyway, an open folder.
 
 ## The key
@@ -37,7 +37,7 @@ Three things the state is **not**:
 The key is what decides which mounts share a state and whether the state is found again later, so it must name the block, not the mount, and must be as stable as the block's identity allows. The page chooses it in one place, the registry boundary (`RegisteredComp`, `config.stateKey`), from the most stable identity the block has, in this order (`lib/doc-comp-state.js`, `compStateKeyBuild`):
 
 ```text
-asset:{store}/{objectId}       the data comes from the asset service layer: every block reading the
+asset:{store}/{itemId}       the data comes from the asset service layer: every block reading the
                                object shares the state, wherever the block is
 id:{docPath}#{id}              the block declares an id prop (<!--renderComp=X,id=tree-->): the id a
                                data reference or a part index names the block by, unique in its document
@@ -48,7 +48,7 @@ instance:{instanceId}          anything else (an MDX element, a part rendered by
                                side-panel item): the instance id of the mount, which only that mount has
 ```
 
-The stability falls from top to bottom. An asset object keeps its id whatever happens to the documents. An id prop moves with the block through every edit, and is what an author declares when the state should not depend on where the block is. A place changes whenever lines above the block change: the edit layer repairs the keys for the changes it makes itself ([Following the lines](#following-the-lines-of-a-document)), and a change made outside the page (an editor, git) leaves the state behind under the old line, idle, until it is collected; the block starts anew. That is the accepted imperfection: it keeps the key a pure function of what the boundary already knows, with no index of blocks to maintain. An instance key makes the state last as long as the mount plus the idle time, which is still useful for a draft shared with a second renderer of the same mount, and costs nothing.
+The stability falls from top to bottom. An asset item keeps its id whatever happens to the documents. An id prop moves with the block through every edit, and is what an author declares when the state should not depend on where the block is. A place changes whenever lines above the block change: the edit layer repairs the keys for the changes it makes itself ([Following the lines](#following-the-lines-of-a-document)), and a change made outside the page (an editor, git) leaves the state behind under the old line, idle, until it is collected; the block starts anew. That is the accepted imperfection: it keeps the key a pure function of what the boundary already knows, with no index of blocks to maintain. An instance key makes the state last as long as the mount plus the idle time, which is still useful for a draft shared with a second renderer of the same mount, and costs nothing.
 
 The place is the format the navigation layer names a block by, and an `Anchor` id declared before a block (the `fragment` of a place) would be one more stable key between the id prop and the line; it is not used today because the boundary does not know the anchor of its block, which only a scan of the document finds. The key kinds are therefore the ones above, in `compStateKeyParse`, and a key reads as text, so the list of states can be read by a person.
 
@@ -97,12 +97,12 @@ The re-key is for the edits the page makes. A change of the file by anything els
 
 ## Drafts and sharing
 
-The first reason the layer exists is a component whose data is large and whose editor must not write it on every change: a workbook. The edit layer already keeps such a draft out of the document until the session ends ([Asset-only components](doc_page_impl_edit.md#asset-only-components): the draft is reported with every change and saved into the asset object when the session is left; leaving the page saves it too, so a draft is never dirty across documents). What was still per mount is everything the editor holds beside the reported draft, and the fact that nothing else on the page could see the draft.
+The first reason the layer exists is a component whose data is large and whose editor must not write it on every change: a workbook. The edit layer already keeps such a draft out of the document until the session ends ([Asset-only components](doc_page_impl_edit.md#asset-only-components): the draft is reported with every change and saved into the asset item when the session is left; leaving the page saves it too, so a draft is never dirty across documents). What was still per mount is everything the editor holds beside the reported draft, and the fact that nothing else on the page could see the draft.
 
-With the state object both change. `ExcelUniver` ([the component](doc_page_impl_mdx_comp.md#exceluniver)) keeps in its state, keyed by its asset object:
+With the state object both change. `ExcelUniver` ([the component](doc_page_impl_mdx_comp.md#exceluniver)) keeps in its state, keyed by its asset item:
 
 - `engine`: the active sheet and the selected cells, in view and in edit mode, taken from the engine's events and given to the next engine instance, so the selection comes back after another document, a switch between View and Edit, the popup;
-- `draft`: the editor's draft store while a session is open on the object. A second block reading the same object, in view mode, renders the draft's workbook and the range typed in the editor's panel, as they change; when the session ends the editor takes the draft out, and every block shows the object again.
+- `draft`: the editor's draft store while a session is open on the item. A second block reading the same item, in view mode, renders the draft's workbook and the range typed in the editor's panel, as they change; when the session ends the editor takes the draft out, and every block shows the item again.
 
 This is the pattern for a component with a draft: the draft lives in the state under a key of its own while the session lasts, the editor puts it there when it mounts and takes it out when it unmounts (a session that ends is always an unmount of the editor), and a view of the same block renders `state.value.draft` when there is one and its data otherwise. It is also how two tabs showing one document would share an edit in progress: the tabs are two mounts with one key, and nothing else is needed for the view side; the edit side stays one session at a time, which is the edit layer's rule.
 
@@ -138,7 +138,7 @@ What `RegisteredComp` gives every component for this is `config.stateKey` ([the 
 ## Where it stands among the layers
 
 ```text
-document / asset object      the data: lines, versions                     persistent, versioned
+document / asset item      the data: lines, versions                     persistent, versioned
 component state (this layer) what a component makes of its data while     the page's lifetime, keyed by
                              shown: selection, drafts, open folders         the block, shared by its mounts
 edit session                 the one block being edited and its draft as    one at a time; the draft is

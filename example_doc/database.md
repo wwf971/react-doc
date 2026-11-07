@@ -5,7 +5,7 @@ All durable data for `react-doc` is stored in `storage-obj`.
 ## Core Rules
 
 - No app-local durable ids.
-- Every durable id is object-storage `objectId`.
+- Every durable id is object-storage `itemId`.
 - Server API resolves one target space and scopes all reads and writes to that space.
 - Updates are versioned through object-storage update APIs.
 

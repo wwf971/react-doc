@@ -32,7 +32,7 @@ import { OBJECT_VIEW_CONTEXT_LIST } from '../../frontend/src/lib/doc-object-ref.
 //                  default false. the default editors of paragraphs and
 //                  lists declare it),
 //                  assetSaveMode (inPlace | newVersion: the save mode written
-//                  into an asset object the page creates for a block of the
+//                  into an asset item the page creates for a block of the
 //                  component; absent: the store's default applies),
 //                  insertObjectPick ({ typeList, isCreateOffered }: the insert
 //                  menu asks for an object of these types first, a search of the
@@ -313,7 +313,7 @@ export function compIconGet(definition) {
 // sourceDefaultCreate above): { lang, raw, props } or { text }, or
 // undefined when the component exposes no factory or starts no block there
 // a component declared isAssetOnly must answer the comment-block form: its
-// lang and raw become the first version of a new asset object, the block
+// lang and raw become the first version of a new asset item, the block
 // written in the document is a reference to it
 export function compSourceDefaultGet(definition, env) {
   const sourceDefaultCreate = definition?.expose?.sourceDefaultCreate;

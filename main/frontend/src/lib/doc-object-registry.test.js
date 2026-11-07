@@ -249,3 +249,26 @@ test('a relation entry is changed by its keeper; a relation query with a text is
   assert.deepEqual(result.relationList.map((relation) => relation.key), ['member/a', 'member/x']);
   assert.match((await store.relationUpdate({ fromRef: 's:1', key: 'member/x', data: {} })).message, /does not change relations/);
 });
+
+test('the types declared in yaml join the registry; a mode\'s component is found by tag name or id', () => {
+  const configDoc = {
+    compRegistry: { PackThing: 'pack/PackThing' },
+    typeDeclared: {
+      typeList: [
+        { id: 'demo.shelf', kind: 'object', label: 'Shelf', extendList: ['frontend.object'], modeList: [{ id: 'list', comp: 'PackThing' }], definedBy: { kind: 'docPage', alias: 'page', file: 'page/.doc-page/type.yaml' } },
+        { id: 'core.object', kind: 'object', label: 'Taken', extendList: [], definedBy: { kind: 'package', name: 'pack', file: 'pack/type.yaml' } },
+      ],
+      problemList: [{ alias: 'page', file: 'x', message: 'y' }],
+    },
+  };
+  const store = new DocObjectStore({ docStore: { compById: { 'pack/PackThing': {} }, sourceStore: { configDoc } } });
+  assert.equal(store.typeRegistry.isAssignable('demo.shelf', 'core.collection'), true);
+  assert.equal(store.typeGet('demo.shelf').definedBy.kind, 'docPage');
+  assert.equal(store.typeGet('demo.shelf').modeList[0].comp, 'PackThing');
+  assert.notEqual(store.typeGet('core.object').label, 'Taken', 'a built-in type is not replaced');
+  assert.match(store.typeRegistry.problemList.join(), /core.object declared in pack\/type.yaml is defined already/);
+  assert.equal(store.typeDeclaredProblemList.length, 1);
+  assert.equal(store.compIsKnown('PackThing'), true);
+  assert.equal(store.compIsKnown('pack/PackThing'), true);
+  assert.equal(store.compIsKnown('Nope'), false);
+});

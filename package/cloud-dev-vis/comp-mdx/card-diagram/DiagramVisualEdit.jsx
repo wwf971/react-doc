@@ -12,7 +12,7 @@ import { diagramCanvasListGet } from './DiagramCanvasRegistry.js';
 import { endpointIsDangling, pointNodeIdBuild } from './DiagramERData.js';
 import './DiagramVisualEdit.css';
 
-const saveTargetLabels = { asset: 'Asset object', inline: 'Inline YAML' };
+const saveTargetLabels = { asset: 'Asset item', inline: 'Inline YAML' };
 const endpointOf = (nodeId, handleId) => ({ nodeId, handleId: handleId ?? null });
 // a key pressed in a text being typed (a cell, a field of the edit card, the
 // search of the create panel) belongs to the field
@@ -58,7 +58,7 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 	const isFromAsset = Boolean(asset?.isFromAsset);
 	const reasonRefused = !isFromAsset ? ''
 		: asset.isHead === false ? 'This block reads an older version of its asset; visual editing writes the head version.'
-		: asset.isLocked ? 'The asset object is locked.'
+		: asset.isLocked ? 'The asset item is locked.'
 		: '';
 	const isAllowed = !reasonRefused;
 	const report = () => { if (store) void onEvent?.('editDraftChange', store.report); };

@@ -5,7 +5,7 @@ import { dashboardStateSet, serviceApiCall } from './service-call.js';
 // added, edited in place and removed.
 //
 //   data.state           { query }: the search the dashboard shows, kept
-//                        in the dashboard's asset object, so a document
+//                        in the dashboard's asset item, so a document
 //                        opens on the same search
 //   config.state         { isWritable, unavailableReason }: whether the
 //                        state can be saved (a pinned asset version cannot)

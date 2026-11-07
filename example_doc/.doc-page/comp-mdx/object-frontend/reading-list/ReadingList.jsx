@@ -8,7 +8,7 @@ import { objectFrontendAssetPathBuild } from '../../../../../main/frontend/src/l
 import './ReadingList.css';
 
 // The modes of the frontend object type example.reading-list of the
-// demonstration (declared in .doc-page/object-frontend.yaml; design:
+// demonstration (declared in .doc-page/type.yaml; design:
 // main/doc_page_impl_obj_frontend.md). A reading list is a small system of
 // its own: its data is assets of the object, of two kinds,
 //

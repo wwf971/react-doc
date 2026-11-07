@@ -8,7 +8,7 @@ import time
 
 import yaml
 
-# the separator of a template folder name {templateId}--{name}, as for asset objects
+# the separator of a template folder name {templateId}--{name}, as for asset items
 TEMPLATE_DIR_SEPARATOR = '--'
 # the separator of an instance folder name {templateName}-inst-{serviceId}
 INSTANCE_DIR_SEPARATOR = '-inst-'
@@ -23,7 +23,7 @@ _BASE36_DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz'
 def id_ms48_create(is_used=None):
     """An id of the form ms48: (unix ms << 16 | 16 random bits) in base 36.
 
-    The same form as asset object ids (plugin/id-ms48.ts), so a service
+    The same form as asset item ids (plugin/id-ms48.ts), so a service
     folder looks like an object folder and sorts by creation.
     """
     while True:

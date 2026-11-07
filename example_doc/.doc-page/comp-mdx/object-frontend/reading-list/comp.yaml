@@ -1,5 +1,5 @@
 # the modes of the frontend object type example.reading-list
-# (.doc-page/object-frontend.yaml; design: main/doc_page_impl_obj_frontend.md):
+# (.doc-page/type.yaml; design: main/doc_page_impl_obj_frontend.md):
 # components rendered by the entry component ObjectFrontend in the placement
 # objectFrontend, never written as blocks themselves (isNotInDoc). a group
 # in a group of the component folder (object-frontend/reading-list/).

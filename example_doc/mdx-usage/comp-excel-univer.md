@@ -16,7 +16,7 @@ name: quarterly sales
 ```
 ````
 
-The block is an asset reference, like any other component whose data is in the store. A new spreadsheet is created from the insert menu in edit mode (**Spreadsheet**): the page creates the asset object with a small starting workbook first, then writes the reference block, and opens it in the spreadsheet editor.
+The block is an asset reference, like any other component whose data is in the store. A new spreadsheet is created from the insert menu in edit mode (**Spreadsheet**): the page creates the asset item with a small starting workbook first, then writes the reference block, and opens it in the spreadsheet editor.
 
 ## Example
 
@@ -33,7 +33,7 @@ In view mode the spreadsheet has no toolbar, formula bar or sheet tabs. Cells ca
 - In edit mode, a click on the sheet selects cells as in view mode and does not open the editor, even when `EditBlockEnterMode` is `click`; the arrow keys of a neighboring block do not move into it either. Only the **Edit** button of the block's toolbar (or the `Sheet` mode in its mode menu) opens it.
 - The editor is the full spreadsheet editor of Univer in the block's place: toolbar, formula bar, sheet tabs and context menu.
 - The floating panel sets what view mode shows: type a range in A1 notation (`B2:D8`), take the selected cells with **Use selection**, or show the active sheet whole with **Whole sheet**.
-- Leaving the block saves the workbook into the asset object, and the view range into the version's metadata. The document is not written. The object saves **in place**, which is the save mode `ExcelUniver` declares: the head version is rewritten, and its previous files are kept as `.bak` files.
+- Leaving the block saves the workbook into the asset item, and the view range into the version's metadata. The document is not written. The item saves **in place**, which is the save mode `ExcelUniver` declares: the head version is rewritten, and its previous files are kept as `.bak` files.
 - There is no source mode: the workbook JSON is edited only through the spreadsheet. Escape and Ctrl/⌘ + Enter go to the cell editor, so use **Save** / **Cancel** in the panel.
 
 ## Popup

@@ -1,0 +1,32 @@
+itemId: w5j7pn121sr
+name: ""
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+owner:
+  ref: frontend:w5j7pn0lh5o
+versionIdHead: w5j7pn1320z
+isDeleted: false
+isLocked: false
+timeCreated: 20261105_01185261+09
+versionList:
+  - versionId: w5j7pn1320z
+    versionIdPrevList: []
+    time: 20261105_01185261+09
+    note: book of the frontend object Short list
+    size: 77
+    hash: 6fe9721d36b98c1bbe0dde0bb505ffcec74fb8bd
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261105_01185261+09
+    versionId: w5j7pn1320z
+  - eventType: updateInPlace
+    time: 20261105_03374822+09
+    versionId: w5j7pn1320z
+  - eventType: move
+    time: 20261108_02172729+09
+    placeFrom: ~example:example/.doc-page/object-frontend/w5j7pn0lh5o--Short list/item
+    placeTo: ~example:example/.doc-page/object-frontend/w5j7pn0lh5o--Short
+      list/item/book

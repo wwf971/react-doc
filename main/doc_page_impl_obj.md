@@ -65,7 +65,7 @@ A reference is `{namespace}:{local}`, the namespace `[a-zA-Z][a-zA-Z0-9.-]*` up 
 | `docPage` | the doc page source (page) | `doc.page` | the doc page's alias |
 | `docDir` | the doc page source | `doc.folder` | the folder's full source path, `~page:root/dir` |
 | `doc` | the doc page source | `doc.document`; `doc.section`, `doc.block`, `doc.group` with a fragment | `~page:root/a.md`, `~page:root/a.md#{fragment}` |
-| `asset` | the asset store (page) | `asset.object` | `{store}/{objectId}` |
+| `asset` | the asset store (page) | `asset.item` | `{store}/{itemId}` |
 | `frontend` | the frontend object service layer (page) | `frontend.object` and the types the doc pages declare below it | the object's id |
 | `service` | the kernel (backend) | `service.instance` | the service id |
 | `serviceTemplate` | the kernel | `service.template` | the template id |
@@ -83,7 +83,7 @@ descriptor
   summary           { isDone: false }          small, for display and filters; may be stale. a type says which keys it promises (summaryKeyList)
   iconUrl           ''                         an icon of its own (a backend path, reached through the page's address), else its type's
   capabilityList    [read, update]             what its provider does with it
-  open              { kind: navigate, target } | { kind: serviceInstance, serviceId } | { kind: serviceTemplate, templateId } | { kind: asset, store, objectId } | null
+  open              { kind: navigate, target } | { kind: serviceInstance, serviceId } | { kind: serviceTemplate, templateId } | { kind: asset, store, itemId } | null
   status            found | registered | missing | unavailable | unknown   (+ loading, on the page)
   timeChecked       when its provider last answered for it (null for a registration)
   provider          { id, label, registry: page | backend, registrant? }
@@ -100,52 +100,7 @@ descriptor
 
 ## Types
 
-```text
-Type
-  id              core.task, doc.document, todo-list.todo: dotted, the first part the namespace of
-                  whoever defines it (core, doc, asset, service, or the template's name)
-  kind            object | relation
-  label, description, icon      the icon a name of the page's icon set (box, file-text, square-check)
-  extendList      the types it extends, of its kind; none for a root
-  summaryKeyList  the keys of the summary an object of it promises (isDone for core.task)
-  definedBy       { kind: builtIn } | { kind: serviceTemplate, id, name } | { kind: serviceInstance, id, name }
-```
-
-The type registry answers whether an object of a type is one of another (**assignable**: the same, or a descendant), how far, and in which order its ancestors come (**rank**: breadth first, each type's parents in the order it lists them). That is all it does: it is no programming-language type system, it checks no content against a schema, and assignability comes from declarations only, never from shapes that happen to match. A type nobody defines is taken as a child of both roots, so every object is at least a `core.object` and is drawn by the fallback view. A type extending one nobody defines extends the root instead, and a cycle is broken where it closes; both are reported (`problemList`).
-
-**Built-in types** are one JSON file, `built-in/object-type/object-type-builtin.json`, read by the kernel and imported by the page, so both registries agree on them:
-
-```text
-core.object                                  anything the registry can name
-├── core.collection                          has members (core.member, ordered, an entry each)
-│   ├── core.group                           an explicit collection
-│   │   └── doc.group                        an ObjectGroup block   (also a doc.block)
-│   ├── doc.page                             members: its root folders
-│   ├── doc.folder                           members: its folders and documents
-│   ├── doc.document                         (also a core.document) members: its top sections
-│   └── doc.section                          (also a core.place)    members: its sub-sections
-├── core.document                            a text people read
-├── core.place                               a place inside another object
-│   └── doc.block                            a component block with an id
-├── core.config  ── service.config           { valueByKey, defineList }; an update { valueByKey }
-├── core.task                                summary isDone; an update { isDone }
-├── core.file    ── asset.object
-├── core.collection ── frontend.object       an object the page keeps in assets (doc_page_impl_obj_frontend.md);
-│                                            members: its assets. the root of the types doc pages declare
-├── core.service ── service.instance
-└── service.template
-
-core.relation
-├── core.member  ── core.contains            a member that exists only inside its container
-├── core.reference ── doc.link, service.dependsOn
-└── service.createdFrom
-```
-
-A type is a promise of semantics, and the `core.*` types carry the few promises consumers rely on: a `core.task` has `summary.isDone` and accepts `{ isDone }`; a `core.config` reads as `{ valueByKey, defineList }` and accepts `{ valueByKey }`; a `core.collection` has `core.member` relations. Capability-like types and semantic ones are the same mechanism, named for what they mean. Being of a type does not promise behavior beyond that (availability, permissions, consistency are the provider's), and a type an object needs a conversion to reach (a PDF as frames) is a service turning one object into another, not a parent in the DAG.
-
-**Types of the doc pages.** A doc page declares the types of its [frontend objects](doc_page_impl_obj_frontend.md) in `.doc-page/object-frontend.yaml`, each below `frontend.object`, with the modes that draw it; the layer's provider defines them (`typeDefineGet`, `definedBy: { kind: docPage, alias }`), so they are types of the registry like any other, assignable, searchable, drawn by views. A doc page defines no type outside that tree ([TODO](doc_page_impl_TODO.md#object-type-source)).
-
-**Types of the templates.** A service template defines types in `expose.typeList` of its script, under its own name (`todo-list.todo`): the kernel refuses a type of another name with a problem, so two templates never collide. The kernel rebuilds the registry whenever a script changes: the built-in types, then the templates' (the oldest template id first; a second definition of an id is reported and left out), then those of instances whose template is gone. The page takes the backend's list over its own built-in copy when there is a backend.
+Every object and relation has types, and consumers ask for those, never for a provider: a search filters by type, a list takes `typeList`, a view is chosen by the nearest type. A type (`core.task`, `doc.document`) has an id, a kind, a label and an icon, and extends other types; the **type registry** answers whether one is another (assignable, nearest first), and what no one defines is at least a `core.object`. The types are built in, defined by service templates, or declared in yaml by doc pages, frontend objects and packages. All of this has a document of its own: [Types](doc_page_impl_type.md).
 
 ## Providers
 
@@ -180,8 +135,8 @@ provider
 | --- | --- | --- | --- | --- | --- |
 | `doc-source` | page | `docPage`, `docDir`, `doc` | `doc.page`, `doc.folder`, `doc.document`, `doc.section`, `doc.block`, `doc.group` | `core.contains`, `core.member` (a group's) | query (places: compiled documents only, `partial`), resolve, read, relationQuery |
 | `doc-link` | page | none | none | `doc.link` | relationQuery (from or to a document) |
-| `asset` | page | `asset` | `asset.object` | none | query, resolve, read (with the head's text), create, update, delete |
-| `frontend` | page | `frontend` | `frontend.object` and the doc pages' types (which it defines, `typeDefineGet`, with their modes, `typeInfoGet`) | `core.member` (an object to its assets) | query, resolve, read, relationQuery, create (an object, or an asset in one), update, delete, relationCreate, relationDelete |
+| `asset` | page | `asset` | `asset.item` | none | query, resolve, read (with the head's text), create, update, delete |
+| `frontend` | page | `frontend` | `frontend.object` and the types declared below it (their modes through `typeInfoGet`) | `core.member` (an object to its assets) | query, resolve, read, relationQuery, create (an object, or an asset in one), update, delete, relationCreate, relationDelete |
 | `backend` | page (a peer) | the backend's | what the backend's providers have | theirs | all, federated by the backend |
 | `kernel` | backend | `service`, `serviceTemplate`, `serviceConfig` | `service.instance`, `service.template`, `service.config` | `service.createdFrom`, `service.dependsOn` | query, resolve, read, update (a config), relationQuery |
 | `service:{id}` | backend | `service.{id}` | its script's `objectProvide.typeList` | its `relationTypeList` | the object apis its script implements |
@@ -232,12 +187,12 @@ A change of an object is its provider's: the registry finds the provider and han
 | write | handed to | example |
 | --- | --- | --- |
 | `update(ref, patch)` | the provider of the reference's namespace | a todo `{ isDone }`, a config `{ valueByKey }`, a frontend object `{ name, metadata }`, an asset `{ text \| data }` |
-| `create({ typeId, content, place?, label? })` | the first provider whose `createTypeList` holds a type `typeId` is assignable to | `example.reading-list` (below `frontend.object`) by the frontend objects; `asset.object` by the asset store |
+| `create({ typeId, content, place?, label? })` | the first provider whose `createTypeList` holds a type `typeId` is assignable to | `example.reading-list` (below `frontend.object`) by the frontend objects; `asset.item` by the asset store |
 | `create({ memberOf: { ref, key?, data? }, content })` | the provider of the collection `memberOf` names: a collection keeps its members, so it makes the member and the relation | an asset created in a frontend object, listed under its key |
 | `delete(ref, options)` | the provider of the reference | a frontend object with its assets (`{ isMemberKept }` keeps them); an asset's deletion mark |
 | `relationCreate({ fromRef, type, toRef, key?, data? })`, `relationUpdate({ fromRef, key \| toRef, data })`, `relationDelete({ fromRef, key \| toRef, isTargetDeleted? })` | the provider of `fromRef`: a relation belongs to whoever keeps it ([below](#relations-collections-and-groups)) | an asset of the store attached to a frontend object; its name and paths changed (the data of its entry); one taken out, kept or deleted |
 
-What a write carries is in the words of the object's type (`content`, `patch`, `options`), the way an update's patch is: the registry checks only that a type exists and that a provider offers the write (else `-2` with the reason: "no provider creates objects of the type core.task", "the doc page source does not delete its objects"). A provider offering a write says so twice: in its `capabilityList`, and per object in the descriptor's `capabilityList` (a locked asset offers no update), which is what a consumer reads before it offers the change. Which providers write today: the frontend objects (create, update, delete, the relations of their assets, [In the object registry](doc_page_impl_obj_frontend.md#in-the-object-registry)), the asset store (create, update, delete), the kernel through the peer (update of a config), the instances whose scripts implement `objectUpdate`. The documents are changed by the edit layer, not through the registry ([TODO](doc_page_impl_TODO.md#object-update-authorization)); creating and deleting objects of a service instance is [TODO](doc_page_impl_TODO.md#object-backend-write).
+What a write carries is in the words of the object's type (`content`, `patch`, `options`), the way an update's patch is: the registry checks only that a type exists and that a provider offers the write (else `-2` with the reason: "no provider creates objects of the type core.task", "the doc page source does not delete its objects"). A provider offering a write says so twice: in its `capabilityList`, and per object in the descriptor's `capabilityList` (a locked asset offers no update), which is what a consumer reads before it offers the change. Which providers write today: the frontend objects (create, update, delete, the relations of their assets, [In the object registry](doc_page_impl_obj_frontend.md#in-the-object-registry)), the asset store (create, update, delete), the kernel through the peer (update of a config), the instances whose scripts implement `itemUpdate`. The documents are changed by the edit layer, not through the registry ([TODO](doc_page_impl_TODO.md#object-update-authorization)); creating and deleting objects of a service instance is [TODO](doc_page_impl_TODO.md#object-backend-write).
 
 ## The apis
 
@@ -350,7 +305,7 @@ def objectQuery(self, typeList, text='', filter=None, limit=100): …      # des
 def objectCount(self, typeList, text='', filter=None): …                   # how many objectQuery would answer (optional)
 def objectResolve(self, localIdList): …                                     # one descriptor or None per id
 def objectRead(self, localId): …                                            # { descriptor, content }
-def objectUpdate(self, localId, patch): …                                   # checks the patch, then { descriptor, content }
+def itemUpdate(self, localId, patch): …                                   # checks the patch, then { descriptor, content }
 def relationQuery(self, fromRef='', toRef='', typeList=None): …             # relations, fromLocalId / toLocalId or refs
 ```
 
@@ -387,7 +342,7 @@ Nothing about groups, timelines or graphs is in the kernel: a timeline is a serv
 ## Files
 
 ```text
-built-in/object-type/object-type-builtin.json   the built-in types, read by the kernel and the page
+built-in/type.yaml                     the built-in types (doc_page_impl_type.md)
 service-backend/service_object.py      TypeRegistry (rebuild, assignability, problems), ObjectRegistry (providers, query,
                                        resolve, read, update, relation_query, register, changed, caches, the wait for one
                                        provider), KernelObjectProvider, InstanceObjectProvider

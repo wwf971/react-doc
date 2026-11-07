@@ -1,0 +1,58 @@
+# The types of the demonstration doc page (design: main/doc_page_impl_type.md#declaring-a-type).
+# Found here by convention (.doc-page/type.yaml beside the entry); "type: { file }" of the entry
+# would name another file, a list several, "type: false" none.
+#
+# each extends frontend.object (a type with modes or kinds of assets does by default), directly or
+# through another type, and inherits the modes of its ancestors (frontend.object brings "overview");
+# a mode declared again with the same id replaces the inherited one. a mode is a component and the
+# parameters it starts with: two modes may share a component and differ by their parameters only
+# (shelf / cards). the components are the doc page's own (comp-mdx/object-frontend/reading-list/comp.yaml).
+typeList:
+  - id: example.reading-list
+    label: Reading list
+    description: books (one asset each) and notes on them (one asset each, naming their book)
+    icon: book
+    # what it holds: a new book or note goes to a folder of its kind under item/, and nothing
+    # else comes in (main/doc_page_impl_obj_frontend.md#what-a-type-accepts)
+    assetKindList:
+      - { id: book, label: Book, langList: [yaml], pathPrefix: /book/, groupPath: book }
+      - { id: note, label: Note, langList: [yaml], pathPrefix: /note/, groupPath: note }
+    modeList:
+      - id: shelf
+        label: Shelf
+        description: the books as a table, filtered by their status
+        comp: ReadingList
+        param: { layout: table }
+        isDefault: true
+      - id: cards
+        label: Cards
+        description: the same books as cards
+        comp: ReadingList
+        param: { layout: cards }
+      - id: add
+        label: Add a book
+        category: edit
+        comp: ReadingListAdd
+      - id: book
+        label: One book
+        description: a book and its notes; param book names it (a path, a key, name:…)
+        comp: ReadingListBook
+      - id: find
+        label: Find
+        description: the assets searched by words and browsed by their paths
+        comp: ReadingListFind
+      - id: stats
+        label: Numbers
+        comp: ReadingListStats
+  # a reading list with fewer things on it: every mode of its parent, its
+  # shelf as cards (the inherited mode of the same id is replaced)
+  - id: example.reading-list-short
+    label: Short reading list
+    extendList: [example.reading-list]
+    icon: book
+    modeList:
+      - id: shelf
+        label: Shelf
+        comp: ReadingList
+        param: { layout: cards }
+        isDefault: true

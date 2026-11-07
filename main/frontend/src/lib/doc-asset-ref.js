@@ -5,20 +5,20 @@ import { docPlaceBuild } from './doc-place.js';
 
 // An asset reference: a component's fenced block written in the language
 // "asset" instead of holding the data itself. The content is yaml that
-// names the store, the object in it (by id, or by its name), and the
+// names the store, the item in it (by id, or by its name), and the
 // version to read (design: doc_page_impl_asset.md):
 //
 //   <!--renderComp=Image-->
 //   ```asset
 //   store: local
-//   objectId: m2x1k9q4z0a1b   # or:  name: hero image
+//   itemId: m2x1k9q4z0a1b   # or:  name: hero image
 //   versionId: head           # optional; a version id pins that version
 //   ```
 //
-// store is required, and one of objectId and name: a reference says where
-// the object is and which one it is, so that the page never has to guess
-// (or create) an object that is not where it looks. a name is unique in its
-// store, so it names one object as an id does; it is what a person writes,
+// store is required, and one of itemId and name: a reference says where
+// the item is and which one it is, so that the page never has to guess
+// (or create) an item that is not where it looks. a name is unique in its
+// store, so it names one item as an id does; it is what a person writes,
 // the id what the page writes. "local" is the one local store; further
 // store ids are reserved for remote stores.
 //
@@ -36,10 +36,10 @@ export function assetRefLangIs(lang) {
   return String(lang ?? '').trim().toLowerCase() === ASSET_REF_LANG;
 }
 
-// { store, objectId, name, versionId ('head' or an id), message } ; message
-// is '' when valid; one of objectId and name is '' (both when invalid)
+// { store, itemId, name, versionId ('head' or an id), message } ; message
+// is '' when valid; one of itemId and name is '' (both when invalid)
 export function assetRefParse(raw) {
-  const reference = { store: '', objectId: '', name: '', versionId: 'head', message: '' };
+  const reference = { store: '', itemId: '', name: '', versionId: 'head', message: '' };
   let content;
   try {
     content = yamlParse(String(raw ?? ''));
@@ -47,23 +47,24 @@ export function assetRefParse(raw) {
     return { ...reference, message: `asset reference is not valid yaml: ${String(error?.message ?? error)}` };
   }
   if (!content || typeof content !== 'object' || Array.isArray(content)) {
-    return { ...reference, message: 'asset reference must be a mapping with store and objectId or name' };
+    return { ...reference, message: 'asset reference must be a mapping with store and itemId or name' };
   }
   reference.store = String(content.store ?? '').trim();
-  reference.objectId = String(content.objectId ?? '').trim();
+  // objectId: the key before items were called items, in a document not migrated yet
+  reference.itemId = String(content.itemId ?? content.objectId ?? '').trim();
   reference.name = String(content.name ?? '').trim();
   const versionIdText = String(content.versionId ?? 'head').trim();
   reference.versionId = versionIdText === '' ? 'head' : versionIdText;
   if (!reference.store) return { ...reference, message: 'asset reference needs store (the id of a store of the asset service layer, e.g. local)' };
-  if (!reference.objectId && !reference.name) return { ...reference, message: 'asset reference needs objectId or name' };
-  if (reference.objectId && reference.name) return { ...reference, message: 'asset reference names the object by objectId or by name, not both' };
+  if (!reference.itemId && !reference.name) return { ...reference, message: 'asset reference needs itemId or name' };
+  if (reference.itemId && reference.name) return { ...reference, message: 'asset reference names the item by itemId or by name, not both' };
   return reference;
 }
 
-// the text of a reference block: store, the object by name when a name is
+// the text of a reference block: store, the item by name when a name is
 // given else by id, and versionId when it is not the head
-export function assetRefTextBuild({ store, objectId = '', name = '', versionId = 'head' }) {
-  const lineList = [`store: ${store}`, name ? `name: ${name}` : `objectId: ${objectId}`];
+export function assetRefTextBuild({ store, itemId = '', name = '', versionId = 'head' }) {
+  const lineList = [`store: ${store}`, name ? `name: ${name}` : `itemId: ${itemId}`];
   if (versionId && versionId !== 'head') lineList.push(`versionId: ${versionId}`);
   return lineList.join('\n');
 }
@@ -110,7 +111,7 @@ const REGEX_MARKER_AT_LINE_END = /(<!--[\s\S]*?-->)[ \t]*$/;
 //   { place: { docPath, sourceLine, fragment },   where the block is (doc_page_impl_nav.md#places-in-a-document)
 //     compName,                                     the tag name of its marker
 //     componentId,                                  the id prop of its marker ('' without)
-//     reference: { store, objectId, name, versionId, message } }   as written (assetRefParse)
+//     reference: { store, itemId, name, versionId, message } }   as written (assetRefParse)
 //
 // sourceLine is the line of the marker comment; fragment is the id an
 // Anchor marker right before it declares. a fence written in the language

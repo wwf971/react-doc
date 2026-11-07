@@ -419,7 +419,7 @@ test('a managed folder left beside the documents is reported once with where it 
   const dir = fixtureCreate();
   fs.mkdirSync(path.join(dir, 'guide', 'comp-mdx'));
   fs.mkdirSync(path.join(dir, 'guide', 'service-app'));
-  // a plain content folder named asset/ (no asset objects) is not reported
+  // a plain content folder named asset/ (no asset items) is not reported
   fs.mkdirSync(path.join(dir, 'guide', 'asset', 'img'), { recursive: true });
   const warnList = [];
   context.mock.method(console, 'warn', (text) => warnList.push(String(text)));

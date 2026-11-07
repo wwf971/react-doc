@@ -216,7 +216,7 @@ export function testCaseEvidenceListGet(parsed) {
   return [...evidenceSet];
 }
 
-// compDefine assetDependencyListGet: what an asset object made from the
+// compDefine assetDependencyListGet: what an asset item made from the
 // data depends on (doc_page_impl_asset.md#dependencies): the evidence
 // documents, which the page resolves against the document
 export function testCaseAssetDependencyListGet(data) {

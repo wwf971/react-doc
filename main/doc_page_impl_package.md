@@ -90,6 +90,10 @@ A package's components are described by `comp.yaml` manifests in its `comp-mdx/`
 - **Build-time dependencies.** A manifest entry may name the extractor that tells a pruned build which files and nested components a block refers to (`dependencyCollect: { entry, export }`), since the host's `registry-source-dependency.js` knows only the components the package ships.
 - **ES modules for node.** A `package.json` with `"type": "module"` at the root of the package lets node load its `.js` files (tests, extractors); it is not an npm package.
 
+## Types of a package
+
+`type.yaml` at the top of a package declares the types of its components, in the grammar of every type file ([Declaring a type](doc_page_impl_type.md#declaring-a-type)). Every doc page of a workspace importing the package has them, so an object of such a type needs no declaration of its own, and a copy of the object works wherever the package is imported. The modes of a type name the package's components, which arrive with it.
+
 ## Service templates of a package
 
 The templates in `service-template-app/` and `service-template-infra/` join the service registry like those of the built-in folder ([Where templates and instances come from](doc_page_impl_service.md#where-templates-and-instances-come-from)): the page syncs the packages it loaded with its doc pages (`registry/docpage/sync`, `packageList: [{ name, dir }]`), and the backend reads their template folders with the origin `{ kind: 'package', alias: name, dir }`. An instance created from a package's template goes to the main doc page, as for a built-in template, since a package holds no instances.

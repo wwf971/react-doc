@@ -512,3 +512,28 @@
 .doc-asset-table .doc-asset-version-uses {
   text-align: right;
 }
+
+.doc-asset-place-badge {
+  margin-left: 0.35rem;
+}
+
+.doc-asset-move {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+
+.doc-asset-move select,
+.doc-asset-move input {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.15rem 0.35rem;
+  font: inherit;
+  color: inherit;
+  background: var(--color-fd-background);
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.25rem;
+}
+

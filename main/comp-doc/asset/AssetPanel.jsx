@@ -9,15 +9,15 @@ import { useEditOutsidePointer } from '../edit/use-edit-outside-pointer.js';
 import { AssetUsageTable } from './AssetUsageTable.jsx';
 import './DocAsset.css';
 
-export const ASSET_PANEL_SECTION_LIST = ['object', 'usage', 'version', 'data'];
+export const ASSET_PANEL_SECTION_LIST = ['item', 'usage', 'version', 'data'];
 
-// The asset panel of one object (design: doc_page_impl_asset.md): the
-// object's metadata and events, the blocks that use it, its versions, the
+// The asset panel of one item (design: doc_page_impl_asset.md): the
+// item's metadata and events, the blocks that use it, its versions, the
 // data of the selected version. From here the head is moved, a version or
-// the object is deleted, the object is restored or renamed, the component
+// the item is deleted, the item is restored or renamed, the component
 // it is data for is declared, its save mode is chosen, the head text is
 // edited and saved (in place, or as a new version), a file is uploaded as
-// the new head data, the object or one version is locked, and a block that
+// the new head data, the item or one version is locked, and a block that
 // uses it is visited. A confirmation opens beside the button that asked
 // for it, so nothing below moves. Everything it shows and every pending
 // action is the state of the panel model (AssetPanelModel); the panel
@@ -32,13 +32,13 @@ export const ASSET_PANEL_SECTION_LIST = ['object', 'usage', 'version', 'data'];
 export const AssetPanel = observer(function AssetPanel({ panel, sectionList = ASSET_PANEL_SECTION_LIST, onNavigate }) {
   const { assetStore } = useDocStores();
   if (!panel) return null;
-  const stateObject = assetStore.objectStateGet(panel.store, panel.objectId);
-  const object = stateObject?.object;
-  if (!object) {
+  const stateItem = assetStore.itemStateGet(panel.store, panel.itemId);
+  const item = stateItem?.item;
+  if (!item) {
     return (
       <div className="doc-asset-panel">
-        {stateObject?.status === 'error'
-          ? <p className="doc-error doc-edit-message">{stateObject.message}</p>
+        {stateItem?.status === 'error'
+          ? <p className="doc-error doc-edit-message">{stateItem.message}</p>
           : <p className="doc-asset-panel-status"><LoaderCircle size={12} className="doc-spin" aria-hidden="true" /> loading</p>}
       </div>
     );
@@ -46,10 +46,10 @@ export const AssetPanel = observer(function AssetPanel({ panel, sectionList = AS
   const isWritable = assetStore.isWritable;
   const isBusy = panel.isBusy;
   const sectionByName = {
-    object: <ObjectSection key="object" object={object} panel={panel} isWritable={isWritable} isBusy={isBusy} />,
-    usage: <UsageSection key="usage" object={object} panel={panel} onNavigate={onNavigate} />,
-    version: <VersionSection key="version" object={object} panel={panel} isWritable={isWritable} isBusy={isBusy} />,
-    data: <DataSection key="data" object={object} panel={panel} isWritable={isWritable} isBusy={isBusy} />,
+    item: <ItemSection key="object" item={item} panel={panel} isWritable={isWritable} isBusy={isBusy} />,
+    usage: <UsageSection key="usage" item={item} panel={panel} onNavigate={onNavigate} />,
+    version: <VersionSection key="version" item={item} panel={panel} isWritable={isWritable} isBusy={isBusy} />,
+    data: <DataSection key="data" item={item} panel={panel} isWritable={isWritable} isBusy={isBusy} />,
   };
   return (
     <div className="doc-asset-panel">
@@ -58,62 +58,96 @@ export const AssetPanel = observer(function AssetPanel({ panel, sectionList = AS
   );
 });
 
-// ---------- object ----------
+// ---------- item ----------
 
-const ObjectSection = observer(function ObjectSection({ object, panel, isWritable, isBusy }) {
-  const isChangeable = isWritable && !object.isDeleted && !object.isLocked && !isBusy;
-  const eventLast = object.eventList[object.eventList.length - 1];
+// where the item lies, whose folder that is, what it declares, and moving it
+const ItemPlace = observer(function ItemPlace({ item, panel, isChangeable }) {
+  const move = panel.move;
+  const kindList = panel.moveKindList;
+  const isIncoming = panel.moveOwnerRefIncoming !== '';
+  return (
+    <>
+      <span>{item.folder} / {item.dirName}</span>
+      {item.folderOwner ? <span className="doc-badge-outline doc-asset-place-badge" title="found in the folder of this object">in {item.folderOwner.ref}</span> : null}
+      {item.owner ? <span className="doc-badge-outline doc-asset-place-badge" title="what the item declares of itself">declares {item.owner.ref}{item.owner.role ? ` (${item.owner.role})` : ''}</span> : null}
+      {isChangeable ? <button type="button" className="doc-asset-link" onClick={() => panel.moveToggle()}>{move ? 'cancel the move' : 'move…'}</button> : null}
+      {move ? (
+        <div className="doc-asset-move">
+          <select aria-label="The folder to move it to" value={move.folder} onChange={(event) => panel.moveSet({ folder: event.target.value, groupPath: '' })}>
+            {panel.moveFolderList.map((folder) => <option key={folder.path} value={folder.path}>{folder.label}</option>)}
+          </select>
+          <input aria-label="The folders inside it" placeholder="(its top) or a/b" value={move.groupPath} onChange={(event) => panel.moveSet({ groupPath: event.target.value })} />
+          {isIncoming && kindList ? (
+            <select aria-label="Its kind in that object" value={move.kind} onChange={(event) => panel.moveSet({ kind: event.target.value })}>
+              <option value="">(kind)</option>
+              {kindList.map((kind) => <option key={kind.id} value={kind.id}>{kind.label}</option>)}
+            </select>
+          ) : null}
+          {isIncoming && !kindList ? <input aria-label="Its kind in that object" placeholder="its kind" value={move.kind} onChange={(event) => panel.moveSet({ kind: event.target.value })} /> : null}
+          <button type="button" className="doc-button" disabled={panel.isBusy} onClick={() => void panel.moveRun()}>Move</button>
+          {isIncoming ? <span className="doc-asset-muted">the object decides whether it takes it</span> : null}
+        </div>
+      ) : null}
+    </>
+  );
+});
+
+const ItemSection = observer(function ItemSection({ item, panel, isWritable, isBusy }) {
+  const isChangeable = isWritable && !item.isDeleted && !item.isLocked && !isBusy;
+  const eventLast = item.eventList[item.eventList.length - 1];
   return (
     <section className="doc-asset-section">
       <dl className="doc-asset-fields">
-        <dt>object</dt>
-        <dd className="doc-asset-mono">{panel.store} / {object.objectId}</dd>
+        <dt>item</dt>
+        <dd className="doc-asset-mono">{panel.store} / {item.itemId}</dd>
         <dt>name</dt>
         <dd>
           {isChangeable
-            ? <EditValueInline value={object.name} placeholder="(no name)" onCommit={(name) => panel.nameSet(name)} />
-            : <span>{object.name || '(no name)'}</span>}
+            ? <EditValueInline value={item.name} placeholder="(no name)" onCommit={(name) => panel.nameSet(name)} />
+            : <span>{item.name || '(no name)'}</span>}
         </dd>
         <dt>component</dt>
-        <dd title="the component whose data the object is (doc_page_impl_mdx_comp.md#components-and-the-asset-service-layer)">
+        <dd title="the component whose data the item is (doc_page_impl_mdx_comp.md#components-and-the-asset-service-layer)">
           {isChangeable
-            ? <EditValueInline value={object.component?.name ?? ''} placeholder="(none)" className="doc-asset-mono" onCommit={(name) => panel.componentSet(name)} />
-            : <span className="doc-asset-mono">{object.component?.name ?? '(none)'}</span>}
+            ? <EditValueInline value={item.component?.name ?? ''} placeholder="(none)" className="doc-asset-mono" onCommit={(name) => panel.componentSet(name)} />
+            : <span className="doc-asset-mono">{item.component?.name ?? '(none)'}</span>}
         </dd>
         <dt>lang</dt>
-        <dd className="doc-asset-mono">{object.lang || '(none)'} <span className="doc-asset-muted">(.{object.fileExt})</span></dd>
+        <dd className="doc-asset-mono">{item.lang || '(none)'} <span className="doc-asset-muted">(.{item.fileExt})</span></dd>
         <dt>type</dt>
-        <dd className="doc-asset-mono">{object.contentType}</dd>
-        <dt>folder</dt>
-        <dd>{object.folder} / {object.dirName}</dd>
+        <dd className="doc-asset-mono">{item.contentType}</dd>
+        <dt>place</dt>
+        <dd>
+          <ItemPlace item={item} panel={panel} isChangeable={isChangeable} />
+        </dd>
         <dt>head</dt>
-        <dd className="doc-asset-mono">{object.versionIdHead}</dd>
+        <dd className="doc-asset-mono">{item.versionIdHead}</dd>
         <dt>created</dt>
-        <dd className="doc-asset-mono">{object.timeCreated}</dd>
+        <dd className="doc-asset-mono">{item.timeCreated}</dd>
         <dt>events</dt>
         <dd>
-          <span className="doc-asset-mono">{object.eventList.length}</span>
+          <span className="doc-asset-mono">{item.eventList.length}</span>
           {eventLast ? <span className="doc-asset-muted">, last <span className="doc-asset-mono">{eventLast.eventType} {eventLast.time}</span></span> : null}
           <button type="button" className="doc-asset-link" onClick={() => panel.eventListToggle()}>
             {panel.isEventListOpen ? 'hide' : 'show all'}
           </button>
-          {panel.isEventListOpen ? <EventList eventList={object.eventList} /> : null}
+          {panel.isEventListOpen ? <EventList eventList={item.eventList} /> : null}
         </dd>
         <dt>save mode</dt>
         <dd>
-          <SaveModeControl object={object} panel={panel} isChangeable={isChangeable} />
+          <SaveModeControl item={item} panel={panel} isChangeable={isChangeable} />
         </dd>
       </dl>
-      {object.isDeleted ? (
+      {item.isDeleted ? (
         <p className="doc-asset-panel-status">
           <span className="doc-asset-frame-flag">deleted</span>
-          <span>The object is marked deleted; documents still read it until the folder is cleaned.</span>
+          <span>The item is marked deleted; documents still read it until the folder is cleaned.</span>
         </p>
       ) : null}
-      {object.isLocked ? (
+      {item.isLocked ? (
         <p className="doc-asset-panel-status">
           <Lock size={12} aria-hidden="true" />
-          <span>The object is locked: its data, versions, head and metadata cannot change until it is unlocked.</span>
+          <span>The item is locked: its data, versions, head and metadata cannot change until it is unlocked.</span>
         </p>
       ) : null}
       {isWritable ? (
@@ -122,32 +156,32 @@ const ObjectSection = observer(function ObjectSection({ object, panel, isWritabl
             type="button"
             className="doc-button"
             disabled={isBusy}
-            title={object.isLocked ? 'allows changes of the object again' : 'no change of the object (data, versions, head, metadata, deletion) until it is unlocked'}
-            onClick={() => panel.objectLockSet(!object.isLocked)}
+            title={item.isLocked ? 'allows changes of the item again' : 'no change of the item (data, versions, head, metadata, deletion) until it is unlocked'}
+            onClick={() => panel.itemLockSet(!item.isLocked)}
           >
-            {object.isLocked ? <LockOpen size={11} aria-hidden="true" /> : <Lock size={11} aria-hidden="true" />}
-            {object.isLocked ? ' Unlock object' : ' Lock object'}
+            {item.isLocked ? <LockOpen size={11} aria-hidden="true" /> : <Lock size={11} aria-hidden="true" />}
+            {item.isLocked ? ' Unlock item' : ' Lock item'}
           </button>
-          {object.isDeleted ? (
-            <button type="button" className="doc-button" disabled={isBusy || object.isLocked} onClick={() => panel.objectRestore()}>
-              Restore object
+          {item.isDeleted ? (
+            <button type="button" className="doc-button" disabled={isBusy || item.isLocked} onClick={() => panel.itemRestore()}>
+              Restore item
             </button>
           ) : (
             <button
               type="button"
               className="doc-button"
-              disabled={isBusy || object.isLocked}
-              title={object.isLocked ? 'the object is locked' : ''}
-              onClick={() => panel.confirmSet('objectDelete')}
+              disabled={isBusy || item.isLocked}
+              title={item.isLocked ? 'the item is locked' : ''}
+              onClick={() => panel.confirmSet('itemDelete')}
             >
-              <Trash2 size={11} aria-hidden="true" /> Delete object
+              <Trash2 size={11} aria-hidden="true" /> Delete item
             </button>
           )}
-          {panel.confirm?.kind === 'objectDelete' ? (
+          {panel.confirm?.kind === 'itemDelete' ? (
             <ConfirmInline
               label={panel.usageList.length > 0
-                ? `Delete the object (mark deleted, files kept)? ${panel.usageList.length} block${panel.usageList.length === 1 ? '' : 's'} still use${panel.usageList.length === 1 ? 's' : ''} it.`
-                : 'Delete the object (mark deleted, files kept)?'}
+                ? `Delete the item (mark deleted, files kept)? ${panel.usageList.length} block${panel.usageList.length === 1 ? '' : 's'} still use${panel.usageList.length === 1 ? 's' : ''} it.`
+                : 'Delete the item (mark deleted, files kept)?'}
               panel={panel}
             />
           ) : null}
@@ -159,7 +193,7 @@ const ObjectSection = observer(function ObjectSection({ object, panel, isWritabl
   );
 });
 
-// what happened to the object, oldest first: time, event, the version it concerns
+// what happened to the item, oldest first: time, event, the version it concerns
 function EventList({ eventList }) {
   return (
     <table className="doc-asset-table doc-asset-event-list">
@@ -177,12 +211,12 @@ function EventList({ eventList }) {
   );
 }
 
-// the save mode of the object: in place (the default, nothing written) or a
+// the save mode of the item: in place (the default, nothing written) or a
 // new version on each save. a radio pair; "default" means the metadata says
-// nothing and the object follows the in-place rule. it decides what an
+// nothing and the item follows the in-place rule. it decides what an
 // upload does and which save button is the primary one.
-const SaveModeControl = observer(function SaveModeControl({ object, panel, isChangeable }) {
-  const isWritten = object.saveMode !== undefined;
+const SaveModeControl = observer(function SaveModeControl({ item, panel, isChangeable }) {
+  const isWritten = item.saveMode !== undefined;
   const optionList = [
     { value: 'inPlace', label: 'update in place' },
     { value: 'newVersion', label: 'new version' },
@@ -193,7 +227,7 @@ const SaveModeControl = observer(function SaveModeControl({ object, panel, isCha
         <label key={option.value} className="doc-asset-save-mode-option" data-disabled={isChangeable ? undefined : ''}>
           <input
             type="radio"
-            name={`doc-asset-save-mode-${panel.store}-${object.objectId}`}
+            name={`doc-asset-save-mode-${panel.store}-${item.itemId}`}
             value={option.value}
             checked={panel.saveMode === option.value}
             disabled={!isChangeable}
@@ -216,15 +250,15 @@ const SaveModeControl = observer(function SaveModeControl({ object, panel, isCha
   );
 });
 
-// ---------- usage: the blocks that reference the object ----------
+// ---------- usage: the blocks that reference the item ----------
 
-// the backlinks of the object (doc_page_impl_asset.md#usage): every block
+// the backlinks of the item (doc_page_impl_asset.md#usage): every block
 // of the documents whose reference names it, as the page last read the
 // documents. the index follows the page's own edits and the documents'
 // content hashes, but a change the page has not heard of yet is not in it:
 // the read-again buttons (all documents, beside the title; one document,
 // beside its place) confirm what the list says.
-const UsageSection = observer(function UsageSection({ object, panel, onNavigate }) {
+const UsageSection = observer(function UsageSection({ item, panel, onNavigate }) {
   const { assetStore, docStore } = useDocStores();
   const usageIndex = assetStore.usageIndex;
   const usageList = panel.usageList;
@@ -245,9 +279,9 @@ const UsageSection = observer(function UsageSection({ object, panel, onNavigate 
   } else if (usageList.length === 0) {
     note = (
       <p className="doc-asset-muted doc-asset-usage-empty">
-        {object.component
-          ? `No block references the object: it is an orphan of ${object.component.name}.`
-          : 'No block references the object.'}
+        {item.component
+          ? `No block references the item: it is an orphan of ${item.component.name}.`
+          : 'No block references the item.'}
       </p>
     );
   }
@@ -279,7 +313,7 @@ const UsageSection = observer(function UsageSection({ object, panel, onNavigate 
       {usageList.length > 0 ? (
         <AssetUsageTable
           usageList={usageList}
-          componentNameObject={object.component?.name ?? ''}
+          componentNameItem={item.component?.name ?? ''}
           usageIsCurrent={(usage) => panel.usageIsOfBlock(usage)}
           docPathRefreshing={isRefreshing ? usageRefresh.docPath : undefined}
           onDocRefresh={(docPath) => void panel.usageRefreshRun(docPath)}
@@ -299,17 +333,17 @@ const UsageSection = observer(function UsageSection({ object, panel, onNavigate 
 // row unselects it. the uses column counts the blocks reading a version:
 // on the head row "following the head | pinned to this id", on another row
 // the blocks pinned to it.
-const VersionSection = observer(function VersionSection({ object, panel, isWritable, isBusy }) {
+const VersionSection = observer(function VersionSection({ item, panel, isWritable, isBusy }) {
   const { assetStore } = useDocStores();
   const versionList = panel.versionList;
   const usageCount = panel.usageCount;
   const isUsageKnown = assetStore.usageIndex.status === 'done';
-  const versionIdRead = assetStore.refVersionIdGet({ store: panel.store, objectId: object.objectId, versionId: panel.versionIdRef || 'head' });
+  const versionIdRead = assetStore.refVersionIdGet({ store: panel.store, itemId: item.itemId, versionId: panel.versionIdRef || 'head' });
   const versionSelected = versionList.find((version) => version.versionId === panel.versionIdSelected);
-  const isHeadSelected = versionSelected?.versionId === object.versionIdHead;
-  const isObjectLocked = object.isLocked;
+  const isHeadSelected = versionSelected?.versionId === item.versionIdHead;
+  const isItemLocked = item.isLocked;
   let deleteReason = '';
-  if (isObjectLocked) deleteReason = 'the object is locked';
+  if (isItemLocked) deleteReason = 'the item is locked';
   else if (versionSelected?.isLocked) deleteReason = 'the version is locked';
   else if (isHeadSelected) deleteReason = 'the head cannot be deleted';
   const pinnedCountSelected = versionSelected ? usageCount.byVersionId[versionSelected.versionId] ?? 0 : 0;
@@ -332,7 +366,7 @@ const VersionSection = observer(function VersionSection({ object, panel, isWrita
           </thead>
           <tbody>
             {versionList.map((version) => {
-              const isHead = version.versionId === object.versionIdHead;
+              const isHead = version.versionId === item.versionIdHead;
               const isSelected = version.versionId === panel.versionIdSelected;
               const isRead = version.versionId === versionIdRead;
               const pinnedCount = usageCount.byVersionId[version.versionId] ?? 0;
@@ -382,20 +416,20 @@ const VersionSection = observer(function VersionSection({ object, panel, isWrita
               <span key={index} className="doc-asset-mono doc-asset-dependency" title={dependency.type}>
                 {dependency.type === 'source'
                   ? dependency.path
-                  : `${dependency.objectId}${dependency.versionId ? `@${dependency.versionId}` : ' (head)'}`}
+                  : `${dependency.itemId}${dependency.versionId ? `@${dependency.versionId}` : ' (head)'}`}
               </span>
             ))}
         </p>
       ) : null}
-      {versionSelected ? <VersionMetadataLine object={object} panel={panel} versionId={versionSelected.versionId} /> : null}
-      {versionSelected && isWritable && !object.isDeleted ? (
+      {versionSelected ? <VersionMetadataLine item={item} panel={panel} versionId={versionSelected.versionId} /> : null}
+      {versionSelected && isWritable && !item.isDeleted ? (
         <div className="doc-asset-actions">
           <span className="doc-asset-mono doc-asset-muted">{versionSelected.versionId}</span>
           <button
             type="button"
             className="doc-button"
-            disabled={isBusy || isHeadSelected || isObjectLocked}
-            title={isObjectLocked ? 'the object is locked' : ''}
+            disabled={isBusy || isHeadSelected || isItemLocked}
+            title={isItemLocked ? 'the item is locked' : ''}
             onClick={() => panel.headSet(versionSelected.versionId)}
           >
             <Check size={11} aria-hidden="true" /> Set as head
@@ -403,8 +437,8 @@ const VersionSection = observer(function VersionSection({ object, panel, isWrita
           <button
             type="button"
             className="doc-button"
-            disabled={isBusy || isObjectLocked}
-            title={isObjectLocked ? 'the object is locked' : (versionSelected.isLocked ? 'allows rewriting and deleting this version again' : 'the version cannot be rewritten in place or deleted until it is unlocked')}
+            disabled={isBusy || isItemLocked}
+            title={isItemLocked ? 'the item is locked' : (versionSelected.isLocked ? 'allows rewriting and deleting this version again' : 'the version cannot be rewritten in place or deleted until it is unlocked')}
             onClick={() => panel.versionLockSet(versionSelected.versionId, !versionSelected.isLocked)}
           >
             {versionSelected.isLocked ? <LockOpen size={11} aria-hidden="true" /> : <Lock size={11} aria-hidden="true" />}
@@ -436,9 +470,9 @@ const VersionSection = observer(function VersionSection({ object, panel, isWrita
 // what the writer of the version's data said about it
 // ({versionId}.metadata.yaml, doc_page_impl_asset.md#version-metadata), read
 // with the version's data: shown once that is loaded
-const VersionMetadataLine = observer(function VersionMetadataLine({ object, panel, versionId }) {
+const VersionMetadataLine = observer(function VersionMetadataLine({ item, panel, versionId }) {
   const { assetStore } = useDocStores();
-  const stateVersion = assetStore.versionGet(panel.store, object.objectId, versionId);
+  const stateVersion = assetStore.versionGet(panel.store, item.itemId, versionId);
   if (stateVersion?.status !== 'done') return null;
   const metadata = stateVersion.metadata ?? {};
   const isEmpty = Object.keys(metadata).length === 0;
@@ -455,20 +489,20 @@ const VersionMetadataLine = observer(function VersionMetadataLine({ object, pane
 
 // ---------- data of the selected version ----------
 
-const DataSection = observer(function DataSection({ object, panel, isWritable, isBusy }) {
+const DataSection = observer(function DataSection({ item, panel, isWritable, isBusy }) {
   const { assetStore } = useDocStores();
   const edit = panel.edit;
   const upload = panel.upload;
   const versionId = panel.versionIdSelected;
-  const stateVersion = versionId ? assetStore.versionGet(panel.store, object.objectId, versionId) : undefined;
-  const stateHead = assetStore.versionGet(panel.store, object.objectId, object.versionIdHead);
-  const isHeadSelected = versionId === object.versionIdHead;
-  const isChangeable = isWritable && !object.isDeleted;
+  const stateVersion = versionId ? assetStore.versionGet(panel.store, item.itemId, versionId) : undefined;
+  const stateHead = assetStore.versionGet(panel.store, item.itemId, item.versionIdHead);
+  const isHeadSelected = versionId === item.versionIdHead;
+  const isChangeable = isWritable && !item.isDeleted;
   const isHeadText = stateHead?.status === 'done' && stateHead.isText === true;
-  const isEditable = isChangeable && isHeadText && !object.isLocked;
+  const isEditable = isChangeable && isHeadText && !item.isLocked;
   const isHeadLocked = panel.isHeadLocked;
   const saveMode = panel.saveMode;
-  const isUploadBlocked = object.isLocked || (saveMode === 'inPlace' && isHeadLocked);
+  const isUploadBlocked = item.isLocked || (saveMode === 'inPlace' && isHeadLocked);
   const fileInputRef = useRef(null);
   // the text and its buttons: a pointer going down anywhere else leaves the
   // editing (saved when changed), as leaving a block of the document does
@@ -479,9 +513,9 @@ const DataSection = observer(function DataSection({ object, panel, isWritable, i
 
   // why the head cannot be edited or replaced, said beside the greyed-out buttons
   let editReason = '';
-  if (object.isLocked) editReason = 'the object is locked, so its data cannot change; unlock it first';
+  if (item.isLocked) editReason = 'the item is locked, so its data cannot change; unlock it first';
   else if (stateHead?.status === 'done' && !isHeadText) {
-    editReason = `the head is not text (${object.contentType}, ${sizeTextGet(stateHead.size)}), so it cannot be edited here; upload a file to replace it`;
+    editReason = `the head is not text (${item.contentType}, ${sizeTextGet(stateHead.size)}), so it cannot be edited here; upload a file to replace it`;
   } else if (isUploadBlocked) {
     editReason = 'the head version is locked and the save mode is in place, so an upload would rewrite it; unlock the version, or choose the new version save mode';
   }
@@ -507,13 +541,13 @@ const DataSection = observer(function DataSection({ object, panel, isWritable, i
           <DataText
             text={stateVersion?.text ?? ''}
             panel={panel}
-            lang={object.lang}
+            lang={item.lang}
             isEditStartable={isEditable && isHeadSelected && !isBusy}
           />
         ) : !versionId ? (
           <p className="doc-asset-muted">Select a version to see its data.</p>
         ) : stateVersion?.status === 'done' ? (
-          <BinaryInfo object={object} panel={panel} versionId={versionId} stateVersion={stateVersion} />
+          <BinaryInfo item={item} panel={panel} versionId={versionId} stateVersion={stateVersion} />
         ) : stateVersion?.status === 'error' ? (
           <p className="doc-error doc-edit-message">{stateVersion.message}</p>
         ) : (
@@ -601,23 +635,23 @@ const DataSection = observer(function DataSection({ object, panel, isWritable, i
 
 // a version whose bytes are not utf-8 text: what is known of it, a preview
 // when the type is an image, the bytes by link
-const BinaryInfo = observer(function BinaryInfo({ object, panel, versionId, stateVersion }) {
+const BinaryInfo = observer(function BinaryInfo({ item, panel, versionId, stateVersion }) {
   const { assetStore } = useDocStores();
-  const url = assetStore.dataUrlGet(panel.store, object.objectId, versionId);
-  const isImage = object.contentType.startsWith('image/');
+  const url = assetStore.dataUrlGet(panel.store, item.itemId, versionId);
+  const isImage = item.contentType.startsWith('image/');
   return (
     <div className="doc-asset-binary">
       <dl className="doc-asset-fields">
         <dt>data</dt>
-        <dd>not text ({object.contentType})</dd>
+        <dd>not text ({item.contentType})</dd>
         <dt>size</dt>
         <dd className="doc-asset-mono">{sizeTextGet(stateVersion.size)}</dd>
         <dt>sha1</dt>
         <dd className="doc-asset-mono">{stateVersion.hash}</dd>
       </dl>
-      {isImage ? <img className="doc-asset-binary-preview" src={url} alt={object.name || object.objectId} /> : null}
+      {isImage ? <img className="doc-asset-binary-preview" src={url} alt={item.name || item.itemId} /> : null}
       <div className="doc-asset-actions">
-        <a className="doc-button" href={url} download={`${object.objectId}.${versionId}.${object.fileExt}`}>
+        <a className="doc-button" href={url} download={`${item.itemId}.${versionId}.${item.fileExt}`}>
           <Download size={11} aria-hidden="true" /> Download
         </a>
       </div>

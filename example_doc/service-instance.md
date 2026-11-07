@@ -3,7 +3,7 @@ title: Service Instances
 description: Stateful services created from templates, run by a backend of their own, shown and worked through dashboards placed in documents
 ---
 
-An asset is data: a versioned object a component reads. A **service instance** is a running thing with its own state: a database, a crawler, anything that answers requests and keeps something between them. Its state is not the document's; the document only places **dashboards** that show and work an instance.
+An asset is data: a versioned item a component reads. A **service instance** is a running thing with its own state: a database, a crawler, anything that answers requests and keeps something between them. Its state is not the document's; the document only places **dashboards** that show and work an instance.
 
 A **service template** is the initial state of a service: a folder with the script (a Python class), the dashboards (a federated module), and the initial config, but no data. A template is never run. An instance is always **created from a template**: the template's folder is copied into a folder of the instance's own, and from then on the instance runs its own copy. Two instances of the same template and the same template version do not share a script, even while their scripts are the same; changing a template changes no instance, and changing an instance's script changes no other instance.
 
@@ -49,10 +49,10 @@ The dashboard below is the default dashboard of the instances of `note-db`, boun
 <!--renderComp=service/note-db/default-->
 ```asset
 store: local
-objectId: w4veeme6sff
+itemId: w4veeme6sff
 ```
 
-The block is a reference into the asset service layer, like any asset-only component: the object holds which instance the dashboard shows and the dashboard's own state, here the search it shows. A search is written into the object in place, so the document opens on the same search; choosing another instance rewrites the object the same way. A dashboard keeps its state there and nowhere else, whatever it is; the instance keeps its own state in its own folder.
+The block is a reference into the asset service layer, like any asset-only component: the item holds which instance the dashboard shows and the dashboard's own state, here the search it shows. A search is written into the item in place, so the document opens on the same search; choosing another instance rewrites the item the same way. A dashboard keeps its state there and nowhere else, whatever it is; the instance keeps its own state in its own folder.
 
 The component id `service/note-db/default` names the template by the name the instances recorded, not the template folder: the dashboard is the instance's own (from its own copy of `dashboard/`), and keeps working if the template is renamed or removed.
 
@@ -63,7 +63,7 @@ A template may expose more dashboards than the two every script has (default, co
 <!--renderComp=service/note-db/stat-->
 ```asset
 store: local
-objectId: w4veemesqgt
+itemId: w4veemesqgt
 ```
 
 ## When a dashboard cannot show
@@ -73,7 +73,7 @@ A dashboard says what keeps it from showing, and its head stays usable, so the r
 <!--renderComp=service/note-db/default-->
 ```asset
 store: local
-objectId: w4veemfcx8m
+itemId: w4veemfcx8m
 ```
 
 This one is a dashboard of a template the backend does not have (`sheet-db`): no template has that name and no instance was created from one, so there is nothing to choose:
@@ -81,7 +81,7 @@ This one is a dashboard of a template the backend does not have (`sheet-db`): no
 <!--renderComp=service/sheet-db/default-->
 ```asset
 store: local
-objectId: w4vfc1twaj6
+itemId: w4vfc1twaj6
 ```
 
 Stop the backend (Ctrl+C) and every dashboard says the backend is down; one that was showing stays on screen, and its calls fail until the backend is back. The page asks again every few seconds, so starting the backend brings the dashboards back without a reload.
@@ -128,6 +128,6 @@ Creating an instance copies the template folder (not its `service-template.yaml`
 
 ## Placing a dashboard
 
-In edit mode the insert menu has a **Services** row: every dashboard of every template the backend knows. A new dashboard is an asset object bound to no instance; choose the instance in its head. The playground is the place to try it (it is ignored by git).
+In edit mode the insert menu has a **Services** row: every dashboard of every template the backend knows. A new dashboard is an asset item bound to no instance; choose the instance in its head. The playground is the place to try it (it is ignored by git).
 
 The design (the backend, templates and instances, what a script exposes, the calls between services, the props of a dashboard, its events) is `main/doc_page_impl_service.md`.

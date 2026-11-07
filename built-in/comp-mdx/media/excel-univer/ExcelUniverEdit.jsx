@@ -19,7 +19,7 @@ import { ExcelUniverEditStore } from './ExcelUniverEditStore.js';
 //
 // the block's data is an asset (ExcelUniver is asset-only): every change is
 // reported as the workbook text and the version metadata, and leaving the
-// block saves both into the asset object in its save mode (in place, as
+// block saves both into the asset item in its save mode (in place, as
 // ExcelUniver declares), the document is not written
 // (doc_page_impl_edit.md#asset-only-components).
 //
