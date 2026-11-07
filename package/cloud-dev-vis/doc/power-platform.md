@@ -23,7 +23,7 @@ A `dataverse-table` card lists its columns with the fixed fields Key, Column, Lo
 
 ### Anchors
 
-A `dataverse-table` offers `body` and `column/<id>` (left and right); a `dataverse-choice` adds `header`, and its rows take no handles; a resource card offers `header` and `property/<id>` on every side. The title line of a table is not an anchor.
+A `dataverse-table` offers `body` and `column/<id>` (left and right); a `dataverse-choice` adds `header`, and its rows take no handles; a resource card offers `header` and `property/<id>` on every side. The title line of a table is not an anchor of its own, though a line to the table as a whole [is drawn there](card-diagram-impl.md#handles-and-anchors).
 
 ## Power Platform Resource Nodes
 

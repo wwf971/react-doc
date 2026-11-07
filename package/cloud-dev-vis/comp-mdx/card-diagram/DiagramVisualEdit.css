@@ -145,14 +145,16 @@
 	color: var(--color-fd-primary);
 }
 
-/* a value of a cell: the text of the read view, clickable. no padding and
-   no minimum height of its own, so the row keeps its height */
+/* a value of a cell: the text of the read view, clickable. its side padding is only for the hover
+   to have some room around the words, and reaches outside the cell, so the words stand and wrap
+   exactly as when reading; no minimum height of its own, so the row keeps its height */
 .doc-vis-cell-value {
 	display: block;
 	box-sizing: border-box;
-	width: 100%;
+	width: calc(100% + 4px);
+	max-width: none;
 	min-width: 0;
-	margin: 0;
+	margin: 0 -2px;
 	padding: 0 2px;
 	border: 0;
 	border-radius: 2px;
@@ -239,6 +241,7 @@
    height, no padding; the frame is an outline, which takes no room */
 .doc-vis-text.is-cell .editable-value-container .value-text-viewport .editable-value-text {
 	min-height: 0;
+	margin: 0 -2px;
 	padding: 0 2px;
 	border: 0;
 	outline: 1.5px solid var(--color-fd-primary);

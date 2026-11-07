@@ -259,11 +259,10 @@ sceneList:
           size: { width: 560, height: 340 }
           data: { scene: /overview/orders, title: Orders, icon: table, tone: blue }
         - id: other
-          renderer: { type: card-note }
+          renderer: { type: scene-link }
           position: { x: 620, y: 140 }
-          size: { width: 200, height: auto }
           link: /overview/summary
-          data: { title: Open the summary, text: The same scene in another card, tone: teal }
+          data: { title: Open the summary, icon: arrow-right-left, tone: teal, statList: [The same scene in another card] }
   - path: /overview/summary
     label: Summary
     diagram:
@@ -410,6 +409,39 @@ nodes:
         - { id: status, name: Status, nameLogical: statuscode, type: Choice, tone: green }
         - { id: modifiedon, name: Modified on, nameLogical: modifiedon, type: Date and Time }
       rowDisplay: [accountid, { break: 2 columns }, status, '...']
+    handles: []
+connections: []
+```
+
+## Rows behind a row break
+
+A row break can hold rows. Click one to open it, and the bar over its rows to close it. Below, the first is closed at first and the second open.
+
+<!--renderComp=DiagramER,title=Rows a reader can open-->
+```yaml
+version: 1
+viewport:
+  size: { height: 360 }
+nodes:
+  - id: account
+    renderer: { type: dataverse-table }
+    position: { x: 0, y: 0 }
+    data:
+      name: Account
+      nameLogical: account
+      columns:
+        - { id: accountid, name: Account, nameLogical: accountid, type: Unique identifier, key: PK }
+        - { id: name, name: Name, nameLogical: name, type: Text }
+        - { id: phone, name: Phone, nameLogical: telephone1, type: Text }
+        - { id: fax, name: Fax, nameLogical: fax, type: Text }
+        - { id: status, name: Status, nameLogical: statuscode, type: Choice, tone: green }
+        - { id: createdon, name: Created on, nameLogical: createdon, type: Date and Time }
+        - { id: modifiedon, name: Modified on, nameLogical: modifiedon, type: Date and Time }
+      rowDisplay:
+        - accountid
+        - { break: 3 columns, rowList: [name, phone, fax] }
+        - status
+        - { break: 2 columns, rowList: [createdon, modifiedon], isExpanded: true }
     handles: []
 connections: []
 ```

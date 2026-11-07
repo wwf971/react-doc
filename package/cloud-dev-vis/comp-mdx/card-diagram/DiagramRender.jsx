@@ -4,7 +4,7 @@ import { BaseEdge, Handle, Position, ViewportPortal, getBezierPath, getSmoothSte
 import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
 import { DiagramCreatePanel } from './DiagramCreatePanel.jsx';
 import { cardSchemaGet } from './TableCardSchema.js';
-import { endpointIsDangling } from './DiagramERData.js';
+import { endpointIsDangling, handleAnchorDrawnOf } from './DiagramERData.js';
 import { routeIsEmpty, routeResolve, routeTypeHasAnchors } from './DiagramRoute.js';
 import { DiagramRouteControls } from './DiagramRouteControls.jsx';
 
@@ -56,7 +56,8 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 				const isAnchorNeeded = anchor => !isViewed && (!node.data?.rowDisplay || node.handles.some(handle => handle.anchor.target === anchor.id));
 				const missing = node.anchors.filter(anchor => anchor.id !== 'body' && !anchors.current.has(anchor.id) && isAnchorNeeded(anchor)).map(anchor => anchor.id);
 				const handles = node.handles.flatMap(handle => {
-					const target = handle.anchor.target === 'body' ? element : anchors.current.get(handle.anchor.target) ?? (isViewed ? element : null);
+					const anchorDrawn = handleAnchorDrawnOf(node, handle);
+					const target = anchorDrawn === 'body' ? element : anchors.current.get(anchorDrawn) ?? (isViewed || anchorDrawn !== handle.anchor.target ? element : null);
 					if (!target) return [];
 					observer.observe(target);
 					const rect = target.getBoundingClientRect();

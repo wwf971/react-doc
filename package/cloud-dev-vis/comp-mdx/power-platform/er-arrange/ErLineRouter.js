@@ -20,7 +20,7 @@ const TRACK_STEP = 10;
 const CARD_MARGIN = 8;
 export const LEVEL_FIRST = 14;
 export const LEVEL_STEP = 9;
-const CANDIDATE_MAX = 40;
+const CANDIDATE_MAX = 150;
 const isVertical = (end) => end.side === 'top' || end.side === 'bottom';
 
 export function erColumnListGet(rectList) {
@@ -141,8 +141,12 @@ export function erLinesRoute({ rectList, lineList, placedList = [] }) {
 		const { slotList, usedSet } = slotListByGap.get(gap);
 		const free = slotList.map((x, i) => ({ x, distance: Math.abs(i - index) })).filter((item) => !usedSet.has(item.x)).sort((a, b) => a.distance - b.distance).map((item) => item.x);
 		const between = slotList.slice(1).map((x, i) => (x + slotList[i]) / 2).filter((x) => !usedSet.has(x));
-		const outer = gap === columnList.length ? [slotList[slotList.length - 1] + LANE_SPACING_OUTER / 2] : gap === 0 ? [slotList[0] - LANE_SPACING_OUTER / 2] : [];
-		return [...free, ...between, ...outer].map((x) => ({ gap, x }));
+		// beyond the outermost lanes: what a row at one height with this line's end needs, its lane
+		// on the far side of the other's. in a gap between two columns, halfway to the card
+		const outer = gap === columnList.length ? [slotList[slotList.length - 1] + LANE_SPACING_OUTER / 2]
+			: gap === 0 ? [slotList[0] - LANE_SPACING_OUTER / 2]
+			: [(columnList[gap - 1].right + slotList[0]) / 2, (slotList[slotList.length - 1] + columnList[gap].left) / 2];
+		return [...free.slice(0, 4), ...outer.filter((x) => !usedSet.has(x)), ...free.slice(4), ...between].map((x) => ({ gap, x }));
 	};
 	const placedReadList = placedList.map((line) => ({ ...line, read: routePathRead(line.d) }));
 	const conflictOf = (candidate) => {
@@ -195,12 +199,17 @@ export function erLinesRoute({ rectList, lineList, placedList = [] }) {
 		return slotListByGap.get(gap).slotList[index];
 	};
 	const levelOrder = [...levelPlanList].sort((a, b) => laneOfPlan(a) - laneOfPlan(b));
-	levelOrder.forEach((plan, order) => {
+	// levels are counted per card: lines going to another card have nothing to do with these
+	const levelNodeOf = (plan) => (plan.kind === 'level-target' ? plan.line.targetNodeId : plan.line.sourceNodeId);
+	const levelGroupByNode = new Map();
+	for (const plan of levelOrder) levelGroupByNode.set(levelNodeOf(plan), [...(levelGroupByNode.get(levelNodeOf(plan)) ?? []), plan]);
+	levelOrder.forEach((plan) => {
 		const { line } = plan;
 		const role = plan.kind === 'level-target' ? 'source' : 'target';
 		const end = plan.kind === 'level-target' ? line.target : line.source;
 		const sign = end.side === 'top' ? -1 : 1;
-		const levelPreferred = levelOrder.length - 1 - order;
+		const group = levelGroupByNode.get(levelNodeOf(plan));
+		const levelPreferred = group.length - 1 - group.indexOf(plan);
 		const levelList = Array.from({ length: levelOrder.length + 4 }, (_, index) => index).sort((a, b) => Math.abs(a - levelPreferred) - Math.abs(b - levelPreferred));
 		const owner = plan.kind === 'level-target' ? [line.sourceNodeId, line.targetNodeId] : [line.sourceNodeId, line.targetNodeId];
 		const best = pickBest((function* () {

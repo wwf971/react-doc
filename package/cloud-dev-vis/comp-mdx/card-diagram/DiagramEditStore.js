@@ -5,7 +5,7 @@ import { cardSchemaGet, cardRowAnchorBuild } from './TableCardSchema.js';
 import { pathResolve, pathEquals, selectionPathBuild, tabPathGet, nodeLineListGet, cardTabList } from './DiagramEditPath.js';
 import { EditHistory } from './DiagramEditHistory.js';
 import { diagramArrangeRun } from './DiagramArrange.js';
-import { cardViewDefaultGet, cardViewListGet, cardViewListPrune, cardViewRowListGet, cardViewSourceOf } from './TableCardData.js';
+import { cardRowDisplayIdListOf, cardRowDisplayWithout, cardViewDefaultGet, cardViewListGet, cardViewListPrune, cardViewRowListGet, cardViewSourceOf } from './TableCardData.js';
 import { routeAnchorCoupleSet, routeAnchorHandleSet, routeAnchorHandlesPull, routeAnchorIdNext, routeAnchorInsertAt, routeAnchorMove, routeAnchorPlaceOf, routeAnchorRemove, routeCompact, routeEndHandleSet, routeNormalize, routeTypeFamilyGet, routeTypeHasAnchors } from './DiagramRoute.js';
 
 export { cardTabList };
@@ -502,9 +502,9 @@ export class DiagramEditStore {
 		if (!isShown) {
 			const reason = this.rowHideReasonGet(nodeId, rowId);
 			if (reason) { this.message = reason; return false; }
-			return this.rowDisplaySet(nodeId, list.filter(entry => entry !== rowId));
+			return this.rowDisplaySet(nodeId, cardRowDisplayWithout(list, rowId));
 		}
-		if (list.includes(rowId)) return false;
+		if (cardRowDisplayIdListOf(list).includes(rowId)) return false;
 		const next = [...list];
 		next.splice(index ?? next.length, 0, rowId);
 		return this.rowDisplaySet(nodeId, next);
@@ -532,8 +532,22 @@ export class DiagramEditStore {
 
 	rowBreakTextSet(nodeId, index, text) {
 		const list = [...this.rowDisplayCurrentGet(nodeId)];
-		list[index] = text ? { break: text } : '...';
+		const { rowList, isExpanded } = typeof list[index] === 'object' ? list[index] : {};
+		list[index] = rowList ? { break: text, rowList, ...(isExpanded === undefined ? {} : { isExpanded }) } : text ? { break: text } : '...';
 		return this.rowDisplaySet(nodeId, list, { groupKey: `rowBreak:${nodeId}/${index}` });
+	}
+
+	// the rows behind a row break: they leave the places they had in the list. none: only the mark.
+	// isExpanded: open at first, undefined to keep what it says
+	rowBreakFoldSet(nodeId, index, { rowList, isExpanded } = {}) {
+		const entry = this.rowDisplayCurrentGet(nodeId)[index];
+		if (entry === undefined || (typeof entry === 'string' && entry !== '...')) { this.message = 'There is no row break at that place.'; return false; }
+		const rowListNext = rowList ?? entry.rowList ?? [];
+		const text = typeof entry === 'object' ? entry.break : '';
+		const isExpandedNext = isExpanded ?? entry.isExpanded;
+		const entryNext = rowListNext.length ? { break: text, rowList: rowListNext, ...(isExpandedNext === undefined ? {} : { isExpanded: isExpandedNext }) } : text ? { break: text } : '...';
+		const list = this.rowDisplayCurrentGet(nodeId).map((item, position) => (position === index ? entryNext : item));
+		return this.rowDisplaySet(nodeId, list.filter((item) => item === entryNext || !rowListNext.includes(item)));
 	}
 
 	rowDisplayMove(nodeId, indexFrom, indexTo) {
@@ -577,7 +591,7 @@ export class DiagramEditStore {
 			this.endpointsDetach(documentNext, endpoint => endpoint.nodeId === nodeId && removed.some(handle => handle.id === endpoint.handleId), positionGet);
 			const path = this.nodePathGet(nodeId);
 			documentNext.setIn([...path, 'data', schema.rowListKey], documentNext.createNode(this.rowsGet(node).filter(row => row.id !== rowId)));
-			if (node.data?.rowDisplay) documentNext.setIn([...path, 'data', 'rowDisplay'], documentNext.createNode(node.data.rowDisplay.filter(entry => entry !== rowId)));
+			if (node.data?.rowDisplay) documentNext.setIn([...path, 'data', 'rowDisplay'], documentNext.createNode(cardRowDisplayWithout(node.data.rowDisplay, rowId)));
 			if (node.data?.viewList) documentNext.setIn([...path, 'data', 'viewList'], documentNext.createNode(cardViewListPrune(node.data.viewList, schema.kind === 'table' ? { plainId: rowId, recordId: rowId } : { plainId: rowId, columnId: rowId })));
 			documentNext.setIn([...path, 'handles'], documentNext.createNode((node.handles ?? []).filter(handle => !removed.includes(handle))));
 		});
@@ -973,6 +987,9 @@ export class DiagramEditStore {
 				const path = ['connections', this.connections.findIndex(connection => connection.id === connectionId), 'route'];
 				if (route) documentNext.setIn(path, documentNext.createNode(route));
 				else if (documentNext.hasIn(path)) documentNext.deleteIn(path);
+			}
+			for (const [connectionId, position] of Object.entries(changes.labelPositionById)) {
+				documentNext.setIn(['connections', this.connections.findIndex(connection => connection.id === connectionId), 'label', 'position'], position);
 			}
 		});
 		return isChanged ? changes.reportList : null;

@@ -1,6 +1,6 @@
 import { lineTypeList, markerTypeList, endpointIsDangling } from './DiagramERData.js';
 import { cardSchemaGet, cardRowAnchorBuild } from './TableCardSchema.js';
-import { CARD_VIEW_MODE_LABEL, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown } from './TableCardData.js';
+import { cardRowDisplayIdListOf, CARD_VIEW_MODE_LABEL, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown } from './TableCardData.js';
 import { strokeDashList } from './DiagramEditStore.js';
 import { cardTabList, tabPathGet, pathLabelListGet, rowNameGet, selectionPathBuild } from './DiagramEditPath.js';
 import { routeAnchorPointGet, routeDirectionFacingList, routeEndPointGet, routeResolve, routeTypeHasAnchors, routeTypeIsBezier, ROUTE_DIRECTION_LIST } from './DiagramRoute.js';
@@ -325,7 +325,9 @@ export function cardModelBuild(editor) {
 			const entry = list[display.rowBreakIndex];
 			return { type: 'detail', sectionList: [{ id: 'row-break', label: 'Row break', propertyList: [
 				{ id: 'text', label: 'Text', kind: 'text', value: typeof entry === 'object' ? entry.break : '', set: value => change(() => store.rowBreakTextSet(nodeId, display.rowBreakIndex, value)) },
-			], note: 'Words beside the mark: what was left out here. Empty, only the mark is drawn.', actionList: [
+				{ id: 'rowList', label: 'Rows behind it', kind: 'text', value: (typeof entry === 'object' ? entry.rowList ?? [] : []).join(', '), set: value => change(() => store.rowBreakFoldSet(nodeId, display.rowBreakIndex, { rowList: String(value).split(',').map(id => id.trim()).filter(Boolean) })) },
+				...(typeof entry === 'object' && entry.rowList ? [{ id: 'isExpanded', label: 'Open at first', kind: 'bool', value: entry.isExpanded === true, set: value => change(() => store.rowBreakFoldSet(nodeId, display.rowBreakIndex, { isExpanded: value })) }] : []),
+			], note: 'Words beside the mark: what was left out here. Rows behind it, by their ids separated by commas, can be opened by a reader. Empty, only the mark is drawn.', actionList: [
 				{ id: 'row-break-remove', label: 'Remove row break', kind: 'danger', act: () => change(() => store.rowDisplayEntryRemove(nodeId, display.rowBreakIndex)) },
 			] }] };
 		}
@@ -334,16 +336,17 @@ export function cardModelBuild(editor) {
 		const isPlainRows = view.mode === 'plain';
 		const nameOf = item => (isPlainRows ? rowNameGet(item, schema) : String(item?.label ?? item?.name ?? item?.id ?? ''));
 		const rowOf = id => viewRows.find(item => item.id === id);
-		const hiddenList = viewRows.filter(item => !list.includes(item.id));
+		const idShownList = cardRowDisplayIdListOf(list);
+		const hiddenList = viewRows.filter(item => !idShownList.includes(item.id));
 		const rowPath = id => (isPlainRows ? selectionPathBuild(nodeId, { rowId: id }) : listPath);
 		const itemList = [
 			...list.map((entry, index) => (typeof entry === 'string' && entry !== '...'
 				? { id: `shown:${entry}`, name: nameOf(rowOf(entry)), isSelected: false, path: rowPath(entry), isRemovable: !store.rowHideReasonGet(nodeId, entry), removeReason: store.rowHideReasonGet(nodeId, entry) }
-				: { id: `break:${index}`, name: 'Row break', sub: typeof entry === 'object' ? entry.break : '', badge: 'break', isSelected: false, path: [...listPath, { kind: 'rowBreak', index }], isRemovable: true, removeReason: '' })),
+				: { id: `break:${index}`, name: 'Row break', sub: typeof entry === 'object' ? entry.break : '', badge: entry.rowList ? `${entry.rowList.length} behind it` : 'break', isSelected: false, path: [...listPath, { kind: 'rowBreak', index }], isRemovable: true, removeReason: '' })),
 			...hiddenList.map(item => ({ id: `hidden:${item.id}`, name: nameOf(item), badge: 'not shown', isSelected: false, path: rowPath(item.id), isRemovable: false, removeReason: 'It is not shown: drag it up, or open it, to show it.' })),
 		];
 		return {
-			type: 'list', id: 'row-display', label: `Shown when reading (${list.filter(entry => typeof entry === 'string' && entry !== '...').length} of ${viewRows.length})`,
+			type: 'list', id: 'row-display', label: `Shown when reading (${idShownList.length} of ${viewRows.length})`,
 			itemList,
 			isReorderable: itemList.length > 1, reorderReason: 'Nothing to reorder.',
 			move: (indexFrom, indexTo) => change(() => {
@@ -432,12 +435,12 @@ export function cardModelBuild(editor) {
 			const handles = handleSection(cardRowAnchorBuild(schema, row.id), 'Handles', schema.isRowHandleAllowed?.(node.data) ?? true);
 			if (handles) sectionList.push(handles);
 			const viewShown = store.cardViewGet(nodeId);
-			const isRowShown = !viewShown.rowDisplay || viewShown.rowDisplay.includes(row.id);
+			const isRowShown = !viewShown.rowDisplay || cardRowDisplayIdListOf(viewShown.rowDisplay).includes(row.id);
 			const hideReason = store.rowHideReasonGet(nodeId, row.id);
 			if (viewShown.mode === 'plain') sectionList.push({ id: 'row-display', label: 'When reading', propertyList: [
 				{ id: 'isShown', label: 'Shown', kind: 'bool', value: isRowShown, isReadOnly: isRowShown && Boolean(hideReason), set: value => change(() => store.rowShownSet(nodeId, row.id, value)) },
 			], note: isRowShown ? hideReason : '', actionList: [
-				{ id: 'break-after', label: 'Insert row break below', isDisabled: !isRowShown || Boolean(store.rowBreakInsertReasonGet(nodeId, store.rowDisplayCurrentGet(nodeId).indexOf(row.id) + 1)), reason: isRowShown ? store.rowBreakInsertReasonGet(nodeId, store.rowDisplayCurrentGet(nodeId).indexOf(row.id) + 1) : 'This row is not shown.', act: () => change(() => store.rowBreakInsert(nodeId, { afterRowId: row.id }) !== null) },
+				{ id: 'break-after', label: 'Insert row break below', isDisabled: !isRowShown || !store.rowDisplayCurrentGet(nodeId).includes(row.id) || Boolean(store.rowBreakInsertReasonGet(nodeId, store.rowDisplayCurrentGet(nodeId).indexOf(row.id) + 1)), reason: isRowShown ? store.rowBreakInsertReasonGet(nodeId, store.rowDisplayCurrentGet(nodeId).indexOf(row.id) + 1) : 'This row is not shown.', act: () => change(() => store.rowBreakInsert(nodeId, { afterRowId: row.id }) !== null) },
 			] });
 			sectionList.push({ id: 'row-actions', label: '', propertyList: [], actionList: [
 				rowInsertAction('insert-above', 'Insert above', rowIndex),

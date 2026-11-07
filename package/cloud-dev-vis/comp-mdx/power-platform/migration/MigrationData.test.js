@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { yamlParse } from '../../../../../main/frontend/src/lib/yaml.js';
 import { diagramNormalize } from '../../card-diagram/DiagramERData.js';
 import { switchRegistryBuild } from '../../card-diagram-switch/SwitchNodeKinds.jsx';
+import { erGeometryEstimateBuild } from '../er-arrange/ErGeometry.js';
+import { routeOverlapListGet, routePathPolylineGet, routePathRunListGet, routePolylinePointAt, routeResolve } from '../../card-diagram/DiagramRoute.js';
+import { labelSizeEstimate } from '../../card-diagram/DiagramLabelPlace.js';
 import { switchPresentationBuild, switchViewHoverResolve, switchViewListOf, switchViewResolve } from '../../card-diagram-switch/SwitchData.js';
 import { powerPlatformNodeRegistry } from '../power-platform-node-registry.js';
 import { migrationCategoryOf, migrationModelBuild, migrationPathBuild, migrationRankBuild } from './MigrationData.js';
@@ -649,6 +652,7 @@ test('a database has three views: a cylinder on its card, the ER diagram on hove
 	assert.deepEqual(matrix.data.rowList.map((row) => row.id), ['a', 'b']);
 	assert.deepEqual(matrix.data.columnList.map((column) => column.id), ['a', 'b']);
 	assert.equal(matrix.data.rowList[0].link, '/overview/pw/a');
+	for (const cell of matrix.data.cellList) assert.equal(cell.link, `/overview/pw/${cell.row}/${cell.column}`);
 	const tableList = itemList.filter((item) => item.kind === 'schema-table' && item.data.db === 'pw');
 	const lookupCount = tableList.reduce((sum, item) => sum + new Set(item.data.columnList.map((column) => column.lookup).filter(Boolean)).size, 0);
 	assert.equal(matrix.data.cellList.length, lookupCount);
@@ -667,5 +671,114 @@ test('a lookup matrix counts the columns behind a mark, and leaves out what is n
 	];
 	const [matrix] = migrationProviderBuild(migrationModelBuild('example', list)).sceneGet('/overview/pw').viewList[1].diagram.nodes;
 	assert.equal(matrix.data.title, 'PW: M');
-	assert.deepEqual(matrix.data.cellList, [{ row: 'q', column: 'p', title: 'Q → P: One, Two', mark: '● 2' }]);
+	assert.deepEqual(matrix.data.cellList, [{ row: 'q', column: 'p', link: '/overview/pw/q/p', title: 'Q → P: One, Two', mark: '2' }]);
 });
+
+test('the estimate of a line to a table as a whole ends at its title line, as it is drawn', () => {
+	const nodes = [
+		{ id: 't', renderer: { type: 'dataverse-table' }, position: { x: 0, y: 100 }, size: { width: 400, height: 300 }, data: { columns: [] }, handles: [{ id: 'side', direction: 'out', anchor: { side: 'right' } }, { id: 'low', direction: 'out', anchor: { side: 'right', offset: 0.8 } }] },
+		{ id: 'n', renderer: { type: 'card-note' }, position: { x: 600, y: 100 }, size: { width: 200, height: 100 }, data: {}, handles: [{ id: 'side', direction: 'in', anchor: { side: 'left' } }] },
+	];
+	const geometry = erGeometryEstimateBuild({ nodes });
+	const lineOf = (handleId) => ({ source: { nodeId: 't', handleId }, target: { nodeId: 'n', handleId: 'side' } });
+	assert.equal(geometry.endOf(lineOf('side'), 'source').y, 118);
+	assert.equal(geometry.endOf(lineOf('low'), 'source').y, 340, 'a place written on purpose stays');
+	assert.equal(geometry.endOf(lineOf('side'), 'target').y, 150, 'another kind keeps the middle of its side');
+});
+
+test('one lookup has a scene of its own: the two tables cut down, and a link from each column to its mapping', () => {
+	const table = (db, logical, columnList) => ({ key: `t.${db}.${logical}`, kind: 'schema-table', path: `/example/schema/${db}/table/${logical}`, data: { db, logical, name: logical.toUpperCase(), columnList } });
+	const list = [
+		{ key: 'sys', kind: 'system', path: '/example/system', data: { source: { id: 'pw', name: 'PW' }, target: { id: 'cn', name: 'CN' } } },
+		table('pw', 'p', [{ id: 'pid', name: 'P', key: 'PK' }, { id: 'other', name: 'Other' }]),
+		table('pw', 'q', [{ id: 'qid', name: 'Q', key: 'PK' }, { id: 'one', name: 'One', lookup: 't.pw.p' }, { id: 'two', name: 'Two', lookup: 't.pw.p' }, { id: 'memo', name: 'Memo' }, { id: 'self', name: 'Self', lookup: 't.pw.q' }]),
+		table('cn', 'x', [{ id: 'xid', name: 'X', key: 'PK' }, { id: 'in', name: 'In', lookup: 't.cn.y' }]),
+		table('cn', 'y', [{ id: 'yid', name: 'Y', key: 'PK' }]),
+		{ key: 'map.t', kind: 'mapping-table', path: '/example/mapping/table/q--x', data: { source: 't.pw.q', target: 't.cn.x', columnKeyList: ['map.c'] } },
+		{ key: 'map.c', kind: 'mapping-column', path: '/example/mapping/column/q--x/in', data: { id: 'in', name: 'In', table: 'map.t', source: 'one', target: 'in', kind: 'text', label: 'l', stepList: [] } },
+	];
+	const providerLookup = migrationProviderBuild(migrationModelBuild('example', list));
+	const { nodes, connections } = providerLookup.sceneGet('/overview/pw/q/p').diagram;
+	assert.deepEqual(nodes.map((node) => node.id), ['table:pw:q', 'table:pw:p', 'link:mapping:one'], 'the same ids as elsewhere, so a switch moves them');
+	assert.deepEqual(connections.map((line) => line.id), ['lookup:pw:q:one', 'lookup:pw:q:two']);
+	assert.equal(connections[0].target.handleId, 'pk');
+	const link = nodes[2];
+	assert.equal(link.renderer.type, 'scene-link');
+	assert.equal(link.link, '/overview/mapping/q--x/in');
+	assert.equal(link.size, undefined, 'no width written: it is as wide as its words');
+	assert.ok(link.data.title.includes('One'));
+	assert.doesNotThrow(() => diagramNormalize({ version: 1, nodes, connections }, registry));
+	assert.equal(diagramNormalize({ version: 1, nodes, connections }, registry).nodes[2].isWidthFit, true);
+	// the target side: what the column comes from
+	assert.equal(providerLookup.sceneGet('/overview/cn/x/y').diagram.nodes.find((node) => node.id === 'link:mapping:in').link, '/overview/mapping/q--x/in');
+	// a table looking itself up is one card, and a column with no mapping has no link
+	const self = providerLookup.sceneGet('/overview/pw/q/q').diagram;
+	assert.deepEqual(self.nodes.map((node) => node.id), ['table:pw:q']);
+	assert.equal(self.connections.length, 1);
+	assert.doesNotThrow(() => diagramNormalize({ version: 1, ...self }, registry));
+	// what is not a lookup names nothing
+	assert.equal(providerLookup.sceneGet('/overview/pw/p/q'), null);
+	assert.equal(providerLookup.sceneGet('/overview/pw/q/nothing'), null);
+	// it can be found from the path bar, under the table
+	assert.deepEqual(providerLookup.childListGet('/overview/pw/q').map((child) => child.path), ['/overview/pw/q/p', '/overview/pw/q/q']);
+	assert.equal(providerLookup.labelGet('/overview/pw/q/p'), '→ P');
+	assert.deepEqual(providerLookup.childListGet('/overview/pw/p'), []);
+});
+
+test('the labels of the column mappings of two tables stand in one column', () => {
+	const { connections } = provider.sceneGet('/overview/mapping/a--x').diagram;
+	const positionList = connections.filter((line) => line.id.startsWith('column:') && line.target.handleId.startsWith('column-') && line.label?.text).map((line) => line.label.position);
+	assert.ok(positionList.length >= 2);
+	assert.deepEqual([...new Set(positionList)], [0.5]);
+});
+
+test('in the scene of one column the rows left out stand behind a break a reader can open', () => {
+	const { nodes } = provider.sceneGet('/overview/mapping/a--x/state').diagram;
+	const table = nodes.find((node) => node.id === 'table:pw:a');
+	const folded = table.data.rowDisplay.filter((entry) => typeof entry === 'object');
+	assert.ok(folded.length > 0 || table.data.rowDisplay.every((entry) => typeof entry === 'string'));
+	for (const entry of folded) {
+		assert.ok(entry.rowList.length > 0);
+		assert.equal(entry.isExpanded, undefined, 'closed at first');
+		assert.ok(entry.break);
+	}
+	assert.equal(new Set([...table.data.rowDisplay.filter((entry) => typeof entry === 'string'), ...folded.flatMap((entry) => entry.rowList)]).size, table.data.columns.length, 'every column is there');
+	assert.doesNotThrow(() => diagramNormalize({ version: 1, nodes, connections: provider.sceneGet('/overview/mapping/a--x/state').diagram.connections }, registry));
+});
+
+test('abandoned columns have a lane each: their lines share only the last run into the card, their labels apart', () => {
+	const table = (db, logical, columnList) => ({ key: `t.${logical}`, kind: 'schema-table', path: `/example/schema/${db}/table/${logical}`, data: { db, logical, name: logical.toUpperCase(), columnList } });
+	const column = (id) => ({ id, name: id, logical: id, type: 'Text' });
+	const abandonOf = (id) => ({ key: `c.${id}`, kind: 'mapping-column', path: `/example/mapping/column/s--t/${id}`, data: { id, name: id, table: 'm', source: id, target: null, kind: 'abandon', label: 'Abandon', stepList: [{ op: 'abandon' }] } });
+	const idList = ['one', 'two', 'three'];
+	const list = [
+		{ key: 'sys', kind: 'system', path: '/example/system', data: { source: { id: 'pw', name: 'PW' }, target: { id: 'cn', name: 'CN' } } },
+		table('pw', 's', [column('keep'), ...idList.map(column)]),
+		table('cn', 't', [column('keep')]),
+		{ key: 'm', kind: 'mapping-table', path: '/example/mapping/table/s--t', data: { source: 't.s', target: 't.t', columnKeyList: ['c.keep', ...idList.map((id) => `c.${id}`)] } },
+		{ key: 'c.keep', kind: 'mapping-column', path: '/example/mapping/column/s--t/keep', data: { id: 'keep', name: 'keep', table: 'm', source: 'keep', target: 'keep', kind: 'copy', label: 'Copy', stepList: [] } },
+		...idList.map(abandonOf),
+	];
+	const diagram = migrationProviderBuild(migrationModelBuild('example', list)).sceneGet('/overview/mapping/s--t').diagram;
+	const geometry = erGeometryEstimateBuild(diagram);
+	const lineList = diagram.connections.map((connection) => {
+		const a = geometry.endOf(connection, 'source');
+		const b = geometry.endOf(connection, 'target');
+		const ends = { sourceX: a.x, sourceY: a.y, sourcePosition: a.side, targetX: b.x, targetY: b.y, targetPosition: b.side };
+		return { id: connection.id, label: connection.label, d: routeResolve('smoothstep', connection.route ?? null, ends).d, sourceKey: `${connection.source.nodeId}/${connection.source.handleId}`, targetKey: `${connection.target.nodeId}/${connection.target.handleId}` };
+	});
+	assert.deepEqual(routeOverlapListGet(lineList), []);
+	const abandonedList = lineList.filter((line) => line.targetKey === 'operator:abandon/left');
+	assert.equal(abandonedList.length, 3);
+	const laneList = abandonedList.map((line) => routePathRunListGet(line.d).find((run) => Math.abs(run.from.x - run.to.x) < 1).from.x);
+	assert.equal(new Set(laneList.map(Math.round)).size, 3, `a lane each: ${laneList}`);
+	const rectList = abandonedList.map((line) => {
+		const point = routePolylinePointAt(routePathPolylineGet(line.d), line.label.position);
+		const size = labelSizeEstimate(line.label.text);
+		return { x: point.x - size.width / 2, y: point.y - size.height / 2, ...size };
+	});
+	rectList.forEach((a, index) => rectList.slice(index + 1).forEach((b) => assert.ok(!(a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height), 'two labels meet')));
+	assert.equal(lineList.find((line) => line.id === 'column:c.keep').label.position, 0.5, 'a line across the gap keeps its place in the column of labels');
+	assert.equal(diagram.connections.find((line) => line.id === 'column:c.keep').route, undefined, 'and its straight way');
+});
+

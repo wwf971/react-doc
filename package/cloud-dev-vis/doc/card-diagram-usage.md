@@ -36,7 +36,7 @@ connections:
   - { id: a-b, source: { nodeId: a, handleId: out }, target: { nodeId: b, handleId: in }, label: { text: then } }
 ```
 
-The cards of the base series are `table` (any fields and rows), `operator`, `card-note`, `card-brief`, `card-three-dots`, `card-database` (a cylinder with its name inside), `card-matrix` (rows and columns with a mark where they meet) and `color-block`; a series adds its own, and the scenes add `scene-embed` and `scene-stack`. The grammar of cards, handles and lines is in [Data diagrams](comp-diagram-er.md).
+The cards of the base series are `table` (any fields and rows), `operator`, `card-note`, `card-brief`, `card-three-dots`, `card-database` (a cylinder with its name inside), `card-matrix` (rows and columns with a mark where they meet) and `color-block`; a series adds its own, and the scenes add `scene-embed`, `scene-stack` and `scene-link`. The grammar of cards, handles and lines is in [Data diagrams](comp-diagram-er.md).
 
 ## Moving and switching
 
@@ -76,9 +76,12 @@ A block has no handles and does not own or move what lies on it. It is always dr
 What a diagram should look like, whoever draws it:
 
 - **A list wraps.** Do not lay out many cards in one row, or fitting the whole diagram makes them small. A list on a canvas breaks into lines at a small count (four or so), and a generator breaks them itself. A chain that must read in one direction may turn downward rather than run on. Stacking by a meaning (rows by rank, columns by depth) is better still.
+- **The labels of lines side by side stand in one column.** Give lines running side by side, as the column mappings between two tables do, one label position. Do not stagger them to keep them apart: a row is taller than a label, and labels that jump left and right are harder to read down.
+- **A line to a table as a whole ends at its title line.** It is what a table card does by itself with a handle on the left or right side of the card (`anchor: { side: left }`). A line about one row ends on that row. Do not place a handle at the middle of a table's side by other means.
+- **A link is a `scene-link`.** A node whose job is to open another scene uses the kind made for it ([A link to a scene](comp-card-diagram-switch.md#a-link-to-a-scene)), with no width written, so it is as wide as its words and every link in a scene looks the same. Do not make a link out of a `card-brief` or a `card-note`. A card that shows something may still have `link`, so a click opens more of it.
 - **A margin around what is held.** A card holding other cards keeps a margin inside its border, so nothing inside touches it. [An embedded scene](card-diagram-flexible-switch.md#one-canvas-no-canvas-inside-a-canvas) has this by default.
 - **One table can be seen several ways.** A table card can declare views, plain, by column or by row, with a menu to switch between them ([Table Card Views](comp-diagram-er.md#table-card-views)).
-- **A long table is cut down to what matters here.** `rowDisplay` picks the rows of a table card, in any order, with a row break for what is left out ([Table Card Views](comp-diagram-er.md#table-card-views)).
+- **A long table is cut down to what matters here.** `rowDisplay` picks the rows of a table card, in any order, with a row break for what is left out, which can hold those rows for the reader to open ([Table Card Views](comp-diagram-er.md#rows-behind-a-row-break)).
 - **What is long scrolls.** In a card of many sections, prefer a [scrolling stack](card-diagram-flexible-switch.md#a-scrolling-stack) to shrinking all of them to fit.
 - **No lines on top of each other.** This is the one most often broken: [next section](#no-lines-on-top-of-each-other).
 - **A scene generated from data gets its layout from an arranger.** [Below](#a-scene-generated-from-data-gets-its-layout-from-an-arranger).

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { makeAutoObservable, runInAction } from 'mobx';
+import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { Pencil, Plus, Trash2 } from '../../../../../main/frontend/UICommon.js';
 import { DocEditBlockFloatContext } from '../../../../../main/comp-doc/edit/DocEditDocContext.js';
@@ -29,10 +29,15 @@ class MigrationEditStore {
 	formValue = {};
 	formMessage = '';
 	isFormOpen = false;
+	floatElement = null;
 
 	constructor(itemRef) {
 		this.itemRef = itemRef ?? '';
-		makeAutoObservable(this, {}, { autoBind: true });
+		makeAutoObservable(this, { floatElement: observable.ref }, { autoBind: true });
+	}
+
+	floatElementSet(element) {
+		this.floatElement = element;
 	}
 
 	itemRefSet(itemRef) {
@@ -109,7 +114,6 @@ async function writesRun(service, { createList = [], writeList = [], removeList 
 }
 
 const MigrationEditView = observer(function MigrationEditView({ store, service, kind, item, model, adapter }) {
-	const [floatElement, floatElementSet] = useState(null);
 	const load = useMemo(() => {
 		try {
 			return { source: adapter.sourceBuild(item, model), registry: adapter.registryGet(model) };
@@ -135,8 +139,7 @@ const MigrationEditView = observer(function MigrationEditView({ store, service, 
 		: <CardStandaloneView {...props} registry={load.registry} />);
 	return (
 		<div className="doc-migration-edit-body">
-			<div ref={floatElementSet} className="doc-migration-edit-float" />
-			<DocEditBlockFloatContext.Provider value={floatElement}>
+			<DocEditBlockFloatContext.Provider value={store.floatElement}>
 				{store.isEditing
 					? <DiagramVisualEdit key={`${item.key}:${store.token}`} data={{ raw: load.source }} config={config} onEvent={onEvent} kind={adapter.kind} registry={load.registry} renderContent={contentOf} />
 					: contentOf({ data: { raw: load.source, source: load.source } })}
@@ -201,16 +204,18 @@ function migrationItemEditCreate(kind, name, isCreateOffered = true) {
 			<div className="doc-migration-edit not-prose">
 				<div className="doc-migration-edit-head">
 					<ObjectFrontendAssetPathInput object={service.ref} value={path} kindList={[kind]} base={`/${category}/`} isMissingWarned onChoose={(pathChosen) => store.itemRefSet(typeof pathChosen === 'string' ? pathChosen : pathChosen?.path ?? '')} />
-					{!store.isEditing && item ? (
-						<button type="button" className="doc-button" disabled={!service.isWritable} title={service.isWritable ? 'Edit this item' : service.writeUnavailableReason} onClick={store.editStart}>
+					{item ? (
+						<button type="button" className={`doc-button${store.isEditing ? ' is-room-kept' : ''}`} disabled={!service.isWritable} title={service.isWritable ? 'Edit this item' : service.writeUnavailableReason} onClick={store.editStart}>
 							<Pencil size={12} aria-hidden="true" /><span>Edit</span>
 						</button>
 					) : null}
-					{isCreateOffered && !store.isEditing ? (
-						<button type="button" className="doc-button" disabled={!service.isWritable} aria-expanded={store.isFormOpen} onClick={store.formToggle}>
+					{isCreateOffered ? (
+						<button type="button" className={`doc-button${store.isEditing ? ' is-room-kept' : ''}`} disabled={!service.isWritable} aria-expanded={store.isFormOpen} onClick={store.formToggle}>
 							<Plus size={12} aria-hidden="true" /><span>New</span>
 						</button>
 					) : null}
+					{/* the bar of the editor stands over this line, so entering moves nothing */}
+					<div ref={store.floatElementSet} className="doc-migration-edit-float" />
 				</div>
 				{store.isFormOpen ? <MigrationNewForm store={store} service={service} kind={kind} model={model} /> : null}
 				{item ? <MigrationEditView key={item.key} store={store} service={service} kind={kind} item={item} model={model} adapter={adapter} />

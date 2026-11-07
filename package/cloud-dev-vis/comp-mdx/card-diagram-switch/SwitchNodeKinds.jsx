@@ -8,7 +8,7 @@ import { DiagramNodeContent, DiagramRenderContext } from '../card-diagram/Diagra
 import { SwitchContext, SwitchStaticScene } from './SwitchStatic.jsx';
 import { SwitchViewSwitcher } from './SwitchViewSwitcher.jsx';
 import { SWITCH_EMBED_CHROME_HEIGHT, switchBoxClipBuild, switchEmbedCardRectOf, switchEmbedMapBuild, switchPathViewRead, switchPresentationBuild, switchStackFrameIsVisible, switchStackItemLayout, switchStackPresentationBuild, switchStackTitleBarNormalize, switchStackTitleBarRead } from './SwitchData.js';
-import { CARD_ICON_BY_NAME } from '../card-diagram/CompactCard.jsx';
+import { CARD_ICON_BY_NAME, CardBrief } from '../card-diagram/CompactCard.jsx';
 
 // The two node kinds of the switching layer (card-diagram-flexible-switch.md):
 //
@@ -25,6 +25,8 @@ import { CARD_ICON_BY_NAME } from '../card-diagram/CompactCard.jsx';
 //                subtitle?, icon?, tone?, statList?, isChromeHidden?, isHeightFullEmbedded?,
 //                isHeightFullFocused? (as tall as its items, no scrollbar; a button of its
 //                title bar and SwitchStore.stackHeightFullSet change it)
+//   scene-link   a way to another scene, and nothing else: a pill as wide as its words. the path
+//                is `link` of the node, as on any node. data: title, icon?, tone?, statList?
 //   scene-tabs    the header of scenes arranged in tabs. data: tabList, focus. written by
 //                switchTabsApply, never by hand
 //
@@ -280,6 +282,11 @@ export const SceneStackCard = observer(function SceneStackCard({ node, nodeId, a
 	);
 });
 
+// the standard form of a link in a scene (card-diagram-usage.md#drawing-conventions)
+export const SceneLinkCard = observer(function SceneLinkCard({ node, nodeId }) {
+	return <div className="doc-switch-link"><CardBrief node={node} nodeId={nodeId} /></div>;
+});
+
 // one tab per member: its anchor is the line a rewired connection ends on
 export const SceneTabsCard = observer(function SceneTabsCard({ node, anchorRef }) {
 	const context = useContext(SwitchContext);
@@ -361,6 +368,22 @@ export const sceneStackNodeKind = {
 	},
 };
 
+export const sceneLinkNodeKind = {
+	type: 'scene-link',
+	label: 'Link to a scene',
+	contract: {
+		anchorListGet: () => [{ id: 'body', sideList: sideAllList }],
+		sizeDefault: { width: 170, height: 40 },
+		isWidthFit: true,
+	},
+	schema: null,
+	Card: SceneLinkCard,
+	create: {
+		description: 'A way to another scene: a pill as wide as its words.', icon: Layers, keywordList: ['link', 'open', 'navigate', 'go'],
+		nodeCreate: (idNext) => ({ id: idNext('link'), renderer: { type: 'scene-link' }, link: '/', data: { title: 'Open', icon: 'link', tone: 'teal' }, handles: [] }),
+	},
+};
+
 export const sceneTabsNodeKind = {
 	type: 'scene-tabs',
 	label: 'Tabs of scenes',
@@ -374,7 +397,7 @@ export const sceneTabsNodeKind = {
 	Card: SceneTabsCard,
 };
 
-export const switchNodeKindList = [sceneEmbedNodeKind, sceneStackNodeKind, sceneTabsNodeKind];
+export const switchNodeKindList = [sceneEmbedNodeKind, sceneStackNodeKind, sceneLinkNodeKind, sceneTabsNodeKind];
 
 // the registry of a series with the kinds of the layer
 export function switchRegistryBuild(registry) {

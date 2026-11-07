@@ -1,3 +1,8 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { StoreContext } from '../../../../main/frontend/src/store/context.js';
+import { ValueMenu } from './DiagramValueControls.jsx';
+import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DiagramEditStore } from './DiagramEditStore.js';
@@ -542,3 +547,33 @@ test('the views of a card are steps of the draft, and what they name goes with w
 	assert.equal(data().viewList, undefined);
 	assert.equal(store.cardViewGet('t').isImplicit, true);
 });
+
+test('a row break with rows behind it, in the editor: the list stays one list, and each change is a step', () => {
+	const rows = ['a', 'b', 'c', 'd'].map((id) => ({ id, name: id, value: id }));
+	const raw = JSON.stringify({ version: 1, nodes: [{ id: 't', renderer: { type: 'table' }, position: { x: 0, y: 0 }, data: { name: 'T', fields: [{ id: 'name', label: 'Name' }, { id: 'value', label: 'Value' }], rows, rowDisplay: ['a', 'b', 'c', '...', 'd'] } }] });
+	const store = new DiagramEditStore(raw, 'diagram', undefined, cardDiagramNodeRegistry);
+	const listOf = () => store.nodeGet('t').data.rowDisplay;
+	assert.equal(store.rowBreakFoldSet('t', 3, { rowList: ['b', 'c'] }), true);
+	assert.deepEqual(listOf(), ['a', { break: '', rowList: ['b', 'c'] }, 'd'], 'the rows leave the places they had');
+	assert.equal(store.rowBreakFoldSet('t', 1, { isExpanded: true }), true);
+	assert.deepEqual(listOf()[1], { break: '', rowList: ['b', 'c'], isExpanded: true });
+	store.rowBreakTextSet('t', 1, 'two');
+	assert.deepEqual(listOf()[1], { break: 'two', rowList: ['b', 'c'], isExpanded: true }, 'its words change alone');
+	assert.equal(store.rowShownSet('t', 'b', true), false, 'a row behind a break is shown already');
+	store.rowShownSet('t', 'b', false);
+	assert.deepEqual(listOf()[1].rowList, ['c']);
+	assert.equal(store.rowBreakFoldSet('t', 0, { rowList: ['d'] }), false, 'a row is not a row break');
+	assert.match(store.message, /no row break/);
+	store.rowBreakFoldSet('t', 1, { rowList: [] });
+	assert.deepEqual(listOf(), ['a', { break: 'two' }, 'd'], 'no rows behind it: the mark alone');
+	store.undo();
+	assert.deepEqual(listOf()[1].rowList, ['c'], 'one step');
+});
+
+test('a value menu in a cell with no value draws nothing, as the card does when reading; its menu still names it', () => {
+	const render = (props) => renderToStaticMarkup(createElement(StoreContext.Provider, { value: { componentConfig: {} } }, createElement(ValueMenu, { label: 'Key', values: ['', 'PK'], valueLabels: { '': 'None' }, onChange: () => {}, ...props })));
+	assert.doesNotMatch(render({ value: '', isCell: true }), /None/);
+	assert.match(render({ value: 'PK', isCell: true }), /PK/);
+	assert.match(render({ value: '', isCell: false }), /None/, 'outside a cell the control says so');
+});
+

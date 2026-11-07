@@ -2,12 +2,15 @@
 
 /* the editors of the data items */
 .doc-migration-edit { margin-block: 0.75rem; font-family: ui-sans-serif, system-ui, sans-serif; }
-.doc-migration-edit-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+.doc-migration-edit-head { position: relative; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+/* what the line holds when reading keeps its room while editing, so the line keeps its height */
+.doc-migration-edit-head > .is-room-kept { visibility: hidden; }
 .doc-migration-edit-head > :first-child { flex: 1 1 0; min-width: 0; }
 .doc-migration-edit-body { position: relative; }
-.doc-migration-edit-float { position: relative; z-index: 12; min-height: 0; }
-.doc-migration-edit-float:not(:empty) { margin-bottom: 0.4rem; }
-.doc-migration-edit-float > .doc-edit-panel { position: static; transform: none; width: 100%; }
+/* the bar of the editor: over the head line, taking no room in it. what it says below its row
+   (a refused save) goes over the card, not moving it */
+.doc-migration-edit-float { position: absolute; top: 0; right: 0; z-index: 12; flex: none !important; max-width: 100%; }
+.doc-migration-edit-float > .doc-edit-panel { position: static; transform: none; width: auto; }
 .doc-migration-new { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; padding: 0.5rem 0.75rem; border: 1px solid var(--color-fd-border); border-radius: 0.4rem; background: color-mix(in srgb, var(--color-fd-muted) 40%, transparent); }
 .doc-migration-new > input, .doc-migration-new > select { padding: 0.2rem 0.45rem; border: 1px solid var(--color-fd-border); border-radius: 0.3rem; background: var(--color-fd-background); color: var(--color-fd-foreground); font: inherit; font-size: 0.78rem; }
 .doc-migration-new-message { color: #b91c1c; font-size: 0.75rem; }

@@ -147,6 +147,9 @@
 /* a card with a link: a scene opens from it */
 .doc-switch-flow .react-flow__node.is-linked { cursor: pointer; }
 .doc-switch-flow .react-flow__node.is-linked:hover > .doc-vis-node > .doc-vis-node-content > * { box-shadow: 0 0 0 2px color-mix(in srgb, #2563eb 55%, transparent), 0 6px 18px rgb(15 23 42 / 14%); }
+/* the ring lies outside the card: what holds a card of a fixed height must not clip it, or only
+   the corners of the ring show. these cards clip what is inside them themselves */
+.doc-vis-node-content:has(> .doc-switch-embed, > .doc-switch-stack, > .doc-switch-link) { overflow: visible; }
 .doc-switch.is-box-adjust .react-flow__node:not([data-id*='scene-box']) { opacity: 0.55; }
 
 /* a label on a line, html so that a link is a button; the same in a static scene */
@@ -171,7 +174,11 @@
 	color: #6d28d9;
 }
 button.doc-switch-edge-label { pointer-events: all; cursor: pointer; }
-button.doc-switch-edge-label:hover { background: #6d28d9; color: #fff; }
+.doc-switch-edge-label.is-hoverable { pointer-events: all; }
+.doc-switch-edge-label.is-hoverable:hover, .doc-switch-edge-label.is-hoverable.is-line-hovered { border-color: color-mix(in srgb, var(--color-fd-foreground) 35%, var(--color-fd-border)); color: var(--color-fd-foreground); }
+button.doc-switch-edge-label:hover, button.doc-switch-edge-label.is-line-hovered { background: #6d28d9; color: #fff; }
+/* a line answers the pointer, though it cannot be selected on a canvas that only reads */
+.doc-switch-flow .react-flow__edge.inactive { pointer-events: visibleStroke; }
 
 /* a scene drawn without a canvas */
 .doc-switch-static { position: relative; width: 0; height: 0; }
@@ -369,3 +376,7 @@ button.doc-switch-edge-label:hover { background: #6d28d9; color: #fff; }
 @media (prefers-reduced-motion: reduce) {
 	.doc-switch-embed.has-layers, .doc-switch-embed.has-layers .doc-switch-embed-chrome, .doc-switch-embed.has-layers .doc-switch-embed-body { transition: none; }
 }
+
+/* a link: a pill as wide as its words */
+.doc-switch-link { width: max-content; }
+.doc-switch-link .doc-card-brief-title { overflow: visible; }

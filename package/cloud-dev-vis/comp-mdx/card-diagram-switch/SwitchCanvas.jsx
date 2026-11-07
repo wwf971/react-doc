@@ -8,7 +8,7 @@ import { useCanvasWheelGuard } from '../card-diagram/CanvasWheelGuard.js';
 import { diagramCanvasLineListGet, diagramCanvasRegister } from '../card-diagram/DiagramCanvasRegistry.js';
 import '../card-diagram/DiagramER.css';
 import { SwitchContext, SwitchStaticScene, pathPointAt } from './SwitchStatic.jsx';
-import { SWITCH_ZOOM_MAX, SWITCH_ZOOM_MIN, switchPresentationBuild } from './SwitchData.js';
+import { SWITCH_ZOOM_MAX, SWITCH_ZOOM_MIN, switchEdgeHoverStyleBuild, switchPresentationBuild } from './SwitchData.js';
 
 // The one React Flow canvas of a switching viewport: the nodes of the scene shown, or
 // of a transition, handed over by the store. Every frame of a transition goes through
@@ -17,6 +17,8 @@ import { SWITCH_ZOOM_MAX, SWITCH_ZOOM_MIN, switchPresentationBuild } from './Swi
 //
 //   children     drawn inside the canvas: the animation layer's <Sequence>s
 const nodeMouseEnterNoop = () => {};
+// narrower than the closest lanes an arranger leaves, so the pointer finds the line it is on
+const SWITCH_EDGE_HIT_WIDTH = 10;
 const errorNoop = () => {};
 
 // a line of a scene: the line of the framework, with its label as html, which a
@@ -26,27 +28,41 @@ const SwitchEdge = observer(function SwitchEdge(props) {
 	const store = useContext(SwitchContext)?.store;
 	const hasLabel = Boolean(connection.label?.text);
 	const dataBase = useMemo(() => (hasLabel ? { ...props.data, connection: { ...connection, label: { ...connection.label, text: '' } } } : props.data), [hasLabel, props.data, connection]);
-	const point = useMemo(() => {
-		if (!hasLabel) return null;
-		return pathPointAt(connectionPathBuild(connection, props), connection.label.position);
-	}, [hasLabel, connection, props.sourceX, props.sourceY, props.targetX, props.targetY, props.sourcePosition, props.targetPosition]);
+	// the pointer on the line or on its label marks both, the line whole, as it may run far from
+	// its label. the state is this line's own, so entering a line renders that line alone. not
+	// while a transition moves everything
+	const [isPointerOn, isPointerOnSet] = useState(false);
+	const isHovered = isPointerOn && !store?.plan;
+	const hoverProps = { onPointerEnter: () => isPointerOnSet(true), onPointerLeave: () => isPointerOnSet(false), onFocus: () => isPointerOnSet(true), onBlur: () => isPointerOnSet(false) };
+	const isPathNeeded = hasLabel || isHovered;
+	const d = useMemo(() => (isPathNeeded ? connectionPathBuild(connection, props) : ''), [isPathNeeded, connection, props.sourceX, props.sourceY, props.targetX, props.targetY, props.sourcePosition, props.targetPosition]);
+	const point = useMemo(() => (hasLabel && d ? pathPointAt(d, connection.label.position) : null), [hasLabel, d, connection.label.position]);
+	const hoverStyle = isHovered ? switchEdgeHoverStyleBuild(connection.style) : null;
+	const labelHoverClass = isHovered ? ' is-line-hovered' : '';
+	// React Flow marks a line as not panning the canvas, for dragging its ends; here it takes the
+	// pointer only to answer a hover, and a drag starting on it pans as anywhere else
+	const lineRef = useRef(null);
+	useLayoutEffect(() => { lineRef.current?.closest('.react-flow__edge')?.classList.remove('nopan'); });
 	return <>
-		<DiagramEdge {...props} data={dataBase} />
+		{hoverStyle ? <path className="doc-switch-edge-hover" d={d} fill="none" style={hoverStyle.band} pointerEvents="none" /> : null}
+		<g ref={lineRef} {...hoverProps}><DiagramEdge {...props} data={dataBase} interactionWidth={SWITCH_EDGE_HIT_WIDTH} /></g>
+		{hoverStyle ? <path className="doc-switch-edge-hover" d={d} fill="none" style={hoverStyle.line} pointerEvents="none" /> : null}
 		{hasLabel && point ? (
 			<EdgeLabelRenderer>
 				{connection.link ? (
 					<button
 						type="button"
-						className="doc-switch-edge-label is-link nodrag nopan"
+						className={`doc-switch-edge-label is-link nodrag nopan${labelHoverClass}`}
 						data-edge-id={props.id}
 						title={connection.linkTitle}
 						style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}
-						onClick={(event) => { event.stopPropagation(); void store?.pathSet(connection.link); }}
+						{...hoverProps}
+						onClick={(event) => { event.stopPropagation(); isPointerOnSet(false); void store?.pathSet(connection.link); }}
 					>
 						{connection.label.text}
 					</button>
 				) : (
-					<div className="doc-switch-edge-label" data-edge-id={props.id} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}>{connection.label.text}</div>
+					<div className={`doc-switch-edge-label is-hoverable${labelHoverClass}`} data-edge-id={props.id} {...hoverProps} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}>{connection.label.text}</div>
 				)}
 			</EdgeLabelRenderer>
 		) : null}

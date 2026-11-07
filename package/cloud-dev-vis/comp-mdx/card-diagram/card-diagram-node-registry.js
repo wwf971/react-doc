@@ -19,7 +19,7 @@ const sideAllList = ['left', 'right', 'top', 'bottom'];
 export const tableNodeKind = {
 	type: 'table',
 	label: 'Table',
-	contract: { dataNormalize: tableCardNormalize, anchorListGet: tableCardAnchorListGet, sizeDefault: { width: 360, height: 240 } },
+	contract: { dataNormalize: tableCardNormalize, anchorListGet: tableCardAnchorListGet, anchorSideDrawn: 'header', sizeDefault: { width: 360, height: 240 } },
 	schema: tableCardSchema,
 	Card: TableCard,
 	create: {

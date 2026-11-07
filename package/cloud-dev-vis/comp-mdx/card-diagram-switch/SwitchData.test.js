@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
 	SWITCH_STACK_ITEM_SCALE_MAX, SWITCH_TAB_HEADER_HEIGHT, switchBoxClipBuild, switchCameraBetween, switchCameraChildOf, switchCameraFit, switchCameraParentOf, switchDocNormalize, switchEmbedMapBuild, switchMaskClipBuild, switchMorphBuild, switchMorphFrameAt,
 	switchPathChain, switchPathHashRead, switchPathNormalize, switchPathParent, switchProviderFromDoc, switchRouteFind, switchStackItemLayout, switchStepSecondGet, switchTabsApply } from './SwitchData.js';
-import { SWITCH_EMBED_CHROME_HEIGHT, switchEmbedCardRectOf, switchViewFrameIsHidden } from './SwitchData.js';
+import { SWITCH_EMBED_CHROME_HEIGHT, switchEdgeHoverStyleBuild, switchEmbedCardRectOf, switchViewFrameIsHidden } from './SwitchData.js';
+import { diagramNormalize, handleAnchorDrawnOf } from '../card-diagram/DiagramERData.js';
 import { switchPathViewBuild, switchPathViewRead, switchViewHoverResolve, switchViewListCheck, switchViewListOf, switchViewResolve, switchViewSwitcherIsShown } from './SwitchData.js';
 import { cardDatabaseFontSizeOf } from '../card-diagram/CompactCard.jsx';
 import { cardMatrixCellOf, cardMatrixNormalize, cardMatrixWidthGet } from '../card-diagram/CardMatrixData.js';
@@ -700,3 +701,72 @@ test('a view alone in its card fills the card, and a portal goes from exactly th
 	assert.deepEqual([framed.body.x, framed.body.y], [100, 50 + SWITCH_EMBED_CHROME_HEIGHT]);
 	assert.ok(framed.map.scale < 1, 'under the title line, with the margin of the card');
 });
+
+// ---------- back, forward, up ----------
+
+test('back, forward and up: forward undoes back, and a new way forgets what lay forward', async () => {
+	const sceneOf = (path) => ({ path, diagram: { nodes: [] } });
+	const sceneByPath = { '/a': sceneOf('/a'), '/a/b/c': sceneOf('/a/b/c'), '/a/d': sceneOf('/a/d') };
+	const provider = { root: '/a', sceneGet: (path) => sceneByPath[path] ?? null, labelGet: (path) => path, childListGet: () => [] };
+	const store = new SwitchStore({ provider, registry: switchRegistryBuild(cardDiagramNodeRegistry) });
+	store.planRun = async (stepList, path) => { store.pathCurrent = path; return true; };
+	assert.equal(store.pathUp, '', 'nothing above the top');
+	await store.pathSet('/a/d');
+	await store.pathSet('/a/b/c');
+	assert.deepEqual([store.historyList, store.forwardList], [['/a', '/a/d'], []]);
+	store.back();
+	await Promise.resolve();
+	assert.equal(store.pathCurrent, '/a/d');
+	assert.deepEqual([store.historyList, store.forwardList], [['/a'], ['/a/b/c']]);
+	store.forward();
+	await Promise.resolve();
+	assert.equal(store.pathCurrent, '/a/b/c');
+	assert.deepEqual([store.historyList, store.forwardList], [['/a', '/a/d'], []]);
+	store.back();
+	await Promise.resolve();
+	await store.pathSet('/a');
+	assert.deepEqual(store.forwardList, [], 'a new way forgets it');
+	await store.pathSet('/a/b/c');
+	assert.equal(store.pathUp, '/a', 'the nearest folder above that is a scene: /a/b is not');
+	store.up();
+	await Promise.resolve();
+	assert.equal(store.pathCurrent, '/a');
+	assert.equal(store.historyList[store.historyList.length - 1], '/a/b/c', 'going up can be gone back on');
+});
+
+test('a link is as wide as its words unless a width is written, and opens by the link of its node', () => {
+	const registry = switchRegistryBuild(cardDiagramNodeRegistry);
+	const nodeOf = (size) => diagramNormalize({ version: 1, nodes: [{ id: 'go', renderer: { type: 'scene-link' }, link: '/x', position: { x: 0, y: 0 }, ...(size ? { size } : {}), data: { title: 'Go' } }] }, registry).nodes[0];
+	assert.equal(nodeOf().isWidthFit, true);
+	assert.equal(nodeOf({ width: 200 }).isWidthFit, undefined);
+	assert.equal(nodeOf().link, '/x');
+	assert.ok(registry.createEntryList.some((entry) => entry.id === 'scene-link'));
+	assert.equal(diagramNormalize({ version: 1, nodes: [{ id: 'n', renderer: { type: 'card-note' }, position: { x: 0, y: 0 }, data: {} }] }, registry).nodes[0].isWidthFit, undefined);
+});
+
+test('a line to a table card as a whole is drawn at its title line, and the handle stays as written', () => {
+	const tableOf = (handles) => diagramNormalize({ version: 1, nodes: [{ id: 't', renderer: { type: 'table' }, position: { x: 0, y: 0 }, data: { name: 'T', fields: [{ id: 'a', label: 'A' }], rows: [{ id: 'r', a: '1' }] }, handles }] }, cardDiagramNodeRegistry).nodes[0];
+	const node = tableOf([
+		{ id: 'left', direction: 'in', anchor: { side: 'left' } },
+		{ id: 'right', direction: 'out', anchor: { target: 'body', side: 'right' } },
+		{ id: 'top', direction: 'in', anchor: { side: 'top' } },
+		{ id: 'low', direction: 'in', anchor: { side: 'left', offset: 0.8 } },
+		{ id: 'row', direction: 'out', anchor: { target: 'row/r', side: 'right' } },
+	]);
+	assert.deepEqual(node.handles.map((handle) => handleAnchorDrawnOf(node, handle)), ['header', 'header', 'body', 'body', 'row/r']);
+	assert.equal(node.handles[0].anchor.target, 'body', 'what is written does not change');
+	const note = diagramNormalize({ version: 1, nodes: [{ id: 'n', renderer: { type: 'card-note' }, position: { x: 0, y: 0 }, data: {}, handles: [{ id: 'left', direction: 'in', anchor: { side: 'left' } }] }] }, cardDiagramNodeRegistry).nodes[0];
+	assert.equal(handleAnchorDrawnOf(note, note.handles[0]), 'body', 'another kind keeps the middle of its side');
+});
+
+test('a line under the pointer on its label: its own color, wider, solid, whatever it was', () => {
+	const { band, line } = switchEdgeHoverStyleBuild({ stroke: '#0d9488', strokeWidth: 2, strokeDasharray: '5 4' });
+	assert.equal(band.stroke, '#0d9488');
+	assert.equal(line.stroke, '#0d9488');
+	assert.equal(band.strokeWidth, 8);
+	assert.equal(line.strokeWidth, 2.75);
+	assert.equal(line.strokeDasharray, undefined, 'a dashed line is followed as a whole');
+	assert.ok(switchEdgeHoverStyleBuild().band.stroke, 'a line with no style of its own has a color');
+	assert.equal(switchEdgeHoverStyleBuild().line.strokeWidth, 1.75);
+});
+

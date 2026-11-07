@@ -172,7 +172,7 @@ export function diagramApiListBuild(registry) {
 		changeApi({
 			name: 'nodeRowDisplaySet',
 			label: 'Choose the rows a table card shows',
-			description: 'The list of what is drawn from top to bottom: row ids, "..." for a row break, { break: text } for one saying what was cut. null shows all the rows.',
+			description: 'The list of what is drawn from top to bottom: row ids, "..." for a row break, { break: text } for one saying what was cut, { break: text, rowList: [ids], isExpanded } for one a reader can open to see the rows behind it. null shows all the rows.',
 			paramList: [{ name: 'nodeId', type: 'string', isRequired: true, description: 'the id of the card' }, { name: 'rowDisplay', type: 'any', description: 'the list, or null' }, viewParam],
 		}, (store, { nodeId, rowDisplay, viewId }) => {
 			if (!store.nodeGet(nodeId)) return false;
@@ -195,6 +195,22 @@ export function diagramApiListBuild(registry) {
 			if (viewDefault !== undefined && !store.viewDefaultSet(nodeId, viewDefault)) return false;
 			if (isViewSwitcherShown !== undefined && !store.viewSwitcherShownSet(nodeId, isViewSwitcherShown)) return false;
 			return { viewList: store.nodeGet(nodeId).data.viewList ?? [] };
+		}),
+		changeApi({
+			name: 'nodeRowBreakFoldSet',
+			label: 'Put rows behind a row break of a table card',
+			description: 'A reader can open the row break to see them. They leave the places they had in the list. An empty list leaves only the mark.',
+			paramList: [
+				{ name: 'nodeId', type: 'string', isRequired: true, description: 'the id of the card' },
+				{ name: 'index', type: 'number', isRequired: true, description: 'the place of the row break in the list' },
+				{ name: 'rowList', type: 'any', description: 'the ids of the rows; what it holds when absent' },
+				{ name: 'isExpanded', type: 'boolean', description: 'open at first; what it says when absent' },
+				viewParam,
+			],
+		}, (store, { nodeId, index, rowList, isExpanded, viewId }) => {
+			if (!store.nodeGet(nodeId)) return false;
+			if (viewId) store.cardViewSet(nodeId, viewId);
+			return store.rowBreakFoldSet(nodeId, index, { rowList, isExpanded });
 		}),
 		changeApi({
 			name: 'nodeRowBreakInsert',

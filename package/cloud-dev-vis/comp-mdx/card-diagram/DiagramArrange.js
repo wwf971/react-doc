@@ -18,7 +18,8 @@ import { routeCompact } from './DiagramRoute.js';
 //   options   { connectionIdList?, origin?, ... }: connectionIdList names the only lines
 //             that may change; the rest of the options belong to the arranger
 //   changes   { positionById?, handleSideList?: [{ nodeId, handleId, side }],
-//               routeById?: { id: route | null }, reportList?: [{ kind, message, connectionId? }] }
+//               routeById?: { id: route | null }, labelPositionById?: { id: part of its line },
+//               reportList?: [{ kind, message, connectionId? }] }
 //
 // An arranger owns the routes it answers: the whole route of a line is replaced, its anchors
 // removed and created anew. Only what the author locked is out of its reach here.
@@ -33,20 +34,22 @@ export function diagramArrangeRun(diagram, arranger, { geometry, ...options } = 
 	const idSet = options.connectionIdList ? new Set(options.connectionIdList) : null;
 	const positionById = Object.fromEntries(Object.entries(changes.positionById ?? {}).filter(([id]) => !lockedSet.has(id)));
 	const routeById = Object.fromEntries(Object.entries(changes.routeById ?? {}).filter(([id]) => !idSet || idSet.has(id)).map(([id, route]) => [id, routeCompact(route)]));
-	return { positionById, handleSideList: changes.handleSideList ?? [], routeById, reportList: changes.reportList ?? [] };
+	const labelPositionById = Object.fromEntries(Object.entries(changes.labelPositionById ?? {}).filter(([id]) => !idSet || idSet.has(id)));
+	return { positionById, handleSideList: changes.handleSideList ?? [], routeById, labelPositionById, reportList: changes.reportList ?? [] };
 }
 
 // the diagram after an arranger: for a generator, which has the data as plain objects
 export function diagramArrangeApply(diagram, arranger, options) {
-	const { positionById, handleSideList, routeById, reportList } = diagramArrangeRun(diagram, arranger, options);
+	const { positionById, handleSideList, routeById, labelPositionById, reportList } = diagramArrangeRun(diagram, arranger, options);
 	const sideByKey = new Map(handleSideList.map((item) => [`${item.nodeId}/${item.handleId}`, item.side]));
 	const nodes = (diagram.nodes ?? []).map((node) => {
 		const handles = node.handles?.map((handle) => (sideByKey.has(`${node.id}/${handle.id}`) ? { ...handle, anchor: { ...handle.anchor, side: sideByKey.get(`${node.id}/${handle.id}`) } } : handle));
 		return { ...node, ...(handles ? { handles } : {}), ...(positionById[node.id] ? { position: positionById[node.id] } : {}) };
 	});
 	const connections = (diagram.connections ?? []).map((connection) => {
-		if (!(connection.id in routeById)) return connection;
-		const { route: _route, ...rest } = connection;
+		const labelled = connection.id in labelPositionById ? { ...connection, label: { ...connection.label, position: labelPositionById[connection.id] } } : connection;
+		if (!(connection.id in routeById)) return labelled;
+		const { route: _route, ...rest } = labelled;
 		return routeById[connection.id] ? { ...rest, route: routeById[connection.id] } : rest;
 	});
 	return { diagram: { ...diagram, nodes, connections }, reportList };

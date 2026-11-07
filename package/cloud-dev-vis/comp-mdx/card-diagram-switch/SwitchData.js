@@ -18,6 +18,7 @@ export const SWITCH_SECOND_MORPH = 0.65;
 export const SWITCH_SECOND_CAMERA = 0.5;
 export const SWITCH_SECOND_SCROLL = 0.4;
 export const SWITCH_STACK_ITEM_SCALE_MAX = 1.1;
+const SWITCH_EDGE_HOVER_STROKE = '#64748b';
 
 // how a scene is being presented: which scene and which of its views, embedded or focused,
 // and when embedded, the scene directly holding it. pathEmbedder is not the parent in the
@@ -75,6 +76,17 @@ export function switchStackTitleBarRead(data, presentation) {
 	if (!title) return data.isChromeHidden ? null : { isLegacy: true, text: data.title };
 	const isVisible = presentation.isEmbedded ? title.isVisibleEmbedded : title.isVisibleFocused;
 	return isVisible === false ? null : { ...title, text: title.text ?? data.title ?? '' };
+}
+
+// a line while the pointer rests on its label: a band along it and the line itself solid, in
+// the line's own color, so the whole of it can be followed, also a thin or a dashed one
+export function switchEdgeHoverStyleBuild(style = {}) {
+	const stroke = style.stroke ?? SWITCH_EDGE_HOVER_STROKE;
+	const width = Number(style.strokeWidth) || 1;
+	return {
+		band: { stroke, strokeWidth: width + 6, strokeOpacity: 0.22, strokeLinecap: 'round' },
+		line: { stroke, strokeWidth: width + 0.75 },
+	};
 }
 
 // ---------- paths ----------

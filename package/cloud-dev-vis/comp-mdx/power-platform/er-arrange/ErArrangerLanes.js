@@ -1,5 +1,6 @@
 import { lineTypeOfConnection } from '../../card-diagram/DiagramArrange.js';
 import { routeResolve, routeTypeIsRightAngle } from '../../card-diagram/DiagramRoute.js';
+import { labelPositionListPlace } from '../../card-diagram/DiagramLabelPlace.js';
 import { erLinesRoute } from './ErLineRouter.js';
 import { erGeometryEstimateBuild } from './ErGeometry.js';
 
@@ -36,16 +37,37 @@ export function erLineSceneGet(diagram, geometry, { connectionIdList } = {}) {
 	return { rectList, lineList, placedList, reportList };
 }
 
+// where the labels of a diagram's lines go, once the lines are routed: lines of any type, the
+// labels of lines out of scope staying as they are but counted as lines to keep off
+export function erLabelsPlace(diagram, geometry, routeById, { connectionIdList } = {}) {
+	const idSet = connectionIdList ? new Set(connectionIdList) : null;
+	const rectList = (diagram.nodes ?? []).flatMap((node) => {
+		const rect = geometry.rectOf(node.id);
+		return rect && !rect.isBackground ? [{ ...rect, id: node.id }] : [];
+	});
+	const lineList = (diagram.connections ?? []).flatMap((connection) => {
+		const source = connection.source?.nodeId ? geometry.endOf(connection, 'source') : null;
+		const target = connection.target?.nodeId ? geometry.endOf(connection, 'target') : null;
+		if (!source || !target) return [];
+		const ends = { sourceX: source.x, sourceY: source.y, sourcePosition: source.side, targetX: target.x, targetY: target.y, targetPosition: target.side };
+		const route = connection.id in routeById ? routeById[connection.id] : connection.route;
+		const isPlaced = !idSet || idSet.has(connection.id);
+		return [{ id: connection.id, d: routeResolve(lineTypeOfConnection(diagram, connection), route ?? null, ends).d, text: isPlaced ? connection.label?.text : '', position: connection.label?.position }];
+	});
+	return labelPositionListPlace({ rectList, lineList });
+}
+
 // the cards stay where they are; every right-angled line gets a new route
 export const erArrangerLanes = {
 	id: 'er-lanes',
 	label: 'Route the lines',
-	description: 'Keeps the cards where they are. Replaces the anchors of every right-angled line, giving each a lane of its own.',
+	description: 'Keeps the cards where they are. Replaces the anchors of every right-angled line, giving each a lane of its own, and places the labels clear of the cards.',
 	isApplicable: erArrangerIsApplicable,
 	geometryEstimate: (diagram, options) => erGeometryEstimateBuild(diagram, options),
 	arrange(diagram, geometry, options) {
 		const scene = erLineSceneGet(diagram, geometry, options);
 		const { routeById, reportList } = erLinesRoute(scene);
-		return { routeById, reportList: [...scene.reportList, ...reportList] };
+		const labels = erLabelsPlace(diagram, geometry, routeById, options);
+		return { routeById, labelPositionById: labels.positionById, reportList: [...scene.reportList, ...reportList, ...labels.reportList] };
 	},
 };

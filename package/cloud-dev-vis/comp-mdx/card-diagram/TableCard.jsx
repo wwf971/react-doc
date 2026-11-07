@@ -1,9 +1,9 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, EyeOff, GripHorizontal, GripVertical, Plus, SeparatorHorizontal, Trash2 } from '../../../../main/frontend/UICommon.js';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, EyeOff, FoldVertical, GripHorizontal, GripVertical, Plus, SeparatorHorizontal, Trash2, UnfoldVertical } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { cardRowAnchorBuild } from './TableCardSchema.js';
-import { cardViewDefaultGet, cardViewDrawBuild, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown } from './TableCardData.js';
+import { cardRowDisplayIdListOf, cardViewDefaultGet, cardViewDrawBuild, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown } from './TableCardData.js';
 import { TextValue, ValueMenu } from './DiagramValueControls.jsx';
 import './DiagramER.css';
 
@@ -50,12 +50,18 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 	const viewSet = id => { if (editor) store.cardViewSet(nodeId, id); else viewIdReadSet(id); };
 	const draw = cardViewDrawBuild(view, cardViewSourceOf(node.data, schema.rowListKey), schema.fieldList);
 	// another view can have the same height with its rows elsewhere: have the handles measured
-	useLayoutEffect(() => { root.current?.dispatchEvent(new Event('scroll')); }, [view.id]);
+	// which row breaks with rows behind them the reader opened or closed: lasts while the card is
+	// on the page, as the view chosen does. by the rows, since a scene may give the card another list
+	const [foldIsExpandedByKey, foldIsExpandedByKeySet] = useState({});
+	const foldKeyOf = (rowBreak) => `${view.id}/${rowBreak.rowList.map(row => row.id).join('/')}`;
+	const foldIsExpanded = (rowBreak) => foldIsExpandedByKey[foldKeyOf(rowBreak)] ?? rowBreak.isExpanded;
+	useLayoutEffect(() => { root.current?.dispatchEvent(new Event('scroll')); }, [view.id, foldIsExpandedByKey]);
 	// what is drawn when reading, in that order with its row breaks. what rowDisplay leaves out
 	// is still there to edit: the editor adds those rows after the others, dimmed
 	const rowDisplay = view.rowDisplay;
-	const rowShownSet = editor && rowDisplay ? new Set(rowDisplay.filter((entry) => typeof entry === 'string')) : null;
-	const rowItemList = [...draw.itemList, ...(rowShownSet ? draw.rowList.filter(row => !rowShownSet.has(row.id)).map(row => ({ row })) : [])];
+	const rowShownSet = editor && rowDisplay ? new Set(cardRowDisplayIdListOf(rowDisplay)) : null;
+	const itemDrawnList = draw.itemList.flatMap(item => (item.break?.rowList && foldIsExpanded(item.break) ? [item, ...item.break.rowList.map(row => ({ row, isInFold: true }))] : [item]));
+	const rowItemList = [...itemDrawnList, ...(rowShownSet ? draw.rowList.filter(row => !rowShownSet.has(row.id)).map(row => ({ row })) : [])];
 	const rowGroupList = node.data.rowGroupList ?? [];
 	const isRowHandleAllowed = schema.isRowHandleAllowed?.(content) ?? true;
 	const isHeaderHandleAllowed = schema.isHeaderHandleAllowed(content);
@@ -87,7 +93,8 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 			{ id: 'move-down', Icon: ArrowDown, title: 'Move down', isDisabled: index === rows.length - 1 || Boolean(rowDisplay), reason: rowDisplay ? reasonRowOrder : 'Already last.', act: () => store.rowMove(nodeId, row.id, index + 1) },
 			(() => {
 				const isShown = !rowShownSet || rowShownSet.has(row.id);
-				const reason = isShown ? store.rowBreakInsertReasonGet(nodeId, store.rowDisplayCurrentGet(nodeId).indexOf(row.id) + 1) : 'This row is not shown.';
+				const place = store.rowDisplayCurrentGet(nodeId).indexOf(row.id);
+				const reason = !isShown ? 'This row is not shown.' : place < 0 ? 'This row is behind a row break.' : store.rowBreakInsertReasonGet(nodeId, place + 1);
 				return { id: 'break-below', Icon: SeparatorHorizontal, title: 'Insert a row break below', isDisabled: Boolean(reason), reason, act: () => store.rowBreakInsert(nodeId, { afterRowId: row.id }) };
 			})(),
 			(() => {
@@ -144,10 +151,16 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 			</div>}
 			{rowItemList.map(item => {
 				if (item.break) return <CardRowBreak key={item.break.id} text={item.break.text} isSelected={store?.display?.nodeId === nodeId && store.display.rowBreakIndex === item.break.index}
+					fold={item.break.rowList ? {
+						isExpanded: foldIsExpanded(item.break),
+						toggle: () => foldIsExpandedByKeySet(previous => ({ ...previous, [foldKeyOf(item.break)]: !foldIsExpanded(item.break) })),
+						// closed, a line to a row behind it ends on the row break
+						anchorSet: element => { if (!foldIsExpanded(item.break)) item.break.rowList.forEach(row => anchorRef?.(draw.isPlain ? cardRowAnchorBuild(schema, row.id) : `${draw.anchorPrefix}/${row.id}`)?.(element)); },
+					} : null}
 					onSelect={editor ? event => { event.stopPropagation(); editor.navigate([{ kind: 'node', id: nodeId }, { kind: 'rowDisplay' }, { kind: 'rowBreak', index: item.break.index }]); } : undefined} />;
 				const { row } = item;
 				// a view of another mode only reads: what it shows is edited as data
-				if (!draw.isPlain) return <div key={row.id} ref={anchorRef?.(`${draw.anchorPrefix}/${row.id}`)} data-row-id={row.id} data-tone={row.tone || undefined} className={`doc-er-table-column doc-card-row nodrag nopan${rowShownSet && !rowShownSet.has(row.id) ? ' is-out-of-display' : ''}`}>
+				if (!draw.isPlain) return <div key={row.id} ref={anchorRef?.(`${draw.anchorPrefix}/${row.id}`)} data-row-id={row.id} data-tone={row.tone || undefined} className={`doc-er-table-column doc-card-row nodrag nopan${rowShownSet && !rowShownSet.has(row.id) ? ' is-out-of-display' : ''}${item.isInFold ? ' is-in-fold' : ''}`}>
 					{draw.fieldList.map(field => <span key={field.id}>{String(row[field.id] ?? '')}</span>)}
 				</div>;
 				const index = rows.indexOf(row);
@@ -156,7 +169,7 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 				const isRowSelected = isSelected && selection.rowId === row.id;
 				const target = cardRowAnchorBuild(schema, row.id);
 				if (row.isEllipsis && !editor) return <div key={row.id} ref={anchorRef?.(target)} data-row-id={row.id} className="doc-er-table-column doc-card-row doc-card-row-ellipsis nodrag nopan">{row[schema.fieldList[0]?.id] || '⋮'}</div>;
-				return <div key={row.id} ref={anchorRef?.(target)} data-row-id={row.id} data-tone={row.tone || undefined} title={isRowOutOfDisplay ? 'Not shown when reading: it is left out of rowDisplay' : undefined} className={`doc-er-table-column doc-card-row nodrag nopan${isRowOutOfDisplay ? ' is-out-of-display' : ''}${isRowSelected && !selection.fieldId ? ' is-selected' : ''}${isRowSelected ? ' is-row-of-selection' : ''}${dropClass('row', index, rows.length)}`} tabIndex={editor ? 0 : undefined}
+				return <div key={row.id} ref={anchorRef?.(target)} data-row-id={row.id} data-tone={row.tone || undefined} title={isRowOutOfDisplay ? 'Not shown when reading: it is left out of rowDisplay' : undefined} className={`doc-er-table-column doc-card-row nodrag nopan${item.isInFold ? ' is-in-fold' : ''}${isRowOutOfDisplay ? ' is-out-of-display' : ''}${isRowSelected && !selection.fieldId ? ' is-selected' : ''}${isRowSelected ? ' is-row-of-selection' : ''}${dropClass('row', index, rows.length)}`} tabIndex={editor ? 0 : undefined}
 					onClick={select({ rowId: row.id })} onFocus={selectOnFocus({ rowId: row.id })}>
 					{schema.fieldList.map(field => (
 						<CardCell key={field.id} editor={editor} nodeId={nodeId} rowId={row.id} field={field} value={rowContent[field.id]}
@@ -184,13 +197,26 @@ function CardViewSwitcher({ viewList, view, onChange }) {
 // the same way around its middle, with what was cut beside it if it says
 const CARD_ROW_BREAK_STROKE = 'c-3 5 -11 8 -11 12.5 c0 3 3.5 3 5.5 3.5 c2 .5 5.5 .5 5.5 3.5 c0 4.5 -8 7.5 -11 12.5';
 
-function CardRowBreak({ text, isSelected = false, onSelect }) {
-	return <div className={`doc-card-row-break nodrag nopan${isSelected ? ' is-selected' : ''}`} role="separator" aria-label={text || 'Rows left out'} title={onSelect ? 'Row break: click to edit' : undefined} onClick={onSelect}>
-		<svg className="doc-card-row-break-mark" viewBox="0 0 30 32" aria-hidden="true">
+// fold: rows stand behind this row break { isExpanded, toggle, anchorSet }. closed, the mark, and a
+// button saying it opens; open, a bar over the rows, whose button closes them. a click anywhere on
+// it does the same when reading; in the editor a click on it edits it, the button toggles
+function CardRowBreak({ text, isSelected = false, onSelect, fold = null }) {
+	const isOpen = Boolean(fold?.isExpanded);
+	const toggleTitle = isOpen ? 'Hide these rows' : 'Show the rows left out here';
+	const onClick = !fold ? onSelect : (event) => {
+		event.stopPropagation();
+		if (onSelect) onSelect(event);
+		else fold.toggle();
+	};
+	const onToggleClick = onSelect ? (event) => { event.stopPropagation(); fold.toggle(); } : undefined;
+	const ToggleIcon = isOpen ? FoldVertical : UnfoldVertical;
+	return <div ref={fold?.anchorSet} className={`doc-card-row-break nodrag nopan${isSelected ? ' is-selected' : ''}${fold ? ' is-foldable' : ''}${isOpen ? ' is-open' : ''}`} role={fold ? undefined : 'separator'} aria-label={fold ? undefined : text || 'Rows left out'} title={onSelect ? 'Row break: click to edit' : fold ? toggleTitle : undefined} onClick={onClick}>
+		{isOpen ? null : <svg className="doc-card-row-break-mark" viewBox="0 0 30 32" aria-hidden="true">
 			<path d={`M13 0 ${CARD_ROW_BREAK_STROKE}`} />
 			<path d={`M28 0 ${CARD_ROW_BREAK_STROKE}`} />
-		</svg>
+		</svg>}
 		{text ? <span className="doc-card-row-break-text">{text}</span> : null}
+		{fold ? <button type="button" className="doc-card-row-break-toggle" title={toggleTitle} aria-label={toggleTitle} aria-expanded={isOpen} onClick={onToggleClick}><ToggleIcon size={12} aria-hidden="true" /></button> : null}
 	</div>;
 }
 

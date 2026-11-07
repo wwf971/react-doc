@@ -31,6 +31,8 @@ export const tableCardFieldListDefault = [{ id: 'name', label: 'Name' }, { id: '
 //   an id          that row. a row may be left out, and come in another order
 //   '...'          a row break: the mark an axis has where part of it is cut away
 //   { break: text }  a row break saying what was cut
+//   { break?: text, rowList: [ids], isExpanded? }   a row break with rows behind it: the reader
+//                  opens it to see them, and closes it again. closed at first unless isExpanded
 //
 // the rows stay in the data whole: this says only what is drawn, and the editor shows them all
 export const CARD_ROW_BREAK = '...';
@@ -40,27 +42,52 @@ export function cardRowDisplayNormalize(rowDisplay, rowList) {
 	if (!Array.isArray(rowDisplay)) throw new Error('rowDisplay must be a list.');
 	const idSet = new Set(rowList.map((row) => row.id));
 	const seen = new Set();
-	return rowDisplay.map((entry) => {
-		if (entry === CARD_ROW_BREAK) return entry;
-		if (entry && typeof entry === 'object') {
-			if (entry.break === undefined) throw new Error('A rowDisplay entry is a row id, "..." or { break: text }.');
-			return { break: String(entry.break) };
-		}
-		const id = String(entry);
+	const idTake = (value) => {
+		const id = String(value);
 		if (!idSet.has(id)) throw new Error(`rowDisplay names "${id}", which is not a row.`);
 		if (seen.has(id)) throw new Error(`rowDisplay names "${id}" twice.`);
 		seen.add(id);
 		return id;
+	};
+	return rowDisplay.map((entry) => {
+		if (entry === CARD_ROW_BREAK) return entry;
+		if (entry && typeof entry === 'object') {
+			if (entry.rowList !== undefined) {
+				if (!Array.isArray(entry.rowList) || entry.rowList.length === 0) throw new Error('rowList of a row break must list the rows behind it.');
+				if (entry.isExpanded !== undefined && typeof entry.isExpanded !== 'boolean') throw new Error('isExpanded of a row break must be a boolean.');
+				return { break: String(entry.break ?? ''), rowList: entry.rowList.map(idTake), ...(entry.isExpanded === undefined ? {} : { isExpanded: entry.isExpanded }) };
+			}
+			if (entry.break === undefined) throw new Error('A rowDisplay entry is a row id, "...", { break: text } or { break: text, rowList: [ids] }.');
+			return { break: String(entry.break) };
+		}
+		return idTake(entry);
 	});
 }
 
-// what is drawn: [{ row }, { break: { id, text } }], from what cardRowDisplayNormalize kept
+// the rows a list draws or holds behind a row break: every one of them is shown, not left out
+export function cardRowDisplayIdListOf(rowDisplay) {
+	return (rowDisplay ?? []).flatMap((entry) => (entry === CARD_ROW_BREAK ? [] : typeof entry === 'object' ? entry.rowList ?? [] : [entry]));
+}
+
+// a list without a row. a row break losing its last row stays, as a mark that holds nothing
+export function cardRowDisplayWithout(rowDisplay, rowId) {
+	return rowDisplay.flatMap((entry) => {
+		if (entry === rowId) return [];
+		if (typeof entry !== 'object' || !entry.rowList?.includes(rowId)) return [entry];
+		const rowList = entry.rowList.filter((id) => id !== rowId);
+		if (rowList.length > 0) return [{ ...entry, rowList }];
+		return [entry.break ? { break: entry.break } : CARD_ROW_BREAK];
+	});
+}
+
+// what is drawn: [{ row }, { break: { id, text, rowList?, isExpanded? } }], from what
+// cardRowDisplayNormalize kept
 export function cardRowDisplayItemListGet(rowDisplay, rowList) {
 	if (!rowDisplay) return rowList.map((row) => ({ row }));
 	const rowById = new Map(rowList.map((row) => [row.id, row]));
 	return rowDisplay.map((entry, index) => {
 		if (entry === CARD_ROW_BREAK) return { break: { id: `~break-${index}`, index, text: '' } };
-		if (typeof entry === 'object') return { break: { id: `~break-${index}`, index, text: entry.break } };
+		if (typeof entry === 'object') return { break: { id: `~break-${index}`, index, text: entry.break, ...(entry.rowList ? { rowList: entry.rowList.map((id) => rowById.get(id)), isExpanded: entry.isExpanded === true } : {}) } };
 		return { row: rowById.get(entry) };
 	});
 }
@@ -171,7 +198,7 @@ export function cardViewNormalize(data, source) {
 
 // the views after something they name is gone: a row of the card, a column, a record
 export function cardViewListPrune(viewList, { plainId, columnId, recordId }) {
-	const without = (list, id) => (list && id !== undefined ? list.filter((entry) => entry !== id) : list);
+	const without = (list, id) => (list && id !== undefined ? cardRowDisplayWithout(list, id) : list);
 	return viewList.map((view) => {
 		const removed = view.mode === 'plain' ? plainId : view.mode === 'column' ? columnId : recordId;
 		const { rowDisplay, fieldDisplay, valueRowId, ...rest } = view;
@@ -187,22 +214,24 @@ export function cardViewListPrune(viewList, { plainId, columnId, recordId }) {
 }
 
 // a rowDisplay keeping some rows, in the order they stand, with a row break for each run of
-// rows left out. textOf(count): what a row break says, if anything. for what generates diagrams
-export function cardRowDisplayKeepBuild(rowIdList, keepIdList, { textOf } = {}) {
+// rows left out. textOf(count): what a row break says, if anything. isFoldable: the rows left out
+// stand behind their row break, for the reader to open. for what generates diagrams
+export function cardRowDisplayKeepBuild(rowIdList, keepIdList, { textOf, isFoldable = false } = {}) {
 	const keepSet = new Set(keepIdList);
 	const list = [];
-	let count = 0;
+	let idLeftList = [];
 	const breakAdd = () => {
-		if (count === 0) return;
-		const text = textOf?.(count);
-		list.push(text ? { break: text } : CARD_ROW_BREAK);
-		count = 0;
+		if (idLeftList.length === 0) return;
+		const text = textOf?.(idLeftList.length);
+		if (isFoldable) list.push({ ...(text ? { break: text } : {}), rowList: idLeftList });
+		else list.push(text ? { break: text } : CARD_ROW_BREAK);
+		idLeftList = [];
 	};
 	for (const id of rowIdList) {
 		if (keepSet.has(id)) {
 			breakAdd();
 			list.push(id);
-		} else count += 1;
+		} else idLeftList.push(id);
 	}
 	breakAdd();
 	return list;

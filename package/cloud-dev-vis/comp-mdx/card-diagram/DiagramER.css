@@ -505,6 +505,7 @@
 /* the dense look of a table card (isCompact): small type, tight rows, a dark
    title line whose color is the tone of the card. many cards with much text
    read at a glance */
+.doc-card { --doc-card-fold-accent: #2563eb; }
 .doc-card[data-tone] { --doc-card-tone: #3f51b5; }
 .doc-card[data-tone='blue'] { --doc-card-tone: #3f51b5; }
 .doc-card[data-tone='teal'] { --doc-card-tone: #0f766e; }
@@ -547,6 +548,16 @@
 .doc-card.is-compact .doc-card-row-break-mark { height: 1.3rem; }
 .doc-card.is-compact .doc-card-row-break-text { font-size: 0.6rem; }
 .doc-card.is-editing .doc-card-row-break { cursor: pointer; }
+/* a row break with rows behind it: closed, the mark and a button; open, a bar over its rows, and a
+   line down the side of them saying where they end */
+.doc-card-row-break.is-foldable { cursor: pointer; }
+.doc-card-row-break.is-foldable:hover { background: color-mix(in srgb, var(--doc-card-fold-accent) 8%, transparent); color: var(--color-fd-foreground); }
+.doc-card-row-break-toggle { position: absolute; top: 50%; right: 0.45rem; display: inline-flex; align-items: center; justify-content: center; width: 1.1rem; height: 1.1rem; padding: 0; transform: translateY(-50%); border: 1px solid color-mix(in srgb, var(--color-fd-foreground) 22%, var(--color-fd-border)); border-radius: 0.25rem; background: var(--color-fd-background); color: var(--color-fd-muted-foreground); cursor: pointer; }
+.doc-card-row-break.is-foldable:hover .doc-card-row-break-toggle, .doc-card-row-break-toggle:focus-visible { border-color: var(--doc-card-fold-accent); color: var(--doc-card-fold-accent); }
+.doc-card-row-break.is-open { background: color-mix(in srgb, var(--color-fd-muted) 62%, transparent); box-shadow: inset 3px 0 0 color-mix(in srgb, var(--doc-card-fold-accent) 55%, transparent); }
+.doc-card-row-break.is-open > .doc-card-row-break-text { left: 0.75rem; max-width: calc(100% - 2.5rem); }
+.doc-card-row.is-in-fold { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--doc-card-fold-accent) 55%, transparent); }
+.doc-card.is-compact .doc-card-row-break-toggle { width: 0.85rem; height: 0.85rem; }
 .doc-card-row-break.is-selected { background: color-mix(in srgb, var(--color-fd-primary, #2563eb) 12%, transparent); outline: 1px solid color-mix(in srgb, var(--color-fd-primary, #2563eb) 45%, transparent); outline-offset: -1px; }
 .doc-card-row.is-out-of-display { opacity: 0.45; }
 /* the views of a card, at the right of its title line */
@@ -675,32 +686,41 @@
 .doc-er-table.is-master { border-color: #f59e0b; }
 .doc-er-table.is-master .doc-er-table-title { background: #fef3c7; }
 
-/* the matrix card: rows and columns with headers, a mark where they meet */
-.doc-card-matrix { box-sizing: border-box; width: 100%; overflow: hidden; border: 1px solid var(--color-fd-border); border-radius: 0.5rem; background: var(--color-fd-card); color: var(--color-fd-foreground); font-size: 0.75rem; }
-.doc-card-matrix-title { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-fd-border); }
-.doc-card-matrix-name { font-size: 0.82rem; font-weight: 600; }
-.doc-card-matrix-subtitle { color: var(--color-fd-muted-foreground); font-size: 0.72rem; }
-.doc-card-matrix-table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 0; font-size: inherit; }
+/* the matrix card: the frame, title and rows of a table card (.doc-er-table), rows and columns
+   with headers, and a mark where they meet */
+.doc-card-matrix { --doc-card-matrix-accent: #475569; overflow: hidden; }
+.doc-card-matrix[data-tone='blue'] { --doc-card-matrix-accent: #2563eb; }
+.doc-card-matrix[data-tone='teal'] { --doc-card-matrix-accent: #0d9488; }
+.doc-card-matrix[data-tone='green'] { --doc-card-matrix-accent: #16a34a; }
+.doc-card-matrix[data-tone='amber'] { --doc-card-matrix-accent: #d97706; }
+.doc-card-matrix[data-tone='red'] { --doc-card-matrix-accent: #dc2626; }
+.doc-card-matrix[data-tone='violet'] { --doc-card-matrix-accent: #7c3aed; }
+.doc-card-matrix-body { overflow: hidden; }
+.doc-card-matrix-table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 0; font-size: 0.72rem; line-height: 1.3; }
 .doc-card-matrix-col-head { width: var(--doc-card-matrix-row-head); }
 .doc-card-matrix-col { width: var(--doc-card-matrix-cell); }
-.doc-card-matrix-table th, .doc-card-matrix-table td { border: 1px solid var(--color-fd-border); padding: 0; font-weight: 500; }
-.doc-card-matrix-table tr > :first-child { border-left: 0; }
-.doc-card-matrix-table tr > :last-child { border-right: 0; }
-.doc-card-matrix-table thead tr:first-child > * { border-top: 0; }
+.doc-card-matrix-table th, .doc-card-matrix-table td { padding: 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--color-fd-border) 78%, transparent); }
+.doc-card-matrix-table th + th, .doc-card-matrix-table th + td, .doc-card-matrix-table td + td { border-left: 1px solid color-mix(in srgb, var(--color-fd-border) 72%, transparent); }
+.doc-card-matrix-table thead th { border-bottom-color: var(--color-fd-border); background: color-mix(in srgb, var(--color-fd-muted) 62%, transparent); color: var(--color-fd-muted-foreground); font-size: 0.66rem; font-weight: 700; }
 .doc-card-matrix-table tbody tr:last-child > * { border-bottom: 0; }
-.doc-card-matrix-corner { vertical-align: bottom; padding: 0.3rem 0.5rem !important; background: color-mix(in srgb, var(--color-fd-muted) 70%, transparent); text-align: left; }
-.doc-card-matrix-axis { display: block; color: var(--color-fd-muted-foreground); font-size: 0.68rem; font-weight: 500; line-height: 1.4; }
+.doc-card-matrix-corner { vertical-align: bottom; padding: 0.3rem 0.45rem !important; text-align: left; }
+.doc-card-matrix-axis { display: block; font-size: 0.62rem; font-weight: 700; line-height: 1.4; }
 .doc-card-matrix-axis.is-column { text-align: right; }
-.doc-card-matrix-column { background: color-mix(in srgb, var(--color-fd-muted) 70%, transparent); text-align: center; vertical-align: bottom; }
+.doc-card-matrix-column { text-align: center; vertical-align: bottom; }
 .doc-card-matrix.is-head-vertical .doc-card-matrix-column > span { display: inline-block; padding: 0.4rem 0; writing-mode: vertical-rl; line-height: var(--doc-card-matrix-cell); white-space: nowrap; }
 .doc-card-matrix.is-head-horizontal .doc-card-matrix-column > span { display: block; padding: 0.25rem; overflow-wrap: anywhere; line-height: 1.25; }
-.doc-card-matrix-row { height: var(--doc-card-matrix-cell); padding: 0 0.5rem !important; background: color-mix(in srgb, var(--color-fd-muted) 70%, transparent); overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
-.doc-card-matrix-cell { height: var(--doc-card-matrix-cell); text-align: center; line-height: 1; white-space: nowrap; }
-.doc-card-matrix-cell.is-diagonal { background: color-mix(in srgb, var(--color-fd-muted) 45%, transparent); }
-.doc-card-matrix-table tbody tr:hover > td:not(.is-diagonal) { background: color-mix(in srgb, var(--color-fd-primary) 8%, transparent); }
-.doc-card-matrix [data-tone='amber'] { color: var(--color-fd-warning, #b45309); }
+.doc-card-matrix-row { height: var(--doc-card-matrix-cell); padding: 0 0.45rem !important; overflow: hidden; font-weight: 600; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.doc-card-matrix-column[data-tone='amber'], .doc-card-matrix-row[data-tone='amber'] { color: #b45309 !important; }
+.doc-card-matrix-cell { position: relative; height: var(--doc-card-matrix-cell); text-align: center; line-height: 1; white-space: nowrap; }
+.doc-card-matrix-cell.is-diagonal { background: color-mix(in srgb, var(--color-fd-muted) 55%, transparent); }
+.doc-card-matrix-dot { display: inline-block; width: 0.5rem; height: 0.5rem; border-radius: 999px; background: var(--doc-card-matrix-accent); vertical-align: middle; }
+.doc-card-matrix-mark { position: absolute; left: calc(50% + 0.4rem); top: 50%; transform: translateY(-50%); color: var(--doc-card-matrix-accent); font-size: 0.58rem; font-weight: 700; line-height: 1; }
+/* where the pointer is: its row and its column, what a matrix is read by */
+.doc-card-matrix-table tbody tr:hover > * { background: color-mix(in srgb, var(--doc-card-matrix-accent) 7%, transparent); }
+.doc-card-matrix-cell:hover::before { content: ''; position: absolute; left: 0; right: 0; top: -2000px; bottom: -2000px; background: color-mix(in srgb, var(--doc-card-matrix-accent) 7%, transparent); pointer-events: none; }
 .doc-switch-flow .doc-card-matrix .is-link { cursor: pointer; }
-.doc-switch-flow .doc-card-matrix .is-link:hover { color: var(--color-fd-primary); text-decoration: underline; }
+.doc-switch-flow .doc-card-matrix th.is-link:hover { color: var(--doc-card-matrix-accent) !important; text-decoration: underline; }
+.doc-switch-flow .doc-card-matrix-cell.is-link:hover .doc-card-matrix-dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--doc-card-matrix-accent) 28%, transparent); }
 
 /* the database card: a cylinder with its name inside */
 .doc-card-database { --doc-card-database-tone: #475569; position: relative; box-sizing: border-box; width: 100%; }

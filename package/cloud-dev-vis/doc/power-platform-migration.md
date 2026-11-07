@@ -43,9 +43,10 @@ An item names another by its **key**, which never changes, not by its path, as [
 | `/overview/{db}/{choice}` | one option set, with each table using it, cut down to its key and those columns, which point to it |
 | `/overview/{db}` | the database, in [three views](#the-views-of-a-database): a cylinder on its card; the ER diagram, arranged by `er-columns` ([Arrangers](card-diagram-arrange.md)): tables by their lookups, option sets below, lines from each column; and its lookup matrix |
 | `/overview/{db}/{table}` | one table, what it refers to, what refers to it |
-| `/overview/mapping` | both ER diagrams; a line per mapping of tables and of option sets, whose label opens it |
-| `/overview/mapping/{pair}` | two tables; a line per column mapping, whose label opens it |
-| `/overview/mapping/{pair}/{column}` | one column through its operators, the rest of the tables abbreviated |
+| `/overview/{db}/{table}/{refer}` | one lookup, opened from a cell of the matrix: the table looking up, cut down to its key and the columns that do, the table looked up, and a [link](comp-card-diagram-switch.md#a-link-to-a-scene) from each column to its column mapping, where it has one (in the target database, what the column comes from) |
+| `/overview/mapping` | both ER diagrams, each arranged by `er-columns`, then together by `er-spread` ([Arrangers](card-diagram-arrange.md)): a right-angled line per mapping of tables and of option sets, in a track clear of the cards, whose label opens it and is placed clear of them |
+| `/overview/mapping/{pair}` | two tables; a line per column mapping, whose label opens it. The lines of abandoned columns go through `er-lanes` ([Arrangers](card-diagram-arrange.md)), a lane each |
+| `/overview/mapping/{pair}/{column}` | one column through its operators, the rest of the tables [behind row breaks](comp-diagram-er.md#rows-behind-a-row-break) a reader can open |
 | `/overview/choice`, `/overview/choice/{pair}` | the mappings of option sets; value to value |
 | `/overview/plan`, `/overview/run`, `/overview/verify`, `/overview/post` | a report: its sections in a [stack](card-diagram-flexible-switch.md#a-scrolling-stack), at full height both in the overview and on its own |
 | `/overview/post/master`, `/overview/post/audit` | [after the migration](#after-the-migration): the references to master tables, the system columns |
@@ -68,9 +69,9 @@ An item names another by its **key**, which never changes, not by its path, as [
 | --- | --- | --- |
 | `icon` | a [`card-database`](card-diagram-impl.md#node-registries) with the name of the database | the default embedded, as in the overview: alone in its card, at the size of the card, so the line from the tool ends on its wall; never focused |
 | `diagram` | the ER diagram | the default focused, and the hover view of the card, so a click opens what the pointer already shows |
-| `matrix` | a [`card-matrix`](card-diagram-impl.md#node-registries): the tables as rows and columns in one order, a mark where the table of a row looks up the table of a column, with the number of its columns when more than one; a header opens that table | focused only, since it cannot be read at the size of a card |
+| `matrix` | a [`card-matrix`](card-diagram-impl.md#node-registries): the tables as rows and columns in one order, a dot where the table of a row looks up the table of a column, with the number of its columns beside it when more than one; a mark opens that lookup, a header that table | focused only, since it cannot be read at the size of a card |
 
-The words of the menu are in `labels` of the `system` item: `viewDiagram`, `viewLookupMatrix`, `lookupFrom`, `lookupTo`. A bounding box is kept per view, under `{path}@{view}` in the layout item.
+The words are in `labels` of the `system` item: `viewDiagram`, `viewLookupMatrix`, `lookupFrom`, `lookupTo`, and `columnMapping` for the links. A bounding box is kept per view, under `{path}@{view}` in the layout item.
 
 ### Finding a row in the target
 
@@ -140,6 +141,8 @@ typeList:
 ## Editing
 
 An editor shows the item as the framework's card or diagram; **Edit** opens the [visual editor](card-diagram-impl.md#card-editing) on it, with undo and redo. The item is not edited directly: an **adapter** (`MigrationEditData.js`) turns the item into the YAML of the draft, and the draft on Save into writes.
+
+**Entering moves nothing.** The bar of the editor stands over the line of the path, where the Edit and New buttons are; they keep their room, unseen, so the line keeps its height and the card its place. A cell keeps the words as they stand when reading, in the same place with the same wrapping: an empty one stays empty and shows its menu when pointed at.
 
 | Item | The draft | What a change means |
 | --- | --- | --- |

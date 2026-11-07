@@ -531,6 +531,7 @@ rowDisplay: [accountid, '...', status, { break: 12 columns }, modifiedon]
 | a row id | that row. Rows can be left out, and can come in another order |
 | `'...'` | a **row break**: the mark an axis has where part of it is cut away |
 | `{ break: text }` | a row break saying what was cut |
+| `{ break?: text, rowList: [ids], isExpanded? }` | a row break with **rows behind it**, which a reader can open and close |
 
 Quote `'...'` so that it stays plain text in YAML.
 
@@ -559,6 +560,47 @@ nodes:
 connections: []
 ```
 
+### Rows behind a row break
+
+A row break can simply be there, or it can hold rows. With `rowList`, the rows named are not drawn at first, and the reader can open them: a click anywhere on the row break, or on the button at its right, whose icon says which way it goes. Open, the row break is a bar over its rows with a button that closes them, and a line down their side shows where they end.
+
+<!--renderComp=DiagramER,title=Rows a reader can open-->
+```yaml
+version: 1
+viewport:
+  size: { height: 360 }
+nodes:
+  - id: account
+    renderer: { type: dataverse-table }
+    position: { x: 0, y: 0 }
+    data:
+      name: Account
+      nameLogical: account
+      columns:
+        - { id: accountid, name: Account, nameLogical: accountid, type: Unique identifier, key: PK }
+        - { id: name, name: Name, nameLogical: name, type: Text }
+        - { id: phone, name: Phone, nameLogical: telephone1, type: Text }
+        - { id: fax, name: Fax, nameLogical: fax, type: Text }
+        - { id: status, name: Status, nameLogical: statuscode, type: Choice, tone: green }
+        - { id: createdon, name: Created on, nameLogical: createdon, type: Date and Time }
+        - { id: modifiedon, name: Modified on, nameLogical: modifiedon, type: Date and Time }
+      rowDisplay:
+        - accountid
+        - { break: 3 columns, rowList: [name, phone, fax] }
+        - status
+        - { break: 2 columns, rowList: [createdon, modifiedon], isExpanded: true }
+    handles: []
+connections: []
+```
+
+- **Closed at first.** `isExpanded: true` opens it at first. What a reader does is not saved: it lasts while the card is on the page, as the view they picked does.
+- **Every row is named once**, as a row of the list or behind one row break. A row behind a row break counts as shown, not left out.
+- **Which to use.** A plain mark says something is cut and there is nothing more to see here, as when the rows do not matter in this diagram. Rows behind it say the reader may want them. In a generator, `cardRowDisplayKeepBuild(rowIdList, keepIdList, { isFoldable: true })` makes them.
+- **A line stays attached.** A line to a row behind a closed row break ends on the row break, and on its row when opened, so nothing is left dangling either way.
+- **A card embedded in another scene** takes no pointer and shows its row breaks as they are at first.
+
+### Rows left out
+
 - **The rows stay in the data.** `rowDisplay` only says what is drawn when reading. In edit mode the card draws the same, followed by the rows left out, dimmed, so that they can still be edited.
 - **A handle belongs on a row that is drawn.** On a card with one view, the editor will not leave out a row with a handle, and in the source one is reported on the card as a missing anchor.
 
@@ -567,10 +609,10 @@ connections: []
 The card's tab has a **Display** section: the default view, the view switcher, the rows shown of the view on the card (all or chosen), and how the card looks (column names hidden, title color; on a generic table also compact, and column widths).
 
 - **Views** lists them: drag to reorder, remove, **Add view**. The first view added keeps the plain view the card had. Opening a view shows it on the card, with its label, its mode, and the parameters of that mode. Changing the mode drops what the view had chosen, since another mode chooses among other rows.
-- **Choose rows and row breaks** opens the list of what the view on the card shows: drag to reorder, drag a row left out up to show it, remove to leave one out, **Insert row break** to add one, click a row break for its text.
+- **Choose rows and row breaks** opens the list of what the view on the card shows: drag to reorder, drag a row left out up to show it, remove to leave one out, **Insert row break** to add one, click a row break for its text, the rows behind it (their ids, separated by commas) and whether it is open at first.
 - **On the card**, in a plain view, a row has **Shown** and **Insert row break below** in its tab, and the same on its toolbar. With a chosen list the order on the card is set in that list, so the row's own move buttons are off. A view of another mode only reads: its data is edited in the tabs of the card, and a Dataverse card's records in the source.
 
-Each change is one undo step, and which view the editor shows is not a step and is not saved. The apis are `nodeViewListSet`, `nodeRowDisplaySet` and `nodeRowBreakInsert`.
+Each change is one undo step, and which view the editor shows is not a step and is not saved. The apis are `nodeViewListSet`, `nodeRowDisplaySet`, `nodeRowBreakInsert` and `nodeRowBreakFoldSet`. In the editor a click on a row break edits it, and its button opens and closes it.
 
 - **A row of its own for what is left out** (`isEllipsis: true` in the data) is still there for a table that never had those rows, or when a line must leave from that place: batches of a split table, for example. It draws `⋮`.
 

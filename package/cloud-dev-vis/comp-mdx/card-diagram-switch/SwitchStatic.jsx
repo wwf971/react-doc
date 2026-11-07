@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { DiagramNodeContent, DiagramRenderContext, connectionPathBuild } from '../card-diagram/DiagramRender.jsx';
-import { endpointIsDangling } from '../card-diagram/DiagramERData.js';
+import { endpointIsDangling, handleAnchorDrawnOf } from '../card-diagram/DiagramERData.js';
 import { switchPresentationBuild } from './SwitchData.js';
 
 // A scene drawn without React Flow (card-diagram-flexible-switch.md#embedding): the
@@ -47,7 +47,8 @@ const StaticNode = observer(function StaticNode({ id, node, position, config, re
 			const bounds = element.getBoundingClientRect();
 			const scale = bounds.width / element.offsetWidth || 1;
 			const handleList = (node.handles ?? []).flatMap((handle) => {
-				const target = handle.anchor.target === 'body' ? element : anchors.current.get(handle.anchor.target);
+				const anchorDrawn = handleAnchorDrawnOf(node, handle);
+				const target = anchorDrawn === 'body' ? element : anchors.current.get(anchorDrawn) ?? (anchorDrawn !== handle.anchor.target ? element : undefined);
 				if (!target) return [];
 				const rect = target.getBoundingClientRect();
 				const { side, offset } = handle.anchor;
@@ -65,7 +66,7 @@ const StaticNode = observer(function StaticNode({ id, node, position, config, re
 		return () => observer.disconnect();
 	}, [id, node, onGeometry]);
 	const visualization = useMemo(() => ({ nodeId: id, size: node.size, isEdit: false, anchorRef }), [id, node.size, anchorRef]);
-	const width = node.size.width === 'auto' ? node.sizeDefault.width : node.size.width;
+	const width = node.isWidthFit ? 'max-content' : node.size.width === 'auto' ? node.sizeDefault.width : node.size.width;
 	return (
 		<div ref={root} className="doc-switch-static-node" data-id={id} style={{ left: position.x, top: position.y, width, height: node.size.height === 'auto' ? undefined : node.size.height, zIndex: node.isBackground ? -1 : undefined, pointerEvents: node.isBackground ? 'none' : undefined }}>
 			<div className="doc-vis-node-content">

@@ -188,6 +188,10 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 		const size = mapping(node.size ?? {}, `${id}.size`);
 		const sizeResolved = { width: dimension(size.width, `${id}.width`), height: dimension(size.height, `${id}.height`) };
 		const sizeDefault = { width: 220, height: 100, ...contract.sizeDefault };
+		// a kind whose lines to the card as a whole end on another part of it (handleAnchorDrawnOf)
+		const anchorSideDrawn = contract.anchorSideDrawn ? { anchorSideDrawn: contract.anchorSideDrawn } : {};
+		// a kind as wide as what it says, when no width is written
+		const widthFit = contract.isWidthFit && sizeResolved.width === 'auto' ? { isWidthFit: true } : {};
 		for (const axis of ['width', 'height']) {
 			number(sizeDefault[axis], `${id}.sizeDefault.${axis}`, Number.MIN_VALUE);
 			if (sizeResolved[axis] !== 'auto' && contract.sizeMin?.[axis] && sizeResolved[axis] < contract.sizeMin[axis]) throw new Error(`${id}.${axis} is smaller than renderer minimum.`);
@@ -209,7 +213,7 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 			return { ...handle, attachPolicy, anchor: { target, side: anchor.side, offset } };
 		});
 		unique(handles, `${id}.handles`);
-		return { ...node, id, renderer, data, anchors, handles, isBackground: contract.isBackground === true, size: sizeResolved, sizeDefault, position: node.position === undefined || node.position === 'auto' ? 'auto' : point(node.position, `${id}.position`) };
+		return { ...node, id, renderer, data, anchors, handles, isBackground: contract.isBackground === true, size: sizeResolved, sizeDefault, ...widthFit, ...anchorSideDrawn, position: node.position === undefined || node.position === 'auto' ? 'auto' : point(node.position, `${id}.position`) };
 	});
 	const nodesById = unique(nodes, 'nodes');
 	const connectionDefault = mapping(defaults.connection ?? {}, 'defaults.connection');
@@ -296,3 +300,12 @@ export function pointNodeIdBuild(connectionId, role) {
 export const lineTypeList = lineTypes;
 export const markerTypeList = markerTypes;
 export const attachPolicyList = attachPolicies;
+
+// the part of a card a handle is drawn on. a line to a card as a whole, at the middle of its
+// left or right side, ends where the kind says (contract.anchorSideDrawn): a table card, the
+// middle of its title line. only the drawing changes: the handle stays what it was written as
+export function handleAnchorDrawnOf(node, handle) {
+	const { target, side, offset } = handle.anchor;
+	const isCardSide = target === 'body' && (side === 'left' || side === 'right') && offset === 0.5;
+	return isCardSide && node.anchorSideDrawn ? node.anchorSideDrawn : target;
+}

@@ -3,8 +3,9 @@
 // whoever fills it says what a mark means.
 //
 //   rowList, columnList   [{ id, label, link?, tone? }]; link: a path a click on the header opens
-//   cellList              [{ row, column, mark?, title? }]; mark: what the cell shows, a dot by
-//                         default; title: what a pointer resting on it reads
+//   cellList              [{ row, column, mark?, title?, link? }]; mark: small words beside the dot,
+//                         which stays in the middle of the cell, a count say; title: what a pointer resting on it reads; link:
+//                         a path a click on the cell opens
 //   title?, subtitle?, tone?
 //   rowAxisLabel?, columnAxisLabel?   what the corner says the rows and the columns are
 //   columnHeadDirection?  vertical (default), for many columns, or horizontal
@@ -12,7 +13,6 @@
 //   isDiagonalMarked?     shade where a row and the column of the same id meet
 export const CARD_MATRIX_ROW_HEAD_WIDTH = 220;
 export const CARD_MATRIX_CELL_SIZE = 30;
-export const CARD_MATRIX_MARK_DEFAULT = '●';
 
 function idListCheck(list, name) {
 	if (!Array.isArray(list)) throw new Error(`A matrix needs data.${name}.`);

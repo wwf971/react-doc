@@ -50,12 +50,13 @@ diagram    the authored data; never changed in place
 geometry   { rectOf(nodeId) -> { x, y, width, height, isBackground } | null,
              endOf(connection, role) -> { x, y, side } | null }
 changes    { positionById?, handleSideList?: [{ nodeId, handleId, side }],
-             routeById?: { id: route | null }, reportList?: [{ kind, message, connectionId? }] }
+             routeById?: { id: route | null }, labelPositionById?: { id: part of its line },
+             reportList?: [{ kind, message, connectionId? }] }
 ```
 
-**Geometry is passed in**, because only the caller knows where things are. The editor and the apis pass what the canvas measured when the diagram is drawn (`diagramCanvasGeometryBuild`); a generator has nothing drawn, so the arranger's estimate is used. The estimate assumes no row wraps, so **check a generated diagram when it is drawn**, as for any diagram: `connectionOverlapListGet`. An arranger placing cards routes against where the cards will be with `diagramGeometryMovedBuild`.
+**Geometry is passed in**, because only the caller knows where things are. The editor and the apis pass what the canvas measured when the diagram is drawn (`diagramCanvasGeometryBuild`); a generator has nothing drawn, so the arranger's estimate is used. The estimate models the sizes a card draws, wrapped rows and titles included, by the width of their words, but it stays an estimate, so **check a generated diagram when it is drawn**, as for any diagram: `connectionOverlapListGet`. An arranger placing cards routes against where the cards will be with `diagramGeometryMovedBuild`.
 
-**A report says what was not done**, rather than failing: `skipped` (a line it does not handle), `narrow` (lanes closer than is readable), `overlap` (no free way found). The editor shows it in the edit panel, and the api answers it.
+**A report says what was not done**, rather than failing: `skipped` (a line it does not handle), `narrow` (lanes closer than is readable), `overlap` (no free way found), `label` (no place for a label clear of the cards). The editor shows it in the edit panel, and the api answers it.
 
 A store command, `arrangeApply(arranger, { geometry, ...options })`, applies changes to a draft; `diagramArrangeApply` applies them to plain data. Both start from `diagramArrangeRun`.
 
@@ -64,9 +65,12 @@ A store command, `arrangeApply(arranger, { geometry, ...options })`, applies cha
 | Id | Cards | Lines |
 | --- | --- | --- |
 | `er-lanes` | stay where they are | every right-angled line gets a new route |
+| `er-spread` | keep their columns and rows; a gap too narrow for its lanes grows, moving what stands right of it | as `er-lanes` |
 | `er-columns` | move: what a line goes to stands at its right, tables stacked in columns, option sets below the first column using them; each gap as wide as the lanes crossing it need; handles turned to face each other | as `er-lanes` |
 
-They are offered for any diagram of the series with a table on it (`isApplicable`). Curves and straight lines are left alone, and a line with a free end is reported as skipped.
+They are offered for any diagram of the series with a table on it (`isApplicable`). Curves and straight lines keep their routes, and a line with a free end is reported as skipped. All of them [place the labels](#labels), of curves too.
+
+**Which one.** `er-columns` for a diagram of tables with no layout of its own to keep. `er-spread` for a diagram put together from parts that already mean something, as two arranged ER diagrams with lines between them: placing every card anew would lose what the parts say, and `er-lanes` alone would squeeze the new lines into gaps sized for the old ones. A line that should be routed like this has to be right-angled; a curve goes straight through whatever lies between its ends.
 
 ### How the ER rules route
 
@@ -84,13 +88,29 @@ A line between two neighbouring columns has one lane, a line further than that h
 
 Lines are placed one after another and each is **checked against those already placed**, by the same rule as [the overlap check](card-diagram-usage.md#no-lines-on-top-of-each-other): the preferred place first, then others. So what no order can foresee, such as two rows at one height in different columns, is found and avoided.
 
-**What to expect.** On made-up schemas from 5 to 40 tables (`ErArranger.test.js` has the small ones), `er-columns` left no overlap and no line over a card, against up to 3800 overlapping pairs with lines routed by the default. Crossings do not go away, and on a dense schema there are more visible ones, since lines no longer hide each other: it separates lines, it does not make a dense schema simple.
+**What to expect.** On made-up schemas from 5 to 40 tables (`ErArranger.test.js` has the small ones), `er-columns` left no overlap and no line over a card, against up to 3800 overlapping pairs with lines routed by the default. On two made-up ER diagrams side by side, with a line per table across them (`er-spread`, 5 to 40 tables a side, with one or three lookups a table), no line stood over a card and no label over a card or another label. Overlaps stayed at zero up to 40 tables a side with one lookup a table, and at one pair at 20 tables with three; at 40 tables with three, 6 pairs overlapped among 274 lines, some of them for a long way. It does less well where several lines arrive at one table, each on a handle of its own at one place: with tables of the target chosen at random, so that some got several lines, the check counted from 1 pair at 5 tables to about 140 at 40. Crossings do not go away, and on a dense schema there are more visible ones, since lines no longer hide each other: it separates lines, it does not make a dense schema simple.
 
 **What it does not do.**
 
 - A line leaving and arriving through a top or bottom handle is skipped.
-- `er-lanes` does not move anything, so cards placed in a staircase read as one column and their lines go around it, and a narrow gap gets narrow lanes (reported as `narrow`).
+- `er-lanes` does not move anything, so cards placed in a staircase read as one column and their lines go around it, and a narrow gap gets narrow lanes (reported as `narrow`). `er-spread` also keeps the rows, so it cannot make room between rows: a line finds a way between the cards as they stand, or around them.
 - A handle has one side, so where lines come to one handle from both sides, as in some cycles, the fewer go around their card.
+
+## Labels
+
+An arranger may answer where the label of a line goes (`labelPositionById`), as a part of the line's length, the same number as `label.position`. `labelPositionListPlace` in `comp-mdx/card-diagram/DiagramLabelPlace.js` works it out from rectangles and paths alone, for any arranger and any line type:
+
+```text
+each label tries places along its line, about one per 16 px, and the place the author wrote
+a place costs what it would cover:   a card              most of all
+                                     another label       next
+                                     near a card, other lines, a bend of its own line   a little
+                                     leaving the place written                          least
+the labels are placed shortest line first, having the fewest places, then each again knowing
+where the others went, until nothing moves (at most 4 rounds)
+```
+
+So with nothing in the way a label stays where it was written. The size of a label is estimated from its words, since nothing is drawn yet. A label with no place clear of the cards is reported as `label` and stands where it covers least. It moves only labels of lines in scope (`connectionIdList`); applied by hand, a move is part of the same undo step.
 
 ## Adding or updating an arranger
 

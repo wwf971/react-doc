@@ -49,6 +49,7 @@ export class SwitchStore {
 	isCameraReady = false;
 	isBoxAdjust = false;
 	historyList = [];
+	forwardList = [];
 	message = '';
 	box = null;
 	measureVersion = 0;
@@ -91,7 +92,7 @@ export class SwitchStore {
 			isSeekBusy: false, seek: false, seekEnd: false, showAt: false, planRun: false, stepEnter: false, stepExit: false, pathSet: false, stepRun: false, registry: false, resolve: false, scope: false, entryByPath: false, sceneDescByPath: false, viewChosenByKey: false, cameraByPath: false, embedBodyByKey: false, stackElementByKey: false, stackScrollByKey: false, stackAreaByKey: false, stackItemByKey: false, itemInitial: false, maskElement: false, maskWorldElement: false, styleElement: false, viewportApi: false,
 			captureHintTimer: false, flowWaiterList: false, measureWaiterList: false, morph: false, step: false, providerVersion: false, runToken: false, stackScrollKeyByKey: false, stackHeightFullByKey: false, stackFullKeySet: false,
 			provider: observable.ref, nodeListFlow: observable.shallow, edgeListFlow: observable.shallow, plan: observable.ref, mask: observable.ref, box: observable.ref, embedHeld: observable.ref,
-			historyList: observable.ref, measurePathList: observable.ref, captureHint: observable.ref,
+			historyList: observable.ref, forwardList: observable.ref, measurePathList: observable.ref, captureHint: observable.ref,
 		}, { autoBind: true });
 		this.providerSet(provider, pathInitial);
 	}
@@ -774,7 +775,10 @@ export class SwitchStore {
 			return this.cameraReset();
 		}
 		if (this.plan) this.planFinishNow();
-		if (isHistory) this.historyList = [...this.historyList.slice(-30), this.pathCurrent];
+		if (isHistory) {
+			this.historyList = [...this.historyList.slice(-30), this.pathCurrent];
+			this.forwardList = [];
+		}
 		const stepList = [...this.routeBuild(this.pathCurrent, path), ...(itemId ? [{ type: 'scroll', path, itemId }] : [])];
 		return this.planRun(stepList, path, cameraTo);
 	}
@@ -784,7 +788,27 @@ export class SwitchStore {
 		if (list.length === 0) return;
 		const path = list[list.length - 1];
 		this.historyList = list.slice(0, -1);
+		this.forwardList = [...this.forwardList.slice(-30), this.pathCurrent];
 		void this.pathSet(path, { isHistory: false });
+	}
+
+	// the way back undone, as far as it went
+	forward() {
+		const list = this.forwardList;
+		if (list.length === 0) return;
+		const path = list[list.length - 1];
+		this.forwardList = list.slice(0, -1);
+		this.historyList = [...this.historyList.slice(-30), this.pathCurrent];
+		void this.pathSet(path, { isHistory: false });
+	}
+
+	// one level up the path: the nearest folder above that is a scene, '' at the top
+	get pathUp() {
+		return this.pathChain.slice(0, -1).reverse().find((path) => this.pathIsFound(path)) ?? '';
+	}
+
+	up() {
+		if (this.pathUp) void this.pathSet(this.pathUp);
 	}
 
 	routeBuild(from, to) {

@@ -5,7 +5,7 @@ import { diagramArrangeApply } from '../../card-diagram/DiagramArrange.js';
 import { cardRowDisplayKeepBuild } from '../../card-diagram/TableCardData.js';
 import { cardMatrixWidthGet } from '../../card-diagram/CardMatrixData.js';
 import { erGeometryEstimateBuild } from '../er-arrange/ErGeometry.js';
-import { erArrangerColumns, erArrangerLanes } from '../er-arrange/er-arranger-list.js';
+import { erArrangerColumns, erArrangerLanes, erArrangerSpread } from '../er-arrange/er-arranger-list.js';
 
 // The scenes of a migration, generated from its data items (power-platform-migration.md):
 // a provider of the switching layer. Every scene is a diagram of the card diagram format,
@@ -17,6 +17,8 @@ import { erArrangerColumns, erArrangerLanes } from '../er-arrange/er-arranger-li
 //   /overview/{db}                    a database, in three views: a cylinder on its card, its ER
 //                                     diagram while a pointer rests there and focused, its lookup matrix
 //   /overview/{db}/{table}            one table and what it refers to
+//   /overview/{db}/{table}/{refer}    one lookup: those two tables, the columns looking up, a link
+//                                     from each to its column mapping
 //   /overview/{db}/{choice}           one option set and the columns using it
 //   /overview/mapping                 both ER diagrams, the mappings of tables as lines
 //   /overview/mapping/{pair}          two tables, the mappings of their columns as lines
@@ -34,7 +36,7 @@ const COLOR_CHOICE = '#7c3aed';
 const COLOR_MAPPING = '#0d9488';
 const LABEL_DEFAULT = {
 	sourceDatabase: 'Source database', targetDatabase: 'Target database', migrationServer: 'Migration server', artifacts: 'Outputs',
-	overview: 'Overview', tabs: 'Reports in tabs', mapping: 'ER diagrams and mappings', choice: 'Option sets',
+	overview: 'Overview', tabs: 'Reports in tabs', mapping: 'Schema mapping', columnMapping: 'Column mapping', choice: 'Option sets',
 	plan: 'Migration plan', run: 'Run report', verify: 'Verification report',
 	runFlow: 'How the rows were sent', runResult: 'Result of each batch', post: 'After the migration', postMake: 'Fix references and system columns', verifyToPost: 'After verifying', postServer: 'Post-processing server', postTarget: 'Columns to update', labelJustLoaded: 'Just loaded', verifyFlow: 'How the result was checked', verifyMatch: 'Finding the row in the target', matchUnit: 'patterns', matchName: 'Pattern', matchTable: 'Tables', verifySample: 'One row compared', verifyResult: 'Result of the checks', detailHint: 'Click for the details',
 	row: 'row', rowOrder: 'the rows in GUID order', batchUnit: 'batches', exceptionUnit: 'exceptions', columnColumn: 'Column', columnSource: 'In the CSV', columnExpected: 'Expected', columnActual: 'In the target',
@@ -117,6 +119,13 @@ function noteNodeBuild({ id, x, y, width = 220, title, text, tone, metaList, tag
 	return { id, renderer: { type: 'card-note' }, position: { x, y }, size: { width, height: 'auto' }, link, data: { title, text, tone, metaList, tag }, handles: handleList };
 }
 
+// a way to another scene: the standard link, as wide as its words
+const LINK_ROW_HEIGHT = 52;
+
+function linkNodeBuild({ id, x, y, link, title, icon, tone, statList }) {
+	return { id, renderer: { type: 'scene-link' }, position: { x, y }, link, data: { title, icon, tone, statList }, handles: [] };
+}
+
 function embedNodeBuild({ id, x, y, width, height, scene, title, subtitle, icon, tone, statList, handleList = [] }) {
 	return { id, renderer: { type: 'scene-embed' }, position: { x, y }, size: { width, height }, data: { scene, title, subtitle, icon, tone, statList }, handles: handleList };
 }
@@ -178,8 +187,51 @@ function sceneErBuild(model, dbId) {
 	return { nodes: er.nodes, connections: er.connections };
 }
 
+// the mapping of a column of a table, in the side it stands on: what a source column becomes,
+// what a target column comes from. null: it has none
+function columnMappingPathOf(model, table, column) {
+	const side = table.db === model.system.source.id ? 'source' : 'target';
+	for (const mapping of model.mappingTableByKey.values()) {
+		if (mapping[side] !== table.key) continue;
+		const row = migrationMappingColumnListOf(model, mapping).find((item) => item[side] === column.id);
+		if (row) return `/overview/mapping/${migrationPairGet(model, mapping)}/${migrationColumnSegmentOf(row)}`;
+	}
+	return null;
+}
+
+// one lookup of a database: the table looking up, cut down to its key and the columns that do,
+// the table looked up, cut down to its key, and a link under them to the mapping of each column
+function sceneLookupBuild(model, dbId, logicalFrom, logicalTo) {
+	const tableList = migrationTableListOf(model, dbId);
+	const from = tableList.find((table) => table.logical === logicalFrom);
+	const to = tableList.find((table) => table.logical === logicalTo);
+	if (!from || !to) return null;
+	const columnList = from.columnList.filter((column) => column.lookup === to.key);
+	if (columnList.length === 0) return null;
+	const isSelf = from.key === to.key;
+	const pkFrom = from.columnList.find((column) => column.key === 'PK');
+	const pkTo = to.columnList.find((column) => column.key === 'PK') ?? to.columnList[0];
+	const linkOf = linkOfDb(dbId).table;
+	const handleInto = handleOf('pk', 'in', 'left', `column/${pkTo.id}`);
+	const nodeFrom = tableNodeBuild(from, {
+		x: 0, y: 0, link: linkOf(from),
+		handleList: [...columnList.map((column) => handleOf(`lookup-${column.id}`, 'out', 'right', `column/${column.id}`)), ...(isSelf ? [handleInto] : [])],
+		columnList: from.columnList.map((column) => (column.lookup === to.key ? { ...column, tone: 'blue' } : column)),
+		rowDisplay: rowDisplayKeepOf(model, from, [pkFrom?.id, ...columnList.map((column) => column.id), ...(isSelf ? [pkTo.id] : [])]),
+	});
+	const nodeTo = isSelf ? nodeFrom : tableNodeBuild(to, { x: TABLE_WIDTH + GAP_COLUMN, y: 0, link: linkOf(to), handleList: [handleInto], rowDisplay: rowDisplayKeepOf(model, to, [pkTo.id]) });
+	const connections = columnList.map((column) => lineOf(`lookup:${dbId}:${from.logical}:${column.id}`, [nodeFrom.id, `lookup-${column.id}`], [nodeTo.id, 'pk'], { style: { stroke: COLOR_LOOKUP, strokeWidth: 1.25 } }));
+	const yLinks = erGeometryEstimateBuild({ nodes: [nodeFrom] }).rectOf(nodeFrom.id).height + GAP_ROW;
+	const linkList = columnList.flatMap((column) => {
+		const path = columnMappingPathOf(model, from, column);
+		return path ? [{ column, path }] : [];
+	}).map(({ column, path }, index) => linkNodeBuild({ id: `link:mapping:${column.id}`, x: 0, y: yLinks + index * LINK_ROW_HEIGHT, link: path, title: `${labelOf(model, 'columnMapping')}: ${column.name}`, icon: 'arrow-right-left', tone: 'teal' }));
+	const nodes = [nodeFrom, ...(isSelf ? [] : [nodeTo]), ...linkList];
+	return diagramArrangeApply({ nodes, connections }, erArrangerLanes).diagram;
+}
+
 // the lookups of a database as a matrix: a mark where the table of a row looks up the table
-// of a column, with how many of its columns do when more than one
+// of a column, with how many of its columns do when more than one; a click on it opens the lookup
 function sceneLookupMatrixBuild(model, dbId) {
 	const { source, target } = model.system;
 	const tableList = migrationTableListOf(model, dbId);
@@ -193,7 +245,7 @@ function sceneLookupMatrixBuild(model, dbId) {
 		}
 		return [...nameListByKey].map(([key, nameList]) => {
 			const refer = model.tableByKey.get(key);
-			return { row: table.logical, column: refer.logical, title: `${table.name} → ${refer.name}: ${nameList.join(', ')}`, ...(nameList.length > 1 ? { mark: `● ${nameList.length}` } : {}) };
+			return { row: table.logical, column: refer.logical, link: `${linkOf(table)}/${refer.logical}`, title: `${table.name} → ${refer.name}: ${nameList.join(', ')}`, ...(nameList.length > 1 ? { mark: String(nameList.length) } : {}) };
 		});
 	});
 	const data = {
@@ -284,7 +336,7 @@ function sceneChoiceBuild(model, dbId, logical) {
 }
 
 // what a break says for columns left out of a table: how many
-const rowDisplayKeepOf = (model, table, idList) => cardRowDisplayKeepBuild(table.columnList.map((column) => column.id), idList, { textOf: (count) => `${count} ${labelOf(model, 'columnUnit')}` });
+const rowDisplayKeepOf = (model, table, idList, { isFoldable = false } = {}) => cardRowDisplayKeepBuild(table.columnList.map((column) => column.id), idList, { isFoldable, textOf: (count) => `${count} ${labelOf(model, 'columnUnit')}` });
 
 // the option sets of one column (isGlobal: false) a table's column mappings go through: a card
 // under each table, a line from the column at the outer side of the table, and, when isPair,
@@ -343,7 +395,6 @@ function sceneMappingAllBuild(model) {
 		nodeTarget.handles = [...nodeTarget.handles, handleOf(`map-${mapping.key}`, 'in', 'left')];
 		const pair = migrationPairGet(model, mapping);
 		connections.push(lineOf(`map:${pair}`, [nodeSource.id, `map-${mapping.key}`], [nodeTarget.id, `map-${mapping.key}`], {
-			renderer: { type: 'bezier' },
 			style: { stroke: COLOR_MAPPING, strokeWidth: 2 },
 			label: { text: mapping.label ?? `${migrationMappingColumnListOf(model, mapping).length} ${labelOf(model, 'columnUnit')}`, position: 0.72 },
 			link: `/overview/mapping/${pair}`,
@@ -360,15 +411,18 @@ function sceneMappingAllBuild(model) {
 		nodeTarget.handles = [...nodeTarget.handles, handleOf(`map-${mapping.key}`, 'in', 'left', 'header')];
 		const pair = migrationChoicePairGet(model, mapping);
 		connections.push(lineOf(`map-choice:${pair}`, [nodeSource.id, `map-${mapping.key}`], [nodeTarget.id, `map-${mapping.key}`], {
-			renderer: { type: 'bezier' },
 			style: { stroke: COLOR_CHOICE, strokeWidth: 1.5 },
 			label: { text: mapping.label ?? labelOf(model, 'choice'), position: 0.5 },
 			link: `/overview/choice/${pair}`,
 		}));
 	}
-	return { nodes, connections };
+	// two arranged diagrams and lines across both: the columns stay, each line gets its way
+	return diagramArrangeApply({ nodes, connections }, erArrangerSpread).diagram;
 }
 
+const ABANDON_GAP_MIN = 70;
+const ABANDON_GAP_MAX = 150;
+const ABANDON_LANE_WIDTH = 30;
 const OPERATOR_WIDTH = { abandon: 96, text: 210, mapping: 240, choice: 240, lookup: 210 };
 
 // two tables, the column mappings between them as lines with a label. a column abandoned
@@ -387,14 +441,18 @@ function sceneMappingTableBuild(model, pair) {
 	const heightMax = Math.max(heightOfTable(source), heightOfTable(target));
 	const abandonId = 'operator:abandon';
 	const columnMappingList = migrationMappingColumnListOf(model, mapping);
-	const isAbandon = columnMappingList.some((columnMapping) => columnMapping.target === undefined || columnMapping.target === null);
-	if (isAbandon) nodes.push({ id: abandonId, renderer: { type: 'operator-abandon' }, position: { x: TABLE_WIDTH + 70, y: heightMax + 70 }, size: { width: OPERATOR_WIDTH.abandon, height: 'auto' }, data: { name: labelOf(model, 'abandon') }, handles: [handleOf('left', 'in', 'left'), handleOf('right', 'in', 'right')] });
+	const abandonCount = columnMappingList.filter((columnMapping) => columnMapping.source && (columnMapping.target === undefined || columnMapping.target === null)).length;
+	const isAbandon = abandonCount > 0;
+	// room beside the table for a lane per abandoned column
+	const abandonGap = Math.max(ABANDON_GAP_MIN, Math.min(ABANDON_GAP_MAX, (abandonCount + 1) * ABANDON_LANE_WIDTH));
+	const abandonLineIdList = [];
+	if (isAbandon) nodes.push({ id: abandonId, renderer: { type: 'operator-abandon' }, position: { x: TABLE_WIDTH + abandonGap, y: heightMax + 70 }, size: { width: OPERATOR_WIDTH.abandon, height: 'auto' }, data: { name: labelOf(model, 'abandon') }, handles: [handleOf('left', 'in', 'left'), handleOf('right', 'in', 'right')] });
 	let yDefault = heightMax + 70;
-	const labelPositionOf = (index) => 0.34 + ((index % 3) * 0.16);
-	columnMappingList.forEach((columnMapping, index) => {
+	columnMappingList.forEach((columnMapping) => {
 		const link = `/overview/mapping/${pair}/${migrationColumnSegmentOf(columnMapping)}`;
 		const style = { stroke: columnMapping.source && columnMapping.target ? COLOR_MAPPING : '#94a3b8', strokeWidth: 1.25 };
-		const label = { text: columnMapping.label ?? columnMapping.kind ?? '', position: labelPositionOf(index) };
+		// in the middle of every line: lines side by side read as one column of labels
+		const label = { text: columnMapping.label ?? columnMapping.kind ?? '', position: 0.5 };
 		if (columnMapping.source && columnMapping.target) {
 			handleSource.push(handleOf(`column-${columnMapping.source}`, 'out', 'right', `column/${columnMapping.source}`));
 			handleTarget.push(handleOf(`column-${columnMapping.target}`, 'in', 'left', `column/${columnMapping.target}`));
@@ -402,6 +460,7 @@ function sceneMappingTableBuild(model, pair) {
 		} else if (columnMapping.source) {
 			handleSource.push(handleOf(`column-${columnMapping.source}`, 'out', 'right', `column/${columnMapping.source}`));
 			connections.push(lineOf(`column:${columnMapping.key}`, [tableNodeId(source.db, source.logical), `column-${columnMapping.source}`], [abandonId, 'left'], { style: { ...style, strokeDasharray: '4 4' }, label: { ...label, position: 0.55 }, link }));
+			abandonLineIdList.push(`column:${columnMapping.key}`);
 		} else if (columnMapping.target) {
 			const id = `operator:default:${columnMapping.target}`;
 			nodes.push({ id, renderer: { type: 'operator-text' }, position: { x: xTarget - 280, y: yDefault }, size: { width: OPERATOR_WIDTH.text, height: 'auto' }, data: { name: labelOf(model, 'defaultValue'), description: columnMapping.label ?? '' }, handles: [handleOf('right', 'out', 'right')] });
@@ -423,17 +482,21 @@ function sceneMappingTableBuild(model, pair) {
 	);
 	nodes.push(...local.nodes);
 	connections.push(...local.connections);
-	if (local.idList.length === 0) return { nodes, connections };
-	return diagramArrangeApply({ nodes, connections }, erArrangerLanes, { connectionIdList: local.idList }).diagram;
+	// the lines across the gap keep their straight way; those that turn get a lane each, so lines
+	// going to one card share only the last run into it, and their labels stand on their own
+	const idList = [...local.idList, ...abandonLineIdList];
+	if (idList.length === 0) return { nodes, connections };
+	return diagramArrangeApply({ nodes, connections }, erArrangerLanes, { connectionIdList: idList }).diagram;
 }
 
-// a table in the scene of one column: that column and its neighbours, a break for the others
+// a table in the scene of one column: that column and its neighbours, and the others behind a
+// break the reader can open
 function tableAroundOf(model, table, columnId) {
 	const index = table.columnList.findIndex((column) => column.id === columnId);
 	const keepList = index < 0 ? table.columnList.slice(0, 4) : table.columnList.slice(Math.max(0, index - 1), index + 2);
 	return {
 		columnList: table.columnList.map((column) => (column.id === columnId ? { ...column, tone: 'green' } : column)),
-		rowDisplay: rowDisplayKeepOf(model, table, keepList.map((column) => column.id)),
+		rowDisplay: rowDisplayKeepOf(model, table, keepList.map((column) => column.id), { isFoldable: true }),
 	};
 }
 
@@ -1223,7 +1286,7 @@ function sceneOverviewBuild(model) {
 			data: { name: tool.name, nameLogical: tool.description ?? '', tone: 'violet', isFieldHeaderHidden: true, fields: [{ id: 'tag', label: '' }, { id: 'name', label: '' }], columnTemplate: '2.6rem 1fr', rows: stepList.map((step, index) => ({ id: step.id, tag: String(index + 1).padStart(2, '0'), name: step.name })) },
 			handles: toolHandles,
 		},
-		{ id: 'link:mapping', renderer: { type: 'card-brief' }, position: { x: OVERVIEW_TOOL_X + 20, y: 40 }, size: { width: OVERVIEW_TOOL_WIDTH - 40, height: 'auto' }, link: '/overview/mapping', data: { title: labelOf(model, 'mapping'), icon: 'arrow-right-left', tone: 'teal', statList: [`${model.mappingTableByKey.size} ${labelOf(model, 'tableUnit')}`] }, handles: [] },
+		linkNodeBuild({ id: 'link:mapping', x: OVERVIEW_TOOL_X, y: 40, link: '/overview/mapping', title: labelOf(model, 'mapping'), icon: 'arrow-right-left', tone: 'teal', statList: [`${model.mappingTableByKey.size} ${labelOf(model, 'tableUnit')}`] }),
 		reportNodeOf('plan', 0, [handleOf('top', 'in', 'top'), handleOf('out', 'out', 'right')]),
 		reportNodeOf('run', 1, [handleOf('top', 'in', 'top'), handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')]),
 		reportNodeOf('verify', 2, [handleOf('top', 'in', 'top'), handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')]),
@@ -1282,7 +1345,10 @@ function sceneBuild(model, path) {
 	const { source, target } = model.system;
 	if (!first) return sceneOverviewBuild(model);
 	if (first === 'tabs') return sceneOverviewTabsBuild(model, reportIdListOf(model).includes(second) ? second : 'plan');
-	if (first === source.id || first === target.id) return second ? sceneTableBuild(model, first, second) ?? sceneChoiceBuild(model, first, second) : sceneErBuild(model, first);
+	if (first === source.id || first === target.id) {
+		if (third) return sceneLookupBuild(model, first, second, third);
+		return second ? sceneTableBuild(model, first, second) ?? sceneChoiceBuild(model, first, second) : sceneErBuild(model, first);
+	}
 	if (first === 'mapping') {
 		if (third) return sceneMappingColumnBuild(model, second, third);
 		return second ? sceneMappingTableBuild(model, second) : sceneMappingAllBuild(model);
@@ -1305,8 +1371,10 @@ function pathLabelGet(model, path) {
 	const { source, target } = model.system;
 	if (!first) return labelOf(model, 'overview');
 	if (first === 'tabs') return second ? labelOf(model, second) : labelOf(model, 'tabs');
-	if (first === source.id) return second ? dbItemNameOf(model, first, second) : source.name;
-	if (first === target.id) return second ? dbItemNameOf(model, first, second) : target.name;
+	if (first === source.id || first === target.id) {
+		if (third) return `→ ${dbItemNameOf(model, first, third)}`;
+		return second ? dbItemNameOf(model, first, second) : (first === source.id ? source : target).name;
+	}
 	if (first === 'mapping') {
 		if (third) {
 			const mapping = migrationMappingTableOfPair(model, second);
@@ -1341,6 +1409,12 @@ function childPathListGet(model, path) {
 	if (path === '/overview/post') return [...(model.planPost?.master ? ['/overview/post/master'] : []), ...(model.planPost?.audit ? ['/overview/post/audit'] : [])];
 	if (path === `/overview/${source.id}`) return [...migrationTableListOf(model, source.id), ...migrationChoiceListOf(model, source.id)].map((item) => `${path}/${item.logical}`);
 	if (path === `/overview/${target.id}`) return [...migrationTableListOf(model, target.id), ...migrationChoiceListOf(model, target.id)].map((item) => `${path}/${item.logical}`);
+	const [, dbId, logical, rest] = path.split('/').filter(Boolean);
+	if ((dbId === source.id || dbId === target.id) && logical && !rest) {
+		const table = migrationTableListOf(model, dbId).find((item) => item.logical === logical);
+		const referList = [...new Set((table?.columnList ?? []).map((column) => column.lookup))].map((key) => model.tableByKey.get(key)).filter((refer) => refer?.db === dbId);
+		return referList.map((refer) => `${path}/${refer.logical}`);
+	}
 	if (path === '/overview/mapping') return [...model.mappingTableByKey.values()].map((mapping) => `${path}/${migrationPairGet(model, mapping)}`);
 	if (path.startsWith('/overview/mapping/') && switchPathParent(path) === '/overview/mapping') {
 		const mapping = migrationMappingTableOfPair(model, switchPathLast(path));

@@ -176,7 +176,7 @@ A `scene-box` node (a kind of the [base series](card-diagram-impl.md#node-regist
 
 ## The path bar
 
-`SwitchPathBar` stands left aligned over the viewport: one button per segment, whose click switches to it; the chevron before a segment lists the scenes beside it, the last chevron the scenes below. A back button walks the scenes visited. At the right: the picture menu (copy or download, PNG or SVG, of the scene as it stands now, through the capture of the [animation](card-diagram-animation.md#pictures)), the camera back to the default of the scene, the bounding box.
+`SwitchPathBar` stands left aligned over the viewport: one button per segment, whose click switches to it; the chevron before a segment lists the scenes beside it, the last chevron the scenes below. Three buttons stand before the path. Back and forward walk the scenes visited, as in a browser: a new way forgets what lay forward (`store.back`, `store.forward`). Up goes one level up the path, to the nearest folder that is a scene (`store.up`), and is itself a step that back can undo. At the right: the picture menu (copy or download, PNG or SVG, of the scene as it stands now, through the capture of the [animation](card-diagram-animation.md#pictures)), the camera back to the default of the scene, the bounding box.
 
 **An item of a menu** shows its `label` (the simple mode). When it has a `labelItemList` (the complex mode), it shows that instead, a list of things of different types, and `label` stays what the segment of the path bar and a screen reader say:
 
@@ -220,7 +220,7 @@ What every scene follows, beside [those of the framework](card-diagram-usage.md#
 | Change | Where | Check |
 | --- | --- | --- |
 | a new way of switching | `switchRouteFind`, a step type in `SwitchStore.stepEnter` / `frameApply` / `stepExit` | a pure function of a progress; `routeTimelineGet` knows its duration without measuring; a test in `SwitchData.test.js` |
-| a node that opens a scene | `link: {path}` on any node or connection of a diagram | no kind needed; the canvas answers the click, the label of a line becomes a button. A part of a card opens one with the attribute `data-switch-link`, so the card need not know this layer |
+| a node that opens a scene | `scene-link` when opening is all it does ([convention](card-diagram-usage.md#drawing-conventions)); `link: {path}` on any other node or connection of a diagram | no kind needed; the canvas answers the click, the label of a line becomes a button. A part of a card opens one with the attribute `data-switch-link`, as the headers and cells of a `card-matrix` do, so the card need not know this layer |
 | another condition on the default view | `switchViewRuleMatch`, `switchViewListCheck` | it reads the presentation and nothing else; for what a rule cannot say, a provider's `viewDefault` may be a function |
 | another source of scenes | a provider | the scenes are ordinary diagrams; ids stay the same across scenes where a morph is wanted |
 | a new kind | [Adding a kind](card-diagram.md#adding-a-kind); `morphKeyGet` if part of its data changes in place | it draws without React Flow as well as with it: a card reads `SwitchContext` for `isStatic` before doing anything needing the canvas |
@@ -237,9 +237,10 @@ The rules that must hold:
 
 | Place | Role |
 | --- | --- |
+| `SwitchNodeKinds.jsx` also | `scene-link`, the standard link: `CardBrief` in a pill as wide as its words (`contract.isWidthFit`, a width of `max-content` on the canvas and in a static scene) |
 | `comp-mdx/card-diagram-switch/SwitchData.js` | pure: paths, the views of a scene, the document, tabs, cameras, the route, a morph, the stylesheets of a frame |
 | `SwitchStore.js` | the state of a viewport: its scenes, the nodes on the canvas, the transition, the box, both clocks |
-| `SwitchCanvas.jsx` | the canvas, the lines with html labels, the mask, the measuring host |
+| `SwitchCanvas.jsx` | the canvas, the lines with html labels (the pointer on a line or on its label, or a keyboard on its button, marks both, the whole line with a band in its color: `switchEdgeHoverStyleBuild`. The state is each line's own, so a hover renders that line alone), the mask, the measuring host |
 | `SwitchStatic.jsx` | a scene without React Flow; `SwitchContext` |
 | `SwitchNodeKinds.jsx` | `scene-embed`, `scene-stack`, `scene-tabs`, `switchRegistryBuild` |
 | `SwitchPathBar.jsx` | the path bar |

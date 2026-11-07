@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { ArrowLeft, ChevronRight, Scan, SquareDashedMousePointer } from '../../../../main/frontend/UICommon.js';
+import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight, Scan, SquareDashedMousePointer } from '../../../../main/frontend/UICommon.js';
 import { AnchoredPopover } from '../../../../main/comp-doc/popup/AnchoredPopover.jsx';
 import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
 import { CARD_ICON_BY_NAME } from '../card-diagram/CompactCard.jsx';
@@ -72,6 +72,12 @@ export const SwitchPathBar = observer(function SwitchPathBar({ store, trailing }
 		<div className="doc-switch-bar not-prose">
 			<button type="button" className="doc-switch-bar-button" title="Back to the previous scene" aria-label="Back to the previous scene" disabled={store.historyList.length === 0} onClick={store.back}>
 				<ArrowLeft size={13} aria-hidden="true" />
+			</button>
+			<button type="button" className="doc-switch-bar-button" title="Forward to the scene left" aria-label="Forward to the scene left" disabled={store.forwardList.length === 0} onClick={store.forward}>
+				<ArrowRight size={13} aria-hidden="true" />
+			</button>
+			<button type="button" className="doc-switch-bar-button" title={store.pathUp ? `Up to ${store.labelGet(store.pathUp)}` : 'Up one level'} aria-label="Up one level" disabled={!store.pathUp} onClick={store.up}>
+				<ArrowUp size={13} aria-hidden="true" />
 			</button>
 			<nav className="doc-switch-path" aria-label="Path of the scene">
 				{chain.map((path, index) => (

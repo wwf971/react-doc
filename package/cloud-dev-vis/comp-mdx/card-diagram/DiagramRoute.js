@@ -649,6 +649,54 @@ function pathRead(d) {
 const runAxisOf = (run) => (Math.abs(run.from.x - run.to.x) < EPSILON ? 'y' : 'x');
 
 export const routePathRead = pathRead;
+
+const CURVE_SAMPLE_QUADRATIC = 4;
+const CURVE_SAMPLE_CUBIC = 16;
+
+// the points of a path, curves sampled: for measuring along a line of any type without a browser
+export function routePathPolylineGet(d) {
+	const tokenList = String(d).match(/[MLQCmlqc]|-?\d*\.?\d+(?:e-?\d+)?/g) ?? [];
+	const pointList = [];
+	let index = 0;
+	let command = '';
+	const pointNext = () => ({ x: Number(tokenList[index++]), y: Number(tokenList[index++]) });
+	while (index < tokenList.length) {
+		if (/^[A-Za-z]$/.test(tokenList[index])) command = tokenList[index++].toUpperCase();
+		const from = pointList[pointList.length - 1];
+		if (command === 'M' || command === 'L') pointList.push(pointNext());
+		else if (command === 'Q') {
+			const [control, to] = [pointNext(), pointNext()];
+			for (let step = 1; step <= CURVE_SAMPLE_QUADRATIC; step += 1) {
+				const t = step / CURVE_SAMPLE_QUADRATIC;
+				pointList.push({ x: (1 - t) ** 2 * from.x + 2 * (1 - t) * t * control.x + t ** 2 * to.x, y: (1 - t) ** 2 * from.y + 2 * (1 - t) * t * control.y + t ** 2 * to.y });
+			}
+		} else if (command === 'C') {
+			const [a, b, to] = [pointNext(), pointNext(), pointNext()];
+			for (let step = 1; step <= CURVE_SAMPLE_CUBIC; step += 1) {
+				const t = step / CURVE_SAMPLE_CUBIC;
+				const u = 1 - t;
+				pointList.push({ x: u ** 3 * from.x + 3 * u ** 2 * t * a.x + 3 * u * t ** 2 * b.x + t ** 3 * to.x, y: u ** 3 * from.y + 3 * u ** 2 * t * a.y + 3 * u * t ** 2 * b.y + t ** 3 * to.y });
+			}
+		} else break;
+	}
+	return pointList;
+}
+
+export function routePolylineLengthGet(pointList) {
+	return pointList.slice(1).reduce((sum, point, index) => sum + Math.hypot(point.x - pointList[index].x, point.y - pointList[index].y), 0);
+}
+
+// the point at a part of a line's length, as a label stands on it (label.position)
+export function routePolylinePointAt(pointList, part) {
+	let rest = routePolylineLengthGet(pointList) * part;
+	for (let index = 1; index < pointList.length; index += 1) {
+		const [from, to] = [pointList[index - 1], pointList[index]];
+		const length = Math.hypot(to.x - from.x, to.y - from.y);
+		if (rest <= length && length > 0) return { x: from.x + ((to.x - from.x) * rest) / length, y: from.y + ((to.y - from.y) * rest) / length };
+		rest -= length;
+	}
+	return pointList[pointList.length - 1];
+}
 export const routePathRunListGet = (d) => pathRead(d).runList;
 
 // the range of a run along its axis

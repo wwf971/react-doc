@@ -29,9 +29,8 @@ sceneList:
           data: { title: Source, text: Reads the rows, tone: blue }
           handles: [{ id: out, direction: out, anchor: { side: right } }]
         - id: note
-          renderer: { type: card-brief }
+          renderer: { type: scene-link }
           position: { x: 0, y: 240 }
-          size: { width: 200, height: auto }
           link: /overview/moved
           data: { title: Open a scene with nodes in common, icon: arrow-right-left, tone: teal }
         - id: detail
@@ -85,9 +84,8 @@ sceneList:
           size: { width: 320, height: auto }
           data: { title: Source, text: Reads the rows, tone: blue }
         - id: note
-          renderer: { type: card-brief }
+          renderer: { type: scene-link }
           position: { x: 300, y: 120 }
-          size: { width: 320, height: auto }
           link: /overview
           data: { title: Back to the overview, icon: arrow-right-left, tone: teal }
 ```
@@ -102,9 +100,23 @@ sceneList:
 | `defaults` | what every `diagram` starts with |
 | `transition` | `secondPortal`, `secondMorph`, `secondCamera`, `secondScroll`: how long a step lasts |
 
-A diagram is the [usual format](comp-diagram-er.md), with one more field on a node and on a connection: **`link`**, the path a click on it opens (`/path#item` also scrolls to an item of a stack there). On a connection, the label becomes the button.
+A diagram is the [usual format](comp-diagram-er.md), with one more field on a node and on a connection, and on a cell of a [matrix](card-diagram-impl.md#node-registries): **`link`**, the path a click on it opens (`/path#item` also scrolls to an item of a stack there). On a connection, the label becomes the button.
 
 Two conventions keep a scene readable, in a generator as by hand: a list of cards **wraps** instead of running on in one row, and what is long **scrolls** in a stack instead of shrinking ([Drawing conventions](card-diagram-usage.md#drawing-conventions)).
+
+## A link to a scene
+
+A node whose job is to open another scene is a **`scene-link`**: a pill with an icon and words, as wide as its words. Write no width.
+
+```yaml
+- id: to-mapping
+  renderer: { type: scene-link }
+  position: { x: 0, y: 240 }
+  link: /overview/mapping
+  data: { title: Schema mapping, icon: arrow-right-left, tone: teal, statList: [7 tables] }
+```
+
+`title` says where it goes, `statList` gives small words under it, and `icon` and `tone` are as on any card. Any other card can have `link` too, when it shows something and a click opens more of it, as a table opens its own scene.
 
 ## Showing a scene inside a card
 
@@ -150,11 +162,10 @@ sceneList:
           size: { width: 560, height: 340 }
           data: { scene: /overview/orders, title: Orders, icon: table, tone: blue }
         - id: other
-          renderer: { type: card-note }
+          renderer: { type: scene-link }
           position: { x: 620, y: 140 }
-          size: { width: 200, height: auto }
           link: /overview/summary
-          data: { title: Open the summary, text: The same scene in another card, tone: teal }
+          data: { title: Open the summary, icon: arrow-right-left, tone: teal, statList: [The same scene in another card] }
   - path: /overview/summary
     label: Summary
     diagram:
@@ -342,15 +353,13 @@ sceneList:
     diagram:
       nodes:
         - id: go-first
-          renderer: { type: card-brief }
+          renderer: { type: scene-link }
           position: { x: 0, y: 0 }
-          size: { width: 180, height: auto }
           link: /list#first
           data: { title: To the first, icon: arrow-right-left, tone: teal }
         - id: go-third
-          renderer: { type: card-brief }
+          renderer: { type: scene-link }
           position: { x: 0, y: 70 }
-          size: { width: 180, height: auto }
           link: /list#part
           data: { title: To the last, icon: arrow-right-left, tone: teal }
         - id: stack

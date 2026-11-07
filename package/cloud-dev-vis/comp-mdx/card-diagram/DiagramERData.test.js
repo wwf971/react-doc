@@ -1,4 +1,4 @@
-import { cardRowDisplayItemListGet, cardRowDisplayKeepBuild, cardRowDisplayNormalize, cardViewDefaultGet, cardViewDrawBuild, cardViewListGet, cardViewListPrune, cardViewSourceOf, cardViewSwitcherIsShown, tableCardNormalize } from './TableCardData.js';
+import { cardRowDisplayIdListOf, cardRowDisplayItemListGet, cardRowDisplayKeepBuild, cardRowDisplayNormalize, cardRowDisplayWithout, cardViewDefaultGet, cardViewDrawBuild, cardViewListGet, cardViewListPrune, cardViewSourceOf, cardViewSwitcherIsShown, tableCardNormalize } from './TableCardData.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
@@ -255,3 +255,29 @@ test('a card has views, each of a mode; without any it has its plain view', () =
 	assert.deepEqual(cardViewListPrune(data.viewList, { columnId: 'g' })[2].rowDisplay, ['f']);
 	assert.equal(cardViewListPrune(data.viewList, { recordId: 'a' })[2].valueRowId, undefined);
 });
+
+test('a row break with rows behind it: every row once, and they count as shown', () => {
+	const rows = ['a', 'b', 'c', 'd'].map((id) => ({ id }));
+	const list = cardRowDisplayNormalize(['a', { break: 'two', rowList: ['b', 'c'] }, 'd'], rows);
+	assert.deepEqual(list, ['a', { break: 'two', rowList: ['b', 'c'] }, 'd']);
+	assert.deepEqual(cardRowDisplayNormalize([{ rowList: ['a'], isExpanded: true }], rows), [{ break: '', rowList: ['a'], isExpanded: true }]);
+	assert.throws(() => cardRowDisplayNormalize(['a', { rowList: ['a'] }], rows), /names "a" twice/);
+	assert.throws(() => cardRowDisplayNormalize([{ rowList: ['z'] }], rows), /not a row/);
+	assert.throws(() => cardRowDisplayNormalize([{ rowList: [] }], rows), /must list the rows/);
+	assert.throws(() => cardRowDisplayNormalize([{ rowList: ['a'], isExpanded: 'yes' }], rows), /must be a boolean/);
+	assert.deepEqual(cardRowDisplayIdListOf(['a', '...', { break: 'x' }, { rowList: ['b', 'c'] }]), ['a', 'b', 'c']);
+	const [, item] = cardRowDisplayItemListGet(list, rows);
+	assert.deepEqual(item.break.rowList.map((row) => row.id), ['b', 'c']);
+	assert.equal(item.break.isExpanded, false, 'closed unless it says otherwise');
+	assert.equal(cardRowDisplayItemListGet([{ rowList: ['a'], isExpanded: true }], rows)[0].break.isExpanded, true);
+	assert.equal(cardRowDisplayItemListGet(['...'], rows)[0].break.rowList, undefined, 'a plain mark has nothing behind it');
+	// a row gone: out of the list, and a break losing its last row stays as a mark
+	assert.deepEqual(cardRowDisplayWithout(['a', { break: 't', rowList: ['b', 'c'] }], 'b'), ['a', { break: 't', rowList: ['c'] }]);
+	assert.deepEqual(cardRowDisplayWithout([{ break: 't', rowList: ['b'] }], 'b'), [{ break: 't' }]);
+	assert.deepEqual(cardRowDisplayWithout([{ break: '', rowList: ['b'] }], 'b'), ['...']);
+	assert.deepEqual(cardRowDisplayWithout(['a', 'b'], 'a'), ['b']);
+	// generated: the rows left out stand behind their breaks
+	assert.deepEqual(cardRowDisplayKeepBuild(['a', 'b', 'c', 'd', 'e'], ['b', 'd'], { isFoldable: true, textOf: (count) => `${count} rows` }), [{ break: '1 rows', rowList: ['a'] }, 'b', { break: '1 rows', rowList: ['c'] }, 'd', { break: '1 rows', rowList: ['e'] }]);
+	assert.deepEqual(cardRowDisplayKeepBuild(['a', 'b'], ['b'], { isFoldable: true }), [{ rowList: ['a'] }, 'b']);
+});
+

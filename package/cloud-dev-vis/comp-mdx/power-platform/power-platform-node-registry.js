@@ -19,7 +19,7 @@ import { erArrangerList } from './er-arrange/er-arranger-list.js';
 export const dataverseTableNodeKind = {
 	type: 'dataverse-table',
 	label: 'Dataverse table',
-	contract: { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseAnchorListGet, sizeDefault: { width: 410, height: 320 } },
+	contract: { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseAnchorListGet, anchorSideDrawn: 'header', sizeDefault: { width: 410, height: 320 } },
 	schema: dataverseTableSchema,
 	Card: DataverseCard,
 	create: {
@@ -31,7 +31,7 @@ export const dataverseTableNodeKind = {
 export const dataverseChoiceNodeKind = {
 	type: 'dataverse-choice',
 	label: 'Dataverse choice',
-	contract: { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseChoiceAnchorListGet, sizeDefault: { width: 410, height: 320 } },
+	contract: { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseChoiceAnchorListGet, anchorSideDrawn: 'header', sizeDefault: { width: 410, height: 320 } },
 	schema: dataverseChoiceSchema,
 	Card: DataverseCard,
 	create: {
