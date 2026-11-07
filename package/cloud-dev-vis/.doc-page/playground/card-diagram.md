@@ -295,6 +295,76 @@ connections:
   - { id: post-editor, source: { nodeId: post, handleId: editor }, target: { nodeId: user, handleId: pk } }
 ```
 
+## Cutting a table down
+
+`rowDisplay` picks the rows of a table card, in any order, with a row break for what is left out. Open it for editing and use **Display** on the card's tab, or click a row and use its toolbar.
+
+<!--renderComp=DiagramER,title=A table cut down-->
+```yaml
+version: 1
+viewport:
+  size: { height: 300 }
+nodes:
+  - id: account
+    renderer: { type: dataverse-table }
+    position: { x: 0, y: 0 }
+    data:
+      name: Account
+      nameLogical: account
+      columns:
+        - { id: accountid, name: Account, nameLogical: accountid, type: Unique identifier, key: PK }
+        - { id: name, name: Name, nameLogical: name, type: Text }
+        - { id: phone, name: Phone, nameLogical: telephone1, type: Text }
+        - { id: status, name: Status, nameLogical: statuscode, type: Choice, tone: green }
+        - { id: modifiedon, name: Modified on, nameLogical: modifiedon, type: Date and Time }
+      rowDisplay: [accountid, { break: 2 columns }, status, '...']
+    handles: []
+connections: []
+```
+
+## One table, several views
+
+A card can declare views, each of a view mode, with a menu at the right of its title line to switch between them. Lines stay attached in every view. In edit mode, open the card's tab: **Views** adds, changes and removes them.
+
+<!--renderComp=DiagramER,title=A table with views-->
+```yaml
+version: 1
+viewport:
+  size: { height: 340 }
+nodes:
+  - id: account
+    renderer: { type: dataverse-table }
+    position: { x: 0, y: 0 }
+    size: { width: 440, height: auto }
+    data:
+      name: Account
+      nameLogical: account
+      columns:
+        - { id: accountid, name: Account, nameLogical: accountid, type: Unique identifier, key: PK }
+        - { id: name, name: Name, nameLogical: name, type: Text }
+        - { id: phone, name: Phone, nameLogical: telephone1, type: Text }
+        - { id: status, name: Status, nameLogical: statuscode, type: Choice }
+      rows:
+        - { id: r1, accountid: A-001, name: Contoso, phone: 03-1111, status: Active }
+        - { id: r2, accountid: A-002, name: Fabrikam, phone: 03-2222, status: Closed }
+      viewList:
+        - { id: schema, label: Schema, mode: plain }
+        - { id: short, label: Schema (short), mode: plain, rowDisplay: [accountid, { break: 2 columns }, status] }
+        - { id: one, label: One record, mode: column, valueRowId: r1 }
+        - { id: records, label: Records, mode: row, fieldDisplay: [accountid, name, status] }
+      viewDefault: short
+    handles:
+      - { id: status, direction: out, anchor: { target: column/status, side: right } }
+  - id: note
+    renderer: { type: card-note }
+    position: { x: 600, y: 60 }
+    size: { width: 180, height: auto }
+    data: { title: Stays attached, tone: teal }
+    handles: [{ id: in, direction: in, anchor: { side: left } }]
+connections:
+  - { id: status-note, source: { nodeId: account, handleId: status }, target: { nodeId: note, handleId: in } }
+```
+
 ## Add your own
 
 Everything above is ordinary content: copy a block, or add one from the insert menu in edit mode.

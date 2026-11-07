@@ -343,3 +343,7 @@ button.doc-switch-edge-label:hover { background: #6d28d9; color: #fff; }
 }
 .doc-switch-stack-item-tag { color: var(--color-fd-muted-foreground); font-size: 0.66rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .doc-switch-stack-item-body { position: relative; overflow: hidden; }
+
+/* an item of a menu with more than words in it (labelItemList) */
+.doc-switch-path-menu-label { display: inline-flex; align-items: center; gap: 0.4rem; }
+.doc-switch-path-menu-label svg { flex: none; color: var(--color-fd-muted-foreground); }

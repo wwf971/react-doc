@@ -530,12 +530,37 @@
 .doc-card.is-compact .doc-er-table-column > span { overflow: hidden; padding: 0.12rem 0.45rem; white-space: nowrap; text-overflow: ellipsis; }
 .doc-card.is-compact .doc-er-table-column > span + span { border-left: 0; }
 .doc-card.is-compact .doc-er-table-column > span:not(:first-child) { color: #4f46e5; text-align: right; }
+/* rows left out (rowDisplay): the mark of a broken axis. it stands in the middle of the card
+   whether or not there is text, the text beside it, and it reaches a little over the rows
+   above and below, as a mark across an axis does */
+.doc-card-row-break { --doc-card-row-break-mark-width: 1.875rem; position: relative; height: 1.5rem; color: var(--color-fd-muted-foreground); }
+.doc-card-row-break:not(:last-child) { border-bottom: 1px solid color-mix(in srgb, var(--color-fd-border) 72%, transparent); }
+.doc-card-row-break-mark { position: absolute; top: 50%; left: 50%; z-index: 1; width: var(--doc-card-row-break-mark-width); height: 2rem; overflow: visible; transform: translate(-50%, -50%); fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; pointer-events: none; }
+.doc-card-row-break-text { position: absolute; top: 50%; left: calc(50% + var(--doc-card-row-break-mark-width) / 2 + 0.4rem); max-width: calc(50% - var(--doc-card-row-break-mark-width) / 2 - 0.8rem); overflow: hidden; transform: translateY(-50%); font-size: 0.68rem; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+/* the last row has nothing below to reach over: the card makes room, and the mark stays inside it */
+.doc-card-row-break:last-child { height: 2rem; }
+.doc-card-row-break:last-child > .doc-card-row-break-mark { top: calc(50% - 0.25rem); }
+.doc-card-row-break:last-child > .doc-card-row-break-text { top: calc(50% - 0.25rem); }
+.doc-card.is-compact .doc-card-row-break:last-child { height: 1.3rem; }
+.doc-card.is-compact .doc-card-row-break:not(:last-child) { height: 1rem; }
+.doc-card.is-compact .doc-card-row-break { --doc-card-row-break-mark-width: 1.25rem; }
+.doc-card.is-compact .doc-card-row-break-mark { height: 1.3rem; }
+.doc-card.is-compact .doc-card-row-break-text { font-size: 0.6rem; }
+.doc-card.is-editing .doc-card-row-break { cursor: pointer; }
+.doc-card-row-break.is-selected { background: color-mix(in srgb, var(--color-fd-primary, #2563eb) 12%, transparent); outline: 1px solid color-mix(in srgb, var(--color-fd-primary, #2563eb) 45%, transparent); outline-offset: -1px; }
+.doc-card-row.is-out-of-display { opacity: 0.45; }
+/* the views of a card, at the right of its title line */
+.doc-card-view-switcher { flex: none; display: inline-flex; align-items: center; gap: 0.2rem; margin-inline-start: 0.5rem; padding: 0.05rem 0.35rem; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); border-radius: 0.3rem; background: transparent; color: inherit; font-size: 0.68rem; font-weight: 500; line-height: 1.3; white-space: nowrap; cursor: pointer; }
+.doc-card-view-switcher:hover:not(.is-single) { background: color-mix(in srgb, currentColor 10%, transparent); }
+.doc-card-view-switcher.is-single { border-color: transparent; opacity: 0.7; cursor: default; }
+
 .doc-card-row-ellipsis { display: block; text-align: center; color: var(--color-fd-muted-foreground); }
 .doc-card.is-compact .doc-card-row-ellipsis { padding-block: 0.05rem; line-height: 1; }
 .doc-card-row[data-tone='green'] { background: color-mix(in srgb, #15803d 10%, transparent); }
 .doc-card-row[data-tone='amber'] { background: color-mix(in srgb, #b45309 12%, transparent); }
 .doc-card-row[data-tone='red'] { background: color-mix(in srgb, #b91c1c 10%, transparent); }
 .doc-card-row[data-tone='blue'] { background: color-mix(in srgb, #2563eb 10%, transparent); }
+.doc-card-row[data-tone='violet'] { background: color-mix(in srgb, #7c3aed 10%, transparent); }
 
 /* rows taken together: a bracket in a gutter on the right of the card */
 .doc-card.has-row-group { position: relative; padding-right: 0; }

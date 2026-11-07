@@ -7,6 +7,10 @@
 //
 //   property   { id, label, kind: 'text' | 'enum' | 'bool', values?, isMultiline?, isSearchable? }
 //   field      a property shown as a column of the card
+//   viewModeList  the view modes a card of this kind can have (TableCardData.js); plain alone
+//              when absent
+//   displayPropertyList   how the card looks, in the Display section of the edit card: a
+//              property left at its default is taken out of the data
 //
 // the words of a card: labelNode (the card), labelRow / labelRowPlural (one
 // row of it: a Column of a Dataverse table, an Option, a Property, a Row),
@@ -41,6 +45,11 @@ export function resourceCardSchemaBuild(type, fieldsResource, labelNode) {
 	};
 }
 
+const TONE = { id: 'tone', label: 'Title color', kind: 'enum', values: ['', 'blue', 'teal', 'green', 'amber', 'red', 'violet', 'slate'], valueLabels: { '': 'Default', blue: 'Blue', teal: 'Teal', green: 'Green', amber: 'Amber', red: 'Red', violet: 'Violet', slate: 'Slate' } };
+
+// what a card with fixed fields offers of the same
+export const cardDisplayPropertyListFixed = [{ id: 'isFieldHeaderHidden', label: 'Hide the field names', kind: 'bool' }, TONE];
+
 export const tableCardSchema = {
 	type: 'table',
 	kind: 'table',
@@ -57,6 +66,13 @@ export const tableCardSchema = {
 	headFieldList: [],
 	nodePropertyList: [{ id: 'name', label: 'Name', kind: 'text' }, { id: 'nameLogical', label: 'Subtitle', kind: 'text' }, { id: 'description', label: 'Description', kind: 'text', isMultiline: true }, { id: 'isHeaderHandleEnabled', label: 'Title handles', kind: 'bool' }],
 	rowPropertyList: [],
+	viewModeList: ['plain', 'column', 'row'],
+	displayPropertyList: [
+		{ id: 'isCompact', label: 'Compact', kind: 'bool' },
+		{ id: 'isFieldHeaderHidden', label: 'Hide the column names', kind: 'bool' },
+		TONE,
+		{ id: 'columnTemplate', label: 'Column widths (css grid)', kind: 'text' },
+	],
 	rowNew: fields => Object.fromEntries(fields.map((field, index) => [field.id, index === 0 ? 'Row' : ''])),
 	isHeaderHandleAllowed: data => data.isHeaderHandleEnabled === true,
 };

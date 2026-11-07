@@ -1,3 +1,5 @@
+import { cardViewNormalize, cardViewSourceOf } from './TableCardData.js';
+
 export function resourceNodeNormalize(data, fields) {
 	const result = { ...data };
 	for (const field of fields) {
@@ -17,6 +19,7 @@ export function resourceNodeNormalize(data, fields) {
 		}
 		return { ...property, name: property.name ?? property.id, value: property.value ?? '', description: property.description ?? '' };
 	});
+	Object.assign(result, cardViewNormalize(result, cardViewSourceOf({ properties: result.properties }, 'properties')));
 	return result;
 }
 

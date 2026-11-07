@@ -16,11 +16,11 @@ const itemList = [
 	{ key: 'ex.pw.c.st', kind: 'schema-choice', path: '/example/schema/pw/choice/st', data: { db: 'pw', logical: 'st', name: 'Status', optionList: [{ value: 1, label: 'On' }, { value: 2, label: 'Off' }] } },
 	{ key: 'ex.cn.c.state', kind: 'schema-choice', path: '/example/schema/connect/choice/state', data: { db: 'connect', logical: 'state', name: 'State', optionList: [{ value: 10, label: 'On' }, { value: 20, label: 'Off' }] } },
 	{ key: 'ex.map.choice.st--state', kind: 'mapping-choice', path: '/example/mapping/choice/st--state', data: { source: 'ex.pw.c.st', target: 'ex.cn.c.state', label: 'Status', optionList: [{ from: 1, to: 10 }, { from: 2, to: null }] } },
-	{ key: 'ex.map.table.a--x', kind: 'mapping-table', path: '/example/mapping/table/a--x', data: { source: 'ex.pw.t.a', target: 'ex.cn.t.x', rowKeyList: ['ex.map.row.a--x.xid', 'ex.map.row.a--x.state', 'ex.map.row.a--x.memo', 'ex.map.row.a--x.origin'] } },
-	{ key: 'ex.map.row.a--x.xid', kind: 'mapping-row', path: '/example/mapping/row/a--x/xid', data: { id: 'xid', name: 'X', table: 'ex.map.table.a--x', source: 'aid', target: 'xid', kind: 'copy', label: 'copy', stepList: [] } },
-	{ key: 'ex.map.row.a--x.state', kind: 'mapping-row', path: '/example/mapping/row/a--x/state', data: { id: 'state', name: 'State', table: 'ex.map.table.a--x', source: 'st', target: 'state', kind: 'choice', label: 'choice', stepList: [{ op: 'text', name: 'Check', description: 'x' }, { op: 'choice', mapping: 'ex.map.choice.st--state' }] } },
-	{ key: 'ex.map.row.a--x.memo', kind: 'mapping-row', path: '/example/mapping/row/a--x/memo', data: { id: 'memo', name: 'Memo', table: 'ex.map.table.a--x', source: 'memo', target: null, kind: 'abandon', label: 'drop', stepList: [{ op: 'abandon' }] } },
-	{ key: 'ex.map.row.a--x.origin', kind: 'mapping-row', path: '/example/mapping/row/a--x/origin', data: { id: 'origin', name: 'Origin', table: 'ex.map.table.a--x', source: null, target: 'origin', kind: 'default', label: 'PW', stepList: [] } },
+	{ key: 'ex.map.table.a--x', kind: 'mapping-table', path: '/example/mapping/table/a--x', data: { source: 'ex.pw.t.a', target: 'ex.cn.t.x', columnKeyList: ['ex.map.column.a--x.xid', 'ex.map.column.a--x.state', 'ex.map.column.a--x.memo', 'ex.map.column.a--x.origin'] } },
+	{ key: 'ex.map.column.a--x.xid', kind: 'mapping-column', path: '/example/mapping/column/a--x/xid', data: { id: 'xid', name: 'X', table: 'ex.map.table.a--x', source: 'aid', target: 'xid', kind: 'copy', label: 'copy', stepList: [] } },
+	{ key: 'ex.map.column.a--x.state', kind: 'mapping-column', path: '/example/mapping/column/a--x/state', data: { id: 'state', name: 'State', table: 'ex.map.table.a--x', source: 'st', target: 'state', kind: 'choice', label: 'choice', stepList: [{ op: 'text', name: 'Check', description: 'x' }, { op: 'choice', mapping: 'ex.map.choice.st--state' }] } },
+	{ key: 'ex.map.column.a--x.memo', kind: 'mapping-column', path: '/example/mapping/column/a--x/memo', data: { id: 'memo', name: 'Memo', table: 'ex.map.table.a--x', source: 'memo', target: null, kind: 'abandon', label: 'drop', stepList: [{ op: 'abandon' }] } },
+	{ key: 'ex.map.column.a--x.origin', kind: 'mapping-column', path: '/example/mapping/column/a--x/origin', data: { id: 'origin', name: 'Origin', table: 'ex.map.table.a--x', source: null, target: 'origin', kind: 'default', label: 'PW', stepList: [] } },
 	{ key: 'ex.plan', kind: 'plan', path: '/example/plan', data: { batchList: [{ table: 'ex.pw.t.a', file: 'a-1.csv', range: '[0, 1)', rowCount: 1 }] } },
 	{ key: 'ex.report.run', kind: 'report-run', path: '/example/report/run', data: { stat: { total: 1, success: 1, dlq: 0 }, batchList: [{ file: 'a-1.csv', rowCount: 1, success: 1, dlq: 0 }], dlqList: [] } },
 	{ key: 'ex.report.verify', kind: 'report-verify', path: '/example/report/verify', data: { stat: { total: 1, matched: 1, exception: 0 }, checkList: [], exceptionList: [] } },
@@ -55,7 +55,7 @@ test('run and verify flows place locations and outputs in base-layer color block
 test('a path names its category and its item', () => {
 	assert.equal(migrationCategoryOf('/real/schema/pw/table/a'), 'real');
 	assert.equal(migrationPathBuild('real', 'schema-table', { db: 'pw', logical: 'a' }), '/real/schema/pw/table/a');
-	assert.equal(migrationPathBuild('example', 'mapping-row', { source: 'a', target: 'x', id: 'c' }), '/example/mapping/row/a--x/c');
+	assert.equal(migrationPathBuild('example', 'mapping-column', { source: 'a', target: 'x', id: 'c' }), '/example/mapping/column/a--x/c');
 });
 
 test('what does not fit together is said', () => {
@@ -99,7 +99,7 @@ test('ER: lookups end on the primary key, option sets on their card, mappings ca
 	assert.ok(connections.some((item) => item.id === 'choice:pw:a:st' && item.target.nodeId === 'choice:pw:st'));
 	const mapping = provider.viewGet('/overview/mapping').diagram.connections.find((item) => item.id === 'map:a--x');
 	assert.equal(mapping.link, '/overview/mapping/a--x');
-	const row = provider.viewGet('/overview/mapping/a--x').diagram.connections.find((item) => item.id === 'row:ex.map.row.a--x.state');
+	const row = provider.viewGet('/overview/mapping/a--x').diagram.connections.find((item) => item.id === 'column:ex.map.column.a--x.state');
 	assert.equal(row.link, '/overview/mapping/a--x/state');
 	assert.equal(row.label.text, 'choice');
 });
@@ -135,35 +135,35 @@ test('edit: an option set and its mapping', () => {
 	assert.throws(() => adapterOf('schema-choice').writesBuild(rawNoValue, choice, model), /needs a value/);
 });
 
-test('edit: a table mapping unchanged writes nothing; lines become row mappings', () => {
+test('edit: a table mapping unchanged writes nothing; lines become column mappings', () => {
 	const item = model.mappingTableByKey.get('ex.map.table.a--x');
 	const adapter = adapterOf('mapping-table');
 	const raw = adapter.sourceBuild(item, model);
 	assert.deepEqual(adapter.writesBuild(raw, item, model), { writeList: [], createList: [], removeList: [] });
 	const doc = yamlParse(raw);
 	// a line removed, one drawn to another target column, one abandoned
-	const without = { ...doc, connections: doc.connections.filter((line) => line.id !== 'row:ex.map.row.a--x.xid') };
+	const without = { ...doc, connections: doc.connections.filter((line) => line.id !== 'column:ex.map.column.a--x.xid') };
 	const removed = adapter.writesBuild(JSON.stringify(without), item, model);
-	assert.deepEqual(removed.removeList, ['ex.map.row.a--x.xid']);
-	assert.ok(!removed.writeList.find((write) => write.ref === item.key).data.rowKeyList.includes('ex.map.row.a--x.xid'));
+	assert.deepEqual(removed.removeList, ['ex.map.column.a--x.xid']);
+	assert.ok(!removed.writeList.find((write) => write.ref === item.key).data.columnKeyList.includes('ex.map.column.a--x.xid'));
 	const drawn = { ...doc, connections: [...without.connections, { id: 'connection-1', source: { nodeId: 'source', handleId: 'col-bid' }, target: { nodeId: 'target', handleId: 'col-xid' } }] };
 	const redrawn = adapter.writesBuild(JSON.stringify(drawn), item, model);
-	assert.deepEqual(redrawn.createList, [], 'a line drawn where one was removed is that row mapping');
-	assert.equal(redrawn.writeList.find((write) => write.ref === 'ex.map.row.a--x.xid').data.source, 'bid');
+	assert.deepEqual(redrawn.createList, [], 'a line drawn where one was removed is that column mapping');
+	assert.equal(redrawn.writeList.find((write) => write.ref === 'ex.map.column.a--x.xid').data.source, 'bid');
 	const abandoned = { ...doc, connections: [...doc.connections, { id: 'connection-2', source: { nodeId: 'source', handleId: 'col-bid' }, target: { nodeId: 'operator-abandon', handleId: 'left' } }] };
 	const created = adapter.writesBuild(JSON.stringify(abandoned), item, model);
-	assert.equal(created.createList[0].key, 'ex.map.row.a--x.bid');
-	assert.equal(created.createList[0].pathList[0], '/example/mapping/row/a--x/bid');
+	assert.equal(created.createList[0].key, 'ex.map.column.a--x.bid');
+	assert.equal(created.createList[0].pathList[0], '/example/mapping/column/a--x/bid');
 	assert.equal(created.createList[0].data.target, null);
 	assert.equal(created.createList[0].data.kind, 'abandon');
-	assert.ok(created.writeList.find((write) => write.ref === item.key).data.rowKeyList.includes('ex.map.row.a--x.bid'));
+	assert.ok(created.writeList.find((write) => write.ref === item.key).data.columnKeyList.includes('ex.map.column.a--x.bid'));
 	const wrong = { ...doc, connections: [{ id: 'connection-3', source: { nodeId: 'operator-abandon', handleId: 'left' }, target: { nodeId: 'source', handleId: 'col-bid' } }] };
 	assert.throws(() => adapter.writesBuild(JSON.stringify(wrong), item, model), /must join/);
 });
 
-test('edit: a row mapping is its chain of operators', () => {
-	const item = model.mappingRowByKey.get('ex.map.row.a--x.state');
-	const adapter = adapterOf('mapping-row');
+test('edit: a column mapping is its chain of operators', () => {
+	const item = model.mappingColumnByKey.get('ex.map.column.a--x.state');
+	const adapter = adapterOf('mapping-column');
 	const raw = adapter.sourceBuild(item, model);
 	const data = adapter.writesBuild(raw, item, model).writeList[0].data;
 	assert.deepEqual([data.source, data.target], ['st', 'state']);
@@ -172,7 +172,7 @@ test('edit: a row mapping is its chain of operators', () => {
 	const doc = yamlParse(raw);
 	doc.connections.push({ id: 'extra', source: { nodeId: 'step-0', handleId: 'right' }, target: { nodeId: 'target', handleId: 'col-origin' } });
 	assert.throws(() => adapter.writesBuild(JSON.stringify(doc), item, model), /more than one way out/);
-	const memo = model.mappingRowByKey.get('ex.map.row.a--x.memo');
+	const memo = model.mappingColumnByKey.get('ex.map.column.a--x.memo');
 	const memoData = adapter.writesBuild(adapter.sourceBuild(memo, model), memo, model).writeList[0].data;
 	assert.equal(memoData.target, null);
 	assert.equal(memoData.kind, 'abandon');
@@ -306,7 +306,7 @@ test('the order is drawn from the lookups of the target, wrapping long rows', ()
 
 test('the flows end in the tables of the target, in the tone of the tables they come from', () => {
 	const tableOf = (key, name, db) => ({ key, kind: 'schema-table', path: `/example/schema/${db}/table/${name}`, data: { db, logical: name, name: name.toUpperCase(), columnList: [] } });
-	const mappingOf = (source, target) => ({ key: `map.${source}`, kind: 'mapping-table', path: `/example/mapping/table/${source}`, data: { source, target, rowKeyList: [] } });
+	const mappingOf = (source, target) => ({ key: `map.${source}`, kind: 'mapping-table', path: `/example/mapping/table/${source}`, data: { source, target, columnKeyList: [] } });
 	const modelTwo = migrationModelBuild('example', [
 		tableOf('s.a', 'a', 'pw'), tableOf('s.b', 'b', 'pw'), tableOf('t.a', 'ta', 'connect'), tableOf('t.b', 'tb', 'connect'),
 		mappingOf('s.a', 't.a'), mappingOf('s.b', 't.b'),
@@ -342,7 +342,7 @@ test('a plan whose tables have no mapping yet ends in the database itself', () =
 
 test('the patterns of finding a row: a title, then lanes of data titled with the tables they apply to', () => {
 	const tableOf = (key, db, logical, columnIdList) => ({ key, kind: 'schema-table', path: `/example/schema/${db}/table/${logical}`, data: { db, logical, name: logical.toUpperCase(), columnList: columnIdList.map((id) => ({ id, name: id, logical: id, type: 'Text' })) } });
-	const mappingOf = (source, target, match) => ({ key: `map.${source}`, kind: 'mapping-table', path: `/example/mapping/table/${source}`, data: { source, target, rowKeyList: [], ...(match ? { match } : {}) } });
+	const mappingOf = (source, target, match) => ({ key: `map.${source}`, kind: 'mapping-table', path: `/example/mapping/table/${source}`, data: { source, target, columnKeyList: [], ...(match ? { match } : {}) } });
 	const modelMatch = migrationModelBuild('example', [
 		tableOf('s.a', 'pw', 'a', ['id']), tableOf('t.a', 'connect', 'ta', ['id']),
 		tableOf('s.u', 'pw', 'u', ['id', 'domain']), tableOf('t.u', 'connect', 'tu', ['id', 'domain']),
@@ -426,8 +426,8 @@ const itemPostListBuild = () => {
 		tableOf('t.m', 'connect', 'tm', [column('mid', { key: 'PK' }), column('code')], { isMaster: true }),
 		tableOf('s.a', 'pw', 'a', [column('aid', { key: 'PK' }), column('m', { lookup: 's.m', key: 'FK' })]),
 		tableOf('t.a', 'connect', 'ta', [column('aid', { key: 'PK' }), column('m', { lookup: 't.m', key: 'FK' }), column('createdon')]),
-		{ key: 'map.m', kind: 'mapping-table', path: '/example/mapping/table/m--tm', data: { source: 's.m', target: 't.m', isTableLevel: true, match: 'key', label: 'As a table', rowKeyList: [] } },
-		{ key: 'map.a', kind: 'mapping-table', path: '/example/mapping/table/a--ta', data: { source: 's.a', target: 't.a', rowKeyList: [] } },
+		{ key: 'map.m', kind: 'mapping-table', path: '/example/mapping/table/m--tm', data: { source: 's.m', target: 't.m', isTableLevel: true, match: 'key', label: 'As a table', columnKeyList: [] } },
+		{ key: 'map.a', kind: 'mapping-table', path: '/example/mapping/table/a--ta', data: { source: 's.a', target: 't.a', columnKeyList: [] } },
 		{ key: 'plan', kind: 'plan', path: '/example/plan', data: { batchList: [{ table: 's.a', file: 'a-001.csv', rowCount: 100 }, { table: 's.a', isOmitted: true, count: 298, rowCount: 29800 }, { table: 's.a', file: 'a-300.csv', rowCount: 50 }] } },
 		{ key: 'run', kind: 'report-run', path: '/example/report/run', data: { stat: { success: 29950, dlq: 0 }, batchList: [{ file: 'a-001.csv', rowCount: 100, success: 100, dlq: 0 }, { isOmitted: true, count: 298, rowCount: 29800, success: 29800, dlq: 0 }, { file: 'a-300.csv', rowCount: 50, success: 50, dlq: 0 }] } },
 		{ key: 'verify', kind: 'report-verify', path: '/example/report/verify', data: { stat: {}, checkList: [], exceptionList: [] } },
@@ -549,4 +549,72 @@ test('the lines fanning out of the tool each have a level of their own, the fart
 	const levelOf = (id) => lineList.find((line) => line.id === id).route.anchorList[0].y;
 	assert.ok(levelOf('make:plan') < levelOf('make:run'));
 	assert.ok(levelOf('make:post') < levelOf('make:verify'));
+});
+
+// an option set used by one column, and global ones, on tables of a mapping
+function modelOptionSetBuild() {
+	const tableOf = (db, logical, columnList) => ({ key: `t.${db}.${logical}`, kind: 'schema-table', path: `/example/schema/${db}/table/${logical}`, data: { db, logical, name: logical, columnList } });
+	const choiceOf = (db, logical, isGlobal) => ({ key: `c.${db}.${logical}`, kind: 'schema-choice', path: `/example/schema/${db}/choice/${logical}`, data: { db, logical, name: logical, ...(isGlobal ? {} : { isGlobal: false }), optionList: [{ value: 1, label: 'One' }] } });
+	const pk = { id: 'id', name: 'Id', type: 'Unique identifier', key: 'PK' };
+	const filler = Array.from({ length: 5 }, (_, index) => ({ id: `f${index}`, name: `F${index}`, type: 'Text' }));
+	return migrationModelBuild('example', [
+		{ key: 'sys', kind: 'system', path: '/example/system', data: { source: { id: 'pw', name: 'PW' }, target: { id: 'connect', name: 'Connect' }, labels: { columnUnit: 'cols' } } },
+		tableOf('pw', 'a', [pk, ...filler, { id: 'shared', name: 'Shared', type: 'Choice', choice: 'c.pw.shared' }, { id: 'own', name: 'Own', type: 'Choice', choice: 'c.pw.own' }]),
+		tableOf('pw', 'b', [pk, { id: 'shared', name: 'Shared', type: 'Choice', choice: 'c.pw.shared' }, ...filler]),
+		tableOf('connect', 'x', [pk, { id: 'ownx', name: 'Own', type: 'Choice', choice: 'c.connect.ownx' }]),
+		choiceOf('pw', 'shared', true), choiceOf('pw', 'own', false), choiceOf('connect', 'ownx', false),
+		{ key: 'm.t', kind: 'mapping-table', path: '/example/mapping/table/a--x', data: { source: 't.pw.a', target: 't.connect.x', columnKeyList: ['m.c'] } },
+		{ key: 'm.c', kind: 'mapping-column', path: '/example/mapping/column/a--x/ownx', data: { id: 'ownx', name: 'Own', table: 'm.t', source: 'own', target: 'ownx', stepList: [{ op: 'choice', mapping: 'm.o' }] } },
+		{ key: 'm.o', kind: 'mapping-choice', path: '/example/mapping/choice/own--ownx', data: { source: 'c.pw.own', target: 'c.connect.ownx', label: 'Own', optionList: [{ from: 1, to: 1 }] } },
+	]);
+}
+
+test('an option set has a view: the tables using it cut down to the columns pointing to it', () => {
+	const provider = migrationProviderBuild(modelOptionSetBuild());
+	const { diagram } = provider.viewGet('/overview/pw/shared');
+	assert.equal(provider.labelGet('/overview/pw/shared'), 'shared');
+	assert.doesNotThrow(() => diagramNormalize({ version: 1, ...diagram }, registry));
+	assert.deepEqual(diagram.nodes.map((node) => node.id), ['table:pw:a', 'table:pw:b', 'choice:pw:shared']);
+	const tableA = diagram.nodes[0];
+	assert.deepEqual(tableA.data.rowDisplay, ['id', { break: '5 cols' }, 'shared', { break: '1 cols' }]);
+	assert.equal(tableA.data.columns.length, 8, 'the rows stay in the data');
+	assert.deepEqual(diagram.nodes[1].data.rowDisplay, ['id', 'shared', { break: '5 cols' }]);
+	assert.deepEqual(diagram.connections.map((line) => line.target.nodeId), ['choice:pw:shared', 'choice:pw:shared']);
+	for (const line of diagram.connections) assert.ok(line.route.anchorList.length, 'an arranger gave it a lane');
+	assert.equal(provider.viewGet('/overview/pw').diagram.nodes.find((node) => node.id === 'choice:pw:shared').link, '/overview/pw/shared');
+	assert.ok(provider.childListGet('/overview/pw').some((item) => item.path === '/overview/pw/shared'));
+});
+
+test('an option set of one column is drawn with its table, not in the ER diagram', () => {
+	const provider = migrationProviderBuild(modelOptionSetBuild());
+	const nodeIdOf = (path) => provider.viewGet(path).diagram.nodes.map((node) => node.id);
+	assert.ok(!nodeIdOf('/overview/pw').includes('choice:pw:own'));
+	assert.ok(nodeIdOf('/overview/pw').includes('choice:pw:shared'));
+	assert.ok(nodeIdOf('/overview/pw/a').includes('choice:pw:own'));
+	assert.equal(provider.viewGet('/overview/pw/a').diagram.nodes.find((node) => node.id === 'choice:pw:own').data.isGlobal, false);
+	assert.equal(provider.viewGet('/overview/pw/own').diagram.nodes.length, 2, 'it has a view too');
+	for (const path of ['/overview/mapping/a--x', '/overview/mapping/a--x/ownx']) {
+		const { diagram } = provider.viewGet(path);
+		assert.doesNotThrow(() => diagramNormalize({ version: 1, ...diagram }, registry), path);
+		for (const id of ['choice:pw:own', 'choice:connect:ownx']) assert.ok(diagram.nodes.some((node) => node.id === id), `${path} ${id}`);
+		assert.ok(diagram.connections.some((line) => line.source.nodeId === 'table:pw:a' && line.target.nodeId === 'choice:pw:own'), path);
+	}
+	assert.equal(provider.viewGet('/overview/mapping/a--x').diagram.connections.find((line) => line.id === 'map-choice:m.o').link, '/overview/choice/own--ownx');
+	assert.ok(!provider.viewGet('/overview/mapping/a--x/ownx').diagram.connections.some((line) => line.id === 'map-choice:m.o'));
+});
+
+test('the menu shows an icon beside a database and an option set', () => {
+	const provider = migrationProviderBuild(modelOptionSetBuild());
+	const itemOf = (parent, path) => provider.childListGet(parent).find((item) => item.path === path);
+	assert.deepEqual(itemOf('/overview', '/overview/pw').labelItemList, [{ type: 'icon', icon: 'database' }, { type: 'text', text: 'PW' }]);
+	assert.equal(itemOf('/overview/pw', '/overview/pw/shared').labelItemList[0].icon, 'list-checks');
+	assert.equal(itemOf('/overview/pw', '/overview/pw/a').labelItemList, undefined);
+});
+
+test('what does not fit about an option set is said', () => {
+	const base = modelOptionSetBuild();
+	const list = (extra) => migrationModelBuild('example', [{ key: 'c', kind: 'schema-choice', path: '/x', data: { db: 'pw', logical: 'a', optionList: [], ...extra } }, { key: 't', kind: 'schema-table', path: '/y', data: { db: 'pw', logical: 'a', columnList: [{ id: 'one', choice: 'c' }, { id: 'two', choice: 'c' }] } }]).problemList;
+	assert.ok(list({}).some((text) => text.includes('same logical name')));
+	assert.ok(list({ isGlobal: false }).some((text) => text.includes('2 columns use it')));
+	assert.equal(base.problemList.length, 0);
 });

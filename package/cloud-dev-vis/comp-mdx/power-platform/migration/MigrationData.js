@@ -4,9 +4,9 @@
 //
 //   /{category}/system                                the two databases, the tool, the words of the views
 //   /{category}/schema/{db}/table/{logical}           one table
-//   /{category}/schema/{db}/choice/{logical}          one global option set
-//   /{category}/mapping/table/{source}--{target}      a pair of tables: the keys of its row mappings
-//   /{category}/mapping/row/{source}--{target}/{id}   one column: how it is carried over, or abandoned
+//   /{category}/schema/{db}/choice/{logical}          one option set; isGlobal: false when only one column uses it
+//   /{category}/mapping/table/{source}--{target}      a pair of tables: the keys of its column mappings
+//   /{category}/mapping/column/{source}--{target}/{id}  one column: how it is carried over, or abandoned
 //   /{category}/mapping/choice/{source}--{target}     a pair of option sets: value to value
 //   /{category}/plan                                  a note on the order of loading, batches
 //   /{category}/plan-post                             what is done after the migration
@@ -19,7 +19,7 @@
 // kinds; nothing reads a category by name except the block choosing it. An item names
 // another by its key, which never changes, not by its path.
 
-export const MIGRATION_KIND_LIST = ['system', 'schema-table', 'schema-choice', 'mapping-table', 'mapping-row', 'mapping-choice', 'plan', 'plan-post', 'report-run', 'report-verify', 'layout'];
+export const MIGRATION_KIND_LIST = ['system', 'schema-table', 'schema-choice', 'mapping-table', 'mapping-column', 'mapping-choice', 'plan', 'plan-post', 'report-run', 'report-verify', 'layout'];
 
 export function migrationSegmentBuild(text) {
 	return String(text ?? '').trim().replace(/[\s/]+/g, '-');
@@ -35,7 +35,7 @@ export function migrationPathBuild(category, kind, part = {}) {
 	if (kind === 'schema-table') return `${root}/schema/${part.db}/table/${migrationSegmentBuild(part.logical)}`;
 	if (kind === 'schema-choice') return `${root}/schema/${part.db}/choice/${migrationSegmentBuild(part.logical)}`;
 	if (kind === 'mapping-table') return `${root}/mapping/table/${migrationPairBuild(part.source, part.target)}`;
-	if (kind === 'mapping-row') return `${root}/mapping/row/${migrationPairBuild(part.source, part.target)}/${migrationSegmentBuild(part.id)}`;
+	if (kind === 'mapping-column') return `${root}/mapping/column/${migrationPairBuild(part.source, part.target)}/${migrationSegmentBuild(part.id)}`;
 	if (kind === 'mapping-choice') return `${root}/mapping/choice/${migrationPairBuild(part.source, part.target)}`;
 	if (kind === 'plan') return `${root}/plan`;
 	if (kind === 'plan-post') return `${root}/plan-post`;
@@ -58,7 +58,7 @@ export function migrationModelBuild(category, itemList) {
 		tableByKey: new Map(),
 		choiceByKey: new Map(),
 		mappingTableByKey: new Map(),
-		mappingRowByKey: new Map(),
+		mappingColumnByKey: new Map(),
 		mappingChoiceByKey: new Map(),
 		plan: null,
 		planPost: null,
@@ -76,8 +76,8 @@ export function migrationModelBuild(category, itemList) {
 		if (item.kind === 'system') model.system = { ...model.system, ...data, key: item.key };
 		else if (item.kind === 'schema-table') model.tableByKey.set(item.key, { ...record, columnList: columnListRead(record) });
 		else if (item.kind === 'schema-choice') model.choiceByKey.set(item.key, { ...record, optionList: record.optionList ?? [] });
-		else if (item.kind === 'mapping-table') model.mappingTableByKey.set(item.key, { ...record, rowKeyList: record.rowKeyList ?? [] });
-		else if (item.kind === 'mapping-row') model.mappingRowByKey.set(item.key, { ...record, stepList: record.stepList ?? [] });
+		else if (item.kind === 'mapping-table') model.mappingTableByKey.set(item.key, { ...record, columnKeyList: record.columnKeyList ?? [] });
+		else if (item.kind === 'mapping-column') model.mappingColumnByKey.set(item.key, { ...record, stepList: record.stepList ?? [] });
 		else if (item.kind === 'mapping-choice') model.mappingChoiceByKey.set(item.key, { ...record, optionList: record.optionList ?? [] });
 		else if (item.kind === 'plan') model.plan = record;
 		else if (item.kind === 'plan-post') model.planPost = record;
@@ -102,11 +102,19 @@ function migrationModelCheck(model) {
 			if (column.choice && !model.choiceByKey.has(column.choice)) problem(`${table.logical}.${column.id}: the column names an option set not found: ${column.choice}.`);
 		}
 	}
+	for (const choice of model.choiceByKey.values()) {
+		// a view of a database names both by their logical names
+		if (migrationTableListOf(model, choice.db).some((table) => table.logical === choice.logical)) problem(`${choice.key}: a table of ${choice.db} has the same logical name, and its view is the one shown.`);
+		if (!migrationChoiceIsGlobal(choice)) {
+			const useCount = [...model.tableByKey.values()].reduce((sum, table) => sum + table.columnList.filter((column) => column.choice === choice.key).length, 0);
+			if (useCount > 1) problem(`${choice.key}: isGlobal is false, but ${useCount} columns use it.`);
+		}
+	}
 	for (const mapping of model.mappingTableByKey.values()) {
 		if (!model.tableByKey.has(mapping.source)) problem(`${mapping.key}: the source table is not found: ${mapping.source}.`);
 		if (!model.tableByKey.has(mapping.target)) problem(`${mapping.key}: the target table is not found: ${mapping.target}.`);
-		for (const rowKey of mapping.rowKeyList) {
-			if (!model.mappingRowByKey.has(rowKey)) problem(`${mapping.key}: the row mapping is not found: ${rowKey}.`);
+		for (const columnKey of mapping.columnKeyList) {
+			if (!model.mappingColumnByKey.has(columnKey)) problem(`${mapping.key}: the column mapping is not found: ${columnKey}.`);
 		}
 	}
 	for (const mapping of model.mappingChoiceByKey.values()) {
@@ -118,6 +126,9 @@ function migrationModelCheck(model) {
 export function migrationTableListOf(model, dbId) {
 	return [...model.tableByKey.values()].filter((table) => table.db === dbId);
 }
+
+// an option set of its own, shared by columns, unless the item says it belongs to one column
+export const migrationChoiceIsGlobal = (choice) => choice.isGlobal !== false;
 
 export function migrationChoiceListOf(model, dbId) {
 	return [...model.choiceByKey.values()].filter((choice) => choice.db === dbId);
@@ -135,8 +146,8 @@ export function migrationMasterReferListOf(model, dbId) {
 		.map((column) => ({ table, column, master: model.tableByKey.get(column.lookup) })));
 }
 
-export function migrationMappingRowListOf(model, mapping) {
-	return mapping.rowKeyList.map((key) => model.mappingRowByKey.get(key)).filter(Boolean);
+export function migrationMappingColumnListOf(model, mapping) {
+	return mapping.columnKeyList.map((key) => model.mappingColumnByKey.get(key)).filter(Boolean);
 }
 
 export function migrationMappingTableOfPair(model, pair) {
@@ -189,7 +200,7 @@ export function migrationRankBuild(model, dbId) {
 	return { rankByKey, groupList, lineList };
 }
 
-// a row mapping by the segment of its path
-export function migrationRowSegmentOf(row) {
-	return migrationSegmentBuild(row.id ?? String(row.path ?? '').split('/').pop());
+// a column mapping by the segment of its path
+export function migrationColumnSegmentOf(columnMapping) {
+	return migrationSegmentBuild(columnMapping.id ?? String(columnMapping.path ?? '').split('/').pop());
 }

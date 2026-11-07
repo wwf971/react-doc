@@ -148,6 +148,7 @@ export function switchDocNormalize(input) {
 			path,
 			label: String(view.label ?? switchPathLast(path)),
 			description: String(view.description ?? ''),
+			labelItemList: view.labelItemList,
 			box: view.box === undefined ? undefined : switchRectRead(view.box, `${path}.box`),
 		});
 	}
@@ -192,7 +193,7 @@ export function switchProviderFromDoc(spec, { onBoxSave } = {}) {
 			if (owner) return owner.tabs.memberList.find((member) => member.id === switchPathLast(path))?.label ?? switchPathLast(path);
 			return spec.viewByPath.get(path)?.label ?? switchPathLast(path);
 		},
-		childListGet: (path) => childPathList(path).map((child) => ({ path: child, label: provider.labelGet(child), description: descriptionOf(child) })),
+		childListGet: (path) => childPathList(path).map((child) => ({ path: child, label: provider.labelGet(child), description: descriptionOf(child), labelItemList: spec.viewByPath.get(child)?.labelItemList })),
 		viewGet: (path) => {
 			const owner = tabsOwnerOf(path);
 			const view = owner ?? spec.viewByPath.get(path);

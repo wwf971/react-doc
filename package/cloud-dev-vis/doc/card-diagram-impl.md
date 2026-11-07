@@ -328,6 +328,8 @@ table, isCompact           card-note                card-brief
 | `columnTemplate` | the widths of the columns, as css grid columns (`5rem 1fr 4rem`) |
 | `isFieldHeaderHidden` | no line of field names |
 | a row's `isEllipsis` | it stands for rows left out: one `⋮`, so a table of any length shows in a few lines |
+| `rowDisplay` | any table card: which rows are drawn, in which order, with row breaks for what is left out ([Table Card Views](comp-diagram-er.md#table-card-views)) |
+| `viewList`, `viewDefault`, `isViewSwitcherHidden` | the views of a table card, each of a mode with its parameters; a card declaring none has its plain view ([Table Card Views](comp-diagram-er.md#table-card-views)) |
 | a row's `tone` | a tint of the row |
 | `rowGroupList: [{ id, rowFrom, rowTo, tone }]` | rows taken together: a bracket beside them in a gutter on the right, and the anchor `group/<id>`, so a line leaves from the middle of the rows; what a table split into batches is drawn with |
 

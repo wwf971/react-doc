@@ -28,6 +28,7 @@ const placeParamList = [
 	{ name: 'offsetX', type: 'number', description: 'its offset from the point at "along" on the line between the ends' },
 	{ name: 'offsetY', type: 'number', description: 'its offset from the point at "along" on the line between the ends' },
 ];
+const viewParam = { name: 'viewId', type: 'string', description: 'the view it is about; the default one when absent' };
 const handleValueParam = { name: 'value', type: 'any', description: `right-angled: ${ROUTE_DIRECTION_LIST.join(', ')} or null for auto; curve: { x, y } or null for none` };
 
 // the diagram block an api works on, and how to read and change it
@@ -167,6 +168,48 @@ export function diagramApiListBuild(registry) {
 			if (!arranger) { store.message = `no arranger has the id "${arrangerId}"`; return false; }
 			const reportList = store.arrangeApply(arranger, { geometry: diagram.canvas?.geometryGet?.(), ...(connectionIdList ? { connectionIdList } : {}) });
 			return reportList ? { arrangerId, reportList } : false;
+		}),
+		changeApi({
+			name: 'nodeRowDisplaySet',
+			label: 'Choose the rows a table card shows',
+			description: 'The list of what is drawn from top to bottom: row ids, "..." for a row break, { break: text } for one saying what was cut. null shows all the rows.',
+			paramList: [{ name: 'nodeId', type: 'string', isRequired: true, description: 'the id of the card' }, { name: 'rowDisplay', type: 'any', description: 'the list, or null' }, viewParam],
+		}, (store, { nodeId, rowDisplay, viewId }) => {
+			if (!store.nodeGet(nodeId)) return false;
+			if (viewId) store.cardViewSet(nodeId, viewId);
+			return store.rowDisplaySet(nodeId, rowDisplay ?? null);
+		}),
+		changeApi({
+			name: 'nodeViewListSet',
+			label: 'Set the views of a table card',
+			description: 'A card has one or more views, each of a mode (plain, column, row) with the parameters of that mode. An empty list leaves the card its plain view.',
+			paramList: [
+				{ name: 'nodeId', type: 'string', isRequired: true, description: 'the id of the card' },
+				{ name: 'viewList', type: 'list', description: 'the views: [{ id, label, mode, rowDisplay?, valueRowId?, fieldDisplay? }]; unchanged when absent' },
+				{ name: 'viewDefault', type: 'any', description: 'the id of the default view; null for the first' },
+				{ name: 'isViewSwitcherShown', type: 'boolean', description: 'whether the menu of views stands on the title line' },
+			],
+		}, (store, { nodeId, viewList, viewDefault, isViewSwitcherShown }) => {
+			if (!store.nodeGet(nodeId)) return false;
+			if (viewList !== undefined && !store.viewListWrite(nodeId, viewList)) return false;
+			if (viewDefault !== undefined && !store.viewDefaultSet(nodeId, viewDefault)) return false;
+			if (isViewSwitcherShown !== undefined && !store.viewSwitcherShownSet(nodeId, isViewSwitcherShown)) return false;
+			return { viewList: store.nodeGet(nodeId).data.viewList ?? [] };
+		}),
+		changeApi({
+			name: 'nodeRowBreakInsert',
+			label: 'Insert a row break into a table card',
+			description: 'A card showing all its rows starts a list of its own. Answers its place in the list.',
+			paramList: [
+				{ name: 'nodeId', type: 'string', isRequired: true, description: 'the id of the card' },
+				{ name: 'afterRowId', type: 'string', description: 'after this row; at the end when absent' },
+				{ name: 'text', type: 'string', description: 'what was cut; only the mark when absent' },
+				viewParam,
+			],
+		}, (store, { nodeId, afterRowId, text, viewId }) => {
+			if (!store.nodeGet(nodeId)) return false;
+			if (viewId) store.cardViewSet(nodeId, viewId);
+			return store.rowBreakInsert(nodeId, { afterRowId, text });
 		}),
 		changeApi({ name: 'connectionLineTypeSet', label: 'Set the line type of a connection', description: 'A route is kept between the right-angled types and dropped on any other change.', paramList: [connectionParam, { name: 'lineType', type: 'string', isRequired: true, valueList: lineTypeList, description: 'the line type' }] },
 			(store, { connectionId, lineType }) => store.connectionSet(connectionId, 'lineType', lineType)),

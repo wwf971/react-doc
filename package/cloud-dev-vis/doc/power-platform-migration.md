@@ -20,9 +20,9 @@ The first folder of a path is the **category**: `/example` holds small, sanitize
 | --- | --- | --- |
 | `system` | `/{category}/system` | the two databases, the tool and its steps, `labels`: every word of the views |
 | `schema-table` | `/{category}/schema/{db}/table/{logical}` | `db`, `logical`, `name`, `columnList`, `isMaster?`: a master table, marked in every view |
-| `schema-choice` | `/{category}/schema/{db}/choice/{logical}` | `db`, `logical`, `name`, `optionList: [{ value, label }]` |
-| `mapping-table` | `/{category}/mapping/table/{source}--{target}` | `source`, `target` (keys of tables), `rowKeyList` (keys of its row mappings), `label?`, `match?`: the id of the [pattern](#finding-a-row-in-the-target) that finds its rows in the target (the first pattern when absent), `isTableLevel?`: mapped as a whole table, with no row mappings: one line between the tables |
-| `mapping-row` | `/{category}/mapping/row/{source}--{target}/{id}` | `table`, `source`, `target` (column ids; `null` target: abandoned, `null` source: a default), `kind`, `label`, `stepList` |
+| `schema-choice` | `/{category}/schema/{db}/choice/{logical}` | `db`, `logical`, `name`, `optionList: [{ value, label }]`, `isGlobal?` (`false`: [only one column uses it](#option-sets)) |
+| `mapping-table` | `/{category}/mapping/table/{source}--{target}` | `source`, `target` (keys of tables), `columnKeyList` (keys of its column mappings), `label?`, `match?`: the id of the [pattern](#finding-a-row-in-the-target) that finds its rows in the target (the first pattern when absent), `isTableLevel?`: mapped as a whole table, with no column mappings: one line between the tables |
+| `mapping-column` | `/{category}/mapping/column/{source}--{target}/{id}` | `table`, `source`, `target` (column ids; `null` target: abandoned, `null` source: a default), `kind`, `label`, `stepList` |
 | `mapping-choice` | `/{category}/mapping/choice/{source}--{target}` | `source`, `target` (keys of option sets), `label`, `optionList: [{ from, to }]` (`null`: not carried over) |
 | `plan` | `/{category}/plan` | `orderNote`, `batchList`: `{ table, file, range, rowCount }`, or `{ table, isOmitted: true, count, rowCount }` for the many batches a drawing leaves out |
 | `plan-post` | `/{category}/plan-post` | [what is done after the migration](#after-the-migration): `intro`, `master`, `audit` |
@@ -30,7 +30,7 @@ The first folder of a path is the **category**: `/example` holds small, sanitize
 | `report-verify` | `/{category}/report/verify` | `stat`, `checkList`, `exceptionList`, `flow` (`set`, `compare`, `exception`), `sample`: one row worked through (`{ key, note, rowList: [{ column, source, expected, actual, result, isProblem? }] }`), `matchIntro`, `matchList`: [the patterns of finding a row](#finding-a-row-in-the-target) |
 | `layout` | `/{category}/layout` | `viewByPath: { path: { box } }`, written by the viewer |
 
-**A column** is `{ id, name, logical, type, key?, isRequired?, description?, lookup?: key of a table, choice?: key of an option set }`. **A step** of a row mapping is `{ op: text, name, description }`, `{ op: mapping, name, rows: [{ key, value }] }`, `{ op: choice, mapping: key of a mapping-choice }` or `{ op: abandon }`.
+**A column** is `{ id, name, logical, type, key?, isRequired?, description?, lookup?: key of a table, choice?: key of an option set }`. **A step** of a column mapping is `{ op: text, name, description }`, `{ op: mapping, name, rows: [{ key, value }] }`, `{ op: choice, mapping: key of a mapping-choice }` or `{ op: abandon }`.
 
 An item names another by its **key**, which never changes, not by its path, as [the frontend object layer recommends](../../../main/doc_page_impl_obj_frontend.md#the-entry-asset). What does not fit together (a lookup naming a table not found) is listed under the viewer and leaves the rest drawn. Any item may say `isUnverified: true`; the viewer says how many are.
 
@@ -40,11 +40,12 @@ An item names another by its **key**, which never changes, not by its path, as [
 | --- | --- |
 | `/overview` | the databases (their ER diagrams, embedded), the tool, the three reports (embedded) |
 | `/overview/tabs/{plan,run,verify}` | the same, the reports in tabs |
+| `/overview/{db}/{choice}` | one option set, with each table using it, cut down to its key and those columns, which point to it |
 | `/overview/{db}` | the ER diagram, arranged by `er-columns` ([Arrangers](card-diagram-arrange.md)): tables by their lookups, option sets below, lines from each column |
 | `/overview/{db}/{table}` | one table, what it refers to, what refers to it |
 | `/overview/mapping` | both ER diagrams; a line per mapping of tables and of option sets, whose label opens it |
-| `/overview/mapping/{pair}` | two tables; a line per row mapping, whose label opens it |
-| `/overview/mapping/{pair}/{row}` | one column through its operators, the rest of the tables abbreviated |
+| `/overview/mapping/{pair}` | two tables; a line per column mapping, whose label opens it |
+| `/overview/mapping/{pair}/{column}` | one column through its operators, the rest of the tables abbreviated |
 | `/overview/choice`, `/overview/choice/{pair}` | the mappings of option sets; value to value |
 | `/overview/plan`, `/overview/run`, `/overview/verify`, `/overview/post` | a report: its sections in a [stack](card-diagram-flexible-switch.md#a-scrolling-stack), at full height both in the overview and on its own |
 | `/overview/post/master`, `/overview/post/audit` | [after the migration](#after-the-migration): the references to master tables, the system columns |
@@ -84,10 +85,25 @@ The tables under a pattern come from `match` of the table mappings. A line never
 
 Some columns cannot get their value when the rows are loaded. `plan-post` describes the run that sets them, on a server of its own, as a report beside the others (`/overview/post`); without the item there is no such report.
 
-- **References to master tables** (`master`). A master table (`isMaster`) is loaded as a whole table, without its GUIDs (`isTableLevel`, no row mappings), so a lookup of it cannot be carried over: it stays empty at the load. Afterwards a table of GUIDs is made from another column, and the lookups are set. The columns concerned are found from the schemas (`migrationMasterReferListOf`). `{ title, text?, source, target, referSource, referTarget, stepList: [{ id: map | find | write, title, tag?, text? }] }`, where the four tables are `{ table, label?, rowList: [{ column, value, isKey?, tone?, label? }] }`.
+- **References to master tables** (`master`). A master table (`isMaster`) is loaded as a whole table, without its GUIDs (`isTableLevel`, no column mappings), so a lookup of it cannot be carried over: it stays empty at the load. Afterwards a table of GUIDs is made from another column, and the lookups are set. The columns concerned are found from the schemas (`migrationMasterReferListOf`). `{ title, text?, source, target, referSource, referTarget, stepList: [{ id: map | find | write, title, tag?, text? }] }`, where the four tables are `{ table, label?, rowList: [{ column, value, isKey?, tone?, label? }] }`.
 - **System columns** (`audit`). The system sets who and when at creation, so the load cannot give the values of the source; a script writes them afterwards. `{ title, text?, source, targetRun, targetPost, stepRun, stepPost }`.
 
 Every view is a pure function of the model. A table keeps its node id (`table:{db}:{logical}`) in every view drawing it, which is what lets a switch move it.
+
+
+### Option sets
+
+An option set is an item of its own, whether or not it is shared. Most are **global**, used by any number of columns. One with `isGlobal: false` belongs to one column (the model says so if more use it), and is drawn with its table rather than on its own:
+
+| View | A global option set | One with `isGlobal: false` |
+| --- | --- | --- |
+| the ER diagram, `/overview/mapping` | a card below the tables, with a line from each column | not drawn |
+| `/overview/{db}/{table}` | a card beside the table | the same |
+| `/overview/mapping/{pair}` | not drawn | a card under each table, a line from its column, and a line between the two opening the mapping of their values |
+| `/overview/mapping/{pair}/{column}` | as an operator | the same operator, and a card under each table |
+| `/overview/{db}/{choice}`, the mappings of `/overview/choice` | yes | yes |
+
+A table and an option set of one database share the namespace of `/overview/{db}/{logical}`: the model reports it when they have the same logical name, and the table is what is shown.
 
 ## Components
 
@@ -96,7 +112,7 @@ Every view is a pure function of the model. A table keeps its node id (`table:{d
 | `MigrationExplorer` | the views | `category`, `path` (the view first shown; `#item` scrolls a stack to an item), `height` |
 | `MigrationTour` | the views under the animation layer | `category`, `height`, `stateList`, `transitionList`, `fps` |
 | `MigrationItemList` | every item by category and kind | `category` |
-| `MigrationSchemaTableEdit`, `MigrationSchemaChoiceEdit`, `MigrationMappingTableEdit`, `MigrationMappingRowEdit`, `MigrationMappingChoiceEdit` | editing one item | `category`, `item` (a path, a key, `name:…`) |
+| `MigrationSchemaTableEdit`, `MigrationSchemaChoiceEdit`, `MigrationMappingTableEdit`, `MigrationMappingColumnEdit`, `MigrationMappingChoiceEdit` | editing one item | `category`, `item` (a path, a key, `name:…`) |
 
 ```yaml
 # .doc-page/object-frontend.yaml
@@ -118,8 +134,8 @@ An editor shows the item as the framework's card or diagram; **Edit** opens the 
 | a table | a `dataverse-table` card | cells and rows as on any card; the detail of a column adds **Lookup to** and **Option set**, chosen among the items |
 | an option set | a `dataverse-choice` card | an option's value is its logical name |
 | a mapping of option sets | an `operator-mapping` card | key to value; an empty value is not carried over |
-| a mapping of tables | a diagram of the two tables and Abandon, a handle on every column | a line drawn is a new row mapping; a line removed removes it; a line to Abandon abandons the column; its label is the label of the row |
-| a row mapping | a diagram of the two tables and its operators | the chain from a source column to a target column is its `stepList`; a second way out of an operator is refused |
+| a mapping of tables | a diagram of the two tables and Abandon, a handle on every column | a line drawn is a new column mapping; a line removed removes it; a line to Abandon abandons the column; its label is the label of the row |
+| a column mapping | a diagram of the two tables and its operators | the chain from a source column to a target column is its `stepList`; a second way out of an operator is refused |
 
 **New** creates a table, an option set, or a mapping of a pair; its key and path come from the logical names. The writes go through the object's api (`assetCreate`, `assetWrite`, `assetRemove`): what is new first, then the lists naming it, then what left. A refused save keeps the session open with the reason.
 

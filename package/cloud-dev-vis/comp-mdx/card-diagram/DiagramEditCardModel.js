@@ -1,5 +1,6 @@
 import { lineTypeList, markerTypeList, endpointIsDangling } from './DiagramERData.js';
 import { cardSchemaGet, cardRowAnchorBuild } from './TableCardSchema.js';
+import { CARD_VIEW_MODE_LABEL, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown } from './TableCardData.js';
 import { strokeDashList } from './DiagramEditStore.js';
 import { cardTabList, tabPathGet, pathLabelListGet, rowNameGet, selectionPathBuild } from './DiagramEditPath.js';
 import { routeAnchorPointGet, routeDirectionFacingList, routeEndPointGet, routeResolve, routeTypeHasAnchors, routeTypeIsBezier, ROUTE_DIRECTION_LIST } from './DiagramRoute.js';
@@ -16,7 +17,7 @@ import { routeAnchorPointGet, routeDirectionFacingList, routeEndPointGet, routeR
 //   segment    { name, path }                                  the path bar
 //   view       { type: 'detail', sectionList }
 //              { type: 'list', id, label, itemList, isReorderable, reorderReason,
-//                move(indexFrom, indexTo), remove(id), add?, note, sectionList }
+//                move(indexFrom, indexTo), remove(id), add?, actionList?, note, sectionList }
 //   item       { id, name, badge?, sub?, isSelected, path, isRemovable, removeReason }
 //   section    { id, label, propertyList, actionList, note? }
 //   property   { id, label, kind: text | enum | bool | number | color, value,
@@ -266,11 +267,124 @@ export function cardModelBuild(editor) {
 	const rowInsertAction = (id, label, index) => ({ id, label, act: () => change(() => Boolean(store.rowInsert(nodeId, index))) });
 	const columnInsertAction = (id, label, index) => ({ id, label, isDisabled: isFieldListFixed, reason: reasonFieldListFixed, act: () => change(() => Boolean(store.columnInsert(nodeId, index))) });
 
+	// the views of the card: the list, or one view with the parameters of its mode
+	const viewViewBuild = () => {
+		const nodeSegment = { kind: 'node', id: nodeId };
+		const declared = node.data.viewList ?? [];
+		const modeList = schema.viewModeList ?? ['plain'];
+		const source = cardViewSourceOf(node.data, schema.rowListKey);
+		if (!display.viewId) {
+			const defaultId = cardViewListGet(node.data).find(view => view.id === node.data.viewDefault)?.id ?? cardViewListGet(node.data)[0].id;
+			const current = store.cardViewGet(nodeId);
+			const itemList = cardViewListGet(node.data).map(view => ({
+				id: view.id, name: cardViewLabelOf(view), badge: `${CARD_VIEW_MODE_LABEL[view.mode]}${view.id === defaultId ? ' · default' : ''}`, sub: view.isImplicit ? 'Every card has this view until it declares others.' : '',
+				isSelected: view.id === current.id, path: view.isImplicit ? [nodeSegment] : [nodeSegment, { kind: 'views' }, { kind: 'view', id: view.id }],
+				isRemovable: !view.isImplicit, removeReason: 'A card keeps at least one view.',
+			}));
+			return {
+				type: 'list', id: 'views', label: `Views (${itemList.length})`, itemList,
+				isReorderable: declared.length > 1, reorderReason: 'One view cannot be reordered.',
+				move: (indexFrom, indexTo) => change(() => store.viewMove(nodeId, indexFrom, indexTo)),
+				remove: id => change(() => store.viewRemove(nodeId, id)),
+				add: { id: 'view-add', label: 'Add view', act: () => change(() => store.viewAdd(nodeId) !== null) },
+				note: '', sectionList: [],
+			};
+		}
+		const view = declared.find(item => item.id === display.viewId);
+		const set = (patch, options) => change(() => store.viewSet(nodeId, view.id, patch, options));
+		const propertyList = [
+			{ id: 'label', label: 'Label', kind: 'text', value: view.label ?? '', set: value => set({ label: value }, { groupKey: `view:${nodeId}/${view.id}/label` }) },
+			{ id: 'mode', label: 'View mode', kind: 'enum', value: view.mode, values: modeList, valueLabels: CARD_VIEW_MODE_LABEL, set: value => set({ mode: value }) },
+		];
+		if (view.mode === 'column' && source.recordList.length) {
+			propertyList.push({ id: 'valueRowId', label: 'Values of', kind: 'enum', value: view.valueRowId ?? '', values: ['', ...source.recordList.map(record => record.id)], valueLabels: { '': 'No record' }, set: value => set({ valueRowId: value || undefined }) });
+		}
+		if (view.mode === 'row') {
+			const shown = view.fieldDisplay ?? source.columnList.map(column => column.id);
+			for (const column of source.columnList) {
+				propertyList.push({ id: `field:${column.id}`, label: column.label, kind: 'bool', value: shown.includes(column.id), isReadOnly: shown.length === 1 && shown[0] === column.id, set: value => set({ fieldDisplay: source.columnList.map(item => item.id).filter(id => (id === column.id ? value : shown.includes(id))) }) });
+			}
+		}
+		const noteOfMode = { plain: 'The rows of the card as they are.', column: 'A row for each column of the table, with the values of a record beside them if one is chosen.', row: 'A row for each record of the table: the columns checked above are the ones shown.' };
+		return { type: 'detail', sectionList: [
+			{ id: 'view', label: 'View', propertyList, note: `${noteOfMode[view.mode]}${source.recordList.length || !modeList.includes('row') ? '' : ' A row view needs the records of the table, written as rows in the source.'}`, actionList: [] },
+			{ id: 'view-actions', label: '', propertyList: [], actionList: [
+				{ id: 'row-display', label: 'Choose rows and row breaks', act: () => editor.navigate([nodeSegment, { kind: 'rowDisplay' }]) },
+				{ id: 'view-default', label: 'Make default', isDisabled: node.data.viewDefault === view.id, reason: 'It is the default.', act: () => change(() => store.viewDefaultSet(nodeId, view.id)) },
+				{ id: 'view-remove', label: 'Remove view', kind: 'danger', act: () => change(() => store.viewRemove(nodeId, view.id)) },
+			] },
+		] };
+	};
+
+	// what the card shows when read: the rows and row breaks in their order, then the rows
+	// left out, which a drag up among them shows. one row break opens its own text
+	const rowDisplayViewBuild = () => {
+		const listPath = [{ kind: 'node', id: nodeId }, { kind: 'rowDisplay' }];
+		const list = store.rowDisplayCurrentGet(nodeId);
+		if (display.rowBreakIndex !== undefined) {
+			const entry = list[display.rowBreakIndex];
+			return { type: 'detail', sectionList: [{ id: 'row-break', label: 'Row break', propertyList: [
+				{ id: 'text', label: 'Text', kind: 'text', value: typeof entry === 'object' ? entry.break : '', set: value => change(() => store.rowBreakTextSet(nodeId, display.rowBreakIndex, value)) },
+			], note: 'Words beside the mark: what was left out here. Empty, only the mark is drawn.', actionList: [
+				{ id: 'row-break-remove', label: 'Remove row break', kind: 'danger', act: () => change(() => store.rowDisplayEntryRemove(nodeId, display.rowBreakIndex)) },
+			] }] };
+		}
+		const view = store.cardViewGet(nodeId);
+		const viewRows = store.cardViewRowsGet(nodeId);
+		const isPlainRows = view.mode === 'plain';
+		const nameOf = item => (isPlainRows ? rowNameGet(item, schema) : String(item?.label ?? item?.name ?? item?.id ?? ''));
+		const rowOf = id => viewRows.find(item => item.id === id);
+		const hiddenList = viewRows.filter(item => !list.includes(item.id));
+		const rowPath = id => (isPlainRows ? selectionPathBuild(nodeId, { rowId: id }) : listPath);
+		const itemList = [
+			...list.map((entry, index) => (typeof entry === 'string' && entry !== '...'
+				? { id: `shown:${entry}`, name: nameOf(rowOf(entry)), isSelected: false, path: rowPath(entry), isRemovable: !store.rowHideReasonGet(nodeId, entry), removeReason: store.rowHideReasonGet(nodeId, entry) }
+				: { id: `break:${index}`, name: 'Row break', sub: typeof entry === 'object' ? entry.break : '', badge: 'break', isSelected: false, path: [...listPath, { kind: 'rowBreak', index }], isRemovable: true, removeReason: '' })),
+			...hiddenList.map(item => ({ id: `hidden:${item.id}`, name: nameOf(item), badge: 'not shown', isSelected: false, path: rowPath(item.id), isRemovable: false, removeReason: 'It is not shown: drag it up, or open it, to show it.' })),
+		];
+		return {
+			type: 'list', id: 'row-display', label: `Shown when reading (${list.filter(entry => typeof entry === 'string' && entry !== '...').length} of ${viewRows.length})`,
+			itemList,
+			isReorderable: itemList.length > 1, reorderReason: 'Nothing to reorder.',
+			move: (indexFrom, indexTo) => change(() => {
+				if (indexFrom >= list.length) return indexTo < list.length ? store.rowShownSet(nodeId, hiddenList[indexFrom - list.length].id, true, indexTo) : false;
+				return store.rowDisplayMove(nodeId, indexFrom, Math.min(indexTo, list.length - 1));
+			}),
+			remove: id => change(() => store.rowDisplayEntryRemove(nodeId, itemList.findIndex(item => item.id === id))),
+			add: { id: 'row-break-add', label: 'Insert row break', isDisabled: Boolean(store.rowBreakInsertReasonGet(nodeId, list.length)), reason: store.rowBreakInsertReasonGet(nodeId, list.length), act: () => change(() => store.rowBreakInsert(nodeId) !== null) },
+			note: view.rowDisplay ? '' : 'All are shown, in their order: a change here starts a list of its own.',
+			sectionList: [],
+		};
+	};
+
 	switch (display.tab) {
 		case 'table': {
+			if (display.isViews) {
+				model.view = viewViewBuild();
+				return model;
+			}
 			const sectionList = [];
 			const nodePropertyList = schema ? schema.nodePropertyList : [{ id: 'label', label: 'Label', kind: 'text' }, { id: 'description', label: 'Description', kind: 'text', isMultiline: true }];
 			sectionList.push({ id: 'node', label: schema?.labelNode ?? 'Node', propertyList: nodePropertyList.map(definition => propertyOf(definition, node.data, (id, value) => store.fieldSet(nodeId, null, id, value))), actionList: [] });
+			if (schema) {
+				const viewCurrent = store.cardViewGet(nodeId);
+				const isChosen = Boolean(viewCurrent.rowDisplay);
+				const viewList = cardViewListGet(node.data);
+				sectionList.push({
+					id: 'display', label: 'Display',
+					propertyList: [
+						...(node.data.viewList?.length > 1 ? [{ id: 'viewDefault', label: 'Default view', kind: 'enum', value: node.data.viewDefault ?? '', values: ['', ...viewList.map(view => view.id)], valueLabels: { '': 'The first', ...Object.fromEntries(viewList.map(view => [view.id, cardViewLabelOf(view)])) }, set: value => change(() => store.viewDefaultSet(nodeId, value || null)) }] : []),
+						{ id: 'viewSwitcher', label: 'View switcher', kind: 'bool', value: cardViewSwitcherIsShown(node.data), set: value => change(() => store.viewSwitcherShownSet(nodeId, value)) },
+						{ id: 'rowDisplayMode', label: `${schema.labelRowPlural} shown`, kind: 'enum', value: isChosen ? 'chosen' : 'all', values: ['all', 'chosen'], valueLabels: { all: 'All', chosen: 'Chosen' }, set: value => change(() => store.rowDisplaySet(nodeId, value === 'chosen' ? store.rowDisplayCurrentGet(nodeId) : null)) },
+						...(schema.displayPropertyList ?? []).map(definition => propertyOf(definition, node.data, (id, value) => store.fieldSet(nodeId, null, id, value, value === '' || value === false))),
+					],
+					note: viewCurrent.isImplicit ? '' : `Rows shown and row breaks are those of the view shown: ${cardViewLabelOf(viewCurrent)}.`,
+					actionList: [
+						{ id: 'views', label: `Views (${viewList.length})`, act: () => editor.navigate([{ kind: 'node', id: nodeId }, { kind: 'views' }]) },
+						{ id: 'row-display', label: 'Choose rows and row breaks', act: () => editor.navigate([{ kind: 'node', id: nodeId }, { kind: 'rowDisplay' }]) },
+					],
+				});
+			}
 			const header = schema ? handleSection('header', 'Title handles', schema.isHeaderHandleAllowed(node.data)) : null;
 			if (header) sectionList.push(header);
 			if (store.kind === 'diagram') {
@@ -290,6 +404,10 @@ export function cardModelBuild(editor) {
 		}
 		case 'row': {
 			if (!schema) return model;
+			if (display.isRowDisplay) {
+				model.view = rowDisplayViewBuild();
+				return model;
+			}
 			if (display.view === 'list') {
 				model.view = {
 					type: 'list', id: 'rows', label: `${schema.labelRowPlural} (${rows.length})`,
@@ -303,6 +421,7 @@ export function cardModelBuild(editor) {
 					move: (indexFrom, indexTo) => change(() => store.rowMove(nodeId, rows[indexFrom]?.id, indexTo)),
 					remove: id => change(() => store.rowRemove(nodeId, id, positionGet)),
 					add: rowInsertAction('row-add', `Add ${labelRowLower}`),
+					actionList: [{ id: 'row-display', label: 'Shown when reading', act: () => editor.navigate([{ kind: 'node', id: nodeId }, { kind: 'rowDisplay' }]) }],
 					note: rows.length ? '' : `No ${schema.labelRowPlural.toLowerCase()} yet.`,
 					sectionList: [],
 				};
@@ -312,6 +431,14 @@ export function cardModelBuild(editor) {
 			sectionList.push({ id: 'row', label: schema.labelRow, propertyList: [...schema.fieldList, ...schema.rowPropertyList].map(definition => propertyOf(definition, row, (id, value) => store.fieldSet(nodeId, row.id, id, value))), actionList: [] });
 			const handles = handleSection(cardRowAnchorBuild(schema, row.id), 'Handles', schema.isRowHandleAllowed?.(node.data) ?? true);
 			if (handles) sectionList.push(handles);
+			const viewShown = store.cardViewGet(nodeId);
+			const isRowShown = !viewShown.rowDisplay || viewShown.rowDisplay.includes(row.id);
+			const hideReason = store.rowHideReasonGet(nodeId, row.id);
+			if (viewShown.mode === 'plain') sectionList.push({ id: 'row-display', label: 'When reading', propertyList: [
+				{ id: 'isShown', label: 'Shown', kind: 'bool', value: isRowShown, isReadOnly: isRowShown && Boolean(hideReason), set: value => change(() => store.rowShownSet(nodeId, row.id, value)) },
+			], note: isRowShown ? hideReason : '', actionList: [
+				{ id: 'break-after', label: 'Insert row break below', isDisabled: !isRowShown || Boolean(store.rowBreakInsertReasonGet(nodeId, store.rowDisplayCurrentGet(nodeId).indexOf(row.id) + 1)), reason: isRowShown ? store.rowBreakInsertReasonGet(nodeId, store.rowDisplayCurrentGet(nodeId).indexOf(row.id) + 1) : 'This row is not shown.', act: () => change(() => store.rowBreakInsert(nodeId, { afterRowId: row.id }) !== null) },
+			] });
 			sectionList.push({ id: 'row-actions', label: '', propertyList: [], actionList: [
 				rowInsertAction('insert-above', 'Insert above', rowIndex),
 				rowInsertAction('insert-below', 'Insert below', rowIndex + 1),

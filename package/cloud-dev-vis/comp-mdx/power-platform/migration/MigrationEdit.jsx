@@ -225,7 +225,7 @@ function migrationItemEditCreate(kind, name, isCreateOffered = true) {
 export const MigrationSchemaTableEdit = migrationItemEditCreate('schema-table', 'MigrationSchemaTableEdit');
 export const MigrationSchemaChoiceEdit = migrationItemEditCreate('schema-choice', 'MigrationSchemaChoiceEdit');
 export const MigrationMappingTableEdit = migrationItemEditCreate('mapping-table', 'MigrationMappingTableEdit');
-export const MigrationMappingRowEdit = migrationItemEditCreate('mapping-row', 'MigrationMappingRowEdit', false);
+export const MigrationMappingColumnEdit = migrationItemEditCreate('mapping-column', 'MigrationMappingColumnEdit', false);
 export const MigrationMappingChoiceEdit = migrationItemEditCreate('mapping-choice', 'MigrationMappingChoiceEdit');
 
 // every item of the object, by category and kind, with its path; removing one

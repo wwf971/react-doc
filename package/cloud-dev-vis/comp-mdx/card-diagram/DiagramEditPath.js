@@ -22,6 +22,10 @@ import { endpointIsDangling } from './DiagramERData.js';
 //     line        { kind: 'line', id | index }                one of them
 //     anchors     { kind: 'anchors' }                         under a line: its anchor points
 //     anchor      { kind: 'anchor', id | index }              one of them (card-diagram-connection-line.md)
+//     views       { kind: 'views' }                           the views of the card (TableCardData.js)
+//     view        { kind: 'view', id | index }                one of them
+//     rowDisplay  { kind: 'rowDisplay' }                      what the view shown draws: its rows and row breaks
+//     rowBreak    { kind: 'rowBreak', index }                 a row break, by its place in that list
 //
 // A segment names its subject by id, or by index or name instead: the three
 // spellings route to the same display, and the path the store keeps is the
@@ -145,6 +149,24 @@ export function pathResolveStep(path, store) {
 		if (!allowed.includes(second.id) && !nodePropertyIdList.includes(second.id)) return { redirect: [nodeSegment] };
 		return { path: [nodeSegment, { kind: 'prop', id: second.id }], display: displayOf({ nodeId, propId: second.id, tab: 'table' }) };
 	}
+	if (segmentIs(second, 'views')) {
+		if (!schema) return { redirect: [nodeSegment] };
+		const listPath = [nodeSegment, { kind: 'views' }];
+		if (!third) return { path: listPath, display: displayOf({ nodeId, tab: 'table', view: 'list', isViews: true }) };
+		if (!segmentIsItem(third, 'view')) return { redirect: listPath };
+		const viewList = node.data?.viewList ?? [];
+		const viewItem = third.id !== undefined ? viewList.find(item => item.id === third.id) : viewList[Number(third.index)];
+		if (!viewItem) return { redirect: listPath };
+		return { path: [...listPath, { kind: 'view', id: viewItem.id }], display: displayOf({ nodeId, tab: 'table', isViews: true, viewId: viewItem.id }) };
+	}
+	if (segmentIs(second, 'rowDisplay')) {
+		if (!schema) return { redirect: [nodeSegment] };
+		const listPath = [nodeSegment, { kind: 'rowDisplay' }];
+		if (!third) return { path: listPath, display: displayOf({ nodeId, tab: 'row', view: 'list', isRowDisplay: true }) };
+		const entry = store.cardViewGet(nodeId).rowDisplay?.[third.index];
+		if (!segmentIs(third, 'rowBreak') || entry === undefined || (typeof entry === 'string' && entry !== '...')) return { redirect: listPath };
+		return { path: [...listPath, { kind: 'rowBreak', index: third.index }], display: displayOf({ nodeId, tab: 'row', isRowDisplay: true, rowBreakIndex: third.index }) };
+	}
 	const collection = collectionKindGet(second, schema);
 	if (!collection) return { redirect: [nodeSegment] };
 	if (collection === 'lines') {
@@ -244,6 +266,10 @@ export function pathLabelListGet(path, store) {
 			case 'row': return rowNameGet(node ? store.rowGet(node.id, segment.id) : undefined, schema) || String(segment.id);
 			case 'field': return String(schema?.fieldList.find(field => field.id === segment.id)?.label ?? segment.id);
 			case 'line': { const connection = store.connectionGet(segment.id); return String(connection?.label?.text || segment.id); }
+			case 'views': return 'Views';
+			case 'view': return String((node?.data?.viewList ?? []).find(item => item.id === segment.id)?.label ?? segment.id);
+			case 'rowDisplay': return 'Shown when reading';
+			case 'rowBreak': return 'Row break';
 			case 'anchors': return 'Anchors';
 			case 'anchor': return String(segment.id);
 			default: return String(segment.kind);

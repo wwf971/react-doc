@@ -5,6 +5,7 @@ import { cardSchemaGet, cardRowAnchorBuild } from './TableCardSchema.js';
 import { pathResolve, pathEquals, selectionPathBuild, tabPathGet, nodeLineListGet, cardTabList } from './DiagramEditPath.js';
 import { EditHistory } from './DiagramEditHistory.js';
 import { diagramArrangeRun } from './DiagramArrange.js';
+import { cardViewDefaultGet, cardViewListGet, cardViewListPrune, cardViewRowListGet, cardViewSourceOf } from './TableCardData.js';
 import { routeAnchorCoupleSet, routeAnchorHandleSet, routeAnchorHandlesPull, routeAnchorIdNext, routeAnchorInsertAt, routeAnchorMove, routeAnchorPlaceOf, routeAnchorRemove, routeCompact, routeEndHandleSet, routeNormalize, routeTypeFamilyGet, routeTypeHasAnchors } from './DiagramRoute.js';
 
 export { cardTabList };
@@ -67,6 +68,7 @@ export class DiagramEditStore {
 	interaction = null;
 	create = null;
 	routeDraft = null;
+	cardViewIdByNode = {};
 	saveTarget = 'asset';
 	message = '';
 
@@ -261,6 +263,7 @@ export class DiagramEditStore {
 		// going elsewhere ends the typing step in progress; the path itself is
 		// not a step of the history
 		if (!pathEquals(route.path, this.path)) { this.path = route.path; this.history.groupClose(); }
+		if (next?.viewId) this.cardViewSet(next.nodeId, next.viewId);
 		if (previous?.nodeId !== next?.nodeId || previous?.connectionId !== next?.connectionId) this.message = '';
 	}
 
@@ -349,7 +352,7 @@ export class DiagramEditStore {
 	fieldSet(nodeId, rowId, field, value, isDelete = false) {
 		const node = this.nodeGet(nodeId);
 		const schema = cardSchemaGet(node, this.registry);
-		const definitionList = schema ? rowId ? [...schema.fieldList, ...schema.rowPropertyList] : schema.nodePropertyList : rowId ? [] : [{ id: 'label' }, { id: 'name' }, { id: 'description' }];
+		const definitionList = schema ? rowId ? [...schema.fieldList, ...schema.rowPropertyList] : [...schema.nodePropertyList, ...(schema.displayPropertyList ?? [])] : rowId ? [] : [{ id: 'label' }, { id: 'name' }, { id: 'description' }];
 		const definition = definitionList.find(item => item.id === field);
 		if (!definition) return false;
 		const groupKey = ['enum', 'bool'].includes(definition.kind) ? null : `field:${nodeId}/${rowId ?? ''}/${field}`;
@@ -380,9 +383,170 @@ export class DiagramEditStore {
 			const next = [...rows];
 			next.splice(at, 0, row);
 			documentNext.setIn([...this.nodePathGet(nodeId), 'data', schema.rowListKey], documentNext.createNode(next));
+			// a row added to a card choosing its rows is one the author wants to see
+			if (node.data?.rowDisplay) documentNext.setIn([...this.nodePathGet(nodeId), 'data', 'rowDisplay'], documentNext.createNode([...node.data.rowDisplay, id]));
 		});
 		if (isChanged) this.select(nodeId, { rowId: id });
 		return isChanged ? id : null;
+	}
+
+	// ---------- which rows a card shows, and its row breaks (comp-diagram-er.md#table-card-views) ----------
+
+	// the view a card shows while it is edited: not a step, and not saved. a view that went
+	// away falls back to the default
+	cardViewSet(nodeId, viewId) { this.cardViewIdByNode = { ...this.cardViewIdByNode, [nodeId]: viewId }; }
+
+	cardViewGet(nodeId) {
+		const data = this.nodeGet(nodeId)?.data;
+		return cardViewListGet(data).find(view => view.id === this.cardViewIdByNode[nodeId]) ?? cardViewDefaultGet(data);
+	}
+
+	// the rows the view shown chooses among
+	cardViewRowsGet(nodeId) {
+		const node = this.nodeGet(nodeId);
+		const schema = cardSchemaGet(node, this.registry);
+		return cardViewRowListGet(this.cardViewGet(nodeId), cardViewSourceOf(node.data, schema?.rowListKey));
+	}
+
+	// the list of the view shown as a whole: null shows all the rows. a wrong list is refused
+	// by the validation
+	rowDisplaySet(nodeId, rowDisplay, { groupKey = null } = {}) {
+		const view = this.cardViewGet(nodeId);
+		return this.changeApply(documentNext => {
+			const dataPath = [...this.nodePathGet(nodeId), 'data'];
+			const path = view.isImplicit ? [...dataPath, 'rowDisplay'] : [...dataPath, 'viewList', this.nodeGet(nodeId).data.viewList.findIndex(item => item.id === view.id), 'rowDisplay'];
+			if (rowDisplay) documentNext.setIn(path, documentNext.createNode(rowDisplay));
+			else if (documentNext.hasIn(path)) documentNext.deleteIn(path);
+		}, { groupKey });
+	}
+
+	// the list as it stands, or, for a view showing all its rows, the list saying just that
+	rowDisplayCurrentGet(nodeId) {
+		return this.cardViewGet(nodeId).rowDisplay ?? this.cardViewRowsGet(nodeId).map(row => row.id);
+	}
+
+	// ---------- the views of a card ----------
+
+	viewListWrite(nodeId, viewList, { groupKey = null } = {}) {
+		return this.changeApply(documentNext => {
+			const dataPath = [...this.nodePathGet(nodeId), 'data'];
+			const data = this.nodeGet(nodeId).data;
+			if (viewList.length) documentNext.setIn([...dataPath, 'viewList'], documentNext.createNode(viewList));
+			else documentNext.deleteIn([...dataPath, 'viewList']);
+			// the card's own list becomes that of its plain view when it declares views
+			if (viewList.length && data.rowDisplay !== undefined) documentNext.deleteIn([...dataPath, 'rowDisplay']);
+			if (data.viewDefault !== undefined && !viewList.some(view => view.id === data.viewDefault)) documentNext.deleteIn([...dataPath, 'viewDefault']);
+		}, { groupKey });
+	}
+
+	// a new view. the first declared keeps the plain view the card had, so nothing it showed is lost
+	viewAdd(nodeId, mode = 'plain') {
+		const data = this.nodeGet(nodeId).data;
+		const declared = data.viewList?.length ? data.viewList : [{ id: 'plain', label: 'Plain', mode: 'plain', ...(data.rowDisplay ? { rowDisplay: data.rowDisplay } : {}) }];
+		const id = idNext('view', declared);
+		const isChanged = this.viewListWrite(nodeId, [...declared, { id, label: `View ${declared.length + 1}`, mode }]);
+		if (!isChanged) return null;
+		this.pathSet([{ kind: 'node', id: nodeId }, { kind: 'views' }, { kind: 'view', id }]);
+		return id;
+	}
+
+	// a change of some parameters of a view; undefined removes one. another mode chooses
+	// among other rows, so what the view had chosen goes
+	viewSet(nodeId, viewId, patch, { groupKey = null } = {}) {
+		const viewList = this.nodeGet(nodeId).data.viewList ?? [];
+		return this.viewListWrite(nodeId, viewList.map(view => {
+			if (view.id !== viewId) return view;
+			const { rowDisplay, fieldDisplay, valueRowId, ...rest } = view;
+			const base = patch.mode && patch.mode !== view.mode ? rest : view;
+			return Object.fromEntries(Object.entries({ ...base, ...patch }).filter(([, value]) => value !== undefined));
+		}), { groupKey });
+	}
+
+	viewRemove(nodeId, viewId) {
+		const isChanged = this.viewListWrite(nodeId, (this.nodeGet(nodeId).data.viewList ?? []).filter(view => view.id !== viewId));
+		if (isChanged) this.pathSet([{ kind: 'node', id: nodeId }, { kind: 'views' }]);
+		return isChanged;
+	}
+
+	viewMove(nodeId, indexFrom, indexTo) {
+		const list = [...(this.nodeGet(nodeId).data.viewList ?? [])];
+		const [view] = list.splice(indexFrom, 1);
+		list.splice(indexTo, 0, view);
+		return this.viewListWrite(nodeId, list);
+	}
+
+	// null: the first view
+	viewDefaultSet(nodeId, viewId) {
+		return this.changeApply(documentNext => {
+			const path = [...this.nodePathGet(nodeId), 'data', 'viewDefault'];
+			if (viewId) documentNext.setIn(path, viewId);
+			else if (documentNext.hasIn(path)) documentNext.deleteIn(path);
+		});
+	}
+
+	viewSwitcherShownSet(nodeId, isShown) {
+		return this.changeApply(documentNext => documentNext.setIn([...this.nodePathGet(nodeId), 'data', 'isViewSwitcherHidden'], !isShown));
+	}
+
+	// why a row cannot be left out, or ''
+	rowHideReasonGet(nodeId, rowId) {
+		const node = this.nodeGet(nodeId);
+		// a card of many views already draws a line to a row that a view leaves out, on its side
+		if (node.data?.viewList?.length) return '';
+		const schema = cardSchemaGet(node, this.registry);
+		return schema && this.anchorHandleListGet(nodeId, cardRowAnchorBuild(schema, rowId)).length ? 'A handle is on this row: remove it first, or the line would have nowhere to end.' : '';
+	}
+
+	rowShownSet(nodeId, rowId, isShown, index) {
+		const list = this.rowDisplayCurrentGet(nodeId);
+		if (!isShown) {
+			const reason = this.rowHideReasonGet(nodeId, rowId);
+			if (reason) { this.message = reason; return false; }
+			return this.rowDisplaySet(nodeId, list.filter(entry => entry !== rowId));
+		}
+		if (list.includes(rowId)) return false;
+		const next = [...list];
+		next.splice(index ?? next.length, 0, rowId);
+		return this.rowDisplaySet(nodeId, next);
+	}
+
+	// why no row break can go at a place of the list, or '': two side by side say nothing more
+	// than one, and their marks would run into each other
+	rowBreakInsertReasonGet(nodeId, at) {
+		const list = this.rowDisplayCurrentGet(nodeId);
+		const isBreak = entry => entry !== undefined && (typeof entry !== 'string' || entry === '...');
+		return isBreak(list[at - 1]) || isBreak(list[at]) ? 'A row break is already there.' : '';
+	}
+
+	// a row break after a row, at a place of the list, or at its end
+	rowBreakInsert(nodeId, { afterRowId, index, text = '' } = {}) {
+		const list = this.rowDisplayCurrentGet(nodeId);
+		const at = afterRowId !== undefined ? list.indexOf(afterRowId) + 1 : index ?? list.length;
+		if (afterRowId !== undefined && at === 0) { this.message = `The row ${afterRowId} is not shown.`; return null; }
+		const reason = this.rowBreakInsertReasonGet(nodeId, at);
+		if (reason) { this.message = reason; return null; }
+		const next = [...list];
+		next.splice(at, 0, text ? { break: text } : '...');
+		return this.rowDisplaySet(nodeId, next) ? at : null;
+	}
+
+	rowBreakTextSet(nodeId, index, text) {
+		const list = [...this.rowDisplayCurrentGet(nodeId)];
+		list[index] = text ? { break: text } : '...';
+		return this.rowDisplaySet(nodeId, list, { groupKey: `rowBreak:${nodeId}/${index}` });
+	}
+
+	rowDisplayMove(nodeId, indexFrom, indexTo) {
+		const list = [...this.rowDisplayCurrentGet(nodeId)];
+		const [entry] = list.splice(indexFrom, 1);
+		list.splice(indexTo, 0, entry);
+		return this.rowDisplaySet(nodeId, list);
+	}
+
+	rowDisplayEntryRemove(nodeId, index) {
+		const list = this.rowDisplayCurrentGet(nodeId);
+		if (typeof list[index] === 'string' && list[index] !== '...') return this.rowShownSet(nodeId, list[index], false);
+		return this.rowDisplaySet(nodeId, list.filter((_, position) => position !== index));
 	}
 
 	rowMove(nodeId, rowId, indexTo) {
@@ -413,6 +577,8 @@ export class DiagramEditStore {
 			this.endpointsDetach(documentNext, endpoint => endpoint.nodeId === nodeId && removed.some(handle => handle.id === endpoint.handleId), positionGet);
 			const path = this.nodePathGet(nodeId);
 			documentNext.setIn([...path, 'data', schema.rowListKey], documentNext.createNode(this.rowsGet(node).filter(row => row.id !== rowId)));
+			if (node.data?.rowDisplay) documentNext.setIn([...path, 'data', 'rowDisplay'], documentNext.createNode(node.data.rowDisplay.filter(entry => entry !== rowId)));
+			if (node.data?.viewList) documentNext.setIn([...path, 'data', 'viewList'], documentNext.createNode(cardViewListPrune(node.data.viewList, schema.kind === 'table' ? { plainId: rowId, recordId: rowId } : { plainId: rowId, columnId: rowId })));
 			documentNext.setIn([...path, 'handles'], documentNext.createNode((node.handles ?? []).filter(handle => !removed.includes(handle))));
 		});
 		if (isChanged) this.pathSet([{ kind: 'node', id: nodeId }, { kind: 'rows' }]);
@@ -463,6 +629,7 @@ export class DiagramEditStore {
 			const path = [...this.nodePathGet(nodeId), 'data'];
 			documentNext.setIn([...path, 'fields'], documentNext.createNode(fields.filter(field => field.id !== fieldId)));
 			documentNext.setIn([...path, 'rows'], documentNext.createNode(this.rowsGet(node).map(({ [fieldId]: _, ...row }) => row)));
+			if (node.data.viewList) documentNext.setIn([...path, 'viewList'], documentNext.createNode(cardViewListPrune(node.data.viewList, { columnId: fieldId })));
 		});
 		if (isChanged) this.pathSet([{ kind: 'node', id: nodeId }, { kind: 'fields' }]);
 		return isChanged;

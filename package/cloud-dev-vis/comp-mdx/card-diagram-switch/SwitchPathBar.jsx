@@ -2,11 +2,40 @@ import { useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { ArrowLeft, ChevronRight, Scan, SquareDashedMousePointer } from '../../../../main/frontend/UICommon.js';
 import { AnchoredPopover } from '../../../../main/comp-doc/popup/AnchoredPopover.jsx';
+import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
+import { CARD_ICON_BY_NAME } from '../card-diagram/CompactCard.jsx';
 
 // The bar over a switching viewport (card-diagram-flexible-switch.md#the-path-bar):
 // the path of the view shown, aligned to the left, one button per segment. A click on
 // a segment switches to it; the chevron before a segment lists the views beside it.
 // At the right, what acts on the view shown: the camera back to its default, the box.
+// An item of a menu: its label, or, when it has one, its labelItemList: a list of things of
+// different types (card-diagram-flexible-switch.md#the-path-bar)
+//
+//   { type: 'text', text }               words
+//   { type: 'icon', icon }               an icon by its name, as a card names one
+//   { type: 'custom', comp, data? }      a React component, given { data }; by its name, a
+//                                        registered component with the placement visualizationNode
+function SwitchMenuItemContent({ item }) {
+	if (!item.labelItemList?.length) return <span>{item.label}</span>;
+	return (
+		<span className="doc-switch-path-menu-label">
+			{item.labelItemList.map((part, index) => {
+				if (part.type === 'icon') {
+					const Icon = CARD_ICON_BY_NAME[part.icon];
+					return Icon ? <Icon key={index} size={14} aria-hidden="true" /> : null;
+				}
+				if (part.type === 'custom') {
+					if (typeof part.comp === 'string') return <RegisteredComp key={index} compName={part.comp} placement="visualizationNode" input={{ data: part.data ?? {} }} configRuntime={{ instanceId: `switch-menu:${item.path}:${index}` }} />;
+					const Comp = part.comp;
+					return Comp ? <Comp key={index} data={part.data ?? {}} /> : null;
+				}
+				return <span key={index}>{part.text}</span>;
+			})}
+		</span>
+	);
+}
+
 const SwitchPathSibling = observer(function SwitchPathSibling({ store, path }) {
 	const ref = useRef(null);
 	const [isOpen, isOpenSet] = useState(false);
@@ -22,8 +51,8 @@ const SwitchPathSibling = observer(function SwitchPathSibling({ store, path }) {
 			{isOpen ? (
 				<AnchoredPopover anchorRef={ref} className="doc-switch-path-menu">
 					{siblingList.map((item) => (
-						<button key={item.path} type="button" data-current={item.path === path ? '' : undefined} onClick={() => { isOpenSet(false); void store.pathSet(item.path); }}>
-							<span>{item.label}</span>
+						<button key={item.path} type="button" aria-label={item.label} data-current={item.path === path ? '' : undefined} onClick={() => { isOpenSet(false); void store.pathSet(item.path); }}>
+							<SwitchMenuItemContent item={item} />
 							{item.description ? <em>{item.description}</em> : null}
 						</button>
 					))}
@@ -80,8 +109,8 @@ const SwitchPathChildren = observer(function SwitchPathChildren({ store, childLi
 			{isOpen ? (
 				<AnchoredPopover anchorRef={ref} className="doc-switch-path-menu">
 					{childList.map((item) => (
-						<button key={item.path} type="button" onClick={() => { isOpenSet(false); void store.pathSet(item.path); }}>
-							<span>{item.label}</span>
+						<button key={item.path} type="button" aria-label={item.label} onClick={() => { isOpenSet(false); void store.pathSet(item.path); }}>
+							<SwitchMenuItemContent item={item} />
 							{item.description ? <em>{item.description}</em> : null}
 						</button>
 					))}

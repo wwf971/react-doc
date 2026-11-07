@@ -1,4 +1,4 @@
-import { makeAutoObservable, observable, reaction } from 'mobx';
+import { makeAutoObservable, observable, reaction, runInAction, when } from 'mobx';
 import type { DocStore } from './DocStore.js';
 import type { DocEditStore } from './DocEditStore.js';
 import type { DocSourceStore } from './DocSourceStore.js';
@@ -33,6 +33,7 @@ import { COMP_EDIT_MODE_SOURCE_ID } from '../../../comp-doc/registry/comp-expose
 //   surfaceList    the surfaces on the page; the last one registered under
 //                  the popup's key is the one shown in it (the view surface
 //                  and the edit surface of a block replace each other)
+//   isSurfaceReloading  surfaceReload is looking for the block again
 //   slotElement    where the popup puts the active surface (its content)
 //   floatElement   where the floating bar of the block's editor goes (its header)
 //
@@ -41,6 +42,11 @@ import { COMP_EDIT_MODE_SOURCE_ID } from '../../../comp-doc/registry/comp-expose
 // otherwise. Edit opens the block's session, View leaves it (the draft is
 // saved), Cancel drops it; persistence is the edit layer's.
 export type BlockPopupTransition = 'idle' | 'entering' | 'leaving' | 'canceling';
+
+export type BlockPopupSurfaceInfo = { path?: string; compId?: string; title?: string; sourceLine?: number };
+
+// how long surfaceReload waits for the block to appear
+const SURFACE_RELOAD_WAIT = 4000;
 
 export type BlockPopup = {
   key: string;
@@ -94,7 +100,8 @@ export function blockPopupKeyBuild(path: string, sourceLine: number, compId: str
 
 export class DocBlockPopupStore {
   popup: BlockPopup | undefined = undefined;
-  surfaceList: { token: number; key: string }[] = [];
+  surfaceList: { token: number; key: string; info: BlockPopupSurfaceInfo }[] = [];
+  isSurfaceReloading = false;
   slotElement: HTMLElement | null = null;
   floatElement: HTMLElement | null = null;
   stores: BlockPopupStores;
@@ -178,9 +185,9 @@ export class DocBlockPopupStore {
 
   // ---------- surfaces ----------
 
-  surfaceRegister(key: string): number {
+  surfaceRegister(key: string, info: BlockPopupSurfaceInfo = {}): number {
     this.surfaceTokenLast += 1;
-    this.surfaceList.push({ token: this.surfaceTokenLast, key });
+    this.surfaceList.push({ token: this.surfaceTokenLast, key, info });
     return this.surfaceTokenLast;
   }
 
@@ -196,6 +203,46 @@ export class DocBlockPopupStore {
       if (this.surfaceList[index].key === key) return this.surfaceList[index].token;
     }
     return undefined;
+  }
+
+  // the surface of the popup's block under another key: the same document, component and
+  // title, the nearest line first (lines before it were edited, or its key was of an instance
+  // that is gone)
+  private surfaceSameBlockGet() {
+    const popup = this.popup;
+    if (!popup) return undefined;
+    const matchList = this.surfaceList.filter(({ info }) => info.path === popup.path && info.compId === popup.compId && info.title === popup.title);
+    const distanceOf = (line?: number) => Math.abs((line ?? popup.sourceLine) - popup.sourceLine);
+    return [...matchList].sort((a, b) => distanceOf(a.info.sourceLine) - distanceOf(b.info.sourceLine))[0];
+  }
+
+  // a dialog whose block is not on the page, asked to try again: the document is rendered
+  // anew, and the block, once it is there, shown again. resolves true when it is. only on
+  // request: without it, a surface going away for a moment could pull in another block
+  async surfaceReload(): Promise<boolean> {
+    const popup = this.popup;
+    if (!popup || this.surfaceActiveToken !== undefined) return Boolean(popup);
+    const { generation, path } = popup;
+    this.isSurfaceReloading = true;
+    popup.message = '';
+    const isFound = () => this.surfaceActiveToken !== undefined || this.surfaceSameBlockGet() !== undefined;
+    try {
+      if (path) await this.stores.sourceStore.loadDoc(path, { isRefresh: true });
+      if (!isFound()) await when(isFound, { timeout: SURFACE_RELOAD_WAIT });
+    } catch {
+      // not there in time: said below
+    }
+    return runInAction(() => {
+      this.isSurfaceReloading = false;
+      if (this.popup?.generation !== generation) return false;
+      if (this.surfaceActiveToken === undefined) {
+        const surface = this.surfaceSameBlockGet();
+        if (surface) this.popup.key = surface.key;
+      }
+      if (this.surfaceActiveToken !== undefined) return true;
+      this.popup.message = 'The block could not be found on the page. It may have been removed from the document.';
+      return false;
+    });
   }
 
   surfaceIsInPopup(token: number): boolean {

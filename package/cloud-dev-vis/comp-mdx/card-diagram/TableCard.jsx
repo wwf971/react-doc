@@ -1,8 +1,9 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripHorizontal, GripVertical, Plus, Trash2 } from '../../../../main/frontend/UICommon.js';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, EyeOff, GripHorizontal, GripVertical, Plus, SeparatorHorizontal, Trash2 } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { cardRowAnchorBuild } from './TableCardSchema.js';
+import { cardViewDefaultGet, cardViewDrawBuild, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown } from './TableCardData.js';
 import { TextValue, ValueMenu } from './DiagramValueControls.jsx';
 import './DiagramER.css';
 
@@ -40,10 +41,25 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 	const isSelected = selection?.nodeId === nodeId;
 	const content = store?.nodeGet(nodeId)?.data ?? node.data;
 	const rows = node.data[schema.rowListKey] ?? [];
+	// the view shown: the reader's choice lives with the card and is never written; in the
+	// editor it is the store's, so the edit card and the card agree
+	const viewList = cardViewListGet(node.data);
+	const [viewIdRead, viewIdReadSet] = useState(null);
+	const viewIdChosen = editor ? store.cardViewIdByNode[nodeId] : viewIdRead;
+	const view = viewList.find(item => item.id === viewIdChosen) ?? cardViewDefaultGet(node.data);
+	const viewSet = id => { if (editor) store.cardViewSet(nodeId, id); else viewIdReadSet(id); };
+	const draw = cardViewDrawBuild(view, cardViewSourceOf(node.data, schema.rowListKey), schema.fieldList);
+	// another view can have the same height with its rows elsewhere: have the handles measured
+	useLayoutEffect(() => { root.current?.dispatchEvent(new Event('scroll')); }, [view.id]);
+	// what is drawn when reading, in that order with its row breaks. what rowDisplay leaves out
+	// is still there to edit: the editor adds those rows after the others, dimmed
+	const rowDisplay = view.rowDisplay;
+	const rowShownSet = editor && rowDisplay ? new Set(rowDisplay.filter((entry) => typeof entry === 'string')) : null;
+	const rowItemList = [...draw.itemList, ...(rowShownSet ? draw.rowList.filter(row => !rowShownSet.has(row.id)).map(row => ({ row })) : [])];
 	const rowGroupList = node.data.rowGroupList ?? [];
 	const isRowHandleAllowed = schema.isRowHandleAllowed?.(content) ?? true;
 	const isHeaderHandleAllowed = schema.isHeaderHandleAllowed(content);
-	const style = columnsStyle ?? { '--doc-card-columns': node.data.columnTemplate || `repeat(${schema.fieldList.length}, minmax(0, 1fr))` };
+	const style = !draw.isPlain ? { '--doc-card-columns': draw.columnTemplate } : columnsStyle ?? { '--doc-card-columns': node.data.columnTemplate || `repeat(${schema.fieldList.length}, minmax(0, 1fr))` };
 	const handleSides = target => new Set((node.handles ?? []).filter(handle => handle.anchor.target === target).map(handle => handle.anchor.side));
 	const handleAdders = (target, sides) => editor ? ['left', 'right'].filter(side => !sides.has(side)).map(side => (
 		<button key={side} type="button" className={`doc-card-handle-add is-${side} nodrag nopan`} title={`Add a ${side} handle`} aria-label={`Add a ${side} handle`} disabled={editor.isLocked}
@@ -60,14 +76,25 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 	const isFieldListFixed = !schema.isFieldListEditable;
 	const labelRow = schema.labelRow.toLowerCase();
 	const labelField = schema.labelField.toLowerCase();
+	const reasonRowOrder = 'The order drawn is chosen in the edit card: Shown when reading.';
 	const rowToolbar = (row, index) => <CardToolbar className="is-row" editor={editor}
-		grip={{ Icon: GripVertical, axis: 'y', title: `Drag to reorder the ${labelRow}`, isDisabled: rows.length <= 1, reason: `One ${labelRow} cannot be reordered.`, indexFrom: index, rectListGet: () => rectListGet(':scope > .doc-card-row'),
+		grip={{ Icon: GripVertical, axis: 'y', title: `Drag to reorder the ${labelRow}`, isDisabled: rows.length <= 1 || Boolean(rowDisplay), reason: rowDisplay ? reasonRowOrder : `One ${labelRow} cannot be reordered.`, indexFrom: index, rectListGet: () => rectListGet(':scope > .doc-card-row'),
 			onPreview: insertion => dropSet({ axis: 'row', index: insertion }), onDrop: indexTo => { dropSet(null); if (indexTo !== index) editor.change(() => store.rowMove(nodeId, row.id, indexTo)); } }}
 		actionList={[
 			{ id: 'insert-above', Icon: ChevronUp, title: `Insert a ${labelRow} above`, act: () => store.rowInsert(nodeId, index) },
 			{ id: 'insert-below', Icon: ChevronDown, title: `Insert a ${labelRow} below`, act: () => store.rowInsert(nodeId, index + 1) },
-			{ id: 'move-up', Icon: ArrowUp, title: 'Move up', isDisabled: index === 0, reason: 'Already first.', act: () => store.rowMove(nodeId, row.id, index - 1) },
-			{ id: 'move-down', Icon: ArrowDown, title: 'Move down', isDisabled: index === rows.length - 1, reason: 'Already last.', act: () => store.rowMove(nodeId, row.id, index + 1) },
+			{ id: 'move-up', Icon: ArrowUp, title: 'Move up', isDisabled: index === 0 || Boolean(rowDisplay), reason: rowDisplay ? reasonRowOrder : 'Already first.', act: () => store.rowMove(nodeId, row.id, index - 1) },
+			{ id: 'move-down', Icon: ArrowDown, title: 'Move down', isDisabled: index === rows.length - 1 || Boolean(rowDisplay), reason: rowDisplay ? reasonRowOrder : 'Already last.', act: () => store.rowMove(nodeId, row.id, index + 1) },
+			(() => {
+				const isShown = !rowShownSet || rowShownSet.has(row.id);
+				const reason = isShown ? store.rowBreakInsertReasonGet(nodeId, store.rowDisplayCurrentGet(nodeId).indexOf(row.id) + 1) : 'This row is not shown.';
+				return { id: 'break-below', Icon: SeparatorHorizontal, title: 'Insert a row break below', isDisabled: Boolean(reason), reason, act: () => store.rowBreakInsert(nodeId, { afterRowId: row.id }) };
+			})(),
+			(() => {
+				const isShown = !rowShownSet || rowShownSet.has(row.id);
+				const reason = isShown ? store.rowHideReasonGet(nodeId, row.id) : '';
+				return { id: 'shown', Icon: isShown ? EyeOff : Eye, title: isShown ? 'Hide when reading' : 'Show when reading', isDisabled: Boolean(reason), reason, act: () => store.rowShownSet(nodeId, row.id, !isShown) };
+			})(),
 			{ id: 'remove', Icon: Trash2, isDanger: true, title: `Remove the ${labelRow}`, act: () => store.rowRemove(nodeId, row.id, editor.handlePositionGet) },
 		]} />;
 	const fieldToolbar = (field, index) => <CardToolbar className="is-field" editor={editor}
@@ -92,6 +119,7 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 				</span>
 				{node.data.nameLogical || editor ? <CardCell editor={editor} nodeId={nodeId} field={{ id: 'nameLogical', kind: 'text' }} value={content.nameLogical} className="doc-er-table-title-logical" /> : null}
 				{titleTrailing}
+				{cardViewSwitcherIsShown(node.data) ? <CardViewSwitcher viewList={viewList} view={view} onChange={viewSet} /> : null}
 				{isHeaderHandleAllowed ? handleAdders('header', titleSides) : null}
 			</div>
 			{node.data.description ? <div className={`doc-er-table-description doc-card-prop nodrag nopan${isPropSelected('description') ? ' is-selected' : ''}`} tabIndex={editor ? 0 : undefined} onClick={select({ propId: 'description' })} onFocus={selectOnFocus({ propId: 'description' })}>{node.data.description}</div> : null}
@@ -101,7 +129,10 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 					<CardCell editor={editor} nodeId={nodeId} field={field} value={content[field.id]} className="doc-card-head-value" />
 				</div>
 			))}
-			{node.data.isFieldHeaderHidden ? null : <div className="doc-er-table-column-header doc-card-fields nodrag nopan">
+			{node.data.isFieldHeaderHidden || draw.isPlain ? null : <div className="doc-er-table-column-header doc-card-fields nodrag nopan">
+				{draw.fieldList.map(field => <span key={field.id} className="doc-card-field">{docStore?.textDisplayGet({ en: field.label }).text ?? field.label}</span>)}
+			</div>}
+			{node.data.isFieldHeaderHidden || !draw.isPlain ? null : <div className="doc-er-table-column-header doc-card-fields nodrag nopan">
 				{schema.fieldList.map((field, index) => {
 					const isFieldSelected = isSelected && selection.fieldId === field.id && !selection.rowId;
 					return <span key={field.id} className={`doc-card-field${isFieldSelected ? ' is-selected' : ''}${dropClass('field', index, schema.fieldList.length)}`} tabIndex={editor ? 0 : undefined}
@@ -111,12 +142,21 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 					</span>;
 				})}
 			</div>}
-			{rows.map((row, index) => {
+			{rowItemList.map(item => {
+				if (item.break) return <CardRowBreak key={item.break.id} text={item.break.text} isSelected={store?.display?.nodeId === nodeId && store.display.rowBreakIndex === item.break.index}
+					onSelect={editor ? event => { event.stopPropagation(); editor.navigate([{ kind: 'node', id: nodeId }, { kind: 'rowDisplay' }, { kind: 'rowBreak', index: item.break.index }]); } : undefined} />;
+				const { row } = item;
+				// a view of another mode only reads: what it shows is edited as data
+				if (!draw.isPlain) return <div key={row.id} ref={anchorRef?.(`${draw.anchorPrefix}/${row.id}`)} data-row-id={row.id} data-tone={row.tone || undefined} className={`doc-er-table-column doc-card-row nodrag nopan${rowShownSet && !rowShownSet.has(row.id) ? ' is-out-of-display' : ''}`}>
+					{draw.fieldList.map(field => <span key={field.id}>{String(row[field.id] ?? '')}</span>)}
+				</div>;
+				const index = rows.indexOf(row);
+				const isRowOutOfDisplay = rowShownSet !== null && !rowShownSet.has(row.id);
 				const rowContent = (content[schema.rowListKey] ?? []).find(item => item.id === row.id) ?? row;
 				const isRowSelected = isSelected && selection.rowId === row.id;
 				const target = cardRowAnchorBuild(schema, row.id);
 				if (row.isEllipsis && !editor) return <div key={row.id} ref={anchorRef?.(target)} data-row-id={row.id} className="doc-er-table-column doc-card-row doc-card-row-ellipsis nodrag nopan">{row[schema.fieldList[0]?.id] || '⋮'}</div>;
-				return <div key={row.id} ref={anchorRef?.(target)} data-row-id={row.id} data-tone={row.tone || undefined} className={`doc-er-table-column doc-card-row nodrag nopan${isRowSelected && !selection.fieldId ? ' is-selected' : ''}${isRowSelected ? ' is-row-of-selection' : ''}${dropClass('row', index, rows.length)}`} tabIndex={editor ? 0 : undefined}
+				return <div key={row.id} ref={anchorRef?.(target)} data-row-id={row.id} data-tone={row.tone || undefined} title={isRowOutOfDisplay ? 'Not shown when reading: it is left out of rowDisplay' : undefined} className={`doc-er-table-column doc-card-row nodrag nopan${isRowOutOfDisplay ? ' is-out-of-display' : ''}${isRowSelected && !selection.fieldId ? ' is-selected' : ''}${isRowSelected ? ' is-row-of-selection' : ''}${dropClass('row', index, rows.length)}`} tabIndex={editor ? 0 : undefined}
 					onClick={select({ rowId: row.id })} onFocus={selectOnFocus({ rowId: row.id })}>
 					{schema.fieldList.map(field => (
 						<CardCell key={field.id} editor={editor} nodeId={nodeId} rowId={row.id} field={field} value={rowContent[field.id]}
@@ -128,10 +168,31 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 					{isRowSelected ? rowToolbar(row, index) : null}
 				</div>;
 			})}
-			{rowGroupList.map(group => <CardRowGroup key={group.id} group={group} anchorRef={anchorRef} />)}
+			{!draw.isPlain ? null : rowGroupList.map(group => <CardRowGroup key={group.id} group={group} anchorRef={anchorRef} />)}
 		</div>
 	);
 });
+
+// the views of a card, at the right of its title line: a menu, or only the name of a view
+// when it has no other
+function CardViewSwitcher({ viewList, view, onChange }) {
+	if (viewList.length <= 1) return <span className="doc-card-view-switcher is-single nodrag nopan">{cardViewLabelOf(view)}</span>;
+	return <ValueMenu label="View" className="doc-card-view-switcher" value={view.id} values={viewList.map(item => item.id)} valueLabels={Object.fromEntries(viewList.map(item => [item.id, cardViewLabelOf(item)]))} onChange={onChange} />;
+}
+
+// rows left out (rowDisplay): the mark of a broken axis, two strokes apart, each one S turned
+// the same way around its middle, with what was cut beside it if it says
+const CARD_ROW_BREAK_STROKE = 'c-3 5 -11 8 -11 12.5 c0 3 3.5 3 5.5 3.5 c2 .5 5.5 .5 5.5 3.5 c0 4.5 -8 7.5 -11 12.5';
+
+function CardRowBreak({ text, isSelected = false, onSelect }) {
+	return <div className={`doc-card-row-break nodrag nopan${isSelected ? ' is-selected' : ''}`} role="separator" aria-label={text || 'Rows left out'} title={onSelect ? 'Row break: click to edit' : undefined} onClick={onSelect}>
+		<svg className="doc-card-row-break-mark" viewBox="0 0 30 32" aria-hidden="true">
+			<path d={`M13 0 ${CARD_ROW_BREAK_STROKE}`} />
+			<path d={`M28 0 ${CARD_ROW_BREAK_STROKE}`} />
+		</svg>
+		{text ? <span className="doc-card-row-break-text">{text}</span> : null}
+	</div>;
+}
 
 // the bracket of rows taken together (rowGroupList): it spans them, in the gutter
 // the card keeps on its right, and it is the anchor group/<id>, so a line leaves

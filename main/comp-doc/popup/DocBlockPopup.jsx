@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Eye, LoaderCircle, Pencil } from '../../frontend/UICommon.js';
+import { Eye, LoaderCircle, Pencil, RefreshCw } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { EDIT_POPUP_CLASS } from '../edit/use-edit-outside-pointer.js';
 import '../edit/DocEdit.css';
@@ -98,7 +98,14 @@ export const DocBlockPopup = observer(function DocBlockPopup() {
         <>
           {isSurfaceShown ? null : (
             <p className="doc-block-popup-placeholder">
-              {popup.transition === 'entering' ? 'Opening the editor…' : 'The block is not shown on the page.'}
+              {popup.transition === 'entering' ? 'Opening the editor…' : (
+                <>
+                  <span>The block is not shown on the page.</span>
+                  <button type="button" className="doc-button-icon" title="Reload the block and show it again" aria-label="Reload the block" disabled={blockPopupStore.isSurfaceReloading} onClick={() => void blockPopupStore.surfaceReload()}>
+                    <RefreshCw aria-hidden="true" size={12} className={blockPopupStore.isSurfaceReloading ? 'doc-spin' : undefined} />
+                  </button>
+                </>
+              )}
             </p>
           )}
           <div ref={slotRefSet} className="doc-block-popup-slot" />

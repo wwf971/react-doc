@@ -2,7 +2,7 @@ import { yamlParse, yamlStringify } from '../../../../../main/frontend/src/lib/y
 import { nodeRegistryBuild } from '../../card-diagram/node-registry.js';
 import { dataverseChoiceNodeKind, dataverseTableNodeKind, powerPlatformNodeRegistry } from '../power-platform-node-registry.js';
 import { operatorNodeKindList } from '../OperatorNodes.js';
-import { migrationMappingRowListOf, migrationPairGet, migrationPathBuild, migrationSegmentBuild, migrationTableListOf } from './MigrationData.js';
+import { migrationMappingColumnListOf, migrationPairGet, migrationPathBuild, migrationSegmentBuild, migrationTableListOf } from './MigrationData.js';
 
 // How each kind of data item is edited (power-platform-migration.md#editing): an item
 // becomes the YAML of a card or a diagram, the visual editor of the card diagram
@@ -116,7 +116,7 @@ const adapterMappingChoice = {
 	},
 };
 
-// ---------- a mapping of tables: the row mappings as lines ----------
+// ---------- a mapping of tables: the column mappings as lines ----------
 
 const tableNodeOf = (table, id, x, side, handleExtra = []) => ({
 	id,
@@ -129,7 +129,7 @@ const tableNodeOf = (table, id, x, side, handleExtra = []) => ({
 
 const ABANDON_ID = 'operator-abandon';
 const DEFAULT_PREFIX = 'operator-default-';
-const ROW_LINE_PREFIX = 'row:';
+const COLUMN_LINE_PREFIX = 'column:';
 const X_TARGET = 960;
 
 const adapterMappingTable = {
@@ -139,7 +139,7 @@ const adapterMappingTable = {
 		const source = model.tableByKey.get(item.source);
 		const target = model.tableByKey.get(item.target);
 		if (!source || !target) throw new Error('This mapping names a table that is not found.');
-		const rowList = migrationMappingRowListOf(model, item);
+		const columnMappingList = migrationMappingColumnListOf(model, item);
 		const yBelow = 70 + Math.max(source.columnList.length, target.columnList.length) * 33 + 62;
 		const nodes = [
 			tableNodeOf(source, 'source', 0, 'right'),
@@ -148,16 +148,16 @@ const adapterMappingTable = {
 		];
 		const connections = [];
 		let yDefault = yBelow;
-		const lineLabel = (row) => ({ text: row.label ?? '', position: 0.5 });
-		for (const row of rowList) {
-			const id = `${ROW_LINE_PREFIX}${row.key}`;
-			if (row.source && row.target) connections.push({ id, source: { nodeId: 'source', handleId: `col-${row.source}` }, target: { nodeId: 'target', handleId: `col-${row.target}` }, label: lineLabel(row) });
-			else if (row.source) connections.push({ id, source: { nodeId: 'source', handleId: `col-${row.source}` }, target: { nodeId: ABANDON_ID, handleId: 'left' }, label: lineLabel(row) });
-			else if (row.target) {
-				const nodeId = `${DEFAULT_PREFIX}${row.target}`;
-				nodes.push({ id: nodeId, renderer: { type: 'operator-text' }, position: { x: 680, y: yDefault }, size: { width: 210, height: 'auto' }, data: { name: model.system.labels?.defaultValue ?? 'Default value', description: row.label ?? '' }, handles: [handleOf('right', 'out', 'right')] });
+		const lineLabel = (columnMapping) => ({ text: columnMapping.label ?? '', position: 0.5 });
+		for (const columnMapping of columnMappingList) {
+			const id = `${COLUMN_LINE_PREFIX}${columnMapping.key}`;
+			if (columnMapping.source && columnMapping.target) connections.push({ id, source: { nodeId: 'source', handleId: `col-${columnMapping.source}` }, target: { nodeId: 'target', handleId: `col-${columnMapping.target}` }, label: lineLabel(columnMapping) });
+			else if (columnMapping.source) connections.push({ id, source: { nodeId: 'source', handleId: `col-${columnMapping.source}` }, target: { nodeId: ABANDON_ID, handleId: 'left' }, label: lineLabel(columnMapping) });
+			else if (columnMapping.target) {
+				const nodeId = `${DEFAULT_PREFIX}${columnMapping.target}`;
+				nodes.push({ id: nodeId, renderer: { type: 'operator-text' }, position: { x: 680, y: yDefault }, size: { width: 210, height: 'auto' }, data: { name: model.system.labels?.defaultValue ?? 'Default value', description: columnMapping.label ?? '' }, handles: [handleOf('right', 'out', 'right')] });
 				yDefault += 100;
-				connections.push({ id, source: { nodeId, handleId: 'right' }, target: { nodeId: 'target', handleId: `col-${row.target}` }, label: { text: '' } });
+				connections.push({ id, source: { nodeId, handleId: 'right' }, target: { nodeId: 'target', handleId: `col-${columnMapping.target}` }, label: { text: '' } });
 			}
 		}
 		return yamlStringify({
@@ -170,15 +170,15 @@ const adapterMappingTable = {
 	},
 	writesBuild: (raw, item, model) => {
 		const doc = yamlParse(raw);
-		const rowList = migrationMappingRowListOf(model, item);
-		const rowByKey = new Map(rowList.map((row) => [row.key, row]));
+		const columnMappingList = migrationMappingColumnListOf(model, item);
+		const columnMappingByKey = new Map(columnMappingList.map((columnMapping) => [columnMapping.key, columnMapping]));
 		const source = model.tableByKey.get(item.source);
 		const target = model.tableByKey.get(item.target);
 		const pair = migrationPairGet(model, item);
 		const prefix = item.key.replace(/map\.table\..*$/, '');
 		const writeList = [];
 		const createList = [];
-		const rowKeyList = [];
+		const columnKeyList = [];
 		const columnOf = (endpoint) => String(endpoint?.handleId ?? '').replace(/^col-/, '');
 		const seen = new Set();
 		for (const connection of doc.connections ?? []) {
@@ -190,40 +190,40 @@ const adapterMappingTable = {
 				throw new Error(`The line ${connection.id} must join a source column to a target column, or to Abandon.`);
 			}
 			const label = connection.label?.text ?? '';
-			const key = String(connection.id).startsWith(ROW_LINE_PREFIX) ? String(connection.id).slice(ROW_LINE_PREFIX.length) : null;
-			const existing = key ? rowByKey.get(key) : null;
+			const key = String(connection.id).startsWith(COLUMN_LINE_PREFIX) ? String(connection.id).slice(COLUMN_LINE_PREFIX.length) : null;
+			const existing = key ? columnMappingByKey.get(key) : null;
 			if (existing) {
 				seen.add(existing.key);
-				rowKeyList.push(existing.key);
-				const { key: _key, path: _path, ...rowData } = existing;
-				const next = { ...rowData, source: isDefault ? existing.source : sourceColumn, target: isAbandon ? null : targetColumn, label: isDefault ? existing.label : label || existing.label };
-				if (JSON.stringify(next) !== JSON.stringify(rowData)) writeList.push({ ref: existing.key, data: next, note: 'row mapping edited' });
+				columnKeyList.push(existing.key);
+				const { key: _key, path: _path, ...columnMappingData } = existing;
+				const next = { ...columnMappingData, source: isDefault ? existing.source : sourceColumn, target: isAbandon ? null : targetColumn, label: isDefault ? existing.label : label || existing.label };
+				if (JSON.stringify(next) !== JSON.stringify(columnMappingData)) writeList.push({ ref: existing.key, data: next, note: 'column mapping edited' });
 				continue;
 			}
 			const id = migrationSegmentBuild(targetColumn ?? sourceColumn);
-			const keyNew = `${prefix}map.row.${pair}.${id}`;
-			if (rowKeyList.includes(keyNew)) throw new Error(`Two lines would be the row mapping of ${id}.`);
-			rowKeyList.push(keyNew);
-			// a line drawn again where a line was removed is that row mapping, changed
-			const rowSame = rowByKey.get(keyNew);
-			if (rowSame) {
+			const keyNew = `${prefix}map.column.${pair}.${id}`;
+			if (columnKeyList.includes(keyNew)) throw new Error(`Two lines would be the column mapping of ${id}.`);
+			columnKeyList.push(keyNew);
+			// a line drawn again where a line was removed is that column mapping, changed
+			const columnMappingSame = columnMappingByKey.get(keyNew);
+			if (columnMappingSame) {
 				seen.add(keyNew);
-				const { key: _key, path: _path, ...rowData } = rowSame;
-				writeList.push({ ref: keyNew, data: { ...rowData, source: sourceColumn, target: isAbandon ? null : targetColumn, label: label || rowData.label }, note: 'row mapping edited' });
+				const { key: _key, path: _path, ...columnMappingData } = columnMappingSame;
+				writeList.push({ ref: keyNew, data: { ...columnMappingData, source: sourceColumn, target: isAbandon ? null : targetColumn, label: label || columnMappingData.label }, note: 'column mapping edited' });
 				continue;
 			}
 			const column = (target?.columnList ?? []).find((item2) => item2.id === targetColumn) ?? (source?.columnList ?? []).find((item2) => item2.id === sourceColumn);
 			createList.push({
 				key: keyNew,
-				kind: 'mapping-row',
+				kind: 'mapping-column',
 				name: column?.name ?? id,
-				pathList: [migrationPathBuild(model.category, 'mapping-row', { source: source.logical, target: target.logical, id })],
+				pathList: [migrationPathBuild(model.category, 'mapping-column', { source: source.logical, target: target.logical, id })],
 				data: { id, name: column?.name ?? id, table: item.key, source: sourceColumn, target: isAbandon ? null : targetColumn, kind: isAbandon ? 'abandon' : 'copy', label: label || (isAbandon ? (model.system.labels?.abandon ?? 'Abandon') : ''), stepList: isAbandon ? [{ op: 'abandon' }] : [] },
 			});
 		}
-		const removeList = rowList.filter((row) => !seen.has(row.key)).map((row) => row.key);
+		const removeList = columnMappingList.filter((columnMapping) => !seen.has(columnMapping.key)).map((columnMapping) => columnMapping.key);
 		const { key, path, ...itemData } = item;
-		if (JSON.stringify(rowKeyList) !== JSON.stringify(item.rowKeyList)) writeList.push({ ref: key, data: { ...itemData, rowKeyList }, note: 'row mappings changed' });
+		if (JSON.stringify(columnKeyList) !== JSON.stringify(item.columnKeyList)) writeList.push({ ref: key, data: { ...itemData, columnKeyList }, note: 'column mappings changed' });
 		return { writeList, createList, removeList };
 	},
 };
@@ -231,14 +231,14 @@ const adapterMappingTable = {
 // ---------- one column ----------
 
 const X_STEP_START = 500;
-const adapterMappingRow = {
+const adapterMappingColumn = {
 	kind: 'diagram',
 	registryGet: () => powerPlatformNodeRegistry,
 	sourceBuild: (item, model) => {
 		const mapping = model.mappingTableByKey.get(item.table);
 		const source = model.tableByKey.get(mapping?.source);
 		const target = model.tableByKey.get(mapping?.target);
-		if (!source || !target) throw new Error('This row mapping names a mapping of tables that is not found.');
+		if (!source || !target) throw new Error('This column mapping names a mapping of tables that is not found.');
 		const handles = [handleOf('left', 'in', 'left'), handleOf('right', 'out', 'right')];
 		let x = X_STEP_START;
 		const stepNodeList = item.stepList.map((step, index) => {
@@ -280,7 +280,7 @@ const adapterMappingRow = {
 		const nodeById = new Map(doc.nodes.map((node) => [node.id, node]));
 		const outOf = (nodeId, handleId) => (doc.connections ?? []).filter((connection) => connection.source?.nodeId === nodeId && (handleId === undefined || connection.source.handleId === handleId));
 		const startList = (doc.connections ?? []).filter((connection) => connection.source?.nodeId === 'source');
-		if (startList.length > 1) throw new Error('One row mapping starts from one source column.');
+		if (startList.length > 1) throw new Error('One column mapping starts from one source column.');
 		const start = startList[0];
 		const stepList = [];
 		let target = null;
@@ -288,7 +288,7 @@ const adapterMappingRow = {
 		let endpointEnd = start?.target;
 		const visited = new Set();
 		while (current && current !== 'target' && current !== 'source') {
-			if (visited.has(current)) throw new Error('The operators of a row mapping cannot form a loop.');
+			if (visited.has(current)) throw new Error('The operators of a column mapping cannot form a loop.');
 			visited.add(current);
 			const node = nodeById.get(current);
 			if (!node) break;
@@ -299,10 +299,10 @@ const adapterMappingRow = {
 			} else if (type === 'operator-text') {
 				stepList.push({ op: 'text', name: node.data?.name ?? '', description: node.data?.description ?? '' });
 			} else {
-				throw new Error(`A row mapping cannot go through the node ${current}.`);
+				throw new Error(`A column mapping cannot go through the node ${current}.`);
 			}
 			const outList = outOf(current);
-			if (outList.length > 1) throw new Error(`The operator ${node.data?.name ?? current} has more than one way out: a row mapping is one chain.`);
+			if (outList.length > 1) throw new Error(`The operator ${node.data?.name ?? current} has more than one way out: a column mapping is one chain.`);
 			endpointEnd = outList[0]?.target ?? null;
 			current = endpointEnd?.nodeId;
 		}
@@ -315,7 +315,7 @@ const adapterMappingRow = {
 			kind: target ? (stepList.length > 0 ? itemData.kind === 'copy' ? 'transform' : itemData.kind : 'copy') : 'abandon',
 			stepList,
 		};
-		return { writeList: [{ ref: key, data: next, note: 'row mapping edited' }] };
+		return { writeList: [{ ref: key, data: next, note: 'column mapping edited' }] };
 	},
 };
 
@@ -323,13 +323,13 @@ export const migrationEditAdapterByKind = {
 	'schema-table': adapterSchemaTable,
 	'schema-choice': adapterSchemaChoice,
 	'mapping-table': adapterMappingTable,
-	'mapping-row': adapterMappingRow,
+	'mapping-column': adapterMappingColumn,
 	'mapping-choice': adapterMappingChoice,
 };
 
 // the item of the model a key names, for its adapter
 export function migrationItemOf(model, kind, key) {
-	const map = { 'schema-table': model.tableByKey, 'schema-choice': model.choiceByKey, 'mapping-table': model.mappingTableByKey, 'mapping-row': model.mappingRowByKey, 'mapping-choice': model.mappingChoiceByKey }[kind];
+	const map = { 'schema-table': model.tableByKey, 'schema-choice': model.choiceByKey, 'mapping-table': model.mappingTableByKey, 'mapping-column': model.mappingColumnByKey, 'mapping-choice': model.mappingChoiceByKey }[kind];
 	return map?.get(key) ?? null;
 }
 
@@ -357,7 +357,7 @@ export function migrationItemNewBuild(kind, model, form) {
 		const pair = `${migrationSegmentBuild(itemSource.logical)}--${migrationSegmentBuild(itemTarget.logical)}`;
 		const key = `${prefix}.map.${isTable ? 'table' : 'choice'}.${pair}`;
 		const label = `${itemSource.name} → ${itemTarget.name}`;
-		const data = isTable ? { source, target, rowKeyList: [] } : { source, target, label, optionList: itemSource.optionList.map((option) => ({ from: option.value, to: null })) };
+		const data = isTable ? { source, target, columnKeyList: [] } : { source, target, label, optionList: itemSource.optionList.map((option) => ({ from: option.value, to: null })) };
 		return { key, kind, name: label, pathList: [migrationPathBuild(model.category, kind, { source: itemSource.logical, target: itemTarget.logical })], data };
 	}
 	throw new Error(`An item of the kind ${kind} is not created here.`);

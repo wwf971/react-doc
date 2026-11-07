@@ -435,3 +435,110 @@ test('the canvas follows a size the draft says otherwise, over what a resize lef
 	assert.equal(canvas.nodeList[0].width, undefined);
 	assert.equal(canvas.nodeList[0].style.width, 500);
 });
+
+test('removing a row takes it out of rowDisplay', () => {
+	const raw = JSON.stringify({ version: 1, nodes: [{ id: 't', renderer: { type: 'table' }, position: { x: 0, y: 0 }, data: { name: 'T', fields: [{ id: 'f', label: 'F' }], rows: [{ id: 'a', f: '1' }, { id: 'b', f: '2' }], rowDisplay: ['a', '...', 'b'] }, handles: [] }], connections: [] });
+	const store = new DiagramEditStore(raw, 'diagram', undefined, registry);
+	assert.equal(store.rowRemove('t', 'b'), true, store.message);
+	assert.deepEqual(store.nodeGet('t').data.rowDisplay, ['a', '...']);
+});
+
+test('the rows a card shows and its row breaks are steps of the draft', () => {
+	const raw = JSON.stringify({ version: 1, nodes: [{ id: 't', renderer: { type: 'table' }, position: { x: 0, y: 0 }, data: { name: 'T', fields: [{ id: 'f', label: 'F' }], rows: [{ id: 'a', f: '1' }, { id: 'b', f: '2' }, { id: 'c', f: '3' }] }, handles: [{ id: 'h', direction: 'out', anchor: { target: 'row/c', side: 'right' } }] }], connections: [] });
+	const store = new DiagramEditStore(raw, 'diagram', undefined, registry);
+	const display = () => store.nodeGet('t').data.rowDisplay;
+	// a row break on a card showing all its rows starts a list
+	assert.equal(store.rowBreakInsert('t', { afterRowId: 'a' }), 1);
+	assert.deepEqual(display(), ['a', '...', 'b', 'c']);
+	store.rowBreakTextSet('t', 1, 'two');
+	store.rowBreakTextSet('t', 1, 'two more');
+	assert.deepEqual(display()[1], { break: 'two more' });
+	store.rowBreakTextSet('t', 1, '');
+	assert.equal(display()[1], '...');
+	// hide, show, move
+	assert.equal(store.rowShownSet('t', 'b', false), true);
+	assert.deepEqual(display(), ['a', '...', 'c']);
+	assert.equal(store.rowShownSet('t', 'c', false), false, 'a row with a handle stays');
+	assert.match(store.message, /handle/);
+	assert.equal(store.rowShownSet('t', 'b', true, 0), true);
+	assert.deepEqual(display(), ['b', 'a', '...', 'c']);
+	store.rowDisplayMove('t', 3, 0);
+	assert.deepEqual(display(), ['c', 'b', 'a', '...']);
+	store.rowDisplayEntryRemove('t', 3);
+	assert.deepEqual(display(), ['c', 'b', 'a']);
+	// two row breaks side by side are refused
+	assert.equal(store.rowBreakInsert('t', { afterRowId: 'a' }), 3);
+	assert.equal(store.rowBreakInsert('t', { afterRowId: 'a' }), null);
+	assert.match(store.message, /already there/);
+	assert.equal(store.rowBreakInsert('t', { afterRowId: 'b' }), 2);
+	assert.equal(store.rowBreakInsert('t'), null);
+	store.rowDisplaySet('t', ['c', 'b', 'a']);
+	// a row added shows; a row break after a row left out is refused
+	const added = store.rowInsert('t');
+	assert.ok(display().includes(added));
+	store.rowShownSet('t', added, false);
+	assert.equal(store.rowBreakInsert('t', { afterRowId: added }), null);
+	// a wrong list is refused, the draft kept
+	assert.equal(store.rowDisplaySet('t', ['nope']), false);
+	assert.match(store.message, /not a row/);
+	assert.deepEqual(display(), ['c', 'b', 'a']);
+	// all rows again, and one undo brings the list back
+	store.rowDisplaySet('t', null);
+	assert.equal(display(), undefined);
+	store.undo();
+	assert.deepEqual(display(), ['c', 'b', 'a']);
+});
+
+test('the display of a card is set in the edit card, and a default leaves the data', () => {
+	const raw = JSON.stringify({ version: 1, nodes: [{ id: 't', renderer: { type: 'table' }, position: { x: 0, y: 0 }, data: { name: 'T', fields: [{ id: 'f', label: 'F' }], rows: [{ id: 'a', f: '1' }] }, handles: [] }], connections: [] });
+	const store = new DiagramEditStore(raw, 'diagram', undefined, registry);
+	assert.equal(store.fieldSet('t', null, 'isCompact', true), true);
+	assert.equal(store.nodeGet('t').data.isCompact, true);
+	assert.equal(store.fieldSet('t', null, 'isCompact', false, true), true);
+	assert.equal('isCompact' in store.nodeGet('t').data, false);
+	assert.equal(store.fieldSet('t', null, 'tone', 'teal'), true);
+});
+
+test('the views of a card are steps of the draft, and what they name goes with what is removed', () => {
+	const raw = JSON.stringify({ version: 1, nodes: [{ id: 't', renderer: { type: 'table' }, position: { x: 0, y: 0 }, data: { name: 'T', fields: [{ id: 'f', label: 'F' }, { id: 'g', label: 'G' }], rows: [{ id: 'a', f: '1', g: '2' }, { id: 'b', f: '3', g: '4' }], rowDisplay: ['a', '...'] }, handles: [] }], connections: [] });
+	const store = new DiagramEditStore(raw, 'diagram', undefined, registry);
+	const data = () => store.nodeGet('t').data;
+	// the first view declared keeps the plain view the card had, with its list
+	const id = store.viewAdd('t', 'row');
+	assert.deepEqual(data().viewList.map((view) => [view.id, view.mode]), [['plain', 'plain'], [id, 'row']]);
+	assert.deepEqual(data().viewList[0].rowDisplay, ['a', '...']);
+	assert.equal(data().rowDisplay, undefined);
+	assert.equal(store.cardViewGet('t').id, id, 'it is the one shown now');
+	// rows shown are those of the view shown
+	store.rowDisplaySet('t', ['b']);
+	assert.deepEqual(data().viewList[1].rowDisplay, ['b']);
+	assert.deepEqual(data().viewList[0].rowDisplay, ['a', '...']);
+	store.cardViewSet('t', 'plain');
+	assert.deepEqual(store.rowDisplayCurrentGet('t'), ['a', '...']);
+	// parameters; another mode chooses among other rows
+	store.viewSet('t', id, { fieldDisplay: ['g'] });
+	assert.deepEqual(data().viewList[1].fieldDisplay, ['g']);
+	store.viewSet('t', id, { mode: 'column' });
+	assert.equal(data().viewList[1].mode, 'column');
+	assert.equal(data().viewList[1].fieldDisplay, undefined);
+	assert.equal(data().viewList[1].rowDisplay, undefined);
+	store.viewSet('t', id, { valueRowId: 'b' });
+	// default and switcher
+	assert.equal(store.viewDefaultSet('t', id), true);
+	assert.equal(data().viewDefault, id);
+	assert.equal(store.viewSwitcherShownSet('t', false), true);
+	assert.equal(data().isViewSwitcherHidden, true);
+	// removed things leave the views valid
+	assert.equal(store.rowRemove('t', 'b'), true, store.message);
+	assert.equal(data().viewList[1].valueRowId, undefined);
+	assert.equal(store.columnRemove('t', 'g'), true, store.message);
+	// a wrong list is refused
+	assert.equal(store.viewListWrite('t', [{ id: 'x', mode: 'nope' }]), false);
+	assert.match(store.message, /mode must be/);
+	// the last view gone: the plain view of the card, and no default naming a view gone
+	assert.equal(store.viewRemove('t', id), true);
+	assert.equal(data().viewDefault, undefined);
+	assert.equal(store.viewRemove('t', 'plain'), true);
+	assert.equal(data().viewList, undefined);
+	assert.equal(store.cardViewGet('t').isImplicit, true);
+});

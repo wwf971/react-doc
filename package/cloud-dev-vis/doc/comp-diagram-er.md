@@ -486,6 +486,96 @@ nodes:
 ```
 
 <!--renderComp=Anchor,id=diagram-dataverse-entity-->
+## Table Card Views
+
+A table card has one or more **views**, and shows one at a time. Each view belongs to a **view mode**, and has the parameters of that mode, so one card can have several views of one mode.
+
+| View mode | A visual row is | Parameters, all optional |
+| --- | --- | --- |
+| `plain` | a row of the card, as the data has it: a column of a Dataverse table, an option of a choice, a record of a generic table | `rowDisplay` |
+| `column` | a column of the table, with the value of one record beside it if `valueRowId` names one | `rowDisplay` (of columns), `valueRowId`, `labelColumn`, `labelValue`, `columnTemplate` |
+| `row` | a record of the table | `rowDisplay` (of records), `fieldDisplay` (the columns, in order), `columnTemplate` |
+
+A table's columns are its `fields`, or a Dataverse card's `columns`. Its records are its `rows`: `{ id, <column id>: value }`. A Dataverse card needs `rows` written for its `row` views. `column` and `row` views are offered on generic and Dataverse tables; choice and resource cards have `plain` only.
+
+```yaml
+data:
+  name: Account
+  columns: [...]
+  rows:
+    - { id: r1, accountid: A-001, name: Contoso, status: Active }
+  viewList:
+    - { id: schema, label: Schema, mode: plain, rowDisplay: [accountid, '...', status] }
+    - { id: one, label: One record, mode: column, valueRowId: r1 }
+    - { id: records, label: Records, mode: row, fieldDisplay: [accountid, name] }
+  viewDefault: one
+```
+
+- **Without `viewList`**, the card has one view, `plain`, and needs no declaration. Its parameters are the card's own: `rowDisplay` directly in `data`. This is what most cards are.
+- **With a `viewList`**, those are the views. `plain` is there only if it is one of them, which is worth doing when the plain view should be offered, or be the default, among others.
+- **The default view** is `viewDefault`, else the first declared.
+- **The switcher** is a menu at the right of the title line. It shows when views are declared. With only one view, it shows the name of the view and cannot be clicked. `isViewSwitcherHidden: true` hides it, and `false` shows it on a card with no declared views too.
+- **What a reader picks is not saved.** It lasts while the card is on the page.
+- **A line stays attached in every view.** If a view does not draw the row a handle is on, the handle stands in the middle of that side of the card.
+
+### Choosing rows
+
+`rowDisplay` lists what a view draws from top to bottom:
+
+```yaml
+rowDisplay: [accountid, '...', status, { break: 12 columns }, modifiedon]
+```
+
+| Entry | Draws |
+| --- | --- |
+| a row id | that row. Rows can be left out, and can come in another order |
+| `'...'` | a **row break**: the mark an axis has where part of it is cut away |
+| `{ break: text }` | a row break saying what was cut |
+
+Quote `'...'` so that it stays plain text in YAML.
+
+<!--renderComp=DiagramER,title=A long table cut down to what matters here-->
+```yaml
+version: 1
+viewport:
+  size: { height: 300 }
+nodes:
+  - id: account
+    renderer: { type: dataverse-table }
+    position: { x: 0, y: 0 }
+    data:
+      name: Account
+      nameLogical: account
+      columns:
+        - { id: accountid, name: Account, nameLogical: accountid, type: Unique identifier, key: PK }
+        - { id: name, name: Name, nameLogical: name, type: Text }
+        - { id: phone, name: Phone, nameLogical: telephone1, type: Text }
+        - { id: fax, name: Fax, nameLogical: fax, type: Text }
+        - { id: status, name: Status, nameLogical: statuscode, type: Choice, tone: green }
+        - { id: createdon, name: Created on, nameLogical: createdon, type: Date and Time }
+        - { id: modifiedon, name: Modified on, nameLogical: modifiedon, type: Date and Time }
+      rowDisplay: [accountid, { break: 3 columns }, status, '...']
+    handles: []
+connections: []
+```
+
+- **The rows stay in the data.** `rowDisplay` only says what is drawn when reading. In edit mode the card draws the same, followed by the rows left out, dimmed, so that they can still be edited.
+- **A handle belongs on a row that is drawn.** On a card with one view, the editor will not leave out a row with a handle, and in the source one is reported on the card as a missing anchor.
+
+### In the edit card
+
+The card's tab has a **Display** section: the default view, the view switcher, the rows shown of the view on the card (all or chosen), and how the card looks (column names hidden, title color; on a generic table also compact, and column widths).
+
+- **Views** lists them: drag to reorder, remove, **Add view**. The first view added keeps the plain view the card had. Opening a view shows it on the card, with its label, its mode, and the parameters of that mode. Changing the mode drops what the view had chosen, since another mode chooses among other rows.
+- **Choose rows and row breaks** opens the list of what the view on the card shows: drag to reorder, drag a row left out up to show it, remove to leave one out, **Insert row break** to add one, click a row break for its text.
+- **On the card**, in a plain view, a row has **Shown** and **Insert row break below** in its tab, and the same on its toolbar. With a chosen list the order on the card is set in that list, so the row's own move buttons are off. A view of another mode only reads: its data is edited in the tabs of the card, and a Dataverse card's records in the source.
+
+Each change is one undo step, and which view the editor shows is not a step and is not saved. The apis are `nodeViewListSet`, `nodeRowDisplaySet` and `nodeRowBreakInsert`.
+
+- **A row of its own for what is left out** (`isEllipsis: true` in the data) is still there for a table that never had those rows, or when a line must leave from that place: batches of a split table, for example. It draws `⋮`.
+
+For generated diagrams, `cardRowDisplayKeepBuild(rowIdList, keepIdList, { textOf })` in `TableCardData.js` builds the list from the rows to keep, with a row break for each run left out.
+
 ## Dataverse Table Card
 
 `DiagramDataverseEntity` shows one `dataverse-table` node outside a canvas: the same card, without dragging, zooming, or connection lines. The text stays selectable. Handles declared on the node are kept and can be edited, so the card can later be moved into a diagram unchanged.

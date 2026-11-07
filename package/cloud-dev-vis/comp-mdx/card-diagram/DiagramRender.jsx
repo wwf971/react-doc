@@ -50,9 +50,13 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 				if (!element || !element.offsetWidth) return;
 				const bounds = element.getBoundingClientRect();
 				const scale = bounds.width / element.offsetWidth || 1;
-				const missing = node.anchors.filter(anchor => anchor.id !== 'body' && !anchors.current.has(anchor.id)).map(anchor => anchor.id);
+				// a row left out by rowDisplay has no anchor drawn, which matters only if a handle is on it
+				// a card of many views draws other rows in each: a handle on a row not drawn now stands on the side of the card
+				const isViewed = Boolean(node.data?.viewList?.length);
+				const isAnchorNeeded = anchor => !isViewed && (!node.data?.rowDisplay || node.handles.some(handle => handle.anchor.target === anchor.id));
+				const missing = node.anchors.filter(anchor => anchor.id !== 'body' && !anchors.current.has(anchor.id) && isAnchorNeeded(anchor)).map(anchor => anchor.id);
 				const handles = node.handles.flatMap(handle => {
-					const target = handle.anchor.target === 'body' ? element : anchors.current.get(handle.anchor.target);
+					const target = handle.anchor.target === 'body' ? element : anchors.current.get(handle.anchor.target) ?? (isViewed ? element : null);
 					if (!target) return [];
 					observer.observe(target);
 					const rect = target.getBoundingClientRect();

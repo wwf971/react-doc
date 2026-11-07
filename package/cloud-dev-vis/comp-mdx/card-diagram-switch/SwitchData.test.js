@@ -395,3 +395,14 @@ test('a stack at full height: by presentation, what is chosen first, a node as t
 	assert.throws(() => viewStackNodeKind.contract.dataNormalize({ itemList: [], isHeightFullFocused: 'yes' }), /isHeightFullFocused must be a boolean/);
 });
 
+test('an item of the menu may be more than words', () => {
+	const provider = switchProviderFromDoc(switchDocNormalize({ version: 1, viewList: [
+		{ path: '/v', label: 'Root', diagram: { nodes: [] } },
+		{ path: '/v/a', label: 'A', labelItemList: [{ type: 'icon', icon: 'database' }, { type: 'text', text: 'A' }], diagram: { nodes: [] } },
+		{ path: '/v/b', label: 'B', diagram: { nodes: [] } },
+	] }));
+	const [a, b] = provider.childListGet('/v');
+	assert.equal(a.labelItemList[0].icon, 'database');
+	assert.equal(a.label, 'A');
+	assert.equal(b.labelItemList, undefined);
+});

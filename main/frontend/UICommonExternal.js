@@ -148,6 +148,7 @@ export {
   Key,
   Zap,
   Send,
+  SeparatorHorizontal,
   CircleAlert,
   FileSpreadsheet,
 } from 'lucide-react';

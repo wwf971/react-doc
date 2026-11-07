@@ -36,9 +36,9 @@ compList:
   - tagName: MigrationMappingTableEdit
     entry: ./migration/migration-comp.js
     export: MigrationMappingTableEditDefine
-  - tagName: MigrationMappingRowEdit
+  - tagName: MigrationMappingColumnEdit
     entry: ./migration/migration-comp.js
-    export: MigrationMappingRowEditDefine
+    export: MigrationMappingColumnEditDefine
   - tagName: MigrationMappingChoiceEdit
     entry: ./migration/migration-comp.js
     export: MigrationMappingChoiceEditDefine

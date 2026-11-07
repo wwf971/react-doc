@@ -72,11 +72,11 @@ function storesCreate({ modeList, isDocEditable = true } = {}) {
       return true;
     },
   });
-  const sourceStore = { configDoc: { compRegistry: { StockTable: 'specific/StockTable' } } };
+  const sourceStore = { configDoc: { compRegistry: { StockTable: 'specific/StockTable' } }, loadDocCount: 0, loadDocAction: null, async loadDoc() { this.loadDocCount += 1; this.loadDocAction?.(); } };
   const assetStore = { isWritable: false, writeUnavailableReason: 'The asset service layer of a built page is a read-only snapshot.' };
   const popupStore = new DocBlockPopupStore({ docStore, editStore, sourceStore, assetStore });
   popupStore.init();
-  return { docStore, editStore, popupStore };
+  return { docStore, editStore, popupStore, sourceStore };
 }
 
 function popupOpen(popupStore, assetInfo) {
@@ -186,4 +186,43 @@ test('the last surface registered under the popup key is the one shown', () => {
   assert.equal(popupStore.surfaceIsInPopup(tokenEdit), true);
   popupStore.surfaceUnregister(tokenEdit);
   assert.equal(popupStore.surfaceIsInPopup(tokenView), true);
+});
+
+test('a dialog whose block is gone reloads the document and finds it again under another key', async () => {
+  const { popupStore, sourceStore } = storesCreate();
+  const info = { path: PATH, compId: 'specific/StockTable', title: 'Sales' };
+  popupStore.open({ path: PATH, sourceLine: SOURCE_LINE, compId: info.compId, title: info.title });
+  assert.equal(popupStore.surfaceActiveToken, undefined);
+  // another block of that document and component, of another title, is not it
+  popupStore.surfaceRegister(`${PATH}#40#specific/StockTable`, { ...info, title: 'Other', sourceLine: 40 });
+  let token;
+  // the document rendered anew brings the block back, a line further down, and one more far away
+  sourceStore.loadDocAction = () => {
+    popupStore.surfaceRegister(`${PATH}#90#specific/StockTable`, { ...info, sourceLine: 90 });
+    token = popupStore.surfaceRegister(`${PATH}#13#specific/StockTable`, { ...info, sourceLine: 13 });
+  };
+  assert.equal(await popupStore.surfaceReload(), true);
+  assert.equal(sourceStore.loadDocCount, 1);
+  assert.equal(popupStore.surfaceActiveToken, token);
+  assert.equal(popupStore.isSurfaceReloading, false);
+  assert.equal(popupStore.popup.message, '');
+  // with the surface there, it does nothing
+  assert.equal(await popupStore.surfaceReload(), true);
+  assert.equal(sourceStore.loadDocCount, 1);
+});
+
+test('a surface of the same block does not pull a dialog by itself, and a block not found is said', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  const { popupStore } = storesCreate();
+  const info = { path: PATH, compId: 'specific/StockTable', title: 'Sales' };
+  popupStore.open({ path: PATH, sourceLine: SOURCE_LINE, compId: info.compId, title: info.title });
+  popupStore.surfaceRegister(`${PATH}#99#specific/StockTable`, { ...info, title: 'Other' });
+  assert.equal(popupStore.surfaceActiveToken, undefined);
+  const result = popupStore.surfaceReload();
+  assert.equal(popupStore.isSurfaceReloading, true);
+  await Promise.resolve(); await Promise.resolve();
+  context.mock.timers.tick(5000);
+  assert.equal(await result, false);
+  assert.match(popupStore.popup.message, /could not be found/);
+  assert.equal(popupStore.isSurfaceReloading, false);
 });

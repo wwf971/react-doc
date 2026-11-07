@@ -75,6 +75,8 @@ What a diagram should look like, whoever draws it:
 
 - **A list wraps.** Do not lay out many cards in one row, or fitting the whole diagram makes them small. A list on a canvas breaks into lines at a small count (four or so), and a generator breaks them itself. A chain that must read in one direction may turn downward rather than run on. Stacking by a meaning (rows by rank, columns by depth) is better still.
 - **A margin around what is held.** A card holding other cards keeps a margin inside its border, so nothing inside touches it. [An embedded view](card-diagram-flexible-switch.md#one-canvas-no-canvas-inside-a-canvas) has this by default.
+- **One table can be seen several ways.** A table card can declare views, plain, by column or by row, with a menu to switch between them ([Table Card Views](comp-diagram-er.md#table-card-views)).
+- **A long table is cut down to what matters here.** `rowDisplay` picks the rows of a table card, in any order, with a row break for what is left out ([Table Card Views](comp-diagram-er.md#table-card-views)).
 - **What is long scrolls.** In a card of many sections, prefer a [scrolling stack](card-diagram-flexible-switch.md#a-scrolling-stack) to shrinking all of them to fit.
 - **No lines on top of each other.** This is the one most often broken: [next section](#no-lines-on-top-of-each-other).
 - **A view generated from data gets its layout from an arranger.** [Below](#a-view-generated-from-data-gets-its-layout-from-an-arranger).

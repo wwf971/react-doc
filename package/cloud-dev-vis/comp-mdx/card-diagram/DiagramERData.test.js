@@ -1,3 +1,4 @@
+import { cardRowDisplayItemListGet, cardRowDisplayKeepBuild, cardRowDisplayNormalize, cardViewDefaultGet, cardViewDrawBuild, cardViewListGet, cardViewListPrune, cardViewSourceOf, cardViewSwitcherIsShown, tableCardNormalize } from './TableCardData.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
@@ -176,4 +177,81 @@ test('a color block says where its labels go, and which of them are titles', () 
 	assert.throws(() => diagramNormalize(diagramOf({ itemList: [], columnList }), cardDiagramNodeRegistry), /columnTop/);
 	assert.throws(() => diagramNormalize(diagramOf({ itemList: [], columnTop: 10, columnList: [{ id: 'a', x: 0 }] }), cardDiagramNodeRegistry), /x and width/);
 	assert.throws(() => diagramNormalize(diagramOf({ itemList: [], columnTop: 10, columnList: [{ id: 'a', x: 0, width: 1, icon: 'nothing' }] }), cardDiagramNodeRegistry), /supported icon/);
+});
+
+test('rowDisplay: rows chosen, in any order, with breaks; the rows stay in the data', () => {
+	const rows = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+	assert.equal(cardRowDisplayNormalize(undefined, rows), undefined);
+	assert.deepEqual(cardRowDisplayNormalize(['c', '...', 'a', { break: 12 }], rows), ['c', '...', 'a', { break: '12' }]);
+	assert.throws(() => cardRowDisplayNormalize(['nope'], rows), /not a row/);
+	assert.throws(() => cardRowDisplayNormalize(['a', 'a'], rows), /twice/);
+	assert.throws(() => cardRowDisplayNormalize('a', rows), /must be a list/);
+	assert.throws(() => cardRowDisplayNormalize([{ text: 'x' }], rows), /row id/);
+	const item = cardRowDisplayItemListGet(['c', '...', { break: 'two' }], rows);
+	assert.equal(item[0].row.id, 'c');
+	assert.deepEqual([item[1].break.text, item[2].break.text], ['', 'two']);
+	assert.notEqual(item[1].break.id, item[2].break.id);
+	assert.equal(cardRowDisplayItemListGet(undefined, rows).length, 3);
+	assert.equal(tableCardNormalize({ rows: [{ id: 'a' }], rowDisplay: ['a'] }).rowDisplay[0], 'a');
+	assert.throws(() => tableCardNormalize({ rows: [{ id: 'a' }], rowDisplay: ['b'] }), /not a row/);
+	assert.deepEqual(cardRowDisplayKeepBuild(['a', 'b', 'c', 'd', 'e'], ['b', 'd']), ['...', 'b', '...', 'd', '...']);
+	assert.deepEqual(cardRowDisplayKeepBuild(['a', 'b', 'c', 'd'], ['a', 'b'], { textOf: (count) => `${count} more` }), ['a', 'b', { break: '2 more' }]);
+	assert.deepEqual(cardRowDisplayKeepBuild(['a', 'b'], ['a', 'b']), ['a', 'b']);
+});
+
+test('a card has views, each of a mode; without any it has its plain view', () => {
+	const rows = [{ id: 'a', f: '1', g: '2' }, { id: 'b', f: '3', g: '4' }];
+	const fields = [{ id: 'f', label: 'F' }, { id: 'g', label: 'G' }];
+	const plainOnly = tableCardNormalize({ fields, rows, rowDisplay: ['a'] });
+	assert.equal(plainOnly.viewList, undefined);
+	assert.deepEqual(cardViewListGet(plainOnly).map((view) => [view.id, view.mode, view.isImplicit]), [['plain', 'plain', true]]);
+	assert.deepEqual(cardViewDefaultGet(plainOnly).rowDisplay, ['a']);
+	assert.equal(cardViewSwitcherIsShown(plainOnly), false);
+	assert.equal(cardViewSwitcherIsShown({ ...plainOnly, isViewSwitcherHidden: false }), true);
+	// two views of one mode, and a default
+	const data = tableCardNormalize({ fields, rows, viewDefault: 'few', viewList: [
+		{ id: 'all', mode: 'row' },
+		{ id: 'few', label: 'Few', mode: 'row', fieldDisplay: ['g'], rowDisplay: ['b', '...'] },
+		{ id: 'one', mode: 'column', valueRowId: 'a', rowDisplay: ['g', 'f'] },
+		{ id: 'data', mode: 'plain' },
+	] });
+	assert.equal(cardViewDefaultGet(data).id, 'few');
+	assert.equal(cardViewDefaultGet({ viewList: data.viewList }).id, 'all', 'else the first');
+	assert.equal(cardViewSwitcherIsShown(data), true);
+	assert.equal(cardViewSwitcherIsShown({ ...data, isViewSwitcherHidden: true }), false);
+	const source = cardViewSourceOf(data, 'rows');
+	const few = cardViewDrawBuild(data.viewList[1], source, []);
+	assert.deepEqual(few.fieldList.map((field) => field.id), ['g']);
+	assert.deepEqual(few.itemList.map((item) => item.row?.id ?? 'break'), ['b', 'break']);
+	assert.equal(few.anchorPrefix, 'row');
+	const one = cardViewDrawBuild(data.viewList[2], source, []);
+	assert.deepEqual(one.fieldList.map((field) => field.id), ['~column', '~value']);
+	assert.deepEqual(one.itemList.map((item) => [item.row['~column'], item.row['~value']]), [['G', '2'], ['F', '1']]);
+	assert.equal(one.anchorPrefix, 'column');
+	assert.equal(cardViewDrawBuild(data.viewList[3], source, fields).isPlain, true);
+	// what does not fit is refused
+	const refused = (extra) => () => tableCardNormalize({ fields, rows, ...extra });
+	assert.throws(refused({ viewList: [{ id: 'a', mode: 'nope' }] }), /mode must be/);
+	assert.throws(refused({ viewList: [{ mode: 'row' }] }), /needs an id/);
+	assert.throws(refused({ viewList: [{ id: 'a', mode: 'row' }, { id: 'a', mode: 'row' }] }), /Duplicate view/);
+	assert.throws(refused({ viewList: [{ id: 'a', mode: 'row' }], viewDefault: 'b' }), /not a view/);
+	assert.throws(refused({ viewDefault: 'b' }), /not a view/);
+	assert.throws(refused({ viewList: [{ id: 'a', mode: 'row' }], rowDisplay: ['a'] }), /in each view/);
+	assert.throws(refused({ viewList: [{ id: 'a', mode: 'column', rowDisplay: ['a'] }] }), /View "a": rowDisplay names "a"/);
+	assert.throws(refused({ viewList: [{ id: 'a', mode: 'row', valueRowId: 'a' }] }), /belongs to a column view/);
+	assert.throws(refused({ viewList: [{ id: 'a', mode: 'column', fieldDisplay: ['f'] }] }), /belongs to a row view/);
+	assert.throws(refused({ viewList: [{ id: 'a', mode: 'column', valueRowId: 'zz' }] }), /not a record/);
+	assert.throws(refused({ viewList: [{ id: 'a', mode: 'row', fieldDisplay: ['zz'] }] }), /not a column/);
+	assert.throws(() => tableCardNormalize({ fields, rows: [], viewList: [{ id: 'a', mode: 'row' }] }), /needs the records/);
+	// a Dataverse card: its columns are its plain rows, its records are in rows
+	const dataverse = dataverseCardNormalize({ columns: [{ id: 'x', name: 'X' }, { id: 'y', name: 'Y' }], rows: [{ id: 'r', x: 1, y: 2 }], viewList: [{ id: 's', mode: 'plain', rowDisplay: ['y'] }, { id: 'r', mode: 'row' }, { id: 'v', mode: 'column', valueRowId: 'r' }] });
+	const sourceDataverse = cardViewSourceOf(dataverse, 'columns');
+	assert.deepEqual(cardViewDrawBuild(dataverse.viewList[1], sourceDataverse, []).fieldList.map((field) => field.label), ['X', 'Y']);
+	assert.deepEqual(cardViewDrawBuild(dataverse.viewList[2], sourceDataverse, []).itemList.map((item) => item.row['~value']), ['1', '2']);
+	assert.ok(dataverseAnchorListGet(dataverse).some((anchor) => anchor.id === 'row/r'));
+	assert.throws(() => dataverseCardNormalize({ columns: [{ id: 'x' }], viewList: [{ id: 'r', mode: 'row' }] }), /needs the records/);
+	// what the views name goes with what they name
+	assert.deepEqual(cardViewListPrune(data.viewList, { columnId: 'g' })[1].fieldDisplay, undefined);
+	assert.deepEqual(cardViewListPrune(data.viewList, { columnId: 'g' })[2].rowDisplay, ['f']);
+	assert.equal(cardViewListPrune(data.viewList, { recordId: 'a' })[2].valueRowId, undefined);
 });

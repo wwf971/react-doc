@@ -81,3 +81,32 @@ test('a redirect rule of the host is applied after the built-in ones', () => {
 	store.select('customer');
 	assert.equal(store.display, null);
 });
+
+test('the path of what a card shows: the list, and a row break by its place', () => {
+	const raw = JSON.stringify({ version: 1, nodes: [{ id: 't', renderer: { type: 'table' }, position: { x: 0, y: 0 }, data: { name: 'T', fields: [{ id: 'f', label: 'F' }], rows: [{ id: 'a', f: '1' }, { id: 'b', f: '2' }], rowDisplay: ['a', { break: 'one' }] }, handles: [] }], connections: [] });
+	const store = new DiagramEditStore(raw, 'diagram', undefined, powerPlatformNodeRegistry);
+	const node = { kind: 'node', id: 't' };
+	const list = pathResolve([node, { kind: 'rowDisplay' }], store);
+	assert.equal(list.display.isRowDisplay, true);
+	assert.equal(list.display.view, 'list');
+	assert.equal(list.display.tab, 'row');
+	const one = pathResolve([node, { kind: 'rowDisplay' }, { kind: 'rowBreak', index: 1 }], store);
+	assert.equal(one.display.rowBreakIndex, 1);
+	assert.deepEqual(pathLabelListGet(one.path, store), ['T', 'Shown when reading', 'Row break']);
+	// a place holding a row, or nothing, goes up to the list
+	assert.deepEqual(pathResolve([node, { kind: 'rowDisplay' }, { kind: 'rowBreak', index: 0 }], store).path, list.path);
+	assert.deepEqual(pathResolve([node, { kind: 'rowDisplay' }, { kind: 'rowBreak', index: 9 }], store).path, list.path);
+});
+
+test('the path of the views of a card', () => {
+	const raw = JSON.stringify({ version: 1, nodes: [{ id: 't', renderer: { type: 'table' }, position: { x: 0, y: 0 }, data: { name: 'T', fields: [{ id: 'f', label: 'F' }], rows: [{ id: 'a', f: '1' }], viewList: [{ id: 'one', label: 'One', mode: 'plain' }, { id: 'two', mode: 'row' }] }, handles: [] }], connections: [] });
+	const store = new DiagramEditStore(raw, 'diagram', undefined, powerPlatformNodeRegistry);
+	const node = { kind: 'node', id: 't' };
+	assert.equal(pathResolve([node, { kind: 'views' }], store).display.isViews, true);
+	const one = pathResolve([node, { kind: 'views' }, { kind: 'view', id: 'one' }], store);
+	assert.equal(one.display.viewId, 'one');
+	assert.deepEqual(pathLabelListGet(one.path, store), ['T', 'Views', 'One']);
+	assert.deepEqual(pathResolve([node, { kind: 'views' }, { kind: 'view', id: 'no' }], store).path, [node, { kind: 'views' }]);
+	store.pathSet([node, { kind: 'views' }, { kind: 'view', id: 'two' }]);
+	assert.equal(store.cardViewGet('t').id, 'two', 'opening a view shows it');
+});

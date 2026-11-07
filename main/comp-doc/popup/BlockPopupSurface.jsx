@@ -65,13 +65,13 @@ export const BlockPopupSurface = observer(function BlockPopupSurface({ config = 
 
   useLayoutEffect(() => {
     if (!key) return undefined;
-    const tokenRegistered = blockPopupStore.surfaceRegister(key);
+    const tokenRegistered = blockPopupStore.surfaceRegister(key, { path: config.sourcePath ?? '', compId: config.compId, title, sourceLine: config.sourceLine });
     tokenSet(tokenRegistered);
     return () => {
       blockPopupStore.surfaceUnregister(tokenRegistered);
       tokenSet(0);
     };
-  }, [blockPopupStore, key]);
+  }, [blockPopupStore, key, config.sourcePath, config.compId, config.sourceLine, title]);
 
   const isInPopup = token !== 0 && blockPopupStore.surfaceIsInPopup(token);
   const slotElement = isInPopup ? blockPopupStore.slotElement : null;

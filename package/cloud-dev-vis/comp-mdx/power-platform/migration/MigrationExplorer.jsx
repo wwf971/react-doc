@@ -97,7 +97,7 @@ const MigrationExplorerBody = observer(function MigrationExplorerBody({ service,
 	const heightWritten = Number(param.height);
 	const height = Number.isFinite(heightWritten) ? Math.max(240, Math.min(1400, heightWritten)) : 640;
 	return (
-		<BlockPopupSurface config={config} title={title} popupKey={`migration:${instanceId}`} className="doc-switch-shell not-prose">
+		<BlockPopupSurface config={config} title={title} popupKey={`migration:${config.instanceId ?? instanceId}`} className="doc-switch-shell not-prose">
 			{({ isInPopup }) => (
 				<>
 					<SwitchViewport store={store} config={config} registry={migrationSwitchRegistry} height={height} isInPopup={isInPopup} rootRef={rootRef} barTrailing={<SwitchBarMenu action={capture} />} />

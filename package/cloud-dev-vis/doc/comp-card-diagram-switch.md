@@ -96,7 +96,7 @@ viewList:
 
 | Key | Meaning |
 | --- | --- |
-| `viewList` | the views: `path`, `label`, `description`, `diagram`, optionally `box` or `tabs` |
+| `viewList` | the views: `path`, `label`, `description`, `diagram`, optionally `box`, `tabs`, or `labelItemList` for [more than words in the menu](card-diagram-flexible-switch.md#the-path-bar) |
 | `root` | the view shown first; the first of the list by default |
 | `title`, `height` | the block; `data.height` of the marker wins, as `data.path` names another first view |
 | `defaults` | what every `diagram` starts with |

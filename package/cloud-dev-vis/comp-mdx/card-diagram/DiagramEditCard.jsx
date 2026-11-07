@@ -117,7 +117,7 @@ function listNodeListBuild(view) {
 			})),
 		},
 		...(view.note ? [{ id: `${view.id}-note`, type: 'custom', compName: 'note', data: { text: view.note } }] : []),
-		...(view.add ? [{ id: `${view.id}-actions`, type: 'custom', compName: 'actions', data: { actionList: [view.add] } }] : []),
+		...(view.add || view.actionList ? [{ id: `${view.id}-actions`, type: 'custom', compName: 'actions', data: { actionList: [...(view.add ? [view.add] : []), ...(view.actionList ?? [])] } }] : []),
 	];
 }
 
@@ -237,7 +237,7 @@ const PlainView = observer(function PlainView({ model, store, editor }) {
 				</div>)}
 			</div>
 			{view.note ? <p className="doc-note doc-vis-card-note">{view.note}</p> : null}
-			{view.add ? <ActionsComp data={{ actionList: [view.add] }} config={{ isReadOnly: editor.isLocked }} /> : null}
+			{view.add || view.actionList ? <ActionsComp data={{ actionList: [...(view.add ? [view.add] : []), ...(view.actionList ?? [])] }} config={{ isReadOnly: editor.isLocked }} /> : null}
 		</div>;
 	}
 	return <>

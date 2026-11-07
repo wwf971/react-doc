@@ -48,7 +48,7 @@ The surface renders its children once, through a portal, into a container elemen
 
 While the block is in the dialog the page keeps its place: the outer box keeps the height it had when the dialog opened and shows a note. When the dialog closes the focus returns to the button that opened it, without scrolling the page.
 
-More than one surface of a block can exist for a moment (the view renderer and the editor replacing each other); the store shows the one registered last under the block's identity. A dialog without a surface (the body is being recompiled, the block is open in source mode) shows a placeholder.
+More than one surface of a block can exist for a moment (the view renderer and the editor replacing each other); the store shows the one registered last under the block's identity. A dialog without a surface (the body is being recompiled, the block is open in source mode, its component was mounted anew under another key) shows a placeholder with a reload button. `surfaceReload` renders the document anew, waits for the block, and shows it again, also under another key if a surface of the same document, component and title is there, the nearest line first. This happens only on request: done by itself, a surface going away for a moment could pull another block into the dialog. If the block does not come back, the dialog says so, and can still be closed. A surface with a `popupKey` should keep it across mounts, or it depends on this button.
 
 ## View and Edit
 

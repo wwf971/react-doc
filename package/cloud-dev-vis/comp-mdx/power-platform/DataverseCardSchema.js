@@ -1,3 +1,5 @@
+import { cardDisplayPropertyListFixed } from '../card-diagram/TableCardSchema.js';
+
 // The card schemas of the Dataverse kinds (TableCardSchema.js of the base
 // series): the fields of a column are fixed. Used by their kinds in
 // power-platform-node-registry.js
@@ -27,6 +29,8 @@ export const dataverseTableSchema = {
 	headFieldList: [],
 	nodePropertyList: [{ id: 'name', label: 'Name', kind: 'text' }, { id: 'nameLogical', label: 'Logical name', kind: 'text' }, { id: 'description', label: 'Description', kind: 'text', isMultiline: true }],
 	rowPropertyList: [{ id: 'isRequired', label: 'Required', kind: 'bool' }, { id: 'description', label: 'Description', kind: 'text', isMultiline: true }],
+	viewModeList: ['plain', 'column', 'row'],
+	displayPropertyList: cardDisplayPropertyListFixed,
 	rowNew: () => ({ name: 'Column', type: 'Text' }),
 	isHeaderHandleAllowed: () => false,
 };
@@ -47,6 +51,7 @@ export const dataverseChoiceSchema = {
 	headFieldList: [],
 	nodePropertyList: [{ id: 'name', label: 'Name', kind: 'text' }, { id: 'nameLogical', label: 'Logical name', kind: 'text' }, { id: 'description', label: 'Description', kind: 'text', isMultiline: true }],
 	rowPropertyList: [{ id: 'description', label: 'Description', kind: 'text', isMultiline: true }],
+	displayPropertyList: cardDisplayPropertyListFixed,
 	rowNew: () => ({ name: 'Option', type: 'Option' }),
 	// a choice is referenced as a whole: its rows take no handles
 	isRowHandleAllowed: () => false,

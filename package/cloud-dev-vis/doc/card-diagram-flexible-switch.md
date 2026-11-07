@@ -17,7 +17,7 @@ provider
   root                    the first view
   viewGet(path)           { path, label, description, diagram, box? }, or null when the path names nothing
   labelGet(path)          the word of a segment of the path bar
-  childListGet(path)      the views below a path: the menu of the path bar
+  childListGet(path)      the views below a path, the menu of the path bar: [{ path, label, description?, labelItemList? }]
   boxSave?(path, rect)    what a bounding box adjusted by the reader does
   transition?             { secondPortal, secondMorph, secondCamera, secondScroll }
 ```
@@ -147,6 +147,21 @@ A `view-box` node (a kind of the [base series](card-diagram-impl.md#node-registr
 ## The path bar
 
 `SwitchPathBar` stands left aligned over the viewport: one button per segment, whose click switches to it; the chevron before a segment lists the views beside it, the last chevron the views below. A back button walks the views visited. At the right: the picture menu (copy or download, PNG or SVG, of the view as it stands now, through the capture of the [animation](card-diagram-animation.md#pictures)), the camera back to the default of the view, the bounding box.
+
+**An item of a menu** shows its `label` (the simple mode). When it has a `labelItemList` (the complex mode), it shows that instead, a list of things of different types, and `label` stays what the segment of the path bar and a screen reader say:
+
+| Type | Shows |
+| --- | --- |
+| `{ type: text, text }` | words |
+| `{ type: icon, icon }` | an icon, by the name a card uses (`database`, `list-checks`, ...) |
+| `{ type: custom, comp, data? }` | a component, given `{ data }`: a React component from a provider in code, or from YAML the name of a registered component with the placement `visualizationNode` |
+
+```yaml
+viewList:
+  - path: /overview/source
+    label: Source
+    labelItemList: [{ type: icon, icon: database }, { type: text, text: Source }]
+```
 
 A reader's camera is remembered per path while the block lives, and is where a return to the path arrives; the fit button forgets it.
 

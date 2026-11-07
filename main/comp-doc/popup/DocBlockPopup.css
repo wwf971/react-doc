@@ -127,6 +127,9 @@
 }
 
 .doc-block-popup-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   margin: 0;
   padding: 0.5rem 0.75rem;
   color: var(--color-fd-muted-foreground);
