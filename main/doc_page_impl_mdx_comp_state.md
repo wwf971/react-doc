@@ -106,6 +106,22 @@ With the state object both change. `ExcelUniver` ([the component](doc_page_impl_
 
 This is the pattern for a component with a draft: the draft lives in the state under a key of its own while the session lasts, the editor puts it there when it mounts and takes it out when it unmounts (a session that ends is always an unmount of the editor), and a view of the same block renders `state.value.draft` when there is one and its data otherwise. It is also how two tabs showing one document would share an edit in progress: the tabs are two mounts with one key, and nothing else is needed for the view side; the edit side stays one session at a time, which is the edit layer's rule.
 
+## Stores kept across mounts
+
+A block is mounted again more often than a reader can tell: **the document entering or leaving edit mode renders another body** (`DocEditBody` instead of the reading body, [Page integration](doc_page_impl_edit.md#page-integration)), and every block of it is a new mount, in the same commit as the old one leaves. A component that holds what it made of its data in a store of its mount (a canvas with its measured cards, its camera, the scene a reader went to) starts over then: it shows a placeholder or an empty canvas for some frames, at another height, and the reader is back at the start. That is the flash and the jump the [no-jitter rule](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule) forbids.
+
+Such a store is the block's, and is kept by this layer like any state, under a key of its own beside the block's (`${stateKey}|${name}`):
+
+```jsx
+const store = useCompStateStore(config, 'switch', () => new SwitchStore(...));
+```
+
+- The next mount of the block finds the store as the last one left it, and paints what it painted in its first frame. Nothing it keeps has to be measured or loaded again; what the component still has to do on a mount (a canvas measuring its lines, a player measuring itself) is covered by the picture the last mount left ([CanvasStill](../package/cloud-dev-vis/doc/card-diagram-impl.md#a-block-mounted-again) of the card diagram framework).
+- **A store serves one mount at a time.** The hook counts the mounts showing it; the mount that leaves in the same commit has gone by the time the new one's layout effects run, so the count is 0 then. A second mount shown while the first one still is (two blocks reading one asset item) gets a store of its own, which is not kept.
+- When the key changes under a mount (its block moved), the mount's store goes under the new key.
+
+A component whose state is a plain mapping uses `useCompState` and needs none of this. The parameters a store was built from still change while it is kept: a component compares what it rebuilds with what the store holds (a provider of scenes carries a `signature`, [the switch layer](../package/cloud-dev-vis/doc/card-diagram-flexible-switch.md#implementation)) and takes the new one without starting over when it is the same.
+
 ## Api
 
 The store (`store/DocCompStateStore.ts`, `compStateStore` in the store context), created by `DocPageMdx` with the source store and started with the other stores:
@@ -131,7 +147,7 @@ export const Xxx = observer(function Xxx({ data, config, onEvent }) {
 });
 ```
 
-The hook holds the state for the mount and follows `config.stateKey` when it changes. A component needing more than one state object (one per sheet, one per tab) asks the store itself with keys of its own built under its `stateKey` (`${config.stateKey}:sheet:${id}`), holding and releasing them in an effect as the hook does. Nothing of this goes through the [event layer](doc_page_impl_event.md): the state is the component's own, the layer only keeps it, and a change of it is not a request the page answers.
+The hook holds the state for the mount and follows `config.stateKey` when it changes. `useCompStateStore(config, name, create)`, from the same file, keeps a store object of the block ([above](#stores-kept-across-mounts)). A component needing more than one state object (one per sheet, one per tab) asks the store itself with keys of its own built under its `stateKey` (`${config.stateKey}:sheet:${id}`), holding and releasing them in an effect as the hook does. Nothing of this goes through the [event layer](doc_page_impl_event.md): the state is the component's own, the layer only keeps it, and a change of it is not a request the page answers.
 
 What `RegisteredComp` gives every component for this is `config.stateKey` ([the runtime config](doc_page_impl.md#component-registry)); a component that never asks for its state costs nothing, since a state object is created on the first ask.
 
@@ -162,7 +178,8 @@ frontend/src/lib/doc-comp-state.js          the key: build (the rule), parse; th
 frontend/src/lib/doc-comp-state.test.js     the key rule, the shifts, the store: hold, idle, collection, re-keys
 frontend/src/store/DocCompStateStore.ts     the states (CompStateObject), hold / release, collection, docDrop
                                             with the manifest, docLineShift / docLineRemap
-comp-doc/registry/use-comp-state.js         useCompState: the state object of a component, held for the mount
+comp-doc/registry/use-comp-state.js         useCompState: the state object of a component, held for the mount;
+                                            useCompStateStore: a store of the block, kept across its mounts
 comp-doc/registry/RegisteredComp.jsx        config.stateKey (compStateKeyBuild)
 frontend/src/store/DocEditStore.ts          operationApply tells the layer the line shifts of every write;
                                             blockMoveApply the mapping of a swap (stateRemapList)

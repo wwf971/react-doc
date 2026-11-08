@@ -225,8 +225,32 @@ test('a report is a stack of its sections, each opening its scene', () => {
 	const { nodes } = provider.sceneGet('/overview/plan').diagram;
 	assert.equal(nodes[0].renderer.type, 'scene-stack');
 	const idList = nodes[0].data.itemList.map((item) => item.id);
-	assert.deepEqual(idList, ['mapping:a--x', 'choice:st--state', 'order', 'batch']);
-	assert.equal(nodes[0].data.itemList[0].scene, '/overview/mapping/a--x');
+	assert.deepEqual(idList, ['mapping', 'choice', 'order', 'batch']);
+	assert.equal(nodes[0].data.itemList[0].scene, '/overview/plan/mapping');
+});
+
+test('the plan holds each kind of mapping in one item: a scene whose views are the pairs, as tabs with a search', () => {
+	const tables = provider.sceneGet('/overview/plan/mapping');
+	assert.deepEqual(tables.viewList.map((view) => view.id), ['a--x']);
+	assert.equal(tables.viewSwitcherLayout, 'tabs');
+	assert.equal(tables.isViewSearchable, true);
+	assert.deepEqual(tables.viewList[0].diagram.nodes.map((node) => node.id), provider.sceneGet('/overview/mapping/a--x').diagram.nodes.map((node) => node.id));
+	assert.deepEqual(provider.sceneGet('/overview/plan/choice').viewList.map((view) => view.id), ['st--state']);
+	assert.ok(provider.childListGet('/overview/plan').some((child) => child.path === '/overview/plan/mapping'));
+});
+
+test('the reports stand in a frame of the outputs, in the overview and in its tabs', () => {
+	for (const path of ['/overview', '/overview/tabs/run']) {
+		const frame = provider.sceneGet(path).diagram.nodes.find((node) => node.id === 'area:artifacts');
+		assert.equal(frame.renderer.type, 'color-block');
+		assert.equal(frame.data.fill, 'none');
+	}
+});
+
+test('the dots of the batches left out have a handle whose square is not drawn', () => {
+	const { nodes } = provider.sceneGet('/overview/run/flow').diagram;
+	const omitList = nodes.flatMap((node) => node.handles ?? []).filter((handle) => handle.id.startsWith('omit'));
+	assert.ok(omitList.every((handle) => handle.isMarkerHidden === true));
 });
 
 test('report stacks show their localized simple title in overview and focus', () => {
@@ -782,3 +806,10 @@ test('abandoned columns have a lane each: their lines share only the last run in
 	assert.equal(diagram.connections.find((line) => line.id === 'column:c.keep').route, undefined, 'and its straight way');
 });
 
+
+test('a scene focused has a title saying what it is on its own; a report has its own title bar instead', () => {
+	assert.match(provider.sceneGet('/overview/mapping/a--x').title, / — /);
+	assert.match(provider.sceneGet('/overview/plan/mapping').viewList[0].title, / — /);
+	assert.equal(provider.sceneGet('/overview/plan').isTitleHidden, true);
+	assert.equal(provider.sceneGet('/overview/plan/order').title, undefined);
+});

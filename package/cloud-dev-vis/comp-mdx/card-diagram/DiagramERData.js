@@ -210,12 +210,25 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 			if (offset > 1) throw new Error(`${id}.${handle.id}: offset exceeds 1.`);
 			const attachPolicy = handle.attachPolicy ?? 'multiple';
 			if (!attachPolicies.includes(attachPolicy)) throw new Error(`${id}.${handle.id}: attachPolicy must be single or multiple.`);
+			if (handle.isMarkerHidden !== undefined && typeof handle.isMarkerHidden !== 'boolean') throw new Error(`${id}.${handle.id}: isMarkerHidden must be true or false.`);
 			return { ...handle, attachPolicy, anchor: { target, side: anchor.side, offset } };
 		});
 		unique(handles, `${id}.handles`);
+		// a background around other nodes: where it is and how large is theirs (diagramPlacesGet)
+		if (node.around !== undefined) {
+			if (contract.isBackground !== true) throw new Error(`${id}: only a background (a color block) is drawn around other nodes.`);
+			return { ...node, id, renderer, data, anchors, handles, isBackground: true, around: aroundRead(node.around, id), size: { width: 1, height: 1 }, sizeDefault, position: { x: 0, y: 0 } };
+		}
 		return { ...node, id, renderer, data, anchors, handles, isBackground: contract.isBackground === true, size: sizeResolved, sizeDefault, ...widthFit, ...anchorSideDrawn, position: node.position === undefined || node.position === 'auto' ? 'auto' : point(node.position, `${id}.position`) };
 	});
 	const nodesById = unique(nodes, 'nodes');
+	for (const node of nodes) {
+		for (const idOther of node.around?.nodeIdList ?? []) {
+			const other = nodesById.get(idOther);
+			if (!other) throw new Error(`${node.id}.around names ${idOther}, which is not a node.`);
+			if (other.around) throw new Error(`${node.id}.around names ${idOther}, which is itself around other nodes.`);
+		}
+	}
 	const connectionDefault = mapping(defaults.connection ?? {}, 'defaults.connection');
 	if (['id', 'source', 'target'].some(key => own(connectionDefault, key))) throw new Error('Connection defaults cannot contain identity or endpoints.');
 	const countByHandle = new Map();
@@ -258,7 +271,55 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 }
 
 export function diagramPositionsGet(nodes, layout, measurements = {}) {
-	const dimensions = node => ({ width: node.size.width === 'auto' ? measurements[node.id]?.width ?? node.sizeDefault.width : node.size.width, height: node.size.height === 'auto' ? measurements[node.id]?.height ?? node.sizeDefault.height : node.size.height });
+	return diagramPlacesGet(nodes, layout, measurements).positions;
+}
+
+// the size of a node as drawn: what is written, else what was measured, else its default
+function nodeDimensionsGet(node, measurements) {
+	return { width: node.size.width === 'auto' ? measurements[node.id]?.width ?? node.sizeDefault.width : node.size.width, height: node.size.height === 'auto' ? measurements[node.id]?.height ?? node.sizeDefault.height : node.size.height };
+}
+
+// around: { nodeIdList, padding? } of a background drawn around other nodes. padding: a
+// number for every side, or { top, right, bottom, left }, each 0 when absent
+function aroundRead(input, id) {
+	mapping(input, `${id}.around`);
+	const nodeIdList = list(input.nodeIdList, `${id}.around.nodeIdList`).map((idOther) => text(idOther, `${id}.around.nodeIdList`));
+	if (nodeIdList.length === 0) throw new Error(`${id}.around needs at least one node in nodeIdList.`);
+	if (nodeIdList.includes(id)) throw new Error(`${id}.around cannot name the node itself.`);
+	const paddingInput = input.padding ?? 0;
+	const padding = typeof paddingInput === 'number'
+		? { top: paddingInput, right: paddingInput, bottom: paddingInput, left: paddingInput }
+		: Object.fromEntries(['top', 'right', 'bottom', 'left'].map((side) => [side, number(mapping(paddingInput, `${id}.around.padding`)[side] ?? 0, `${id}.around.padding.${side}`, Number.NEGATIVE_INFINITY)]));
+	return { nodeIdList, padding };
+}
+
+// where every node is, and the size of those drawn around others: a background with `around`
+// is the union of the rects of its nodes as drawn (their measured sizes included), with its
+// padding, so it follows them when a card grows. positions: Map id -> { x, y }; sizeById:
+// Map id -> { width, height } of those backgrounds alone
+export function diagramPlacesGet(nodes, layout, measurements = {}) {
+	const positions = diagramPositionsBaseGet(nodes.filter(node => !node.around), layout, measurements);
+	const sizeById = new Map();
+	const byId = new Map(nodes.map(node => [node.id, node]));
+	for (const node of nodes) {
+		if (!node.around) continue;
+		const rectList = node.around.nodeIdList.flatMap((idOther) => {
+			const other = byId.get(idOther);
+			const position = positions.get(idOther);
+			return other && position ? [{ ...position, ...nodeDimensionsGet(other, measurements) }] : [];
+		});
+		if (rectList.length === 0) continue;
+		const { top, right, bottom, left } = node.around.padding;
+		const x = Math.min(...rectList.map(rect => rect.x)) - left;
+		const y = Math.min(...rectList.map(rect => rect.y)) - top;
+		positions.set(node.id, { x, y });
+		sizeById.set(node.id, { width: Math.max(...rectList.map(rect => rect.x + rect.width)) + right - x, height: Math.max(...rectList.map(rect => rect.y + rect.height)) + bottom - y });
+	}
+	return { positions, sizeById };
+}
+
+function diagramPositionsBaseGet(nodes, layout, measurements) {
+	const dimensions = node => nodeDimensionsGet(node, measurements);
 	const automatic = nodes.filter(node => node.position === 'auto');
 	const cell = { width: Math.max(1, ...automatic.map(node => dimensions(node).width)) + layout.gap.x, height: Math.max(1, ...automatic.map(node => dimensions(node).height)) + layout.gap.y };
 	const occupied = nodes.filter(node => node.position !== 'auto').map(node => ({ ...node.position, ...dimensions(node) }));

@@ -68,10 +68,10 @@ export const ObjectFrontendBody = observer(function ObjectFrontendBody({ data = 
   };
 
   const service = useMemo(
-    () => objectFrontendServiceBuild({ objectFrontendStore, ref: state.ref, mode, modeList, param, paramBlock: block.param, blockSwitch, docState: config.docState }),
+    () => objectFrontendServiceBuild({ objectFrontendStore, ref: state.ref, mode, modeList, param, paramBlock: block.param, blockSwitch, docState: config.docState, blockKey: `objectFrontend:${config.stateKey}:${mode?.id}` }),
     // the service is rebuilt with what it describes; its getters read the store
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [objectFrontendStore, state.ref, mode?.id, JSON.stringify(param), modeList.length, data.raw, compState.value.override, config.docState],
+    [objectFrontendStore, state.ref, mode?.id, JSON.stringify(param), modeList.length, data.raw, compState.value.override, config.docState, config.stateKey],
   );
 
   if (blockAuthored.message && !blockDraft) return <p className="doc-error doc-object-frontend-line">ObjectFrontend: {blockAuthored.message}</p>;
@@ -114,7 +114,7 @@ export const ObjectFrontendBody = observer(function ObjectFrontendBody({ data = 
 // object as the files say now (getters: it is an observer and re-renders),
 // its assets by key, and the switches of its block. it never reaches the
 // asset store or the document itself
-export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, modeList, param, paramBlock = {}, blockSwitch, docState }) {
+export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, modeList, param, paramBlock = {}, blockSwitch, docState, blockKey }) {
   const stateGet = () => objectFrontendStore.objectGet(ref);
   return Object.freeze({
     ref,
@@ -195,7 +195,10 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
       return asset ? objectFrontendStore.assetRemove(stateGet().id, asset.key, options.isAssetKept === true) : Promise.resolve({ code: -1, message: `the object has no asset ${assetRef}` });
     },
     metadataSet: (patch) => objectFrontendStore.metadataSet(ref, patch),
-    // a turn to mount something heavy, one block per frame (useObjectFrontendDrawTurn)
+    // a turn to mount something heavy, one block per frame (useObjectFrontendDrawTurn). blockKey
+    // is the block, the same in every mount of it (reading and edit mode): a block drawn once
+    // draws at once when it is mounted again
+    blockKey,
     drawTurnAsk: (id) => objectFrontendStore.blockDrawAsk(id),
     drawTurnIs: (id) => objectFrontendStore.blockDrawIs(id),
     // the block switched to another mode / other parameters: the block's own

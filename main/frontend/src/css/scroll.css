@@ -1,0 +1,21 @@
+/* ---------- .doc-scroll-horizontal ----------
+   a row wider than its place (ScrollHorizontal.jsx): the outer box clips, the inner strip
+   is moved by a transform from its store. no scrollbar; the wheel and a drag move it. a
+   component class next to it sets the row's own layout (gaps, alignment). */
+.doc-scroll-horizontal {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.doc-scroll-horizontal.is-overflowing {
+  cursor: grab;
+}
+
+.doc-scroll-horizontal-inner {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  will-change: transform;
+}

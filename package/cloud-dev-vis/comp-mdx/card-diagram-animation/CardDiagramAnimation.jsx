@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { Copy, Download, ImageDown } from '../../../../main/frontend/UICommon.js';
 import { BlockPopupSurface } from '../../../../main/comp-doc/popup/BlockPopupSurface.jsx';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
+import { useCompStateStore } from '../../../../main/comp-doc/registry/use-comp-state.js';
 import { compDefinitionNormalize, compIdResolve } from '../../../../main/comp-doc/registry/comp-registry.js';
 import { DiagramCopyStore } from '../card-diagram/DiagramERStore.js';
 import { cardDiagramNodeRegistry } from '../card-diagram/card-diagram-node-registry.js';
@@ -30,7 +31,9 @@ const CardDiagramAnimationBase = observer(function CardDiagramAnimationBase({ da
 	const playerRef = useRef(null);
 	const rootRef = useRef(null);
 	const [copyStore] = useState(() => new DiagramCopyStore());
-	const [store] = useState(() => new AnimationStore(source, (name, placement) => {
+	// the block's, not the mount's (useCompStateStore): mounted again (the document entering
+	// or leaving edit mode), the block is at the state the reader left it at
+	const store = useCompStateStore(config, 'animation', () => new AnimationStore(source, (name, placement) => {
 		const definition = compDefinitionNormalize(compById[compIdResolve(sourceStore.configDoc, name)]);
 		if (!definition?.placementList?.includes(placement)) return undefined;
 		return definition.expose?.[placement];

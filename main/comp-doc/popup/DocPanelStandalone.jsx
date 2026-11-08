@@ -96,6 +96,7 @@ export function DocPanelStandalone({ data = {}, config = {}, headerRightContent,
 					{config.isExpandVisible ? (
 						<button
 							type="button"
+							className="doc-button-icon is-panel"
 							title={config.isExpanded ? '元のサイズに戻す' : '最大化'}
 							aria-label={config.isExpanded ? '元のサイズに戻す' : '最大化'}
 							onClick={() => onEvent?.('expandChangeRequest', { isExpanded: !config.isExpanded })}
@@ -104,7 +105,7 @@ export function DocPanelStandalone({ data = {}, config = {}, headerRightContent,
 						</button>
 					) : null}
 					{config.isCloseVisible ? (
-						<button type="button" title="閉じる" aria-label="閉じる" onClick={() => onEvent?.('closeRequest')}>
+						<button type="button" className="doc-button-icon is-panel" title="閉じる" aria-label="閉じる" onClick={() => onEvent?.('closeRequest')}>
 							<X size={16} />
 						</button>
 					) : null}

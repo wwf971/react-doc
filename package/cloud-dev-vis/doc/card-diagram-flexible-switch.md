@@ -21,6 +21,8 @@ provider
   labelGet(path)          the word of a segment of the path bar
   childListGet(path)      the scenes below a path, the menu of the path bar: [{ path, label, description?, labelItemList? }]
   boxSave?(path, rect)    what a bounding box adjusted by the reader does
+  signature?              what the scenes are made of (the text of the document, the data they are generated
+                          from): a provider built again with the same one is the same, nothing is read again
   transition?             { secondPortal, secondMorph, secondCamera, secondScroll }
 ```
 
@@ -70,6 +72,8 @@ Only views available in that presentation count, so nobody can show one a scene 
 **A view alone in its card** (`isFrameHiddenEmbedded`) takes away the frame, the title line and the margin, for as long as it is what the card shows. It is a layer of the card rather than of its body, mapped to the whole card with no margin (`switchEmbedCardRectOf`), and `embedPlaceGet` gives a portal the same map, so that swap stays invisible too. The title line keeps its room, only unseen, so the body and the other layers do not move. Handles stay on the card: a line arriving at the side ends there, and the view reaches it by being drawn at the size of the card, so the layer needs no knowledge of lines, and no line is rerouted when the frame comes and goes.
 
 **Default views differ between presentations, and a portal must not show that.** The end of a portal is exactly what the card shows, so a portal always goes to the view on the card; a morph then goes on to the view asked for, and on the way out they run in the opposite order. A card with a hover view always opens through it (`embedListOf`), since that is a preview of opening. The store holds that view on the card for the whole way (`embedHeld`), whatever the pointer does, and lets go when the way ends, so on the way out the card returns to its view at rest only after the camera has left. A stack item has no hover view: its height follows its view. See [the ways of switching](#the-ways-of-switching). Two views of one scene are a morph directly, never out and back in through what embeds them. A generator keeps node ids across views where something should move rather than fade, as it does across scenes.
+
+**Views as tabs** (`viewSwitcherLayout: tabs`, `SwitchViewTabs`): where a stack item embeds the scene, the switcher is a row of its own under the item's title, a search field (`isViewSearchable`, `switchViewSearch`) and a strip of tabs on one line, moved sideways by the wheel or a drag without a scrollbar (`ScrollHorizontal` of the page; the wheel only in the stack's own scene, where the stack takes it), so a search or a choice never changes the row's height. The item's body is as tall as its tallest view (each view is measured once, `scenesMeasured`, and `switchStackItemLayout` is taken of each), so choosing a tab moves nothing below. The row is drawn in a static copy too, inert, so a mask or a picture has the same geometry. Elsewhere the views keep the menu.
 
 **The switcher** (`SwitchViewSwitcher`) is the control of a table card. It stands in the path bar for the scene focused, and in the title line of a card or a stack item embedding it, for that embedding, not in a card inside another embedded scene, which takes no pointer. With one view available it shows words alone. Switching a view on a card draws the other view at once: a card has no steps of its own.
 
@@ -165,6 +169,14 @@ item of a state of an animation                                 a way ending wit
 
 **A picture** is made from a copy of the html, which has no scroll position: while it is made, the area holds its place by a transform (`switchScrollFreeze`).
 
+## The title of a scene
+
+Embedded, a scene is named by what holds it: the title line of a card or of a stack item. Focused, nothing does, and the path bar only says where it is, in short words. So a scene focused has a **title**: a node of its world (`~title`, of the kind `scene-title`), a heading in the style of a section of the page, standing above the box of the scene at its left. It zooms and pans with the cards, as one of them.
+
+- **What it says**: `store.titleOf(path)`, the `title` of the view shown, else of the scene, else its `label`; none with `isTitleHidden` (a scene whose content starts with its own title, a report's stack with its title bar). A provider gives a title that stands alone, the kind with the name ("Schema mapping — Account → Customer"), since the short words of the path bar are not beside it in a picture or at a glance.
+- **Where and how large** (`titleRectOf`): above the box by a gap, at its left. Its size grows with a scene wider than a base width (`titleScaleOf`), so it keeps its weight beside what it names; its width is guessed from its words until it is measured.
+- **Only where the scene is focused.** The layer adds it to the nodes of the canvas (`flowListOf`, so a morph between two views moves it as any card) and to a static root drawn as the canvas draws it (the mask, the measuring host); it is not in the scene's own graph, so an embedded copy, the box of the scene and everything an embedding derives from the box stay as they were. The camera of a scene focused fits its box and its title (`sceneBoxFocusedGet`, through `cameraDefaultGet`); a portal ends on that camera as on any other. It takes no pointer.
+
 ## The bounding box
 
 A `scene-box` node (a kind of the [base series](card-diagram-impl.md#node-registries)) is a red frame. It is the one form of a box inside the layer; a `box` in a scene's description becomes such a node when the scene is read.
@@ -176,7 +188,7 @@ A `scene-box` node (a kind of the [base series](card-diagram-impl.md#node-regist
 
 ## The path bar
 
-`SwitchPathBar` stands left aligned over the viewport: one button per segment, whose click switches to it; the chevron before a segment lists the scenes beside it, the last chevron the scenes below. Three buttons stand before the path. Back and forward walk the scenes visited, as in a browser: a new way forgets what lay forward (`store.back`, `store.forward`). Up goes one level up the path, to the nearest folder that is a scene (`store.up`), and is itself a step that back can undo. At the right: the picture menu (copy or download, PNG or SVG, of the scene as it stands now, through the capture of the [animation](card-diagram-animation.md#pictures)), the camera back to the default of the scene, the bounding box.
+`SwitchPathBar` stands left aligned over the viewport: one button per segment, whose click switches to it; the chevron before a segment lists the scenes beside it, the last chevron the scenes below. Three buttons stand before the path. Back and forward walk the scenes visited, as in a browser: a new way forgets what lay forward (`store.back`, `store.forward`). Up goes one level up the path, to the nearest folder that is a scene (`store.up`), and is itself a step that back can undo. At the right: the picture menu (copy or download, PNG or SVG, of the scene as it stands now, through the capture of the [animation](card-diagram-animation.md#pictures)), the camera back to the default of the scene, the bounding box. The buttons are those of a panel's header (`.doc-button-icon.is-panel` of the page's shared styles) and the bar has the header's sides, so in the block popup the ones at the right stand right under its maximize and close buttons; nothing is reserved beside them.
 
 **An item of a menu** shows its `label` (the simple mode). When it has a `labelItemList` (the complex mode), it shows that instead, a list of things of different types, and `label` stays what the segment of the path bar and a screen reader say:
 
@@ -195,7 +207,7 @@ sceneList:
 
 After the last segment stands [the switcher](#the-views-of-a-scene) of a scene with views.
 
-A reader's camera is remembered per path, and so per view, while the block lives, and is where a return to the path arrives; the fit button forgets it.
+A reader's camera is remembered per path, and so per view, while the block lives, and is where a return to the path arrives; the fit button forgets it. The block lives longer than a mount of it: `useSwitchStore` keeps the store in the block's component state ([stores kept across mounts](../../../main/doc_page_impl_mdx_comp_state.md#stores-kept-across-mounts)), so when the document enters or leaves edit mode the block comes back at the scene, the view and the camera the reader left, with its cards measured, and paints them in its first frame (a new canvas starts from `cameraLive`, the camera the last one had). A provider built again on the new mount is taken as it is (`providerAdopt`) when its `signature` is the one of the provider the store holds; a provider without a signature, or with another, reads the scenes anew (`providerSet`). The animation over it (`SwitchAnimationStore`) is kept with it.
 
 ## Under the animation layer
 

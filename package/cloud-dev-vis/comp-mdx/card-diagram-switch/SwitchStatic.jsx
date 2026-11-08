@@ -109,6 +109,10 @@ export const SwitchStaticScene = observer(function SwitchStaticScene({ store, pa
 	void store.measureVersion;
 	const positions = store.entryPositionsGet(entry);
 	const nodeList = entry.canvas.graph.nodes.filter((node) => node.renderer.type !== 'scene-box');
+	// a root drawn as the canvas draws it (a mask, the measuring host) has the title of the scene
+	// focused; an embedded copy is named by what holds it
+	const titleNode = !isEmbedded && depth === 0 ? store.titleNodeOf?.(path) ?? null : null;
+	const titleRect = titleNode ? store.titleRectOf(path) : null;
 	const endOf = (endpoint) => {
 		if (endpointIsDangling(endpoint)) return { x: endpoint.position.x, y: endpoint.position.y, side: 'left' };
 		const position = positions.get(endpoint.nodeId);
@@ -131,8 +135,9 @@ export const SwitchStaticScene = observer(function SwitchStaticScene({ store, pa
 					</defs>
 					{lineList.map(({ connection, source, target }) => <StaticLine key={connection.id} connection={connection} source={source} target={target} markerId={markerId} />)}
 				</svg>
+				{titleNode && titleRect ? <StaticNode key={titleNode.id} id={titleNode.id} node={titleNode} position={titleRect} config={config} registry={registry} onGeometry={onGeometry} /> : null}
 				{nodeList.map((node) => (
-					<StaticNode key={node.id} id={node.id} node={node} position={positions.get(node.id) ?? { x: 0, y: 0 }} config={config} registry={registry} onGeometry={onGeometry} />
+					<StaticNode key={node.id} id={node.id} node={node.around ? { ...node, size: store.nodeSizeOf(entry, node) } : node} position={positions.get(node.id) ?? { x: 0, y: 0 }} config={config} registry={registry} onGeometry={onGeometry} />
 				))}
 				{lineList.filter(({ connection }) => connection.label.text).map(({ connection, source, target }) => <StaticLabel key={connection.id} connection={connection} source={source} target={target} />)}
 			</div>

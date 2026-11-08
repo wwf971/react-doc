@@ -9,6 +9,7 @@ import '@xyflow/react/dist/style.css';
 import { Check, CircleAlert, LoaderCircle } from '../../../../main/frontend/UICommon.js';
 import { DiagramEdge, DiagramNode, DiagramPointNode, DiagramRenderContext } from '../card-diagram/DiagramRender.jsx';
 import { useCanvasWheelGuard } from '../card-diagram/CanvasWheelGuard.js';
+import { CanvasStill, useCanvasStill } from '../card-diagram/CanvasStill.jsx';
 import '../card-diagram/DiagramER.css';
 import { animationPositionOffsetGet, animationProgressGet, animationSceneAtFrame, animationSceneStyleBuild, animationViewBetween } from './AnimationData.js';
 
@@ -223,6 +224,9 @@ export const AnimationCanvas = observer(function AnimationCanvas({ store, config
 	const boxRef = useRef(null);
 	const playerRef = useRef(null);
 	useCanvasWheelGuard(boxRef);
+	// the player draws a few frames after it mounts: a block mounted again holds the
+	// picture it left until then
+	const still = useCanvasStill(config, 'animation', boxRef);
 	const { box, plan, spec, playToken, playbackRate } = store;
 	const context = useMemo(() => ({ config, registry, measurementSet: store.canvasStore.measurementSet, edgeGeometry: new Map() }), [config, registry, store]);
 	const inputProps = useMemo(() => ({ store, scope, context }), [store, scope, context]);
@@ -279,6 +283,7 @@ export const AnimationCanvas = observer(function AnimationCanvas({ store, config
 
 	return (
 		<div ref={boxRef} className="doc-anim-viewport">
+			<CanvasStill still={still} />
 			<AnimationCaptureHint store={store} />
 			{box && spec ? (
 				<Player

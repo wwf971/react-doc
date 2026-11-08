@@ -44,6 +44,7 @@ export const AssetPanelPopup = observer(function AssetPanelPopup() {
       headerRightContent={(
         <button
           type="button"
+          className="doc-button-icon is-panel"
           title={isPreviewOpen ? 'Hide the preview' : 'Show the preview: what the data renders as'}
           aria-label={isPreviewOpen ? 'Hide the preview' : 'Show the preview'}
           aria-pressed={isPreviewOpen}

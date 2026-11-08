@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	SWITCH_STACK_ITEM_SCALE_MAX, SWITCH_TAB_HEADER_HEIGHT, switchBoxClipBuild, switchCameraBetween, switchCameraChildOf, switchCameraFit, switchCameraParentOf, switchDocNormalize, switchEmbedMapBuild, switchMaskClipBuild, switchMorphBuild, switchMorphFrameAt,
-	switchPathChain, switchPathHashRead, switchPathNormalize, switchPathParent, switchProviderFromDoc, switchRouteFind, switchStackItemLayout, switchStepSecondGet, switchTabsApply } from './SwitchData.js';
+	switchPathChain, switchPathHashRead, switchPathNormalize, switchPathParent, switchProviderFromDoc, switchRouteFind, switchStackItemLayout, switchStepSecondGet, switchTabsApply, switchViewSearch } from './SwitchData.js';
 import { SWITCH_EMBED_CHROME_HEIGHT, switchEdgeHoverStyleBuild, switchEmbedCardRectOf, switchViewFrameIsHidden } from './SwitchData.js';
 import { diagramNormalize, handleAnchorDrawnOf } from '../card-diagram/DiagramERData.js';
 import { switchPathViewBuild, switchPathViewRead, switchViewHoverResolve, switchViewListCheck, switchViewListOf, switchViewResolve, switchViewSwitcherIsShown } from './SwitchData.js';
@@ -768,5 +768,15 @@ test('a line under the pointer on its label: its own color, wider, solid, whatev
 	assert.equal(line.strokeDasharray, undefined, 'a dashed line is followed as a whole');
 	assert.ok(switchEdgeHoverStyleBuild().band.stroke, 'a line with no style of its own has a color');
 	assert.equal(switchEdgeHoverStyleBuild().line.strokeWidth, 1.75);
+});
+
+
+test('views found by words: every word in the label, the description or the id, any case', () => {
+	const viewList = [{ id: 'new_property--new_estate', label: '物件基本 → 物件基本', description: 'new_property → new_estate' }, { id: 'new_unit--new_room', label: '部屋 → 部屋', description: 'new_unit → new_room' }];
+	assert.equal(switchViewSearch(viewList, '').length, 2);
+	assert.deepEqual(switchViewSearch(viewList, '部屋').map((view) => view.id), ['new_unit--new_room']);
+	assert.deepEqual(switchViewSearch(viewList, 'NEW_ESTATE property').map((view) => view.id), ['new_property--new_estate']);
+	assert.equal(switchViewSearch(viewList, 'estate room').length, 0);
+	assert.throws(() => switchViewListCheck({ viewList: [{ id: 'a', diagram: {} }], viewSwitcherLayout: 'grid' }, '/x'), /menu or tabs/);
 });
 

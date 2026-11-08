@@ -48,14 +48,17 @@ An item names another by its **key**, which never changes, not by its path, as [
 | `/overview/mapping/{pair}` | two tables; a line per column mapping, whose label opens it. The lines of abandoned columns go through `er-lanes` ([Arrangers](card-diagram-arrange.md)), a lane each |
 | `/overview/mapping/{pair}/{column}` | one column through its operators, the rest of the tables [behind row breaks](comp-diagram-er.md#rows-behind-a-row-break) a reader can open |
 | `/overview/choice`, `/overview/choice/{pair}` | the mappings of option sets; value to value |
-| `/overview/plan`, `/overview/run`, `/overview/verify`, `/overview/post` | a report: its sections in a [stack](card-diagram-flexible-switch.md#a-scrolling-stack), at full height both in the overview and on its own |
+| `/overview/plan`, `/overview/run`, `/overview/verify`, `/overview/post` | a report: its sections in a [stack](card-diagram-flexible-switch.md#a-scrolling-stack), at full height both in the overview and on its own. In the overview (and its tabs) the reports stand in a frame, the outputs (`artifacts`), a color block with `fill: none` drawn [around](card-diagram-impl.md#around-other-nodes) them as they grow |
 | `/overview/post/master`, `/overview/post/audit` | [after the migration](#after-the-migration): the references to master tables, the system columns |
+| `/overview/plan/mapping`, `/overview/plan/choice` | every mapping of tables, every mapping of option sets, as the views of one scene ([views as tabs](comp-card-diagram-switch.md#views-as-tabs), with a search): the plan holds each kind in one item. A view is drawn as `/overview/mapping/{pair}` or `/overview/choice/{pair}` is, with its box |
 | `/overview/plan/order` | the order of loading, as its ranks |
 | `/overview/run/flow` | how the rows were sent: each table with its rows bracketed into batches, a card per batch with its result, send, retry, dead letters, the tables of the target with the rows that reached them (found through the table mappings; the database itself when a table has no mapping yet), the report |
 | `/overview/verify/flow` | how the result was checked: the same batches as the reference, the set compared, the values compared with what is read back from the tables of the target, the checks, the exceptions |
 | `/overview/verify/match`, `/overview/verify/match/{id}` | how a row of the source is found in the target: the patterns one under another, or one alone |
 | `/overview/verify/sample` | one row worked through, column by column |
 | `/overview/plan/batch`, `/overview/run/{batch,dlq}`, `/overview/verify/{check,exception}` | the tables, each a scene of its own |
+
+**A scene focused has a title that stands alone** (`pathTitleGet`, [the title of a scene](card-diagram-flexible-switch.md#the-title-of-a-scene)): the kind with the name where the label alone would not say it (`スキーマ対応 — ユーザー → 担当ユーザー`, `列の対応 — 物件基本 → 物件基本 / 所在地`, `PW — 移行元データベース`, `物件基本 (new_property)`), the label elsewhere (`テーブルの取込順番`), and none for a report, whose stack starts with its title bar.
 
 **A report shows how it went, then what came of it** ([a matter of taste](card-diagram-usage.md#a-matter-of-taste-show-how-it-happens-then-what-came-of-it)). The run report and the verification report start with their process, a diagram with the actual figures on it, and hold short cards of totals; the tables are scenes of their own which those cards, and the steps of the diagram, open.
 

@@ -102,6 +102,17 @@
   cursor: default;
 }
 
+/* .doc-button-icon.is-panel: the buttons of a panel's header (maximize,
+   close: DocPanelStandalone) and of a bar standing in a panel or a block
+   like one (the path bar of a scene viewport), so the two read as one
+   row of controls: 24px, a 16px icon, in the color of the title */
+.doc-button-icon.is-panel {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--color-fd-foreground);
+}
+
 /* ---------- .doc-button-group ----------
    a row of icon buttons in one frame: the control group over a hovered
    block, the controls of a focused row or column of a card. buttons are

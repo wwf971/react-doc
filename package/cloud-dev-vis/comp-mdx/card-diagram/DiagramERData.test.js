@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
 import { dataverseCardNormalize, dataverseAnchorListGet } from '../power-platform/DataverseCardData.js';
-import { diagramNormalize, diagramPositionsGet, diagramLegacyConvert, cardStandaloneNormalize } from './DiagramERData.js';
+import { diagramNormalize, diagramPositionsGet, diagramLegacyConvert, cardStandaloneNormalize, diagramPlacesGet } from './DiagramERData.js';
 import { diagramDependenciesCollect, cardDiagramSourceDefaultCreate } from './DiagramERSource.js';
 import { diagramSourceDefaultCreate, dataverseSourceDefaultCreate } from '../power-platform/DataverseCardSource.js';
 import { dataverseEntityNodeRegistry, powerPlatformNodeRegistry } from '../power-platform/power-platform-node-registry.js';
@@ -171,6 +171,8 @@ test('a color block says where its labels go, and which of them are titles', () 
 	const diagramOf = (data) => ({ version: 1, nodes: [{ id: 'b', renderer: { type: 'color-block' }, position: { x: 0, y: 0 }, size: { width: 100, height: 100 }, data, handles: [] }], connections: [] });
 	assert.doesNotThrow(() => diagramNormalize(diagramOf({ labelSide: 'top', itemList: [{ id: 't', text: 'T', level: 1 }, { id: 'u', text: 'U' }] }), cardDiagramNodeRegistry));
 	assert.throws(() => diagramNormalize(diagramOf({ labelSide: 'left', itemList: [] }), cardDiagramNodeRegistry), /top or the bottom/);
+	assert.doesNotThrow(() => diagramNormalize(diagramOf({ fill: 'none', itemList: [] }), cardDiagramNodeRegistry));
+	assert.throws(() => diagramNormalize(diagramOf({ fill: 'solid', itemList: [] }), cardDiagramNodeRegistry), /fill: none/);
 	assert.throws(() => diagramNormalize(diagramOf({ itemList: [{ id: 't', text: 'T', level: 3 }] }), cardDiagramNodeRegistry), /level 1 or 2/);
 	const columnList = [{ id: 'a', x: 0, width: 50, icon: 'database', text: 'A' }, { id: 'b', x: 50, width: 50 }];
 	assert.doesNotThrow(() => diagramNormalize(diagramOf({ itemList: [], columnTop: 10, columnList }), cardDiagramNodeRegistry));
@@ -281,3 +283,17 @@ test('a row break with rows behind it: every row once, and they count as shown',
 	assert.deepEqual(cardRowDisplayKeepBuild(['a', 'b'], ['b'], { isFoldable: true }), [{ rowList: ['a'] }, 'b']);
 });
 
+
+test('a background around other nodes is the union of their drawn rects, with its padding', () => {
+	const diagram = { version: 1, nodes: [
+		{ id: 'a', renderer: { type: 'card-note' }, position: { x: 0, y: 100 }, size: { width: 200, height: 'auto' }, data: { title: 'A' }, handles: [] },
+		{ id: 'b', renderer: { type: 'card-note' }, position: { x: 300, y: 100 }, size: { width: 200, height: 80 }, data: { title: 'B' }, handles: [] },
+		{ id: 'frame', renderer: { type: 'color-block' }, around: { nodeIdList: ['a', 'b'], padding: { top: 40, right: 10, bottom: 10, left: 10 } }, data: { fill: 'none', itemList: [] }, handles: [] },
+	], connections: [] };
+	const graph = diagramNormalize(diagram, cardDiagramNodeRegistry);
+	const places = diagramPlacesGet(graph.nodes, graph.layout, { a: { width: 200, height: 300 } });
+	assert.deepEqual(places.positions.get('frame'), { x: -10, y: 60 });
+	assert.deepEqual(places.sizeById.get('frame'), { width: 520, height: 350 });
+	assert.throws(() => diagramNormalize({ ...diagram, nodes: [...diagram.nodes.slice(0, 2), { ...diagram.nodes[2], around: { nodeIdList: ['c'] } }] }, cardDiagramNodeRegistry), /not a node/);
+	assert.throws(() => diagramNormalize({ ...diagram, nodes: [{ ...diagram.nodes[0], around: { nodeIdList: ['b'] } }, ...diagram.nodes.slice(1)] }, cardDiagramNodeRegistry), /only a background/);
+});

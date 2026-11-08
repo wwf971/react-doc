@@ -133,10 +133,14 @@ export class DocObjectFrontendStore {
   // the assets asked for in this tick, read together
   loadRefByKey = new Map<string, any>();
   // the heavy parts of the modes that have their turn, and those waiting for it: a document
-  // of many blocks mounts one per frame, so it is painted and answers meanwhile
+  // of many blocks mounts one per frame, so it is painted and answers meanwhile. a block is
+  // known by its key (the block, not the mount): the mounts holding it are counted, and it
+  // keeps its turn for a frame after the last one left, so the same block mounted again (the
+  // document entering or leaving edit mode renders another body) draws at once
   blockDrawIdSet = observable.set<string>();
   blockDrawQueue: string[] = [];
   blockDrawFrameId: number | undefined;
+  blockDrawHolderCountById = new Map<string, number>();
 
   constructor(stores: Stores) {
     this.stores = stores;
@@ -152,6 +156,7 @@ export class DocObjectFrontendStore {
       blockDrawIdSet: false,
       blockDrawQueue: false,
       blockDrawFrameId: false,
+      blockDrawHolderCountById: false,
       config: observable.ref,
     });
   }
@@ -512,11 +517,21 @@ export class DocObjectFrontendStore {
   }
 
   blockDrawAsk(blockId: string): () => void {
-    this.blockDrawQueue.push(blockId);
-    this.blockDrawNextSchedule();
+    this.blockDrawHolderCountById.set(blockId, (this.blockDrawHolderCountById.get(blockId) ?? 0) + 1);
+    if (!this.blockDrawIdSet.has(blockId) && !this.blockDrawQueue.includes(blockId)) {
+      this.blockDrawQueue.push(blockId);
+      this.blockDrawNextSchedule();
+    }
     return () => {
-      this.blockDrawQueue = this.blockDrawQueue.filter((id) => id !== blockId);
-      this.blockDrawIdSet.delete(blockId);
+      const count = (this.blockDrawHolderCountById.get(blockId) ?? 1) - 1;
+      this.blockDrawHolderCountById.set(blockId, count);
+      if (count > 0) return;
+      requestAnimationFrame(() => {
+        if ((this.blockDrawHolderCountById.get(blockId) ?? 0) > 0) return;
+        this.blockDrawHolderCountById.delete(blockId);
+        this.blockDrawQueue = this.blockDrawQueue.filter((id) => id !== blockId);
+        runInAction(() => this.blockDrawIdSet.delete(blockId));
+      });
     };
   }
 
@@ -525,7 +540,7 @@ export class DocObjectFrontendStore {
     this.blockDrawFrameId = requestAnimationFrame(() => {
       this.blockDrawFrameId = undefined;
       const blockId = this.blockDrawQueue.shift();
-      if (blockId !== undefined) this.blockDrawIdSet.add(blockId);
+      if (blockId !== undefined) runInAction(() => this.blockDrawIdSet.add(blockId));
       if (this.blockDrawQueue.length > 0) this.blockDrawNextSchedule();
     });
   }

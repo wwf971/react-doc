@@ -70,14 +70,14 @@ export const SwitchPathBar = observer(function SwitchPathBar({ store, trailing }
 	const childList = store.provider.childListGet(scene);
 	return (
 		<div className="doc-switch-bar not-prose">
-			<button type="button" className="doc-switch-bar-button" title="Back to the previous scene" aria-label="Back to the previous scene" disabled={store.historyList.length === 0} onClick={store.back}>
-				<ArrowLeft size={13} aria-hidden="true" />
+			<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="Back to the previous scene" aria-label="Back to the previous scene" disabled={store.historyList.length === 0} onClick={store.back}>
+				<ArrowLeft size={16} aria-hidden="true" />
 			</button>
-			<button type="button" className="doc-switch-bar-button" title="Forward to the scene left" aria-label="Forward to the scene left" disabled={store.forwardList.length === 0} onClick={store.forward}>
-				<ArrowRight size={13} aria-hidden="true" />
+			<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="Forward to the scene left" aria-label="Forward to the scene left" disabled={store.forwardList.length === 0} onClick={store.forward}>
+				<ArrowRight size={16} aria-hidden="true" />
 			</button>
-			<button type="button" className="doc-switch-bar-button" title={store.pathUp ? `Up to ${store.labelGet(store.pathUp)}` : 'Up one level'} aria-label="Up one level" disabled={!store.pathUp} onClick={store.up}>
-				<ArrowUp size={13} aria-hidden="true" />
+			<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title={store.pathUp ? `Up to ${store.labelGet(store.pathUp)}` : 'Up one level'} aria-label="Up one level" disabled={!store.pathUp} onClick={store.up}>
+				<ArrowUp size={16} aria-hidden="true" />
 			</button>
 			<nav className="doc-switch-path" aria-label="Path of the scene">
 				{chain.map((path, index) => (
@@ -93,11 +93,11 @@ export const SwitchPathBar = observer(function SwitchPathBar({ store, trailing }
 			</nav>
 			<span className="doc-switch-bar-trailing">
 				{trailing}
-				<button type="button" className="doc-switch-bar-button" title="Back to the default range of this scene" aria-label="Fit the scene" onClick={() => void store.cameraReset()}>
-					<Scan size={13} aria-hidden="true" />
+				<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="Back to the default range of this scene" aria-label="Fit the scene" onClick={() => void store.cameraReset()}>
+					<Scan size={16} aria-hidden="true" />
 				</button>
-				<button type="button" className="doc-switch-bar-button" title="Adjust the bounding box of this scene (the red frame): the range shown by default and when embedded" aria-label="Adjust the bounding box" aria-pressed={store.isBoxAdjust} onClick={store.boxAdjustToggle}>
-					<SquareDashedMousePointer size={13} aria-hidden="true" />
+				<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="Adjust the bounding box of this scene (the red frame): the range shown by default and when embedded" aria-label="Adjust the bounding box" aria-pressed={store.isBoxAdjust} onClick={store.boxAdjustToggle}>
+					<SquareDashedMousePointer size={16} aria-hidden="true" />
 				</button>
 			</span>
 		</div>

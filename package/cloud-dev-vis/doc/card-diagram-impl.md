@@ -196,6 +196,7 @@ anchor:
 | `anchor.side` | `left`, `right`, `top`, or `bottom`, restricted by the anchor's `sideList`. Required. |
 | `anchor.offset` | Position along that side, from 0 to 1; default 0.5. Left/right run top to bottom; top/bottom run left to right. |
 | `attachPolicy` | `multiple` (default) or `single`: how many connections the handle accepts. Validation rejects a second connection on a `single` handle, and the editor refuses to drop one there. |
+| `isMarkerHidden` | `true`: the square of the handle is not drawn while reading; its lines still end there. For a line leaving something that is not a place to connect, such as the dots of rows left out. The visual editor draws it. |
 
 A row handle stays attached to that row when its order, text, or height changes. Persist its anchor and offset, not its measured page coordinates. A renderer must attach every declared non-body anchor; a missing anchor is an actionable error, not a connection to the node's origin.
 
@@ -238,6 +239,10 @@ for table at zero-based index i:
 React Flow draws nodes at the supplied coordinates. `fitView` changes the camera to show them; it does not arrange the nodes.
 
 The new schema uses one rule: missing `position` or `position: auto` requests layout; `{ x, y }` preserves exact finite coordinates, including negative coordinates. A partial mapping such as `{ x: 40 }`, or any other string, is an error. Positions name the node's top-left corner in diagram coordinates, independent of browser scrolling and viewport zoom.
+
+### Around other nodes
+
+A background (a kind with `contract.isBackground`, the `color-block`) may be placed and sized by what it holds instead of by numbers: `around: { nodeIdList, padding? }`, the padding a number or `{ top, right, bottom, left }`. Its rect is the union of the rects of those nodes **as drawn**, measured sizes included, plus its padding (`diagramPlacesGet`, which `diagramPositionsGet` answers the positions of), so a frame around cards of `height: auto` (a stack at full height, a table) grows as they do. Its own `position` and `size` are not read, and it does not move by hand. It cannot name itself, a node that does not exist, or another node drawn around others. The canvas (`DiagramERStore`) resolves it when the diagram is read and again with every measurement; the switch layer through `entryPositionsGet` and `nodeSizeOf`, for the canvas, the static scenes and the boxes alike.
 
 ### Default Layout
 
@@ -426,6 +431,12 @@ A free end is a hidden point node (`~end:<role>:<connectionId>`, type `visualiza
 The node and edge objects handed to React Flow are plain and keep their identity while nothing about them changed: `DiagramERStore.nodeList` / `edgeList` are shallow observables of plain objects (the graph they are built from is a plain reference too), `applyNodeChanges` copies only the node a change names, and the canvas decorates each object once per flag set (`draggable`, `className`, `hidden`). A drag therefore re-renders the dragged node alone, frame by frame, and the card inside it is not rendered again (its `node`, `anchorRef` and `visualization` props keep their identity). A deep clone of the whole list per frame (`toJS`), which re-created every node object and made every card re-measure its anchors, is what made dragging sluggish.
 
 React Flow supplies canvas interaction and path utilities. The diagram supplies the domain-neutral schema, automatic layout policy, validation, and serialization. Table rows and choice options belong to node renderers, not to the graph adapter. Reusable card content can therefore appear both inside a node and in a standalone card without forcing a static card to support canvas interaction.
+
+## A block mounted again
+
+A block is mounted again when the document enters or leaves edit mode (the page renders another body, and every block in it is a new mount) and when the reader comes back to it. Whatever the block keeps in the [block's component state](../../../main/doc_page_impl_mdx_comp_state.md#stores-kept-across-mounts) is there at once, but React Flow still draws the cards of a new canvas a frame after it mounts and the lines a frame or two after that (they need the measured cards and anchors), and a canvas played by remotion's `Player` (the [animation](card-diagram-animation.md), the switch under it) waits until the player measured itself. Each of those frames would show the block empty or without its lines.
+
+`CanvasStill.jsx` covers them. A host of a canvas (`DiagramERView`, `SwitchCanvas`, `AnimationCanvas`, and the player area of `SwitchAnimation`) takes a copy of its html as its mount leaves, kept for the block (`useCanvasStill(config, name, hostRef)`, under `${name}-still`), and the next mount shows that picture over itself, opaque and without taking the pointer, until its live canvas has as many cards and lines as the picture (or has had a few frames to settle: what it draws may have changed). The picture is read in a layout effect, not while rendering: the last mount leaves in the same commit, after the new one rendered. A canvas whose config has no `stateKey` keeps nothing and draws as before; a component building the config of an inner diagram derives one from its own (`${stateKey}|item:${key}`).
 
 ## Existing ER Data
 

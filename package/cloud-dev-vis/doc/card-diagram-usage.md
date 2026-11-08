@@ -36,7 +36,32 @@ connections:
   - { id: a-b, source: { nodeId: a, handleId: out }, target: { nodeId: b, handleId: in }, label: { text: then } }
 ```
 
-The cards of the base series are `table` (any fields and rows), `operator`, `card-note`, `card-brief`, `card-three-dots`, `card-database` (a cylinder with its name inside), `card-matrix` (rows and columns with a mark where they meet) and `color-block`; a series adds its own, and the scenes add `scene-embed`, `scene-stack` and `scene-link`. The grammar of cards, handles and lines is in [Data diagrams](comp-diagram-er.md).
+The grammar of cards, handles and lines is in [Data diagrams](comp-diagram-er.md).
+
+## Which card for what
+
+Reach for a card that exists before drawing one of your own: each already knows its anchors, its views, its sizes and how it reads embedded. Every renderer below is a `renderer: { type }` of a node.
+
+| To show | Use | Notes |
+| --- | --- | --- |
+| a table, a list of fields, anything in rows and columns | `table` | its own fields and rows; [views](comp-diagram-er.md#table-card-views) choose rows, a row break hides some behind a mark a reader can open; `rowGroupList` brackets rows; a line can leave a row (`row/{id}`) |
+| a Dataverse table, an option set | `dataverse-table`, `dataverse-choice` (`DiagramER` and the Power Platform series) | key, logical name, type; the purple convention of a choice ([Dataverse table card](comp-diagram-er.md#dataverse-table-card)) |
+| a step of a process | `operator`; in a column mapping `operator-mapping`, `operator-text`, `operator-abandon` | a label and a note; the mapping operators are the steps a column goes through |
+| a short fact: a title, a line of text, a few figures | `card-note` | a tone; the default for anything that is not a table |
+| an item in a list (a file, a batch, a table among many) | `card-brief` | a pill: an icon, a title, a line of figures; as wide as its words with `isWidthFit` |
+| what a long series leaves out | `card-three-dots` | "298 batches" between the first and the last; a line may leave the dots, without the square of a handle (`isMarkerHidden`) |
+| a database, a store | `card-database` | a cylinder with its name inside |
+| which of a set relates to which | `card-matrix` | rows and columns with a mark where they meet; a cell may be a [link](comp-card-diagram-switch.md#a-link-to-a-scene) |
+| a flow or a rule of Power Platform | `power-automate`, `business-rule` | trigger, action, condition, scope ...; a Dataverse condition or action |
+| a place, a lane, a group, outputs | `color-block` | behind the cards; `fill: none` for a frame; `around` what it holds ([below](#background-color-blocks)) |
+| the part of a scene shown first, and when embedded | `scene-box` | a red frame, drawn only while it is adjusted |
+| another scene, small, opening on a click | `scene-embed` (switch layer) | with `viewHover` a preview while the pointer rests on it |
+| sections one under another, each at full width | `scene-stack` (switch layer) | scenes or cards; at full height embedded or focused; views of a scene as tabs in an item |
+| a way to another scene | `scene-link` (switch layer), or `link` on any card or line | a pill as wide as its words |
+| some cards of one diagram in tabs | `switchTabsApply` (switch layer, `scene-tabs`) | each tab a scene of its own; lines are rewired, never dropped ([Tabs](comp-card-diagram-switch.md#tabs)) |
+| something no card draws | `renderer: { component: Name }` | a registered component with the placement `visualizationNode`, listing its anchors ([Custom nodes](comp-diagram-er.md#operators-custom-nodes-and-line-styles)); a title bar or a menu item takes components the same way (`visualizationTitle`, `labelItemList`) |
+
+A series (a node registry) adds its own kinds; what a diagram may use is the registry of its component, and an unknown kind is an error naming the known ones. The **blocks** of a document are in the table at the top: one diagram, an animation, scenes. A scene of the switch layer gets its title over it when focused from the layer itself ([below](#focused-and-embedded)), not from a card.
 
 ## Moving and switching
 
@@ -46,11 +71,24 @@ The cards of the base series are `table` (any fields and rows), `operator`, `car
 
 **To show one scene more than one way**, give it `viewList`: it shows one view at a time, and `viewDefault` says which, also by how the scene is presented and which scene embeds it. `viewHover` is what a card embedding it shows while a pointer rests there. A menu switches between them ([Views of a scene](comp-card-diagram-switch.md#views-of-a-scene)). This is the view of a scene; [a table card has views](comp-diagram-er.md#table-card-views) in the same way.
 
+**To show many of one kind in one place**, make them the views of one scene with `viewSwitcherLayout: tabs` (and `isViewSearchable: true` once there are more than a handful): where a stack embeds it, a row of tabs and a search field stands under the item's title, one tab per view, and the item keeps the height of the tallest, so choosing one moves nothing ([Views as tabs](comp-card-diagram-switch.md#views-as-tabs)). A report listing every mapping, every table, every pattern one under another grows with the data; one item with tabs stays one item.
+
+**Reach for the switch layer early.** A diagram that does not fit, that a reader has to scroll around to read, or that mixes an overview with details is usually several scenes: an overview whose cards open the details (`scene-embed`, a click zooms in), a report as a stack of its sections, the same thing in views. Generated diagrams especially: a generator can make a scene per item for free, and a scene per item can be read at its own scale. One canvas holding everything at once is right only when everything has to be seen at once.
+
 Routes of lines work the same in all of them, also in a scene embedded in a card.
+
+## Focused and embedded
+
+A scene of the switch layer is seen two ways, and a generator should think of both every time it makes one: **embedded**, inside a card or a stack item of another scene, small, named by that card's title line; and **focused**, on the canvas alone, at its own scale, after a click. What reads well in one does not in the other. Typical points:
+
+- **A title.** Focused, nothing around the scene says what it is any more, and the path bar holds only short words. Give each scene, and each view, a `title` that stands alone: the kind and the name ("Schema mapping — Account → Customer", "PW — Source database"), not just the last segment of its path. The layer draws it as a heading above the scene, in its world, so it zooms with the cards, and only where the scene is focused ([The title of a scene](card-diagram-flexible-switch.md#the-title-of-a-scene)). Leave it out (`isTitleHidden`) where the content already starts with its title, as a stack with a title bar does.
+- **Which view.** A view meant to be glanced at in a card (a cylinder, a summary) is rarely the one to read focused (the diagram, a matrix): `viewDefault` by presentation says which, and `isAvailableEmbedded` / `isAvailableFocused` keep a view from where it does not work ([Views of a scene](comp-card-diagram-switch.md#views-of-a-scene)).
+- **How tall.** Embedded, a stack scrolls in its card or grows to its full height (`isHeightFullEmbedded`); focused, the reader zooms and scrolls freely. A frame or a label placed by numbers around something of `height: auto` is wrong in one of the two: draw it `around` what it holds.
+- **What a click does.** Embedded, a click on the card opens the scene; focused, the cards inside are what clicks reach. Controls drawn in a title line (a view switcher, tabs) work embedded only where the card takes the pointer; in a static copy they are drawn inert, at the same size, so nothing moves.
 
 ## Background color blocks
 
-`color-block` is a lightly colored rectangle with a list of labels, at its bottom or, with `labelSide: top`, at its top. Use it for locations, swimlanes, groups of outputs, and other backgrounds behind the cards.
+`color-block` is a lightly colored rectangle with a list of labels, at its bottom or, with `labelSide: top`, at its top. Use it for locations, swimlanes, groups of outputs, and other backgrounds behind the cards. With `fill: none` it is a frame instead: no tint, a solid border in its tone. Use that for a container of cards that already have colors of their own (the reports of a project, the outputs of a step), where a tint behind them would compete with theirs. A frame around cards whose height is not known in advance (`height: auto`, a stack at full height) is written `around: { nodeIdList, padding }` instead of a position and a size: it is drawn around those cards as they are measured ([Around other nodes](card-diagram-impl.md#around-other-nodes)).
 
 ```yaml
 id: source-area

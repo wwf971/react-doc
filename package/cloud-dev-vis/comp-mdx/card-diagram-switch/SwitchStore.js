@@ -2,7 +2,7 @@ import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { applyNodeChanges } from '@xyflow/react';
 import { yamlStringify } from '../../../../main/frontend/src/lib/yaml.js';
 import { DiagramERStore } from '../card-diagram/DiagramERStore.js';
-import { diagramPositionsGet } from '../card-diagram/DiagramERData.js';
+import { diagramNormalize, diagramPlacesGet, diagramPositionsGet } from '../card-diagram/DiagramERData.js';
 import {
 	SWITCH_EMBED_CHROME_HEIGHT, switchCameraBetween, switchCameraChildOf, switchCameraFit, switchCameraParentOf, switchEase, switchEmbedCardRectOf, switchEmbedMapBuild, switchMaskClipBuild, switchMorphBuild,
 	switchMorphFrameAt, switchMorphStyleBuild, switchPathChain, switchPathHashRead, switchPathNormalize, switchPathParent, switchPathViewBuild, switchPathViewRead, switchPortalItemStyleBuild, switchPortalStyleBuild, switchRectUnion,
@@ -37,6 +37,16 @@ const isMotionReduced = () => typeof window !== 'undefined' && window.matchMedia
 // A transition is a list of steps; a step is drawn by frameApply(progress), from any
 // clock: stepRun below (requestAnimationFrame), or remotion's frame (seek). Between
 // two steps the nodes of the canvas change, under the mask.
+// the title of a scene focused: a node of its world, this high, this far above what the
+// scene draws (card-diagram-flexible-switch.md#the-title-of-a-scene), larger in proportion in a
+// scene wider than SWITCH_TITLE_WIDTH_BASE, so it keeps its weight beside what it names; a width
+// guessed from its words until it is measured
+export const SWITCH_TITLE_ID = '~title';
+const SWITCH_TITLE_HEIGHT = 48;
+const SWITCH_TITLE_GAP = 28;
+const SWITCH_TITLE_CHAR_WIDTH = 30;
+const SWITCH_TITLE_WIDTH_BASE = 1200;
+
 export class SwitchStore {
 	provider = null;
 	pathCurrent = '';
@@ -67,6 +77,7 @@ export class SwitchStore {
 		this.sceneDescByPath = new Map();
 		this.viewChosenByKey = observable.map({}, { deep: false });
 		this.cameraByPath = new Map();
+		this.titleNodeByText = new Map();
 		this.embedBodyByKey = new Map();
 		this.stackElementByKey = new Map();
 		this.stackScrollByKey = new Map();
@@ -88,8 +99,13 @@ export class SwitchStore {
 		this.providerVersion = 0;
 		this.runToken = 0;
 		this.isSeekBusy = false;
+		// the camera the canvas had when it left: the block mounted again starts from it
+		// (the store is the block's, useSwitchStore). animationStore: the animation layer
+		// over it, kept with it (SwitchAnimation)
+		this.cameraLive = null;
+		this.animationStore = null;
 		makeAutoObservable(this, {
-			isSeekBusy: false, seek: false, seekEnd: false, showAt: false, planRun: false, stepEnter: false, stepExit: false, pathSet: false, stepRun: false, registry: false, resolve: false, scope: false, entryByPath: false, sceneDescByPath: false, viewChosenByKey: false, cameraByPath: false, embedBodyByKey: false, stackElementByKey: false, stackScrollByKey: false, stackAreaByKey: false, stackItemByKey: false, itemInitial: false, maskElement: false, maskWorldElement: false, styleElement: false, viewportApi: false,
+			cameraLive: false, animationStore: false, isSeekBusy: false, seek: false, seekEnd: false, showAt: false, planRun: false, stepEnter: false, stepExit: false, pathSet: false, stepRun: false, registry: false, resolve: false, scope: false, entryByPath: false, sceneDescByPath: false, viewChosenByKey: false, cameraByPath: false, titleNodeByText: false, embedBodyByKey: false, stackElementByKey: false, stackScrollByKey: false, stackAreaByKey: false, stackItemByKey: false, itemInitial: false, maskElement: false, maskWorldElement: false, styleElement: false, viewportApi: false,
 			captureHintTimer: false, flowWaiterList: false, measureWaiterList: false, morph: false, step: false, providerVersion: false, runToken: false, stackScrollKeyByKey: false, stackHeightFullByKey: false, stackFullKeySet: false,
 			provider: observable.ref, nodeListFlow: observable.shallow, edgeListFlow: observable.shallow, plan: observable.ref, mask: observable.ref, box: observable.ref, embedHeld: observable.ref,
 			historyList: observable.ref, forwardList: observable.ref, measurePathList: observable.ref, captureHint: observable.ref,
@@ -124,6 +140,12 @@ export class SwitchStore {
 		this.flowSet(path);
 		this.styleWrite('');
 		this.measureVersion += 1;
+	}
+
+	// the same scenes made again (a block mounted again builds its provider anew): what
+	// the provider answers with from now on, nothing read again
+	providerAdopt(provider) {
+		this.provider = provider;
 	}
 
 	// what the provider says of a scene, asked once. a scene it cannot make says why
@@ -217,6 +239,10 @@ export class SwitchStore {
 			viewList: switchViewListOf(desc, presentation).map((view) => ({ id: view.id, label: view.label ?? view.id, description: view.description })),
 			view: switchPathViewRead(path).view,
 			isShown: switchViewSwitcherIsShown(desc, presentation),
+			// how the views are offered: a menu, or tabs over what embeds the scene (a stack item);
+			// isSearchable: with a field finding them by their words
+			layout: desc.viewSwitcherLayout ?? 'menu',
+			isSearchable: Boolean(desc.isViewSearchable),
 		};
 	}
 
@@ -342,6 +368,18 @@ export class SwitchStore {
 		entry.canvas.measurementSet(nodeId, size);
 		this.measureVersion += 1;
 		this.measureWaiterCheck();
+		// a background around cards on the canvas follows them as they are measured, and so does
+		// the title above the scene
+		if (path === this.pathFlow && !this.plan) {
+			const isAround = entry.canvas.graph?.nodes.some((node) => node.around);
+			const title = this.titleFlowNodeOf(path);
+			this.nodeListFlow = this.nodeListFlow.map((node) => {
+				if (node.id === SWITCH_TITLE_ID) return title && (title.position.x !== node.position.x || title.position.y !== node.position.y || title.data.node !== node.data.node) ? { ...node, position: title.position, style: title.style, data: title.data } : node;
+				return isAround && node.data?.node?.around ? this.flowNodeDecorate(entry, node) : node;
+			});
+			// the width of the title known: the camera at rest takes it in
+			if (nodeId === SWITCH_TITLE_ID && this.isCameraReady && path === this.pathCurrent && !this.cameraByPath.has(path)) this.cameraApply(this.cameraDefaultGet(path));
+		}
 		// a stack at full height gets its height as its items are drawn: the camera follows,
 		// until the reader has moved it
 		if (this.isCameraReady && !this.plan && path === this.pathCurrent && !this.cameraByPath.has(path) && this.graphNodeListOf(entry).some((node) => node.renderer.type === SCENE_STACK_TYPE && node.size.height === 'auto')) {
@@ -350,11 +388,18 @@ export class SwitchStore {
 	}
 
 	nodeSizeOf(entry, node) {
+		// a background around other nodes is as large as they make it
+		if (node.around) return this.entryPlacesGet(entry).sizeById.get(node.id) ?? { width: 1, height: 1 };
 		const measured = entry.canvas.measurements[node.id];
 		return {
 			width: node.size.width === 'auto' ? measured?.width ?? node.sizeDefault.width : node.size.width,
 			height: node.size.height === 'auto' ? measured?.height ?? node.sizeDefault.height : node.size.height,
 		};
+	}
+
+	entryPlacesGet(entry) {
+		const graph = entry.canvas.graph;
+		return graph ? diagramPlacesGet(graph.nodes, graph.layout, entry.canvas.measurements) : { positions: new Map(), sizeById: new Map() };
 	}
 
 	entryPositionsGet(entry) {
@@ -384,7 +429,7 @@ export class SwitchStore {
 	}
 
 	cameraDefaultGet(path) {
-		return switchCameraFit(this.sceneBoxGet(path), this.box ?? { width: 800, height: 600 });
+		return switchCameraFit(this.sceneBoxFocusedGet(path), this.box ?? { width: 800, height: 600 });
 	}
 
 	cameraOf(path) {
@@ -588,13 +633,15 @@ export class SwitchStore {
 			initialWidth: measured?.width,
 			initialHeight: measured?.height,
 			position: this.entryPositionsGet(entry).get(node.id) ?? node.position,
+			...(nodeGraph.around ? { style: { ...node.style, ...this.nodeSizeOf(entry, nodeGraph) } } : {}),
 		};
 	}
 
 	flowListOf(path) {
 		const entry = this.entryGet(path);
 		if (!entry) return { nodeList: [], edgeList: [] };
-		return { nodeList: entry.canvas.nodeList.map((node) => this.flowNodeDecorate(entry, node)), edgeList: [...entry.canvas.edgeList] };
+		const title = this.titleFlowNodeOf(path);
+		return { nodeList: [...entry.canvas.nodeList.map((node) => this.flowNodeDecorate(entry, node)), ...(title ? [title] : [])], edgeList: [...entry.canvas.edgeList] };
 	}
 
 	flowSet(path) {
@@ -711,6 +758,64 @@ export class SwitchStore {
 		this.viewportApi = api;
 	}
 
+	// ---------- the title of the scene focused ----------
+
+	// what a scene focused is called, over its canvas (card-diagram-flexible-switch.md#the-title-of-a-scene):
+	// the title of its view, else of the scene, else its label; '' with isTitleHidden. focused
+	// there is no card around it to name it, as there is where it is embedded
+	titleOf(path) {
+		const { path: scene, view } = switchPathViewRead(path);
+		const desc = this.sceneDescGet(scene);
+		if (!desc || desc.error || desc.isTitleHidden) return '';
+		const viewDesc = view ? desc.viewList?.find((item) => item.id === view) : null;
+		return String(viewDesc?.title ?? desc.title ?? desc.label ?? '');
+	}
+
+	// where the title stands: above the box of the scene, at its left
+	titleRectOf(path) {
+		const title = this.titleOf(path);
+		const entry = this.entryGet(path);
+		if (!title || !entry?.canvas.graph) return null;
+		const box = this.sceneBoxGet(path);
+		const scale = this.titleScaleOf(path);
+		const measured = entry.canvas.measurements[SWITCH_TITLE_ID];
+		return { x: box.x, y: box.y - (SWITCH_TITLE_GAP + SWITCH_TITLE_HEIGHT) * scale, width: measured?.width ?? title.length * SWITCH_TITLE_CHAR_WIDTH * scale, height: SWITCH_TITLE_HEIGHT * scale };
+	}
+
+	// how much larger than the base the title of a scene is: 1 up to the base width, then in
+	// proportion to the width of its box (rounded, so a measurement does not redraw it for nothing)
+	titleScaleOf(path) {
+		return Math.max(1, Math.round((this.sceneBoxGet(path).width / SWITCH_TITLE_WIDTH_BASE) * 10) / 10);
+	}
+
+	// what the camera of a scene focused fits: its box and its title. an embedding fits the box alone
+	sceneBoxFocusedGet(path) {
+		const box = this.sceneBoxGet(path);
+		const rect = this.titleRectOf(path);
+		return rect ? switchRectUnion([box, rect]) : box;
+	}
+
+	// the node of the title, of the registry's kind scene-title; one per text, so it keeps its identity
+	titleNodeOf(path) {
+		const text = this.titleOf(path);
+		if (!text) return null;
+		const scale = this.titleScaleOf(path);
+		const key = `${scale}|${text}`;
+		if (!this.titleNodeByText.has(key)) {
+			const node = diagramNormalize({ version: 1, nodes: [{ id: 'title', renderer: { type: 'scene-title' }, position: { x: 0, y: 0 }, size: { width: 'auto', height: SWITCH_TITLE_HEIGHT * scale }, data: { text, scale }, handles: [] }] }, this.registry).nodes[0];
+			this.titleNodeByText.set(key, { ...node, id: SWITCH_TITLE_ID });
+		}
+		return this.titleNodeByText.get(key);
+	}
+
+	// the title on the canvas: a node like the cards, which takes no pointer
+	titleFlowNodeOf(path) {
+		const rect = this.titleRectOf(path);
+		const node = this.titleNodeOf(path);
+		if (!rect || !node) return null;
+		return { id: SWITCH_TITLE_ID, type: 'visualizationNode', position: { x: rect.x, y: rect.y }, style: { width: 'max-content', height: rect.height }, draggable: false, selectable: false, focusable: false, connectable: false, data: { node } };
+	}
+
 	boxSet(box) {
 		if (this.box && this.box.width === box.width && this.box.height === box.height) return;
 		this.box = box;
@@ -747,7 +852,7 @@ export class SwitchStore {
 
 	// a state of an animation showing a region of its scene
 	boxCameraGet(path, region) {
-		return switchCameraFit(this.sceneBoxGet(path, region), this.box ?? { width: 800, height: 600 });
+		return switchCameraFit(region ? this.sceneBoxGet(path, region) : this.sceneBoxFocusedGet(path), this.box ?? { width: 800, height: 600 });
 	}
 
 	styleWrite(text) {

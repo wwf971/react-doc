@@ -3,6 +3,7 @@ import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { Pencil, Plus, Trash2 } from '../../../../../main/frontend/UICommon.js';
 import { DocEditBlockFloatContext } from '../../../../../main/comp-doc/edit/DocEditDocContext.js';
+import { useCompState } from '../../../../../main/comp-doc/registry/use-comp-state.js';
 import { ObjectFrontendAssetPathInput } from '../../../../../main/comp-doc/object-frontend/ObjectFrontendAssetPathInput.jsx';
 import { DiagramERView } from '../../card-diagram/CardDiagram.jsx';
 import { CardStandaloneView } from '../../card-diagram/CardStandalone.jsx';
@@ -32,9 +33,11 @@ class MigrationEditStore {
 	isFormOpen = false;
 	floatElement = null;
 
-	constructor(itemRef) {
+	// onItemRefChange: the item chosen, told to whoever keeps it beyond this mount
+	constructor(itemRef, onItemRefChange) {
 		this.itemRef = itemRef ?? '';
-		makeAutoObservable(this, { floatElement: observable.ref }, { autoBind: true });
+		this.onItemRefChange = onItemRefChange;
+		makeAutoObservable(this, { floatElement: observable.ref, onItemRefChange: false }, { autoBind: true });
 	}
 
 	floatElementSet(element) {
@@ -43,6 +46,7 @@ class MigrationEditStore {
 
 	itemRefSet(itemRef) {
 		this.itemRef = itemRef;
+		this.onItemRefChange?.(itemRef);
 		this.isEditing = false;
 		this.status = 'editing';
 		this.message = '';
@@ -114,7 +118,7 @@ async function writesRun(service, { createList = [], writeList = [], removeList 
 	for (const ref of removeList) await resultCheck(service.assetRemove(ref));
 }
 
-const MigrationEditView = observer(function MigrationEditView({ store, service, kind, item, model, adapter }) {
+const MigrationEditView = observer(function MigrationEditView({ store, service, kind, item, model, adapter, blockConfig }) {
 	const load = useMemo(() => {
 		try {
 			return { source: adapter.sourceBuild(item, model), registry: adapter.registryGet(model) };
@@ -124,7 +128,9 @@ const MigrationEditView = observer(function MigrationEditView({ store, service, 
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [adapter, item, model]);
 	if (load.message) return <p className="doc-error">{load.message}</p>;
-	const config = { isEdit: store.isEditing, edit: { modeId: 'visual', session: { status: store.status, message: store.message } }, instanceId: `migration-edit-${item.key}` };
+	// the diagram is the block's, per item: what it keeps across its mounts is found again
+	// (the document entering or leaving edit mode mounts it again, card-diagram CanvasStill)
+	const config = { isEdit: store.isEditing, edit: { modeId: 'visual', session: { status: store.status, message: store.message } }, instanceId: `migration-edit-${item.key}`, ...(blockConfig.stateKey ? { stateKey: `${blockConfig.stateKey}|item:${item.key}`, compId: blockConfig.compId } : {}) };
 	const onEvent = (eventType, payload) => {
 		if (eventType === 'editCancelRequest') store.editEnd();
 		else if (eventType === 'editSubmitRequest') {
@@ -195,7 +201,13 @@ function migrationItemEditCreate(kind, name, isCreateOffered = true) {
 		const service = config.objectFrontend;
 		const param = data.param ?? {};
 		const category = param.category ?? 'example';
-		const [store] = useState(() => new MigrationEditStore(param.item));
+		// the item the reader chose is the block's: kept while the block is mounted again (the
+		// document entering or leaving edit mode), for as long as the block names the same one
+		const blockState = useCompState(config, { itemRef: '', itemParam: '' });
+		const [store] = useState(() => new MigrationEditStore(
+			blockState.value.itemParam === (param.item ?? '') && blockState.value.itemRef ? blockState.value.itemRef : param.item,
+			(itemRef) => blockState.patch({ itemRef, itemParam: param.item ?? '' }),
+		));
 		if (!service) return <p className="doc-error">{name} is a mode of a migration (ObjectFrontend).</p>;
 		const { read, model } = useMigrationModel(service, category);
 		if (!model) return <MigrationLoading read={read} />;
@@ -225,7 +237,7 @@ function migrationItemEditCreate(kind, name, isCreateOffered = true) {
 					<div ref={store.floatElementSet} className="doc-migration-edit-float" />
 				</div>
 				{store.isFormOpen && service.docState?.isEditing ? <MigrationNewForm store={store} service={service} kind={kind} model={model} /> : null}
-				{item ? <MigrationEditView key={item.key} store={store} service={service} kind={kind} item={item} model={model} adapter={adapter} />
+				{item ? <MigrationEditView key={item.key} store={store} service={service} kind={kind} item={item} model={model} adapter={adapter} blockConfig={config} />
 					: <p className="doc-note">{store.itemRef ? `There is no ${kind} at ${store.itemRef}.` : `There is no ${kind} under /${category} yet.`}</p>}
 			</div>
 		);

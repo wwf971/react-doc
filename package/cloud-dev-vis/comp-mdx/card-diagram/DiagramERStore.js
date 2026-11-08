@@ -1,7 +1,10 @@
 import { applyNodeChanges, MarkerType } from '@xyflow/react';
 import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
 import { makeAutoObservable, observable } from 'mobx';
-import { diagramNormalize, diagramPositionsGet, viewportNormalize, endpointIsDangling, pointNodeIdBuild } from './DiagramERData.js';
+import { diagramNormalize, diagramPlacesGet, viewportNormalize, endpointIsDangling, pointNodeIdBuild } from './DiagramERData.js';
+
+// the style of a background drawn around other nodes, from the size they make it (diagramPlacesGet)
+const aroundStyleOf = (size) => ({ width: size?.width ?? 1, height: size?.height ?? 1 });
 
 const viewStates = new WeakMap();
 
@@ -71,7 +74,7 @@ class DiagramERStore {
 			const data = yamlParse(this.source);
 			this.graph = diagramNormalize(data, this.registry, this.rendererResolve, this.height);
 			this.viewport = this.graph.viewport;
-			const positions = diagramPositionsGet(this.graph.nodes, this.graph.layout, this.measurements);
+			const { positions, sizeById } = diagramPlacesGet(this.graph.nodes, this.graph.layout, this.measurements);
 			const pointNodes = [];
 			const endpointNode = (connection, role) => {
 				const endpoint = connection[role];
@@ -111,7 +114,8 @@ class DiagramERStore {
 						...(isSizeAuthoredChanged ? beforeWithoutSize : before),
 						id: node.id, type: 'visualizationNode', position: before && !isPositionAuthoredChanged ? before.position : positions.get(node.id),
 						zIndex: node.isBackground ? -1 : 0,
-						style: { width: node.isWidthFit ? 'max-content' : node.size.width === 'auto' ? node.sizeDefault.width : node.size.width, ...(node.size.height === 'auto' ? {} : { height: node.size.height }) },
+						style: node.around ? aroundStyleOf(sizeById.get(node.id)) : { width: node.isWidthFit ? 'max-content' : node.size.width === 'auto' ? node.sizeDefault.width : node.size.width, ...(node.size.height === 'auto' ? {} : { height: node.size.height }) },
+						...(node.around ? { draggable: false } : {}),
 						data: { node },
 					};
 				}),
@@ -146,12 +150,16 @@ class DiagramERStore {
 		if (!this.graph) return;
 		try {
 			const nodes = this.graph.nodes.map(node => this.positionsTemporary[node.id] ? { ...node, position: this.positionsTemporary[node.id] } : node);
-			const positions = diagramPositionsGet(nodes, this.graph.layout, this.measurements);
-			// a node whose place did not change keeps its identity
+			const { positions, sizeById } = diagramPlacesGet(nodes, this.graph.layout, this.measurements);
+			// a node whose place did not change keeps its identity; a background around others
+			// follows their size too
 			this.nodeList = this.nodeList.map(node => {
 				if (node.type !== 'visualizationNode') return node;
 				const position = positions.get(node.id);
-				return position && node.position?.x === position.x && node.position?.y === position.y ? node : { ...node, position };
+				const size = sizeById.get(node.id);
+				const isSizeSame = !size || (node.style?.width === size.width && node.style?.height === size.height);
+				if (position && node.position?.x === position.x && node.position?.y === position.y && isSizeSame) return node;
+				return { ...node, ...(position ? { position } : {}), ...(isSizeSame ? {} : { style: aroundStyleOf(size) }) };
 			});
 		} catch (error) {
 			this.loadState = { status: 'error', message: error.message };

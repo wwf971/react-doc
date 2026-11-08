@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { Copy, Download, ImageDown } from '../../../../main/frontend/UICommon.js';
 import { BlockPopupSurface } from '../../../../main/comp-doc/popup/BlockPopupSurface.jsx';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
+import { useCompStateStore } from '../../../../main/comp-doc/registry/use-comp-state.js';
 import { compDefinitionNormalize, compIdResolve } from '../../../../main/comp-doc/registry/comp-registry.js';
 import { yamlParse, yamlStringify } from '../../../../main/frontend/src/lib/yaml.js';
 import { DiagramCopyStore } from '../card-diagram/DiagramERStore.js';
@@ -26,12 +27,18 @@ export function useSwitchResolve() {
 }
 
 // the store of a switching viewport, given its scenes: one per block, its scenes
-// replaced when the provider changes
-export function useSwitchStore({ provider, registry, pathInitial, scope }) {
+// replaced when the provider changes. it is the block's, not the mount's
+// (useCompStateStore): the block mounted again (the document entering or leaving edit
+// mode renders another body, the reader coming back) finds its scenes measured, its
+// camera and the scene the reader was at, and paints them in its first frame. a provider
+// made again with the same signature is taken without reading the scenes again
+export function useSwitchStore({ provider, registry, pathInitial, scope, config }) {
 	const resolve = useSwitchResolve();
-	const [store] = useState(() => new SwitchStore({ provider, registry, resolve, pathInitial, scope }));
+	const store = useCompStateStore(config, 'switch', () => new SwitchStore({ provider, registry, resolve, pathInitial, scope }));
 	useEffect(() => {
-		if (store.provider !== provider) store.providerSet(provider);
+		if (store.provider === provider) return;
+		if (provider.signature !== undefined && provider.signature === store.provider?.signature) store.providerAdopt(provider);
+		else store.providerSet(provider);
 	}, [store, provider]);
 	return store;
 }
@@ -115,7 +122,7 @@ const CardDiagramSwitchBase = observer(function CardDiagramSwitchBase({ data = {
 	const load = useMemo(() => {
 		try {
 			const spec = switchDocNormalize(source);
-			return { spec, provider: switchProviderFromDoc(spec, { onBoxSave: (path, rect) => switchDocBoxSave(sourceRef.current, path, rect, onEvent, config) }) };
+			return { spec, provider: switchProviderFromDoc(spec, { onBoxSave: (path, rect) => switchDocBoxSave(sourceRef.current, path, rect, onEvent, config), signature: source }) };
 		} catch (error) {
 			return { message: String(error?.message ?? error) };
 		}
@@ -137,7 +144,7 @@ const CardDiagramSwitchBase = observer(function CardDiagramSwitchBase({ data = {
 });
 
 const CardDiagramSwitchBody = observer(function CardDiagramSwitchBody({ load, data, config, registry, scope, isInPopup, rootRef, title, copyStore, source, onEvent }) {
-	const store = useSwitchStore({ provider: load.provider, registry, pathInitial: data.path ?? load.spec.root, scope });
+	const store = useSwitchStore({ provider: load.provider, registry, pathInitial: data.path ?? load.spec.root, scope, config });
 	const capture = switchCaptureActionBuild({ store, rootRef, titleGet: () => title });
 	const heightWritten = Number(data.height ?? config.height ?? load.spec.height);
 	const height = Number.isFinite(heightWritten) ? Math.max(240, Math.min(1400, heightWritten)) : 620;
@@ -146,7 +153,7 @@ const CardDiagramSwitchBody = observer(function CardDiagramSwitchBody({ load, da
 			store={store} config={config} registry={registry} height={height} isInPopup={isInPopup} rootRef={rootRef}
 			barTrailing={<>
 				<SwitchBarMenu action={capture} />
-				<button type="button" className="doc-switch-bar-button" title={copyStore.label} aria-label={copyStore.label} onClick={() => copyStore.copy(source, onEvent)}><Copy size={13} aria-hidden="true" /></button>
+				<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title={copyStore.label} aria-label={copyStore.label} onClick={() => copyStore.copy(source, onEvent)}><Copy size={16} aria-hidden="true" /></button>
 			</>}
 		/>
 	);
@@ -158,7 +165,7 @@ export const SwitchBarMenu = observer(function SwitchBarMenu({ action }) {
 	const { Icon } = action;
 	return (
 		<span className="doc-switch-bar-menu" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) isOpenSet(false); }}>
-			<button type="button" className="doc-switch-bar-button" title={action.label} aria-label={action.label} aria-expanded={isOpen} onClick={() => isOpenSet(!isOpen)}><Icon size={13} aria-hidden="true" /></button>
+			<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title={action.label} aria-label={action.label} aria-expanded={isOpen} onClick={() => isOpenSet(!isOpen)}><Icon size={16} aria-hidden="true" /></button>
 			{isOpen ? (
 				<span className="doc-switch-bar-menu-list" role="menu">
 					{action.menuItemList.map((item) => {

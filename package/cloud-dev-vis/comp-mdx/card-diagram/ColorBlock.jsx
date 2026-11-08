@@ -7,6 +7,7 @@ export function colorBlockNormalize(data) {
 	if (data.tone !== undefined && !toneList.includes(data.tone)) throw new Error('A color block needs a supported tone.');
 	if (!Array.isArray(data.itemList)) throw new Error('A color block needs itemList for its labels.');
 	if (data.labelSide !== undefined && !['top', 'bottom'].includes(data.labelSide)) throw new Error('A color block places its labels at the top or the bottom.');
+	if (data.fill !== undefined && !['tint', 'none'].includes(data.fill)) throw new Error('A color block is filled with its tint, or with none (fill: none, a frame).');
 	if (data.columnList !== undefined) {
 		if (!Array.isArray(data.columnList)) throw new Error('A color block needs columnList to be a list.');
 		if (!Number.isFinite(data.columnTop)) throw new Error('A color block with columns needs columnTop: where they start.');
@@ -33,7 +34,7 @@ export function colorBlockNormalize(data) {
 
 export const ColorBlock = observer(function ColorBlock({ node, editor, nodeId }) {
 	return (
-		<div className={`doc-color-block${editor ? ' is-editable' : ''}`} data-tone={node.data.tone ?? 'slate'} data-label-side={node.data.labelSide ?? 'bottom'} onClick={editor ? (event) => { event.stopPropagation(); editor.select(nodeId); } : undefined}>
+		<div className={`doc-color-block${editor ? ' is-editable' : ''}`} data-tone={node.data.tone ?? 'slate'} data-label-side={node.data.labelSide ?? 'bottom'} data-fill={node.data.fill ?? 'tint'} onClick={editor ? (event) => { event.stopPropagation(); editor.select(nodeId); } : undefined}>
 			<div className="doc-color-block-labels">
 				{node.data.itemList.map((item) => {
 					const Icon = CARD_ICON_BY_NAME[item.icon];

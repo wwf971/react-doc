@@ -48,7 +48,10 @@ export class SwitchAnimationStore {
 		this.switchStore = switchStore;
 		this.compiledById = new Map();
 		this.wayById = new Map();
-		makeAutoObservable(this, { switchStore: false, compiledById: false, wayById: false, spec: observable.ref, plan: observable.ref }, { autoBind: true });
+		// the block started at its state once (SwitchAnimation); a mount again does not
+		// start it there again
+		this.isShownFirst = false;
+		makeAutoObservable(this, { switchStore: false, compiledById: false, wayById: false, isShownFirst: false, spec: observable.ref, plan: observable.ref }, { autoBind: true });
 		this.specSet(spec);
 	}
 

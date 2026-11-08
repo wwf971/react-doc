@@ -162,6 +162,20 @@ export function switchViewListCheck(desc, path) {
 		idSet.add(view.id);
 	}
 	for (const field of ['viewDefault', 'viewHover']) switchViewChoiceCheck(desc[field], field, idSet, path);
+	if (desc.viewSwitcherLayout !== undefined && !['menu', 'tabs'].includes(desc.viewSwitcherLayout)) throw new Error(`The viewSwitcherLayout of ${path} is menu or tabs.`);
+	if (desc.isViewSearchable !== undefined && typeof desc.isViewSearchable !== 'boolean') throw new Error(`The isViewSearchable of ${path} is true or false.`);
+	for (const view of desc.viewList) if (view.title !== undefined && typeof view.title !== 'string') throw new Error(`The title of the view ${view.id} of ${path} is text.`);
+}
+
+// the views a search finds: every word of the text in the label, the description or the id
+// of a view, whatever the case; all of them for no text
+export function switchViewSearch(viewList, text) {
+	const wordList = String(text ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+	if (wordList.length === 0) return viewList;
+	return viewList.filter((view) => {
+		const haystack = [view.label, view.description, view.id].filter(Boolean).join('\n').toLowerCase();
+		return wordList.every((word) => haystack.includes(word));
+	});
 }
 
 function switchViewChoiceCheck(value, field, idSet, path) {
@@ -309,7 +323,7 @@ export function switchDocNormalize(input) {
 
 // the scenes of a document, as the layer asks for them. onBoxSave: what a box the
 // reader adjusted does (rewrites the block, when the block can be written)
-export function switchProviderFromDoc(spec, { onBoxSave } = {}) {
+export function switchProviderFromDoc(spec, { onBoxSave, signature } = {}) {
 	const tabsOwnerOf = (path) => {
 		const parent = switchPathParent(path);
 		const scene = spec.sceneByPath.get(parent);
@@ -332,6 +346,8 @@ export function switchProviderFromDoc(spec, { onBoxSave } = {}) {
 		return spec.sceneByPath.get(path)?.description ?? '';
 	};
 	const provider = {
+		// the text of the document: a provider built again from the same text is the same
+		signature,
 		root: spec.root,
 		title: spec.title,
 		transition: spec.transition,
@@ -346,11 +362,11 @@ export function switchProviderFromDoc(spec, { onBoxSave } = {}) {
 			const scene = owner ?? spec.sceneByPath.get(path);
 			if (!scene) return null;
 			if (scene.viewList) {
-				const { viewDefault, viewHover, isViewSwitcherHidden, isViewSwitcherHiddenEmbedded, isViewSwitcherHiddenFocused } = scene;
-				return { path, label: provider.labelGet(path), description: descriptionOf(path), viewDefault, viewHover, isViewSwitcherHidden, isViewSwitcherHiddenEmbedded, isViewSwitcherHiddenFocused, viewList: scene.viewList.map((view) => ({ ...view, diagram: { defaults: spec.defaults, ...view.diagram } })) };
+				const { viewDefault, viewHover, isViewSwitcherHidden, isViewSwitcherHiddenEmbedded, isViewSwitcherHiddenFocused, viewSwitcherLayout, isViewSearchable, title, isTitleHidden } = scene;
+				return { path, label: provider.labelGet(path), description: descriptionOf(path), title, isTitleHidden, viewDefault, viewHover, isViewSwitcherHidden, isViewSwitcherHiddenEmbedded, isViewSwitcherHiddenFocused, viewSwitcherLayout, isViewSearchable, viewList: scene.viewList.map((view) => ({ ...view, diagram: { defaults: spec.defaults, ...view.diagram } })) };
 			}
 			const diagram = diagramOf(scene, owner ? switchPathLast(path) : undefined);
-			return { path, label: provider.labelGet(path), description: descriptionOf(path), diagram: { defaults: spec.defaults, ...diagram }, box: owner ? undefined : scene.box };
+			return { path, label: provider.labelGet(path), description: descriptionOf(path), title: owner ? undefined : scene.title, isTitleHidden: (owner ?? scene).isTitleHidden, diagram: { defaults: spec.defaults, ...diagram }, box: owner ? undefined : scene.box };
 		},
 		boxSave: onBoxSave,
 	};

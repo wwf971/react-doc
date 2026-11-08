@@ -94,7 +94,7 @@ sceneList:
 
 | Key | Meaning |
 | --- | --- |
-| `sceneList` | the scenes: `path`, `label`, `description`, `diagram`, or [`viewList`](#views-of-a-scene) for more than one view of it, optionally `box`, `tabs`, or `labelItemList` for [more than words in the menu](card-diagram-flexible-switch.md#the-path-bar) |
+| `sceneList` | the scenes: `path`, `label`, `description`, `diagram`, or [`viewList`](#views-of-a-scene) for more than one view of it, optionally `box`, `tabs`, `labelItemList` for [more than words in the menu](card-diagram-flexible-switch.md#the-path-bar), `title` (and a view's `title`) for the heading over the scene when it is focused, its `label` without one, or `isTitleHidden: true` for none ([The title of a scene](card-diagram-flexible-switch.md#the-title-of-a-scene)) |
 | `root` | the scene shown first; the first of the list by default |
 | `title`, `height` | the block; `data.height` of the marker wins, as `data.path` names another first scene |
 | `defaults` | what every `diagram` starts with |
@@ -239,6 +239,8 @@ sceneList:
 | `viewDefault` | the view shown: an id, or the rules below; the first available view without one |
 | `viewHover` | the view shown while a pointer rests on a card embedding the scene: an id, or the rules below. None without one |
 | `isViewSwitcherHidden`, `isViewSwitcherHiddenEmbedded`, `isViewSwitcherHiddenFocused` | no menu: anywhere, in what embeds it, in the path bar |
+| `viewSwitcherLayout` | `menu` (the default) or `tabs`: [views as tabs](#views-as-tabs) where a stack item embeds the scene |
+| `isViewSearchable` | with tabs, a field finding a view by the words of its label, description or id |
 
 **The rules** are read in order and the first match wins. A view not available in that presentation is passed over.
 
@@ -264,6 +266,78 @@ viewDefault:
 - id: orders
   renderer: { type: scene-embed }
   data: { scene: /overview/orders, view: matrix, title: Orders }    # this card asks for a view
+```
+
+### Views as tabs
+
+Many things of one kind, each a diagram of its own (the mappings of a project, the tables of a database), are best one scene whose views they are, offered as tabs:
+
+```yaml
+- path: /plan/mapping
+  label: Schema mapping
+  viewSwitcherLayout: tabs
+  isViewSearchable: true
+  viewList:
+    - { id: account, label: Account → Customer, description: account → customer, diagram: { ... } }
+    - { id: order, label: Order → Order, description: salesorder → order, diagram: { ... } }
+```
+
+Embedded in a [stack](#a-scrolling-stack-of-scenes), the item shows a row under its title: the search field, then one tab per view in one line, moved sideways by the wheel or a drag, never with a scrollbar. A search keeps the tabs whose label, description or id hold every word typed, whatever the case; Enter shows the first, Escape empties the field. A tab shows its view at once, in the item, as the menu does; the item is as tall as the tallest view, so nothing below it moves. Focused (in the path bar) and on a `scene-embed` card the views keep the menu. Unlike [Tabs](#tabs), which arrange nodes of one diagram and make each tab a scene of its own, these switch in place and need no path per tab (the path may still name one: `/plan/mapping@order`).
+
+The frame around the stack below is a `color-block` with `fill: none`, drawn `around` the stack ([Around other nodes](card-diagram-impl.md#around-other-nodes)), not at numbers of its own.
+
+<!--renderComp=CardDiagramSwitch,height=520,title=Views as tabs-->
+```yaml
+version: 1
+sceneList:
+  - path: /plan
+    label: Plan
+    diagram:
+      nodes:
+        - id: frame
+          renderer: { type: color-block }
+          around: { nodeIdList: [stack], padding: { top: 52, right: 24, bottom: 24, left: 24 } }
+          data: { tone: slate, fill: none, labelSide: top, itemList: [{ id: label, icon: archive, text: Outputs }] }
+          handles: []
+        - id: stack
+          renderer: { type: scene-stack }
+          position: { x: 0, y: 0 }
+          size: { width: 620, height: 420 }
+          data:
+            title: Plan
+            icon: layers
+            tone: violet
+            itemList:
+              - { id: mapping, scene: /plan/mapping, title: Schema mapping, icon: arrow-right-left, tone: teal }
+  - path: /plan/mapping
+    label: Schema mapping
+    viewSwitcherLayout: tabs
+    isViewSearchable: true
+    viewList:
+      - id: account
+        label: Account → Customer
+        description: account → customer
+        diagram:
+          nodes:
+            - { id: s, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: account, text: 4 columns, tone: blue }, handles: [{ id: out, direction: out, anchor: { side: right } }] }
+            - { id: t, renderer: { type: card-note }, position: { x: 320, y: 0 }, size: { width: 180, height: auto }, data: { title: customer, text: 4 columns, tone: green }, handles: [{ id: in, direction: in, anchor: { side: left } }] }
+          connections: [{ id: st, source: { nodeId: s, handleId: out }, target: { nodeId: t, handleId: in }, label: { text: copy } }]
+      - id: order
+        label: Order → Order
+        description: salesorder → order
+        diagram:
+          nodes:
+            - { id: s, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: salesorder, text: 9 columns, tone: blue }, handles: [{ id: out, direction: out, anchor: { side: right } }] }
+            - { id: t, renderer: { type: card-note }, position: { x: 320, y: 120 }, size: { width: 180, height: auto }, data: { title: order, text: 8 columns, tone: green }, handles: [{ id: in, direction: in, anchor: { side: left } }] }
+          connections: [{ id: st, source: { nodeId: s, handleId: out }, target: { nodeId: t, handleId: in }, label: { text: GUID } }]
+      - id: product
+        label: Product → Item
+        description: product → item
+        diagram:
+          nodes:
+            - { id: s, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: product, text: 6 columns, tone: blue }, handles: [{ id: out, direction: out, anchor: { side: right } }] }
+            - { id: t, renderer: { type: card-note }, position: { x: 320, y: 0 }, size: { width: 180, height: auto }, data: { title: item, text: 5 columns, tone: green }, handles: [{ id: in, direction: in, anchor: { side: left } }] }
+          connections: [{ id: st, source: { nodeId: s, handleId: out }, target: { nodeId: t, handleId: in }, label: { text: copy } }]
 ```
 
 ## A scrolling stack of scenes

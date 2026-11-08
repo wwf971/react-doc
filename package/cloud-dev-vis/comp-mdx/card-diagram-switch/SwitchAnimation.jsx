@@ -5,6 +5,7 @@ import { AbsoluteFill, Sequence, useCurrentFrame } from 'remotion';
 import { AnimationControl } from '../card-diagram-animation/AnimationControl.jsx';
 import { SwitchAnimationStore } from './SwitchAnimationStore.js';
 import { SwitchCanvas } from './SwitchCanvas.jsx';
+import { CanvasStill, useCanvasStill } from '../card-diagram/CanvasStill.jsx';
 import { SwitchPathBar } from './SwitchPathBar.jsx';
 import '../card-diagram-animation/CardDiagramAnimation.css';
 import './CardDiagramSwitch.css';
@@ -34,14 +35,23 @@ const SwitchAnimationTimeline = observer(function SwitchAnimationTimeline({ stor
 
 const SwitchAnimationComposition = ({ store, config, registry }) => (
 	<AbsoluteFill>
-		<SwitchCanvas store={store.switchStore} config={config} registry={registry}>
+		<SwitchCanvas store={store.switchStore} config={config} registry={registry} isStillOuter>
 			<SwitchAnimationTimeline store={store} />
 		</SwitchCanvas>
 	</AbsoluteFill>
 );
 
+// the animation over a switching store is kept with it (the block's, useSwitchStore), so a
+// block mounted again (the document entering or leaving edit mode) is at the state it was
+function switchAnimationStoreOf(switchStore, spec) {
+	if (!switchStore.animationStore) switchStore.animationStore = new SwitchAnimationStore({ spec, switchStore });
+	return switchStore.animationStore;
+}
+
 export const SwitchAnimation = observer(function SwitchAnimation({ spec, switchStore, config, registry, height, isInPopup, rootRef, barTrailing }) {
-	const [store] = useState(() => new SwitchAnimationStore({ spec, switchStore }));
+	const store = useMemo(() => switchAnimationStoreOf(switchStore, spec),
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[switchStore]);
 	const boxRef = useRef(null);
 	const playerRef = useRef(null);
 	const [box, boxSet] = useState(null);
@@ -62,12 +72,15 @@ export const SwitchAnimation = observer(function SwitchAnimation({ spec, switchS
 		return () => observer.disconnect();
 	}, []);
 	// the block starts at its state, once the canvas has a box
-	const isShownFirst = useRef(false);
 	useEffect(() => {
-		if (!switchStore.isCameraReady || isShownFirst.current) return;
-		isShownFirst.current = true;
+		if (!switchStore.isCameraReady || store.isShownFirst) return;
+		store.isShownFirst = true;
 		store.stateShow(store.stateIdCurrent);
 	}, [store, switchStore.isCameraReady]);
+	// the player draws its composition only once it measured itself, a few frames after it
+	// mounts: a block mounted again holds the picture its last mount left until the canvas
+	// in it drew (CanvasStill), so it does not flash empty
+	const still = useCanvasStill(config, 'switch-animation', boxRef);
 	useEffect(() => {
 		const player = playerRef.current;
 		if (!player) return undefined;
@@ -104,6 +117,7 @@ export const SwitchAnimation = observer(function SwitchAnimation({ spec, switchS
 			<AnimationControl store={store} playerRef={playerRef} />
 			<SwitchPathBar store={switchStore} trailing={barTrailing} />
 			<div ref={boxRef} className="doc-switch-player">
+				<CanvasStill still={still} />
 				{box ? (
 					<Player
 						ref={playerRef}

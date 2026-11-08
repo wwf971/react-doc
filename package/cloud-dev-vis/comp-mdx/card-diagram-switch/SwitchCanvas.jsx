@@ -5,6 +5,7 @@ import '@xyflow/react/dist/style.css';
 import { Check, CircleAlert, LoaderCircle } from '../../../../main/frontend/UICommon.js';
 import { DiagramEdge, DiagramNode, DiagramPointNode, DiagramRenderContext, connectionPathBuild } from '../card-diagram/DiagramRender.jsx';
 import { useCanvasWheelGuard } from '../card-diagram/CanvasWheelGuard.js';
+import { CanvasStill, useCanvasStill } from '../card-diagram/CanvasStill.jsx';
 import { diagramCanvasLineListGet, diagramCanvasRegister } from '../card-diagram/DiagramCanvasRegistry.js';
 import '../card-diagram/DiagramER.css';
 import { SwitchContext, SwitchStaticScene, pathPointAt } from './SwitchStatic.jsx';
@@ -72,13 +73,18 @@ const SwitchEdge = observer(function SwitchEdge(props) {
 const nodeTypes = { visualizationNode: DiagramNode, visualizationPoint: DiagramPointNode };
 const edgeTypes = { visualizationEdge: SwitchEdge };
 
+const CAMERA_START = { x: 0, y: 0, zoom: 1 };
+
 const SwitchFlow = observer(function SwitchFlow({ store, children }) {
 	const rf = useReactFlow();
 	const isInitialized = useNodesInitialized();
 	const { flowVersion } = store;
 	useEffect(() => {
 		store.viewportApiSet({ viewportSet: (camera) => { void rf.setViewport(camera); }, viewportGet: () => rf.getViewport() });
-		return () => store.viewportApiSet(null);
+		return () => {
+			store.cameraLive = { ...rf.getViewport() };
+			store.viewportApiSet(null);
+		};
 	}, [store, rf]);
 	useEffect(() => { store.flowInitializedSet(isInitialized); }, [store, isInitialized, flowVersion]);
 	useEffect(() => {
@@ -94,7 +100,7 @@ const SwitchFlow = observer(function SwitchFlow({ store, children }) {
 			edges={store.edgeListFlow}
 			nodeTypes={nodeTypes}
 			edgeTypes={edgeTypes}
-			defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+			defaultViewport={store.cameraLive ?? CAMERA_START}
 			minZoom={SWITCH_ZOOM_MIN}
 			maxZoom={SWITCH_ZOOM_MAX}
 			proOptions={{ hideAttribution: true }}
@@ -174,9 +180,12 @@ const SwitchHint = observer(function SwitchHint({ store }) {
 
 // the canvas in a box of its own, measured: the box is what cameras fit. a block
 // playing it under another clock (the animation layer) puts this inside its composition
-export const SwitchCanvas = observer(function SwitchCanvas({ store, config, registry, children }) {
+export const SwitchCanvas = observer(function SwitchCanvas({ store, config, registry, isStillOuter = false, children }) {
 	const boxRef = useRef(null);
 	useCanvasWheelGuard(boxRef);
+	// a block mounted again holds the picture it left until the canvas drew; under the
+	// animation layer the block holds it around the player, which draws the canvas late
+	const still = useCanvasStill(config, 'switch', boxRef, { isEnabled: !isStillOuter });
 	const [, readySet] = useState(false);
 	const context = useMemo(() => ({
 		config,
@@ -212,6 +221,7 @@ export const SwitchCanvas = observer(function SwitchCanvas({ store, config, regi
 	const styleRef = (element) => store.styleElementSet(element);
 	return (
 		<div ref={boxRef} className="doc-switch-viewport" data-ready={store.isCameraReady ? '' : undefined}>
+			<CanvasStill still={still} />
 			<SwitchHint store={store} />
 			<style ref={styleRef} />
 			<ReactFlowProvider>

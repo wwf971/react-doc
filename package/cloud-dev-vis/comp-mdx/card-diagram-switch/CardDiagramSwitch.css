@@ -14,18 +14,19 @@
 }
 .doc-switch.is-popup { height: 100%; border: 0; border-radius: 0; }
 
-/* the path bar: the segments of the path at the left, what acts on the scene at the right */
+/* the path bar: the segments of the path at the left, what acts on the scene at the right.
+   its buttons are those of a panel's header (.doc-button-icon.is-panel), and its sides are
+   the header's, so in the block popup they stand right under the maximize and close buttons */
 .doc-switch-bar {
 	flex: none;
 	display: flex;
 	align-items: center;
 	gap: 0.35rem;
 	min-height: 2.25rem;
-	padding: 0.25rem 0.6rem;
+	padding: 0.25rem 0.75rem;
 	border-bottom: 1px solid var(--color-fd-border);
 	background: color-mix(in srgb, var(--color-fd-muted) 45%, transparent);
 }
-.doc-switch.is-popup .doc-switch-bar { padding-right: 5rem; }
 .doc-switch-path { flex: 1 1 0; min-width: 0; display: flex; align-items: center; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .doc-switch-path-item { flex: none; display: inline-flex; align-items: center; }
 .doc-switch-path-segment {
@@ -89,21 +90,7 @@
 .doc-switch-path-menu > button:hover { background: var(--color-fd-accent); }
 .doc-switch-path-menu > button[data-current] { font-weight: 650; }
 .doc-switch-path-menu > button > em { color: var(--color-fd-muted-foreground); font-size: 0.68rem; font-style: normal; }
-.doc-switch-bar-trailing { flex: none; display: inline-flex; align-items: center; gap: 0.1rem; }
-.doc-switch-bar-button {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 1.6rem;
-	height: 1.6rem;
-	border: 0;
-	border-radius: 0.3rem;
-	background: none;
-	color: var(--color-fd-muted-foreground);
-	cursor: pointer;
-}
-.doc-switch-bar-button:hover:not(:disabled) { background: var(--color-fd-accent); color: var(--color-fd-foreground); }
-.doc-switch-bar-button:disabled { opacity: 0.35; cursor: default; }
+.doc-switch-bar-trailing { flex: none; display: inline-flex; align-items: center; gap: 0.25rem; }
 .doc-switch-bar-button[aria-pressed='true'] { background: rgb(220 38 38 / 12%); color: #dc2626; }
 .doc-switch-bar-menu { position: relative; display: inline-flex; }
 .doc-switch-bar-menu-list {
@@ -351,6 +338,39 @@ button.doc-switch-edge-label:hover, button.doc-switch-edge-label.is-line-hovered
 .doc-switch-stack-item-tag { color: var(--color-fd-muted-foreground); font-size: 0.66rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .doc-switch-stack-item-body { position: relative; overflow: hidden; }
 
+/* the views of the scene of a stack item as tabs (SwitchViewTabs): one line under the title
+   line, the search field at the left and the tabs scrolling sideways after it, so neither a
+   search nor a choice changes its height. the tabs are those of a scene in tabs (.doc-switch-tab),
+   at the size of a line */
+.doc-switch-view-tabs {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	height: 2.1rem;
+	padding-inline: 0.6rem;
+	border-bottom: 1px solid color-mix(in srgb, var(--doc-switch-tone) 20%, var(--color-fd-border));
+	cursor: default;
+}
+.doc-switch-view-tabs.is-inert { pointer-events: none; }
+.doc-switch-view-tabs-search { flex: 0 0 13rem; font-size: 0.75rem; }
+.doc-switch-view-tabs-search input::-webkit-search-cancel-button { display: none; }
+.doc-switch-view-tabs-count { flex: none; padding-inline: 0.35rem; color: var(--color-fd-muted-foreground); font-size: 0.68rem; font-variant-numeric: tabular-nums; }
+.doc-switch-view-tabs-strip { flex: 1 1 0; }
+.doc-switch-view-tabs-list { gap: 0.3rem; }
+.doc-switch-view-tabs-list > .doc-switch-tab {
+	/* in the tone of the item holding them */
+	--doc-switch-tone: inherit;
+	flex: none;
+	height: 1.6rem;
+	padding: 0 0.65rem;
+	border-bottom: 1px solid var(--color-fd-border);
+	border-radius: 0.4rem;
+	font-size: 0.75rem;
+	white-space: nowrap;
+}
+.doc-switch-view-tabs-list > .doc-switch-tab[aria-selected='true'] { border-bottom-color: color-mix(in srgb, var(--doc-switch-tone) 55%, var(--color-fd-border)); }
+.doc-switch-view-tabs-none { color: var(--color-fd-muted-foreground); font-size: 0.72rem; white-space: nowrap; }
+
 /* an item of a menu with more than words in it (labelItemList) */
 .doc-switch-path-menu-label { display: inline-flex; align-items: center; gap: 0.4rem; }
 .doc-switch-path-menu-label svg { flex: none; color: var(--color-fd-muted-foreground); }
@@ -380,3 +400,17 @@ button.doc-switch-edge-label:hover, button.doc-switch-edge-label.is-line-hovered
 /* a link: a pill as wide as its words */
 .doc-switch-link { width: max-content; }
 .doc-switch-link .doc-card-brief-title { overflow: visible; }
+
+/* the title of a scene focused: a node of the world above the scene (SceneTitleCard), in the
+   style of a section heading of the page at the scale of the cards around it */
+.doc-switch-scene-title {
+	margin: 0;
+	color: var(--color-fd-foreground);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 32px;
+	font-weight: 700;
+	line-height: 48px;
+	letter-spacing: -0.01em;
+	white-space: nowrap;
+}
+.react-flow__node:has(> .doc-vis-node .doc-switch-scene-title), .doc-switch-static-node:has(.doc-switch-scene-title) { pointer-events: none; }

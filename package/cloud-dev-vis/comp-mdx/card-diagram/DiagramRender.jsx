@@ -98,7 +98,7 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 				const isSelected = Boolean(connectionSelected) && ['source', 'target'].some(role => !endpointIsDangling(connectionSelected[role]) && connectionSelected[role].nodeId === id && connectionSelected[role].handleId === handle.id);
 				const count = editor ? editor.store.handleConnectionListGet(id, handle.id).length : 0;
 				return <Handle key={handle.id} id={handle.id} type={handle.direction === 'in' ? 'target' : 'source'} position={positions[handle.anchor.side]} isConnectable={isConnectable}
-					className={`doc-er-table-handle is-${handle.direction}${isSelected ? ' is-selected' : ''}${count ? ' is-occupied' : ''}${editor ? ' is-editable' : ''}`}
+					className={`doc-er-table-handle is-${handle.direction}${isSelected ? ' is-selected' : ''}${count ? ' is-occupied' : ''}${editor ? ' is-editable' : ''}${handle.isMarkerHidden && !editor ? ' is-marker-hidden' : ''}`}
 					title={editor ? `${handle.id}: ${count === 0 ? 'drag to connect' : `${count} connection${count === 1 ? '' : 's'}; click to select one, drag to connect`}` : undefined}
 					style={{ left: handle.left, top: handle.top, right: 'auto', bottom: 'auto', transform: 'translate(-50%, -50%)', visibility: handle.isHidden ? 'hidden' : 'visible' }}
 					onClick={editor ? event => { event.stopPropagation(); editor.handleClick(id, handle.id); } : undefined} />;

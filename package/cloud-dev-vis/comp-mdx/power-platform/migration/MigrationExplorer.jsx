@@ -34,18 +34,20 @@ export function migrationItemListRead(service, category) {
 
 // the model of a category, built when its data changes, and given once this block's turn to
 // draw has come (what is drawn from it is what takes long to mount). until then the block
-// shows what is read so far (MigrationLoading)
+// shows what is read so far (MigrationLoading). signature: the data the model was built
+// from, which a provider of its scenes is known by (useSwitchStore)
 export function useMigrationModel(service, category) {
 	const read = migrationItemListRead(service, category);
 	const isLoading = read.countLoading > 0;
-	const modelBuilt = useMemo(() => (isLoading ? null : migrationModelBuild(category, read.itemList)),
+	const built = useMemo(() => (isLoading ? null : { model: migrationModelBuild(category, read.itemList), signature: `${category}\u0000${read.signature}` }),
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[category, read.signature, isLoading]);
 	// an item written is read again: what was drawn stays until it is
-	const modelLast = useRef(null);
-	if (modelBuilt) modelLast.current = modelBuilt;
-	const isDrawTurn = useObjectFrontendDrawTurn(service, Boolean(modelLast.current));
-	return { read, model: isDrawTurn && modelLast.current?.category === category ? modelLast.current : null };
+	const builtLast = useRef(null);
+	if (built) builtLast.current = built;
+	const isDrawTurn = useObjectFrontendDrawTurn(service, Boolean(builtLast.current));
+	const isShown = isDrawTurn && builtLast.current?.model.category === category;
+	return { read, model: isShown ? builtLast.current.model : null, signature: isShown ? builtLast.current.signature : '' };
 }
 
 // a mode of a migration: the scenes of its data, the category chosen by the block.
@@ -58,10 +60,10 @@ export const MigrationExplorer = observer(function MigrationExplorer({ data = {}
 	if (!service) return <p className="doc-error">MigrationExplorer is a mode of a migration (ObjectFrontend).</p>;
 	const param = data.param ?? {};
 	const category = param.category ?? 'example';
-	const { read, model } = useMigrationModel(service, category);
+	const { read, model, signature } = useMigrationModel(service, category);
 	if (!model) return <MigrationLoading read={read} param={param} />;
 	if (read.countAll === 0) return <p className="doc-note">There are no items under /{category}.</p>;
-	return <MigrationExplorerBody service={service} model={model} read={read} param={param} config={config} category={category} />;
+	return <MigrationExplorerBody service={service} model={model} signature={signature} read={read} param={param} config={config} category={category} />;
 });
 
 // as tall as the block will be, so what is below does not jump when it is drawn
@@ -87,11 +89,11 @@ export function migrationBoxSaveBuild(service, model, category) {
 	};
 }
 
-const MigrationExplorerBody = observer(function MigrationExplorerBody({ service, model, read, param, config, category }) {
+const MigrationExplorerBody = observer(function MigrationExplorerBody({ service, model, signature, read, param, config, category }) {
 	const instanceId = useId().replace(/[^a-zA-Z0-9]/g, '');
 	const rootRef = useRef(null);
-	const provider = useMemo(() => migrationProviderBuild(model, { onBoxSave: migrationBoxSaveBuild(service, model, category) }), [model, service, category]);
-	const store = useSwitchStore({ provider, registry: migrationSwitchRegistry, pathInitial: param.path, scope: `.doc-switch-${instanceId}` });
+	const provider = useMemo(() => migrationProviderBuild(model, { onBoxSave: migrationBoxSaveBuild(service, model, category), signature }), [model, service, category, signature]);
+	const store = useSwitchStore({ provider, registry: migrationSwitchRegistry, pathInitial: param.path, scope: `.doc-switch-${instanceId}`, config });
 	const title = model.system.title || 'Migration';
 	const capture = switchCaptureActionBuild({ store, rootRef, titleGet: () => title });
 	const problemList = [...read.problemList, ...model.problemList];
@@ -125,12 +127,12 @@ export const MigrationTour = observer(function MigrationTour({ data = {}, config
 	if (!service) return <p className="doc-error">MigrationTour is a mode of a migration (ObjectFrontend).</p>;
 	const param = data.param ?? {};
 	const category = param.category ?? 'example';
-	const { read, model } = useMigrationModel(service, category);
+	const { read, model, signature } = useMigrationModel(service, category);
 	if (!model) return <MigrationLoading read={read} param={param} />;
-	return <MigrationTourBody service={service} model={model} param={param} config={config} category={category} />;
+	return <MigrationTourBody service={service} model={model} signature={signature} param={param} config={config} category={category} />;
 });
 
-const MigrationTourBody = observer(function MigrationTourBody({ service, model, param, config, category }) {
+const MigrationTourBody = observer(function MigrationTourBody({ service, model, signature, param, config, category }) {
 	const instanceId = useId().replace(/[^a-zA-Z0-9]/g, '');
 	const rootRef = useRef(null);
 	const load = useMemo(() => {
@@ -141,8 +143,8 @@ const MigrationTourBody = observer(function MigrationTourBody({ service, model, 
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [JSON.stringify(param), model]);
-	const provider = useMemo(() => migrationProviderBuild(model, { onBoxSave: migrationBoxSaveBuild(service, model, category) }), [model, service, category]);
-	const store = useSwitchStore({ provider, registry: migrationSwitchRegistry, pathInitial: load.spec?.stateList.find((state) => state.id === load.spec.stateIdInitial)?.path, scope: `.doc-switch-${instanceId}` });
+	const provider = useMemo(() => migrationProviderBuild(model, { onBoxSave: migrationBoxSaveBuild(service, model, category), signature }), [model, service, category, signature]);
+	const store = useSwitchStore({ provider, registry: migrationSwitchRegistry, pathInitial: load.spec?.stateList.find((state) => state.id === load.spec.stateIdInitial)?.path, scope: `.doc-switch-${instanceId}`, config });
 	const capture = switchCaptureActionBuild({ store, rootRef, titleGet: () => load.spec?.title || 'Migration' });
 	if (load.message) return <p className="doc-error">{load.message}</p>;
 	const heightWritten = Number(param.height);

@@ -21,6 +21,7 @@ import './DiagramER.css';
 import { DiagramVisualEdit } from './DiagramVisualEdit.jsx';
 import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
 import { useCanvasWheelGuard } from './CanvasWheelGuard.js';
+import { CanvasStill, useCanvasStill } from './CanvasStill.jsx';
 import { diagramCanvasGeometryBuild, diagramCanvasLineListGet, diagramCanvasRegister, diagramCanvasEndsGet } from './DiagramCanvasRegistry.js';
 
 // A diagram of nodes and connections on a pannable, zoomable canvas
@@ -70,6 +71,7 @@ export const DiagramERView = observer(function DiagramERView({ data = {}, config
 	const edgeGeometry = useRef(new Map());
 	const viewportRef = useRef(null);
 	useCanvasWheelGuard(viewportRef);
+	const still = useCanvasStill(config, 'diagram', viewportRef);
 	// the height is an authored prop (data.height); config.height is the
 	// form a host passes it in
 	const heightDiagram = store.viewport.size.height === 'auto' ? 620 : store.viewport.size.height;
@@ -99,6 +101,7 @@ export const DiagramERView = observer(function DiagramERView({ data = {}, config
 			style={{ '--doc-er-diagram-height': `${heightDiagram}px`, width: isInPopup || store.viewport.size.width === 'auto' ? '100%' : store.viewport.size.width, maxWidth: '100%' }}
 		>
 			<div ref={viewportRef} className="doc-er-diagram-viewport">
+				<CanvasStill still={still} />
 				<ReactFlowProvider>
 					<DiagramRenderContext.Provider value={context}><DiagramERCanvas store={store} viewState={viewState} isEditing={Boolean(editor)} /></DiagramRenderContext.Provider>
 				</ReactFlowProvider>

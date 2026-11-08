@@ -533,9 +533,12 @@ frontend/src/css/
 │                 .doc-error           message of a failed request or a rejected input
 │                 .doc-status          a running request: spinner and short text in one line; [data-error]
 ├── spin.css      .doc-spin            turns an icon while something runs
-└── search.css    .doc-search-field    a search field: icon and text (the insert menu, the object search)
-                  .doc-search-result   a result row: name, label, description; .doc-search-match marks the words
+├── search.css    .doc-search-field    a search field: icon and text (the insert menu, the object search)
+│                 .doc-search-result   a result row: name, label, description; .doc-search-match marks the words
+└── scroll.css    .doc-scroll-horizontal  a row wider than its place, without a scrollbar (comp-doc/scroll/ScrollHorizontal.jsx)
 ```
+
+**A row wider than its place** never shows a scrollbar ([the rule](../../../ai-skills/app-dev/references/frontend-scrollable-horizontal.md)): `ScrollHorizontal` (`comp-doc/scroll/`) clips it and moves its inner strip by the offset of a `ScrollHorizontalStore` (MobX), which the wheel over the row (either direction, the page not scrolling then), a drag (a click ending a drag is swallowed) and `reveal(left, width)` change. It starts at the end its `align` names; `isWheelEnabled: false` leaves the wheel to a canvas around it. What stands in it says its full text in its `title`. The tabs of a scene's views are the first use ([views as tabs](../package/cloud-dev-vis/doc/comp-card-diagram-switch.md#views-as-tabs)).
 
 - **Loaded once.** The package stylesheet `style.css` imports `css/index.css` into its own cascade layer, `doc-shared`, which comes after the Tailwind layers. So a shared class wins over a Tailwind utility, and a rule of a component stylesheet (which has no layer) wins over a shared class whatever its specificity. A component never imports these files.
 - **Shared class first, component class for the rest.** New UI uses a shared class when one fits, and puts a component class next to it only for what is its own: a size, a width, a position (`className="doc-button-icon doc-block-list-review-toggle"` with only `width` / `height` in `BlockList.css`). Because the component rule always wins, it must not restate a property a shared state sets (a background, a cursor), or the hover or disabled look of the shared class is lost; a broad component rule such as `.panel button { cursor: pointer }` needs `:not(:disabled)` for the same reason.

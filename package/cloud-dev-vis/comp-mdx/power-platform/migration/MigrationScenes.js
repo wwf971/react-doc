@@ -615,17 +615,29 @@ function reportStackBuild(model, id, itemList) {
 	};
 }
 
+// the mappings of one kind (mapping: the tables, choice: the option sets) as one scene whose
+// views are the pairs, offered as tabs with a search where the plan embeds it: one item of
+// the plan for all of them, at the height of the tallest, however many there are. a view is
+// drawn as the scene of its pair is, with that scene's box
+function scenePlanPairsBuild(model, kind) {
+	const isTable = kind === 'mapping';
+	const list = isTable ? [...model.mappingTableByKey.values()] : [...model.mappingChoiceByKey.values()];
+	const byKey = isTable ? model.tableByKey : model.choiceByKey;
+	const logicalOf = (key) => byKey.get(key)?.logical ?? key;
+	const viewList = list.map((mapping) => {
+		const pair = isTable ? migrationPairGet(model, mapping) : migrationChoicePairGet(model, mapping);
+		const diagram = isTable ? sceneMappingTableBuild(model, pair) : sceneMappingChoiceBuild(model, pair);
+		if (!diagram) return null;
+		const path = `/overview/${kind}/${pair}`;
+		return { id: pair, label: pathLabelGet(model, path), title: pathTitleGet(model, path), description: `${logicalOf(mapping.source)} → ${logicalOf(mapping.target)}`, diagram: diagramOfScene(diagram), box: boxOf(model, path) };
+	}).filter(Boolean);
+	return viewList.length > 0 ? { viewList, viewSwitcherLayout: 'tabs', isViewSearchable: true } : null;
+}
+
 function scenePlanBuild(model) {
 	const itemList = [];
-	for (const mapping of model.mappingTableByKey.values()) {
-		const pair = migrationPairGet(model, mapping);
-		const nameOf = (key) => model.tableByKey.get(key)?.name ?? key;
-		itemList.push({ id: `mapping:${pair}`, scene: `/overview/mapping/${pair}`, title: `${nameOf(mapping.source)} → ${nameOf(mapping.target)}`, subtitle: labelOf(model, 'mapping'), icon: 'arrow-right-left', tone: 'teal' });
-	}
-	for (const mapping of model.mappingChoiceByKey.values()) {
-		const pair = migrationChoicePairGet(model, mapping);
-		itemList.push({ id: `choice:${pair}`, scene: `/overview/choice/${pair}`, title: mapping.label ?? pair, subtitle: labelOf(model, 'choice'), icon: 'list-checks', tone: 'violet' });
-	}
+	if (model.mappingTableByKey.size > 0) itemList.push({ id: 'mapping', scene: '/overview/plan/mapping', title: labelOf(model, 'mapping'), subtitle: `${model.mappingTableByKey.size} ${labelOf(model, 'tableUnit')}`, icon: 'arrow-right-left', tone: 'teal' });
+	if (model.mappingChoiceByKey.size > 0) itemList.push({ id: 'choice', scene: '/overview/plan/choice', title: labelOf(model, 'choice'), subtitle: `${model.mappingChoiceByKey.size} ${labelOf(model, 'choiceUnit')}`, icon: 'list-checks', tone: 'violet' });
 	itemList.push({ id: 'order', scene: '/overview/plan/order', title: labelOf(model, 'planOrder'), icon: 'layers', tone: 'blue' });
 	if (model.plan) itemList.push({ id: 'batch', scene: '/overview/plan/batch', title: labelOf(model, 'planBatch'), icon: 'split', tone: 'amber' });
 	return reportStackBuild(model, 'plan', itemList);
@@ -757,7 +769,8 @@ function batchFlowBuild(model, { xBatch, widthBatch, resultOf, link }) {
 			// the batches left out: more dots in the rows, joined to the dots between the cards
 			if (batch.isOmitted) {
 				rows.push({ id: `omit${index}-a`, isEllipsis: true }, { id: `omit${index}-b`, isEllipsis: true }, { id: `omit${index}-c`, isEllipsis: true });
-				handles.push(handleOf(`omit${index}`, 'out', 'right', `row/omit${index}-b`));
+				// the dashed line leaves the dots themselves: no square of a handle there
+				handles.push({ ...handleOf(`omit${index}`, 'out', 'right', `row/omit${index}-b`), isMarkerHidden: true });
 				start += Math.max(0, batch.rowCount ?? 0);
 				return;
 			}
@@ -1265,6 +1278,20 @@ const OVERVIEW_REPORT_WIDTH = 560;
 const OVERVIEW_REPORT_HEIGHT = 420;
 const OVERVIEW_REPORT_GAP_MIN = 120;
 const OVERVIEW_LEVEL_GAP = 44;
+// the frame of the reports, the outputs of the project: around them, its label above them
+const OVERVIEW_ARTIFACTS_PAD = 28;
+const OVERVIEW_ARTIFACTS_LABEL = 44;
+
+// a frame (a color block without fill) around the reports as they are drawn: a report at full
+// height grows as its sections are drawn, and the frame with it. its label at its top left
+function artifactsFrameBuild(model, nodeIdList) {
+	return {
+		id: 'area:artifacts', renderer: { type: 'color-block' },
+		around: { nodeIdList, padding: { top: OVERVIEW_ARTIFACTS_PAD + OVERVIEW_ARTIFACTS_LABEL, right: OVERVIEW_ARTIFACTS_PAD, bottom: OVERVIEW_ARTIFACTS_PAD, left: OVERVIEW_ARTIFACTS_PAD } },
+		data: { tone: 'slate', fill: 'none', labelSide: 'top', itemList: [{ id: 'artifacts', icon: 'archive', text: labelOf(model, 'artifacts') }] },
+		handles: [],
+	};
+}
 
 function sceneOverviewBuild(model) {
 	const { source, target, tool } = model.system;
@@ -1291,6 +1318,7 @@ function sceneOverviewBuild(model) {
 		reportNodeOf('run', 1, [handleOf('top', 'in', 'top'), handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')]),
 		reportNodeOf('verify', 2, [handleOf('top', 'in', 'top'), handleOf('in', 'in', 'left'), handleOf('out', 'out', 'right')]),
 		...(model.planPost ? [reportNodeOf('post', 3, [handleOf('top', 'in', 'top'), handleOf('in', 'in', 'left')])] : []),
+		artifactsFrameBuild(model, reportIdList.map((id) => `report:${id}`)),
 	];
 	const reportIdOf = (step, index) => `report:${step.report ?? ['plan', 'run', 'verify'][index]}`;
 	const labelStep = ['planMake', 'runMake', 'verifyMake', 'postMake'];
@@ -1327,12 +1355,16 @@ const TAB_HEIGHT = 810;
 function sceneOverviewTabsBuild(model, focus) {
 	const diagram = sceneOverviewBuild(model);
 	const widthAll = OVERVIEW_TARGET_X + OVERVIEW_DB_WIDTH;
-	return switchTabsApply(diagram, {
+	const tabbed = switchTabsApply(diagram, {
 		id: 'tabs',
 		memberList: reportIdListOf(model).map((id) => ({ id: `report:${id}`, label: labelOf(model, id), tone: REPORT_TONE_BY_ID[id], link: `/overview/tabs/${id}` })),
 		position: { x: (widthAll - TAB_WIDTH) / 2, y: OVERVIEW_REPORT_Y },
 		size: { width: TAB_WIDTH, height: TAB_HEIGHT },
 	}, `report:${focus}`);
+	// the frame of the reports holds them in tabs too: around the header and the report shown
+	const idSet = new Set(tabbed.nodes.map((node) => node.id));
+	const frameNodeIdList = ['tabs', ...reportIdListOf(model).map((id) => `report:${id}`)].filter((id) => idSet.has(id));
+	return { ...tabbed, nodes: tabbed.nodes.map((node) => (node.id === 'area:artifacts' ? artifactsFrameBuild(model, frameNodeIdList) : node)) };
 }
 
 // ---------- the provider ----------
@@ -1395,11 +1427,34 @@ function pathLabelGet(model, path) {
 		}
 		return labelOf(model, 'choice');
 	}
-	if (first === 'plan') return second === 'order' ? labelOf(model, 'planOrder') : second === 'batch' ? labelOf(model, 'planBatch') : labelOf(model, 'plan');
+	if (first === 'plan') return second === 'order' ? labelOf(model, 'planOrder') : second === 'batch' ? labelOf(model, 'planBatch') : second === 'mapping' ? labelOf(model, 'mapping') : second === 'choice' ? labelOf(model, 'choice') : labelOf(model, 'plan');
 	if (first === 'run') return second === 'flow' ? labelOf(model, 'runFlow') : second === 'batch' ? labelOf(model, 'runBatch') : second === 'dlq' ? labelOf(model, 'runDlq') : labelOf(model, 'run');
 	if (first === 'post') return second === 'master' ? model.planPost?.master?.title ?? second : second === 'audit' ? model.planPost?.audit?.title ?? second : labelOf(model, 'post');
 	if (first === 'verify') return second === 'flow' ? labelOf(model, 'verifyFlow') : second === 'match' ? (third ? model.reportVerify?.matchList?.find((match) => match.id === third)?.title ?? third : labelOf(model, 'verifyMatch')) : second === 'sample' ? labelOf(model, 'verifySample') : second === 'check' ? labelOf(model, 'verifySet') : second === 'exception' ? labelOf(model, 'verifyException') : labelOf(model, 'verify');
 	return last;
+}
+
+// what a scene is called over its canvas when it is focused (card-diagram-usage.md#focused-and-embedded):
+// there it has no card or path bar beside it to say what it belongs to, so a title names the
+// kind as well ("Schema mapping — A → B"). undefined: its label is enough. a report starts
+// with its own title bar, so it has none (isTitleHidden, reportIdListOf)
+const TITLE_SEPARATOR = ' — ';
+
+function pathTitleGet(model, path) {
+	const [, first, second, third] = path.split('/').filter(Boolean);
+	const { source, target } = model.system;
+	if (first === source.id || first === target.id) {
+		const db = first === source.id ? source : target;
+		if (!second) return `${db.name}${TITLE_SEPARATOR}${labelOf(model, first === source.id ? 'sourceDatabase' : 'targetDatabase')}`;
+		if (third) return `${dbItemNameOf(model, first, second)} → ${dbItemNameOf(model, first, third)}`;
+		return `${dbItemNameOf(model, first, second)} (${second})`;
+	}
+	if (first === 'mapping' && second) {
+		const pairLabel = pathLabelGet(model, `/overview/mapping/${second}`);
+		return third ? `${labelOf(model, 'columnMapping')}${TITLE_SEPARATOR}${pairLabel} / ${pathLabelGet(model, path)}` : `${labelOf(model, 'mapping')}${TITLE_SEPARATOR}${pairLabel}`;
+	}
+	if (first === 'choice' && second) return `${labelOf(model, 'choice')}${TITLE_SEPARATOR}${pathLabelGet(model, path)}`;
+	return undefined;
 }
 
 function childPathListGet(model, path) {
@@ -1421,7 +1476,7 @@ function childPathListGet(model, path) {
 		return mapping ? migrationMappingColumnListOf(model, mapping).map((row) => `${path}/${migrationColumnSegmentOf(row)}`) : [];
 	}
 	if (path === '/overview/choice') return [...model.mappingChoiceByKey.values()].map((mapping) => `${path}/${migrationChoicePairGet(model, mapping)}`);
-	if (path === '/overview/plan') return ['/overview/plan/order', '/overview/plan/batch'];
+	if (path === '/overview/plan') return [...(model.mappingTableByKey.size > 0 ? ['/overview/plan/mapping'] : []), ...(model.mappingChoiceByKey.size > 0 ? ['/overview/plan/choice'] : []), '/overview/plan/order', '/overview/plan/batch'];
 	if (path === '/overview/run') return ['/overview/run/flow', '/overview/run/batch', '/overview/run/dlq'];
 	if (path === '/overview/verify/match') return (model.reportVerify?.matchList ?? []).map((match) => `${path}/${match.id}`);
 	if (path === '/overview/verify') return ['/overview/verify/flow', ...(model.reportVerify?.matchList?.length ? ['/overview/verify/match'] : []), ...(model.reportVerify?.sample ? ['/overview/verify/sample'] : []), '/overview/verify/check', '/overview/verify/exception'];
@@ -1470,8 +1525,10 @@ function boxOf(model, path) {
 	}
 }
 
-export function migrationProviderBuild(model, { onBoxSave } = {}) {
+export function migrationProviderBuild(model, { onBoxSave, signature } = {}) {
 	const provider = {
+		// what the scenes are made of: a provider built again from the same data is the same
+		signature,
 		root: '/overview',
 		title: model.system.title ?? '',
 		labelGet: (path) => pathLabelGet(model, path),
@@ -1479,10 +1536,16 @@ export function migrationProviderBuild(model, { onBoxSave } = {}) {
 		sceneGet: (path) => {
 			const { source, target } = model.system;
 			const dbId = [source.id, target.id].find((id) => path === `/overview/${id}`);
-			if (dbId) return { path, label: pathLabelGet(model, path), ...sceneDbViewsBuild(model, dbId, path) };
+			if (dbId) return { path, label: pathLabelGet(model, path), title: pathTitleGet(model, path), ...sceneDbViewsBuild(model, dbId, path) };
+			const pairKind = { '/overview/plan/mapping': 'mapping', '/overview/plan/choice': 'choice' }[path];
+			if (pairKind) {
+				const views = scenePlanPairsBuild(model, pairKind);
+				return views ? { path, label: pathLabelGet(model, path), ...views } : null;
+			}
 			const diagram = sceneBuild(model, path);
 			if (!diagram) return null;
-			return { path, label: pathLabelGet(model, path), box: boxOf(model, path), diagram: diagramOfScene(diagram) };
+			const isReport = reportIdListOf(model).some((id) => path === `/overview/${id}`);
+			return { path, label: pathLabelGet(model, path), title: pathTitleGet(model, path), ...(isReport ? { isTitleHidden: true } : {}), box: boxOf(model, path), diagram: diagramOfScene(diagram) };
 		},
 		boxSave: onBoxSave,
 	};
