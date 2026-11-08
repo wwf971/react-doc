@@ -1,0 +1,56 @@
+/* The pagination environment (doc_page_impl_pagination.md): sheets of the page's size, one
+   under another, as the print preview of the flow. The sheet is white with no rule, as it
+   is printed; its shadow and the label under it are the screen's only. */
+.doc-page-flow {
+  position: relative;
+}
+
+.doc-page-flow-sheet-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+
+.doc-page-sheet-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.doc-page-sheet {
+  box-sizing: border-box;
+  overflow: hidden;
+  color: #000;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 18%), 0 0 0 1px rgb(0 0 0 / 6%);
+}
+
+.doc-page-content {
+  box-sizing: border-box;
+}
+
+/* a piece is a box of its own: what is measured alone is what the page holds */
+.doc-page-piece {
+  display: flow-root;
+}
+
+.doc-page-label {
+  font-size: 0.75rem;
+  color: var(--color-fd-muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.doc-page-measure {
+  position: absolute;
+  top: 0;
+  left: -100000px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.doc-page-probe {
+  position: absolute;
+  width: 1px;
+}

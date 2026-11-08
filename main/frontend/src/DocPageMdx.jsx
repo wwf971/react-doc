@@ -20,6 +20,7 @@ import { DocWorkspaceStore } from './store/DocWorkspaceStore.js';
 import { DocSlashStore } from './store/DocSlashStore.js';
 import { DocApiStore } from './store/DocApiStore.js';
 import { DocPaletteStore } from './store/DocPaletteStore.js';
+import { DocFindStore } from './store/DocFindStore.js';
 import { DocHotkeyStore } from './store/DocHotkeyStore.js';
 import { DocObjectStore, objectEventTypeList } from './store/DocObjectStore.js';
 import { objectProviderDocCreate } from './lib/doc-object-provider-doc.js';
@@ -231,6 +232,8 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     const objectFrontendStore = new DocObjectFrontendStore({ assetStore, objectStore, configStore });
     objectStore.providerAdd(objectProviderFrontendCreate({ objectFrontendStore }));
     const paletteStore = new DocPaletteStore({ apiStore });
+    // find in a part of the page: the scopes components register (doc_page_impl_api.md#finding-in-a-part-of-the-page)
+    const findStore = new DocFindStore();
     const hotkeyStore = new DocHotkeyStore({ apiStore, mapListHost: config.hotkeyMapList ?? [] });
     // the event layer (doc_page_impl_event.md): component reports are routed
     // to the domain that answers them; the stores never see onEvent callbacks
@@ -305,6 +308,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       slashStore,
       apiStore,
       paletteStore,
+      findStore,
       hotkeyStore,
       eventRouter,
       onEvent,

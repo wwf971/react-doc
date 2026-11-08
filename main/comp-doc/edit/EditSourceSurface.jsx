@@ -13,7 +13,9 @@ import './DocEdit.css';
 // set by code).
 //
 //   tag                 element to render: 'p', 'h1'..'h6', 'div' (default)
-//   kind                block kind, for the typography of the surface
+//   kind                block kind, for the typography of the surface; 'plain'
+//                       for a component's own field: no look of its own, the
+//                       type and box of where it is (a cell of a CV)
 //   text, textVersion   content to show; rewritten when textVersion changes
 //   selectionInitial    where the caret is when the surface opens
 //                       (doc_page_impl_edit.md#where-the-caret-goes):
@@ -38,6 +40,12 @@ import './DocEdit.css';
 //                       (doc_page_impl_edit_slash.md); the keys of the menu
 //                       come before the keys below while it is open
 //   isLocked            no editing while a change request is pending
+//   isFocusedInitial    take the focus when the surface opens (default true);
+//                       false for the surfaces of one form opened together
+//                       (the fields of a row of a table), all but the one
+//                       clicked
+//   isTabInserted       Tab types two spaces (default true); false lets Tab
+//                       go on to the component, which moves to the next field
 //   onTextChange(text)  typed text
 //   onSubmitRequest()   Ctrl/Cmd + Enter
 //   onCancelRequest()   Escape
@@ -55,6 +63,8 @@ export function EditSourceSurface({
   lineSpaceListGet,
   slash,
   isLocked = false,
+  isFocusedInitial = true,
+  isTabInserted = true,
   className = '',
   onTextChange,
   onSubmitRequest,
@@ -77,7 +87,7 @@ export function EditSourceSurface({
 
   useEffect(() => {
     const element = elementRef.current;
-    if (!element || isLocked) return;
+    if (!element || isLocked || !isFocusedInitial) return;
     element.focus({ preventScroll: true });
     caretPlaceInitial(element, selectionInitial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,7 +106,7 @@ export function EditSourceSurface({
       onSubmitRequest?.();
       return;
     }
-    if (event.key === 'Tab') {
+    if (event.key === 'Tab' && isTabInserted) {
       event.preventDefault();
       document.execCommand('insertText', false, '  ');
       return;

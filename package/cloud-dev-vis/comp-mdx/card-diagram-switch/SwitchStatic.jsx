@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { DiagramNodeContent, DiagramRenderContext, connectionPathBuild } from '../card-diagram/DiagramRender.jsx';
+import { DiagramNodeContent, DiagramRenderContext, DiagramSearchPathContext, connectionPathBuild, useDiagramSearchMark } from '../card-diagram/DiagramRender.jsx';
 import { endpointIsDangling, handleAnchorDrawnOf } from '../card-diagram/DiagramERData.js';
 import { switchPresentationBuild } from './SwitchData.js';
 
@@ -10,11 +10,10 @@ import { switchPresentationBuild } from './SwitchData.js';
 // scene before it is shown. There is never a second React Flow canvas: a scene inside
 // a scene is plain React, scaled by a transform of its parent.
 //
-// `pathOwner` reaches the cards below: the scene they belong to; `depth` stops a
-// scene embedding itself.
+// `pathOwner` reaches the cards below: the scene they belong to. `depth` is how deep the scene
+// is embedded (its presentation, with depthMax of the block): a scene deeper than depthMax is
+// not drawn, and what holds it draws a note instead (switchPresentationChildIsDrawn).
 export const SwitchContext = createContext(null);
-
-const SWITCH_DEPTH_MAX = 3;
 const pathElement = () => document.createElementNS('http://www.w3.org/2000/svg', 'path');
 
 // a point along a line, by the part of its length (the label of a line)
@@ -28,6 +27,7 @@ export function pathPointAt(d, part) {
 // one card: placed by the scene, measuring its anchors; the geometry goes up once, not per frame
 const StaticNode = observer(function StaticNode({ id, node, position, config, registry, onGeometry }) {
 	const root = useRef(null);
+	const searchMark = useDiagramSearchMark(id);
 	const anchors = useRef(new Map());
 	const refs = useRef(new Map());
 	const measureRef = useRef(() => {});
@@ -68,7 +68,7 @@ const StaticNode = observer(function StaticNode({ id, node, position, config, re
 	const visualization = useMemo(() => ({ nodeId: id, size: node.size, isEdit: false, anchorRef }), [id, node.size, anchorRef]);
 	const width = node.isWidthFit ? 'max-content' : node.size.width === 'auto' ? node.sizeDefault.width : node.size.width;
 	return (
-		<div ref={root} className="doc-switch-static-node" data-id={id} style={{ left: position.x, top: position.y, width, height: node.size.height === 'auto' ? undefined : node.size.height, zIndex: node.isBackground ? -1 : undefined, pointerEvents: node.isBackground ? 'none' : undefined }}>
+		<div ref={root} className="doc-switch-static-node" data-id={id} data-search={searchMark.state ?? undefined} style={{ left: position.x, top: position.y, width, height: node.size.height === 'auto' ? undefined : node.size.height, zIndex: node.isBackground ? -1 : undefined, pointerEvents: node.isBackground ? 'none' : undefined }}>
 			<div className="doc-vis-node-content">
 				<DiagramNodeContent id={id} node={node} config={config} registry={registry} anchorRef={anchorRef} visualization={visualization} />
 			</div>
@@ -83,12 +83,13 @@ function StaticLine({ connection, source, target, markerId }) {
 	return <path d={d} fill="none" style={connection.style} markerEnd={connection.markerEnd === 'none' ? undefined : `url(#${markerId})`} />;
 }
 
-function StaticLabel({ connection, source, target }) {
+const StaticLabel = observer(function StaticLabel({ connection, source, target }) {
+	const searchState = useDiagramSearchMark('').lineStateOf(connection.id);
 	const point = useMemo(() => {
 		return pathPointAt(connectionPathBuild(connection, staticEndsOf(source, target)), connection.label.position);
 	}, [connection, source, target]);
-	return <div className={`doc-switch-edge-label${connection.link ? ' is-link' : ''}`} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}>{connection.label.text}</div>;
-}
+	return <div className={`doc-switch-edge-label${connection.link ? ' is-link' : ''}`} data-search={searchState ?? undefined} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}>{connection.label.text}</div>;
+});
 
 export const SwitchStaticScene = observer(function SwitchStaticScene({ store, path, depth = 0, isEmbedded = false, pathEmbedder = null }) {
 	const parent = useContext(SwitchContext);
@@ -103,9 +104,10 @@ export const SwitchStaticScene = observer(function SwitchStaticScene({ store, pa
 			return JSON.stringify(previous[id]) === next ? previous : { ...previous, [id]: handleList };
 		});
 	}, [store, path]);
-	const context = useMemo(() => ({ store, isStatic: true, depth, pathChain: [...(parent?.pathChain ?? []), path], presentation: switchPresentationBuild(path, isEmbedded, pathEmbedder) }), [store, depth, parent, path, isEmbedded, pathEmbedder]);
+	const depthMax = store.depthRenderMax;
+	const context = useMemo(() => ({ store, isStatic: true, depth, pathChain: [...(parent?.pathChain ?? []), path], presentation: switchPresentationBuild(path, isEmbedded, pathEmbedder, { depth, depthMax }) }), [store, depth, depthMax, parent, path, isEmbedded, pathEmbedder]);
 	if (!entry?.canvas.graph) return null;
-	if (depth >= SWITCH_DEPTH_MAX) return null;
+	if (depth > depthMax) return null;
 	void store.measureVersion;
 	const positions = store.entryPositionsGet(entry);
 	const nodeList = entry.canvas.graph.nodes.filter((node) => node.renderer.type !== 'scene-box');
@@ -126,6 +128,7 @@ export const SwitchStaticScene = observer(function SwitchStaticScene({ store, pa
 	});
 	return (
 		<SwitchContext.Provider value={context}>
+			<DiagramSearchPathContext.Provider value={path}>
 			<div className="doc-switch-static">
 				<svg className="doc-switch-static-lines" aria-hidden="true">
 					<defs>
@@ -141,6 +144,7 @@ export const SwitchStaticScene = observer(function SwitchStaticScene({ store, pa
 				))}
 				{lineList.filter(({ connection }) => connection.label.text).map(({ connection, source, target }) => <StaticLabel key={connection.id} connection={connection} source={source} target={target} />)}
 			</div>
+			</DiagramSearchPathContext.Provider>
 		</SwitchContext.Provider>
 	);
 });

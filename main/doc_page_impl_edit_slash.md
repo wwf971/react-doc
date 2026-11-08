@@ -1,4 +1,4 @@
-<!-- Design of the slash mode of the default editors. Parent document: doc_page_impl_edit.md. -->
+<!-- Design of the slash mode of the default editors, and of any surface a component offers it in (its own actions). Parent document: doc_page_impl_edit.md. -->
 
 # Slash Mode of the Default Editors: Design
 
@@ -36,7 +36,7 @@ the slash text replaced through the browser's editing (the surface reports it as
 
 ## The state machine
 
-The slash mode has one central state, held by `DocSlashStore.slash`, for the one surface where it is open:
+The slash mode has one central state, held by `DocSlashStore.slash`, for the one surface where it is open, with the actions that surface offers ([Beyond the document editors](#beyond-the-document-editors)):
 
 ```text
 idle
@@ -54,7 +54,7 @@ param mode             the slash text is "/name " + the parameter
   │  a key the action takes (keyHandle)                    -> effect
   ▼
 effect   replace(text)   the slash text is replaced by text; back to idle
-         paramSet(text)  the parameter is rewritten; the param mode stays
+         paramSet(text)  the parameter is rewritten; the param mode stays (a folder chosen: going on in it)
          cancel()        back to idle; the text stays as typed
 
 back to idle, the text kept as typed:
@@ -112,6 +112,8 @@ context = { sourcePath, docPageAlias, source }  the document edited, its doc pag
 effect  = slashEffect.replace(text) | slashEffect.paramSet(text) | slashEffect.cancel()
 ```
 
+**Going on after a part of the parameter.** An action whose parameter is a path chosen a part at a time (a folder, then what is in it) answers a folder chosen with `paramSet`: the parameter becomes the folder followed by `/`, the menu lists what is inside, and the author goes on choosing, never leaving the slash mode until a leaf is chosen and `replace` writes it. `/link ~example/` and a CV's `/query name/jp/` work so; the menu shows such an item with a folder icon (`kind: 'dir'`).
+
 Callbacks rather than a component of its own keep the parameter logic pure and testable (`/link` is `lib/doc-link-complete.js` plus four lines of definition), while the menu stays one component with one keyboard behavior. `itemListGet` is called inside an observer, so an action may read MobX stores, and its list follows them (a document added to the source appears in the list while the author types). An action whose callback throws lists nothing, and a warning names it (`[doc-slash]`), so a broken action never breaks the editor. The effects are the whole vocabulary of what an action can do to the text. A later need (insert a block, open a dialog) is one more effect type, applied in one place (`slashEffectApplyGet`, `DocSlashStore.effectApply`).
 
 ## The slash action registry
@@ -147,6 +149,29 @@ When the block offers it, the editor receives `config.edit.slash = { store, cont
 ### On and off
 
 The switch in the editor bar (`EditSlashToggle`, `[/ Slash]`, highlighted when on) turns the slash mode on and off for the whole page. Off, typing `/` is plain text. The choice is kept in the browser (`localStorage`, `doc-page-edit-slash`), and it is on by default. The button keeps its width in both states, so the bar does not move.
+
+## Beyond the document editors
+
+The slash mode is not tied to documents. Any surface built on `EditSourceSurface` offers it when it is handed a `slash`, and a component editing its own data (a cell of a CV drawn by a mode of a frontend object, a field of a form) asks for one with `useEditSlashConfig` (`comp-doc/slash/use-edit-slash-config.js`, exported by the package):
+
+```js
+const slash = useEditSlashConfig({
+  actionList: [cvQuerySlashAction],     // its own actions, slashActionDefine as any
+  context: { info, dateNow },           // what its actions receive
+  isPageActionIncluded: false,          // the page's registry (/link ...) too; default false
+});
+<EditSourceSurface kind="plain" slash={slash} text={draft} onTextChange={draftSet} ... />
+```
+
+- **Own actions.** A surface's actions are its own list, then the page's registry when `isPageActionIncluded` (an own action hides a page action of its name). They are kept with the open slash mode (`slashStart({ actionOwnList, isPageActionIncluded })`), and every lookup of an open slash mode reads them (`DocSlashStore.actionByNameOpen`), so two surfaces of a page offer different actions with one store and one menu. An action over a component's data is defined beside the component and needs no registry: the component's own data (the profile a CV reads) comes in its context.
+- **The same mode.** One switch for the page (`EditSlashToggle`, exported too, so a component's card shows it), one menu, the same keys, the same effects. A component only decides what its surface's keys mean when the slash mode does not take them: the menu's keys come first, and a key it took is `defaultPrevented` when it reaches the component.
+- **A component's field.** `kind="plain"` gives the surface no look of its own (the block kinds have the typography of the page, the source kinds a monospace box): it takes the type and box of where it is, and the component styles it. `isFocusedInitial={false}` lets several surfaces open together (the fields of a row) with one focused, and `isTabInserted={false}` lets Tab move to the next field.
+- **Its context is read when the menu lists**, not only when the slash mode starts: a component hands a context object it keeps current (a ref), so what the menu lists follows its data.
+
+| surface | actions | provided by |
+| --- | --- | --- |
+| a paragraph or list of a document | the page's registry | the edit layer (`config.edit.slash`) |
+| a cell of a Japanese-style CV (package cv) | `/query`, `/q`: a value of the profile as `{{path}}`, a segment at a time | the package cv, `useEditSlashConfig` |
 
 ## The surface binding
 
@@ -189,6 +214,7 @@ In the action mode, a query that matches no action shows no menu, because the au
 | `comp-doc/slash/slash-define.js` | `slashActionDefine`, building the registry by layers, the name index |
 | `comp-doc/slash/slash-registry.js` | the package's actions by id |
 | `comp-doc/slash/use-edit-slash.js` | the binding of a surface: caret, keys, writing the text |
+| `comp-doc/slash/use-edit-slash-config.js` | `useEditSlashConfig`: the slash of a component's own surface, with its own actions |
 | `comp-doc/slash/EditSlashMenu.jsx`, `EditSlashToggle.jsx`, `EditSlash.css` | the menu and the switch |
 | `comp-doc/link/link-slash.js`, `frontend/src/lib/doc-link-complete.js` | `/link`: the action, its items and the link it writes |
 | `frontend/src/lib/doc-slash.test.js`, `doc-link-complete.test.js` | the state machine, the store, and `/link` |

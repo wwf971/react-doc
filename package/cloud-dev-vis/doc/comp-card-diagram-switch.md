@@ -97,6 +97,8 @@ sceneList:
 | `sceneList` | the scenes: `path`, `label`, `description`, `diagram`, or [`viewList`](#views-of-a-scene) for more than one view of it, optionally `box`, `tabs`, `labelItemList` for [more than words in the menu](card-diagram-flexible-switch.md#the-path-bar), `title` (and a view's `title`) for the heading over the scene when it is focused, its `label` without one, or `isTitleHidden: true` for none ([The title of a scene](card-diagram-flexible-switch.md#the-title-of-a-scene)) |
 | `root` | the scene shown first; the first of the list by default |
 | `title`, `height` | the block; `data.height` of the marker wins, as `data.path` names another first scene |
+| `compConfig` `SceneTitleAlign` | not a key of the document: a component key a doc page sets in its config (`left`, the default, or `center`), for where the title of a scene focused stands ([The title of a scene](card-diagram-flexible-switch.md#the-title-of-a-scene)) |
+| `depthMax` | how deep scenes inside cards are drawn, 3 by default (`data.depthMax` of the marker wins): a card past it shows a note and opens the scene on a click ([Depth](card-diagram-flexible-switch.md#presentation-context)) |
 | `defaults` | what every `diagram` starts with |
 | `transition` | `secondPortal`, `secondMorph`, `secondCamera`, `secondScroll`: how long a step lasts |
 

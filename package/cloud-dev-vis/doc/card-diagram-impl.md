@@ -438,6 +438,33 @@ A block is mounted again when the document enters or leaves edit mode (the page 
 
 `CanvasStill.jsx` covers them. A host of a canvas (`DiagramERView`, `SwitchCanvas`, `AnimationCanvas`, and the player area of `SwitchAnimation`) takes a copy of its html as its mount leaves, kept for the block (`useCanvasStill(config, name, hostRef)`, under `${name}-still`), and the next mount shows that picture over itself, opaque and without taking the pointer, until its live canvas has as many cards and lines as the picture (or has had a few frames to settle: what it draws may have changed). The picture is read in a layout effect, not while rendering: the last mount leaves in the same commit, after the new one rendered. A canvas whose config has no `stateKey` keeps nothing and draws as before; a component building the config of an inner diagram derives one from its own (`${stateKey}|item:${key}`).
 
+## Search
+
+A reader finds words in a diagram as in a code editor: with the pointer over the canvas, the key of `find/open` (`mod+f` in the default map, [Finding in a part of the page](../../../main/doc_page_impl_api.md#finding-in-a-part-of-the-page)) opens a bar at the top right of the viewport; Enter and Shift+Enter (or its arrows) go to the next and the previous thing found, Escape closes it. It searches the **data** of the diagram, not what happens to be drawn, so it finds rows behind a row break and, in the switch layer, scenes too deep to be drawn; what it finds is then **marked where it is drawn**.
+
+```text
+the bar (DiagramSearchStore)  text, match case, whole word, depth  ──► request { text, isCaseSensitive, isWholeWord, depth, depthMax }
+diagramSceneSearch(graph)      every node, every line, in reading order ──► result { path, nodeList, connectionList }
+  a node                       contract.searchMatch(node, helper)     ──► { partList, childList, isWhole? } | null
+                               else its schema: title fields, head fields, every field of every row
+                               else the words of its data (not how it looks: tone, icon, sizes, links)
+  a line                       its label
+diagramSearchItemListBuild     one item per part found, a scene inside a card right after the card ──► what Enter steps through
+diagramSearchStateBuild        'match' | 'current' per node, part, line, and per card holding the current one
+```
+
+**The contract** (`DiagramSearch.js`). A kind may answer itself, `contract.searchMatch(node, helper)`, with the **parts** that matched (ids of its own: `title`, `row/{id}`, `item/{id}`, `tab/{id}`), the scenes inside it that matched (`childList`), or `isWhole` for a match with nothing finer to point at. `helper` gives `test(text)` (the request's literal, case and whole word, whole words in any script), `textListOf(value)`, `cardSchemaSearch(node)` and `childSearch(scene, view)`. A kind that does not answer is searched by its **schema** when it is a card, read as the editor reads it (`cardSchemaGet`: a generic table's fields are those of its data), a cell by its value (an enum by its label) or, where a variant draws a cell otherwise, by `contract.searchCellTextGet(field, row, data)` (the Dataverse cards: the id of a column without a logical name); else by the words of its data. A registered component as a node is searched by the words of its data.
+
+**Cells are not asked.** A cell has no component of its own: what a variant changes is how the card draws a value (`cellRender`), so the kind, which knows its variant, says what text a cell holds; a custom card says so for all of it through `searchMatch`. The words are then found in what is drawn without asking anyone (below), so nothing in a card has to take part for its words to be highlighted.
+
+**Depth.** `request.depth` is how deep the scene being searched is embedded (0 the scene searched first), `depthMax` the deepest a search goes. A kind holding a scene asks for it through `helper.childSearch`, the one place a search goes deeper: past `depthMax`, or into a scene already in the chain, it answers nothing, so the search stops there whatever the kind does. A diagram of one scene has no scenes inside and offers no depth; the switch layer does ([below the cards](card-diagram-flexible-switch.md#search-in-scenes)).
+
+**Marks.** The search of a canvas is in `DiagramRenderContext.search`; `useDiagramSearchMark(nodeId)` reads how a node, a part of it or a line is marked, in the scene a card is drawn in (`DiagramSearchPathContext`). The node's wrapper (`.doc-vis-node`, `.doc-switch-static-node`) carries `data-search="match|current"`, outlined; the table card marks its title and its rows (tinted); a stack item and the html label of a line, theirs. The words themselves are highlighted by the **CSS Custom Highlight API** (`DiagramSearchHighlight.js`): ranges of the text inside what is marked, painted by `::highlight(doc-diagram-search)` and `::highlight(doc-diagram-search-current)`, recomputed as the canvas draws (a mutation observer), never a change of the elements of a card.
+
+**The current item** is brought into view (`useDiagramSearchHost`): the host's camera moves so its innermost mark stands in the middle, zooming in only as far as reading it takes, and not at all when it is in view and readable. A host prepares it first where it needs to: the switch layer scrolls a stack to the item holding it.
+
+**A host** (a canvas) gives a searcher of what it shows and its camera: `DiagramERView` its graph, `SwitchCanvas` the scene shown with the scenes inside it. The hook registers the canvas as a find scope of the page, keeps the result fresh (a reaction, since a search may read scenes not read yet), the highlights and the reveal; `DiagramSearchBar` is the bar. The search of a block of scenes is kept with its store, so it survives the document entering edit mode.
+
 ## Existing ER Data
 
 The legacy grammar is identified by `tables` and `relationships` without the new `version`. It is the ER grammar of Dataverse tables: its tables become Dataverse kinds, so it reads only in a component whose registry has them (`DiagramER`). New data declares `version: 1` and `nodes`/`connections`; mixed grammars or unknown versions fail explicitly. A compatibility adapter converts legacy content in memory:

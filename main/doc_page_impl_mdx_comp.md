@@ -37,7 +37,8 @@ a component definition (compDefine)
     │   ├── editModeList             the ways its data is edited in place (+ the built-in source mode)
     │   ├── sourceDefaultCreate      the source of a new block, for the insert menu
     │   ├── apiList                  the apis it offers the unified api registry, {compId}/{name}
-    │   └── objectView               the object types it draws, in which contexts (icon, inline, card, block)
+    │   ├── objectView               the object types it draws, in which contexts (icon, inline, card, block)
+    │   └── pagination               its data laid out on pages: the flow, the pieces, where they are cut
     └── non-standard names: kept as declared, read by whoever knows them (compExposeGet)
         └── visualizationNode        e.g. the node contract of a card diagram: anchorListGet, sizeDefault
 ```
@@ -59,6 +60,7 @@ compDefine(Xxx, {
                                                                  the source of a new block
     apiList:       [apiDefine({ name, label, paramList, run, ... })]    the apis it offers the unified api registry
     objectView:    { typeList, contextList, priority }               the objects it draws, for the object registry
+    pagination:    { pieceListGet, pieceTypeById, pageClassName?, pageSpec? }   its data on pages (doc_page_impl_pagination.md)
     anythingElse:  kept as written                                  for a host or a later feature
   },
 })
@@ -196,6 +198,10 @@ A component offers operations on its blocks to whoever works the page programmat
 ### Object views
 
 A component that draws objects of the [object registry](doc_page_impl_obj.md) says which: `expose.objectView`, `{ typeList, contextList, priority }`, the object types it draws (and every subtype of them) in which contexts (`icon`, `inline`, `card`, `block`), checked at registration like the other standard names. Such a component renders in the placement `objectView`, with `data: { ref, descriptor }` and `config.objectView: { context, isEditAllowed, editUnavailableReason, note }`, and asks for a change of the object with `objectUpdateRequest`. Which view draws an object is the page's choice, not the object's: the nearest of its types wins, then the priority, and the fallback view, registered for `core.object`, draws every object nothing nearer draws ([Object views](doc_page_impl_obj.md#object-views)). A component of a doc page or a package becomes a view the same way, and a service template's module carries views too (`expose.compList` of its script). The views of the package are `common/ObjectViewFallback`, `ObjectViewCollection`, `ObjectViewConfig` and `ObjectViewDocument` (`comp-doc/object/`), and `ObjectViewFrontend` for the frontend objects; the components a document writes to place objects are `ObjectView`, `ObjectList`, `ObjectGroup` and `ObjectSearch` ([Search](doc_page_impl_obj_search.md)), and `ObjectFrontend`, the entry component of a [frontend object](doc_page_impl_obj_frontend.md#the-entry-component), which renders the component of a mode of its type in the placement `objectFrontend`.
+
+### Pagination
+
+A component whose data can be laid out on pages of a fixed size says how, in `expose.pagination`, checked at registration like the other standard names: the flow its data makes (`pieceListGet(data, context)`: pieces `{ type, data }`), and per type of piece how it is drawn (`Render({ data, layout })`), where it may be cut (`split(data, { space, measured })` -> a head and a tail, both data) and whether a cut head is drawn to the bottom of its page (`isFilledOnSplit`). A pagination environment (`PageFlow`) measures the pieces, places them on pages, previews, prints and downloads them; the component never measures the page itself. The design, the rules a piece type keeps and printing across browsers: [Pagination](doc_page_impl_pagination.md). The first component declaring it is the sheet of the package cv; `compPaginationGet(definition)` reads it.
 
 ## Component styles
 

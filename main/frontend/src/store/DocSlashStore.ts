@@ -42,7 +42,11 @@ import { slashActionByNameBuild } from '../../../comp-doc/slash/slash-define.js'
 //                    context      what the actions are given (slash-define.js)
 //                    rectAnchor   { left, top, bottom }: where the menu goes
 //                                 (viewport coordinates)
-//                    itemIndexActive  the highlighted item of the menu }
+//                    itemIndexActive  the highlighted item of the menu
+//                    actionOwnList    the surface's own actions (a component editing its
+//                                 own data: /query of a CV cell), before the page's
+//                    isPageActionIncluded   whether the page's registry is offered too }
+//                  the actions of an open slash mode are its surface's: actionByNameOpen
 
 export type SlashAnchor = { lineIndex: number; column: number };
 export type SlashLineState = { lineIndex: number; lineBefore: string };
@@ -54,6 +58,8 @@ export type SlashState = {
   context: any;
   rectAnchor: SlashRect | undefined;
   itemIndexActive: number;
+  actionOwnList: any[];
+  isPageActionIncluded: boolean;
 };
 // what the surface does after a choice: replace the slash text (its
 // lengthOld characters before the caret) by textNew when given; the slash
@@ -99,6 +105,27 @@ export class DocSlashStore {
     return this.actionByName.get(String(name ?? '').toLowerCase());
   }
 
+  // the actions of the open slash mode: its surface's own, then the page's
+  // registry unless the surface offers its own only. an own action hides a
+  // page action of the same name
+  get actionByNameOpen(): Map<string, any> {
+    const slash = this.slash;
+    if (!slash || (slash.actionOwnList.length === 0 && slash.isPageActionIncluded)) return this.actionByName;
+    const actionByName = new Map(slash.isPageActionIncluded ? this.actionByName : []);
+    for (const action of slash.actionOwnList) {
+      for (const name of [action.name, ...(action.aliasList ?? [])]) actionByName.set(String(name).toLowerCase(), action);
+    }
+    return actionByName;
+  }
+
+  get actionListOpen(): any[] {
+    return [...new Set(this.actionByNameOpen.values())];
+  }
+
+  actionOpenGet(name: string) {
+    return this.actionByNameOpen.get(String(name ?? '').toLowerCase());
+  }
+
   // ---------- the switch ----------
 
   isOnSet(isOn: boolean) {
@@ -120,7 +147,7 @@ export class DocSlashStore {
   // { mode: 'action', query } | { mode: 'param', action, actionName, param }
   get parsed(): any {
     if (!this.slash) return { mode: SLASH_MODE_END };
-    return slashTextParse(this.slash.text, (name: string) => this.actionGet(name));
+    return slashTextParse(this.slash.text, (name: string) => this.actionOpenGet(name));
   }
 
   // what the menu lists: actions in the action mode ({ id, action }), the
@@ -129,7 +156,7 @@ export class DocSlashStore {
   get itemList(): any[] {
     const parsed = this.parsed;
     if (parsed.mode === SLASH_MODE_ACTION) {
-      return slashActionMatchList(this.actionList, parsed.query).map((action) => ({ id: action.name, action }));
+      return slashActionMatchList(this.actionListOpen, parsed.query).map((action) => ({ id: action.name, action }));
     }
     if (parsed.mode === SLASH_MODE_PARAM && this.slash) {
       try {
@@ -148,10 +175,17 @@ export class DocSlashStore {
     return this.itemList[this.slash.itemIndexActive];
   }
 
-  // a "/" was typed at the start of a word of a surface
-  slashStart(surfaceId: string, { anchor, context, rect }: { anchor: SlashAnchor; context: any; rect?: SlashRect }) {
+  // a "/" was typed at the start of a word of a surface. actionOwnList: the
+  // surface's own actions; isPageActionIncluded (default true): the page's
+  // registry offered beside them
+  slashStart(surfaceId: string, { anchor, context, rect, actionOwnList = [], isPageActionIncluded = true }: {
+    anchor: SlashAnchor; context: any; rect?: SlashRect; actionOwnList?: any[]; isPageActionIncluded?: boolean;
+  }) {
     if (!this.isOn) return;
-    this.slash = { surfaceId, anchor, text: '/', context, rectAnchor: rect, itemIndexActive: 0 };
+    this.slash = {
+      surfaceId, anchor, text: '/', context, rectAnchor: rect, itemIndexActive: 0,
+      actionOwnList: Array.isArray(actionOwnList) ? actionOwnList : [], isPageActionIncluded: isPageActionIncluded !== false,
+    };
   }
 
   // the surface changed (typing) or its caret moved: the slash text is read
@@ -161,7 +195,7 @@ export class DocSlashStore {
     const slash = this.slash;
     if (!slash || slash.surfaceId !== surfaceId) return false;
     const text = slashTextGet(slash.anchor, lineState);
-    if (text === undefined || slashTextParse(text, (name: string) => this.actionGet(name)).mode === SLASH_MODE_END) {
+    if (text === undefined || slashTextParse(text, (name: string) => this.actionOpenGet(name)).mode === SLASH_MODE_END) {
       this.slashEnd();
       return false;
     }

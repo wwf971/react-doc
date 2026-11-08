@@ -88,6 +88,14 @@ import { OBJECT_VIEW_CONTEXT_LIST } from '../../frontend/src/lib/doc-object-ref.
 //                  and config.objectView { context, isEditAllowed,
 //                  editUnavailableReason }; priority orders two views of
 //                  the same type (default 0)
+//   pagination     { pieceListGet(data, context) -> [{ type, data }],
+//                  pieceTypeById: { [type]: { Render, split?, isFilledOnSplit? } },
+//                  pageClassName?, pageSpec? }: the component's data can be laid
+//                  out on pages (doc_page_impl_pagination.md#the-contract): the
+//                  flow its data makes, the pieces of it, drawn by Render({ data,
+//                  layout }) and cut by split(data, { space, measured, isPageTop })
+//                  -> { head, tail, breakKey } | null. a pagination environment
+//                  (PageFlow) measures and places them
 
 export const COMP_EDIT_MODE_SOURCE_ID = 'source';
 
@@ -123,7 +131,7 @@ const ASSET_SAVE_MODE_LIST = ['inPlace', 'newVersion'];
 // isAssetOnly renders there only with data from the asset service layer
 export const COMP_PLACEMENT_DOC_LIST = ['mdx', 'commentBlock'];
 
-export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'apiList', 'objectView'];
+export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'apiList', 'objectView', 'pagination'];
 
 const REGEX_TYPE_ID = /^[a-z][a-z0-9-]*(\.[a-zA-Z][a-zA-Z0-9-]*)+$/;
 
@@ -138,7 +146,7 @@ export function compExposeNormalize(expose = {}) {
   if (expose.editTemplate !== undefined) {
     throw new Error('compDefine: expose.editTemplate is expose.sourceDefaultCreate(env) now (comp-expose.js).');
   }
-  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, apiList, objectView, ...exposeOther } = expose;
+  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, apiList, objectView, pagination, ...exposeOther } = expose;
   return {
     ...exposeOther,
     meta: metaNormalize(meta),
@@ -148,7 +156,35 @@ export function compExposeNormalize(expose = {}) {
     sourceDefaultCreate: sourceDefaultCreateNormalize(sourceDefaultCreate),
     apiList: apiListNormalize(apiList),
     objectView: objectViewNormalize(objectView),
+    pagination: paginationNormalize(pagination),
   };
+}
+
+// what the component tells a pagination environment (doc_page_impl_pagination.md#the-contract):
+// checked here, so that a component missing a part fails when it is defined, not while a
+// page is laid out; undefined for a component that is not paginated
+function paginationNormalize(pagination) {
+  if (pagination === undefined) return undefined;
+  const isFunction = (value) => typeof value === 'function';
+  if (!pagination || typeof pagination !== 'object' || Array.isArray(pagination)) {
+    throw new Error('compDefine: expose.pagination must be { pieceListGet, pieceTypeById, pageClassName?, pageSpec? }.');
+  }
+  const { pieceListGet, pieceTypeById, pageClassName = '', pageSpec } = pagination;
+  if (!isFunction(pieceListGet)) throw new Error('compDefine: expose.pagination.pieceListGet(data, context) must be a function.');
+  if (!pieceTypeById || typeof pieceTypeById !== 'object' || Object.keys(pieceTypeById).length === 0) {
+    throw new Error('compDefine: expose.pagination.pieceTypeById must name the types of its pieces.');
+  }
+  for (const [type, pieceType] of Object.entries(pieceTypeById)) {
+    if (!pieceType?.Render) throw new Error(`compDefine: expose.pagination.pieceTypeById.${type} needs a Render.`);
+    if (pieceType.split !== undefined && !isFunction(pieceType.split)) throw new Error(`compDefine: expose.pagination.pieceTypeById.${type}.split must be a function.`);
+  }
+  if (typeof pageClassName !== 'string') throw new Error('compDefine: expose.pagination.pageClassName must be a class name.');
+  return { ...pagination, pieceListGet, pieceTypeById, pageClassName, pageSpec };
+}
+
+// the pagination of a component, undefined when it has none
+export function compPaginationGet(definition) {
+  return definition?.expose?.pagination;
 }
 
 // what the component draws as an object view: the types, the contexts, the

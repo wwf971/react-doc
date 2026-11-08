@@ -131,3 +131,34 @@ test('the store: the slash mode ends when the text stops being a slash text', ()
   store.slashStart('s1', { anchor: { lineIndex: 0, column: 0 }, context: {} });
   assert.equal(store.slash, undefined);
 });
+
+test('a surface brings its own actions: alone, or before the page\'s, a folder chosen going on', () => {
+  const store = new DocSlashStore({ slashActionById: { 'nav/link': actionLink } });
+  store.isOnSet(true);
+  const valueByPath = { 'name/jp/last': '山田', 'name/jp/first': '太郎' };
+  const actionQuery = slashActionDefine({
+    name: 'query',
+    aliasList: ['q'],
+    label: 'Query path',
+    param: {
+      itemListGet: (param) => (param.endsWith('/') || param === ''
+        ? Object.keys(valueByPath).filter((path) => path.startsWith(param)).map((path) => ({ id: path, label: path, detail: valueByPath[path] }))
+        : [{ id: 'dir', kind: 'dir', label: `${param}/` }]),
+      itemChoose: (item, param) => (item.kind === 'dir' ? slashEffect.paramSet(`${param}/`) : slashEffect.replace(`{{${item.id}}}`)),
+    },
+  });
+  store.slashStart('cell', { anchor: { lineIndex: 0, column: 0 }, context: {}, actionOwnList: [actionQuery], isPageActionIncluded: false });
+  assert.deepEqual(store.itemList.map((item) => item.id), ['query']);
+  store.slashUpdate('cell', { lineIndex: 0, lineBefore: '/link ' });
+  assert.equal(store.slash, undefined, 'the page\'s /link is not offered here');
+  store.slashStart('cell', { anchor: { lineIndex: 0, column: 0 }, context: {}, actionOwnList: [actionQuery], isPageActionIncluded: false });
+  store.slashUpdate('cell', { lineIndex: 0, lineBefore: '/q name' });
+  // a folder chosen: the parameter goes on inside it, the slash mode stays
+  assert.deepEqual(store.itemChoose(), { textNew: '/q name/', isEnded: false, lengthOld: 7 });
+  store.slashUpdate('cell', { lineIndex: 0, lineBefore: '/q name/' });
+  assert.deepEqual(store.itemList.map((item) => item.detail), ['山田', '太郎']);
+  assert.deepEqual(store.itemChoose(1), { textNew: '{{name/jp/first}}', isEnded: true, lengthOld: 8 });
+  // with the page's actions too
+  store.slashStart('cell', { anchor: { lineIndex: 0, column: 0 }, context: {}, actionOwnList: [actionQuery] });
+  assert.deepEqual(store.itemList.map((item) => item.id), ['link', 'query']);
+});

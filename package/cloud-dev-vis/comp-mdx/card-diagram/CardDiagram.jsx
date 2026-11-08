@@ -22,6 +22,9 @@ import { DiagramVisualEdit } from './DiagramVisualEdit.jsx';
 import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
 import { useCanvasWheelGuard } from './CanvasWheelGuard.js';
 import { CanvasStill, useCanvasStill } from './CanvasStill.jsx';
+import { DiagramSearchStore } from './DiagramSearchStore.js';
+import { diagramSceneSearch } from './DiagramSearch.js';
+import { DiagramSearchBar, useDiagramSearchHost } from './DiagramSearchView.jsx';
 import { diagramCanvasGeometryBuild, diagramCanvasLineListGet, diagramCanvasRegister, diagramCanvasEndsGet } from './DiagramCanvasRegistry.js';
 
 // A diagram of nodes and connections on a pannable, zoomable canvas
@@ -72,10 +75,16 @@ export const DiagramERView = observer(function DiagramERView({ data = {}, config
 	const viewportRef = useRef(null);
 	useCanvasWheelGuard(viewportRef);
 	const still = useCanvasStill(config, 'diagram', viewportRef);
+	// the search of the diagram (card-diagram-impl.md#search): what its graph answers, where it
+	// is drawn now
+	const [search] = useState(() => new DiagramSearchStore());
+	search.searcherSet((request) => {
+		return diagramSceneSearch({ path: '', graph: store.graph, rectOf: (id) => diagramNodeRectOf(store, id), request, registry });
+	});
 	// the height is an authored prop (data.height); config.height is the
 	// form a host passes it in
 	const heightDiagram = store.viewport.size.height === 'auto' ? 620 : store.viewport.size.height;
-	const context = { config, registry, editor, measurementSet: store.measurementSet, edgeGeometry: edgeGeometry.current };
+	const context = { config, registry, editor, measurementSet: store.measurementSet, edgeGeometry: edgeGeometry.current, search };
 
 	useEffect(() => {
 		if (store.source !== sourceDiagram) store.sourceLoad(sourceDiagram, Boolean(editor));
@@ -104,10 +113,25 @@ export const DiagramERView = observer(function DiagramERView({ data = {}, config
 				<CanvasStill still={still} />
 				<ReactFlowProvider>
 					<DiagramRenderContext.Provider value={context}><DiagramERCanvas store={store} viewState={viewState} isEditing={Boolean(editor)} /></DiagramRenderContext.Provider>
+					<DiagramSearchHost search={search} hostRef={viewportRef} label={data.title || 'Diagram'} versionGet={() => store.graphVersion} />
 				</ReactFlowProvider>
 			</div>
 		</figure>
 	);
+});
+
+// where a node is drawn, for the order of what a search found
+function diagramNodeRectOf(store, nodeId) {
+	const node = store.nodeList.find((item) => item.id === nodeId);
+	const measured = store.measurements[nodeId];
+	return { x: node?.position?.x ?? 0, y: node?.position?.y ?? 0, width: measured?.width ?? 0, height: measured?.height ?? 0 };
+}
+
+// the search of a diagram: a find scope of the page, its bar, the camera brought to what is current
+const DiagramSearchHost = observer(function DiagramSearchHost({ search, hostRef, label, versionGet }) {
+	const rf = useReactFlow();
+	useDiagramSearchHost({ hostRef, search, label, versionGet, cameraGet: () => rf.getViewport(), cameraSet: (camera) => { void rf.setViewport(camera, { duration: 220 }); } });
+	return <DiagramSearchBar search={search} />;
 });
 
 const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, isEditing = false }) {

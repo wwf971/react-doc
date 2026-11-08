@@ -31,3 +31,11 @@ hotkeyMap:
       when: editAvailable
     - key: mod+,
       api: settings/toggle
+    - key: mod+f
+      api: find/open
+      when: findScopeActive
+      description: find in the part of the page under the pointer (a diagram); elsewhere the browser's find
+    - key: escape
+      api: find/close
+      when: findOpen
+      description: close the search of that part

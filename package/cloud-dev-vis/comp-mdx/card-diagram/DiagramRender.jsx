@@ -17,6 +17,27 @@ import { DiagramRouteControls } from './DiagramRouteControls.jsx';
 // place the edit card of a line, to draw a line being detached, and to find
 // lines lying on top of each other
 export const DiagramRenderContext = createContext({});
+
+// search (card-diagram-impl.md#search): DiagramRenderContext.search is the search of the canvas
+// (DiagramSearchStore), absent where nothing searches; the marks of a card and of its parts are
+// read from it here
+// the scene a card is drawn in, for its marks: '' in a diagram of one scene; the switch layer
+// gives the path of the scene focused on the canvas, and of each scene drawn inside a card.
+// a value, or a function read while rendering (an observable path)
+export const DiagramSearchPathContext = createContext('');
+
+// how a node (and its parts) is marked: 'match', 'current' or null. read in an observer
+export function useDiagramSearchMark(nodeId) {
+	const { search } = useContext(DiagramRenderContext);
+	const pathValue = useContext(DiagramSearchPathContext);
+	const path = typeof pathValue === 'function' ? pathValue() : pathValue;
+	return {
+		state: search?.stateOf(path, nodeId) ?? null,
+		partStateOf: (partId) => search?.stateOf(path, nodeId, partId) ?? null,
+		lineStateOf: (connectionId) => search?.lineStateOf(path, connectionId) ?? null,
+	};
+}
+
 const positions = { left: Position.Left, right: Position.Right, top: Position.Top, bottom: Position.Bottom };
 
 // the node component React Flow renders, around the card. while a node is
@@ -28,6 +49,7 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 	const { node } = data;
 	const { config = {}, registry, measurementSet, editor } = useContext(DiagramRenderContext);
 	const root = useRef(null);
+	const searchMark = useDiagramSearchMark(id);
 	const anchors = useRef(new Map());
 	const refs = useRef(new Map());
 	const measureCurrent = useRef(() => {});
@@ -89,7 +111,7 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 	const connectionSelected = selection?.nodeId === id && selection.connectionId ? editor.store.connectionGet(selection.connectionId) : undefined;
 	const isConnectable = Boolean(editor) && !editor.isLocked;
 	return (
-		<div ref={root} className={`doc-vis-node${node.isBackground && !editor ? ' is-background' : ''}${node.size.height === 'auto' ? ' is-height-auto' : ''}`} style={{ height: node.size.height === 'auto' ? 'auto' : '100%' }}>
+		<div ref={root} className={`doc-vis-node${node.isBackground && !editor ? ' is-background' : ''}${node.size.height === 'auto' ? ' is-height-auto' : ''}`} data-search={searchMark.state ?? undefined} style={{ height: node.size.height === 'auto' ? 'auto' : '100%' }}>
 			<div className="doc-vis-node-content">
 				<DiagramNodeContent id={id} node={node} config={config} registry={registry} editor={editor} anchorRef={anchorRef} visualization={visualization} />
 			</div>
@@ -166,6 +188,7 @@ export function connectionPathBuild(connection, ends) {
 export const DiagramEdge = observer(function DiagramEdge(props) {
 	const { config = {}, editor, edgeGeometry } = useContext(DiagramRenderContext);
 	const { connection } = props.data;
+	const searchState = useDiagramSearchMark('').lineStateOf(props.id);
 	const pathRef = useRef(null);
 	const [labelPoint, labelPointSet] = useState(null);
 	const isSelected = editor?.store.selection?.connectionId === props.id;
@@ -198,7 +221,8 @@ export const DiagramEdge = observer(function DiagramEdge(props) {
 		{isSelected ? <path d={pathValue} fill="none" className="doc-vis-edge-selection" pointerEvents="none" /> : null}
 		<BaseEdge id={props.id} path={pathValue} markerStart={props.markerStart} markerEnd={props.markerEnd} style={connection.style} interactionWidth={props.interactionWidth ?? 24}
 			label={connection.label.text} labelX={labelPoint?.x ?? (props.sourceX + props.targetX) / 2} labelY={labelPoint?.y ?? (props.sourceY + props.targetY) / 2}
-			labelStyle={{ fontSize: 11, fontWeight: 650 }} labelBgPadding={[6, 3]} labelBgBorderRadius={3} />
+			labelStyle={{ fontSize: 11, fontWeight: 650 }} labelBgPadding={[6, 3]} labelBgBorderRadius={3}
+			labelBgStyle={searchState ? { fill: searchState === 'current' ? 'rgb(249 115 22 / 55%)' : 'rgb(250 204 21 / 55%)' } : undefined} />
 		{ends}
 	</>;
 });

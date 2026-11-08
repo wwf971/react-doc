@@ -147,12 +147,17 @@ An api that changes the document does not call a store where a component would r
 | `edit/blockEnter { block?, editModeId?, doc? }` | a block opened in an edit mode (`editBlockEnterRequest`) | edit mode is on |
 | `page/contextGet` | the context above, serializable | |
 | `settings/open { tab? }`, `settings/close`, `settings/toggle`; `search/open`; `palette/open`, `palette/close`, `palette/toggle` | the dialogs of the page | |
+| `find/open`, `find/close` | the search of the part of the page under the pointer or holding the focus, such as a diagram ([Finding in a part of the page](#finding-in-a-part-of-the-page)) | such a part is active; its search is open |
 | `language/set { language }` | one of the authored languages of the document | |
 | `type/list { typeList? }`, `type/get { typeId }`; `object/search`, `object/query`, `object/resolve`, `object/read`, `object/open`; `object/create`, `object/update`, `object/delete`; `relation/query`, `relation/create`, `relation/update`, `relation/delete` | the standard apis of the object service layer, one vocabulary for every kind of object (a document, an asset, a frontend object and its assets, a todo of a service), each answered by the provider that owns what it is about ([The apis](doc_page_impl_obj.md#the-apis)) | the provider offers the write |
 | `playground/listGet`, `playground/reset { id? }`, `playground/delete { id? }` | the playground documents, created or reset from their templates, and deleted ([Playground documents](doc_page_impl_test.md#the-apis)) | the development server serves the page |
 | `api/listGet`, `hotkey/listGet` | the registry itself: every api with its parameters and availability; every key with the binding that answers it and those it passes over | |
 
 **Locating a block.** The `block` parameter of a document api is the index of the block among the root-level blocks of the document, or the `id` of its marker (`<!--renderComp=TestCaseTable,id=login-asset-->`, the identity [`dataRef`](doc_page_impl_mdx_comp.md#component-data-reference) uses); without it, the block the author is at. `doc` is any link target form; without it, the current document. The block model comes from the edit layer and is read through the edit api, so these apis exist on the development server; a built page keeps the apis that need no server.
+
+### Finding in a part of the page
+
+Some parts of the page draw what the browser's find cannot search the way a reader means: a diagram canvas holds rows behind a break and scenes inside cards, and moves its camera rather than scrolling. Such a part registers a **find scope** (`DocFindStore`, through `useFindScope(hostRef, { label, open, close, isOpenGet })` of `comp-doc/find/`) for as long as it is mounted, and is the **active** one while the pointer is over its element or the focus is in it. `find/open` and `find/close` act on the active scope; the context names `findScopeActive` and `findOpen` let a map bind them only then. The default map binds `mod+f` to `find/open` while a scope is active and `escape` to `find/close` while its search is open, so the browser's own find keeps `mod+f` everywhere else, and a map rebinds either like any key. The page knows nothing of what a scope searches: the diagrams of `cloud-dev-vis` are the first ([Search](../package/cloud-dev-vis/doc/card-diagram-impl.md#search)).
 
 ## The apis of a component
 

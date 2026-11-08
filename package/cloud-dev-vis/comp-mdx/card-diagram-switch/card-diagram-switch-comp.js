@@ -2,6 +2,7 @@ import { Layers } from '../../../../main/frontend/UICommon.js';
 import { compDefine } from '../../../../main/comp-doc/registry/comp-registry.js';
 import { CardDiagramSwitch } from './CardDiagramSwitch.jsx';
 import { switchSourceDefaultCreate } from './SwitchSource.js';
+import { switchConfigDefineList } from './SwitchData.js';
 
 // What a switching block exposes (compDefine expose): a block that opens in the
 // popup, asset-backed like a diagram, edited as its source. A click in the viewport
@@ -11,7 +12,7 @@ export function cardDiagramSwitchDefineOptionsBuild({ label, description, source
 		placementList: ['mdx', 'commentBlock'],
 		isAssetAware: true,
 		expose: {
-			meta: { isEditAssetAccepted: true, isEditEnterButtonOnly: true, label, description },
+			meta: { isEditAssetAccepted: true, isEditEnterButtonOnly: true, label, description, configDefineList: switchConfigDefineList },
 			icon: Layers,
 			sourceDefaultCreate,
 		},

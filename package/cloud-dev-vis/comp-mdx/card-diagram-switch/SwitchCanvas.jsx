@@ -3,9 +3,11 @@ import { observer } from 'mobx-react-lite';
 import { Background, Controls, EdgeLabelRenderer, ReactFlow, ReactFlowProvider, useNodesInitialized, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Check, CircleAlert, LoaderCircle } from '../../../../main/frontend/UICommon.js';
-import { DiagramEdge, DiagramNode, DiagramPointNode, DiagramRenderContext, connectionPathBuild } from '../card-diagram/DiagramRender.jsx';
+import { DiagramEdge, DiagramNode, DiagramPointNode, DiagramRenderContext, DiagramSearchPathContext, connectionPathBuild, useDiagramSearchMark } from '../card-diagram/DiagramRender.jsx';
 import { useCanvasWheelGuard } from '../card-diagram/CanvasWheelGuard.js';
 import { CanvasStill, useCanvasStill } from '../card-diagram/CanvasStill.jsx';
+import { DiagramSearchStore } from '../card-diagram/DiagramSearchStore.js';
+import { DiagramSearchBar, useDiagramSearchHost } from '../card-diagram/DiagramSearchView.jsx';
 import { diagramCanvasLineListGet, diagramCanvasRegister } from '../card-diagram/DiagramCanvasRegistry.js';
 import '../card-diagram/DiagramER.css';
 import { SwitchContext, SwitchStaticScene, pathPointAt } from './SwitchStatic.jsx';
@@ -27,6 +29,7 @@ const errorNoop = () => {};
 const SwitchEdge = observer(function SwitchEdge(props) {
 	const { connection } = props.data;
 	const store = useContext(SwitchContext)?.store;
+	const searchState = useDiagramSearchMark('').lineStateOf(props.id) ?? undefined;
 	const hasLabel = Boolean(connection.label?.text);
 	const dataBase = useMemo(() => (hasLabel ? { ...props.data, connection: { ...connection, label: { ...connection.label, text: '' } } } : props.data), [hasLabel, props.data, connection]);
 	// the pointer on the line or on its label marks both, the line whole, as it may run far from
@@ -55,6 +58,7 @@ const SwitchEdge = observer(function SwitchEdge(props) {
 						type="button"
 						className={`doc-switch-edge-label is-link nodrag nopan${labelHoverClass}`}
 						data-edge-id={props.id}
+						data-search={searchState}
 						title={connection.linkTitle}
 						style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}
 						{...hoverProps}
@@ -63,7 +67,7 @@ const SwitchEdge = observer(function SwitchEdge(props) {
 						{connection.label.text}
 					</button>
 				) : (
-					<div className={`doc-switch-edge-label is-hoverable${labelHoverClass}`} data-edge-id={props.id} {...hoverProps} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}>{connection.label.text}</div>
+					<div className={`doc-switch-edge-label is-hoverable${labelHoverClass}`} data-edge-id={props.id} data-search={searchState} {...hoverProps} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}>{connection.label.text}</div>
 				)}
 			</EdgeLabelRenderer>
 		) : null}
@@ -178,6 +182,28 @@ const SwitchHint = observer(function SwitchHint({ store }) {
 	);
 });
 
+// the search of a block: a find scope of the page, its bar, the camera brought to what is
+// current. an item inside a stack of the scene shown is scrolled to first
+const SwitchSearchHost = observer(function SwitchSearchHost({ store, search, hostRef }) {
+	const rf = useReactFlow();
+	useDiagramSearchHost({
+		hostRef,
+		search,
+		label: store.provider?.title || 'Scenes',
+		versionGet: () => [store.pathCurrent, store.flowVersion],
+		cameraGet: () => rf.getViewport(),
+		cameraSet: (camera) => {
+			store.cameraReport(camera, true);
+			void rf.setViewport(camera, { duration: 220 });
+		},
+		revealPrepare: (item) => {
+			const holder = [...item.chain, item].find((entry) => entry.path === store.pathCurrent && entry.partId?.startsWith('item/'));
+			if (holder) store.scrollTo({ nodeId: holder.nodeId, itemId: holder.partId.slice('item/'.length), isInstant: true });
+		},
+	});
+	return <DiagramSearchBar search={search} />;
+});
+
 // the canvas in a box of its own, measured: the box is what cameras fit. a block
 // playing it under another clock (the animation layer) puts this inside its composition
 export const SwitchCanvas = observer(function SwitchCanvas({ store, config, registry, isStillOuter = false, children }) {
@@ -187,13 +213,21 @@ export const SwitchCanvas = observer(function SwitchCanvas({ store, config, regi
 	// animation layer the block holds it around the player, which draws the canvas late
 	const still = useCanvasStill(config, 'switch', boxRef, { isEnabled: !isStillOuter });
 	const [, readySet] = useState(false);
+	// the search of the block (card-diagram-impl.md#search), kept with its store: the scene shown
+	// and the scenes inside its cards, as deep as the bar says (the depth drawn, at first)
+	const search = useMemo(() => {
+		if (!store.searchStore) store.searchStore = new DiagramSearchStore({ isDepthOffered: true, depthMax: store.depthRenderMax });
+		store.searchStore.searcherSet((request) => store.searchRun(request));
+		return store.searchStore;
+	}, [store]);
 	const context = useMemo(() => ({
 		config,
 		registry,
+		search,
 		measurementSet: (id, size) => store.measurementSet(store.pathFlow, id, size),
 		edgeGeometry: new Map(),
 		sceneBox: { get isAdjust() { return store.isBoxAdjust; }, resizeEnd: (nodeId, params) => store.boxCommit(nodeId, params) },
-	}), [config, registry, store]);
+	}), [config, registry, store, search]);
 	// the scene shown, for the check of its lines (DiagramCanvasRegistry.js). only those it
 	// shows are looked at: the geometry of a scene left stays behind
 	useEffect(() => diagramCanvasRegister({
@@ -205,7 +239,8 @@ export const SwitchCanvas = observer(function SwitchCanvas({ store, config, regi
 		endsGet: () => null,
 		lineListGet: () => diagramCanvasLineListGet(context.edgeGeometry, store.entryGet(store.pathFlow)?.canvas.graph?.connections ?? []),
 	}), [store, config, context]);
-	const switchContext = useMemo(() => ({ store, isStatic: false, depth: 0, pathChain: [], get presentation() { return switchPresentationBuild(store.pathFlow); } }), [store]);
+	const switchContext = useMemo(() => ({ store, isStatic: false, depth: 0, pathChain: [], get presentation() { return switchPresentationBuild(store.pathFlow, false, null, { depth: 0, depthMax: store.depthRenderMax }); } }), [store]);
+	const searchPathGet = useMemo(() => () => store.pathFlow, [store]);
 	useLayoutEffect(() => {
 		const element = boxRef.current;
 		if (!element) return undefined;
@@ -227,11 +262,14 @@ export const SwitchCanvas = observer(function SwitchCanvas({ store, config, regi
 			<ReactFlowProvider>
 				<DiagramRenderContext.Provider value={context}>
 					<SwitchContext.Provider value={switchContext}>
-						<SwitchFlow store={store}>{children}</SwitchFlow>
+						<DiagramSearchPathContext.Provider value={searchPathGet}>
+							<SwitchFlow store={store}>{children}</SwitchFlow>
+						</DiagramSearchPathContext.Provider>
 						<SwitchMask store={store} />
 						<SwitchMeasureHost store={store} />
 					</SwitchContext.Provider>
 				</DiagramRenderContext.Provider>
+				<SwitchSearchHost store={store} search={search} hostRef={boxRef} />
 			</ReactFlowProvider>
 			{store.loadError ? (
 				<div className="doc-er-diagram-message is-error doc-switch-error" role="alert">

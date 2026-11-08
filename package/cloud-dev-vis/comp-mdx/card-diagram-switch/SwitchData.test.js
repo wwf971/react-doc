@@ -8,7 +8,7 @@ import { diagramNormalize, handleAnchorDrawnOf } from '../card-diagram/DiagramER
 import { switchPathViewBuild, switchPathViewRead, switchViewHoverResolve, switchViewListCheck, switchViewListOf, switchViewResolve, switchViewSwitcherIsShown } from './SwitchData.js';
 import { cardDatabaseFontSizeOf } from '../card-diagram/CompactCard.jsx';
 import { cardMatrixCellOf, cardMatrixNormalize, cardMatrixWidthGet } from '../card-diagram/CardMatrixData.js';
-import { switchPresentationBuild, switchStackFrameIsVisible, switchStackHeightIsFull, switchStackPresentationBuild, switchStackTitleBarNormalize, switchStackTitleBarRead } from './SwitchData.js';
+import { SWITCH_DEPTH_MAX_DEFAULT, switchPresentationChildIsDrawn, switchPresentationBuild, switchStackFrameIsVisible, switchStackHeightIsFull, switchStackPresentationBuild, switchStackTitleBarNormalize, switchStackTitleBarRead } from './SwitchData.js';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SceneStackTitleBar, sceneStackNodeKind, switchRegistryBuild } from './SwitchNodeKinds.jsx';
@@ -135,8 +135,8 @@ test('stack title renderer respects presentation and renders plain text safely',
 test('stack titles choose visibility by presentation, independently of static rendering', () => {
 	const focused = switchPresentationBuild('/report');
 	const embedded = switchPresentationBuild('/report', true);
-	assert.deepEqual(focused, { path: '/report', view: '', isEmbedded: false, isFocused: true, pathEmbedder: null });
-	assert.deepEqual(embedded, { path: '/report', view: '', isEmbedded: true, isFocused: false, pathEmbedder: null });
+	assert.deepEqual(focused, { path: '/report', view: '', isEmbedded: false, isFocused: true, pathEmbedder: null, depth: 0, depthMax: SWITCH_DEPTH_MAX_DEFAULT });
+	assert.deepEqual(embedded, { path: '/report', view: '', isEmbedded: true, isFocused: false, pathEmbedder: null, depth: 1, depthMax: SWITCH_DEPTH_MAX_DEFAULT });
 	for (const isVisibleEmbedded of [false, true]) {
 		for (const isVisibleFocused of [false, true]) {
 			const data = { titleBar: { text: 'Report', isVisibleEmbedded, isVisibleFocused } };
@@ -426,11 +426,11 @@ test('a path may name a view of its scene, and an item after it', () => {
 });
 
 test('a presentation says which scene embeds it, not the parent in the tree of paths', () => {
-	assert.deepEqual(switchPresentationBuild('/er@matrix', true, '/other@x'), { path: '/er', view: 'matrix', isEmbedded: true, isFocused: false, pathEmbedder: '/other' });
+	assert.deepEqual(switchPresentationBuild('/er@matrix', true, '/other@x'), { path: '/er', view: 'matrix', isEmbedded: true, isFocused: false, pathEmbedder: '/other', depth: 1, depthMax: SWITCH_DEPTH_MAX_DEFAULT });
 	assert.equal(switchPresentationBuild('/er', false, '/other').pathEmbedder, null);
 	// a stack focused elsewhere: the scene it stands in embeds it
 	const stack = switchStackPresentationBuild({ focusPath: '/report' }, switchPresentationBuild('/overview'));
-	assert.deepEqual(stack, { path: '/report', view: '', isEmbedded: true, isFocused: false, pathEmbedder: '/overview' });
+	assert.deepEqual(stack, { path: '/report', view: '', isEmbedded: true, isFocused: false, pathEmbedder: '/overview', depth: 0, depthMax: SWITCH_DEPTH_MAX_DEFAULT });
 	assert.equal(switchStackPresentationBuild({ focusPath: '/report' }, switchPresentationBuild('/report')).isFocused, true);
 });
 
@@ -780,3 +780,11 @@ test('views found by words: every word in the label, the description or the id, 
 	assert.throws(() => switchViewListCheck({ viewList: [{ id: 'a', diagram: {} }], viewSwitcherLayout: 'grid' }, '/x'), /menu or tabs/);
 });
 
+
+test('a presentation knows how deep it is embedded, and whether a scene inside it is drawn', () => {
+	const canvas = switchPresentationBuild('/a', false, null, { depth: 0, depthMax: 2 });
+	assert.equal(switchPresentationChildIsDrawn(canvas), true);
+	assert.equal(switchPresentationChildIsDrawn(switchPresentationBuild('/b', true, '/a', { depth: 1, depthMax: 2 })), true);
+	assert.equal(switchPresentationChildIsDrawn(switchPresentationBuild('/c', true, '/b', { depth: 2, depthMax: 2 })), false);
+	assert.equal(switchPresentationChildIsDrawn(switchPresentationBuild('/a', false, null, { depth: 0, depthMax: 0 })), false);
+});

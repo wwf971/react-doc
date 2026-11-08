@@ -896,8 +896,10 @@
   font-weight: 500;
 }
 
-/* source-like kinds (code, table, math, html, components, ...): monospace */
-.doc-edit-surface:not([data-kind="paragraph"], [data-kind="heading"], [data-kind="list"], [data-kind="blockquote"]) {
+/* source-like kinds (code, table, math, html, components, ...): monospace. kind "plain" is a
+   component's own field (a cell of a table it draws): it keeps the type and the box of where it
+   is, and the component styles it */
+.doc-edit-surface:not([data-kind="paragraph"], [data-kind="heading"], [data-kind="list"], [data-kind="blockquote"], [data-kind="plain"]) {
   margin: 1rem 0;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--color-fd-border);

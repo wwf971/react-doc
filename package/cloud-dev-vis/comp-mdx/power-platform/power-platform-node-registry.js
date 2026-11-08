@@ -16,10 +16,14 @@ import { erArrangerList } from './er-arrange/er-arranger-list.js';
 // The node kinds of the Power Platform series (power-platform.md): Dataverse
 // tables and global choices, Power Automate steps and business rules, on top
 // of the kinds of the base series (a generic table, an operator).
+// what a search reads in a cell of a Dataverse card: what the card draws there (DataverseCard
+// cellRender), its id where a column has no logical name; the value otherwise (undefined)
+const dataverseSearchCellTextGet = (field, row) => (field.id === 'nameLogical' ? row.nameLogical || row.id : undefined);
+
 export const dataverseTableNodeKind = {
 	type: 'dataverse-table',
 	label: 'Dataverse table',
-	contract: { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseAnchorListGet, anchorSideDrawn: 'header', sizeDefault: { width: 410, height: 320 } },
+	contract: { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseAnchorListGet, anchorSideDrawn: 'header', sizeDefault: { width: 410, height: 320 }, searchCellTextGet: dataverseSearchCellTextGet },
 	schema: dataverseTableSchema,
 	Card: DataverseCard,
 	create: {
@@ -31,7 +35,7 @@ export const dataverseTableNodeKind = {
 export const dataverseChoiceNodeKind = {
 	type: 'dataverse-choice',
 	label: 'Dataverse choice',
-	contract: { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseChoiceAnchorListGet, anchorSideDrawn: 'header', sizeDefault: { width: 410, height: 320 } },
+	contract: { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseChoiceAnchorListGet, anchorSideDrawn: 'header', sizeDefault: { width: 410, height: 320 }, searchCellTextGet: dataverseSearchCellTextGet },
 	schema: dataverseChoiceSchema,
 	Card: DataverseCard,
 	create: {

@@ -23,15 +23,34 @@ const SWITCH_EDGE_HOVER_STROKE = '#64748b';
 // how a scene is being presented: which scene and which of its views, embedded or focused,
 // and when embedded, the scene directly holding it. pathEmbedder is not the parent in the
 // tree of paths: a scene may embed one that lies anywhere
-export function switchPresentationBuild(path, isEmbedded = false, pathEmbedder = null) {
+// the component-level config of a component drawing a switching viewport
+// (doc_page_impl_config.md#component-level-config), one list shared by all of them, so a doc
+// page sets it per component under compConfig and every viewport of the page follows
+export const switchConfigDefineList = [
+	{ key: 'SceneTitleAlign', type: 'enum', valueList: ['left', 'center'], valueDefault: 'left', description: 'Where the title of a scene focused stands above it: at its left, or centered over it (card-diagram-flexible-switch.md#the-title-of-a-scene).' },
+];
+
+// how deep scenes inside cards are drawn by default (a block may say otherwise: depthMax)
+export const SWITCH_DEPTH_MAX_DEFAULT = 3;
+
+// how a scene is presented (card-diagram-flexible-switch.md#presentation-context). depth: how
+// deep it is embedded, 0 on the canvas (or a static root standing for it), one more inside each
+// card or stack item; depthMax: the deepest a scene is drawn in this block, so whatever draws
+// a scene inside it draws it only while depth + 1 <= depthMax (switchPresentationChildIsDrawn)
+export function switchPresentationBuild(path, isEmbedded = false, pathEmbedder = null, { depth = isEmbedded ? 1 : 0, depthMax = SWITCH_DEPTH_MAX_DEFAULT } = {}) {
 	const { path: scene, view } = switchPathViewRead(path);
-	return { path: scene, view, isEmbedded, isFocused: !isEmbedded, pathEmbedder: isEmbedded && pathEmbedder ? switchPathViewRead(pathEmbedder).path : null };
+	return { path: scene, view, isEmbedded, isFocused: !isEmbedded, pathEmbedder: isEmbedded && pathEmbedder ? switchPathViewRead(pathEmbedder).path : null, depth, depthMax };
+}
+
+// whether a scene inside a card of a scene presented so is drawn
+export function switchPresentationChildIsDrawn(presentation) {
+	return (presentation?.depth ?? 0) + 1 <= (presentation?.depthMax ?? SWITCH_DEPTH_MAX_DEFAULT);
 }
 
 export function switchStackPresentationBuild(data, presentation) {
 	if (!data.focusPath) return presentation;
 	const path = switchPathNormalize(data.focusPath);
-	return switchPresentationBuild(path, presentation.isEmbedded || presentation.path !== path, presentation.isEmbedded ? presentation.pathEmbedder : presentation.path);
+	return switchPresentationBuild(path, presentation.isEmbedded || presentation.path !== path, presentation.isEmbedded ? presentation.pathEmbedder : presentation.path, { depth: presentation.depth ?? 0, depthMax: presentation.depthMax });
 }
 
 export function switchStackFrameIsVisible(data, presentation) {
@@ -318,7 +337,8 @@ export function switchDocNormalize(input) {
 	}
 	const root = switchPathNormalize(value.root ?? value.sceneList[0].path);
 	if (!sceneByPath.has(root)) throw new Error(`The root ${root} is not a scene.`);
-	return { title: String(value.title ?? ''), root, height: value.height, transition: value.transition ?? {}, defaults: value.defaults, sceneByPath };
+	if (value.depthMax !== undefined && !(Number.isInteger(value.depthMax) && value.depthMax >= 0)) throw new Error('depthMax is how deep scenes inside cards are drawn: 0 or more.');
+	return { title: String(value.title ?? ''), root, height: value.height, depthMax: value.depthMax, transition: value.transition ?? {}, defaults: value.defaults, sceneByPath };
 }
 
 // the scenes of a document, as the layer asks for them. onBoxSave: what a box the

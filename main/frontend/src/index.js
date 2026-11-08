@@ -21,6 +21,7 @@ export {
   compExposeGet,
   compIconGet,
   compMetaGet,
+  compPaginationGet,
   compSourceDefaultGet,
   compViewModeListGet,
 } from '../../comp-doc/registry/comp-expose.js';
@@ -45,6 +46,16 @@ export { useDocStores } from './store/context.js';
 // and the browser backends over the asset api / a bundled snapshot
 export { ASSET_REF_LANG, assetRefLangIs, assetRefParse, assetBlockTextExpand } from './lib/doc-asset-ref.js';
 export { assetBackendApiCreate, assetBackendSnapshotCreate } from './lib/doc-asset-backend.js';
+// asset paths (doc_page_impl_obj_frontend_asset_path.md): the grammar of path patterns and the index
+// over it, for anything indexing data items by paths; also '@wwf971/react-doc/asset-path', without the page
+export * from './lib/doc-object-frontend-asset-path.js';
+// pagination (doc_page_impl_pagination.md): the environment laying a component's flow out on
+// pages, printing and downloading them, and the helpers a piece type's split uses
+export { PageFlow } from '../../comp-doc/pagination/PageFlow.jsx';
+export { pageFlowPdfDownload, pageFlowPrint, pageFlowPrintProfileGet } from '../../comp-doc/pagination/page-flow-export.js';
+export {
+  PAGE_SPEC_A4, PAGINATION_PRINT_PROFILE_BY_ENGINE, pageSpecNormalize, paginationBreakLastFitting, paginationPlan, paginationTextCutGet,
+} from './lib/doc-pagination.js';
 // building blocks for a component's own edit mode (doc_page_impl_edit.md)
 export { EditActions } from '../../comp-doc/edit/EditActions.jsx';
 export { EditFloatingPanel } from '../../comp-doc/edit/EditFloatingPanel.jsx';
@@ -57,6 +68,9 @@ export { TextBlockEdit } from '../../../built-in/comp-mdx/text/TextBlockEdit.jsx
 export { slashActionDefine } from '../../comp-doc/slash/slash-define.js';
 export { slashEffect } from './lib/doc-slash.js';
 export { DocSlashStore } from './store/DocSlashStore.js';
+// the slash mode in a component's own surfaces (doc_page_impl_edit_slash.md#beyond-the-document-editors)
+export { useEditSlashConfig } from '../../comp-doc/slash/use-edit-slash-config.js';
+export { EditSlashToggle } from '../../comp-doc/slash/EditSlashToggle.jsx';
 // the unified api registry (doc_page_impl_api.md): a host defines apis and
 // hands them as config.apiById, a component exposes them (expose.apiList);
 // the command palette and the hotkeys run them

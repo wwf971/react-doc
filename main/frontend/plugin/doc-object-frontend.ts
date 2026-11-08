@@ -18,6 +18,7 @@ import {
   objectFrontendEntryParse, objectFrontendEntryTextBuild, objectFrontendListCovers, objectFrontendListGroupPathGet, objectFrontendListParse, objectFrontendListTextBuild, objectFrontendRefBuild,
   objectFrontendPartitionGroupPathBuild, objectFrontendPartitionListResolve,
 } from '../src/lib/doc-object-frontend.js';
+import { assetPathCompile } from '../src/lib/doc-object-frontend-asset-path.js';
 
 // The frontend object service layer on the development server (design:
 // doc_page_impl_obj_frontend.md). The page keeps the objects; the server
@@ -783,12 +784,22 @@ function assetNamingRead(assetList: any[], keyOwn: string, input: { name?: unkno
   if (input.pathList === undefined || input.pathList === null) return naming;
   if (!Array.isArray(input.pathList)) throw new AssetError(-1, 'pathList is a list of paths (/kind/...)');
   const pathList: string[] = [];
+  // every path a pattern stands for names one asset: compared path by path, not by the text
+  const ownerByPath = new Map<string, any>();
+  for (const one of assetList) {
+    if (one.key === keyOwn) continue;
+    for (const pattern of one.pathList ?? []) for (const text of assetPathCompile(pattern, { isAbsolute: true }).textList) if (!ownerByPath.has(text)) ownerByPath.set(text, one);
+  }
   for (const pathText of input.pathList) {
     const { path, message } = objectFrontendAssetPathNormalize(pathText);
     if (message) throw new AssetError(-1, `the path ${JSON.stringify(pathText)}: ${message}`);
     if (!path || pathList.includes(path)) continue;
-    const owner = assetList.find((one: any) => one.key !== keyOwn && (one.pathList ?? []).includes(path));
-    if (owner) throw new AssetError(-1, `the path ${path} is the path of ${owner.name || owner.key} already`);
+    const textList = assetPathCompile(path, { isAbsolute: true }).textList;
+    const taken = textList.find((text) => ownerByPath.has(text));
+    if (taken) {
+      const owner = ownerByPath.get(taken);
+      throw new AssetError(-1, `the path ${taken}${textList.length > 1 ? ` (one of those ${path} stands for)` : ''} is the path of ${owner.name || owner.key} already`);
+    }
     pathList.push(path);
   }
   if (pathList.length > 0) naming.pathList = pathList;

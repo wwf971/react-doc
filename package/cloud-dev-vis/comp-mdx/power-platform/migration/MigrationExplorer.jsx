@@ -55,6 +55,7 @@ export function useMigrationModel(service, category) {
 //   param.category   example (default), or real: the first folder of the items
 //   param.path       the scene shown first
 //   param.height     the height of the block
+//   param.depthMax   how deep scenes inside cards are drawn (card-diagram-flexible-switch.md#presentation-context)
 export const MigrationExplorer = observer(function MigrationExplorer({ data = {}, config = {} }) {
 	const service = config.objectFrontend;
 	if (!service) return <p className="doc-error">MigrationExplorer is a mode of a migration (ObjectFrontend).</p>;
@@ -93,7 +94,7 @@ const MigrationExplorerBody = observer(function MigrationExplorerBody({ service,
 	const instanceId = useId().replace(/[^a-zA-Z0-9]/g, '');
 	const rootRef = useRef(null);
 	const provider = useMemo(() => migrationProviderBuild(model, { onBoxSave: migrationBoxSaveBuild(service, model, category), signature }), [model, service, category, signature]);
-	const store = useSwitchStore({ provider, registry: migrationSwitchRegistry, pathInitial: param.path, scope: `.doc-switch-${instanceId}`, config });
+	const store = useSwitchStore({ provider, registry: migrationSwitchRegistry, pathInitial: param.path, scope: `.doc-switch-${instanceId}`, config, depthMax: param.depthMax });
 	const title = model.system.title || 'Migration';
 	const capture = switchCaptureActionBuild({ store, rootRef, titleGet: () => title });
 	const problemList = [...read.problemList, ...model.problemList];
@@ -144,7 +145,7 @@ const MigrationTourBody = observer(function MigrationTourBody({ service, model, 
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [JSON.stringify(param), model]);
 	const provider = useMemo(() => migrationProviderBuild(model, { onBoxSave: migrationBoxSaveBuild(service, model, category), signature }), [model, service, category, signature]);
-	const store = useSwitchStore({ provider, registry: migrationSwitchRegistry, pathInitial: load.spec?.stateList.find((state) => state.id === load.spec.stateIdInitial)?.path, scope: `.doc-switch-${instanceId}`, config });
+	const store = useSwitchStore({ provider, registry: migrationSwitchRegistry, pathInitial: load.spec?.stateList.find((state) => state.id === load.spec.stateIdInitial)?.path, scope: `.doc-switch-${instanceId}`, config, depthMax: param.depthMax });
 	const capture = switchCaptureActionBuild({ store, rootRef, titleGet: () => load.spec?.title || 'Migration' });
 	if (load.message) return <p className="doc-error">{load.message}</p>;
 	const heightWritten = Number(param.height);

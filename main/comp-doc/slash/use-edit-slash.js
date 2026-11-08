@@ -16,9 +16,12 @@ import { EditSlashMenu } from './EditSlashMenu.jsx';
 //                      editing (execCommand), so the surface reports the
 //                      new text as typed and undo takes it back
 //
-//   slash                config.edit.slash of the editor, or undefined (the
-//                        block does not offer the slash mode):
-//                        { store: DocSlashStore, context } (slash-define.js)
+//   slash                config.edit.slash of the editor, or what a component
+//                        editing its own data offers (useEditSlashConfig), or
+//                        undefined (no slash mode):
+//                        { store: DocSlashStore, context,
+//                          actionList?            the surface's own actions
+//                          isPageActionIncluded?  the page's too (default true) }
 //   textBeforeCaretGet   (element) => the text from the start of the
 //                        surface to the caret, as the surface reads it
 //
@@ -89,6 +92,8 @@ export function useEditSlash(elementRef, slash, { textBeforeCaretGet }) {
       anchor: { lineIndex: lineState.lineIndex, column: lineState.lineBefore.length - 1 },
       context: slash.context,
       rect: rectRead(),
+      actionOwnList: slash.actionList ?? [],
+      isPageActionIncluded: slash.isPageActionIncluded !== false,
     });
   };
 

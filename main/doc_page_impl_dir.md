@@ -33,6 +33,9 @@ my-doc/                          the doc page folder: give this to a workspace f
     ├── object-frontend.yaml     other folders for its frontend objects (optional)
     │                            (and packageList of the entry: the packages it needs, by name)
     ├── service-backend.yaml     the config of the service backend, when the page is the one a backend is started for
+    ├── dev/                     notes for whoever works on the doc page, never shown by it (#development-notes)
+    │   ├── preference.md        its design preferences: how it wants to look and read
+    │   └── guide.md             how to work on it (optional): launching, its data, its traps
     ├── hotkey/                  its keyboard maps, one yaml file each (optional: none otherwise)
     │   ├── main.yaml            the map it activates by convention (entry: hotkey.file names another)
     │   └── base.yaml            a map main.yaml includes, or the reader picks instead
@@ -205,6 +208,27 @@ built-in/type.yaml                          the types of the page itself
 ```
 
 Which one depends on who needs the type: several objects or documents of a doc page, one object that may be copied elsewhere, or everyone using a package's components, in which case no copy of it is kept in a doc page. A type of a service template is the exception: it is declared in its script, since a template is code. The entry says `type: { file }`, `type: [...]`, `type: { typeList }` in place, or `type: false`; as for the files beside it, nothing is needed when the convention is followed. A change of a type file reloads the page, as a change of the apis or the tags does, and the file is never collected as a document.
+
+### Development notes
+
+A doc page is built over time, by its author and by agents working for them, and some of what was decided for it is not in any file the page reads: how it wants to look where the framework leaves a choice, what was tried and refused. That goes into `.doc-page/dev/`, plain Markdown for whoever works on the doc page next. The page never reads it: the source scan does not enter `.doc-page/`, so it is not a document, and it travels with the doc page like the rest of its metadata. The folder is made by its first file, as a managed folder is.
+
+```text
+.doc-page/dev/
+├── preference.md   the design preferences of the doc page: one section per preference, each saying
+│                   what (titles of scenes centered), where it is set (a config key, a parameter of a
+│                   block, a package's option) and why; the first thing to read before changing how
+│                   the doc page looks
+└── guide.md        optional: how to work on it, what is particular to it (how its data is changed,
+                    what not to touch, how to check a change)
+```
+
+The rules:
+
+- **A preference is set where the page reads it, and written down here.** What can be a value (a config key of the page or of a component, `compConfig`; a parameter of a block) is set in the doc page's own config or blocks, so it holds whatever the defaults of react-doc become; `preference.md` names the key and the reason. What cannot be a value yet becomes an option of the component or the package first, never a change of its default for one doc page.
+- **It wins over the defaults for that doc page.** Work on the doc page (its documents, its blocks, the components and packages it uses, as far as it uses them) follows its preferences: a new scene, a new block, a new component it uses is made to match them.
+- **A preference the author states is recorded there**, in their words made precise, when it is about the doc page rather than about react-doc as a whole; one about every doc page belongs to the design documents of react-doc instead.
+- Preferences of the whole workspace, if a workspace has any, go in `.doc-workspace/dev/preference.md` the same way, below those of a doc page.
 
 ## Local content kept out of git
 

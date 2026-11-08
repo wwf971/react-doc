@@ -3,9 +3,10 @@ import { applyNodeChanges } from '@xyflow/react';
 import { yamlStringify } from '../../../../main/frontend/src/lib/yaml.js';
 import { DiagramERStore } from '../card-diagram/DiagramERStore.js';
 import { diagramNormalize, diagramPlacesGet, diagramPositionsGet } from '../card-diagram/DiagramERData.js';
+import { diagramSceneSearch } from '../card-diagram/DiagramSearch.js';
 import {
 	SWITCH_EMBED_CHROME_HEIGHT, switchCameraBetween, switchCameraChildOf, switchCameraFit, switchCameraParentOf, switchEase, switchEmbedCardRectOf, switchEmbedMapBuild, switchMaskClipBuild, switchMorphBuild,
-	switchMorphFrameAt, switchMorphStyleBuild, switchPathChain, switchPathHashRead, switchPathNormalize, switchPathParent, switchPathViewBuild, switchPathViewRead, switchPortalItemStyleBuild, switchPortalStyleBuild, switchRectUnion,
+	SWITCH_DEPTH_MAX_DEFAULT, switchMorphFrameAt, switchMorphStyleBuild, switchPathChain, switchPathHashRead, switchPathNormalize, switchPathParent, switchPathViewBuild, switchPathViewRead, switchPortalItemStyleBuild, switchPortalStyleBuild, switchRectUnion,
 	switchRouteFind, switchStackItemLayout, switchStepSecondGet, switchPresentationBuild, switchStackHeightIsFull, switchStackPresentationBuild, switchViewDescGet, switchViewFrameIsHidden, switchViewHoverResolve, switchViewListCheck, switchViewListOf, switchViewResolve, switchViewSwitcherIsShown } from './SwitchData.js';
 
 const SCENE_BOX_TYPE = 'scene-box';
@@ -57,6 +58,10 @@ export class SwitchStore {
 	stepIndex = -1;
 	mask = null;
 	isCameraReady = false;
+	// the deepest a scene inside cards is drawn (switchPresentationBuild depthMax): a block's own
+	depthRenderMax = SWITCH_DEPTH_MAX_DEFAULT;
+	// where the title of a scene focused stands: left or center (compConfig SceneTitleAlign)
+	titleAlign = 'left';
 	isBoxAdjust = false;
 	historyList = [];
 	forwardList = [];
@@ -104,8 +109,10 @@ export class SwitchStore {
 		// over it, kept with it (SwitchAnimation)
 		this.cameraLive = null;
 		this.animationStore = null;
+		// the search of the block (SwitchCanvas), kept with the store across mounts
+		this.searchStore = null;
 		makeAutoObservable(this, {
-			cameraLive: false, animationStore: false, isSeekBusy: false, seek: false, seekEnd: false, showAt: false, planRun: false, stepEnter: false, stepExit: false, pathSet: false, stepRun: false, registry: false, resolve: false, scope: false, entryByPath: false, sceneDescByPath: false, viewChosenByKey: false, cameraByPath: false, titleNodeByText: false, embedBodyByKey: false, stackElementByKey: false, stackScrollByKey: false, stackAreaByKey: false, stackItemByKey: false, itemInitial: false, maskElement: false, maskWorldElement: false, styleElement: false, viewportApi: false,
+			cameraLive: false, animationStore: false, searchStore: false, isSeekBusy: false, seek: false, seekEnd: false, showAt: false, planRun: false, stepEnter: false, stepExit: false, pathSet: false, stepRun: false, registry: false, resolve: false, scope: false, entryByPath: false, sceneDescByPath: false, viewChosenByKey: false, cameraByPath: false, titleNodeByText: false, embedBodyByKey: false, stackElementByKey: false, stackScrollByKey: false, stackAreaByKey: false, stackItemByKey: false, itemInitial: false, maskElement: false, maskWorldElement: false, styleElement: false, viewportApi: false,
 			captureHintTimer: false, flowWaiterList: false, measureWaiterList: false, morph: false, step: false, providerVersion: false, runToken: false, stackScrollKeyByKey: false, stackHeightFullByKey: false, stackFullKeySet: false,
 			provider: observable.ref, nodeListFlow: observable.shallow, edgeListFlow: observable.shallow, plan: observable.ref, mask: observable.ref, box: observable.ref, embedHeld: observable.ref,
 			historyList: observable.ref, forwardList: observable.ref, measurePathList: observable.ref, captureHint: observable.ref,
@@ -758,6 +765,42 @@ export class SwitchStore {
 		this.viewportApi = api;
 	}
 
+	titleAlignSet(align) {
+		this.titleAlign = align === 'center' ? 'center' : 'left';
+	}
+
+	depthRenderMaxSet(depthMax) {
+		const value = Number(depthMax);
+		this.depthRenderMax = Number.isFinite(value) ? Math.max(0, Math.round(value)) : SWITCH_DEPTH_MAX_DEFAULT;
+	}
+
+	// ---------- search (card-diagram-impl.md#search) ----------
+
+	// the scene shown and, as deep as the request goes, the scenes inside its cards: the
+	// framework's search of a scene (diagramSceneSearch), whose kinds holding a scene ask for it
+	// through helper.childSearch; this answers with the path of the view that card shows
+	searchRun(request) {
+		return this.searchSceneRun(this.pathCurrent, request, []);
+	}
+
+	searchSceneRun(path, request, pathChain) {
+		const entry = this.entryGet(path);
+		const graph = entry?.canvas.graph;
+		const positions = graph ? this.entryPositionsGet(entry) : new Map();
+		return diagramSceneSearch({
+			path, graph, request, registry: this.registry, pathChain,
+			rectOf: (nodeId) => {
+				const node = graph?.nodes.find((item) => item.id === nodeId);
+				return node ? { ...(positions.get(nodeId) ?? { x: 0, y: 0 }), ...this.nodeSizeOf(entry, node) } : null;
+			},
+			childSceneSearch: (pathOwner, sceneInput, view, requestChild, chain) => {
+				const pathChild = this.embedPathOf(pathOwner, sceneInput, view);
+				if (!pathChild || chain.includes(pathChild) || !this.pathIsFound(pathChild)) return null;
+				return this.searchSceneRun(pathChild, requestChild, chain);
+			},
+		});
+	}
+
 	// ---------- the title of the scene focused ----------
 
 	// what a scene focused is called, over its canvas (card-diagram-flexible-switch.md#the-title-of-a-scene):
@@ -779,7 +822,10 @@ export class SwitchStore {
 		const box = this.sceneBoxGet(path);
 		const scale = this.titleScaleOf(path);
 		const measured = entry.canvas.measurements[SWITCH_TITLE_ID];
-		return { x: box.x, y: box.y - (SWITCH_TITLE_GAP + SWITCH_TITLE_HEIGHT) * scale, width: measured?.width ?? title.length * SWITCH_TITLE_CHAR_WIDTH * scale, height: SWITCH_TITLE_HEIGHT * scale };
+		const width = measured?.width ?? title.length * SWITCH_TITLE_CHAR_WIDTH * scale;
+		// centered over the box by its width as drawn (guessed until it is measured)
+		const x = this.titleAlign === 'center' ? box.x + (box.width - width) / 2 : box.x;
+		return { x, y: box.y - (SWITCH_TITLE_GAP + SWITCH_TITLE_HEIGHT) * scale, width, height: SWITCH_TITLE_HEIGHT * scale };
 	}
 
 	// how much larger than the base the title of a scene is: 1 up to the base width, then in

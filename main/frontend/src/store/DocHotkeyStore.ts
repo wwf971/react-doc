@@ -41,6 +41,7 @@ const CHORD_WAIT_MS = 2000;
 export const hotkeyContextKeyList = [
   'editMode', 'viewMode', 'editAvailable', 'sessionOpen', 'blockSelectMode',
   'paletteOpen', 'settingsOpen', 'blockPopupOpen', 'devServer',
+  'findScopeActive', 'findOpen',
 ];
 
 export class DocHotkeyStore {
@@ -150,7 +151,7 @@ export class DocHotkeyStore {
 
   // the state of the page a binding's "when" reads
   get contextKeyByName(): Record<string, boolean> {
-    const { editStore, paletteStore, configStore, blockPopupStore, envStore } = this.apiStore.stores;
+    const { editStore, paletteStore, configStore, blockPopupStore, envStore, findStore } = this.apiStore.stores;
     const isEditMode = editStore?.isEditMode === true;
     return {
       editMode: isEditMode,
@@ -162,6 +163,9 @@ export class DocHotkeyStore {
       settingsOpen: configStore?.isSettingsOpen === true,
       blockPopupOpen: blockPopupStore?.isOpen === true,
       devServer: envStore?.isDevServer === true,
+      // a part of the page that finds in what it draws is under the pointer or has the focus
+      findScopeActive: findStore?.isScopeActive === true,
+      findOpen: findStore?.isOpen === true,
     };
   }
 

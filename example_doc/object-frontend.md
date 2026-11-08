@@ -78,6 +78,8 @@ Each asset of a reading list has a **name** (a book its title) and **paths**, as
 /book/non-fiction/a-pattern-language   /author/christopher-alexander/a-pattern-language
 ```
 
+A path may also leave the order of some of its folders free, with an **unordered group** (`{…}`), and give alternatives with a **choice** (`[…]`): a book about mathematics and music is under both topics, neither inside the other, so *Gödel, Escher, Bach* has a third path, `/topic/{mathematics/music/}gödel-escher-bach`, standing for `/topic/mathematics/music/…` and `/topic/music/mathematics/…`; `topic` stays first and the title last. A `/` ends every segment but the last, so it goes after each member inside the group, saying that the path goes on after it; a group ending a path has none, its members separated by commas (`/topic/{mathematics, music}`) (`main/doc_page_impl_obj_frontend_asset_path.md`, Order-free segments). Type `/topic/` in **find** below: both topics are folders.
+
 The folders (`/book`, `/book/sci-fi`, `/author`) are implied by the paths and hold nothing themselves. Wherever a mode, a block or a caller names one asset, it writes an **asset reference**: a path (`/book/sci-fi/dune`), the key (`book-1`), `name:Dune`, or `id:` and the asset's object id. The book above is named by its path; a note names its book by the key, which never changes, since a path is an index the list may rearrange.
 
 The mode **find** uses the two pieces the layer ships for components of modes: a search by words in any order, as the object search reads them (`dune`, `herbert`, `kind:note`, `path:/author/`), and a path typed with completion, folder by folder (type `/`, then `a`, Tab, …). Choosing a book opens it; a note opens its book.
@@ -86,6 +88,16 @@ The mode **find** uses the two pieces the layer ships for components of modes: a
 ```yaml
 object: frontend:w5j7ozoijzl
 mode: find
+```
+
+A reference by any of the paths a pattern stands for names the book:
+
+<!--renderComp=ObjectFrontend-->
+```yaml
+object: frontend:w5j7ozoijzl
+mode: book
+param:
+  book: /topic/music/mathematics/gödel-escher-bach
 ```
 
 A reference that names nothing, or an asset its list names and the store has lost, is said where it is used, never an empty block:

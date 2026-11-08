@@ -62,7 +62,7 @@ How the list is kept (also in `AGENTS.md`):
 
 ## MDX components
 
-- <a id="comp-pagination"></a>**Pagination as a capability of a component.** A component is drawn as one long block; none says how it splits over pages of a given size. A capability any component may declare (how far it fits, where it can be split, what it draws on the next page), with a page frame around a document or a block, is what the Japanese-style CV of the package `cv`, kept in a repository of its own (`2025/cv-dev/cv`), waits for; the former project's algorithm measured each piece and split tables by row, and printing to a PDF follows from it.
+- <a id="pagination-layout"></a>**Layout beyond a column of pieces.** Pagination places the pieces of a flow one after another down a page and cuts them where their types say ([Pagination](doc_page_impl_pagination.md)). On the same flow, measures and plan, a richer layout: floating elements placed beside or around the flow (a figure, a sidebar), elements fixed to every page (a header, a footer, the page number drawn on the sheet), keeping a piece with the next one (a heading with its paragraph), several columns, a page of another size inside the flow; and a block of a document that is a pagination environment for the blocks inside it, so that any component declaring the contract is paginated in a document, not only by the component that draws the environment itself (the CV's view Pages). Each is a new kind of thing the planner places, decided by the same measures, so a component's pieces stay as they are.
 
 ## Events and component state
 

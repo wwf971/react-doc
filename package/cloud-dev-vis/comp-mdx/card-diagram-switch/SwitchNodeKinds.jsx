@@ -4,10 +4,10 @@ import { Boxes, Expand, FoldVertical, Layers, UnfoldVertical } from '../../../..
 import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
 import { nodeRegistryBuild } from '../card-diagram/node-registry.js';
 import { diagramNormalize } from '../card-diagram/DiagramERData.js';
-import { DiagramNodeContent, DiagramRenderContext } from '../card-diagram/DiagramRender.jsx';
+import { DiagramNodeContent, DiagramRenderContext, useDiagramSearchMark } from '../card-diagram/DiagramRender.jsx';
 import { SwitchContext, SwitchStaticScene } from './SwitchStatic.jsx';
 import { SwitchViewSwitcher, SwitchViewTabs } from './SwitchViewSwitcher.jsx';
-import { SWITCH_EMBED_CHROME_HEIGHT, switchBoxClipBuild, switchEmbedCardRectOf, switchEmbedMapBuild, switchPathViewBuild, switchPathViewRead, switchPresentationBuild, switchStackFrameIsVisible, switchStackItemLayout, switchStackPresentationBuild, switchStackTitleBarNormalize, switchStackTitleBarRead } from './SwitchData.js';
+import { SWITCH_EMBED_CHROME_HEIGHT, switchBoxClipBuild, switchEmbedCardRectOf, switchEmbedMapBuild, switchPathViewBuild, switchPathViewRead, switchPresentationBuild, switchPresentationChildIsDrawn, switchStackFrameIsVisible, switchStackItemLayout, switchStackPresentationBuild, switchStackTitleBarNormalize, switchStackTitleBarRead } from './SwitchData.js';
 import { CARD_ICON_BY_NAME, CardBrief } from '../card-diagram/CompactCard.jsx';
 
 // The two node kinds of the switching layer (card-diagram-flexible-switch.md):
@@ -78,11 +78,14 @@ export const SceneEmbedCard = observer(function SceneEmbedCard({ node, nodeId })
 		const map = switchEmbedMapBuild(isFrameHidden ? switchEmbedCardRectOf(body) : body, box, isFrameHidden ? 0 : data.padding);
 		return (
 			<div key={pathLayer} className={`doc-switch-embed-world${pathLayer === pathShown ? '' : ' is-layer-hidden'}`} style={{ transform: `translate(${map.tx}px, ${map.ty}px) scale(${map.scale})`, clipPath: store.sceneBoxIsChosen(pathLayer, data.box) ? switchBoxClipBuild(box) : undefined }}>
-				<SwitchStaticScene store={store} path={pathLayer} depth={(context?.depth ?? 0) + (context?.isStatic ? 1 : 0)} isEmbedded pathEmbedder={pathOwner} />
+				<SwitchStaticScene store={store} path={pathLayer} depth={(context?.depth ?? 0) + 1} isEmbedded pathEmbedder={pathOwner} />
 			</div>
 		);
 	};
-	const isDrawable = Boolean(store && body) && !isCycle;
+	// a scene inside a card is drawn while it is not deeper than the block draws (depthMax of the
+	// presentation): past it the card says the scene opens on a click
+	const isDepthDrawn = switchPresentationChildIsDrawn(context?.presentation);
+	const isDrawable = Boolean(store && body) && !isCycle && isDepthDrawn;
 	const isFrameShownHidden = Boolean(store) && !isCycle && store.viewFrameIsHidden(pathShown);
 	return (
 		<div className={`doc-switch-embed${data.isChromeHidden ? ' is-chrome-hidden' : ''}${pathLayerList.length > 1 ? ' has-layers' : ''}${isFrameShownHidden ? ' is-frame-hidden' : ''}`} data-tone={data.tone || 'slate'} {...pointerProps}>
@@ -98,6 +101,7 @@ export const SceneEmbedCard = observer(function SceneEmbedCard({ node, nodeId })
 			<div ref={bodyRef} className="doc-switch-embed-body">
 				{!store ? <span className="doc-switch-embed-note">{scene}</span>
 					: isCycle ? <span className="doc-switch-embed-note">{scene} embeds itself</span>
+					: !isDepthDrawn ? <span className="doc-switch-embed-note">Deeper than this block draws: opens on a click</span>
 					: isDrawable ? pathLayerList.filter((pathLayer) => !store.viewFrameIsHidden(pathLayer)).map(layerRender) : null}
 			</div>
 			{isDrawable ? pathLayerList.filter((pathLayer) => store.viewFrameIsHidden(pathLayer)).map(layerRender) : null}
@@ -111,7 +115,7 @@ function pathOwnerOf(context) {
 }
 
 // an item of a stack: its title line, and a scene as wide as the item, or a card
-const SceneStackItem = observer(function SceneStackItem({ item, index, isWheelTaken = false, store, stackKey, scrollRef, widthBody, anchorRef, isStatic, depth, pathOwner }) {
+const SceneStackItem = observer(function SceneStackItem({ item, index, isWheelTaken = false, searchState = null, store, stackKey, scrollRef, widthBody, anchorRef, isStatic, depth, pathOwner }) {
 	const rootRef = useRef(null);
 	const bodyRef = useRef(null);
 	const { registry, config } = useContext(DiagramRenderContext);
@@ -164,7 +168,7 @@ const SceneStackItem = observer(function SceneStackItem({ item, index, isWheelTa
 	// widthBody: the area this reads gets its ref after this item, on the first commit
 	}, [store, stackKey, item.id, scrollRef, heightBody, widthBody]);
 	return (
-		<section ref={rootRef} className={`doc-switch-stack-item${link && !isStatic ? ' is-linked' : ''}`} data-stack-item={item.id} data-tone={item.tone || 'slate'} onClick={link && !isStatic ? (event) => { event.stopPropagation(); void store.pathSet(link); } : undefined}>
+		<section ref={rootRef} className={`doc-switch-stack-item${link && !isStatic ? ' is-linked' : ''}`} data-stack-item={item.id} data-search-part={`item/${item.id}`} data-search={searchState ?? undefined} data-tone={item.tone || 'slate'} onClick={link && !isStatic ? (event) => { event.stopPropagation(); void store.pathSet(link); } : undefined}>
 			<span ref={anchorRef?.(`item/${item.id}`)} className="doc-switch-stack-item-anchor" />
 			{item.title ? (
 				<div className="doc-switch-stack-item-chrome">
@@ -181,7 +185,7 @@ const SceneStackItem = observer(function SceneStackItem({ item, index, isWheelTa
 				{nodeCard ? <DiagramNodeContent id={item.id} node={nodeCard} config={config} registry={registry} anchorRef={anchorRefNone} visualization={visualization} /> : null}
 				{layout ? (
 					<div className="doc-switch-embed-world" style={{ transform: `translate(${layout.map.tx}px, ${layout.map.ty}px) scale(${layout.map.scale})`, clipPath: store.sceneBoxIsChosen(pathShown, item.box) ? switchBoxClipBuild(box) : undefined }}>
-						<SwitchStaticScene store={store} path={pathShown} depth={depth + 1} isEmbedded pathEmbedder={pathOwner} />
+						{depth + 1 <= store.depthRenderMax ? <SwitchStaticScene store={store} path={pathShown} depth={depth + 1} isEmbedded pathEmbedder={pathOwner} /> : null}
 					</div>
 				) : null}
 			</div>
@@ -225,6 +229,7 @@ export const SceneStackCard = observer(function SceneStackCard({ node, nodeId, a
 	const { data } = node;
 	const scrollRef = useRef(null);
 	const [widthBody, widthBodySet] = useState(0);
+	const searchMark = useDiagramSearchMark(nodeId);
 	const stackKey = store ? store.stackKey(pathOwnerOf(context), nodeId) : '';
 	const presentation = switchStackPresentationBuild(data, context?.presentation ?? switchPresentationBuild(pathOwnerOf(context)));
 	const isEmbedded = presentation.isEmbedded;
@@ -288,7 +293,7 @@ export const SceneStackCard = observer(function SceneStackCard({ node, nodeId, a
 				<div ref={scrollRef} className="doc-switch-stack-scroll nopan nodrag" onScroll={store ? (event) => store.stackScrollReport(stackKey, event.currentTarget) : undefined}>
 					<div className="doc-switch-stack-list">
 						{(data.itemList ?? []).map((item, index, list) => (
-							<SceneStackItem key={item.id} isWheelTaken={!isEmbedded && !isStatic} item={item} index={list.slice(0, index).filter((other) => other.title).length} store={store} stackKey={stackKey} scrollRef={scrollRef} widthBody={widthBody} anchorRef={anchorRef} isStatic={isStatic || isEmbedded} depth={context?.depth ?? 0} pathOwner={pathOwnerOf(context)} />
+							<SceneStackItem key={item.id} isWheelTaken={!isEmbedded && !isStatic} searchState={searchMark.partStateOf(`item/${item.id}`)} item={item} index={list.slice(0, index).filter((other) => other.title).length} store={store} stackKey={stackKey} scrollRef={scrollRef} widthBody={widthBody} anchorRef={anchorRef} isStatic={isStatic || isEmbedded} depth={context?.depth ?? 0} pathOwner={pathOwnerOf(context)} />
 						))}
 					</div>
 				</div>
@@ -329,10 +334,40 @@ export const SceneTabsCard = observer(function SceneTabsCard({ node, anchorRef }
 	);
 });
 
+// search (card-diagram-impl.md#search): what a card holding scenes answers. its own words are a
+// part of it; a scene inside it is searched one level deeper, through helper.childSearch, which
+// stops at the depth of the request
+function sceneEmbedSearchMatch(node, helper) {
+	const data = node.data ?? {};
+	const partList = helper.textListOf([data.title, data.subtitle, data.statList]).some(helper.test) ? [{ id: 'title' }] : [];
+	const result = helper.childSearch(data.scene, data.view);
+	return { partList, childList: result ? [{ partId: 'scene', result }] : [] };
+}
+
+function sceneStackSearchMatch(node, helper) {
+	const data = node.data ?? {};
+	const titleBar = typeof data.titleBar === 'string' ? data.titleBar : data.titleBar?.text;
+	const partList = helper.textListOf([titleBar, data.title, data.subtitle, data.statList]).some(helper.test) ? [{ id: 'title' }] : [];
+	const childList = [];
+	for (const item of data.itemList ?? []) {
+		const textList = helper.textListOf([item.title, item.subtitle, item.node?.data]);
+		if (textList.some(helper.test)) partList.push({ id: `item/${item.id}` });
+		const result = item.scene ? helper.childSearch(item.scene, item.view) : null;
+		if (result) childList.push({ partId: `item/${item.id}`, result });
+	}
+	return { partList, childList };
+}
+
+function sceneTabsSearchMatch(node, helper) {
+	const partList = (node.data?.tabList ?? []).filter((tab) => helper.test(tab.label)).map((tab) => ({ id: `tab/${tab.id}` }));
+	return { partList, childList: [] };
+}
+
 export const sceneEmbedNodeKind = {
 	type: 'scene-embed',
 	label: 'Embedded scene',
 	contract: {
+		searchMatch: sceneEmbedSearchMatch,
 		dataNormalize: (data) => {
 			if (typeof data.scene !== 'string' || !data.scene.trim()) throw new Error('An embedded scene needs data.scene, the path of a scene.');
 			return data;
@@ -355,6 +390,7 @@ export const sceneStackNodeKind = {
 	type: 'scene-stack',
 	label: 'Scrolling stack of scenes',
 	contract: {
+		searchMatch: sceneStackSearchMatch,
 		dataNormalize: (data) => {
 			if (!Array.isArray(data.itemList)) throw new Error('A stack needs data.itemList: its items, each a scene or a card.');
 			switchStackTitleBarNormalize(data.titleBar);
@@ -403,6 +439,7 @@ export const sceneTabsNodeKind = {
 	type: 'scene-tabs',
 	label: 'Tabs of scenes',
 	contract: {
+		searchMatch: sceneTabsSearchMatch,
 		anchorListGet: (data) => [{ id: 'body', sideList: sideAllList }, ...(data.tabList ?? []).map((tab) => ({ id: `tab/${tab.id}`, sideList: sideAllList }))],
 		sizeDefault: { width: 800, height: 40 },
 		// a tab chosen in place: the header stays, its lines move

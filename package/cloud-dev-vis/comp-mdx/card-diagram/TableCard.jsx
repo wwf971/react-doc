@@ -5,6 +5,7 @@ import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { cardRowAnchorBuild } from './TableCardSchema.js';
 import { cardRowDisplayIdListOf, cardViewDefaultGet, cardViewDrawBuild, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown } from './TableCardData.js';
 import { TextValue, ValueMenu } from './DiagramValueControls.jsx';
+import { useDiagramSearchMark } from './DiagramRender.jsx';
 import './DiagramER.css';
 
 // The generic table-like card of a diagram node (card-diagram-impl.md#the-table-card):
@@ -33,6 +34,8 @@ import './DiagramER.css';
 //   cellRender(field, row, value)  what a variant shows in a read cell (undefined: the value)
 //   cellClassName(field, row)      an extra class of a cell
 export const TableCard = observer(function TableCard({ node, schema, editor, nodeId, anchorRef, className = '', titleLeading = null, titleTrailing = null, cellRender, cellClassName, columnsStyle }) {
+	// what a search found in the card: its title, its rows (DiagramSearch.js, parts title and row/{id})
+	const searchMark = useDiagramSearchMark(nodeId);
 	const { docStore } = useDocStores();
 	const root = useRef(null);
 	const [drop, dropSet] = useState(null);
@@ -118,7 +121,7 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 	return (
 		<div ref={root} data-node-id={nodeId} data-tone={node.data.tone || undefined} className={`doc-er-table doc-card ${className}${node.data.isCompact ? ' is-compact' : ''}${rowGroupList.length ? ' has-row-group' : ''}${editor ? ' is-editable' : ''}${isCardSelected ? ' is-selected' : ''}`.trim()} style={style} tabIndex={editor ? 0 : undefined}
 			onClick={select({})} onFocus={selectOnFocus({})}>
-			<div ref={anchorRef?.('header')} className="doc-er-table-title doc-card-title">
+			<div ref={anchorRef?.('header')} className="doc-er-table-title doc-card-title" data-search-part="title" data-search={searchMark.partStateOf('title') ?? undefined}>
 				<span className="doc-er-table-title-name">
 					{titleLeading}
 					{node.data.badge ? <span className="doc-er-table-badge">{node.data.badge}</span> : null}
@@ -160,7 +163,7 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 					onSelect={editor ? event => { event.stopPropagation(); editor.navigate([{ kind: 'node', id: nodeId }, { kind: 'rowDisplay' }, { kind: 'rowBreak', index: item.break.index }]); } : undefined} />;
 				const { row } = item;
 				// a view of another mode only reads: what it shows is edited as data
-				if (!draw.isPlain) return <div key={row.id} ref={anchorRef?.(`${draw.anchorPrefix}/${row.id}`)} data-row-id={row.id} data-tone={row.tone || undefined} className={`doc-er-table-column doc-card-row nodrag nopan${rowShownSet && !rowShownSet.has(row.id) ? ' is-out-of-display' : ''}${item.isInFold ? ' is-in-fold' : ''}`}>
+				if (!draw.isPlain) return <div key={row.id} ref={anchorRef?.(`${draw.anchorPrefix}/${row.id}`)} data-row-id={row.id} data-search={searchMark.partStateOf(`row/${row.id}`) ?? undefined} data-tone={row.tone || undefined} className={`doc-er-table-column doc-card-row nodrag nopan${rowShownSet && !rowShownSet.has(row.id) ? ' is-out-of-display' : ''}${item.isInFold ? ' is-in-fold' : ''}`}>
 					{draw.fieldList.map(field => <span key={field.id}>{String(row[field.id] ?? '')}</span>)}
 				</div>;
 				const index = rows.indexOf(row);
@@ -169,7 +172,7 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 				const isRowSelected = isSelected && selection.rowId === row.id;
 				const target = cardRowAnchorBuild(schema, row.id);
 				if (row.isEllipsis && !editor) return <div key={row.id} ref={anchorRef?.(target)} data-row-id={row.id} className="doc-er-table-column doc-card-row doc-card-row-ellipsis nodrag nopan">{row[schema.fieldList[0]?.id] || '⋮'}</div>;
-				return <div key={row.id} ref={anchorRef?.(target)} data-row-id={row.id} data-tone={row.tone || undefined} title={isRowOutOfDisplay ? 'Not shown when reading: it is left out of rowDisplay' : undefined} className={`doc-er-table-column doc-card-row nodrag nopan${item.isInFold ? ' is-in-fold' : ''}${isRowOutOfDisplay ? ' is-out-of-display' : ''}${isRowSelected && !selection.fieldId ? ' is-selected' : ''}${isRowSelected ? ' is-row-of-selection' : ''}${dropClass('row', index, rows.length)}`} tabIndex={editor ? 0 : undefined}
+				return <div key={row.id} ref={anchorRef?.(target)} data-row-id={row.id} data-search={searchMark.partStateOf(`row/${row.id}`) ?? undefined} data-tone={row.tone || undefined} title={isRowOutOfDisplay ? 'Not shown when reading: it is left out of rowDisplay' : undefined} className={`doc-er-table-column doc-card-row nodrag nopan${item.isInFold ? ' is-in-fold' : ''}${isRowOutOfDisplay ? ' is-out-of-display' : ''}${isRowSelected && !selection.fieldId ? ' is-selected' : ''}${isRowSelected ? ' is-row-of-selection' : ''}${dropClass('row', index, rows.length)}`} tabIndex={editor ? 0 : undefined}
 					onClick={select({ rowId: row.id })} onFocus={selectOnFocus({ rowId: row.id })}>
 					{schema.fieldList.map(field => (
 						<CardCell key={field.id} editor={editor} nodeId={nodeId} rowId={row.id} field={field} value={rowContent[field.id]}

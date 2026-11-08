@@ -3,6 +3,7 @@ export {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  CaseSensitive,
   Boxes,
   Boxes as ProjectIcon,
   Building2,
@@ -120,6 +121,7 @@ export {
   Upload,
   Waypoints,
   Workflow,
+  WholeWord,
   X,
   // the icons of the object Types (comp-doc/object/object-icon.jsx)
   Archive,

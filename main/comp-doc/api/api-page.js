@@ -47,6 +47,23 @@ export const apiByIdPage = {
     isAvailable: (context) => Boolean(context.uiHandleGet('searchOpen')) || 'the search dialog is not mounted',
     run: (context) => context.uiHandleGet('searchOpen')?.(true),
   }),
+  // find in the part of the page under the pointer or holding the focus (a diagram canvas):
+  // its own search, not the browser's (doc_page_impl_api.md#finding-in-a-part-of-the-page)
+  'find/open': apiDefine({
+    label: 'Find in this part of the page',
+    description: 'Opens the search of the part of the page under the pointer or holding the focus, such as a diagram.',
+    icon: Search,
+    palette: false,
+    isAvailable: ({ stores }) => stores.findStore?.isScopeActive === true || 'nothing under the pointer finds in what it draws',
+    run: ({ stores }) => { stores.findStore.open(); },
+  }),
+  'find/close': apiDefine({
+    label: 'Close the search of this part of the page',
+    icon: Search,
+    palette: false,
+    isAvailable: ({ stores }) => stores.findStore?.isOpen === true || 'no search of a part of the page is open',
+    run: ({ stores }) => { stores.findStore.close(); },
+  }),
   'palette/open': apiDefine({
     label: 'Open the command palette',
     icon: SquareTerminal,

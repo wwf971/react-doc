@@ -32,9 +32,14 @@ export function useSwitchResolve() {
 // mode renders another body, the reader coming back) finds its scenes measured, its
 // camera and the scene the reader was at, and paints them in its first frame. a provider
 // made again with the same signature is taken without reading the scenes again
-export function useSwitchStore({ provider, registry, pathInitial, scope, config }) {
+// depthMax: how deep scenes inside cards are drawn in this block (the presentation's depthMax).
+// the component's config (switchConfigDefineList) is read from config.compConfig
+export function useSwitchStore({ provider, registry, pathInitial, scope, config, depthMax }) {
 	const resolve = useSwitchResolve();
 	const store = useCompStateStore(config, 'switch', () => new SwitchStore({ provider, registry, resolve, pathInitial, scope }));
+	useEffect(() => { if (depthMax !== undefined) store.depthRenderMaxSet(depthMax); }, [store, depthMax]);
+	const titleAlign = config?.compConfig?.SceneTitleAlign;
+	useEffect(() => { store.titleAlignSet(titleAlign); }, [store, titleAlign]);
 	useEffect(() => {
 		if (store.provider === provider) return;
 		if (provider.signature !== undefined && provider.signature === store.provider?.signature) store.providerAdopt(provider);
@@ -144,7 +149,7 @@ const CardDiagramSwitchBase = observer(function CardDiagramSwitchBase({ data = {
 });
 
 const CardDiagramSwitchBody = observer(function CardDiagramSwitchBody({ load, data, config, registry, scope, isInPopup, rootRef, title, copyStore, source, onEvent }) {
-	const store = useSwitchStore({ provider: load.provider, registry, pathInitial: data.path ?? load.spec.root, scope, config });
+	const store = useSwitchStore({ provider: load.provider, registry, pathInitial: data.path ?? load.spec.root, scope, config, depthMax: data.depthMax ?? load.spec.depthMax });
 	const capture = switchCaptureActionBuild({ store, rootRef, titleGet: () => title });
 	const heightWritten = Number(data.height ?? config.height ?? load.spec.height);
 	const height = Number.isFinite(heightWritten) ? Math.max(240, Math.min(1400, heightWritten)) : 620;

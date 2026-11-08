@@ -82,6 +82,7 @@ A command is a method of `DiagramEditStore` (or of a store a series adds on the 
 | ☐ | The fields the schema marks fixed are still focused and listed in the editor, with their buttons greyed out and the reason (`reasonFieldListFixed`) |
 | ☐ | The cells use `CardCell` / the injected text control, so typing goes through `fieldSet` (and therefore the history); no input of its own |
 | ☐ | A fresh node from `create` is valid as it is, with explicit handles where the author would expect them |
+| ☐ | Search finds its words ([Search](card-diagram-impl.md#search)): a card with a schema needs nothing, unless a variant draws a cell otherwise than its value (`contract.searchCellTextGet`); a card without one answers `contract.searchMatch` when the words of its data are not what it shows, and a kind holding a scene asks for it through `helper.childSearch` |
 | ☐ | The kind has a test beside the registry (as `OperatorNodes.test.js`), covering normalization, the schema's rows and fields, a cell edit and its undo |
 | ☐ | The series document and the usage document describe it, whose examples show it |
 

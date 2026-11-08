@@ -1,4 +1,8 @@
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
+import {
+  ASSET_PATH_SEGMENT_LENGTH_MAX, assetPathCompile, assetPathIndexBuild, assetPathIndexComplete, assetPathIndexGet, assetPathIndexNodeGet,
+  assetPathListSplit, assetPathNormalize,
+} from './doc-object-frontend-asset-path.js';
 
 // The frontend object service layer, its pure part (design:
 // doc_page_impl_obj_frontend.md), shared by the development server
@@ -372,7 +376,12 @@ export function objectFrontendAssetAcceptCheck(kindList, input) {
   const pathPrefix = String(kindDeclared.pathPrefix ?? '');
   // paths index an asset several ways: one of them, when it has any, files it under its kind
   const pathList = input.pathList ?? [];
-  if (pathPrefix && pathList.length > 0 && !pathList.some((path) => String(path).startsWith(pathPrefix))) {
+  // a pattern files it so when one of the paths it stands for does
+  const isFiled = (pattern) => {
+    const { textList } = assetPathCompile(pattern, { isAbsolute: true });
+    return (textList.length > 0 ? textList : [String(pattern)]).some((path) => path.startsWith(pathPrefix));
+  };
+  if (pathPrefix && pathList.length > 0 && !pathList.some(isFiled)) {
     return { message: `one path of the kind ${kind} starts with ${pathPrefix}, not ${pathList.join(', ')}`, kind, kindDeclared };
   }
   return { message: '', kind, kindDeclared };
@@ -383,15 +392,18 @@ export function objectFrontendAssetAcceptCheck(kindList, input) {
 // an asset of a frontend object may have a name, for people (Dune), and
 // paths, any number of them, indexing it the ways its object wants (by
 // kind and genre, by author: /book/sci-fi/dune, /author/frank-herbert/dune).
-// a path is read as an os path is: "/" separates the folders, "." and ".."
-// and repeated or trailing slashes are resolved, so "book//sci-fi/./dune/"
-// is /book/sci-fi/dune; it is written in that canonical form, always from
-// the root of the object. the folders of the paths are implied (/book,
-// /book/sci-fi) and hold nothing themselves. a path names one asset of its
-// object (the writes refuse a taken one; one written twice by hand names
-// the first and is reported). which paths an asset has is the object's
-// choice; the recommended pattern starts with the kind (/book/...,
-// /note/...), so the kinds are the first folders (objectFrontendAssetPathBuild).
+// a path is an asset path pattern (doc-object-frontend-asset-path.js,
+// doc_page_impl_obj_frontend_asset_path.md): a plain path, read as an os
+// path is ("book//sci-fi/./dune/" is /book/sci-fi/dune), or one with
+// unordered groups and choices, standing for several paths
+// (/book/{sci-fi/frank-herbert/}dune). it is written in its canonical form,
+// always from the root of the object. the folders of the paths are implied
+// (/book, /book/sci-fi) and hold nothing themselves. every path a pattern
+// stands for names one asset of its object (the writes refuse a taken one;
+// one written twice by hand names the first and is reported). which paths
+// an asset has is the object's choice; the recommended pattern starts with
+// the kind (/book/..., /note/...), so the kinds are the first folders
+// (objectFrontendAssetPathBuild).
 //
 // what names an asset within its object (an asset reference), wherever a
 // mode, a block's param or a caller asks for one:
@@ -400,28 +412,18 @@ export function objectFrontendAssetAcceptCheck(kindList, input) {
 //   name:Dune             its name (names need not be unique: the first, said to be ambiguous)
 //   id:w5j7pmxa7fw        the object id of the asset
 
-export const OBJECT_FRONTEND_ASSET_PATH_SEGMENT_LENGTH_MAX = 80;
+export const OBJECT_FRONTEND_ASSET_PATH_SEGMENT_LENGTH_MAX = ASSET_PATH_SEGMENT_LENGTH_MAX;
 
-// { path, message }: the canonical form of a path ('' for an empty text), or why it is none
+// { path, message }: the canonical form of a path pattern, from the root ('' for an empty text),
+// or why it is none. the grammar is the asset path grammar (doc-object-frontend-asset-path.js):
+// a plain path, or one with unordered groups ({a/b/}x, {a, b}) and choices ([a, b])
 export function objectFrontendAssetPathNormalize(textInput) {
   const text = String(textInput ?? '').trim();
   if (text === '') return { path: '', message: '' };
-  const segmentList = [];
-  for (const segmentRaw of text.split('/')) {
-    const segment = segmentRaw.trim();
-    if (segment === '' || segment === '.') continue;
-    if (segment === '..') {
-      if (segmentList.length === 0) return { path: '', message: 'it goes above the root of the object' };
-      segmentList.pop();
-      continue;
-    }
-    // eslint-disable-next-line no-control-regex
-    if (/[\u0000-\u001f]/.test(segment)) return { path: '', message: 'a folder name cannot hold control characters' };
-    if (segment.length > OBJECT_FRONTEND_ASSET_PATH_SEGMENT_LENGTH_MAX) return { path: '', message: `a folder name is at most ${OBJECT_FRONTEND_ASSET_PATH_SEGMENT_LENGTH_MAX} characters` };
-    segmentList.push(segment);
-  }
-  if (segmentList.length === 0) return { path: '', message: 'the root of the object names no asset' };
-  return { path: `/${segmentList.join('/')}`, message: '' };
+  const { path, message } = assetPathNormalize(text, { isAbsolute: true });
+  if (message) return { path: '', message: message.replace(/^it goes above the root/, 'it goes above the root of the object') };
+  if (!path) return { path: '', message: 'the root of the object names no asset' };
+  return { path, message: '' };
 }
 
 // a name made a folder name of the recommended pattern: lowercase, letters
@@ -440,36 +442,22 @@ export function objectFrontendAssetPathBuild(kind, ...segmentList) {
 
 // the index of the assets of an object: by key, by path, by name, by id,
 // and the folders the paths imply. assetList: the assets as the object
-// state lists them (with status). problemList: a path claimed twice
+// state lists them (with status). a path pattern indexes the asset under
+// every path it stands for. problemList: a path claimed twice, a pattern
+// that is none
+//   pathIndex   the asset path index (doc-object-frontend-asset-path.js): folders, completion
+//   byPath      every concrete path -> its asset
 export function objectFrontendAssetIndexBuild(assetList) {
   const byKey = new Map();
-  const byPath = new Map();
   const byName = new Map();
   const byItemId = new Map();
-  // folder path -> { path, folderSet: Set of child folder paths, assetPathList }
-  const folderByPath = new Map([['/', { path: '/', folderSet: new Set(), assetPathList: [] }]]);
-  const problemList = [];
-  const folderEnsure = (path) => {
-    if (folderByPath.has(path)) return folderByPath.get(path);
-    const folder = { path, folderSet: new Set(), assetPathList: [] };
-    folderByPath.set(path, folder);
-    folderEnsure(objectFrontendAssetPathParentGet(path)).folderSet.add(path);
-    return folder;
-  };
   for (const asset of assetList ?? []) {
     byKey.set(asset.key, asset);
     byItemId.set(asset.itemId, asset);
     if (asset.name) byName.set(asset.name, [...(byName.get(asset.name) ?? []), asset]);
-    for (const path of asset.pathList ?? []) {
-      if (byPath.has(path)) {
-        problemList.push(`the path ${path} is claimed by ${byPath.get(path).key} and ${asset.key}: it names ${byPath.get(path).key}`);
-        continue;
-      }
-      byPath.set(path, asset);
-      folderEnsure(objectFrontendAssetPathParentGet(path)).assetPathList.push(path);
-    }
   }
-  return { byKey, byPath, byName, byItemId, folderByPath, problemList };
+  const pathIndex = assetPathIndexBuild((assetList ?? []).map((asset) => ({ entry: asset, pathList: asset.pathList ?? [] })), { labelOf: (asset) => asset.key, isAbsolute: true });
+  return { byKey, byPath: pathIndex.entryByPath, byName, byItemId, pathIndex, problemList: pathIndex.problemList };
 }
 
 export function objectFrontendAssetPathParentGet(path) {
@@ -481,7 +469,8 @@ export function objectFrontendAssetPathParentGet(path) {
 //   found                 an asset of the object, there in the store
 //   missing | deleted     an asset the object lists, gone from the store (asset says which)
 //   unknown               nothing of the object answers to the reference
-// a name several assets have answers the first, with the message saying so
+// a name several assets have answers the first, with the message saying so. a path with
+// groups or choices names the asset every path it stands for names (an asset's own pattern)
 export function objectFrontendAssetRefResolve(index, refInput) {
   const ref = String(refInput ?? '').trim();
   if (ref === '') return { status: 'unknown', by: '', message: 'name the asset: a path (/…), a key, name:…, id:…' };
@@ -490,10 +479,15 @@ export function objectFrontendAssetRefResolve(index, refInput) {
   let message = '';
   if (ref.startsWith('/')) {
     by = 'path';
-    const { path, message: pathMessage } = objectFrontendAssetPathNormalize(ref);
-    if (pathMessage) return { status: 'unknown', by, message: `${ref}: ${pathMessage}` };
-    asset = index.byPath.get(path);
-    if (!asset && index.folderByPath.has(path)) return { status: 'unknown', by, message: `${path} is a folder of the object, not an asset` };
+    const compiled = assetPathCompile(ref, { isAbsolute: true });
+    if (compiled.message) return { status: 'unknown', by, message: `${ref}: ${compiled.message}` };
+    if (compiled.pathList.length === 0) return { status: 'unknown', by, message: `${ref}: the root of the object names no asset` };
+    const assetSet = new Set(compiled.pathList.map((one) => assetPathIndexGet(index.pathIndex, one)));
+    if (assetSet.size > 1) return { status: 'unknown', by, message: `${compiled.path} stands for paths of several assets (or of none): name one path` };
+    [asset] = [...assetSet];
+    if (!asset && compiled.pathList.length === 1 && assetPathIndexNodeGet(index.pathIndex, compiled.pathList[0])) {
+      return { status: 'unknown', by, message: `${compiled.path} is a folder of the object, not an asset` };
+    }
   } else if (ref.startsWith('name:')) {
     by = 'name';
     const list = index.byName.get(ref.slice('name:'.length).trim()) ?? [];
@@ -518,47 +512,19 @@ export function objectFrontendAssetRefResolve(index, refInput) {
 // then its assets, those whose name starts with what follows the last "/"
 // (then those that hold it). a text without a leading "/" is read from
 // base (default the root). kindList: only assets of these kinds, and the
-// folders holding one.
+// folders holding one. a folder is every folder some path of a pattern runs
+// through, so an asset at /book/{sci-fi/frank-herbert/}dune is under both
 //   -> [{ kind: 'folder' | 'asset', path, segment, asset?, assetCount }]
 export function objectFrontendAssetPathComplete(index, textInput, { kindList = [], base = '/' } = {}) {
-  const text = String(textInput ?? '');
-  const isAbsolute = text.startsWith('/');
-  const indexSlash = text.lastIndexOf('/');
-  const dirText = indexSlash >= 0 ? text.slice(0, indexSlash + 1) : '';
-  const prefix = (indexSlash >= 0 ? text.slice(indexSlash + 1) : text).toLowerCase();
-  const dirJoined = isAbsolute ? dirText : `${base.replace(/\/$/, '')}/${dirText}`;
-  const dirPath = objectFrontendAssetPathNormalize(dirJoined).path || '/';
-  const folder = index.folderByPath.get(dirPath);
-  if (!folder) return [];
   const kindSet = new Set(kindList);
-  const assetIsWanted = (asset) => kindSet.size === 0 || kindSet.has(asset.kind);
-  const assetCountGet = (folderPath) => {
-    let count = 0;
-    for (const [path, asset] of index.byPath) if ((path.startsWith(`${folderPath}/`) || folderPath === '/') && assetIsWanted(asset)) count += 1;
-    return count;
-  };
-  const candidateList = [];
-  for (const path of folder.folderSet) {
-    const count = assetCountGet(path);
-    if (count > 0) candidateList.push({ kind: 'folder', path, segment: path.slice(path.lastIndexOf('/') + 1), assetCount: count });
-  }
-  for (const path of folder.assetPathList) {
-    const asset = index.byPath.get(path);
-    if (assetIsWanted(asset)) candidateList.push({ kind: 'asset', path, segment: path.slice(path.lastIndexOf('/') + 1), asset, assetCount: 1 });
-  }
-  const rankGet = (candidate) => {
-    const segment = candidate.segment.toLowerCase();
-    const name = String(candidate.asset?.name ?? '').toLowerCase();
-    if (prefix === '' || segment.startsWith(prefix)) return 0;
-    if (name.startsWith(prefix)) return 1;
-    if (segment.includes(prefix) || name.includes(prefix)) return 2;
-    return -1;
-  };
-  return candidateList
-    .map((candidate) => ({ candidate, rank: rankGet(candidate) }))
-    .filter((item) => item.rank >= 0)
-    .sort((a, b) => a.rank - b.rank || (a.candidate.kind === b.candidate.kind ? 0 : a.candidate.kind === 'folder' ? -1 : 1) || a.candidate.segment.localeCompare(b.candidate.segment))
-    .map((item) => item.candidate);
+  const candidateList = assetPathIndexComplete(index.pathIndex, textInput, {
+    base,
+    isEntryWanted: (asset) => kindSet.size === 0 || kindSet.has(asset.kind),
+    labelOf: (asset) => asset.name ?? '',
+  });
+  return candidateList.map((one) => (one.kind === 'folder'
+    ? { kind: 'folder', path: one.path, segment: one.segment, assetCount: one.entryCount }
+    : { kind: 'asset', path: one.path, segment: one.segment, asset: one.entry, assetCount: 1 }));
 }
 
 // a search of the assets of an object by words, as the object registry's
@@ -625,14 +591,22 @@ function assetTokenMatch(asset, token) {
   if (is('name') && name.startsWith(valueLower)) return { field: 'name', score: 8 };
   if (is('name') && name.includes(valueLower)) return { field: 'name', score: 5 };
   if (is('path')) {
-    for (const path of asset.pathList ?? []) {
+    // every path a pattern stands for, the canonical one first
+    const pathTextList = (asset.pathList ?? []).flatMap((pattern) => {
+      const { textList } = assetPathCompile(pattern, { isAbsolute: true });
+      return textList.length > 0 ? textList : [String(pattern)];
+    });
+    for (const path of pathTextList) {
       const pathLower = path.toLowerCase();
       if (valueLower.startsWith('/')) {
         if (pathLower.startsWith(valueLower)) return { field: 'path', score: 4, path };
         continue;
       }
       if (pathLower.split('/').some((segment) => segment.startsWith(valueLower))) return { field: 'path', score: 4, path };
-      if (pathLower.includes(valueLower)) return { field: 'path', score: 3, path };
+    }
+    if (!valueLower.startsWith('/')) {
+      const path = pathTextList.find((one) => one.toLowerCase().includes(valueLower));
+      if (path) return { field: 'path', score: 3, path };
     }
   }
   if (is('key') && String(asset.key).toLowerCase().includes(valueLower)) return { field: 'key', score: 3 };
@@ -641,15 +615,15 @@ function assetTokenMatch(asset, token) {
   return undefined;
 }
 
-// the paths of an asset as a text and back: "a, b" (the settings tab edits them so)
+// the paths of an asset as a text and back: "a, b" (the settings tab edits them so); a comma
+// inside a choice [a, b] stays in its pattern
 export function objectFrontendAssetPathListParse(text) {
   const pathList = [];
   const problemList = [];
-  for (const part of String(text ?? '').split(',')) {
-    if (part.trim() === '') continue;
+  for (const part of assetPathListSplit(text)) {
     const { path, message } = objectFrontendAssetPathNormalize(part);
-    if (message) problemList.push(`${part.trim()}: ${message}`);
-    else if (!pathList.includes(path)) pathList.push(path);
+    if (message) problemList.push(`${part}: ${message}`);
+    else if (path && !pathList.includes(path)) pathList.push(path);
   }
   return { pathList, problemList };
 }

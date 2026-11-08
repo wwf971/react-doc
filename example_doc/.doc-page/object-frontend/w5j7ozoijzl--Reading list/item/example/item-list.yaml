@@ -22,6 +22,7 @@ assetList:
     pathList:
       - /book/non-fiction/gödel-escher-bach
       - /author/douglas-hofstadter/gödel-escher-bach
+      - /topic/{mathematics/music/}gödel-escher-bach
   - key: book-4
     kind: book
     itemId: w5j7pmz5o32

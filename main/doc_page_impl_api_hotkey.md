@@ -53,7 +53,7 @@ hotkeyMap:
       api: null                   # unbinds the key from the maps below
 ```
 
-`when` is one or more **context names** joined by `&&`, each negatable with `!`: `editMode`, `viewMode`, `editAvailable`, `sessionOpen`, `blockSelectMode`, `paletteOpen`, `settingsOpen`, `blockPopupOpen`, `devServer` (`hotkeyContextKeyList`, read from the stores at the moment of the key). A name the page does not keep is false.
+`when` is one or more **context names** joined by `&&`, each negatable with `!`: `editMode`, `viewMode`, `editAvailable`, `sessionOpen`, `blockSelectMode`, `paletteOpen`, `settingsOpen`, `blockPopupOpen`, `devServer`, `findScopeActive` (a part of the page that finds in what it draws is under the pointer or holds the focus), `findOpen` (its search is open) (`hotkeyContextKeyList`, read from the stores at the moment of the key). A name the page does not keep is false.
 
 ## Where the maps are
 

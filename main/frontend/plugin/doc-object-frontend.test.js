@@ -13,7 +13,7 @@ import { objectFrontendConfigOfDocPageListGet, objectFrontendDirNameBuild } from
 import { objectFrontendAssetListMerge, objectFrontendListGroupPathGet } from '../src/lib/doc-object-frontend.js';
 import {
   objectFrontendAssetIndexBuild, objectFrontendAssetPathBuild, objectFrontendAssetPathComplete, objectFrontendAssetPathNormalize,
-  objectFrontendAssetRefResolve, objectFrontendAssetSearch,
+  objectFrontendAssetAcceptCheck, objectFrontendAssetPathListParse, objectFrontendAssetRefResolve, objectFrontendAssetSearch,
   objectFrontendBlockRead, objectFrontendBlockTextBuild, objectFrontendEntryParse, objectFrontendModeChoose,
   objectFrontendModeListResolve,
 } from '../src/lib/doc-object-frontend.js';
@@ -412,6 +412,33 @@ test('the names and paths of assets are written into their records; a path anoth
   assert.deepEqual(recordListOf(dir, id)[0], { key: 'book-1', kind: 'book', itemId: asset.body.data.itemId, pathList: ['/book/classic/dune'], listGroupPath: '' });
   const bad = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/meta/set', { id, key: 'book-1', pathList: ['/..'] });
   assert.match(bad.body.message, /above the root/);
+  // a pattern is kept as written, canonical; a path it stands for that another asset has is refused
+  const pattern = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/meta/set', { id, key: 'book-1', pathList: ['book/{classic/frank-herbert/}dune'] });
+  assert.equal(pattern.body.code, 0, pattern.body.message);
+  assert.deepEqual(recordListOf(dir, id)[0].pathList, ['/book/{classic/frank-herbert/}dune']);
+  const crossing = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/create', { id, kind: 'book', pathList: ['/book/[frank-herbert/classic/, new/]dune'], text: 'c: 1\n' });
+  assert.equal(crossing.body.code, -1);
+  assert.match(crossing.body.message, /the path \/book\/frank-herbert\/classic\/dune \(one of those .* stands for\) is the path of book-1/);
+  const unclosed = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/meta/set', { id, key: 'book-1', pathList: ['/book/{a, b'] });
+  assert.match(unclosed.body.message, /not closed/);
+});
+
+test('a path pattern indexes an asset under every path it stands for', () => {
+  const assetList = [
+    { key: 'book-1', kind: 'book', itemId: 'w1', name: 'Dune', pathList: ['/book/{sci-fi/frank-herbert/}dune'], status: 'found' },
+    { key: 'book-2', kind: 'book', itemId: 'w2', name: 'Solaris', pathList: ['/book/sci-fi/[solaris, lem]'], status: 'found' },
+  ];
+  const index = objectFrontendAssetIndexBuild(assetList);
+  assert.equal(index.problemList.length, 0);
+  assert.equal(objectFrontendAssetRefResolve(index, '/book/frank-herbert/sci-fi/dune').asset.key, 'book-1');
+  assert.equal(objectFrontendAssetRefResolve(index, '/book/sci-fi/lem').asset.key, 'book-2');
+  // a reference written as a pattern names the asset all its paths name
+  assert.equal(objectFrontendAssetRefResolve(index, '/book/{sci-fi/frank-herbert/}dune').asset.key, 'book-1');
+  assert.match(objectFrontendAssetRefResolve(index, '/book/sci-fi/[lem, dune]').message, /several assets/);
+  assert.deepEqual(objectFrontendAssetPathComplete(index, '/book/').map((item) => `${item.kind}:${item.path}:${item.assetCount}`), ['folder:/book/frank-herbert:1', 'folder:/book/sci-fi:2']);
+  assert.deepEqual(objectFrontendAssetSearch(assetList, 'path:/book/frank').hitList.map((hit) => [hit.asset.key, hit.pathMatched]), [['book-1', '/book/frank-herbert/sci-fi/dune']]);
+  assert.deepEqual(objectFrontendAssetPathListParse('/a/[b, c], /d').pathList, ['/a/[b, c]', '/d']);
+  assert.equal(objectFrontendAssetAcceptCheck([{ id: 'book', pathPrefix: '/book/' }], { kind: 'book', pathList: ['/[book/, shelf/]x'] }).message, '');
 });
 
 test('a folder name holds ASCII only, whatever the name is', () => {
