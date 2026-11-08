@@ -30,7 +30,7 @@ The first folder of a path is the **category**: `/example` holds small, sanitize
 | `report-verify` | `/{category}/report/verify` | `stat`, `checkList`, `exceptionList`, `flow` (`set`, `compare`, `exception`), `sample`: one row worked through (`{ key, note, rowList: [{ column, source, expected, actual, result, isProblem? }] }`), `matchIntro`, `matchList`: [the patterns of finding a row](#finding-a-row-in-the-target) |
 | `layout` | `/{category}/layout` | `sceneByPath: { path: { box } }`, written by the viewer |
 
-**A column** is `{ id, name, logical, type, key?, isRequired?, description?, lookup?: key of a table, choice?: key of an option set }`. **A step** of a column mapping is `{ op: text, name, description }`, `{ op: mapping, name, rows: [{ key, value }] }`, `{ op: choice, mapping: key of a mapping-choice }` or `{ op: abandon }`.
+**A column** is `{ id, name, logical, type, key?, isRequired?, description?, lookup?: key of a table, choice?: key of an option set }`. **A step** of a column mapping is `{ op: text, name, description }`, `{ op: mapping, name, rows: [{ key, value }] }`, `{ op: choice, mapping: key of a mapping-choice }` or `{ op: abandon }`; any other op (the operators that do something of the type `db-migration.project-real` of db-migration-tool: `digits`, `check-length`, `upn` …) is drawn as a text operator with its name and description, and keeps its parameters.
 
 An item names another by its **key**, which never changes, not by its path, as [the frontend object layer recommends](../../../main/doc_page_impl_obj_frontend.md#the-entry-asset). What does not fit together (a lookup naming a table not found) is listed under the viewer and leaves the rest drawn. Any item may say `isUnverified: true`; the viewer says how many are.
 
@@ -153,7 +153,7 @@ An editor shows the item as the framework's card or diagram; **Edit** opens the 
 | an option set | a `dataverse-choice` card | an option's value is its logical name |
 | a mapping of option sets | an `operator-mapping` card | key to value; an empty value is not carried over |
 | a mapping of tables | a diagram of the two tables and Abandon, a handle on every column | a line drawn is a new column mapping; a line removed removes it; a line to Abandon abandons the column; its label is the label of the row |
-| a column mapping | a diagram of the two tables and its operators | the chain from a source column to a target column is its `stepList`; a second way out of an operator is refused |
+| a column mapping | a diagram of the two tables and its operators | the chain from a source column to a target column is its `stepList`; a second way out of an operator is refused; an operator of another op is written back with its parameters, its name and description edited |
 
 **New** creates a table, an option set, or a mapping of a pair; its key and path come from the logical names. The writes go through the object's api (`assetCreate`, `assetWrite`, `assetRemove`): what is new first, then the lists naming it, then what left. A refused save keeps the session open with the reason.
 
