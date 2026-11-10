@@ -12,7 +12,8 @@ A **frontend object** is an object of the [object registry](doc_page_impl_obj.md
     {entryId}/        the entry asset           { name, type, description, metadata }
     item-list.yaml    an item list              { assetList [{ key, kind, itemId }] }: the assets lying here and below
     {partition}/ …    its other assets          each declares the object: owner { ref: frontend:{id} }; a folder at
-                                                the top may be a partition, with its own list, git keeping some out
+                                                the top may be a partition, with its own list, git keeping some out,
+                                                and a storage point holding its items (partition.yaml; file-tree without)
 .doc-page/type.yaml (or beside object.yaml, or in a package)   its type (doc_page_impl_type.md)
   typeList    example.reading-list              below frontend.object: modes [{ id, comp, param, category }], kinds of assets
         │
@@ -77,7 +78,8 @@ isDeleted: true                      # the object was deleted, its files stay (b
 - **A new name renames the folder**; ids stay, so nothing that refers to the object or its items changes.
 - **Deleting an object does not remove its folder.** Its `object.yaml` says `isDeleted: true`, so the object stops existing, and its assets are marked deleted, so references to them still resolve; with its assets kept it is an [orphan entry](#how-an-asset-comes-to-belong), which **List it** brings back. Removing the files is a step for a person.
 - **A type used by this object alone belongs in `type.yaml` beside it**, so that it travels with it ([Declaring a type](doc_page_impl_type.md#declaring-a-type)). The components its modes name do not travel: they are found in the doc page or a package, as any component, which is why the type of a package's components is the package's.
-- Later, this folder may hold more than items (components of its own), and the items may come from a backend instead of `item/`: [TODO](doc_page_impl_TODO.md#object-frontend).
+- **The object holds its items whatever stores them.** A partition of `item/` may be bound to a storage point other than file-tree ([Where a partition is stored](#where-a-partition-is-stored)); what that point keeps (pack files, a cache) still lies in the folder of the partition.
+- Later, this folder may hold more than items (components of its own): [TODO](doc_page_impl_TODO.md#object-frontend).
 
 An object may also have **no folder of its own**: a line `{ id, entry }` in `objectList` of the doc page's file, with its assets in an asset folder of the doc page, in a group folder `{id}--{name}` that follows its name ([Group folders](doc_page_impl_asset.md#group-folders)). It behaves the same, except that it cannot be moved by copying one folder, and it records its assets in its entry (`assetList`), having no item folder for lists; `react-doc migrate` turns one into the other ([Migrating](doc_page_impl_cli.md#migrating-a-doc-page)).
 
@@ -170,19 +172,37 @@ typeList:
       - { id: example, label: Example, description: the made-up person of the demonstration }
       - { id: real, label: My data, isGitIgnored: true }        # kept out of git: the checkout's own
       - { id: playground, label: Playground, isGitIgnored: true }
+      - { id: archive, label: Archive, storagePoint: file-pack }  # bound to that storage point when it is made
 ```
 
 **Conventions** for a type and the modes that write its objects:
 
 - **Design them with the type.** Which origins its data will have (a demonstration, a person's own data, what is tried out) is decided when the type is designed, and each is a partition; one partition is a complete design. Adding a second one later moves nothing, adding the first one later moves every item.
-- **Declare them in the type** (`partitionList`: `id` the folder name in ASCII, `label`, `description`, `isGitIgnored`, `isDefault`), and write the matching rule into the `.gitignore` of the repository. A write into a partition kept out of git is refused while git does not ignore it.
+- **Declare them in the type** (`partitionList`: `id` the folder name in ASCII, `label`, `description`, `isGitIgnored`, `isDefault`, `storagePoint`), and write the matching rule into the `.gitignore` of the repository. A write into a partition kept out of git is refused while git does not ignore it.
 - **The default partition** is the one declared `isDefault`, else the first: a write naming no partition goes there (into the folder of its kind inside it), so a mode of a type with one partition never mentions partitions in its writes.
 - **Every form that creates something says where it goes**: the partition, its folder, and whether git keeps it ("goes to item/playground/book, kept out of git", `objectFrontendPartitionPlaceText`). With several partitions the user chooses, the default chosen first; with one, nothing is asked and the line still says where it goes. A mode never writes into a partition without saying so.
 - **What is made from an existing asset goes where that asset is**: a note on a book into the book's partition, a value added from a CV into the CV's partition, a mapping next to the tables it maps. The asset's `partition` says which.
 - **Trying a page out writes into the playground**, so the example stays as committed.
 - **Paths usually start with the partition** when several partitions hold the same kinds (`/example/info/name`, `/real/info/name`), since a path is unique in the object; the modes then read one partition at a time. The first folder of a path is still the object's own choice and may mean something else: the migration of `react-doc-db-migration` names a **category** there (`/example`, `/real`), and all its illustration, of both categories, lies in its partition `example`.
 
-**For the modes**, the api of the entry component offers `partitionList` (`{ id, label, description, isGitIgnored, isDefault, isDeclared, isPresent, assetCount }`: declared ones first, then folders found with a list) and `partitionDefault`, the `partition` of each asset, and `assetCreate({ partition?, groupPath? })`, which places the item in the folder of its kind inside the partition, the default one when none is named. The writes take `partition` too (`asset/create`, `asset/attach`) and refuse one the type does not declare. An asset lying outside every declared partition is a problem of the object.
+**For the modes**, the api of the entry component offers `partitionList` (`{ id, label, description, isGitIgnored, isDefault, isDeclared, isPresent, assetCount, storage }`: declared ones first, then folders found with a list) and `partitionDefault`, the `partition` of each asset, and `assetCreate({ partition?, groupPath? })`, which places the item in the folder of its kind inside the partition, the default one when none is named. The writes take `partition` too (`asset/create`, `asset/attach`) and refuse one the type does not declare. An asset lying outside every declared partition is a problem of the object.
+
+### Where a partition is stored
+
+A partition is the unit the [asset storage service layer](doc_page_impl_asset_storage.md) stores: **each partition is bound to one storage point**, and all its items are held there. Without a word it is `file-tree`, one folder of plain files per item. Bound to `file-pack`, its items are merged into pack files, whose content a search of the disk does not read; the contracts of that layer leave room for a backend.
+
+```text
+item/real/
+├── partition.yaml     storagePoint: file-pack, and whose partition it is     (absent: file-tree)
+├── item-list.yaml     the records of its assets: the same for every storage point
+└── item-0001.pack     what the point keeps: here, the items merged
+```
+
+- **The type gives the default** (`storagePoint` of `partitionList`), applied when the partition is made; a partition that exists keeps what its `partition.yaml` says, so one object may differ from another of its type.
+- **Nothing above changes with the point.** The records, keys, names, paths, item ids and versions are the same; a mode reads and writes through the same api and never names a point. It may ask where its data is: `partition.storage` (`{ pointId, typeId, place, isContentSearchable, apiSetList, isAvailable, unavailableReason, … }`), and `storagePointList`, the points the object may use.
+- **A whole partition moves to another point** with `partitionStorageSet` ([Changing the storage of a partition](doc_page_impl_asset_storage.md#changing-the-storage-of-a-partition)); an asset moved into a partition of another point is written there by its type.
+- **A partition whose point cannot be used** (not declared, disabled, a type without a driver) is a problem of the object: its assets are listed as `missing` from its item list, the other partitions work, and a point of the type its data was written by [claims it back](doc_page_impl_asset_storage.md#claiming-a-partition-back).
+- **The entry asset** lies outside every partition and is always file-tree, as are the assets of a type declaring no partition.
 
 ### The apis of partitions
 
@@ -191,9 +211,10 @@ Every frontend object has the same apis for its partitions, whatever its type: a
 | | the api of a mode | the route of the asset api | the settings tab |
 | --- | --- | --- | --- |
 | **list** | `partitionList`, `partitionDefault` | read with the object (its item lists come with the declarations) | the table **Partitions** of the object: folder, label, tracked or kept out, assets |
-| **create** | `partitionCreate(partition)` | `object-frontend/partition/create { id, partition }` | **Create**, for one its type declares and the disk lacks |
+| **create** | `partitionCreate(partition, storagePoint?)` | `object-frontend/partition/create { id, partition, storagePoint? }` | **Create**, for one its type declares and the disk lacks |
 | **rename** | `partitionRename(from, to)` | `object-frontend/partition/rename { id, partitionFrom, partitionTo }` | |
 | **delete** | `partitionDelete(partition)` | `object-frontend/partition/delete { id, partition }` | **Delete**, asking in its row |
+| **storage** | `partitionStorageSet(partition, storagePoint)`, `storagePointList` | `object-frontend/partition/storage/set { id, partition, storagePoint }`, `partition/compact { id, partition }` | **Storage…**, a point chosen in its row; **Compact** in the Asset service tab |
 
 - **Create** makes the folder with an empty item list, so a record never lands above it; it is how a partition kept out of git exists in a fresh clone before anything is written into it (the first write makes it too).
 - **Rename** moves the folder with what it holds; the item lists move with it, so every record follows, and the paths of the assets are the object's and do not change. The new name must be free and, for a type declaring partitions, declared.
@@ -376,7 +397,9 @@ config.objectFrontend                    the object and its api (getters: the co
   isEditable, editUnavailableReason      whether the mode offers its edit controls now: writable, and the document in edit
                                          mode (#reading-and-editing); why not
   docState                               the state of the document the block is in (config.docState)
-  partitionList, partitionDefault        its partitions (#partitions)
+  partitionList, partitionDefault        its partitions (#partitions), each with storage: the storage point holding it
+  storagePointList, partitionStorageSet(p, pointId)   the points it may use; a whole partition moved to one
+                                         (#where-a-partition-is-stored)
   partitionCreate(p), partitionRename(from, to), partitionDelete(p)   the apis of partitions (#the-apis-of-partitions)
   open()                                 the object in the Frontend objects tab
   otherGet(ref)                          the api of another frontend object: the same reads and writes, for a mode
@@ -468,7 +491,7 @@ So a mode tests `service.docState.isEditing` to show a control and `service.isEd
 The **Frontend objects** tab of the settings panel (`ObjectFrontendSettings.jsx`) is the layer's own place:
 
 - **New object**: the doc page (those with an asset store and not `objectFrontend: false`), the type (`frontend.object` and the declared ones), the name; **Create**.
-- **Objects**: one row per object of every doc page (name, type, doc page, assets, id, state: found, or how many things to look at). A click shows the chosen one below its table: name and description edited in place (a new name renames its folder), the reference, the type, the entry asset (its asset panel opens from it) and where it lies, the modes; its **partitions** (the folder, the label, tracked or kept out, how many assets, **Create** for a declared one the disk lacks, **Delete** asking in its row, and a note when its type declares none); a search of its assets (`ObjectFrontendAssetSearchPanel`, a hit marking its row); its **assets** (key, name and paths edited in place, the paths as `/a, /b`, kind, object, versions, state), each **Remove** asking in its row whether to delete it or keep it in the store; its folders on disk (a folder renamed in place; an asset's folder in its row); what disagrees (**Attach**, **Adopt**, **Move out**, **Move in**); the problems; the metadata; **Delete object**, asking in its row whether its assets go with it.
+- **Objects**: one row per object of every doc page (name, type, doc page, assets, id, state: found, or how many things to look at). A click shows the chosen one below its table: name and description edited in place (a new name renames its folder), the reference, the type, the entry asset (its asset panel opens from it) and where it lies, the modes; its **partitions** (the folder, the label, tracked or kept out, the storage point, how many assets, **Create** for a declared one the disk lacks, **Storage…** moving it whole to another point, **Delete** asking in its row, and a note when its type declares none); a search of its assets (`ObjectFrontendAssetSearchPanel`, a hit marking its row); its **assets** (key, name and paths edited in place, the paths as `/a, /b`, kind, object, versions, state), each **Remove** asking in its row whether to delete it or keep it in the store; its folders on disk (a folder renamed in place; an asset's folder in its row); what disagrees (**Attach**, **Adopt**, **Move out**, **Move in**); the problems; the metadata; **Delete object**, asking in its row whether its assets go with it.
 - **Types**: what the doc pages declare: id, label, extends, the modes (an inherited one marked ↑), the doc page.
 - **Problems** of the files, by doc page, and the **orphan entries** with **List it in {doc page}**.
 
@@ -571,4 +594,4 @@ example_doc/object-frontend.md             the demonstration
 
 ## Future updates
 
-What the layer leaves for later (assets of an object fetched from a backend, a schema of the data of a kind, components kept in the folder of an object, being told of a change of an asset instead of re-rendering) is in [TODO](doc_page_impl_TODO.md#object-frontend).
+What the layer leaves for later (a schema of the data of a kind, components kept in the folder of an object, being told of a change of an asset instead of re-rendering) is in [TODO](doc_page_impl_TODO.md#object-frontend).

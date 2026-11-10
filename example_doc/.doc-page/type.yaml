@@ -22,6 +22,9 @@ typeList:
     partitionList:
       - { id: example, label: Example, description: the books and notes of the demonstration }
       - { id: playground, label: Playground, description: what is added while trying the page, isGitIgnored: true }
+      # held by the storage point file-pack: its books are merged into pack files (item/packed/item-0001.pack),
+      # which a search of the disk does not read (main/doc_page_impl_asset_storage.md#file-pack)
+      - { id: packed, label: Packed, description: books kept in pack files instead of one folder each, storagePoint: file-pack }
     modeList:
       - id: shelf
         label: Shelf

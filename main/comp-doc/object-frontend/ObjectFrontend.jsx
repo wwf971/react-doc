@@ -166,14 +166,22 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
       partition: input.partition,
     }),
     // the folders the object splits its items into ({ id, label, description, isGitIgnored, isDefault,
-    // isDeclared, isPresent, assetCount }): what a mode creating something offers and names; with one,
+    // isDeclared, isPresent, assetCount, storage }): what a mode creating something offers and names; with one,
     // nothing is asked (doc_page_impl_obj_frontend.md#partitions). an asset made without a partition
-    // goes to the default one
+    // goes to the default one. storage: the storage point holding the partition and what its type
+    // promises ({ pointId, typeId, label, typeLabel, place, isContentSearchable, apiSetList,
+    // isAvailable, unavailableReason }, doc_page_impl_asset_storage.md): the apis of a mode are the
+    // same whatever the point, and a mode reads this to say where the data is
     get partitionList() { return stateGet().partitionList; },
     get partitionDefault() { return stateGet().partitionList.find((one) => one.isDefault); },
-    // { code, message }: a partition made (its folder and an empty list), renamed (its folder moved
-    // with what it holds), deleted (its assets off their lists and deleted softly)
-    partitionCreate: (partition) => objectFrontendStore.partitionCreate(stateGet().id, partition),
+    // the storage points the object may bind a partition to, and the storage of a whole partition
+    // changed to one of them (its items written by the type of that point; no key, name or path changes)
+    get storagePointList() { return objectFrontendStore.storagePointListGet(stateGet().id); },
+    partitionStorageSet: (partition, storagePoint) => objectFrontendStore.partitionStorageSet(stateGet().id, partition, storagePoint),
+    // { code, message }: a partition made (its folder and an empty list; bound to storagePoint, by
+    // default the point its type declares for it), renamed (its folder moved with what it holds),
+    // deleted (its assets off their lists and deleted softly)
+    partitionCreate: (partition, storagePoint) => objectFrontendStore.partitionCreate(stateGet().id, partition, storagePoint),
     partitionRename: (partitionFrom, partitionTo) => objectFrontendStore.partitionRename(stateGet().id, partitionFrom, partitionTo),
     partitionDelete: (partition) => objectFrontendStore.partitionDelete(stateGet().id, partition),
     // the assets its type holds, and where one lies on disk, which nothing else depends on:

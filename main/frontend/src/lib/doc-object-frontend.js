@@ -298,11 +298,12 @@ function typeKeyResolve(typeId, typeList, key) {
 // (doc_page_impl_obj_frontend.md#partitions)
 
 // the partitions of an object: those its type declares, then the folders at the top of its item
-// folder holding an item list. each { id, label, description, isGitIgnored, isDeclared, isPresent }
+// folder holding an item list or saying their storage point. each { id, label, description,
+// isGitIgnored, isDeclared, isPresent, storagePoint? }
 // isDefault: where a write naming none goes; assetCount: the assets lying in it (groupPathList: the
-// places of the object's assets)
-export function objectFrontendPartitionListBuild(partitionDeclaredList, listGroupPathList, groupPathList = []) {
-  const presentSet = new Set((listGroupPathList ?? []).map((groupPath) => String(groupPath).split('/')[0]).filter(Boolean));
+// places of the object's assets); storagePoint: the point its type binds it to when it is made
+export function objectFrontendPartitionListBuild(partitionDeclaredList, listGroupPathList, groupPathList = [], partitionBoundList = []) {
+  const presentSet = new Set([...(listGroupPathList ?? []).map((groupPath) => String(groupPath).split('/')[0]), ...partitionBoundList].filter(Boolean));
   const partitionDefault = objectFrontendPartitionDefaultGet(partitionDeclaredList);
   const partitionList = (partitionDeclaredList ?? []).map((one) => ({ ...one, isDefault: one === partitionDefault, isDeclared: true, isPresent: presentSet.has(one.id) }));
   for (const id of presentSet) {
@@ -329,7 +330,10 @@ export function objectFrontendPartitionOf(partitionList, groupPath) {
 export function objectFrontendPartitionPlaceText(partition, groupPathInside = '') {
   const folder = ['item', partition?.id, groupPathInside].filter(Boolean).join('/');
   if (!partition) return `${folder}/`;
-  return `${folder}/, ${partition.isGitIgnored ? 'kept out of git' : 'tracked by git'}`;
+  // a storage point other than file-tree is said too: the item is then no folder of plain files
+  // (doc_page_impl_asset_storage.md)
+  const storage = partition.storage && partition.storage.typeId !== 'file-tree' ? `, held by ${partition.storage.pointId}` : '';
+  return `${folder}/, ${partition.isGitIgnored ? 'kept out of git' : 'tracked by git'}${storage}`;
 }
 
 // the partition a write naming none goes to: the one declared isDefault, else the first; undefined

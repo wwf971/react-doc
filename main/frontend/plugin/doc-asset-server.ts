@@ -3,9 +3,10 @@ import {
   ASSET_STORE_ID_LOCAL, AssetError, type AssetItemKey, type AssetStore, type AssetUsageDoc, type AssetVersionData,
   textDecodeTry,
 } from './doc-asset-store.ts';
+import { assetStorageConfigDefaultGet, assetStorageConfigForPage } from './doc-asset-storage.ts';
 import { testCaseAssetResultSet, testCaseAssetWriteCheck } from '../../../built-in/comp-mdx/test-case-table/TestCaseTableApi.js';
 import {
-  objectFrontendAssetAttach, objectFrontendAssetGroupMove, objectFrontendPartitionCreate, objectFrontendPartitionDelete, objectFrontendPartitionRename, objectFrontendAssetMove, objectFrontendAssetCreate, objectFrontendAssetRemove, objectFrontendConfigForPage,
+  objectFrontendAssetAttach, objectFrontendAssetGroupMove, objectFrontendPartitionCompact, objectFrontendPartitionCreate, objectFrontendPartitionDelete, objectFrontendPartitionRename, objectFrontendPartitionStorageSet, objectFrontendAssetMove, objectFrontendAssetCreate, objectFrontendAssetRemove, objectFrontendConfigForPage,
   objectFrontendAssetMetaSet, objectFrontendCreate, objectFrontendDelete, objectFrontendMetaSet, objectFrontendRegister, type ObjectFrontendConfig,
 } from './doc-object-frontend.ts';
 
@@ -15,7 +16,10 @@ import {
 // serves the local store; every item route names the store it means
 // (store=local), the way a reference does.
 //
-//   GET  {endpoint}/status                                   -> { isWritable: true, storeIdList, folderList, docPageList }
+//   GET  {endpoint}/status                                   -> { isWritable: true, storeIdList, folderList, docPageList, storage }
+//                                     storage: { typeList, apiSetList, pointList, fileList }, the storage points of the
+//                                     page (doc_page_impl_asset_storage.md); a folder an object owns carries partitionList,
+//                                     its partitions bound to a point with what their storage holds
 //   GET  {endpoint}/item/list?store=                        -> { itemList }
 //   GET  {endpoint}/item/get?store=&itemId=|name=&versionId=  -> { item, version }   versionId default head
 //   POST {endpoint}/item/get/list  { store, requestList: [{ itemId, versionId }] } -> { answerList: [{ code, data, message }] }
@@ -72,6 +76,10 @@ import {
 //   POST {endpoint}/object-frontend/asset/meta/set { id, key, name?, pathList?, kind? }   how an asset is named and indexed
 //   POST {endpoint}/object-frontend/asset/remove { id, key | itemId, isAssetKept? }
 //   POST {endpoint}/object-frontend/asset/attach { id, itemId, key?, kind?, name?, pathList? }
+//   POST {endpoint}/object-frontend/partition/create { id, partition, storagePoint? }
+//   POST {endpoint}/object-frontend/partition/storage/set { id, partition, storagePoint }   every item of the partition
+//                                     written by the type of that point (doc_page_impl_asset_storage.md)
+//   POST {endpoint}/object-frontend/partition/compact { id, partition }   the pack files of a partition written again
 //
 // every json response is { code, data, message }. code 0 is success; negative codes:
 //   -1  bad request or unexpected failure
@@ -79,6 +87,9 @@ import {
 //   -3  store, item or version not found
 //   -4  the item or folder belongs to a read-only doc page (a package treated
 //       as a doc page, doc_page_impl_package.md#a-package-as-a-doc-page)
+//   -5  a place in a folder an object owns, asked for by another layer
+//   -6  the storage point holding the place cannot be used (not declared, disabled, a type
+//       without a driver)
 //
 // item:  { itemId, name, lang, contentType, fileExt, component?, owner?, saveMode?, versionIdHead, isDeleted, isLocked,
 //            timeCreated, folder, dirName, groupPath,
@@ -162,7 +173,7 @@ export function docAssetMiddlewareCreate(options: {
   };
 }
 
-const statusByCode: Record<number, number> = { [-1]: 400, [-2]: 409, [-3]: 404, [-4]: 403, [-5]: 409 };
+const statusByCode: Record<number, number> = { [-1]: 400, [-2]: 409, [-3]: 404, [-4]: 403, [-5]: 409, [-6]: 409 };
 
 // the routes of the frontend object service layer: the store and the
 // declarations read for the request, the write, then the declarations read
@@ -193,6 +204,8 @@ async function objectFrontendRouteHandle(
     '/object-frontend/partition/create': () => objectFrontendPartitionCreate(context, body),
     '/object-frontend/partition/rename': () => objectFrontendPartitionRename(context, body),
     '/object-frontend/partition/delete': () => objectFrontendPartitionDelete(context, body),
+    '/object-frontend/partition/storage/set': () => objectFrontendPartitionStorageSet(context, body),
+    '/object-frontend/partition/compact': () => objectFrontendPartitionCompact(context, body),
   };
   const write = writeByRoute[route];
   if (!write) throw new AssetError(-1, `unknown frontend object route: ${method} ${route}`);
@@ -212,7 +225,10 @@ async function routeHandle(
   const method = req.method ?? 'GET';
   if (method === 'GET') {
     if (route === '/status') {
-      return { isWritable: true, storeIdList: [ASSET_STORE_ID_LOCAL], folderList: store.folderInfoList(), docPageList: store.docPageInfoList() };
+      return {
+        isWritable: true, storeIdList: [ASSET_STORE_ID_LOCAL], folderList: store.folderInfoList(), docPageList: store.docPageInfoList(),
+        storage: assetStorageConfigForPage(store.config.storage ?? assetStorageConfigDefaultGet()),
+      };
     }
     if (route === '/item/list') {
       storeIdCheck(url.searchParams.get('store'));

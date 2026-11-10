@@ -1,0 +1,11 @@
+# the storage points of this doc page (design: main/doc_page_impl_asset_storage.md#declaring-storage-points),
+# seen by its own frontend objects only; the workspace declares the ones every doc page sees.
+storagePointList:
+  # a point of a type the page does not implement yet: it is listed as "contract only" in the
+  # Asset service tab, and nothing can be bound to it. it shows where a backend would be declared
+  - id: team-remote
+    type: remote
+    label: Team backend
+    description: a backend holding the partitions of a team (the contract of the type remote; not implemented)
+    config: { url: "https://storage.example.invalid", cacheMode: readThrough }
+    auth: { kind: token }

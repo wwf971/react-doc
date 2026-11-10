@@ -56,3 +56,7 @@ update-*
 
 
 /temp*
+# what a storage point caches or is writing in a partition of a frontend object: a cache is never
+# the truth (main/doc_page_impl_asset_storage.md#where-a-partition-lies)
+**/.doc-page/object-frontend/*/item/*/.cache/
+**/.doc-page/object-frontend/*/item/*/.tmp/

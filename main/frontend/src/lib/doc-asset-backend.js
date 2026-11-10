@@ -12,7 +12,9 @@
 // a further backend (a remote object storage) implements the same calls.
 // every item call names the store (the id written in a reference).
 //
-//   statusGet()                                 { isWritable, storeIdList, folderList }
+//   statusGet()                                 { isWritable, storeIdList, folderList, storage }: storage is
+//                                               { typeList, apiSetList, pointList, fileList }, the storage points
+//                                               of the page (doc_page_impl_asset_storage.md)
 //   itemList(store)                           { itemList }
 //   itemGet(store, itemId, versionId)       { item, version: { versionId, size, hash, isText, text?, metadata } }
 //                                               metadata: the version's metadata mapping ({} when none)
@@ -176,7 +178,11 @@ export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
 
   return {
     kind: 'snapshot',
-    statusGet: () => Promise.resolve({ code: 0, data: { isWritable: false, storeIdList: [storeIdLocal], folderList: [] }, message: '' }),
+    statusGet: () => Promise.resolve({
+      code: 0,
+      data: { isWritable: false, storeIdList: [storeIdLocal], folderList: snapshot?.folderList ?? [], storage: snapshot?.storage ?? null },
+      message: '',
+    }),
     itemList: (store) => Promise.resolve(storeCheck(store) ?? {
       code: 0,
       data: { itemList: Object.keys(itemById).map(itemMetaGet) },

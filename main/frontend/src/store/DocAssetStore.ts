@@ -256,6 +256,17 @@ export type DocAssetStoreOptions = {
 
 const messageConflict = 'The asset changed since it was loaded. It was reloaded; apply the change again.';
 
+// the storage points of the page and the types they are of (doc_page_impl_asset_storage.md), as
+// the backend answers them
+export type AssetStorageInfo = {
+  typeList: any[];
+  apiSetList: any[];
+  pointList: any[];
+  fileList: any[];
+};
+
+const ASSET_STORAGE_EMPTY: AssetStorageInfo = { typeList: [], apiSetList: [], pointList: [], fileList: [] };
+
 export class DocAssetStore {
   backend: ReturnType<typeof assetBackendApiCreate> | ReturnType<typeof assetBackendSnapshotCreate> | undefined;
   isAvailable = false;
@@ -264,6 +275,8 @@ export class DocAssetStore {
   storeIdList: string[] = [];
   folderList: AssetFolderInfo[] = [];
   docPageList: AssetDocPageInfo[] = [];
+  // the storage points and types (the asset storage service layer)
+  storage: AssetStorageInfo = ASSET_STORAGE_EMPTY;
   // the layers answering for the folders their objects own, by the namespace of a reference
   folderOwnerHandlerByNamespace = new Map<string, AssetFolderOwnerHandler>();
   // the folder whose items the settings panel lists ('' none chosen)
@@ -359,7 +372,61 @@ export class DocAssetStore {
       this.storeIdList = result.code === 0 && Array.isArray(result.data?.storeIdList) ? result.data.storeIdList : [];
       this.folderList = result.code === 0 && Array.isArray(result.data?.folderList) ? result.data.folderList : [];
       this.docPageList = result.code === 0 && Array.isArray(result.data?.docPageList) ? result.data.docPageList : [];
+      this.storage = result.code === 0 && result.data?.storage ? result.data.storage : ASSET_STORAGE_EMPTY;
     });
+  }
+
+  // ---------- the storage points (doc_page_impl_asset_storage.md) ----------
+
+  storageTypeGet(typeId: string): any | undefined {
+    return this.storage.typeList.find((one) => one.id === typeId);
+  }
+
+  // every api set a type promises, its ancestors' first
+  storageTypeApiSetListGet(typeId: string): string[] {
+    const chain: any[] = [];
+    for (let type = this.storageTypeGet(typeId); type && !chain.includes(type); type = this.storageTypeGet(type.extends)) chain.unshift(type);
+    return [...new Set(chain.flatMap((type) => type.apiSetList as string[]))];
+  }
+
+  // the points an object of a doc page may name: the built-in ones, the workspace's, its doc page's
+  storagePointListOfDocPageGet(docPageAlias: string): any[] {
+    return this.storage.pointList.filter((one) => one.scope !== 'docPage' || one.docPageAlias === docPageAlias);
+  }
+
+  storagePointGet(pointId: string, docPageAlias = ''): any | undefined {
+    return this.storagePointListOfDocPageGet(docPageAlias).find((one) => one.id === pointId) ?? this.storage.pointList.find((one) => one.id === pointId);
+  }
+
+  // what a partition of an object's folder is held by, for whoever shows or asks it: the point, its
+  // type with what the type promises, and whether it can be used
+  //   bind   { pointId, typeId, unavailableReason, pointIdClaimed? } as the declarations carry it;
+  //          undefined: file-tree, the storage of a partition that says nothing
+  storageOfBindGet(bind: any | undefined, docPageAlias = ''): any {
+    const pointId = bind?.pointId ?? 'file-tree';
+    const typeId = bind?.typeId || 'file-tree';
+    const point = this.storagePointGet(pointId, docPageAlias);
+    const type = this.storageTypeGet(typeId);
+    return {
+      pointId,
+      typeId,
+      label: point?.label ?? pointId,
+      typeLabel: type?.label ?? typeId,
+      place: type?.place ?? 'local',
+      isContentSearchable: type?.isContentSearchable === true,
+      apiSetList: this.storageTypeApiSetListGet(typeId),
+      isAvailable: !bind?.unavailableReason,
+      unavailableReason: bind?.unavailableReason ?? '',
+      pointIdClaimed: bind?.pointIdClaimed ?? '',
+      config: point?.config ?? {},
+    };
+  }
+
+  // what the storage of a partition holds, as the last status said: { itemCount, size, sizeDead,
+  // fileList, typeIdFoundList }; undefined for a partition without a file of its own
+  partitionInfoGet(ownerRef: string, partition: string): any | undefined {
+    const folder: any = this.folderList.find((one: any) => one.owner?.ref === ownerRef);
+    return folder?.partitionList?.find((one: any) => one.partition === partition);
   }
 
   get backendKind(): 'api' | 'snapshot' | 'none' {

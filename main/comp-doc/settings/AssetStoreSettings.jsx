@@ -21,6 +21,9 @@ import './DocSettings.css';
 //                      [~root/path       ] Add       stringList
 //     Default folder   [~example/.doc-page/asset ▾]            select
 //     On disk          ~example/.doc-page/asset  store default  13 items
+//   Storage points                                 group: AssetStoragePointArea, the points the store
+//                                                  keeps its items at, their types, and the partitions
+//                                                  bound to one (doc_page_impl_asset_storage.md)
 //   Items and references ⟳                         group: AssetOrphanArea
 //
 // Every doc page names its asset folders in its asset store config
@@ -93,6 +96,13 @@ export function assetStoreItemListBuild({ stores, data, writeByItemId, assetRequ
     };
   });
   itemList.push({
+    id: 'assetStorage',
+    type: 'group',
+    label: 'Storage points',
+    description: 'where the store keeps the bytes of its items: the built-in points, and those asset-storage.yaml of the workspace or of a doc page declares',
+    children: [{ id: 'assetStoragePoint', type: 'custom', comp: AssetStoragePointArea, isFullWidth: true }],
+  });
+  itemList.push({
     id: 'assetItems',
     type: 'group',
     label: <AssetItemsGroupLabel />,
@@ -110,6 +120,137 @@ export function assetStoreItemListBuild({ stores, data, writeByItemId, assetRequ
   }
   return { itemList, requestStateByPath };
 }
+
+const STORAGE_POINT_STATUS_TEXT = { ready: 'ready', disabled: 'disabled', typeUnknown: 'unknown type', typeNotImplemented: 'contract only' };
+
+function sizeTextGet(size) {
+  if (!Number.isFinite(size) || size <= 0) return '0';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// the storage points of the page (asset storage service layer, doc_page_impl_asset_storage.md):
+//
+//   point       type        declared by            state     holds
+//   file-tree   File tree   built in               ready     every asset folder, 3 partitions
+//   file-pack   File pack   built in               ready     1 partition
+//   team        Remote      example · asset-…yaml  contract only
+//
+//   partitions bound to a point: object, partition, point, items, size, dead, [Compact]
+//   storage types: what each promises (its api sets), where its bytes are, whether a search finds them
+const AssetStoragePointArea = observer(function AssetStoragePointArea() {
+  const { assetStore, objectFrontendStore } = useDocStores();
+  const { typeList, apiSetList, pointList, fileList } = assetStore.storage;
+  const partitionList = assetStore.folderList.flatMap((folder) => (folder.partitionList ?? []).map((partition) => ({ ...partition, ownerRef: folder.owner?.ref ?? '', folderPath: folder.path })));
+  const folderOwnedCount = assetStore.folderList.filter((folder) => folder.owner).length;
+  const folderPlainCount = assetStore.folderList.length - folderOwnedCount;
+  const holdTextGet = (point) => {
+    const count = partitionList.filter((one) => one.pointId === point.id).length;
+    if (point.id !== 'file-tree') return point.status === 'ready' ? `${count} partition${count === 1 ? '' : 's'}` : '—';
+    return `${folderPlainCount} folder${folderPlainCount === 1 ? '' : 's'}, ${folderOwnedCount} object${folderOwnedCount === 1 ? '' : 's'}`;
+  };
+  const apiSetLabelGet = (id) => apiSetList.find((one) => one.id === id)?.label ?? id;
+  const isWriting = objectFrontendStore?.write.status === 'submitting';
+  const problemFileList = fileList.filter((file) => file.problemList.length > 0);
+  return (
+    <div className="doc-settings-asset-storage">
+      <div className="doc-asset-table-scroll">
+        <table className="doc-asset-table">
+          <thead><tr><th>point</th><th>type</th><th>declared by</th><th>state</th><th>holds</th></tr></thead>
+          <tbody>
+            {pointList.map((point) => (
+              <tr key={`${point.scope}:${point.docPageAlias}:${point.id}`}>
+                <td title={point.description}>{point.id}{point.label && point.label !== point.id ? <span className="doc-asset-muted"> {point.label}</span> : null}</td>
+                <td>{assetStore.storageTypeGet(point.typeId)?.label ?? point.typeId}</td>
+                <td className="doc-asset-muted" title={point.file}>{point.scope === 'builtIn' ? 'built in' : point.scope === 'workspace' ? 'workspace' : `doc page ${point.docPageAlias}`}</td>
+                <td title={point.statusMessage}>
+                  <span className="doc-badge-outline" data-primary={point.status === 'ready' ? '' : undefined}>{STORAGE_POINT_STATUS_TEXT[point.status] ?? point.status}</span>
+                </td>
+                <td className="doc-asset-muted" title={point.id === 'file-tree' ? 'every asset folder, and every partition of an object not bound to another point' : 'the partitions bound to it'}>{holdTextGet(point)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {problemFileList.map((file) => (
+        <p key={file.file} className="doc-settings-tab-issue">{file.file}: {file.problemList.join('; ')}</p>
+      ))}
+
+      <h4>Partitions bound to a point ({partitionList.length})</h4>
+      {partitionList.length === 0 ? (
+        <p className="doc-note">
+          No partition names a storage point, so file-tree holds every one. A partition is bound in the Frontend objects tab (its row, Storage…),
+          or by its type (storagePoint of partitionList).
+        </p>
+      ) : (
+        <div className="doc-asset-table-scroll">
+          <table className="doc-asset-table">
+            <thead>
+              <tr>
+                <th>object</th><th>partition</th><th>point</th><th className="doc-asset-version-size">items</th>
+                <th className="doc-asset-version-size">size</th><th className="doc-asset-version-size">dead</th><th aria-label="actions" />
+              </tr>
+            </thead>
+            <tbody>
+              {partitionList.map((partition) => {
+                const id = partition.ownerRef.replace(/^frontend:/, '');
+                const isMixed = partition.typeIdFoundList.length > 1;
+                return (
+                  <tr key={`${partition.folderPath}/${partition.partition}`}>
+                    <td title={partition.folderPath}>{objectFrontendStore?.objectGet(id)?.name || partition.ownerRef}</td>
+                    <td>item/{partition.partition}/</td>
+                    <td>
+                      {partition.pointId}
+                      {partition.pointIdClaimed ? <span className="doc-settings-tab-issue"> gone, read through {partition.pointIdClaimed}</span> : null}
+                      {partition.unavailableReason ? <span className="doc-settings-tab-issue" title={partition.unavailableReason}> cannot be used</span> : null}
+                      {isMixed ? <span className="doc-settings-tab-issue" title="a change of storage was interrupted: remove the data of the type the partition is not bound to"> also holds {partition.typeIdFoundList.filter((one) => one !== partition.typeId).join(', ')} data</span> : null}
+                    </td>
+                    <td className="doc-asset-muted doc-asset-version-size">{partition.itemCount}</td>
+                    <td className="doc-asset-muted doc-asset-version-size" title={partition.fileList.map((file) => `${file.name} ${sizeTextGet(file.size)}`).join('\n')}>{partition.size ? sizeTextGet(partition.size) : '—'}</td>
+                    <td className="doc-asset-muted doc-asset-version-size">{partition.size ? sizeTextGet(partition.sizeDead) : '—'}</td>
+                    <td className="doc-settings-tab-actions">
+                      {assetStore.isWritable && partition.sizeDead > 0 && id ? (
+                        <button
+                          type="button"
+                          className="doc-button"
+                          disabled={isWriting}
+                          title="write its pack files again without what no item reads any more"
+                          onClick={() => void objectFrontendStore.partitionCompact(id, partition.partition)}
+                        >
+                          Compact
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <h4>Storage types</h4>
+      <div className="doc-asset-table-scroll">
+        <table className="doc-asset-table">
+          <thead><tr><th>type</th><th>promises</th><th>content</th><th>state</th></tr></thead>
+          <tbody>
+            {typeList.filter((type) => !type.isAbstract).map((type) => (
+              <tr key={type.id}>
+                <td title={type.description}>{type.id}{type.extends && type.extends !== 'storage' ? <span className="doc-asset-muted"> extends {type.extends}</span> : null}</td>
+                <td className="doc-settings-asset-storage-wrap">{assetStore.storageTypeApiSetListGet(type.id).map(apiSetLabelGet).join(' · ')}</td>
+                <td className="doc-asset-muted" title={type.isContentSearchable ? 'a search of the disk finds the content of its items' : 'a search of the disk does not find the content of its items'}>
+                  {type.place === 'remote' ? 'remote' : type.isContentSearchable ? 'local, plain files' : 'local, opaque'}
+                </td>
+                <td><span className="doc-badge-outline" data-primary={type.isImplemented ? '' : undefined}>{type.isImplemented ? 'implemented' : 'contract only'}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+});
 
 // how many items a folder holds: from the index once it is read, so it follows a move
 const AssetFolderCount = observer(function AssetFolderCount({ folder }) {

@@ -118,6 +118,8 @@ export class DocObjectFrontendStore {
     confirm: '' as string,
     // the asset a search of the chosen object's assets marked
     assetKeySelected: '',
+    // the storage point chosen in the row of a partition asked to change its storage ('' the one it has)
+    storagePointChosen: '',
   };
   overrideByKey = observable.map<string, { mode?: string; param?: Record<string, any> }>({}, { deep: false });
   // the sessions of the asset search uis (ObjectFrontendAssetSearchPanel), by the ui's key
@@ -346,7 +348,22 @@ export class DocObjectFrontendStore {
     const merged = objectFrontendAssetListMerge(entry.assetList, decl.listList ?? []);
     const partitionDeclaredList = this.partitionListOfTypeGet(entry.type);
     const groupPathInFolderList = assetStore.itemList.filter((item: any) => item.folderOwner?.ref === ref && !item.isDeleted && item.itemId !== decl.entry).map((item: any) => item.groupPath ?? '');
-    const partitionList = decl.dir ? objectFrontendPartitionListBuild(partitionDeclaredList, (decl.listList ?? []).map((list: any) => list.groupPath), groupPathInFolderList) : [];
+    // each partition with the storage point holding it (doc_page_impl_asset_storage.md): what its
+    // partition.yaml says, read with the declarations; the point its type declares for one not made
+    // yet; file-tree otherwise
+    const bindList: any[] = decl.partitionStorageList ?? [];
+    const partitionList = (decl.dir
+      ? objectFrontendPartitionListBuild(partitionDeclaredList, (decl.listList ?? []).map((list: any) => list.groupPath), groupPathInFolderList, bindList.map((one) => one.partition))
+      : []
+    ).map((partition: any) => {
+      const bind = bindList.find((one) => one.partition === partition.id)
+        ?? (!partition.isPresent && partition.storagePoint ? { pointId: partition.storagePoint, typeId: assetStore.storagePointGet?.(partition.storagePoint, decl.docPageAlias)?.typeId ?? '' } : undefined);
+      return { ...partition, storage: assetStore.storageOfBindGet?.(bind, decl.docPageAlias) ?? { pointId: 'file-tree', typeId: 'file-tree', isAvailable: true, unavailableReason: '', pointIdClaimed: '', apiSetList: [] } };
+    });
+    for (const partition of partitionList) {
+      if (partition.storage.unavailableReason) problemList.push(`the partition ${partition.id}: ${partition.storage.unavailableReason}`);
+      else if (partition.storage.pointIdClaimed) problemList.push(`the partition ${partition.id} names the storage point ${partition.storage.pointId}, which is gone: it is read through ${partition.storage.pointIdClaimed}; set its storage to keep it so`);
+    }
     // a type declaring partitions keeps every asset in one of them (doc_page_impl_obj_frontend.md#partitions)
     if (decl.dir && partitionDeclaredList?.length) {
       const outsideCount = groupPathInFolderList.filter((groupPath: string) => !partitionDeclaredList.some((one: any) => groupPath === one.id || groupPath.startsWith(`${one.id}/`))).length;
@@ -651,8 +668,31 @@ export class DocObjectFrontendStore {
   }
 
   // the apis of partitions, every object has them (doc_page_impl_obj_frontend.md#the-apis-of-partitions)
-  partitionCreate(id: string, partition: string) {
-    return this.writeRun('partition/create', { id, partition });
+  //   storagePoint   the point it is bound to; absent: the one its type declares, else file-tree
+  partitionCreate(id: string, partition: string, storagePoint?: string) {
+    return this.writeRun('partition/create', storagePoint ? { id, partition, storagePoint } : { id, partition });
+  }
+
+  // the storage of a whole partition changed to another point: its items written by the type of
+  // that point, nothing of the object's records changed (doc_page_impl_asset_storage.md
+  // #changing-the-storage-of-a-partition)
+  async partitionStorageSet(id: string, partition: string, storagePoint: string) {
+    const result = await this.writeRun('partition/storage/set', { id, partition, storagePoint });
+    void this.stores.assetStore.statusLoad?.();
+    return result;
+  }
+
+  // what the pack files of a partition keep dead is dropped
+  async partitionCompact(id: string, partition: string) {
+    const result = await this.writeRun('partition/compact', { id, partition });
+    void this.stores.assetStore.statusLoad?.();
+    return result;
+  }
+
+  // the storage points an object may bind a partition to: those its doc page sees
+  storagePointListGet(id: string): any[] {
+    const decl = this.declList.find((one: any) => one.id === id);
+    return this.stores.assetStore.storagePointListOfDocPageGet?.(decl?.docPageAlias ?? '') ?? [];
   }
 
   partitionRename(id: string, partitionFrom: string, partitionTo: string) {
@@ -760,6 +800,11 @@ export class DocObjectFrontendStore {
 
   settingsConfirmSet(confirm: string) {
     this.settings.confirm = confirm;
+    this.settings.storagePointChosen = '';
+  }
+
+  settingsStoragePointSet(pointId: string) {
+    this.settings.storagePointChosen = pointId;
   }
 
   // the doc page a new object goes to: the one chosen, else the first that can hold one

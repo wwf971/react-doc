@@ -232,26 +232,57 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
       ) : (
         <div className="doc-asset-table-scroll">
           <table className="doc-asset-table">
-            <thead><tr><th>partition</th><th>label</th><th>git</th><th className="doc-asset-version-size">assets</th><th aria-label="actions" /></tr></thead>
+            <thead><tr><th>partition</th><th>label</th><th>storage</th><th className="doc-asset-version-size">assets</th><th aria-label="actions" /></tr></thead>
             <tbody>
               {state.partitionList.map((partition) => {
                 const confirmKey = `partitionDelete:${partition.id}`;
+                const storageKey = `partitionStorage:${partition.id}`;
+                const pointList = store.storagePointListGet(id).filter((point) => point.status === 'ready');
+                const pointIdNow = partition.storage.pointIdClaimed ? '' : partition.storage.pointId;
+                const pointIdChosen = pointList.some((point) => point.id === store.settings.storagePointChosen) ? store.settings.storagePointChosen : pointIdNow || pointList[0]?.id || '';
                 return (
                   <tr key={partition.id}>
                     <td>item/{partition.id}/{partition.isDefault ? <span className="doc-asset-muted"> (default)</span> : null}</td>
-                    <td>{partition.label}{partition.isDeclared ? '' : <span className="doc-settings-tab-issue"> not declared by its type</span>}</td>
-                    <td className="doc-asset-muted">{partition.isGitIgnored ? 'kept out' : 'tracked'}</td>
+                    <td title={partition.isGitIgnored ? 'kept out of git' : 'tracked by git'}>
+                      {partition.label}
+                      <span className="doc-asset-muted"> · {partition.isGitIgnored ? 'kept out' : 'tracked'}</span>
+                      {partition.isDeclared ? '' : <span className="doc-settings-tab-issue"> not declared by its type</span>}
+                    </td>
+                    <td title={partition.storage.unavailableReason || `${partition.storage.typeLabel}: ${partition.storage.isContentSearchable ? 'plain files, found by a search of the disk' : 'not found by a search of the disk'}`}>
+                      {partition.storage.pointId}
+                      {partition.storage.unavailableReason ? <span className="doc-settings-tab-issue"> cannot be used</span> : null}
+                      {partition.storage.pointIdClaimed ? <span className="doc-settings-tab-issue"> gone, read through {partition.storage.pointIdClaimed}</span> : null}
+                    </td>
                     <td className="doc-asset-muted doc-asset-version-size">{partition.isPresent ? partition.assetCount : '—'}</td>
                     <td className="doc-settings-tab-actions">
                       {!isWritable ? null : !partition.isPresent ? (
-                        <button type="button" className="doc-button" disabled={isWriting} title="make its folder, with an empty item list" onClick={() => void store.partitionCreate(id, partition.id)}>Create</button>
+                        <button type="button" className="doc-button" disabled={isWriting} title={`make its folder, with an empty item list, held by ${partition.storage.pointId}`} onClick={() => void store.partitionCreate(id, partition.id)}>Create</button>
+                      ) : confirm === storageKey ? (
+                        <>
+                          <select aria-label={`The storage point of ${partition.id}`} value={pointIdChosen} disabled={isWriting} onChange={(event) => store.settingsStoragePointSet(event.target.value)}>
+                            {pointList.map((point) => <option key={point.id} value={point.id}>{point.id}</option>)}
+                          </select>
+                          <button
+                            type="button"
+                            className="doc-button"
+                            disabled={isWriting || !pointIdChosen || pointIdChosen === pointIdNow}
+                            title={`every item of the partition (${partition.assetCount}) is written by the type of that point; its keys, names and paths stay`}
+                            onClick={() => void store.partitionStorageSet(id, partition.id, pointIdChosen).then((result) => { if (result.code === 0) store.settingsConfirmSet(''); })}
+                          >
+                            Move
+                          </button>
+                          <button type="button" className="doc-button" onClick={() => store.settingsConfirmSet('')}>Cancel</button>
+                        </>
                       ) : confirm === confirmKey ? (
                         <>
                           <button type="button" className="doc-button" data-danger="" disabled={isWriting} title="its assets off their lists and deleted softly (their files stay), then its folder when empty" onClick={() => void store.partitionDelete(id, partition.id).then(() => store.settingsConfirmSet(''))}>Delete {partition.assetCount} asset(s)</button>
                           <button type="button" className="doc-button" onClick={() => store.settingsConfirmSet('')}>Cancel</button>
                         </>
                       ) : (
-                        <button type="button" className="doc-button" disabled={isWriting} onClick={() => store.settingsConfirmSet(confirmKey)}>Delete</button>
+                        <>
+                          <button type="button" className="doc-button" disabled={isWriting} title="hold this partition at another storage point" onClick={() => store.settingsConfirmSet(storageKey)}>Storage…</button>
+                          <button type="button" className="doc-button" disabled={isWriting} onClick={() => store.settingsConfirmSet(confirmKey)}>Delete</button>
+                        </>
                       )}
                     </td>
                   </tr>

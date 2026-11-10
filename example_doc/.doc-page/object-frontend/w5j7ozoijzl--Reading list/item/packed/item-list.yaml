@@ -1,0 +1,17 @@
+# the assets of the frontend object lying in this folder and below, down to a folder with an
+# item-list.yaml of its own: written by the page (doc_page_impl_obj_frontend.md#the-item-lists)
+assetList:
+  - key: book-5
+    kind: book
+    itemId: w5vcq7f4p4u
+    name: The Dispossessed
+    pathList:
+      - /book/sci-fi/the-dispossessed
+      - /author/ursula-k-le-guin/the-dispossessed
+  - key: book-6
+    kind: book
+    itemId: w5vcq7gq9jp
+    name: The Timeless Way of Building
+    pathList:
+      - /book/architecture/the-timeless-way-of-building
+      - /author/christopher-alexander/the-timeless-way-of-building

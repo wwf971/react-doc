@@ -14,6 +14,13 @@ import {
 import { lineOperationApply, lineOperationListApply } from './doc-edit-lines.ts';
 import { yamlScalarTextBuild, yamlStringListSetBuild, yamlValueSetOperationBuild } from './doc-yaml-edit.ts';
 import { timeTextGet } from '../src/lib/time-text.js';
+import {
+  ASSET_STORAGE_POINT_FILE_TREE, ASSET_STORAGE_TYPE_FILE_PACK, ASSET_STORAGE_TYPE_FILE_TREE,
+  assetStoragePartitionFileRead, assetStoragePartitionFileWrite, assetStorageTypeGet,
+  type AssetStorageConfig, type AssetStorageDriver, type AssetStorageInfo, type AssetStoragePartitionBind, type AssetStoragePoint,
+} from './doc-asset-storage.ts';
+import { assetStorageFileTreeDriver } from './doc-asset-storage-file-tree.ts';
+import { assetStorageFilePackDriverCreate, assetStorageFilePackFileListRemove } from './doc-asset-storage-file-pack.ts';
 
 // The local store of the asset service layer, on disk (design: doc_page_impl_asset.md). A general
 // store of items with a version history, modeled after an object storage
@@ -124,9 +131,17 @@ import { timeTextGet } from '../src/lib/time-text.js';
 // with -5, whichever way it comes (doc_page_impl_asset.md#folders-owned-by-an-object). data,
 // versions and locks are not places: they are written as for any item.
 //
+// where the bytes are is the matter of the asset storage service layer
+// (doc_page_impl_asset_storage.md, doc-asset-storage.ts): the layout above is the one of the
+// storage type file-tree, which holds every store folder. a partition of a frontend object (a
+// folder at the top of its item folder) may be bound to another storage point, and its items are
+// then read and written by the driver of that point's type; the store names them the same way
+// (folder, dirName, groupPath) and every api here works on them alike.
+//
 // errors are AssetError with the codes of the api:
 //   -1 bad request, -2 conflict (the data changed since it was read), -3 not found,
-//   -4 a read-only folder, -5 a place that belongs to the layer of an object
+//   -4 a read-only folder, -5 a place that belongs to the layer of an object,
+//   -6 the storage point holding the place cannot be used
 
 export const ASSET_ITEM_META_NAME = 'item.yaml';
 // the name the file had when items were called objects: an item folder holding
@@ -134,7 +149,7 @@ export const ASSET_ITEM_META_NAME = 'item.yaml';
 export const ASSET_ITEM_META_NAME_FORMER = 'object.yaml';
 const assetFormerWarnedSet = new Set<string>();
 
-function assetFormerWarn(folderAbs: string) {
+export function assetFormerWarn(folderAbs: string) {
   if (assetFormerWarnedSet.has(folderAbs)) return;
   assetFormerWarnedSet.add(folderAbs);
   console.warn(`[doc-asset] ${folderAbs} holds asset items in the former form (object.yaml), which is not read: run "react-doc migrate <doc page folder>" (main/update-20261107-repl.md)`);
@@ -233,7 +248,13 @@ export type AssetItemMeta = {
   // scan, beside owner, which is what the item itself declares. neither decides that the
   // item belongs to the object: the object says that
   folderOwner?: AssetOwner;
+  // the storage point holding it and the type of that point, read from where it was found
+  // (doc_page_impl_asset_storage.md); never written into the item
+  storage: AssetItemStorage;
 };
+
+// where an item is held: the storage point, its type, and whether the content is plain files
+export type AssetItemStorage = { pointId: string; typeId: string };
 
 // the bytes of one version, with the text when the bytes are valid utf-8,
 // and the version's metadata ({} when it has none)
@@ -264,9 +285,21 @@ export type AssetFolder = {
   // a folder owned by an object of the registry, not named in any asset.yaml:
   // the item folder of a frontend object (doc_page_impl_asset.md#folders-owned-by-an-object)
   owner?: AssetOwner;
+  // the folders at its top bound to a storage point by their partition.yaml (the partitions of
+  // the frontend object owning the folder); a folder not named here is held by file-tree
+  partitionStorageList?: AssetStoragePartitionBind[];
+  // the alias of the doc page that names it
+  docPageAlias?: string;
 };
 
-export type AssetFolderInfo = AssetFolder & { isExists: boolean; itemCount: number };
+// a partition of a store folder with what its storage holds
+export type AssetPartitionInfo = AssetStoragePartitionBind & AssetStorageInfo & {
+  // the storage types whose data lies in its folder: more than one is what a change of storage
+  // that was interrupted leaves behind
+  typeIdFoundList: string[];
+};
+
+export type AssetFolderInfo = AssetFolder & { isExists: boolean; itemCount: number; partitionList: AssetPartitionInfo[] };
 
 // the asset store config of one doc page
 export type AssetDocPage = {
@@ -303,6 +336,8 @@ export type AssetStoreConfig = {
   // the roots of the source rules, which name the folders; absent in a config
   // without owned folders
   rootAbsPathByPath?: Map<string, string>;
+  // the storage points of the page (doc-asset-storage.ts); absent: the built-in ones
+  storage?: AssetStorageConfig;
 };
 
 // what the store config reader needs of a doc page (plugin/doc-entry.ts DocPageLoaded)
@@ -315,7 +350,7 @@ export type AssetDocPageInput = {
   isReadOnly?: boolean;
   // the folders objects of the doc page own: the layer owning them says which
   // (doc-object-frontend.ts), the store only reads them like the others
-  folderOwnedList?: { pathAbs: string; owner: AssetOwner }[];
+  folderOwnedList?: { pathAbs: string; owner: AssetOwner; partitionStorageList?: AssetStoragePartitionBind[] }[];
 };
 
 // what names an item: its id, or its name
@@ -390,7 +425,7 @@ export function assetConfigOfDocPageListGet(
         }
         continue;
       }
-      folderList.push({ path: folderPath, pathAbs, isDefault: false, docEntryFile: docPage.entryFile, isReadOnly: docPageInput.isReadOnly === true });
+      folderList.push({ path: folderPath, pathAbs, isDefault: false, docEntryFile: docPage.entryFile, isReadOnly: docPageInput.isReadOnly === true, docPageAlias: docPage.alias });
     }
     for (const owned of docPageInput.folderOwnedList ?? []) {
       const folderPath = sourcePathOfAbsGet(owned.pathAbs, docPage, rootAbsPathByPath);
@@ -401,7 +436,8 @@ export function assetConfigOfDocPageListGet(
       if (folderList.some((folder) => folder.pathAbs === owned.pathAbs)) continue;
       folderList.push({
         path: folderPath, pathAbs: owned.pathAbs, isDefault: false, docEntryFile: docPage.entryFile,
-        isReadOnly: docPageInput.isReadOnly === true, owner: owned.owner,
+        isReadOnly: docPageInput.isReadOnly === true, owner: owned.owner, docPageAlias: docPage.alias,
+        partitionStorageList: owned.partitionStorageList ?? [],
       });
     }
     for (const problem of docPage.problemList) console.warn(`[doc-asset] ${docPage.configFileRelative}: ${problem}`);
@@ -628,46 +664,104 @@ function dirMove(dirFrom: string, dirTo: string) {
 export function assetStoreCreate(config: AssetStoreConfig) {
   const folderList = config.folderList;
   const folderDefault = folderList.find((folder) => folder.isDefault);
-  const itemDirGet = (meta: AssetItemMeta) => path.join(folderAbsGet(meta.folder), ...meta.dirName.split('/'));
-  const itemMetaPathGet = (meta: AssetItemMeta) => path.join(itemDirGet(meta), ASSET_ITEM_META_NAME);
-  const versionPathGet = (meta: AssetItemMeta, versionId: string) => path.join(itemDirGet(meta), `${versionId}.${meta.fileExt}`);
-  // always yaml, whatever the extension of the data file
-  const versionMetadataPathGet = (meta: AssetItemMeta, versionId: string) => path.join(itemDirGet(meta), `${versionId}.metadata.yaml`);
 
   function folderAbsGet(folderPath: string): string {
-    const folder = folderList.find((one) => one.path === folderPath);
-    if (!folder) throw new AssetError(-3, `asset folder not in the store: ${folderPath}`);
-    return folder.pathAbs;
+    return folderGet(folderPath).pathAbs;
   }
 
-  // the item folders of a store folder: [{ dirName, itemId, groupPath }],
-  // a folder before the folders inside it, in name order. a folder holding
-  // item.yaml whose name starts with an id is an item (nothing inside it
-  // is read for items); any other folder is a group and is read in turn,
-  // to ASSET_GROUP_DEPTH_MAX levels; dot folders are never read
+  function folderGet(folderPath: string): AssetFolder {
+    const folder = folderList.find((one) => one.path === folderPath);
+    if (!folder) throw new AssetError(-3, `asset folder not in the store: ${folderPath}`);
+    return folder;
+  }
+
+  // ---------- the containers ----------
+  // a container is where one storage type keeps items (doc-asset-storage.ts): a store folder is
+  // one, held by file-tree, and so is every folder at its top bound to a point of another type (a
+  // partition of the frontend object owning the folder). the store names an item by its folder
+  // and its place there (dirName); a container knows the place inside itself, which for a
+  // partition is the place without the partition's name
+
+  type Container = {
+    driver: AssetStorageDriver;
+    dirAbs: string;
+    // the folders of the store folder leading to it: '' for the store folder, the partition otherwise
+    prefix: string;
+    storage: AssetItemStorage;
+    // of the store folder: the partitions other containers hold, which file-tree does not enter
+    groupSkipList: string[];
+  };
+
+  const driverPackByConfig = new Map<string, AssetStorageDriver>();
+  function driverGet(typeId: string, configOfPoint: Record<string, unknown>): AssetStorageDriver | undefined {
+    if (typeId === ASSET_STORAGE_TYPE_FILE_TREE) return assetStorageFileTreeDriver;
+    if (typeId !== ASSET_STORAGE_TYPE_FILE_PACK) return undefined;
+    const key = JSON.stringify(configOfPoint ?? {});
+    if (!driverPackByConfig.has(key)) driverPackByConfig.set(key, assetStorageFilePackDriverCreate(configOfPoint ?? {}));
+    return driverPackByConfig.get(key);
+  }
+
+  // the folders at the top of a store folder file-tree does not hold
+  function groupSkipListGet(folder: AssetFolder): string[] {
+    return (folder.partitionStorageList ?? []).filter((one) => one.typeId !== ASSET_STORAGE_TYPE_FILE_TREE || one.unavailableReason).map((one) => one.partition);
+  }
+
+  function containerTreeGet(folder: AssetFolder): Container {
+    return {
+      driver: assetStorageFileTreeDriver, dirAbs: folder.pathAbs, prefix: '',
+      storage: { pointId: ASSET_STORAGE_POINT_FILE_TREE, typeId: ASSET_STORAGE_TYPE_FILE_TREE }, groupSkipList: groupSkipListGet(folder),
+    };
+  }
+
+  // the container of a partition as a bind says; undefined when the bind is file-tree's (the
+  // store folder holds it) or its point cannot be used
+  function containerOfBindGet(folder: AssetFolder, bind: AssetStoragePartitionBind): Container | undefined {
+    if (bind.unavailableReason || bind.typeId === ASSET_STORAGE_TYPE_FILE_TREE) return undefined;
+    const driver = driverGet(bind.typeId, bind.config);
+    if (!driver) return undefined;
+    return { driver, dirAbs: path.join(folder.pathAbs, bind.partition), prefix: bind.partition, storage: { pointId: bind.pointId, typeId: bind.typeId }, groupSkipList: [] };
+  }
+
+  // the container holding the place groupPath of a store folder: -6 when its point cannot be used
+  function containerOf(folder: AssetFolder, groupPath: string): Container {
+    const first = groupPath.split('/')[0];
+    const bind = first ? (folder.partitionStorageList ?? []).find((one) => one.partition === first) : undefined;
+    if (!bind) return containerTreeGet(folder);
+    if (bind.unavailableReason) throw new AssetError(-6, `the partition ${first} of ${folder.owner?.ref ?? folder.path} cannot be read or written: ${bind.unavailableReason}`);
+    return containerOfBindGet(folder, bind) ?? { ...containerTreeGet(folder), storage: { pointId: bind.pointId, typeId: bind.typeId } };
+  }
+
+  // every container of a store folder that can be read
+  function containerListOf(folder: AssetFolder): Container[] {
+    const list = [containerTreeGet(folder)];
+    for (const bind of folder.partitionStorageList ?? []) {
+      const container = containerOfBindGet(folder, bind);
+      if (container) list.push(container);
+    }
+    return list;
+  }
+
+  const dirNameInnerGet = (container: Container, dirName: string) => (container.prefix ? dirName.slice(container.prefix.length + 1) : dirName);
+  const dirNameOuterGet = (container: Container, dirNameInner: string) => (container.prefix ? `${container.prefix}/${dirNameInner}` : dirNameInner);
+  const groupPathOuterGet = (container: Container, groupPathInner: string) => (container.prefix ? [container.prefix, groupPathInner].filter(Boolean).join('/') : groupPathInner);
+
+  // where an item is: its container, and its place inside it
+  function placeOf(meta: Pick<AssetItemMeta, 'folder' | 'dirName' | 'groupPath'>): { container: Container; dirName: string } {
+    const container = containerOf(folderGet(meta.folder), meta.groupPath);
+    return { container, dirName: dirNameInnerGet(container, meta.dirName) };
+  }
+
+  // the items of a store folder: [{ dirName, itemId, groupPath }], those of file-tree first (a
+  // folder before the folders inside it, in name order: a folder holding item.yaml whose name
+  // starts with an id is an item, any other a group read in turn, to ASSET_GROUP_DEPTH_MAX
+  // levels, dot folders never), then those of its partitions held by another storage type
   function itemDirList(folder: AssetFolder): { dirName: string; itemId: string; groupPath: string }[] {
     const list: { dirName: string; itemId: string; groupPath: string }[] = [];
-    const visit = (groupPath: string, depth: number) => {
-      const dirAbs = groupPath ? path.join(folder.pathAbs, ...groupPath.split('/')) : folder.pathAbs;
-      if (!fs.existsSync(dirAbs)) return;
-      const entryList = fs.readdirSync(dirAbs, { withFileTypes: true })
-        .filter((one) => one.isDirectory() && !one.name.startsWith('.'))
-        .sort((a, b) => a.name.localeCompare(b.name));
-      const groupList: string[] = [];
-      for (const one of entryList) {
-        const dirName = groupPath ? `${groupPath}/${one.name}` : one.name;
-        const itemId = itemIdFromDirName(one.name);
-        if (itemId && fs.existsSync(path.join(dirAbs, one.name, ASSET_ITEM_META_NAME))) {
-          list.push({ dirName, itemId, groupPath });
-          continue;
-        }
-        if (itemId && fs.existsSync(path.join(dirAbs, one.name, ASSET_ITEM_META_NAME_FORMER))) assetFormerWarn(folder.pathAbs);
-        groupList.push(dirName);
+    for (const container of containerListOf(folder)) {
+      for (const place of container.driver.itemPlaceList(container.dirAbs, { groupSkipList: container.groupSkipList })) {
+        list.push({ dirName: dirNameOuterGet(container, place.dirName), itemId: place.itemId, groupPath: groupPathOuterGet(container, place.groupPath) });
       }
-      if (depth >= ASSET_GROUP_DEPTH_MAX) return;
-      for (const groupPathInner of groupList) visit(groupPathInner, depth + 1);
-    };
-    visit('', 0);
+    }
     return list;
   }
 
@@ -683,6 +777,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       ...folder,
       isExists: fs.existsSync(folder.pathAbs),
       itemCount: itemDirList(folder).length,
+      partitionList: partitionInfoList(folder),
     }));
   }
 
@@ -835,36 +930,24 @@ export function assetStoreCreate(config: AssetStoreConfig) {
 
   function versionDataGetOf(meta: AssetItemMeta, versionIdRequested = 'head'): AssetVersionData {
     const versionId = versionIdResolve(meta, versionIdRequested);
-    const filePath = versionPathGet(meta, versionId);
-    if (!fs.existsSync(filePath)) {
-      throw new AssetError(-3, `data file of version ${versionId} is missing: ${filePath}`);
-    }
-    return versionDataBuild(versionId, fs.readFileSync(filePath), versionMetadataRead(meta, versionId));
+    const { container, dirName } = placeOf(meta);
+    const bytes = container.driver.versionRead(container.dirAbs, dirName, versionId, meta.fileExt);
+    if (!bytes) throw new AssetError(-3, `the data of version ${versionId} of item ${meta.itemId} is missing (${meta.folder}/${meta.dirName})`);
+    return versionDataBuild(versionId, bytes, versionMetadataRead(meta, versionId));
   }
 
   // ---------- the metadata of a version ----------
 
-  // the mapping of {versionId}.metadata.yaml; {} when the file is missing or
-  // does not hold a mapping
+  // the metadata of a version ({versionId}.metadata.yaml of file-tree); {} when it has none
   function versionMetadataRead(meta: AssetItemMeta, versionId: string): AssetVersionMetadata {
-    const filePath = versionMetadataPathGet(meta, versionId);
-    if (!fs.existsSync(filePath)) return {};
-    const content = yamlParse(fs.readFileSync(filePath, 'utf-8'));
-    if (!content || typeof content !== 'object' || Array.isArray(content)) return {};
-    return content as AssetVersionMetadata;
+    const { container, dirName } = placeOf(meta);
+    return container.driver.versionMetadataRead(container.dirAbs, dirName, versionId);
   }
 
-  // an empty mapping removes the file (its previous content is kept as .bak)
+  // an empty mapping removes it
   function versionMetadataWrite(meta: AssetItemMeta, versionId: string, metadata: AssetVersionMetadata) {
-    const filePath = versionMetadataPathGet(meta, versionId);
-    if (Object.keys(metadata).length === 0) {
-      if (fs.existsSync(filePath)) {
-        fs.copyFileSync(filePath, `${filePath}.bak`);
-        fs.rmSync(filePath);
-      }
-      return;
-    }
-    fileWriteSafe(filePath, yamlStringify(metadata));
+    const { container, dirName } = placeOf(meta);
+    container.driver.versionMetadataWrite(container.dirAbs, dirName, versionId, metadata);
   }
 
   // the metadata of one version replaced; versionId 'head' or '' is the head.
@@ -934,7 +1017,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     }
     folderOwnerPlaceCheck(folder.path, input.asLayer, 'a new item');
     const lang = langNormalize(input.lang);
-    fs.mkdirSync(folder.pathAbs, { recursive: true });
+    const container = containerOf(folder, groupPath);
     const isItemIdUsed = (id: string) => folderList.some((one) => itemDirFind(one, id) !== undefined);
     const itemId = idMs48Create(isItemIdUsed);
     const versionId = idMs48Create();
@@ -955,13 +1038,13 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       folder: folder.path,
       dirName: dirNameInGroupBuild(groupPath, itemDirNameBuild(itemId, name)),
       groupPath,
+      storage: container.storage,
     };
     if (component) meta.component = component;
     if (owner) meta.owner = owner;
     if (folder.owner) meta.folderOwner = folder.owner;
     if (input.saveMode === 'inPlace' || input.saveMode === 'newVersion') meta.saveMode = input.saveMode;
-    fs.mkdirSync(itemDirGet(meta), { recursive: true });
-    fileWriteSafe(versionPathGet(meta, versionId), input.data);
+    versionWrite(meta, versionId, input.data);
     versionMetadataWrite(meta, versionId, versionMetadata);
     itemMetaWrite(meta);
     return { item: meta, version: versionDataBuild(versionId, input.data, versionMetadata), isCreated: true };
@@ -1017,7 +1100,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       if (dependencyListNext !== undefined) versionHead.dependencyList = dependencyListNext;
       meta.eventList.push({ eventType: 'updateInPlace', time, versionId });
     }
-    fileWriteSafe(versionPathGet(meta, versionId), input.data);
+    versionWrite(meta, versionId, input.data);
     // a new version always gets its own file; in place, the file is written
     // only when the update names metadata
     if (mode === 'newVersion' || versionMetadataNext !== undefined) versionMetadataWrite(meta, versionId, versionMetadata);
@@ -1063,10 +1146,11 @@ export function assetStoreCreate(config: AssetStoreConfig) {
           const metaOther = itemList().find((one) => one.name === nameNext && one.itemId !== meta.itemId);
           if (metaOther) throw new AssetError(-1, `the name "${nameNext}" is taken by item ${metaOther.itemId}`);
         }
-        const dirPrevious = itemDirGet(meta);
+        const { container, dirName: dirNamePrevious } = placeOf(meta);
         meta.name = nameNext;
         meta.dirName = dirNameInGroupBuild(meta.groupPath, itemDirNameBuild(meta.itemId, nameNext));
-        fs.renameSync(dirPrevious, itemDirGet(meta));
+        const dirNameNext = dirNameInnerGet(container, meta.dirName);
+        if (dirNameNext !== dirNamePrevious) container.driver.itemPlaceSet(container.dirAbs, dirNamePrevious, dirNameNext);
       }
     }
     if (change.lang !== undefined) meta.lang = langNormalize(change.lang);
@@ -1106,25 +1190,54 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     folderWritableCheck(folderNext);
     folderOwnerPlaceCheck(meta.folder, change.asLayer, 'moving an item');
     folderOwnerPlaceCheck(folderNext, change.asLayer, 'moving an item');
-    const dirPrevious = itemDirGet(meta);
+    const from = placeOf(meta);
     const folderPrevious = meta.folder;
     const groupPathPrevious = meta.groupPath;
     const placeFrom = placeTextBuild(meta.folder, meta.groupPath);
-    const dirNameNext = dirNameInGroupBuild(groupPath, path.basename(dirPrevious));
-    const dirNext = path.join(folderAbsGet(folderNext), ...dirNameNext.split('/'));
-    if (fs.existsSync(dirNext)) throw new AssetError(-1, `${dirNameNext} exists already in ${folderNext}`);
-    fs.mkdirSync(path.dirname(dirNext), { recursive: true });
-    dirMove(dirPrevious, dirNext);
+    const dirNameNext = dirNameInGroupBuild(groupPath, meta.dirName.split('/').pop()!);
+    const containerTo = containerOf(folderGet(folderNext), groupPath);
+    const dirNameToInner = dirNameInnerGet(containerTo, dirNameNext);
+    if (containerTo.driver.itemMetaRead(containerTo.dirAbs, dirNameToInner) !== undefined) throw new AssetError(-1, `${dirNameNext} exists already in ${folderNext}`);
+    const isSameContainer = from.container.dirAbs === containerTo.dirAbs && from.container.driver === containerTo.driver;
+    const isTreeBoth = from.container.driver === assetStorageFileTreeDriver && containerTo.driver === assetStorageFileTreeDriver;
+    // inside one container the place changes; between two folders of file-tree the folder of the
+    // item moves as it is, with its backups; between two storage types the item is written again
+    // by the other type, version by version, and removed where it was once it is whole there
+    let isTransferred = false;
+    if (isSameContainer) {
+      from.container.driver.itemPlaceSet(from.container.dirAbs, from.dirName, dirNameToInner);
+    } else if (isTreeBoth) {
+      const dirNext = path.join(containerTo.dirAbs, ...dirNameToInner.split('/'));
+      if (fs.existsSync(dirNext)) throw new AssetError(-1, `${dirNameNext} exists already in ${folderNext}`);
+      fs.mkdirSync(path.dirname(dirNext), { recursive: true });
+      dirMove(path.join(from.container.dirAbs, ...from.dirName.split('/')), dirNext);
+    } else {
+      itemVersionListCopy(meta, from, { container: containerTo, dirName: dirNameToInner });
+      isTransferred = true;
+    }
     meta.folder = folderNext;
     meta.groupPath = groupPath;
     meta.dirName = dirNameNext;
+    meta.storage = containerTo.storage;
     const folderOwnerNext = folderList.find((one) => one.path === folderNext)?.owner;
     if (folderOwnerNext) meta.folderOwner = folderOwnerNext;
     else delete meta.folderOwner;
-    groupEmptyRemove(folderPrevious, groupPathPrevious);
     meta.eventList.push({ eventType: 'move', time: timeTextGet(), placeFrom, placeTo: placeTextBuild(folderNext, groupPath) });
     itemMetaWrite(meta);
+    if (isTransferred) from.container.driver.itemRemove(from.container.dirAbs, from.dirName);
+    groupEmptyRemove(folderPrevious, groupPathPrevious);
     return meta;
+  }
+
+  // every version of an item, with its metadata, written at another place by the type of that place
+  function itemVersionListCopy(meta: AssetItemMeta, from: { container: Container; dirName: string }, to: { container: Container; dirName: string }) {
+    for (const version of meta.versionList) {
+      const bytes = from.container.driver.versionRead(from.container.dirAbs, from.dirName, version.versionId, meta.fileExt);
+      if (!bytes) continue;
+      to.container.driver.versionWrite(to.container.dirAbs, to.dirName, version.versionId, meta.fileExt, bytes);
+      const metadata = from.container.driver.versionMetadataRead(from.container.dirAbs, from.dirName, version.versionId);
+      if (Object.keys(metadata).length > 0) to.container.driver.versionMetadataWrite(to.container.dirAbs, to.dirName, version.versionId, metadata);
+    }
   }
 
   // a group folder renamed or moved (groupPathFrom -> groupPathTo, both in
@@ -1137,34 +1250,44 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     if (groupPathFrom === groupPathTo) return;
     folderWritableCheck(folderPath);
     folderOwnerPlaceCheck(folderPath, options.asLayer, 'moving a group');
-    const folderAbs = folderAbsGet(folderPath);
-    const dirFrom = path.join(folderAbs, ...groupPathFrom.split('/'));
-    const dirTo = path.join(folderAbs, ...groupPathTo.split('/'));
-    if (!fs.existsSync(dirFrom)) return;
-    if (fs.existsSync(dirTo)) throw new AssetError(-1, `the group ${groupPathTo} exists already`);
-    const folder = folderList.find((one) => one.path === folderPath)!;
+    const folder = folderGet(folderPath);
     for (const one of itemDirList(folder)) {
       if (one.groupPath !== groupPathFrom && !one.groupPath.startsWith(`${groupPathFrom}/`)) continue;
       const meta = itemMetaRead(folder, one.dirName);
       if (meta?.isLocked) throw new AssetError(-1, `the item ${meta.itemId} in the group is locked`);
     }
-    fs.mkdirSync(path.dirname(dirTo), { recursive: true });
-    fs.renameSync(dirFrom, dirTo);
-    groupEmptyRemove(folderPath, groupPathFrom.split('/').slice(0, -1).join('/'));
+    const bindFrom = (folder.partitionStorageList ?? []).find((one) => one.partition === groupPathFrom.split('/')[0]);
+    // a partition renamed whole: its folder moves with what its storage keeps there, and its
+    // file says its new name
+    if (bindFrom && groupPathFrom === bindFrom.partition) {
+      if (groupPathTo.includes('/')) throw new AssetError(-1, `the partition ${groupPathFrom} is held by the storage point ${bindFrom.pointId}: it is renamed, not moved into a folder`);
+      const dirFrom = path.join(folder.pathAbs, groupPathFrom);
+      const dirTo = path.join(folder.pathAbs, groupPathTo);
+      if (fs.existsSync(dirTo)) throw new AssetError(-1, `the group ${groupPathTo} exists already`);
+      if (!fs.existsSync(dirFrom)) return;
+      fs.renameSync(dirFrom, dirTo);
+      const file = assetStoragePartitionFileRead(dirTo);
+      if (file) assetStoragePartitionFileWrite(dirTo, { ...file, partition: groupPathTo });
+      bindFrom.partition = groupPathTo;
+      return;
+    }
+    const container = containerOf(folder, groupPathFrom);
+    const containerTo = containerOf(folder, groupPathTo);
+    if (container.dirAbs !== containerTo.dirAbs || container.driver !== containerTo.driver) {
+      throw new AssetError(-1, `${groupPathFrom} and ${groupPathTo} are held by different storage points: move the items one by one`);
+    }
+    const groupPathFromInner = dirNameInnerGet(container, groupPathFrom);
+    const groupPathToInner = container.prefix ? dirNameInnerGet(container, groupPathTo) : groupPathTo;
+    container.driver.groupMove(container.dirAbs, groupPathFromInner, groupPathToInner);
   }
 
   // a group folder that holds nothing any more (no file, no folder) is removed,
   // and so are the groups above it that become empty
   function groupEmptyRemove(folderPath: string, groupPath: string) {
     if (!groupPath) return;
-    const folderAbs = folderAbsGet(folderPath);
-    const partList = groupPath.split('/');
-    while (partList.length > 0) {
-      const dirAbs = path.join(folderAbs, ...partList);
-      if (!fs.existsSync(dirAbs) || fs.readdirSync(dirAbs).length > 0) return;
-      fs.rmdirSync(dirAbs);
-      partList.pop();
-    }
+    const container = containerOf(folderGet(folderPath), groupPath);
+    const groupPathInner = container.prefix ? (groupPath === container.prefix ? '' : dirNameInnerGet(container, groupPath)) : groupPath;
+    container.driver.groupEmptyRemove(container.dirAbs, groupPathInner);
   }
 
   // the head moves to an existing version; a later new version branches from it
@@ -1200,11 +1323,8 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     }
     meta.eventList.push({ eventType: 'versionDelete', time: timeTextGet(), versionId });
     itemMetaWrite(meta);
-    const filePath = versionPathGet(meta, versionId);
-    const metadataPath = versionMetadataPathGet(meta, versionId);
-    for (const file of [filePath, `${filePath}.bak`, metadataPath, `${metadataPath}.bak`]) {
-      if (fs.existsSync(file)) fs.rmSync(file);
-    }
+    const { container, dirName } = placeOf(meta);
+    container.driver.versionRemove(container.dirAbs, dirName, versionId, meta.fileExt);
     return meta;
   }
 
@@ -1319,9 +1439,10 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       if (meta.isDeleted) continue;
       const versionDataById: Record<string, AssetSnapshotVersion> = {};
       for (const version of meta.versionList) {
-        const filePath = versionPathGet(meta, version.versionId);
-        if (!fs.existsSync(filePath)) continue;
-        const data = versionDataBuild(version.versionId, fs.readFileSync(filePath), versionMetadataRead(meta, version.versionId));
+        const { container, dirName } = placeOf(meta);
+        const bytes = container.driver.versionRead(container.dirAbs, dirName, version.versionId, meta.fileExt);
+        if (!bytes) continue;
+        const data = versionDataBuild(version.versionId, bytes, versionMetadataRead(meta, version.versionId));
         versionDataById[version.versionId] = data.isText
           ? { size: data.size, hash: data.hash, isText: true, text: data.text, metadata: data.metadata }
           : { size: data.size, hash: data.hash, isText: false, dataBase64: data.bytes.toString('base64'), metadata: data.metadata };
@@ -1347,15 +1468,21 @@ export function assetStoreCreate(config: AssetStoreConfig) {
 
   // ---------- files ----------
 
-  // dirName: the item's folder in the store folder, through its groups ("a/b/{id}--{name}")
+  // dirName: the item's place in the store folder, through its groups ("a/b/{id}--{name}")
   function itemMetaRead(folder: AssetFolder, dirName: string): AssetItemMeta | undefined {
     const partList = dirName.split('/');
-    const filePath = path.join(folder.pathAbs, ...partList, ASSET_ITEM_META_NAME);
-    if (!fs.existsSync(filePath)) return undefined;
-    const content = yamlParse(fs.readFileSync(filePath, 'utf-8'));
-    const meta = itemMetaNormalize(content, itemIdFromDirName(partList[partList.length - 1]), folder.path, dirName, partList.slice(0, -1).join('/'));
+    const groupPath = partList.slice(0, -1).join('/');
+    const container = containerOf(folder, groupPath);
+    const content = container.driver.itemMetaRead(container.dirAbs, dirNameInnerGet(container, dirName));
+    if (content === undefined) return undefined;
+    const meta = itemMetaNormalize(content, itemIdFromDirName(partList[partList.length - 1]), folder.path, dirName, groupPath, container.storage);
     if (folder.owner) meta.folderOwner = folder.owner;
     return meta;
+  }
+
+  function versionWrite(meta: AssetItemMeta, versionId: string, data: Buffer) {
+    const { container, dirName } = placeOf(meta);
+    container.driver.versionWrite(container.dirAbs, dirName, versionId, meta.fileExt, data);
   }
 
   // the file keeps one key order whatever the order the keys were set in;
@@ -1378,13 +1505,135 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     metaFile.timeCreated = meta.timeCreated;
     metaFile.versionList = meta.versionList;
     metaFile.eventList = meta.eventList;
-    fileWriteSafe(itemMetaPathGet(meta), yamlStringify(metaFile));
+    const { container, dirName } = placeOf(meta);
+    container.driver.itemMetaWrite(container.dirAbs, dirName, metaFile);
+  }
+
+  // ---------- the partitions of a folder and their storage ----------
+  // doc_page_impl_asset_storage.md#partitions: a folder at the top of a store folder an object
+  // owns may be bound to a storage point; every item in it is then held by that point
+
+  // what the storage of each bound partition holds
+  function partitionInfoList(folder: AssetFolder): AssetPartitionInfo[] {
+    return (folder.partitionStorageList ?? []).map((bind) => {
+      const dirAbs = path.join(folder.pathAbs, bind.partition);
+      const typeIdFoundList: string[] = [];
+      if (assetStorageFileTreeDriver.isDataFound(dirAbs)) typeIdFoundList.push(ASSET_STORAGE_TYPE_FILE_TREE);
+      if (driverGet(ASSET_STORAGE_TYPE_FILE_PACK, {})!.isDataFound(dirAbs)) typeIdFoundList.push(ASSET_STORAGE_TYPE_FILE_PACK);
+      const container = containerOfBindGet(folder, bind);
+      const info: AssetStorageInfo = container
+        ? container.driver.infoGet(container.dirAbs)
+        : { itemCount: bind.unavailableReason ? 0 : assetStorageFileTreeDriver.itemPlaceList(dirAbs).length, size: 0, sizeDead: 0, fileList: [] };
+      return { ...bind, ...info, typeIdFoundList };
+    });
+  }
+
+  // a partition known to this store as bound from now on (its file was just written, or its
+  // folder is about to be made): what is created in it goes to that point
+  function partitionStorageBind(folderPath: string, bind: AssetStoragePartitionBind) {
+    const folder = folderGet(folderPath);
+    folder.partitionStorageList = [...(folder.partitionStorageList ?? []).filter((one) => one.partition !== bind.partition), bind];
+  }
+
+  // the storage of a whole partition changed to another point: every item in it is written by the
+  // type of that point, checked, and only then the partition's file says the new point and what
+  // the type before kept is removed. an interruption before the file is written leaves the
+  // partition as it was, with a copy to remove; after it, the partition as it will be, with the
+  // data of the type before still there (typeIdFoundList of its info says so)
+  //   owner   what the partition's file says of whose it is: { ref, typeId? }
+  function partitionStorageSet(
+    folderPath: string,
+    partition: string,
+    point: AssetStoragePoint,
+    options: { owner?: { ref: string; typeId?: string }; asLayer?: string } = {},
+  ): AssetPartitionInfo {
+    const folder = folderGet(folderPath);
+    folderWritableCheck(folderPath);
+    folderOwnerPlaceCheck(folderPath, options.asLayer, 'changing the storage of a partition');
+    if (!folder.owner) throw new AssetError(-1, `${folderPath} is no folder of an object: only a partition of a frontend object is bound to a storage point`);
+    if (!partition || partition.includes('/')) throw new AssetError(-1, `a partition is a folder at the top of the item folder: ${JSON.stringify(partition)}`);
+    if (point.status !== 'ready') throw new AssetError(-6, `the storage point ${point.id} cannot be used: ${point.statusMessage}`);
+    const type = assetStorageTypeGet(point.typeId);
+    if (!type || !driverGet(point.typeId, point.config)) throw new AssetError(-6, `the storage type ${point.typeId} has no driver`);
+    const from = containerOf(folder, partition);
+    const bindNext: AssetStoragePartitionBind = { partition, pointId: point.id, typeId: point.typeId, unavailableReason: '', config: point.config };
+    const dirAbs = path.join(folder.pathAbs, partition);
+    const fileContent = { storagePoint: point.id, storageType: point.typeId, ...(options.owner ? { owner: options.owner } : {}), partition };
+    const to: Container = containerOfBindGet(folder, bindNext) ?? { ...containerTreeGet(folder), storage: { pointId: point.id, typeId: point.typeId } };
+    if (from.driver.typeId === to.driver.typeId && from.dirAbs === to.dirAbs) {
+      // the same data read by another point of the same type: only the file changes
+      assetStoragePartitionFileWrite(dirAbs, fileContent);
+      partitionStorageBind(folderPath, bindNext);
+      return partitionInfoList(folder).find((one) => one.partition === partition)!;
+    }
+    const placeList = itemDirList(folder).filter((one) => one.groupPath === partition || one.groupPath.startsWith(`${partition}/`));
+    const isDataThere = to.prefix
+      ? to.driver.isDataFound(to.dirAbs)
+      : assetStorageFileTreeDriver.isDataFound(dirAbs);
+    if (isDataThere) throw new AssetError(-1, `the partition ${partition} holds data of the storage type ${point.typeId} already (a change of storage that was interrupted): remove it, or the data of the other type, by hand first`);
+    const copyList: { meta: AssetItemMeta; fromDirName: string; toDirName: string }[] = [];
+    for (const place of placeList) {
+      const meta = itemMetaRead(folder, place.dirName);
+      if (!meta) continue;
+      const fromDirName = dirNameInnerGet(from, place.dirName);
+      const toDirName = to.prefix ? place.dirName.slice(to.prefix.length + 1) : place.dirName;
+      itemVersionListCopy(meta, { container: from, dirName: fromDirName }, { container: to, dirName: toDirName });
+      to.driver.itemMetaWrite(to.dirAbs, toDirName, from.driver.itemMetaRead(from.dirAbs, fromDirName) as Record<string, unknown>);
+      copyList.push({ meta, fromDirName, toDirName });
+    }
+    // what was written is read back before anything is removed
+    for (const { meta, fromDirName, toDirName } of copyList) {
+      for (const version of meta.versionList) {
+        const bytesFrom = from.driver.versionRead(from.dirAbs, fromDirName, version.versionId, meta.fileExt);
+        const bytesTo = to.driver.versionRead(to.dirAbs, toDirName, version.versionId, meta.fileExt);
+        if (bytesFrom && (!bytesTo || !bytesFrom.equals(bytesTo))) {
+          throw new AssetError(-1, `version ${version.versionId} of item ${meta.itemId} did not read back as written by ${point.typeId}: the partition is left as it was`);
+        }
+      }
+    }
+    assetStoragePartitionFileWrite(dirAbs, fileContent);
+    for (const { fromDirName } of copyList) from.driver.itemRemove(from.dirAbs, fromDirName);
+    if (from.prefix) {
+      assetStorageFilePackFileListRemove(from.dirAbs);
+    } else {
+      // the group folders file-tree leaves empty inside the partition, deepest first
+      const groupPathList = [...new Set(placeList.map((one) => one.groupPath))].sort((a, b) => b.length - a.length);
+      for (const groupPath of groupPathList) if (groupPath !== partition) from.driver.groupEmptyRemove(from.dirAbs, groupPath);
+    }
+    partitionStorageBind(folderPath, bindNext);
+    return partitionInfoList(folder).find((one) => one.partition === partition)!;
+  }
+
+  // what a type keeps dead in a partition is dropped (the pack files of file-pack written again)
+  function partitionCompact(folderPath: string, partition: string): AssetPartitionInfo {
+    const folder = folderGet(folderPath);
+    folderWritableCheck(folderPath);
+    const container = containerOf(folder, partition);
+    if (!container.prefix || !container.driver.compact) throw new AssetError(-1, `the storage type ${container.storage.typeId} of the partition ${partition} keeps nothing to compact`);
+    container.driver.compact(container.dirAbs);
+    return partitionInfoList(folder).find((one) => one.partition === partition)!;
+  }
+
+  // the items of a container changed on disk since this was last asked, for a file the watcher
+  // reports that names no item (a pack file): [] when the file is not such a file
+  function changeItemIdListOfFileGet(filePath: string): string[] | undefined {
+    for (const folder of folderList) {
+      for (const container of containerListOf(folder)) {
+        if (!container.prefix || !container.driver.changeItemIdListGet) continue;
+        if (path.dirname(filePath) === container.dirAbs) return container.driver.changeItemIdListGet(container.dirAbs);
+      }
+    }
+    return undefined;
   }
 
   return {
     config,
     folderList,
     folderOwnedAdd,
+    partitionStorageBind,
+    partitionStorageSet,
+    partitionCompact,
+    changeItemIdListOfFileGet,
     folderInfoList,
     docPageInfoList,
     folderSet,
@@ -1439,6 +1688,9 @@ export type AssetSnapshot = {
   usageDocList?: AssetUsageDoc[];
   // the frontend objects and types the doc pages declare, added by the plugin
   objectFrontend?: { docPageList: unknown[] };
+  // the storage points, and the folders of the store with their partitions, added by the plugin
+  storage?: unknown;
+  folderList?: unknown[];
 };
 
 // ---------- helpers ----------
@@ -1616,7 +1868,10 @@ function fileExtNormalize(fileExt: unknown): string {
 
 // the metadata as the file holds it. a file without eventList (written
 // before events were recorded) gets the one event its creation was.
-function itemMetaNormalize(content: any, itemId: string, folder: string, dirName: string, groupPath = ''): AssetItemMeta {
+function itemMetaNormalize(
+  content: any, itemId: string, folder: string, dirName: string, groupPath = '',
+  storage: AssetItemStorage = { pointId: ASSET_STORAGE_POINT_FILE_TREE, typeId: ASSET_STORAGE_TYPE_FILE_TREE },
+): AssetItemMeta {
   const versionList = Array.isArray(content?.versionList) ? content.versionList : [];
   const lang = String(content?.lang ?? '');
   const timeCreated = String(content?.timeCreated ?? '');
@@ -1651,6 +1906,7 @@ function itemMetaNormalize(content: any, itemId: string, folder: string, dirName
     folder,
     dirName,
     groupPath,
+    storage,
   };
   if (content?.saveMode === 'inPlace' || content?.saveMode === 'newVersion') meta.saveMode = content.saveMode;
   try {

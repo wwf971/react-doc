@@ -184,6 +184,8 @@ export type DocPageLoaded = {
   // objects and their types (doc-object-frontend.ts); playground: its playground
   // documents (doc-playground.ts)
   asset: EntryFileSection;
+  // the storage points it declares (doc-asset-storage.ts); undefined: asset-storage.yaml beside it
+  assetStorage: EntryFileSection;
   service: EntryFileSection;
   comp: EntryFileSection;
   hotkey: EntryFileSection;
@@ -273,6 +275,9 @@ export type DocWorkspaceSpec = {
   addressConfig?: (string | number)[];
   // the workspace's keyboard map, absolute (workspace "hotkey: { file }")
   hotkeyFile?: string;
+  // the file declaring the storage points of the workspace, absolute (workspace
+  // "assetStorage: { file }"; absent: asset-storage.yaml beside the workspace file; false: none)
+  assetStorageFile?: string;
 };
 
 export type DocWorkspaceLoaded = {
@@ -351,12 +356,12 @@ type LoadContext = {
   warningList: string[];
 };
 
-const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'type', 'playground', 'packageList', 'sidePanelDefault', 'sidePanelById'];
+const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'assetStorage', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'type', 'playground', 'packageList', 'sidePanelDefault', 'sidePanelById'];
 // the sections an entry alone may hold: each names a config file of the doc
 // page (or switches the feature off), found beside the entry by convention
-const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'playground'] as const;
+const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'assetStorage', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'playground'] as const;
 const CONFIG_FILE_KEY_LIST = ['config', 'variable'];
-const WORKSPACE_FILE_KEY_LIST = ['title', 'homeDoc', 'homeItem', 'docPageList', 'packageList', 'config', 'hotkey'];
+const WORKSPACE_FILE_KEY_LIST = ['title', 'homeDoc', 'homeItem', 'docPageList', 'packageList', 'config', 'hotkey', 'assetStorage'];
 const ENTRY_FILE_SUFFIX = '-entry.yaml';
 const ENTRY_FILE_NAME = 'entry.yaml';
 
@@ -545,6 +550,14 @@ export function docWorkspaceSpecRead(workspace: any, configDir: string, configFi
       throw new Error(`[doc-source] workspace "hotkey" is { file }, the keyboard map of the workspace: ${place}`);
     }
     spec.hotkeyFile = path.resolve(dirBase, content.hotkey.file);
+  }
+  if (content.assetStorage !== undefined && content.assetStorage !== false) {
+    if (!mappingIs(content.assetStorage) || typeof content.assetStorage.file !== 'string' || !content.assetStorage.file.trim()) {
+      throw new Error(`[doc-source] workspace "assetStorage" is { file }, the storage points of the workspace, or false: ${place}`);
+    }
+    spec.assetStorageFile = path.resolve(dirBase, content.assetStorage.file);
+  } else if (content.assetStorage === undefined && fileWorkspace) {
+    spec.assetStorageFile = path.join(dirBase, 'asset-storage.yaml');
   }
   content.docPageList.forEach((item: any, index: number) => {
     spec.docPageList.push(docPageSpecRead(item, dirBase, `${place} docPageList[${index}]`));
@@ -883,6 +896,7 @@ function docPageRegister(entryFile: string, mention: DocPageMention, isRoot: boo
     rootList: [],
     mentionList: [mention],
     asset: undefined,
+    assetStorage: undefined,
     service: undefined,
     comp: undefined,
     hotkey: undefined,

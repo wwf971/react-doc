@@ -38,7 +38,7 @@ const TOP_KEY_LIST = ['typeList'];
 const TYPE_KEY_LIST = ['id', 'kind', 'label', 'description', 'icon', 'extendList', 'summaryKeyList', 'modeList', 'assetKindList', 'partitionList'];
 const MODE_KEY_LIST = ['id', 'label', 'description', 'category', 'comp', 'param', 'isDefault'];
 const ASSET_KIND_KEY_LIST = ['id', 'label', 'langList', 'pathPrefix', 'groupPath', 'isIncomingRefused'];
-const PARTITION_KEY_LIST = ['id', 'label', 'description', 'isGitIgnored', 'isDefault'];
+const PARTITION_KEY_LIST = ['id', 'label', 'description', 'isGitIgnored', 'isDefault', 'storagePoint'];
 
 export type TypeSection = undefined | false | { file: string } | { typeList: unknown } | ({ file: string } | { typeList: unknown })[];
 
@@ -65,7 +65,9 @@ export type TypeAssetKind = {
 
 // a partition: a folder of the item folder of an object, holding its items and their item list;
 // isGitIgnored: kept out of git, its data the checkout's own (real data, what is tried out)
-export type TypePartition = { id: string; label: string; description: string; isGitIgnored: boolean; isDefault: boolean };
+// storagePoint: the storage point the partition is bound to when it is made ('' or absent: file-tree;
+// doc_page_impl_asset_storage.md#which-point-a-partition-is-bound-to)
+export type TypePartition = { id: string; label: string; description: string; isGitIgnored: boolean; isDefault: boolean; storagePoint?: string };
 
 export type TypeDeclared = {
   id: string;
@@ -225,7 +227,7 @@ function typeRead(item: any, place: string, problem: (message: string) => void):
 // the partitions of a type: each a folder name of ASCII (doc_page_impl_dir.md#folder-names-of-assets)
 function partitionListRead(value: unknown, place: string, problem: (message: string) => void): TypePartition[] {
   if (!Array.isArray(value)) {
-    problem(`${place}: a list of partitions { id, label, description, isGitIgnored, isDefault }`);
+    problem(`${place}: a list of partitions { id, label, description, isGitIgnored, isDefault, storagePoint }`);
     return [];
   }
   const partitionList: TypePartition[] = [];
@@ -248,6 +250,7 @@ function partitionListRead(value: unknown, place: string, problem: (message: str
       description: typeof item.description === 'string' ? item.description : '',
       isGitIgnored: item.isGitIgnored === true,
       isDefault: item.isDefault === true,
+      ...(typeof item.storagePoint === 'string' && item.storagePoint ? { storagePoint: item.storagePoint } : {}),
     });
   });
   if (partitionList.filter((one) => one.isDefault).length > 1) problem(`${place}: one partition is the default (isDefault); the first is used`);

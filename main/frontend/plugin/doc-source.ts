@@ -73,6 +73,7 @@ import {
 } from './doc-asset-store.ts';
 import { assetBlockTextExpand, assetUsageListScan } from '../src/lib/doc-asset-ref.js';
 import { OBJECT_FRONTEND_LIST_NAME, OBJECT_FRONTEND_META_NAME } from '../src/lib/doc-object-frontend.js';
+import { ASSET_STORAGE_PARTITION_FILE_NAME, assetStorageConfigForPage, assetStorageConfigRead, type AssetStorageConfig } from './doc-asset-storage.ts';
 import { objectFrontendConfigForPage, objectFrontendConfigOfDocPageListGet, objectFrontendFolderOwnedListGet, objectFrontendTypeFileListGet, type ObjectFrontendConfig } from './doc-object-frontend.ts';
 import { TYPE_CONFIG_FILE_NAME, typeDeclaredConfigGet, type TypeDeclaredConfig } from './doc-type-config.ts';
 import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
@@ -451,6 +452,9 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
             usageDocList: assetUsageDocListScan(fileEntries, []),
             // the frontend objects and types of the doc pages (doc_page_impl_obj_frontend.md)
             objectFrontend: objectFrontendConfigForPage(objectFrontendConfigGet(configDoc, configDir)),
+            // the storage points and the folders with their partitions (doc_page_impl_asset_storage.md)
+            storage: assetStorageConfigForPage(assetStorageConfigGet(configDoc, configDir)),
+            folderList: assetStore.folderInfoList().map(({ pathAbs: _pathAbs, ...folder }) => folder),
           }
         : null;
       return generateModuleCode(isBuild ? playgroundLeaveOut(configDoc) : configDoc, fileEntries, dirEntries, attachmentList, isBuild, {
@@ -764,6 +768,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         let objectFrontendPathList = objectFrontendConfigNow.pathList;
         let objectFrontendFolderList = objectFrontendConfigNow.folderList;
         const assetWatch = () => {
+          for (const file of assetConfig!.storage?.pathList ?? []) server.watcher.add(file);
           for (const docPage of assetConfig!.docPageList) server.watcher.add(docPage.configFile);
           for (const folder of assetConfig!.folderList) server.watcher.add(folder.pathAbs);
           for (const file of objectFrontendPathList) server.watcher.add(file);
@@ -797,6 +802,13 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
             assetObjectFrontendFolderReload();
             return;
           }
+          // the file binding a partition to a storage point, or a file declaring storage points:
+          // the store reads other containers now (doc_page_impl_asset_storage.md)
+          const isPartitionFile = path.basename(filePath) === ASSET_STORAGE_PARTITION_FILE_NAME && objectFrontendFolderList.some((folder) => pathIsInside(filePath, folder));
+          if (isPartitionFile || (assetConfig!.storage?.pathList ?? []).includes(filePath)) {
+            assetObjectFrontendFolderReload();
+            return;
+          }
           if (objectFrontendPathList.includes(filePath)) {
             server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { itemId: '', isStoreChanged: false, isObjectFrontendChanged: true } });
             return;
@@ -827,7 +839,18 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
           // holding item.yaml whose name starts with an id. a file right in
           // the store folder or in a group is not an object's
           const itemId = assetItemIdOfPathGet(folder.pathAbs, filePath);
-          if (!itemId) return;
+          if (!itemId) {
+            // a file of a storage type that names no item (a pack file): its driver says which
+            // items changed since it was last asked
+            let itemIdList: string[] | undefined;
+            try {
+              itemIdList = assetStoreCreate(assetConfig!).changeItemIdListOfFileGet(filePath);
+            } catch {
+              itemIdList = undefined;
+            }
+            for (const itemIdOne of itemIdList ?? []) server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { itemId: itemIdOne, isStoreChanged: false } });
+            return;
+          }
           server.ws.send({ type: 'custom', event: 'doc-asset-change', data: { itemId, isStoreChanged: false } });
         };
         server.watcher.on('add', assetChangeSend);
@@ -1374,6 +1397,8 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
   // the doc pages loaded, for the asset service layer, the service layer
   // and the components of the doc pages: absolute paths, not part of the
   // data sent to the page
+  // the file declaring the storage points of the workspace (doc-asset-storage.ts): not sent to the page
+  Object.defineProperty(config.docEntry, 'assetStorageWorkspaceFile', { enumerable: false, value: workspaceSpec.assetStorageFile });
   Object.defineProperty(config.docEntry, 'docPageList', {
     enumerable: false,
     value: entryLoaded.docPageList,
@@ -1734,7 +1759,17 @@ function objectFrontendConfigGet(configDoc: any, configDir: string): ObjectFront
   const docPageList = Array.isArray(configDoc.docEntry?.docPageList) ? configDoc.docEntry.docPageList : [];
   const assetFolderByAlias = new Map<string, string>();
   for (const docPage of assetConfigGet(configDoc, configDir)?.docPageList ?? []) assetFolderByAlias.set(docPage.alias, docPage.folderDefault);
-  return objectFrontendConfigOfDocPageListGet(docPageList, configDir, assetFolderByAlias, typeDeclaredConfigOfDocGet(docPageList, configDoc.docEntry?.packageList ?? [], configDir).typeList);
+  return objectFrontendConfigOfDocPageListGet(
+    docPageList, configDir, assetFolderByAlias, typeDeclaredConfigOfDocGet(docPageList, configDoc.docEntry?.packageList ?? [], configDir).typeList,
+    assetStorageConfigGet(configDoc, configDir),
+  );
+}
+
+// the storage points of the page: the built-in ones, the workspace's and those of its doc pages
+// (doc_page_impl_asset_storage.md#declaring-storage-points)
+function assetStorageConfigGet(configDoc: any, configDir: string): AssetStorageConfig {
+  const docPageList = Array.isArray(configDoc.docEntry?.docPageList) ? configDoc.docEntry.docPageList : [];
+  return assetStorageConfigRead({ docPageInputList: docPageList, workspaceFile: configDoc.docEntry?.assetStorageWorkspaceFile, configDir });
 }
 
 // the types the doc pages, their objects and the packages declare (doc_page_impl_type.md#declaring-a-type)
@@ -1746,9 +1781,11 @@ function typeDeclaredConfigOfDocGet(docPageList: any[], packageList: any[], conf
 function assetConfigGet(configDoc: any, configDir: string): AssetStoreConfig | undefined {
   const docPageList = configDoc.docEntry?.docPageList;
   if (!Array.isArray(docPageList)) return undefined;
-  const docPageInputList = docPageList.map((docPage: any) => ({ ...docPage, folderOwnedList: objectFrontendFolderOwnedListGet(docPage) }));
+  const storage = assetStorageConfigGet(configDoc, configDir);
+  const docPageInputList = docPageList.map((docPage: any) => ({ ...docPage, folderOwnedList: objectFrontendFolderOwnedListGet(docPage, storage) }));
   const assetConfig = assetConfigOfDocPageListGet(docPageInputList, sourceRootAbsPathByPathGet(configDoc, configDir), configDir);
   assetConfig.isFolderLazy = folderManagedIsLazyGet(configDoc);
+  assetConfig.storage = storage;
   return assetConfig.docPageList.length > 0 ? assetConfig : undefined;
 }
 

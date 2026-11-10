@@ -1,0 +1,12 @@
+# the storage points of the workspace (design: main/doc_page_impl_asset_storage.md#declaring-storage-points):
+# where the asset store keeps the items of a partition of a frontend object. every doc page of the
+# workspace may bind a partition to one of them. file-tree and file-pack are built in and need no line.
+# found here by convention (asset-storage.yaml beside the workspace file); "assetStorage: { file }"
+# of the workspace file names another file, "assetStorage: false" none.
+storagePointList:
+  # a second point of the type file-pack, with its own config: pack files of 1 MB at most
+  - id: pack-small
+    type: file-pack
+    label: Small packs
+    description: pack files of at most 1 MB each
+    config: { packSizeMax: 1048576 }

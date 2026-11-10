@@ -1175,3 +1175,26 @@
 .doc-settings-tab-asset-row .doc-edit-value {
   white-space: nowrap;
 }
+
+/* ---------- the storage points of the Asset service tab (AssetStoragePointArea) ---------- */
+.doc-settings-asset-storage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.doc-settings-asset-storage > h4 {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.doc-settings-asset-storage > p {
+  margin: 0;
+}
+
+/* a cell whose text may take several lines, so that the table stays as wide as the panel */
+.doc-asset-table td.doc-settings-asset-storage-wrap {
+  white-space: normal;
+}

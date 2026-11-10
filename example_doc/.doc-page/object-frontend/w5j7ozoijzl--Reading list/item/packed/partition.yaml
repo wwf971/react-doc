@@ -1,0 +1,8 @@
+# which storage point holds the items of this partition, and whose partition it is
+# (doc_page_impl_asset_storage.md#the-partition-file). written by the page.
+storagePoint: file-pack
+storageType: file-pack
+owner:
+  ref: frontend:w5j7ozoijzl
+  typeId: example.reading-list
+partition: packed
