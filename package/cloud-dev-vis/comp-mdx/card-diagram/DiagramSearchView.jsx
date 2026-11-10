@@ -68,13 +68,17 @@ export const DiagramSearchBar = observer(function DiagramSearchBar({ search }) {
 
 // the camera that brings an element into view: moved so the element stands in the middle,
 // zoomed in only as far as it takes to read it (an element drawn smaller than a line of text
-// grows to one); none when it is in view and readable already (out of the way of the bar)
+// grows to one); none when it is in view and readable already. in view: inside the host by a
+// margin and not under the bar, which covers its own box at the top right, not the whole top
+// (the title of a scene focused stands there, beside it); a move still leaves the top band free
 export function diagramSearchCameraReveal(host, element, camera, { marginTop = 52, margin = 24, heightReadable = 14, heightTarget = 26 } = {}) {
 	if (!host || !element || !camera) return null;
 	const hostRect = host.getBoundingClientRect();
 	const rect = element.getBoundingClientRect();
 	if (rect.width === 0 && rect.height === 0) return null;
-	const isInView = rect.left >= hostRect.left + margin && rect.right <= hostRect.right - margin && rect.top >= hostRect.top + marginTop && rect.bottom <= hostRect.bottom - margin;
+	const bar = host.querySelector('.doc-diagram-search-bar')?.getBoundingClientRect();
+	const isUnderBar = Boolean(bar) && rect.left < bar.right && rect.right > bar.left && rect.top < bar.bottom && rect.bottom > bar.top;
+	const isInView = !isUnderBar && rect.left >= hostRect.left + margin && rect.right <= hostRect.right - margin && rect.top >= hostRect.top + (bar ? margin : marginTop) && rect.bottom <= hostRect.bottom - margin;
 	const isReadable = rect.height >= heightReadable;
 	if (isInView && isReadable) return null;
 	// a host drawn scaled (a transform around it) moves its world by its own pixels

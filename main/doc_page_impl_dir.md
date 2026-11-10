@@ -310,14 +310,16 @@ my-package/                      the package folder: give its path to a workspac
 ├── type.yaml                    optional: the types of its components, at this fixed name
 ├── doc/
 │   ├── README.md                its root document (required)
-│   └── xxx.md                   its other documents, one per series of components
+│   └── xxx.md                   its design documents, one per series of components
 ├── comp-mdx/                    its components: comp.yaml manifests, the grammar of a doc page's
-│   └── {series}/comp.yaml         (Component folders above), grouped by function
+│   └── {series}/comp.yaml         (Component folders above), grouped by function; beside the code of a
+│       {series}/comp-xxx.md       component or series, its document for authors (the demonstrations)
 ├── service-template-app/        its app service templates, {templateId}--{name}/, grouped as in a doc page
 ├── service-template-infra/      its infra service templates
 ├── .doc-page/                   optional: makes it a doc page too (below)
 │   ├── entry.yaml               title, homeDoc: ~{name}/doc/README.md
-│   ├── source.yaml              the package folder as its root; comp-mdx/ and the templates are never collected
+│   ├── source.yaml              the package folder as its root; of comp-mdx/ only the Markdown documents are
+│   │                              collected, the templates never are
 │   ├── side-panel.yaml          its documents, the demonstrations first
 │   └── asset/                   the items its documents show: data of the package, read-only unless it is served alone
 └── package.json                 optional: { "type": "module" }, so node reads its .js as ES modules
@@ -326,7 +328,7 @@ my-package/                      the package folder: give its path to a workspac
 - **Required**: `doc-package.yaml` and `doc/README.md`. The content folders may be absent (nothing of that kind), never moved.
 - **Never there**: instance folders (`service-app/`, `service-infra/`): a package holds no running state. In its `.doc-page/`, no `comp-mdx/` and no service folders, and an entry naming `comp`, `service` or `packageList` is refused: its components and templates are the ones at its top, what it needs is `packageDependList`.
 
-Unlike a doc page, a package keeps its code folders at its top: code and templates are what a package is, and its documents, the ones a reader of the package looks for, are gathered in `doc/`. A package with `.doc-page/entry.yaml` is also a **doc page**, read-only except while it is served alone: it can be launched, listed in a workspace, or mounted for a while, its documents demonstrating its components ([A package as a doc page](doc_page_impl_package.md#a-package-as-a-doc-page)). `react-doc init package` writes the three files.
+Unlike a doc page, a package keeps its code folders at its top: code and templates are what a package is. **A component's document lies in the folder of the component** (or of its series), beside its code, as a template's `service_{name}.md` lies beside its script: what is written for the authors of a component (its usage, with live examples) moves, is copied and is read with it, never gathered elsewhere. `doc/` holds the root document and the design documents of the package, which span its components. A package with `.doc-page/entry.yaml` is also a **doc page**, read-only except while it is served alone: it can be launched, listed in a workspace, or mounted for a while, its documents demonstrating its components ([A package as a doc page](doc_page_impl_package.md#a-package-as-a-doc-page)). `react-doc init package` writes the three files.
 
 The packages of the project live in `package/` at its root, one folder each, which is where a package named by its name is looked for first (`packageSearchDirList` of `config.yaml`); `package/cloud-dev-vis/` is the one the demonstration imports ([its root document](../package/cloud-dev-vis/doc/README.md)).
 

@@ -69,7 +69,7 @@ const StaticNode = observer(function StaticNode({ id, node, position, config, re
 	const width = node.isWidthFit ? 'max-content' : node.size.width === 'auto' ? node.sizeDefault.width : node.size.width;
 	return (
 		<div ref={root} className="doc-switch-static-node" data-id={id} data-search={searchMark.state ?? undefined} style={{ left: position.x, top: position.y, width, height: node.size.height === 'auto' ? undefined : node.size.height, zIndex: node.isBackground ? -1 : undefined, pointerEvents: node.isBackground ? 'none' : undefined }}>
-			<div className="doc-vis-node-content">
+			<div className="doc-vis-node-content not-prose">
 				<DiagramNodeContent id={id} node={node} config={config} registry={registry} anchorRef={anchorRef} visualization={visualization} />
 			</div>
 		</div>

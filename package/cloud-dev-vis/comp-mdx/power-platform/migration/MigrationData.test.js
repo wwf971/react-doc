@@ -191,6 +191,24 @@ test('edit: a column mapping is its chain of operators', () => {
 	assert.deepEqual(dataOf(memo).stepList.map((step) => step.op), memoData.stepList.map((step) => step.op));
 });
 
+test('edit: an operator that does something (db-migration.project-real) comes back with its parameters', () => {
+	const item = { ...model.mappingColumnByKey.get('ex.map.column.a--x.state'), stepList: [
+		{ op: 'digits', name: 'Digits only' },
+		{ op: 'check-length', max: 15, name: 'Length', description: 'at most 15' },
+		{ op: 'text', name: 'Said only', description: 'a note' },
+	] };
+	const adapter = adapterOf('mapping-column');
+	const doc = yamlParse(adapter.sourceBuild(item, model));
+	assert.equal(doc.nodes.find((node) => node.id === 'step-0').renderer.type, 'operator-text');
+	doc.nodes.find((node) => node.id === 'step-1').data.name = 'Length, renamed';
+	const data = adapter.writesBuild(JSON.stringify(doc), item, model).writeList[0].data;
+	assert.deepEqual(data.stepList, [
+		{ op: 'digits', name: 'Digits only', description: '' },
+		{ op: 'check-length', max: 15, name: 'Length, renamed', description: 'at most 15' },
+		{ op: 'text', name: 'Said only', description: 'a note' },
+	]);
+});
+
 test('new items get their key and path from their names', () => {
 	const table = migrationItemNewBuild('schema-table', model, { db: 'connect', logical: 'new_t', name: 'T' });
 	assert.equal(table.key, 'ex.connect.table.new_t');

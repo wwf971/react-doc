@@ -19,7 +19,7 @@ import { CheckValue, TextValue, ValueMenu } from './DiagramValueControls.jsx';
 // The card stands beside the whole principal, never beside the row or
 // cell within it, and its top edge is computed from the principal alone:
 // the card grows and shrinks downward as its content changes, and never
-// moves while the author works in it (comp-diagram-er.md#diagram-er-edit).
+// moves while the author works in it (../power-platform/comp-diagram-er.md#diagram-er-edit).
 export const DiagramEditCard = observer(function DiagramEditCard({ editor, onKeyDown }) {
 	const { componentConfig } = useDocStores();
 	const { store } = editor;

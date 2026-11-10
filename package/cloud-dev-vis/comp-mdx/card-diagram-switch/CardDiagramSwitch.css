@@ -92,6 +92,8 @@
 .doc-switch-path-menu > button > em { color: var(--color-fd-muted-foreground); font-size: 0.68rem; font-style: normal; }
 .doc-switch-bar-trailing { flex: none; display: inline-flex; align-items: center; gap: 0.25rem; }
 .doc-switch-bar-button[aria-pressed='true'] { background: rgb(220 38 38 / 12%); color: #dc2626; }
+/* the search, pressed while its bar is open: not the red of the bounding box */
+.doc-switch-bar-button.is-search[aria-pressed='true'] { background: rgb(37 99 235 / 12%); color: #2563eb; }
 .doc-switch-bar-menu { position: relative; display: inline-flex; }
 .doc-switch-bar-menu-list {
 	position: absolute;
@@ -404,12 +406,10 @@ button.doc-switch-edge-label:hover, button.doc-switch-edge-label.is-line-hovered
 /* the title of a scene focused: a node of the world above the scene (SceneTitleCard), in the
    style of a section heading of the page at the scale of the cards around it */
 .doc-switch-scene-title {
-	margin: 0;
+	/* margin, font size and line height: inline (SceneTitleCard), from the height of its node */
 	color: var(--color-fd-foreground);
 	font-family: ui-sans-serif, system-ui, sans-serif;
-	font-size: 32px;
 	font-weight: 700;
-	line-height: 48px;
 	letter-spacing: -0.01em;
 	white-space: nowrap;
 }

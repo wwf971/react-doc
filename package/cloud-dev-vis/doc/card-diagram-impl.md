@@ -266,6 +266,8 @@ Reader dragging changes temporary positions only. Later measurements preserve th
 
 Numeric dimensions are outer node sizes in diagram units. `auto` width uses the renderer's preferred width; `auto` height follows its content. Runtime measurements are not automatically serialized. The node wrapper enforces numeric dimensions; overflowing content scrolls within it, and handles follow their anchor elements when scrolled. Handles outside the visible node are hidden until their anchors return into view. A renderer can declare minimum dimensions through `sizeMin`; incompatible authored sizes produce a validation error rather than silent coercion. Resizing and resize-axis controls belong to the planned edit mode.
 
+<a id="numeric-dimensions-and-the-box-of-a-node"></a>**The box of a node scrolls only what its card really holds beyond it.** A scrollbar for a pixel or a margin is a defect, and the box is kept from it by construction, never by tuning sizes, hiding scrollbars or turning scrolling off: (1) the box (`.doc-vis-node-content`, in `DiagramRender` and `SwitchStatic`, so in every shell a node is drawn in) is `not-prose`, out of the page's typography: the margins, font sizes and line heights a page gives its headings, paragraphs and lists do not reach a card; a host that styles prose with rules of its own must keep them off `.not-prose` (`:not(:where(.not-prose, .not-prose *))`, as the typography rules of the doc page do). (2) A card whose height is fixed by the diagram (a scene title) sets what decides that height inline, from the same constant as its node. (3) A card that places parts in authored pixels gives them the node's box: its edge is drawn over it and takes no room (a color block's `::before`), so the box its parts are placed in is not smaller than the node by a border.
+
 `viewport` groups all canvas settings. It is separate from node geometry:
 
 | Field | Meaning and default |
@@ -337,8 +339,8 @@ table, isCompact           card-note                card-brief
 | `columnTemplate` | the widths of the columns, as css grid columns (`5rem 1fr 4rem`) |
 | `isFieldHeaderHidden` | no line of field names |
 | a row's `isEllipsis` | it stands for rows left out: one `⋮`, so a table of any length shows in a few lines |
-| `rowDisplay` | any table card: which rows are drawn, in which order, with row breaks for what is left out ([Table Card Views](comp-diagram-er.md#table-card-views)) |
-| `viewList`, `viewDefault`, `isViewSwitcherHidden` | the views of a table card, each of a mode with its parameters; a card declaring none has its plain view ([Table Card Views](comp-diagram-er.md#table-card-views)) |
+| `rowDisplay` | any table card: which rows are drawn, in which order, with row breaks for what is left out ([Table Card Views](../comp-mdx/power-platform/comp-diagram-er.md#table-card-views)) |
+| `viewList`, `viewDefault`, `isViewSwitcherHidden` | the views of a table card, each of a mode with its parameters; a card declaring none has its plain view ([Table Card Views](../comp-mdx/power-platform/comp-diagram-er.md#table-card-views)) |
 | a row's `tone` | a tint of the row |
 | `rowGroupList: [{ id, rowFrom, rowTo, tone }]` | rows taken together: a bracket beside them in a gutter on the right, and the anchor `group/<id>`, so a line leaves from the middle of the rows; what a table split into batches is drawn with |
 
@@ -407,7 +409,7 @@ undo / redo    ->  the state before / after put back, the cell dropped, the path
 
 What this history is not: the document-level undo of the page's edit layer (a write to the file taken back), which is listed in the project's [TODO](../../../main/doc_page_impl_TODO.md#edit-undo); this one is within a session, on the draft, and never reaches the file.
 
-The rules as an author sees them are in [Data diagrams](comp-diagram-er.md#diagram-er-view) (Reading a diagram, Visual editing).
+The rules as an author sees them are in [Data diagrams](../comp-mdx/power-platform/comp-diagram-er.md#diagram-er-view) (Reading a diagram, Visual editing).
 
 ## React Flow Boundary
 
@@ -440,7 +442,7 @@ A block is mounted again when the document enters or leaves edit mode (the page 
 
 ## Search
 
-A reader finds words in a diagram as in a code editor: with the pointer over the canvas, the key of `find/open` (`mod+f` in the default map, [Finding in a part of the page](../../../main/doc_page_impl_api.md#finding-in-a-part-of-the-page)) opens a bar at the top right of the viewport; Enter and Shift+Enter (or its arrows) go to the next and the previous thing found, Escape closes it. It searches the **data** of the diagram, not what happens to be drawn, so it finds rows behind a row break and, in the switch layer, scenes too deep to be drawn; what it finds is then **marked where it is drawn**.
+A reader finds words in a diagram as in a code editor: with the pointer over the canvas, the key of `find/open` (`mod+f` in the default map, [Finding in a part of the page](../../../main/doc_page_impl_api.md#finding-in-a-part-of-the-page)) opens a bar at the top right of the viewport, as does the **search button** where a reader sees it (the magnifier in the path bar of the switch layer, `SwitchPathBar`; beside the zoom controls of a diagram of one scene, `DiagramSearchControl`), pressed while the bar is open; Enter and Shift+Enter (or its arrows) go to the next and the previous thing found, Escape closes it. It searches the **data** of the diagram, not what happens to be drawn, so it finds rows behind a row break and, in the switch layer, scenes too deep to be drawn; what it finds is then **marked where it is drawn**.
 
 ```text
 the bar (DiagramSearchStore)  text, match case, whole word, depth  ──► request { text, isCaseSensitive, isWholeWord, depth, depthMax }
@@ -461,9 +463,9 @@ diagramSearchStateBuild        'match' | 'current' per node, part, line, and per
 
 **Marks.** The search of a canvas is in `DiagramRenderContext.search`; `useDiagramSearchMark(nodeId)` reads how a node, a part of it or a line is marked, in the scene a card is drawn in (`DiagramSearchPathContext`). The node's wrapper (`.doc-vis-node`, `.doc-switch-static-node`) carries `data-search="match|current"`, outlined; the table card marks its title and its rows (tinted); a stack item and the html label of a line, theirs. The words themselves are highlighted by the **CSS Custom Highlight API** (`DiagramSearchHighlight.js`): ranges of the text inside what is marked, painted by `::highlight(doc-diagram-search)` and `::highlight(doc-diagram-search-current)`, recomputed as the canvas draws (a mutation observer), never a change of the elements of a card.
 
-**The current item** is brought into view (`useDiagramSearchHost`): the host's camera moves so its innermost mark stands in the middle, zooming in only as far as reading it takes, and not at all when it is in view and readable. A host prepares it first where it needs to: the switch layer scrolls a stack to the item holding it.
+**The current item** is brought into view (`useDiagramSearchHost`): the host's camera moves so its innermost mark stands in the middle, zooming in only as far as reading it takes, and not at all when it is in view and readable. In view is inside the host by a margin and not under the bar: the bar covers its own box at the top right, not the whole top, where the title of a scene focused stands beside it (`diagramSearchCameraReveal`). A host prepares it first where it needs to: the switch layer scrolls a stack to the item holding it.
 
-**A host** (a canvas) gives a searcher of what it shows and its camera: `DiagramERView` its graph, `SwitchCanvas` the scene shown with the scenes inside it. The hook registers the canvas as a find scope of the page, keeps the result fresh (a reaction, since a search may read scenes not read yet), the highlights and the reveal; `DiagramSearchBar` is the bar. The search of a block of scenes is kept with its store, so it survives the document entering edit mode.
+**A host** (a canvas) gives a searcher of what it shows and its camera: `DiagramERView` its graph, `SwitchCanvas` the scene shown with the scenes inside it. The hook registers the canvas as a find scope of the page, keeps the result fresh (a reaction, since a search may read scenes not read yet), the highlights and the reveal; `DiagramSearchBar` is the bar. The search of a block of scenes is kept with its store (`SwitchStore.searchStoreGet`, made by the canvas or the button of the path bar, whichever asks first), so it survives the document entering edit mode.
 
 ## Existing ER Data
 

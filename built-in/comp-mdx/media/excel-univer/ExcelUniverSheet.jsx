@@ -38,7 +38,8 @@ function excelUniverEngineGet(univerLoad) {
 //                 context menu, and every change of the data is reported.
 //                 false (view mode): none of them; the workbook is read-only
 //                 and every command that would change the data is canceled,
-//                 so cells can be selected and the sheet scrolled, nothing else
+//                 so cells can be selected, copied (Ctrl/⌘+C) and the sheet
+//                 scrolled, nothing else
 //   isReadOnlyWarningShown  view mode: the engine's dialog saying the sheet
 //                 cannot be edited appears when the reader tries to (a double
 //                 click on a cell); false: the attempt does nothing
@@ -116,7 +117,12 @@ export function ExcelUniverSheet({
         // editor opens); the guard refuses what still gets through
         univerAPI.setPermissionDialogVisible(isReadOnlyWarningShown);
         try {
-          await workbook.getWorkbookPermission().setReadOnly();
+          const permission = workbook.getWorkbookPermission();
+          await permission.setReadOnly();
+          // read-only is the engine's viewer mode, which allows viewing and
+          // printing only: copying the selected cells (its own Ctrl/⌘+C,
+          // which takes the key from the browser) is allowed again
+          await permission.setPoint(univerAPI.Enum?.WorkbookPermissionPoint?.Copy ?? 'WorkbookCopy', true);
         } catch (error) {
           console.error(error);
         }
@@ -139,11 +145,28 @@ export function ExcelUniverSheet({
       onReadyRef.current?.({ univerAPI, workbook, engineVersion: engine.univerVersion });
     };
 
+    // the engine takes its keys (Ctrl/⌘+C among them) through a hidden input
+    // it focuses on a click. it may have placed that input outside its own
+    // element (on the body, when the page rendered the block anew, as on
+    // entering the document's edit mode), and on the first click it moves it
+    // back in, which drops the focus: given back here, once the click is done
+    const focusKeep = () => {
+      setTimeout(() => {
+        if (isDisposed) return;
+        const active = document.activeElement;
+        if (active && active !== document.body && active !== document.documentElement) return;
+        const input = mountElement.querySelector('[contenteditable="true"]');
+        if (input) input.focus({ preventScroll: true });
+      }, 0);
+    };
+    mountElement.addEventListener('pointerup', focusKeep);
+
     mount().catch((error) => {
       if (!isDisposed) messageSet(String(error?.message ?? error));
     });
     return () => {
       isDisposed = true;
+      mountElement.removeEventListener('pointerup', focusKeep);
       for (const disposable of disposableList) disposable.dispose();
       mountElement.remove();
       // a mount still loading the engine creates nothing (isDisposed); an

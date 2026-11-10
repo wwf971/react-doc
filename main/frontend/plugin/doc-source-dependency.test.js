@@ -100,6 +100,41 @@ test('a consumer extractor retains its static target', () => {
   assert.deepEqual(result.dependencyList.map((dependency) => dependency.target), ['~docs/data.csv']);
 });
 
+test('a block whose asset reference was not expanded does not reach its extractor', () => {
+  const dataList = [];
+  const extractor = { 'app/Table': (data, context) => { dataList.push(data); context.dependencyAdd('~docs/evidence.md', 'source'); } };
+  const collect = (text) => docSourceDependenciesCollect(text, { internalPath: '~docs/page.md', ext: 'md' }, { compRegistry: { Table: 'app/Table' } }, extractor);
+  // the item is missing: the fence is still the reference, which is no data of the component
+  const missing = collect(`<!--renderComp=Table-->\n${F}asset\nstore: local\nname: login test cases\n${F}\n`);
+  assert.equal(dataList.length, 0);
+  assert.deepEqual(missing.dependencyList, []);
+  assert.equal(missing.warningList.length, 1);
+  assert.match(missing.warningList[0], /Table: the asset login test cases is not in the store/);
+  // expanded (the store had it): the data reaches the extractor, and what it names is retained
+  const expanded = collect(`<!--renderComp=Table-->\n${F}yaml\ntype: table\n${F}\n`);
+  assert.equal(dataList.length, 1);
+  assert.equal(dataList[0].lang, 'yaml');
+  assert.deepEqual(expanded.dependencyList.map((dependency) => dependency.target), ['~docs/evidence.md']);
+  assert.deepEqual(expanded.warningList, []);
+});
+
+test('an attachment url is written once, every key of its file naming it', async () => {
+  const { fileUrlByPathCodeBuild } = await import('./doc-source.ts');
+  const lineList = fileUrlByPathCodeBuild([
+    { absPath: '/d/a.png', referenceList: ['./img/a.png', 'img/a.png', '~docs/img/a.png'] },
+    { absPath: '/d/b.png', referenceList: ['~docs/b.png', 'img/a.png'] },
+  ], (absPath) => `data:image/png;base64,${absPath}`);
+  const code = lineList.join('\n');
+  assert.equal(code.split('data:image/png;base64,/d/a.png').length - 1, 1);
+  const fileUrlByPath = new Function(`${code.replace('export const', 'const')}\nreturn fileUrlByPath;`)();
+  assert.deepEqual(fileUrlByPath, {
+    'img/a.png': 'data:image/png;base64,/d/b.png', // a key two files claim: the later one, as before
+    '~docs/img/a.png': 'data:image/png;base64,/d/a.png',
+    '~docs/b.png': 'data:image/png;base64,/d/b.png',
+  });
+  assert.equal(fileUrlByPathCodeBuild([], () => '').join('\n'), 'export const fileUrlByPath = {};');
+});
+
 // ---------- pruning ----------
 
 function sourceBuild(fileByRelPath) {

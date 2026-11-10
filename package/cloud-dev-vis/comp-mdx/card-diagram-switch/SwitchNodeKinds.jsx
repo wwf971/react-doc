@@ -7,7 +7,7 @@ import { diagramNormalize } from '../card-diagram/DiagramERData.js';
 import { DiagramNodeContent, DiagramRenderContext, useDiagramSearchMark } from '../card-diagram/DiagramRender.jsx';
 import { SwitchContext, SwitchStaticScene } from './SwitchStatic.jsx';
 import { SwitchViewSwitcher, SwitchViewTabs } from './SwitchViewSwitcher.jsx';
-import { SWITCH_EMBED_CHROME_HEIGHT, switchBoxClipBuild, switchEmbedCardRectOf, switchEmbedMapBuild, switchPathViewBuild, switchPathViewRead, switchPresentationBuild, switchPresentationChildIsDrawn, switchStackFrameIsVisible, switchStackItemLayout, switchStackPresentationBuild, switchStackTitleBarNormalize, switchStackTitleBarRead } from './SwitchData.js';
+import { SWITCH_EMBED_CHROME_HEIGHT, SWITCH_TITLE_FONT_SIZE, SWITCH_TITLE_HEIGHT, switchBoxClipBuild, switchEmbedCardRectOf, switchEmbedMapBuild, switchPathViewBuild, switchPathViewRead, switchPresentationBuild, switchPresentationChildIsDrawn, switchStackFrameIsVisible, switchStackItemLayout, switchStackPresentationBuild, switchStackTitleBarNormalize, switchStackTitleBarRead } from './SwitchData.js';
 import { CARD_ICON_BY_NAME, CardBrief } from '../card-diagram/CompactCard.jsx';
 
 // The two node kinds of the switching layer (card-diagram-flexible-switch.md):
@@ -454,7 +454,10 @@ export const sceneTabsNodeKind = {
 // it is never written in a scene, and offered by no panel
 export const SceneTitleCard = observer(function SceneTitleCard({ node }) {
 	const scale = node.data.scale ?? 1;
-	return <h2 className="doc-switch-scene-title" style={scale === 1 ? undefined : { fontSize: 32 * scale, lineHeight: `${48 * scale}px` }}>{node.data.text}</h2>;
+	// what decides its height is set here, inline: its node is SWITCH_TITLE_HEIGHT * scale high,
+	// and its one line is as high, so the heading rules of a page (a margin, a font size, a line
+	// height of its h2) cannot make it overflow its node. not-prose: out of the page's typography
+	return <h2 className="doc-switch-scene-title not-prose" style={{ margin: 0, fontSize: SWITCH_TITLE_FONT_SIZE * scale, lineHeight: `${SWITCH_TITLE_HEIGHT * scale}px` }}>{node.data.text}</h2>;
 });
 
 export const sceneTitleNodeKind = {
@@ -462,8 +465,11 @@ export const sceneTitleNodeKind = {
 	label: 'Title of a scene',
 	contract: {
 		anchorListGet: () => [{ id: 'body', sideList: sideAllList }],
-		sizeDefault: { width: 400, height: 48 },
+		sizeDefault: { width: 400, height: SWITCH_TITLE_HEIGHT },
 		isWidthFit: true,
+		// found by its words, as a whole (SwitchStore.searchRun searches it with the scene shown);
+		// not by the rest of its data, a scale
+		searchMatch: (node, helper) => (helper.test(node.data.text) ? { isWhole: true } : null),
 	},
 	schema: null,
 	Card: SceneTitleCard,

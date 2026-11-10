@@ -1,6 +1,6 @@
 # Card Diagram Animation: Design
 
-A wrapper of the [card diagram framework](card-diagram.md) that makes a diagram move between named states, inside the page, as a block of a document. It is general purpose: it knows nodes, rows, connections and a camera, never what a diagram is about. What authors write is in [comp-card-diagram-animation.md](comp-card-diagram-animation.md); this document is the design, and what to go through before changing it.
+A wrapper of the [card diagram framework](card-diagram.md) that makes a diagram move between named states, inside the page, as a block of a document. It is general purpose: it knows nodes, rows, connections and a camera, never what a diagram is about. What authors write is in [comp-card-diagram-animation.md](../comp-mdx/card-diagram-animation/comp-card-diagram-animation.md); this document is the design, and what to go through before changing it.
 
 ```text
 [control area]           the states as a graph, the transitions as lines, Play
@@ -86,7 +86,7 @@ Animations are many and small, each about one aspect, and share their cards:
 
 | Change | Where | Check |
 | --- | --- | --- |
-| a new property of a target | `PROP_DEFAULT_BY_KIND`, `animationSceneStyleBuild` | interpolated by kind: a color goes in `PROP_COLOR_SET`; a test in `AnimationData.test.js`; the table of [comp-card-diagram-animation.md](comp-card-diagram-animation.md#targets-and-properties) |
+| a new property of a target | `PROP_DEFAULT_BY_KIND`, `animationSceneStyleBuild` | interpolated by kind: a color goes in `PROP_COLOR_SET`; a test in `AnimationData.test.js`; the table of [comp-card-diagram-animation.md](../comp-mdx/card-diagram-animation/comp-card-diagram-animation.md#targets-and-properties) |
 | a new kind of track | `trackNormalize`, `animationTransitionCompile`, a component in a `Sequence` | deterministic from the frame alone: seeking to a frame gives the same picture |
 | a new card | a kind of a registry, not here | [Adding a kind](card-diagram.md#adding-a-kind); rows marked `data-row-id` |
 

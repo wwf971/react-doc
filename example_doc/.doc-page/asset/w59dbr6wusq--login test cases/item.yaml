@@ -1,0 +1,48 @@
+itemId: w59dbr6wusq
+name: login test cases
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+component:
+  name: TestCaseTable
+saveMode: inPlace
+versionIdHead: w59dbr6ws4w
+isDeleted: false
+isLocked: false
+timeCreated: 20261031_03361868+09
+versionList:
+  - versionId: w59dbr6ws4w
+    versionIdPrevList: []
+    time: 20261031_03361868+09
+    note: TestCaseTable demonstration of ~example/mdx-usage/comp-test-case-table.md
+    size: 2639
+    hash: e13cab47e182330fe7533d4779e6ee8870f45f6f
+    isLocked: false
+    dependencyList:
+      - type: source
+        path: ~example:example/mdx-usage/test-case-evidence.md
+eventList:
+  - eventType: create
+    time: 20261031_03361868+09
+    versionId: w59dbr6ws4w
+  - eventType: updateInPlace
+    time: 20261031_03405963+09
+    versionId: w59dbr6ws4w
+  - eventType: updateInPlace
+    time: 20261031_03410134+09
+    versionId: w59dbr6ws4w
+  - eventType: updateInPlace
+    time: 20261031_03410298+09
+    versionId: w59dbr6ws4w
+  - eventType: updateInPlace
+    time: 20261031_03410799+09
+    versionId: w59dbr6ws4w
+  - eventType: updateInPlace
+    time: 20261031_03422053+09
+    versionId: w59dbr6ws4w
+  - eventType: updateInPlace
+    time: 20261031_03434828+09
+    versionId: w59dbr6ws4w
+  - eventType: updateInPlace
+    time: 20261102_13261232+09
+    versionId: w59dbr6ws4w

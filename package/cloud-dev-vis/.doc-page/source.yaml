@@ -1,6 +1,7 @@
-# The documents of the package are in doc/; the root is the package folder, as
-# a doc page's is, so that .doc-page/asset is named by it. comp-mdx/ and the
-# template folders of a package are never collected.
+# The design documents of the package are in doc/, the document of a component
+# in its folder of comp-mdx/; the root is the package folder, as a doc page's is,
+# so that .doc-page/asset is named by it. Of comp-mdx/ only the Markdown documents
+# are collected, never the code; the template folders of a package never are.
 rules:
   - action: addFolder
     alias: cloud-dev-vis

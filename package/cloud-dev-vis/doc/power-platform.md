@@ -43,7 +43,7 @@ invalid enum values and duplicate property IDs are rejected. Anchors are
 direction, side, endpoint, and label rules. No runtime execution order is
 inferred from card placement: label branches and run-after conditions explicitly.
 
-Files for each resource share a prefix: `PowerAutomateNode*` and `BusinessRuleNode*` contain its card (the resource card of the base series with an icon and an accent color), its fields and validation, and its starting text. The kinds themselves (contract, schema, card, create entry) are declared in `power-platform-node-registry.js`. See [Power Platform diagrams](comp-powerplatform.md) for complete examples and design-specific caveats.
+Files for each resource share a prefix: `PowerAutomateNode*` and `BusinessRuleNode*` contain its card (the resource card of the base series with an icon and an accent color), its fields and validation, and its starting text. The kinds themselves (contract, schema, card, create entry) are declared in `power-platform-node-registry.js`. See [Power Platform diagrams](../comp-mdx/power-platform/comp-powerplatform.md) for complete examples and design-specific caveats.
 
 ## Mapping Operators
 
@@ -130,7 +130,7 @@ node:
 - `isRequired` and `description` are optional.
 - A column description must be available from the corresponding column-name tooltip without increasing the table's vertical size.
 - Legacy `entity: ...` input remains readable: the registry's `cardLegacyConvert` (`dataverseCardLegacyConvert`) turns it into `{ version: 1, node }`.
-- Inline and asset-backed cards share the visual editor of the diagrams (`DiagramVisualEdit`, [card-diagram-impl.md](card-diagram-impl.md#card-editing)): cells typed in place, rows inserted / moved / removed from the toolbar of a focused row or the lists of the edit card, row handles added and removed from the row's detail or the row edges; the edit card stands beside the whole card and is driven by its path ([comp-diagram-er.md](comp-diagram-er.md#diagram-er-edit)). Drafts save on Save or normal exit, to the asset or inline YAML; Cancel discards them.
+- Inline and asset-backed cards share the visual editor of the diagrams (`DiagramVisualEdit`, [card-diagram-impl.md](card-diagram-impl.md#card-editing)): cells typed in place, rows inserted / moved / removed from the toolbar of a focused row or the lists of the edit card, row handles added and removed from the row's detail or the row edges; the edit card stands beside the whole card and is driven by its path ([comp-diagram-er.md](../comp-mdx/power-platform/comp-diagram-er.md#diagram-er-edit)). Drafts save on Save or normal exit, to the asset or inline YAML; Cancel discards them.
 
 ### Display Requirements
 

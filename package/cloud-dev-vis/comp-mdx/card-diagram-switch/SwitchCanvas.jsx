@@ -6,7 +6,6 @@ import { Check, CircleAlert, LoaderCircle } from '../../../../main/frontend/UICo
 import { DiagramEdge, DiagramNode, DiagramPointNode, DiagramRenderContext, DiagramSearchPathContext, connectionPathBuild, useDiagramSearchMark } from '../card-diagram/DiagramRender.jsx';
 import { useCanvasWheelGuard } from '../card-diagram/CanvasWheelGuard.js';
 import { CanvasStill, useCanvasStill } from '../card-diagram/CanvasStill.jsx';
-import { DiagramSearchStore } from '../card-diagram/DiagramSearchStore.js';
 import { DiagramSearchBar, useDiagramSearchHost } from '../card-diagram/DiagramSearchView.jsx';
 import { diagramCanvasLineListGet, diagramCanvasRegister } from '../card-diagram/DiagramCanvasRegistry.js';
 import '../card-diagram/DiagramER.css';
@@ -213,13 +212,8 @@ export const SwitchCanvas = observer(function SwitchCanvas({ store, config, regi
 	// animation layer the block holds it around the player, which draws the canvas late
 	const still = useCanvasStill(config, 'switch', boxRef, { isEnabled: !isStillOuter });
 	const [, readySet] = useState(false);
-	// the search of the block (card-diagram-impl.md#search), kept with its store: the scene shown
-	// and the scenes inside its cards, as deep as the bar says (the depth drawn, at first)
-	const search = useMemo(() => {
-		if (!store.searchStore) store.searchStore = new DiagramSearchStore({ isDepthOffered: true, depthMax: store.depthRenderMax });
-		store.searchStore.searcherSet((request) => store.searchRun(request));
-		return store.searchStore;
-	}, [store]);
+	// the search of the block (card-diagram-impl.md#search), kept with its store
+	const search = useMemo(() => store.searchStoreGet(), [store]);
 	const context = useMemo(() => ({
 		config,
 		registry,

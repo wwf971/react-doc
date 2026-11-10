@@ -11,6 +11,7 @@ import {
   wikiTextSplit,
 } from '../src/lib/doc-link-classify.js';
 import { remarkCommentComp } from '../src/lib/remark-comment-comp.js';
+import { assetRefLangIs, assetRefParse } from '../src/lib/doc-asset-ref.js';
 
 // statically authored local file references of one document, for source
 // pruning (doc-source.ts pruneSourceToSidePanel) and for the link index of
@@ -121,6 +122,15 @@ export function docSourceDependenciesCollect(
     }
     const collect = collectByCompId[compIdResolve(configDoc, compName)];
     if (!collect) return;
+    // a block whose asset reference was not expanded (the item is not in the
+    // store: not committed, or in a partition kept out) holds the reference,
+    // not the component's data: its extractor is not given it
+    if (assetRefLangIs(data.lang)) {
+      const reference = assetRefParse(String(data.raw ?? ''));
+      const name = reference.itemId || reference.name || String(data.raw ?? '').trim().split(/\r?\n/).join(', ');
+      warningList.push(`${sourcePath}: ${compName}: the asset ${name} is not in the store; the files its data refers to are not discovered`);
+      return;
+    }
     collect(data, {
       dependencyAdd: (target, kind) => dependencyAdd(target, kind, compName, block),
       // nested Markdown is compiled without comment components (MdxRenderer)

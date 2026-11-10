@@ -58,7 +58,7 @@ For a component whose box is a canvas of things (nodes and lines, shapes, images
 - **Keyboard:** Escape steps out, Enter confirms a cell, Ctrl/⌘ + Enter saves, ArrowUp / ArrowDown and Enter in a search list, Ctrl/⌘ + Z undoes and Ctrl/⌘ + Shift + Z redoes.
 - **Undo and redo of the draft, in the session:** every change of the draft is a step the author can take back and repeat, from the bar and from the keys, until the session is saved or canceled; typing in one cell is one step; the selection is not a step and is not restored by one. The history belongs to the session in the browser: it starts empty when the block enters edit mode and is dropped with the session, so nothing of it is in the data. The editors of the diagrams get this from their engine ([the history](../package/cloud-dev-vis/doc/card-diagram-impl.md#history)); another engine keeps a history of its own on the same terms.
 
-`DiagramER` implements all of these; its rules are written out for authors in [Data diagrams](../package/cloud-dev-vis/doc/comp-diagram-er.md#diagram-er-view) and for implementers in [card-diagram-impl.md](../package/cloud-dev-vis/doc/card-diagram-impl.md#card-editing), with the guidance for building on that engine in [card-diagram.md](../package/cloud-dev-vis/doc/card-diagram.md) beside it.
+`DiagramER` implements all of these; its rules are written out for authors in [Data diagrams](../package/cloud-dev-vis/comp-mdx/power-platform/comp-diagram-er.md#diagram-er-view) and for implementers in [card-diagram-impl.md](../package/cloud-dev-vis/doc/card-diagram-impl.md#card-editing), with the guidance for building on that engine in [card-diagram.md](../package/cloud-dev-vis/doc/card-diagram.md) beside it.
 
 ## Should: switching view and edit while open
 

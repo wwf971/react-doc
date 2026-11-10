@@ -390,7 +390,7 @@ export class DiagramEditStore {
 		return isChanged ? id : null;
 	}
 
-	// ---------- which rows a card shows, and its row breaks (comp-diagram-er.md#table-card-views) ----------
+	// ---------- which rows a card shows, and its row breaks (../power-platform/comp-diagram-er.md#table-card-views) ----------
 
 	// the view a card shows while it is edited: not a step, and not saved. a view that went
 	// away falls back to the default

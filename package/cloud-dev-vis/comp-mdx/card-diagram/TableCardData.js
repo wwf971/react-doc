@@ -23,7 +23,7 @@
 //       table split into batches is drawn with
 export const tableCardFieldListDefault = [{ id: 'name', label: 'Name' }, { id: 'value', label: 'Value' }];
 
-// The rows a card shows (comp-diagram-er.md#choosing-rows): a list of what to draw from
+// The rows a card shows (../power-platform/comp-diagram-er.md#choosing-rows): a list of what to draw from
 // top to bottom, of any card whose rows are data of its own, whatever a row means there.
 //
 //   rowDisplay: [accountid, '...', status, { break: 12 columns }, modifiedon]
@@ -92,7 +92,7 @@ export function cardRowDisplayItemListGet(rowDisplay, rowList) {
 	});
 }
 
-// The views of a table card (comp-diagram-er.md#table-card-views): a card has one or more views,
+// The views of a table card (../power-platform/comp-diagram-er.md#table-card-views): a card has one or more views,
 // each of a view mode, and shows one at a time.
 //
 //   viewList?: [{ id, label?, mode, ...its parameters }]

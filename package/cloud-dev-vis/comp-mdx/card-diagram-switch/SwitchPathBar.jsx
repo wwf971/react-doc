@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight, Scan, SquareDashedMousePointer } from '../../../../main/frontend/UICommon.js';
+import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight, Scan, Search, SquareDashedMousePointer } from '../../../../main/frontend/UICommon.js';
 import { AnchoredPopover } from '../../../../main/comp-doc/popup/AnchoredPopover.jsx';
 import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
 import { CARD_ICON_BY_NAME } from '../card-diagram/CompactCard.jsx';
@@ -10,7 +10,8 @@ import { switchPresentationBuild } from './SwitchData.js';
 // The bar over a switching viewport (card-diagram-flexible-switch.md#the-path-bar):
 // the path of the scene shown, aligned to the left, one button per segment. A click on
 // a segment switches to it; the chevron before a segment lists the scenes beside it.
-// At the right, what acts on the scene shown: the camera back to its default, the box.
+// At the right, what acts on the scene shown: find in it (the bar mod+f opens over the canvas),
+// the camera back to its default, the box.
 // An item of a menu: its label, or, when it has one, its labelItemList: a list of things of
 // different types (card-diagram-flexible-switch.md#the-path-bar)
 //
@@ -93,6 +94,7 @@ export const SwitchPathBar = observer(function SwitchPathBar({ store, trailing }
 			</nav>
 			<span className="doc-switch-bar-trailing">
 				{trailing}
+				<SwitchSearchButton store={store} />
 				<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="Back to the default range of this scene" aria-label="Fit the scene" onClick={() => void store.cameraReset()}>
 					<Scan size={16} aria-hidden="true" />
 				</button>
@@ -101,6 +103,17 @@ export const SwitchPathBar = observer(function SwitchPathBar({ store, trailing }
 				</button>
 			</span>
 		</div>
+	);
+});
+
+// the search of the block, seen: the bar opens at the top right of the canvas, below it, as
+// mod+f with the pointer over the canvas opens it (card-diagram-impl.md#search)
+const SwitchSearchButton = observer(function SwitchSearchButton({ store }) {
+	const search = store.searchStoreGet();
+	return (
+		<button type="button" className="doc-button-icon is-panel doc-switch-bar-button is-search" title="Find in the diagram, and in the scenes inside its cards" aria-label="Find in the diagram" aria-pressed={search.isOpen} onClick={() => (search.isOpen ? search.close() : search.open())}>
+			<Search size={16} aria-hidden="true" />
+		</button>
 	);
 });
 

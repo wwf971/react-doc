@@ -4,10 +4,11 @@ import { yamlStringify } from '../../../../main/frontend/src/lib/yaml.js';
 import { DiagramERStore } from '../card-diagram/DiagramERStore.js';
 import { diagramNormalize, diagramPlacesGet, diagramPositionsGet } from '../card-diagram/DiagramERData.js';
 import { diagramSceneSearch } from '../card-diagram/DiagramSearch.js';
+import { DiagramSearchStore } from '../card-diagram/DiagramSearchStore.js';
 import {
 	SWITCH_EMBED_CHROME_HEIGHT, switchCameraBetween, switchCameraChildOf, switchCameraFit, switchCameraParentOf, switchEase, switchEmbedCardRectOf, switchEmbedMapBuild, switchMaskClipBuild, switchMorphBuild,
 	SWITCH_DEPTH_MAX_DEFAULT, switchMorphFrameAt, switchMorphStyleBuild, switchPathChain, switchPathHashRead, switchPathNormalize, switchPathParent, switchPathViewBuild, switchPathViewRead, switchPortalItemStyleBuild, switchPortalStyleBuild, switchRectUnion,
-	switchRouteFind, switchStackItemLayout, switchStepSecondGet, switchPresentationBuild, switchStackHeightIsFull, switchStackPresentationBuild, switchViewDescGet, switchViewFrameIsHidden, switchViewHoverResolve, switchViewListCheck, switchViewListOf, switchViewResolve, switchViewSwitcherIsShown } from './SwitchData.js';
+	switchRouteFind, switchStackItemLayout, switchStepSecondGet, switchPresentationBuild, switchStackHeightIsFull, switchStackPresentationBuild, switchViewDescGet, switchViewFrameIsHidden, switchViewHoverResolve, switchViewListCheck, switchViewListOf, switchViewResolve, switchViewSwitcherIsShown, SWITCH_TITLE_HEIGHT } from './SwitchData.js';
 
 const SCENE_BOX_TYPE = 'scene-box';
 const SCENE_EMBED_TYPE = 'scene-embed';
@@ -43,7 +44,6 @@ const isMotionReduced = () => typeof window !== 'undefined' && window.matchMedia
 // scene wider than SWITCH_TITLE_WIDTH_BASE, so it keeps its weight beside what it names; a width
 // guessed from its words until it is measured
 export const SWITCH_TITLE_ID = '~title';
-const SWITCH_TITLE_HEIGHT = 48;
 const SWITCH_TITLE_GAP = 28;
 const SWITCH_TITLE_CHAR_WIDTH = 30;
 const SWITCH_TITLE_WIDTH_BASE = 1200;
@@ -109,7 +109,7 @@ export class SwitchStore {
 		// over it, kept with it (SwitchAnimation)
 		this.cameraLive = null;
 		this.animationStore = null;
-		// the search of the block (SwitchCanvas), kept with the store across mounts
+		// the search of the block (searchStoreGet), kept with the store across mounts
 		this.searchStore = null;
 		makeAutoObservable(this, {
 			cameraLive: false, animationStore: false, searchStore: false, isSeekBusy: false, seek: false, seekEnd: false, showAt: false, planRun: false, stepEnter: false, stepExit: false, pathSet: false, stepRun: false, registry: false, resolve: false, scope: false, entryByPath: false, sceneDescByPath: false, viewChosenByKey: false, cameraByPath: false, titleNodeByText: false, embedBodyByKey: false, stackElementByKey: false, stackScrollByKey: false, stackAreaByKey: false, stackItemByKey: false, itemInitial: false, maskElement: false, maskWorldElement: false, styleElement: false, viewportApi: false,
@@ -769,6 +769,18 @@ export class SwitchStore {
 		this.titleAlign = align === 'center' ? 'center' : 'left';
 	}
 
+	// the search of the block (card-diagram-impl.md#search): made by whichever asks first, the
+	// canvas (SwitchCanvas, which searches with it) or the button of the path bar, so both hold
+	// the same one; it searches the scene shown and the scenes inside its cards, as deep as the
+	// bar says (the depth drawn, at first)
+	searchStoreGet() {
+		if (!this.searchStore) {
+			this.searchStore = new DiagramSearchStore({ isDepthOffered: true, depthMax: this.depthRenderMax });
+			this.searchStore.searcherSet((request) => this.searchRun(request));
+		}
+		return this.searchStore;
+	}
+
 	depthRenderMaxSet(depthMax) {
 		const value = Number(depthMax);
 		this.depthRenderMax = Number.isFinite(value) ? Math.max(0, Math.round(value)) : SWITCH_DEPTH_MAX_DEFAULT;
@@ -778,18 +790,25 @@ export class SwitchStore {
 
 	// the scene shown and, as deep as the request goes, the scenes inside its cards: the
 	// framework's search of a scene (diagramSceneSearch), whose kinds holding a scene ask for it
-	// through helper.childSearch; this answers with the path of the view that card shows
+	// through helper.childSearch; this answers with the path of the view that card shows.
+	// the scene shown is searched with its title, a node the layer draws above it and not one
+	// of its graph (titleFlowNodeOf); a scene inside a card has none drawn, its card names it
 	searchRun(request) {
-		return this.searchSceneRun(this.pathCurrent, request, []);
+		const path = this.pathCurrent;
+		const titleRect = this.titleRectOf(path);
+		const titleNode = titleRect ? this.titleNodeOf(path) : null;
+		return this.searchSceneRun(path, request, [], titleNode ? { node: titleNode, rect: titleRect } : null);
 	}
 
-	searchSceneRun(path, request, pathChain) {
+	searchSceneRun(path, request, pathChain, title = null) {
 		const entry = this.entryGet(path);
-		const graph = entry?.canvas.graph;
+		const graphOwn = entry?.canvas.graph;
+		const graph = graphOwn && title ? { ...graphOwn, nodes: [title.node, ...graphOwn.nodes] } : graphOwn;
 		const positions = graph ? this.entryPositionsGet(entry) : new Map();
 		return diagramSceneSearch({
 			path, graph, request, registry: this.registry, pathChain,
 			rectOf: (nodeId) => {
+				if (title && nodeId === title.node.id) return title.rect;
 				const node = graph?.nodes.find((item) => item.id === nodeId);
 				return node ? { ...(positions.get(nodeId) ?? { x: 0, y: 0 }), ...this.nodeSizeOf(entry, node) } : null;
 			},

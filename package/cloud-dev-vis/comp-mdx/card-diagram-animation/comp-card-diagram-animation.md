@@ -4,7 +4,7 @@ description: CardDiagramAnimation moves a card diagram between named states; cli
 language: en
 ---
 
-A diagram that moves. `CardDiagramAnimation` wraps a [card diagram](comp-diagram-er.md) in a control area: the **states** are named, and the viewport goes to one when it is clicked or plays its way between two. `DiagramERAnimation` is the same with the cards of the [Power Platform series](comp-powerplatform.md). The design is in [Card Diagram Animation: Design](card-diagram-animation.md).
+A diagram that moves. `CardDiagramAnimation` wraps a [card diagram](../power-platform/comp-diagram-er.md) in a control area: the **states** are named, and the viewport goes to one when it is clicked or plays its way between two. `DiagramERAnimation` is the same with the cards of the [Power Platform series](../power-platform/comp-powerplatform.md). The design is in [Card Diagram Animation: Design](../../doc/card-diagram-animation.md).
 
 ## A table split into batches
 
@@ -297,7 +297,7 @@ An animation is edited as its source (the block's source mode); it has no visual
 
 ## Compact cards
 
-Three looks for diagrams of many cards ([Compact cards](card-diagram-impl.md#compact-cards)), usable in every diagram of the framework:
+Three looks for diagrams of many cards ([Compact cards](../../doc/card-diagram-impl.md#compact-cards)), usable in every diagram of the framework:
 
 <!--renderComp=CardDiagram,height=300-->
 ```yaml

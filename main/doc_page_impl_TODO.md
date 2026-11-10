@@ -24,12 +24,12 @@ How the list is kept (also in `AGENTS.md`):
 
 ## Card diagram animation
 
-- <a id="animation-visual-edit"></a>**A visual edit mode of an animation.** An animation is edited as its source ([Card Diagram Animation](../package/cloud-dev-vis/doc/comp-card-diagram-animation.md)). Editing the diagram with the framework's editor, and states and tracks from the control area, would be its visual mode; the diagram's part is `DiagramVisualEdit` on `document.diagram`.
+- <a id="animation-visual-edit"></a>**A visual edit mode of an animation.** An animation is edited as its source ([Card Diagram Animation](../package/cloud-dev-vis/comp-mdx/card-diagram-animation/comp-card-diagram-animation.md)). Editing the diagram with the framework's editor, and states and tracks from the control area, would be its visual mode; the diagram's part is `DiagramVisualEdit` on `document.diagram`.
 - <a id="animation-scrub"></a>**Scrubbing.** The progress on a line shows where a transition is but cannot be dragged; everything is a function of the frame, so a drag would be `seekTo`.
 
 ## Connection lines of a card diagram
 
-- <a id="card-record-edit"></a>**Editing the records of a Dataverse card visually.** A `row` or a `column` view of a table only reads, and a Dataverse card's `rows` are written in the source ([Table Card Views](../package/cloud-dev-vis/doc/comp-diagram-er.md#table-card-views)). Its cells could be typed in as a plain view's are.
+- <a id="card-record-edit"></a>**Editing the records of a Dataverse card visually.** A `row` or a `column` view of a table only reads, and a Dataverse card's `rows` are written in the source ([Table Card Views](../package/cloud-dev-vis/comp-mdx/power-platform/comp-diagram-er.md#table-card-views)). Its cells could be typed in as a plain view's are.
 - <a id="card-view-reader"></a>**Keeping what a reader picked.** The view a reader switches a card to lasts while the card is on the page; a link naming a view, or remembering it per reader, would let a document point at it.
 - <a id="route-convert"></a>**Carrying a route to another family of line types.** A route is kept between the right-angled line types and dropped on any other change ([The two layers](../package/cloud-dev-vis/doc/card-diagram-connection-line.md#the-two-layers)). Keeping the anchors, as places, when a right-angled line becomes a curve or back, with handles made up from the directions or the other way round, would save redoing them. `DiagramRoute.js` has what it needs: the anchors' places do not depend on the family.
 - <a id="route-auto"></a>**Lines avoiding each other on any diagram.** The ER [arrangers](../package/cloud-dev-vis/doc/card-diagram-arrange.md) keep lines apart and off cards when cards stand in columns, and `connectionOverlapListGet` finds what is left. A router that takes free space from the drawn cards wherever they are, with no columns, would also serve cards placed in a staircase and lines leaving through a top or bottom handle.

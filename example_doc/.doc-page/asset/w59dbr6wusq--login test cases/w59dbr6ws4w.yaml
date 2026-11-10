@@ -1,0 +1,92 @@
+type: test-case-table
+version: 1
+title: Login
+rowHeader: Test case
+rowHeaderWidth: 7.5rem
+groupDisplay: row
+columns:
+  - { id: description, label: Description, width: 13rem }
+testers:
+  - { id: ai, name: AI self-check, width: 6.5rem }
+  - { id: dev, name: Developer, width: 6.5rem }
+  - { id: pm, name: PM, width: 6.5rem }
+rows:
+  - id: form
+    label: Login form
+    children:
+      - id: form-empty
+        label: Empty submit
+        cells:
+          description: Submit the form with both fields empty.
+      - id: form-wrong
+        label: Wrong password
+        cells:
+          description: Submit a known address with a wrong password.
+      - id: form-ok
+        label: Valid credentials
+        cells:
+          description: Submit a known address with its password.
+  - id: session
+    label: Session
+    children:
+      - id: session-expire
+        label: Expiry
+        cells:
+          description: Wait past the session lifetime, then open a page.
+      - id: session-logout
+        label: Logout
+        cells:
+          description: Choose Logout in the account menu.
+results:
+  {
+    form-empty:
+      {
+        ai:
+          [
+            {
+                id: a0765cee-e348-4309-8116-376aa91b4be4,
+                result: OK,
+                operator: Claude Fable 5.1,
+                time: 1793385659626,
+                timeTimezone: 540,
+                evidence: ~example:example/mdx-usage/test-case-evidence.md
+              },
+            {
+                id: b93c673b-278d-4e77-8c30-650e2c4cdd46,
+                result: NG,
+                operator: Claude Fable 5.1,
+                time: 1793385661346,
+                timeTimezone: 540
+              },
+            {
+                id: 475777bd-3a7c-4c2e-b4fe-4d9eb9f07950,
+                result: null,
+                operator: Claude Fable 5.1,
+                time: 1793385662980,
+                timeTimezone: 540
+              },
+            {
+                id: e60c3812-0f3f-4571-a80e-c9d1eb62d1f4,
+                result: OK,
+                operator: Claude Fable 5.1 (api check),
+                time: 1793593572324,
+                timeTimezone: 540,
+                evidence: ~example:example/mdx-usage/test-case-evidence.md
+              }
+          ]
+      },
+    form-wrong:
+      {
+        ai:
+          [
+            {
+                id: 441867a2-04e8-44f0-9a73-86b509b10281,
+                result: OK,
+                operator: Claude Fable 5.1,
+                time: 1793385667994,
+                timeTimezone: 540,
+                evidence: ~example:example/mdx-usage/test-case-evidence.md
+              }
+          ]
+      }
+  }

@@ -26,7 +26,7 @@ store: local
 name: quarterly sales
 ```
 
-In view mode the spreadsheet has no toolbar, formula bar or sheet tabs. Cells can be selected and the sheet scrolled, but values and styles cannot change; a double click on a cell does nothing. The block shows the range named in the metadata of the asset version (here `A1:F6` of the sheet `Sales`). The notes below row 6 and the second sheet `Notes` are part of the workbook, but view mode does not show them.
+In view mode the spreadsheet has no toolbar, formula bar or sheet tabs. Cells can be selected, copied (Ctrl/⌘ + C, ready to paste into Excel or another sheet) and the sheet scrolled, but values and styles cannot change; a double click on a cell does nothing. The block shows the range named in the metadata of the asset version (here `A1:F6` of the sheet `Sales`). The notes below row 6 and the second sheet `Notes` are part of the workbook, but view mode does not show them.
 
 ## Editing
 

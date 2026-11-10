@@ -254,9 +254,9 @@ connections:
 <!--renderComp=Anchor,id=diagram-er-flow-->
 ## Operators, Custom Nodes, and Line Styles
 
-A node is not necessarily a table. `operator` is a built-in step node; `renderer: { component: MigrationStep }` draws a node with a registered component that declares the `visualizationNode` placement and lists its anchors (`input`, `output`). Lines take a `renderer.type` (`smoothstep` by default, `bezier`, `straight`, `step`, or `polyline` with waypoints), and a `style`, `label`, markers, and `isAnimated`. `defaults.connection` sets these for every line; a line overrides them one property at a time. A right-angled line or a curve can be shaped by anchors and handles ([Connection Lines](card-diagram-connection-line.md)), which is also how lines are kept off each other ([the check](card-diagram-usage.md#no-lines-on-top-of-each-other)).
+A node is not necessarily a table. `operator` is a built-in step node; `renderer: { component: MigrationStep }` draws a node with a registered component that declares the `visualizationNode` placement and lists its anchors (`input`, `output`). Lines take a `renderer.type` (`smoothstep` by default, `bezier`, `straight`, `step`, or `polyline` with waypoints), and a `style`, `label`, markers, and `isAnimated`. `defaults.connection` sets these for every line; a line overrides them one property at a time. A right-angled line or a curve can be shaped by anchors and handles ([Connection Lines](../../doc/card-diagram-connection-line.md)), which is also how lines are kept off each other ([the check](../../doc/card-diagram-usage.md#no-lines-on-top-of-each-other)).
 
-A node can also be **any object** of the page's object registry: `renderer: { component: ObjectView }` with `data: { object: doc:~example:example/service-kernel.md }` draws a card of that document, and the same with a service instance, its config, a todo or a database, each by the view of its own types (`example_doc/object-registry.md`, [Objects and Types](../../../main/doc_page_impl_obj.md#object-views)). It has one anchor, `body`, on every side. In edit mode, a double-click on the canvas and a few typed words also list the objects found by the page's object search, below the node kinds; choosing one adds such a node. `objectSearch: { typeList: [core.task] }` in the diagram's data narrows what is offered, `objectSearch: { isEnabled: false }` offers none.
+A node can also be **any object** of the page's object registry: `renderer: { component: ObjectView }` with `data: { object: doc:~example:example/service-kernel.md }` draws a card of that document, and the same with a service instance, its config, a todo or a database, each by the view of its own types (`example_doc/object-registry.md`, [Objects and Types](../../../../main/doc_page_impl_obj.md#object-views)). It has one anchor, `body`, on every side. In edit mode, a double-click on the canvas and a few typed words also list the objects found by the page's object search, below the node kinds; choosing one adds such a node. `objectSearch: { typeList: [core.task] }` in the diagram's data narrows what is offered, `objectSearch: { isEnabled: false }` offers none.
 
 <!--renderComp=DiagramER,title=Customer migration-->
 ```yaml
@@ -663,7 +663,7 @@ node:
 <!--renderComp=Anchor,id=diagram-er-view-->
 ## Reading a Diagram
 
-These are the rules of a diagram while the document is read (and of a block in edit mode whose session is not open). They are the general principle of every block-like component with a canvas ([Block-like components](../../../main/doc_page_impl_mdx_comp_block.md)):
+These are the rules of a diagram while the document is read (and of a block in edit mode whose session is not open). They are the general principle of every block-like component with a canvas ([Block-like components](../../../../main/doc_page_impl_mdx_comp_block.md)):
 
 - **The reader moves the camera, never the content.** Dragging on empty canvas or on the title line of a card pans; the mouse wheel zooms around the pointer; the controls at the bottom left zoom and fit. A node cannot be dragged: its position is part of the document, and the document is changed only in edit mode.
 - **Text stays text.** Dragging across the rows of a card selects their text, as in any paragraph; a column description is the tooltip of its name.
@@ -749,7 +749,7 @@ The words are the card's own: the rows of a Dataverse table are its *Columns*, o
 - **Dragging from a handle whose connection is focused** (after a click on the handle chose it) does not start a new line: it detaches that end of the focused line and carries it with the pointer, drawn from the line's other end. The same happens when dragging from a handle that takes one line and has it.
 - **Moving an end:** drag the end of a line where it meets a handle, or drag the ring of a free end. Dropping it on a handle that takes it attaches it there; dropping it anywhere else leaves it as a free end at that point. A free end is part of the saved data (`position`), so it is still there after a reload.
 - **Line settings** (the line's detail): label, line type (right-angled, right-angled with sharp corners, curve, straight, polyline), color, thickness, dash (solid, dashed, dotted), the arrow at each end, animation, its route, and **Remove line**. The two ends are listed as read-only text. The **Lines** list of a card names every line at its handles, with its ends, and removes one with the button before it.
-- **Shaping a line:** with the line focused, double-click it to add an anchor, drag the anchor to move it, and drag a handle to change how the line runs there. Delete removes the selected anchor. What each does, in right-angled lines and curves, is in [Connection Lines](card-diagram-connection-line.md#in-the-editor).
+- **Shaping a line:** with the line focused, double-click it to add an anchor, drag the anchor to move it, and drag a handle to change how the line runs there. Delete removes the selected anchor. What each does, in right-angled lines and curves, is in [Connection Lines](../../doc/card-diagram-connection-line.md#in-the-editor).
 - The edit card is **hidden while something is being typed or dragged**: while a cell is being edited, while a node, a line end or a new line is being dragged, and while the create panel is open. It comes back, at the same path, when the gesture ends.
 
 ### Creating nodes and connections
@@ -760,7 +760,7 @@ The words are the card's own: the rows of a Dataverse table are its *Columns*, o
 
 ### Arranging
 
-**Arrange** in the edit panel lists the arrangers of ER diagrams: *Route the lines* keeps the cards where they are, and *Place the cards in columns and route the lines* also moves them. Both remove the anchors of the right-angled lines and create new ones, and either is one undo step. The rules are in [Arrangers](card-diagram-arrange.md).
+**Arrange** in the edit panel lists the arrangers of ER diagrams: *Route the lines* keeps the cards where they are, and *Place the cards in columns and route the lines* also moves them. Both remove the anchors of the right-angled lines and create new ones, and either is one undo step. The rules are in [Arrangers](../../doc/card-diagram-arrange.md).
 
 ### Positions
 

@@ -63,7 +63,7 @@ import {
   serviceConfigFileGet, serviceConfigOfDocPageListGet, serviceSyncDocPageListBuild, problemListReport, type ServiceFolderSet,
 } from './doc-service-server.ts';
 import {
-  compConfigOfDocPageListGet, compConfigurationFileListGet, compFolderListGet, compManifestPathIs, compPathIs,
+  compConfigOfDocPageListGet, compConfigurationFileListGet, compDocumentPathIs, compFolderListGet, compManifestPathIs, compPathIs,
   type CompConfig, type CompMount,
 } from './doc-comp-config.ts';
 import { docPackageListLoad, docPackageSpecDirGet, docPackageSpecListRead, PACKAGE_SERVICE_TEMPLATE_FOLDER_LIST, type DocPackageLoaded, type DocPackageSpec } from './doc-package.ts';
@@ -1665,7 +1665,7 @@ function sourceExcludePathIs(exclude: SourceExclude, filePath: string): boolean 
     || exclude.objectFrontendPathList.some((file) => filePath === file || filePath === `${file}.bak` || filePath === `${file}.tmp`)
     || exclude.objectFrontendFolderList.some((folder) => pathIsInside(filePath, folder))
     || servicePathIs(exclude.serviceFolderSet, filePath)
-    || compPathIs(exclude.compConfig, filePath);
+    || (compPathIs(exclude.compConfig, filePath) && !compDocumentPathIs(filePath));
 }
 
 // the dependency extractors the mounts name (dependencyCollect of a
@@ -2183,6 +2183,22 @@ function textContentHashGet(content: string | Buffer): string {
   return createHash('sha256').update(content).digest('hex');
 }
 
+// the code of fileUrlByPath: one constant per file, its url; the table maps
+// every key (a reference without its leading ./) to the constant of its file.
+// a key two files claim keeps the file listed later, as one table built key
+// by key would
+export function fileUrlByPathCodeBuild(attachmentList: DocAttachmentResolved[], urlGet: (absPath: string) => string): string[] {
+  const lines: string[] = [];
+  const indexByKey = new Map<string, number>();
+  attachmentList.forEach((attachment, index) => {
+    lines.push(`const docAttachmentUrl${index} = ${JSON.stringify(urlGet(attachment.absPath))};`);
+    for (const reference of attachment.referenceList) indexByKey.set(reference.replace(/^\.\//, ''), index);
+  });
+  const entryList = [...indexByKey].map(([key, index]) => `  ${JSON.stringify(key)}: docAttachmentUrl${index},`);
+  lines.push(entryList.length ? `export const fileUrlByPath = {\n${entryList.join('\n')}\n};` : 'export const fileUrlByPath = {};');
+  return lines;
+}
+
 export function generateModuleCode(
   configDoc: any,
   fileEntries: FileEntry[],
@@ -2231,17 +2247,12 @@ export function generateModuleCode(
   // the bytes of the files components name: a build inlines them as data
   // urls, keyed by source path and by the spelling the reference used; in
   // development the page reads them through the source api instead, and the
-  // table only covers files found outside the collected source
-  const fileUrlByPath: Record<string, string> = {};
-  for (const attachment of attachmentList) {
-    const url = isBuild
-      ? attachmentDataUrlGet(attachment.absPath)
-      : `/@fs/${normalizeSlashPath(attachment.absPath)}`;
-    for (const reference of attachment.referenceList) {
-      fileUrlByPath[reference.replace(/^\.\//, '')] = url;
-    }
-  }
-  lines.push(`export const fileUrlByPath = ${JSON.stringify(fileUrlByPath)};`);
+  // table only covers files found outside the collected source. each url is
+  // written once and every key of its file names it: a file has two keys
+  // at least, and a data url repeated per key would carry its bytes as often
+  lines.push(...fileUrlByPathCodeBuild(attachmentList, (absPath) => (isBuild
+    ? attachmentDataUrlGet(absPath)
+    : `/@fs/${normalizeSlashPath(absPath)}`)));
   if (!isBuild) {
     // development: the text of a file is read over http, never imported
     lines.push('async function sourceTextLoad(path) {');

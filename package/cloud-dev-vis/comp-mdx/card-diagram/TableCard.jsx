@@ -18,7 +18,7 @@ import './DiagramER.css';
 // Without an editor the card is plain, selectable text (nodrag nopan on
 // every row, so a drag in a row selects text while a drag on the title line
 // pans the canvas). With one, every part of the card answers a click
-// (comp-diagram-er.md#diagram-er-edit): the title line and the description
+// (../power-platform/comp-diagram-er.md#diagram-er-edit): the title line and the description
 // focus the card, a head field focuses that property, a field header the
 // field, a row the row, a cell starts typing in it; what is focused is
 // highlighted even where it cannot be changed. A focused row or field shows

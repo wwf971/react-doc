@@ -9,10 +9,10 @@ sidePanelById:
         defaultOpen: true
         children:
           - doc: ~cloud-dev-vis/doc/card-diagram-usage.md
-          - doc: ~cloud-dev-vis/doc/comp-diagram-er.md
-          - doc: ~cloud-dev-vis/doc/comp-powerplatform.md
-          - doc: ~cloud-dev-vis/doc/comp-card-diagram-animation.md
-          - doc: ~cloud-dev-vis/doc/comp-card-diagram-switch.md
+          - doc: ~cloud-dev-vis/comp-mdx/power-platform/comp-diagram-er.md
+          - doc: ~cloud-dev-vis/comp-mdx/power-platform/comp-powerplatform.md
+          - doc: ~cloud-dev-vis/comp-mdx/card-diagram-animation/comp-card-diagram-animation.md
+          - doc: ~cloud-dev-vis/comp-mdx/card-diagram-switch/comp-card-diagram-switch.md
           # a document of this checkout only: a clone has none, and this item then opens
           # an error page that offers to create it (main/doc_page_impl_test.md)
           - id: card-diagram-playground

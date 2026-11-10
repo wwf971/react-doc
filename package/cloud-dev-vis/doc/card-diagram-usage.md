@@ -9,9 +9,9 @@ A diagram is node cards joined by connection lines on a canvas, written as YAML.
 
 | You want | Use | Read |
 | --- | --- | --- |
-| one diagram | `CardDiagram` (generic cards), `DiagramER` (with Power Platform cards) | [Data diagrams](comp-diagram-er.md) |
-| a diagram moving between named states | `CardDiagramAnimation`, `DiagramERAnimation` | [Card Diagram Animation](comp-card-diagram-animation.md) |
-| many diagrams in one viewport, switched by path, one inside a card of another | `CardDiagramSwitch`, `DiagramERSwitch` | [Card Diagram Scenes](comp-card-diagram-switch.md) |
+| one diagram | `CardDiagram` (generic cards), `DiagramER` (with Power Platform cards) | [Data diagrams](../comp-mdx/power-platform/comp-diagram-er.md) |
+| a diagram moving between named states | `CardDiagramAnimation`, `DiagramERAnimation` | [Card Diagram Animation](../comp-mdx/card-diagram-animation/comp-card-diagram-animation.md) |
+| many diagrams in one viewport, switched by path, one inside a card of another | `CardDiagramSwitch`, `DiagramERSwitch` | [Card Diagram Scenes](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md) |
 | to shape a line by hand | anchors and handles on any of them | [Connection Lines](card-diagram-connection-line.md) |
 | to try something out | [the playground](card-diagram.playground.md), a document git ignores, under **Playground** in the side panel (a fresh clone has none: the item creates it) | [Playground documents](../../../main/doc_page_impl_test.md#playground-documents) |
 
@@ -36,7 +36,7 @@ connections:
   - { id: a-b, source: { nodeId: a, handleId: out }, target: { nodeId: b, handleId: in }, label: { text: then } }
 ```
 
-The grammar of cards, handles and lines is in [Data diagrams](comp-diagram-er.md).
+The grammar of cards, handles and lines is in [Data diagrams](../comp-mdx/power-platform/comp-diagram-er.md).
 
 ## Which card for what
 
@@ -44,22 +44,22 @@ Reach for a card that exists before drawing one of your own: each already knows 
 
 | To show | Use | Notes |
 | --- | --- | --- |
-| a table, a list of fields, anything in rows and columns | `table` | its own fields and rows; [views](comp-diagram-er.md#table-card-views) choose rows, a row break hides some behind a mark a reader can open; `rowGroupList` brackets rows; a line can leave a row (`row/{id}`) |
-| a Dataverse table, an option set | `dataverse-table`, `dataverse-choice` (`DiagramER` and the Power Platform series) | key, logical name, type; the purple convention of a choice ([Dataverse table card](comp-diagram-er.md#dataverse-table-card)) |
+| a table, a list of fields, anything in rows and columns | `table` | its own fields and rows; [views](../comp-mdx/power-platform/comp-diagram-er.md#table-card-views) choose rows, a row break hides some behind a mark a reader can open; `rowGroupList` brackets rows; a line can leave a row (`row/{id}`) |
+| a Dataverse table, an option set | `dataverse-table`, `dataverse-choice` (`DiagramER` and the Power Platform series) | key, logical name, type; the purple convention of a choice ([Dataverse table card](../comp-mdx/power-platform/comp-diagram-er.md#dataverse-table-card)) |
 | a step of a process | `operator`; in a column mapping `operator-mapping`, `operator-text`, `operator-abandon` | a label and a note; the mapping operators are the steps a column goes through |
 | a short fact: a title, a line of text, a few figures | `card-note` | a tone; the default for anything that is not a table |
 | an item in a list (a file, a batch, a table among many) | `card-brief` | a pill: an icon, a title, a line of figures; as wide as its words with `isWidthFit` |
 | what a long series leaves out | `card-three-dots` | "298 batches" between the first and the last; a line may leave the dots, without the square of a handle (`isMarkerHidden`) |
 | a database, a store | `card-database` | a cylinder with its name inside |
-| which of a set relates to which | `card-matrix` | rows and columns with a mark where they meet; a cell may be a [link](comp-card-diagram-switch.md#a-link-to-a-scene) |
+| which of a set relates to which | `card-matrix` | rows and columns with a mark where they meet; a cell may be a [link](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md#a-link-to-a-scene) |
 | a flow or a rule of Power Platform | `power-automate`, `business-rule` | trigger, action, condition, scope ...; a Dataverse condition or action |
 | a place, a lane, a group, outputs | `color-block` | behind the cards; `fill: none` for a frame; `around` what it holds ([below](#background-color-blocks)) |
 | the part of a scene shown first, and when embedded | `scene-box` | a red frame, drawn only while it is adjusted |
 | another scene, small, opening on a click | `scene-embed` (switch layer) | with `viewHover` a preview while the pointer rests on it |
 | sections one under another, each at full width | `scene-stack` (switch layer) | scenes or cards; at full height embedded or focused; views of a scene as tabs in an item |
 | a way to another scene | `scene-link` (switch layer), or `link` on any card or line | a pill as wide as its words |
-| some cards of one diagram in tabs | `switchTabsApply` (switch layer, `scene-tabs`) | each tab a scene of its own; lines are rewired, never dropped ([Tabs](comp-card-diagram-switch.md#tabs)) |
-| something no card draws | `renderer: { component: Name }` | a registered component with the placement `visualizationNode`, listing its anchors ([Custom nodes](comp-diagram-er.md#operators-custom-nodes-and-line-styles)); a title bar or a menu item takes components the same way (`visualizationTitle`, `labelItemList`) |
+| some cards of one diagram in tabs | `switchTabsApply` (switch layer, `scene-tabs`) | each tab a scene of its own; lines are rewired, never dropped ([Tabs](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md#tabs)) |
+| something no card draws | `renderer: { component: Name }` | a registered component with the placement `visualizationNode`, listing its anchors ([Custom nodes](../comp-mdx/power-platform/comp-diagram-er.md#operators-custom-nodes-and-line-styles)); a title bar or a menu item takes components the same way (`visualizationTitle`, `labelItemList`) |
 
 A series (a node registry) adds its own kinds; what a diagram may use is the registry of its component, and an unknown kind is an error naming the known ones. The **blocks** of a document are in the table at the top: one diagram, an animation, scenes. A scene of the switch layer gets its title over it when focused from the layer itself ([below](#focused-and-embedded)), not from a card.
 
@@ -69,9 +69,9 @@ A series (a node registry) adds its own kinds; what a diagram may use is the reg
 
 **To show many diagrams in one viewport**, give each a path: `CardDiagramSwitch` takes `sceneList: [{ path, label, diagram }]`, and a path bar goes between them. A card of the kind `scene-embed` shows another scene inside it and zooms into it on a click, and a `scene-stack` is a scrolling list of scenes. Scenes may be written in the document or generated from data: whatever has scenes is a [provider](card-diagram-flexible-switch.md#the-concepts).
 
-**To show one scene more than one way**, give it `viewList`: it shows one view at a time, and `viewDefault` says which, also by how the scene is presented and which scene embeds it. `viewHover` is what a card embedding it shows while a pointer rests there. A menu switches between them ([Views of a scene](comp-card-diagram-switch.md#views-of-a-scene)). This is the view of a scene; [a table card has views](comp-diagram-er.md#table-card-views) in the same way.
+**To show one scene more than one way**, give it `viewList`: it shows one view at a time, and `viewDefault` says which, also by how the scene is presented and which scene embeds it. `viewHover` is what a card embedding it shows while a pointer rests there. A menu switches between them ([Views of a scene](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md#views-of-a-scene)). This is the view of a scene; [a table card has views](../comp-mdx/power-platform/comp-diagram-er.md#table-card-views) in the same way.
 
-**To show many of one kind in one place**, make them the views of one scene with `viewSwitcherLayout: tabs` (and `isViewSearchable: true` once there are more than a handful): where a stack embeds it, a row of tabs and a search field stands under the item's title, one tab per view, and the item keeps the height of the tallest, so choosing one moves nothing ([Views as tabs](comp-card-diagram-switch.md#views-as-tabs)). A report listing every mapping, every table, every pattern one under another grows with the data; one item with tabs stays one item.
+**To show many of one kind in one place**, make them the views of one scene with `viewSwitcherLayout: tabs` (and `isViewSearchable: true` once there are more than a handful): where a stack embeds it, a row of tabs and a search field stands under the item's title, one tab per view, and the item keeps the height of the tallest, so choosing one moves nothing ([Views as tabs](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md#views-as-tabs)). A report listing every mapping, every table, every pattern one under another grows with the data; one item with tabs stays one item.
 
 **Reach for the switch layer early.** A diagram that does not fit, that a reader has to scroll around to read, or that mixes an overview with details is usually several scenes: an overview whose cards open the details (`scene-embed`, a click zooms in), a report as a stack of its sections, the same thing in views. Generated diagrams especially: a generator can make a scene per item for free, and a scene per item can be read at its own scale. One canvas holding everything at once is right only when everything has to be seen at once.
 
@@ -82,14 +82,14 @@ Routes of lines work the same in all of them, also in a scene embedded in a card
 A scene of the switch layer is seen two ways, and a generator should think of both every time it makes one: **embedded**, inside a card or a stack item of another scene, small, named by that card's title line; and **focused**, on the canvas alone, at its own scale, after a click. What reads well in one does not in the other. Typical points:
 
 - **A title.** Focused, nothing around the scene says what it is any more, and the path bar holds only short words. Give each scene, and each view, a `title` that stands alone: the kind and the name ("Schema mapping — Account → Customer", "PW — Source database"), not just the last segment of its path. The layer draws it as a heading above the scene, in its world, so it zooms with the cards, and only where the scene is focused ([The title of a scene](card-diagram-flexible-switch.md#the-title-of-a-scene)). Leave it out (`isTitleHidden`) where the content already starts with its title, as a stack with a title bar does.
-- **Which view.** A view meant to be glanced at in a card (a cylinder, a summary) is rarely the one to read focused (the diagram, a matrix): `viewDefault` by presentation says which, and `isAvailableEmbedded` / `isAvailableFocused` keep a view from where it does not work ([Views of a scene](comp-card-diagram-switch.md#views-of-a-scene)).
+- **Which view.** A view meant to be glanced at in a card (a cylinder, a summary) is rarely the one to read focused (the diagram, a matrix): `viewDefault` by presentation says which, and `isAvailableEmbedded` / `isAvailableFocused` keep a view from where it does not work ([Views of a scene](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md#views-of-a-scene)).
 - **How tall.** Embedded, a stack scrolls in its card or grows to its full height (`isHeightFullEmbedded`); focused, the reader zooms and scrolls freely. A frame or a label placed by numbers around something of `height: auto` is wrong in one of the two: draw it `around` what it holds.
 - **How deep.** A scene inside a card inside a card is drawn smaller each level, and costs a drawing each. The presentation says how deep a scene is drawn (`depth`) and how deep the block draws (`depthMax`, 3 by default, a parameter of the block): past it a card shows a note and opens its scene on a click. A generator nesting scenes deeply lowers it, or lets a card draw less when its `depth` is high.
 - **What a click does.** Embedded, a click on the card opens the scene; focused, the cards inside are what clicks reach. Controls drawn in a title line (a view switcher, tabs) work embedded only where the card takes the pointer; in a static copy they are drawn inert, at the same size, so nothing moves.
 
 ## Search
 
-Every diagram can be searched: with the pointer over it, `mod+f` opens a bar at the top right of the viewport, as in a code editor ([Search](card-diagram-impl.md#search)). It reads the data, so rows behind a break are found, and in scenes the scenes inside cards as deep as the bar says. Nothing is to be done for the cards of the framework. A kind of your own is found by the words of its data, by its schema when it has one; it answers `contract.searchMatch` when what it shows is not the words of its data, and `contract.searchCellTextGet` when a variant draws a cell otherwise than its value ([Adding a kind](card-diagram.md#adding-a-kind)). Write the words a reader would look for into the data (a logical name beside a display name), and the search finds them.
+Every diagram can be searched: the magnifier (in the path bar of a block of scenes, beside the zoom buttons of a diagram of one scene) or, with the pointer over it, `mod+f` opens a bar at the top right of the viewport, as in a code editor ([Search](card-diagram-impl.md#search)). It reads the data, so rows behind a break are found, and in scenes the scenes inside cards as deep as the bar says. Nothing is to be done for the cards of the framework. A kind of your own is found by the words of its data, by its schema when it has one; it answers `contract.searchMatch` when what it shows is not the words of its data, and `contract.searchCellTextGet` when a variant draws a cell otherwise than its value ([Adding a kind](card-diagram.md#adding-a-kind)). Write the words a reader would look for into the data (a logical name beside a display name), and the search finds them.
 
 ## Background color blocks
 
@@ -108,7 +108,7 @@ data:
 handles: []
 ```
 
-`itemList` may be empty, for a block with no label. Each item has a unique `id` and `text`, `icon`, or both; `level: 1` or `2` makes it a title, larger and on a line of its own. `columnList: [{ id, x, width, text?, icon? }]` with `columnTop` draws columns inside the block, in its own pixels, for what reads as columns without a block in the block. Icons are the names of `CARD_ICON_BY_NAME` (`database`, `server`, `file`, `archive`, `cloud` ...). Tones are `blue`, `teal`, `green`, `amber`, `red`, `violet` and `slate` (the default).
+`itemList` may be empty, for a block with no label. Each item has a unique `id` and `text`, `icon`, or both; `level: 1` or `2` makes it a title, larger and on a line of its own. `columnList: [{ id, x, width, text?, icon? }]` with `columnTop` draws columns inside the block, in its own pixels (from its outer edge: the block's edge is drawn over it and takes no room, so columns up to its width end at its right edge rather than past a border), for what reads as columns without a block in the block. Icons are the names of `CARD_ICON_BY_NAME` (`database`, `server`, `file`, `archive`, `cloud` ...). Tones are `blue`, `teal`, `green`, `amber`, `red`, `violet` and `slate` (the default).
 
 A block has no handles and does not own or move what lies on it. It is always drawn behind the lines and the cards, whatever the order in the data. While reading, the pointer passes through it; while editing it is selected and moved like a card. Leave room for its labels when placing cards on it.
 
@@ -121,10 +121,10 @@ What a diagram should look like, whoever draws it:
 - **A list wraps.** Do not lay out many cards in one row, or fitting the whole diagram makes them small. A list on a canvas breaks into lines at a small count (four or so), and a generator breaks them itself. A chain that must read in one direction may turn downward rather than run on. Stacking by a meaning (rows by rank, columns by depth) is better still.
 - **The labels of lines side by side stand in one column.** Give lines running side by side, as the column mappings between two tables do, one label position. Do not stagger them to keep them apart: a row is taller than a label, and labels that jump left and right are harder to read down.
 - **A line to a table as a whole ends at its title line.** It is what a table card does by itself with a handle on the left or right side of the card (`anchor: { side: left }`). A line about one row ends on that row. Do not place a handle at the middle of a table's side by other means.
-- **A link is a `scene-link`.** A node whose job is to open another scene uses the kind made for it ([A link to a scene](comp-card-diagram-switch.md#a-link-to-a-scene)), with no width written, so it is as wide as its words and every link in a scene looks the same. Do not make a link out of a `card-brief` or a `card-note`. A card that shows something may still have `link`, so a click opens more of it.
+- **A link is a `scene-link`.** A node whose job is to open another scene uses the kind made for it ([A link to a scene](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md#a-link-to-a-scene)), with no width written, so it is as wide as its words and every link in a scene looks the same. Do not make a link out of a `card-brief` or a `card-note`. A card that shows something may still have `link`, so a click opens more of it.
 - **A margin around what is held.** A card holding other cards keeps a margin inside its border, so nothing inside touches it. [An embedded scene](card-diagram-flexible-switch.md#one-canvas-no-canvas-inside-a-canvas) has this by default.
-- **One table can be seen several ways.** A table card can declare views, plain, by column or by row, with a menu to switch between them ([Table Card Views](comp-diagram-er.md#table-card-views)).
-- **A long table is cut down to what matters here.** `rowDisplay` picks the rows of a table card, in any order, with a row break for what is left out, which can hold those rows for the reader to open ([Table Card Views](comp-diagram-er.md#rows-behind-a-row-break)).
+- **One table can be seen several ways.** A table card can declare views, plain, by column or by row, with a menu to switch between them ([Table Card Views](../comp-mdx/power-platform/comp-diagram-er.md#table-card-views)).
+- **A long table is cut down to what matters here.** `rowDisplay` picks the rows of a table card, in any order, with a row break for what is left out, which can hold those rows for the reader to open ([Table Card Views](../comp-mdx/power-platform/comp-diagram-er.md#rows-behind-a-row-break)).
 - **What is long scrolls.** In a card of many sections, prefer a [scrolling stack](card-diagram-flexible-switch.md#a-scrolling-stack) to shrinking all of them to fit.
 - **No lines on top of each other.** This is the one most often broken: [next section](#no-lines-on-top-of-each-other).
 - **A scene generated from data gets its layout from an arranger.** [Below](#a-scene-generated-from-data-gets-its-layout-from-an-arranger).

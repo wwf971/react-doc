@@ -4,9 +4,9 @@ description: CardDiagramSwitch shows many card diagrams in one viewport, by path
 language: en
 ---
 
-One viewport, many diagrams. `CardDiagramSwitch` holds **scenes**, each a [card diagram](comp-diagram-er.md) with a **path**. The path bar above the viewport shows where you are: click a segment to go there, or the chevron before it to see the scenes beside it. A scene can show another scene inside a card; clicking the card zooms into it. At any scene you can pan and zoom, and copy or download what you see as PNG or SVG. `DiagramERSwitch` is the same block with every card of the [Power Platform](comp-powerplatform.md) series.
+One viewport, many diagrams. `CardDiagramSwitch` holds **scenes**, each a [card diagram](../power-platform/comp-diagram-er.md) with a **path**. The path bar above the viewport shows where you are: click a segment to go there, or the chevron before it to see the scenes beside it. A scene can show another scene inside a card; clicking the card zooms into it. At any scene you can pan and zoom, and copy or download what you see as PNG or SVG. `DiagramERSwitch` is the same block with every card of the [Power Platform](../power-platform/comp-powerplatform.md) series.
 
-The design is in [card-diagram-flexible-switch.md](card-diagram-flexible-switch.md).
+The design is in [card-diagram-flexible-switch.md](../../doc/card-diagram-flexible-switch.md).
 
 ## An overview with a card to zoom into
 
@@ -94,17 +94,17 @@ sceneList:
 
 | Key | Meaning |
 | --- | --- |
-| `sceneList` | the scenes: `path`, `label`, `description`, `diagram`, or [`viewList`](#views-of-a-scene) for more than one view of it, optionally `box`, `tabs`, `labelItemList` for [more than words in the menu](card-diagram-flexible-switch.md#the-path-bar), `title` (and a view's `title`) for the heading over the scene when it is focused, its `label` without one, or `isTitleHidden: true` for none ([The title of a scene](card-diagram-flexible-switch.md#the-title-of-a-scene)) |
+| `sceneList` | the scenes: `path`, `label`, `description`, `diagram`, or [`viewList`](#views-of-a-scene) for more than one view of it, optionally `box`, `tabs`, `labelItemList` for [more than words in the menu](../../doc/card-diagram-flexible-switch.md#the-path-bar), `title` (and a view's `title`) for the heading over the scene when it is focused, its `label` without one, or `isTitleHidden: true` for none ([The title of a scene](../../doc/card-diagram-flexible-switch.md#the-title-of-a-scene)) |
 | `root` | the scene shown first; the first of the list by default |
 | `title`, `height` | the block; `data.height` of the marker wins, as `data.path` names another first scene |
-| `compConfig` `SceneTitleAlign` | not a key of the document: a component key a doc page sets in its config (`left`, the default, or `center`), for where the title of a scene focused stands ([The title of a scene](card-diagram-flexible-switch.md#the-title-of-a-scene)) |
-| `depthMax` | how deep scenes inside cards are drawn, 3 by default (`data.depthMax` of the marker wins): a card past it shows a note and opens the scene on a click ([Depth](card-diagram-flexible-switch.md#presentation-context)) |
+| `compConfig` `SceneTitleAlign` | not a key of the document: a component key a doc page sets in its config (`left`, the default, or `center`), for where the title of a scene focused stands ([The title of a scene](../../doc/card-diagram-flexible-switch.md#the-title-of-a-scene)) |
+| `depthMax` | how deep scenes inside cards are drawn, 3 by default (`data.depthMax` of the marker wins): a card past it shows a note and opens the scene on a click ([Depth](../../doc/card-diagram-flexible-switch.md#presentation-context)) |
 | `defaults` | what every `diagram` starts with |
 | `transition` | `secondPortal`, `secondMorph`, `secondCamera`, `secondScroll`: how long a step lasts |
 
-A diagram is the [usual format](comp-diagram-er.md), with one more field on a node and on a connection, and on a cell of a [matrix](card-diagram-impl.md#node-registries): **`link`**, the path a click on it opens (`/path#item` also scrolls to an item of a stack there). On a connection, the label becomes the button.
+A diagram is the [usual format](../power-platform/comp-diagram-er.md), with one more field on a node and on a connection, and on a cell of a [matrix](../../doc/card-diagram-impl.md#node-registries): **`link`**, the path a click on it opens (`/path#item` also scrolls to an item of a stack there). On a connection, the label becomes the button.
 
-Two conventions keep a scene readable, in a generator as by hand: a list of cards **wraps** instead of running on in one row, and what is long **scrolls** in a stack instead of shrinking ([Drawing conventions](card-diagram-usage.md#drawing-conventions)).
+Two conventions keep a scene readable, in a generator as by hand: a list of cards **wraps** instead of running on in one row, and what is long **scrolls** in a stack instead of shrinking ([Drawing conventions](../../doc/card-diagram-usage.md#drawing-conventions)).
 
 ## A link to a scene
 
@@ -144,7 +144,7 @@ A box written or named shows that part alone; what lies outside it stays out, un
 
 ## Views of a scene
 
-A scene can have more than one view and shows one at a time, as [a table card](comp-diagram-er.md#table-card-views) does. Which one depends on how the scene is presented: focused on the canvas, or embedded, and if embedded, in which scene.
+A scene can have more than one view and shows one at a time, as [a table card](../power-platform/comp-diagram-er.md#table-card-views) does. Which one depends on how the scene is presented: focused on the canvas, or embedded, and if embedded, in which scene.
 
 Below, **Orders** shows its cards in this overview, and its matrix while the pointer rests on it. Click the card to focus it: it opens at its detail view. Open **the summary** to see the same scene in another card, as a cylinder with no frame around it. The menu in a title line or the path bar switches between views.
 
@@ -254,7 +254,7 @@ viewDefault:
   - { view: detail }                                            # otherwise: focused
 ```
 
-`when` takes `isEmbedded`, `isFocused` and `embedder`. The embedder is the scene **directly** holding this one, which need not be its parent among the paths. In code, `viewDefault` may also be a function of the [presentation](card-diagram-flexible-switch.md#presentation-context).
+`when` takes `isEmbedded`, `isFocused` and `embedder`. The embedder is the scene **directly** holding this one, which need not be its parent among the paths. In code, `viewDefault` may also be a function of the [presentation](../../doc/card-diagram-flexible-switch.md#presentation-context).
 
 **What is shown**, first to last: a view the reader chose there, what the embedding asks for (`view` on a `scene-embed` or an item of a stack), `viewDefault`, the first available. What the reader chose lasts while the block is on the page, separately for focused and for each scene embedding it.
 
@@ -286,7 +286,7 @@ Many things of one kind, each a diagram of its own (the mappings of a project, t
 
 Embedded in a [stack](#a-scrolling-stack-of-scenes), the item shows a row under its title: the search field, then one tab per view in one line, moved sideways by the wheel or a drag, never with a scrollbar. A search keeps the tabs whose label, description or id hold every word typed, whatever the case; Enter shows the first, Escape empties the field. A tab shows its view at once, in the item, as the menu does; the item is as tall as the tallest view, so nothing below it moves. Focused (in the path bar) and on a `scene-embed` card the views keep the menu. Unlike [Tabs](#tabs), which arrange nodes of one diagram and make each tab a scene of its own, these switch in place and need no path per tab (the path may still name one: `/plan/mapping@order`).
 
-The frame around the stack below is a `color-block` with `fill: none`, drawn `around` the stack ([Around other nodes](card-diagram-impl.md#around-other-nodes)), not at numbers of its own.
+The frame around the stack below is a `color-block` with `fill: none`, drawn `around` the stack ([Around other nodes](../../doc/card-diagram-impl.md#around-other-nodes)), not at numbers of its own.
 
 <!--renderComp=CardDiagramSwitch,height=520,title=Views as tabs-->
 ```yaml
@@ -574,7 +574,7 @@ sceneList:
 
 ## Under the animation layer
 
-A switching viewport can move between **states** under the clock of the [animation](comp-card-diagram-animation.md): a state names a scene, and a transition plays the way between two scenes. A component generating its scenes passes them to `SwitchAnimation` with this part of the document:
+A switching viewport can move between **states** under the clock of the [animation](../card-diagram-animation/comp-card-diagram-animation.md): a state names a scene, and a transition plays the way between two scenes. A component generating its scenes passes them to `SwitchAnimation` with this part of the document:
 
 ```yaml
 stateList:

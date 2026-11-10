@@ -1,12 +1,16 @@
-.doc-color-block { box-sizing: border-box; width: 100%; height: 100%; display: flex; align-items: flex-end; padding: 14px 16px; border: 1px solid #cbd5e1; border-radius: 4px; background: #f1f5f9cc; color: #475569; }
-.doc-color-block[data-tone="blue"] { background: #eff6ffcc; border-color: #bfdbfe; color: #1e40af; }
-.doc-color-block[data-tone="teal"] { background: #f0fdfacc; border-color: #99f6e4; color: #115e59; }
-.doc-color-block[data-tone="green"] { background: #f0fdf4cc; border-color: #bbf7d0; color: #166534; }
-.doc-color-block[data-tone="amber"] { background: #fffbebcc; border-color: #fde68a; color: #92400e; }
-.doc-color-block[data-tone="red"] { background: #fff1f2cc; border-color: #fecdd3; color: #9f1239; }
-.doc-color-block[data-tone="violet"] { background: #f5f3ffcc; border-color: #ddd6fe; color: #5b21b6; }
-/* fill: none, a frame around a group: no tint, a real border in the color of its labels */
-.doc-color-block[data-fill="none"] { background: none; border: 1.5px solid color-mix(in srgb, currentColor 55%, transparent); border-radius: 8px; }
+/* its edge is drawn over it (::before) and takes no room, so the box its columns are placed in
+   (its padding box) is the box of its node: a column authored at x, this wide, ends at x + width
+   of the node, the last one at its right edge, not past a border */
+.doc-color-block { --doc-color-block-edge: #cbd5e1; --doc-color-block-edge-width: 1px; box-sizing: border-box; width: 100%; height: 100%; display: flex; align-items: flex-end; padding: 14px 16px; border-radius: 4px; background: #f1f5f9cc; color: #475569; }
+.doc-color-block::before { content: ""; position: absolute; inset: 0; border: var(--doc-color-block-edge-width) solid var(--doc-color-block-edge); border-radius: inherit; pointer-events: none; }
+.doc-color-block[data-tone="blue"] { background: #eff6ffcc; --doc-color-block-edge: #bfdbfe; color: #1e40af; }
+.doc-color-block[data-tone="teal"] { background: #f0fdfacc; --doc-color-block-edge: #99f6e4; color: #115e59; }
+.doc-color-block[data-tone="green"] { background: #f0fdf4cc; --doc-color-block-edge: #bbf7d0; color: #166534; }
+.doc-color-block[data-tone="amber"] { background: #fffbebcc; --doc-color-block-edge: #fde68a; color: #92400e; }
+.doc-color-block[data-tone="red"] { background: #fff1f2cc; --doc-color-block-edge: #fecdd3; color: #9f1239; }
+.doc-color-block[data-tone="violet"] { background: #f5f3ffcc; --doc-color-block-edge: #ddd6fe; color: #5b21b6; }
+/* fill: none, a frame around a group: no tint, an edge in the color of its labels */
+.doc-color-block[data-fill="none"] { --doc-color-block-edge: color-mix(in srgb, currentColor 55%, transparent); --doc-color-block-edge-width: 1.5px; background: none; border-radius: 8px; }
 .doc-color-block-labels { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 16px; width: 100%; min-width: 0; }
 .doc-color-block-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; font-size: 13px; font-weight: 600; }
 .doc-color-block-label > svg { flex: none; }
@@ -241,6 +245,12 @@
 	width: 100%;
 }
 
+/* the box of a node: as large as the diagram says, scrolling only what its card really holds
+   beyond it. it is out of the typography of the page (not-prose, in DiagramRender and
+   SwitchStatic), whatever shell a node is drawn in, so the margins, font sizes and line heights
+   the page gives its headings, paragraphs and lists cannot make a card larger than its node.
+   a page that styles its prose with rules of its own must keep them off .not-prose, as the
+   typography rules of the doc page do (frontend/src/style.css) */
 .doc-vis-node-content {
 	width: 100%;
 	height: 100%;
@@ -840,3 +850,8 @@ div.doc-diagram-search-bar {
 .doc-switch-edge-label[data-search='current'] { border-color: rgb(234 88 12); background: rgb(254 215 170); }
 ::highlight(doc-diagram-search) { background-color: rgb(250 204 21 / 55%); color: inherit; }
 ::highlight(doc-diagram-search-current) { background-color: rgb(249 115 22 / 75%); color: inherit; }
+
+/* the search button among the zoom controls (DiagramSearchControl): an outline icon, which the
+   controls would fill; pressed while the bar is open */
+.doc-diagram-search-control svg { fill: none; }
+.doc-diagram-search-control[aria-pressed="true"] { color: #2563eb; }

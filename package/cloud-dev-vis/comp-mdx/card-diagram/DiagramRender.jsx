@@ -112,7 +112,7 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 	const isConnectable = Boolean(editor) && !editor.isLocked;
 	return (
 		<div ref={root} className={`doc-vis-node${node.isBackground && !editor ? ' is-background' : ''}${node.size.height === 'auto' ? ' is-height-auto' : ''}`} data-search={searchMark.state ?? undefined} style={{ height: node.size.height === 'auto' ? 'auto' : '100%' }}>
-			<div className="doc-vis-node-content">
+			<div className="doc-vis-node-content not-prose">
 				<DiagramNodeContent id={id} node={node} config={config} registry={registry} editor={editor} anchorRef={anchorRef} visualization={visualization} />
 			</div>
 			{geometry.missing.length ? <div className="doc-vis-node-error" role="alert">Missing anchors: {geometry.missing.join(', ')}</div> : null}

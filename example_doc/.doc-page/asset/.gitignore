@@ -52,6 +52,10 @@
 !/w55j4vdm1uw--todos dashboard/w55j4vefjq0.yaml
 !/w55j4vfa50k--todos storage/item.yaml
 !/w55j4vfa50k--todos storage/w55j4vg6ufb.yaml
+# the TestCaseTable of mdx-usage/comp-test-case-table.md#test-case-table-asset:
+# its records are the checks of the demonstration, written by the page
+!/w59dbr6wusq--login test cases/item.yaml
+!/w59dbr6wusq--login test cases/w59dbr6ws4w.yaml
 # the Backups dashboard of the local-backup infra instance (provisioned, so
 # bound to the instance of the machine the example was written on)
 !/w5f3p2e9xsm--backups of the example/item.yaml

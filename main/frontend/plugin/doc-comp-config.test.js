@@ -260,6 +260,24 @@ test('the plugin imports every entry module, exports the mounts, and writes the 
   assert.equal(codeBuild.split('\n').filter((line) => line.startsWith('import ')).length, 3);
 });
 
+test('the document of a component lies in its folder: a Markdown file there is collected, its code never', () => {
+  const dir = fixtureCreate({ compYamlByPage: { page: 'folderList:\n  - ../widgets\n' } });
+  fs.mkdirSync(path.join(dir, 'page/widgets/w'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'page/widgets/w/W.jsx'), 'export function W() { return null; }\n');
+  fs.writeFileSync(path.join(dir, 'page/widgets/w/comp.yaml'), 'tagName: W\nentry: ./W.jsx\n');
+  fs.writeFileSync(path.join(dir, 'page/widgets/w/comp-w.md'), '# W\n');
+  fs.writeFileSync(path.join(dir, 'page/widgets/w/comp-w.md.bak'), '# W, before\n');
+  const code = pluginCreate(dir).load('\0virtual:doc-source');
+  assert.ok(code.includes('~page:docs/widgets/w/comp-w.md'));
+  assert.ok(!code.includes('~page:docs/widgets/w/W.jsx'));
+  assert.ok(!code.includes('~page:docs/widgets/w/comp.yaml'));
+  assert.ok(!code.includes('comp-w.md.bak'));
+  // the folders of the components are still no folders of the source
+  assert.ok(!/dirManifest = .*widgets/.test(code));
+  // inside .doc-page nothing is ever a document, a Markdown file neither
+  assert.ok(!code.includes('comp-mdx/readme.md'));
+});
+
 test('a file of a component folder is code (never a reload); a manifest or the comp config file is configuration', () => {
   const dir = fixtureCreate({ manifestByPage: { page: MANIFEST_PAGE } });
   const compConfig = compConfigOfDocPageListGet(docPageInputList(dir), dir);

@@ -8,6 +8,10 @@ import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
 
 export const SWITCH_TAB_HEADER_HEIGHT = 40;
 export const SWITCH_EMBED_CHROME_HEIGHT = 34;
+// the title of a scene focused (SceneTitleCard): the height of its node, which is its line
+// height, and its font size, at scale 1
+export const SWITCH_TITLE_HEIGHT = 48;
+export const SWITCH_TITLE_FONT_SIZE = 32;
 export const SWITCH_EMBED_PADDING = 0.03;
 export const SWITCH_FIT_PADDING = 0.06;
 export const SWITCH_FIT_ZOOM_MAX = 1.25;

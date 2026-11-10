@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import {
 	Background,
+	ControlButton,
 	Controls,
 	MiniMap,
 	ReactFlow,
@@ -11,7 +12,7 @@ import {
 	useViewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Copy } from '../../../../main/frontend/UICommon.js';
+import { Copy, Search } from '../../../../main/frontend/UICommon.js';
 import { BlockPopupSurface } from '../../../../main/comp-doc/popup/BlockPopupSurface.jsx';
 import { DiagramERStore, DiagramCopyStore, diagramViewStateGet } from './DiagramERStore.js';
 import { DiagramNode, DiagramPointNode, DiagramCreateNode, DiagramEdge, DiagramConnectionLine, DiagramRenderContext } from './DiagramRender.jsx';
@@ -134,8 +135,19 @@ const DiagramSearchHost = observer(function DiagramSearchHost({ search, hostRef,
 	return <DiagramSearchBar search={search} />;
 });
 
+// the search, seen: a button beside the zoom, for the bar mod+f opens with the pointer over the
+// canvas (a diagram of one scene has no bar of its own to hold it, as the switch layer's path bar does)
+const DiagramSearchControl = observer(function DiagramSearchControl({ search }) {
+	if (!search) return null;
+	return (
+		<ControlButton className="doc-diagram-search-control" title="Find in the diagram" aria-label="Find in the diagram" aria-pressed={search.isOpen} onClick={() => (search.isOpen ? search.close() : search.open())}>
+			<Search aria-hidden="true" />
+		</ControlButton>
+	);
+});
+
 const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, isEditing = false }) {
-	const { editor, edgeGeometry } = useContext(DiagramRenderContext);
+	const { editor, edgeGeometry, search } = useContext(DiagramRenderContext);
 	const { fitView, setViewport, getViewport, getNode, getInternalNode, screenToFlowPosition, flowToScreenPosition } = useReactFlow();
 	const isInitialized = useNodesInitialized();
 	// the zoom, as a custom property of the canvas: the controls drawn over a
@@ -323,7 +335,7 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			onReconnectEnd={isEditing ? (_event, edge, handleType, state) => editor.reconnectEnd(edge, handleType, state) : undefined}
 		>
 			<Background gap={18} size={1} />
-			<Controls showInteractive={false} />
+			<Controls showInteractive={false}><DiagramSearchControl search={search} /></Controls>
 			{viewport.isMiniMapVisible ? <MiniMap position="bottom-right" pannable zoomable /> : null}
 		</ReactFlow>
 	);

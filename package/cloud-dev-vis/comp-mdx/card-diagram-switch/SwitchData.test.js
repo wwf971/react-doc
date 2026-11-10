@@ -788,3 +788,21 @@ test('a presentation knows how deep it is embedded, and whether a scene inside i
 	assert.equal(switchPresentationChildIsDrawn(switchPresentationBuild('/c', true, '/b', { depth: 2, depthMax: 2 })), false);
 	assert.equal(switchPresentationChildIsDrawn(switchPresentationBuild('/a', false, null, { depth: 0, depthMax: 0 })), false);
 });
+
+test('the search of the scene shown finds its title, drawn above it, and only by its words', () => {
+	const card = { id: 'card', renderer: { type: 'card-note' }, position: { x: 0, y: 0 }, size: { width: 200, height: 80 }, data: { title: '全体の計画' } };
+	const sceneByPath = {
+		'/overview': { path: '/overview', title: '全体像', diagram: { nodes: [card] } },
+		'/plain': { path: '/plain', title: '全体像', isTitleHidden: true, diagram: { nodes: [card] } },
+	};
+	const provider = { root: '/overview', sceneGet: (path) => sceneByPath[path] ?? null, labelGet: (path) => path, childListGet: () => [] };
+	const store = new SwitchStore({ provider, registry: switchRegistryBuild(cardDiagramNodeRegistry) });
+	const request = (text) => ({ text, isCaseSensitive: false, isWholeWord: false, depth: 0, depthMax: 0 });
+	const found = store.searchRun(request('全'));
+	assert.deepEqual(found.nodeList.map((node) => node.nodeId), ['~title', 'card'], 'the title first: it stands above the scene');
+	assert.equal(found.nodeList[0].rect.y, store.titleRectOf('/overview').y);
+	assert.deepEqual(store.searchRun(request('体像')).nodeList.map((node) => node.nodeId), ['~title']);
+	assert.deepEqual(store.searchRun(request('1')).nodeList, [], 'not by its scale');
+	store.pathCurrent = '/plain';
+	assert.deepEqual(store.searchRun(request('体像')).nodeList, [], 'a scene with its title hidden has none to find');
+});

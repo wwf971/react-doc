@@ -394,6 +394,13 @@ export function compPathIs(compConfig: CompConfig, filePath: string): boolean {
   return compConfig.docPageList.some((docPage) => docPage.folderList.some((folder) => pathIsInside(filePath, folder)));
 }
 
+// a document of a component: a Markdown file in its folder, beside its code
+// (comp-diagram-er.md, comp_index.md). the one kind of file of a component
+// folder that is collected, listed and watched as any document
+export function compDocumentPathIs(filePath: string): boolean {
+  return /\.mdx?$/i.test(filePath);
+}
+
 // a comp config file of a doc page, or a manifest a component folder holds
 // or could hold (at its root or in a group at any depth): configuration, so
 // a change, an addition or a removal regenerates the manifest of the page

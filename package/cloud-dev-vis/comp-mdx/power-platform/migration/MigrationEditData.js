@@ -249,10 +249,13 @@ const adapterMappingColumn = {
 				x += 310;
 				const mappingChoice = step.op === 'choice' ? model.mappingChoiceByKey.get(step.mapping) : null;
 				const rows = mappingChoice ? mappingChoice.optionList.map((option, position2) => ({ id: `o${position2}`, key: String(option.from), value: String(option.to ?? '') })) : (step.rows ?? []).map((row, position2) => ({ id: row.id ?? `r${position2}`, key: String(row.key ?? ''), value: String(row.value ?? '') }));
-				return { id, renderer: { type: 'operator-mapping' }, position, data: { name: step.name ?? mappingChoice?.label ?? 'Mapping', rows, choiceMapping: step.mapping }, handles };
+				return { id, renderer: { type: 'operator-mapping' }, position, data: { name: step.name ?? mappingChoice?.label ?? 'Mapping', rows, choiceMapping: step.mapping, ...(step.onMissing ? { onMissing: step.onMissing } : {}) }, handles };
 			}
 			x += 280;
-			return { id, renderer: { type: 'operator-text' }, position, data: { name: step.name ?? '', description: step.description ?? '' }, handles };
+			// an operator other than text (trim, digits, check-length ... of db-migration.project-real) is drawn
+			// as a text operator and keeps the step it is, so a save writes it back with its parameters
+			const stepKept = step.op && step.op !== 'text' ? step : undefined;
+			return { id, renderer: { type: 'operator-text' }, position, data: { name: step.name ?? (stepKept ? step.op : ''), description: step.description ?? '', ...(stepKept ? { step: stepKept } : {}) }, handles };
 		});
 		const nodes = [
 			tableNodeOf(source, 'source', 0, 'right'),
@@ -295,9 +298,11 @@ const adapterMappingColumn = {
 			const type = node.renderer?.type;
 			if (type === 'operator-abandon') { stepList.push({ op: 'abandon', name: node.data?.name }); current = null; endpointEnd = null; break; }
 			if (type === 'operator-mapping') {
-				stepList.push(node.data?.choiceMapping ? { op: 'choice', mapping: node.data.choiceMapping } : { op: 'mapping', name: node.data?.name, rows: (node.data?.rows ?? []).map(({ key, value }) => ({ key, value })) });
+				const onMissing = node.data?.onMissing ? { onMissing: node.data.onMissing } : {};
+				stepList.push(node.data?.choiceMapping ? { op: 'choice', mapping: node.data.choiceMapping, ...onMissing } : { op: 'mapping', name: node.data?.name, rows: (node.data?.rows ?? []).map(({ key, value }) => ({ key, value })), ...onMissing });
 			} else if (type === 'operator-text') {
-				stepList.push({ op: 'text', name: node.data?.name ?? '', description: node.data?.description ?? '' });
+				const stepKept = node.data?.step;
+				stepList.push(stepKept ? { ...stepKept, name: node.data?.name ?? stepKept.name, description: node.data?.description ?? stepKept.description ?? '' } : { op: 'text', name: node.data?.name ?? '', description: node.data?.description ?? '' });
 			} else {
 				throw new Error(`A column mapping cannot go through the node ${current}.`);
 			}
