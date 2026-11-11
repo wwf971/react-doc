@@ -1,9 +1,10 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useContext, useEffect, useId, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { eventResultIsAccepted, resultNormalize } from '../../frontend/src/lib/doc-event.js';
 import { LinkDocRender } from './LinkDocRender.jsx';
 import { LinkWarning } from './LinkWarning.jsx';
+import { DocNavScopeContext } from './DocNavScope.js';
 import { SourceLinkRenderPopup } from '../../../built-in/comp-mdx/source-link/SourceLinkRenderPopup.jsx';
 
 // renders one recognized doc link (from remark-doc-link).
@@ -29,13 +30,16 @@ export const DocLink = observer(function DocLink({
   line,
   children,
 }) {
-  const { configStore, docStore, sourceStore, compConfigHost, linkConfig, onEvent: onEventPage, tagStore } = useDocStores();
+  const { configStore, docStore, sourceStore, navStore, compConfigHost, linkConfig, onEvent: onEventPage, tagStore } = useDocStores();
   const id = useId();
   const refWrap = useRef(null);
   const [warningText, setWarningText] = useState('');
   const [pathPopup, setPathPopup] = useState('');
   const Panel = compConfigHost?.panelComponent;
-  const { targetList: targets, hash } = docStore.docTargetResolve(target ?? '', from ?? '');
+  const { targetList: targets, hash, param = {} } = docStore.docTargetResolve(target ?? '', from ?? '');
+  // what the link asks of the navigation (?nav=page | popup | owner): doc_page_impl_nav.md#routing-a-navigation
+  const navMode = param.nav ?? '';
+  const navScope = useContext(DocNavScopeContext);
   const isDropdownOpen = docStore.linkDropdownOpenId === id;
   const CompRender = linkConfig.CompRender ?? LinkDocRender;
 
@@ -70,7 +74,7 @@ export const DocLink = observer(function DocLink({
       && (['md', 'mdx'].includes(entry.ext)
         || Object.hasOwn(sourceStore.configDoc.fileDisplay ?? {}, entry.ext));
   };
-  const isPopup = !isMultiple && Boolean(targetFirst) && isPopupTarget(targetFirst.internalPath);
+  const isPopup = !isMultiple && Boolean(targetFirst) && navMode !== 'page' && isPopupTarget(targetFirst.internalPath);
   const isNavigationUnavailable = Boolean(targetFirst)
     && !isMultiple && !isPopup
     && !docStore.isDocNavigable(targetFirst.internalPath);
@@ -167,6 +171,24 @@ export const DocLink = observer(function DocLink({
     if (eventType === 'activateRequest') {
       if (isBroken) {
         return;
+      }
+      // the place the link is rendered in answers first (a block showing documents of its
+      // own), then the routes of the page, each the call of an api
+      // (doc_page_impl_nav.md#routing-a-navigation)
+      if (!isMultiple && targetFirst.internalPath && navStore) {
+        const request = { target: targetFirst.internalPath, hash, fromPath: data.fromPath, param, owner: targetFirst.owner, route: targetFirst.navigationTarget, point: event && Number.isFinite(event.clientX) ? { clientX: event.clientX, clientY: event.clientY } : undefined };
+        const resultScope = navMode ? undefined : resultNormalize(await navScope?.handle?.(request));
+        if (eventResultIsAccepted(resultScope)) return;
+        const resultRoute = await navStore.request(request);
+        if (resultRoute?.code === 0) {
+          setWarningText('');
+          return;
+        }
+        if (resultRoute) {
+          setWarningText(resultRoute.message || docStore.navigationError || data.titleText);
+          docStore.clearNavigationError();
+          return;
+        }
       }
       if (isPopup) {
         await popupOpen(targetFirst.internalPath);

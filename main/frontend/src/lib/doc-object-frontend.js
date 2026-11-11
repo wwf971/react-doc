@@ -261,6 +261,53 @@ export function objectFrontendAssetKeyFree(entry, keyWanted, kind) {
   }
 }
 
+// ---------- the documents of an object (doc_page_impl_obj_frontend.md#documents-of-an-object) ----------
+
+// A document path is a system of its own, beside the asset paths: it is where an asset of a
+// kind declared a document (isDoc) stands under the root of its object in the source of the
+// page. The kind says how it is made, docPath, a pattern over the record of the asset:
+//
+//   {path}   the first asset path of the record, without its leading "/" (the default: the
+//            two systems are then the same, by the choice of the type)
+//   {key}    the key of the asset        {kind}   its kind
+//
+// the extension is the language of the item (md, mdx). '' when the asset is not a document
+export const OBJECT_FRONTEND_DOC_LANG_LIST = ['md', 'mdx'];
+export const OBJECT_FRONTEND_DOC_PATH_DEFAULT = '{path}';
+
+export function objectFrontendDocRelPathBuild(asset, kindDeclared, lang) {
+  if (kindDeclared?.isDoc !== true || !OBJECT_FRONTEND_DOC_LANG_LIST.includes(String(lang ?? ''))) return '';
+  const pathFirst = String(asset.pathList?.[0] ?? '').replace(/^\/+|\/+$/g, '');
+  const pattern = String(kindDeclared.docPath || OBJECT_FRONTEND_DOC_PATH_DEFAULT);
+  const rel = pattern
+    .replace(/\{path\}/g, pathFirst || `${asset.kind}/${asset.key}`)
+    .replace(/\{key\}/g, asset.key)
+    .replace(/\{kind\}/g, asset.kind)
+    .replace(/\/{2,}/g, '/').replace(/^\/+|\/+$/g, '');
+  return rel ? `${rel}.${lang}` : '';
+}
+
+// the documents of an object: [{ asset, relPath }], one per asset that is a document; of two
+// assets at one path the first keeps it, the other is a problem.
+//   langOf(asset)   the language of its item
+export function objectFrontendDocListBuild(assetList, kindList, langOf) {
+  const kindById = new Map((kindList ?? []).map((kind) => [kind.id, kind]));
+  const docList = [];
+  const problemList = [];
+  const keyByPath = new Map();
+  for (const asset of assetList ?? []) {
+    const relPath = objectFrontendDocRelPathBuild(asset, kindById.get(asset.kind), langOf(asset));
+    if (!relPath) continue;
+    if (keyByPath.has(relPath)) {
+      problemList.push(`the assets ${keyByPath.get(relPath)} and ${asset.key} have the document path ${relPath}: the first keeps it`);
+      continue;
+    }
+    keyByPath.set(relPath, asset.key);
+    docList.push({ asset, relPath });
+  }
+  return { docList, problemList };
+}
+
 // ---------- what a type accepts ----------
 
 // the assets a type declares it holds: assetKindList of its declaration, or of the nearest

@@ -1,0 +1,24 @@
+itemId: w5xe9e6cwhq
+name: ""
+lang: md
+contentType: text/markdown
+fileExt: md
+owner:
+  ref: frontend:w5xe9dxeujf
+versionIdHead: w5xe9e6cncg
+isDeleted: false
+isLocked: false
+timeCreated: 20261112_02533729+09
+versionList:
+  - versionId: w5xe9e6cncg
+    versionIdPrevList: []
+    time: 20261112_02533729+09
+    note: imported
+    size: 1592
+    hash: f9f8e84b06169207c7c7d623dd57d891d5a8cd7c
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261112_02533729+09
+    versionId: w5xe9e6cncg

@@ -1,0 +1,14 @@
+# The doc page of the package "zettelkasten", created by `react-doc init package`:
+# it lets the package be read and launched (react-doc dev <its folder>), or
+# listed in a workspace, beside being imported. Served alone it is edited like
+# any doc page; listed in a workspace or mounted it is read-only. Its components and
+# templates are read from comp-mdx/ and service-template-*/ at its top.
+# design: main/doc_page_impl_package.md#a-package-as-a-doc-page
+docEntry:
+  title: "Zettelkasten: linked knowledge cards kept as a frontend object"
+  homeDoc: ~zettelkasten/comp-mdx/zettelkasten/comp-zettelkasten.md
+source:
+  file: ./source.yaml
+sidePanelById:
+  main:
+    file: ./side-panel.yaml

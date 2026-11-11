@@ -16,8 +16,9 @@ import {
   OBJECT_FRONTEND_PARTITION_REGEX, OBJECT_FRONTEND_ROLE_ENTRY, OBJECT_FRONTEND_TYPE_ROOT,
   objectFrontendAssetAcceptCheck, objectFrontendAssetKeyFree, objectFrontendAssetKindListResolve, objectFrontendAssetListMerge, objectFrontendAssetPathNormalize,
   objectFrontendEntryParse, objectFrontendEntryTextBuild, objectFrontendListCovers, objectFrontendListGroupPathGet, objectFrontendListParse, objectFrontendListTextBuild, objectFrontendRefBuild,
-  objectFrontendPartitionGroupPathBuild, objectFrontendPartitionListResolve,
+  objectFrontendPartitionGroupPathBuild, objectFrontendPartitionListResolve, objectFrontendDocListBuild,
 } from '../src/lib/doc-object-frontend.js';
+import { sourcePathParse, sourceRootObjectParse } from '../src/lib/doc-source-path.js';
 import {
   ASSET_STORAGE_PARTITION_FILE_NAME, ASSET_STORAGE_POINT_FILE_TREE, assetStoragePartitionBindListRead, assetStoragePartitionBindResolve, assetStoragePartitionFileRead,
   assetStoragePartitionFileWrite, assetStoragePointFind, type AssetStorageConfig, type AssetStoragePartitionBind,
@@ -931,6 +932,38 @@ function listingRead(context: WriteContext, decl: ObjectFrontendDecl): Listing {
   const listList = itemDirAbs ? objectListListRead(itemDirAbs) : [];
   const { assetList } = objectFrontendAssetListMerge(entry.assetList, listList);
   return { meta, entry, hash, itemDirAbs, assetList, listGroupPathList: listList.map((list) => list.groupPath) };
+}
+
+// ---------- the documents of an object ----------
+
+// the document an object registered, for the edit api (doc-edit-server.ts): the asset at the
+// document path of a full source path ~{docPage}:${frontend.id:{id}}/{path}, with the reading
+// of its head and the writing of a new text into its item (in place, by its save mode). the
+// same rule as the page registers by (objectFrontendDocListBuild); undefined for any other path
+export function objectFrontendDocFind(context: WriteContext, internalPath: string): { itemId: string; read: () => string; write: (text: string, note?: string) => void; folderAbs: string } | undefined {
+  const parsed = sourcePathParse(internalPath);
+  const object = parsed ? sourceRootObjectParse(parsed.rootAlias) : undefined;
+  if (!parsed || !object || object.namespace !== OBJECT_FRONTEND_LAYER || object.by !== 'id') return undefined;
+  const decl = declFind(context.config, object.ref);
+  if (!decl || decl.docPageAlias !== parsed.docPageAlias) return undefined;
+  const { store } = context;
+  const listing = listingRead(context, decl);
+  const kindList = objectFrontendAssetKindListResolve(listing.entry.type, context.config.typeList) ?? [];
+  const langOf = (asset: any) => {
+    try { return store.itemGet(asset.itemId).lang; } catch { return ''; }
+  };
+  const { docList } = objectFrontendDocListBuild(listing.assetList, kindList, langOf);
+  const doc = docList.find((one: any) => one.relPath === parsed.relPath);
+  if (!doc) return undefined;
+  const itemId = doc.asset.itemId;
+  return {
+    itemId,
+    folderAbs: listing.itemDirAbs,
+    read: () => String(store.versionDataGet(itemId).text ?? ''),
+    write: (text, note) => {
+      store.itemUpdate({ itemId, hashBase: store.versionDataGet(itemId).hash, data: Buffer.from(text, 'utf-8'), note: note ?? 'edited in the page' });
+    },
+  };
 }
 
 // ---------- partitions ----------

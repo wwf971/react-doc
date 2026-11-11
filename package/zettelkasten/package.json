@@ -1,0 +1,6 @@
+{
+  "name": "zettelkasten",
+  "private": true,
+  "type": "module",
+  "description": "A react-doc package (doc-package.yaml is its config); this file marks its .js modules as ES modules for node."
+}

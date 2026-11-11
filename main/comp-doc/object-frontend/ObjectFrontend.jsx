@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useContext, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import { stringify as yamlStringify } from 'yaml';
 import { LoaderCircle } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
+import { DocNavArrivalContext } from '../link/DocNavScope.js';
 import { useCompState } from '../registry/use-comp-state.js';
 import {
   OBJECT_FRONTEND_PLACEMENT, objectFrontendBlockRead, objectFrontendBlockTextBuild,
@@ -67,11 +68,14 @@ export const ObjectFrontendBody = observer(function ObjectFrontendBody({ data = 
     return result ?? { code: -1, message: 'nobody answered' };
   };
 
+  // where a reader was going when the place this block is in was opened for them (the popup
+  // showing the home document of an object)
+  const navArrivalAny = useContext(DocNavArrivalContext);
   const service = useMemo(
-    () => objectFrontendServiceBuild({ objectFrontendStore, ref: state.ref, mode, modeList, param, paramBlock: block.param, blockSwitch, docState: config.docState, blockKey: `objectFrontend:${config.stateKey}:${mode?.id}` }),
+    () => objectFrontendServiceBuild({ objectFrontendStore, ref: state.ref, mode, modeList, param, paramBlock: block.param, blockSwitch, docState: config.docState, blockKey: `objectFrontend:${config.stateKey}:${mode?.id}`, navArrival: navArrivalAny?.ref === state.ref ? navArrivalAny : undefined }),
     // the service is rebuilt with what it describes; its getters read the store
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [objectFrontendStore, state.ref, mode?.id, JSON.stringify(param), modeList.length, data.raw, compState.value.override, config.docState, config.stateKey],
+    [objectFrontendStore, state.ref, mode?.id, JSON.stringify(param), modeList.length, data.raw, compState.value.override, config.docState, config.stateKey, navArrivalAny],
   );
 
   if (blockAuthored.message && !blockDraft) return <p className="doc-error doc-object-frontend-line">ObjectFrontend: {blockAuthored.message}</p>;
@@ -114,7 +118,7 @@ export const ObjectFrontendBody = observer(function ObjectFrontendBody({ data = 
 // object as the files say now (getters: it is an observer and re-renders),
 // its assets by key, and the switches of its block. it never reaches the
 // asset store or the document itself
-export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, modeList, param, paramBlock = {}, blockSwitch, docState, blockKey }) {
+export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, modeList, param, paramBlock = {}, blockSwitch, docState, blockKey, navArrival }) {
   const stateGet = () => objectFrontendStore.objectGet(ref);
   return Object.freeze({
     ref,
@@ -223,6 +227,12 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
     open: () => objectFrontendStore.settingsOpen(stateGet().id),
     // the api of another frontend object, for a mode whose data lies in two objects (a CV
     // reading a profile): the same reads and writes, without the switches of a block
+    // the documents of the object (doc_page_impl_obj_frontend.md#documents-of-an-object): the
+    // source path of the document of an asset ('' when it is not one), and where a reader was
+    // going when this block was opened for them: { target, hash, key, version } of a document
+    // of this object, undefined otherwise (#the-home-document)
+    docPathGet: (assetRef) => objectFrontendStore.docPathGet(ref, assetRef),
+    navArrival,
     otherGet: (refOther) => objectFrontendServiceBuild({
       objectFrontendStore,
       ref: refOther,

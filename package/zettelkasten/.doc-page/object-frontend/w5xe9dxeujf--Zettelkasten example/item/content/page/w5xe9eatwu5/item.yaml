@@ -1,0 +1,24 @@
+itemId: w5xe9eatwu5
+name: ""
+lang: md
+contentType: text/markdown
+fileExt: md
+owner:
+  ref: frontend:w5xe9dxeujf
+versionIdHead: w5xe9eatenh
+isDeleted: false
+isLocked: false
+timeCreated: 20261112_02533740+09
+versionList:
+  - versionId: w5xe9eatenh
+    versionIdPrevList: []
+    time: 20261112_02533740+09
+    note: the home document
+    size: 152
+    hash: 0b59ae5b3a6795f0b30b048b11bb46b88c467811
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261112_02533740+09
+    versionId: w5xe9eatenh

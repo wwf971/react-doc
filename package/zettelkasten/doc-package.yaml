@@ -1,0 +1,10 @@
+# The config of the package "zettelkasten", created by `react-doc init package`.
+# Its name and place are fixed: doc-package.yaml at the root of the package.
+# Every key is required; the folders of a package have fixed names
+# (comp-mdx/, service-template-app/, service-template-infra/, doc/README.md).
+# design: main/doc_page_impl_package.md
+name: zettelkasten
+description: "Zettelkasten: linked knowledge cards kept as a frontend object"
+# the packages this one needs: { dir }, relative to this file
+packageDependList:
+  - dir: ../cloud-dev-vis

@@ -462,7 +462,7 @@ export class DocStore {
   // shared by document links and component data references, so both accept
   // the same target forms: "@first/{itemId}" resolves through the side-panel
   // tree, every other form through DocSourceStore.resolveLink().
-  docTargetResolve(target: string, fromPath: string): { targetList: any[]; hash: string } {
+  docTargetResolve(target: string, fromPath: string): { targetList: any[]; hash: string; param?: Record<string, string>; warning?: string } {
     const treeLink = this.resolveTreeLink(target);
     if (treeLink) {
       return {
@@ -475,8 +475,8 @@ export class DocStore {
         hash: treeLink.hash,
       };
     }
-    const { targets, hash } = this.sourceStore.resolveLink(target, fromPath);
-    return { targetList: targets, hash };
+    const { targets, hash, param, warning } = this.sourceStore.resolveLink(target, fromPath);
+    return { targetList: targets, hash, param, warning };
   }
 
   private compDataRefDocResolve(target: unknown, fromPath: string): {

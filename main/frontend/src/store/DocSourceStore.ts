@@ -43,6 +43,17 @@ export type FileEntry = {
   configSource?: Record<string, any>;
   configFrontmatter?: Record<string, any>;
   load: () => Promise<string>;
+  // a document registered by a provider, not a file of a folder
+  // (doc_page_impl_source.md#documents-registered-by-an-object): who registered it
+  // ({ providerId, ref: the object, key: the document in the object's own terms })
+  owner?: { providerId: string; ref: string; key: string };
+};
+
+// what a document provider registers: its entries, and the object roots they lie in with the
+// names each answers to (a root is written ${namespace:id}; ${namespace:name} resolves to it)
+export type DocProvided = {
+  entryList: FileEntry[];
+  rootObjectList: { namespace: string; name: string; rootAlias: string; docPageAlias: string }[];
 };
 
 // a folder of the source: the folder of an addFolder rule or one below it
@@ -158,6 +169,10 @@ export class DocSourceStore {
   // it started with is the current one, so an older result can neither
   // overwrite a newer one nor bring a removed path back.
   versionByPath: Record<string, number> = {};
+  // the documents providers registered, by provider (docProvidedSet)
+  docProvidedById = observable.map<string, DocProvided>({}, { deep: false });
+  // what a resolution warned about, said once in the console (a name several objects have)
+  resolveWarningSet = new Set<string>();
   // stable service object handed to registered components (config.source)
   sourceService: Readonly<Record<string, (...args: any[]) => any>>;
   // completion of a path of the file system the development server runs on
@@ -210,6 +225,7 @@ export class DocSourceStore {
       dirManifest: observable.ref,
       linkIndex: observable.ref,
       compileConfig: false,
+      resolveWarningSet: false,
       linkResolve: false,
       envStore: false,
       sourceEndpoint: false,
@@ -235,8 +251,42 @@ export class DocSourceStore {
 
   get entryByInternalPath(): Map<string, FileEntry> {
     const result = new Map<string, FileEntry>();
-    for (const entry of this.fileManifest) result.set(entry.internalPath, entry);
+    for (const entry of this.entryAllList) result.set(entry.internalPath, entry);
     return result;
+  }
+
+  // every file a reference can name: the files of the folders (the manifest), then the
+  // documents providers registered
+  get entryAllList(): FileEntry[] {
+    if (this.docProvidedById.size === 0) return this.fileManifest;
+    const list = [...this.fileManifest];
+    for (const provided of this.docProvidedById.values()) list.push(...provided.entryList);
+    return list;
+  }
+
+  // ---------- documents registered by a provider ----------
+
+  // a provider's documents, replacing what it registered before: they are resolved, loaded and
+  // compiled like files (never pages of the side panel, never in the manifest). a document
+  // whose content hash changed is compiled again when it is shown
+  docProvidedSet(providerId: string, provided: DocProvided | undefined): void {
+    const before = this.docProvidedById.get(providerId);
+    const hashBefore = new Map((before?.entryList ?? []).map((entry) => [entry.internalPath, entry.contentHash]));
+    if (provided) this.docProvidedById.set(providerId, provided);
+    else this.docProvidedById.delete(providerId);
+    const refreshList: string[] = [];
+    for (const entry of provided?.entryList ?? []) {
+      if (hashBefore.has(entry.internalPath) && hashBefore.get(entry.internalPath) !== entry.contentHash && this.compiledByPath[entry.internalPath]) refreshList.push(entry.internalPath);
+    }
+    for (const path of refreshList) {
+      this.versionByPath[path] = (this.versionByPath[path] ?? 0) + 1;
+      void this.loadDoc(path, { isRefresh: true });
+    }
+  }
+
+  // the provider a document belongs to, undefined for a file of a folder
+  docOwnerGet(internalPath: string): FileEntry['owner'] {
+    return this.entryByInternalPath.get(internalPath)?.owner;
   }
 
   get targetsByName(): Map<string, FileEntry[]> {
@@ -246,7 +296,8 @@ export class DocSourceStore {
   // the indexes a target is resolved with (lib/doc-target-resolve.js): by
   // full path, by local path (the same ~root/rel in several doc pages), by name
   get sourceIndex(): { entryList: FileEntry[]; entryByInternalPath: Map<string, FileEntry>; entryListByLocalPath: Map<string, FileEntry[]>; entryListByName: Map<string, FileEntry[]> } {
-    return sourceIndexBuild(this.fileManifest);
+    const rootObjectList = [...this.docProvidedById.values()].flatMap((provided) => provided.rootObjectList);
+    return sourceIndexBuild(this.entryAllList, rootObjectList);
   }
 
   // ---------- the workspace ----------
@@ -549,7 +600,7 @@ export class DocSourceStore {
 
   // link resolution. target forms: see lib/doc-target-resolve.js, which the
   // build-time dependency discovery shares.
-  resolveLink(target: string, fromPath: string): { targets: LinkTarget[]; hash: string } {
+  resolveLink(target: string, fromPath: string): { targets: LinkTarget[]; hash: string; param?: Record<string, string>; warning?: string } {
     if (this.linkResolve) {
       const result = this.linkResolve({
         target,
@@ -560,15 +611,20 @@ export class DocSourceStore {
       });
       if (result) return result;
     }
-    const { entryList: candidates, hash } = docTargetResolve(target, fromPath, this.sourceIndex) as { entryList: FileEntry[]; hash: string };
+    const { entryList: candidates, hash, param, warning } = docTargetResolve(target, fromPath, this.sourceIndex) as { entryList: FileEntry[]; hash: string; param: Record<string, string>; warning?: string };
+    if (warning && !this.resolveWarningSet.has(warning)) {
+      this.resolveWarningSet.add(warning);
+      console.warn(`[doc-source] ${warning} (written in ${fromPath || 'the page'})`);
+    }
 
     const targets = candidates.map((e) => ({
       internalPath: e.internalPath,
       title: e.title,
       name: e.name,
       docPageAlias: e.docPageAlias,
+      owner: e.owner,
     }));
-    return { targets, hash };
+    return { targets, hash, param, warning };
   }
 
   // ---------- files: resolution, urls ----------

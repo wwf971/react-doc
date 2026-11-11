@@ -15,12 +15,20 @@ export function cardIconNormalize(data) {
 	return data;
 }
 
-export const cardIconAnchorListGet = () => [{ id: 'body', sideList: sideAllList }, { id: 'icon', sideList: sideAllList }];
+export const cardIconAnchorListGet = () => [{ id: 'body', sideList: sideAllList }, { id: 'icon', sideList: sideAllList }, { id: 'text', sideList: ['right'] }];
+
+// what a search finds in it: its words, never how it looks (its icon, its tones)
+export function cardIconSearchMatch(node, helper) {
+	const { title, text, badge } = node.data ?? {};
+	return [title, text, badge].some((one) => helper.test(one)) ? { partList: [], childList: [], isWhole: true } : null;
+}
 
 // the rectangle of an anchor in the rectangle of its node
 export function cardIconAnchorRectEstimate(node, anchorId, rect) {
-	if (anchorId !== 'icon') return rect;
+	if (anchorId !== 'icon' && anchorId !== 'text') return rect;
 	const size = node.data?.isFocus ? CARD_ICON_MARK_SIZE_FOCUS : CARD_ICON_MARK_SIZE;
+	// the words: as wide as the node leaves them at most (how wide they are is known once drawn)
+	if (anchorId === 'text') return node.data?.labelSide === 'bottom' ? { x: rect.x, y: rect.y + size, width: rect.width, height: rect.height - size } : { x: rect.x + size + 8, y: rect.y, width: Math.max(0, rect.width - size - 8), height: rect.height };
 	if (node.data?.labelSide === 'bottom') return { x: rect.x + (rect.width - size) / 2, y: rect.y, width: size, height: size };
 	return { x: rect.x, y: rect.y + (rect.height - size) / 2, width: size, height: size };
 }

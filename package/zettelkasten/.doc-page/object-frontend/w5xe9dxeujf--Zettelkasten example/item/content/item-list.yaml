@@ -1,0 +1,75 @@
+# the assets of the frontend object lying in this folder and below, down to a folder with an
+# item-list.yaml of its own: written by the page (doc_page_impl_obj_frontend.md#the-item-lists)
+assetList:
+  - key: card-atomic
+    kind: zettel
+    itemId: w5xe9dycqa0
+    name: One card, one idea
+    pathList:
+      - /zettel/card/card-atomic
+  - key: card-own-words
+    kind: zettel
+    itemId: w5xe9dyvjwd
+    name: Written in your own words
+    pathList:
+      - /zettel/card/card-own-words
+  - key: card
+    kind: zettel
+    itemId: w5xe9dzdt8r
+    name: Cards
+    pathList:
+      - /zettel/card
+  - key: link-backlink
+    kind: zettel
+    itemId: w5xe9dzvj5i
+    name: Backlinks
+    pathList:
+      - /zettel/link/link-backlink
+  - key: link-place
+    kind: zettel
+    itemId: w5xe9e1xbae
+    name: A link to a place in a card
+    pathList:
+      - /zettel/link/link-place
+  - key: link
+    kind: zettel
+    itemId: w5xe9e3mw71
+    name: Links
+    pathList:
+      - /zettel/link
+  - key: q001
+    kind: question
+    itemId: w5xe9e4p2rp
+    name: Q1 Is this one card or two
+    pathList:
+      - /question/q001
+  - key: q002
+    kind: question
+    itemId: w5xe9e6cwhq
+    name: Q2 Finding where an idea is used
+    pathList:
+      - /question/q002
+  - key: structure-hub
+    kind: zettel
+    itemId: w5xe9e6vhxu
+    name: Hub cards
+    pathList:
+      - /zettel/structure/structure-hub
+  - key: structure
+    kind: zettel
+    itemId: w5xe9e7hn66
+    name: Structure
+    pathList:
+      - /zettel/structure
+  - key: zk
+    kind: zettel
+    itemId: w5xe9e87pfy
+    name: The zettelkasten method
+    pathList:
+      - /zettel/zk
+  - key: home
+    kind: page
+    itemId: w5xe9eatwu5
+    name: Home
+    pathList:
+      - /page/home

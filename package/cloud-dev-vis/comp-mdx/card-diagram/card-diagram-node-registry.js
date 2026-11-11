@@ -6,7 +6,7 @@ import { TableCard } from './TableCard.jsx';
 import { OperatorCard } from './OperatorCard.jsx';
 import { CardBrief, CardDatabase, CardNote, CardThreeDots } from './CompactCard.jsx';
 import { CardCaption, CardIcon } from './CardIcon.jsx';
-import { cardIconAnchorListGet, cardIconAnchorRectEstimate, cardIconNormalize } from './CardIconData.js';
+import { cardIconAnchorListGet, cardIconAnchorRectEstimate, cardIconNormalize, cardIconSearchMatch } from './CardIconData.js';
 import { diagramArrangerOutline } from './DiagramArrangeOutline.js';
 import { SceneBoxCard } from './SceneBoxCard.jsx';
 import { CardMatrix } from './CardMatrix.jsx';
@@ -112,7 +112,7 @@ export const cardDatabaseNodeKind = {
 export const cardIconNodeKind = {
 	type: 'card-icon',
 	label: 'Icon',
-	contract: { dataNormalize: cardIconNormalize, anchorListGet: cardIconAnchorListGet, anchorRectEstimate: cardIconAnchorRectEstimate, sizeDefault: { width: 180, height: 32 } },
+	contract: { dataNormalize: cardIconNormalize, anchorListGet: cardIconAnchorListGet, anchorRectEstimate: cardIconAnchorRectEstimate, searchMatch: cardIconSearchMatch, sizeDefault: { width: 180, height: 32 } },
 	schema: null,
 	Card: CardIcon,
 	create: {

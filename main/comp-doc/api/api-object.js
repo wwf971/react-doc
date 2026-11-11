@@ -19,6 +19,23 @@ import { apiDefine } from '../../frontend/src/lib/doc-api.js';
 //   writing    object/create, object/update, object/delete
 //   relations  relation/query, relation/create, relation/update, relation/delete
 export const apiByIdObject = {
+  // the one api the frontend object layer has beside the standard ones: what the navigation
+  // calls for a document an object registered (doc_page_impl_obj_frontend.md#the-home-document)
+  'object-frontend/doc/open': apiDefine({
+    label: 'Open a document of a frontend object',
+    description: 'Shows a document a frontend object registered, for a reader arriving from outside the object: the home document of the object in the popup, told where the reader was going, or the document itself when the object has no home document.',
+    icon: Box,
+    paramList: [
+      { name: 'target', type: 'sourcePath', pathSpec: { kind: 'file' }, isRequired: true, description: 'the full source path of the document, ~page:${frontend.id:…}/…' },
+      { name: 'hash', type: 'string', description: 'the place in it' },
+      { name: 'fromPath', type: 'sourcePath', description: 'the document the link is written in' },
+    ],
+    run: async ({ stores, call }, { target, hash }) => {
+      const plan = stores.objectFrontendStore.docOpenPlanGet({ target: String(target), hash: String(hash ?? '') });
+      if (!plan) return { code: -1, message: `No frontend object registered ${target}.` };
+      return call('nav/popup', plan);
+    },
+  }),
   'object/search': apiDefine({
     label: 'Search objects',
     description: 'Objects of the page and of the services by words in any order: a name, a host (service, doc page), an id, a type; type:…, in:…, id:…, ns:… narrow a word. Hosts with too many objects are counted, not listed.',

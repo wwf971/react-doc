@@ -1,0 +1,8 @@
+# The side panel of the package's doc page.
+sidePanelById:
+  main:
+    tree:
+      - doc: ~zettelkasten/comp-mdx/zettelkasten/comp-zettelkasten.md
+        text: Zettelkasten
+      - doc: ~zettelkasten/doc/README.md
+        text: Design

@@ -18,7 +18,9 @@ import './CardIcon.css';
 // about, larger and filled. isGhost: a thing that is not there yet (a dashed mark: add one).
 // badge: a word marking what sort of thing it is (EXAMPLE), small capitals after the title; with
 // isBadgeUnder, before the line of text instead, so a narrow node keeps its width for its title.
-// Two anchors: `icon`, the mark, where the lines of a graph end; `body`, the whole node.
+// Three anchors: `icon`, the mark, where the lines of a graph end; `text`, a little after the end of
+// its words (the title, its badge, the line of text: whichever is longest), where a line leaves a
+// node wider than its words; `body`, the whole node.
 export const CardIcon = observer(function CardIcon({ node, nodeId, anchorRef }) {
 	const { title, text, icon, tone, statusTone, labelSide, isFocus, isGhost, isLabelHidden, badge, isBadgeUnder } = node.data;
 	const Icon = CARD_ICON_BY_NAME[icon] ?? Boxes;
@@ -32,6 +34,7 @@ export const CardIcon = observer(function CardIcon({ node, nodeId, anchorRef }) 
 			</span>
 			{isLabelHidden ? null : (
 				<span className="doc-card-icon-text">
+					<span ref={anchorRef?.('text')} className="doc-card-icon-text-anchor" aria-hidden="true" />
 					<span className="doc-card-icon-head"><span className="doc-card-icon-title">{title}</span>{badge && !isBadgeUnder ? <span className="doc-card-icon-badge">{badge}</span> : null}</span>
 					{text || (badge && isBadgeUnder) ? <span className="doc-card-icon-under">{badge && isBadgeUnder ? <span className="doc-card-icon-badge">{badge}</span> : null}{text ? <span className="doc-card-icon-note">{text}</span> : null}</span> : null}
 				</span>

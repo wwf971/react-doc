@@ -1,0 +1,18 @@
+# The modes of a zettelkasten (doc/README.md): components rendered by the entry component
+# ObjectFrontend for an object of the type zettelkasten.box (type.yaml at the top of the
+# package), never written as blocks themselves.
+compList:
+  - tagName: ZettelExplorer
+    entry: ./zettelkasten-comp.js
+    export: ZettelExplorerDefine
+  - tagName: ZettelCard
+    entry: ./zettelkasten-comp.js
+    export: ZettelCardDefine
+  # cards on a card diagram: a block of any document, and the node drawing a card in any diagram
+  - tagName: ZettelDiagram
+    entry: ./zettelkasten-comp.js
+    export: ZettelDiagramDefine
+    dependencyCollect: { entry: ../../../cloud-dev-vis/comp-mdx/card-diagram/DiagramERSource.js, export: diagramDependenciesCollect }
+  - tagName: ZettelNode
+    entry: ./zettelkasten-comp.js
+    export: ZettelNodeDefine

@@ -22,6 +22,19 @@
 // an alias (of a root or of a doc page) is one word: letters, digits, "_",
 // "-" and "."; never "/", ":", "~", "#" or whitespace (sourceAliasIsValid).
 //
+// a root may also be an object that registers documents with the source
+// (doc_page_impl_source.md#documents-registered-by-an-object), written as
+// a reference to the object in "${...}":
+//
+//   ~${frontend.id:w5v261zcv3v}/zettel/a.md        an object by its id
+//   ~${frontend.name:Reading list}/zettel/a.md     by its name
+//   ~${frontend:w5v261zcv3v}/zettel/a.md           by either: an id first, then a name
+//   ~page:${frontend.id:w5v261zcv3v}/zettel/a.md   the full form: the identity
+//
+// the segment runs to its "}", so the ":" inside it is not the doc page
+// separator. the identity always names the object by its id (.id); the
+// other spellings are resolved to it (doc-target-resolve.js).
+//
 // other spellings a reference may use are relative:
 //   ./a.md, ../a.md   relative to the directory of the referencing document
 //   dir/a.md          a suffix of a source path (one match expected)
@@ -33,6 +46,8 @@
 
 export const SOURCE_ROOT_MARK = '~';
 export const SOURCE_DOC_PAGE_SEPARATOR = ':';
+export const SOURCE_ROOT_OBJECT_OPEN = '${';
+export const SOURCE_ROOT_OBJECT_CLOSE = '}';
 
 const aliasRegex = /^[A-Za-z0-9_.-]+$/;
 
@@ -66,12 +81,60 @@ export function sourcePathIsFull(value) {
 export function sourcePathParse(value) {
   if (!sourcePathIsRooted(value)) return undefined;
   const text = sourcePathNormalize(value);
-  const indexSlash = text.indexOf('/');
-  const segRoot = indexSlash < 0 ? text.slice(1) : text.slice(1, indexSlash);
-  const relPath = indexSlash < 0 ? '' : text.slice(indexSlash + 1);
-  const indexSeparator = segRoot.indexOf(SOURCE_DOC_PAGE_SEPARATOR);
+  const { segRoot, relPath } = sourceRootSegmentSplit(text);
+  const indexSeparator = sourceDocPageSeparatorFind(segRoot);
   if (indexSeparator < 0) return { docPageAlias: '', rootAlias: segRoot, relPath };
   return { docPageAlias: segRoot.slice(0, indexSeparator), rootAlias: segRoot.slice(indexSeparator + 1), relPath };
+}
+
+// the root segment of a rooted text (without the mark) and what follows its
+// "/". an object root "${...}" runs to its "}", whatever it holds
+function sourceRootSegmentSplit(text) {
+  const indexObject = text.indexOf(SOURCE_ROOT_OBJECT_OPEN);
+  const indexSlashFirst = text.indexOf('/');
+  let indexSlash = indexSlashFirst;
+  if (indexObject >= 0 && (indexSlashFirst < 0 || indexObject < indexSlashFirst)) {
+    const indexClose = text.indexOf(SOURCE_ROOT_OBJECT_CLOSE, indexObject);
+    indexSlash = indexClose < 0 ? -1 : text.indexOf('/', indexClose);
+  }
+  return indexSlash < 0 ? { segRoot: text.slice(1), relPath: '' } : { segRoot: text.slice(1, indexSlash), relPath: text.slice(indexSlash + 1) };
+}
+
+// where the doc page alias ends in a root segment: the first ":" before an object root
+function sourceDocPageSeparatorFind(segRoot) {
+  const indexObject = segRoot.indexOf(SOURCE_ROOT_OBJECT_OPEN);
+  const index = segRoot.indexOf(SOURCE_DOC_PAGE_SEPARATOR);
+  return indexObject >= 0 && index > indexObject ? -1 : index;
+}
+
+// a root that is an object: "${namespace.by:ref}", by "id" or "name", or "${namespace:ref}"
+// for either. { namespace, by: 'id' | 'name' | '', ref } of such a root alias, undefined
+// for a folder root
+export function sourceRootObjectParse(rootAlias) {
+  const text = String(rootAlias ?? '');
+  if (!text.startsWith(SOURCE_ROOT_OBJECT_OPEN) || !text.endsWith(SOURCE_ROOT_OBJECT_CLOSE)) return undefined;
+  const inner = text.slice(SOURCE_ROOT_OBJECT_OPEN.length, -SOURCE_ROOT_OBJECT_CLOSE.length);
+  const index = inner.indexOf(':');
+  if (index <= 0 || index === inner.length - 1) return undefined;
+  const head = inner.slice(0, index);
+  const indexDot = head.lastIndexOf('.');
+  const by = indexDot > 0 ? head.slice(indexDot + 1) : '';
+  if (by !== '' && by !== 'id' && by !== 'name') return undefined;
+  let ref = inner.slice(index + 1);
+  // a name written in a link may be percent-encoded ("Reading%20list")
+  try { ref = decodeURIComponent(ref); } catch { /* kept as written */ }
+  return { namespace: by ? head.slice(0, indexDot) : head, by, ref };
+}
+
+// the root of an object: by its id (the identity) unless another spelling is asked for
+export function sourceRootObjectBuild(namespace, ref, by = 'id') {
+  return `${SOURCE_ROOT_OBJECT_OPEN}${namespace}${by ? `.${by}` : ''}:${ref}${SOURCE_ROOT_OBJECT_CLOSE}`;
+}
+
+// the object whose root a rooted path lies in: { namespace, by, ref }, undefined for a file of a folder
+export function sourcePathObjectGet(value) {
+  const parsed = sourcePathParse(value);
+  return parsed ? sourceRootObjectParse(parsed.rootAlias) : undefined;
 }
 
 // backslashes become slashes, repeated and trailing slashes go
@@ -114,9 +177,8 @@ export function sourcePathRootGet(value) {
 export function sourcePathPatternFullGet(pattern, docPageAlias) {
   const text = String(pattern ?? '');
   if (!text.startsWith(SOURCE_ROOT_MARK) || !docPageAlias) return text;
-  const indexSlash = text.indexOf('/');
-  const segRoot = indexSlash < 0 ? text.slice(1) : text.slice(1, indexSlash);
-  if (segRoot === '' || segRoot.includes(SOURCE_DOC_PAGE_SEPARATOR)) return text;
+  const { segRoot } = sourceRootSegmentSplit(text);
+  if (segRoot === '' || sourceDocPageSeparatorFind(segRoot) >= 0) return text;
   return `${SOURCE_ROOT_MARK}${docPageAlias}${SOURCE_DOC_PAGE_SEPARATOR}${text.slice(1)}`;
 }
 

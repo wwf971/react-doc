@@ -53,6 +53,11 @@ target form                resolution (lib/doc-target-resolve.js)
 ./sub/a.md, ../a.md        path relative to the source document, in the same doc page
 xx/a.md                    path suffix: the matches of the local doc page when there are any,
 a.md                       file name:   else the matches of every doc page
+~${frontend.id:x}/xx/a.md  a document an object registered: ${frontend.id:…}, ${frontend.name:…},
+                           or ${frontend:…} for either (an id first)
+                           (doc_page_impl_source.md#documents-registered-by-an-object)
+…?nav=page                 a query before the fragment: what the link asks of the navigation
+                           (#routing-a-navigation)
                              ├─ one match  -> navigate
                              ├─ many       -> choose from a candidate list (each with its doc page)
                              └─ none       -> show a broken link
@@ -73,6 +78,42 @@ A link has two ways to show its target: **navigation** and **viewing**. A target
 When a target can be neither navigated to nor viewed (no side-panel item and no host panel, an extension without a declared display, or a failed load), activating its link opens a dismissible warning beside that link. Unexpected `navigate()` failures use the same local warning. It closes after dismissal, an outside click, a target change, or successful navigation. This identifies the failing link without moving the reader or showing a detached page-level warning. The warning (`LinkWarning`) is portaled into `document.body` at a fixed position computed from the link's anchor (below it, or above when it does not fit, clamped to the viewport, following scroll and resize), so a table's overflow boundary does not clip it; table overflow itself is left as it is.
 
 The default document-link renderer and warning are also the display boundary for inline source links. A source target absent from the collected manifest uses the same red broken-link treatment as a missing document. A collected source that cannot be loaded or opened uses the orange unavailable treatment and the same local warning. This keeps target-state feedback consistent while leaving document navigation and source-popup behavior in their respective controllers.
+
+## Routing a navigation
+
+Following a link is a **request**, and what happens is **the call of an api with parameters**. A route is the rule that turns a request into such a call; the classic navigation is one route among others, and every way of showing a target can be called by anyone through the [api registry](doc_page_impl_api.md) (the palette, a hotkey, an agent).
+
+```text
+link activated
+  └─ request { target (full path), hash, fromPath, param, owner?, route?, point? }
+       1. host    linkConfig.onEvent / the page's onEvent ('link:activateRequest'), as before
+       2. scope   the place the link is rendered in, when it answers navigation itself
+                  (DocNavScopeContext { handle }): an instance of an object's mode shows the
+                  documents of its object in itself
+       3. routes  DocNavStore.request: the first route that takes the request names an api;
+                  the api is called, and its result is the answer
+```
+
+| route | takes | calls |
+| --- | --- | --- |
+| a layer's own (`routeAdd({ id, apiGet })`) | what its `apiGet(request)` answers for | the api it names |
+| `owner` | a target a provider registered, when the provider named an api (`ownerApiSet(providerId, api)`) | that api, `{ target, hash, fromPath }`; for a frontend object `object-frontend/doc/open` |
+| `page` | a target with a side-panel item | `nav/goTo { target }`: the classic navigation (item, history, url) |
+| `popup` | another document the popup can show | `nav/popup { target, hash, arrival? }`: the inline popup of the page |
+
+- **The order is the default**; a route that failed lets the next one try, and the last failure is the answer (the warning beside the link). No route: the link says the target cannot be shown.
+- **A link names a route** in a query after its path, before the fragment, wherever a target is written: `?nav=page`, `?nav=popup`, `?nav=owner`, or the id of a layer's route. Then only that route is asked, and the scope is passed over. Other keys of the query travel in `param` to whoever answers (`docTargetResolve` splits them off, `targetQuerySplit`).
+- **`nav/request { target, fromPath? }`** is the whole of it as an api: a target as a document would write it, resolved and routed as a click would.
+
+```text
+[Chunking](rag-chunking.md)                 inside its object: the instance showing it; outside: its owner's api
+[Chunking](rag-chunking.md?nav=popup#s)     the inline popup, at a place
+[the guide](~docs/guide.md?nav=page)        the classic navigation
+```
+
+**Inside or outside.** A target registered by an object is shown **where the reader is** when the link is in an instance of that object's component (the scope: the same instance answers), and **in the popup** when the link is anywhere else, since no place of the page is the object's. What the popup shows is the object's to say: its [home document](doc_page_impl_obj_frontend.md#the-home-document) when it has one, told where the reader was going, else the target itself.
+
+**The inline popup** is one per page (`DocNavPopup`, state in `DocNavStore.popup`), drawn by the popup of a source link. `arrival { target, hash, key, ref }` of `nav/popup` is handed to what the popup renders as `DocNavArrivalContext`: a document standing for another one (a home document) reads it and takes the reader there.
 
 ## Writing a link
 

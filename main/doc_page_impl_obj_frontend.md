@@ -274,6 +274,61 @@ Both components take the object by its reference and read the store themselves, 
 
 **Versions.** An object reads the **head** of each of its assets: a record names an asset, never a version of one, so a write of an asset is what every mode shows next. An asset pinned to a version (an object whose part must not change while its source is revised) is [TODO](doc_page_impl_TODO.md#object-frontend-version).
 
+## Documents of an object
+
+An object can **register documents with the source layer** of the page ([Documents registered by an object](doc_page_impl_source.md#documents-registered-by-an-object)). A registered document is compiled and rendered by the document pipeline, is linked like any document, is edited block by block by the edit layer, and has a source path under the root of its object.
+
+```text
+asset of the object                      document of the page
+  record: key, kind, name, pathList        ~{docPage}:${frontend.id:{id}}/{document path}.md
+  item: Markdown (md, mdx)        ──►      text: the head of the item
+  kind declared isDoc                      owner { providerId: frontend, ref: frontend:{id}, key }
+```
+
+**Two path systems.** The **asset paths** of a record index an asset inside its object, for its modes ([Naming and finding the assets](#naming-and-finding-the-assets)). The **document path** is where the asset stands in the source of the page, for links. They are separate: a kind says how the document path is made, and may make it the asset path.
+
+```yaml
+# type.yaml
+assetKindList:
+  - { id: book, langList: [md], isDoc: true }                           # docPath absent: {path}, the first asset path
+  - { id: zettel, langList: [md, mdx], isDoc: true, docPath: "card/{key}" }   # its own: card/{key}.md
+```
+
+`docPath` is a pattern over `{path}` (the first asset path; the kind and key of an asset without one), `{key}` and `{kind}` (`objectFrontendDocRelPathBuild`); the extension is the language of the item. A path of its own that does not follow the hierarchy of the asset paths stays valid when an asset is filed elsewhere. Two assets at one document path: the first keeps it. The page (`DocObjectFrontendStore.docProvided`) and the development server (`objectFrontendDocFind`) apply the same rule.
+
+- **Data beside the text** goes in the frontmatter of the document; a mode reads the item's text (`assetTextGet`) for it and renders the body through `sourceStore.loadDoc(path)` and the compiled `Body`, or, while its document is edited, through `DocEditBody` ([Documents that are not files](doc_page_impl_edit.md#documents-that-are-not-files)). `service.docPathGet(assetRef)` is the source path of an asset's document.
+- **References**: between documents of one object, relative or by file name (`./a.md`, `a.md#place`); from anywhere, `~${frontend.id:{id}}/…`, `~${frontend.name:{name}}/…` or `~${frontend:{id or name}}/…`.
+
+### Answering navigation
+
+Registering documents means answering for them: a link to one has to lead somewhere, and no item of the side panel is theirs. The layer answers by where the link is ([Routing a navigation](doc_page_impl_nav.md#routing-a-navigation)):
+
+```text
+the link is inside an instance of a mode of the object   ->  that instance shows the target
+    the mode provides DocNavScopeContext { handle(request) } around what it renders and
+    answers { code: 0 } for request.owner.ref === service.ref
+the link is anywhere else                                ->  the api object-frontend/doc/open
+    the home document of the object in the popup, told where the reader was going;
+    without a home document, the target itself in the popup
+```
+
+So a mode must know which of the two it is in, and it does without asking: a link inside it reaches its scope handler, and an arrival from outside reaches it as `service.navArrival`.
+
+### The home document
+
+An object may name one of its documents its **home document**: `metadata.docHome` of its entry, an asset reference. It is an ordinary document of the object (an asset of a kind declared `isDoc`) that shows the object to a reader coming from outside, usually by holding a block of the object in the mode that browses it. It must **accept where the reader was going**: the popup hands `arrival { target, hash, key, ref }` to what it renders, the entry component passes it to the mode as `service.navArrival { target, hash, key, version }` (only to blocks of that object), and the mode goes there.
+
+```md
+<!-- the home document of a zettelkasten: item /page/home -->
+<!--renderComp=ObjectFrontend-->
+```yaml
+object: frontend:w5v62zxzbdl
+mode: explorer
+```
+```
+
+`DocObjectFrontendStore.docHomePathGet(ref)` is its source path; `docOpenPlanGet({ target, hash })` is what `object-frontend/doc/open` hands to `nav/popup`.
+
 ## A word on the names: objects hold items
 
 The container is an **object**: a frontend object, like an MDX component instance, is what a reader and the registry deal with. What it holds is one level below, and is never called an object: an **asset item** of the [asset service layer](doc_page_impl_asset.md), a piece of versioned data with its locks and folder, called an **asset of the object** or a **data item** where the object is the subject. *Object* has enough meanings already (anything a provider of the registry names, the frontend object itself); "the objects of an object" would make every sentence ambiguous ("delete the object": the frontend object, or one of its pieces?). The files say the same: `object.yaml` describes a frontend object, `item.yaml` an asset item.

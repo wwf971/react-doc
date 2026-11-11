@@ -1,0 +1,14 @@
+# The documents of the package are in doc/. The root is the package folder, so
+# that .doc-page/asset is named by it; comp-mdx/ and the template folders of a
+# package are never collected.
+rules:
+  - action: addFolder
+    alias: zettelkasten
+    path: ..
+    collect: recursive
+    exclude:
+      - doc-package.yaml
+      - type.yaml
+      - package.json
+      - .gitignore
+      - .DS_Store

@@ -60,3 +60,7 @@ update-*
 # the truth (main/doc_page_impl_asset_storage.md#where-a-partition-lies)
 **/.doc-page/object-frontend/*/item/*/.cache/
 **/.doc-page/object-frontend/*/item/*/.tmp/
+
+# what a reader of a zettelkasten writes (notes, progress): the partition "note" of its object, kept
+# out of git with its item list (main/doc_page_impl_obj_frontend.md#partitions)
+**/.doc-page/object-frontend/*/item/note/

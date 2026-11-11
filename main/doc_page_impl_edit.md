@@ -486,3 +486,17 @@ comp-mdx/test-case-table/TestCaseTable.jsx  mode `results`: a session that saves
 example_doc/.doc-page/comp-mdx/table/stock-table/StockTableEdit.jsx  host component edit mode demonstration, mode `cells`
 example_doc/mdx-doc-edit-in-place.md           playground document
 ```
+
+## Documents that are not files
+
+The edit layer edits a document as root-level blocks, by line operations sent to the edit api. That holds for a document [a layer registered with the source](doc_page_impl_source.md#documents-registered-by-an-object) too: the semantic model is the same (blocks, sessions, the toolbar, the insert menu, history), and only where the text lives differs.
+
+```text
+DocEditStore  ── sourceRead(path) / sourceApply(path, hashBase, operations) ──►  edit api
+                                                                                  ├─ a file of the source: read and written on disk
+                                                                                  └─ docProvidedFind(path): read() and write(text) of its layer
+```
+
+- **The server resolves the path.** `/source` and `/source/apply` look for a file entry first, then ask `docProvidedFind` of the middleware; for a document of a frontend object it is `objectFrontendDocFind`, which reads the head of the asset item and writes the new text into the item through the asset store (its save mode, its versions, its locks). The whole item is written for one block: the line operations are applied to its text on the server, as for a file.
+- **The page needs nothing more**: `docIsEditable(path)` is true for a registered Markdown document, and `docEditEnsure(path)` / `docEditActiveGet(path)` give its edit body. A component showing such a document renders `DocEditBody` for it while its own document is edited, in place of the reading body.
+- **Not offered there**: deleting files with a block, and the frontmatter and whole-source sessions of the page toolbar, which belong to the page's current document.

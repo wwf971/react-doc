@@ -97,7 +97,10 @@ export const DiagramStaticLabel = observer(function DiagramStaticLabel({ connect
 //   padding       room around what is drawn, px
 //   onNodeClick   (node, event): a click on a card that is not a background. a card with `link`
 //                 shows a pointer; what a link opens is the caller's to say
-//   onSize        ({ width, height }): the size of the block, when it changes
+//   onSize        ({ width, height, xOrigin, yOrigin }): the size of the block, and where the point
+//                 (0, 0) of the diagram is drawn in it, when either changes. The block starts at what
+//                 is drawn farthest up and left (less the padding), so a caller laying something of its
+//                 own over the diagram places it from the origin, not from the block's corner
 //
 // A node with no position written stands where the grid of the diagram puts it; a background
 // written `around` other nodes follows them as they are measured. A line ends in an arrow unless
@@ -152,7 +155,7 @@ export const DiagramStatic = observer(function DiagramStatic({ diagram, registry
 		const yMin = Math.min(...pointList.map((point) => point.y));
 		return { x: xMin - padding, y: yMin - padding, width: Math.ceil(Math.max(...pointList.map((point) => point.x)) - xMin + padding * 2), height: Math.ceil(Math.max(...pointList.map((point) => point.y)) - yMin + padding * 2) };
 	}, [graph, place, geometry.sizeById, lineList, padding]);
-	useLayoutEffect(() => { onSize?.({ width: box.width, height: box.height }); }, [onSize, box.width, box.height]);
+	useLayoutEffect(() => { onSize?.({ width: box.width, height: box.height, xOrigin: -box.x, yOrigin: -box.y }); }, [onSize, box.width, box.height, box.x, box.y]);
 	if (load.message) return <div className="doc-er-diagram-message is-error" role="alert"><strong>The diagram could not be read.</strong><span>{load.message}</span></div>;
 	const nodeClick = onNodeClick ? (event) => {
 		const id = event.target.closest?.('.doc-diagram-static-node')?.dataset.id;

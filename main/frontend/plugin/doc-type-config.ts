@@ -37,7 +37,7 @@ export const TYPE_CONFIG_FILE_NAME = 'type.yaml';
 const TOP_KEY_LIST = ['typeList'];
 const TYPE_KEY_LIST = ['id', 'kind', 'label', 'description', 'icon', 'extendList', 'summaryKeyList', 'modeList', 'assetKindList', 'partitionList'];
 const MODE_KEY_LIST = ['id', 'label', 'description', 'category', 'comp', 'param', 'isDefault'];
-const ASSET_KIND_KEY_LIST = ['id', 'label', 'langList', 'pathPrefix', 'groupPath', 'isIncomingRefused'];
+const ASSET_KIND_KEY_LIST = ['id', 'label', 'langList', 'pathPrefix', 'groupPath', 'isIncomingRefused', 'isDoc', 'docPath'];
 const PARTITION_KEY_LIST = ['id', 'label', 'description', 'isGitIgnored', 'isDefault', 'storagePoint'];
 
 export type TypeSection = undefined | false | { file: string } | { typeList: unknown } | ({ file: string } | { typeList: unknown })[];
@@ -61,6 +61,11 @@ export type TypeAssetKind = {
   groupPath?: string;
   // made by the modes of the type only: nothing comes in from elsewhere
   isIncomingRefused?: boolean;
+  // its assets in Markdown are documents the object registers with the source
+  // (doc_page_impl_obj_frontend.md#documents-of-an-object)
+  isDoc?: boolean;
+  // where such a document stands under the root of its object: a pattern over {path}, {key}, {kind}
+  docPath?: string;
 };
 
 // a partition: a folder of the item folder of an object, holding its items and their item list;
@@ -304,7 +309,7 @@ function modeListRead(value: unknown, place: string, problem: (message: string) 
 
 function assetKindListRead(value: unknown, place: string, problem: (message: string) => void): TypeAssetKind[] {
   if (!Array.isArray(value)) {
-    problem(`${place}: a list of kinds { id, label, langList, pathPrefix, groupPath, isIncomingRefused }`);
+    problem(`${place}: a list of kinds { id, label, langList, pathPrefix, groupPath, isIncomingRefused, isDoc, docPath }`);
     return [];
   }
   const kindList: TypeAssetKind[] = [];
@@ -324,6 +329,8 @@ function assetKindListRead(value: unknown, place: string, problem: (message: str
       ...(typeof item.pathPrefix === 'string' ? { pathPrefix: item.pathPrefix } : {}),
       ...(typeof item.groupPath === 'string' ? { groupPath: item.groupPath } : {}),
       ...(item.isIncomingRefused === true ? { isIncomingRefused: true } : {}),
+      ...(item.isDoc === true ? { isDoc: true } : {}),
+      ...(typeof item.docPath === 'string' && item.docPath ? { docPath: item.docPath } : {}),
     });
   });
   return kindList;

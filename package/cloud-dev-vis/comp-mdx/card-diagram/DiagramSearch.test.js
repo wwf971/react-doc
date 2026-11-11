@@ -32,6 +32,21 @@ test('a card of a schema answers its title and the rows whose fields match; a ca
 	assert.deepEqual(items.map((item) => item.key), ['|n', '|t|row/a']);
 });
 
+test('an icon node answers its title, its line of text and its badge, never its icon or tones', () => {
+	const icon = (id, y, data) => ({ id, renderer: { type: 'card-icon' }, position: { x: 0, y }, size: { width: 180, height: 32 }, data, handles: [{ id: 'out', direction: 'out', anchor: { target: 'text', side: 'right' } }] });
+	const graph = graphOf([
+		icon('a', 0, { title: 'Example accounts', text: '4 connections', icon: 'layers', tone: 'amber', statusTone: 'green' }),
+		icon('b', 40, { title: 'bb', text: 'webapi', badge: 'example', icon: 'plug', tone: 'amber' }),
+	]);
+	const idListOf = (text) => diagramSceneSearch({ graph, request: diagramSearchRequestBuild({ text }), registry: cardDiagramNodeRegistry }).nodeList.map((one) => one.nodeId);
+	assert.deepEqual(idListOf('account'), ['a']);
+	assert.deepEqual(idListOf('connections'), ['a']);
+	assert.deepEqual(idListOf('example'), ['a', 'b']);
+	assert.deepEqual(idListOf('green'), []);
+	assert.deepEqual(idListOf('amber'), []);
+	assert.deepEqual(idListOf('plug'), []);
+});
+
 test('a line answers by its label', () => {
 	const graph = graphOf([note('a', 0, 'A'), note('b', 100, 'B')], [{ id: 'ab', source: { nodeId: 'a', handleId: 'out' }, target: { nodeId: 'b', handleId: 'in' }, label: { text: 'copies to' } }]);
 	const result = diagramSceneSearch({ graph, request: diagramSearchRequestBuild({ text: 'copies' }), registry: cardDiagramNodeRegistry });

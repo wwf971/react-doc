@@ -10,6 +10,11 @@
 	height: 100%;
 	color: var(--color-fd-foreground);
 }
+/* words beside the mark: the card is as wide as the mark and its words, not as its node (a column
+   of nodes has one width), so what outlines it (a hover, a search) ends where the words end; the
+   node still takes a click on its whole width */
+.doc-card-icon.is-label-right { width: fit-content; max-width: 100%; }
+.doc-diagram-static-node:has(> .doc-vis-node-content > .doc-card-icon.is-link) { cursor: pointer; }
 .doc-card-icon.is-label-bottom { flex-direction: column; justify-content: flex-start; gap: 0.3rem; text-align: center; }
 .doc-card-icon.is-link { cursor: pointer; }
 .doc-card-icon-mark {
@@ -45,7 +50,25 @@
 .doc-card-icon-status[data-tone='amber'] { --doc-card-status: #d97706; }
 .doc-card-icon-status[data-tone='red'] { --doc-card-status: #dc2626; }
 .doc-card-icon-status[data-tone='violet'] { --doc-card-status: #7c3aed; }
-.doc-card-icon-text { display: grid; min-width: 0; gap: 0.05rem; }
+.doc-card-icon-text { position: relative; display: grid; min-width: 0; gap: 0.05rem; }
+/* the anchor `text`: a line drawn out of the words starts a little after them, wherever they end,
+   and past the outline of a hover or a search (6px out of the card at most) */
+.doc-card-icon-text-anchor { position: absolute; top: 0; bottom: 0; left: 100%; width: 0; margin-left: 12px; pointer-events: none; }
+
+/* a card opening a scene, hovered; a card found by a search: outlined around the mark and the
+   words, a little apart from them, instead of around the whole node */
+.doc-switch-flow .react-flow__node.is-linked:hover > .doc-vis-node > .doc-vis-node-content > .doc-card-icon {
+	border-radius: 8px;
+	box-shadow: 0 6px 18px rgb(15 23 42 / 14%);
+	outline: 2px solid color-mix(in srgb, #2563eb 55%, transparent);
+	outline-offset: 4px;
+}
+.doc-vis-node[data-search]:has(> .doc-vis-node-content > .doc-card-icon),
+.doc-switch-static-node[data-search] > .doc-vis-node-content:has(> .doc-card-icon) { outline: none; }
+.doc-vis-node[data-search] > .doc-vis-node-content > .doc-card-icon,
+.doc-switch-static-node[data-search] > .doc-vis-node-content > .doc-card-icon { border-radius: 8px; outline: 2px solid rgb(234 179 8 / 85%); outline-offset: 3px; }
+.doc-vis-node[data-search='current'] > .doc-vis-node-content > .doc-card-icon,
+.doc-switch-static-node[data-search='current'] > .doc-vis-node-content > .doc-card-icon { outline: 3px solid rgb(234 88 12); }
 .doc-card-icon.is-label-bottom .doc-card-icon-text { width: 100%; }
 .doc-card-icon-title { min-width: 0; overflow: hidden; font-size: 0.8rem; font-weight: 550; line-height: 1.25; white-space: nowrap; text-overflow: ellipsis; }
 .doc-card-icon.is-focus .doc-card-icon-title { font-weight: 650; }

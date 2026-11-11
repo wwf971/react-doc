@@ -1,0 +1,6 @@
+name: Zettelkasten example
+type: zettelkasten.box
+description: A box of small notes, each saying one thing, joined by links. This
+  example box explains the method with the method.
+metadata:
+  rootKey: zk

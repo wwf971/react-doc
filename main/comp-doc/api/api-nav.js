@@ -41,6 +41,32 @@ export const apiByIdNav = {
     paramList: [{ name: 'target', type: 'sourcePath', pathSpec: { kind: 'file' }, isRequired: true, description: 'the target, as a link would write it' }],
     run: ({ stores }, { target }) => navigateResult(stores.docStore, target),
   }),
+  'nav/popup': apiDefine({
+    label: 'Open a document in the popup',
+    description: 'Shows a document of the source in the inline popup of the page, at a place when a fragment is given. A document registered by an object opens its home document when the object has one (object-frontend/doc/open).',
+    icon: LinkIcon,
+    paramList: [
+      { name: 'target', type: 'sourcePath', pathSpec: { kind: 'file' }, isRequired: true, description: 'the full source path of the document' },
+      { name: 'hash', type: 'string', description: 'the place in it: an id or a heading title' },
+      { name: 'arrival', type: 'object', description: 'where the reader was going, handed to what the document renders: { target, hash, key, ref }' },
+    ],
+    run: ({ stores }, { target, hash, arrival }) => stores.navStore.popupOpen({ target: String(target), hash: String(hash ?? ''), arrival }),
+  }),
+  'nav/request': apiDefine({
+    label: 'Follow a link',
+    description: 'Resolves a link target as a document would write it and routes it as a click on the link would: to the owner of a registered document, the side panel item, or the popup. ?nav=page | popup | owner in the target names one route.',
+    icon: LinkIcon,
+    paramList: [
+      { name: 'target', type: 'string', isRequired: true, description: 'the target, as a link would write it' },
+      { name: 'fromPath', type: 'sourcePath', description: 'the document the target is written in (relative targets, the local doc page)' },
+    ],
+    run: async ({ stores }, { target, fromPath = '' }) => {
+      const { targetList, hash, param = {} } = stores.docStore.docTargetResolve(String(target), String(fromPath));
+      if (targetList.length === 0) return { code: -1, message: `The target names no document: ${target}` };
+      const first = targetList[0];
+      return (await stores.navStore.request({ target: first.internalPath, hash, fromPath: String(fromPath), param, owner: first.owner, route: first.navigationTarget })) ?? { code: -1, message: `Nothing can show ${first.internalPath}.` };
+    },
+  }),
 };
 
 function navigateResult(docStore, target) {

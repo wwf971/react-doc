@@ -91,6 +91,35 @@ The first segment is the root, marked by `~`: the alias of the root, prefixed by
 
 Other spellings of a target stay what they were, and resolve to a full source path through `lib/doc-target-resolve.js`: a path relative to the document (`./a.md`, `../image/a.svg`), a path suffix (`guide/a.md`), a file name (`a.md`). A relative or suffix spelling is what an author writes inside one folder; the source path is what crosses folders, roots and doc pages, and what the page writes itself (a created file, a dependency). How each spelling finds its file, and why the local doc page always comes first, is specified in [link recognition and target resolution](doc_page_impl_nav.md#link-recognition-and-target-resolution).
 
+## Documents registered by an object
+
+Not every document is a file of a folder. A layer that keeps documents of its own registers them with the source, and from then on they are resolved, loaded, compiled and linked like files. The source layer knows such a layer only as a **document provider**; the first one is the frontend object layer ([Documents of an object](doc_page_impl_obj_frontend.md#documents-of-an-object)).
+
+```text
+provider (a layer)  ── docProvidedSet(providerId, { entryList, rootObjectList }) ──►  DocSourceStore
+  entryList        file entries as the manifest has them, each with its own load() and
+                   owner { providerId, ref, key }: who registered it, and its name there
+  rootObjectList   the object roots the entries lie in, and what each answers to:
+                   { namespace, id, name, rootAlias, docPageAlias }
+```
+
+**The root of such a document is an object**, written as a reference in `${…}` where a folder root has its alias:
+
+```text
+~${frontend.id:w5v62zxzbdl}/card/rag-chunking.md        the object by its id
+~${frontend.name:AWS AIP-C01}/card/rag-chunking.md      by its name
+~${frontend:w5v62zxzbdl}/card/rag-chunking.md           by either: an id first, then a name
+~page:${frontend.id:w5v62zxzbdl}/card/rag-chunking.md   the full form: the identity, always by id
+./rag-embedding.md, ../question/q015.md, q015.md        from a document of the same object
+```
+
+- **One segment.** The root runs to its `}`, so the `:` inside is not the doc page separator (`sourceRootObjectParse` answers `{ namespace, by, ref }`, `sourceRootObjectBuild`, `sourcePathObjectGet`). In a Markdown link a name with a space is written in angle brackets, `[x](<~${frontend.name:My box}/a.md>)`, or percent-encoded.
+- **Resolution** (`sourceRootObjectListFind`): `.id` and `.name` look at that alone; without either, an object of that id answers before one of that name. The reference is rewritten to the identity and resolved as any full path. **No object: no entry**, a broken link like a missing file. **Several objects** (a name two objects have): the first, and the resolution carries a `warning`, logged once with the document it is written in. Keeping these conflicts as state the page shows is [TODO](doc_page_impl_TODO.md#source-object-conflict).
+- **Inside one object** references are relative or by file name and resolve by the ordinary rules; of several matches of a name or a suffix, a document of an object prefers those of its own root.
+- **The path under the root is the provider's choice**, a system of its own: it need not be how the provider files the thing itself (for a frontend object, the asset paths; its type decides whether the two agree).
+- **Not pages.** Registered documents are not in the manifest: they have no side-panel item and the search of the page does not list them. Where a link to one leads is the owner's to say ([Routing a navigation](doc_page_impl_nav.md#routing-a-navigation)).
+- **Kept current.** A document whose `contentHash` changed is compiled again when it is on screen. It is edited through the edit layer like a file, its writes handed to its provider ([Documents that are not files](doc_page_impl_edit.md#documents-that-are-not-files)).
+
 ## Source rules and collection
 
 The `source` of a document yaml file is an ordered rule list (see [The document entry](doc_page_impl_side_panel.md#the-document-entry)). The add rules define the roots of the doc page and say how they collect:

@@ -74,7 +74,7 @@ import {
 import { assetBlockTextExpand, assetUsageListScan } from '../src/lib/doc-asset-ref.js';
 import { OBJECT_FRONTEND_LIST_NAME, OBJECT_FRONTEND_META_NAME } from '../src/lib/doc-object-frontend.js';
 import { ASSET_STORAGE_PARTITION_FILE_NAME, assetStorageConfigForPage, assetStorageConfigRead, type AssetStorageConfig } from './doc-asset-storage.ts';
-import { objectFrontendConfigForPage, objectFrontendConfigOfDocPageListGet, objectFrontendFolderOwnedListGet, objectFrontendTypeFileListGet, type ObjectFrontendConfig } from './doc-object-frontend.ts';
+import { objectFrontendConfigForPage, objectFrontendConfigOfDocPageListGet, objectFrontendDocFind, objectFrontendFolderOwnedListGet, objectFrontendTypeFileListGet, type ObjectFrontendConfig } from './doc-object-frontend.ts';
 import { TYPE_CONFIG_FILE_NAME, typeDeclaredConfigGet, type TypeDeclaredConfig } from './doc-type-config.ts';
 import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
 import { sourceFileBackupNameIs } from './doc-source-file.ts';
@@ -706,6 +706,14 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         endpoint: docEditEndpoint,
         fileEntryListGet,
         readOnlyReasonGet,
+        // a document of a frontend object is edited through its asset item
+        docProvidedFind: (internalPath) => {
+          const configDocNow = loadConfigDoc(configFile, options);
+          const assetConfigNow = assetConfigGet(configDocNow, configDir);
+          if (!assetConfigNow) return undefined;
+          const doc = objectFrontendDocFind({ store: assetStoreCreate(assetConfigNow), config: objectFrontendConfigGet(configDocNow, configDir) }, internalPath);
+          return doc ? { absPath: doc.folderAbs, read: doc.read, write: doc.write } : undefined;
+        },
         sidePanel: {
           configDir,
           fileListGet: () => collectDocYamlFiles(loadConfigDoc(configFile, options)),

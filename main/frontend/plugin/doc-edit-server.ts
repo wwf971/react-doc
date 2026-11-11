@@ -139,6 +139,10 @@ export type DocEditMiddlewareOptions = {
   fileEntryListGet: () => DocEditFileEntry[];
   // why a file may not be written ('' when it may): it is in a read-only doc page
   readOnlyReasonGet?: (absPath: string) => string;
+  // a document that is not a file of a folder: one a layer registered with the source (a
+  // document of a frontend object, doc_page_impl_edit.md#documents-that-are-not-files). read
+  // and written whole through its layer; the line operations are the same
+  docProvidedFind?: (internalPath: string) => { absPath: string; read: () => string; write: (text: string) => void } | undefined;
   sidePanel?: DocEditSidePanelOptions;
   config?: DocEditConfigOptions;
   workspace?: DocEditWorkspaceOptions;
@@ -192,6 +196,12 @@ async function routeHandle(
     const internalPath = url.searchParams.get('path') ?? '';
     const entry = editableEntryGet(fileEntryListGet(), internalPath);
     if (!entry) {
+      const provided = options.docProvidedFind?.(internalPath);
+      if (provided) {
+        const text = provided.read();
+        jsonSend(res, 200, { code: 0, data: { internalPath, text, hash: textHashGet(text) }, message: '' });
+        return;
+      }
       jsonSend(res, 404, { code: -3, data: null, message: `not an editable document of the source: ${internalPath}` });
       return;
     }
@@ -205,6 +215,11 @@ async function routeHandle(
     const internalPath = String(body?.internalPath ?? '');
     const entry = editableEntryGet(fileEntryListGet(), internalPath);
     if (!entry) {
+      const provided = options.docProvidedFind?.(internalPath);
+      if (provided) {
+        docProvidedApply(res, options, internalPath, provided, body);
+        return;
+      }
       jsonSend(res, 404, { code: -3, data: null, message: `not an editable document of the source: ${internalPath}` });
       return;
     }
@@ -295,6 +310,42 @@ async function routeHandle(
   }
 
   jsonSend(res, 404, { code: -1, data: null, message: `unknown edit api route: ${req.method} ${route}` });
+}
+
+// the line operations of /source/apply on a document a layer registered: the same checks and
+// the same operations, the text read from and written to its layer whole
+function docProvidedApply(
+  res: ServerResponse,
+  options: DocEditMiddlewareOptions,
+  internalPath: string,
+  provided: { absPath: string; read: () => string; write: (text: string) => void },
+  body: any,
+) {
+  if (readOnlySend(res, options, provided.absPath)) return;
+  const operationList = Array.isArray(body?.operationList) ? body.operationList : undefined;
+  const isOperationValid = operationList
+    ? operationList.length > 0 && operationList.every((operation: unknown) => lineOperationIsValid(operation))
+    : lineOperationIsValid(body?.operation);
+  if (typeof body?.hashBase !== 'string' || !isOperationValid) {
+    jsonSend(res, 400, { code: -1, data: null, message: 'request needs hashBase and a valid line operation (or a list of them)' });
+    return;
+  }
+  if (Array.isArray(body?.filePathDeleteList) && body.filePathDeleteList.length > 0) {
+    jsonSend(res, 400, { code: -1, data: null, message: 'files are not deleted with a block of a document that is not a file' });
+    return;
+  }
+  const textCurrent = provided.read();
+  if (textHashGet(textCurrent) !== body.hashBase) {
+    jsonSend(res, 409, { code: -2, data: { internalPath, text: textCurrent, hash: textHashGet(textCurrent) }, message: 'the document changed since it was loaded; the edit was not applied' });
+    return;
+  }
+  try {
+    const textNext = operationList ? lineOperationListApply(textCurrent, operationList as LineOperation[]) : lineOperationApply(textCurrent, body.operation as LineOperation);
+    provided.write(textNext);
+    jsonSend(res, 200, { code: 0, data: { internalPath, text: textNext, hash: textHashGet(textNext) }, message: '' });
+  } catch (error: any) {
+    jsonSend(res, 400, { code: typeof error?.code === 'number' ? error.code : -1, data: null, message: String(error?.message ?? error) });
+  }
 }
 
 // one change of the workspace file, built in place by doc-workspace-edit.ts.

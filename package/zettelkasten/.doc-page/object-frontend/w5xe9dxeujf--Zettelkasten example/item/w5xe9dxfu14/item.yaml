@@ -1,0 +1,28 @@
+itemId: w5xe9dxfu14
+name: ""
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+owner:
+  ref: frontend:w5xe9dxeujf
+  role: entry
+versionIdHead: w5xe9dxggx5
+isDeleted: false
+isLocked: false
+timeCreated: 20261112_02533706+09
+versionList:
+  - versionId: w5xe9dxggx5
+    versionIdPrevList: []
+    time: 20261112_02533706+09
+    note: the entry of the frontend object Zettelkasten example
+    size: 221
+    hash: 5c87f575d3182101cd08fd442cf7c5fb454e9e73
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261112_02533706+09
+    versionId: w5xe9dxggx5
+  - eventType: updateInPlace
+    time: 20261112_02533742+09
+    versionId: w5xe9dxggx5

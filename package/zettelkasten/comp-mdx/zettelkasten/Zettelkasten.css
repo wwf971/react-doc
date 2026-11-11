@@ -1,0 +1,211 @@
+/* The modes of a zettelkasten (ZettelExplorer.jsx, ZettelReader.jsx, ZettelPanel.jsx). The
+   buttons, badges, notes and the search field are the page's shared classes; the map is the
+   switching viewport of the package cloud-dev-vis, filling its side. */
+
+/* the outer box carries the margins of the block (main/doc_page_impl_mdx_comp_block.md) */
+.zettel-shell { margin: 1rem 0 1.5rem; }
+
+.zettel-explorer {
+	--zettel-right: #16a34a;
+	--zettel-wrong: #dc2626;
+	--zettel-review: #d97706;
+	--zettel-mark: #eab308;
+	container-type: inline-size;
+	display: flex;
+	flex-direction: column;
+	height: var(--zettel-height, 720px);
+	overflow: hidden;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 6px;
+	background: var(--color-fd-background);
+	color: var(--color-fd-foreground);
+	font-size: 0.85rem;
+	line-height: 1.5;
+}
+.zettel-explorer.is-popup { height: 100%; border: 0; border-radius: 0; }
+
+/* ---------- the bar ---------- */
+.zettel-toolbar {
+	flex: none;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4rem 0.6rem;
+	/* the right end is kept free for the popup button of the block */
+	padding: 0.4rem 2.6rem 0.4rem 0.75rem;
+	border-bottom: 1px solid var(--color-fd-border);
+	background: color-mix(in srgb, var(--color-fd-muted) 35%, transparent);
+}
+.zettel-toolbar .doc-button-group > button { gap: 0.25rem; }
+.zettel-toolbar .doc-button[aria-pressed='true'] { border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border)); }
+.zettel-search { position: relative; flex: 1 1 12rem; min-width: 10rem; max-width: 26rem; }
+.zettel-search .doc-search-field { height: 1.75rem; font-size: 0.78rem; }
+.zettel-search-result-list { position: absolute; z-index: 30; top: calc(100% + 2px); left: 0; width: max(100%, 26rem); max-width: 80cqw; max-height: 22rem; box-shadow: 0 6px 20px rgb(15 23 42 / 14%); }
+.zettel-search-result-list .doc-search-result { width: 100%; min-height: 1.7rem; border: 0; background: none; color: inherit; font: inherit; font-size: 0.78rem; text-align: left; }
+.zettel-search-result-list .doc-search-result[data-active] { background: var(--color-fd-accent); }
+.zettel-search-result-list .doc-search-result-description { min-width: 0; overflow: hidden; color: var(--color-fd-muted-foreground); font-size: 0.72rem; text-overflow: ellipsis; }
+.zettel-search-result-list .doc-search-none { padding: 0.35rem 0.6rem; color: var(--color-fd-muted-foreground); font-size: 0.75rem; }
+
+/* ---------- the two sides ---------- */
+.zettel-body { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); }
+.zettel-explorer[data-layout='map'] .zettel-body, .zettel-explorer[data-layout='card'] .zettel-body { grid-template-columns: minmax(0, 1fr); }
+.zettel-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--color-fd-border); }
+.zettel-explorer[data-layout='map'] .zettel-side { border-right: 0; }
+.zettel-side > .doc-switch { flex: 1 1 0; min-height: 0; margin: 0; border: 0; border-radius: 0; }
+/* narrow: the left side above the card */
+@container (max-width: 780px) {
+	.zettel-explorer[data-layout='split'] .zettel-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 0.85fr) minmax(0, 1fr); }
+	.zettel-explorer[data-layout='split'] .zettel-side { border-right: 0; border-bottom: 1px solid var(--color-fd-border); }
+}
+
+/* ---------- the card read ---------- */
+.zettel-reader { min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0.85rem 1.15rem 1.6rem; }
+.zettel-explorer.is-card .zettel-body { display: block; }
+.zettel-reader-message { margin-bottom: 0.5rem; }
+.zettel-crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 0.1rem 0.15rem; margin-bottom: 0.45rem; color: var(--color-fd-muted-foreground); font-size: 0.72rem; }
+.zettel-crumb-item { display: inline-flex; align-items: center; gap: 0.15rem; }
+.zettel-crumb-button { padding: 0.05rem 0.25rem; border: 0; border-radius: 3px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.zettel-crumb-button:hover { background: var(--color-fd-accent); color: var(--color-fd-foreground); }
+
+.zettel-card-head { margin-bottom: 0.2rem; }
+.zettel-card-title { margin: 0; font-size: 1.12rem; font-weight: 700; line-height: 1.3; }
+.zettel-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0.3rem 0 0; }
+.zettel-card-key { color: var(--color-fd-muted-foreground); font-size: 0.7rem; user-select: all; }
+.zettel-card-summary { margin: 0.55rem 0 0; padding-left: 0.7rem; border-left: 3px solid color-mix(in srgb, var(--color-fd-primary) 45%, var(--color-fd-border)); color: color-mix(in srgb, var(--color-fd-foreground) 86%, transparent); font-size: 0.88rem; }
+
+.zettel-section { margin-top: 1rem; padding-top: 0.7rem; border-top: 1px solid var(--color-fd-border); border-radius: 3px; }
+.zettel-section-title { display: flex; align-items: center; gap: 0.4rem; margin: 0 0 0.35rem; font-size: 0.86rem; font-weight: 650; }
+.zettel-section-title > em { color: var(--color-fd-muted-foreground); font-size: 0.7rem; font-style: normal; font-weight: 500; }
+.zettel-section-action { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0; }
+
+/* a place a link asked for: marked until the reader goes elsewhere */
+.zettel-reader .zettel-option.doc-navigation-target { background: color-mix(in srgb, var(--zettel-mark) 20%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--zettel-mark) 20%, transparent); border-radius: 2px; }
+
+/* ---------- the text of a card: a document of the page (DocsBody), at the size of the card ---------- */
+.zettel-doc { max-width: none; font-size: 0.85rem; line-height: 1.55; }
+.zettel-doc > :first-child { margin-top: 0.6rem; }
+.zettel-doc :is(h1, h2) { margin: 1rem 0 0.35rem; padding-top: 0.7rem; border-top: 1px solid var(--color-fd-border); font-size: 0.92rem; font-weight: 650; line-height: 1.35; }
+.zettel-doc :is(h3, h4) { margin: 0.8rem 0 0.3rem; font-size: 0.86rem; font-weight: 650; }
+.zettel-doc p { margin: 0.45rem 0; }
+.zettel-doc :is(ul, ol) { margin: 0.45rem 0; padding-left: 1.25rem; }
+.zettel-doc li { margin: 0.2rem 0; }
+.zettel-doc table { margin: 0.5rem 0; font-size: 0.8rem; }
+.zettel-doc :is(th, td) { padding: 0.3rem 0.55rem; }
+.zettel-doc pre { margin: 0.5rem 0; font-size: 0.76rem; }
+.zettel-doc .doc-navigation-target { background: color-mix(in srgb, var(--zettel-mark) 22%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--zettel-mark) 22%, transparent); border-radius: 2px; }
+.zettel-section-doc { padding-top: 0; }
+.zettel-note-text.zettel-doc > :first-child { margin-top: 0; }
+.zettel-note-text.zettel-doc > :last-child { margin-bottom: 0; }
+
+/* what the block adds while its document is edited */
+.zettel-edit-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0.4rem 0 0; }
+.zettel-note-add { display: grid; gap: 0.3rem; padding-top: 0.3rem; }
+
+/* a link to a card: in the line of the text, in the color of what it opens */
+.zettel-link { border-bottom: 1px dotted currentColor; color: var(--color-fd-primary); text-decoration: none; cursor: pointer; }
+.zettel-link:hover { border-bottom-style: solid; background: color-mix(in srgb, currentColor 10%, transparent); }
+.zettel-link[data-kind='question'] { color: var(--zettel-review); font-weight: 600; }
+.zettel-link.is-missing { border-bottom: 1px dashed var(--color-fd-destructive, #dc2626); color: var(--color-fd-destructive, #dc2626); cursor: default; }
+.zettel-link.is-chip { display: inline-flex; padding: 0.05rem 0.45rem; border: 1px solid color-mix(in srgb, currentColor 35%, var(--color-fd-border)); border-radius: 999px; font-size: 0.74rem; line-height: 1.5; }
+.zettel-chip-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; margin: 0.35rem 0 0; }
+
+/* ---------- rows: what lies below a card, the questions using it, the cards pointing at it ---------- */
+.zettel-row-list { display: flex; flex-direction: column; }
+.zettel-row-list.is-panel { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 0.75rem 0.75rem; }
+.zettel-row { display: grid; gap: 0.1rem; width: 100%; padding: 0.35rem 0.3rem; border: 0; border-top: 1px solid color-mix(in srgb, var(--color-fd-border) 70%, transparent); border-radius: 0; background: none; color: inherit; font: inherit; text-align: left; }
+.zettel-row:first-child { border-top: 0; }
+button.zettel-row { cursor: pointer; }
+button.zettel-row:hover, .zettel-row[aria-current='true'] { background: var(--color-fd-accent); }
+.zettel-row-title { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; min-width: 0; font-weight: 600; }
+.zettel-row.is-question .zettel-row-title, .zettel-row.is-note .zettel-row-title { font-weight: 500; }
+.zettel-row-number { flex: none; min-width: 2.3rem; color: var(--zettel-review); font-weight: 650; }
+.zettel-row-name { min-width: 0; }
+.zettel-row-text { color: var(--color-fd-muted-foreground); font-size: 0.78rem; }
+.zettel-row-text:empty { display: none; }
+.zettel-row-count { margin-left: auto; color: var(--color-fd-muted-foreground); font-size: 0.7rem; font-weight: 500; white-space: nowrap; }
+.zettel-option-chip { min-width: 1.25rem; padding: 0 0.3rem; border: 1px solid var(--color-fd-border); border-radius: 3px; background: none; color: var(--color-fd-muted-foreground); font: inherit; font-size: 0.7rem; font-weight: 650; line-height: 1.25rem; cursor: pointer; }
+.zettel-option-chip[data-verdict='correct'] { border-color: color-mix(in srgb, var(--zettel-right) 60%, var(--color-fd-border)); color: var(--zettel-right); }
+.zettel-option-chip[data-verdict='wrong'] { border-color: color-mix(in srgb, var(--zettel-wrong) 45%, var(--color-fd-border)); color: var(--zettel-wrong); }
+.zettel-source-list { display: grid; gap: 0.2rem; font-size: 0.78rem; }
+.zettel-source-list a { color: var(--color-fd-primary); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+
+.zettel-progress-dot { flex: none; display: inline-block; width: 0.55rem; height: 0.55rem; border: 1.5px solid var(--color-fd-border); border-radius: 999px; }
+.zettel-progress-dot[data-status='right'] { border-color: var(--zettel-right); background: var(--zettel-right); }
+.zettel-progress-dot[data-status='wrong'] { border-color: var(--zettel-wrong); background: var(--zettel-wrong); }
+.zettel-progress-dot[data-status='review'] { border-color: var(--zettel-review); background: var(--zettel-review); }
+
+/* ---------- a question ---------- */
+.zettel-question-stem { margin-top: 0.6rem; }
+.zettel-question-stem p { margin: 0.45rem 0; }
+.zettel-option-list { display: grid; gap: 0.45rem; margin-top: 0.7rem; }
+.zettel-option { border: 1px solid var(--color-fd-border); border-radius: 5px; }
+.zettel-option[data-chosen] { border-color: color-mix(in srgb, var(--color-fd-primary) 70%, var(--color-fd-border)); box-shadow: inset 3px 0 0 var(--color-fd-primary); }
+.zettel-option[data-verdict='correct'] { border-color: color-mix(in srgb, var(--zettel-right) 60%, var(--color-fd-border)); background: color-mix(in srgb, var(--zettel-right) 7%, transparent); }
+.zettel-option[data-verdict='wrong'] { border-color: color-mix(in srgb, var(--zettel-wrong) 28%, var(--color-fd-border)); }
+.zettel-option-main { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 0.6rem; width: 100%; padding: 0.5rem 0.65rem; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.zettel-option-main:disabled { cursor: default; }
+.zettel-option-main:hover:not(:disabled) { background: var(--color-fd-accent); }
+.zettel-option-id { display: inline-flex; align-items: center; justify-content: center; width: 1.45rem; height: 1.45rem; border: 1px solid var(--color-fd-border); border-radius: 999px; font-size: 0.76rem; font-weight: 700; }
+.zettel-option[data-chosen] .zettel-option-id { border-color: var(--color-fd-primary); background: var(--color-fd-primary); color: var(--color-fd-primary-foreground, #fff); }
+.zettel-option[data-verdict='correct'] .zettel-option-id { border-color: var(--zettel-right); background: var(--zettel-right); color: #fff; }
+.zettel-option-verdict { display: inline-flex; align-items: center; height: 1.45rem; }
+.zettel-option[data-verdict='correct'] .zettel-option-verdict { color: var(--zettel-right); }
+.zettel-option[data-verdict='wrong'] .zettel-option-verdict { color: var(--zettel-wrong); }
+.zettel-option-foot { margin: 0 0.65rem 0.5rem 2.7rem; }
+.zettel-option-chosen { color: var(--color-fd-muted-foreground); font-size: 0.72rem; }
+.zettel-question-action { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.75rem; }
+.zettel-answer-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.75rem; margin: 0; }
+.zettel-answer-letter { color: var(--zettel-right); font-size: 1.05rem; letter-spacing: 0.08em; }
+.zettel-answer-note { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.45rem; margin-top: 0.5rem; padding: 0.5rem 0.7rem; border: 1px solid color-mix(in srgb, var(--zettel-review) 40%, var(--color-fd-border)); border-radius: 5px; background: color-mix(in srgb, var(--zettel-review) 7%, transparent); font-size: 0.82rem; }
+.zettel-answer-note > svg { margin-top: 0.2rem; color: var(--zettel-review); }
+.zettel-answer-note[data-disputed] { border-color: color-mix(in srgb, var(--zettel-wrong) 40%, var(--color-fd-border)); background: color-mix(in srgb, var(--zettel-wrong) 6%, transparent); }
+.zettel-answer-note[data-disputed] > svg { color: var(--zettel-wrong); }
+.zettel-clue-list { display: grid; gap: 0.4rem; }
+.zettel-clue { display: grid; gap: 0.05rem; padding-left: 0.65rem; border-left: 2px solid var(--color-fd-border); }
+.zettel-clue-text { font-style: italic; }
+.zettel-clue-implies { color: var(--color-fd-muted-foreground); font-size: 0.8rem; }
+
+/* ---------- notes ---------- */
+.zettel-note-button { display: inline-flex; align-items: center; justify-content: center; width: 1.3rem; height: 1.3rem; padding: 0; border: 0; border-radius: 3px; background: none; color: var(--color-fd-muted-foreground); cursor: pointer; opacity: 0.55; }
+.zettel-note-button:hover:not(:disabled) { background: var(--color-fd-accent); color: var(--color-fd-foreground); opacity: 1; }
+.zettel-note-button:disabled { cursor: default; opacity: 0.25; }
+.zettel-note-area { display: grid; gap: 0.35rem; margin-top: 0.5rem; }
+.zettel-note { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 0.45rem; padding: 0.4rem 0.55rem; border-left: 3px solid var(--zettel-mark); border-radius: 0 4px 4px 0; background: color-mix(in srgb, var(--zettel-mark) 12%, var(--color-fd-background)); font-size: 0.82rem; }
+.zettel-note-icon { margin-top: 0.25rem; color: color-mix(in srgb, var(--zettel-mark) 70%, var(--color-fd-foreground)); }
+.zettel-note-action { display: inline-flex; }
+.zettel-note-body { min-width: 0; }
+.zettel-note-place { display: inline-block; margin-bottom: 0.15rem; color: var(--color-fd-muted-foreground); font-size: 0.7rem; cursor: pointer; }
+.zettel-note-place:hover { text-decoration: underline; }
+
+/* ---------- the panels of the left side ---------- */
+.zettel-panel { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; }
+.zettel-panel[role='tree'] { padding: 0.5rem 0.5rem 0.75rem; }
+.zettel-panel-head { flex: none; display: grid; gap: 0.4rem; padding: 0.6rem 0.75rem 0.5rem; }
+.zettel-panel:has(> .zettel-row-list.is-panel) { overflow: hidden; }
+.zettel-filter { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.zettel-filter-chip { padding: 0.05rem 0.5rem; border: 1px solid var(--color-fd-border); border-radius: 999px; background: none; color: var(--color-fd-muted-foreground); font: inherit; font-size: 0.72rem; line-height: 1.5; cursor: pointer; }
+.zettel-filter-chip:hover { background: var(--color-fd-accent); color: var(--color-fd-foreground); }
+.zettel-filter-chip[aria-pressed='true'] { border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border)); background: color-mix(in srgb, var(--color-fd-primary) 12%, transparent); color: var(--color-fd-primary); }
+.zettel-outline-row { display: flex; align-items: center; gap: 0.15rem; padding-left: calc(var(--zettel-depth, 0) * 0.95rem); border-radius: 3px; }
+.zettel-outline-row:hover, .zettel-outline-row[aria-current='true'] { background: var(--color-fd-accent); }
+.zettel-outline-row[aria-current='true'] .zettel-outline-name { font-weight: 650; }
+.zettel-outline-fold { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 1.2rem; height: 1.5rem; padding: 0; border: 0; background: none; color: var(--color-fd-muted-foreground); cursor: pointer; }
+span.zettel-outline-fold { cursor: default; }
+.zettel-outline-name { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 0.35rem; padding: 0.15rem 0.2rem; border: 0; background: none; color: inherit; font: inherit; font-size: 0.82rem; text-align: left; cursor: pointer; }
+.zettel-outline-name > em { color: var(--color-fd-muted-foreground); font-size: 0.66rem; font-style: normal; }
+.zettel-outline-count { flex: none; margin-right: 0.3rem; padding: 0 0.35rem; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--zettel-review) 14%, transparent); color: var(--zettel-review); font: inherit; font-size: 0.66rem; font-weight: 650; line-height: 1.15rem; cursor: pointer; }
+
+.zettel-problem { flex: none; max-height: 9rem; overflow-y: auto; padding: 0.3rem 0.75rem; border-top: 1px solid var(--color-fd-border); color: #b45309; font-size: 0.72rem; }
+.zettel-problem > summary { cursor: pointer; }
+.zettel-problem > ul { margin: 0.25rem 0 0; padding-left: 1.1rem; list-style: disc; }
+
+/* ---------- a card as a node of a card diagram (ZettelDiagram.jsx) ---------- */
+.zettel-node { box-sizing: border-box; display: grid; gap: 0.15rem; width: 230px; padding: 0.4rem 0.6rem; border: 1px solid color-mix(in srgb, var(--color-fd-primary) 45%, var(--color-fd-border)); border-left-width: 3px; border-radius: 0.35rem; background: var(--color-fd-background); color: var(--color-fd-foreground); font-size: 0.7rem; line-height: 1.3; }
+.zettel-node[role='button'] { cursor: pointer; }
+.zettel-node[role='button']:hover { background: var(--color-fd-accent); }
+.zettel-node[data-kind='question'] { border-color: color-mix(in srgb, #d97706 55%, var(--color-fd-border)); }
+.zettel-node-head { display: flex; align-items: flex-start; gap: 0.3rem; }
+.zettel-node-head > svg { flex: none; margin-top: 0.1rem; color: var(--color-fd-muted-foreground); }
+.zettel-node-text { color: var(--color-fd-muted-foreground); font-size: 0.64rem; }
+.zettel-node.is-missing { border-style: dashed; border-color: var(--color-fd-destructive, #dc2626); color: var(--color-fd-destructive, #dc2626); }
+.zettel-manage { display: grid; gap: 0.1rem; margin-bottom: 0.3rem; }

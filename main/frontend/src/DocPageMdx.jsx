@@ -12,6 +12,7 @@ import { DocAssetStore, assetEventTypeList } from './store/DocAssetStore.js';
 import { DocServiceStore, serviceEventTypeList } from './store/DocServiceStore.js';
 import { DocTagStore } from './store/DocTagStore.js';
 import { DocBlockPopupStore } from './store/DocBlockPopupStore.js';
+import { DocNavStore } from './store/DocNavStore.js';
 import { DocSidePanelStore, sidePanelEventTypeList } from './store/DocSidePanelStore.js';
 import { DocPasteStore } from './store/DocPasteStore.js';
 import { DocBlockSelectStore } from './store/DocBlockSelectStore.js';
@@ -40,6 +41,7 @@ import { DocSidebarFolder } from '../../comp-doc/side-panel/DocSidebarFolder.jsx
 import { TagOverviewPopup } from '../../comp-doc/tag/TagOverviewPopup.jsx';
 import { AssetPanelPopup } from '../../comp-doc/asset/AssetPanelPopup.jsx';
 import { DocBlockPopup } from '../../comp-doc/popup/DocBlockPopup.jsx';
+import { DocNavPopup } from '../../comp-doc/link/DocNavPopup.jsx';
 import { SourceFilePrompt } from '../../comp-doc/source/SourceFilePrompt.jsx';
 import { SidePanelMovePicker } from '../../comp-doc/side-panel/SidePanelMovePicker.jsx';
 import { SidePanelItemDialog } from '../../comp-doc/side-panel/SidePanelItemDialog.jsx';
@@ -229,7 +231,11 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // the frontend object service layer (doc_page_impl_obj_frontend.md):
     // objects the page keeps itself, in assets, declared by the doc pages
     // with their types; a provider of the registry like the other layers
-    const objectFrontendStore = new DocObjectFrontendStore({ assetStore, objectStore, configStore });
+    // routing a navigation (doc_page_impl_nav.md#routing-a-navigation): a link followed is a
+    // request, and the route taking it calls an api
+    const navStore = new DocNavStore({ docStore, sourceStore });
+    navStore.apiCall = (id, params) => apiStore.call(id, params);
+    const objectFrontendStore = new DocObjectFrontendStore({ assetStore, objectStore, configStore, sourceStore, navStore });
     objectStore.providerAdd(objectProviderFrontendCreate({ objectFrontendStore }));
     const paletteStore = new DocPaletteStore({ apiStore });
     // find in a part of the page: the scopes components register (doc_page_impl_api.md#finding-in-a-part-of-the-page)
@@ -301,6 +307,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       serviceStore,
       objectStore,
       objectFrontendStore,
+      navStore,
       sidePanelStore,
       pasteStore,
       blockSelectStore,
@@ -435,6 +442,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
               <TagOverviewPopup />
               <AssetPanelPopup />
               <DocBlockPopup />
+              <DocNavPopup />
               <SourceFilePrompt />
               <SidePanelMovePicker />
               <SidePanelItemDialog />

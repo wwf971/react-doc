@@ -1,13 +1,19 @@
-import { computed, makeAutoObservable, observable, runInAction, type IComputedValue } from 'mobx';
+import { sourcePathBuild, sourceRootObjectBuild } from '../lib/doc-source-path.js';
+import { computed, makeAutoObservable, observable, reaction, runInAction, type IComputedValue } from 'mobx';
 import { parse as yamlParse } from 'yaml';
 import {
   OBJECT_FRONTEND_LIST_NAME, OBJECT_FRONTEND_ROLE_ENTRY, OBJECT_FRONTEND_TYPE_ROOT,
   objectFrontendAssetListMerge, objectFrontendEntryParse, objectFrontendListCovers, objectFrontendIdOfRefGet, objectFrontendModeChoose,
   objectFrontendModeListResolve, objectFrontendParamMerge, objectFrontendRefBuild,
   objectFrontendAssetIndexBuild, objectFrontendAssetPathComplete, objectFrontendAssetRefResolve, objectFrontendAssetSearch,
-  objectFrontendAssetKindListResolve, objectFrontendPartitionListBuild, objectFrontendPartitionListResolve, objectFrontendPartitionOf,
+  objectFrontendAssetKindListResolve, objectFrontendDocListBuild, objectFrontendPartitionListBuild, objectFrontendPartitionListResolve, objectFrontendPartitionOf,
 } from '../lib/doc-object-frontend.js';
 import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
+
+// the layer as a provider of documents of the source (DocSourceStore.docProvidedSet)
+export const OBJECT_FRONTEND_DOC_PROVIDER_ID = 'frontend';
+// the namespace of an object in a source path: ~${frontend.id:…}
+export const OBJECT_FRONTEND_DOC_NAMESPACE = 'frontend';
 
 // The frontend object service layer of the page (design: doc_page_impl_obj_frontend.md).
 //
@@ -41,7 +47,7 @@ import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
 // defined through this layer's provider, doc-object-provider-frontend.js)
 // and for telling it that the objects changed.
 
-type Stores = { assetStore: any; objectStore?: any; configStore?: any };
+type Stores = { assetStore: any; objectStore?: any; configStore?: any; sourceStore?: any; navStore?: any };
 
 export type ObjectFrontendMode = {
   id: string; label: string; description: string; category: string; comp: string; param: Record<string, any>;
@@ -125,6 +131,8 @@ export class DocObjectFrontendStore {
   // the sessions of the asset search uis (ObjectFrontendAssetSearchPanel), by the ui's key
   assetSearchSessionByKey = new Map<string, ObjectFrontendAssetSearchSession>();
   unsubscribe: (() => void) | undefined;
+  // what ends the registration of the objects' documents and of their navigation route
+  docDisposeList: (() => void)[] = [];
   configPromise: Promise<void> | undefined;
   // the object as the files say now, by id: worked out only when what it is made of
   // changed (the declarations, its entry, the index of the assets), not when the data
@@ -151,6 +159,7 @@ export class DocObjectFrontendStore {
       overrideByKey: false,
       assetSearchSessionByKey: false,
       unsubscribe: false,
+      docDisposeList: false,
       configPromise: false,
       objectStateById: false,
       assetDataById: false,
@@ -180,11 +189,92 @@ export class DocObjectFrontendStore {
     this.unsubscribe = assetStore.subscribe?.((change: any) => {
       if (change?.isObjectFrontendChanged || change?.isStoreChanged) void this.configLoad();
     });
+    const { sourceStore, navStore } = this.stores;
+    // the documents of the objects are registered with the source, again whenever they change
+    if (sourceStore?.docProvidedSet) this.docDisposeList.push(reaction(() => this.docProvided, (provided) => sourceStore.docProvidedSet(OBJECT_FRONTEND_DOC_PROVIDER_ID, provided), { fireImmediately: true }));
+    // a link to one of them from outside its object is opened by this layer's api
+    navStore?.ownerApiSet(OBJECT_FRONTEND_DOC_PROVIDER_ID, 'object-frontend/doc/open');
   }
 
   dispose() {
     this.unsubscribe?.();
     this.unsubscribe = undefined;
+    for (const dispose of this.docDisposeList) dispose();
+    this.docDisposeList = [];
+    this.stores.sourceStore?.docProvidedSet?.(OBJECT_FRONTEND_DOC_PROVIDER_ID, undefined);
+  }
+
+  // ---------- the documents of the objects (doc_page_impl_obj_frontend.md#documents-of-an-object) ----------
+
+  // what the layer registers with the source: one entry per asset that is a document (a kind
+  // its type declares isDoc, an item in Markdown), under the root of its object,
+  // ${frontend.id:{id}}, at its document path (objectFrontendDocRelPathBuild); and what each
+  // root answers to, its id and its name
+  get docProvided(): { entryList: any[]; rootObjectList: any[] } {
+    const entryList: any[] = [];
+    const rootObjectList: any[] = [];
+    const { assetStore } = this.stores;
+    for (const decl of this.declList) {
+      const state = this.objectGet(decl.id);
+      if (state.status !== 'found') continue;
+      const { docList } = objectFrontendDocListBuild(state.assetList.filter((asset) => asset.status === 'found'), this.assetKindListGet(state.ref) ?? [], (asset: any) => asset.item?.lang);
+      if (docList.length === 0) continue;
+      const rootAlias = sourceRootObjectBuild(OBJECT_FRONTEND_DOC_NAMESPACE, state.id);
+      rootObjectList.push({ namespace: OBJECT_FRONTEND_DOC_NAMESPACE, id: state.id, name: state.name, rootAlias, docPageAlias: state.docPageAlias });
+      for (const { asset, relPath } of docList) {
+        const head = asset.item.versionList?.find((version: any) => version.versionId === asset.item.versionIdHead);
+        const refAsset = { store: ASSET_STORE_ID_LOCAL, itemId: asset.itemId, versionId: 'head' };
+        entryList.push({
+          docPageAlias: state.docPageAlias,
+          rootAlias,
+          relPath,
+          name: relPath.split('/').pop(),
+          ext: asset.item.lang,
+          title: asset.name || asset.key,
+          internalPath: sourcePathBuild(rootAlias, relPath, state.docPageAlias),
+          collect: 'referenced',
+          contentHash: head?.hash ?? asset.item.versionIdHead,
+          owner: { providerId: OBJECT_FRONTEND_DOC_PROVIDER_ID, ref: state.ref, key: asset.key },
+          load: async () => {
+            await assetStore.refLoad(refAsset);
+            const query = assetStore.refQuery(refAsset);
+            if (query.status !== 'done' || !query.version?.isText) throw new Error(query.message || `the asset ${asset.key} of ${state.ref} cannot be read`);
+            return query.version.text;
+          },
+        });
+      }
+    }
+    return { entryList, rootObjectList };
+  }
+
+  // the source path of the document of an asset: ~{docPage}:${frontend.id:{id}}/{document path},
+  // '' when the asset is not a registered document
+  docPathGet(idOrRef: string, assetRef: string): string {
+    const state = this.objectGet(idOrRef);
+    const key = this.assetResolve(idOrRef, assetRef).asset?.key;
+    if (!key) return '';
+    return this.docProvided.entryList.find((entry) => entry.owner.ref === state.ref && entry.owner.key === key)?.internalPath ?? '';
+  }
+
+  // the home document of an object: the document its entry names (metadata.docHome, an asset
+  // reference), which shows the object to a reader arriving from outside it and takes where
+  // they were going (doc_page_impl_obj_frontend.md#the-home-document). '' when it names none
+  docHomePathGet(idOrRef: string): string {
+    const state = this.objectGet(idOrRef);
+    const home = state.status === 'found' ? String(state.metadata?.docHome ?? '') : '';
+    return home ? this.docPathGet(idOrRef, home) : '';
+  }
+
+  // what following a link to a document of an object from outside it opens: the home document
+  // of the object, told where the reader was going (arrival), or the document itself when the
+  // object has no home. the answer of the api object-frontend/doc/open, which the navigation
+  // calls for a target this layer registered (doc_page_impl_nav.md#routing-a-navigation)
+  docOpenPlanGet(request: { target: string; hash?: string }): { target: string; hash: string; arrival?: { target: string; hash: string; key: string; ref: string } } | undefined {
+    const owner = this.stores.sourceStore?.docOwnerGet?.(request.target);
+    if (owner?.providerId !== OBJECT_FRONTEND_DOC_PROVIDER_ID) return undefined;
+    const pathHome = this.docHomePathGet(owner.ref);
+    if (!pathHome || pathHome === request.target) return { target: request.target, hash: request.hash ?? '' };
+    return { target: pathHome, hash: '', arrival: { target: request.target, hash: request.hash ?? '', key: owner.key, ref: owner.ref } };
   }
 
   configLoad(): Promise<void> {

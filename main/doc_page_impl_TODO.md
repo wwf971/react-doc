@@ -124,3 +124,10 @@ In the order they would matter ([Service layer](doc_page_impl_service.md)):
 - <a id="service-call-any-component"></a>**Calls from any component.** Only dashboards send `serviceApiCallRequest`; a component of the registry that is not a dashboard could call an instance by a target too, as the page does.
 - <a id="service-isolation"></a>**Execution isolation.** Instances share one process; a template could declare how its instances run (the shared process, a worker, a process of their own, outside the backend), for scripts that are not trusted or need resources of their own; a hook that does not return could then be killed instead of recorded.
 - <a id="service-event"></a>**Service events.** The lifecycle changes, the dependency changes and the log records share one envelope only in the log; a subscription (a dashboard told that its instance restarted, a service told that its dependency came back) would be the next channel beside the calls, on the [subscriptions](#event-subscription) of the event layer.
+
+## Source: object roots
+
+<a id="source-object-conflict"></a>
+
+- **An internal representation of name and id conflicts of object roots.** A path `~${frontend.name:x}/…` (or `~${frontend:x}/…`) that several objects answer to resolves to the first, and the only trace is a `warning` on the resolution, logged once in the console (`DocSourceStore.resolveWarningSet`). Keep the conflicts as state instead: when the providers register their roots (`docProvidedSet`), work out per namespace which names several objects have and which id of one object is the name of another, hold it in the source store (`rootObjectConflictList: [{ namespace, ref, by, rootList }]`), and let the places that can act on it read it: the Frontend objects tab (a problem on each object involved, with the others), a link written by such a name (the candidate list a file name with several matches already gets, or a mark beside the link), and the build (a warning naming the documents that use the ambiguous spelling, from the link index). The resolver then asks this representation rather than scanning the roots per link.
+
