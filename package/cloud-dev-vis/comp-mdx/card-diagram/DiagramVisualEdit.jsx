@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Plus, Undo2, Waypoints } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
@@ -249,10 +249,16 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 				if (authored?.position && authored.position !== 'auto' && !authored.isPositionLocked) change(() => store.nodeMove(node.id, position));
 			});
 		},
-		createOpen: position => { if (position) { store.selectionClear(); store.createOpen(position); } },
+		createOpen: (position, option) => { if (position) { store.selectionClear(); store.createOpen(position, option); } },
 		createClose: () => { store.createClose(); focusRoot(); },
 		createChoose: (entry, position) => {
 			store.createClose();
+			// an entry of a source of the host (DiagramCreatePanel.jsx): the source adds it, with the
+			// commands of the store, when it has what it needs
+			if (entry.source) {
+				void Promise.resolve(entry.source.choose(entry, position, editor)).catch(error => { store.message = String(error?.message ?? error); });
+				return;
+			}
 			change(() => {
 				if (entry.isConnection) store.connectionCreateDangling(position);
 				else if (entry.nodeComponent) store.nodeComponentAdd(entry.nodeComponent.compName, entry.nodeComponent.data, position, entry.nodeComponent.idPrefix);
@@ -260,6 +266,23 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			});
 		},
 	} : undefined;
+	// a host asks for the create panel to be opened, in the state of one of its actions
+	// (config.createRequest { actionId, key }): at the middle of the canvas, once it is there
+	const createRequest = config.createRequest;
+	const editorRef = useRef(editor);
+	editorRef.current = editor;
+	useEffect(() => {
+		if (!createRequest?.key) return undefined;
+		let frame;
+		let tryCount = 0;
+		const open = () => {
+			const center = canvas.current?.centerGet?.();
+			if (center && editorRef.current) editorRef.current.createOpen(center, { actionId: createRequest.actionId });
+			else if ((tryCount += 1) < 40) frame = requestAnimationFrame(open);
+		};
+		frame = requestAnimationFrame(open);
+		return () => cancelAnimationFrame(frame);
+	}, [createRequest?.key]); // eslint-disable-line react-hooks/exhaustive-deps
 	return <div ref={root} tabIndex={-1} className={`doc-vis-edit${editor ? ' is-active' : ''}${isInPopup ? ' is-popup' : ''}`} onKeyDown={keyDown} onClick={event => {
 		if (event.target === event.currentTarget || event.target.classList.contains('doc-vis-card-static')) editor?.clearSelection();
 	}}>

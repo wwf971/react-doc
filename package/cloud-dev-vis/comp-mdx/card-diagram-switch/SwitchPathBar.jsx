@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight, Scan, Search, SquareDashedMousePointer } from '../../../../main/frontend/UICommon.js';
 import { AnchoredPopover } from '../../../../main/comp-doc/popup/AnchoredPopover.jsx';
+import { ScrollHorizontal } from '../../../../main/comp-doc/scroll/ScrollHorizontal.jsx';
 import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
 import { CARD_ICON_BY_NAME } from '../card-diagram/CompactCard.jsx';
 import { SwitchViewSwitcher } from './SwitchViewSwitcher.jsx';
@@ -69,6 +70,17 @@ export const SwitchPathBar = observer(function SwitchPathBar({ store, trailing }
 	const chain = store.pathChain;
 	const scene = store.sceneCurrent;
 	const childList = store.provider.childListGet(scene);
+	// a path wider than its place is moved by the wheel over it or a drag, without a scrollbar
+	// (ScrollHorizontal); the segment of the scene shown, with what follows it, stays in sight
+	const scroll = store.pathScroll;
+	const stripRef = useRef(null);
+	useLayoutEffect(() => {
+		const strip = stripRef.current;
+		const segment = strip?.querySelector('[aria-current="page"]')?.closest('.doc-switch-path-item');
+		if (!segment) return;
+		scroll.reveal(segment.offsetLeft, strip.offsetWidth - segment.offsetLeft);
+		scroll.reveal(segment.offsetLeft, segment.offsetWidth);
+	}, [scroll, scene, scroll.widthOuter, scroll.widthInner]);
 	return (
 		<div className="doc-switch-bar not-prose">
 			<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="Back to the previous scene" aria-label="Back to the previous scene" disabled={store.historyList.length === 0} onClick={store.back}>
@@ -80,18 +92,18 @@ export const SwitchPathBar = observer(function SwitchPathBar({ store, trailing }
 			<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title={store.pathUp ? `Up to ${store.labelGet(store.pathUp)}` : 'Up one level'} aria-label="Up one level" disabled={!store.pathUp} onClick={store.up}>
 				<ArrowUp size={16} aria-hidden="true" />
 			</button>
-			<nav className="doc-switch-path" aria-label="Path of the scene">
+			<ScrollHorizontal store={scroll} className="doc-switch-path" innerClassName="doc-switch-path-list" innerRef={stripRef} innerProps={{ role: 'navigation', 'aria-label': 'Path of the scene' }}>
 				{chain.map((path, index) => (
 					<span key={path} className="doc-switch-path-item">
 						{index > 0 ? <SwitchPathSibling store={store} path={path} /> : null}
-						<button type="button" className="doc-switch-path-segment" aria-current={path === scene ? 'page' : undefined} title={path} onClick={() => void store.pathSet(path)}>
+						<button type="button" className="doc-switch-path-segment" aria-current={path === scene ? 'page' : undefined} title={store.labelGet(path)} onClick={() => void store.pathSet(path)}>
 							{store.labelGet(path)}
 						</button>
 					</span>
 				))}
 				<SwitchViewSwitcher store={store} presentation={switchPresentationBuild(scene)} />
 				{childList.length > 0 ? <SwitchPathChildren store={store} childList={childList} /> : null}
-			</nav>
+			</ScrollHorizontal>
 			<span className="doc-switch-bar-trailing">
 				{trailing}
 				<SwitchSearchButton store={store} />

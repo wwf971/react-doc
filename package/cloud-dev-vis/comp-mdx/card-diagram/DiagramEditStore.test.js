@@ -429,6 +429,32 @@ test('a node resized is one step of the draft, undone whole; a size below its mi
 	assert.deepEqual(store.nodes[0].size, { width: 400, height: 250 });
 });
 
+test('the create panel is opened at a place, and in the state of an action when asked to', () => {
+	const store = new DiagramEditStore(JSON.stringify({ version: 1, nodes: [], connections: [] }), 'diagram', undefined, registry);
+	store.createOpen({ x: 1, y: 2 });
+	assert.deepEqual(store.create, { position: { x: 1, y: 2 }, actionId: undefined });
+	store.createOpen({ x: 3, y: 4 }, { actionId: 'table-add' });
+	assert.equal(store.create.actionId, 'table-add');
+	store.createClose();
+	assert.equal(store.create, null);
+});
+
+test('a graph made by a generator replaces the nodes and the lines in one step, undone whole; an invalid one is refused', () => {
+	const box = (id, x) => ({ id, renderer: { type: 'scene-box' }, position: { x, y: 0 }, size: { width: 100, height: 100 }, data: {} });
+	const store = new DiagramEditStore(JSON.stringify({ version: 1, nodes: [box('a', 0)], connections: [] }), 'diagram', undefined, registry);
+	assert.equal(store.graphSet({ nodes: [box('a', 50), box('b', 300)], connections: [] }, { selectId: 'b' }), true);
+	assert.deepEqual(store.nodes.map(node => [node.id, node.position.x]), [['a', 50], ['b', 300]]);
+	assert.equal(store.selection?.nodeId, 'b');
+	assert.equal(store.undo(), true);
+	assert.deepEqual(store.nodes.map(node => [node.id, node.position.x]), [['a', 0]]);
+	assert.equal(store.redo(), true);
+	assert.equal(store.nodes.length, 2);
+	// two nodes of one id: refused, the draft and the history as they were
+	assert.equal(store.graphSet({ nodes: [box('a', 0), box('a', 9)], connections: [] }), false);
+	assert.ok(store.message);
+	assert.equal(store.nodes.length, 2);
+});
+
 test('the canvas follows a size the draft says otherwise, over what a resize left on the node', () => {
 	const sourceOf = (width) => JSON.stringify({ version: 1, nodes: [{ id: 'box', renderer: { type: 'scene-box' }, position: { x: 0, y: 0 }, size: { width, height: 200 }, data: {} }] });
 	const canvas = new DiagramERStore(sourceOf(300), undefined, 620, registry);

@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import {
-	Archive, ArrowRightLeft, Ellipsis, EllipsisVertical, Boxes, Check, CircleAlert, Cloud, Database, FileCheck, FileSpreadsheet, FileText, Filter, Hash, Key, Layers, Link, ListChecks, RefreshCw, Search, Send, Server, ShieldCheck, Split, Table2, TriangleAlert, Waypoints, Workflow, Zap,
+	Archive, ArrowRightLeft, Book, Ellipsis, EllipsisVertical, Boxes, Check, CircleAlert, Cloud, Database, FileCheck, FileSpreadsheet, FileText, Filter, FolderIcon, Hash, History, Key, Layers, LayoutDashboard, Link, ListChecks, ListTodo, Network, Package, Play, Plug, Plus, RefreshCw, Search, Send, Server, Settings, ShieldCheck, Split, Table2, TableProperties, TriangleAlert, Waypoints, Workflow, Zap,
 } from '../../../../main/frontend/UICommon.js';
 import { CardCell } from './TableCard.jsx';
 
@@ -19,9 +19,11 @@ import { CardCell } from './TableCard.jsx';
 // an icon is named by a word of ICON_BY_NAME; tone: blue, teal, green, amber, red,
 // violet, slate. a value is typed through CardCell, as in every card
 export const CARD_ICON_BY_NAME = {
-	archive: Archive, 'arrow-right-left': ArrowRightLeft, boxes: Boxes, check: Check, alert: CircleAlert, cloud: Cloud, database: Database, 'file-check': FileCheck,
-	'file-spreadsheet': FileSpreadsheet, file: FileText, filter: Filter, hash: Hash, key: Key, layers: Layers, link: Link, 'list-checks': ListChecks, refresh: RefreshCw,
-	search: Search, send: Send, server: Server, shield: ShieldCheck, split: Split, table: Table2, warning: TriangleAlert, waypoints: Waypoints, workflow: Workflow, zap: Zap,
+	archive: Archive, 'arrow-right-left': ArrowRightLeft, book: Book, boxes: Boxes, check: Check, alert: CircleAlert, cloud: Cloud, dashboard: LayoutDashboard, database: Database,
+	'file-check': FileCheck, 'file-spreadsheet': FileSpreadsheet, file: FileText, filter: Filter, folder: FolderIcon, hash: Hash, history: History, key: Key, layers: Layers, link: Link,
+	'list-checks': ListChecks, 'list-todo': ListTodo, network: Network, package: Package, play: Play, plug: Plug, plus: Plus, refresh: RefreshCw, search: Search, send: Send,
+	server: Server, settings: Settings, shield: ShieldCheck, split: Split, table: Table2, 'table-properties': TableProperties, warning: TriangleAlert, waypoints: Waypoints,
+	workflow: Workflow, zap: Zap,
 };
 
 export const CardNote = observer(function CardNote({ node, editor, nodeId }) {

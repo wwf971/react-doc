@@ -1,95 +1,22 @@
-import { createContext, useCallback, useContext, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useId, useMemo, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { DiagramNodeContent, DiagramRenderContext, DiagramSearchPathContext, connectionPathBuild, useDiagramSearchMark } from '../card-diagram/DiagramRender.jsx';
-import { endpointIsDangling, handleAnchorDrawnOf } from '../card-diagram/DiagramERData.js';
+import { DiagramRenderContext, DiagramSearchPathContext } from '../card-diagram/DiagramRender.jsx';
+import { DiagramStaticLabel, DiagramStaticLine, DiagramStaticNode, pathPointAt } from '../card-diagram/DiagramStatic.jsx';
+import { endpointIsDangling } from '../card-diagram/DiagramERData.js';
 import { switchPresentationBuild } from './SwitchData.js';
 
 // A scene drawn without React Flow (card-diagram-flexible-switch.md#embedding): the
 // same cards, placed absolutely, with its lines in one svg. This is what an embedded
 // scene is, what covers the canvas while its nodes are replaced, and what measures a
 // scene before it is shown. There is never a second React Flow canvas: a scene inside
-// a scene is plain React, scaled by a transform of its parent.
+// a scene is plain React, scaled by a transform of its parent. The cards and lines are the
+// pieces of a diagram without a canvas (card-diagram/DiagramStatic.jsx).
 //
 // `pathOwner` reaches the cards below: the scene they belong to. `depth` is how deep the scene
 // is embedded (its presentation, with depthMax of the block): a scene deeper than depthMax is
 // not drawn, and what holds it draws a note instead (switchPresentationChildIsDrawn).
 export const SwitchContext = createContext(null);
-const pathElement = () => document.createElementNS('http://www.w3.org/2000/svg', 'path');
-
-// a point along a line, by the part of its length (the label of a line)
-export function pathPointAt(d, part) {
-	const path = pathElement();
-	path.setAttribute('d', d);
-	const length = path.getTotalLength();
-	return path.getPointAtLength(length * part);
-}
-
-// one card: placed by the scene, measuring its anchors; the geometry goes up once, not per frame
-const StaticNode = observer(function StaticNode({ id, node, position, config, registry, onGeometry }) {
-	const root = useRef(null);
-	const searchMark = useDiagramSearchMark(id);
-	const anchors = useRef(new Map());
-	const refs = useRef(new Map());
-	const measureRef = useRef(() => {});
-	const anchorRef = useCallback((anchorId) => {
-		if (!refs.current.has(anchorId)) {
-			refs.current.set(anchorId, (element) => {
-				if (element) anchors.current.set(anchorId, element);
-				else anchors.current.delete(anchorId);
-			});
-		}
-		return refs.current.get(anchorId);
-	}, []);
-	useLayoutEffect(() => {
-		const measure = () => {
-			const element = root.current;
-			if (!element || !element.offsetWidth) return;
-			const bounds = element.getBoundingClientRect();
-			const scale = bounds.width / element.offsetWidth || 1;
-			const handleList = (node.handles ?? []).flatMap((handle) => {
-				const anchorDrawn = handleAnchorDrawnOf(node, handle);
-				const target = anchorDrawn === 'body' ? element : anchors.current.get(anchorDrawn) ?? (anchorDrawn !== handle.anchor.target ? element : undefined);
-				if (!target) return [];
-				const rect = target.getBoundingClientRect();
-				const { side, offset } = handle.anchor;
-				const isHorizontal = side === 'top' || side === 'bottom';
-				const x = ((isHorizontal ? rect.left + rect.width * offset : side === 'left' ? rect.left : rect.right) - bounds.left) / scale;
-				const y = ((isHorizontal ? (side === 'top' ? rect.top : rect.bottom) : rect.top + rect.height * offset) - bounds.top) / scale;
-				return [{ id: handle.id, x, y, side }];
-			});
-			onGeometry(id, handleList, { width: element.offsetWidth, height: element.offsetHeight });
-		};
-		measureRef.current = measure;
-		measure();
-		const observer = new ResizeObserver(measure);
-		observer.observe(root.current);
-		return () => observer.disconnect();
-	}, [id, node, onGeometry]);
-	const visualization = useMemo(() => ({ nodeId: id, size: node.size, isEdit: false, anchorRef }), [id, node.size, anchorRef]);
-	const width = node.isWidthFit ? 'max-content' : node.size.width === 'auto' ? node.sizeDefault.width : node.size.width;
-	return (
-		<div ref={root} className="doc-switch-static-node" data-id={id} data-search={searchMark.state ?? undefined} style={{ left: position.x, top: position.y, width, height: node.size.height === 'auto' ? undefined : node.size.height, zIndex: node.isBackground ? -1 : undefined, pointerEvents: node.isBackground ? 'none' : undefined }}>
-			<div className="doc-vis-node-content not-prose">
-				<DiagramNodeContent id={id} node={node} config={config} registry={registry} anchorRef={anchorRef} visualization={visualization} />
-			</div>
-		</div>
-	);
-});
-
-const staticEndsOf = (source, target) => ({ sourceX: source.x, sourceY: source.y, sourcePosition: source.side, targetX: target.x, targetY: target.y, targetPosition: target.side });
-
-function StaticLine({ connection, source, target, markerId }) {
-	const d = connectionPathBuild(connection, staticEndsOf(source, target));
-	return <path d={d} fill="none" style={connection.style} markerEnd={connection.markerEnd === 'none' ? undefined : `url(#${markerId})`} />;
-}
-
-const StaticLabel = observer(function StaticLabel({ connection, source, target }) {
-	const searchState = useDiagramSearchMark('').lineStateOf(connection.id);
-	const point = useMemo(() => {
-		return pathPointAt(connectionPathBuild(connection, staticEndsOf(source, target)), connection.label.position);
-	}, [connection, source, target]);
-	return <div className={`doc-switch-edge-label${connection.link ? ' is-link' : ''}`} data-search={searchState ?? undefined} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}>{connection.label.text}</div>;
-});
+export { pathPointAt };
 
 export const SwitchStaticScene = observer(function SwitchStaticScene({ store, path, depth = 0, isEmbedded = false, pathEmbedder = null }) {
 	const parent = useContext(SwitchContext);
@@ -136,13 +63,13 @@ export const SwitchStaticScene = observer(function SwitchStaticScene({ store, pa
 							<path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
 						</marker>
 					</defs>
-					{lineList.map(({ connection, source, target }) => <StaticLine key={connection.id} connection={connection} source={source} target={target} markerId={markerId} />)}
+					{lineList.map(({ connection, source, target }) => <DiagramStaticLine key={connection.id} connection={connection} source={source} target={target} markerId={markerId} />)}
 				</svg>
-				{titleNode && titleRect ? <StaticNode key={titleNode.id} id={titleNode.id} node={titleNode} position={titleRect} config={config} registry={registry} onGeometry={onGeometry} /> : null}
+				{titleNode && titleRect ? <DiagramStaticNode className="doc-switch-static-node" key={titleNode.id} id={titleNode.id} node={titleNode} position={titleRect} config={config} registry={registry} onGeometry={onGeometry} /> : null}
 				{nodeList.map((node) => (
-					<StaticNode key={node.id} id={node.id} node={node.around ? { ...node, size: store.nodeSizeOf(entry, node) } : node} position={positions.get(node.id) ?? { x: 0, y: 0 }} config={config} registry={registry} onGeometry={onGeometry} />
+					<DiagramStaticNode className="doc-switch-static-node" key={node.id} id={node.id} node={node.around ? { ...node, size: store.nodeSizeOf(entry, node) } : node} position={positions.get(node.id) ?? { x: 0, y: 0 }} config={config} registry={registry} onGeometry={onGeometry} />
 				))}
-				{lineList.filter(({ connection }) => connection.label.text).map(({ connection, source, target }) => <StaticLabel key={connection.id} connection={connection} source={source} target={target} />)}
+				{lineList.filter(({ connection }) => connection.label.text).map(({ connection, source, target }) => <DiagramStaticLabel className="doc-switch-edge-label" key={connection.id} connection={connection} source={source} target={target} />)}
 			</div>
 			</DiagramSearchPathContext.Provider>
 		</SwitchContext.Provider>

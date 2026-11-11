@@ -1074,6 +1074,45 @@ body:has(.doc-block-popup .doc-vis-edit) .prop-editor-color-popover {
 	font-weight: 600;
 }
 
+/* the panel in a state of an action (DiagramCreateState): a line saying which, over the field */
+.doc-vis-create-state { display: contents; }
+.doc-vis-create-state-line {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0.2rem 0.3rem 0.2rem 0.45rem;
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--color-fd-primary) 9%, transparent);
+	color: var(--color-fd-foreground);
+	font-size: 0.7rem;
+	font-weight: 600;
+}
+.doc-vis-create-state-path { display: flex; flex: 1; min-width: 0; align-items: center; gap: 0.3rem; overflow: hidden; white-space: nowrap; }
+.doc-vis-create-state-path > span:not(.is-current) { color: var(--color-fd-muted-foreground); font-weight: 500; }
+.doc-vis-create-state-path > span + span::before { content: '›'; margin-right: 0.3rem; color: var(--color-fd-muted-foreground); font-weight: 400; }
+.doc-vis-create-tick {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 12px;
+	height: 12px;
+	border: 1px solid var(--color-fd-muted-foreground);
+	border-radius: 2px;
+}
+.doc-vis-create-tick.is-ticked { border-color: var(--color-fd-primary); background: var(--color-fd-primary); color: var(--color-fd-primary-foreground); }
+.doc-vis-create-foot { display: flex; align-items: center; justify-content: flex-end; gap: 0.4rem; padding: 0.3rem 0.1rem 0.05rem; border-top: 1px solid var(--color-fd-border); }
+.doc-vis-create-foot > .doc-note { margin-right: auto; }
+
+/* the entries of a source of the host: rows of the list like the others */
+.doc-vis-create-source {
+	display: contents;
+}
+
+.doc-vis-create-group .doc-spin {
+	margin-left: 0.35rem;
+	vertical-align: -1px;
+}
+
 .doc-vis-create-summary {
 	display: flex;
 	flex-wrap: wrap;

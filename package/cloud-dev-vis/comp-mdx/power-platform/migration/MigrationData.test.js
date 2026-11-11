@@ -9,7 +9,8 @@ import { labelSizeEstimate } from '../../card-diagram/DiagramLabelPlace.js';
 import { switchPresentationBuild, switchViewHoverResolve, switchViewListOf, switchViewResolve } from '../../card-diagram-switch/SwitchData.js';
 import { powerPlatformNodeRegistry } from '../power-platform-node-registry.js';
 import { migrationCategoryOf, migrationModelBuild, migrationPathBuild, migrationRankBuild } from './MigrationData.js';
-import { migrationProviderBuild } from './MigrationScenes.js';
+import { migrationDbProviderBuild, migrationExternalListOf, migrationProviderBuild } from './MigrationScenes.js';
+import { migrationCanvasSync, migrationCanvasTableListOf } from './MigrationCanvas.js';
 import { migrationEditAdapterByKind, migrationItemNewBuild } from './MigrationEditData.js';
 
 const itemList = [
@@ -830,4 +831,108 @@ test('a scene focused has a title saying what it is on its own; a report has its
 	assert.match(provider.sceneGet('/overview/plan/mapping').viewList[0].title, / — /);
 	assert.equal(provider.sceneGet('/overview/plan').isTitleHidden, true);
 	assert.equal(provider.sceneGet('/overview/plan/order').title, undefined);
+});
+
+// a canvas of tables of one database: no system, no mapping; a column may look up a table the
+// canvas does not hold (lookupTable)
+const canvasItemList = [
+	{ key: 'c.t.a', kind: 'schema-table', path: '/canvas/schema/pw/table/a', data: { db: 'pw', logical: 'a', name: 'A', columnList: [{ id: 'aid', name: 'A', logical: 'aid', type: 'Unique identifier', key: 'PK' }, { id: 'bid', name: 'B', logical: 'bid', type: 'Lookup', key: 'FK', lookup: 'c.t.b' }, { id: 'owner', name: 'Owner', logical: 'owner', type: 'Lookup', key: 'FK', lookupTable: 'systemuser', lookupTableName: 'User' }, ...Array.from({ length: 12 }, (_, index) => ({ id: `t${index}`, name: `Text ${index}`, logical: `t${index}`, type: 'Text' }))] } },
+	{ key: 'c.t.b', kind: 'schema-table', path: '/canvas/schema/pw/table/b', data: { db: 'pw', logical: 'b', name: 'B', columnList: [{ id: 'bid', name: 'B', logical: 'bid', type: 'Unique identifier', key: 'PK' }, { id: 'made', name: 'Made by', logical: 'made', type: 'Lookup', key: 'FK', lookupTable: 'systemuser', lookupTableName: 'User' }] } },
+];
+
+test('the scenes of one database alone stand under a root of their own, with the tables looked up from outside', () => {
+	const canvasModel = migrationModelBuild('canvas', canvasItemList);
+	const dbProvider = migrationDbProviderBuild(canvasModel, 'pw', { root: '/canvas', label: 'My canvas', erColumnCountMax: 8 });
+	assert.equal(dbProvider.root, '/canvas');
+	assert.equal(dbProvider.labelGet('/canvas'), 'My canvas');
+	assert.deepEqual(dbProvider.childListGet('/canvas').map((child) => child.path), ['/canvas/a', '/canvas/b', '/canvas/systemuser']);
+	assert.equal(dbProvider.labelGet('/canvas/systemuser'), 'User');
+	const root = dbProvider.sceneGet('/canvas');
+	assert.deepEqual(root.viewList.map((view) => view.id), ['diagram', 'matrix']);
+	const er = diagramNormalize({ version: 1, ...root.viewList[0].diagram }, registry);
+	// one card for the table outside, however many columns look it up; every link stays under the root
+	assert.deepEqual(er.nodes.map((node) => node.id).sort(), ['external:pw:systemuser', 'table:pw:a', 'table:pw:b']);
+	assert.equal(er.connections.filter((connection) => connection.target.nodeId === 'external:pw:systemuser').length, 2);
+	assert.deepEqual(er.nodes.map((node) => node.link).sort(), ['/canvas/a', '/canvas/b', '/canvas/systemuser']);
+	// a long table keeps its key and the columns a line leaves; the rest is behind a break
+	const display = er.nodes.find((node) => node.id === 'table:pw:a').data.rowDisplay;
+	assert.deepEqual(display.filter((entry) => typeof entry === 'string'), ['aid', 'bid', 'owner']);
+	assert.deepEqual(display.filter((entry) => typeof entry !== 'string').map((entry) => entry.rowList.length), [12]);
+	assert.equal(er.nodes.find((node) => node.id === 'table:pw:b').data.rowDisplay, undefined);
+	// a table, a lookup, the table outside: scenes of the same root
+	const table = diagramNormalize({ version: 1, ...dbProvider.sceneGet('/canvas/a').diagram }, registry);
+	assert.ok(table.nodes.some((node) => node.link === '/canvas/systemuser'));
+	assert.ok(dbProvider.sceneGet('/canvas/a/b'));
+	const external = diagramNormalize({ version: 1, ...dbProvider.sceneGet('/canvas/systemuser').diagram }, registry);
+	assert.deepEqual(external.nodes.map((node) => node.id).sort(), ['external:pw:systemuser', 'table:pw:a', 'table:pw:b']);
+	assert.equal(dbProvider.sceneGet('/canvas/nothing'), null);
+	assert.equal(dbProvider.sceneGet('/overview'), null);
+});
+
+test('an option set of one column is a card of its own where the provider asks for it', () => {
+	const item = (isGlobal) => ({ key: 'c.c.kind', kind: 'schema-choice', path: '/canvas/schema/pw/choice/kind', data: { db: 'pw', logical: 'kind', name: 'Kind', ...(isGlobal ? {} : { isGlobal: false }), optionList: [{ value: 1, label: 'One' }] } });
+	const tableWith = { ...canvasItemList[1], data: { ...canvasItemList[1].data, columnList: [...canvasItemList[1].data.columnList, { id: 'kind', name: 'Kind', logical: 'kind', type: 'Choice', choice: 'c.c.kind' }] } };
+	const model = migrationModelBuild('canvas', [canvasItemList[0], tableWith, item(false)]);
+	const idListOf = (option) => migrationDbProviderBuild(model, 'pw', { root: '/canvas', ...option }).sceneGet('/canvas').viewList[0].diagram.nodes.map((node) => node.id);
+	assert.ok(!idListOf({}).includes('choice:pw:kind'), 'with its table by default');
+	const shown = migrationDbProviderBuild(model, 'pw', { root: '/canvas', isChoiceLocalShown: true }).sceneGet('/canvas').viewList[0].diagram;
+	assert.ok(shown.nodes.some((node) => node.id === 'choice:pw:kind'));
+	assert.ok(shown.connections.some((connection) => connection.id === 'choice:pw:b:kind' && connection.target.nodeId === 'choice:pw:kind'));
+});
+
+test('a database of too many tables for a diagram opens on an index of its tables', () => {
+	const many = Array.from({ length: 5 }, (_, index) => ({ key: `c.t.m${index}`, kind: 'schema-table', path: `/canvas/schema/pw/table/m${index}`, data: { db: 'pw', logical: `m${index}`, name: `M ${index}`, columnList: [{ id: 'id', name: 'Id', logical: 'id', type: 'Unique identifier', key: 'PK' }] } }));
+	const model = migrationModelBuild('canvas', many);
+	assert.deepEqual(migrationDbProviderBuild(model, 'pw', { root: '/canvas', erTableCountMax: 5 }).sceneGet('/canvas').viewList.map((view) => view.id), ['diagram', 'matrix']);
+	const index = migrationDbProviderBuild(model, 'pw', { root: '/canvas', erTableCountMax: 4 }).sceneGet('/canvas');
+	assert.equal(index.viewList, undefined);
+	const diagram = diagramNormalize({ version: 1, ...index.diagram }, registry);
+	assert.deepEqual(diagram.nodes.map((node) => node.link), many.map((item) => `/canvas/${item.data.logical}`));
+	assert.equal(diagram.connections.length, 0);
+	assert.equal(new Set(diagram.nodes.map((node) => `${node.position.x}|${node.position.y}`)).size, 5, 'no two cards at one place');
+});
+
+test('a canvas drawn by hand keeps where its cards stand while its tables are made again from the model', () => {
+	const model = migrationModelBuild('canvas', [canvasItemList[0]]);
+	// nothing drawn yet: everything arranged, valid as a diagram
+	const first = migrationCanvasSync(null, model, 'pw');
+	assert.deepEqual(first.addedList.sort(), ['external:pw:systemuser', 'table:pw:a']);
+	diagramNormalize(first.diagram, registry);
+	assert.deepEqual(migrationCanvasTableListOf(first.diagram, 'pw'), ['a']);
+	// a reader moves a card, adds a note and a line by hand
+	const moved = {
+		...first.diagram,
+		nodes: [...first.diagram.nodes.map((node) => (node.id === 'table:pw:a' ? { ...node, position: { x: 900, y: 700 }, handles: [...node.handles, { id: 'hand', direction: 'out', anchor: { target: 'body', side: 'top' } }] } : node)),
+			{ id: 'note-1', renderer: { type: 'card-note' }, position: { x: 5, y: 5 }, size: { width: 200, height: 'auto' }, data: { title: 'mine' }, handles: [{ id: 'in', direction: 'in', anchor: { side: 'left' } }] }],
+		connections: [...first.diagram.connections, { id: 'hand-1', source: { nodeId: 'table:pw:a', handleId: 'hand' }, target: { nodeId: 'note-1', handleId: 'in' } }],
+	};
+	// a second table comes, dropped at a point: the first stays where it was put, the lookup between them is drawn
+	const both = migrationModelBuild('canvas', canvasItemList);
+	const second = migrationCanvasSync(moved, both, 'pw', { position: { x: 100, y: 200 } });
+	assert.deepEqual(second.addedList, ['table:pw:b']);
+	const nodeOf = (diagram, id) => diagram.nodes.find((node) => node.id === id);
+	assert.deepEqual(nodeOf(second.diagram, 'table:pw:a').position, { x: 900, y: 700 });
+	assert.deepEqual(nodeOf(second.diagram, 'table:pw:b').position, { x: 100, y: 200 });
+	assert.ok(nodeOf(second.diagram, 'note-1'));
+	assert.ok(nodeOf(second.diagram, 'table:pw:a').handles.some((handle) => handle.id === 'hand'), 'the handle of a line by hand stays');
+	assert.ok(second.diagram.connections.some((connection) => connection.id === 'hand-1'));
+	assert.ok(second.diagram.connections.some((connection) => connection.id === 'lookup:pw:a:bid' && connection.target.nodeId === 'table:pw:b'));
+	diagramNormalize(second.diagram, registry);
+	// the same model again changes nothing
+	assert.deepEqual(migrationCanvasSync(second.diagram, both, 'pw').diagram, second.diagram);
+	// a table gone from the model leaves with its lines, the line by hand ending on it too; the rest stays
+	const onlyB = migrationModelBuild('canvas', [canvasItemList[1]]);
+	const third = migrationCanvasSync(second.diagram, onlyB, 'pw');
+	assert.deepEqual(third.removedList, ['table:pw:a']);
+	assert.deepEqual(third.diagram.nodes.map((node) => node.id).sort(), ['external:pw:systemuser', 'note-1', 'table:pw:b']);
+	assert.ok(third.diagram.connections.every((connection) => connection.source.nodeId !== 'table:pw:a'));
+	diagramNormalize(third.diagram, registry);
+});
+
+test('a migration draws no table from outside unless asked, and its paths stay under the overview', () => {
+	const mixed = migrationModelBuild('example', [...itemList, ...canvasItemList.map((item) => ({ ...item, data: { ...item.data, columnList: item.data.columnList.map((column) => ({ ...column, lookup: undefined })) } }))]);
+	assert.deepEqual(migrationExternalListOf(mixed, 'pw'), []);
+	const er = diagramShownOf(migrationProviderBuild(mixed), '/overview/pw');
+	assert.ok(er.nodes.every((node) => !node.id.startsWith('external:')));
+	assert.ok(er.nodes.filter((node) => node.link).every((node) => node.link.startsWith('/overview/pw/')));
 });

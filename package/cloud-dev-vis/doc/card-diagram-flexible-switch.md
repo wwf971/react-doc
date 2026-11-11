@@ -21,6 +21,8 @@ provider
   labelGet(path)          the word of a segment of the path bar
   childListGet(path)      the scenes below a path, the menu of the path bar: [{ path, label, description?, labelItemList? }]
   boxSave?(path, rect)    what a bounding box adjusted by the reader does
+  linkOpen?(link)         a link of a node the provider answers itself (true: taken): one that is not
+                          a scene, since it leaves the viewport for a page of whoever hosts it
   signature?              what the scenes are made of (the text of the document, the data they are generated
                           from): a provider built again with the same one is the same, nothing is read again
   transition?             { secondPortal, secondMorph, secondCamera, secondScroll }
@@ -197,7 +199,7 @@ A `scene-box` node (a kind of the [base series](card-diagram-impl.md#node-regist
 
 ## The path bar
 
-`SwitchPathBar` stands left aligned over the viewport: one button per segment, whose click switches to it; the chevron before a segment lists the scenes beside it, the last chevron the scenes below. Three buttons stand before the path. Back and forward walk the scenes visited, as in a browser: a new way forgets what lay forward (`store.back`, `store.forward`). Up goes one level up the path, to the nearest folder that is a scene (`store.up`), and is itself a step that back can undo. At the right: the picture menu (copy or download, PNG or SVG, of the scene as it stands now, through the capture of the [animation](card-diagram-animation.md#pictures)), the camera back to the default of the scene, the bounding box. The buttons are those of a panel's header (`.doc-button-icon.is-panel` of the page's shared styles) and the bar has the header's sides, so in the block popup the ones at the right stand right under its maximize and close buttons; nothing is reserved beside them.
+`SwitchPathBar` stands left aligned over the viewport: one button per segment, whose click switches to it; the chevron before a segment lists the scenes beside it, the last chevron the scenes below. Three buttons stand before the path. Back and forward walk the scenes visited, as in a browser: a new way forgets what lay forward (`store.back`, `store.forward`). Up goes one level up the path, to the nearest folder that is a scene (`store.up`), and is itself a step that back can undo. **A path wider than its place does not wrap and has no scrollbar**: it is a strip moved by the wheel over it or by a drag (`ScrollHorizontal`, its offset in `store.pathScroll`, kept with the block), the page not scrolling meanwhile; a switch brings the segment of the scene shown into sight with what follows it (the view switcher, the chevron of the scenes below), and every segment says its full label in its title. At the right: the picture menu (copy or download, PNG or SVG, of the scene as it stands now, through the capture of the [animation](card-diagram-animation.md#pictures)), the camera back to the default of the scene, the bounding box. The buttons are those of a panel's header (`.doc-button-icon.is-panel` of the page's shared styles) and the bar has the header's sides, so in the block popup the ones at the right stand right under its maximize and close buttons; nothing is reserved beside them.
 
 **An item of a menu** shows its `label` (the simple mode). When it has a `labelItemList` (the complex mode), it shows that instead, a list of things of different types, and `label` stays what the segment of the path bar and a screen reader say:
 

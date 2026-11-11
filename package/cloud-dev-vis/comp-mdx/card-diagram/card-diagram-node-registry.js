@@ -5,6 +5,9 @@ import { tableCardSchema } from './TableCardSchema.js';
 import { TableCard } from './TableCard.jsx';
 import { OperatorCard } from './OperatorCard.jsx';
 import { CardBrief, CardDatabase, CardNote, CardThreeDots } from './CompactCard.jsx';
+import { CardCaption, CardIcon } from './CardIcon.jsx';
+import { cardIconAnchorListGet, cardIconAnchorRectEstimate, cardIconNormalize } from './CardIconData.js';
+import { diagramArrangerOutline } from './DiagramArrangeOutline.js';
 import { SceneBoxCard } from './SceneBoxCard.jsx';
 import { CardMatrix } from './CardMatrix.jsx';
 import { cardMatrixNormalize, cardMatrixWidthGet } from './CardMatrixData.js';
@@ -104,6 +107,32 @@ export const cardDatabaseNodeKind = {
 	},
 };
 
+// something among many: a round mark with its words beside it (CardIcon.jsx). a line of a
+// graph ends on the mark (the anchor `icon`); an arranger asks where that is (anchorRectEstimate)
+export const cardIconNodeKind = {
+	type: 'card-icon',
+	label: 'Icon',
+	contract: { dataNormalize: cardIconNormalize, anchorListGet: cardIconAnchorListGet, anchorRectEstimate: cardIconAnchorRectEstimate, sizeDefault: { width: 180, height: 32 } },
+	schema: null,
+	Card: CardIcon,
+	create: {
+		description: 'A small round icon with its name beside it: a thing among many, in a graph.', icon: Boxes, keywordList: ['icon', 'graph', 'node', 'circle', 'resource'],
+		nodeCreate: idNext => ({ id: idNext('icon'), renderer: { type: 'card-icon' }, size: { width: 180, height: 32 }, data: { title: 'Thing', icon: 'boxes', tone: 'slate' }, handles: [
+			{ id: 'in', direction: 'in', anchor: { target: 'icon', side: 'left' } },
+			{ id: 'out', direction: 'out', anchor: { target: 'icon', side: 'bottom' } },
+		] }),
+	},
+};
+
+// a few words over a group of nodes. written by a generator, not offered by the editor
+export const cardCaptionNodeKind = {
+	type: 'card-caption',
+	label: 'Caption',
+	contract: compactContract({ width: 180, height: 16 }),
+	schema: null,
+	Card: CardCaption,
+};
+
 // rows and columns with headers, and a mark where they meet (CardMatrixData.js)
 export const cardMatrixNodeKind = {
 	type: 'card-matrix',
@@ -152,6 +181,6 @@ export const colorBlockNodeKind = {
 	},
 };
 
-export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, cardThreeDotsNodeKind, cardDatabaseNodeKind, cardMatrixNodeKind, sceneBoxNodeKind, colorBlockNodeKind];
+export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, cardThreeDotsNodeKind, cardDatabaseNodeKind, cardIconNodeKind, cardCaptionNodeKind, cardMatrixNodeKind, sceneBoxNodeKind, colorBlockNodeKind];
 
-export const cardDiagramNodeRegistry = nodeRegistryBuild({ id: 'card-diagram', label: 'Card diagram', kindList: cardDiagramNodeKindList });
+export const cardDiagramNodeRegistry = nodeRegistryBuild({ id: 'card-diagram', label: 'Card diagram', kindList: cardDiagramNodeKindList, arrangerList: [diagramArrangerOutline] });

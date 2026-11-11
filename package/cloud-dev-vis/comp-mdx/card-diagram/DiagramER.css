@@ -10,7 +10,15 @@
 .doc-color-block[data-tone="red"] { background: #fff1f2cc; --doc-color-block-edge: #fecdd3; color: #9f1239; }
 .doc-color-block[data-tone="violet"] { background: #f5f3ffcc; --doc-color-block-edge: #ddd6fe; color: #5b21b6; }
 /* fill: none, a frame around a group: no tint, an edge in the color of its labels */
-.doc-color-block[data-fill="none"] { --doc-color-block-edge: color-mix(in srgb, currentColor 55%, transparent); --doc-color-block-edge-width: 1.5px; background: none; border-radius: 8px; }
+/* on a dark page the tints are those of the tone over the dark, and the words light */
+.dark .doc-color-block { --doc-color-block-edge: color-mix(in srgb, #64748b 45%, transparent); background: color-mix(in srgb, #64748b 12%, transparent); color: #cbd5e1; }
+.dark .doc-color-block[data-tone="blue"] { --doc-color-block-edge: color-mix(in srgb, #3b82f6 42%, transparent); background: color-mix(in srgb, #3b82f6 11%, transparent); color: #93c5fd; }
+.dark .doc-color-block[data-tone="teal"] { --doc-color-block-edge: color-mix(in srgb, #14b8a6 42%, transparent); background: color-mix(in srgb, #14b8a6 10%, transparent); color: #5eead4; }
+.dark .doc-color-block[data-tone="green"] { --doc-color-block-edge: color-mix(in srgb, #22c55e 40%, transparent); background: color-mix(in srgb, #22c55e 9%, transparent); color: #86efac; }
+.dark .doc-color-block[data-tone="amber"] { --doc-color-block-edge: color-mix(in srgb, #f59e0b 40%, transparent); background: color-mix(in srgb, #f59e0b 9%, transparent); color: #fcd34d; }
+.dark .doc-color-block[data-tone="red"] { --doc-color-block-edge: color-mix(in srgb, #f43f5e 42%, transparent); background: color-mix(in srgb, #f43f5e 10%, transparent); color: #fda4af; }
+.dark .doc-color-block[data-tone="violet"] { --doc-color-block-edge: color-mix(in srgb, #8b5cf6 45%, transparent); background: color-mix(in srgb, #8b5cf6 12%, transparent); color: #c4b5fd; }
+.doc-color-block[data-fill="none"], .dark .doc-color-block[data-fill="none"] { --doc-color-block-edge: color-mix(in srgb, currentColor 55%, transparent); --doc-color-block-edge-width: 1.5px; background: none; border-radius: 8px; }
 .doc-color-block-labels { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 16px; width: 100%; min-width: 0; }
 .doc-color-block-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; font-size: 13px; font-weight: 600; }
 .doc-color-block-label > svg { flex: none; }
@@ -855,3 +863,24 @@ div.doc-diagram-search-bar {
    controls would fill; pressed while the bar is open */
 .doc-diagram-search-control svg { fill: none; }
 .doc-diagram-search-control[aria-pressed="true"] { color: #2563eb; }
+
+/* a diagram drawn without a canvas (DiagramStatic.jsx): as large as what it draws */
+.doc-diagram-static { position: relative; overflow: hidden; isolation: isolate; }
+.doc-diagram-static-world { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.doc-diagram-static-lines { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.doc-diagram-static-node { position: absolute; }
+.doc-diagram-static-node[data-link] { cursor: pointer; }
+.doc-diagram-static-node .doc-vis-node-content { height: 100%; }
+.doc-diagram-static-label {
+	position: absolute;
+	left: 0;
+	top: 0;
+	padding: 0 0.3rem;
+	border-radius: 0.3rem;
+	background: var(--color-fd-background);
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.62rem;
+	line-height: 1.5;
+	white-space: nowrap;
+	pointer-events: none;
+}

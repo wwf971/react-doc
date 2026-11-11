@@ -436,6 +436,92 @@ connections:
   - { id: normalize-target, source: { nodeId: normalize, handleId: out }, target: { nodeId: target, handleId: email-in } }
 ```
 
+### A graph of things: icon nodes
+
+A `card-icon` is a thing among many: a small round mark with its name beside it (`title`, `text`, `icon`, `tone`), a dot for its state (`statusTone`), larger and filled for the one the graph is about (`isFocus`), dashed for one that is not there yet (`isGhost`). A line ends on its mark with `anchor: { target: icon }`, and a handle with `isMarkerHidden` draws no square there. A `card-caption` is a few small words over a group. The example is laid out by the **Outline** arranger (in edit mode: **Arrange**): the nodes one under another, indented by level, the lines leaving the bottom of a node turning once into the side of the next, so a graph fits a narrow place and grows downward.
+
+<!--renderComp=CardDiagram,title=Around a plan-->
+```yaml
+version: 1
+viewport:
+  size: { height: 380 }
+defaults:
+  connection: { renderer: { type: smoothstep }, markerEnd: none, style: { stroke: '#94a3b8', strokeWidth: 1.25 } }
+nodes:
+  - id: project
+    renderer: { type: card-icon }
+    position: { x: 20, y: 20 }
+    size: { width: 220, height: 34 }
+    data: { title: 'Migration', icon: 'folder' }
+    handles:
+      - { id: 'down', direction: 'out', anchor: { target: 'icon', side: 'bottom' }, isMarkerHidden: true }
+  - id: plans
+    renderer: { type: card-icon }
+    position: { x: 20, y: 60 }
+    size: { width: 220, height: 34 }
+    data: { title: 'Plans', icon: 'list-checks' }
+    handles:
+      - { id: 'up', direction: 'in', anchor: { target: 'icon', side: 'top' }, isMarkerHidden: true }
+      - { id: 'down', direction: 'out', anchor: { target: 'icon', side: 'bottom' }, isMarkerHidden: true }
+  - id: plan
+    renderer: { type: card-icon }
+    position: { x: 42, y: 100 }
+    size: { width: 220, height: 40 }
+    data: { title: 'Rehearsal 2', text: '7 tables', icon: 'list-checks', tone: 'blue', isFocus: true, statusTone: 'green' }
+    handles:
+      - { id: 'in', direction: 'in', anchor: { target: 'icon', side: 'left' }, isMarkerHidden: true }
+      - { id: 'down', direction: 'out', anchor: { target: 'icon', side: 'bottom' }, isMarkerHidden: true }
+  - id: run-1
+    renderer: { type: card-icon }
+    position: { x: 64, y: 146 }
+    size: { width: 220, height: 34 }
+    data: { title: 'First run', text: '18 of 18 steps', icon: 'play', tone: 'green', statusTone: 'green' }
+    handles:
+      - { id: 'in', direction: 'in', anchor: { target: 'icon', side: 'left' }, isMarkerHidden: true }
+  - id: run-2
+    renderer: { type: card-icon }
+    position: { x: 64, y: 186 }
+    size: { width: 220, height: 34 }
+    data: { title: 'Second run', text: '10 of 18 steps', icon: 'play', tone: 'green', statusTone: 'amber' }
+    handles:
+      - { id: 'in', direction: 'in', anchor: { target: 'icon', side: 'left' }, isMarkerHidden: true }
+  - id: new
+    renderer: { type: card-icon }
+    position: { x: 64, y: 226 }
+    size: { width: 220, height: 34 }
+    data: { title: 'New execution', icon: 'plus', isGhost: true }
+    handles:
+      - { id: 'in', direction: 'in', anchor: { target: 'icon', side: 'left' }, isMarkerHidden: true }
+  - id: uses
+    renderer: { type: card-caption }
+    position: { x: 64, y: 276 }
+    size: { width: 220, height: 16 }
+    data: { text: 'Uses' }
+    handles: []
+  - id: source
+    renderer: { type: card-icon }
+    position: { x: 64, y: 298 }
+    size: { width: 220, height: 34 }
+    data: { title: 'PW', text: 'source', icon: 'database', tone: 'blue' }
+    handles:
+      - { id: 'in', direction: 'in', anchor: { target: 'icon', side: 'left' }, isMarkerHidden: true }
+  - id: target
+    renderer: { type: card-icon }
+    position: { x: 64, y: 338 }
+    size: { width: 220, height: 34 }
+    data: { title: 'Connect', text: 'target', icon: 'database', tone: 'blue' }
+    handles:
+      - { id: 'in', direction: 'in', anchor: { target: 'icon', side: 'left' }, isMarkerHidden: true }
+connections:
+  - { id: 'project-plans', source: { nodeId: 'project', handleId: 'down' }, target: { nodeId: 'plans', handleId: 'up' } }
+  - { id: 'plans-plan', source: { nodeId: 'plans', handleId: 'down' }, target: { nodeId: 'plan', handleId: 'in' }, route: { anchorList: [{ id: 'a1', along: 1, x: -9, y: 0 }] } }
+  - { id: 'plan-run-1', source: { nodeId: 'plan', handleId: 'down' }, target: { nodeId: 'run-1', handleId: 'in' }, route: { anchorList: [{ id: 'a1', along: 1, x: -6, y: 0 }] } }
+  - { id: 'plan-run-2', source: { nodeId: 'plan', handleId: 'down' }, target: { nodeId: 'run-2', handleId: 'in' }, route: { anchorList: [{ id: 'a1', along: 1, x: -6, y: 0 }] } }
+  - { id: 'plan-new', source: { nodeId: 'plan', handleId: 'down' }, target: { nodeId: 'new', handleId: 'in' }, route: { anchorList: [{ id: 'a1', along: 1, x: -6, y: 0 }] } }
+  - { id: 'plan-source', source: { nodeId: 'plan', handleId: 'down' }, target: { nodeId: 'source', handleId: 'in' }, style: { strokeDasharray: '3 3' }, route: { anchorList: [{ id: 'a1', along: 1, x: -6, y: 0 }] } }
+  - { id: 'plan-target', source: { nodeId: 'plan', handleId: 'down' }, target: { nodeId: 'target', handleId: 'in' }, style: { strokeDasharray: '3 3' }, route: { anchorList: [{ id: 'a1', along: 1, x: -6, y: 0 }] } }
+```
+
 <!--renderComp=Anchor,id=diagram-er-layout-->
 ## Automatic Layout and Viewport
 

@@ -86,7 +86,7 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | Place | Role |
 | --- | --- |
 | `comp-mdx/card-diagram/node-registry.js` | `nodeRegistryBuild`, `nodeRegistrySearch`: the registry mechanism |
-| `comp-mdx/card-diagram/card-diagram-node-registry.js`, `CompactCard.jsx` | the generic kinds (`table`, `operator`, `card-note`, `card-brief`, `card-database`, `card-matrix`, `scene-box`) and the registry of `CardDiagram` |
+| `comp-mdx/card-diagram/card-diagram-node-registry.js`, `CompactCard.jsx`, `CardIcon.jsx`, `CardIconData.js` | the generic kinds (`table`, `operator`, `card-note`, `card-brief`, `card-database`, `card-icon`, `card-caption`, `card-matrix`, `scene-box`) and the registry of `CardDiagram` |
 | `comp-mdx/card-diagram-animation/` | the animation: [card-diagram-animation.md](card-diagram-animation.md#implementation) |
 | `comp-mdx/card-diagram-switch/` | scenes by path: [card-diagram-flexible-switch.md](card-diagram-flexible-switch.md#implementation) |
 | `comp-mdx/power-platform/migration/` | a migration as data: [power-platform-migration.md](power-platform-migration.md#implementation) |
@@ -94,7 +94,8 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | `comp-mdx/card-diagram/CardDiagram.jsx`, `CardStandalone.jsx` | the canvas and the standalone card, and their factories `cardDiagramCompCreate`, `cardStandaloneCompCreate` |
 | `comp-mdx/card-diagram/DiagramERData.js`, `DiagramERStore.js`, `DiagramEdit*.js`, `DiagramRender.jsx` | normalization, the canvas model, the editor's draft and path, the node and edge components (their names keep the `DiagramER` prefix of the series they started in) |
 | `comp-mdx/card-diagram/DiagramRoute.js`, `DiagramRouteControls.jsx`, `DiagramApiList.js`, `DiagramCanvasRegistry.js` | the route of a line, its controls, and the apis of a diagram: [card-diagram-connection-line.md](card-diagram-connection-line.md#implementation) |
-| `comp-mdx/card-diagram/DiagramArrange.js`, `comp-mdx/power-platform/er-arrange/` | the contract of an arranger, and the arrangers of ER diagrams: [card-diagram-arrange.md](card-diagram-arrange.md) |
+| `comp-mdx/card-diagram/DiagramArrange.js`, `DiagramArrangeOutline.js`, `comp-mdx/power-platform/er-arrange/` | the contract of an arranger, the outline arranger of the base series, and the arrangers of ER diagrams: [card-diagram-arrange.md](card-diagram-arrange.md) |
+| `comp-mdx/card-diagram/DiagramStatic.jsx` | a diagram drawn without a canvas, and the pieces the switch layer draws an embedded scene with: [A diagram without a canvas](card-diagram-impl.md#a-diagram-without-a-canvas) |
 | `comp-mdx/card-diagram/DiagramEditHistory.js` | `EditHistory`: the history of a draft (steps, typing groups, undo, redo), generic over the state its owner records; `DiagramEditStore` records in it from `changeApply` and `DiagramVisualEdit` offers it in the bar and on the keys |
 | `comp-mdx/card-diagram/TableCard*.js(x)`, `ResourceNodeCard.jsx`, `OperatorCard.jsx` | the generic cards and their schemas |
 | `comp-mdx/card-diagram/card-diagram-comp.js` | the exposure shared by every diagram component, and the definition of `CardDiagram` |

@@ -76,6 +76,32 @@ An item names another by its **key**, which never changes, not by its path, as [
 
 The words are in `labels` of the `system` item: `viewDiagram`, `viewLookupMatrix`, `lookupFrom`, `lookupTo`, and `columnMapping` for the links. A bounding box is kept per view, under `{path}@{view}` in the layout item.
 
+### One database alone
+
+`migrationDbProviderBuild(model, dbId, { root, label, title, isLookupExternalShown, erColumnCountMax, erTableCountMax, isChoiceLocalShown })` is a provider of the scenes of one database and nothing else, under a root of its own: for whoever has tables of a database and no migration around them, as a canvas where a reader collects tables to look at (db-migration-tool). The model is built from `schema-table` and `schema-choice` items alone.
+
+```text
+{root}                     the ER diagram, or the lookup matrix (two views); an index, for a database of
+                           more tables than erTableCountMax
+{root}/{table}             one table and what it refers to
+{root}/{table}/{refer}     one lookup
+{root}/{choice}            one option set and the columns using it
+{root}/{external}          a table the model does not hold, and the tables looking it up
+```
+
+**A table looked up from outside** is a column with `lookupTable` (the logical name of a table the model has no item of; `lookupTableName`, its display name, when known). Where the model asks for it (`isLookupExternalShown`, on by default for this provider and off for a migration, whose scenes are as they were), such a table is drawn as a card of its two names, once per table however many columns look it up, with the lines of those columns; it has a scene of its own, so a reader can go to it and whoever holds the tables can offer to add it. `erColumnCountMax` cuts a longer table down, in the diagram alone, to its key and the columns a line leaves, the rest behind breaks a reader can open; a run of one or two columns between them is shown, since a break would take as much room. With `isChoiceLocalShown` an option set of one column is a card of its own in the diagram, as a global one is (by default it is drawn only in the scene of its table). A database of more tables than `erTableCountMax` has no diagram and no matrix, which nobody could read: its first scene is an **index**, its tables and option sets as cards of their two names in a grid, by name, each opening its scene (the first 600; the rest are reached by the menu of the path bar). The paths of every scene of a database come from one place (`dbPathOf`), so the same scene builders serve both providers.
+
+### A canvas drawn by hand
+
+`MigrationCanvas.js` is for a canvas a person arranges: **one diagram**, edited with the visual editor, in which the tables and option sets of a database stand where they were put, beside whatever was added by hand. The diagram holds two sorts of things, told apart by their ids:
+
+| | ids | made by |
+| --- | --- | --- |
+| of the database | nodes `table:{db}:{logical}`, `choice:{db}:{logical}`, `external:{db}:{logical}`; connections `lookup:{db}:…`, `choice:{db}:…` | the model, never by hand (`migrationErGraphBuild`, the cards and lines of the ER diagram, not arranged) |
+| by hand | everything else | the reader, left as it is |
+
+`migrationCanvasSync(diagram, model, dbId, { position, erColumnCountMax })` makes what is of the database again from the model as it is now and answers `{ diagram, addedList, removedList }`: a node that stood keeps its place, its size and the handles lines by hand end on; a table gone from the model leaves with its lines (a line by hand ending on it too); what is new is placed at `position` (where a reader asked for it), the tables one under another with the option sets and outside tables that came with them at their right, or, without a position, at the right of everything drawn; a diagram with nothing of the database yet is arranged whole as an ER diagram. A line of the database keeps the route a reader gave it while it runs between the same ends. So the data is read again without the drawing, and the drawing is saved without the data. `migrationCanvasTableListOf(diagram, dbId)` is the tables a drawing holds: what a canvas keeps when its drawing is saved.
+
 ### Finding a row in the target
 
 A row can be checked only once its counterpart in the target is found, and how differs by table, so the report says it as **patterns**. The scene opens with a title saying what this is about (`matchIntro`), and each pattern is a lane under a title of its own, in the columns of the flows, seen by dashed dividers rather than blocks inside the block: one row of the source, what the migration server does with its key and what comes of it (one column of cards), the row found in the target.
@@ -162,7 +188,8 @@ An editor shows the item as the framework's card or diagram; **Edit** opens the 
 | Place | Role |
 | --- | --- |
 | `migration/MigrationData.js` | the kinds, the paths, the model |
-| `migration/MigrationScenes.js` | the provider: every scene |
+| `migration/MigrationScenes.js` | the provider: every scene; `migrationDbProviderBuild`, the scenes of one database alone; `migrationErGraphBuild` |
+| `migration/MigrationCanvas.js` | a canvas drawn by hand kept in step with the model: `migrationCanvasSync`, `migrationCanvasTableListOf` |
 | `migration/MigrationEditData.js` | the adapters, a new item |
 | `migration/MigrationExplorer.jsx` | reading the items; `MigrationExplorer`, `MigrationTour` |
 | `migration/MigrationEdit.jsx` | the host of an editor; `MigrationItemList` |

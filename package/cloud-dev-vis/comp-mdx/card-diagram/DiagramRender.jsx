@@ -157,7 +157,7 @@ export const DiagramCreateNode = observer(function DiagramCreateNode({ data }) {
 	const { zoom } = useViewport();
 	if (!editor) return null;
 	return <div className="doc-vis-create nodrag nopan nowheel" style={{ transform: `scale(${1 / zoom})`, transformOrigin: 'top left' }}>
-		<DiagramCreatePanel position={data.position} editor={editor} objectService={config?.object} sessionKey={`diagram-create:${config?.instanceId ?? 'diagram'}`} />
+		<DiagramCreatePanel position={data.position} editor={editor} objectService={config?.object} sessionKey={`diagram-create:${config?.instanceId ?? 'diagram'}`} sourceList={config?.createSourceList} actionList={config?.createActionList} actionIdInitial={editor.store.create?.actionId} />
 	</div>;
 });
 

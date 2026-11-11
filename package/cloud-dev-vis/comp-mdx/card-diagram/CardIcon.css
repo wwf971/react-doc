@@ -1,0 +1,74 @@
+/* the icon node and the caption of the base series (CardIcon.jsx) */
+.doc-vis-node-content:has(> .doc-card-icon), .doc-vis-node-content:has(> .doc-card-caption) { overflow: visible; border: 0; background: none; box-shadow: none; }
+.doc-card-icon {
+	--doc-card-accent: #64748b;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	width: 100%;
+	height: 100%;
+	color: var(--color-fd-foreground);
+}
+.doc-card-icon.is-label-bottom { flex-direction: column; justify-content: flex-start; gap: 0.3rem; text-align: center; }
+.doc-card-icon.is-link { cursor: pointer; }
+.doc-card-icon-mark {
+	box-sizing: border-box;
+	position: relative;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 1.5px solid color-mix(in srgb, var(--doc-card-accent) 62%, var(--color-fd-background));
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--doc-card-accent) 11%, var(--color-fd-background));
+	color: var(--doc-card-accent);
+	transition: background-color 0.12s, border-color 0.12s;
+}
+.doc-card-icon.is-link:hover .doc-card-icon-mark { border-color: var(--doc-card-accent); background: color-mix(in srgb, var(--doc-card-accent) 22%, var(--color-fd-background)); }
+.doc-card-icon.is-focus .doc-card-icon-mark { border-color: var(--doc-card-accent); background: var(--doc-card-accent); color: #fff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--doc-card-accent) 20%, transparent); }
+.doc-card-icon.is-ghost .doc-card-icon-mark { border-style: dashed; background: none; color: var(--color-fd-muted-foreground); border-color: color-mix(in srgb, var(--color-fd-muted-foreground) 55%, transparent); }
+.doc-card-icon.is-ghost .doc-card-icon-title { color: var(--color-fd-muted-foreground); font-weight: 450; }
+.doc-card-icon-status {
+	position: absolute;
+	right: -2px;
+	bottom: -2px;
+	width: 8px;
+	height: 8px;
+	border: 1.5px solid var(--color-fd-background);
+	border-radius: 999px;
+	background: var(--doc-card-status, #64748b);
+}
+.doc-card-icon-status[data-tone='blue'] { --doc-card-status: #2563eb; }
+.doc-card-icon-status[data-tone='teal'] { --doc-card-status: #0d9488; }
+.doc-card-icon-status[data-tone='green'] { --doc-card-status: #16a34a; }
+.doc-card-icon-status[data-tone='amber'] { --doc-card-status: #d97706; }
+.doc-card-icon-status[data-tone='red'] { --doc-card-status: #dc2626; }
+.doc-card-icon-status[data-tone='violet'] { --doc-card-status: #7c3aed; }
+.doc-card-icon-text { display: grid; min-width: 0; gap: 0.05rem; }
+.doc-card-icon.is-label-bottom .doc-card-icon-text { width: 100%; }
+.doc-card-icon-title { min-width: 0; overflow: hidden; font-size: 0.8rem; font-weight: 550; line-height: 1.25; white-space: nowrap; text-overflow: ellipsis; }
+.doc-card-icon.is-focus .doc-card-icon-title { font-weight: 650; }
+.doc-card-icon-under { display: flex; min-width: 0; align-items: center; gap: 0.3rem; }
+.doc-card-icon-head { display: flex; min-width: 0; align-items: center; gap: 0.35rem; }
+.doc-card-icon.is-label-bottom .doc-card-icon-head { justify-content: center; }
+/* a word marking what sort of thing it is: small capitals in a dashed outline, the same wherever it is drawn */
+.doc-card-icon-badge { flex: none; padding: 0 0.28rem; border: 1px dashed color-mix(in srgb, var(--color-fd-muted-foreground) 70%, transparent); border-radius: 3px; color: var(--color-fd-muted-foreground); font-size: 0.56rem; font-weight: 650; letter-spacing: 0.06em; line-height: 1.45; text-transform: uppercase; white-space: nowrap; }
+.doc-card-icon-note { min-width: 0; overflow: hidden; color: var(--color-fd-muted-foreground); font-size: 0.68rem; line-height: 1.25; white-space: nowrap; text-overflow: ellipsis; }
+.doc-card-icon[data-tone='blue'] { --doc-card-accent: #2563eb; }
+.doc-card-icon[data-tone='teal'] { --doc-card-accent: #0d9488; }
+.doc-card-icon[data-tone='green'] { --doc-card-accent: #16a34a; }
+.doc-card-icon[data-tone='amber'] { --doc-card-accent: #d97706; }
+.doc-card-icon[data-tone='red'] { --doc-card-accent: #dc2626; }
+.doc-card-icon[data-tone='violet'] { --doc-card-accent: #7c3aed; }
+.doc-card-caption {
+	overflow: hidden;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.66rem;
+	font-weight: 550;
+	letter-spacing: 0.04em;
+	line-height: 1.3;
+	text-transform: uppercase;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}

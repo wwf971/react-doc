@@ -1,3 +1,4 @@
+import { ScrollHorizontalStore } from '../../../../main/comp-doc/scroll/ScrollHorizontalStore.js';
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { applyNodeChanges } from '@xyflow/react';
 import { yamlStringify } from '../../../../main/frontend/src/lib/yaml.js';
@@ -111,8 +112,11 @@ export class SwitchStore {
 		this.animationStore = null;
 		// the search of the block (searchStoreGet), kept with the store across mounts
 		this.searchStore = null;
+		// how far the path of the bar is moved when it is wider than its place (SwitchPathBar):
+		// its own store, kept with the block
+		this.pathScroll = new ScrollHorizontalStore();
 		makeAutoObservable(this, {
-			cameraLive: false, animationStore: false, searchStore: false, isSeekBusy: false, seek: false, seekEnd: false, showAt: false, planRun: false, stepEnter: false, stepExit: false, pathSet: false, stepRun: false, registry: false, resolve: false, scope: false, entryByPath: false, sceneDescByPath: false, viewChosenByKey: false, cameraByPath: false, titleNodeByText: false, embedBodyByKey: false, stackElementByKey: false, stackScrollByKey: false, stackAreaByKey: false, stackItemByKey: false, itemInitial: false, maskElement: false, maskWorldElement: false, styleElement: false, viewportApi: false,
+			cameraLive: false, animationStore: false, searchStore: false, pathScroll: false, isSeekBusy: false, seek: false, seekEnd: false, showAt: false, planRun: false, stepEnter: false, stepExit: false, pathSet: false, stepRun: false, registry: false, resolve: false, scope: false, entryByPath: false, sceneDescByPath: false, viewChosenByKey: false, cameraByPath: false, titleNodeByText: false, embedBodyByKey: false, stackElementByKey: false, stackScrollByKey: false, stackAreaByKey: false, stackItemByKey: false, itemInitial: false, maskElement: false, maskWorldElement: false, styleElement: false, viewportApi: false,
 			captureHintTimer: false, flowWaiterList: false, measureWaiterList: false, morph: false, step: false, providerVersion: false, runToken: false, stackScrollKeyByKey: false, stackHeightFullByKey: false, stackFullKeySet: false,
 			provider: observable.ref, nodeListFlow: observable.shallow, edgeListFlow: observable.shallow, plan: observable.ref, mask: observable.ref, box: observable.ref, embedHeld: observable.ref,
 			historyList: observable.ref, forwardList: observable.ref, measurePathList: observable.ref, captureHint: observable.ref,

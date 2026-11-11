@@ -40,8 +40,8 @@ registry = nodeRegistryBuild({ id, kindList, cardLegacyConvert? })
 ```
 
 ```text
-CardDiagram            registry card-diagram      table, operator, card-note, card-brief
-DiagramER              registry power-platform    table, operator, card-note, card-brief, dataverse-table, dataverse-choice,
+CardDiagram            registry card-diagram      table, operator, card-note, card-brief, card-icon ...
+DiagramER              registry power-platform    table, operator, card-note, card-brief, card-icon ..., dataverse-table, dataverse-choice,
 DiagramPowerAutomate     (one registry for the      power-automate, business-rule
 DiagramBusinessRule       three: one diagram may mix them)
                         plus operator-abandon, operator-text, operator-mapping
@@ -348,6 +348,23 @@ table, isCompact           card-note                card-brief
 
 `card-database` holds `title`, `text`, `tone`: a cylinder drawn at the size of its node with its name inside, the title as large as fits. A line joins its body.
 
+<a id="icon-nodes"></a>`card-icon` (`CardIcon.jsx`, `CardIconData.js`) is something among many: a small round mark with its words beside it, for a graph of things rather than of contents. It says what a thing is and how it stands; what the thing holds is another scene, or another page of whoever draws the graph.
+
+```text
+( ◉ ) Title            title, text?            the words beside the mark (labelSide: right, the default)
+      a line of text   icon, tone              a word of CARD_ICON_BY_NAME, a tone of the compact cards
+                       statusTone?             a dot on the mark: the state of the thing
+                       isFocus?                the one the graph is about: larger, filled
+                       isGhost?                not there yet: a dashed mark (add one)
+                       badge?                  a word marking what sort of thing it is (EXAMPLE): small
+                                               capitals in a dashed outline after the title
+                       isBadgeUnder?           the badge before the line of text instead: a narrow
+                                               node keeps its width for its title
+                       labelSide: bottom       the words under the mark; isLabelHidden: the mark alone
+```
+
+It has two anchors: `icon`, the mark, where the lines of a graph end, and `body`, the whole node. Its size is written by whoever draws it, since a graph is laid out before it is drawn; its kind says where the mark is in a node of a given size (`contract.anchorRectEstimate(node, anchorId, rect)`, a hook of any kind whose anchors are not its whole box), which is what an arranger without a drawn diagram asks ([the estimate](card-diagram-arrange.md#the-contract)). `card-caption` (`data.text`) is a few small words over a group of such nodes. Both are generic: which things there are, how they hang together and where they go is the business of the layer that builds the diagram.
+
 `card-matrix` holds rows and columns with headers and a mark where they meet: `rowList`, `columnList` (`[{ id, label, link?, tone? }]`), `cellList` (`[{ row, column, mark?, title?, link? }]`: a dot in the middle of the cell, with `mark`, a count say, in small words beside it), `title`, `subtitle`, `rowAxisLabel`, `columnAxisLabel`, `columnHeadDirection` (`vertical` by default, or `horizontal`), `rowHeadWidth`, `cellSize`, `isDiagonalMarked`. It has the frame, title line and rows of a table card, and knows nothing of what they are. A header or a cell with `link` opens that path on a canvas that switches scenes. `cardMatrixWidthGet` gives its width without drawing it, and a line joins its body.
 
 ## Card Editing
@@ -381,6 +398,29 @@ The store keeps the path canonical: `pathSet` resolves what it is given, and eve
 **Connections.** A click on a handle rotates the selection through the connections attached to it and back to none (`handleClick`), keeping the card selected. A drag from a handle starts a new line (`connect` interaction) unless a connection at that handle is selected, or the handle takes one line and has it: then the drag detaches that end and carries it (`detach`), drawn by the custom connection line from the line's other end. React Flow's edge anchors move an end (`reconnect`); a free end is a hidden point node whose dot can also be dragged, snapping to the nearest handle within reach on drop. Every drop goes through one validation (`endpointAttachReasonGet`: direction, same handle, attach policy), and a drop that is refused or lands on nothing leaves the end free where it was dropped (`connectionEndpointSet`). A new line is oriented so that it leaves a handle that can send and enters one that can receive (`connectionOrient`). `connectionSet` changes the presentation fields; `connectionRemove` deletes.
 
 **Creating.** A double-click on empty canvas (or the bar's **+**) opens the create panel (`DiagramCreatePanel.jsx`), a searched list of the create entries of the node registry of the component (`nodeRegistrySearch`): its kinds that have a create entry, and a connection with two free ends. The chosen node gets the panel's position and is selected.
+
+<a id="sources-of-the-create-panel"></a>**Sources of the create panel.** A host may offer things to add that are neither kinds nor objects of the page, found by the text typed: `config.createSourceList`, a list (kept the same across renders) of `{ id, label, placeholder?, isBeforeKinds?, search(text), choose(entry, position, editor) }`. `search` answers `{ entryList: [{ id, label, description?, icon? }], note?, actionList?: [{ id, label, run() }] }`, at once or as a promise; it runs a moment after the typing stops, and an answer that comes after a later search began is dropped. The entries stand under the label of their source (above the kinds with `isBeforeKinds`), the words typed marked in them; `note` is a line under them (why there are none, how old they are) and `actionList` buttons beside it, after which the search runs again. `choose` adds the entry with the commands of `editor.store` through `editor.change`, at once or when a promise ends, so what it adds is validated and undone like any change; a failure is the message of the editor. The engine knows nothing of what a source offers: db-migration-tool offers the tables of a database, read from the database when one is chosen.
+
+**Actions and states of the create panel.** A host may offer entries that do something rather than add one thing: `config.createActionList`, a list of `{ id, label, description?, icon?, keywordList?, start({ position, editor }) }`, drawn under the heading *Actions*, found by the text typed like the kinds. An action whose `start` answers a **state** puts the panel into it, and the panel then asks for what the action needs, one state at a time: a state machine the host runs, which the panel only draws.
+
+```text
+state   { id, label,                 what the panel is doing now
+          placeholder?, search?(text) → { entryList, note?, actionList? }   what is offered, as a source answers
+          isMulti?, commitLabel?(count), commit?(entryList, api)             entries ticked, then taken together
+          isText?,                                                           the text typed is the value
+          choose?(entry | { text }, api) }                                   one entry taken, or the text
+choose, commit   → another state (the next thing to ask: a series of parameters), 'back' (the state
+                   before), or nothing (done: the panel closes); at once or as a promise. api: { position, editor }
+```
+
+- **The panel says which state it is in**: a line over the field names the states entered, the last one strong, with a button leaving it. Escape does the same after emptying the field; leaving the first state goes back to the list (or closes the panel, when it was opened in that state).
+- In a state of several (`isMulti`) a click or Enter ticks an entry, and the button at the foot (or Ctrl/⌘ + Enter) takes what is ticked; in a state of one, a click or Enter takes the entry; in a state of text, Enter takes what was typed.
+- What `choose` or `commit` throws is said in the panel, which stays as it is, so a refusal loses nothing ticked.
+- A host opens the panel in the state of an action with `editor.createOpen(position, { actionId })`, or from outside the editor with `config.createRequest { actionId, key }` (a new `key` asks again): at the middle of the canvas.
+
+The states know nothing of a diagram and the panel nothing of what they ask for: db-migration-tool's *Add tables* is one state of several over the tables of a database, whose commit reads them and places them with `graphSet`.
+
+**A graph made by a generator.** `DiagramEditStore.graphSet({ nodes, connections }, { selectId? })` replaces the nodes and the connections whole, as one step of the history: for whoever makes a piece of graph outside the editor (a source of the create panel bringing a card with its lines, a diagram made again from its data) and answers for what it leaves out. It goes through `changeApply`, so an invalid graph is refused with its reason and an undo puts everything back.
 
 **Removing a node** detaches its connections (free ends where its handles were) and deletes the node; nothing is refused for being connected.
 
@@ -488,6 +528,21 @@ Reading a document never rewrites it. Keep the existing component tag as a compa
 ## Standalone Cards
 
 A standalone card (`CardStandalone.jsx`, `cardStandaloneCompCreate`) renders one node of its registry without React Flow, handles, dragging, panning, or zooming, with `{ version: 1, node }`. The node must be of a kind of the registry that is a card (one with a schema). Data without `version` is the older form of a series, converted by the registry's `cardLegacyConvert` when it has one, and refused otherwise. The card is the same component, with the same normalization, markup, styles and stable row ids, as inside a diagram; the outer wrapper only constrains size and scrolling. `DiagramDataverseEntity` is the standalone card of the Power Platform series ([Power Platform](power-platform.md#the-standalone-dataverse-card)).
+
+## A diagram without a canvas
+
+`DiagramStatic` (`DiagramStatic.jsx`) draws a whole diagram with no React Flow: the same cards, placed absolutely, their lines in one svg. Nothing pans or zooms; the block is as large as what it draws (the cards as measured, and the lines), and scrolls with whatever holds it. It is for a place where a canvas would be in the way: a side panel, a page that is itself a diagram, a list.
+
+```text
+<DiagramStatic diagram registry resolve? padding? onNodeClick? onSize? />
+
+diagram       the data of a diagram; a node without a position stands on the default grid, a
+              background written `around` other nodes follows them as they are measured
+onNodeClick   (node, event): a click on a card that is not a background. A card with `link` shows a
+              pointer, and what a link opens is the caller's to say: there are no scenes to switch to
+```
+
+Its pieces are what the switch layer draws [a scene inside a card](card-diagram-flexible-switch.md#one-canvas-no-canvas-inside-a-canvas) with (`DiagramStaticNode`, `DiagramStaticLine`, `DiagramStaticLabel`): one way of measuring anchors and of drawing a line between two measured ends, whether or not there is a path system around it. A static diagram is read-only by construction; it has no editor, no search and no camera.
 
 ## Design Checks
 

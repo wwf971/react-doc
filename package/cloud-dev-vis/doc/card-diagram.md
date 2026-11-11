@@ -17,6 +17,8 @@ a change of the canvas           DiagramERStore, CardDiagram, DiagramRender
 a change of the data format      DiagramERData (normalization) first, then everything that reads it
 a diagram moving between states  the animation wrapper: card-diagram-animation.md
 many diagrams in one viewport    the switching layer: card-diagram-flexible-switch.md
+a diagram where a canvas is in   DiagramStatic: card-diagram-impl.md#a-diagram-without-a-canvas
+the way
 how a line runs (anchors, routes) DiagramRoute: card-diagram-connection-line.md
 arranging a whole diagram          DiagramArrange: card-diagram-arrange.md
 ```
@@ -142,7 +144,7 @@ So:
 From `main/frontend`:
 
 ```sh
-node --import tsx --import ./src/lib/node-test-register.js --test ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramERData.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramRoute.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditStore.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditPath.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditIntegration.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/OperatorNodes.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram-switch/SwitchData.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/migration/MigrationData.test.js
+node --import tsx --import ./src/lib/node-test-register.js --test ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramERData.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramRoute.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditStore.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditPath.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditIntegration.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramArrangeOutline.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/OperatorNodes.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram-switch/SwitchData.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/migration/MigrationData.test.js
 ```
 
 The store is tested on the registry of the Power Platform series, which holds every card variant; a change of the engine is tested there, a change of a series beside the series. Every command has a test of its effect **and of its undo**. The page is then checked in the browser, in the doc page of the package (`react-doc dev package/cloud-dev-vis`), on its [playground](../../../main/doc_page_impl_test.md#playground-documents), the one document of the package that can be written: entering edit mode moves nothing, the command works from its control and from the keys, Ctrl/⌘ + Z takes it back, Save clears the bar's history buttons.

@@ -51,6 +51,7 @@ Reach for a card that exists before drawing one of your own: each already knows 
 | an item in a list (a file, a batch, a table among many) | `card-brief` | a pill: an icon, a title, a line of figures; as wide as its words with `isWidthFit` |
 | what a long series leaves out | `card-three-dots` | "298 batches" between the first and the last; a line may leave the dots, without the square of a handle (`isMarkerHidden`) |
 | a database, a store | `card-database` | a cylinder with its name inside |
+| a thing among many, in a graph of what relates to what | `card-icon`, with `card-caption` over a group | a small round mark with its name beside it, a dot for its state; lines end on the mark (`anchor: { target: icon }`). In a narrow place, laid out by the [outline arranger](card-diagram-arrange.md#the-outline-arranger) |
 | which of a set relates to which | `card-matrix` | rows and columns with a mark where they meet; a cell may be a [link](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md#a-link-to-a-scene) |
 | a flow or a rule of Power Platform | `power-automate`, `business-rule` | trigger, action, condition, scope ...; a Dataverse condition or action |
 | a place, a lane, a group, outputs | `color-block` | behind the cards; `fill: none` for a frame; `around` what it holds ([below](#background-color-blocks)) |

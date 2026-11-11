@@ -8,7 +8,7 @@ An **arranger** arranges a diagram by a set of rules: it decides how lines run a
  the editor or an api, by hand  ──┘   (pure)
 ```
 
-The contract is in `comp-mdx/card-diagram/DiagramArrange.js` and knows no kind of card. The arrangers are in `comp-mdx/power-platform/er-arrange/`, at the level of ER diagrams for now ([below](#moving-arrangers-up-to-the-framework)).
+The contract is in `comp-mdx/card-diagram/DiagramArrange.js` and knows no kind of card. The base series has one arranger, [the outline](#the-outline-arranger); the arrangers of ER diagrams are in `comp-mdx/power-platform/er-arrange/` ([below](#moving-arrangers-up-to-the-framework)).
 
 ## Using one
 
@@ -54,11 +54,37 @@ changes    { positionById?, handleSideList?: [{ nodeId, handleId, side }],
              reportList?: [{ kind, message, connectionId? }] }
 ```
 
-**Geometry is passed in**, because only the caller knows where things are. The editor and the apis pass what the canvas measured when the diagram is drawn (`diagramCanvasGeometryBuild`); a generator has nothing drawn, so the arranger's estimate is used. The estimate models the sizes a card draws, wrapped rows and titles included, by the width of their words, but it stays an estimate, so **check a generated diagram when it is drawn**, as for any diagram: `connectionOverlapListGet`. An arranger placing cards routes against where the cards will be with `diagramGeometryMovedBuild`.
+**Geometry is passed in**, because only the caller knows where things are. The editor and the apis pass what the canvas measured when the diagram is drawn (`diagramCanvasGeometryBuild`); a generator has nothing drawn, so the arranger's estimate is used. An estimate that knows no kind (`diagramGeometryEstimateBuild`, `DiagramArrangeOutline.js`) takes the written size of a node, else the default of its kind, and asks the kind where an anchor is in that rectangle (`contract.anchorRectEstimate`, when the caller passes the registry); it is exact for cards whose sizes are written, as [icon nodes](card-diagram-impl.md#icon-nodes) are. The estimate models the sizes a card draws, wrapped rows and titles included, by the width of their words, but it stays an estimate, so **check a generated diagram when it is drawn**, as for any diagram: `connectionOverlapListGet`. An arranger placing cards routes against where the cards will be with `diagramGeometryMovedBuild`.
 
 **A report says what was not done**, rather than failing: `skipped` (a line it does not handle), `narrow` (lanes closer than is readable), `overlap` (no free way found), `label` (no place for a label clear of the cards). The editor shows it in the edit panel, and the api answers it.
 
 A store command, `arrangeApply(arranger, { geometry, ...options })`, applies changes to a draft; `diagramArrangeApply` applies them to plain data. Both start from `diagramArrangeRun`.
+
+## The outline arranger
+
+`outline` (`DiagramArrangeOutline.js`, offered by `CardDiagram`) is for a graph read downward in a narrow place: its nodes stand one under another, each on a row of its own, indented by a level the caller gives, and its lines run straight, vertical or horizontal, beside the rows. It uses height, not width.
+
+```text
+ ◯ above                 a line from the bottom (or top) of a node to the side of another turns
+ │                       once, under (or over) the node it leaves. the lines leaving one handle
+ ◯ above                 downward share that first stretch, a trunk, which is the stretch the
+ └──◉ the one            rule of lines allows them to share: it ends at their common endpoint
+      ├──◯ below
+      └──◯ below         a line between two handles on the same side goes out into the margin
+ ┌─────◯ another         on that side, along a lane of its own, and back in: the shortest
+ └─────◯ that it uses    nearest the rows, so lines of one handle nest without crossing
+```
+
+| Option | |
+| --- | --- |
+| `levelById` | the indent of a row, 0 when absent; `indent` px each (22) |
+| `gapBeforeById` | room over a row, to set groups apart; `rowGap` between any two rows (8) |
+| `origin` | the top left of the first row |
+| `laneGap` | between two lanes of a margin, and between the rows and the first (10) |
+| `isPlaced: false` | keeps the nodes where they are, and routes only |
+| `registry` | for the estimate |
+
+The order of the rows is the order of the nodes. What it cannot route it reports as `skipped`: a line whose target is not on the way of a line leaving that side of its source, a curve, a free end. It knows no kind of card, so the structure (which node is above, below, beside which) is entirely the caller's: a caller lists the nodes in order, gives the levels, and chooses the side of each handle.
 
 ## The arrangers of ER diagrams
 
@@ -120,7 +146,7 @@ So with nothing in the way a label stays where it was written. The size of a lab
 
 ## Moving arrangers up to the framework
 
-A component offers what its node registry names (`arrangerList`); `CardDiagram` names none today. Nothing in the contract, the store command, the menu or the apis depends on ER diagrams, so an arranger moves up with no change to them:
+A component offers what its node registry names (`arrangerList`); `CardDiagram` names the outline. Nothing in the contract, the store command, the menu or the apis depends on ER diagrams, so an arranger of ER diagrams moves up with no change to them:
 
 1. Make it stop depending on the ER kinds. `ErLineRouter.js` already does not; `erArrangerIsApplicable`, the estimate's row heights (`ErGeometry.js`), and which cards go below (`BELOW_TYPE_LIST`) do.
 2. Move the files to `comp-mdx/card-diagram/`, and add the list to `cardDiagramNodeRegistry`.

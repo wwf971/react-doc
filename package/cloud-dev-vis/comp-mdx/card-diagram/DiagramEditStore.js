@@ -320,7 +320,8 @@ export class DiagramEditStore {
 	}
 
 	interactionSet(interaction) { this.interaction = interaction; }
-	createOpen(position) { this.create = { position }; this.cell = null; }
+	// option.actionId: the panel opens in the state of that action of the host (DiagramCreatePanel.jsx)
+	createOpen(position, { actionId } = {}) { this.create = { position, actionId }; this.cell = null; }
 	createClose() { this.create = null; }
 
 	// ---------- cells ----------
@@ -763,6 +764,21 @@ export class DiagramEditStore {
 		});
 		if (isChanged) this.select(node.id);
 		return isChanged ? node.id : null;
+	}
+
+	// the nodes and the connections replaced whole by what a generator made of them (a
+	// source of the create panel bringing a piece of graph with its lines, a diagram
+	// made again from its data): one step of the history, validated like any change.
+	// the generator answers for what it leaves out; the path is re-resolved, and with
+	// selectId that node is focused
+	graphSet({ nodes, connections }, { selectId } = {}) {
+		if (this.kind !== 'diagram') return false;
+		const isChanged = this.changeApply(documentNext => {
+			documentNext.set('nodes', documentNext.createNode(nodes ?? []));
+			documentNext.set('connections', documentNext.createNode(connections ?? []));
+		});
+		if (isChanged && selectId && this.nodeGet(selectId)) this.select(selectId);
+		return isChanged;
 	}
 
 	// a node goes alone: the connections on its handles stay, their ends

@@ -130,7 +130,10 @@ const SwitchFlow = observer(function SwitchFlow({ store, children }) {
 				const nodeGraph = node.data?.node;
 				// a part of a card may open something of its own (data-switch-link)
 				const link = event.target.closest?.('[data-switch-link]')?.dataset.switchLink ?? nodeGraph?.link ?? (nodeGraph?.renderer.type === 'scene-embed' ? nodeGraph.data.scene : undefined);
-				if (link && !event.target.closest?.('button')) void store.pathSet(link);
+				if (!link || event.target.closest?.('button')) return;
+				// a link the provider answers itself leaves the viewport (a page of the host): it is not a scene
+				if (store.provider?.linkOpen?.(link) === true) return;
+				void store.pathSet(link);
 			}}
 			onNodeDragStop={(_event, node) => { if (node.data?.node?.renderer.type === 'scene-box') store.boxCommit(node.id); }}
 		>
