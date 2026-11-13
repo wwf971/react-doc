@@ -23,7 +23,7 @@ object: frontend:w5j7ozoijzl
 object: frontend:w5j7ozoijzl
 ```
 
-Without a `mode`, the block draws the type's default mode, here the shelf. Its status filter is a parameter of the block: the buttons write it into this document (`param: { status: reading }`), through the api the mode is given (`paramSet`), in reading mode as in edit mode; in edit mode, a click on a status moves the book on (`want` → `reading` → `read`) and writes the book's asset; in reading mode the status only reads, as a block of a frontend object shows no control that changes data while its document is read (`main/doc_page_impl_obj_frontend.md`, Reading and editing). Opening a book switches the block for as long as the page is open, without writing the document (`{ isSaved: false }`).
+Without a `mode`, the block draws the type's default mode, here the shelf. Its last column, the remark of a book, is a cell typed in place while the page is edited ([Cells, and things inside an object](#cells-and-things-inside-an-object)). Its status filter is a parameter of the block: the buttons write it into this document (`param: { status: reading }`), through the api the mode is given (`paramSet`), in reading mode as in edit mode; in edit mode, a click on a status moves the book on (`want` → `reading` → `read`) and writes the book's asset; in reading mode the status only reads, as a block of a frontend object shows no control that changes data while its document is read (`main/doc_page_impl_obj_frontend.md`, Reading and editing). Opening a book switches the block for as long as the page is open, without writing the document (`{ isSaved: false }`).
 
 ## One object, several modes
 
@@ -111,6 +111,33 @@ param:
 ```
 
 The names and paths of the assets are edited in the **Frontend objects** tab too, where a search finds an asset of the chosen object, and the registry's apis offer them to agents (`relation/query { fromRef, text }`, `relation/update { fromRef, key, data: { name, pathList } }`).
+
+## Cells, and things inside an object
+
+Two texts of a reading list are **cells** of the cell edit layer (`main/doc_page_impl_edit_cell.md`): the **remark** of a book, a cell of the shelf's table at the top of this page, and the text of a **note**. Such a text is words with **tokens** in it, and each token is drawn by the layer it belongs to:
+
+```text
+{{/book/sci-fi/the-left-hand-of-darkness}}
+    the list's own token: another book of this list; a click opens it in the block
+[Frontend Objects](~example:example/object-frontend.md)
+    a link: resolved and followed by the navigation layer
+{{@frontend:w5j7pn0lh5o}}
+    a view of an object of the registry, drawn by the view of its types
+{{@frontend:w5j7ozoijzl#/book/sci-fi/dune}}
+    something inside an object, named by an inner path
+```
+
+Switch the page to **Edit** and click a remark: the cell is typed where it stands, and nothing of the table moves. Type `/` for the actions of its tokens: `/book` (the list's own, also entered by typing `{{`), `/link`, and `/object`, which walks to an object a step per choice: a **type**, then an **object** of it, then **what is inside it**. The last step is answered by the object: a reading list completes the paths of its books and notes, a profile of the package cv the query paths of its values. Enter saves, Escape leaves the text as it was.
+
+**Something inside an object** is named from anywhere by the object's reference, `#`, and an inner path: for a reading list, a path of one of its assets. In a line of text it is written as an inline object view, as here: <!--renderComp=ObjectView-->`frontend:w5j7ozoijzl#/book/sci-fi/dune`. In the block context it is drawn by the mode its type declares for one thing (`pathParam` of the mode `book`), given the path:
+
+<!--renderComp=ObjectView-->
+```yaml
+object: frontend:w5j7ozoijzl#/author/ursula-k-le-guin/the-left-hand-of-darkness
+context: block
+```
+
+A path nothing is at says so where it stands: <!--renderComp=ObjectView-->`frontend:w5j7ozoijzl#/book/sci-fi/solaris`.
 
 ## Types and inheritance
 

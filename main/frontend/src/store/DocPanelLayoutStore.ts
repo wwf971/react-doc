@@ -12,6 +12,8 @@ import { makeAutoObservable } from 'mobx';
 //   isResizable       resized by its edges and corners
 //   isSizeRemembered  the size a resize leaves is kept for the next opening
 //                     of this panel, also after a reload (localStorage)
+//   isExpandable      it has a maximize / restore button; maximized it fills
+//                     the window (expandedById), until it closes
 //
 //   rectById            the rect of an open panel that was moved or resized:
 //                       { x, y, width, height } in px of the window. absent:
@@ -23,7 +25,7 @@ import { makeAutoObservable } from 'mobx';
 
 export type PanelRect = { x?: number; y?: number; width?: number; height?: number };
 
-export type PanelLayoutOption = { isMovable?: boolean; isResizable?: boolean; isSizeRemembered?: boolean };
+export type PanelLayoutOption = { isMovable?: boolean; isResizable?: boolean; isSizeRemembered?: boolean; isExpandable?: boolean };
 
 export type PanelRectChange = { rect: PanelRect; kind: 'move' | 'resize'; isEnd: boolean };
 
@@ -32,6 +34,7 @@ const storageKeyDefault = 'doc-page-panel-size';
 export class DocPanelLayoutStore {
   storageKey: string;
   rectById: Record<string, PanelRect> = {};
+  expandedById: Record<string, boolean> = {};
   sizeRememberedById: Record<string, { width: number; height: number }> = {};
 
   constructor({ storageKey = storageKeyDefault }: { storageKey?: string } = {}) {
@@ -47,6 +50,7 @@ export class DocPanelLayoutStore {
       isMovable: option.isMovable === true,
       isResizable: option.isResizable === true,
       rect: this.rectById[panelId] ?? (sizeRemembered ? { ...sizeRemembered } : undefined),
+      ...(option.isExpandable ? { isExpandVisible: true, isExpanded: this.expandedById[panelId] === true } : {}),
     };
   }
 
@@ -66,10 +70,15 @@ export class DocPanelLayoutStore {
   // the panel closed: it opens centered next time, in its remembered size
   panelClose(panelId: string) {
     delete this.rectById[panelId];
+    delete this.expandedById[panelId];
   }
 
   // the events of the panel contract this store answers; true when handled
   eventHandle(panelId: string, eventType: string, eventData: any, option: PanelLayoutOption = {}): boolean {
+    if (eventType === 'expandChangeRequest' && option.isExpandable) {
+      this.expandedById[panelId] = eventData?.isExpanded === true;
+      return true;
+    }
     if (eventType !== 'rectChangeRequest') return false;
     this.rectChange(panelId, eventData as PanelRectChange, option);
     return true;

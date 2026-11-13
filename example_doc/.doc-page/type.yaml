@@ -45,6 +45,10 @@ typeList:
         label: One book
         description: a book and its notes; param book names it (a path, a key, name:…)
         comp: ReadingListBook
+        # the mode showing one thing of the list, named by an inner path in its parameter "book":
+        # what draws {{@frontend:{id}#/book/sci-fi/dune}} as a block
+        # (main/doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths)
+        pathParam: book
       - id: find
         label: Find
         description: the assets searched by words and browsed by their paths

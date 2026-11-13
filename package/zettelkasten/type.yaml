@@ -37,3 +37,8 @@ typeList:
         label: One card
         description: one card in the flow of the document; param zettel names it
         comp: ZettelCard
+        # the mode showing one thing of the box, named by an inner path in its parameter "zettel"
+        # (a key, a path of the card): what draws a reference such as
+        # frontend:{id}#card-atomic as a block
+        # (main/doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths)
+        pathParam: zettel

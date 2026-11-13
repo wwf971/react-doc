@@ -8,7 +8,7 @@ An **arranger** arranges a diagram by a set of rules: it decides how lines run a
  the editor or an api, by hand  ──┘   (pure)
 ```
 
-The contract is in `comp-mdx/card-diagram/DiagramArrange.js` and knows no kind of card. The base series has one arranger, [the outline](#the-outline-arranger); the arrangers of ER diagrams are in `comp-mdx/power-platform/er-arrange/` ([below](#moving-arrangers-up-to-the-framework)).
+The contract is in `comp-mdx/card-diagram/DiagramArrange.js` and knows no kind of card. The base series has two arrangers, [the outline](#the-outline-arranger) and [the rows](#the-rows-arranger); the arrangers of ER diagrams are in `comp-mdx/power-platform/er-arrange/` ([below](#moving-arrangers-up-to-the-framework)).
 
 ## Using one
 
@@ -85,6 +85,52 @@ A store command, `arrangeApply(arranger, { geometry, ...options })`, applies cha
 | `registry` | for the estimate |
 
 The order of the rows is the order of the nodes. What it cannot route it reports as `skipped`: a line whose target is not on the way of a line leaving that side of its source, a curve, a free end. It knows no kind of card, so the structure (which node is above, below, beside which) is entirely the caller's: a caller lists the nodes in order, gives the levels, and chooses the side of each handle.
+
+## The rows arranger
+
+`rows` (`DiagramArrangeRows.js`) is for a graph read downward that is wider than an outline: its nodes stand each on a row of its own, **in the column its caller gives**, as the steps of a plan do (a step under the one whose rows it takes, what is computed for it a column to the right). Where the outline indents, it sets columns apart, and it leaves no line running along a node.
+
+```text
+ ◯ a ┄┄┄┄┄┄┄┄┄┄┄┐              a line from the side of a node to the top of one in another column, and one
+ │              ▼              from the bottom of a node to the side of one in another column, turn once
+ ◯ b            ◯ c            when the way down is free (a to c, d to e)
+ ├───────┐      │
+ ◯ f     │      ◯ d            a line that would run through nodes goes out on a level of the gap under the
+ │       │      │              node it leaves, down a track of a channel, and in (b to g): the tracks of a
+ ◯ e ────│──────┘              channel stand a lane apart, the shortest line nearest the column it goes to
+ │       │
+ ◯ h     └──◯ g
+```
+
+```text
+ channel   the room left of a column (the margin left of the first; one more right of the last). A column
+           stands as far from the one at its left as the tracks of the channel between them need
+ track     a vertical stretch in a channel, kept for one line, next to the column the line goes to
+ level     a horizontal stretch in the gap between two rows, where a line turns towards its channel (under
+           the node it leaves) or towards its node (over the node it reaches). A gap is as high as its
+           levels need
+```
+
+| A line | Runs |
+| --- | --- |
+| from the bottom of a node to the top of one in its column | straight down; past nodes of that column, by the channel left of the column |
+| from the bottom of a node to the side of another | down its column and into that side, when the node stands on that side and no node of the column is in the way; else by the channel on that side of its target (`left`: left of the column of the target; `right`: right of it) |
+| from the side of a node to the top of another | along its row and down, when the way down is free; else by a channel and the level over its target |
+| between the sides of two nodes | by the channel on that side of its target, when its source faces it |
+
+Lines sharing a handle share only the stretch at that handle, as [the rule of lines](card-diagram-usage.md#no-lines-on-top-of-each-other) has it: each has a level and a track of its own, the nearer its other end the higher its level and the nearer its track, so lines leaving one node do not cross each other. A line going straight down keeps an anchor half way: left to itself between two rows close to each other, it is drawn going down, back up and down again.
+
+| Option | |
+| --- | --- |
+| `columnById` | the column of a node, 0 when absent |
+| `gapBeforeById` | room over a row, to set groups apart; `rowGap` between any two rows (10) |
+| `columnGap` | between two columns at least (24) |
+| `laneGap`, `levelStep` | between two tracks of a channel (12), two levels of a gap (6) |
+| `origin` | the top left of the first row of the first column |
+| `isPlaced: false` | keeps the nodes where they are: their columns are read off their rectangles and their rows off their heights, and only the lines are routed. A channel or a gap too small for its lines is reported as `narrow` |
+| `registry` | for the estimate |
+
+The order of the rows is the order of the nodes. What it cannot route it reports as `skipped`: a line leaving a node upward or reaching one from below, a line to a node above its source, a side handle facing away from where the line has to go, a curve, a free end. **Where an end is at the end of the words of a node** (a handle on the right of the anchor `text` of an icon node), where that is is known for sure only when the node is drawn, so the corners of such a line are kept by its other end: the line then turns where it should whatever the words measure. It knows no kind of card, so the structure is entirely the caller's: the caller lists the nodes in order, gives the columns, and chooses the side of each handle. It is not in the list the editor offers (`arrangerList`), since it needs its columns from a caller.
 
 ## The arrangers of ER diagrams
 

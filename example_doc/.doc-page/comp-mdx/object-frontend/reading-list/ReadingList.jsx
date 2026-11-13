@@ -2,6 +2,11 @@ import { observer } from 'mobx-react-lite';
 import { Book, Plus, Search } from '../../../../../main/frontend/UICommon.js';
 import { useCompState } from '../../../../../main/comp-doc/registry/use-comp-state.js';
 import { EditValueInline } from '../../../../../main/comp-doc/edit/EditValueInline.jsx';
+import { CellField } from '../../../../../main/comp-doc/cell/CellField.jsx';
+import { useCell } from '../../../../../main/comp-doc/cell/use-cell.js';
+import { cellTokenDefine } from '../../../../../main/comp-doc/cell/cell-define.js';
+import { slashActionDefine } from '../../../../../main/comp-doc/slash/slash-define.js';
+import { slashEffect } from '../../../../../main/frontend/src/lib/doc-slash.js';
 import { ObjectFrontendAssetPathInput } from '../../../../../main/comp-doc/object-frontend/ObjectFrontendAssetPathInput.jsx';
 import { ObjectFrontendAssetSearchPanel } from '../../../../../main/comp-doc/object-frontend/ObjectFrontendAssetSearchPanel.jsx';
 import { objectFrontendAssetPathBuild, objectFrontendPartitionPlaceText } from '../../../../../main/frontend/src/lib/doc-object-frontend.js';
@@ -28,6 +33,12 @@ import './ReadingList.css';
 // (assets by any asset reference: a path, a key, name:…; their search and
 // path completion; modeSet / paramSet / blockSet switching the block).
 //
+// two texts of it are cells of the cell edit layer (main/doc_page_impl_edit_cell.md): the
+// remark of a book (a cell of the shelf's table) and the text of a note. while the document is
+// edited a click opens one in place, and its text may hold tokens beside words: a link
+// (/link), a view of any object (/object), and the list's own kind, another book of this
+// list ({{/book/sci-fi/dune}}, typed with /book or "{{"), which opens that book in the block.
+//
 //   ReadingList        modes shelf (param layout: table) and cards (layout: cards); param
 //                      status filters the books, and the filter buttons write it into the block
 //   ReadingListAdd     mode add: a form registering a new book, its paths built from it
@@ -40,6 +51,7 @@ const STATUS_LABEL = { want: 'to read', reading: 'reading', read: 'read' };
 
 export const ReadingList = observer(function ReadingList({ data = {}, config = {} }) {
   const service = config.objectFrontend;
+  const cell = useReadingListCell(config);
   if (!service) return <p className="doc-error">ReadingList is a mode of a reading list (ObjectFrontend).</p>;
   const param = data.param ?? {};
   const statusFilter = STATUS_LIST.includes(param.status) ? param.status : '';
@@ -82,12 +94,12 @@ export const ReadingList = observer(function ReadingList({ data = {}, config = {
         </div>
       ) : bookList.length > 0 ? (
         <table className="reading-list-table">
-          <thead><tr><th>title</th><th>author</th><th>genre</th><th>status</th><th>notes</th></tr></thead>
+          <thead><tr><th>title</th><th>author</th><th>genre</th><th>status</th><th>notes</th><th>remark</th></tr></thead>
           <tbody>
             {bookList.map((book) => (
               <tr key={book.key}>
                 <td><button type="button" className="reading-list-link" onClick={() => bookOpen(service, book.asset)}>{book.data?.title ?? book.asset.name ?? book.key}</button></td>
-                {book.status === 'error' ? <td colSpan={4} className="doc-error">{book.message}</td> : (
+                {book.status === 'error' ? <td colSpan={5} className="doc-error">{book.message}</td> : (
                   <>
                     <td>{book.data?.author ?? ''}</td>
                     <td className="doc-note">{book.data?.genre ?? ''}</td>
@@ -101,6 +113,20 @@ export const ReadingList = observer(function ReadingList({ data = {}, config = {
                       ) : <span className="doc-badge-outline reading-list-status">{STATUS_LABEL[book.data?.status] ?? book.data?.status ?? ''}</span>}
                     </td>
                     <td className="doc-note">{noteCountByBook[book.key] ?? 0}</td>
+                    {/* a cell: words, links, views of objects, other books of the list; typed in
+                        place while the document is edited (main/doc_page_impl_edit_cell.md) */}
+                    <CellField
+                      as="td"
+                      className="reading-list-remark"
+                      cell={cell}
+                      fieldKey={`${config.instanceId}:remark:${book.key}`}
+                      value={book.data?.remark ?? ''}
+                      placeholder="(remark)"
+                      isEditable={service.isEditable}
+                      editUnavailableReason={service.docState?.isEditing ? service.editUnavailableReason : ''}
+                      ariaLabel={`The remark on ${book.data?.title ?? book.key}`}
+                      onCommit={(text) => bookRemarkSet(service, book, text)}
+                    />
                   </>
                 )}
               </tr>
@@ -185,6 +211,7 @@ export const ReadingListAdd = observer(function ReadingListAdd({ config = {} }) 
 export const ReadingListBook = observer(function ReadingListBook({ data = {}, config = {} }) {
   const service = config.objectFrontend;
   const draft = useCompState(config, { text: '', message: '' });
+  const cell = useReadingListCell(config);
   if (!service) return null;
   // the book: any asset reference (a path, a key, name:…)
   const bookRef = String(data.param?.book ?? '');
@@ -225,14 +252,38 @@ export const ReadingListBook = observer(function ReadingListBook({ data = {}, co
       {(resolved.asset?.pathList ?? []).length > 0 ? <p className="doc-note">{resolved.asset.pathList.join(' · ')}</p> : null}
       {resolved.status === 'found' ? (
         <ul className="reading-list-note-list">
-          {noteList.length === 0 ? <li className="doc-note">No note on this book yet.</li> : noteList.map((note) => <li key={note.asset.key}>{note.data?.text ?? note.message}</li>)}
+          {noteList.length === 0 ? <li className="doc-note">No note on this book yet.</li> : noteList.map((note) => (
+            <li key={note.asset.key}>
+              {note.status === 'error' ? note.message : (
+                <CellField
+                  as="div"
+                  cell={cell}
+                  fieldKey={`${config.instanceId}:note:${note.asset.key}`}
+                  value={note.data?.text ?? ''}
+                  isMultiline
+                  isEditable={service.isEditable}
+                  ariaLabel="The text of the note"
+                  onCommit={(text) => service.assetWrite(note.asset.key, { ...note.data, text }, `a note on ${book?.data?.title ?? key}`)}
+                />
+              )}
+            </li>
+          ))}
         </ul>
       ) : null}
       {service.isEditable && book?.status === 'done' ? (
         <div className="reading-list-form">
           <span className="doc-note">note</span>
           <span className="reading-list-form-actions">
-            <EditValueInline value={draft.value.text} placeholder="(a note on the book)" onCommit={(text) => draft.patch({ text })} />
+            <CellField
+              cell={cell}
+              className="reading-list-note-new"
+              fieldKey={`${config.instanceId}:note-new`}
+              value={draft.value.text}
+              placeholder="(a note on the book: /link, /object, /book)"
+              isEditable
+              ariaLabel="A new note"
+              onCommit={(text) => draft.patch({ text })}
+            />
             <button type="button" className="doc-button" onClick={() => void noteAdd()}>Add the note</button>
             <span className="doc-note">goes to {objectFrontendPartitionPlaceText(notePartition, 'note')}, beside its book</span>
             {draft.value.message ? <span className="doc-error">{draft.value.message}</span> : null}
@@ -324,6 +375,60 @@ export const ReadingListStats = observer(function ReadingListStats({ config = {}
     </div>
   );
 });
+
+// ---------- the cells of a reading list ----------
+
+// /book: another book of this list, written into a cell as {{/book/sci-fi/dune}}. the list's
+// own slash action, offered in its cells beside the page's (/link, /object): it walks the
+// paths of the list's books through the api of the mode, a folder at a time
+const readingListBookSlashAction = slashActionDefine({
+  name: 'book',
+  aliasList: ['b'],
+  label: 'Book of this list',
+  description: 'another book of the list, by its path',
+  icon: Book,
+  param: {
+    placeholder: 'a path of the list: /book/…, /author/… (a folder goes on)',
+    emptyText: 'No book of the list is at this path',
+    itemListGet: (param, context) => (context.service?.assetComplete(param.trim() || '/', { kindList: ['book'] }) ?? []).map((one) => (one.kind === 'folder'
+      ? { id: `dir:${one.path}`, kind: 'dir', label: `${one.segment}/`, detail: `${one.assetCount} book${one.assetCount === 1 ? '' : 's'}`, paramNext: `${one.path}/` }
+      : { id: `book:${one.path}`, kind: 'file', label: one.asset.name || one.segment, detail: one.path, path: one.path })),
+    itemChoose: (item) => (item.kind === 'dir' ? slashEffect.paramSet(item.paramNext) : slashEffect.replace(`{{${item.path}}}`)),
+  },
+});
+
+// the list's own token kind: a brace token holding a path of the list ({{/book/sci-fi/dune}}),
+// drawn as the title of the book, opening it in the block; a path nothing is at says so
+const readingListBookToken = cellTokenDefine({
+  name: 'book',
+  label: 'Book of this list',
+  description: 'another book of the list: {{/book/…}}',
+  brace: { sigil: '' },
+  read: (body) => (body.startsWith('/') ? { path: body } : undefined),
+  textGet: (token, cell) => cell.context.service?.assetGet(token.data.path)?.name ?? token.data.path,
+  Render: observer(function ReadingListBookMention({ token, cell }) {
+    const service = cell.context.service;
+    const resolved = service?.assetResolve(token.data.path) ?? { status: 'unknown', message: 'no list' };
+    if (resolved.status !== 'found') return <span className="reading-list-mention is-missing" title={resolved.message}>{token.data.path}</span>;
+    return (
+      <button type="button" className="reading-list-link reading-list-mention" title={`${token.data.path}: open it in this block`} onClick={(event) => { event.stopPropagation(); bookOpen(service, resolved.asset); }}>
+        {resolved.asset.name || resolved.asset.key}
+      </button>
+    );
+  }),
+  slashAction: readingListBookSlashAction,
+});
+
+// the cell of the list's texts: its own kind first, then the kinds of the page (a link, a
+// view of an object). the kinds read the list through the context, kept current each render
+function useReadingListCell(config) {
+  return useCell({ tokenList: [readingListBookToken], context: { service: config.objectFrontend }, config });
+}
+
+function bookRemarkSet(service, book, text) {
+  const { remark: _remark, ...rest } = book.data ?? {};
+  return service.assetWrite(book.key, text.trim() ? { ...rest, remark: text } : rest, `${book.data?.title}: remark`);
+}
 
 // opening a book switches the block for as long as the page is open (the
 // document keeps its shelf), naming the book by its first path

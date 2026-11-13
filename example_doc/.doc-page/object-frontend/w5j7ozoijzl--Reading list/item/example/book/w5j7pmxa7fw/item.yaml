@@ -13,9 +13,9 @@ versionList:
   - versionId: w5j7pmxbx1o
     versionIdPrevList: []
     time: 20261105_01185251+09
-    note: book of the frontend object Reading list
-    size: 61
-    hash: 6dd183718d5ddcb47d9509d7729ad5e7ab95dd72
+    note: "Dune: remark"
+    size: 207
+    hash: fc3827358592555a2ffadeb144cdb9739f585fc0
     isLocked: false
     dependencyList: []
 eventList:
@@ -36,3 +36,6 @@ eventList:
       list/item/book
     placeTo: ~example_doc:example/.doc-page/object-frontend/w5j7ozoijzl--Reading
       list/item/example/book
+  - eventType: updateInPlace
+    time: 20261113_21504871+09
+    versionId: w5j7pmxbx1o

@@ -20,7 +20,11 @@ import './DocEdit.css';
 // the rows list the basic blocks, the components marked isInsertCommon and
 // the dashboards of the service templates the backend knows
 // (doc_page_impl_service_dashboard.md#creating-a-dashboard);
-// the search finds every entry by tag name, label and description, and its
+// the search finds every entry by tag name, label and description, and
+// after them the objects an entry naming an object would be asked for (a
+// frontend object by its name or the label of its type: "cv" finds the CVs
+// of the page, though no component is named so), each written at once as
+// that entry's block. its
 // results open in a dropdown floating over the rows, so the menu keeps its
 // height while the author types. matched text is highlighted. ArrowDown /
 // ArrowUp move in the results, Enter takes the highlighted one (the first
@@ -54,7 +58,7 @@ export const DocEditInsertMenu = observer(function DocEditInsertMenu() {
 });
 
 const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) {
-  const { compById, compConfigHost, configStore, editStore, objectFrontendStore, pasteStore, serviceStore, sourceStore } = useDocStores();
+  const { compById, compConfigHost, configStore, editStore, objectStore, pasteStore, serviceStore, sourceStore } = useDocStores();
   const isPasteShown = Boolean(pasteStore && compConfigHost.panelComponent);
   const { path, format } = useDocEditDoc();
   const [query, querySet] = useState('');
@@ -71,15 +75,30 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
     }),
     [compById, configStore, format, path, serviceDashboardList, sourceStore.configDoc],
   );
-  const resultList = useMemo(() => templateSearch(templateList, query), [templateList, query]);
+  const resultTemplateList = useMemo(() => templateSearch(templateList, query), [templateList, query]);
   const isSubmitting = menu.status === 'submitting';
   const isQuery = query.trim() !== '';
+  // the objects of the entries that name one, found by the same words: asked of the registry
+  // once per entry while something is typed (kept by the registry), narrowed here
+  const resultList = [...resultTemplateList, ...(isQuery ? objectSearch(templateList, query, objectStore) : [])];
   const templateListText = templateList.filter((template) => template.group === 'text');
   const templateListCommon = templateList.filter((template) => template.group === 'component' && template.isCommon);
   const countComponentOther = templateList.filter((template) => template.group === 'component' && !template.isCommon).length;
   const templateListService = templateList.filter((template) => template.group === 'service');
 
   const templatePick = menu.pickTemplateId ? templateList.find((template) => template.id === menu.pickTemplateId) : undefined;
+
+  // a result of the search: an entry, or an object written as the block of its entry
+  const resultChoose = (result) => {
+    if (!result.objectRef) {
+      choose(result.template);
+      return;
+    }
+    if (isSubmitting) return;
+    const text = result.template.textForObjectGet(result.objectRef);
+    if (text) void editStore.blockCreate(path, text);
+    else editStore.insertMenuMessageSet(`${result.template.compName} starts no block for ${result.objectRef}`);
+  };
 
   const choose = (template) => {
     if (isSubmitting) return;
@@ -121,7 +140,7 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
     if (event.key === 'Enter') {
       event.preventDefault();
       const result = resultList[indexActive] ?? resultList[0];
-      if (result) choose(result.template);
+      if (result) resultChoose(result);
     }
   };
 
@@ -177,23 +196,23 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
               <span className="doc-search-none">nothing matches “{query.trim()}”</span>
             ) : resultList.map((result, index) => (
               <div
-                key={result.template.id}
+                key={result.objectRef ? `${result.template.id}:${result.objectRef}` : result.template.id}
                 className="doc-search-result"
                 role="option"
                 aria-selected={index === indexActive}
                 data-active={index === indexActive ? '' : undefined}
-                title={result.template.description || undefined}
+                title={result.description || undefined}
                 // a pointer down would take the focus from the search field
                 onPointerDown={(event) => event.preventDefault()}
-                onClick={() => choose(result.template)}
+                onClick={() => resultChoose(result)}
               >
                 <result.template.icon size={13} aria-hidden="true" />
                 <span className="doc-search-result-name">{textHighlight(result.name, result.queryLower)}</span>
                 {result.label !== '' ? (
                   <span className="doc-search-result-label">{textHighlight(result.label, result.queryLower)}</span>
                 ) : null}
-                {result.template.description ? (
-                  <span className="doc-search-result-description">{textHighlight(result.template.description, result.queryLower)}</span>
+                {result.description ? (
+                  <span className="doc-search-result-description">{textHighlight(result.description, result.queryLower)}</span>
                 ) : null}
               </div>
             ))}
@@ -332,9 +351,31 @@ function templateSearch(templateList, query) {
     else if (label.toLowerCase().includes(queryLower)) rank = 1;
     else if (template.description.toLowerCase().includes(queryLower)) rank = 2;
     else continue;
-    resultList.push({ template, name, label, rank, queryLower });
+    resultList.push({ template, name, label, description: template.description, rank, queryLower });
   }
   resultList.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+  return resultList;
+}
+
+// the objects an entry naming an object (objectPick) would be asked for, matching the
+// query by their name, the label of their type or their description; each is written as
+// the block of that entry at once. the registry is asked for the objects of the pick's
+// types and keeps its answer, so typing costs one query per entry
+const OBJECT_RESULT_COUNT_MAX = 12;
+function objectSearch(templateList, query, objectStore) {
+  const queryLower = query.trim().toLowerCase();
+  if (queryLower === '' || !objectStore) return [];
+  const resultList = [];
+  for (const template of templateList) {
+    if (!template.objectPick || !template.textForObjectGet) continue;
+    const objectList = objectStore.queryStateGet({ typeList: template.objectPick.typeList, limit: 200 }).result?.objectList ?? [];
+    for (const descriptor of objectList) {
+      const typeLabel = descriptor.typeList[0] ? objectStore.typeLabelGet(descriptor.typeList[0]) : '';
+      if (!`${descriptor.label} ${typeLabel} ${descriptor.description}`.toLowerCase().includes(queryLower)) continue;
+      resultList.push({ template, objectRef: descriptor.ref, name: descriptor.label, label: typeLabel, description: `${template.label} · ${descriptor.description}`, queryLower });
+      if (resultList.length >= OBJECT_RESULT_COUNT_MAX) return resultList;
+    }
+  }
   return resultList;
 }
 

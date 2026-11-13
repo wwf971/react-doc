@@ -1,5 +1,5 @@
 import { createElement, useEffect, useId } from 'react';
-import { slashLineRead, slashTriggerIs } from '../../frontend/src/lib/doc-slash.js';
+import { slashLineRead, slashTriggerIs, slashTriggerMatch } from '../../frontend/src/lib/doc-slash.js';
 import { caretRectGet } from '../edit/caret-place.js';
 import { EditSlashMenu } from './EditSlashMenu.jsx';
 
@@ -21,7 +21,13 @@ import { EditSlashMenu } from './EditSlashMenu.jsx';
 //                        undefined (no slash mode):
 //                        { store: DocSlashStore, context,
 //                          actionList?            the surface's own actions
-//                          isPageActionIncluded?  the page's too (default true) }
+//                          isPageActionIncluded?  the page's too (default true)
+//                          isTriggerLoose?        "/" starts the slash mode anywhere but in
+//                                                 a path or a url (a cell: no spaces
+//                                                 between its words); default false
+//                          triggerList?           direct triggers: [{ text, action, endList? }],
+//                                                 a text entering the param mode of an
+//                                                 action at once ("{{" in a cell) }
 //   textBeforeCaretGet   (element) => the text from the start of the
 //                        surface to the caret, as the surface reads it
 //
@@ -86,14 +92,21 @@ export function useEditSlash(elementRef, slash, { textBeforeCaretGet }) {
       return;
     }
     const inputEvent = event.nativeEvent;
-    if (!lineState || inputEvent?.inputType !== 'insertText' || inputEvent.data !== '/') return;
-    if (!slashTriggerIs(lineState.lineBefore)) return;
+    if (!lineState || inputEvent?.inputType !== 'insertText' || typeof inputEvent.data !== 'string') return;
+    // what was just typed: a "/" beginning a word, or the last character of
+    // a direct trigger of the surface
+    const trigger = inputEvent.data === '/' ? undefined : slashTriggerMatch(lineState.lineBefore, slash.triggerList);
+    const isSlash = inputEvent.data === '/' && slashTriggerIs(lineState.lineBefore, { isLoose: slash.isTriggerLoose === true });
+    if (!isSlash && !(trigger && trigger.text.endsWith(inputEvent.data))) return;
+    const textStart = isSlash ? '/' : trigger.text;
     slashStore.slashStart(surfaceId, {
-      anchor: { lineIndex: lineState.lineIndex, column: lineState.lineBefore.length - 1 },
+      anchor: { lineIndex: lineState.lineIndex, column: lineState.lineBefore.length - textStart.length },
       context: slash.context,
       rect: rectRead(),
       actionOwnList: slash.actionList ?? [],
       isPageActionIncluded: slash.isPageActionIncluded !== false,
+      triggerList: slash.triggerList ?? [],
+      text: textStart,
     });
   };
 

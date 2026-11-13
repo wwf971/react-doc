@@ -40,6 +40,11 @@
 //       ItemRender({ item, isActive, param })
 //                                optional: draws one item; default: the
 //                                label, then the detail muted
+//       hintGet(param, context) -> string
+//                                optional: what the parameter typed so far
+//                                means, shown beside the label of the action
+//                                (a reference being walked: the names of what
+//                                it has reached); '' shows the placeholder
 //       emptyText                the line shown when there is no item
 //     },
 //   })
@@ -52,7 +57,11 @@
 //   { sourcePath    the document being edited (full source path)
 //     docPageAlias  its doc page
 //     source        the service object of the doc page source service layer
-//                   (doc_page_impl_source.md#the-page-side-docsourcestore-and-the-service-object) }
+//                   (doc_page_impl_source.md#the-page-side-docsourcestore-and-the-service-object)
+//     object        the object service layer (DocObjectStore): what /object lists from }
+// a surface of a component hands its own context (use-edit-slash-config.js); a cell's
+// context is built by the cell edit layer, which adds source and object to the
+// component's own (doc_page_impl_edit_cell.md)
 
 const nameRegex = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
@@ -84,6 +93,7 @@ export function slashActionDefine(options = {}) {
       itemChoose: param.itemChoose,
       keyHandle: typeof param.keyHandle === 'function' ? param.keyHandle : undefined,
       ItemRender: param.ItemRender,
+      hintGet: typeof param.hintGet === 'function' ? param.hintGet : undefined,
       emptyText: String(param.emptyText ?? 'Nothing matches'),
     }),
   });

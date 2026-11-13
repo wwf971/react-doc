@@ -51,7 +51,7 @@ import {
   compObjectViewDocument,
   compObjectViewFallback,
 } from '../object/object-comp-define.js';
-import { compObjectFrontend, compObjectFrontendOverview, compObjectViewFrontend } from '../object-frontend/object-frontend-define.js';
+import { compObjectFrontend, compObjectFrontendOverview, compObjectViewFrontend, compObjectViewFrontendInner } from '../object-frontend/object-frontend-define.js';
 import {
   accordionsExpose,
   blockExpose,
@@ -251,6 +251,7 @@ export const compById = {
   'common/ObjectFrontend': compObjectFrontend,
   'common/ObjectFrontendOverview': compObjectFrontendOverview,
   'common/ObjectViewFrontend': compObjectViewFrontend,
+  'common/ObjectViewFrontendInner': compObjectViewFrontendInner,
   'common/Anchor': compDefine(Anchor, { placementList: ['mdx', 'commentBlock', 'commentInline'] }),
   'common/Tag': compDefine(Tag, { placementList: ['mdx', 'commentInline'] }),
   'common/TagLabel': compDefine(TagLabel, { placementList: ['tag', 'mdx'] }),

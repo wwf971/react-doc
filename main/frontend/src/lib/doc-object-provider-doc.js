@@ -67,7 +67,8 @@ export function objectProviderDocCreate({ sourceStore, docStore }) {
     label: entry.title || entry.name,
     description: entry.internalPath,
     summary: { docPageAlias: entry.docPageAlias, ext: entry.ext, collect: entry.collect ?? '' },
-    capabilityList: ['read'],
+    // innerComplete: its sections complete a reference typed into it
+    capabilityList: ['read', 'innerComplete'],
     open: isOpenable ? navigateOpenGet(entry.internalPath) : null,
   });
 
@@ -147,12 +148,33 @@ export function objectProviderDocCreate({ sourceStore, docStore }) {
     namespaceList: ['doc', 'docDir', 'docPage'],
     typeList: ['doc.page', 'doc.folder', 'doc.document', 'doc.section', 'doc.block', 'doc.group'],
     relationTypeList: ['core.contains', 'core.member'],
-    capabilityList: ['query', 'resolve', 'read', 'relationQuery'],
+    capabilityList: ['query', 'resolve', 'read', 'relationQuery', 'innerComplete'],
     queryFilterList: ['docPageAlias'],
     // the answers follow the source data: a manifest replaced or a document
     // compiled is a new version, so what the registry kept is asked again
     versionGet: () => [sourceStore.fileManifest, sourceStore.dirManifest, Object.keys(sourceStore.compiledByPath).length],
     cacheSecond: 300,
+
+    // inside a document: its sections, by the words typed (a title, a fragment). the document
+    // is compiled when it was not yet, and the list follows
+    // (doc_page_impl_obj.md#inside-an-object)
+    innerComplete: (ref, text) => {
+      const split = docRefSplit(ref);
+      if (!split || split.fragment || !sourceStore.entryByInternalPath.get(split.path)) return { status: 'done', itemList: [], message: `${ref} is not a document` };
+      const sectionList = sectionListGet(split.path);
+      if (!sectionList) {
+        if (sourceStore.compiledByPath[split.path]?.status !== 'error') queueMicrotask(() => void sourceStore.loadDoc(split.path));
+        return { status: sourceStore.compiledByPath[split.path]?.status === 'error' ? 'done' : 'loading', itemList: [], message: '' };
+      }
+      const wordList = String(text ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+      return {
+        status: 'done',
+        message: '',
+        itemList: sectionList
+          .filter((section) => wordList.every((word) => `${section.title} ${section.id}`.toLowerCase().includes(word)))
+          .map((section) => ({ kind: 'item', ref: `doc:${split.path}#${section.id}`, label: section.title || section.id, detail: `§ ${'·'.repeat(Math.max(0, (section.depth ?? 1) - 1))} #${section.id}` })),
+      };
+    },
 
     query: (spec, registry) => {
       const typeListAsked = spec.typeList;

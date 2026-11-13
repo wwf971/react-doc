@@ -134,6 +134,8 @@ The candidates come from the same internal representation as resolution: every d
 - **A path** (`~root/…`, `~page:root/…`, `./`, `../`) walks the folders one level at a time, folders first. Choosing a folder continues inside it, and choosing a document ends the walk.
 - **A place** (`…#Setup`) after `#` is kept and added to the target.
 
+**In a cell.** A link is also one of the tokens a cell of a component may hold ([Cell editing](doc_page_impl_edit_cell.md)): the navigation layer offers the token kind `nav/link` (`comp-doc/link/link-cell.jsx`). It is written as in a document, `[label](target)`, typed with the same `/link`, and drawn by `DocLink`, so it is resolved, routed and warned about exactly as a link of a document. One thing differs: a cell belongs to data, not to one document, and is drawn wherever a block shows its object, so `/link` writes the **full form** there (`~page:root/x/a.md`), which names the same document from everywhere (`linkSlashActionBuild({ isTargetFull: true })`). A relative target typed by hand is resolved from the document the cell is drawn in. A url or a fragment of the page itself is the browser's anchor, as in a document.
+
 ## Fragment scrolling and highlighting
 
 Document replacement and place selection have different behavior:

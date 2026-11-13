@@ -171,3 +171,16 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- a dialog of a component (PanelPopup) ----------
+   the size it opens in is its own class's; without one, most of the window.
+   its content scrolls inside it */
+.doc-panel-popup {
+  width: min(64rem, 92vw);
+  height: min(54rem, 90vh);
+}
+
+.doc-panel-popup-body {
+  min-height: 0;
+  overflow: auto;
+}

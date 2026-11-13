@@ -72,6 +72,8 @@ typeList:
     # below frontend.object (doc_page_impl_obj_frontend.md):
     modeList:
       - { id: shelf, label: Shelf, comp: ReadingList, param: { layout: table }, category: view, isDefault: true }
+      - { id: book, label: One book, comp: ReadingListBook, pathParam: book }   # shows one thing of the object, named by
+                                    #   an inner path in this parameter (doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths)
     assetKindList:
       - { id: book, label: Book, langList: [yaml], pathPrefix: /book/, groupPath: book }
     partitionList:                  # optional: the folders its items are split into (doc_page_impl_obj_frontend.md#partitions)
@@ -116,7 +118,8 @@ core.object                                  anything the registry can name
 │                                            the root of the types with modes
 ├── core.document                            a text people read
 ├── core.place                               a place inside another object
-│   └── doc.block                            a component block with an id
+│   ├── doc.block                            a component block with an id
+│   └── frontend.inner                       something inside a frontend object, named by an inner path
 ├── core.config  ── service.config           { valueByKey, defineList }; an update { valueByKey }
 ├── core.task                                summary isDone; an update { isDone }
 ├── core.file    ── asset.item

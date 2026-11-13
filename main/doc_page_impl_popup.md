@@ -71,6 +71,24 @@ The dialog belongs to the edit session of its block: it carries `doc-edit-popup`
 
 Navigating to another page closes the dialog and drops an Edit entry still in flight.
 
+## A dialog of a component
+
+The block popup shows **the block itself**, larger. A component sometimes has a second thing to show apart from its place in the document: its content laid out on pages, as printed; a larger view of one part; a form. That is `PanelPopup` (`comp-doc/popup/PanelPopup.jsx`, exported by the package): the host's panel component ([the panel contract](doc_page_impl.md#the-panel-contract)) with what every dialog of the page does already done.
+
+```jsx
+<PanelPopup panelId={`cvJpPages:${config.instanceId}`} title="The pages" isOpen={store.isPagesOpen} onClose={store.pagesClose}
+  headerRightContent={<PagesBar />} className="doc-cv-jp-pages-popup">
+  <PageFlow ... />
+</PanelPopup>
+```
+
+- **Its state is the component's**: `isOpen` and what it shows are in the component's store; the dialog only asks to close (`onClose`), by its button and by Escape (a control inside taking Escape itself keeps it open).
+- **Its place and size are the page's** (`DocPanelLayoutStore`, by `panelId`): moved by its header, resized by its edges, the size remembered for the next opening, maximized and restored by its button (`isExpandable` of `usePanelLayout`). `className` gives the size it opens in.
+- **It is rendered where the component puts it**, so the React contexts of the component reach its content: the pieces of a paginated CV are drawn in the dialog with the cell of the sheet around them.
+- Without a panel component of the host there is no dialog, and the content is drawn in place.
+
+The Japanese-style CV of the package cv opens its pages so: **Pages…** in the bar of the sheet shows the A4 pages in a dialog with **Print / PDF** and **Download PDF** in its header, and the sheet stays where it is.
+
 ## Inline Tooltips and Dropdowns
 
 The block popup is a dialog. The small overlays that belong to an inline element (the candidate list of an ambiguous link, a tooltip, a dropdown of a cell) are a different case, and they have their own rule: **an inline overlay must not be a plain absolutely positioned descendant.** Documents put such elements inside containers that clip: Fumadocs wraps every Markdown table in an `overflow: auto` element, and hierarchy tables scroll with fixed heights. An absolutely positioned descendant cannot leave those boxes, whatever its z-index, and `overflow-y: visible` alone does not help since the other axis stays `auto`. Removing the overflow breaks wide-table scrolling and is not the fix; table overflow and border-radius stay as they are.
@@ -110,6 +128,7 @@ DOC_TEST_BROWSER="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" 
 
 - `frontend/src/store/DocBlockPopupStore.ts`: the popup, the surfaces, the mode and its changes.
 - `comp-doc/popup/DocBlockPopup.jsx`: the dialog of the page.
+- `comp-doc/popup/PanelPopup.jsx`: a dialog of a component, for a second thing it shows.
 - `comp-doc/popup/BlockPopupSurface.jsx`: what a component renders in; `DocBlockPopup.css`.
 - `frontend/src/lib/doc-block-popup-store.test.js`: mode, transitions, failures, navigation, surfaces.
 - `comp-doc/popup/AnchoredPopover.jsx`: the top-layer surface of inline tooltips and dropdowns; `AnchoredPopover.css`, `AnchoredPopover.browser.test.mjs`.

@@ -1,5 +1,9 @@
+import { when } from 'mobx';
 import { objectRefParse } from './doc-object-ref.js';
-import { OBJECT_FRONTEND_NAMESPACE, OBJECT_FRONTEND_TYPE_ROOT, objectFrontendAssetSearch, objectFrontendRefBuild } from './doc-object-frontend.js';
+import {
+  OBJECT_FRONTEND_NAMESPACE, OBJECT_FRONTEND_TYPE_INNER, OBJECT_FRONTEND_TYPE_ROOT,
+  objectFrontendAssetSearch, objectFrontendInnerRefBuild, objectFrontendRefBuild, objectFrontendRefSplit,
+} from './doc-object-frontend.js';
 import { stringify as yamlStringify } from 'yaml';
 import { typeDefineNormalize } from './doc-object-type.js';
 
@@ -17,8 +21,8 @@ import { typeDefineNormalize } from './doc-object-type.js';
 // structural write of the layer:
 //   create { typeId, content: { name, description, metadata }, place: { docPageAlias | docPath } }
 //                               a new object of a frontend type
-//   create { memberOf: { ref: frontend:{id}, key?, data: { kind, name?, pathList? } }, content: { text | data, lang } }
-//                               a new asset of the object, listed under its key
+//   create { memberOf: { ref: frontend:{id}, key?, data: { kind, name?, pathList?, partition?, groupPath? } }, content: { text | data, lang } }
+//                               a new asset of the object, listed under its key, in the partition named
 //   update frontend:{id} { name?, description?, typeId?, metadata? }   metadata a key at a time, null removes one
 //   delete frontend:{id} { isMemberKept? }                            its assets deleted too, or kept
 //   relationCreate { fromRef: frontend:{id}, type: core.member, toRef: asset:local/{itemId}, key?, data: { kind } }
@@ -28,6 +32,13 @@ import { typeDefineNormalize } from './doc-object-type.js';
 //   relationQuery { fromRef, text? }                                 its assets; with text, those the asset search finds
 // the data of one asset is written by the asset store's own provider
 // (update asset:local/{itemId} { text | data }).
+//
+// It also answers for what is inside an object (doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths):
+//   resolve frontend:{id}#{inner path}     an object of the type frontend.inner: what the path names,
+//                                          as the type of the object says (an asset by default)
+//   innerComplete(frontend:{id}, text)     the candidates completing a typed inner path, asked of the
+//                                          same: the capability innerComplete, on the provider and on
+//                                          every object, which the slash action /object reads
 
 export function objectProviderFrontendCreate({ objectFrontendStore }) {
   const descriptorBuild = (state) => ({
@@ -36,9 +47,34 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
     label: state.name || state.id,
     description: `${objectFrontendStore.typeLabelGet(state.typeId)} · ${state.assetList.length} asset(s) · ${state.docPageAlias}`,
     summary: { assetCount: state.assetList.length, docPageAlias: state.docPageAlias, typeId: state.typeId },
-    capabilityList: ['read', 'update', 'delete', 'relationCreate', 'relationUpdate', 'relationDelete'],
+    capabilityList: ['read', 'update', 'delete', 'relationCreate', 'relationUpdate', 'relationDelete', 'innerComplete'],
     open: { kind: 'objectFrontend', id: state.id },
   });
+
+  // what the registry knows of something inside an object: named for a reader, with the object,
+  // the path and the kind in its summary; missing, still of its type, when nothing of the
+  // object answers to the path or the store lacks the asset it names, so the view of
+  // frontend.inner says so where the reference stands
+  const innerDescriptorBuild = (state, inner) => {
+    if (inner.status === 'loading') return null;
+    return {
+      ref: objectFrontendInnerRefBuild(state.id, inner.path),
+      typeList: [...(inner.typeId ? [inner.typeId] : []), OBJECT_FRONTEND_TYPE_INNER],
+      label: inner.label || inner.path,
+      description: [inner.detail, state.name || state.id].filter(Boolean).join(' · '),
+      summary: { objectRef: state.ref, objectLabel: state.name || state.id, path: inner.path, kind: inner.kind, ...(inner.text === undefined ? {} : { text: inner.text }) },
+      capabilityList: [],
+      open: { kind: 'objectFrontend', id: state.id, innerPath: inner.path },
+      ...(inner.status === 'found' ? {} : { status: 'missing', message: inner.message || `nothing of ${state.name || state.id} is at ${inner.path}` }),
+    };
+  };
+
+  // an inner path answered once what it reads is there: the data of an asset may still be on its way
+  const innerResolveReady = async (id, innerPath) => {
+    const read = () => objectFrontendStore.innerResolve(id, innerPath);
+    if (read().status === 'loading') await when(() => read().status !== 'loading', { timeout: 8000 }).catch(() => undefined);
+    return read();
+  };
 
   // what a read answers: the entry as content, each asset with its reference
   const readBuild = (state) => ({
@@ -85,6 +121,9 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
     return parsed?.namespace === OBJECT_FRONTEND_NAMESPACE ? parsed.local : '';
   };
 
+  // { id, innerPath, isInner } of a reference of the namespace: the object, and the inner path after "#"
+  const splitOfRef = (ref) => (objectRefParse(ref)?.namespace === OBJECT_FRONTEND_NAMESPACE ? objectFrontendRefSplit(ref) : { id: '', innerPath: '', isInner: false });
+
   return {
     id: 'frontend',
     label: 'the frontend objects',
@@ -95,7 +134,8 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
     },
     relationTypeList: ['core.member'],
     // relationText: its relation query takes the text itself (the asset search)
-    capabilityList: ['query', 'resolve', 'read', 'relationQuery', 'relationText', 'create', 'update', 'delete', 'relationCreate', 'relationUpdate', 'relationDelete'],
+    // innerComplete: it completes a text typed for something inside one of its objects
+    capabilityList: ['query', 'resolve', 'read', 'relationQuery', 'relationText', 'create', 'update', 'delete', 'relationCreate', 'relationUpdate', 'relationDelete', 'innerComplete'],
     // objects of frontend.object and every type below it
     createTypeList: [OBJECT_FRONTEND_TYPE_ROOT],
     versionGet: () => [objectFrontendStore.config, objectFrontendStore.stores.assetStore.itemById],
@@ -108,6 +148,7 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
     // an object opens in the Frontend objects tab of the settings panel
     open: (descriptor) => {
       if (descriptor.open?.kind !== 'objectFrontend') return false;
+      if (descriptor.open.innerPath) return objectFrontendStore.innerOpen(descriptor.open.id, descriptor.open.innerPath);
       return objectFrontendStore.settingsOpen(descriptor.open.id);
     },
 
@@ -117,13 +158,30 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
     },
 
     resolve: async (refList) => {
-      const idList = refList.map(idOfRef);
-      await ready(idList.filter(Boolean));
-      return idList.map((id) => {
-        if (!id) return null;
-        const state = objectFrontendStore.objectGet(id);
-        return state.status === 'found' ? descriptorBuild(state) : null;
-      });
+      const splitList = refList.map(splitOfRef);
+      await ready(splitList.map((split) => split.id).filter(Boolean));
+      return Promise.all(splitList.map(async (split) => {
+        if (!split.id) return null;
+        const state = objectFrontendStore.objectGet(split.id);
+        if (state.status !== 'found') return null;
+        if (!split.isInner) return descriptorBuild(state);
+        return innerDescriptorBuild(state, await innerResolveReady(split.id, split.innerPath));
+      }));
+    },
+
+    // the candidates completing a text typed for something inside an object: the type of the
+    // object answers (its component exposing objectInner), else the paths of its assets
+    innerComplete: (ref, text) => {
+      const { id } = splitOfRef(ref);
+      if (!id) return { status: 'done', itemList: [], message: `${ref} is not a frontend object` };
+      const result = objectFrontendStore.innerComplete(id, text);
+      return {
+        status: result.status,
+        message: result.message,
+        itemList: result.itemList.map((item) => (item.kind === 'dir'
+          ? { kind: 'dir', text: item.path, label: item.label, detail: item.detail }
+          : { kind: 'item', ref: objectFrontendInnerRefBuild(id, item.path), label: item.label, detail: item.detail })),
+      };
     },
 
     read: async (ref) => {
@@ -140,8 +198,8 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
       if (!objectFrontendStore.typeIsFrontend(typeId)) return undefined;
       return {
         assetKindList: objectFrontendStore.assetKindListOfTypeGet(typeId),
-        modeList: objectFrontendStore.modeListGet(typeId).map(({ id, label, description, category, comp, param, isDefault, typeId: typeIdDeclared }) => ({
-          id, label, description, category, comp, param, isDefault, typeId: typeIdDeclared,
+        modeList: objectFrontendStore.modeListGet(typeId).map(({ id, label, description, category, comp, param, isDefault, pathParam, typeId: typeIdDeclared }) => ({
+          id, label, description, category, comp, param, isDefault, typeId: typeIdDeclared, ...(pathParam ? { pathParam } : {}),
         })),
       };
     },
@@ -156,6 +214,8 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
         const result = resultCheck(await objectFrontendStore.assetCreate(id, {
           key: memberOf.key, kind: memberOf.data?.kind ?? content.kind, name: memberOf.data?.name, pathList: memberOf.data?.pathList,
           lang: content.lang ?? 'yaml', text: textOfContent(content), note: content.note,
+          // where it goes: a partition of the object (the default one without), a folder inside it
+          partition: memberOf.data?.partition, groupPath: memberOf.data?.groupPath,
         }));
         return {
           descriptor: { ref: `asset:local/${result.data.itemId}`, typeList: ['asset.item'], label: result.data.key },

@@ -17,7 +17,18 @@
 // (␣ stands for a space)
 //
 // the slash mode starts only when a "/" is typed at the start of a line or
-// after a space, so a path or a url typed in the text never starts it.
+// after a space, so a path or a url typed in the text never starts it. a
+// surface whose text has no spaces between words (a cell of a form, text in
+// Japanese) asks for the loose rule: anywhere but inside a path, a url or a
+// fraction (slashTriggerIs).
+//
+// a surface may also name direct triggers: a text that, typed, enters the
+// param mode of one action at once, without "/" and a name. the trigger
+// text then stands where "/name " stands:
+//
+//   {{           param mode of the trigger's action, param ''
+//   {{name/jp    param 'name/jp'
+//   {{name}      ended: a trigger says which characters end it (endList)
 
 export const SLASH_MODE_ACTION = 'action';
 export const SLASH_MODE_PARAM = 'param';
@@ -46,12 +57,32 @@ export const slashEffect = Object.freeze({
 });
 
 // a "/" just typed starts the slash mode when it begins a word:
-// lineBefore is the text of the line up to the caret, the "/" included
-export function slashTriggerIs(lineBefore) {
+// lineBefore is the text of the line up to the caret, the "/" included.
+//   isLoose   the rule of a surface whose words are not set apart by spaces:
+//             the "/" starts the slash mode unless it follows a Latin letter,
+//             a digit or one of / : . ~ _ - < (a path, a url, 1/2, and/or)
+export function slashTriggerIs(lineBefore, { isLoose = false } = {}) {
   const text = String(lineBefore ?? '');
   if (!text.endsWith('/')) return false;
   if (text.length === 1) return true;
-  return /\s/.test(text[text.length - 2]);
+  const charBefore = text[text.length - 2];
+  if (/\s/.test(charBefore)) return true;
+  return isLoose && !/[A-Za-z0-9/:.~_\-<]/.test(charBefore);
+}
+
+// the direct trigger just typed, when the line up to the caret ends with
+// the text of one (the longest wins: "{{@" before "{{"), or undefined
+//   triggerList   [{ text, action, endList? }]
+export function slashTriggerMatch(lineBefore, triggerList) {
+  const text = String(lineBefore ?? '');
+  return slashTriggerListSort(triggerList).find((trigger) => text.endsWith(trigger.text));
+}
+
+// the triggers that can be matched, the longest text first
+function slashTriggerListSort(triggerList) {
+  return (Array.isArray(triggerList) ? triggerList : [])
+    .filter((trigger) => trigger && typeof trigger.text === 'string' && trigger.text !== '' && trigger.action?.param)
+    .sort((a, b) => b.text.length - a.text.length);
 }
 
 // the line of the caret, from the text before the caret:
@@ -66,24 +97,38 @@ export function slashLineRead(textBefore) {
 
 // the slash text of a started slash mode, or undefined when the caret has
 // left it (another line, or before the "/", or the "/" was deleted)
-//   anchor       { lineIndex, column }: where the "/" was typed
+//   anchor       { lineIndex, column }: where the "/" (or the first
+//                character of a direct trigger) was typed
 //   lineState    { lineIndex, lineBefore } now
-export function slashTextGet(anchor, lineState) {
+//   triggerList  the direct triggers of the surface: the text may start
+//                with one of them instead of "/"
+export function slashTextGet(anchor, lineState, triggerList) {
   if (!anchor || !lineState || anchor.lineIndex !== lineState.lineIndex) return undefined;
   const text = lineState.lineBefore.slice(anchor.column);
-  if (lineState.lineBefore.length <= anchor.column || text[0] !== '/') return undefined;
-  return text;
+  if (lineState.lineBefore.length <= anchor.column) return undefined;
+  if (text[0] === '/') return text;
+  return slashTriggerListSort(triggerList).some((trigger) => text.startsWith(trigger.text)) ? text : undefined;
 }
 
 // the mode of a slash text (see the top of this file):
 //   { mode: 'action', query }
-//   { mode: 'param', action, actionName, param }
+//   { mode: 'param', action, actionName, param, trigger? }
 //   { mode: 'end' }
 // actionGet(name) answers the action of a name typed after the "/", or
-// undefined; an action without a parameter has no param mode
-export function slashTextParse(text, actionGet) {
+// undefined; an action without a parameter has no param mode. a text
+// starting with a direct trigger (triggerList) is the param mode of the
+// trigger's action: what follows the trigger text is the parameter, ended
+// by two spaces in a row, a line break, or a character of its endList
+export function slashTextParse(text, actionGet, triggerList) {
   const value = String(text ?? '');
-  if (!value.startsWith('/')) return { mode: SLASH_MODE_END };
+  if (!value.startsWith('/')) {
+    const trigger = slashTriggerListSort(triggerList).find((one) => value.startsWith(one.text));
+    if (!trigger) return { mode: SLASH_MODE_END };
+    const param = value.slice(trigger.text.length);
+    const endList = Array.isArray(trigger.endList) ? trigger.endList : [];
+    if (param.includes('  ') || param.includes('\n') || endList.some((end) => param.includes(end))) return { mode: SLASH_MODE_END };
+    return { mode: SLASH_MODE_PARAM, action: trigger.action, actionName: trigger.action.name, param, trigger };
+  }
   const body = value.slice(1);
   const indexSpace = body.indexOf(' ');
   if (indexSpace < 0) {
@@ -123,10 +168,14 @@ export function slashActionMatchList(actionList, query) {
 //   effect      one of slashEffect
 //   actionName  the name the param mode was entered with, kept when the
 //               parameter is rewritten ('/ln ' stays '/ln ')
-export function slashEffectApplyGet(effect, actionName) {
+//   trigger     the direct trigger the param mode was entered with, when it
+//               was: its text is kept instead ('{{' stays '{{')
+export function slashEffectApplyGet(effect, actionName, trigger) {
   if (!effect || typeof effect !== 'object') return { textNew: undefined, isEnded: false };
   if (effect.type === SLASH_EFFECT_REPLACE) return { textNew: effect.text, isEnded: true };
-  if (effect.type === SLASH_EFFECT_PARAM_SET) return { textNew: `/${actionName} ${effect.text}`, isEnded: false };
+  if (effect.type === SLASH_EFFECT_PARAM_SET) {
+    return { textNew: trigger ? `${trigger.text}${effect.text}` : `/${actionName} ${effect.text}`, isEnded: false };
+  }
   if (effect.type === SLASH_EFFECT_CANCEL) return { textNew: undefined, isEnded: true };
   return { textNew: undefined, isEnded: false };
 }

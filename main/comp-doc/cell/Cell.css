@@ -1,0 +1,174 @@
+/* ---------- the cell edit layer (doc_page_impl_edit_cell.md) ----------
+   a cell takes the type and the box of where it stands: nothing here sets a
+   font, a size or a padding of the text. what is styled is what a cell adds:
+   a token inside a line, the surface while it is open, the field's marks */
+
+/* a token drawn inside a line of text: it never makes the line taller
+   (doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule), so a chip
+   of the object registry is drawn in the compact scale of a line here */
+.doc-cell-token {
+  display: inline;
+}
+
+.doc-cell-token .doc-object-view {
+  display: inline;
+}
+
+.doc-cell-token .doc-object-chip {
+  display: inline-flex;
+  vertical-align: baseline;
+  padding: 0 0.4em;
+  font-size: 0.88em;
+  line-height: 1.25;
+}
+
+/* a token that a click selects (its kind has a card, its value can be edited):
+   the pointer says so, and the selected one is ringed without changing its box */
+.doc-cell-token[data-selectable] {
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.doc-cell-token[data-selectable]:hover {
+  outline: 1px dashed color-mix(in srgb, var(--color-fd-primary) 55%, var(--color-fd-border));
+  outline-offset: 1px;
+}
+
+.doc-cell-token[data-selected],
+.doc-cell-token[data-selected]:hover {
+  outline: 2px solid var(--color-fd-primary);
+  outline-offset: 1px;
+}
+
+/* the card of a selected token: beside it, floating, in the compact scale of
+   the floating controls of the edit layer; what does not fit scrolls inside */
+.doc-cell-token-card {
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 17rem;
+  padding: 0.45rem 0.7rem 0.6rem;
+  overflow-y: auto;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--color-fd-popover-foreground, var(--color-fd-foreground));
+  text-align: left;
+  white-space: normal;
+}
+
+.doc-cell-token-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--color-fd-border);
+}
+
+.doc-cell-token-card-title {
+  flex: 1 1 auto;
+  font-weight: 550;
+}
+
+.doc-cell-token-card-close {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+}
+
+.doc-cell-token-card-close:hover {
+  background: var(--color-fd-accent);
+}
+
+/* the surface of a cell: the text as it is kept, in the box of the value */
+.doc-cell-edit {
+  display: block;
+  min-height: 1lh;
+}
+
+/* ---------- the field (CellField) ---------- */
+.doc-cell-field {
+  position: relative;
+}
+
+/* a field that a click opens: the text cursor, and an outline under the
+   pointer. its box and its text are untouched, so a field holding tokens
+   (a link, a chip) reads the same in both modes; an empty one shows its
+   placeholder, marked as the other values edited in place (.doc-edit-value) */
+.doc-cell-field[data-editable] {
+  cursor: text;
+  border-radius: 2px;
+}
+
+.doc-cell-field[data-editable]:hover {
+  outline: 1px dashed color-mix(in srgb, var(--color-fd-primary) 45%, var(--color-fd-border));
+  outline-offset: 2px;
+}
+
+span.doc-cell-field[data-editable][data-empty] {
+  display: inline-block;
+  min-width: 2rem;
+}
+
+.doc-cell-field-placeholder {
+  color: var(--color-fd-muted-foreground);
+  text-decoration: underline dashed color-mix(in srgb, var(--color-fd-primary) 45%, var(--color-fd-border));
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.doc-cell-field[data-open] {
+  outline: 1px solid color-mix(in srgb, var(--color-fd-primary) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* inside a line: an inline box, so the line does not break around the surface */
+.doc-cell-field[data-open][data-inline] > .doc-cell-edit {
+  display: inline-block;
+  min-width: 3rem;
+  vertical-align: top;
+}
+
+/* why a save was refused: under the field, floating, so nothing moves */
+.doc-cell-field-message {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 60;
+  width: max-content;
+  max-width: 22rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-fd-destructive, #dc2626) 45%, var(--color-fd-border));
+  border-radius: 4px;
+  background: var(--color-fd-popover, var(--color-fd-background));
+  color: var(--color-fd-destructive, #dc2626);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+/* ---------- something inside a frontend object, in a line (ObjectViewFrontendInner) ---------- */
+/* a value reads as text: a dotted line under it says it is read from elsewhere */
+.doc-object-inner-value {
+  text-decoration: underline dotted color-mix(in srgb, currentColor 40%, transparent);
+  text-underline-offset: 3px;
+}
+
+/* what is not there says so where it is: a dashed outline, as a tag nobody defines */
+.doc-object-inner-chip[data-status="unknown"],
+.doc-object-inner-chip[data-status="missing"],
+.doc-object-inner-chip[data-status="deleted"] {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 60%, var(--color-fd-border));
+  color: var(--color-fd-muted-foreground);
+}

@@ -45,7 +45,9 @@ import { slashActionByNameBuild } from '../../../comp-doc/slash/slash-define.js'
 //                    itemIndexActive  the highlighted item of the menu
 //                    actionOwnList    the surface's own actions (a component editing its
 //                                 own data: /query of a CV cell), before the page's
-//                    isPageActionIncluded   whether the page's registry is offered too }
+//                    isPageActionIncluded   whether the page's registry is offered too
+//                    triggerList  the direct triggers of the surface: a text that enters
+//                                 the param mode of one action at once ("{{" in a cell) }
 //                  the actions of an open slash mode are its surface's: actionByNameOpen
 
 export type SlashAnchor = { lineIndex: number; column: number };
@@ -60,7 +62,11 @@ export type SlashState = {
   itemIndexActive: number;
   actionOwnList: any[];
   isPageActionIncluded: boolean;
+  triggerList: SlashTrigger[];
 };
+// a direct trigger of a surface: text typed enters the param mode of action;
+// a character of endList typed in the parameter ends the slash mode
+export type SlashTrigger = { text: string; action: any; endList?: string[] };
 // what the surface does after a choice: replace the slash text (its
 // lengthOld characters before the caret) by textNew when given; the slash
 // mode has ended when isEnded
@@ -147,7 +153,7 @@ export class DocSlashStore {
   // { mode: 'action', query } | { mode: 'param', action, actionName, param }
   get parsed(): any {
     if (!this.slash) return { mode: SLASH_MODE_END };
-    return slashTextParse(this.slash.text, (name: string) => this.actionOpenGet(name));
+    return slashTextParse(this.slash.text, (name: string) => this.actionOpenGet(name), this.slash.triggerList);
   }
 
   // what the menu lists: actions in the action mode ({ id, action }), the
@@ -175,16 +181,18 @@ export class DocSlashStore {
     return this.itemList[this.slash.itemIndexActive];
   }
 
-  // a "/" was typed at the start of a word of a surface. actionOwnList: the
-  // surface's own actions; isPageActionIncluded (default true): the page's
-  // registry offered beside them
-  slashStart(surfaceId: string, { anchor, context, rect, actionOwnList = [], isPageActionIncluded = true }: {
-    anchor: SlashAnchor; context: any; rect?: SlashRect; actionOwnList?: any[]; isPageActionIncluded?: boolean;
+  // a "/" was typed at the start of a word of a surface, or one of its
+  // direct triggers (text: what was typed, "/" by default). actionOwnList:
+  // the surface's own actions; isPageActionIncluded (default true): the
+  // page's registry offered beside them; triggerList: its direct triggers
+  slashStart(surfaceId: string, { anchor, context, rect, actionOwnList = [], isPageActionIncluded = true, triggerList = [], text = '/' }: {
+    anchor: SlashAnchor; context: any; rect?: SlashRect; actionOwnList?: any[]; isPageActionIncluded?: boolean; triggerList?: SlashTrigger[]; text?: string;
   }) {
     if (!this.isOn) return;
     this.slash = {
-      surfaceId, anchor, text: '/', context, rectAnchor: rect, itemIndexActive: 0,
+      surfaceId, anchor, text, context, rectAnchor: rect, itemIndexActive: 0,
       actionOwnList: Array.isArray(actionOwnList) ? actionOwnList : [], isPageActionIncluded: isPageActionIncluded !== false,
+      triggerList: Array.isArray(triggerList) ? triggerList : [],
     };
   }
 
@@ -194,8 +202,8 @@ export class DocSlashStore {
   slashUpdate(surfaceId: string, lineState: SlashLineState, rect?: SlashRect): boolean {
     const slash = this.slash;
     if (!slash || slash.surfaceId !== surfaceId) return false;
-    const text = slashTextGet(slash.anchor, lineState);
-    if (text === undefined || slashTextParse(text, (name: string) => this.actionOpenGet(name)).mode === SLASH_MODE_END) {
+    const text = slashTextGet(slash.anchor, lineState, slash.triggerList);
+    if (text === undefined || slashTextParse(text, (name: string) => this.actionOpenGet(name), slash.triggerList).mode === SLASH_MODE_END) {
       this.slashEnd();
       return false;
     }
@@ -242,7 +250,19 @@ export class DocSlashStore {
     return this.effectApply(
       this.effectRun(parsed.action, () => parsed.action.param.itemChoose(item, parsed.param, slash.context)),
       parsed.actionName,
+      parsed.trigger,
     );
+  }
+
+  // the line the menu shows beside the name of the action of the param mode:
+  // what the parameter typed so far means (the object a reference names),
+  // when the action says so; '' otherwise
+  get paramHint(): string {
+    const slash = this.slash;
+    const parsed = this.parsed;
+    if (!slash || parsed.mode !== SLASH_MODE_PARAM || !parsed.action.param.hintGet) return '';
+    const hint = this.effectRun(parsed.action, () => parsed.action.param.hintGet(parsed.param, slash.context));
+    return typeof hint === 'string' ? hint : '';
   }
 
   // a key, offered to the action of the param mode before the slash mode's
@@ -256,7 +276,7 @@ export class DocSlashStore {
       item: this.itemActive,
       context: slash.context,
     }));
-    return effect ? this.effectApply(effect, parsed.actionName) : undefined;
+    return effect ? this.effectApply(effect, parsed.actionName, parsed.trigger) : undefined;
   }
 
   effectRun(action: any, run: () => any) {
@@ -268,10 +288,10 @@ export class DocSlashStore {
     }
   }
 
-  effectApply(effect: any, actionName: string): SlashApply | undefined {
+  effectApply(effect: any, actionName: string, trigger?: SlashTrigger): SlashApply | undefined {
     const slash = this.slash;
     if (!slash || !effect) return undefined;
-    const apply = slashEffectApplyGet(effect, actionName);
+    const apply = slashEffectApplyGet(effect, actionName, trigger);
     if (apply.isEnded) this.slashEnd();
     return { ...apply, lengthOld: slash.text.length };
   }

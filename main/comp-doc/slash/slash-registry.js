@@ -1,4 +1,5 @@
 import { linkSlashAction } from '../link/link-slash.js';
+import { objectSlashAction } from '../object/object-slash.js';
 
 // all slash actions the package registers, by id ({layer}/{name}), the
 // counterpart of compById in registry/registry.js. each is defined by the
@@ -8,4 +9,7 @@ import { linkSlashAction } from '../link/link-slash.js';
 export const slashActionById = {
   // the navigation layer: a link to a document of the workspace
   'nav/link': linkSlashAction,
+  // the object service layer: a view of an object of the registry, found a
+  // type, an object, then what is inside it
+  'object/view': objectSlashAction,
 };

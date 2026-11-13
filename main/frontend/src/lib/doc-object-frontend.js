@@ -85,6 +85,109 @@ export function objectFrontendIdOfRefGet(ref) {
   return /^[0-9a-z]+$/.test(id) ? id : '';
 }
 
+// ---------- inner references ----------
+//
+// something inside a frontend object is named by an inner path, and from
+// outside the object by an inner reference: the reference of the object, "#",
+// the inner path (doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths):
+//
+//   frontend:w5j7ozoijzl#/book/sci-fi/dune     an asset, by one of its paths
+//   frontend:w5j7ozoijzl#book-1                the same asset, by its key
+//   frontend:w5pbeilkczg#example/name/jp/first what its type says an inner path is (a value of a profile)
+//
+// the object's id holds no "#", so the first one ends it; the inner path may hold more
+
+// the type of what an inner reference names (built-in/type.yaml)
+export const OBJECT_FRONTEND_TYPE_INNER = 'frontend.inner';
+export const OBJECT_FRONTEND_INNER_MARK = '#';
+
+// { id, ref, innerPath, isInner } of a reference of the layer's namespace (or a bare id);
+// id '' when it names no frontend object. isInner: a "#" was written, even with nothing after it
+export function objectFrontendRefSplit(refInput) {
+  const text = String(refInput ?? '').trim();
+  const indexMark = text.indexOf(OBJECT_FRONTEND_INNER_MARK);
+  const id = objectFrontendIdOfRefGet(indexMark < 0 ? text : text.slice(0, indexMark));
+  return {
+    id,
+    ref: id ? objectFrontendRefBuild(id) : '',
+    innerPath: indexMark < 0 ? '' : text.slice(indexMark + 1).trim(),
+    isInner: indexMark >= 0,
+  };
+}
+
+export function objectFrontendInnerRefBuild(idOrRef, innerPath) {
+  const id = objectFrontendIdOfRefGet(idOrRef);
+  return `${objectFrontendRefBuild(id)}${OBJECT_FRONTEND_INNER_MARK}${String(innerPath ?? '').trim()}`;
+}
+
+// what an inner path names in an object whose type has no inner paths of its
+// own: one of its assets, by an asset reference (a path, a key, name:…, id:…).
+//   -> { status: found | missing | deleted | unknown, path, label, detail, kind, asset?, message }
+//      path   the inner path as it is kept: the path given, else the first path of the asset
+//             (the first one its first pattern stands for), its key when it has none
+export function objectFrontendInnerResolveDefault(index, innerPath, kindLabelOf = (kind) => kind) {
+  const resolved = objectFrontendAssetRefResolve(index, innerPath);
+  const asset = resolved.asset;
+  if (!asset) return { status: resolved.status, path: String(innerPath ?? '').trim(), label: String(innerPath ?? '').trim(), detail: '', kind: '', message: resolved.message };
+  // the first path its first pattern stands for: a path a reader can type, not the pattern
+  const pathFirst = asset.pathList?.[0] ? assetPathCompile(asset.pathList[0], { isAbsolute: true }).textList?.[0] ?? asset.pathList[0] : '';
+  const path = resolved.by === 'path' ? String(innerPath).trim() : pathFirst || asset.key;
+  return {
+    status: resolved.status,
+    path,
+    label: asset.name || assetPathLastSegmentGet(pathFirst) || asset.key,
+    detail: [kindLabelOf(asset.kind), pathFirst || asset.key].filter(Boolean).join(' · '),
+    kind: asset.kind ?? '',
+    asset,
+    message: resolved.message,
+  };
+}
+
+// the candidates completing a typed inner path, for the same objects: the
+// folders and assets of the folder typed so far (objectFrontendAssetPathComplete);
+// at the top also the assets that have no path, by their key; and for words
+// that are no path (no "/"), the assets whose name or key holds them, so a
+// reader who knows a name need not walk the folders
+//   -> [{ kind: 'dir' | 'item', path, label, detail }]
+//      a dir's path ends with "/": typing goes on inside it
+export function objectFrontendInnerCompleteDefault(index, textInput, kindLabelOf = (kind) => kind) {
+  const text = String(textInput ?? '').trim();
+  const itemList = objectFrontendAssetPathComplete(index, text === '' ? '/' : text).map((one) => (one.kind === 'folder'
+    ? { kind: 'dir', path: `${one.path}/`, label: `${one.segment}/`, detail: `${one.assetCount} item${one.assetCount === 1 ? '' : 's'}` }
+    : { kind: 'item', path: one.path, label: one.asset.name || one.segment, detail: [kindLabelOf(one.asset.kind), one.path].filter(Boolean).join(' · ') }));
+  if (text.includes('/') && text !== '/') return itemList;
+  const word = text === '/' ? '' : text.toLowerCase();
+  const pathSet = new Set(itemList.map((item) => item.path));
+  let countNamed = 0;
+  for (const asset of index.byKey.values()) {
+    const pathFirst = asset.pathList?.[0] ? assetPathCompile(asset.pathList[0], { isAbsolute: true }).textList?.[0] ?? asset.pathList[0] : '';
+    const isMatch = word !== '' && (asset.key.toLowerCase().includes(word) || String(asset.name ?? '').toLowerCase().includes(word));
+    // without a word: only the assets no path indexes, which nothing else lists
+    if (!(isMatch || (word === '' && !pathFirst))) continue;
+    const path = pathFirst || asset.key;
+    if (pathSet.has(path) || countNamed >= INNER_NAMED_COUNT_MAX) continue;
+    pathSet.add(path);
+    countNamed += 1;
+    itemList.push({ kind: 'item', path, label: asset.name || asset.key, detail: [kindLabelOf(asset.kind), path].filter(Boolean).join(' · ') });
+  }
+  return itemList;
+}
+
+// how many assets a word lists by name or key, beside the folders
+const INNER_NAMED_COUNT_MAX = 30;
+
+function assetPathLastSegmentGet(path) {
+  const text = String(path ?? '');
+  return text.slice(text.lastIndexOf('/') + 1);
+}
+
+// the mode of a type that shows one thing of its object, named by an inner
+// path: the first mode declaring pathParam, the parameter taking it
+// (doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths)
+export function objectFrontendInnerModeGet(modeList) {
+  return (modeList ?? []).find((mode) => typeof mode.pathParam === 'string' && mode.pathParam !== '');
+}
+
 // ---------- the entry asset ----------
 
 // { entry, problemList }: what the text of an entry asset says, every key

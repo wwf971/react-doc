@@ -44,6 +44,7 @@
 
 .reading-list-link {
   padding: 0;
+  text-align: left;
   border: 0;
   background: none;
   color: var(--color-fd-primary);
@@ -146,4 +147,30 @@
   background: var(--color-fd-background);
   border: 1px solid var(--color-fd-border);
   border-radius: 0.375rem;
+}
+
+/* ---------- the cells of the list (main/doc_page_impl_edit_cell.md) ---------- */
+/* the remark of a book: the widest column, its text wrapping */
+.reading-list-remark {
+  min-width: 9rem;
+  overflow-wrap: anywhere;
+}
+
+/* the short columns keep their width, so a long remark wraps in its own column instead of
+   squeezing them */
+.reading-list-table td:nth-child(n+2):nth-child(-n+5):not(.doc-error) {
+  white-space: nowrap;
+}
+
+/* another book of the list mentioned in a cell; one nothing answers to says so */
+.reading-list-mention.is-missing {
+  color: var(--color-fd-muted-foreground);
+  text-decoration: underline dashed color-mix(in srgb, var(--color-fd-destructive, #dc2626) 60%, transparent);
+  text-underline-offset: 3px;
+}
+
+/* the new note typed before it is added: a field of its own width */
+.reading-list-note-new {
+  flex: 1 1 14rem;
+  min-width: 10rem;
 }

@@ -300,7 +300,9 @@ export class SwitchStore {
 		if (box && !nodes.some((node) => node.renderer?.type === SCENE_BOX_TYPE)) {
 			nodes.push({ id: 'scene-box', renderer: { type: SCENE_BOX_TYPE }, position: { x: box.x, y: box.y }, size: { width: box.width, height: box.height }, data: {} });
 		}
-		entry.canvas.sourceLoad(yamlStringify({ version: 1, ...diagram, nodes }));
+		// a provider may give its lines one style object, its nodes one renderer: each is written out
+		// where it stands. Written once and named again, a text is refused past a hundred of them
+		entry.canvas.sourceLoad(yamlStringify({ version: 1, ...diagram, nodes }, { aliasDuplicateObjects: false }));
 	}
 
 	graphNodeListOf(entry) {

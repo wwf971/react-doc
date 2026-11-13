@@ -33,6 +33,27 @@ export const OBJECT_STATUS_LIST = ['found', 'registered', 'missing', 'unavailabl
 
 export const OBJECT_CAPABILITY_LIST = ['query', 'resolve', 'read', 'update', 'relationQuery'];
 
+// something inside an object is named by an inner reference: the reference
+// of the object, "#", and what names the thing inside it, which is its
+// provider's to read (a fragment of a document, an inner path of a frontend
+// object): doc:~page:root/a.md#setup, frontend:w5j7ozoijzl#/book/sci-fi/dune.
+// a provider that has such things keeps "#" out of the references of the
+// objects holding them, so the first "#" ends the object's reference
+// (doc_page_impl_obj.md#inside-an-object)
+export const OBJECT_REF_INNER_MARK = '#';
+
+// { ref, inner, isInner }: the object's reference and the text after the mark
+export function objectRefInnerSplit(refInput) {
+  const text = String(refInput ?? '');
+  const indexMark = text.indexOf(OBJECT_REF_INNER_MARK);
+  if (indexMark < 0) return { ref: text.trim(), inner: '', isInner: false };
+  return { ref: text.slice(0, indexMark).trim(), inner: text.slice(indexMark + 1), isInner: true };
+}
+
+export function objectRefInnerBuild(ref, inner) {
+  return `${String(ref ?? '').trim()}${OBJECT_REF_INNER_MARK}${String(inner ?? '')}`;
+}
+
 // { namespace, local } of a reference; undefined for anything else
 export function objectRefParse(ref) {
   const match = REF_REGEX.exec(String(ref ?? ''));

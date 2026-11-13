@@ -35,6 +35,7 @@ the page   DocObjectFrontendStore          joins the declarations with the asset
 - A **type** is a type of the type registry, `frontend.object` or one a doc page declares below it; it says how the object is drawn: its **modes**.
 - A **mode** is a component of the component registry and the parameters it starts with, with an id, a label and a **category** (`view`, `edit`, anything: how the modes are grouped). A type has its own modes and those of its ancestors.
 - The **entry component**, `ObjectFrontend`, is a block of a document naming an object, a mode and the parameters of that mode, and rendering the mode's component.
+- An **inner path** names one thing inside an object that the object can show: by default one of its assets, by an asset reference. With the object's reference before it, `frontend:{id}#{inner path}`, it is an **inner reference**, which names that thing from anywhere ([Things inside an object](#things-inside-an-object-inner-paths)).
 
 ## Who is the truth of what
 
@@ -102,6 +103,7 @@ typeList:
         param: { layout: table }    # what the component starts with
         isDefault: true
       - { id: add, label: Add a book, comp: ReadingListAdd, category: edit }
+      - { id: book, label: One book, comp: ReadingListBook, pathParam: book }   # shows one thing, named by an inner path
 ```
 
 A type with modes or kinds of assets is below `frontend.object` unless it says which type it extends. The components a type names are the doc page's own (`comp-mdx/`) or any of the registry, mounted the usual way ([Components of a doc page](doc_page_impl_mdx_comp.md#components-of-a-doc-page)); one no registry has is marked in the Types table of the settings tab.
@@ -329,6 +331,75 @@ mode: explorer
 
 `DocObjectFrontendStore.docHomePathGet(ref)` is its source path; `docOpenPlanGet({ target, hash })` is what `object-frontend/doc/open` hands to `nav/popup`.
 
+## Things inside an object: inner paths
+
+An object is seldom shown only whole. A reader wants one book of a list, one card of a box, one value of a profile, and wants to name it from elsewhere: a cell of another object, a paragraph, a node of a diagram. The layer has one **convention** for that, and one small **mechanism**.
+
+```text
+an inner path          /book/sci-fi/dune              names one thing inside its object
+an inner reference     frontend:w5j7ozoijzl#/book/sci-fi/dune     the same, from anywhere: an object of the registry
+        │
+        ├─ drawn       inline / card   the view of frontend.inner: a chip, a card (a value: its text)
+        │              block           the mode of its type declaring pathParam, given the path
+        └─ typed       /object … frontend:w5j7ozoijzl#/book/sci-    completed by the type of the object
+```
+
+**The convention: what draws an object accepts an inner path.**
+
+- **An inner path is, by default, an asset reference**: a path of an asset (`/book/sci-fi/dune`), its key, `name:…`, `id:…` ([Naming and finding the assets](#naming-and-finding-the-assets)). A type that gives its assets paths has inner paths with no further work. A type whose things are **not** its data items says what an inner path is itself (below): the values of a profile of the package cv are keys inside its items, named `example/name/jp/first`.
+- **A mode that shows one thing declares `pathParam`**: the parameter of the mode that takes an inner path. The mode resolves it (`service.assetResolve`), shows the thing, and shows the reference and why when nothing is there, never an empty block. The parameter keeps the name the mode gave it (`book`, `zettel`, `instance`); `pathParam` only says which one it is:
+
+```yaml
+modeList:
+  - { id: book, comp: ReadingListBook, pathParam: book }      # param.book: an inner path
+```
+
+- **Everything else follows from the two.** An `ObjectFrontend` block names the mode and the path as before (`mode: book`, `param: { book: /book/sci-fi/dune }`). An `ObjectView` naming the inner reference draws it in any context, and in the block context draws exactly that block (`innerBlockGet`). Nothing is enforced: a type declaring no such mode still has its things drawn as chips and cards, and a mode may take paths without declaring it.
+
+**The mechanism: an object completes references into itself.** When a reference is typed with [`/object`](doc_page_impl_obj.md#writing-a-reference) (in a cell, in a paragraph), the last step, what is inside the object, is asked of the layer's provider (`innerComplete`), which every frontend object offers. The layer answers for the type of the object:
+
+| the type | resolve: what an inner path names | complete: the candidates of a typed one |
+| --- | --- | --- |
+| has no answer of its own (the default) | an asset reference (`objectFrontendInnerResolveDefault`) | the folders and assets of the folder typed so far; at the top the assets no path indexes, by key; and for words that are no path, the assets whose name or key holds them, so a reader who knows a name need not walk the folders (`objectFrontendInnerCompleteDefault`, over [asset path completion](doc_page_impl_obj_frontend_asset_path.md#the-index-of-entries-by-their-paths)) |
+| has a component exposing `objectInner` | the component's `resolve({ service, path })` | the component's `complete({ service, text })` |
+
+```js
+compDefine(CvProfileInfo, {
+  placementList: ['objectFrontend'],
+  expose: {
+    objectInner: {
+      typeList: ['cv.profile'],                              // and every type below it: the nearest wins
+      // { status: found | missing | unknown | loading, path, label, detail, kind, text?, typeId? }
+      resolve: ({ service, path }) => cvProfileInnerResolve(service, path),
+      // [{ kind: 'dir' | 'item', path, label, detail }]  (a dir's path ends with "/": typing goes on)
+      complete: ({ service, text }) => cvProfileInnerComplete(service, text),
+    },
+  },
+});
+```
+
+`service` is the api of a mode ([The entry component](#the-entry-component)) of the object asked about, without a block. Both functions are called inside an observer and read the object through it, so their answers follow the data; `loading` while the data of an asset is on its way. `text` of a resolve makes the thing a **value**: it is drawn in a line as that text. `typeId` gives the thing a type of its own below `frontend.inner`, for a type that wants a view of its own for its things ([Object views](doc_page_impl_obj.md#object-views)).
+
+**In the registry.** An inner reference is an object of the type `frontend.inner` (a `core.place`): `label` its name, `summary { objectRef, objectLabel, path, kind, text? }`, missing (still of its type) when nothing is at the path. `common/ObjectViewFrontendInner` draws it: a chip in a line (the value itself when it is one), a card, and in the block context the mode declaring `pathParam`. Opening it goes to its document when the asset is one ([Documents of an object](#documents-of-an-object)), else to the object in the settings tab. On the page: `DocObjectFrontendStore.innerResolve(object, path)`, `innerComplete(object, text)`, `innerBlockGet(object, path)`, `innerOpen(object, path)`.
+
+**When a type is added or changed, check this part.** It costs little and is what makes the things of an object reachable from every cell and paragraph:
+
+1. Do its assets have paths? Then completion works already. Give them paths as [recommended](doc_page_impl_obj_frontend_asset_path.md#asset-paths-in-a-frontend-object), the kind first, so the top of a walk is the kinds.
+2. Does a mode show one thing? Declare `pathParam` on it, and let it take any asset reference there, not only a key.
+3. Are its things something else than its data items (values inside an item, rows of a table)? Expose `objectInner` on the component that knows them, with both functions.
+4. Does a text of a mode hold what a reader types (a remark, a cell)? Make it a cell of the [cell edit layer](doc_page_impl_edit_cell.md), with a token kind of its own for what only this type knows.
+
+| type | inner paths | the mode showing one |
+| --- | --- | --- |
+| `example.reading-list` (the demonstration) | asset paths: `/book/…`, `/author/…`, `/note/…` | `book`, `pathParam: book` |
+| `zettelkasten.box` (package zettelkasten) | asset references of its cards: `/zettel/…`, a key | `card`, `pathParam: zettel` |
+| `cv.jp` (package cv) | asset paths: `/example/instance/…`, `/example/template/…` | `sheet`, `pathParam: instance` |
+| `cv.profile` (package cv) | its own: a partition and a query path, `example/name/jp/first` (`objectInner` of its mode Information) | none: a value is drawn as its text |
+
+## Cells of a mode
+
+A text of a mode that the author types in place, a cell of a table, a field of a card, is a **cell** of the [cell edit layer](doc_page_impl_edit_cell.md), not a field of the mode's own making: `useCell` for the cell, `CellField` for a value drawn and edited where it stands (or `CellValue` and `CellEdit` for a mode with a behavior of its own around the text), and `cellTokenDefine` for a token only this type knows. The cell is then typed like every other cell of the page, with `/link`, `/object` and the type's own action, and what it holds is drawn by the layer each token belongs to. The mode keeps the text in its data and writes it through its api (`assetWrite`), offered while `service.isEditable`. The demonstration's reading list (the remark of a book, the text of a note) and the Japanese-style CV of the package cv (every cell of the sheet) are built so.
+
 ## A word on the names: objects hold items
 
 The container is an **object**: a frontend object, like an MDX component instance, is what a reader and the registry deal with. What it holds is one level below, and is never called an object: an **asset item** of the [asset service layer](doc_page_impl_asset.md), a piece of versioned data with its locks and folder, called an **asset of the object** or a **data item** where the object is the subject. *Object* has enough meanings already (anything a provider of the registry names, the frontend object itself); "the objects of an object" would make every sentence ambiguous ("delete the object": the frontend object, or one of its pieces?). The files say the same: `object.yaml` describes a frontend object, `item.yaml` an asset item.
@@ -403,7 +474,7 @@ A type's modes are its own declarations, then those of its ancestors in the orde
 
 Nothing ties the modes of a type to one way of looking at the same data: the page renders the component a mode names and assumes nothing about it. A mode may draw all the data as a table, be a form registering a new piece, show one asset chosen by a parameter, or sum everything up; the category only groups the modes where they are listed. A type has two ways to offer its **morphes**, and may mix them:
 
-1. **many modes**: one per morphe, each with its component and parameters (`shelf`, `add`, `book`, `stats`);
+1. **many modes**: one per morphe, each with its component and parameters (`shelf`, `add`, `book`, `stats`); a mode showing one thing of the object says which parameter names it (`pathParam`, [Things inside an object](#things-inside-an-object-inner-paths));
 2. **few modes, many parameters**: one component, the morphe chosen by the parameters, by the block or by the component itself (`shelf` and `cards` are one component with `layout: table | cards`; the status filter is `param.status`).
 
 ## The entry component
@@ -456,6 +527,8 @@ config.objectFrontend                    the object and its api (getters: the co
   storagePointList, partitionStorageSet(p, pointId)   the points it may use; a whole partition moved to one
                                          (#where-a-partition-is-stored)
   partitionCreate(p), partitionRename(from, to), partitionDelete(p)   the apis of partitions (#the-apis-of-partitions)
+  ref                                    the reference of the object: frontend:{id}. something inside it is named
+                                         from elsewhere as {ref}#{inner path} (#things-inside-an-object-inner-paths)
   open()                                 the object in the Frontend objects tab
   otherGet(ref)                          the api of another frontend object: the same reads and writes, for a mode
                                          whose data lies in two objects (a CV reading a profile)
@@ -486,9 +559,9 @@ The layer's provider (`lib/doc-object-provider-frontend.js`, id `frontend`) spea
 | --- | --- |
 | namespace | `frontend`; the local part is the object's id |
 | types | `frontend.object` (built-in, a `core.collection`) and the types declared below it, which the registry reads itself; of each, its modes with the inherited ones and its kinds of assets (`typeInfoGet`, so `type/get` answers them) |
-| descriptor | label: the name; type: the entry's; summary `{ assetCount, docPageAlias, typeId }`; `open: { kind: objectFrontend, id }` |
+| descriptor | label: the name; type: the entry's; summary `{ assetCount, docPageAlias, typeId }`; `open: { kind: objectFrontend, id }`. Of an inner reference `frontend:{id}#{inner path}`: type `frontend.inner`, label the thing's name, summary `{ objectRef, objectLabel, path, kind, text? }` ([Things inside an object](#things-inside-an-object-inner-paths)) |
 | relations | `core.member` from the object to each asset, `asset:local/{itemId}`, keyed `member/{key}`, `data: { kind, status }`, in the order of the lists; to an asset, the object it belongs to |
-| capabilities | query, resolve, read (the entry as content: name, type, metadata, assets with their references, modes), relationQuery, and the writes below |
+| capabilities | query, resolve, read (the entry as content: name, type, metadata, assets with their references, modes), relationQuery, innerComplete (the candidates completing a typed inner path, asked of the type of the object), and the writes below |
 | opening | the Frontend objects tab, the object chosen |
 
 **Writing it through the registry.** Everyone who is not a mode of an object (an agent, the palette, another component) creates and changes frontend objects with the standard writes of the registry ([Writing through the registry](doc_page_impl_obj.md#writing-through-the-registry)), each answered by this provider with a structural write of the layer, and the standard apis carry them ([The apis](doc_page_impl_obj.md#the-apis)); the layer has no apis of its own:
@@ -500,8 +573,9 @@ object/create { typeId: example.reading-list,              a new object in that 
   content: { name, description?, metadata? },                place.docPath, or the first that can hold one, without it)
   place: { docPageAlias: example } }
 object/create { memberOf: { ref: frontend:{id},            a new asset of the object, created in its folder and
-  key?, data: { kind: book, name?, pathList? } },            listed under its key ({kind}-{n} when absent)
-  content: { data: { title: Dune } } | { text, lang } }
+  key?, data: { kind: book, name?, pathList?,                listed under its key ({kind}-{n} when absent), in the
+    partition?, groupPath? } },                              partition named (the default one without) and the folder
+  content: { data: { title: Dune } } | { text, lang } }      inside it (that of its kind without)
 object/read { ref: frontend:{id} }                         the entry and the lists: name, type, metadata, assetList [{ key, kind, ref }], modes,
                                                            assetKindList, disagreement { strayList, unknownList, outsideList }
 object/read { ref: asset:local/{itemId} }                one asset, with the text of its head
@@ -525,7 +599,7 @@ doc/blockDataSet { raw: "object: …\nmode: …\nparam: …" }   what a block sh
 
 The writes check what the settings tab checks (a type no doc page declares, a doc page without frontend objects, a key taken, an asset of another object), so an agent and a person make the same changes the same way.
 
-`common/ObjectViewFrontend` is the view of `frontend.object` (contexts `card` and `block`): a card with the name, the type, the kinds of the assets and the modes, and in the block context the object in its default mode. A type of a doc page may expose a view of its own, nearer to its objects, as any type ([Object views](doc_page_impl_obj.md#object-views)). So a frontend object is found by a search (`type:frontend.object`), listed by `ObjectList`, grouped by `ObjectGroup`, drawn by `ObjectView` and in a card diagram, and its assets are members a view of collections lists.
+`common/ObjectViewFrontend` is the view of `frontend.object` (contexts `card` and `block`): a card with the name, the type, the kinds of the assets and the modes, and in the block context the object in its default mode. `common/ObjectViewFrontendInner` is the view of `frontend.inner`, something inside an object, in every context. A type of a doc page may expose a view of its own, nearer to its objects, as any type ([Object views](doc_page_impl_obj.md#object-views)). So a frontend object is found by a search (`type:frontend.object`), listed by `ObjectList`, grouped by `ObjectGroup`, drawn by `ObjectView` and in a card diagram, and its assets are members a view of collections lists.
 
 ## Reading and editing
 
@@ -614,6 +688,8 @@ frontend/src/lib/doc-object-frontend.js    the pure part: references, the entry 
                                            of the assets (normalize, the index, references, completion, search, the
                                            recommended path), the block of the
                                            entry component, the modes (inheritance, choice), the built-in overview mode
+                                           inner references (split, build), what an inner path names and completes
+                                           by default, the mode declaring pathParam
 frontend/src/lib/doc-object-frontend-asset-path.js   the grammar of asset paths and the index over it
                                            (doc_page_impl_obj_frontend_asset_path.md)
 frontend/plugin/doc-object-frontend.ts     what a doc page says (the folders of the objects, object-frontend.yaml, the item lists of each,
@@ -629,12 +705,16 @@ frontend/cli/doc-migrate.js                the former form rewritten (react-doc 
 frontend/src/lib/doc-asset-backend.js      objectFrontendConfigGet, objectFrontendWrite (api and snapshot), itemMove
 frontend/src/store/DocObjectFrontendStore.ts   the layer on the page
 frontend/src/lib/doc-object-frontend-store.test.js   reading many assets: one request, what is worked out once
-frontend/src/lib/doc-object-provider-frontend.js   its provider of the object registry, the writes among its capabilities
+frontend/src/lib/doc-object-provider-frontend.js   its provider of the object registry, the writes among its capabilities;
+                                           inner references resolved, innerComplete
+comp-doc/registry/comp-expose.js           expose.objectInner: a component answering for the inner paths of its types
 frontend/src/store/DocEditStore.ts         dataReplaceRequest and blockPropSetRequest found by the block's line in reading
                                            mode; the pick step of the insert menu
-comp-doc/object-frontend/                  ObjectFrontend (the entry component and the api of a mode), useObjectFrontendDrawTurn, ObjectFrontendEdit
+comp-doc/object-frontend/                  ObjectFrontend (the entry component), object-frontend-service.js (the api of a mode),
+                                           useObjectFrontendDrawTurn, ObjectFrontendEdit
                                            (its edit mode), ObjectFrontendOverview (the mode overview), ObjectViewFrontend
-                                           (the view of frontend.object), ObjectFrontendAssetPathInput and
+                                           (the view of frontend.object), ObjectViewFrontendInner (the view of
+                                           frontend.inner), ObjectFrontendAssetPathInput and
                                            ObjectFrontendAssetSearchPanel (finding the assets of an object),
                                            object-frontend-define.js, ObjectFrontend.css
 comp-doc/edit/DocEditInsertMenu.jsx, edit-template.js   the pick step (meta.insertObjectPick)
@@ -643,7 +723,7 @@ comp-doc/api/api-object.js, api-doc.js     the standard apis that reach the laye
                                            doc/blockPropSet
 example_doc/.doc-page/type.yaml            the demonstration's types (example.reading-list, example.reading-list-short)
 example_doc/.doc-page/object-frontend/     its objects
-example_doc/.doc-page/comp-mdx/object-frontend/reading-list/   their modes
+example_doc/.doc-page/comp-mdx/object-frontend/reading-list/   their modes, with their cells (doc_page_impl_edit_cell.md)
 example_doc/object-frontend.md             the demonstration
 ```
 

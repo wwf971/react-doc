@@ -19,6 +19,7 @@ import { DocBlockSelectStore } from './store/DocBlockSelectStore.js';
 import { DocPanelLayoutStore } from './store/DocPanelLayoutStore.js';
 import { DocWorkspaceStore } from './store/DocWorkspaceStore.js';
 import { DocSlashStore } from './store/DocSlashStore.js';
+import { DocCellStore } from './store/DocCellStore.js';
 import { DocApiStore } from './store/DocApiStore.js';
 import { DocPaletteStore } from './store/DocPaletteStore.js';
 import { DocFindStore } from './store/DocFindStore.js';
@@ -64,6 +65,8 @@ import { compById as compByIdDefault } from '../../comp-doc/registry/registry.js
 import { compMountByIdBuild } from '../../comp-doc/registry/comp-mount.js';
 import { slashActionById as slashActionByIdDefault } from '../../comp-doc/slash/slash-registry.js';
 import { slashActionByIdBuild } from '../../comp-doc/slash/slash-define.js';
+import { cellTokenById as cellTokenByIdDefault } from '../../comp-doc/cell/cell-registry.js';
+import { cellTokenByIdBuild } from '../../comp-doc/cell/cell-define.js';
 import { apiById as apiByIdDefault } from '../../comp-doc/api/api-registry.js';
 import { apiByIdBuild, apiDeclaredLayerBuild } from './lib/doc-api.js';
 import './DocPageMdx.css';
@@ -108,6 +111,8 @@ import './DocPageMdx.css';
 // config.compById, and their tag names are in configDoc.compRegistry already.
 // config.slashActionById are the host's slash actions over the package's
 // (doc_page_impl_edit_slash.md#the-slash-action-registry); null removes one.
+// config.cellTokenById are the host's token kinds of cells over the package's
+// (doc_page_impl_edit_cell.md#token-kinds); null removes one.
 // config.apiById are the host's apis over the package's and the doc pages'
 // declared ones (doc_page_impl_api.md#the-registry); null removes one.
 // config.hotkeyMapList are the host's keyboard maps, stacked above the doc
@@ -125,6 +130,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // doc pages' and the host's (see registry building at the end of this file)
     const compById = compByIdBuild(data.compMountList, config.compById);
     const slashActionById = slashActionByIdPageBuild(config.slashActionById);
+    const cellTokenById = cellTokenByIdPageBuild(config.cellTokenById);
     const apiById = apiByIdPageBuild(data.configDoc?.apiDeclared, config.apiById);
     // the environment of the page: how it is served, and so what it allows.
     // every store asks it, not an endpoint or a build flag of its own
@@ -237,6 +243,10 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     navStore.apiCall = (id, params) => apiStore.call(id, params);
     const objectFrontendStore = new DocObjectFrontendStore({ assetStore, objectStore, configStore, sourceStore, navStore });
     objectStore.providerAdd(objectProviderFrontendCreate({ objectFrontendStore }));
+    // the cell edit layer (doc_page_impl_edit_cell.md): the small values a component lets the
+    // author type in place, their tokens (a link, a view of an object, a value of the
+    // component's own data) and the slash mode typing them
+    const cellStore = new DocCellStore({ cellTokenById, stores: { slashStore, sourceStore, objectStore } });
     const paletteStore = new DocPaletteStore({ apiStore });
     // find in a part of the page: the scopes components register (doc_page_impl_api.md#finding-in-a-part-of-the-page)
     const findStore = new DocFindStore();
@@ -313,6 +323,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       blockSelectStore,
       panelLayoutStore,
       slashStore,
+      cellStore,
       apiStore,
       paletteStore,
       findStore,
@@ -369,6 +380,10 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
   useEffect(() => {
     stores.slashStore.replaceSlashActionById(slashActionByIdPageBuild(config.slashActionById));
   }, [config.slashActionById, stores]);
+
+  useEffect(() => {
+    stores.cellStore.replaceCellTokenById(cellTokenByIdPageBuild(config.cellTokenById));
+  }, [config.cellTokenById, stores]);
 
   useEffect(() => {
     stores.apiStore.replaceApiById(apiByIdPageBuild(data.configDoc?.apiDeclared, config.apiById));
@@ -526,7 +541,7 @@ function DocPageLayoutContainer({ children, ...props }) {
 
 // ---------- registry building ----------
 //
-// the page has three registries, built the same way when the page starts
+// the page has four registries, built the same way when the page starts
 // and again when what they are built from changes: the package's
 // definitions, then those of the doc pages, then the host's, each layer
 // over the one before (an id of a later layer replaces the same id of an
@@ -535,10 +550,12 @@ function DocPageLayoutContainer({ children, ...props }) {
 //   registry            package            doc pages                      host
 //   compById            registry.js        data.compMountList             config.compById
 //   slashActionById     slash-registry.js  (none yet)                     config.slashActionById
+//   cellTokenById       cell-registry.js   (none yet)                     config.cellTokenById
 //   apiById             api-registry.js    configDoc.apiDeclared (yaml)   config.apiById
 //
 // compById is held by DocStore (replaceCompById), slashActionById by
-// DocSlashStore (replaceSlashActionById), apiById by DocApiStore
+// DocSlashStore (replaceSlashActionById), cellTokenById by DocCellStore
+// (replaceCellTokenById), apiById by DocApiStore
 // (replaceApiById; the apis of components and services join it through
 // providers at run time).
 
@@ -550,6 +567,11 @@ function compByIdBuild(compMountList, compByIdHost) {
 // the slash action registry (doc_page_impl_edit_slash.md#the-slash-action-registry)
 function slashActionByIdPageBuild(slashActionByIdHost) {
   return slashActionByIdBuild(slashActionByIdDefault, slashActionByIdHost);
+}
+
+// the token kinds of cells (doc_page_impl_edit_cell.md#token-kinds)
+function cellTokenByIdPageBuild(cellTokenByIdHost) {
+  return cellTokenByIdBuild(cellTokenByIdDefault, cellTokenByIdHost);
 }
 
 // the api registry (doc_page_impl_api.md#the-registry)

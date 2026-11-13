@@ -134,6 +134,17 @@ typeList:
     summaryKeyList:
       - assetCount
     description: "An object whose data the page keeps itself, in assets of the asset store: an entry asset describing it (its name, type, assets and metadata) and any number of assets of its own, its members (core.member). Drawn in the modes of its type; the root of the types doc pages declare for their frontend objects (main/doc_page_impl_obj_frontend.md)."
+  - id: frontend.inner
+    kind: object
+    label: Inside a frontend object
+    icon: hash
+    extendList:
+      - core.place
+    summaryKeyList:
+      - objectRef
+      - path
+      - kind
+    description: "Something inside a frontend object that the object can show, named by an inner path: one of its assets by default (a path, a key), or what its type says an inner path is (a value of a profile). Its reference is the object's, \"#\", the inner path (frontend:{id}#/book/sci-fi/dune); its summary says the object, the path and the kind (main/doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths)."
   # objects: service.*
   - id: service.template
     kind: object

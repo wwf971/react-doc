@@ -28,6 +28,7 @@ provider
   transition?             { secondPortal, secondMorph, secondCamera, secondScroll }
 ```
 
+- A **diagram a provider builds in code** may give one object to many of its parts (one style to every line, one renderer to every node), however many they are: the scene is loaded with each written out where it stands.
 - A **bounding box** is the part of a scene shown by default, and shown when the scene is embedded. Without one it is everything the scene draws.
 - An **embedded scene** is a card of one scene showing another scene inside it.
 - A **switch** is the way from the scene shown to another: a list of steps, each drawn from a progress.

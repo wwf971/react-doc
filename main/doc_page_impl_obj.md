@@ -42,7 +42,7 @@ the object service layer (DocObjectStore, and ObjectRegistry in the kernel)
 └── the searches                the sessions of the search uis: text, filters, result (DocObjectSearchStore)
 ```
 
-It offers its services through the store's methods (resolve, query, relationQuery, read, update, create, delete, relationCreate, relationDelete, register, search, open, typeInfoGet), through `config.object` and the events of the route `object` for components, through the standard apis `object/*`, `relation/*` and `type/*` of the unified api registry ([The apis](#the-apis)), and through the backend's `/object/*` for services. Searching it by words, with the moderation that keeps a search from fetching everything a host has, is [Objects and Types: Search](doc_page_impl_obj_search.md).
+It offers its services through the store's methods (resolve, query, relationQuery, innerCompleteGet, read, update, create, delete, relationCreate, relationDelete, register, search, open, typeInfoGet), through `config.object` and the events of the route `object` for components, through the standard apis `object/*`, `relation/*` and `type/*` of the unified api registry ([The apis](#the-apis)), and through the backend's `/object/*` for services. Searching it by words, with the moderation that keeps a search from fetching everything a host has, is [Objects and Types: Search](doc_page_impl_obj_search.md). Naming something inside an object, and writing a reference while typing (`/object`), is [Inside an object](#inside-an-object).
 
 ## The concepts
 
@@ -66,7 +66,7 @@ A reference is `{namespace}:{local}`, the namespace `[a-zA-Z][a-zA-Z0-9.-]*` up 
 | `docDir` | the doc page source | `doc.folder` | the folder's full source path, `~page:root/dir` |
 | `doc` | the doc page source | `doc.document`; `doc.section`, `doc.block`, `doc.group` with a fragment | `~page:root/a.md`, `~page:root/a.md#{fragment}` |
 | `asset` | the asset store (page) | `asset.item` | `{store}/{itemId}` |
-| `frontend` | the frontend object service layer (page) | `frontend.object` and the types the doc pages declare below it | the object's id |
+| `frontend` | the frontend object service layer (page) | `frontend.object` and the types the doc pages declare below it; `frontend.inner` with an inner path | the object's id, `{id}#{inner path}` |
 | `service` | the kernel (backend) | `service.instance` | the service id |
 | `serviceTemplate` | the kernel | `service.template` | the template id |
 | `serviceConfig` | the kernel | `service.config` | the service id of the instance |
@@ -115,7 +115,9 @@ provider
   capabilityList            some of query, count, resolve, read, update, relationQuery (count: how many a query
                             would answer, without listing them: the preflight of a search), and the writes
                             create, delete, relationCreate, relationUpdate, relationDelete (#writing-through-the-registry);
-                            relationText: its relation query searches the text itself
+                            relationText: its relation query searches the text itself;
+                            innerComplete: it completes a text typed for something inside one of its objects
+                            (#inside-an-object)
   createTypeList            the types it creates objects of (and of every type below them)
   queryFilterList           the filters its query understands (isDone, kind, docPageAlias)
   cacheSecond               how long its answers may be reused
@@ -133,10 +135,10 @@ provider
 
 | provider | registry | namespaces | objects | relations | capabilities |
 | --- | --- | --- | --- | --- | --- |
-| `doc-source` | page | `docPage`, `docDir`, `doc` | `doc.page`, `doc.folder`, `doc.document`, `doc.section`, `doc.block`, `doc.group` | `core.contains`, `core.member` (a group's) | query (places: compiled documents only, `partial`), resolve, read, relationQuery |
+| `doc-source` | page | `docPage`, `docDir`, `doc` | `doc.page`, `doc.folder`, `doc.document`, `doc.section`, `doc.block`, `doc.group` | `core.contains`, `core.member` (a group's) | query (places: compiled documents only, `partial`), resolve, read, relationQuery, innerComplete (the sections of a document) |
 | `doc-link` | page | none | none | `doc.link` | relationQuery (from or to a document) |
 | `asset` | page | `asset` | `asset.item` | none | query, resolve, read (with the head's text), create, update, delete |
-| `frontend` | page | `frontend` | `frontend.object` and the types declared below it (their modes through `typeInfoGet`) | `core.member` (an object to its assets) | query, resolve, read, relationQuery, create (an object, or an asset in one), update, delete, relationCreate, relationDelete |
+| `frontend` | page | `frontend` | `frontend.object` and the types declared below it (their modes through `typeInfoGet`); `frontend.inner`, something inside one, with `#` and an inner path | `core.member` (an object to its assets) | query, resolve, read, relationQuery, create (an object, or an asset in one), update, delete, relationCreate, relationDelete, innerComplete (what the type of the object says is inside it) |
 | `backend` | page (a peer) | the backend's | what the backend's providers have | theirs | all, federated by the backend |
 | `kernel` | backend | `service`, `serviceTemplate`, `serviceConfig` | `service.instance`, `service.template`, `service.config` | `service.createdFrom`, `service.dependsOn` | query, resolve, read, update (a config), relationQuery |
 | `service:{id}` | backend | `service.{id}` | its script's `objectProvide.typeList` | its `relationTypeList` | the object apis its script implements |
@@ -179,6 +181,41 @@ The page reuses an answer while it asks again (a stale answer is drawn until the
 **What the registry does not promise**, because no provider can keep it for all: that a registered object exists, that a deleted object is unregistered at once, that a query is complete, that a provider notifies changes, that every object has a permanent identity. A document edited by another program while the page is closed, an instance whose database was restored, a provider that never reports a deletion: each is a provider still, and the registry answers what it knows, with when and from whom. Correctness and performance come from how providers and consumers use the registry (a provider that registers what it can and says when it changed; a consumer that verifies before an operation that matters, and reads the content from the provider), not from guarantees it would impose.
 
 **Registration** is for objects a principal wants found without being asked: a service registering its few important objects so a query need not call it (`self.context.object_register(descriptorList, is_replace)`, in its own namespace only), the page registering its documents into the backend's registry ([The page and the backend](#the-page-and-the-backend)), a component registering an object of a namespace no provider owns. A namespace a provider owns is registered in by that provider alone. A registration is held in memory, by registrant; a reference persistently held by someone (pinned, kept across restarts) is [TODO](doc_page_impl_TODO.md#object-registration-persistent).
+
+## Inside an object
+
+Some objects hold things a reader wants to name one by one: a document its sections, a frontend object its data items. Such a thing is named by an **inner reference**: the reference of the object, `#`, and what names the thing inside it, which is its provider's to read.
+
+```text
+doc:~example:root/guide.md#setup              a section of a document: the fragment navigation uses
+frontend:w5j7ozoijzl#/book/sci-fi/dune        something inside a frontend object: an inner path
+```
+
+- **An inner reference is a reference.** It is resolved, drawn and opened like any other (`doc.section`, `frontend.inner`); nothing of the registry reads what follows the `#`. A provider that has such things keeps `#` out of the references of the objects holding them, so the first `#` ends the object's reference (`objectRefInnerSplit`, `objectRefInnerBuild`).
+- **A provider says that it lists what is inside its objects** with the capability `innerComplete`, on itself and on every object that has something inside (the descriptor's `capabilityList`). This is how an object declares, when it is registered, that a reference into it can be completed while it is typed.
+- **Completion is the provider's.** `innerCompleteGet(ref, text)` of the store hands the text typed after the `#` to the provider of the reference, which answers at once from what its layer holds (the menu reading it is an observer, so the list follows the layer): `{ status: done | loading | none, itemList, message }`, each item a folder to go on in (`{ kind: 'dir', text, label, detail }`) or a thing to write (`{ kind: 'item', ref, label, detail }`). The doc page source lists the sections of a document, compiling it when it was not yet; the frontend objects ask the type of the object ([Things inside an object](doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths)).
+- **A missing thing keeps its type.** A provider answering `missing` for an inner reference may still say what it is (its types), so the view of that type says where the reference stands that nothing is there, instead of the fallback view.
+
+### Writing a reference
+
+Resolution reads a reference; its inverse writes one while the author types. The object service layer offers this as the slash action **`/object`** ([Slash mode](doc_page_impl_edit_slash.md)), which walks the registry as it is organized, a step per choice (`lib/doc-object-complete.js`):
+
+```text
+/object ␣                         the types some provider lists objects of (those a doc page, a package or a
+                                  template declares before the built-in ones); words narrow them
+/object example.reading-list/     the objects of the type: one federated query, kept by the registry; words narrow it
+/object frontend:w5j7ozoijzl      the object itself, to write as it is, and the top of what is inside it
+/object frontend:w5j7ozoijzl#/book/sci-     inside it: innerCompleteGet, the provider's
+```
+
+An object whose provider lists nothing inside it is written at once. What is written for the reference chosen is the surface's to say (`objectSlashActionBuild({ textBuild })`):
+
+| where | written | drawn by |
+| --- | --- | --- |
+| a paragraph or a list of a document | `` <!--renderComp=ObjectView-->`frontend:w5j7ozoijzl#/book/sci-fi/dune` ``: the inline form of `ObjectView` ([Inline components](doc_page_impl_mdx_li.md#inline-components)) | `ObjectView` in the placement `commentInline`, the context `inline` |
+| a cell of a component | `{{@frontend:w5j7ozoijzl#/book/sci-fi/dune}}`: the token kind `object/view` ([Cell editing](doc_page_impl_edit_cell.md#token-kinds)) | `ObjectViewHost`, the context `inline` |
+
+Both draw the object through the registry, so the cell and the paragraph know no type: the view of the object's types is chosen as everywhere ([Object views](#object-views)).
 
 ## Writing through the registry
 
@@ -280,9 +317,10 @@ compDefine(TaskCard, {
 | `common/ObjectViewConfig` | `core.config` | card, block: a form of the define list; Save is the update `{ valueByKey }` |
 | `common/ObjectViewDocument` | `core.document`, `core.place` | card: opens it; counts the `doc.link` relations to a document or a section |
 | `common/ObjectViewFrontend` | `frontend.object` | card: its name, the kinds of its assets, its modes; block: the object in its default mode ([Frontend objects](doc_page_impl_obj_frontend.md#in-the-object-registry)) |
+| `common/ObjectViewFrontendInner` | `frontend.inner` | icon, inline: a chip, or the value as text; card; block: the object in the mode its type declares for one thing ([Things inside an object](doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths)) |
 | `service/todo-list/comp/todo-card` | `core.task` | card, icon, inline: checks it off (`{ isDone }`); from the module of the template `todo-list` |
 
-**The components a document writes** consume the registry: `ObjectView` (one object by its reference, in a context; also a node of a card diagram), `ObjectList` (the objects of some types: a federated query, with its completeness), `ObjectGroup` (a group whose truth is the document), `ObjectSearch` (a search by words, [Search](doc_page_impl_obj_search.md#the-ui)). A view keeps what it read and its draft in the layer, not in itself (`viewStateGet(key)`, `viewContentLoad`, `viewDraftSave`): the config form and the fallback view's content do. Their usage is in the demonstration, `example_doc/object-registry.md`. Every one of them draws objects through `ObjectViewHost`, which resolves the reference, chooses the view and renders it; a consumer of another package does the same.
+**The components a document writes** consume the registry: `ObjectView` (one object by its reference, in a context; also a node of a card diagram, and inside a line of text its inline form, a marker and the reference as inline code), `ObjectList` (the objects of some types: a federated query, with its completeness), `ObjectGroup` (a group whose truth is the document), `ObjectSearch` (a search by words, [Search](doc_page_impl_obj_search.md#the-ui)). A view keeps what it read and its draft in the layer, not in itself (`viewStateGet(key)`, `viewContentLoad`, `viewDraftSave`): the config form and the fallback view's content do. Their usage is in the demonstration, `example_doc/object-registry.md`. Every one of them draws objects through `ObjectViewHost`, which resolves the reference, chooses the view and renders it; a consumer of another package does the same.
 
 **In a card diagram**, a node `renderer: { component: ObjectView }` with `data: { object: … }` is a card of any object: `ObjectView` declares the placement `visualizationNode` and the node contract (one `body` anchor on every side, `sizeDefault`), the way any registered renderer of the diagram does ([Internal and Registered Renderers](../package/cloud-dev-vis/doc/card-diagram-impl.md#internal-and-registered-renderers)). The diagram knows no type; the lines are its own data. Drawing a diagram from relations of the registry is [TODO](doc_page_impl_TODO.md#object-relation-diagram).
 
@@ -354,7 +392,8 @@ service-backend/service_runtime.py     the registry kept beside the service regi
                                        instance's answers forgotten when it restarts, instance_config_set, api_call's wait
 service-backend/server.py              GET /type/list, /object/provider/list; POST /object/query, resolve, read, update,
                                        relation/query, register, unregister
-frontend/src/lib/doc-object-ref.js     references, descriptors, relations, contexts, statuses, request keys
+frontend/src/lib/doc-object-ref.js     references (inner references among them), descriptors, relations, contexts, statuses, request keys
+frontend/src/lib/doc-object-complete.js   completing a reference while it is typed: a type, an object, inside it (/object)
 frontend/src/lib/doc-object-type.js    the built-in types, typeRegistryBuild: assignability, distance, rank
 frontend/src/lib/doc-object-provider-doc.js     the doc page source: doc pages, folders, documents, places, groups; opens a document
 frontend/src/lib/doc-object-provider-link.js    the links (doc.link) of the navigation layer (DocLinkStore), both ways
@@ -365,7 +404,7 @@ frontend/src/lib/doc-object-provider-frontend.js the frontend objects (doc_page_
                                                 assets as members; opens the Frontend objects tab
 frontend/src/lib/doc-service-api.js    the object endpoints of the backend
 frontend/src/store/DocObjectStore.ts   the page's registry, knowing the layers only through their providers: types,
-                                       providers, resolve / query / relation states and caches, read, update, the
+                                       providers, resolve / query / relation states and caches, innerCompleteGet, read, update, the
                                        writes (create, delete, relationCreate / relationDelete) and typeInfoGet,
                                        registrations, the views (candidates, choice), requirement status, open, the
                                        events, the page's documents registered into the peer
@@ -374,7 +413,8 @@ frontend/src/lib/doc-object-registry.test.js   types, references, federation, to
 comp-doc/api/api-object.js             the standard apis: type/*, object/*, relation/*
 frontend/src/store/DocObjectSearchStore.ts, lib/doc-object-search.js   the search (doc_page_impl_obj_search.md)
 comp-doc/object/                       ObjectViewHost (one object drawn), ObjectView, ObjectList, ObjectGroup, ObjectSearch,
-                                       ObjectSearchPanel, the views
+                                       ObjectSearchPanel, object-slash.js (/object), object-cell.jsx (the object view as a
+                                       token of a cell, doc_page_impl_edit_cell.md), the views
                                        (Fallback, Collection, Config, Document), ObjectCompleteness, object-icon.jsx,
                                        object-comp-define.js (the definitions), object-comp-data.js, DocObject.css
 comp-doc/service/service-comp-define.js, ServiceCompHost.jsx   the components of a template's module (compList)

@@ -88,6 +88,16 @@ import { OBJECT_VIEW_CONTEXT_LIST } from '../../frontend/src/lib/doc-object-ref.
 //                  and config.objectView { context, isEditAllowed,
 //                  editUnavailableReason }; priority orders two views of
 //                  the same type (default 0)
+//   objectInner    { typeList, resolve?({ service, path }), complete?({ service, text }) }:
+//                  the component answers for the inner paths of the frontend
+//                  objects of these types (and their subtypes), for a type
+//                  whose inner paths are not the paths of its assets
+//                  (doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths):
+//                  resolve says what an inner path names ({ status, path,
+//                  label, detail, kind, text?, typeId? }), complete lists the
+//                  candidates completing a typed one ([{ kind: 'dir' | 'item',
+//                  path, label, detail }]). service is the api of a mode
+//                  (config.objectFrontend) of the object asked about
 //   pagination     { pieceListGet(data, context) -> [{ type, data }],
 //                  pieceTypeById: { [type]: { Render, split?, isFilledOnSplit? } },
 //                  pageClassName?, pageSpec? }: the component's data can be laid
@@ -131,7 +141,7 @@ const ASSET_SAVE_MODE_LIST = ['inPlace', 'newVersion'];
 // isAssetOnly renders there only with data from the asset service layer
 export const COMP_PLACEMENT_DOC_LIST = ['mdx', 'commentBlock'];
 
-export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'apiList', 'objectView', 'pagination'];
+export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'apiList', 'objectView', 'objectInner', 'pagination'];
 
 const REGEX_TYPE_ID = /^[a-z][a-z0-9-]*(\.[a-zA-Z][a-zA-Z0-9-]*)+$/;
 
@@ -146,7 +156,7 @@ export function compExposeNormalize(expose = {}) {
   if (expose.editTemplate !== undefined) {
     throw new Error('compDefine: expose.editTemplate is expose.sourceDefaultCreate(env) now (comp-expose.js).');
   }
-  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, apiList, objectView, pagination, ...exposeOther } = expose;
+  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, apiList, objectView, objectInner, pagination, ...exposeOther } = expose;
   return {
     ...exposeOther,
     meta: metaNormalize(meta),
@@ -156,6 +166,7 @@ export function compExposeNormalize(expose = {}) {
     sourceDefaultCreate: sourceDefaultCreateNormalize(sourceDefaultCreate),
     apiList: apiListNormalize(apiList),
     objectView: objectViewNormalize(objectView),
+    objectInner: objectInnerNormalize(objectInner),
     pagination: paginationNormalize(pagination),
   };
 }
@@ -203,6 +214,24 @@ function objectViewNormalize(objectView) {
   }
   if (typeof priority !== 'number') throw new Error('compDefine: expose.objectView.priority must be a number.');
   return { typeList: [...typeList], contextList: [...contextList], priority };
+}
+
+// what the component answers of the inner paths of frontend objects: the
+// types, and the two questions (either may be left to the layer, which then
+// reads the paths of the assets); undefined for a component answering none
+function objectInnerNormalize(objectInner) {
+  if (objectInner === undefined) return undefined;
+  if (!objectInner || typeof objectInner !== 'object' || Array.isArray(objectInner)) {
+    throw new Error('compDefine: expose.objectInner must be { typeList, resolve?, complete? }.');
+  }
+  const { typeList, resolve, complete } = objectInner;
+  if (!Array.isArray(typeList) || typeList.length === 0 || !typeList.every((typeId) => REGEX_TYPE_ID.test(String(typeId)))) {
+    throw new Error('compDefine: expose.objectInner.typeList must list type ids of frontend objects (cv.profile).');
+  }
+  if (resolve !== undefined && typeof resolve !== 'function') throw new Error('compDefine: expose.objectInner.resolve({ service, path }) must be a function.');
+  if (complete !== undefined && typeof complete !== 'function') throw new Error('compDefine: expose.objectInner.complete({ service, text }) must be a function.');
+  if (!resolve && !complete) throw new Error('compDefine: expose.objectInner needs resolve or complete.');
+  return { typeList: [...typeList], resolve, complete };
 }
 
 // the apis a component exposes: definitions made with apiDefine, or the
@@ -365,6 +394,12 @@ export function compSourceDefaultGet(definition, env) {
 // for one that draws no object (doc_page_impl_obj.md#object-views)
 export function compObjectViewGet(definition) {
   return definition?.expose?.objectView;
+}
+
+// what a component answers of the inner paths of frontend objects
+// (expose.objectInner), undefined for one that answers none
+export function compObjectInnerGet(definition) {
+  return definition?.expose?.objectInner;
 }
 
 export function compViewModeListGet(definition) {

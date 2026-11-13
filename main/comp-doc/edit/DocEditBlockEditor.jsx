@@ -58,7 +58,7 @@ import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
 //   viewRendered  the block as the body rendered it, for editors that keep a
 //                 rendered part in the flow
 export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, viewRendered }) {
-  const { compById, editStore, slashStore, sourceStore } = useDocStores();
+  const { compById, editStore, objectStore, slashStore, sourceStore } = useDocStores();
   const { path, format } = useDocEditDoc();
   const session = editStore.session;
   if (!session || session.path !== path) return null;
@@ -110,7 +110,7 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
     configEdit.edit.slash = {
       store: slashStore,
       // what the slash actions are given (slash-define.js)
-      context: { sourcePath: path, docPageAlias: sourceStore.docPageAliasOfPath(path), source: sourceStore.sourceService },
+      context: { sourcePath: path, docPageAlias: sourceStore.docPageAliasOfPath(path), source: sourceStore.sourceService, object: objectStore },
     };
   }
   return (

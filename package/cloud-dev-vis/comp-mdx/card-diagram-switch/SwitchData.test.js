@@ -38,6 +38,21 @@ test('base color blocks validate bottom labels and stay behind ordinary cards', 
 	assert.equal((html.match(/class="doc-color-block-label"/g) ?? []).length, 2);
 });
 
+test('a scene whose lines share one style object is drawn however many they are', () => {
+	// what a provider builds in code: one style and one renderer, given to every line and every node
+	const style = { stroke: '#94a3b8', strokeWidth: 1.25 };
+	const renderer = { type: 'card-note' };
+	const count = 150;
+	const nodes = Array.from({ length: count + 1 }, (_, index) => ({ id: `n${index}`, renderer, position: { x: 0, y: index * 60 }, data: { title: `Node ${index}` },
+		handles: [{ id: 'in', direction: 'in', anchor: { side: 'top' } }, { id: 'out', direction: 'out', anchor: { side: 'bottom' } }] }));
+	const connections = Array.from({ length: count }, (_, index) => ({ id: `c${index}`, source: { nodeId: 'n0', handleId: 'out' }, target: { nodeId: `n${index + 1}`, handleId: 'in' }, style }));
+	const store = new SwitchStore({ provider: { root: '/', sceneGet: () => ({ diagram: { nodes, connections } }) }, registry: switchRegistryBuild(cardDiagramNodeRegistry) });
+	assert.equal(store.loadError, '');
+	const canvas = store.entryGet('/').canvas;
+	assert.equal(canvas.nodeList.length, count + 1);
+	assert.equal(canvas.edgeList.length, count);
+});
+
 test('direct stacks share scroll state across scenes while keeping geometry and other stacks independent', () => {
 	const node = { id: 'report', renderer: { type: 'scene-stack' }, data: { focusPath: '/report', itemList: [] }, size: { width: 300, height: 200 } };
 	const independent = { ...node, id: 'independent', data: { itemList: [] } };

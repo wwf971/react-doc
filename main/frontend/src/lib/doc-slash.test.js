@@ -11,6 +11,7 @@ import {
   slashTextGet,
   slashTextParse,
   slashTriggerIs,
+  slashTriggerMatch,
 } from './doc-slash.js';
 import { slashActionByIdBuild, slashActionByNameBuild, slashActionDefine } from '../../../comp-doc/slash/slash-define.js';
 import { DocSlashStore } from '../store/DocSlashStore.js';
@@ -161,4 +162,74 @@ test('a surface brings its own actions: alone, or before the page\'s, a folder c
   // with the page's actions too
   store.slashStart('cell', { anchor: { lineIndex: 0, column: 0 }, context: {}, actionOwnList: [actionQuery] });
   assert.deepEqual(store.itemList.map((item) => item.id), ['link', 'query']);
+});
+
+test('the loose rule starts the slash mode anywhere but in a path, a url or a fraction', () => {
+  assert.equal(slashTriggerIs('月/', { isLoose: true }), true);
+  assert.equal(slashTriggerIs('{{birth/month}}/', { isLoose: true }), true);
+  assert.equal(slashTriggerIs('(a)/', { isLoose: true }), true);
+  assert.equal(slashTriggerIs('and/', { isLoose: true }), false);
+  assert.equal(slashTriggerIs('1/', { isLoose: true }), false);
+  assert.equal(slashTriggerIs('http:/', { isLoose: true }), false);
+  assert.equal(slashTriggerIs('http://', { isLoose: true }), false);
+  assert.equal(slashTriggerIs('~root/', { isLoose: true }), false);
+  // the rule of the documents is unchanged
+  assert.equal(slashTriggerIs('月/'), false);
+});
+
+const actionQuery = slashActionDefine({
+  name: 'query',
+  label: 'Query',
+  param: {
+    itemListGet: (param) => ['name/', 'name/jp', 'birth/'].filter((path) => path.startsWith(param)).map((path) => ({ id: path, label: path, kind: path.endsWith('/') ? 'dir' : 'value' })),
+    itemChoose: (item) => (item.kind === 'dir' ? slashEffect.paramSet(item.label) : slashEffect.replace(`{{${item.label}}}`)),
+    hintGet: (param) => (param ? `in ${param}` : ''),
+  },
+});
+const actionMention = slashActionDefine({
+  name: 'object',
+  label: 'Object',
+  param: { itemListGet: () => [{ id: 'a', label: 'a' }], itemChoose: () => slashEffect.replace('{{@a}}') },
+});
+const triggerList = [{ text: '{{', action: actionQuery, endList: ['}'] }, { text: '{{@', action: actionMention, endList: ['}'] }];
+
+test('a direct trigger is the param mode of its action, the longest trigger first', () => {
+  assert.equal(slashTriggerMatch('生年 {{', triggerList).action, actionQuery);
+  assert.equal(slashTriggerMatch('{{@', triggerList).action, actionMention);
+  assert.equal(slashTriggerMatch('{', triggerList), undefined);
+  const parsed = slashTextParse('{{name/j', actionGet, triggerList);
+  assert.equal(parsed.mode, SLASH_MODE_PARAM);
+  assert.equal(parsed.action, actionQuery);
+  assert.equal(parsed.param, 'name/j');
+  assert.equal(slashTextParse('{{@fro', actionGet, triggerList).action, actionMention);
+  // a character of its endList, two spaces in a row and a line break end it
+  assert.equal(slashTextParse('{{name}', actionGet, triggerList).mode, SLASH_MODE_END);
+  assert.equal(slashTextParse('{{name  ', actionGet, triggerList).mode, SLASH_MODE_END);
+  // without triggers a text not starting with "/" is no slash text
+  assert.equal(slashTextParse('{{name', actionGet).mode, SLASH_MODE_END);
+  assert.equal(slashTextGet({ lineIndex: 0, column: 2 }, { lineIndex: 0, lineBefore: 'a {{name' }, triggerList), '{{name');
+  assert.equal(slashTextGet({ lineIndex: 0, column: 2 }, { lineIndex: 0, lineBefore: 'a {{name' }), undefined);
+  // a rewritten parameter keeps the trigger text where "/name " stands otherwise
+  assert.deepEqual(slashEffectApplyGet(slashEffect.paramSet('name/'), 'query', triggerList[0]), { textNew: '{{name/', isEnded: false });
+});
+
+test('the store: a trigger typed in a cell walks a path and writes the token', () => {
+  const store = new DocSlashStore({ slashActionById: {} });
+  store.slashStart('cell', { anchor: { lineIndex: 0, column: 0 }, context: {}, actionOwnList: [actionQuery, actionMention], isPageActionIncluded: false, triggerList, text: '{{' });
+  assert.equal(store.parsed.mode, SLASH_MODE_PARAM);
+  assert.deepEqual(store.itemList.map((item) => item.label), ['name/', 'name/jp', 'birth/']);
+  assert.equal(store.paramHint, '');
+  // a folder chosen: the parameter is rewritten after the trigger text
+  assert.deepEqual(store.itemChoose(0), { textNew: '{{name/', isEnded: false, lengthOld: 2 });
+  assert.equal(store.slashUpdate('cell', { lineIndex: 0, lineBefore: '{{name/' }), true);
+  assert.equal(store.paramHint, 'in name/');
+  assert.deepEqual(store.itemList.map((item) => item.label), ['name/', 'name/jp']);
+  assert.deepEqual(store.itemChoose(1), { textNew: '{{name/jp}}', isEnded: true, lengthOld: 7 });
+  assert.equal(store.slash, undefined);
+  // "@" typed after the braces: the other kind's action takes over
+  store.slashStart('cell', { anchor: { lineIndex: 0, column: 0 }, context: {}, actionOwnList: [actionQuery, actionMention], isPageActionIncluded: false, triggerList, text: '{{' });
+  assert.equal(store.slashUpdate('cell', { lineIndex: 0, lineBefore: '{{@' }), true);
+  assert.equal(store.parsed.action, actionMention);
+  // the closing brace typed by hand ends it
+  assert.equal(store.slashUpdate('cell', { lineIndex: 0, lineBefore: '{{@a}' }), false);
 });

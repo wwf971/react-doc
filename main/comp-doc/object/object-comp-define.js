@@ -25,7 +25,8 @@ import { ObjectViewDocument } from './ObjectViewDocument.jsx';
 const placementDocList = ['mdx', 'commentBlock'];
 
 export const compObjectView = compDefine(ObjectView, {
-  placementList: [...placementDocList, 'visualizationNode'],
+  // commentInline: the inline form, a marker and the reference as inline code
+  placementList: [...placementDocList, 'commentInline', 'visualizationNode'],
   expose: {
     meta: {
       label: 'Object',

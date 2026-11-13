@@ -1,4 +1,4 @@
-<!-- Design of the slash mode of the default editors, and of any surface a component offers it in (its own actions). Parent document: doc_page_impl_edit.md. -->
+<!-- Design of the slash mode of the default editors, and of any surface a component offers it in (its own actions). Parent document: doc_page_impl_edit.md. The cells of a component (a cell of a table, a field of a mode of a frontend object) are typed with it through the cell edit layer, doc_page_impl_edit_cell.md. -->
 
 # Slash Mode of the Default Editors: Design
 
@@ -24,7 +24,8 @@ The actions come from a **registry**. It is built the same way as the component 
 DocPageMdx (start)
   ├─ compById         = package registry.js  + doc pages' components + host config.compById
   └─ slashActionById  = package slash-registry.js               + host config.slashActionById
-                         └─ 'nav/link': the navigation layer's /link (comp-doc/link/link-slash.js)
+                         ├─ 'nav/link': the navigation layer's /link (comp-doc/link/link-slash.js)
+                         └─ 'object/view': the object service layer's /object (comp-doc/object/object-slash.js)
 
 DocSlashStore                       one per page: the registry, the switch, the one open slash mode
   ▲ start / update / end / keys       ▼ state
@@ -74,6 +75,19 @@ Typing, deleting, pasting and undoing therefore all lead to the right state with
 
 **Why two spaces end it.** A parameter may contain one space (`/link getting started`), so a single space cannot mean "stop". Two spaces in a row never belong to a parameter, so they say that the author went back to writing. Escape does the same from the keyboard without typing anything. The first Escape closes the menu only; a second Escape cancels the block's edit session as usual.
 
+**Where a `/` starts it.** In a document, only at the start of a line or after a space, so a path or a url typed in the text never starts it. A surface whose words no space sets apart (a cell: `{{birth/month}}月`, text in Japanese) asks for the **loose rule** (`isTriggerLoose`): anywhere, unless the `/` follows a Latin letter, a digit or one of `/ : . ~ _ - <`, which is where a path, a url, `1/2` or `and/or` has one (`slashTriggerIs`).
+
+**Direct triggers.** A surface may name texts that enter the param mode of one action at once, without `/` and a name (`triggerList: [{ text, action, endList }]`). The trigger text then stands where `/name ␣` stands:
+
+```text
+{{            the param mode of the trigger's action, the parameter empty
+{{name/jp     the parameter is "name/jp"; a folder chosen rewrites it after the trigger text
+{{@           a longer trigger of the surface takes over: the action of "{{@"
+{{name}       ended: a character of the trigger's endList, two spaces in a row, a line break
+```
+
+The mode still follows from the text: the text from the first character of the trigger to the caret is parsed again after every input, the longest trigger first. The [cell edit layer](doc_page_impl_edit_cell.md#drawing-and-typing) uses both: its cells have the loose rule, and the opening text of a brace token (`{{`, `{{@`) is a direct trigger of the action that completes it.
+
 ## Keys and pointer
 
 While a slash mode is open, the surface offers every key to the binding first (`useEditSlash().keyDown`). The surface's own keys (Escape cancels the session, the arrows shift focus to the neighbor block, Tab indents) apply only to keys the binding did not take.
@@ -104,15 +118,18 @@ slashActionDefine({
     itemChoose(item, param, context) -> effect Enter, Tab, or a click on an item
     keyHandle(event, { param, item, context }) -> effect | undefined    optional: keys of its own
     ItemRender({ item, isActive, param })      optional: draws one item (default: icon by kind, label, detail)
+    hintGet(param, context) -> string          optional: what the parameter typed so far means, shown in the head of
+                                               the menu (the names of what a reference being walked has reached)
     emptyText                                  the line shown when there is no item
   },
 })
 
-context = { sourcePath, docPageAlias, source }  the document edited, its doc page, the source service object
+context = { sourcePath, docPageAlias, source, object }   the document edited, its doc page, the source service
+                                                          object, the object service layer (what /object lists from)
 effect  = slashEffect.replace(text) | slashEffect.paramSet(text) | slashEffect.cancel()
 ```
 
-**Going on after a part of the parameter.** An action whose parameter is a path chosen a part at a time (a folder, then what is in it) answers a folder chosen with `paramSet`: the parameter becomes the folder followed by `/`, the menu lists what is inside, and the author goes on choosing, never leaving the slash mode until a leaf is chosen and `replace` writes it. `/link ~example/` and a CV's `/query name/jp/` work so; the menu shows such an item with a folder icon (`kind: 'dir'`).
+**Going on after a part of the parameter.** An action whose parameter is a path chosen a part at a time (a folder, then what is in it) answers a folder chosen with `paramSet`: the parameter becomes the folder followed by `/`, the menu lists what is inside, and the author goes on choosing, never leaving the slash mode until a leaf is chosen and `replace` writes it. `/link ~example/`, a CV's `/query name/jp/` and `/object` (a type, then an object, then what is inside it) work so; the menu shows such an item with a folder icon (`kind: 'dir'`). An action whose parameter does not read as a path while it is walked (a reference holding an id) says what it has reached with `hintGet`. An item an action lists only to say something (why a list is empty, that it is still asked for) is chosen to no effect: `itemChoose` answers nothing.
 
 Callbacks rather than a component of its own keep the parameter logic pure and testable (`/link` is `lib/doc-link-complete.js` plus four lines of definition), while the menu stays one component with one keyboard behavior. `itemListGet` is called inside an observer, so an action may read MobX stores, and its list follows them (a document added to the source appears in the list while the author types). An action whose callback throws lists nothing, and a warning names it (`[doc-slash]`), so a broken action never breaks the editor. The effects are the whole vocabulary of what an action can do to the text. A later need (insert a block, open a dialog) is one more effect type, applied in one place (`slashEffectApplyGet`, `DocSlashStore.effectApply`).
 
@@ -135,6 +152,7 @@ Ids are `{layer}/{name}`, such as `nav/link`. The [unified api registry](doc_pag
 | id | name | provided by | does |
 | --- | --- | --- | --- |
 | `nav/link` | `/link`, `/ln` | navigation ([Writing a link](doc_page_impl_nav.md#writing-a-link)) | a Markdown link to a document of the workspace |
+| `object/view` | `/object`, `/obj`, `/o` | the object service layer ([Writing a reference](doc_page_impl_obj.md#writing-a-reference)) | a view of an object of the registry, found a type, an object, then what is inside it; in a document the inline form of `ObjectView` |
 
 ## Which blocks offer it
 
@@ -152,26 +170,35 @@ The switch in the editor bar (`EditSlashToggle`, `[/ Slash]`, highlighted when o
 
 ## Beyond the document editors
 
-The slash mode is not tied to documents. Any surface built on `EditSourceSurface` offers it when it is handed a `slash`, and a component editing its own data (a cell of a CV drawn by a mode of a frontend object, a field of a form) asks for one with `useEditSlashConfig` (`comp-doc/slash/use-edit-slash-config.js`, exported by the package):
+The slash mode is not tied to documents. Any surface built on `EditSourceSurface` offers it when it is handed a `slash`, and there are two ways to get one outside the block editors:
+
+- **A cell** (a cell of a table, a field of a mode of a frontend object: any small value typed in place) goes through the [cell edit layer](doc_page_impl_edit_cell.md), which builds the slash of a cell from its token kinds: the component defines what its tokens are (`cellTokenDefine`), asks for a cell (`useCell`) and draws it with `CellValue`, `CellEdit` or `CellField`. **This is the way for every cell-level value**: the cells of a page are then typed alike and hold the same things (a link, a view of an object) beside the component's own.
+- **Any other surface of a component** (a form's free text that holds no tokens, a search field with commands) asks for a slash itself with `useEditSlashConfig` (`comp-doc/slash/use-edit-slash-config.js`, exported by the package):
 
 ```js
 const slash = useEditSlashConfig({
-  actionList: [cvQuerySlashAction],     // its own actions, slashActionDefine as any
+  actionList: [myAction],               // its own actions, slashActionDefine as any
   context: { info, dateNow },           // what its actions receive
   isPageActionIncluded: false,          // the page's registry (/link ...) too; default false
+  isTriggerLoose: false,                // "/" anywhere but in a path or a url; default false
+  triggerList: [],                      // direct triggers: [{ text, action, endList }]
 });
 <EditSourceSurface kind="plain" slash={slash} text={draft} onTextChange={draftSet} ... />
 ```
 
-- **Own actions.** A surface's actions are its own list, then the page's registry when `isPageActionIncluded` (an own action hides a page action of its name). They are kept with the open slash mode (`slashStart({ actionOwnList, isPageActionIncluded })`), and every lookup of an open slash mode reads them (`DocSlashStore.actionByNameOpen`), so two surfaces of a page offer different actions with one store and one menu. An action over a component's data is defined beside the component and needs no registry: the component's own data (the profile a CV reads) comes in its context.
+What holds for both:
+
+- **Own actions.** A surface's actions are its own list, then the page's registry when `isPageActionIncluded` (an own action hides a page action of its name). They are kept with the open slash mode (`slashStart({ actionOwnList, isPageActionIncluded, triggerList })`), and every lookup of an open slash mode reads them (`DocSlashStore.actionByNameOpen`), so two surfaces of a page offer different actions with one store and one menu. An action over a component's data is defined beside the component and needs no registry: the component's own data comes in its context.
 - **The same mode.** One switch for the page (`EditSlashToggle`, exported too, so a component's card shows it), one menu, the same keys, the same effects. A component only decides what its surface's keys mean when the slash mode does not take them: the menu's keys come first, and a key it took is `defaultPrevented` when it reaches the component.
 - **A component's field.** `kind="plain"` gives the surface no look of its own (the block kinds have the typography of the page, the source kinds a monospace box): it takes the type and box of where it is, and the component styles it. `isFocusedInitial={false}` lets several surfaces open together (the fields of a row) with one focused, and `isTabInserted={false}` lets Tab move to the next field.
-- **Its context is read when the menu lists**, not only when the slash mode starts: a component hands a context object it keeps current (a ref), so what the menu lists follows its data.
+- **Its context is read when the menu lists**, not only when the slash mode starts: a component hands a context object it keeps current, so what the menu lists follows its data. A cell's context is kept current by `useCell`.
 
 | surface | actions | provided by |
 | --- | --- | --- |
 | a paragraph or list of a document | the page's registry | the edit layer (`config.edit.slash`) |
-| a cell of a Japanese-style CV (package cv) | `/query`, `/q`: a value of the profile as `{{path}}`, a segment at a time | the package cv, `useEditSlashConfig` |
+| a cell of a component | the actions of the cell's token kinds: `/link`, `/object`, and the component's own | the [cell edit layer](doc_page_impl_edit_cell.md) (`useCell`) |
+| a cell of a Japanese-style CV (package cv) | `/query`, `/q`, or `{{`: a value of the profile as `{{path}}`, a segment at a time; `/link`, `/object` | the package cv, as a token kind of its cells |
+| a remark or a note of a reading list (the demonstration) | `/book`, or `{{`: another book of the list; `/link`, `/object` | the demonstration's mode, as a token kind of its cells |
 
 ## The surface binding
 
@@ -180,7 +207,8 @@ const slash = useEditSlashConfig({
 ```text
 surface onInput  -> textReport (the draft, as before) -> inputAfter
                       open here:   slashUpdate(line of the caret, caret rect)
-                      else:        "/" typed at a word start? -> slashStart(line, column, context)
+                      else:        "/" typed where the surface's rule lets it start, or the last character
+                                   of one of its direct triggers? -> slashStart(line, column, context)
 selectionchange, scroll (while open)  -> slashUpdate, or slashEnd when the surface lost focus
 surface onKeyDown -> keyDown first (see Keys and pointer)
 choice -> SlashApply { textNew, isEnded, lengthOld }
@@ -196,14 +224,15 @@ The text is written through the browser's own editing command, as a paste is. Th
 ```text
 action mode                                   param mode
 ┌───────────────────────────────────────┐    ┌───────────────────────────────────────┐
-│ ⧉ /link  Link   a link to a document… │    │ ⧉ Link   a document name or title, … │ ◄ the action, its hint while empty
+│ ⧉ /link  Link   a link to a document… │    │ ⧉ Link   a document name or title, … │ ◄ the action; its placeholder while empty,
+│                                       │    │                                       │   else what the action says the parameter means
 │ ↑ ↓ Enter choose · Esc or two spaces  │    │ ▢ guide              ~example/guide   │ ◄ folders first in a path
 └───────────────────────────────────────┘    │ ▤ Getting started  ~example/guide/st… │
                                              │ ↑ ↓ Enter choose · Esc or two spaces  │
                                              └───────────────────────────────────────┘
 ```
 
-In the action mode, a query that matches no action shows no menu, because the author is probably writing text that starts with `/`. In the param mode, an empty list shows the action's `emptyText`, so the author knows the parameter is being read.
+In the action mode, a query that matches no action shows no menu, because the author is probably writing text that starts with `/`. In the param mode, an empty list shows the action's `emptyText`, so the author knows the parameter is being read. The head and the foot stay in place while a long list scrolls between them.
 
 ## Files
 
@@ -217,4 +246,5 @@ In the action mode, a query that matches no action shows no menu, because the au
 | `comp-doc/slash/use-edit-slash-config.js` | `useEditSlashConfig`: the slash of a component's own surface, with its own actions |
 | `comp-doc/slash/EditSlashMenu.jsx`, `EditSlashToggle.jsx`, `EditSlash.css` | the menu and the switch |
 | `comp-doc/link/link-slash.js`, `frontend/src/lib/doc-link-complete.js` | `/link`: the action, its items and the link it writes |
-| `frontend/src/lib/doc-slash.test.js`, `doc-link-complete.test.js` | the state machine, the store, and `/link` |
+| `comp-doc/object/object-slash.js`, `frontend/src/lib/doc-object-complete.js` | `/object`: the action, the walk from a type to what is inside an object |
+| `frontend/src/lib/doc-slash.test.js`, `doc-link-complete.test.js`, `doc-object-complete.test.js` | the state machine, the triggers, the store, `/link`, `/object` |

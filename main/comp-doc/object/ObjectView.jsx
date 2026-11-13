@@ -17,7 +17,17 @@ import { objectCompDataRead, objectContextRead } from './object-comp-data.js';
 //
 // In a node of a card diagram (renderer: { component: ObjectView }) it is a
 // card filling the node; its data is the same mapping.
+//
+// Inside a line of text it is the inline form: the marker and the reference
+// as inline code, drawn in the context inline (what /object writes in a
+// paragraph, doc_page_impl_obj.md#writing-a-reference):
+//
+//   see <!--renderComp=ObjectView-->`frontend:w5j7ozoijzl#/book/sci-fi/dune` for the plot
 export const ObjectView = observer(function ObjectView({ data = {}, config = {} }) {
+  if (config.placement === 'commentInline') {
+    const objectRefInline = String(data.raw ?? '').trim();
+    return <ObjectViewHost objectRef={objectRefInline} context="inline" sourcePath={config.sourcePath} />;
+  }
   const value = objectCompDataRead(data);
   const objectRef = String(value.object ?? value.ref ?? '');
   const context = objectContextRead(value.context, 'card');

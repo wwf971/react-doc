@@ -4,6 +4,7 @@ import {
   OBJECT_VIEW_CONTEXT_LIST,
   objectDescriptorNormalize,
   objectDescriptorPlaceholder,
+  objectRefIsValid,
   objectRefParse,
   objectRequestKeyBuild,
   objectTextIsMatch,
@@ -164,6 +165,13 @@ export type ObjectProvider = {
   relationCreate?: (spec: ObjectRelationWriteSpec, registry: any) => Promise<{ relation: any }>;
   relationDelete?: (spec: ObjectRelationWriteSpec, registry: any) => Promise<{ relation?: any } | void>;
   relationUpdate?: (spec: ObjectRelationWriteSpec, registry: any) => Promise<{ relation?: any } | void>;
+  // capability innerComplete: the candidates completing a text typed for
+  // something inside one of its objects (the paths of a frontend object, the
+  // sections of a document). answered at once from what its layer holds,
+  // read in an observer: { status: done | loading, itemList, message }, each
+  // item { kind: 'dir', text, label, detail } (typing goes on with text) or
+  // { kind: 'item', ref, label, detail } (ref: the reference of what it names)
+  innerComplete?: (ref: string, text: string, registry: any) => ObjectInnerCompleteResult;
   // facts about a type beyond its definition that this provider knows (the
   // modes of a frontend object type): merged into typeInfoGet
   typeInfoGet?: (typeId: string, registry: any) => Record<string, any> | undefined;
@@ -184,6 +192,9 @@ export type ObjectProvider = {
   compListGet?: () => ObjectProviderComp[];
   open?: (descriptor: ObjectDescriptor) => boolean | Promise<boolean>;
 };
+
+export type ObjectInnerCompleteItem = { kind: 'dir' | 'item'; text?: string; ref?: string; label: string; detail?: string };
+export type ObjectInnerCompleteResult = { status: 'done' | 'loading' | 'none'; itemList: ObjectInnerCompleteItem[]; message: string };
 
 type ResolveEntry = { status: 'loading' | 'done'; descriptor: ObjectDescriptor; time: number; version: any; promise?: Promise<ObjectDescriptor> };
 type RequestEntry<T> = { status: 'loading' | 'done'; result: T | null; time: number; version: any; promise?: Promise<T>; providerIdList: string[] };
@@ -334,6 +345,17 @@ export class DocObjectStore {
     const compById = this.stores.docStore?.compById ?? {};
     const compId = compIdResolve(this.stores.docStore?.sourceStore?.configDoc, compName);
     return compDefinitionGet(compById, compId) !== undefined || compDefinitionGet(compById, compName) !== undefined;
+  }
+
+  // the components of the registry exposing a name, each with what it exposes: how a layer
+  // finds the components answering for its types (expose.objectInner of the frontend objects)
+  compExposeListGet(exposeName: string): { compId: string; value: any }[] {
+    const list: { compId: string; value: any }[] = [];
+    for (const [compId, item] of Object.entries(this.stores.docStore?.compById ?? {})) {
+      const value = compDefinitionNormalize(item)?.expose?.[exposeName];
+      if (value !== undefined) list.push({ compId, value });
+    }
+    return list;
   }
 
   get typeDeclaredProblemList(): { alias: string; file: string; message: string }[] {
@@ -489,7 +511,11 @@ export class DocObjectStore {
     try {
       const [item] = await provider.resolve([ref], this.typeRegistry, { isVerify });
       if (!item || item.status === 'missing') {
-        return { ...(known ?? (objectDescriptorPlaceholder(ref, 'missing') as ObjectDescriptor)), status: 'missing', message: item?.message || `${provider.label} has no object ${ref}` };
+        // a provider that still says what the missing thing is (its types, a name) is heard: the
+        // view of its type then says where it stands that it is gone (something inside a
+        // frontend object whose path names nothing)
+        const base = item?.typeList?.length ? (objectDescriptorNormalize(item, provider, 'missing') as ObjectDescriptor) : known ?? (objectDescriptorPlaceholder(ref, 'missing') as ObjectDescriptor);
+        return { ...base, status: 'missing', message: item?.message || `${provider.label} has no object ${ref}` };
       }
       return objectDescriptorNormalize(item, provider, item.status ?? 'found') as ObjectDescriptor;
     } catch (error: any) {
@@ -503,6 +529,30 @@ export class DocObjectStore {
     if (entry?.status === 'done' && entry.descriptor.typeList.length > 0) return entry.descriptor;
     const registration = this.registrationByRef.get(ref);
     return registration?.descriptor;
+  }
+
+  // ---------- inside an object ----------
+
+  // the candidates completing a text typed for something inside an object
+  // (doc_page_impl_obj.md#inside-an-object): asked of the provider of the
+  // reference, which answers at once from what its layer holds. read in an
+  // observer (the menu of the slash action /object), it follows the layer.
+  // status none: the provider completes nothing inside its objects
+  innerCompleteGet(ref: string, text = ''): ObjectInnerCompleteResult {
+    const provider = this.providerOfRefGet(ref);
+    if (!provider?.innerComplete || !provider.capabilityList.includes('innerComplete')) {
+      return { status: 'none', itemList: [], message: provider ? `${provider.label} lists nothing inside its objects` : `no provider of ${ref}` };
+    }
+    try {
+      const result = provider.innerComplete(ref, String(text ?? ''), this.typeRegistry);
+      return {
+        status: result?.status ?? 'done',
+        itemList: Array.isArray(result?.itemList) ? result.itemList.filter((item) => item && (item.kind === 'dir' ? typeof item.text === 'string' : objectRefIsValid(item.ref))) : [],
+        message: String(result?.message ?? ''),
+      };
+    } catch (error: any) {
+      return { status: 'done', itemList: [], message: String(error?.message ?? error) };
+    }
   }
 
   // descriptors a query (or a search) answered, kept as what is known of their references

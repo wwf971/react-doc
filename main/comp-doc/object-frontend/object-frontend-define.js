@@ -1,16 +1,18 @@
 import { Boxes, LayoutList, SquarePen } from '../../frontend/UICommon.js';
 import { compDefine } from '../registry/comp-registry.js';
 import {
-  OBJECT_FRONTEND_PLACEMENT, OBJECT_FRONTEND_TYPE_ROOT, objectFrontendBlockTextBuild,
+  OBJECT_FRONTEND_PLACEMENT, OBJECT_FRONTEND_TYPE_INNER, OBJECT_FRONTEND_TYPE_ROOT, objectFrontendBlockTextBuild,
 } from '../../frontend/src/lib/doc-object-frontend.js';
 import { ObjectFrontend } from './ObjectFrontend.jsx';
 import { ObjectFrontendOverview } from './ObjectFrontendOverview.jsx';
 import { ObjectViewFrontend } from './ObjectViewFrontend.jsx';
+import { ObjectViewFrontendInner } from './ObjectViewFrontendInner.jsx';
 
 // The components of the frontend object service layer (doc_page_impl_obj_frontend.md):
 // the entry component a document writes (ObjectFrontend), the mode every
-// frontend object has (ObjectFrontendOverview, of frontend.object), and the
-// view of frontend.object for the object registry.
+// frontend object has (ObjectFrontendOverview, of frontend.object), the
+// view of frontend.object for the object registry, and the view of
+// frontend.inner, something inside an object named by an inner path.
 //
 // The block starts in the comment-block form, as every component of the
 // package: the marker <!--renderComp=ObjectFrontend--> and its fenced yaml.
@@ -53,5 +55,13 @@ export const compObjectViewFrontend = compDefine(ObjectViewFrontend, {
   expose: {
     meta: { label: 'Frontend object', isNotInDoc: true, isReadOnly: true },
     objectView: { typeList: [OBJECT_FRONTEND_TYPE_ROOT], contextList: ['card', 'block'], priority: 0 },
+  },
+});
+
+export const compObjectViewFrontendInner = compDefine(ObjectViewFrontendInner, {
+  placementList: ['objectView'],
+  expose: {
+    meta: { label: 'Inside a frontend object', isNotInDoc: true, isReadOnly: true },
+    objectView: { typeList: [OBJECT_FRONTEND_TYPE_INNER], contextList: ['icon', 'inline', 'card', 'block'], priority: 0 },
   },
 });

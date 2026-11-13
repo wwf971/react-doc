@@ -47,6 +47,13 @@ import './DocEdit.css';
 //   isTabInserted       Tab types two spaces (default true); false lets Tab
 //                       go on to the component, which moves to the next field
 //   onTextChange(text)  typed text
+//   onSelectionChange({ start, end, text })
+//                       optional: the selection inside the surface, as offsets
+//                       into its text, whenever it changes (a caret is start
+//                       equal to end). not reported once the selection has left
+//                       the surface, so what was selected last stays known to a
+//                       control beside it (the cell edit layer: a selected text
+//                       made a token, doc_page_impl_edit_cell.md)
 //   onSubmitRequest()   Ctrl/Cmd + Enter
 //   onCancelRequest()   Escape
 //   onFocusShiftRequest(direction, { point })
@@ -67,6 +74,7 @@ export function EditSourceSurface({
   isTabInserted = true,
   className = '',
   onTextChange,
+  onSelectionChange,
   onSubmitRequest,
   onCancelRequest,
   onFocusShiftRequest,
@@ -74,6 +82,21 @@ export function EditSourceSurface({
 }) {
   const elementRef = useRef(null);
   const slashBinding = useEditSlash(elementRef, slash, { textBeforeCaretGet });
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
+  const isSelectionReported = Boolean(onSelectionChange);
+
+  // the selection inside the surface, told to whoever asked for it
+  useEffect(() => {
+    if (!isSelectionReported) return undefined;
+    const selectionHandle = () => {
+      const element = elementRef.current;
+      const range = element ? selectionRangeGet(element) : undefined;
+      if (range) onSelectionChangeRef.current?.(range);
+    };
+    document.addEventListener('selectionchange', selectionHandle);
+    return () => document.removeEventListener('selectionchange', selectionHandle);
+  }, [isSelectionReported]);
 
   useLayoutEffect(() => {
     const element = elementRef.current;
@@ -245,6 +268,24 @@ function surfaceLineShapeKeep(element, lineSpaceListGet) {
   const offset = caretOffsetGet(element);
   element.replaceChildren(...lineList.map((line, index) => surfaceLineBuild(line, spaceList[index])));
   if (offset !== undefined) caretPlaceAtLineOffset(element, offset);
+}
+
+// the selection inside the surface as offsets into its text: { start, end, text };
+// undefined when it is not inside the surface
+function selectionRangeGet(element) {
+  const selection = window.getSelection?.();
+  if (!selection || selection.rangeCount === 0) return undefined;
+  const range = selection.getRangeAt(0);
+  if (!element.contains(range.startContainer) || !element.contains(range.endContainer)) return undefined;
+  const offsetOf = (container, offset) => {
+    const rangeBefore = document.createRange();
+    rangeBefore.selectNodeContents(element);
+    rangeBefore.setEnd(container, offset);
+    return element.hasAttribute('data-lines') ? surfaceLineListRead(rangeBefore.cloneContents()).join('\n').length : rangeBefore.toString().length;
+  };
+  const start = offsetOf(range.startContainer, range.startOffset);
+  const end = offsetOf(range.endContainer, range.endOffset);
+  return { start, end, text: surfaceTextGet(element).slice(start, end) };
 }
 
 // where the caret is, as an offset into the text of the surface

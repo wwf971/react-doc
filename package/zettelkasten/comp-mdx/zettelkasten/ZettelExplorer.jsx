@@ -77,7 +77,7 @@ export function ZettelLoading({ read, height }) {
 // The mode "explorer" of a zettelkasten (doc/README.md#the-modes): the map of the cards and
 // the card being read, side by side.
 //
-//   param.zettel       the card shown first (a key); the root without one
+//   param.zettel       the card shown first (a key, or any asset reference: a path, name:…); the root without one
 //   param.height       the height of the block
 //   param.layout       split (default) | map | card: what the block starts with
 //   param.panel        map (default) | outline | question | note: what the left side starts with
@@ -104,14 +104,23 @@ const LAYOUT_LIST = [
 	{ id: 'card', label: 'Card', Icon: FileText, title: 'The card alone' },
 ];
 
+// the card a block names, as its key: param.zettel is an inner path of the box (react-doc:
+// main/doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths), so a key, a path of
+// the card (/zettel/…) or name:… all name it; what names no asset is left as written
+function zettelKeyOfParam(service, zettelParam) {
+	if (!zettelParam) return '';
+	return service.assetGet(String(zettelParam))?.key ?? String(zettelParam);
+}
+
 const ZettelExplorerBody = observer(function ZettelExplorerBody({ service, model, read, param, config }) {
 	const instanceId = useId().replace(/[^a-zA-Z0-9]/g, '');
 	const rootRef = useRef(null);
 	const store = useCompStateStore(config, 'zettel', () => new ZettelStore({ isPractice: param.isPractice === true, layout: param.layout, panel: param.panel }));
 	// the card read: the store's once it has one, else the one the block names
-	const pathStart = zettelPathOf(model, param.zettel && zettelGet(model, param.zettel) ? param.zettel : model.rootKey);
+	const zettelKey = zettelKeyOfParam(service, param.zettel);
+	const pathStart = zettelPathOf(model, zettelKey && zettelGet(model, zettelKey) ? zettelKey : model.rootKey);
 	const path = zettelPathRead(model, store.path) ? store.path : pathStart;
-	useEffect(() => { store.pathEnsure(model, param.zettel); }, [store, model, param.zettel]);
+	useEffect(() => { store.pathEnsure(model, zettelKey); }, [store, model, zettelKey]);
 	// in practice the scenes of the questions show the verdicts only of those answered
 	const revealText = store.isPractice ? [...store.revealKeySet].sort().join(',') : '*';
 	const provider = useMemo(() => zettelProviderBuild(model, {
@@ -230,9 +239,10 @@ export const ZettelCard = observer(function ZettelCard({ data = {}, config = {} 
 
 const ZettelCardBody = observer(function ZettelCardBody({ service, model, param, config }) {
 	const store = useCompStateStore(config, 'zettel', () => new ZettelStore({ isPractice: param.isPractice === true }));
-	const pathStart = zettelPathOf(model, param.zettel && zettelGet(model, param.zettel) ? param.zettel : model.rootKey);
+	const zettelKey = zettelKeyOfParam(service, param.zettel);
+	const pathStart = zettelPathOf(model, zettelKey && zettelGet(model, zettelKey) ? zettelKey : model.rootKey);
 	const path = zettelPathRead(model, store.path) ? store.path : pathStart;
-	useEffect(() => { store.pathEnsure(model, param.zettel); }, [store, model, param.zettel]);
+	useEffect(() => { store.pathEnsure(model, zettelKey); }, [store, model, zettelKey]);
 	if (!path) return <p className="doc-note">There is no card {param.zettel ? `"${param.zettel}"` : ''} in this zettelkasten.</p>;
 	const height = Number(param.height) > 0 ? zettelHeightOf(param) : 0;
 	return (

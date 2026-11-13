@@ -18,7 +18,7 @@ param:
   height: 640
 ```
 
-A block is written like this; `param.zettel` names the card shown first, `param.layout` is `split`, `map` or `card`, and `param.isPractice: true` hides the answers of questions until asked.
+A block is written like this; `param.zettel` names the card shown first (its key, or any reference to it within the box: a path, `name:…`), `param.layout` is `split`, `map` or `card`, and `param.isPractice: true` hides the answers of questions until asked.
 
 ````md
 <!--renderComp=ObjectFrontend-->

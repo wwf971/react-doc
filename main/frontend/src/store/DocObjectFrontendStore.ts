@@ -7,7 +7,9 @@ import {
   objectFrontendModeListResolve, objectFrontendParamMerge, objectFrontendRefBuild,
   objectFrontendAssetIndexBuild, objectFrontendAssetPathComplete, objectFrontendAssetRefResolve, objectFrontendAssetSearch,
   objectFrontendAssetKindListResolve, objectFrontendDocListBuild, objectFrontendPartitionListBuild, objectFrontendPartitionListResolve, objectFrontendPartitionOf,
+  objectFrontendInnerCompleteDefault, objectFrontendInnerModeGet, objectFrontendInnerResolveDefault, objectFrontendRefSplit,
 } from '../lib/doc-object-frontend.js';
+import { objectFrontendServiceBuild } from '../../../comp-doc/object-frontend/object-frontend-service.js';
 import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
 
 // the layer as a provider of documents of the source (DocSourceStore.docProvidedSet)
@@ -52,7 +54,24 @@ type Stores = { assetStore: any; objectStore?: any; configStore?: any; sourceSto
 export type ObjectFrontendMode = {
   id: string; label: string; description: string; category: string; comp: string; param: Record<string, any>;
   isDefault: boolean; typeId: string;
+  // the parameter taking an inner path, of a mode showing one thing of its object
+  pathParam?: string;
 };
+
+// what an inner path names in an object (innerResolve)
+export type ObjectFrontendInner = {
+  status: 'found' | 'missing' | 'deleted' | 'unknown' | 'loading';
+  // the inner path as it is kept, how the thing is named for a reader, a line saying more
+  path: string; label: string; detail: string;
+  // its kind (an asset's kind, or what the type calls it), its value as text when it is one
+  kind: string; text?: string;
+  // a type of its own below frontend.inner, when the type of the object declares one
+  typeId?: string;
+  asset?: ObjectFrontendAsset;
+  message: string;
+};
+
+export type ObjectFrontendInnerCandidate = { kind: 'dir' | 'item'; path: string; label: string; detail: string };
 
 export type ObjectFrontendAsset = {
   key: string;
@@ -158,6 +177,7 @@ export class DocObjectFrontendStore {
       stores: false,
       overrideByKey: false,
       assetSearchSessionByKey: false,
+      innerServiceByRef: false,
       unsubscribe: false,
       docDisposeList: false,
       configPromise: false,
@@ -858,6 +878,132 @@ export class DocObjectFrontendStore {
     const modeList = this.modeListGet(state.typeId);
     const mode = objectFrontendModeChoose(modeList, modeIdAsked);
     return { modeList, mode, param: objectFrontendParamMerge(mode?.param, paramBlock) };
+  }
+
+  // ---------- things inside an object: inner paths ----------
+  // (doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths) an inner path names one
+  // thing inside an object that the object can show: by default one of its assets, by an asset
+  // reference; a type whose things are not its assets (the values of a profile) has a component
+  // answering for them (expose.objectInner)
+
+  // what answers for the inner paths of a type: the component exposing objectInner for the
+  // nearest type; undefined when none does, and the layer reads the paths of the assets
+  innerProviderGet(typeId: string): { compId: string; resolve?: (input: any) => any; complete?: (input: any) => any } | undefined {
+    const objectStore = this.stores.objectStore;
+    const registry = objectStore?.typeRegistry;
+    if (!registry || !objectStore.compExposeListGet) return undefined;
+    let best: { compId: string; value: any; distance: number } | undefined;
+    for (const { compId, value } of objectStore.compExposeListGet('objectInner')) {
+      for (const typeIdOne of value.typeList ?? []) {
+        const distance = registry.rankGet([typeId], typeIdOne);
+        if (distance !== undefined && (!best || distance < best.distance)) best = { compId, value, distance };
+      }
+    }
+    return best ? { compId: best.compId, resolve: best.value.resolve, complete: best.value.complete } : undefined;
+  }
+
+  // the api of a mode for an object, without a block: what a component answering for the inner
+  // paths of its type reads the object with
+  innerServiceByRef = new Map<string, any>();
+  innerServiceGet(ref: string) {
+    let service = this.innerServiceByRef.get(ref);
+    if (!service) {
+      service = objectFrontendServiceBuild({
+        objectFrontendStore: this, ref, modeList: [], param: {},
+        blockSwitch: () => Promise.resolve({ code: -1, message: 'an inner path is answered without a block to switch' }),
+      } as any);
+      this.innerServiceByRef.set(ref, service);
+    }
+    return service;
+  }
+
+  private assetKindLabelOfGet(idOrRef: string) {
+    const kindList = this.assetKindListGet(idOrRef) ?? [];
+    return (kind: string) => kindList.find((one: any) => one.id === kind)?.label ?? kind;
+  }
+
+  // what an inner path names in an object, with its status: found, missing or deleted (an
+  // asset the object lists, gone from the store), unknown (nothing answers to it), loading
+  innerResolve(idOrRef: string, innerPath: string): ObjectFrontendInner {
+    const state = this.objectGet(idOrRef);
+    const path = String(innerPath ?? '').trim();
+    const base = { path, label: path, detail: '', kind: '' };
+    if (state.status !== 'found') return { ...base, status: state.status === 'loading' ? 'loading' : 'unknown', message: state.message };
+    if (path === '') return { ...base, status: 'unknown', message: 'an inner path names something inside the object' };
+    const provider = this.innerProviderGet(state.typeId);
+    if (!provider?.resolve) return objectFrontendInnerResolveDefault(state.assetIndex, path, this.assetKindLabelOfGet(state.ref)) as ObjectFrontendInner;
+    try {
+      const answer = provider.resolve({ service: this.innerServiceGet(state.ref), path }) ?? {};
+      return {
+        status: ['found', 'missing', 'deleted', 'loading'].includes(answer.status) ? answer.status : 'unknown',
+        path: String(answer.path ?? path),
+        label: String(answer.label ?? path),
+        detail: String(answer.detail ?? ''),
+        kind: String(answer.kind ?? ''),
+        ...(answer.text === undefined || answer.text === null ? {} : { text: String(answer.text) }),
+        ...(typeof answer.typeId === 'string' && answer.typeId ? { typeId: answer.typeId } : {}),
+        message: String(answer.message ?? ''),
+      };
+    } catch (error: any) {
+      console.warn(`[doc-object-frontend] ${provider.compId}: objectInner.resolve failed`, error);
+      return { ...base, status: 'unknown', message: String(error?.message ?? error) };
+    }
+  }
+
+  // the candidates completing a typed inner path: the folders (their path ends with "/", typing
+  // goes on inside) and the things of the folder typed so far. read in an observer, it follows
+  // the object; loading while the object is not read yet
+  innerComplete(idOrRef: string, text: string): { status: 'done' | 'loading'; itemList: ObjectFrontendInnerCandidate[]; message: string } {
+    const state = this.objectGet(idOrRef);
+    if (state.status === 'loading') return { status: 'loading', itemList: [], message: '' };
+    if (state.status !== 'found') return { status: 'done', itemList: [], message: state.message };
+    const provider = this.innerProviderGet(state.typeId);
+    if (!provider?.complete) {
+      return { status: 'done', itemList: objectFrontendInnerCompleteDefault(state.assetIndex, text, this.assetKindLabelOfGet(state.ref)) as ObjectFrontendInnerCandidate[], message: '' };
+    }
+    try {
+      const answer = provider.complete({ service: this.innerServiceGet(state.ref), text: String(text ?? '') });
+      const list = Array.isArray(answer) ? answer : answer?.itemList ?? [];
+      return {
+        status: !Array.isArray(answer) && answer?.status === 'loading' ? 'loading' : 'done',
+        itemList: list.filter((item: any) => item && typeof item.path === 'string').map((item: any) => ({
+          kind: item.kind === 'dir' ? 'dir' : 'item', path: item.path, label: String(item.label ?? item.path), detail: String(item.detail ?? ''),
+        })),
+        message: String((!Array.isArray(answer) && answer?.message) || ''),
+      };
+    } catch (error: any) {
+      console.warn(`[doc-object-frontend] ${provider.compId}: objectInner.complete failed`, error);
+      return { status: 'done', itemList: [], message: String(error?.message ?? error) };
+    }
+  }
+
+  // the mode of a type showing one thing of its object, and the block that shows the thing an
+  // inner path names: { object, mode, param: { [pathParam]: path } }; undefined when the type
+  // declares no such mode
+  innerModeGet(typeId: string): ObjectFrontendMode | undefined {
+    return objectFrontendInnerModeGet(this.modeListGet(typeId)) as ObjectFrontendMode | undefined;
+  }
+
+  innerBlockGet(idOrRef: string, innerPath: string): { object: string; mode: string; param: Record<string, any> } | undefined {
+    const state = this.objectGet(objectFrontendRefSplit(idOrRef).ref || idOrRef);
+    if (state.status !== 'found') return undefined;
+    const mode = this.innerModeGet(state.typeId);
+    return mode?.pathParam ? { object: state.ref, mode: mode.id, param: { [mode.pathParam]: innerPath } } : undefined;
+  }
+
+  // going to what an inner path names: its document when it is one, through the routes of the
+  // navigation (so the home document of its object answers a reader coming from outside), else
+  // the object in the Frontend objects tab
+  innerOpen(idOrRef: string, innerPath: string): boolean {
+    const { id } = objectFrontendRefSplit(idOrRef);
+    const inner = this.innerResolve(id, innerPath);
+    const docPath = inner.asset ? this.docPathGet(id, inner.asset.key) : '';
+    const { navStore } = this.stores;
+    if (docPath && navStore?.request) {
+      void navStore.request({ target: docPath, hash: '', fromPath: '', param: {} });
+      return true;
+    }
+    return this.settingsOpen(id);
   }
 
   // ---------- the Frontend objects tab ----------

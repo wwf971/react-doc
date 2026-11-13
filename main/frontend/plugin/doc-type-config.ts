@@ -36,7 +36,7 @@ import {
 export const TYPE_CONFIG_FILE_NAME = 'type.yaml';
 const TOP_KEY_LIST = ['typeList'];
 const TYPE_KEY_LIST = ['id', 'kind', 'label', 'description', 'icon', 'extendList', 'summaryKeyList', 'modeList', 'assetKindList', 'partitionList'];
-const MODE_KEY_LIST = ['id', 'label', 'description', 'category', 'comp', 'param', 'isDefault'];
+const MODE_KEY_LIST = ['id', 'label', 'description', 'category', 'comp', 'param', 'isDefault', 'pathParam'];
 const ASSET_KIND_KEY_LIST = ['id', 'label', 'langList', 'pathPrefix', 'groupPath', 'isIncomingRefused', 'isDoc', 'docPath'];
 const PARTITION_KEY_LIST = ['id', 'label', 'description', 'isGitIgnored', 'isDefault', 'storagePoint'];
 
@@ -50,6 +50,8 @@ export type TypeMode = {
   comp: string;
   param: Record<string, unknown>;
   isDefault: boolean;
+  // the parameter of the mode taking an inner path: the mode shows one thing of its object
+  pathParam?: string;
 };
 
 export type TypeAssetKind = {
@@ -294,6 +296,10 @@ function modeListRead(value: unknown, place: string, problem: (message: string) 
       problem(`${placeOne}: "param" is a mapping`);
       return;
     }
+    if (item.pathParam !== undefined && (typeof item.pathParam !== 'string' || !OBJECT_FRONTEND_MODE_ID_REGEX.test(item.pathParam))) {
+      problem(`${placeOne}: "pathParam" names the parameter of the mode that takes an inner path (letters, digits, "_" and "-")`);
+      return;
+    }
     modeList.push({
       id,
       label: typeof item.label === 'string' && item.label ? item.label : id,
@@ -302,6 +308,8 @@ function modeListRead(value: unknown, place: string, problem: (message: string) 
       comp: item.comp.trim(),
       param: item.param ?? {},
       isDefault: item.isDefault === true,
+      // the mode shows one thing of its object: the parameter naming it by an inner path
+      ...(typeof item.pathParam === 'string' && item.pathParam ? { pathParam: item.pathParam } : {}),
     });
   });
   return modeList;

@@ -29,13 +29,27 @@
   white-space: nowrap;
 }
 
+/* the head and the foot stay while a long list scrolls between them */
 .doc-edit-slash-head {
+  position: sticky;
+  top: -2px;
+  z-index: 1;
   border-bottom: 1px solid var(--color-fd-border);
   margin-bottom: 2px;
+  background: var(--color-fd-popover, var(--color-fd-background));
 }
 
 .doc-edit-slash-head-label {
   font-weight: 550;
+}
+
+/* what the parameter typed so far means: one line, cut at the end */
+.doc-edit-slash-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-fd-muted-foreground);
 }
 
 .doc-edit-slash-item {
@@ -85,8 +99,12 @@
 }
 
 .doc-edit-slash-foot {
+  position: sticky;
+  bottom: -2px;
+  z-index: 1;
   margin-top: 2px;
   border-top: 1px solid var(--color-fd-border);
+  background: var(--color-fd-popover, var(--color-fd-background));
   color: var(--color-fd-muted-foreground);
   font-size: 0.66rem;
 }
@@ -98,4 +116,18 @@
   font-family: inherit;
   font-size: 0.62rem;
   line-height: 1.1;
+}
+
+/* an item drawn by an action as one row of its own (ItemRender): the same
+   columns as the default item, the last one a mark that choosing goes on */
+.doc-edit-slash-row {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.doc-edit-slash-go {
+  flex: 0 0 auto;
 }

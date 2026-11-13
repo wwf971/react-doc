@@ -58,6 +58,8 @@ export const EditSlashMenu = observer(function EditSlashMenu({ slashStore, surfa
 
   const action = parsed.mode === SLASH_MODE_PARAM ? parsed.action : undefined;
   const ItemRender = action?.param?.ItemRender;
+  // what the parameter typed so far means (the action says); the placeholder while it says nothing
+  const hint = action ? slashStore.paramHint : '';
   const style = menuPositionGet(slash.rectAnchor, heightMenu);
 
   return createPortal(
@@ -73,7 +75,8 @@ export const EditSlashMenu = observer(function EditSlashMenu({ slashStore, surfa
         <div className="doc-edit-slash-head">
           {action.icon ? <action.icon size={13} className="doc-edit-slash-icon" /> : null}
           <span className="doc-edit-slash-head-label">{action.label}</span>
-          {parsed.param === '' ? <span className="doc-edit-slash-muted">{action.param.placeholder}</span> : null}
+          {hint ? <span className="doc-edit-slash-hint" title={hint}>{hint}</span> : null}
+          {!hint && parsed.param === '' ? <span className="doc-edit-slash-muted">{action.param.placeholder}</span> : null}
         </div>
       ) : null}
       {itemList.length === 0 ? (
