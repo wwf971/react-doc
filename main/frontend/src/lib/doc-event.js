@@ -122,8 +122,8 @@ export class DocEventRouter {
   //   subject.blockLine    the marker line of the block, matched against the
   //                        subscribers' sourceLine
   // every matching subscriber is called, in subscription order; a listener
-  // that throws is reported and passed over. isAccepted: at least one
-  // answered with code 0.
+  // that throws is reported and passed over. answers { code: 0, message, data:
+  // { resultList, isAccepted } }; isAccepted: at least one answered with code 0.
   async publish({ type, subject = {}, data = {} }) {
     const sourcePath = String(subject.sourcePath ?? '');
     const subscriptionList = [...(this.subscriptionListByType.get(type) ?? [])].filter((subscription) => (
@@ -139,20 +139,18 @@ export class DocEventRouter {
         console.error(`[doc-event] a subscriber of ${type} failed.`, error);
       }
     }
-    return { resultList, isAccepted: resultList.some(eventResultIsAccepted) };
+    return { code: 0, message: '', data: { resultList, isAccepted: resultList.some(eventResultIsAccepted) } };
   }
 }
 
-// a handler result in the { code, data, message } form; undefined when the
-// handler did not answer. { isHandled: true } is the form host applications
-// returned before the event layer existed and still means "accepted".
+// a handler result in the { code, message, data } form, the one shape an
+// answer has; undefined when the handler did not answer (anything else is no answer)
 export function resultNormalize(result) {
   if (result === undefined || result === null) return undefined;
   if (typeof result !== 'object') return undefined;
   if (typeof result.code === 'number') {
     return { code: result.code, data: result.data, message: result.message ?? '' };
   }
-  if (result.isHandled === true) return { code: eventCodeAccepted, data: result.data, message: '' };
   return undefined;
 }
 

@@ -6,7 +6,8 @@ import {
 import { assetStorageConfigDefaultGet, assetStorageConfigForPage } from './doc-asset-storage.ts';
 import { testCaseAssetResultSet, testCaseAssetWriteCheck } from '../../../built-in/comp-mdx/test-case-table/TestCaseTableApi.js';
 import {
-  objectFrontendAssetAttach, objectFrontendAssetGroupMove, objectFrontendPartitionCompact, objectFrontendPartitionCreate, objectFrontendPartitionDelete, objectFrontendPartitionRename, objectFrontendPartitionStorageSet, objectFrontendAssetMove, objectFrontendAssetCreate, objectFrontendAssetRemove, objectFrontendConfigForPage,
+  objectFrontendAssetAttach, objectFrontendAssetGroupMove, objectFrontendPartitionCompact, objectFrontendPartitionCreate, objectFrontendPartitionDelete, objectFrontendPartitionRename, objectFrontendPartitionStorageSet,
+  objectFrontendPartitionItemImport, objectFrontendAssetMove, objectFrontendAssetCreate, objectFrontendAssetRemove, objectFrontendConfigForPage,
   objectFrontendAssetMetaSet, objectFrontendCreate, objectFrontendDelete, objectFrontendMetaSet, objectFrontendRegister, type ObjectFrontendConfig,
 } from './doc-object-frontend.ts';
 
@@ -167,7 +168,9 @@ export function docAssetMiddlewareCreate(options: {
         .catch(failureSend);
       return;
     }
-    void routeHandle(req, route, url, storeGet(), rootAbsPathByPathGet, fileEntryListGet)
+    // the store is read inside the chain: a config that does not load is answered like any failure
+    void Promise.resolve()
+      .then(() => routeHandle(req, route, url, storeGet(), rootAbsPathByPathGet, fileEntryListGet))
       .then((data) => jsonSend(res, 200, { code: 0, data, message: '' }))
       .catch(failureSend);
   };
@@ -205,6 +208,7 @@ async function objectFrontendRouteHandle(
     '/object-frontend/partition/rename': () => objectFrontendPartitionRename(context, body),
     '/object-frontend/partition/delete': () => objectFrontendPartitionDelete(context, body),
     '/object-frontend/partition/storage/set': () => objectFrontendPartitionStorageSet(context, body),
+    '/object-frontend/partition/item/import': () => objectFrontendPartitionItemImport(context, body),
     '/object-frontend/partition/compact': () => objectFrontendPartitionCompact(context, body),
   };
   const write = writeByRoute[route];

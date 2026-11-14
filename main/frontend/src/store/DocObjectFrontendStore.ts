@@ -4,7 +4,7 @@ import { parse as yamlParse } from 'yaml';
 import {
   OBJECT_FRONTEND_LIST_NAME, OBJECT_FRONTEND_ROLE_ENTRY, OBJECT_FRONTEND_TYPE_ROOT,
   objectFrontendAssetListMerge, objectFrontendEntryParse, objectFrontendListCovers, objectFrontendIdOfRefGet, objectFrontendModeChoose,
-  objectFrontendModeListResolve, objectFrontendParamMerge, objectFrontendRefBuild,
+  objectFrontendModeListResolve, objectFrontendParamMerge, objectFrontendRefBuild, objectFrontendAssetNamingRead,
   objectFrontendAssetIndexBuild, objectFrontendAssetPathComplete, objectFrontendAssetRefResolve, objectFrontendAssetSearch,
   objectFrontendAssetKindListResolve, objectFrontendDocListBuild, objectFrontendPartitionListBuild, objectFrontendPartitionListResolve, objectFrontendPartitionOf,
   objectFrontendInnerCompleteDefault, objectFrontendInnerModeGet, objectFrontendInnerResolveDefault, objectFrontendRefSplit,
@@ -49,7 +49,9 @@ export const OBJECT_FRONTEND_DOC_NAMESPACE = 'frontend';
 // defined through this layer's provider, doc-object-provider-frontend.js)
 // and for telling it that the objects changed.
 
-type Stores = { assetStore: any; objectStore?: any; configStore?: any; sourceStore?: any; navStore?: any };
+// remoteStore: the storage points the page drives (DocAssetRemoteStore), set once it is created:
+// the partitions an object keeps at a remote point, read and written by the page itself
+type Stores = { assetStore: any; objectStore?: any; configStore?: any; sourceStore?: any; navStore?: any; remoteStore?: any };
 
 export type ObjectFrontendMode = {
   id: string; label: string; description: string; category: string; comp: string; param: Record<string, any>;
@@ -145,6 +147,12 @@ export class DocObjectFrontendStore {
     assetKeySelected: '',
     // the storage point chosen in the row of a partition asked to change its storage ('' the one it has)
     storagePointChosen: '',
+    // moving a partition away from a storage point of the page: what that point held stays there
+    isSourceKept: false,
+    // the partition chosen as the target of a copy ('' the first that can take one)
+    partitionCopyTarget: '',
+    // what the last copy of a partition answered, by the partition copied
+    partitionCopyMessage: '',
   };
   overrideByKey = observable.map<string, { mode?: string; param?: Record<string, any> }>({}, { deep: false });
   // the sessions of the asset search uis (ObjectFrontendAssetSearchPanel), by the ui's key
@@ -327,6 +335,11 @@ export class DocObjectFrontendStore {
     this.stores.objectStore?.changed('frontend');
   }
 
+  // the declarations as a write of the development server answered them
+  configAcceptFromWrite(config: { docPageList?: any[] }) {
+    this.configAccept({ status: 'done', message: '', docPageList: config?.docPageList ?? [] });
+  }
+
   // ---------- the declarations ----------
 
   get isAvailable(): boolean {
@@ -343,10 +356,38 @@ export class DocObjectFrontendStore {
     return this.stores.assetStore.writeUnavailableReason;
   }
 
-  // why this object cannot be written: as the page, or as the read-only doc page holding it (a package)
+  // why this object cannot be written: as the page, or as the read-only doc page holding it (a
+  // package). an object with a partition a storage point of the page holds can be written there
+  // whatever the page is (a built page too), so it is writable while one of those is; a write
+  // into another partition then says its own reason
   writeUnavailableReasonOf(idOrRef: string): string {
-    const docPage = this.docPageList.find((one: any) => one.alias === this.declGet(objectFrontendIdOfRefGet(idOrRef))?.docPageAlias);
-    return docPage?.isReadOnly ? `the objects of the package ${docPage.alias} are read-only` : this.writeUnavailableReason;
+    const id = objectFrontendIdOfRefGet(idOrRef);
+    const docPage = this.docPageList.find((one: any) => one.alias === this.declGet(id)?.docPageAlias);
+    if (docPage?.isReadOnly) return `the objects of the package ${docPage.alias} are read-only`;
+    const reason = this.writeUnavailableReason;
+    if (!reason) return '';
+    const { remoteStore } = this.stores;
+    const ref = objectFrontendRefBuild(id);
+    const isRemoteWritable = (this.declGet(id)?.partitionStorageList ?? []).some((bind: any) => bind.driverPlace === 'page' && remoteStore?.partitionWriteUnavailableReasonGet(ref, bind.partition) === '');
+    return isRemoteWritable ? '' : reason;
+  }
+
+  // why one partition of an object cannot be written now ('' when it can): the storage point of
+  // the page holding it (not signed in, out of reach), or the page for a partition in its folders
+  partitionWriteUnavailableReasonGet(idOrRef: string, partition: string): string {
+    const id = objectFrontendIdOfRefGet(idOrRef);
+    const docPage = this.docPageList.find((one: any) => one.alias === this.declGet(id)?.docPageAlias);
+    if (docPage?.isReadOnly) return `the objects of the package ${docPage.alias} are read-only`;
+    const { remoteStore } = this.stores;
+    const bind = (this.declGet(id)?.partitionStorageList ?? []).find((one: any) => one.partition === partition);
+    if (bind?.driverPlace === 'page') return remoteStore?.partitionWriteUnavailableReasonGet(objectFrontendRefBuild(id), partition) ?? 'the page has no driver of its storage point';
+    // a partition not made yet that its type binds to a point of the page: making it writes the
+    // folder of the object (the bind), and then asks that point
+    const storage = bind ? undefined : this.objectGet(id).partitionList.find((one: any) => one.id === partition)?.storage;
+    if (storage?.driverPlace === 'page') {
+      return this.writeUnavailableReason || (remoteStore ? remoteStore.pointUnavailableReasonGet(remoteStore.pointGet(storage.pointId, this.declGet(id)?.docPageAlias ?? '')).message : 'the page has no driver of its storage point');
+    }
+    return this.writeUnavailableReason;
   }
 
   get docPageList(): any[] {
@@ -455,7 +496,11 @@ export class DocObjectFrontendStore {
     if (!this.typeIsFrontend(entry.type)) problemList.push(`the type ${entry.type} is not a frontend object type: it is drawn as ${OBJECT_FRONTEND_TYPE_ROOT}`);
     // the records: of the entry (an object without a folder of its own, or one written before item
     // lists), then of the item lists the server read in its folder
-    const merged = objectFrontendAssetListMerge(entry.assetList, decl.listList ?? []);
+    // (a partition a storage point of the page holds keeps its records at the point: they are
+    // read by the remote half of the storage layer and join the lists here)
+    const { remoteStore } = this.stores;
+    const listList = [...(decl.listList ?? []), ...(remoteStore?.listListOfGet(ref) ?? [])];
+    const merged = objectFrontendAssetListMerge(entry.assetList, listList);
     const partitionDeclaredList = this.partitionListOfTypeGet(entry.type);
     const groupPathInFolderList = assetStore.itemList.filter((item: any) => item.folderOwner?.ref === ref && !item.isDeleted && item.itemId !== decl.entry).map((item: any) => item.groupPath ?? '');
     // each partition with the storage point holding it (doc_page_impl_asset_storage.md): what its
@@ -463,14 +508,33 @@ export class DocObjectFrontendStore {
     // yet; file-tree otherwise
     const bindList: any[] = decl.partitionStorageList ?? [];
     const partitionList = (decl.dir
-      ? objectFrontendPartitionListBuild(partitionDeclaredList, (decl.listList ?? []).map((list: any) => list.groupPath), groupPathInFolderList, bindList.map((one) => one.partition))
+      ? objectFrontendPartitionListBuild(partitionDeclaredList, listList.map((list: any) => list.groupPath), groupPathInFolderList, bindList.map((one) => one.partition))
       : []
     ).map((partition: any) => {
       const bind = bindList.find((one) => one.partition === partition.id)
         ?? (!partition.isPresent && partition.storagePoint ? { pointId: partition.storagePoint, typeId: assetStore.storagePointGet?.(partition.storagePoint, decl.docPageAlias)?.typeId ?? '' } : undefined);
-      return { ...partition, storage: assetStore.storageOfBindGet?.(bind, decl.docPageAlias) ?? { pointId: 'file-tree', typeId: 'file-tree', isAvailable: true, unavailableReason: '', pointIdClaimed: '', apiSetList: [] } };
+      const storage = assetStore.storageOfBindGet?.(bind, decl.docPageAlias) ?? { pointId: 'file-tree', typeId: 'file-tree', isAvailable: true, unavailableReason: '', pointIdClaimed: '', apiSetList: [] };
+      // a partition of a point of the page: what the page read of it, and whether it can be asked now
+      const remote = storage.driverPlace === 'page' ? remoteStore?.partitionGet(ref, partition.id) : undefined;
+      if (remote) {
+        storage.remote = {
+          status: remote.status, message: remote.message, isFromCache: remote.isFromCache, isRefreshing: remote.isRefreshing,
+          timeChecked: remote.timeChecked, timeFetched: remote.timeFetched, revision: remote.revision, itemCount: remote.itemList.length,
+        };
+      } else if (storage.driverPlace === 'page' && remoteStore) {
+        // not made yet, and its type binds it to a point of the page: what that point would say now
+        const reason = remoteStore.pointUnavailableReasonGet(remoteStore.pointGet(storage.pointId, decl.docPageAlias));
+        storage.remote = {
+          status: reason.code === 0 ? 'absent' : reason.code === -7 ? 'authRequired' : 'error',
+          message: reason.code === 0 ? `not made yet: the first write makes it at ${storage.label}, or claims what that point holds for this object` : reason.message,
+          isFromCache: false, isRefreshing: false, timeChecked: 0, timeFetched: 0, revision: 0, itemCount: 0,
+        };
+      }
+      return { ...partition, storage };
     });
     for (const partition of partitionList) {
+      const remoteStatus = partition.storage.remote?.status;
+      if (remoteStatus === 'forbidden' || remoteStatus === 'error') problemList.push(`the partition ${partition.id}: ${partition.storage.remote.message}`);
       if (partition.storage.unavailableReason) problemList.push(`the partition ${partition.id}: ${partition.storage.unavailableReason}`);
       else if (partition.storage.pointIdClaimed) problemList.push(`the partition ${partition.id} names the storage point ${partition.storage.pointId}, which is gone: it is read through ${partition.storage.pointIdClaimed}; set its storage to keep it so`);
     }
@@ -676,10 +740,12 @@ export class DocObjectFrontendStore {
 
   // a structural write on the development server; the asset items it
   // wrote and the declarations as they are now come back with the answer
+  // (the backend of the asset store routes it: a write about a partition a storage point of the
+  // page holds is done by the page against that point, any other by the development server,
+  // which a built page has none of)
   async writeRun(route: string, body: Record<string, any>): Promise<{ code: number; data?: any; message: string }> {
     const { assetStore } = this.stores;
-    const reason = assetStore.writeUnavailableReason;
-    if (reason) return { code: -1, message: reason };
+    if (!assetStore.backend) return { code: -1, message: assetStore.writeUnavailableReason };
     if (this.write.status === 'submitting') return { code: -1, message: 'another change of a frontend object is being written' };
     runInAction(() => {
       this.write = { status: 'submitting', route, id: String(body.id ?? ''), message: '' };
@@ -786,10 +852,82 @@ export class DocObjectFrontendStore {
   // the storage of a whole partition changed to another point: its items written by the type of
   // that point, nothing of the object's records changed (doc_page_impl_asset_storage.md
   // #changing-the-storage-of-a-partition)
-  async partitionStorageSet(id: string, partition: string, storagePoint: string) {
-    const result = await this.writeRun('partition/storage/set', { id, partition, storagePoint });
+  //   isSourceKept   moving away from a point of the page: what that point held stays there, as
+  //                  a copy no object reads (it can be claimed again, or removed at the point)
+  async partitionStorageSet(id: string, partition: string, storagePoint: string, options: { isSourceKept?: boolean } = {}) {
+    runInAction(() => {
+      this.settings.partitionCopyMessage = '';
+    });
+    this.stores.remoteStore?.transferClear?.();
+    const result = await this.writeRun('partition/storage/set', { id, partition, storagePoint, ...(options.isSourceKept ? { isSourceKept: true } : {}) });
     void this.stores.assetStore.statusLoad?.();
     return result;
+  }
+
+  // a partition a storage point of the page holds, asked again whether it changed elsewhere
+  partitionRefresh(idOrRef: string, partition: string): Promise<void> {
+    return this.stores.remoteStore?.partitionRefresh(objectFrontendRefBuild(objectFrontendIdOfRefGet(idOrRef)), partition) ?? Promise.resolve();
+  }
+
+  // the sign-in dialog of the auth provider the storage point of a partition names: true once signed in
+  partitionSignIn(idOrRef: string, partition: string): Promise<boolean> {
+    const { remoteStore } = this.stores;
+    const id = objectFrontendIdOfRefGet(idOrRef);
+    const bind = (this.declGet(id)?.partitionStorageList ?? []).find((one: any) => one.partition === partition);
+    // the point holding the partition, or the one its type binds it to when it is not made yet
+    const pointId = bind?.pointId ?? this.objectGet(id).partitionList.find((one: any) => one.id === partition)?.storage?.pointId ?? '';
+    const point = pointId ? remoteStore?.pointGet(pointId, this.declGet(id)?.docPageAlias ?? '') : undefined;
+    const providerRef = remoteStore?.providerRefOfPointGet(point) ?? '';
+    const authStore = remoteStore?.stores?.authStore;
+    if (!providerRef || !authStore) return Promise.resolve(false);
+    return authStore.signInOpen(providerRef, { reason: `The partition ${partition} is held by the storage point ${point.label || point.id}.` });
+  }
+
+  // the assets of a partition copied into another partition, of the same object or of another
+  // one: new assets with the same content (the head of each text asset), keys and names; a key
+  // or a path the target has already gets out of the way (a number after the key; the path left
+  // out). a path starting with the partition it comes from starts with the one it goes to.
+  // answers { countCopied, skipList: [{ key, reason }] }
+  async partitionCopy(id: string, partitionFrom: string, target: { id?: string; partition: string; storagePoint?: string }): Promise<{ code: number; data?: any; message: string }> {
+    const idTo = target.id || id;
+    const partitionTo = String(target.partition ?? '');
+    if (idTo === id && partitionFrom === partitionTo) return { code: -1, message: 'a partition is copied into another partition' };
+    const stateFrom = this.objectGet(id);
+    const stateTo = this.objectGet(idTo);
+    if (stateFrom.status !== 'found' || stateTo.status !== 'found') return { code: -1, message: stateFrom.message || stateTo.message || 'the object is not loaded' };
+    const { assetStore } = this.stores;
+    const partitionOfTarget = stateTo.partitionList.find((one: any) => one.id === partitionTo);
+    if (!partitionOfTarget?.isPresent) {
+      const created = await this.partitionCreate(idTo, partitionTo, target.storagePoint);
+      if (created.code !== 0) return created;
+    }
+    const assetList = stateFrom.assetList.filter((asset) => asset.partition === partitionFrom && asset.status === 'found');
+    const skipList: { key: string; reason: string }[] = [];
+    let countCopied = 0;
+    for (const asset of assetList) {
+      const refHead = { store: ASSET_STORE_ID_LOCAL, itemId: asset.itemId, versionId: 'head' };
+      await assetStore.refLoad(refHead);
+      const query = assetStore.refQuery(refHead);
+      if (query.status !== 'done' || !query.version?.isText) {
+        skipList.push({ key: asset.key, reason: query.status === 'done' ? 'its data is not text' : query.message || 'its data was not read' });
+        continue;
+      }
+      const assetListTo = this.objectGet(idTo).assetList;
+      let key = asset.key;
+      for (let index = 2; assetListTo.some((one) => one.key === key); index++) key = `${asset.key}-${index}`;
+      const pathList = (asset.pathList ?? [])
+        .map((path: string) => (path === `/${partitionFrom}` || path.startsWith(`/${partitionFrom}/`) ? `/${partitionTo}${path.slice(partitionFrom.length + 1)}` : path))
+        .filter((path: string) => objectFrontendAssetNamingRead(assetListTo, '', { pathList: [path] }).message === '');
+      const groupPath = String(asset.item?.groupPath ?? '').split('/').slice(1).join('/');
+      const result = await this.writeRun('asset/create', {
+        id: idTo, key, kind: asset.kind, ...(asset.name ? { name: asset.name } : {}), ...(pathList.length > 0 ? { pathList } : {}),
+        lang: asset.item?.lang ?? 'yaml', text: query.version.text ?? '', partition: partitionTo, groupPath,
+        note: `copied from ${partitionFrom} of ${stateFrom.name || id}`,
+      });
+      if (result.code !== 0) skipList.push({ key: asset.key, reason: result.message });
+      else countCopied += 1;
+    }
+    return { code: 0, data: { countCopied, skipList }, message: skipList.length > 0 ? `${countCopied} copied, ${skipList.length} left out` : '' };
   }
 
   // what the pack files of a partition keep dead is dropped
@@ -1037,10 +1175,35 @@ export class DocObjectFrontendStore {
   settingsConfirmSet(confirm: string) {
     this.settings.confirm = confirm;
     this.settings.storagePointChosen = '';
+    // a choice made for one move is not carried into the next editor that opens
+    this.settings.isSourceKept = false;
   }
 
   settingsStoragePointSet(pointId: string) {
     this.settings.storagePointChosen = pointId;
+  }
+
+  settingsSourceKeptSet(isSourceKept: boolean) {
+    this.settings.isSourceKept = isSourceKept;
+  }
+
+  settingsPartitionCopyTargetSet(partition: string) {
+    this.settings.partitionCopyTarget = partition;
+  }
+
+  // the copy of a partition asked from its row of the tab: what it answered is said there
+  async settingsPartitionCopySubmit(id: string, partitionFrom: string, partitionTo: string) {
+    this.settings.partitionCopyMessage = '';
+    // the line under the table says what was done last: what a move said before goes
+    this.stores.remoteStore?.transferClear?.();
+    const result = await this.partitionCopy(id, partitionFrom, { partition: partitionTo });
+    runInAction(() => {
+      this.settings.confirm = '';
+      this.settings.partitionCopyMessage = result.code === 0
+        ? `${result.data.countCopied} asset(s) copied into ${partitionTo}${result.data.skipList.length > 0 ? `; left out: ${result.data.skipList.map((one: any) => `${one.key} (${one.reason})`).join(', ')}` : ''}`
+        : result.message;
+    });
+    return result;
   }
 
   // the doc page a new object goes to: the one chosen, else the first that can hold one
@@ -1064,13 +1227,13 @@ export class DocObjectFrontendStore {
   }
 
   // an object created from a block's creation (the insert menu): of a type, named after it
-  async createForInsert(typeId: string, docPath: string): Promise<{ code: number; ref?: string; message: string }> {
+  async createForInsert(typeId: string, docPath: string): Promise<{ code: number; data?: { ref: string }; message: string }> {
     const alias = docPath.startsWith('~') && docPath.includes(':') ? docPath.slice(1, docPath.indexOf(':')) : '';
     const docPage = this.docPageList.find((docPage: any) => docPage.alias === alias && !docPage.isDisabled && docPage.assetFolder)
       ?? this.docPageList.find((docPage: any) => !docPage.isDisabled && docPage.assetFolder);
     if (!docPage) return { code: -1, message: 'no doc page here can hold a frontend object (it needs an asset folder)' };
     const result = await this.create({ docPageAlias: docPage.alias, typeId, name: `New ${this.typeLabelGet(typeId).toLowerCase()}` });
-    return result.code === 0 ? { code: 0, ref: objectFrontendRefBuild(result.data.id), message: '' } : { code: result.code, message: result.message };
+    return result.code === 0 ? { code: 0, message: '', data: { ref: objectFrontendRefBuild(result.data.id) } } : { code: result.code, message: result.message };
   }
 }
 

@@ -29,8 +29,9 @@ test('a published event reaches the subscribers of its block, and those of the w
     data: { target: 'b.md' },
   });
   assert.deepEqual(received, [['block 12', 'b.md', 12], ['document']]);
-  assert.equal(result.isAccepted, true);
-  assert.deepEqual(result.resultList, [{ code: 0, data: undefined, message: '' }]);
+  assert.equal(result.code, 0);
+  assert.equal(result.data.isAccepted, true);
+  assert.deepEqual(result.data.resultList, [{ code: 0, data: undefined, message: '' }]);
 });
 
 test('an ended subscription receives nothing; a failing listener is passed over', async () => {
@@ -53,8 +54,8 @@ test('an ended subscription receives nothing; a failing listener is passed over'
   try {
     const result = await router.publish({ type: 'placeReveal', subject: { sourcePath: '~ex/a.md', blockLine: 1 } });
     assert.deepEqual(received, ['after']);
-    assert.equal(result.isAccepted, false);
-    assert.equal(result.resultList.length, 1);
+    assert.equal(result.data.isAccepted, false);
+    assert.equal(result.data.resultList.length, 1);
   } finally {
     console.error = errorOriginal;
   }
@@ -63,5 +64,5 @@ test('an ended subscription receives nothing; a failing listener is passed over'
 test('an event of a type nobody subscribed to is accepted by nobody', async () => {
   const router = new DocEventRouter();
   const result = await router.publish({ type: 'placeReveal', subject: { sourcePath: '~ex/a.md', blockLine: 1 } });
-  assert.deepEqual(result, { resultList: [], isAccepted: false });
+  assert.deepEqual(result, { code: 0, message: '', data: { resultList: [], isAccepted: false } });
 });

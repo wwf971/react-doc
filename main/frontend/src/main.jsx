@@ -39,6 +39,11 @@ createRoot(document.getElementById('root')).render(
       // demonstration components (StockTable, DemoCounter, the side-panel
       // item hook ...) come this way, from example_doc/.doc-page/comp-mdx/comp.yaml
       compMountList: docSource.docCompMountList,
+      // what the packages bring beside components: the page drivers of their storage types
+      // (doc_page_impl_asset_storage.md#points-of-the-page) and their auth kinds
+      // (doc_page_impl_auth.md), imported by the plugin like the components
+      storagePageDriverList: docSource.docStoragePageDriverList,
+      authKindList: docSource.docAuthKindList,
     }}
     config={{
       language: 'en',

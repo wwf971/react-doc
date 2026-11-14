@@ -14,7 +14,7 @@ import {
 import {
   OBJECT_FRONTEND_CONFIG_FILE_NAME, OBJECT_FRONTEND_FOLDER_NAME, OBJECT_FRONTEND_ITEM_FOLDER_NAME, OBJECT_FRONTEND_KEY_REGEX, OBJECT_FRONTEND_LIST_NAME, OBJECT_FRONTEND_META_NAME,
   OBJECT_FRONTEND_PARTITION_REGEX, OBJECT_FRONTEND_ROLE_ENTRY, OBJECT_FRONTEND_TYPE_ROOT,
-  objectFrontendAssetAcceptCheck, objectFrontendAssetKeyFree, objectFrontendAssetKindListResolve, objectFrontendAssetListMerge, objectFrontendAssetPathNormalize,
+  objectFrontendAssetAcceptCheck, objectFrontendAssetKeyFree, objectFrontendAssetNamingRead, objectFrontendAssetKindListResolve, objectFrontendAssetListMerge, objectFrontendAssetPathNormalize,
   objectFrontendEntryParse, objectFrontendEntryTextBuild, objectFrontendListCovers, objectFrontendListGroupPathGet, objectFrontendListParse, objectFrontendListTextBuild, objectFrontendRefBuild,
   objectFrontendPartitionGroupPathBuild, objectFrontendPartitionListResolve, objectFrontendDocListBuild,
 } from '../src/lib/doc-object-frontend.js';
@@ -747,7 +747,11 @@ export function objectFrontendPartitionCreate(context: WriteContext, input: { id
   const groupPath = partitionPlaceRequire(context, listing, partitionIdRequire(input.partition), '');
   const file = listFileGet(listing.itemDirAbs, groupPath);
   if (fs.existsSync(file)) throw new AssetError(-1, `the partition ${groupPath} exists already`);
-  partitionStorageEnsure(context, decl, listing, groupPath, input.storagePoint);
+  if (assetStoragePartitionFileRead(path.dirname(file))) throw new AssetError(-1, `the partition ${groupPath} exists already`);
+  const point = partitionStorageEnsure(context, decl, listing, groupPath, input.storagePoint);
+  // a partition held by a point of the page keeps its records at that point: its folder holds
+  // the file saying so and no item list (doc_page_impl_asset_storage.md#points-of-the-page)
+  if (point?.driverPlace === 'page') return writeResultBuild(context, decl.id, []);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fileWriteSafe(file, objectFrontendListTextBuild([]));
   return writeResultBuild(context, decl.id, []);
@@ -757,23 +761,80 @@ export function objectFrontendPartitionCreate(context: WriteContext, input: { id
 // #changing-the-storage-of-a-partition): every item in it written by the type of that point,
 // then its partition.yaml, then what the type before kept removed. the records of its item list,
 // the keys, names and paths of its assets, and every reference to them stay as they are
-export function objectFrontendPartitionStorageSet(context: WriteContext, input: { id: string; partition: string; storagePoint: string }): ObjectFrontendWriteResult {
+//   isDataTransferred   a point of the page is on one side: the page copied the items already
+//                       (doc_page_impl_asset_storage.md#moving-through-the-page), and this write
+//                       switches the bind. the records follow the items: taken off the lists of
+//                       the folder when the partition leaves for the point, written into its item
+//                       list (recordList) when it comes home
+export function objectFrontendPartitionStorageSet(
+  context: WriteContext,
+  input: { id: string; partition: string; storagePoint: string; isDataTransferred?: boolean; recordList?: unknown },
+): ObjectFrontendWriteResult {
   const { store } = context;
   const decl = declGet(context.config, input.id);
   const listing = listingRead(context, decl);
   if (!listing.itemDirAbs) throw new AssetError(-1, `the object ${decl.id} has no folder of its own: it has no partitions`);
   docPageWritableGet(context.config, decl.docPageAlias);
   const partition = partitionIdRequire(input.partition);
-  if (!fs.existsSync(path.join(listing.itemDirAbs, partition))) throw new AssetError(-3, `the object has no partition ${partition}`);
+  const dirAbs = path.join(listing.itemDirAbs, partition);
+  if (!fs.existsSync(dirAbs)) throw new AssetError(-3, `the object has no partition ${partition}`);
   partitionGitIgnoreRequire(context, listing, partition);
   const point = storagePointRequire(context, decl, input.storagePoint);
   const ref = objectFrontendRefBuild(decl.id);
   const folder = store.folderList.find((one) => one.owner?.ref === ref);
   if (!folder) throw new AssetError(-3, `the item folder of ${ref} is not in the store`);
-  store.partitionStorageSet(folder.path, partition, point, { owner: { ref, typeId: listing.entry.type }, asLayer: OBJECT_FRONTEND_LAYER });
-  const storeNow = context.storeGet?.() ?? store;
   const isIn = (groupPath: string) => groupPath === partition || groupPath.startsWith(`${partition}/`);
+  const bindNow = (folder.partitionStorageList ?? []).find((one) => one.partition === partition);
+  const isPageFrom = bindNow?.driverPlace === 'page';
+  const isPageTo = point.driverPlace === 'page';
+  const itemIdLocalSet = new Set(isPageFrom ? [] : store.itemList().filter((one) => one.folderOwner?.ref === ref && isIn(one.groupPath)).map((one) => one.itemId));
+  store.partitionStorageSet(folder.path, partition, point, { owner: { ref, typeId: listing.entry.type }, asLayer: OBJECT_FRONTEND_LAYER, isDataTransferred: input.isDataTransferred === true });
+  if (isPageTo && !isPageFrom) {
+    // the records are at the point now, with the items
+    listingWrite(store, listing, listing.assetList.filter((one: any) => !itemIdLocalSet.has(one.itemId) && !(one.listGroupPath !== null && isIn(one.listGroupPath))));
+    for (const file of [path.join(dirAbs, OBJECT_FRONTEND_LIST_NAME), path.join(dirAbs, `${OBJECT_FRONTEND_LIST_NAME}.bak`)]) fs.rmSync(file, { force: true });
+  } else if (isPageFrom && !isPageTo) {
+    const recordList = (Array.isArray(input.recordList) ? input.recordList : []).map((one: any) => {
+      const record: Record<string, unknown> = { key: String(one?.key ?? ''), kind: String(one?.kind ?? ''), itemId: String(one?.itemId ?? '') };
+      if (typeof one?.name === 'string' && one.name) record.name = one.name;
+      if (Array.isArray(one?.pathList) && one.pathList.length > 0) record.pathList = one.pathList.map(String);
+      return record;
+    }).filter((one) => OBJECT_FRONTEND_KEY_REGEX.test(String(one.key)) && idMs48Is(one.itemId));
+    fileWriteSafe(listFileGet(listing.itemDirAbs, partition), objectFrontendListTextBuild(recordList));
+  }
+  const storeNow = context.storeGet?.() ?? store;
   return writeResultBuild(context, decl.id, storeNow.itemList().filter((one) => one.folderOwner?.ref === ref && isIn(one.groupPath)));
+}
+
+// one item of a partition held by a point of the page, written into the folder of the partition
+// by the type of a local point, with its history: the page calls this for every item before it
+// switches the storage of the partition to that point (partition/storage/set with
+// isDataTransferred). nothing reads what is written here until then
+export function objectFrontendPartitionItemImport(
+  context: WriteContext,
+  input: { id: string; partition: string; storagePoint: string; item: Record<string, any>; versionList: { versionId: string; text?: string; dataBase64?: string; metadata?: Record<string, unknown> }[] },
+): ObjectFrontendWriteResult {
+  const { store } = context;
+  const decl = declGet(context.config, input.id);
+  const listing = listingRead(context, decl);
+  if (!listing.itemDirAbs) throw new AssetError(-1, `the object ${decl.id} has no folder of its own: it has no partitions`);
+  docPageWritableGet(context.config, decl.docPageAlias);
+  const partition = partitionIdRequire(input.partition);
+  partitionGitIgnoreRequire(context, listing, partition);
+  const point = storagePointRequire(context, decl, input.storagePoint);
+  const ref = objectFrontendRefBuild(decl.id);
+  const folder = store.folderList.find((one) => one.owner?.ref === ref);
+  if (!folder) throw new AssetError(-3, `the item folder of ${ref} is not in the store`);
+  const bindNow = (folder.partitionStorageList ?? []).find((one) => one.partition === partition);
+  if (bindNow?.driverPlace !== 'page') throw new AssetError(-1, `the partition ${partition} is not held by a storage point of the page: its items are moved by partition/storage/set`);
+  if (!mappingIs(input.item)) throw new AssetError(-1, 'an imported item is { item, versionList }');
+  const versionList = (Array.isArray(input.versionList) ? input.versionList : []).map((one) => ({
+    versionId: String(one?.versionId ?? ''),
+    data: typeof one?.dataBase64 === 'string' ? Buffer.from(one.dataBase64, 'base64') : Buffer.from(String(one?.text ?? ''), 'utf-8'),
+    metadata: mappingIs(one?.metadata) ? one.metadata : {},
+  }));
+  const item = store.partitionItemImport(folder.path, partition, point, { item: { ...input.item, owner: { ref } }, versionList }, { asLayer: OBJECT_FRONTEND_LAYER });
+  return writeResultBuild(context, decl.id, [item]);
 }
 
 // what the pack files of a partition keep dead is dropped
@@ -798,30 +859,32 @@ function storagePointRequire(context: WriteContext, decl: ObjectFrontendDecl, po
 // the partition a write is about to put its first item in is bound to its storage point first: the
 // point named, else the one its type declares for the partition (storagePoint of partitionList).
 // a partition that says its point already, or holds items, stays as it is; file-tree needs no file
+// answers the point the partition was bound to by this call; undefined when it stays as it is
 function partitionStorageEnsure(context: WriteContext, decl: ObjectFrontendDecl, listing: Listing, groupPath: string, pointIdNamed?: string) {
   const partition = String(groupPath ?? '').split('/')[0];
-  if (!listing.itemDirAbs || !partition) return;
+  if (!listing.itemDirAbs || !partition) return undefined;
   const partitionDeclared = (objectFrontendPartitionListResolve(listing.entry.type, context.config.typeList) ?? []).find((one: any) => one.id === partition);
   const pointId = pointIdNamed || partitionDeclared?.storagePoint || '';
-  if (!pointId) return;
+  if (!pointId) return undefined;
   const dirAbs = path.join(listing.itemDirAbs, partition);
   if (assetStoragePartitionFileRead(dirAbs)) {
     if (pointIdNamed) throw new AssetError(-1, `the partition ${partition} is bound to a storage point already: change it with partition/storage/set`);
-    return;
+    return undefined;
   }
   const ref = objectFrontendRefBuild(decl.id);
   const folder = context.store.folderList.find((one) => one.owner?.ref === ref);
-  if (!folder) return;
+  if (!folder) return undefined;
   const hasItem = context.store.itemList().some((one) => one.folderOwner?.ref === ref && (one.groupPath === partition || one.groupPath.startsWith(`${partition}/`)));
   if (hasItem) {
     if (pointIdNamed) throw new AssetError(-1, `the partition ${partition} holds items already: change its storage with partition/storage/set`);
-    return;
+    return undefined;
   }
-  if (pointId === ASSET_STORAGE_POINT_FILE_TREE && !pointIdNamed) return;
+  if (pointId === ASSET_STORAGE_POINT_FILE_TREE && !pointIdNamed) return undefined;
   const point = storagePointRequire(context, decl, pointId);
   const file = { storagePoint: point.id, storageType: point.typeId, owner: { ref, typeId: listing.entry.type }, partition };
   assetStoragePartitionFileWrite(dirAbs, file);
   context.store.partitionStorageBind(folder.path, assetStoragePartitionBindResolve(partition, file, context.store.config.storage, decl.docPageAlias));
+  return point;
 }
 
 // a partition renamed: its folder moved with its items and its lists, so every record follows;
@@ -835,10 +898,13 @@ export function objectFrontendPartitionRename(context: WriteContext, input: { id
   if (!fs.existsSync(path.join(listing.itemDirAbs, from))) throw new AssetError(-3, `the object has no partition ${from}`);
   if (fs.existsSync(path.join(listing.itemDirAbs, to))) throw new AssetError(-1, `the partition ${to} exists already: move its assets one by one, or rename it first`);
   const hasItem = context.store.itemList().some((one) => one.folderOwner?.ref === objectFrontendRefBuild(decl.id) && (one.groupPath === from || one.groupPath.startsWith(`${from}/`)));
-  if (hasItem) return objectFrontendAssetGroupMove(context, { id: decl.id, groupFrom: from, groupTo: to });
+  const result = hasItem ? objectFrontendAssetGroupMove(context, { id: decl.id, groupFrom: from, groupTo: to }) : undefined;
   // nothing in it but its list: the folder is moved as it is
-  fs.renameSync(path.join(listing.itemDirAbs, from), path.join(listing.itemDirAbs, to));
-  return writeResultBuild(context, decl.id, []);
+  if (!hasItem) fs.renameSync(path.join(listing.itemDirAbs, from), path.join(listing.itemDirAbs, to));
+  // the file saying its storage point names the partition too
+  const fileStorage = assetStoragePartitionFileRead(path.join(listing.itemDirAbs, to));
+  if (fileStorage && fileStorage.partition !== to) assetStoragePartitionFileWrite(path.join(listing.itemDirAbs, to), { ...fileStorage, partition: to });
+  return result ?? writeResultBuild(context, decl.id, []);
 }
 
 // a partition deleted: its assets off their lists and deleted softly (their files stay, as for an
@@ -876,32 +942,8 @@ function partitionIdRequire(value: unknown): string {
 // the paths in their canonical form, each once, none another asset of the
 // object (other than keyOwn) has
 function assetNamingRead(assetList: any[], keyOwn: string, input: { name?: unknown; pathList?: unknown }): { name?: string; pathList?: string[] } {
-  const naming: { name?: string; pathList?: string[] } = {};
-  const name = String(input.name ?? '').trim();
-  if (name.length > 200) throw new AssetError(-1, 'the name of an asset is at most 200 characters');
-  if (name) naming.name = name;
-  if (input.pathList === undefined || input.pathList === null) return naming;
-  if (!Array.isArray(input.pathList)) throw new AssetError(-1, 'pathList is a list of paths (/kind/...)');
-  const pathList: string[] = [];
-  // every path a pattern stands for names one asset: compared path by path, not by the text
-  const ownerByPath = new Map<string, any>();
-  for (const one of assetList) {
-    if (one.key === keyOwn) continue;
-    for (const pattern of one.pathList ?? []) for (const text of assetPathCompile(pattern, { isAbsolute: true }).textList) if (!ownerByPath.has(text)) ownerByPath.set(text, one);
-  }
-  for (const pathText of input.pathList) {
-    const { path, message } = objectFrontendAssetPathNormalize(pathText);
-    if (message) throw new AssetError(-1, `the path ${JSON.stringify(pathText)}: ${message}`);
-    if (!path || pathList.includes(path)) continue;
-    const textList = assetPathCompile(path, { isAbsolute: true }).textList;
-    const taken = textList.find((text) => ownerByPath.has(text));
-    if (taken) {
-      const owner = ownerByPath.get(taken);
-      throw new AssetError(-1, `the path ${taken}${textList.length > 1 ? ` (one of those ${path} stands for)` : ''} is the path of ${owner.name || owner.key} already`);
-    }
-    pathList.push(path);
-  }
-  if (pathList.length > 0) naming.pathList = pathList;
+  const { naming, message } = objectFrontendAssetNamingRead(assetList, keyOwn, input);
+  if (message) throw new AssetError(-1, message);
   return naming;
 }
 

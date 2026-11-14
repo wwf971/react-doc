@@ -43,7 +43,7 @@ export { DocAssetStore } from './store/DocAssetStore.js';
 // the component state service layer (doc_page_impl_mdx_comp_state.md): the
 // state object of a block, held by a component across renders and unmounts
 export { DocCompStateStore } from './store/DocCompStateStore.js';
-export { useCompState } from '../../comp-doc/registry/use-comp-state.js';
+export { useCompState, useCompStateStore } from '../../comp-doc/registry/use-comp-state.js';
 export { compStateKeyBuild, compStateKeyParse } from './lib/doc-comp-state.js';
 export { useDocStores } from './store/context.js';
 // the asset service layer (doc_page_impl_asset.md): the reference form in documents

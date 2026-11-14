@@ -1,0 +1,8 @@
+# What the storage type aws-utils.remote draws (doc/README.md#the-storage-type): the panel of one
+# of its storage points in the Asset service tab of the settings panel, named by panelComp of
+# asset-storage-type.yaml. The driver of the type is no component: that file names its module
+# (aws-storage-driver.js).
+compList:
+  - tagName: AwsStoragePointPanel
+    entry: ./aws-storage-comp.js
+    export: AwsStoragePointPanelDefine

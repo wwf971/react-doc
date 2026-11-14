@@ -1,0 +1,160 @@
+/* The auth layer of the page (doc_page_impl_auth.md): the sign-in dialog, the one-line session
+   state, and the form pieces an auth kind draws its dialog with (a package's kind uses these
+   classes, so every kind looks like the page). */
+
+/* the size the dialog opens in (over the default size of a dialog of the page, hence both classes) */
+.doc-panel-popup.doc-auth-popup {
+  width: min(27rem, 92vw);
+  height: min(24rem, 86vh);
+}
+
+.doc-auth-popup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem 0.9rem;
+  overflow: auto;
+  font-size: 0.8rem;
+}
+
+.doc-auth-reason {
+  padding: 0.3rem 0.5rem;
+  border-left: 2px solid var(--color-fd-primary);
+  background: color-mix(in srgb, var(--color-fd-primary) 6%, transparent);
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.75rem;
+}
+
+/* ---------- the session line ---------- */
+
+.doc-auth-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  font-size: 0.75rem;
+}
+
+.doc-auth-line-name {
+  font-weight: 600;
+}
+
+.doc-auth-line-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-auth-line-text[data-muted] {
+  color: var(--color-fd-muted-foreground);
+}
+
+/* ---------- the pieces of a form ---------- */
+
+.doc-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.doc-auth-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.doc-auth-note {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.doc-auth-field {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.doc-auth-field-label {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.74rem;
+}
+
+.doc-auth-input {
+  width: 100%;
+  height: 1.6rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.doc-auth-input:focus {
+  border-color: var(--color-fd-primary);
+  outline: none;
+}
+
+.doc-auth-input[data-code] {
+  width: 8rem;
+  letter-spacing: 0.2em;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* the buttons of a form: a row of their own, at the left */
+.doc-auth-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* what a step answered: one line whose height is kept whether it says something or not, so the
+   form does not move when a message appears */
+.doc-auth-message {
+  min-height: 1.1rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.74rem;
+  line-height: 1.1rem;
+  user-select: text;
+}
+
+.doc-auth-message[data-error] {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-auth-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-fd-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.74rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.doc-auth-secret {
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.74rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.doc-auth-qr {
+  width: 11rem;
+  height: 11rem;
+  padding: 0.4rem;
+  background: #fff;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+}

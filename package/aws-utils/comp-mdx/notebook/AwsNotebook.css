@@ -1,0 +1,190 @@
+/* The mode "notes" of a notebook (AwsNotebook): a tight list beside the note chosen, in a body of a
+   fixed height, so choosing a note or a partition moves nothing around it. */
+
+.aws-notebook {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+}
+
+.aws-notebook-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.aws-notebook-label {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.74rem;
+}
+
+.aws-notebook-tab-list {
+  display: inline-flex;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+}
+
+.aws-notebook-tab {
+  padding: 0.1rem 0.6rem;
+  border: 0;
+  border-right: 1px solid var(--color-fd-border);
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.aws-notebook-tab:last-child {
+  border-right: 0;
+}
+
+/* the chosen tab reads heavier without a wider text: its width stays */
+.aws-notebook-tab[aria-selected='true'] {
+  background: color-mix(in srgb, var(--color-fd-primary) 12%, transparent);
+  color: var(--color-fd-primary);
+  text-shadow: 0.4px 0 0 currentColor;
+}
+
+.aws-notebook-place {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.74rem;
+}
+
+.aws-notebook-body {
+  display: grid;
+  grid-template-columns: minmax(9rem, 15rem) minmax(0, 1fr);
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  min-height: 8rem;
+}
+
+.aws-notebook-list {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  border-right: 1px solid var(--color-fd-border);
+}
+
+.aws-notebook-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  border: 0;
+  border-bottom: 1px solid var(--color-fd-border);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  text-align: left;
+}
+
+.aws-notebook-row:hover {
+  background: var(--color-fd-accent);
+}
+
+.aws-notebook-row[aria-selected='true'] {
+  background: color-mix(in srgb, var(--color-fd-primary) 12%, transparent);
+}
+
+.aws-notebook-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aws-notebook-row-time {
+  flex: 0 0 auto;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.aws-notebook-empty {
+  padding: 0.5rem;
+}
+
+.aws-notebook-note {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.aws-notebook-note-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--color-fd-border);
+}
+
+.aws-notebook-note-title {
+  font-weight: 600;
+}
+
+.aws-notebook-note-text {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0.5rem;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+/* the size the dialog opens in (over the default size of a dialog of the page) */
+.doc-panel-popup.aws-notebook-popup {
+  width: min(36rem, 94vw);
+  height: min(28rem, 88vh);
+}
+
+.aws-notebook-form {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.aws-notebook-textarea {
+  flex: 1 1 auto;
+  min-height: 8rem;
+  padding: 0.4rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  resize: none;
+}
+
+.aws-notebook-textarea:focus {
+  border-color: var(--color-fd-primary);
+  outline: none;
+}
+
+/* beside the buttons, on their line: the row keeps its height whether it is there or not */
+.aws-notebook-reason {
+  flex: 1 1 12rem;
+  min-width: 0;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}

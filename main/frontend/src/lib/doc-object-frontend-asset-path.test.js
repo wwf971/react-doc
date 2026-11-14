@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  assetPathCanonicalGet, assetPathRestList,
   assetPathChoice, assetPathCompile, assetPathConcat, assetPathExpand, assetPathIndexBelowList, assetPathIndexBuild, assetPathIndexComplete,
   assetPathIndexGet, assetPathIndexPathOfEntryGet, assetPathListSplit, assetPathMatch, assetPathNormalize, assetPathParse, assetPathPrefixStrip,
   assetPathSplit, assetPathText,
@@ -148,4 +149,37 @@ test('the index: an entry by any of its paths, the entries below a folder, compl
   assert.deepEqual(assetPathIndexComplete(index, '/book/sci-fi/so').map((one) => one.path), ['/book/sci-fi/solaris']);
   assert.deepEqual(assetPathIndexComplete(index, 'sci-fi/', { base: '/book' }).map((one) => one.path), ['/book/sci-fi/frank-herbert', '/book/sci-fi/solaris']);
   assert.deepEqual(assetPathIndexPathOfEntryGet(index, book, ['book', 'frank-herbert']), ['book', 'frank-herbert', 'sci-fi', 'dune']);
+});
+
+test('what is left of a pattern after a start of its path keeps a group as a group', () => {
+  const rest = (text, path) => assetPathRestList(assetPathParse(text).node, path.split('/').filter(Boolean)).map((elementList) => assetPathText({ kind: 'sequence', elementList }));
+  assert.deepEqual(rest('name/{jp/last/}kanji', ''), ['name/{jp/last/}kanji']);
+  assert.deepEqual(rest('name/{jp/last/}kanji', 'name'), ['{jp/last/}kanji']);
+  // a member entered: the other one is a plain segment again, whichever was entered
+  assert.deepEqual(rest('name/{jp/last/}kanji', 'name/last'), ['jp/kanji']);
+  assert.deepEqual(rest('name/{jp/last/}kanji', 'name/jp'), ['last/kanji']);
+  assert.deepEqual(rest('name/{jp/last/}kanji', 'name/jp/last'), ['kanji']);
+  // a whole path leaves nothing; a path of something else has no rest
+  assert.deepEqual(rest('name/{en, last}', 'name/last/en'), ['']);
+  assert.deepEqual(rest('name/{en, last}', 'name/jp'), []);
+  assert.deepEqual(rest('name/{en, last}', 'name/en/last/more'), []);
+  // three members: two are left, still in any order
+  assert.deepEqual(rest('{a/b/c/}x', 'b'), ['{a/c/}x']);
+  // every alternative of a choice that starts so
+  assert.deepEqual(rest('book/[sci-fi/, classic/]dune', 'book'), ['[sci-fi/, classic/]dune']);
+  assert.deepEqual(rest('book/[sci-fi/, classic/]dune', 'book/classic'), ['dune']);
+  assert.deepEqual(rest('[b/, ]c', ''), ['[b/, ]c']);
+  // a member of several segments, half walked
+  assert.deepEqual(rest('{[a/b/]c/}x', 'a'), ['b/c/x']);
+  // segments compared the caller's way
+  assert.deepEqual(assetPathRestList(assetPathParse('Name/{JP/last/}kanji').node, ['name', 'jp'], { segmentNormalize: (name) => name.toLowerCase() }).length, 1);
+});
+
+test('the canonical path of a pattern says which of its segments come in any order', () => {
+  const canonicalOf = (text) => assetPathCanonicalGet(assetPathParse(text).node).map((one) => `${one.name}${one.memberList ? `{${one.memberList.join(',')}}` : ''}`);
+  assert.deepEqual(canonicalOf('name/{jp/last/}kanji'), ['name', 'jp{jp,last}', 'last{jp,last}', 'kanji']);
+  assert.deepEqual(canonicalOf('name/{en, last}'), ['name', 'en{en,last}', 'last{en,last}']);
+  assert.deepEqual(canonicalOf('book/[sci-fi/, classic/]dune'), ['book', 'sci-fi', 'dune']);
+  assert.deepEqual(canonicalOf('{[a/b/]c/}x'), ['a{a/b,c}', 'b{a/b,c}', 'c{a/b,c}', 'x']);
+  assert.deepEqual(canonicalOf('a/b'), ['a', 'b']);
 });

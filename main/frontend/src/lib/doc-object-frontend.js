@@ -541,6 +541,40 @@ export function objectFrontendAssetAcceptCheck(kindList, input) {
   return { message: '', kind, kindDeclared };
 }
 
+// { naming: { name?, pathList? }, message } of an asset as a write gives them: the name trimmed,
+// the paths in their canonical form, each once, none another asset of the object (other than
+// keyOwn) has. message is '' when they can be written. the development server and the page (for
+// an asset of a partition a storage point of the page holds) check a write with it
+export function objectFrontendAssetNamingRead(assetList, keyOwn, input) {
+  const naming = {};
+  const name = String(input.name ?? '').trim();
+  if (name.length > 200) return { naming, message: 'the name of an asset is at most 200 characters' };
+  if (name) naming.name = name;
+  if (input.pathList === undefined || input.pathList === null) return { naming, message: '' };
+  if (!Array.isArray(input.pathList)) return { naming, message: 'pathList is a list of paths (/kind/...)' };
+  const pathList = [];
+  // every path a pattern stands for names one asset: compared path by path, not by the text
+  const ownerByPath = new Map();
+  for (const one of assetList ?? []) {
+    if (one.key === keyOwn) continue;
+    for (const pattern of one.pathList ?? []) for (const text of assetPathCompile(pattern, { isAbsolute: true }).textList) if (!ownerByPath.has(text)) ownerByPath.set(text, one);
+  }
+  for (const pathText of input.pathList) {
+    const { path, message } = objectFrontendAssetPathNormalize(pathText);
+    if (message) return { naming, message: `the path ${JSON.stringify(pathText)}: ${message}` };
+    if (!path || pathList.includes(path)) continue;
+    const textList = assetPathCompile(path, { isAbsolute: true }).textList;
+    const taken = textList.find((text) => ownerByPath.has(text));
+    if (taken) {
+      const owner = ownerByPath.get(taken);
+      return { naming, message: `the path ${taken}${textList.length > 1 ? ` (one of those ${path} stands for)` : ''} is the path of ${owner.name || owner.key} already` };
+    }
+    pathList.push(path);
+  }
+  if (pathList.length > 0) naming.pathList = pathList;
+  return { naming, message: '' };
+}
+
 // ---------- the assets of an object: names, paths, references ----------
 //
 // an asset of a frontend object may have a name, for people (Dune), and

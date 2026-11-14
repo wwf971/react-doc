@@ -287,7 +287,7 @@ const DocEditInsertPick = observer(function DocEditInsertPick({ menu, template, 
       editStore.insertMenuMessageSet(result.message);
       return;
     }
-    write(result.ref);
+    write(result.data.ref);
   };
   const isCreating = objectFrontendStore?.write.status === 'submitting' && objectFrontendStore.write.route === 'create';
   return (

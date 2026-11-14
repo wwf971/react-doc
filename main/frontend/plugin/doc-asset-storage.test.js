@@ -10,7 +10,8 @@ import { docAssetMiddlewareCreate } from './doc-asset-server.ts';
 import { docAssetConfigLoad, loadConfigDoc } from './doc-source.ts';
 import { objectFrontendConfigOfDocPageListGet } from './doc-object-frontend.ts';
 import {
-  assetStorageConfigRead, assetStoragePartitionBindResolve, assetStorageTypeApiSetListGet, assetStorageTypeIs,
+  assetStorageConfigRead, assetStoragePageDriverListGet, assetStoragePartitionBindResolve, assetStorageTypeApiSetListGet, assetStorageTypeDeclaredRead,
+  assetStorageTypeIs,
 } from './doc-asset-storage.ts';
 import { assetStorageFilePackDriverCreate } from './doc-asset-storage-file-pack.ts';
 
@@ -28,8 +29,9 @@ function dirTempCreate() {
 test('storage types: a type promises the api sets of its ancestors and its own', () => {
   assert.deepEqual(assetStorageTypeApiSetListGet('file-tree'), ['item', 'partition']);
   assert.deepEqual(assetStorageTypeApiSetListGet('file-pack'), ['item', 'partition', 'pack']);
-  assert.deepEqual(assetStorageTypeApiSetListGet('remote-notify'), ['item', 'partition', 'cache', 'auth', 'notify']);
-  assert.equal(assetStorageTypeIs('remote-notify', 'remote'), true);
+  assert.deepEqual(assetStorageTypeApiSetListGet('remote'), ['item', 'partition', 'cache', 'auth']);
+  // an optional api set is promised by a point only when its config turns it on
+  assert.deepEqual(assetStorageTypeApiSetListGet('remote', undefined, { isNotifyEnabled: true }), ['item', 'partition', 'cache', 'auth', 'notify']);
   assert.equal(assetStorageTypeIs('file-pack', 'remote'), false);
 });
 
@@ -207,7 +209,9 @@ test('a partition bound to file-pack by its type: its items in pack files, the s
   assert.deepEqual(folder.partitionList[0].typeIdFoundList, ['file-pack']);
   // the declarations carry the bind, for the page
   const decl = (await get('object-frontend/config')).body.data.docPageList[0].objectList[0];
-  assert.deepEqual(decl.partitionStorageList, [{ partition: 'real', pointId: 'file-pack', typeId: 'file-pack', unavailableReason: '' }]);
+  assert.deepEqual(decl.partitionStorageList, [{
+    partition: 'real', pointId: 'file-pack', typeId: 'file-pack', unavailableReason: '', driverPlace: 'server', owner: { ref: `frontend:${id}`, typeId: 'demo.profile' },
+  }]);
   // a build bundles it like the rest
   const snapshot = assetStoreCreate(docAssetConfigLoad(path.join(dir, 'config.yaml'))).snapshotBuild();
   assert.equal(Object.values(snapshot.itemById[itemId].versionDataById)[0].text, 'salary: 2\n');
@@ -305,4 +309,104 @@ test('storage points of a workspace file are seen by every doc page; a bind reso
   assert.deepEqual(config.pointList.map((one) => [one.id, one.scope]), [['file-tree', 'builtIn'], ['file-pack', 'builtIn'], ['shared', 'workspace']]);
   assert.equal(assetStoragePartitionBindResolve('real', { storagePoint: 'shared', storageType: 'file-pack' }, config, 'a').pointIdClaimed, undefined);
   assert.match(assetStoragePartitionBindResolve('real', { storagePoint: 'x', storageType: 'remote' }, config, 'a').unavailableReason, /not declared/);
+});
+
+// ---------- storage types of a package, and partitions held by a point of the page ----------
+
+// a package declaring a storage type below remote, with a module of its driver, and a doc page
+// importing it and declaring a point of that type
+function fixtureRemoteCreate() {
+  const dir = fixtureCreate();
+  const packageDir = path.join(dir, 'pkg', 'cloud');
+  fs.mkdirSync(path.join(packageDir, 'doc'), { recursive: true });
+  fs.mkdirSync(path.join(packageDir, 'storage'), { recursive: true });
+  fs.writeFileSync(path.join(packageDir, 'doc-package.yaml'), 'name: cloud\ndescription: a backend\npackageDependList: []\n');
+  fs.writeFileSync(path.join(packageDir, 'doc', 'README.md'), '# Cloud\n');
+  fs.writeFileSync(path.join(packageDir, 'storage', 'driver.js'), 'export function driverCreate() { return {}; }\n');
+  fs.writeFileSync(path.join(packageDir, 'asset-storage-type.yaml'), [
+    'storageTypeList:',
+    '  - id: cloud.remote',
+    '    extends: remote',
+    '    label: Cloud',
+    '    configKeyList:',
+    '      - { key: space, description: the space of the point, valueDefault: "" }',
+    '    driver: { entry: ./storage/driver.js, export: driverCreate }',
+    '  - { id: other.remote, extends: remote, driver: { entry: ./storage/driver.js, export: driverCreate } }',
+    '  - { id: cloud.local, extends: file-pack, driver: { entry: ./storage/driver.js, export: driverCreate } }',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'config.yaml'), ['docEntry:', '  dir: ./page', 'packageList:', '  - dir: ./pkg/cloud', ''].join('\n'));
+  fs.writeFileSync(path.join(dir, 'page', '.doc-page', 'asset-storage.yaml'), [
+    'storagePointList:',
+    '  - { id: cloud, type: cloud.remote, config: { url: "https://storage.example.invalid" }, auth: { provider: "frontend:w5j7ccccccc" } }',
+    '  - { id: cloud-no-url, type: cloud.remote }',
+    '  - { id: contract, type: remote, config: { url: "https://storage.example.invalid" } }',
+    '',
+  ].join('\n'));
+  return dir;
+}
+
+test('a package declares a storage type below remote: its driver is the page\'s, a point of it is ready', () => {
+  const dir = fixtureRemoteCreate();
+  const declared = assetStorageTypeDeclaredRead([{ name: 'cloud', dir: path.join(dir, 'pkg', 'cloud') }], dir);
+  assert.deepEqual(declared.typeList.map((one) => [one.id, one.extends, one.driverPlace, one.place]), [['cloud.remote', 'remote', 'page', 'remote']]);
+  // an id outside the name of the package, and a type extending a local type, are left out with a problem
+  assert.equal(declared.fileList[0].problemList.length, 2);
+  assert.match(declared.fileList[0].problemList[0], /cloud\.\{name\}/);
+  assert.match(declared.fileList[0].problemList[1], /extends/);
+  assert.deepEqual(assetStoragePageDriverListGet(declared.typeList), [{ typeId: 'cloud.remote', entryFile: path.join(dir, 'pkg', 'cloud', 'storage', 'driver.js'), export: 'driverCreate' }]);
+  const config = docAssetConfigLoad(path.join(dir, 'config.yaml')).storage;
+  const pointById = Object.fromEntries(config.pointList.map((one) => [one.id, one]));
+  assert.deepEqual([pointById.cloud.status, pointById.cloud.driverPlace], ['ready', 'page']);
+  assert.deepEqual(pointById.cloud.apiSetList, ['item', 'partition', 'cache', 'auth']);
+  // a remote point says where it is reached; the type remote itself is a contract without a driver
+  assert.equal(pointById['cloud-no-url'].status, 'configInvalid');
+  assert.equal(pointById.contract.status, 'typeNotImplemented');
+  // the page receives the type without the path of its module
+  assert.equal(config.typeList.find((one) => one.id === 'cloud.remote').pageDriver.export, 'driverCreate');
+});
+
+test('a partition held by a point of the page: the server keeps its bind, the page moves its items', async () => {
+  const dir = fixtureRemoteCreate();
+  const { id, itemDir, get, objectPost } = await objectCreate(dir);
+  // a local partition with one asset of two versions
+  const made = await objectPost('asset/create', { kind: 'info', partition: 'other', name: 'note', pathList: ['/other/info/note'], text: 'a: 1\n' });
+  assert.equal(made.body.code, 0, made.body.message);
+  const { itemId, key } = made.body.data;
+  const itemBefore = (await get(`item/get?store=local&itemId=${itemId}`)).body.data.item;
+  // the server does not move items to a point of the page by itself: the page copies them first
+  assert.equal((await objectPost('partition/storage/set', { partition: 'other', storagePoint: 'cloud' })).body.code, -1);
+  // the page copied them: the bind is switched, and what the server held is gone with its records
+  const switched = await objectPost('partition/storage/set', { partition: 'other', storagePoint: 'cloud', isDataTransferred: true });
+  assert.equal(switched.body.code, 0, switched.body.message);
+  assert.deepEqual(fs.readdirSync(path.join(itemDir, 'other')), ['partition.yaml']);
+  assert.equal(yamlParse(fs.readFileSync(path.join(itemDir, 'other', 'partition.yaml'), 'utf-8')).storagePoint, 'cloud');
+  const decl = (await get('object-frontend/config')).body.data.docPageList[0].objectList[0];
+  assert.deepEqual(decl.partitionStorageList.map((one) => [one.partition, one.pointId, one.driverPlace, one.owner.ref]), [['other', 'cloud', 'page', `frontend:${id}`]]);
+  assert.deepEqual(decl.listList.filter((one) => one.groupPath.startsWith('other')), []);
+  assert.equal((await get(`item/get?store=local&itemId=${itemId}`)).body.code, -3);
+  // a write of the server into that partition is refused: its items are the page's to write
+  assert.equal((await objectPost('asset/create', { kind: 'info', partition: 'other', text: 'b: 1\n' })).body.code, -6);
+  // home again: every item written by the type of a local point with its history, then the switch with the records
+  const imported = await objectPost('partition/item/import', {
+    partition: 'other', storagePoint: 'file-pack',
+    item: { ...itemBefore, groupPath: 'info' },
+    versionList: [{ versionId: itemBefore.versionIdHead, text: 'a: 1\n', metadata: { by: 'page' } }],
+  });
+  assert.equal(imported.body.code, 0, imported.body.message);
+  // nothing reads it before the switch
+  assert.equal((await get(`item/get?store=local&itemId=${itemId}`)).body.code, -3);
+  const home = await objectPost('partition/storage/set', { partition: 'other', storagePoint: 'file-pack', isDataTransferred: true, recordList: [{ key, kind: 'info', itemId, name: 'note', pathList: ['/other/info/note'] }] });
+  assert.equal(home.body.code, 0, home.body.message);
+  const read = (await get(`item/get?store=local&itemId=${itemId}`)).body.data;
+  assert.equal(read.version.text, 'a: 1\n');
+  assert.deepEqual(read.version.metadata, { by: 'page' });
+  assert.deepEqual([read.item.groupPath, read.item.storage.typeId, read.item.owner.ref], ['other/info', 'file-pack', `frontend:${id}`]);
+  assert.equal(read.item.versionList[0].hash, itemBefore.versionList[0].hash);
+  const declHome = (await get('object-frontend/config')).body.data.docPageList[0].objectList[0];
+  assert.deepEqual(declHome.listList.find((one) => one.groupPath === 'other').assetList, [{ key, kind: 'info', itemId, name: 'note', pathList: ['/other/info/note'] }]);
+  // a partition made at a point of the page (or claimed from it): its folder holds the bind and no item list
+  const claimed = await objectPost('partition/create', { partition: 'example', storagePoint: 'cloud' });
+  assert.equal(claimed.body.code, 0, claimed.body.message);
+  assert.deepEqual(fs.readdirSync(path.join(itemDir, 'example')), ['partition.yaml']);
 });

@@ -120,6 +120,8 @@ const store = useCompStateStore(config, 'switch', () => new SwitchStore(...));
 - **A store serves one mount at a time.** The hook counts the mounts showing it; the mount that leaves in the same commit has gone by the time the new one's layout effects run, so the count is 0 then. A second mount shown while the first one still is (two blocks reading one asset item) gets a store of its own, which is not kept.
 - When the key changes under a mount (its block moved), the mount's store goes under the new key.
 
+Both hooks are exported from `@wwf971/react-doc`, so a mode of a frontend object in a package keeps its store the same way (the package cv: the panel of a profile stays on its view, its path and its scroll position when the document enters or leaves edit mode).
+
 A component whose state is a plain mapping uses `useCompState` and needs none of this. The parameters a store was built from still change while it is kept: a component compares what it rebuilds with what the store holds (a provider of scenes carries a `signature`, [the switch layer](../package/cloud-dev-vis/doc/card-diagram-flexible-switch.md#implementation)) and takes the new one without starting over when it is the same.
 
 ## Api

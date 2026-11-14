@@ -159,16 +159,28 @@ assetPathText(node, { isAbsolute })      the canonical text of a node
 assetPathExpand(node, { limit })         { pathList: [[segment]], message }: the canonical path first
 assetPathCompile(text)                   { node, path, pathList, textList, message }, cached by text
 assetPathMatch(node, segmentList, { isPrefix, segmentNormalize })   a path of it, or the start of one
+assetPathRestList(node, segmentList, { segmentNormalize })          what is left of it after a start of its path: [elementList]
+assetPathCanonicalGet(node)              its canonical path, each segment with the group it is in: [{ name, memberList? }]
 assetPathConcat(...nodes), assetPathChoice(nodes), assetPathPrefixStrip(node, segmentList)
 assetPathSplit(text), assetPathJoin(segmentList, { isAbsolute }), assetPathSegmentEscape(name), assetPathListSplit(text)
 assetPathIndexBuild(sourceList, { segmentNormalize, labelOf, isAbsolute })
 assetPathIndexGet, assetPathIndexNodeGet, assetPathIndexBelowList, assetPathIndexComplete, assetPathIndexPathOfEntryGet
 ```
 
+**Walking a level at a time.** The index answers with segments: below `name` come `jp`, `last`, `first`, `en`, each one segment ahead, and nothing says that `jp` and `last` are one step taken in either order. A view that shows what comes next as it is written (a file explorer over the entries: one item for a group, any member of it a way forward) asks the pattern instead. `assetPathRestList` gives what is left of a pattern after the segments walked, a group entered keeping its other members as a group, or as the one member left:
+
+```text
+name/{jp/last/}kanji   after name        {jp/last/}kanji    one item: jp and last, either first
+                       after name/last   jp/kanji           one plain segment, then the value
+name/{en, last}        after name        {en, last}         one item ending the path: the value is shown at it
+```
+
+`assetPathCanonicalGet` is the other direction, for a view drawn along canonical paths (a tree): the canonical path, each segment with the members of the group it is in, so a level that could as well come after the next one is marked. The package cv draws both over the values of a profile (cv: `doc/cv-query.md#the-mode-information`).
+
 ## Files
 
 ```text
-frontend/src/lib/doc-object-frontend-asset-path.js        the grammar, expansion, matching, the index, completion
+frontend/src/lib/doc-object-frontend-asset-path.js        the grammar, expansion, matching, walking, the index, completion
 frontend/src/lib/doc-object-frontend-asset-path.test.js   the grammar, locality, refusals, the index
 frontend/src/lib/doc-object-frontend.js                   the asset paths of an object over it: normalize, the index of an
                                                           object's assets, references, completion, search, a list in one field

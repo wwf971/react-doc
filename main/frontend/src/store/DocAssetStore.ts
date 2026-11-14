@@ -1,5 +1,5 @@
 import { makeAutoObservable, observable, reaction, runInAction } from 'mobx';
-import { assetBackendApiCreate, assetBackendSnapshotCreate } from '../lib/doc-asset-backend.js';
+import { assetBackendApiCreate, assetBackendRouteCreate, assetBackendSnapshotCreate } from '../lib/doc-asset-backend.js';
 import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
 import { sourcePathBuild, sourcePathFullGet, sourcePathParse } from '../lib/doc-source-path.js';
 import { AssetPanelModel } from './AssetPanelModel.js';
@@ -268,7 +268,12 @@ export type AssetStorageInfo = {
 const ASSET_STORAGE_EMPTY: AssetStorageInfo = { typeList: [], apiSetList: [], pointList: [], fileList: [] };
 
 export class DocAssetStore {
-  backend: ReturnType<typeof assetBackendApiCreate> | ReturnType<typeof assetBackendSnapshotCreate> | undefined;
+  // what the store talks to: the development server or the snapshot of a build (backendBase),
+  // with the items of the partitions held by storage points of the page answered by the remote
+  // half of the storage layer (remote, DocAssetRemoteStore) instead
+  backend: any;
+  backendBase: ReturnType<typeof assetBackendApiCreate> | ReturnType<typeof assetBackendSnapshotCreate> | undefined;
+  remote: any = undefined;
   isAvailable = false;
   isWritable = false;
   statusMessage = '';
@@ -307,12 +312,20 @@ export class DocAssetStore {
   reloadTimerByItemId = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(options: DocAssetStoreOptions = {}) {
-    if (options.endpoint) this.backend = assetBackendApiCreate(options.endpoint);
-    else if (options.snapshot) this.backend = assetBackendSnapshotCreate(options.snapshot, ASSET_STORE_ID_LOCAL);
+    if (options.endpoint) this.backendBase = assetBackendApiCreate(options.endpoint);
+    else if (options.snapshot) this.backendBase = assetBackendSnapshotCreate(options.snapshot, ASSET_STORE_ID_LOCAL);
+    if (this.backendBase) {
+      this.backend = assetBackendRouteCreate(this.backendBase, {
+        remoteGet: () => this.remote,
+        writeUnavailableReasonGet: () => (this.isWritable ? '' : this.writeUnavailableReason),
+      });
+    }
     this.subscribe = options.subscribe;
     this.manifestGet = options.manifestGet;
     makeAutoObservable(this, {
       backend: false,
+      backendBase: false,
+      remote: false,
       subscribe: false,
       unsubscribe: false,
       manifestGet: false,
@@ -351,6 +364,11 @@ export class DocAssetStore {
         (manifest) => this.usageManifestSync(manifest),
       );
     }
+  }
+
+  // the storage points the page drives (DocAssetRemoteStore): set once it is created
+  remoteSet(remote: any) {
+    this.remote = remote;
   }
 
   dispose() {
@@ -413,8 +431,10 @@ export class DocAssetStore {
       label: point?.label ?? pointId,
       typeLabel: type?.label ?? typeId,
       place: type?.place ?? 'local',
+      // where its driver runs: a point of the page is read and written by the page itself
+      driverPlace: type?.driverPlace ?? 'server',
       isContentSearchable: type?.isContentSearchable === true,
-      apiSetList: this.storageTypeApiSetListGet(typeId),
+      apiSetList: point?.apiSetList ?? this.storageTypeApiSetListGet(typeId),
       isAvailable: !bind?.unavailableReason,
       unavailableReason: bind?.unavailableReason ?? '',
       pointIdClaimed: bind?.pointIdClaimed ?? '',
@@ -738,6 +758,9 @@ export class DocAssetStore {
   }
 
   private itemAccept(store: string, item: AssetItem) {
+    // an item of a storage point of the page whose partition left the page meanwhile (a read or a
+    // write was on its way when somebody signed out): a late answer does not put it back
+    if (this.remote?.itemIsGone?.(item)) return;
     const key = itemKeyGet(store, item.itemId);
     const stateBefore = this.itemById[key];
     // an item read again as it was stays the same item: reading the data of
@@ -747,11 +770,17 @@ export class DocAssetStore {
     }
     // a reference by this name resolves now
     if (item.name) delete this.nameLookupByKey[nameKeyGet(store, item.name)];
-    // versions that no longer exist (deleted) leave the cache
-    const versionIdSet = new Set(item.versionList.map((version) => version.versionId));
+    // versions that no longer exist (deleted) leave the cache, and so does the data of a version
+    // whose bytes are not the ones the item names any more (rewritten in place by a write that
+    // answered without the data, or elsewhere): it is read again when used
+    const hashByVersionId = new Map(item.versionList.map((version) => [version.versionId, version.hash]));
     const prefix = versionKeyGet(store, item.itemId, '');
     for (const key of Object.keys(this.versionByKey)) {
-      if (key.startsWith(prefix) && !versionIdSet.has(key.slice(prefix.length))) delete this.versionByKey[key];
+      if (!key.startsWith(prefix)) continue;
+      const versionId = key.slice(prefix.length);
+      const versionHeld = this.versionByKey[key];
+      if (!hashByVersionId.has(versionId)) delete this.versionByKey[key];
+      else if (versionHeld.status === 'done' && versionHeld.hash !== undefined && versionHeld.hash !== hashByVersionId.get(versionId)) delete this.versionByKey[key];
     }
   }
 
@@ -770,6 +799,8 @@ export class DocAssetStore {
     itemId: string,
     version: { versionId: string; size: number; hash: string; isText: boolean; text?: string; metadata?: AssetVersionMetadata },
   ) {
+    // the data of a version of an item the store does not hold is not kept (see itemAccept)
+    if (!this.itemById[itemKeyGet(store, itemId)]?.item) return;
     this.versionByKey[versionKeyGet(store, itemId, version.versionId)] = {
       status: 'done',
       isText: version.isText === true,
@@ -793,8 +824,10 @@ export class DocAssetStore {
 
   // every write: the backend answers, the fresh item (and version) replace
   // the loaded ones, the caller gets { code, data, message }
+  // (whether the place can be written is the backend's to say: a write the development server
+  // holds is refused where there is none, one a storage point of the page holds is not)
   private async writeApply(store: string, request: () => Promise<any>, messageFailure: string): Promise<AssetResult> {
-    if (!this.isWritable) return { code: -1, message: this.writeUnavailableReason };
+    if (!this.backend) return { code: -1, message: this.writeUnavailableReason };
     const result = await request();
     if (result.code !== 0) {
       return { code: result.code, message: result.code === -2 ? messageConflict : result.message || messageFailure };
@@ -970,6 +1003,15 @@ export class DocAssetStore {
   // items another layer wrote through the same backend (the frontend
   // object service layer: an item and its entry in one request), taken as
   // the index would bring them; a deleted item stays, marked
+  // items that left the store without a file saying so (a partition of a storage point of the
+  // page no longer read)
+  itemListForget(store: string, itemIdList: string[]) {
+    if (itemIdList.length === 0) return;
+    runInAction(() => {
+      for (const itemId of itemIdList) this.itemForget(store, itemId);
+    });
+  }
+
   itemListAccept(store: string, itemList: AssetItem[]) {
     runInAction(() => {
       for (const item of itemList) {

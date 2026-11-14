@@ -1198,3 +1198,74 @@
 .doc-asset-table td.doc-settings-asset-storage-wrap {
   white-space: normal;
 }
+
+/* ---------- partitions held by a storage point of the page (Frontend objects tab) ---------- */
+
+/* the state the page read of such a partition, beside its storage point */
+.doc-settings-partition-remote {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.15rem;
+}
+
+.doc-settings-partition-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* what moving or copying a partition says: its line keeps its height whether it says something */
+.doc-settings-partition-progress {
+  min-height: 1.2rem;
+  margin: 0.25rem 0 0;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.74rem;
+  line-height: 1.2rem;
+  user-select: text;
+}
+
+.doc-settings-partition-progress[data-error] {
+  color: var(--color-fd-destructive, #dc2626);
+}
+
+/* ---------- storage points the page reaches itself (Asset service tab) ---------- */
+
+.doc-settings-remote-point {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--color-fd-border);
+}
+
+.doc-settings-remote-point-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.doc-settings-remote-point-title > .doc-asset-muted {
+  font-weight: 400;
+}
+
+.doc-settings-remote-point-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+/* where a point is reached: an address, in the font of the panel (not monospace), selectable */
+.doc-settings-remote-point-url {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  user-select: text;
+}

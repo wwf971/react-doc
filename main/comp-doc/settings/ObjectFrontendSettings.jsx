@@ -7,6 +7,7 @@ import { ObjectFrontendAssetSearchPanel } from '../object-frontend/ObjectFronten
 import { objectFrontendAssetPathListParse } from '../../frontend/src/lib/doc-object-frontend.js';
 import '../asset/DocAsset.css';
 import '../object-frontend/ObjectFrontend.css';
+import { timeTextDisplay } from '../../frontend/src/lib/time-text.js';
 import './DocSettings.css';
 
 // The "Frontend objects" tab of the settings panel (design:
@@ -194,7 +195,8 @@ const ObjectFrontendIncomingRow = observer(function ObjectFrontendIncomingRow({ 
 // the object chosen in the table: what its entry says, its assets, what does
 // not agree, and its changes
 const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
-  const { objectFrontendStore: store, assetStore } = useDocStores();
+  const { objectFrontendStore: store, assetStore, assetRemoteStore, authStore } = useDocStores();
+  const transfer = assetRemoteStore?.transfer;
   const state = store.objectGet(id);
   const isWritable = store.writeUnavailableReasonOf(id) === '';
   const isWriting = store.write.status === 'submitting';
@@ -240,6 +242,13 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
                 const pointList = store.storagePointListGet(id).filter((point) => point.status === 'ready');
                 const pointIdNow = partition.storage.pointIdClaimed ? '' : partition.storage.pointId;
                 const pointIdChosen = pointList.some((point) => point.id === store.settings.storagePointChosen) ? store.settings.storagePointChosen : pointIdNow || pointList[0]?.id || '';
+                // a partition held by a storage point of the page: what the page read of it, and the session it is read with
+                const isOfPage = partition.storage.driverPlace === 'page';
+                const remote = partition.storage.remote;
+                const providerRef = isOfPage ? String(assetStore.storagePointGet(partition.storage.pointId, state.docPageAlias)?.auth?.provider ?? '') : '';
+                const copyKey = `partitionCopy:${partition.id}`;
+                const copyTargetList = state.partitionList.filter((one) => one.id !== partition.id);
+                const copyTarget = copyTargetList.some((one) => one.id === store.settings.partitionCopyTarget) ? store.settings.partitionCopyTarget : copyTargetList[0]?.id ?? '';
                 return (
                   <tr key={partition.id}>
                     <td>item/{partition.id}/{partition.isDefault ? <span className="doc-asset-muted"> (default)</span> : null}</td>
@@ -252,35 +261,83 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
                       {partition.storage.pointId}
                       {partition.storage.unavailableReason ? <span className="doc-settings-tab-issue"> cannot be used</span> : null}
                       {partition.storage.pointIdClaimed ? <span className="doc-settings-tab-issue"> gone, read through {partition.storage.pointIdClaimed}</span> : null}
+                      {remote ? (
+                        <span className="doc-settings-partition-remote" title={remote.message || (remote.timeChecked ? `the storage point answered at ${timeTextDisplay(remote.timeChecked, { part: 'second' })}` : '')}>
+                          <span className="doc-badge-outline" {...(remote.status === 'ready' && !remote.isFromCache ? { 'data-primary': true } : {})} {...(remote.status === 'forbidden' || remote.status === 'error' ? { 'data-error': true } : {})}>
+                            {REMOTE_STATUS_TEXT[remote.status] ?? remote.status}{remote.status === 'ready' && remote.isFromCache ? ', from the cache' : ''}
+                          </span>
+                          {remote.status === 'authRequired' && providerRef ? (
+                            <button type="button" className="doc-button" data-primary onClick={() => void authStore?.signInOpen(providerRef, { reason: `The partition ${partition.id} is held by the storage point ${partition.storage.label}.` })}>Sign in</button>
+                          ) : (
+                            <button type="button" className="doc-button" disabled={remote.isRefreshing || remote.status === 'loading'} title="ask the storage point whether the partition changed" onClick={() => void assetRemoteStore.partitionRefresh(state.ref, partition.id)}>
+                              {remote.isRefreshing || remote.status === 'loading' ? 'Reading' : 'Refresh'}
+                            </button>
+                          )}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="doc-asset-muted doc-asset-version-size">{partition.isPresent ? partition.assetCount : '—'}</td>
                     <td className="doc-settings-tab-actions">
                       {!isWritable ? null : !partition.isPresent ? (
-                        <button type="button" className="doc-button" disabled={isWriting} title={`make its folder, with an empty item list, held by ${partition.storage.pointId}`} onClick={() => void store.partitionCreate(id, partition.id)}>Create</button>
+                        <button
+                          type="button"
+                          className="doc-button"
+                          disabled={isWriting}
+                          title={isOfPage
+                            ? `bind it to the storage point ${partition.storage.pointId}: a partition of this object the point holds already is claimed with its items, else it is made there`
+                            : `make its folder, with an empty item list, held by ${partition.storage.pointId}`}
+                          onClick={() => void store.partitionCreate(id, partition.id)}
+                        >
+                          {isOfPage ? 'Create or claim' : 'Create'}
+                        </button>
                       ) : confirm === storageKey ? (
                         <>
                           <select aria-label={`The storage point of ${partition.id}`} value={pointIdChosen} disabled={isWriting} onChange={(event) => store.settingsStoragePointSet(event.target.value)}>
                             {pointList.map((point) => <option key={point.id} value={point.id}>{point.id}</option>)}
                           </select>
+                          {isOfPage ? (
+                            <label className="doc-settings-partition-check" title={`unchecked: the partition leaves ${partition.storage.pointId}. checked: what that point holds stays there as a copy no object reads; it can be claimed again later, or removed at the point`}>
+                              <input type="checkbox" checked={store.settings.isSourceKept} disabled={isWriting} onChange={(event) => store.settingsSourceKeptSet(event.target.checked)} />
+                              <span>keep a copy at {partition.storage.pointId}</span>
+                            </label>
+                          ) : null}
                           <button
                             type="button"
                             className="doc-button"
                             disabled={isWriting || !pointIdChosen || pointIdChosen === pointIdNow}
-                            title={`every item of the partition (${partition.assetCount}) is written by the type of that point; its keys, names and paths stay`}
-                            onClick={() => void store.partitionStorageSet(id, partition.id, pointIdChosen).then((result) => { if (result.code === 0) store.settingsConfirmSet(''); })}
+                            title={`every item of the partition (${partition.assetCount}) is written by the type of that point, with its history; its keys, names and paths stay`}
+                            onClick={() => void store.partitionStorageSet(id, partition.id, pointIdChosen, { isSourceKept: isOfPage && store.settings.isSourceKept }).then((result) => { if (result.code === 0) store.settingsConfirmSet(''); })}
                           >
-                            Move
+                            {isOfPage && store.settings.isSourceKept ? 'Copy here' : 'Move'}
+                          </button>
+                          <button type="button" className="doc-button" onClick={() => store.settingsConfirmSet('')}>Cancel</button>
+                        </>
+                      ) : confirm === copyKey ? (
+                        <>
+                          <span className="doc-asset-muted">into</span>
+                          <select aria-label={`The partition ${partition.id} is copied into`} value={copyTarget} disabled={isWriting} onChange={(event) => store.settingsPartitionCopyTargetSet(event.target.value)}>
+                            {copyTargetList.map((one) => <option key={one.id} value={one.id}>{one.id}{one.isPresent ? '' : ' (made)'}</option>)}
+                          </select>
+                          <button
+                            type="button"
+                            className="doc-button"
+                            disabled={isWriting || !copyTarget}
+                            title="its assets are made again in that partition, with the same content, keys and names; a key or a path that partition's object has already gets out of the way"
+                            onClick={() => void store.settingsPartitionCopySubmit(id, partition.id, copyTarget)}
+                          >
+                            Copy {partition.assetCount} asset(s)
                           </button>
                           <button type="button" className="doc-button" onClick={() => store.settingsConfirmSet('')}>Cancel</button>
                         </>
                       ) : confirm === confirmKey ? (
                         <>
-                          <button type="button" className="doc-button" data-danger="" disabled={isWriting} title="its assets off their lists and deleted softly (their files stay), then its folder when empty" onClick={() => void store.partitionDelete(id, partition.id).then(() => store.settingsConfirmSet(''))}>Delete {partition.assetCount} asset(s)</button>
+                          <button type="button" className="doc-button" data-danger="" disabled={isWriting} title={isOfPage ? 'the partition is marked deleted at its storage point (it can be restored there), and its bind leaves the folder of the object' : 'its assets off their lists and deleted softly (their files stay), then its folder when empty'} onClick={() => void store.partitionDelete(id, partition.id).then(() => store.settingsConfirmSet(''))}>Delete {partition.assetCount} asset(s)</button>
                           <button type="button" className="doc-button" onClick={() => store.settingsConfirmSet('')}>Cancel</button>
                         </>
                       ) : (
                         <>
-                          <button type="button" className="doc-button" disabled={isWriting} title="hold this partition at another storage point" onClick={() => store.settingsConfirmSet(storageKey)}>Storage…</button>
+                          <button type="button" className="doc-button" disabled={isWriting} title="hold this partition at another storage point: in the folders of the doc page, or at a backend the page reaches" onClick={() => store.settingsConfirmSet(storageKey)}>Storage…</button>
+                          <button type="button" className="doc-button" disabled={isWriting || copyTargetList.length === 0 || partition.assetCount === 0} title={copyTargetList.length === 0 ? 'its type declares no other partition to copy into' : 'copy its assets into another partition of this object'} onClick={() => store.settingsConfirmSet(copyKey)}>Copy…</button>
                           <button type="button" className="doc-button" disabled={isWriting} onClick={() => store.settingsConfirmSet(confirmKey)}>Delete</button>
                         </>
                       )}
@@ -292,6 +349,14 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
           </table>
         </div>
       )}
+
+      {/* what moving or copying a partition says: one line of one height, so the tables below stay */}
+      <p className="doc-settings-partition-progress" {...(transfer?.status === 'error' ? { 'data-error': true } : {})}>
+        {transfer?.status === 'running' ? `${transfer.title}: ${transfer.text}${transfer.countTotal > 0 ? ` (${transfer.countDone} of ${transfer.countTotal} versions)` : ''}`
+          : transfer?.status === 'error' ? `${transfer.title}: ${transfer.message}`
+            : transfer?.status === 'done' ? `${transfer.title}: ${transfer.text}`
+              : store.settings.partitionCopyMessage}
+      </p>
 
       <h4>Assets ({state.assetList.length})</h4>
       {state.assetList.length > 0 ? (
@@ -429,3 +494,9 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
     </div>
   );
 });
+
+// what the page read of a partition a storage point of the page holds (doc_page_impl_asset_storage.md#points-of-the-page)
+const REMOTE_STATUS_TEXT = {
+  idle: 'not read', loading: 'reading', ready: 'read', absent: 'not at the point yet', authRequired: 'signed out',
+  forbidden: 'not allowed', unreachable: 'out of reach', error: 'failed',
+};

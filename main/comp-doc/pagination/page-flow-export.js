@@ -61,7 +61,7 @@ export async function pageFlowPrint(rootElement, { title = 'pages', pageSpec } =
   setTimeout(finish, 10 * 60 * 1000);
   win.focus();
   win.print();
-  return { code: 0, message: '', engine };
+  return { code: 0, message: '', data: { engine } };
 }
 
 function stylesheetLoadWait(doc) {
@@ -100,5 +100,5 @@ export async function pageFlowPdfDownload(rootElement, { fileName = 'pages.pdf',
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
-  return { code: 0, message: '', pageCount: pageList.length };
+  return { code: 0, message: '', data: { pageCount: pageList.length } };
 }

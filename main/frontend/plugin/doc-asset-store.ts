@@ -706,6 +706,10 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     return (folder.partitionStorageList ?? []).filter((one) => one.typeId !== ASSET_STORAGE_TYPE_FILE_TREE || one.unavailableReason).map((one) => one.partition);
   }
 
+  // a partition held by a storage point of the page (a remote type): the page reads and writes
+  // its items, this store only keeps its bind (doc_page_impl_asset_storage.md#points-of-the-page)
+  const bindIsOfPage = (bind: AssetStoragePartitionBind | undefined) => bind?.driverPlace === 'page';
+
   function containerTreeGet(folder: AssetFolder): Container {
     return {
       driver: assetStorageFileTreeDriver, dirAbs: folder.pathAbs, prefix: '',
@@ -728,6 +732,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     const bind = first ? (folder.partitionStorageList ?? []).find((one) => one.partition === first) : undefined;
     if (!bind) return containerTreeGet(folder);
     if (bind.unavailableReason) throw new AssetError(-6, `the partition ${first} of ${folder.owner?.ref ?? folder.path} cannot be read or written: ${bind.unavailableReason}`);
+    if (bindIsOfPage(bind)) throw new AssetError(-6, `the partition ${first} of ${folder.owner?.ref ?? folder.path} is held by the storage point ${bind.pointId}, which the page reaches itself: its items are read and written by the page, not by the development server`);
     return containerOfBindGet(folder, bind) ?? { ...containerTreeGet(folder), storage: { pointId: bind.pointId, typeId: bind.typeId } };
   }
 
@@ -1523,7 +1528,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       const container = containerOfBindGet(folder, bind);
       const info: AssetStorageInfo = container
         ? container.driver.infoGet(container.dirAbs)
-        : { itemCount: bind.unavailableReason ? 0 : assetStorageFileTreeDriver.itemPlaceList(dirAbs).length, size: 0, sizeDead: 0, fileList: [] };
+        : { itemCount: bind.unavailableReason || bindIsOfPage(bind) ? 0 : assetStorageFileTreeDriver.itemPlaceList(dirAbs).length, size: 0, sizeDead: 0, fileList: [] };
       return { ...bind, ...info, typeIdFoundList };
     });
   }
@@ -1541,11 +1546,13 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   // partition as it was, with a copy to remove; after it, the partition as it will be, with the
   // data of the type before still there (typeIdFoundList of its info says so)
   //   owner   what the partition's file says of whose it is: { ref, typeId? }
+  //   isDataTransferred   the page copied the items already, to or from a point it drives: this
+  //                       store only switches the bind, and removes what it held itself
   function partitionStorageSet(
     folderPath: string,
     partition: string,
     point: AssetStoragePoint,
-    options: { owner?: { ref: string; typeId?: string }; asLayer?: string } = {},
+    options: { owner?: { ref: string; typeId?: string }; asLayer?: string; isDataTransferred?: boolean } = {},
   ): AssetPartitionInfo {
     const folder = folderGet(folderPath);
     folderWritableCheck(folderPath);
@@ -1553,12 +1560,41 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     if (!folder.owner) throw new AssetError(-1, `${folderPath} is no folder of an object: only a partition of a frontend object is bound to a storage point`);
     if (!partition || partition.includes('/')) throw new AssetError(-1, `a partition is a folder at the top of the item folder: ${JSON.stringify(partition)}`);
     if (point.status !== 'ready') throw new AssetError(-6, `the storage point ${point.id} cannot be used: ${point.statusMessage}`);
-    const type = assetStorageTypeGet(point.typeId);
-    if (!type || !driverGet(point.typeId, point.config)) throw new AssetError(-6, `the storage type ${point.typeId} has no driver`);
-    const from = containerOf(folder, partition);
-    const bindNext: AssetStoragePartitionBind = { partition, pointId: point.id, typeId: point.typeId, unavailableReason: '', config: point.config };
+    const type = assetStorageTypeGet(point.typeId, config.storage?.typeList);
     const dirAbs = path.join(folder.pathAbs, partition);
     const fileContent = { storagePoint: point.id, storageType: point.typeId, ...(options.owner ? { owner: options.owner } : {}), partition };
+    const bindNow = (folder.partitionStorageList ?? []).find((one) => one.partition === partition);
+    const bindNext: AssetStoragePartitionBind = {
+      partition, pointId: point.id, typeId: point.typeId, unavailableReason: '', config: point.config, driverPlace: point.driverPlace,
+      ...(options.owner ? { owner: options.owner } : {}),
+    };
+    if (bindIsOfPage(bindNow) || point.driverPlace === 'page') {
+      // a point of the page on one side at least: the page read the items from one point and
+      // wrote them to the other (doc_page_impl_asset_storage.md#moving-through-the-page)
+      if (options.isDataTransferred !== true) {
+        throw new AssetError(-1, `the partition ${partition} moves to or from a storage point the page reaches itself (${bindIsOfPage(bindNow) ? bindNow!.pointId : point.id}): the page copies its items, then switches its storage`);
+      }
+      const fromLocal = bindIsOfPage(bindNow) ? undefined : containerOf(folder, partition);
+      const placeLocalList = fromLocal
+        ? itemDirList(folder).filter((one) => one.groupPath === partition || one.groupPath.startsWith(`${partition}/`))
+        : [];
+      if (point.driverPlace !== 'page' && !driverGet(point.typeId, point.config)) throw new AssetError(-6, `the storage type ${point.typeId} has no driver`);
+      assetStoragePartitionFileWrite(dirAbs, fileContent);
+      if (fromLocal) {
+        // what this store held is at the point now: it goes, as the data of the type before does
+        for (const place of placeLocalList) fromLocal.driver.itemRemove(fromLocal.dirAbs, dirNameInnerGet(fromLocal, place.dirName));
+        if (fromLocal.prefix) {
+          assetStorageFilePackFileListRemove(fromLocal.dirAbs);
+        } else {
+          const groupPathList = [...new Set(placeLocalList.map((one) => one.groupPath))].sort((a, b) => b.length - a.length);
+          for (const groupPath of groupPathList) if (groupPath !== partition) fromLocal.driver.groupEmptyRemove(fromLocal.dirAbs, groupPath);
+        }
+      }
+      partitionStorageBind(folderPath, bindNext);
+      return partitionInfoList(folder).find((one) => one.partition === partition)!;
+    }
+    if (!type || !driverGet(point.typeId, point.config)) throw new AssetError(-6, `the storage type ${point.typeId} has no driver`);
+    const from = containerOf(folder, partition);
     const to: Container = containerOfBindGet(folder, bindNext) ?? { ...containerTreeGet(folder), storage: { pointId: point.id, typeId: point.typeId } };
     if (from.driver.typeId === to.driver.typeId && from.dirAbs === to.dirAbs) {
       // the same data read by another point of the same type: only the file changes
@@ -1604,6 +1640,55 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     return partitionInfoList(folder).find((one) => one.partition === partition)!;
   }
 
+  // one item written into a partition with the history it is given, by the type of a local
+  // point: how the page brings the items of a partition home from a point it drives, before the
+  // storage of the partition is switched to that local point (partitionStorageSet with
+  // isDataTransferred). while the partition is still bound to the point of the page, what is
+  // written here is not read by anything
+  //   item          what item.yaml holds (as the point answered it), groupPath: its place inside
+  //                 the partition
+  //   versionList   [{ versionId, data, metadata }]: the bytes and the metadata of every version
+  function partitionItemImport(
+    folderPath: string,
+    partition: string,
+    point: AssetStoragePoint,
+    input: { item: Record<string, any>; versionList: { versionId: string; data: Buffer; metadata?: AssetVersionMetadata }[] },
+    options: { asLayer?: string } = {},
+  ): AssetItemMeta {
+    const folder = folderGet(folderPath);
+    folderWritableCheck(folderPath);
+    folderOwnerPlaceCheck(folderPath, options.asLayer, 'importing an item into a partition');
+    if (!folder.owner) throw new AssetError(-1, `${folderPath} is no folder of an object`);
+    if (!partition || partition.includes('/')) throw new AssetError(-1, `a partition is a folder at the top of the item folder: ${JSON.stringify(partition)}`);
+    if (point.status !== 'ready' || point.driverPlace === 'page') throw new AssetError(-6, `the storage point ${point.id} is not a local point that can be used`);
+    const itemId = String(input.item?.itemId ?? '');
+    if (!idMs48Is(itemId)) throw new AssetError(-1, `an imported item names its id: ${JSON.stringify(input.item?.itemId)}`);
+    const bindNext: AssetStoragePartitionBind = { partition, pointId: point.id, typeId: point.typeId, unavailableReason: '', config: point.config, driverPlace: 'server' };
+    const to: Container = containerOfBindGet(folder, bindNext) ?? { ...containerTreeGet(folder), storage: { pointId: point.id, typeId: point.typeId } };
+    const groupPath = [partition, groupPathNormalize(input.item.groupPath ?? '')].filter(Boolean).join('/');
+    const dirName = dirNameInGroupBuild(groupPath, itemDirNameBuild(itemId, ''));
+    const meta = itemMetaNormalize({ ...input.item, name: '' }, itemId, folder.path, dirName, groupPath, to.storage);
+    const dirNameInner = to.prefix ? dirName.slice(to.prefix.length + 1) : dirName;
+    for (const version of input.versionList) {
+      if (!meta.versionList.some((one) => one.versionId === version.versionId)) continue;
+      to.driver.versionWrite(to.dirAbs, dirNameInner, version.versionId, meta.fileExt, version.data);
+      const metadata = versionMetadataNormalize(version.metadata ?? {});
+      if (Object.keys(metadata).length > 0) to.driver.versionMetadataWrite(to.dirAbs, dirNameInner, version.versionId, metadata);
+    }
+    const missing = meta.versionList.find((one) => !input.versionList.some((version) => version.versionId === one.versionId));
+    if (missing) throw new AssetError(-1, `the imported item ${itemId} lists the version ${missing.versionId}, whose data did not come with it`);
+    const metaFile: Record<string, unknown> = { itemId: meta.itemId, name: meta.name, lang: meta.lang, contentType: meta.contentType, fileExt: meta.fileExt };
+    if (meta.component !== undefined) metaFile.component = meta.component;
+    if (meta.owner !== undefined) metaFile.owner = meta.owner;
+    if (meta.saveMode !== undefined) metaFile.saveMode = meta.saveMode;
+    Object.assign(metaFile, {
+      versionIdHead: meta.versionIdHead, isDeleted: meta.isDeleted, isLocked: meta.isLocked, timeCreated: meta.timeCreated,
+      versionList: meta.versionList, eventList: meta.eventList,
+    });
+    to.driver.itemMetaWrite(to.dirAbs, dirNameInner, metaFile);
+    return { ...meta, folderOwner: folder.owner };
+  }
+
   // what a type keeps dead in a partition is dropped (the pack files of file-pack written again)
   function partitionCompact(folderPath: string, partition: string): AssetPartitionInfo {
     const folder = folderGet(folderPath);
@@ -1632,6 +1717,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     folderOwnedAdd,
     partitionStorageBind,
     partitionStorageSet,
+    partitionItemImport,
     partitionCompact,
     changeItemIdListOfFileGet,
     folderInfoList,

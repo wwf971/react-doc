@@ -71,7 +71,19 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
     // the storage points the object may bind a partition to, and the storage of a whole partition
     // changed to one of them (its items written by the type of that point; no key, name or path changes)
     get storagePointList() { return objectFrontendStore.storagePointListGet(stateGet().id); },
-    partitionStorageSet: (partition, storagePoint) => objectFrontendStore.partitionStorageSet(stateGet().id, partition, storagePoint),
+    // options.isSourceKept: moving away from a storage point of the page, what it held stays there as a copy
+    partitionStorageSet: (partition, storagePoint, options) => objectFrontendStore.partitionStorageSet(stateGet().id, partition, storagePoint, options),
+    // the assets of a partition made again in another one ({ id?, partition, storagePoint? }; id: another object):
+    // { code, data: { countCopied, skipList }, message }
+    partitionCopy: (partitionFrom, target) => objectFrontendStore.partitionCopy(stateGet().id, partitionFrom, target),
+    // why one partition cannot be written now ('' when it can): the page, for a partition in its folders; the
+    // storage point, for one a point of the page holds (nobody signed in, out of reach). such a partition is
+    // written on a built page too, so a mode asks per partition, not only isWritable
+    partitionWriteUnavailableReasonGet: (partition) => objectFrontendStore.partitionWriteUnavailableReasonGet(ref, partition),
+    // a partition a storage point of the page holds: asked again whether it changed elsewhere; the sign-in
+    // dialog of the auth provider its point names (Promise<boolean>: signed in)
+    partitionRefresh: (partition) => objectFrontendStore.partitionRefresh(ref, partition),
+    partitionSignIn: (partition) => objectFrontendStore.partitionSignIn(ref, partition),
     // { code, message }: a partition made (its folder and an empty list; bound to storagePoint, by
     // default the point its type declares for it), renamed (its folder moved with what it holds),
     // deleted (its assets off their lists and deleted softly)

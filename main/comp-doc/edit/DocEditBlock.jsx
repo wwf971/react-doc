@@ -227,15 +227,33 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
 // the editor, so the wrapper still holds the rendered block when it is
 // measured. a block that mounts already in a session (one just created) has
 // no view geometry and gets none.
+//
+// the lock must hold through the whole swap of the rendered block for its
+// editor, not only after it. while the wrapper is empty and unlocked the
+// document is shorter by the height of the block; a layout at that moment,
+// with the block near the end of the document, leaves the scroll position
+// beyond the end, the browser pulls it back, and nothing undoes that: the page
+// jumps. so the lock is written to the wrapper the moment it is measured, and
+// is kept in a ref, read by the same render that draws the editor.
 function useGeometryLock(elementRef, editStore, path, index) {
-  const [geometryLock, geometryLockSet] = useState(null);
+  const geometryLockRef = useRef(null);
+  const [, versionSet] = useState(0);
   useEffect(() => reaction(
     () => editStore.sessionIs(path, 'block', index),
     (isEditing) => {
-      geometryLockSet(isEditing ? blockGeometryMeasure(elementRef.current) : null);
+      const wrapper = elementRef.current;
+      geometryLockRef.current = isEditing ? blockGeometryMeasure(wrapper) : null;
+      // the wrapper takes the lock now, before React touches it. React swaps the children
+      // first and sets the style of the wrapper last, and in between the browser may lay
+      // the page out by itself: it does when the element holding the focus (the Edit button
+      // of the toolbar, just clicked) is taken out. the wrapper must not be empty and
+      // unlocked at that moment
+      if (wrapper && geometryLockRef.current) Object.assign(wrapper.style, geometryLockRef.current);
+      // a render also when nothing else asks for one
+      versionSet((version) => version + 1);
     },
   ), [elementRef, editStore, path, index]);
-  return geometryLock;
+  return geometryLockRef.current;
 }
 
 // the height of the wrapper and its distances to the previous and the next

@@ -492,6 +492,59 @@ export function assetPathMatch(node, segmentListInput, { isPrefix = false, segme
   return endSet(node, 0).has(length);
 }
 
+// ---------- walking a pattern, a segment at a time ----------
+
+// what is left of a pattern after the start of one of its paths: [elementList], the elements still
+// to come, in order, one list per way the start can be read (the alternatives of a choice, a
+// member of a group entered first), each once; [] when the segments start none of its paths. An
+// empty elementList: the segments are a whole path of it. A group entered keeps its other members
+// as a group, or as the one member left, so what comes next can be shown as it is: several
+// segments in any order, not one of them picked.
+//   (name/{jp/last/}kanji, [name])        -> [[{jp/last/}, kanji]]   jp and last, either first
+//   (name/{jp/last/}kanji, [name, last])  -> [[jp, kanji]]
+//   (name/{en, last},      [name, en])    -> [[last]]
+// what a view walking the entries of an index a level at a time (a file explorer) draws next
+export function assetPathRestList(node, segmentListInput, { segmentNormalize = segmentSame } = {}) {
+  if (!node) return [];
+  const segmentList = segmentListInput.map(segmentNormalize);
+  const groupOf = (memberList) => (memberList.length === 0 ? [] : memberList.length === 1 ? [memberList[0]] : [{ kind: 'group', memberList }]);
+  const consume = (elementList, at) => {
+    if (at === segmentList.length) return [elementList];
+    if (elementList.length === 0) return [];
+    const [head, ...tail] = elementList;
+    if (head.kind === 'segment') return segmentNormalize(head.name) === segmentList[at] ? consume(tail, at + 1) : [];
+    if (head.kind === 'sequence') return consume([...head.elementList, ...tail], at);
+    if (head.kind === 'choice') return head.alternativeList.flatMap((one) => consume([one, ...tail], at));
+    return head.memberList.flatMap((member, index) => consume([member, ...groupOf(head.memberList.filter((one, other) => other !== index)), ...tail], at));
+  };
+  const seen = new Set();
+  return consume([node], 0)
+    // a sequence left at the head (a member of several segments, half walked) is its elements
+    .map((elementList) => assetPathSimplify(sequenceOf(elementList)).elementList)
+    .filter((elementList) => {
+      const key = nodeText(sequenceOf(elementList), false, false);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+// the canonical path of a pattern, each segment with the unordered group it is in, when it is in
+// one: [{ name, memberList? }]. memberList: the canonical texts of the members of that group, the
+// segment's own among them (a member of several segments: a/b); those members come in any order.
+// a choice is its first alternative.  name/{jp/last/}kanji ->
+//   [{ name: name }, { name: jp, memberList: [jp, last] }, { name: last, memberList: [jp, last] }, { name: kanji }]
+export function assetPathCanonicalGet(node) {
+  if (!node) return [];
+  if (node.kind === 'segment') return [{ name: node.name }];
+  if (node.kind === 'sequence') return node.elementList.flatMap(assetPathCanonicalGet);
+  if (node.kind === 'choice') return assetPathCanonicalGet(node.alternativeList[0]);
+  const memberCanonicalList = node.memberList.map(assetPathCanonicalGet);
+  const memberList = memberCanonicalList.map((one) => one.map((segment) => segment.name).join('/'));
+  // a group inside a member keeps its own: only the innermost group of a segment is said
+  return memberCanonicalList.flatMap((one) => one.map((segment) => (segment.memberList ? segment : { ...segment, memberList })));
+}
+
 // ---------- the index of entries by their paths ----------
 
 // an index of entries (whatever a caller indexes: asset items, values) by the paths of their

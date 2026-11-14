@@ -191,19 +191,21 @@ typeList:
 
 ### Where a partition is stored
 
-A partition is the unit the [asset storage service layer](doc_page_impl_asset_storage.md) stores: **each partition is bound to one storage point**, and all its items are held there. Without a word it is `file-tree`, one folder of plain files per item. Bound to `file-pack`, its items are merged into pack files, whose content a search of the disk does not read; the contracts of that layer leave room for a backend.
+A partition is the unit the [asset storage service layer](doc_page_impl_asset_storage.md) stores: **each partition is bound to one storage point**, and all its items are held there. Without a word it is `file-tree`, one folder of plain files per item. Bound to `file-pack`, its items are merged into pack files, whose content a search of the disk does not read. Bound to a point of a remote type, its items and their records are kept at a backend the page reaches itself, and belong to the person signed in: the same on every machine, and on a built page.
 
 ```text
-item/real/
-├── partition.yaml     storagePoint: file-pack, and whose partition it is     (absent: file-tree)
-├── item-list.yaml     the records of its assets: the same for every storage point
+item/real/                                                                     item/cloud/
+├── partition.yaml     storagePoint: file-pack, and whose partition it is      └── partition.yaml     storagePoint: cloud
+├── item-list.yaml     the records of its assets                                   (its items and records are at the point)
 └── item-0001.pack     what the point keeps: here, the items merged
 ```
 
 - **The type gives the default** (`storagePoint` of `partitionList`), applied when the partition is made; a partition that exists keeps what its `partition.yaml` says, so one object may differ from another of its type.
 - **Nothing above changes with the point.** The records, keys, names, paths, item ids and versions are the same; a mode reads and writes through the same api and never names a point. It may ask where its data is: `partition.storage` (`{ pointId, typeId, place, isContentSearchable, apiSetList, isAvailable, unavailableReason, … }`), and `storagePointList`, the points the object may use.
-- **A whole partition moves to another point** with `partitionStorageSet` ([Changing the storage of a partition](doc_page_impl_asset_storage.md#changing-the-storage-of-a-partition)); an asset moved into a partition of another point is written there by its type.
+- **A whole partition moves to another point** with `partitionStorageSet` ([Changing the storage of a partition](doc_page_impl_asset_storage.md#changing-the-storage-of-a-partition)): from files to the cloud, back, or between two local types, with every item and its history. Away from a remote point it may leave a copy there (`isSourceKept`). An asset moved into a partition of another local point is written there by its type.
 - **A partition whose point cannot be used** (not declared, disabled, a type without a driver) is a problem of the object: its assets are listed as `missing` from its item list, the other partitions work, and a point of the type its data was written by [claims it back](doc_page_impl_asset_storage.md#claiming-a-partition-back).
+- **A partition of a remote point has a state of its own** (`storage.remote`): read, read from the cache, signed out, out of reach ([The state of a partition](doc_page_impl_asset_storage.md#the-state-of-a-partition)). While nobody is signed in it shows nothing and offers **Sign in**; the object and its other partitions work.
+- **Whether a partition can be written is said per partition** (`partitionWriteUnavailableReasonGet`): a partition in the folders of the doc page needs the development server, a remote one needs its point, and is written on a built page too.
 - **The entry asset** lies outside every partition and is always file-tree, as are the assets of a type declaring no partition.
 
 ### The apis of partitions
@@ -213,14 +215,17 @@ Every frontend object has the same apis for its partitions, whatever its type: a
 | | the api of a mode | the route of the asset api | the settings tab |
 | --- | --- | --- | --- |
 | **list** | `partitionList`, `partitionDefault` | read with the object (its item lists come with the declarations) | the table **Partitions** of the object: folder, label, tracked or kept out, assets |
-| **create** | `partitionCreate(partition, storagePoint?)` | `object-frontend/partition/create { id, partition, storagePoint? }` | **Create**, for one its type declares and the disk lacks |
+| **create, claim** | `partitionCreate(partition, storagePoint?)` | `object-frontend/partition/create { id, partition, storagePoint? }` | **Create**, for one its type declares and the disk lacks; **Create or claim** when its point is remote |
 | **rename** | `partitionRename(from, to)` | `object-frontend/partition/rename { id, partitionFrom, partitionTo }` | |
 | **delete** | `partitionDelete(partition)` | `object-frontend/partition/delete { id, partition }` | **Delete**, asking in its row |
-| **storage** | `partitionStorageSet(partition, storagePoint)`, `storagePointList` | `object-frontend/partition/storage/set { id, partition, storagePoint }`, `partition/compact { id, partition }` | **Storage…**, a point chosen in its row; **Compact** in the Asset service tab |
+| **storage** | `partitionStorageSet(partition, storagePoint, { isSourceKept? })`, `storagePointList` | `object-frontend/partition/storage/set { id, partition, storagePoint }`, `partition/compact { id, partition }` | **Storage…**, a point chosen in its row, with **keep a copy** away from a remote point; **Compact** in the Asset service tab |
+| **copy** | `partitionCopy(from, { id?, partition, storagePoint? })` | done by the page, an `asset/create` per asset | **Copy…**, a partition chosen in its row |
+| **remote** | `partitionWriteUnavailableReasonGet(partition)`, `partitionRefresh(partition)`, `partitionSignIn(partition)` | asked of the storage point by the page | the state beside its storage point, with **Refresh** or **Sign in** |
 
-- **Create** makes the folder with an empty item list, so a record never lands above it; it is how a partition kept out of git exists in a fresh clone before anything is written into it (the first write makes it too).
+- **Create** makes the folder with an empty item list, so a record never lands above it; it is how a partition kept out of git exists in a fresh clone before anything is written into it (the first write makes it too). For a remote point it is also the **claim**: the folder gets the bind, and a partition of this object the point holds already is the partition from then on ([Claiming a partition back](doc_page_impl_asset_storage.md#claiming-a-partition-back)).
 - **Rename** moves the folder with what it holds; the item lists move with it, so every record follows, and the paths of the assets are the object's and do not change. The new name must be free and, for a type declaring partitions, declared.
-- **Delete** takes every asset of the partition off its list and deletes it softly (its files stay, as for a deleted object), then removes the list and the folder when nothing is left in them; a locked asset stops it.
+- **Delete** takes every asset of the partition off its list and deletes it softly (its files stay, as for a deleted object), then removes the list and the folder when nothing is left in them; a locked asset stops it. A remote partition is marked deleted at its point, where it can be restored or removed for good.
+- **Storage** moves the partition itself, items and history, to another point: nothing of the object changes. **Copy** is another thing: the assets of the partition are made again in another partition, of the same object or of another one, as new items with the same content (the head of each text asset), keys and names. A key or a path the target has already gets out of the way (a number after the key; the path left out), and a path starting with the partition it comes from (`/example/info/name`) starts with the one it goes to. It is how the example of a demonstration becomes the start of one's own data.
 - The type is the truth of which partitions there may be: renaming a declared partition is also a change of `partitionList`, written by a person.
 
 ## Naming and finding the assets
@@ -519,14 +524,18 @@ config.objectFrontend                    the object and its api (getters: the co
   modeSet(modeId, options), paramSet(paramChange, options), blockSet({ mode, param }, options)
                                          the block switched: another mode, other parameters (merged, null removes a key;
                                          isReplaced replaces them), or both
-  isWritable, writeUnavailableReason, write    whether the page can write here, and the structural write in progress
+  isWritable, writeUnavailableReason, write    whether the page can write here (something of the object: one partition
+                                         may be writable where another is not), and the structural write in progress
   isEditable, editUnavailableReason      whether the mode offers its edit controls now: writable, and the document in edit
                                          mode (#reading-and-editing); why not
   docState                               the state of the document the block is in (config.docState)
   partitionList, partitionDefault        its partitions (#partitions), each with storage: the storage point holding it
-  storagePointList, partitionStorageSet(p, pointId)   the points it may use; a whole partition moved to one
+  storagePointList, partitionStorageSet(p, pointId, { isSourceKept? })   the points it may use; a whole partition moved to one
                                          (#where-a-partition-is-stored)
-  partitionCreate(p), partitionRename(from, to), partitionDelete(p)   the apis of partitions (#the-apis-of-partitions)
+  partitionCreate(p), partitionRename(from, to), partitionDelete(p), partitionCopy(from, target)
+                                         the apis of partitions (#the-apis-of-partitions)
+  partitionWriteUnavailableReasonGet(p)  why one partition cannot be written now ('' when it can)
+  partitionRefresh(p), partitionSignIn(p)   a partition a remote storage point holds: asked again; the sign-in of its point
   ref                                    the reference of the object: frontend:{id}. something inside it is named
                                          from elsewhere as {ref}#{inner path} (#things-inside-an-object-inner-paths)
   open()                                 the object in the Frontend objects tab
@@ -638,7 +647,8 @@ objectGet(id) the object as the files say now: the entry asset (loaded on demand
 declList, orphanEntryList, typeDeclaredList, typeOfferList, modeListGet(typeId), modeResolve(state, mode, param)
 writeRun      the structural writes: create, register, delete, meta/set, asset/create, asset/remove, asset/attach;
               each answers the asset items it wrote (taken into DocAssetStore at once, itemListAccept) and the
-              declarations as they are now
+              declarations as they are now. a write about a partition a remote storage point holds is done by the
+              page against that point (DocAssetRemoteStore.objectFrontendWrite), any other by the development server
 assetWrite, metadataSet       the data of an asset, the metadata of the object
 assetDataGet, blockDrawAsk    the data of an asset, parsed once; a block's turn to draw (#reading-many-assets)
 settings, write               the tab's state, the write in progress
@@ -675,7 +685,7 @@ A mode of an object made of many assets reads all of them in every render, and a
 - **What a render asks for is read together**: the assets asked for in one tick go to the asset store as one list ([`refListLoad`](doc_page_impl_asset.md#loading-at-page-start)), which reads them a few at a time, one request and one change of the store per step, with a painted frame before each step. So the blocks waiting are drawn a few times, not once per asset, and a count of what is read (`Reading the data items (12 of 51)`) is really seen moving, on a built page too, whose reads are answered at once.
 - **The heavy part of a block waits for its turn.** A mode whose data takes long to mount asks for a turn once its data is ready (`useObjectFrontendDrawTurn`, over `drawTurnAsk` and `drawTurnIs` of its api) and goes on showing its count until then; the blocks get their turns one per frame, so a document of several is painted and answers between them instead of freezing while they all mount. The turn is the block's, not the mount's (`blockKey` of the api, from the block's state key): a block mounted again while it is on the page (the document entering or leaving edit mode renders another body) has its turn at once, and draws in its first frame; it keeps it for a frame after its last mount left. A mode that mounts quickly does not need it. The migration modes also keep the height the block will take while they wait, from `param.height`, so what is below does not jump.
 
-A **built page** has no server: the declarations travel in the asset snapshot (`assetSnapshot.objectFrontend`), the objects and their data with the snapshot of the store, and every write is refused with the store's reason; a block's switches hold while the page is open.
+A **built page** has no server: the declarations travel in the asset snapshot (`assetSnapshot.objectFrontend`), the objects and their data with the snapshot of the store, and every write into the folders is refused with the store's reason; a block's switches hold while the page is open. A partition a remote storage point holds is the exception: its bind is in the snapshot, its data is read from the point by the page, and it is written there too.
 
 ## Files
 

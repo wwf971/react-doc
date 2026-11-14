@@ -1,0 +1,12 @@
+# The side panel of the package's doc page.
+sidePanelById:
+  main:
+    tree:
+      - doc: ~aws-utils/doc/README.md
+        text: aws-utils
+      - doc: ~aws-utils/doc/first-use.md
+        text: First use
+      - doc: ~aws-utils/doc/storage-contract.md
+        text: Storage contract
+      - doc: ~aws-utils/doc/auth-contract.md
+        text: Auth contract

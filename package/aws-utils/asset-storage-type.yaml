@@ -1,0 +1,14 @@
+# The storage types of the package aws-utils (react-doc: main/doc_page_impl_asset_storage.md
+# #storage-types-of-a-package): a doc page of a workspace importing the package may declare a
+# storage point of one of them in its asset-storage.yaml. The driver runs in the page.
+# contract: doc/storage-contract.md
+storageTypeList:
+  - id: aws-utils.remote
+    extends: remote
+    label: AWS storage service
+    description: the partitions kept at a storage service on AWS (API Gateway, Lambda, DynamoDB, S3), reached by the page itself over https, read through the cache of the browser
+    configKeyList:
+      - { key: space, description: "the key of the space of this point at the service: its area, which no other point reaches. absent: the id of the point", valueDefault: "" }
+    driver: { entry: ./comp-mdx/storage/aws-storage-driver.js, export: awsStorageDriverCreate }
+    # what is its own of a point, in the Asset service tab: the service, the account, its spaces
+    panelComp: AwsStoragePointPanel

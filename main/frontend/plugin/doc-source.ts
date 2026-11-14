@@ -73,7 +73,11 @@ import {
 } from './doc-asset-store.ts';
 import { assetBlockTextExpand, assetUsageListScan } from '../src/lib/doc-asset-ref.js';
 import { OBJECT_FRONTEND_LIST_NAME, OBJECT_FRONTEND_META_NAME } from '../src/lib/doc-object-frontend.js';
-import { ASSET_STORAGE_PARTITION_FILE_NAME, assetStorageConfigForPage, assetStorageConfigRead, type AssetStorageConfig } from './doc-asset-storage.ts';
+import {
+  ASSET_STORAGE_PARTITION_FILE_NAME, assetStorageConfigForPage, assetStorageConfigRead, assetStoragePageDriverListGet, assetStorageTypeDeclaredRead,
+  type AssetStorageConfig,
+} from './doc-asset-storage.ts';
+import { authKindConfigForPage, authKindConfigRead, type AuthKindDeclared } from './doc-auth-config.ts';
 import { objectFrontendConfigForPage, objectFrontendConfigOfDocPageListGet, objectFrontendDocFind, objectFrontendFolderOwnedListGet, objectFrontendTypeFileListGet, type ObjectFrontendConfig } from './doc-object-frontend.ts';
 import { TYPE_CONFIG_FILE_NAME, typeDeclaredConfigGet, type TypeDeclaredConfig } from './doc-type-config.ts';
 import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
@@ -467,6 +471,8 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         assetSnapshot,
         moduleId,
         compMountList: compConfigGet(configDoc).mountList,
+        storagePageDriverList: assetStoragePageDriverListGet(configDoc.docEntry?.storageTypeDeclared?.typeList ?? []),
+        authKindList: configDoc.docEntry?.authKindList ?? [],
       });
     },
 
@@ -955,6 +961,9 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
 //                                          through it instead of importing the file as a module.
 //   GET  {endpoint}/data?path=~page:root/x.png  the bytes of a collected file with their media type
 //                                          (an image an Image block names)
+//                                          (these two answer the file itself, as a download does;
+//                                          when they fail they answer { code, message, data } like
+//                                          every other route, and so does a failure nobody foresaw)
 //   POST {endpoint}/file/create            { dirPath, name, text | dataBase64, isOverwrite? }
 //                                          -> { code, data: { path, entry }, message }
 //                                          writes a file into a folder of the source. dirPath is a
@@ -1003,7 +1012,17 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.end(JSON.stringify(payload));
   };
+  // what a route throws (a config that does not load any more) is answered in the one shape, not
+  // by the error page of the development server
   return (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+    try {
+      handle(req, res, next);
+    } catch (error: any) {
+      if (res.headersSent) res.end();
+      else jsonSend(res, 500, { code: -1, data: null, message: String(error?.message ?? error) });
+    }
+  };
+  function handle(req: IncomingMessage, res: ServerResponse, next: () => void) {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const route = url.pathname.startsWith(`${endpoint}/`) ? url.pathname.slice(endpoint.length) : '';
     const isWorkspaceRoute = route === '/os/list' || route === '/workspace/mount' || route === '/workspace/unmount';
@@ -1087,13 +1106,13 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
 
     if (req.method !== 'GET') {
       res.setHeader('Allow', 'GET');
-      textSend(res, 405, 'the source api answers GET here');
+      jsonSend(res, 405, { code: -1, data: null, message: 'the source api answers GET here' });
       return;
     }
     const internalPath = sourcePathNormalize(url.searchParams.get('path') ?? '');
     const entry = fileEntryListGet().find((item) => item.internalPath === internalPath);
     if (!entry) {
-      textSend(res, 404, `not a file of the collected source: ${internalPath}`);
+      jsonSend(res, 404, { code: -3, data: null, message: `not a file of the collected source: ${internalPath}` });
       return;
     }
     if (route === '/data') {
@@ -1101,7 +1120,7 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
       try {
         bytes = fs.readFileSync(entry.absPath);
       } catch {
-        textSend(res, 404, `the source file is not available: ${internalPath}`);
+        jsonSend(res, 404, { code: -3, data: null, message: `the source file is not available: ${internalPath}` });
         return;
       }
       res.statusCode = 200;
@@ -1114,11 +1133,11 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
     try {
       text = fs.readFileSync(entry.absPath, 'utf-8');
     } catch {
-      textSend(res, 404, `the source file is not available: ${internalPath}`);
+      jsonSend(res, 404, { code: -3, data: null, message: `the source file is not available: ${internalPath}` });
       return;
     }
     textSend(res, 200, text);
-  };
+  }
 }
 
 const statusByCode: Record<number, number> = { 0: 200, [-1]: 400, [-2]: 409, [-3]: 404, [-4]: 403 };
@@ -1474,6 +1493,14 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
   const playgroundConfig = playgroundConfigOfDocPageListGet(entryLoaded.docPageList, configDir);
   for (const problem of playgroundConfig.problemList) problemListReport('doc-playground', problem.file, [problem.message]);
   config.playgroundList = playgroundConfig.list;
+  // what the packages bring beside components and types: the auth kinds (doc_page_impl_auth.md)
+  // and the storage types with a driver of the page (doc_page_impl_asset_storage.md). the page
+  // receives what they declare as configuration, and their modules with the code
+  const authKindConfig = authKindConfigRead(config.docEntry?.packageList ?? [], configDir);
+  config.authDeclared = authKindConfigForPage(authKindConfig);
+  Object.defineProperty(config.docEntry, 'authKindList', { enumerable: false, value: authKindConfig.kindList });
+  const storageTypeDeclared = assetStorageTypeDeclaredRead(config.docEntry?.packageList ?? [], configDir);
+  Object.defineProperty(config.docEntry, 'storageTypeDeclared', { enumerable: false, value: storageTypeDeclared });
   Object.defineProperty(config, 'playgroundConfig', { enumerable: false, value: playgroundConfig });
   // page values the workspace or its first doc page supplies when
   // config.yaml does not set them, so that a doc page used in another
@@ -1525,6 +1552,8 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
   // the api files of the doc pages: a change there reloads the page with
   // the new maps / apis
   fileListConfiguration.push(...hotkeyConfig.pathList, ...apiDeclaredConfig.pathList, ...typeDeclaredConfig.pathList, ...playgroundConfig.pathList);
+  // a change of a file declaring auth kinds or storage types changes the modules the page imports
+  fileListConfiguration.push(...authKindConfig.pathList, ...storageTypeDeclared.pathList);
   Object.defineProperty(config, 'fileListConfiguration', { enumerable: false, value: fileListConfiguration });
   return config;
 }
@@ -1777,7 +1806,10 @@ function objectFrontendConfigGet(configDoc: any, configDir: string): ObjectFront
 // (doc_page_impl_asset_storage.md#declaring-storage-points)
 function assetStorageConfigGet(configDoc: any, configDir: string): AssetStorageConfig {
   const docPageList = Array.isArray(configDoc.docEntry?.docPageList) ? configDoc.docEntry.docPageList : [];
-  return assetStorageConfigRead({ docPageInputList: docPageList, workspaceFile: configDoc.docEntry?.assetStorageWorkspaceFile, configDir });
+  return assetStorageConfigRead({
+    docPageInputList: docPageList, workspaceFile: configDoc.docEntry?.assetStorageWorkspaceFile, configDir,
+    typeDeclared: configDoc.docEntry?.storageTypeDeclared,
+  });
 }
 
 // the types the doc pages, their objects and the packages declare (doc_page_impl_type.md#declaring-a-type)
@@ -2259,6 +2291,10 @@ export function generateModuleCode(
     assetSnapshot: AssetSnapshot | null;
     moduleId: string;
     compMountList?: CompMount[];
+    // the page drivers of the storage types and the auth kinds of the packages: modules the page
+    // imports like the components (doc_page_impl_package.md#what-a-package-brings)
+    storagePageDriverList?: { typeId: string; entryFile: string; export: string }[];
+    authKindList?: AuthKindDeclared[];
     linkIndex?: DocLinkIndex;
   },
 ): string {
@@ -2274,7 +2310,26 @@ export function generateModuleCode(
     moduleNameByEntryFile.set(mount.entryFile, moduleName);
     lines.push(`import * as ${moduleName} from ${JSON.stringify(normalizeSlashPath(mount.entryFile))};`);
   }
+  // the page drivers of the storage types and the auth kinds: static imports too, each handed to
+  // the page with what its declaration says
+  const moduleNameExtraByEntryFile = new Map<string, string>();
+  const moduleNameExtraGet = (entryFile: string): string => {
+    if (!moduleNameExtraByEntryFile.has(entryFile)) {
+      const moduleName = `docExtraModule${moduleNameExtraByEntryFile.size}`;
+      moduleNameExtraByEntryFile.set(entryFile, moduleName);
+      lines.push(`import * as ${moduleName} from ${JSON.stringify(normalizeSlashPath(entryFile))};`);
+    }
+    return moduleNameExtraByEntryFile.get(entryFile)!;
+  };
+  const storagePageDriverCodeList = (services.storagePageDriverList ?? []).map((one) => (
+    `  { typeId: ${JSON.stringify(one.typeId)}, driverCreate: ${moduleNameExtraGet(one.entryFile)}[${JSON.stringify(one.export)}] },`
+  ));
+  const authKindCodeList = (services.authKindList ?? []).map((one) => (
+    `  { id: ${JSON.stringify(one.id)}, label: ${JSON.stringify(one.label)}, description: ${JSON.stringify(one.description)}, typeId: ${JSON.stringify(one.typeId)}, kind: ${moduleNameExtraGet(one.entryFile)}[${JSON.stringify(one.export)}] },`
+  ));
   lines.push(`export let configDoc = ${JSON.stringify(configDoc)};`);
+  lines.push('export const docStoragePageDriverList = [', ...storagePageDriverCodeList, '];');
+  lines.push('export const docAuthKindList = [', ...authKindCodeList, '];');
   lines.push('export const docCompMountList = [');
   for (const mount of compMountList) {
     const { manifestFile: _manifestFile, dependencyCollect: _dependencyCollect, ...mountData } = mount;
@@ -2302,7 +2357,11 @@ export function generateModuleCode(
     // development: the text of a file is read over http, never imported
     lines.push('async function sourceTextLoad(path) {');
     lines.push(`  const response = await fetch(${JSON.stringify(services.docSourceEndpoint)} + '/file?path=' + encodeURIComponent(path), { cache: 'no-store' });`);
-    lines.push('  if (!response.ok) throw new Error(await response.text());');
+    // a failure of the source api is { code, message, data }; the text of a file is the file itself
+    lines.push('  if (!response.ok) {');
+    lines.push('    const answer = await response.json().catch(() => undefined);');
+    lines.push("    throw new Error(answer?.message || 'the source api answered ' + response.status);");
+    lines.push('  }');
     lines.push('  return response.text();');
     lines.push('}');
   }

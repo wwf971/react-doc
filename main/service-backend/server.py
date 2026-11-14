@@ -61,14 +61,35 @@ def handler_class_build(runtime):
 
         # ---------- answers ----------
 
-        def response_send(self, result):
+        # every answer of the backend is { code, message, data } and nothing else at its top level
+        # (a file route answers the file itself, and this shape when it fails): also for a method
+        # it does not take, a request it cannot read, and a failure nobody foresaw
+        def response_send(self, result, status=None):
+            # an answer already on its way (a file whose bytes failed to be written) gets no second one
+            if getattr(self, 'is_answered', False):
+                return
+            self.is_answered = True
             body = json.dumps(result, ensure_ascii=False).encode('utf-8')
-            self.send_response(STATUS_BY_CODE.get(result.get('code'), 500))
+            self.send_response(status or STATUS_BY_CODE.get(result.get('code'), 500))
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.send_header('Content-Length', str(len(body)))
             self.send_header('Cache-Control', 'no-store')
             self.end_headers()
-            self.wfile.write(body)
+            if self.command != 'HEAD':
+                self.wfile.write(body)
+
+        # what the http server of the standard library answers itself (a request line it cannot
+        # read, a method without a handler): in the one shape too, not as its html page
+        def send_error(self, code, message=None, explain=None):
+            self.close_connection = True
+            self.is_answered = False
+            self.response_send({'code': -1, 'message': message or explain or f'http {code}'}, status=code)
+
+        def method_refuse(self):
+            self.is_answered = False
+            self.response_send({'code': -1, 'message': f'{self.command} is not taken: the backend answers GET and POST'}, status=405)
+
+        do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = method_refuse
 
         def file_send(self, root_dir, relative_path):
             root_abs = os.path.normpath(root_dir)
@@ -80,6 +101,7 @@ def handler_class_build(runtime):
             content_type = CONTENT_TYPE_BY_EXT.get(ext) or mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
             with open(file_path, 'rb') as file:
                 body = file.read()
+            self.is_answered = True
             self.send_response(200)
             self.send_header('Content-Type', content_type)
             self.send_header('Content-Length', str(len(body)))
@@ -142,10 +164,11 @@ def handler_class_build(runtime):
         # ---------- routes ----------
 
         def do_GET(self):
-            url = urlparse(self.path)
-            query = {key: value_list[0] for key, value_list in parse_qs(url.query).items()}
-            path = url.path
+            self.is_answered = False
             try:
+                url = urlparse(self.path)
+                query = {key: value_list[0] for key, value_list in parse_qs(url.query).items()}
+                path = url.path
                 if path == '/status':
                     self.response_send({'code': 0, 'data': runtime.status_get()})
                 elif path == '/registry':
@@ -212,8 +235,9 @@ def handler_class_build(runtime):
                 self.response_send({'code': -1, 'message': f'{type(error).__name__}: {error}'})
 
         def do_POST(self):
-            path = urlparse(self.path).path
+            self.is_answered = False
             try:
+                path = urlparse(self.path).path
                 body = self.body_read()
                 if path == '/instance/create':
                     data = runtime.instance_create(body.get('templateId', ''), body.get('name', ''), body.get('description', ''),

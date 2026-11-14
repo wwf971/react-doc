@@ -196,7 +196,7 @@ export class DocEnvStore {
     const result = await docEditApiCreate(endpoint).statusGet();
     runInAction(() => {
       this.isServerChecking = false;
-      if (result.isUnreachable) {
+      if (result.data?.isUnreachable) {
         this.serverLostReport(result.message);
         return;
       }

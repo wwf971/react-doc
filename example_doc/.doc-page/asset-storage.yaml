@@ -1,11 +1,17 @@
 # the storage points of this doc page (design: main/doc_page_impl_asset_storage.md#declaring-storage-points),
 # seen by its own frontend objects only; the workspace declares the ones every doc page sees.
 storagePointList:
-  # a point of a type the page does not implement yet: it is listed as "contract only" in the
-  # Asset service tab, and nothing can be bound to it. it shows where a backend would be declared
+  # a point of the type remote itself: remote is a contract without a driver (what every remote
+  # type promises), so the point is listed as "contract only" in the Asset service tab and nothing
+  # can be bound to it. a point that works names a type a package brings with its driver, such as
+  # aws-utils.remote, the url of a backend of one's own, and the auth provider that signs its
+  # requests (example_doc/asset-storage-remote.md):
+  #   - id: cloud
+  #     type: aws-utils.remote
+  #     config: { url: "https://abc123.execute-api.us-east-1.amazonaws.com" }
+  #     auth: { provider: frontend:w6abcdefghi }
   - id: team-remote
     type: remote
     label: Team backend
-    description: a backend holding the partitions of a team (the contract of the type remote; not implemented)
+    description: a backend holding the partitions of a team (the contract every remote type extends; a point is made of a type below it)
     config: { url: "https://storage.example.invalid", cacheMode: readThrough }
-    auth: { kind: token }

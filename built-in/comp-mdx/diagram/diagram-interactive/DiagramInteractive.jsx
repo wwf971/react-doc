@@ -179,14 +179,15 @@ function DiagramInteractive({ ariaLabel, children, className = '', contentSize, 
 	const [displayModeCurrent, setDisplayModeCurrent] = useState(displayMode === 'fit' ? 'fit' : 'contain');
 
 	const isExpandedSet = useCallback(async (value) => {
+		// the host took the request (code 0): the state is the host's; nobody did: the component keeps it
 		const result = await onEvent?.('expandChangeRequest', { isExpanded: value });
-		if (!result?.isHandled) setIsExpanded(value);
+		if (result?.code !== 0) setIsExpanded(value);
 	}, [onEvent]);
 
 	const displayModeToggle = useCallback(async () => {
 		const displayModeNext = displayModeCurrent === 'fit' ? 'contain' : 'fit';
 		const result = await onEvent?.('displayModeChangeRequest', { displayMode: displayModeNext });
-		if (!result?.isHandled) setDisplayModeCurrent(displayModeNext);
+		if (result?.code !== 0) setDisplayModeCurrent(displayModeNext);
 	}, [displayModeCurrent, onEvent]);
 
 	useEffect(() => {

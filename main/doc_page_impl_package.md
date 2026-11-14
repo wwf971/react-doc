@@ -95,6 +95,21 @@ A package's components are described by `comp.yaml` manifests in its `comp-mdx/`
 
 `type.yaml` at the top of a package declares the types of its components, in the grammar of every type file ([Declaring a type](doc_page_impl_type.md#declaring-a-type)). Every doc page of a workspace importing the package has them, so an object of such a type needs no declaration of its own, and a copy of the object works wherever the package is imported. The modes of a type name the package's components, which arrive with it.
 
+<a id="what-a-package-brings"></a>
+
+## Storage types and auth kinds of a package
+
+A package may bring two more things, each declared in a file at its top the way `type.yaml` declares types, and each naming a **module the page imports**, as a manifest names a component's:
+
+```text
+asset-storage-type.yaml    storage types below remote, each with the module of its page driver
+                           (doc_page_impl_asset_storage.md#storage-types-of-a-package)
+auth-kind.yaml             auth kinds, each with the type of its providers and its module
+                           (doc_page_impl_auth.md#auth-kinds-of-a-package)
+```
+
+Every doc page of a workspace importing the package can then declare a storage point of such a type, and keep an auth provider of such a kind. The plugin reads both files with the config, imports the modules into the page (`docStoragePageDriverList`, `docAuthKindList` of the virtual module, bundled into a build like the components), and a change of either file reloads the page. Unlike `doc-package.yaml`, both files are optional: a package without them brings none. The package `aws-utils` brings one of each ([its root document](../package/aws-utils/doc/README.md)).
+
 ## Service templates of a package
 
 The templates in `service-template-app/` and `service-template-infra/` join the service registry like those of the built-in folder ([Where templates and instances come from](doc_page_impl_service.md#where-templates-and-instances-come-from)): the page syncs the packages it loaded with its doc pages (`registry/docpage/sync`, `packageList: [{ name, dir }]`), and the backend reads their template folders with the origin `{ kind: 'package', alias: name, dir }`. An instance created from a package's template goes to the main doc page, as for a built-in template, since a package holds no instances.
@@ -169,7 +184,8 @@ A package of components usually groups them in **series**, one folder each under
 | `plugin/doc-asset-store.ts`, `plugin/doc-edit-server.ts`, `plugin/doc-object-frontend.ts` | the refusals of a read-only doc page (`-4`) |
 | `store/DocSourceStore.ts`, `store/DocEditStore.ts`, `store/doc-config-layer.ts`, `comp-doc/settings/WorkspaceSettings.jsx`, `comp-doc/side-panel/DocSidePanelSection.jsx` | what the page says of it |
 | `plugin/doc-comp-config.ts` | `compPackageRead`: the component folder of a package, read after the doc pages' |
+| `plugin/doc-asset-storage.ts`, `plugin/doc-auth-config.ts` | `assetStorageTypeDeclaredRead`, `authKindConfigRead`: the storage types and the auth kinds of the packages; `plugin/doc-source.ts` imports their modules into the virtual module |
 | `plugin/doc-service-server.ts` | `ServiceSyncPackage`, the `packageList` of the sync route |
 | `service-backend/service_runtime.py` | `docpage_sync` keeps the packages; `folder_list_get` reads their template folders (origin `package`) |
 | `src/lib/doc-workspace-graph.js`, `comp-doc/settings/WorkspaceSettings.jsx` | the packages in the graph of the Workspace tab |
-| `package/` | the packages of the project; `package/cloud-dev-vis/` the one the demonstration imports, itself a doc page |
+| `package/` | the packages of the project; `package/cloud-dev-vis/` the one the demonstration imports, itself a doc page; `package/aws-utils/` the one bringing a storage type and an auth kind |

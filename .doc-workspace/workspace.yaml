@@ -41,6 +41,11 @@ docPageList:
   # read-only, and imported by being here. its documents demonstrate its
   # components (main/doc_page_impl_package.md#a-package-as-a-doc-page)
   - dir: ../package/cloud-dev-vis
+  # the package bringing a storage type and an auth kind (main/doc_page_impl_package.md
+  # #storage-types-and-auth-kinds-of-a-package): listed as a doc page too, so its documents (the
+  # contracts of its backends, first use) are read here, and imported by being here, so a doc page
+  # of the workspace may declare a storage point of the type aws-utils.remote
+  - dir: ../package/aws-utils
 
 # the packages the workspace imports beyond those above (main/doc_page_impl_package.md):
 # each named by its folder, relative to this file, or by its name (found in

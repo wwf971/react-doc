@@ -1,0 +1,11 @@
+# The modes of a Cognito auth provider (doc/README.md#the-auth-provider): components rendered by
+# the entry component ObjectFrontend for an object of the type aws-utils.auth-cognito (type.yaml
+# at the top of the package), never written as blocks themselves. The auth kind itself is no
+# component: auth-kind.yaml at the top of the package names its module (auth-kind-cognito.js).
+compList:
+  - tagName: AwsAuthSession
+    entry: ./aws-auth-comp.js
+    export: AwsAuthSessionDefine
+  - tagName: AwsAuthAdmin
+    entry: ./aws-auth-comp.js
+    export: AwsAuthAdminDefine

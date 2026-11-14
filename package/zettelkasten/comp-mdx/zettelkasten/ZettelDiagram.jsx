@@ -93,7 +93,7 @@ export const zettelNodeDefineOptions = {
 const keyOfTitle = (title) => String(title).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
 
 // a new card of a box: a topic below its root, with the title given and a first line to write
-// over. answers { code, message, path }: the source path of the new card
+// over. answers { code, message, data: { key, path } }: path is the source path of the new card
 export async function zettelCardCreate(objectFrontendStore, state, { title, parent = '', level = 'topic' }) {
 	const reason = objectFrontendStore.writeUnavailableReasonOf?.(state.ref) ?? '';
 	if (reason) return { code: -1, message: reason };
@@ -107,7 +107,7 @@ export async function zettelCardCreate(objectFrontendStore, state, { title, pare
 	const text = zettelDocTextBuild({ level, ...(parentKey ? { parent: parentKey } : {}), title, summary: '' }, 'A new card: write what it says.');
 	const result = await objectFrontendStore.assetCreate(state.id, { key, kind: 'zettel', name: title, pathList: [pathAsset], lang: 'md', text, note: 'a new card' });
 	if (result?.code !== 0) return { code: result?.code ?? -1, message: result?.message || 'The card could not be made.' };
-	return { code: 0, message: '', key, path: zettelDocPathBuild(objectFrontendStore, state, { key, kind: 'zettel', pathList: [pathAsset] }) };
+	return { code: 0, message: '', data: { key, path: zettelDocPathBuild(objectFrontendStore, state, { key, kind: 'zettel', pathList: [pathAsset] }) } };
 }
 
 // what the create panel of a diagram offers beside its kinds (package cloud-dev-vis,
@@ -150,7 +150,7 @@ function zettelCreateConfigBuild(stores, boxAsked) {
 			if (!title) throw new Error('A card needs a title.');
 			const result = await zettelCardCreate(stores.objectFrontendStore, state, { title });
 			if (result.code !== 0) throw new Error(result.message);
-			nodeAdd(editor, position, result.path);
+			nodeAdd(editor, position, result.data.path);
 		},
 	});
 	const createActionList = [{

@@ -9,7 +9,7 @@ function useHierarchyContext(contextInitial, onEvent) {
     if (eventType === 'contextChange') {
       const patch = hierarchyContextMerge({}, eventData.context);
       setContext((previous) => hierarchyContextMerge(previous, patch));
-      return { isHandled: true };
+      return { code: 0, message: '' };
     }
     return onEvent?.(eventType, eventData);
   };

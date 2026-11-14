@@ -1,0 +1,9 @@
+# The auth kinds of the package aws-utils (react-doc: main/doc_page_impl_auth.md#auth-kinds-of-a-package):
+# the code signing a person in against one sort of identity provider. A frontend object of the
+# type a kind names is an auth provider of that kind. contract: doc/auth-contract.md
+authKindList:
+  - id: cognito
+    label: Amazon Cognito
+    description: signs a person in against a Cognito user pool from a form inside the page (password, new password, authenticator code), and keeps the session fresh
+    typeId: aws-utils.auth-cognito
+    module: { entry: ./comp-mdx/auth/auth-kind-cognito.js, export: authKindCognito }

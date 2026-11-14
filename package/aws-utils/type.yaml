@@ -1,0 +1,47 @@
+# The types of the package aws-utils (react-doc: main/doc_page_impl_type.md#declaring-a-type):
+# every doc page of a workspace importing the package has them. design: doc/README.md
+typeList:
+  # an auth provider of the kind cognito (auth-kind.yaml): an object whose entry names a Cognito
+  # user pool in metadata.auth. the auth layer of the page signs people in with it and hands its
+  # session to whoever asks (a storage point of the type aws-utils.remote)
+  - id: aws-utils.auth-cognito
+    label: Cognito auth provider
+    description: signs people in with an Amazon Cognito user pool; its modes show the session, and the console of the account admin
+    icon: key-round
+    # it keeps nothing but its entry: one partition by the convention of the layer
+    partitionList:
+      - { id: main, label: Main, isDefault: true }
+    modeList:
+      - id: session
+        label: Session
+        description: who is signed in, with what the account service knows of them; signing in and out, the password, the authenticator app, asking for an account
+        comp: AwsAuthSession
+        category: view
+        isDefault: true
+      - id: admin
+        label: Account admin
+        description: the console of the account admin; accounts issued, changed, disabled and deleted, and the requests for an account
+        comp: AwsAuthAdmin
+        category: edit
+
+  # a notebook: notes kept in the partitions of one object. it exists to show, and to use, a
+  # partition held by a storage point: the same notes read and written whether they lie in the
+  # folders of the doc page or in the cloud. a doc page binds the partition "cloud" to one of its
+  # storage points by declaring a type below this one (storagePoint of partitionList), or by
+  # Storage… of the partition in the Frontend objects tab
+  - id: aws-utils.notebook
+    label: Notebook
+    description: notes kept in the partitions of one object; one partition may be held by a storage point in the cloud
+    icon: notebook
+    assetKindList:
+      - { id: note, label: Note, langList: [md], pathPrefix: /note/, groupPath: note }
+    partitionList:
+      - { id: local, label: This doc page, description: "notes in the folders of the doc page", isDefault: true }
+      - { id: cloud, label: Cloud, description: "notes of the person signed in: meant to be held by a storage point" }
+    modeList:
+      - id: notes
+        label: Notes
+        description: the notes of one partition, with adding, editing and removing; param partition names the one shown first
+        comp: AwsNotebook
+        category: view
+        isDefault: true

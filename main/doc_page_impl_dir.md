@@ -316,6 +316,8 @@ A package is a folder of components and service templates that a workspace impor
 my-package/                      the package folder: give its path to a workspace (packageList)
 ├── doc-package.yaml             its config, at this fixed name: name, description, packageDependList, all required
 ├── type.yaml                    optional: the types of its components, at this fixed name
+├── asset-storage-type.yaml      optional: its storage types, each with the module of its page driver
+├── auth-kind.yaml               optional: its auth kinds, each with the type of its providers and its module
 ├── doc/
 │   ├── README.md                its root document (required)
 │   └── xxx.md                   its design documents, one per series of components

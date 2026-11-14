@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { LoaderCircle, RotateCw } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
@@ -8,7 +8,10 @@ import { useEditOutsidePointer } from '../edit/use-edit-outside-pointer.js';
 import { AssetPanel } from '../asset/AssetPanel.jsx';
 import { AssetItemTable } from '../asset/AssetItemTable.jsx';
 import { AssetUsageTable } from '../asset/AssetUsageTable.jsx';
+import { AuthSessionLine } from '../auth/AuthSessionLine.jsx';
+import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import '../edit/DocEdit.css';
+import { timeTextDisplay } from '../../frontend/src/lib/time-text.js';
 import './DocSettings.css';
 
 // The "Asset service" tab of the settings panel (asset service layer) (design:
@@ -121,7 +124,25 @@ export function assetStoreItemListBuild({ stores, data, writeByItemId, assetRequ
   return { itemList, requestStateByPath };
 }
 
-const STORAGE_POINT_STATUS_TEXT = { ready: 'ready', disabled: 'disabled', typeUnknown: 'unknown type', typeNotImplemented: 'contract only' };
+const STORAGE_POINT_STATUS_TEXT = { ready: 'ready', disabled: 'disabled', typeUnknown: 'unknown type', typeNotImplemented: 'contract only', configInvalid: 'config incomplete' };
+
+// what the page read of a partition a storage point of the page holds
+const REMOTE_STATUS_TEXT = {
+  idle: 'not read', loading: 'reading', ready: 'read', absent: 'not at the point yet', authRequired: 'signed out',
+  forbidden: 'not allowed', unreachable: 'out of reach', error: 'failed',
+};
+
+// the placement a storage type's own panel is rendered in (panelComp of its declaration)
+export const ASSET_STORAGE_POINT_PLACEMENT = 'assetStoragePoint';
+
+function timeAgoTextGet(time) {
+  if (!time) return 'never';
+  const second = Math.max(0, Math.round((Date.now() - time) / 1000));
+  if (second < 60) return `${second} s ago`;
+  if (second < 3600) return `${Math.round(second / 60)} min ago`;
+  if (second < 86400) return `${Math.round(second / 3600)} h ago`;
+  return timeTextDisplay(time, { part: 'date' });
+}
 
 function sizeTextGet(size) {
   if (!Number.isFinite(size) || size <= 0) return '0';
@@ -140,7 +161,7 @@ function sizeTextGet(size) {
 //   partitions bound to a point: object, partition, point, items, size, dead, [Compact]
 //   storage types: what each promises (its api sets), where its bytes are, whether a search finds them
 const AssetStoragePointArea = observer(function AssetStoragePointArea() {
-  const { assetStore, objectFrontendStore } = useDocStores();
+  const { assetStore, objectFrontendStore, assetRemoteStore } = useDocStores();
   const { typeList, apiSetList, pointList, fileList } = assetStore.storage;
   const partitionList = assetStore.folderList.flatMap((folder) => (folder.partitionList ?? []).map((partition) => ({ ...partition, ownerRef: folder.owner?.ref ?? '', folderPath: folder.path })));
   const folderOwnedCount = assetStore.folderList.filter((folder) => folder.owner).length;
@@ -177,6 +198,8 @@ const AssetStoragePointArea = observer(function AssetStoragePointArea() {
         <p key={file.file} className="doc-settings-tab-issue">{file.file}: {file.problemList.join('; ')}</p>
       ))}
 
+      <AssetStorageRemoteArea />
+
       <h4>Partitions bound to a point ({partitionList.length})</h4>
       {partitionList.length === 0 ? (
         <p className="doc-note">
@@ -206,7 +229,9 @@ const AssetStoragePointArea = observer(function AssetStoragePointArea() {
                       {partition.unavailableReason ? <span className="doc-settings-tab-issue" title={partition.unavailableReason}> cannot be used</span> : null}
                       {isMixed ? <span className="doc-settings-tab-issue" title="a change of storage was interrupted: remove the data of the type the partition is not bound to"> also holds {partition.typeIdFoundList.filter((one) => one !== partition.typeId).join(', ')} data</span> : null}
                     </td>
-                    <td className="doc-asset-muted doc-asset-version-size">{partition.itemCount}</td>
+                    <td className="doc-asset-muted doc-asset-version-size" title={partition.driverPlace === 'page' ? 'as the page read them from the storage point' : undefined}>
+                      {partition.driverPlace === 'page' ? assetRemoteStore?.partitionGet(partition.ownerRef, partition.partition)?.itemList.length ?? '—' : partition.itemCount}
+                    </td>
                     <td className="doc-asset-muted doc-asset-version-size" title={partition.fileList.map((file) => `${file.name} ${sizeTextGet(file.size)}`).join('\n')}>{partition.size ? sizeTextGet(partition.size) : '—'}</td>
                     <td className="doc-asset-muted doc-asset-version-size">{partition.size ? sizeTextGet(partition.sizeDead) : '—'}</td>
                     <td className="doc-settings-tab-actions">
@@ -418,6 +443,108 @@ const AssetOrphanArea = observer(function AssetOrphanArea() {
         <div className="doc-settings-asset-detail">
           <AssetPanel panel={settingsPanel} onNavigate={() => configStore.settingsOpenSet(false)} />
         </div>
+      ) : null}
+    </div>
+  );
+});
+
+// the storage points whose driver runs in the page (doc_page_impl_asset_storage.md#points-of-the-page):
+// a backend the page reaches itself. per point: who is signed in to it, whether it answers, what
+// the browser keeps of it, the partitions it holds for the objects of the page, and what is its
+// type's own (the panel its type brings)
+const AssetStorageRemoteArea = observer(function AssetStorageRemoteArea() {
+  const { assetRemoteStore } = useDocStores();
+  const pointList = assetRemoteStore?.pointList ?? [];
+  if (pointList.length === 0) return null;
+  return (
+    <>
+      <h4>Points the page reaches itself ({pointList.length})</h4>
+      <p className="doc-note">
+        A point of a remote type is asked by the page, not by the development server, so it works on a built page too. What was read is kept in this
+        browser: shown at once the next time, and checked against the point.
+      </p>
+      {pointList.map((point) => <AssetStorageRemotePoint key={`${point.scope}:${point.docPageAlias}:${point.id}`} point={point} />)}
+    </>
+  );
+});
+
+const AssetStorageRemotePoint = observer(function AssetStorageRemotePoint({ point }) {
+  const { assetStore, assetRemoteStore, objectFrontendStore } = useDocStores();
+  const pointState = assetRemoteStore.pointStateGet(point.id);
+  const providerRef = assetRemoteStore.providerRefOfPointGet(point);
+  const reason = assetRemoteStore.pointUnavailableReasonGet(point);
+  const type = assetStore.storageTypeGet(point.typeId);
+  const cacheInfo = assetRemoteStore.cacheInfoByPointId.get(point.id);
+  const partitionList = [...assetRemoteStore.partitionByKey.values()].filter((one) => one.pointId === point.id);
+  const isRefreshing = partitionList.some((one) => one.isRefreshing || one.status === 'loading');
+  // the point is asked what it is when the tab shows it, and again when another person signs in
+  const authState = reason.code === 0 ? 'signedIn' : String(reason.code);
+  useEffect(() => {
+    if (point.status !== 'ready') return;
+    void assetRemoteStore.pointCheck(point.id, point.docPageAlias);
+    void assetRemoteStore.cacheInfoLoad(point.id, point.docPageAlias);
+  }, [assetRemoteStore, point.id, point.docPageAlias, point.status, authState]);
+  const serviceText = pointState.status === 'checking' ? 'asking'
+    : pointState.status === 'ready' ? `answers${pointState.service?.contractVersion ? ` · contract ${pointState.service.contractVersion}` : ''}${pointState.message ? ` · ${pointState.message}` : ''}`
+      : pointState.status === 'idle' ? 'not asked yet' : pointState.message;
+  return (
+    <div className="doc-settings-remote-point">
+      <div className="doc-settings-remote-point-title">
+        <span>{point.label || point.id}</span>
+        <span className="doc-asset-muted">{point.id} · {type?.label ?? point.typeId}</span>
+      </div>
+      <div className="doc-asset-fields">
+        <span className="doc-asset-muted">reached at</span>
+        <span className="doc-settings-remote-point-url">{String(point.config?.url ?? '—')}</span>
+        <span className="doc-asset-muted">signed by</span>
+        <span className="doc-settings-remote-point-row">
+          {providerRef ? <AuthSessionLine providerRef={providerRef} reason={`The storage point ${point.label || point.id} is read and written as the person signed in.`} /> : <span className="doc-settings-tab-issue">no auth provider named (auth: {'{ provider: frontend:{id} }'})</span>}
+        </span>
+        <span className="doc-asset-muted">service</span>
+        <span className="doc-settings-remote-point-row">
+          <span {...(pointState.status === 'unreachable' || pointState.status === 'error' ? { className: 'doc-settings-tab-issue' } : {})}>{point.status === 'ready' ? serviceText : point.statusMessage}</span>
+          <button type="button" className="doc-button" disabled={point.status !== 'ready' || pointState.status === 'checking'} title="ask the point what it is and who the session is to it" onClick={() => void assetRemoteStore.pointCheck(point.id, point.docPageAlias)}>Check</button>
+        </span>
+        <span className="doc-asset-muted">cache</span>
+        <span className="doc-settings-remote-point-row">
+          <span title={`cacheMode ${cacheInfo?.mode ?? '—'}: readThrough shows the cache and checks it against the point, pinned trusts it until a refresh, none keeps nothing`}>
+            {cacheInfo
+              ? `${cacheInfo.mode} · ${cacheInfo.partitionCount} partition(s), ${cacheInfo.versionCount} version(s), ${sizeTextGet(cacheInfo.size)} in this browser · fetched ${timeAgoTextGet(cacheInfo.timeFetchedLast)}`
+              : 'not counted yet'}
+          </span>
+          <button type="button" className="doc-button" disabled={reason.code !== 0 || isRefreshing} title="ask the point whether its partitions changed, and read what did" onClick={() => void assetRemoteStore.pointRefresh(point.id).then(() => assetRemoteStore.cacheInfoLoad(point.id, point.docPageAlias))}>
+            {isRefreshing ? 'Reading' : 'Refresh'}
+          </button>
+          <button type="button" className="doc-button" title="drop what this browser keeps of the point, and read it again" onClick={() => void assetRemoteStore.cacheClear(point.id)}>Clear</button>
+        </span>
+      </div>
+      {partitionList.length > 0 ? (
+        <div className="doc-asset-table-scroll">
+          <table className="doc-asset-table">
+            <thead><tr><th>object</th><th>partition</th><th>state</th><th className="doc-asset-version-size">items</th><th className="doc-asset-version-size">revision</th><th>fetched</th></tr></thead>
+            <tbody>
+              {partitionList.map((partition) => (
+                <tr key={partition.key}>
+                  <td title={partition.ownerRef}>{objectFrontendStore?.objectGet(partition.ownerRef)?.name || partition.ownerRef}</td>
+                  <td>item/{partition.partition}/</td>
+                  <td title={partition.message}>
+                    <span className="doc-badge-outline" {...(partition.status === 'ready' && !partition.isFromCache ? { 'data-primary': true } : {})} {...(partition.status === 'forbidden' || partition.status === 'error' ? { 'data-error': true } : {})}>
+                      {REMOTE_STATUS_TEXT[partition.status] ?? partition.status}{partition.status === 'ready' && partition.isFromCache ? ', from the cache' : ''}
+                    </span>
+                  </td>
+                  <td className="doc-asset-muted doc-asset-version-size">{partition.status === 'ready' ? partition.itemList.length : '—'}</td>
+                  <td className="doc-asset-muted doc-asset-version-size">{partition.status === 'ready' ? partition.revision : '—'}</td>
+                  <td className="doc-asset-muted">{partition.status === 'ready' ? timeAgoTextGet(partition.timeFetched) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="doc-note">No partition of an object of this page is bound to it. A partition is bound in the Frontend objects tab (its row, Storage…), or by its type (storagePoint of partitionList).</p>
+      )}
+      {type?.panelComp && point.status === 'ready' ? (
+        <RegisteredComp compName={type.panelComp} placement={ASSET_STORAGE_POINT_PLACEMENT} input={{ data: { pointId: point.id, docPageAlias: point.docPageAlias } }} />
       ) : null}
     </div>
   );

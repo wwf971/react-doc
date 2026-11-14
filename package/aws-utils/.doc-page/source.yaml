@@ -1,0 +1,15 @@
+# The documents of the package are in doc/. The root is the package folder, so that
+# .doc-page/asset is named by it; comp-mdx/ of a package is never collected.
+rules:
+  - action: addFolder
+    alias: aws-utils
+    path: ..
+    collect: recursive
+    exclude:
+      - doc-package.yaml
+      - type.yaml
+      - asset-storage-type.yaml
+      - auth-kind.yaml
+      - package.json
+      - .gitignore
+      - .DS_Store

@@ -41,6 +41,9 @@ import { DocSearchDialog } from '../../comp-doc/page/DocSearchDialog.jsx';
 import { DocSidebarFolder } from '../../comp-doc/side-panel/DocSidebarFolder.jsx';
 import { TagOverviewPopup } from '../../comp-doc/tag/TagOverviewPopup.jsx';
 import { AssetPanelPopup } from '../../comp-doc/asset/AssetPanelPopup.jsx';
+import { DocAuthPopup } from '../../comp-doc/auth/DocAuthPopup.jsx';
+import { DocAuthStore } from './store/DocAuthStore.js';
+import { DocAssetRemoteStore } from './store/DocAssetRemoteStore.js';
 import { DocBlockPopup } from '../../comp-doc/popup/DocBlockPopup.jsx';
 import { DocNavPopup } from '../../comp-doc/link/DocNavPopup.jsx';
 import { SourceFilePrompt } from '../../comp-doc/source/SourceFilePrompt.jsx';
@@ -105,6 +108,9 @@ import './DocPageMdx.css';
 // config.service.endpoint is the service backend as the development server
 // forwards it (docServiceEndpoint); without it the dashboards of service
 // instances show that there is no backend (doc_page_impl_service.md).
+// data.authKindList and data.storagePageDriverList are what the packages bring beside
+// components: the auth kinds (docAuthKindList, doc_page_impl_auth.md) and the page drivers of
+// their storage types (docStoragePageDriverList, doc_page_impl_asset_storage.md#points-of-the-page).
 // data.compMountList is the components of the doc pages as the plugin
 // mounted them (docCompMountList, doc_page_impl_mdx_comp.md#components-of-a-doc-page):
 // their definitions join the registry between the package's and the host's
@@ -243,6 +249,16 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     navStore.apiCall = (id, params) => apiStore.call(id, params);
     const objectFrontendStore = new DocObjectFrontendStore({ assetStore, objectStore, configStore, sourceStore, navStore });
     objectStore.providerAdd(objectProviderFrontendCreate({ objectFrontendStore }));
+    // the auth service layer (doc_page_impl_auth.md): the sessions of the auth providers (frontend
+    // objects of the type of an auth kind), handed to whoever must prove who the person is. the
+    // kinds come from the packages (data.authKindList)
+    const authStore = new DocAuthStore({ objectFrontendStore, objectStore }, { kindList: data.authKindList });
+    // the storage points the page drives (doc_page_impl_asset_storage.md#points-of-the-page): the
+    // partitions of frontend objects held by a backend the page reaches itself, read through a
+    // cache of the browser. the drivers come from the packages (data.storagePageDriverList)
+    const assetRemoteStore = new DocAssetRemoteStore({ assetStore, authStore, objectFrontendStore }, { driverList: data.storagePageDriverList });
+    assetStore.remoteSet(assetRemoteStore);
+    objectFrontendStore.stores.remoteStore = assetRemoteStore;
     // the cell edit layer (doc_page_impl_edit_cell.md): the small values a component lets the
     // author type in place, their tokens (a link, a view of an object, a value of the
     // component's own data) and the slash mode typing them
@@ -317,6 +333,8 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       serviceStore,
       objectStore,
       objectFrontendStore,
+      authStore,
+      assetRemoteStore,
       navStore,
       sidePanelStore,
       pasteStore,
@@ -357,10 +375,12 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     stores.serviceStore.init();
     stores.objectStore.init();
     stores.objectFrontendStore.init();
+    stores.assetRemoteStore.init();
     stores.apiStore.init();
     return () => {
       stores.hotkeyStore.dispose();
       stores.apiStore.dispose();
+      stores.assetRemoteStore.dispose();
       stores.objectFrontendStore.dispose();
       stores.objectStore.dispose();
       stores.serviceStore.dispose();
@@ -456,6 +476,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
               <DocsShell />
               <TagOverviewPopup />
               <AssetPanelPopup />
+              <DocAuthPopup />
               <DocBlockPopup />
               <DocNavPopup />
               <SourceFilePrompt />

@@ -9,7 +9,11 @@
 //   assetBackendSnapshotCreate(snapshot)   the store bundled into a build by
 //                                          the vite plugin: read-only
 //
-// a further backend (a remote object storage) implements the same calls.
+//   assetBackendRouteCreate(base, { remoteGet, ... })   one of the two above, with the items of the
+//                                          partitions held by storage points of the page (remote
+//                                          types) answered by DocAssetRemoteStore instead: what
+//                                          DocAssetStore talks to
+//
 // every item call names the store (the id written in a reference).
 //
 //   statusGet()                                 { isWritable, storeIdList, folderList, storage }: storage is
@@ -233,5 +237,111 @@ export function assetBackendSnapshotCreate(snapshot, storeIdLocal = 'local') {
       data: { docList: docPathList.length > 0 ? usageDocList.filter((doc) => docPathList.includes(doc.docPath)) : usageDocList },
       message: '',
     }),
+  };
+}
+
+// The backend the asset store talks to (doc_page_impl_asset_storage.md#points-of-the-page): the
+// development server or the snapshot of a build for everything they hold, and the storage points
+// of the page for the items of the partitions bound to them. The asset store asks one backend and
+// does not know which half answered; an item is routed by its id, which is unique in the store.
+//
+//   base                         assetBackendApiCreate(...) or assetBackendSnapshotCreate(...)
+//   remoteGet()                  the DocAssetRemoteStore of the page (undefined until it is there)
+//   writeUnavailableReasonGet()  why base cannot be written ('' when it can): a write that goes to
+//                                base is refused with it, so a built page still writes what a
+//                                storage point of the page holds
+export function assetBackendRouteCreate(base, { remoteGet, writeUnavailableReasonGet = () => '' }) {
+  const remote = () => remoteGet?.();
+  const isRemote = (itemId) => remote()?.itemIs(String(itemId ?? '')) === true;
+  const refuse = (message) => Promise.resolve({ code: -1, data: null, message });
+  // a write that base holds: refused where base cannot be written
+  const baseWrite = (write) => {
+    const reason = writeUnavailableReasonGet();
+    return reason ? refuse(reason) : write();
+  };
+  const dataOf = (input) => {
+    if (typeof input.dataBase64 === 'string') {
+      const binary = atob(input.dataBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+      return { bytes };
+    }
+    return { text: String(input.text ?? '') };
+  };
+  // a write of one item: the point's when the point holds the item, else base's
+  const itemWrite = (itemId, method, args, write) => (isRemote(itemId) ? remote().itemCall(itemId, method, args) : baseWrite(write));
+  return {
+    ...base,
+    itemList: async (store) => {
+      const result = await base.itemList(store);
+      const itemListRemote = remote()?.itemList ?? [];
+      if (result.code !== 0 || itemListRemote.length === 0) return result;
+      return { ...result, data: { ...result.data, itemList: [...result.data.itemList, ...itemListRemote] } };
+    },
+    itemGet: (store, itemId, versionId = 'head') => (isRemote(itemId)
+      ? remote().versionListGet([{ itemId, versionId }]).then((answerList) => answerList[0])
+      : base.itemGet(store, itemId, versionId)),
+    itemGetList: async (store, requestList) => {
+      const indexRemoteList = [];
+      const indexBaseList = [];
+      requestList.forEach((request, index) => (isRemote(request.itemId) ? indexRemoteList : indexBaseList).push(index));
+      if (indexRemoteList.length === 0) return base.itemGetList(store, requestList);
+      const answerList = new Array(requestList.length);
+      const [answerRemoteList, resultBase] = await Promise.all([
+        remote().versionListGet(indexRemoteList.map((index) => requestList[index])),
+        indexBaseList.length > 0 ? base.itemGetList(store, indexBaseList.map((index) => requestList[index])) : Promise.resolve({ code: 0, data: { answerList: [] }, message: '' }),
+      ]);
+      indexRemoteList.forEach((index, position) => { answerList[index] = answerRemoteList[position]; });
+      indexBaseList.forEach((index, position) => {
+        answerList[index] = resultBase.code === 0 ? resultBase.data.answerList[position] : { code: resultBase.code, data: null, message: resultBase.message };
+      });
+      return { code: 0, data: { answerList }, message: '' };
+    },
+    dataUrlGet: (store, itemId, versionId = 'head') => (isRemote(itemId) ? remote().dataUrlGet(itemId, versionId) : base.dataUrlGet(store, itemId, versionId)),
+    itemCreate: (input) => baseWrite(() => base.itemCreate(input)),
+    itemUpdate: (input) => itemWrite(input.itemId, 'itemUpdate', {
+      hashBase: input.hashBase, mode: input.mode, note: input.note, dependencyList: input.dependencyList, versionMetadata: input.versionMetadata, ...dataOf(input),
+    }, () => base.itemUpdate(input)),
+    testCaseResultSet: (input) => (isRemote(input.itemId)
+      ? refuse('a test result is not recorded into an item held by a storage point of the page yet')
+      : baseWrite(() => base.testCaseResultSet(input))),
+    itemDelete: (store, itemId) => itemWrite(itemId, 'itemDelete', {}, () => base.itemDelete(store, itemId)),
+    itemRestore: (store, itemId) => itemWrite(itemId, 'itemRestore', {}, () => base.itemRestore(store, itemId)),
+    itemMetaSet: (store, itemId, change) => {
+      if (!isRemote(itemId)) return baseWrite(() => base.itemMetaSet(store, itemId, change));
+      // an item of a point has no name of the store: people name it in its record
+      if (change.name) return refuse('an item held by a storage point of the page has no name of the store: name it as an asset of its object');
+      const { name: _name, ...changeOfPoint } = change;
+      return remote().itemCall(itemId, 'itemMetaSet', changeOfPoint);
+    },
+    versionCheckout: (store, itemId, versionId) => itemWrite(itemId, 'versionCheckout', { versionId }, () => base.versionCheckout(store, itemId, versionId)),
+    versionDelete: (store, itemId, versionId) => itemWrite(itemId, 'versionDelete', { versionId }, () => base.versionDelete(store, itemId, versionId)),
+    versionMetadataSet: (store, itemId, versionId, versionMetadata) => itemWrite(itemId, 'versionMetadataSet', { versionId, versionMetadata }, () => base.versionMetadataSet(store, itemId, versionId, versionMetadata)),
+    itemLockSet: (store, itemId, isLocked) => itemWrite(itemId, 'itemLockSet', { isLocked }, () => base.itemLockSet(store, itemId, isLocked)),
+    versionLockSet: (store, itemId, versionId, isLocked) => itemWrite(itemId, 'versionLockSet', { versionId, isLocked }, () => base.versionLockSet(store, itemId, versionId, isLocked)),
+    // the dependencies of a version travel with the metadata of its item
+    dependencyListGet: (store, itemId, versionId = 'head') => {
+      if (!isRemote(itemId)) return base.dependencyListGet(store, itemId, versionId);
+      const item = remote().itemList.find((one) => one.itemId === itemId);
+      const versionIdResolved = versionId === 'head' || versionId === '' ? item.versionIdHead : versionId;
+      const version = item.versionList.find((one) => one.versionId === versionIdResolved);
+      return Promise.resolve(version
+        ? { code: 0, data: { versionId: versionIdResolved, dependencyList: version.dependencyList ?? [] }, message: '' }
+        : { code: -3, data: null, message: `version ${versionIdResolved} not found in item ${itemId}` });
+    },
+    // base knows the items it holds; what depends on an item of a point from another point is not asked
+    dependentListGet: (store, itemId, versionId = '') => (isRemote(itemId)
+      ? Promise.resolve({ code: 0, data: { dependentList: [] }, message: '' })
+      : base.dependentListGet(store, itemId, versionId)),
+    dependencyListSet: (store, itemId, versionId, dependencyList) => itemWrite(itemId, 'dependencyListSet', { versionId, dependencyList }, () => base.dependencyListSet(store, itemId, versionId, dependencyList)),
+    dependencyAdd: (store, itemId, versionId, dependency) => itemWrite(itemId, 'dependencyAdd', { versionId, dependency }, () => base.dependencyAdd(store, itemId, versionId, dependency)),
+    dependencyRemove: (store, itemId, versionId, dependency) => itemWrite(itemId, 'dependencyRemove', { versionId, dependency }, () => base.dependencyRemove(store, itemId, versionId, dependency)),
+    folderSet: (configFile, folderList, folderDefault) => baseWrite(() => base.folderSet(configFile, folderList, folderDefault)),
+    itemMove: (store, itemId, place) => (isRemote(itemId)
+      ? refuse('an item held by a storage point of the page is moved by its object')
+      : baseWrite(() => base.itemMove(store, itemId, place))),
+    // a structural write of a frontend object: the page's own when it concerns a partition a
+    // point of the page holds, else the development server's
+    objectFrontendWrite: (route, body) => remote()?.objectFrontendWrite(route, body) ?? baseWrite(() => base.objectFrontendWrite(route, body)),
   };
 }
