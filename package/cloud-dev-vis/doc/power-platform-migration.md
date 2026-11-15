@@ -19,7 +19,7 @@ The first folder of a path is the **category**: `/example` holds small, sanitize
 | Kind | Path | Holds |
 | --- | --- | --- |
 | `system` | `/{category}/system` | the two databases, the tool and its steps, `labels`: every word of the scenes |
-| `schema-table` | `/{category}/schema/{db}/table/{logical}` | `db`, `logical`, `name`, `columnList`, `isMaster?`: a master table, marked in every scene |
+| `schema-table` | `/{category}/schema/{db}/table/{logical}` | `db`, `logical`, `name`, `columnList`, `isMaster?`: a master table, marked in every scene; `tone?`, `badge?`: a state of the table its data gives it (not migrated, not decided), drawn on its card in every scene, under the mark of a master |
 | `schema-choice` | `/{category}/schema/{db}/choice/{logical}` | `db`, `logical`, `name`, `optionList: [{ value, label }]`, `isGlobal?` (`false`: [only one column uses it](#option-sets)) |
 | `mapping-table` | `/{category}/mapping/table/{source}--{target}` | `source`, `target` (keys of tables), `columnKeyList` (keys of its column mappings), `label?`, `match?`: the id of the [pattern](#finding-a-row-in-the-target) that finds its rows in the target (the first pattern when absent), `isTableLevel?`: mapped as a whole table, with no column mappings: one line between the tables |
 | `mapping-column` | `/{category}/mapping/column/{source}--{target}/{id}` | `table`, `source`, `target` (column ids; `null` target: abandoned, `null` source: a default), `kind`, `label`, `stepList` |

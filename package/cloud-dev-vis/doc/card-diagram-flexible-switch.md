@@ -28,6 +28,7 @@ provider
   transition?             { secondPortal, secondMorph, secondCamera, secondScroll }
 ```
 
+- **The text of a block** is read by the `loadBuild(source, { registry, sourceRef, onEvent, config })` its component was made with (`cardDiagramSwitchCompCreate(registry, name, { loadBuild })`), which answers `{ spec: { root, title?, height?, depthMax? }, provider }`. By default the text is a document of scenes (`switchDocLoadBuild`); a component drawing scenes from data of its own reads that data instead, as `DiagramAwsArchitecture` reads the description of a system ([aws.md](aws.md#scenes-generated-from-a-description)).
 - A **diagram a provider builds in code** may give one object to many of its parts (one style to every line, one renderer to every node), however many they are: the scene is loaded with each written out where it stands.
 - A **bounding box** is the part of a scene shown by default, and shown when the scene is embedded. Without one it is everything the scene draws.
 - An **embedded scene** is a card of one scene showing another scene inside it.
@@ -116,7 +117,7 @@ A portal out is the same, in reverse, starting from the camera the reader left t
 
 ### A morph
 
-`switchMorphBuild` pairs the nodes of two scenes by id. A node in both keeps its React identity and moves; its handles are those of both scenes while the lines of the scene left fade. Two nodes of one id with **different content** are two nodes: the old one, renamed `~from:{id}`, fades out while the new one fades in, both moving between the same places. A kind may say what counts as its content (`contract.morphKeyGet`), as the tabs header does, whose focus changes in place. `switchMorphFrameAt` gives the positions and sizes at a progress.
+`switchMorphBuild` pairs the nodes of two scenes by id. A node in both keeps its React identity and moves; its handles are those of both scenes while the lines of the scene left fade. Two nodes of one id with **different content** are two nodes: the old one, renamed `~from:{id}`, fades out while the new one fades in, both moving between the same places. A kind may say what counts as its content (`contract.morphKeyGet`), as the tabs header does, whose focus changes in place; a node drawn in another [display](card-diagram-impl.md#the-display-of-a-node) is another drawing, so an overview of marks and a view of cards with the same ids morph each card into its mark. `switchMorphFrameAt` gives the positions and sizes at a progress.
 
 ### Between two cameras
 
@@ -239,6 +240,21 @@ What every scene follows, beside [those of the framework](card-diagram-usage.md#
 - **A margin inside what embeds.** A card or an item showing a scene keeps a margin around it. Nothing of the inner scene touches the border of what holds it, also for an embedding inside an embedding. Write `padding: 0` only where the inner scene has no border of its own to touch it.
 - **What is long scrolls, it does not shrink.** Sections of different heights belong in a stack rather than in a grid of cards fitted to one size.
 
+## Editing a block of scenes
+
+A block has two edit modes: its **text**, as every block has, and **Visual** (`SwitchSceneEdit.jsx`), the visual editor of the framework on one diagram of the document at a time. A menu above the canvas chooses which: a scene with a diagram of its own, or one view of a scene (`/system/storage @overview`). Everything of the editor is there, its history, the panel of a card, the arrangers.
+
+```text
+targets      every scene with a diagram, every view with one, in the order of the document
+open         the diagram as the editor reads it: version 1, the defaults of the document where it has none
+choose another   what was done to the first is kept as its draft; choosing it again opens the draft
+Save         the whole document written once: each draft in the place of its diagram (setIn on the parsed
+             document), the defaults it was given taken away again, everything else of the text as it was,
+             comments included
+```
+
+The page is told the document, never the diagram of one scene, so its dirty mark and its Save are the block's (`SwitchSceneEditStore.js`). A scene made of tabs of another has no diagram of its own: it is edited through the scene it arranges. A component whose scenes are generated from data offers no visual mode (`cardDiagramSwitchDefineOptionsBuild({ isSceneEditable: false })`): what an author changes there is the data, as text, or wherever the data is written from.
+
 ## Adding to it
 
 | Change | Where | Check |
@@ -246,7 +262,7 @@ What every scene follows, beside [those of the framework](card-diagram-usage.md#
 | a new way of switching | `switchRouteFind`, a step type in `SwitchStore.stepEnter` / `frameApply` / `stepExit` | a pure function of a progress; `routeTimelineGet` knows its duration without measuring; a test in `SwitchData.test.js` |
 | a node that opens a scene | `scene-link` when opening is all it does ([convention](card-diagram-usage.md#drawing-conventions)); `link: {path}` on any other node or connection of a diagram | no kind needed; the canvas answers the click, the label of a line becomes a button. A part of a card opens one with the attribute `data-switch-link`, as the headers and cells of a `card-matrix` do, so the card need not know this layer |
 | another condition on the default view | `switchViewRuleMatch`, `switchViewListCheck` | it reads the presentation and nothing else; for what a rule cannot say, a provider's `viewDefault` may be a function |
-| another source of scenes | a provider | the scenes are ordinary diagrams; ids stay the same across scenes where a morph is wanted |
+| another source of scenes | a provider; for a block reading a text of its own, a `loadBuild` building it ([The concepts](#the-concepts)) | the scenes are ordinary diagrams; ids stay the same across scenes where a morph is wanted; `isSceneEditable: false` when they are generated |
 | a new kind | [Adding a kind](card-diagram.md#adding-a-kind); `morphKeyGet` if part of its data changes in place | it draws without React Flow as well as with it: a card reads `SwitchContext` for `isStatic` before doing anything needing the canvas |
 
 The rules that must hold:
@@ -270,7 +286,8 @@ The rules that must hold:
 | `SwitchPathBar.jsx` | the path bar |
 | `SwitchViewSwitcher.jsx` | the menu of the views of a scene |
 | `SwitchAnimation.jsx`, `SwitchAnimationStore.js` | under the animation layer |
-| `CardDiagramSwitch.jsx` | `SwitchViewport`, the block of a document, `cardDiagramSwitchCompCreate`, the hooks a generator of scenes uses |
+| `CardDiagramSwitch.jsx` | `SwitchViewport`, the block of a document, `cardDiagramSwitchCompCreate` with its `loadBuild`, the hooks a generator of scenes uses |
+| `SwitchSceneEdit.jsx`, `SwitchSceneEditStore.js` | the visual edit mode: one scene or view at a time, drafts, the document written again ([Editing a block of scenes](#editing-a-block-of-scenes)) |
 | `card-diagram-switch-comp.js`, `SwitchSource.js`, `comp.yaml` | the registration, the starting text, the build-time dependencies |
 | `comp-mdx/card-diagram/SceneBoxCard.jsx` | the bounding box, in the base series |
 | `comp-mdx/power-platform/power-platform-comp.js` | `DiagramERSwitch` |

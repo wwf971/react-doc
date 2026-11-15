@@ -15,6 +15,12 @@ export { AnchoredPopover } from '../../comp-doc/popup/AnchoredPopover.jsx';
 // the host's panel, moved, resized, maximized and closed as every dialog of the page
 // (doc_page_impl_popup.md#a-dialog-of-a-component)
 export { PanelPopup } from '../../comp-doc/popup/PanelPopup.jsx';
+// the surface a block-like component renders in, so the block opens in the block popup
+// (doc_page_impl_mdx_comp_block.md#must-the-popup)
+export { BlockPopupSurface } from '../../comp-doc/popup/BlockPopupSurface.jsx';
+// a time as a person reads it, always with its zone, and a time text of the project's format
+// (AGENTS.md#a-time-shown-always-carries-its-zone)
+export { timeTextDisplay, timeTextGet } from './lib/time-text.js';
 export { RegisteredComp } from '../../comp-doc/registry/RegisteredComp.jsx';
 export { compDefine, compNativeDefine } from '../../comp-doc/registry/comp-registry.js';
 // what a component exposes (doc_page_impl_mdx_comp.md#what-a-component-exposes):

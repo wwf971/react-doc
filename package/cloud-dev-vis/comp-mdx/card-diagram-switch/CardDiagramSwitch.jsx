@@ -12,6 +12,7 @@ import { animationCapture, animationCaptureCopy, animationCaptureDownload } from
 import { SwitchStore } from './SwitchStore.js';
 import { SwitchCanvas } from './SwitchCanvas.jsx';
 import { SwitchPathBar } from './SwitchPathBar.jsx';
+import { SwitchSceneEdit } from './SwitchSceneEdit.jsx';
 import { switchRegistryBuild } from './SwitchNodeKinds.jsx';
 import { switchDocNormalize, switchPathNormalize, switchPathViewRead, switchProviderFromDoc } from './SwitchData.js';
 import '../card-diagram-animation/CardDiagramAnimation.css';
@@ -116,7 +117,15 @@ export const SwitchViewport = observer(function SwitchViewport({ store, config, 
 	);
 });
 
-const CardDiagramSwitchBase = observer(function CardDiagramSwitchBase({ data = {}, config = {}, onEvent, registry }) {
+// what a block of scenes reads its text as: a document of scenes (switchDocNormalize), or, for a
+// component generating its scenes from data, whatever its loadBuild makes of the text. answers
+// { spec: { root, title?, height?, depthMax? }, provider }, or throws with the reason
+function switchDocLoadBuild(source, { sourceRef, onEvent, config }) {
+	const spec = switchDocNormalize(source);
+	return { spec, provider: switchProviderFromDoc(spec, { onBoxSave: (path, rect) => switchDocBoxSave(sourceRef.current, path, rect, onEvent, config), signature: source }) };
+}
+
+const CardDiagramSwitchBase = observer(function CardDiagramSwitchBase({ data = {}, config = {}, onEvent, registry, loadBuild = switchDocLoadBuild }) {
 	const source = data.source || data.raw || '';
 	const instanceId = useId().replace(/[^a-zA-Z0-9]/g, '');
 	const rootRef = useRef(null);
@@ -126,17 +135,18 @@ const CardDiagramSwitchBase = observer(function CardDiagramSwitchBase({ data = {
 	sourceRef.current = source;
 	const load = useMemo(() => {
 		try {
-			const spec = switchDocNormalize(source);
-			return { spec, provider: switchProviderFromDoc(spec, { onBoxSave: (path, rect) => switchDocBoxSave(sourceRef.current, path, rect, onEvent, config), signature: source }) };
+			return loadBuild(source, { sourceRef, onEvent, config, registry });
 		} catch (error) {
 			return { message: String(error?.message ?? error) };
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [source]);
+	}, [source, loadBuild]);
 	const title = data.title || load.spec?.title || 'Scenes';
+	// the visual edit mode: one scene of the document at a time, in the editor of the framework
+	const isVisualEdit = config.isEdit && config.edit?.modeId === 'visual';
 	return (
 		<BlockPopupSurface config={config} title={title} className="doc-switch-shell not-prose">
-			{({ isInPopup }) => (load.message ? (
+			{({ isInPopup }) => (isVisualEdit ? <SwitchSceneEdit data={data} config={config} onEvent={onEvent} registry={registry} isInPopup={isInPopup} /> : load.message ? (
 				<div className="doc-er-diagram-message is-error" role="alert">
 					<strong>The scenes could not be read.</strong>
 					<span>{load.message}</span>
@@ -203,9 +213,11 @@ async function switchDocBoxSave(source, path, rect, onEvent, config) {
 }
 
 // the switching component of a node registry
-export function cardDiagramSwitchCompCreate(registry, name) {
+// loadBuild: how the block reads its text, for a component generating its scenes from data
+// (switchDocLoadBuild, a document of scenes, by default)
+export function cardDiagramSwitchCompCreate(registry, name, { loadBuild } = {}) {
 	const registrySwitch = switchRegistryBuild(registry);
-	const CompRender = (props) => <CardDiagramSwitchBase {...props} registry={registrySwitch} />;
+	const CompRender = (props) => <CardDiagramSwitchBase {...props} registry={registrySwitch} loadBuild={loadBuild} />;
 	CompRender.displayName = name;
 	return CompRender;
 }

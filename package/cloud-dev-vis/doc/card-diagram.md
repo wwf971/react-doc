@@ -9,7 +9,7 @@ What the page asks of every block-like component (the popup surface, the no-jitt
 ## Know what kind of change you are making
 
 ```text
-a new card of a platform         a kind: contract + schema + Card + create entry, in a series folder
+a new card of a platform         a kind: contract + schema + Card + create entry (+ simple), in a series folder
 a new platform                   a series: a folder of kinds, a registry, components, a comp.yaml, a doc
 a new thing the author can do    a command of DiagramEditStore (and the control that calls it)
 a change of how cards are drawn  TableCard / ResourceNodeCard / OperatorCard and their css
@@ -17,6 +17,7 @@ a change of the canvas           DiagramERStore, CardDiagram, DiagramRender
 a change of the data format      DiagramERData (normalization) first, then everything that reads it
 a diagram moving between states  the animation wrapper: card-diagram-animation.md
 many diagrams in one viewport    the switching layer: card-diagram-flexible-switch.md
+how a node looks at a glance     its simple display: card-diagram-impl.md#the-display-of-a-node
 a diagram where a canvas is in   DiagramStatic: card-diagram-impl.md#a-diagram-without-a-canvas
 the way
 how a line runs (anchors, routes) DiagramRoute: card-diagram-connection-line.md
@@ -85,7 +86,9 @@ A command is a method of `DiagramEditStore` (or of a store a series adds on the 
 | ☐ | The cells use `CardCell` / the injected text control, so typing goes through `fieldSet` (and therefore the history); no input of its own |
 | ☐ | A fresh node from `create` is valid as it is, with explicit handles where the author would expect them |
 | ☐ | Search finds its words ([Search](card-diagram-impl.md#search)): a card with a schema needs nothing, unless a variant draws a cell otherwise than its value (`contract.searchCellTextGet`); a card without one answers `contract.searchMatch` when the words of its data are not what it shows, and a kind holding a scene asks for it through `helper.childSearch` |
-| ☐ | The kind has a test beside the registry (as `OperatorNodes.test.js`), covering normalization, the schema's rows and fields, a cell edit and its undo |
+| ☐ | A thing a system is drawn with (a resource, a table, a store) has a simple display (`contract.simple`: its shape, and what its mark says, [The display of a node](card-diagram-impl.md#the-display-of-a-node)); its anchors need nothing more, every handle goes to the mark |
+| ☐ | A card whose height follows its content answers `contract.sizeEstimate`, so an arranger with nothing drawn places it where it will be ([the contract](card-diagram-arrange.md#the-contract)) |
+| ☐ | The kind has a test beside the registry (as `OperatorNodes.test.js`, `aws-node-registry.test.js`), covering normalization, the schema's rows and fields, a cell edit and its undo |
 | ☐ | The series document and the usage document describe it, whose examples show it |
 
 ## Adding nodes that are not kinds
@@ -106,7 +109,8 @@ A node drawn by a registered component of the page (`renderer: { component }`) n
 | ☐ | Nothing of the series is imported by `card-diagram/`; the series imports the base by relative path |
 | ☐ | A document `doc/<series>.md` (design), a usage document for authors beside it, both reachable from the README's tables; the package's `README.md` tree and tables list the folder |
 | ☐ | The tests of the base still pass unchanged, and the series has tests of its own; the test command in [power-platform.md](power-platform.md#mapping-operators) lists them |
-| ☐ | A diagram of the series started from the insert menu is a small complete example (`sourceDefaultCreate`) |
+| ☐ | A diagram of the series started from the insert menu is a small complete example (`sourceDefaultCreate`), laid out by an arranger of the series when it is made (as `AwsSource.js` does) |
+| ☐ | Its registry offers the arrangers that fit its diagrams (`arrangerList`): the layer arrangers for a system read downward |
 
 ## Changing the canvas or the cards
 
@@ -144,10 +148,10 @@ So:
 From `main/frontend`:
 
 ```sh
-node --import tsx --import ./src/lib/node-test-register.js --test ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramERData.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramRoute.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditStore.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditPath.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramEditIntegration.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramArrangeOutline.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram/DiagramArrangeRows.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/OperatorNodes.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram-switch/SwitchData.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/migration/MigrationData.test.js
+node --import tsx --import ./src/lib/node-test-register.js --test ../../package/cloud-dev-vis/comp-mdx/card-diagram/*.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/OperatorNodes.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/er-arrange/ErArranger.test.js ../../package/cloud-dev-vis/comp-mdx/power-platform/migration/MigrationData.test.js ../../package/cloud-dev-vis/comp-mdx/aws/*.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram-switch/*.test.js ../../package/cloud-dev-vis/comp-mdx/card-diagram-animation/AnimationData.test.js
 ```
 
-The store is tested on the registry of the Power Platform series, which holds every card variant; a change of the engine is tested there, a change of a series beside the series. Every command has a test of its effect **and of its undo**. The page is then checked in the browser, in the doc page of the package (`react-doc dev package/cloud-dev-vis`), on its [playground](../../../main/doc_page_impl_test.md#playground-documents), the one document of the package that can be written: entering edit mode moves nothing, the command works from its control and from the keys, Ctrl/⌘ + Z takes it back, Save clears the bar's history buttons.
+The base series is tested on its own registry, the store also on the registry of the Power Platform series, which holds every card variant; a change of the engine is tested there, a change of a series beside the series (`aws-node-registry.test.js` for the AWS series). Every command has a test of its effect **and of its undo**. The page is then checked in the browser, in the doc page of the package (`react-doc dev package/cloud-dev-vis`), on its [playground](../../../main/doc_page_impl_test.md#playground-documents), the one document of the package that can be written: entering edit mode moves nothing, the command works from its control and from the keys, Ctrl/⌘ + Z takes it back, Save clears the bar's history buttons.
 
 Documents to keep in step, by what changed: a rule of the engine goes into [card-diagram-impl.md](card-diagram-impl.md) (what exists, integrated, never a changelog); a rule authors meet goes into [comp-diagram-er.md](../comp-mdx/power-platform/comp-diagram-er.md) or the usage document of the series; a new file goes into the README's implementation table; a gap left for later goes into the project's [TODO](../../../main/doc_page_impl_TODO.md), not into a document as a note. The page-level documents in `main/` change only when the contract of every block-like component changes.
 

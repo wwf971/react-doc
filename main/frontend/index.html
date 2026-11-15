@@ -6,7 +6,16 @@
     <title>Doc</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- what is shown until the page has mounted (main/doc_page_impl_cli.md#the-first-load-after-a-start):
+         the first visit after a development server starts waits for the modules to be transformed,
+         and a blank page reads as broken. React replaces it when it renders into #root -->
+    <div id="root">
+      <div class="doc-boot" role="status" style="display:flex;align-items:center;justify-content:center;gap:10px;min-height:100vh;margin:0;font:14px system-ui,sans-serif;color:#888">
+        <style>@keyframes doc-boot-spin{to{transform:rotate(360deg)}}@media(prefers-color-scheme:dark){body{background:#0a0a0a}}</style>
+        <span style="width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:doc-boot-spin .8s linear infinite"></span>
+        <span>Loading the doc page…</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

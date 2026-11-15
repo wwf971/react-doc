@@ -5,4 +5,6 @@
 name: aws-utils
 description: "AWS behind a doc page: a storage type keeping partitions of frontend objects at a storage service, and an auth provider signing people in with Amazon Cognito"
 # the packages this one needs: { dir }, relative to this file
-packageDependList: []
+# cloud-dev-vis: the diagrams of the storage service (doc/storage-architecture.md)
+packageDependList:
+  - { dir: ../cloud-dev-vis }

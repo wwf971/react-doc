@@ -1,0 +1,13 @@
+# The doc page of the package "app-config": it lets the package be read and launched
+# (react-doc dev <its folder>), or listed in a workspace, beside being imported. Its components
+# are read from comp-mdx/ at its top. The demonstration with a config object is in the doc page
+# example_doc (app-config.md), which imports the package.
+# design: main/doc_page_impl_package.md#a-package-as-a-doc-page
+docEntry:
+  title: "App config: settings as stacked config layers of a frontend object"
+  homeDoc: ~app-config/comp-mdx/app-config/comp-app-config.md
+source:
+  file: ./source.yaml
+sidePanelById:
+  main:
+    file: ./side-panel.yaml

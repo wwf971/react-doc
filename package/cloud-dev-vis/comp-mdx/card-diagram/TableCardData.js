@@ -294,3 +294,72 @@ export function tableCardAnchorListGet(data) {
 		...(data.rowGroupList ?? []).map(group => ({ id: `group/${group.id}`, sideList: ['right'] })),
 	];
 }
+
+// ---------- the footer of a card
+
+export const CARD_FOOTER_HEIGHT = 23;
+
+// whether a card draws its footer: it says so (data.footer), or a handle stands on it, by its
+// anchor or as a handle of the card as a whole on its bottom. reads authored and normalized nodes alike
+export function cardFooterIsShown(node) {
+	const footer = node?.data?.footer;
+	if (footer !== undefined && footer !== false && footer !== null) return true;
+	return (node?.handles ?? []).some((handle) => {
+		const target = handle.anchor?.target ?? 'body';
+		return target === 'footer' || (target === 'body' && handle.anchor?.side === 'bottom');
+	});
+}
+
+export const cardFooterTextOf = (data) => (typeof data?.footer === 'string' ? data.footer : '');
+
+// ---------- how tall a card will be, before it is drawn
+// what an arranger with nothing drawn assumes (card-diagram-arrange.md#the-contract): the table
+// card as it lays out its title, description, head fields, field names and rows, the words of a
+// cell wrapping by the width of its column. measured on the cards as drawn at the root font size
+// of a page; a card drawn is measured again, so an estimate only has to be near
+const ESTIMATE_TITLE = 40;
+const ESTIMATE_DESCRIPTION_LINE = 15;
+const ESTIMATE_DESCRIPTION_PAD = 14;
+const ESTIMATE_HEAD_FIELD = 32;
+const ESTIMATE_FIELD_HEADER = 39;
+const ESTIMATE_ROW = 32;
+const ESTIMATE_ROW_PAD = 10;
+const ESTIMATE_LINE = 15;
+const ESTIMATE_LETTER = 5.8;
+
+const lineCountOf = (text, width) => Math.max(1, ...String(text ?? '').split('\n').map((line) => Math.ceil((line.length * ESTIMATE_LETTER) / Math.max(40, width))));
+const widthOf = (node, widthDefault) => (typeof node.size?.width === 'number' ? node.size.width : widthDefault);
+
+function cardHeightEstimate(node, { headCount, rowList, columnShareList, widthDefault }) {
+	const width = widthOf(node, widthDefault) - 24;
+	const description = node.data?.description ? ESTIMATE_DESCRIPTION_PAD + ESTIMATE_DESCRIPTION_LINE * lineCountOf(node.data.description, width) : 0;
+	// a row is as high as its most wrapped cell, and at least a row
+	const rowHeight = (cellList) => Math.max(ESTIMATE_ROW, ESTIMATE_ROW_PAD + ESTIMATE_LINE * Math.max(...cellList.map((text, index) => lineCountOf(text, width * (columnShareList[index] ?? 1) - 12))));
+	// the line of field names is drawn with no rows too
+	const rows = (node.data?.isFieldHeaderHidden ? 0 : ESTIMATE_FIELD_HEADER) + rowList.reduce((sum, cellList) => sum + rowHeight(cellList), 0);
+	return Math.round(ESTIMATE_TITLE + description + headCount * ESTIMATE_HEAD_FIELD + rows + (cardFooterIsShown(node) ? CARD_FOOTER_HEIGHT : 0));
+}
+
+// a resource card (ResourceNodeCard.jsx): head fields (every one, written or not: entering edit mode
+// moves nothing), then its properties, a name and a value
+export function resourceCardHeightEstimate(node, fields, widthDefault = 320) {
+	const headCount = fields.slice(1).filter((field) => field.id !== 'description').length;
+	const rowList = (node.data?.properties ?? []).map((property) => [property.name ?? property.id, property.value ?? '']);
+	return cardHeightEstimate(node, { headCount, rowList, columnShareList: [0.33, 0.67], widthDefault });
+}
+
+// a card of rows with fixed fields: columnShareList, the part of the width each field has (as its
+// variant draws its columns), alike when absent
+export function rowCardHeightEstimate(node, schema, widthDefault = 380, columnShareList) {
+	const headCount = schema.headFieldList.length;
+	const rowList = (node.data?.[schema.rowListKey] ?? []).map((row) => schema.fieldList.map((field) => row[field.id] ?? ''));
+	const share = 1 / Math.max(1, schema.fieldList.length);
+	return cardHeightEstimate(node, { headCount, rowList, columnShareList: columnShareList ?? schema.fieldList.map(() => share), widthDefault });
+}
+
+// a note card (CompactCard.jsx): its title line, its text wrapping by the width of the card, its figures
+export function cardNoteHeightEstimate(node, widthDefault = 170) {
+	const width = widthOf(node, widthDefault) - 16;
+	const text = node.data?.text ? 13 * String(node.data.text).split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil((line.length * 5.1) / Math.max(40, width))), 0) : 0;
+	return 25 + text + (node.data?.metaList?.length ? 22 : 0);
+}

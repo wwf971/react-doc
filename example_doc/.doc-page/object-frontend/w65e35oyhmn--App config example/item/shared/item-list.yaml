@@ -1,0 +1,21 @@
+# the assets of the frontend object lying in this folder and below, down to a folder with an
+# item-list.yaml of its own: written by the page (doc_page_impl_obj_frontend.md#the-item-lists)
+assetList:
+  - key: declare.example
+    kind: config-declare
+    itemId: w65e35p01yp
+    name: example
+    pathList:
+      - /declare/example
+  - key: shared.base
+    kind: config-layer
+    itemId: w65e35p01yq
+    name: Base
+    pathList:
+      - /layer/shared/base
+  - key: shared.team
+    kind: config-layer
+    itemId: w65e35p01yr
+    name: Team
+    pathList:
+      - /layer/shared/team

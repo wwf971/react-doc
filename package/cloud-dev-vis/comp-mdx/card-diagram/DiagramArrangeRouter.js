@@ -1,8 +1,13 @@
-import { routePathRead, routeOverlapPairGet, routeResolve } from '../../card-diagram/DiagramRoute.js';
+import { routePathRead, routeOverlapPairGet, routeResolve, routeTypeIsRightAngle } from './DiagramRoute.js';
+import { lineTypeOfConnection } from './DiagramArrange.js';
+import { labelPositionListPlace } from './DiagramLabelPlace.js';
+import { endpointKeyOf } from './DiagramERData.js';
+import { nodeIsSimple } from './DiagramArrangeOutline.js';
 
 // The routes of the right-angled lines of a diagram of cards standing in columns, from where
-// the cards and the ends of the lines are (card-diagram-arrange.md#how-the-er-rules-route).
-// It knows rectangles and points, nothing of tables.
+// the cards and the ends of the lines are (card-diagram-arrange.md#the-lane-router). It knows
+// rectangles and points, nothing of tables: the arrangers of ER diagrams route with it, and the
+// arrangers of layers read downward route with it turned a quarter (DiagramArrangeLayers.js).
 //
 //   column   the cards whose widths overlap; the columns are read off the rectangles, so
 //            cards placed by hand work as well as generated ones
@@ -23,7 +28,7 @@ export const LEVEL_STEP = 9;
 const CANDIDATE_MAX = 150;
 const isVertical = (end) => end.side === 'top' || end.side === 'bottom';
 
-export function erColumnListGet(rectList) {
+export function diagramColumnListGet(rectList) {
 	const sorted = rectList.filter((rect) => !rect.isBackground).sort((a, b) => a.x - b.x);
 	const columnList = [];
 	for (const rect of sorted) {
@@ -83,7 +88,7 @@ function laneDemandListGet(planList, columnOf) {
 }
 
 // how many lanes each gap needs: what an arranger placing the columns makes room for
-export function erLaneCountByGapGet(lineList, columnOf) {
+export function diagramLaneCountByGapGet(lineList, columnOf) {
 	const planList = lineList.map((line) => planOf(line, columnOf)).filter(Boolean);
 	return new Map([...laneDemandListGet(planList, columnOf)].map(([gap, list]) => [gap, list.length]));
 }
@@ -99,8 +104,11 @@ function routeThrough(line, pointList) {
 	return { anchorList: pointList.map((point, index) => ({ id: `a${index + 1}`, along: 1, x: round(point.x - line.target.x), y: round(point.y - line.target.y) })) };
 }
 
-export function erLinesRoute({ rectList, lineList, placedList = [] }) {
-	const columnList = erColumnListGet(rectList);
+// measureType: the line type candidates are measured with against the lines placed: their own by
+// default; 'step' measures with sharp corners, since a rounded corner shortens the runs it joins and
+// hides a stretch two lines share by the length of its radius, a junction a reader still sees
+export function diagramLinesRoute({ rectList, lineList, placedList = [], measureType }) {
+	const columnList = diagramColumnListGet(rectList);
 	const columnOf = new Map();
 	columnList.forEach((column, index) => column.idList.forEach((id) => columnOf.set(id, index)));
 	const obstacleList = rectList.filter((rect) => !rect.isBackground);
@@ -112,7 +120,7 @@ export function erLinesRoute({ rectList, lineList, placedList = [] }) {
 		if (plan) planList.push(plan);
 		else {
 			reportList.push({ kind: 'skipped', connectionId: line.id, message: `${line.id}: both of its ends leave a card through its top or bottom, which these rules do not route` });
-			placedList = [...placedList, lineFinished(line, routeResolve(line.type, null, endsOf(line)).d)];
+			placedList = [...placedList, lineFinished(line, routeResolve(measureType ?? line.type, null, endsOf(line)).d)];
 		}
 	}
 	// the lanes of each gap, evenly spaced
@@ -162,7 +170,7 @@ export function erLinesRoute({ rectList, lineList, placedList = [] }) {
 		|| y <= rect.y - CARD_MARGIN || y >= rect.y + rect.height + CARD_MARGIN);
 	const tryPlace = (line, pointList) => {
 		const route = routeThrough(line, pointList);
-		const d = routeResolve(line.type, route, endsOf(line)).d;
+		const d = routeResolve(measureType ?? line.type, route, endsOf(line)).d;
 		const candidate = { ...lineFinished(line, d), read: routePathRead(d) };
 		return { route, candidate, conflict: conflictOf(candidate) };
 	};
@@ -258,4 +266,59 @@ export function erLinesRoute({ rectList, lineList, placedList = [] }) {
 
 function lineFinished(line, d) {
 	return { id: line.id, d, sourceKey: line.sourceKey, targetKey: line.targetKey };
+}
+
+// what the line router needs of a diagram: its cards and its right-angled, attached lines.
+// a line out of scope stays as it is and counts as something to keep off. registry: of the
+// component, to know a node drawn simple, whose handles on one place of its mark are one end
+export function diagramLineSceneGet(diagram, geometry, { connectionIdList, registry } = {}) {
+	const idSet = connectionIdList ? new Set(connectionIdList) : null;
+	const nodeById = new Map((diagram.nodes ?? []).map((node) => [node.id, node]));
+	const keyOf = (endpoint) => {
+		const node = nodeById.get(endpoint.nodeId);
+		return endpointKeyOf(endpoint, node, Boolean(node) && nodeIsSimple(diagram, node, registry?.kindByType?.[node.renderer?.type]?.contract));
+	};
+	const rectList = (diagram.nodes ?? []).flatMap((node) => {
+		const rect = geometry.rectOf(node.id);
+		return rect ? [{ ...rect, id: node.id }] : [];
+	});
+	const lineList = [];
+	const placedList = [];
+	const reportList = [];
+	for (const connection of diagram.connections ?? []) {
+		const type = lineTypeOfConnection(diagram, connection);
+		if (!routeTypeIsRightAngle(type)) continue;
+		const source = connection.source?.nodeId ? geometry.endOf(connection, 'source') : null;
+		const target = connection.target?.nodeId ? geometry.endOf(connection, 'target') : null;
+		if (!source || !target) {
+			reportList.push({ kind: 'skipped', connectionId: connection.id, message: `${connection.id}: it has a free end, or is not drawn` });
+			continue;
+		}
+		const line = { id: connection.id, type, source, target, sourceNodeId: connection.source.nodeId, targetNodeId: connection.target.nodeId, sourceKey: keyOf(connection.source), targetKey: keyOf(connection.target) };
+		if (idSet && !idSet.has(connection.id)) {
+			const ends = { sourceX: source.x, sourceY: source.y, sourcePosition: source.side, targetX: target.x, targetY: target.y, targetPosition: target.side };
+			placedList.push({ id: line.id, d: routeResolve(type, connection.route ?? null, ends).d, sourceKey: line.sourceKey, targetKey: line.targetKey });
+		} else lineList.push(line);
+	}
+	return { rectList, lineList, placedList, reportList };
+}
+
+// where the labels of a diagram's lines go, once the lines are routed: lines of any type, the
+// labels of lines out of scope staying as they are but counted as lines to keep off
+export function diagramLabelsPlace(diagram, geometry, routeById, { connectionIdList } = {}) {
+	const idSet = connectionIdList ? new Set(connectionIdList) : null;
+	const rectList = (diagram.nodes ?? []).flatMap((node) => {
+		const rect = geometry.rectOf(node.id);
+		return rect && !rect.isBackground ? [{ ...rect, id: node.id }] : [];
+	});
+	const lineList = (diagram.connections ?? []).flatMap((connection) => {
+		const source = connection.source?.nodeId ? geometry.endOf(connection, 'source') : null;
+		const target = connection.target?.nodeId ? geometry.endOf(connection, 'target') : null;
+		if (!source || !target) return [];
+		const ends = { sourceX: source.x, sourceY: source.y, sourcePosition: source.side, targetX: target.x, targetY: target.y, targetPosition: target.side };
+		const route = connection.id in routeById ? routeById[connection.id] : connection.route;
+		const isPlaced = !idSet || idSet.has(connection.id);
+		return [{ id: connection.id, d: routeResolve(lineTypeOfConnection(diagram, connection), route ?? null, ends).d, text: isPlaced ? connection.label?.text : '', position: connection.label?.position }];
+	});
+	return labelPositionListPlace({ rectList, lineList });
 }

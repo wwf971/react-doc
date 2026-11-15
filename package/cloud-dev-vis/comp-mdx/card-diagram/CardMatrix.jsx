@@ -47,7 +47,7 @@ export const CardMatrix = observer(function CardMatrix({ node, nodeId }) {
 							{columnList.map((column) => {
 								const cell = cellOf(row.id, column.id);
 								return (
-									<td key={column.id} title={cell?.title} className={`doc-card-matrix-cell${data.isDiagonalMarked && row.id === column.id ? ' is-diagonal' : ''}${cell?.link ? ' is-link' : ''}`} {...(cell ? linkPropsOf(cell) : {})}>
+									<td key={column.id} title={cell?.title} data-tone={cell?.tone || undefined} className={`doc-card-matrix-cell${data.isDiagonalMarked && row.id === column.id ? ' is-diagonal' : ''}${cell?.link ? ' is-link' : ''}`} {...(cell ? linkPropsOf(cell) : {})}>
 										{cell ? <span className="doc-card-matrix-dot" /> : null}
 										{cell?.mark !== undefined ? <span className="doc-card-matrix-mark">{cell.mark}</span> : null}
 									</td>

@@ -100,6 +100,9 @@ function tableNodeBuild(table, { x, y, handleList = [], link, width = TABLE_WIDT
 		data: {
 			name: table.name,
 			nameLogical: table.logical,
+			// a state the data gives the table (not migrated, not decided), then a master, which wins
+			...(table.tone ? { tone: table.tone } : {}),
+			...(table.badge ? { badge: table.badge } : {}),
 			...(table.isMaster ? { tone: MASTER_TONE, badge: MASTER_BADGE, isMaster: true } : {}),
 			columns: (columnList ?? table.columnList).map((column) => ({
 				id: column.id, name: column.name, nameLogical: column.logical ?? column.id, type: column.type, key: column.key, isRequired: column.isRequired, description: column.description, tone: column.tone,

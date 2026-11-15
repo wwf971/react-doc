@@ -82,6 +82,10 @@ sidePanelById:
       - doc: ~example/object-frontend.md
         text: Frontend Objects
         tags: [guide]
+      # the settings of an app as config layers of a frontend object, stacked (package app-config)
+      - doc: ~example/app-config.md
+        text: App Config Layers
+        tags: [guide]
       # a partition of a frontend object kept in the cloud: a storage point of a remote type,
       # the auth provider that signs it in, and the local demonstration made by a script
       - doc: ~example/asset-storage-remote.md

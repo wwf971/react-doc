@@ -77,6 +77,12 @@ export const tableCardSchema = {
 	isHeaderHandleAllowed: data => data.isHeaderHandleEnabled === true,
 };
 
+// the footer of a card (TableCard.jsx): a strip under its rows, the anchor `footer`, which a
+// line leaving the bottom of the card leaves from. data.footer: true (shown, empty) or its text;
+// drawn too while a handle stands on it (cardFooterIsShown, TableCardData.js)
+export const CARD_FOOTER_ANCHOR = 'footer';
+export const cardFooterProperty = { id: 'footer', label: 'Footer text', kind: 'text' };
+
 // the schema of a node, with the field list of a generic table resolved from
 // its data; null for a node that is not a card (an operator, a component)
 // or whose type the registry does not know

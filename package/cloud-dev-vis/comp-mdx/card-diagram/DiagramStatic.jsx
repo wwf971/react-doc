@@ -1,6 +1,6 @@
 import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { DiagramNodeContent, connectionPathBuild, useDiagramSearchMark } from './DiagramRender.jsx';
+import { DiagramNodeContent, connectionPathBuild, handlePointMeasure, useDiagramSearchMark } from './DiagramRender.jsx';
 import { diagramNormalize, diagramPlacesGet, endpointIsDangling, handleAnchorDrawnOf } from './DiagramERData.js';
 import { routePathPolylineGet } from './DiagramRoute.js';
 
@@ -49,12 +49,8 @@ export const DiagramStaticNode = observer(function DiagramStaticNode({ id, node,
 				const anchorDrawn = handleAnchorDrawnOf(node, handle);
 				const target = anchorDrawn === 'body' ? element : anchors.current.get(anchorDrawn) ?? (anchorDrawn !== handle.anchor.target ? element : undefined);
 				if (!target) return [];
-				const rect = target.getBoundingClientRect();
-				const { side, offset } = handle.anchor;
-				const isHorizontal = side === 'top' || side === 'bottom';
-				const x = ((isHorizontal ? rect.left + rect.width * offset : side === 'left' ? rect.left : rect.right) - bounds.left) / scale;
-				const y = ((isHorizontal ? (side === 'top' ? rect.top : rect.bottom) : rect.top + rect.height * offset) - bounds.top) / scale;
-				return [{ id: handle.id, x, y, side }];
+				const point = handlePointMeasure(target, handle.anchor);
+				return [{ id: handle.id, x: (point.x - bounds.left) / scale, y: (point.y - bounds.top) / scale, side: handle.anchor.side }];
 			});
 			onGeometry(id, handleList, { width: element.offsetWidth, height: element.offsetHeight });
 		};

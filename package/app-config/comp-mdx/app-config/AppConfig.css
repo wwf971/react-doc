@@ -1,0 +1,238 @@
+/* The mode of a config object (AppConfigView.jsx). Buttons, badges and notes are the page's shared
+   classes (main/frontend/src/css/); only the layout is here. */
+
+.app-config {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 4px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.app-config-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+}
+
+.app-config-title {
+  font-weight: 600;
+}
+
+.app-config-section {
+  margin-left: auto;
+}
+
+.app-config-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.app-config-target {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+}
+
+.app-config-target select {
+  max-width: 18rem;
+  padding: 0.1rem 0.3rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  color: inherit;
+  font-size: 0.8rem;
+}
+
+.app-config-table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+}
+
+.app-config-table th,
+.app-config-table td {
+  padding: 0.3rem 0.6rem 0.3rem 0;
+  border-top: 1px solid var(--color-fd-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.app-config-table th {
+  border-top: 0;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.app-config-table td:first-child {
+  width: 42%;
+}
+
+.app-config-key-label {
+  font-weight: 500;
+}
+
+.app-config-key,
+.app-config-key-description {
+  display: block;
+  font-size: 0.72rem;
+}
+
+.app-config-value {
+  min-width: 8rem;
+  overflow-wrap: anywhere;
+}
+
+/* the value cell keeps one height whether it reads or is typed in */
+.app-config-value > .doc-button-group {
+  --doc-button-group-height: 1.5rem;
+  box-shadow: none;
+}
+
+.app-config-hidden {
+  display: block;
+  font-size: 0.72rem;
+}
+
+.app-config-remove {
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
+
+.app-config-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.app-config-switch:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.app-config-switch-knob {
+  position: relative;
+  width: 1.8rem;
+  height: 1rem;
+  border-radius: 999px;
+  background: var(--color-fd-muted);
+  box-shadow: inset 0 0 0 1px var(--color-fd-border);
+  transition: background 120ms ease;
+}
+
+.app-config-switch-knob::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(1rem - 4px);
+  height: calc(1rem - 4px);
+  border-radius: 999px;
+  background: var(--color-fd-background);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 25%);
+  transition: transform 120ms ease;
+}
+
+.app-config-switch[aria-checked='true'] .app-config-switch-knob {
+  background: var(--color-fd-primary);
+}
+
+.app-config-switch[aria-checked='true'] .app-config-switch-knob::after {
+  transform: translateX(0.8rem);
+}
+
+.app-config-problem-list,
+.app-config-layer-list,
+.app-config-create {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.app-config-problem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.5rem;
+}
+
+.app-config-layer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+}
+
+.app-config-layer[data-disabled] {
+  border-style: dashed;
+  opacity: 0.65;
+}
+
+.app-config-layer-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.5rem;
+}
+
+.app-config-rank {
+  min-width: 1.1rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.app-config-layer-toggle {
+  margin-left: auto;
+}
+
+.app-config-layer-value {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 1rem;
+  margin: 0;
+  padding-left: 1.6rem;
+}
+
+.app-config-layer-entry {
+  overflow-wrap: anywhere;
+}
+
+.app-config-create-form {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+}
+
+.app-config-create-form > .doc-button-group {
+  justify-self: start;
+  box-shadow: none;
+}
+
+.app-config-create-place {
+  grid-column: 1 / -1;
+}
+
+.app-config-message {
+  margin: 0;
+}

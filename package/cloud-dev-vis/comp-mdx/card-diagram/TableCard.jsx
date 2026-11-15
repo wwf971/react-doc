@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, EyeOff, FoldVertical, GripHorizontal, GripVertical, Plus, SeparatorHorizontal, Trash2, UnfoldVertical } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { cardRowAnchorBuild } from './TableCardSchema.js';
-import { cardRowDisplayIdListOf, cardViewDefaultGet, cardViewDrawBuild, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown } from './TableCardData.js';
+import { cardFooterIsShown, cardFooterTextOf, cardRowDisplayIdListOf, cardViewDefaultGet, cardViewDrawBuild, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown } from './TableCardData.js';
 import { TextValue, ValueMenu } from './DiagramValueControls.jsx';
 import { useDiagramSearchMark } from './DiagramRender.jsx';
 import './DiagramER.css';
@@ -70,7 +70,7 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 	const isHeaderHandleAllowed = schema.isHeaderHandleAllowed(content);
 	const style = !draw.isPlain ? { '--doc-card-columns': draw.columnTemplate } : columnsStyle ?? { '--doc-card-columns': node.data.columnTemplate || `repeat(${schema.fieldList.length}, minmax(0, 1fr))` };
 	const handleSides = target => new Set((node.handles ?? []).filter(handle => handle.anchor.target === target).map(handle => handle.anchor.side));
-	const handleAdders = (target, sides) => editor ? ['left', 'right'].filter(side => !sides.has(side)).map(side => (
+	const handleAdders = (target, sides, sideList = ['left', 'right']) => editor ? sideList.filter(side => !sides.has(side)).map(side => (
 		<button key={side} type="button" className={`doc-card-handle-add is-${side} nodrag nopan`} title={`Add a ${side} handle`} aria-label={`Add a ${side} handle`} disabled={editor.isLocked}
 			onClick={event => { event.stopPropagation(); editor.change(() => store.handleSideSet(nodeId, target, side, true)); }}><Plus size={9} strokeWidth={3} /></button>
 	)) : null;
@@ -185,6 +185,14 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 				</div>;
 			})}
 			{!draw.isPlain ? null : rowGroupList.map(group => <CardRowGroup key={group.id} group={group} anchorRef={anchorRef} />)}
+			{cardFooterIsShown(node) ? (
+				// the footer: what a line leaving the bottom of the card leaves from, so it is never read as
+				// leaving the last row; a few words of its own if it has them (data.footer)
+				<div ref={anchorRef?.('footer')} className={`doc-card-footer doc-card-prop nodrag nopan${isPropSelected('footer') ? ' is-selected' : ''}`} data-search-part="footer" tabIndex={editor ? 0 : undefined} onClick={select({ propId: 'footer' })} onFocus={selectOnFocus({ propId: 'footer' })}>
+					{cardFooterTextOf(node.data) || editor ? <CardCell editor={editor} nodeId={nodeId} field={{ id: 'footer', kind: 'text', label: 'Footer text' }} value={cardFooterTextOf(content)} className="doc-card-footer-text" /> : null}
+					{handleAdders('footer', handleSides('footer'), ['bottom'])}
+				</div>
+			) : null}
 		</div>
 	);
 });

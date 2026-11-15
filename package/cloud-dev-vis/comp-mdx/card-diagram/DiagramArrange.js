@@ -17,7 +17,7 @@ import { routeCompact } from './DiagramRoute.js';
 //               endOf(connection, role) -> { x, y, side } | null }
 //   options   { connectionIdList?, origin?, ... }: connectionIdList names the only lines
 //             that may change; the rest of the options belong to the arranger
-//   changes   { positionById?, handleSideList?: [{ nodeId, handleId, side }],
+//   changes   { positionById?, handleSideList?: [{ nodeId, handleId, side, offset? }],
 //               routeById?: { id: route | null }, labelPositionById?: { id: part of its line },
 //               reportList?: [{ kind, message, connectionId? }] }
 //
@@ -41,9 +41,12 @@ export function diagramArrangeRun(diagram, arranger, { geometry, ...options } = 
 // the diagram after an arranger: for a generator, which has the data as plain objects
 export function diagramArrangeApply(diagram, arranger, options) {
 	const { positionById, handleSideList, routeById, labelPositionById, reportList } = diagramArrangeRun(diagram, arranger, options);
-	const sideByKey = new Map(handleSideList.map((item) => [`${item.nodeId}/${item.handleId}`, item.side]));
+	const changeByKey = new Map(handleSideList.map((item) => [`${item.nodeId}/${item.handleId}`, item]));
 	const nodes = (diagram.nodes ?? []).map((node) => {
-		const handles = node.handles?.map((handle) => (sideByKey.has(`${node.id}/${handle.id}`) ? { ...handle, anchor: { ...handle.anchor, side: sideByKey.get(`${node.id}/${handle.id}`) } } : handle));
+		const handles = node.handles?.map((handle) => {
+			const change = changeByKey.get(`${node.id}/${handle.id}`);
+			return change ? { ...handle, anchor: { ...handle.anchor, side: change.side, ...(change.offset !== undefined ? { offset: change.offset } : {}) } } : handle;
+		});
 		return { ...node, ...(handles ? { handles } : {}), ...(positionById[node.id] ? { position: positionById[node.id] } : {}) };
 	});
 	const connections = (diagram.connections ?? []).map((connection) => {
@@ -56,9 +59,12 @@ export function diagramArrangeApply(diagram, arranger, options) {
 }
 
 // the same place asked of a geometry after some cards moved and some handles changed side:
-// an arranger placing cards routes the lines where the cards will be
-export function diagramGeometryMovedBuild(geometry, positionById = {}, handleSideList = []) {
-	const sideByKey = new Map(handleSideList.map((item) => [`${item.nodeId}/${item.handleId}`, item.side]));
+// an arranger placing cards routes the lines where the cards will be. an end whose side did not
+// change moves with its card; one that went to the other side of its row stays at its height.
+// endChangedOf(connection, role, rect, change): where an end that changed is, for an arranger
+// that knows better (one turning a handle from a side to the top)
+export function diagramGeometryMovedBuild(geometry, positionById = {}, handleSideList = [], { endChangedOf } = {}) {
+	const changeByKey = new Map(handleSideList.map((item) => [`${item.nodeId}/${item.handleId}`, item]));
 	const rectOf = (nodeId) => {
 		const rect = geometry.rectOf(nodeId);
 		return rect && positionById[nodeId] ? { ...rect, ...positionById[nodeId] } : rect;
@@ -70,7 +76,11 @@ export function diagramGeometryMovedBuild(geometry, positionById = {}, handleSid
 		const before = geometry.rectOf(nodeId);
 		const rect = rectOf(nodeId);
 		if (!before || !rect) return end;
-		const side = sideByKey.get(`${nodeId}/${handleId}`) ?? end.side;
+		const change = changeByKey.get(`${nodeId}/${handleId}`);
+		if (!change || (change.side === end.side && change.offset === undefined)) return { ...end, x: end.x + rect.x - before.x, y: end.y + rect.y - before.y };
+		const endChanged = endChangedOf?.(connection, role, rect, change);
+		if (endChanged) return endChanged;
+		const side = change.side;
 		if (side === 'left' || side === 'right') return { x: side === 'left' ? rect.x : rect.x + rect.width, y: rect.y + end.y - before.y, side };
 		return { x: rect.x + end.x - before.x, y: side === 'top' ? rect.y : rect.y + rect.height, side };
 	};

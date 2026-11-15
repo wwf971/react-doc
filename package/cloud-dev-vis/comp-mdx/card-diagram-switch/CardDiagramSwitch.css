@@ -146,22 +146,23 @@
 /* a label on a line, html so that a link is a button; the same in a static scene */
 .doc-switch-edge-label {
 	position: absolute;
-	padding: 0.1rem 0.45rem;
-	border: 1px solid var(--color-fd-border);
-	border-radius: 999px;
-	background: var(--color-fd-background);
-	color: var(--color-fd-muted-foreground);
+	padding: 0.05rem 0.3rem;
+	border: 1px solid transparent;
+	border-radius: 0.25rem;
+	background: color-mix(in srgb, var(--color-fd-background) 90%, transparent);
+	color: color-mix(in srgb, var(--color-fd-foreground) 62%, var(--color-fd-muted-foreground));
 	font: inherit;
-	font-family: ui-sans-serif, system-ui, sans-serif;
-	font-size: 11px;
-	font-weight: 600;
+	font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+	font-size: 10.5px;
+	font-weight: 500;
+	letter-spacing: 0.04em;
 	line-height: 1.35;
 	white-space: nowrap;
 	pointer-events: none;
 }
 .doc-switch-edge-label.is-link {
-	border-color: color-mix(in srgb, #6d28d9 45%, var(--color-fd-border));
-	background: color-mix(in srgb, #6d28d9 8%, var(--color-fd-background));
+	border-color: color-mix(in srgb, #6d28d9 35%, var(--color-fd-border));
+	background: color-mix(in srgb, #6d28d9 6%, var(--color-fd-background));
 	color: #6d28d9;
 }
 button.doc-switch-edge-label { pointer-events: all; cursor: pointer; }
@@ -186,10 +187,10 @@ button.doc-switch-edge-label:hover, button.doc-switch-edge-label.is-line-hovered
 	width: 100%;
 	height: 100%;
 	overflow: hidden;
-	border: 1px solid color-mix(in srgb, var(--doc-switch-tone) 40%, var(--color-fd-border));
-	border-radius: 0.55rem;
+	border: 1.5px solid color-mix(in srgb, var(--doc-switch-tone) 45%, var(--color-fd-border));
+	border-radius: 0.75rem;
 	background: var(--color-fd-background);
-	box-shadow: 0 2px 10px rgb(15 23 42 / 8%);
+	box-shadow: 0 1px 2px rgb(15 23 42 / 6%);
 	font-family: ui-sans-serif, system-ui, sans-serif;
 }
 .doc-switch-embed[data-tone='blue'] { --doc-switch-tone: #2563eb; }
@@ -205,15 +206,15 @@ button.doc-switch-edge-label:hover, button.doc-switch-edge-label.is-line-hovered
 	align-items: center;
 	gap: 0.4rem;
 	padding-inline: 0.65rem;
-	border-bottom: 1px solid color-mix(in srgb, var(--doc-switch-tone) 22%, var(--color-fd-border));
-	background: color-mix(in srgb, var(--doc-switch-tone) 9%, var(--color-fd-background));
+	border-bottom: 1px solid color-mix(in srgb, var(--doc-switch-tone) 16%, var(--color-fd-border));
+	background: color-mix(in srgb, var(--doc-switch-tone) 5%, var(--color-fd-background));
 	white-space: nowrap;
 }
 .doc-switch-embed-icon { display: inline-flex; color: var(--doc-switch-tone); }
-.doc-switch-embed-title { color: var(--color-fd-foreground); font-size: 0.82rem; font-weight: 700; }
+.doc-switch-embed-title { color: color-mix(in srgb, var(--doc-switch-tone) 55%, var(--color-fd-foreground)); font-size: 0.8rem; font-weight: 600; }
 .doc-switch-embed-subtitle { min-width: 0; overflow: hidden; color: var(--color-fd-muted-foreground); font-size: 0.68rem; text-overflow: ellipsis; }
 .doc-switch-embed-stat { margin-left: auto; display: inline-flex; gap: 0.5rem; color: var(--color-fd-muted-foreground); font-size: 0.66rem; font-weight: 600; }
-.doc-switch-embed-body { position: relative; flex: 1 1 0; min-height: 0; overflow: hidden; background: color-mix(in srgb, var(--color-fd-muted) 28%, transparent); }
+.doc-switch-embed-body { position: relative; flex: 1 1 0; min-height: 0; overflow: hidden; background: color-mix(in srgb, var(--doc-switch-tone) 3%, var(--color-fd-background)); }
 .doc-switch-embed.is-chrome-hidden { background: none; }
 .doc-switch-embed-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; }
 .doc-switch-embed-note { position: absolute; inset: 0; display: grid; place-items: center; color: var(--color-fd-muted-foreground); font-size: 0.75rem; }
@@ -416,3 +417,9 @@ button.doc-switch-edge-label:hover, button.doc-switch-edge-label.is-line-hovered
 	white-space: nowrap;
 }
 .react-flow__node:has(> .doc-vis-node .doc-switch-scene-title), .doc-switch-static-node:has(.doc-switch-scene-title) { pointer-events: none; }
+
+/* the visual edit mode of a block of scenes (SwitchSceneEdit.jsx): which scene is edited, above the canvas */
+.doc-switch-scene-edit { display: flex; flex-direction: column; gap: 0.4rem; }
+.doc-switch-scene-edit-bar { display: flex; align-items: center; gap: 0.5rem; min-width: 0; padding: 0.2rem 0.1rem; font-size: 0.78rem; }
+.doc-switch-scene-edit-label { color: var(--color-fd-muted-foreground); font-weight: 600; }
+.doc-switch-scene-edit-note { min-width: 0; overflow: hidden; color: var(--color-fd-muted-foreground); font-size: 0.72rem; white-space: nowrap; text-overflow: ellipsis; }

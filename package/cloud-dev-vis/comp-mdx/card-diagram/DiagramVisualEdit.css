@@ -130,12 +130,20 @@
 	left: 0;
 }
 
+.doc-card-handle-add.is-bottom {
+	top: auto;
+	bottom: -8px;
+	left: 50%;
+	transform: translateX(-50%);
+}
+
 .doc-card-handle-add.is-right {
 	left: 100%;
 }
 
 .doc-card-row:hover > .doc-card-handle-add,
 .doc-card-title:hover > .doc-card-handle-add,
+.doc-card-footer:hover > .doc-card-handle-add,
 .doc-card-handle-add:focus-visible {
 	opacity: 1;
 }

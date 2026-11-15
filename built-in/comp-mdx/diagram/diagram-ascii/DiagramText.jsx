@@ -50,8 +50,13 @@ function diagramLineListNormalize(lineList) {
     }
   }
 
+  // a line is aligned to the rules only when it has as many borders as one of them: a line
+  // crossing two boxes side by side (whose rules carry labels, so are no guides) has more, and
+  // is left as written instead of having its last border pulled onto the edge of the first box
+  const borderCountSet = new Set(guideList.map((guide) => guide.positionList.length));
   return lineList.map((line) => {
     if (!line.startsWith('│') || !line.endsWith('│')) return line;
+    if (!borderCountSet.has(diagramBorderPositionListGet(line).length)) return line;
     const positionList = diagramBorderPositionListGet(line).slice(1, -1);
     const positionTargetList = positionListByCount.get(positionList.length) ?? [];
     let lineNormalized = line;

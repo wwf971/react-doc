@@ -1,0 +1,5 @@
+# the official AWS icons, fetched on a machine that draws with them
+# (script-icon/aws-icon-fetch.mjs, doc/aws.md#the-official-icons): not tracked, since AWS does
+# not say they may be passed on
+*
+!.gitignore

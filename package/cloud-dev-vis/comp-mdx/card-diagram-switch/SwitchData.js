@@ -628,7 +628,8 @@ export function switchStepSecondGet(step, transition = {}) {
 // its data that may change in place, by its contract's morphKeyGet
 function nodeContentKey(node, registry) {
 	const morphKeyGet = registry?.kindByType[node.renderer?.type]?.contract?.morphKeyGet;
-	return JSON.stringify([node.renderer, morphKeyGet ? morphKeyGet(node.data) : node.data]);
+	// a node drawn in another display (detailed, simple) is another drawing: it fades into it
+	return JSON.stringify([node.renderer, node.display ?? 'detailed', morphKeyGet ? morphKeyGet(node.data) : node.data]);
 }
 
 function sizeNumber(value) {

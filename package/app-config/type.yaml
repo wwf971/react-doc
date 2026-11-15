@@ -1,0 +1,37 @@
+# The types of the package app-config (react-doc: main/doc_page_impl_type.md#declaring-a-type):
+# every doc page importing the package (packageList: [{ name: app-config }]) has them, so a config
+# object needs no declaration of its own. design: doc/README.md
+typeList:
+  # dotted, as every type id: the namespace of the package, then the type
+  - id: app-config.config
+    label: App config
+    description: the settings of an app as config layers, stacked into the final config; each value said with the layer it came from
+    icon: settings
+    # where the layers lie (main/doc_page_impl_obj_frontend.md#partitions). The partitions stack
+    # in this order unless the entry's metadata says another (partitionOrder): what everyone working
+    # on the workspace shares first, what this checkout or machine sets over it. A partition holds
+    # any number of layers; local is the default, so the first value a person sets makes local.main
+    partitionList:
+      - { id: shared, label: Shared, description: "layers kept with the workspace, tracked by git" }
+      - { id: local, label: Local, description: "layers of this checkout or machine, kept out of git", isGitIgnored: true, isDefault: true }
+    # what it holds (main/doc_page_impl_obj_frontend.md#what-a-type-accepts)
+    assetKindList:
+      # one layer: { label, order, isDisabled, value: a nested mapping }; key {partition}.{name},
+      # path /layer/{partition}/{name}
+      - { id: config-layer, label: Config layer, langList: [yaml], pathPrefix: /layer/, groupPath: layer }
+      # the keys an app declares: { app, keyList: [{ key, type, default, label, description,
+      # valueList, min, max }] }; key declare.{app}, written by the app itself, in partition shared
+      - { id: config-declare, label: Declared keys, langList: [yaml], pathPrefix: /declare/, groupPath: declare }
+    modeList:
+      - id: final
+        label: Final config
+        description: "every declared key with its final value and the layer it came from, the problems of the layers, the layers in stack order"
+        comp: AppConfigView
+        param: { section: final }
+        isDefault: true
+      - id: layers
+        label: Layers
+        description: "the layers in stack order with what each sets; while the document is edited, a layer made, disabled, its values changed"
+        comp: AppConfigView
+        param: { section: layers }
+        category: edit

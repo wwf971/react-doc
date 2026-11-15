@@ -1,0 +1,1837 @@
+{
+ "about": "The contract of the stack of the package app-config (doc/README.md#the-cases): every case is run through appConfigStack ({ declareList, layerList, partitionOrder, partitionDeclaredList }); value, sourceByKey and layerOrder are compared whole, problemList in order on layer, key and kind. Another implementation (the Python mirror of db-migration-tool) runs the same cases.",
+ "caseList": [
+  {
+   "name": "defaults alone",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": []
+   },
+   "expect": {
+    "problemList": [],
+    "value": {
+     "example.isHidden": false,
+     "migPlan.rangeCount": 16,
+     "view.theme": "auto",
+     "view.title": "",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "isDefault": true
+     },
+     "migPlan.rangeCount": {
+      "isDefault": true
+     },
+     "view.theme": {
+      "isDefault": true
+     },
+     "view.title": {
+      "isDefault": true
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": []
+   }
+  },
+  {
+   "name": "one layer",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "local.main",
+      "partition": "local",
+      "label": "main",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "example": {
+        "isHidden": true
+       }
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [],
+    "value": {
+     "example.isHidden": true,
+     "migPlan.rangeCount": 16,
+     "view.theme": "auto",
+     "view.title": "",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "layer": "local.main",
+      "partition": "local"
+     },
+     "migPlan.rangeCount": {
+      "isDefault": true
+     },
+     "view.theme": {
+      "isDefault": true
+     },
+     "view.title": {
+      "isDefault": true
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": [
+     "local.main"
+    ]
+   }
+  },
+  {
+   "name": "two partitions: local over shared",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "local.main",
+      "partition": "local",
+      "label": "main",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "example": {
+        "isHidden": true
+       }
+      }
+     },
+     {
+      "key": "shared.team",
+      "partition": "shared",
+      "label": "team",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "migPlan": {
+        "rangeCount": 32
+       },
+       "example": {
+        "isHidden": false
+       }
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [],
+    "value": {
+     "example.isHidden": true,
+     "migPlan.rangeCount": 32,
+     "view.theme": "auto",
+     "view.title": "",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "layer": "local.main",
+      "partition": "local"
+     },
+     "migPlan.rangeCount": {
+      "layer": "shared.team",
+      "partition": "shared"
+     },
+     "view.theme": {
+      "isDefault": true
+     },
+     "view.title": {
+      "isDefault": true
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": [
+     "shared.team",
+     "local.main"
+    ]
+   }
+  },
+  {
+   "name": "two layers in one partition, by order",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "shared.team",
+      "partition": "shared",
+      "label": "team",
+      "order": 10,
+      "isDisabled": false,
+      "value": {
+       "view": {
+        "theme": "dark"
+       }
+      }
+     },
+     {
+      "key": "shared.base",
+      "partition": "shared",
+      "label": "base",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "view": {
+        "theme": "light",
+        "title": "Base"
+       }
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [],
+    "value": {
+     "example.isHidden": false,
+     "migPlan.rangeCount": 16,
+     "view.theme": "dark",
+     "view.title": "Base",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "isDefault": true
+     },
+     "migPlan.rangeCount": {
+      "isDefault": true
+     },
+     "view.theme": {
+      "layer": "shared.team",
+      "partition": "shared"
+     },
+     "view.title": {
+      "layer": "shared.base",
+      "partition": "shared"
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": [
+     "shared.base",
+     "shared.team"
+    ]
+   }
+  },
+  {
+   "name": "the same order: by key",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "shared.b",
+      "partition": "shared",
+      "label": "b",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "view": {
+        "title": "B"
+       }
+      }
+     },
+     {
+      "key": "shared.a",
+      "partition": "shared",
+      "label": "a",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "view": {
+        "title": "A"
+       }
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [],
+    "value": {
+     "example.isHidden": false,
+     "migPlan.rangeCount": 16,
+     "view.theme": "auto",
+     "view.title": "B",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "isDefault": true
+     },
+     "migPlan.rangeCount": {
+      "isDefault": true
+     },
+     "view.theme": {
+      "isDefault": true
+     },
+     "view.title": {
+      "layer": "shared.b",
+      "partition": "shared"
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": [
+     "shared.a",
+     "shared.b"
+    ]
+   }
+  },
+  {
+   "name": "partitionOrder over the order of the type",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": [
+     "local",
+     "shared"
+    ],
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "shared.team",
+      "partition": "shared",
+      "label": "team",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "example": {
+        "isHidden": false
+       }
+      }
+     },
+     {
+      "key": "local.main",
+      "partition": "local",
+      "label": "main",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "example": {
+        "isHidden": true
+       }
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [],
+    "value": {
+     "example.isHidden": false,
+     "migPlan.rangeCount": 16,
+     "view.theme": "auto",
+     "view.title": "",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "layer": "shared.team",
+      "partition": "shared"
+     },
+     "migPlan.rangeCount": {
+      "isDefault": true
+     },
+     "view.theme": {
+      "isDefault": true
+     },
+     "view.title": {
+      "isDefault": true
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": [
+     "local.main",
+     "shared.team"
+    ]
+   }
+  },
+  {
+   "name": "partitionOrder naming one: the declared after it, then the rest alphabetically",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": [
+     "local"
+    ],
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "shared.team",
+      "partition": "shared",
+      "label": "team",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "view": {
+        "title": "S"
+       }
+      }
+     },
+     {
+      "key": "archive.old",
+      "partition": "archive",
+      "label": "old",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "view": {
+        "title": "A"
+       }
+      }
+     },
+     {
+      "key": "local.main",
+      "partition": "local",
+      "label": "main",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "view": {
+        "title": "L"
+       }
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [],
+    "value": {
+     "example.isHidden": false,
+     "migPlan.rangeCount": 16,
+     "view.theme": "auto",
+     "view.title": "A",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "isDefault": true
+     },
+     "migPlan.rangeCount": {
+      "isDefault": true
+     },
+     "view.theme": {
+      "isDefault": true
+     },
+     "view.title": {
+      "layer": "archive.old",
+      "partition": "archive"
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": [
+     "local.main",
+     "shared.team",
+     "archive.old"
+    ]
+   }
+  },
+  {
+   "name": "partitions no type declares: after the declared ones, alphabetically",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "zeta.one",
+      "partition": "zeta",
+      "label": "one",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "view": {
+        "title": "Z"
+       }
+      }
+     },
+     {
+      "key": "alpha.one",
+      "partition": "alpha",
+      "label": "one",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "view": {
+        "title": "A"
+       }
+      }
+     },
+     {
+      "key": "shared.base",
+      "partition": "shared",
+      "label": "base",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "view": {
+        "title": "S"
+       }
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [],
+    "value": {
+     "example.isHidden": false,
+     "migPlan.rangeCount": 16,
+     "view.theme": "auto",
+     "view.title": "Z",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "isDefault": true
+     },
+     "migPlan.rangeCount": {
+      "isDefault": true
+     },
+     "view.theme": {
+      "isDefault": true
+     },
+     "view.title": {
+      "layer": "zeta.one",
+      "partition": "zeta"
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": [
+     "shared.base",
+     "alpha.one",
+     "zeta.one"
+    ]
+   }
+  },
+  {
+   "name": "a disabled layer gives nothing, and is not checked",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "shared.team",
+      "partition": "shared",
+      "label": "team",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "example": {
+        "isHidden": true
+       }
+      }
+     },
+     {
+      "key": "local.main",
+      "partition": "local",
+      "label": "main",
+      "order": 0,
+      "isDisabled": true,
+      "value": {
+       "example": {
+        "isHidden": false
+       },
+       "oldKey": 1
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [],
+    "value": {
+     "example.isHidden": true,
+     "migPlan.rangeCount": 16,
+     "view.theme": "auto",
+     "view.title": "",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "layer": "shared.team",
+      "partition": "shared"
+     },
+     "migPlan.rangeCount": {
+      "isDefault": true
+     },
+     "view.theme": {
+      "isDefault": true
+     },
+     "view.title": {
+      "isDefault": true
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": [
+     "shared.team",
+     "local.main"
+    ]
+   }
+  },
+  {
+   "name": "stale keys: the topmost path, never walked into",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "local.main",
+      "partition": "local",
+      "label": "main",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "example": {
+        "isHidden": true,
+        "color": "red"
+       },
+       "layout": {
+        "side": 300
+       },
+       "migPlan": {
+        "rangeCount": 8
+       }
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [
+     {
+      "layer": "local.main",
+      "key": "example.color",
+      "kind": "stale"
+     },
+     {
+      "layer": "local.main",
+      "key": "layout",
+      "kind": "stale"
+     }
+    ],
+    "value": {
+     "example.isHidden": true,
+     "migPlan.rangeCount": 8,
+     "view.theme": "auto",
+     "view.title": "",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "layer": "local.main",
+      "partition": "local"
+     },
+     "migPlan.rangeCount": {
+      "layer": "local.main",
+      "partition": "local"
+     },
+     "view.theme": {
+      "isDefault": true
+     },
+     "view.title": {
+      "isDefault": true
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": [
+     "local.main"
+    ]
+   }
+  },
+  {
+   "name": "a wrong type falls through to the layer below",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "shared.team",
+      "partition": "shared",
+      "label": "team",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "example": {
+        "isHidden": true
+       }
+      }
+     },
+     {
+      "key": "local.main",
+      "partition": "local",
+      "label": "main",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "example": {
+        "isHidden": "yes"
+       }
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [
+     {
+      "layer": "local.main",
+      "key": "example.isHidden",
+      "kind": "type"
+     }
+    ],
+    "value": {
+     "example.isHidden": true,
+     "migPlan.rangeCount": 16,
+     "view.theme": "auto",
+     "view.title": "",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "layer": "shared.team",
+      "partition": "shared"
+     },
+     "migPlan.rangeCount": {
+      "isDefault": true
+     },
+     "view.theme": {
+      "isDefault": true
+     },
+     "view.title": {
+      "isDefault": true
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": [
+     "shared.team",
+     "local.main"
+    ]
+   }
+  },
+  {
+   "name": "range and enum",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "shared.team",
+      "partition": "shared",
+      "label": "team",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "migPlan": {
+        "rangeCount": 32
+       },
+       "view": {
+        "theme": "light"
+       }
+      }
+     },
+     {
+      "key": "local.main",
+      "partition": "local",
+      "label": "main",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "view": {
+        "theme": "blue"
+       },
+       "migPlan": {
+        "rangeCount": 1000
+       }
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [
+     {
+      "layer": "local.main",
+      "key": "migPlan.rangeCount",
+      "kind": "range"
+     },
+     {
+      "layer": "local.main",
+      "key": "view.theme",
+      "kind": "enum"
+     }
+    ],
+    "value": {
+     "example.isHidden": false,
+     "migPlan.rangeCount": 32,
+     "view.theme": "light",
+     "view.title": "",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "isDefault": true
+     },
+     "migPlan.rangeCount": {
+      "layer": "shared.team",
+      "partition": "shared"
+     },
+     "view.theme": {
+      "layer": "shared.team",
+      "partition": "shared"
+     },
+     "view.title": {
+      "isDefault": true
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": [
+     "shared.team",
+     "local.main"
+    ]
+   }
+  },
+  {
+   "name": "a string list",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "shared.team",
+      "partition": "shared",
+      "label": "team",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "reactDoc": {
+        "pathList": "one"
+       }
+      }
+     },
+     {
+      "key": "local.main",
+      "partition": "local",
+      "label": "main",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "reactDoc": {
+        "pathList": [
+         "../react-doc",
+         "~/react-doc"
+        ]
+       }
+      }
+     },
+     {
+      "key": "local.more",
+      "partition": "local",
+      "label": "more",
+      "order": 5,
+      "isDisabled": false,
+      "value": {
+       "reactDoc": {
+        "pathList": [
+         "a",
+         2
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [
+     {
+      "layer": "shared.team",
+      "key": "reactDoc.pathList",
+      "kind": "type"
+     },
+     {
+      "layer": "local.more",
+      "key": "reactDoc.pathList",
+      "kind": "type"
+     }
+    ],
+    "value": {
+     "example.isHidden": false,
+     "migPlan.rangeCount": 16,
+     "view.theme": "auto",
+     "view.title": "",
+     "reactDoc.pathList": [
+      "../react-doc",
+      "~/react-doc"
+     ]
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "isDefault": true
+     },
+     "migPlan.rangeCount": {
+      "isDefault": true
+     },
+     "view.theme": {
+      "isDefault": true
+     },
+     "view.title": {
+      "isDefault": true
+     },
+     "reactDoc.pathList": {
+      "layer": "local.main",
+      "partition": "local"
+     }
+    },
+    "layerOrder": [
+     "shared.team",
+     "local.main",
+     "local.more"
+    ]
+   }
+  },
+  {
+   "name": "null is not set",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "shared.team",
+      "partition": "shared",
+      "label": "team",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "view": {
+        "title": "Team"
+       }
+      }
+     },
+     {
+      "key": "local.main",
+      "partition": "local",
+      "label": "main",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "view": {
+        "title": null
+       },
+       "example": null,
+       "gone": null
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [],
+    "value": {
+     "example.isHidden": false,
+     "migPlan.rangeCount": 16,
+     "view.theme": "auto",
+     "view.title": "Team",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "isDefault": true
+     },
+     "migPlan.rangeCount": {
+      "isDefault": true
+     },
+     "view.theme": {
+      "isDefault": true
+     },
+     "view.title": {
+      "layer": "shared.team",
+      "partition": "shared"
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": [
+     "shared.team",
+     "local.main"
+    ]
+   }
+  },
+  {
+   "name": "a leaf where the declared keys below need a mapping",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     }
+    ],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "local.main",
+      "partition": "local",
+      "label": "main",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "example": true,
+       "view": {
+        "title": "T"
+       }
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [
+     {
+      "layer": "local.main",
+      "key": "example",
+      "kind": "type"
+     }
+    ],
+    "value": {
+     "example.isHidden": false,
+     "migPlan.rangeCount": 16,
+     "view.theme": "auto",
+     "view.title": "T",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "isDefault": true
+     },
+     "migPlan.rangeCount": {
+      "isDefault": true
+     },
+     "view.theme": {
+      "isDefault": true
+     },
+     "view.title": {
+      "layer": "local.main",
+      "partition": "local"
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": [
+     "local.main"
+    ]
+   }
+  },
+  {
+   "name": "a key declared twice: the first wins",
+   "input": {
+    "declareList": [
+     {
+      "key": "example.isHidden",
+      "type": "boolean",
+      "default": false,
+      "label": "Hide the example"
+     },
+     {
+      "key": "migPlan.rangeCount",
+      "type": "number",
+      "default": 16,
+      "min": 1,
+      "max": 256,
+      "label": "Ranges per table"
+     },
+     {
+      "key": "view.theme",
+      "type": "enum",
+      "default": "auto",
+      "valueList": [
+       "auto",
+       "light",
+       "dark"
+      ],
+      "label": "Theme"
+     },
+     {
+      "key": "view.title",
+      "type": "string",
+      "default": "",
+      "label": "Title"
+     },
+     {
+      "key": "reactDoc.pathList",
+      "type": "string-list",
+      "default": [],
+      "label": "Where react-doc is"
+     },
+     {
+      "key": "example.isHidden",
+      "type": "string",
+      "default": "no"
+     }
+    ],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "local.main",
+      "partition": "local",
+      "label": "main",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "example": {
+        "isHidden": true
+       }
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [],
+    "value": {
+     "example.isHidden": true,
+     "migPlan.rangeCount": 16,
+     "view.theme": "auto",
+     "view.title": "",
+     "reactDoc.pathList": []
+    },
+    "sourceByKey": {
+     "example.isHidden": {
+      "layer": "local.main",
+      "partition": "local"
+     },
+     "migPlan.rangeCount": {
+      "isDefault": true
+     },
+     "view.theme": {
+      "isDefault": true
+     },
+     "view.title": {
+      "isDefault": true
+     },
+     "reactDoc.pathList": {
+      "isDefault": true
+     }
+    },
+    "layerOrder": [
+     "local.main"
+    ]
+   }
+  },
+  {
+   "name": "untyped: no declaration, every leaf taken",
+   "input": {
+    "declareList": [],
+    "partitionOrder": null,
+    "partitionDeclaredList": [
+     "shared",
+     "local"
+    ],
+    "layerList": [
+     {
+      "key": "local.main",
+      "partition": "local",
+      "label": "main",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "a": {
+        "b": 2
+       },
+       "e": null,
+       "f": {}
+      }
+     },
+     {
+      "key": "shared.team",
+      "partition": "shared",
+      "label": "team",
+      "order": 0,
+      "isDisabled": false,
+      "value": {
+       "a": {
+        "b": 1,
+        "c": [
+         1,
+         2
+        ]
+       },
+       "d": "x"
+      }
+     }
+    ]
+   },
+   "expect": {
+    "problemList": [],
+    "value": {
+     "a.b": 2,
+     "a.c": [
+      1,
+      2
+     ],
+     "d": "x"
+    },
+    "sourceByKey": {
+     "a.b": {
+      "layer": "local.main",
+      "partition": "local"
+     },
+     "a.c": {
+      "layer": "shared.team",
+      "partition": "shared"
+     },
+     "d": {
+      "layer": "shared.team",
+      "partition": "shared"
+     }
+    },
+    "layerOrder": [
+     "shared.team",
+     "local.main"
+    ]
+   }
+  }
+ ]
+}

@@ -137,6 +137,22 @@ node main/frontend/cli/doc-cli.js pack --out /tmp/react-doc-pack
 npm pack /tmp/react-doc-pack            # or npm publish /tmp/react-doc-pack
 ```
 
+### The first load after a start
+
+**The problem.** The first visit after `react-doc dev` starts can wait seconds on a blank page, while later visits take half a second. Vite serves the page as its source modules and transforms each one when the browser first asks for it, so the first visit pays for every transform, one request after another (about 1,600 requests for a package with a few components). Worse, a library the page reaches only through a lazy `import()` (here `html-to-image`, which exporting a page and capturing an animation use) is not seen when vite bundles the libraries at start: it is found during the visit, vite bundles the libraries again, and **reloads the page**. Measured on a package served with an empty cache: 3.8 s to the first content, with a reload; 0.5 s on the next visit.
+
+**What is done** (`frontend/vite.config.ts`, `frontend/index.html`):
+
+| | does |
+| --- | --- |
+| `optimizeDeps.include` | names the libraries only lazy imports reach, so they are bundled with the others at start and nothing is bundled again during a visit |
+| `server.warmup.clientFiles` | transforms the entry of the page and what it imports as soon as the server starts, instead of when the first visit asks |
+| a loading line in `#root` | the html shows "Loading the doc page…" until React renders over it, so a slow load is never a blank page |
+
+After them, the first visit to a server started with an empty cache shows its content in 0.65 s, without a reload, in half the requests.
+
+**When it comes back.** The terminal of the server says so: `new dependencies optimized: {name}` followed by `optimized dependencies changed. reloading` during a visit means a library reached only lazily was added: name it in `optimizeDeps.include`. The libraries bundled at start are kept between runs in the vite cache (`$TMPDIR/react-doc-vite/{hash}`), so only the first start of a target pays for them; a stale cache shows as a blank page whose requests answer 504, and a cache of its own (`TMPDIR=… react-doc dev`) avoids it.
+
 ### The launch layer
 
 `dev` starts vite on `main/frontend` with what to serve in the environment (`REACT_DOC_LAUNCH`, read by `vite.config.ts`, given to `docSourcePlugin({ launch })`). It is one more layer of the package config, over `config.yaml` and `config.0.yaml`, and written nowhere:

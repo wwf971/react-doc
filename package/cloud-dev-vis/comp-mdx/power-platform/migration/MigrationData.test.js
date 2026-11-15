@@ -470,6 +470,18 @@ test('a report with no patterns has no such section', () => {
 	assert.ok(!provider.sceneGet('/overview/verify').diagram.nodes[0].data.itemList.some((item) => item.id === 'match'));
 });
 
+test('a table carries a state of its data on its card, under the mark of a master', () => {
+	const list = itemList.map((item) => (item.key === 'ex.pw.t.b' ? { ...item, data: { ...item.data, tone: 'slate', badge: 'Not migrated' } } : item));
+	const provider = migrationProviderBuild(migrationModelBuild('example', list));
+	const card = provider.sceneGet('/overview/mapping').diagram.nodes.find((node) => node.id === 'table:pw:b');
+	assert.equal(card.data.tone, 'slate');
+	assert.equal(card.data.badge, 'Not migrated');
+	const master = migrationModelBuild('example', [...list.slice(0, 1), { ...list[2], data: { ...list[2].data, isMaster: true, tone: 'slate', badge: 'x' } }]);
+	const masterCard = migrationProviderBuild(master).sceneGet('/overview/pw').viewList[0].diagram.nodes.find((node) => node.id === 'table:pw:b');
+	assert.equal(masterCard.data.isMaster, true);
+	assert.notEqual(masterCard.data.badge, 'x');
+});
+
 // many batches, a master table, the plan after the migration
 const itemPostListBuild = () => {
 	const tableOf = (key, db, logical, columnList, extra = {}) => ({ key, kind: 'schema-table', path: `/example/schema/${db}/table/${logical}`, data: { db, logical, name: logical.toUpperCase(), columnList, ...extra } });

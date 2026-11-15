@@ -1,0 +1,7 @@
+# The mode of a config object (doc/README.md#the-mode): a component rendered by the entry component
+# ObjectFrontend for an object of the type app-config.config (type.yaml at the top of the package), never
+# written as a block itself.
+compList:
+  - tagName: AppConfigView
+    entry: ./app-config-comp.js
+    export: AppConfigViewDefine

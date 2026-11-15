@@ -122,6 +122,101 @@ sequenceDiagram
 `DiagramER` は YAML からテーブルやその他のノードと、その間の接続線を描き、`DiagramDataverseEntity` はテーブルカードを一枚キャンバスなしで表示します。すべての指定方法と視覚的な編集は専用のページにまとめています：[データ図](~cloud-dev-vis:cloud-dev-vis/comp-mdx/power-platform/comp-diagram-er.md)。
 ```
 
+<!--renderComp=Anchor,id=diagram-aws-->
+<!--renderComp=MultiLang-->
+## {en: "AWS Diagram", jp: "AWS 構成図"}
+
+<!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
+```markdown
+`DiagramAws` draws the resources of a system on AWS (an http api, a function, a table, a bucket, a user pool, a role) as cards, or, as here, as simple marks for an overview: one line of the data, `defaults: { node: { display: simple } }`, and the lines stay where they were attached. The cards, the arrangers that lay them out, and a system at several scales are on their own page: [AWS diagrams](~cloud-dev-vis:cloud-dev-vis/comp-mdx/aws/comp-aws.md); the storage service of `aws-utils` is drawn with them: [Storage Service Architecture](~aws-utils:aws-utils/doc/storage-architecture.md).
+
+`DiagramAws` は AWS 上のシステムのリソース（HTTP API、関数、テーブル、バケット、ユーザープール、ロール）をカードとして、またはここでのように概要用のシンプルな記号として描きます。データの一行 `defaults: { node: { display: simple } }` で切り替わり、接続線はつながったままです。カード、配置を決める arranger、複数の縮尺のシステムは専用のページにまとめています：[AWS 図](~cloud-dev-vis:cloud-dev-vis/comp-mdx/aws/comp-aws.md)。`aws-utils` のストレージサービスもこれで描いています：[Storage Service Architecture](~aws-utils:aws-utils/doc/storage-architecture.md)。
+```
+
+<!--renderComp=DiagramAws,title=A small system at a glance-->
+```yaml
+version: 1
+viewport:
+  size: { height: 560 }
+nodes:
+  - id: page
+    renderer: { type: card-note }
+    data: { title: The page, text: a browser, tone: slate }
+    handles: [ { id: out, direction: out, anchor: { target: body, side: bottom } } ]
+    position: { x: 75, y: 0 }
+  - id: api
+    renderer: { type: aws-http-api }
+    data:
+      name: "{prefix}--api"
+      authorizer: "jwt: the user pool"
+      cors: any origin
+      throttle: 20 / s
+      properties: [ { id: items, name: items, value: "create, get, update" } ]
+    handles:
+      - { id: in, direction: in, anchor: { target: body, side: top } }
+      - { id: out, direction: out, anchor: { target: body, side: bottom } }
+    position: { x: 94, y: 102 }
+  - id: function
+    renderer: { type: aws-lambda }
+    data:
+      name: "{prefix}--api"
+      runtime: python3.12
+      memory: 512 MB
+      timeout: 29 s
+      role: "{prefix}--api-role"
+      properties: [ { id: table, name: TABLE_DATA, value: the table } ]
+    handles:
+      - { id: in, direction: in, anchor: { target: body, side: top } }
+      - { id: rows, direction: out, anchor: { target: body, side: bottom, offset: 0.333 } }
+      - { id: objects, direction: out, anchor: { target: body, side: bottom, offset: 0.667 } }
+    position: { x: 94, y: 264 }
+  - id: table
+    renderer: { type: aws-dynamodb-table }
+    data:
+      name: items
+      nameLogical: "{prefix}--data"
+      pk: pk (S)
+      sk: sk (S)
+      description: billed per request
+      attributes:
+        - { id: pk, key: PK, name: pk, type: S, holds: the owner }
+        - { id: sk, key: SK, name: sk, type: S, holds: the item }
+    handles: [ { id: in, direction: in, anchor: { target: body, side: top } } ]
+    position: { x: 0, y: 426 }
+  - id: bucket
+    renderer: { type: aws-s3-bucket }
+    data:
+      name: "{prefix}--data"
+      access: private
+      versioning: off
+      properties: [ { id: data, name: data/, value: large bytes } ]
+    handles: [ { id: in, direction: in, anchor: { target: body, side: top } } ]
+    position: { x: 188, y: 426 }
+connections:
+  - id: request
+    source: { nodeId: page, handleId: out }
+    target: { nodeId: api, handleId: in }
+    label: { text: https + token, position: 0.5 }
+    route: { anchorList: [ { id: a1, along: 1, x: 0, y: -32 } ] }
+  - id: call
+    source: { nodeId: api, handleId: out }
+    target: { nodeId: function, handleId: in }
+    label: { text: invoke, position: 0.5 }
+    route: { anchorList: [ { id: a1, along: 1, x: 0, y: -32 } ] }
+  - id: rows
+    source: { nodeId: function, handleId: rows }
+    target: { nodeId: table, handleId: in }
+    label: { text: rows, position: 0.5 }
+    route: { anchorList: [ { id: a1, along: 1, x: 0, y: -42.7 } ] }
+  - id: objects
+    source: { nodeId: function, handleId: objects }
+    target: { nodeId: bucket, handleId: in }
+    label: { text: objects, position: 0.5 }
+    route: { anchorList: [ { id: a1, along: 1, x: 0, y: -21.3 } ] }
+defaults:
+  node: { display: simple }
+```
+
 <!--renderComp=Anchor,id=proxy-connection-diagram-->
 <!--renderComp=MultiLang-->
 ## {en: "Interactive diagram", jp: "インタラクティブ図"}

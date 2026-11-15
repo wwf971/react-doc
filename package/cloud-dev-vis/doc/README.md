@@ -17,17 +17,23 @@ cloud-dev-vis/
 │   ├── card-diagram-impl.md    the base series, design and implementation: data format, canvas, cards,
 │   │                           editor, history, node registries
 │   ├── power-platform.md       the Power Platform series, design
+│   ├── aws.md                  the AWS series, design
 │   ├── card-diagram-animation.md  the animation of a card diagram, design
 │   ├── card-diagram-flexible-switch.md  many scenes in one viewport, design
 │   └── power-platform-migration.md  a database migration as data: its items, scenes and editors
 ├── .doc-page/              makes the package a doc page: entry, source rules, side panel, assets of its
 │                           demonstrations, the template of its playground
+├── script-icon/            aws-icon-fetch.mjs: fetches the official AWS icons (aws.md#the-official-icons)
 └── comp-mdx/
     ├── card-diagram/       the base series       CardDiagram
     ├── card-diagram-animation/  animation        CardDiagramAnimation
     │                       comp-card-diagram-animation.md  for authors: CardDiagramAnimation, DiagramERAnimation
     ├── card-diagram-switch/  scenes by path       CardDiagramSwitch
     │                       comp-card-diagram-switch.md  for authors: CardDiagramSwitch, DiagramERSwitch
+    ├── aws/                AWS                   DiagramAws, DiagramAwsSwitch, DiagramAwsArchitecture,
+    │                                             DiagramAwsResource; icon-official/: the official icons,
+    │                                             fetched, ignored by git
+    │                       comp-aws.md            for authors: which card for which resource
     ├── demo/               what its documents demonstrate with: MigrationStep
     └── power-platform/     Power Platform        DiagramER, DiagramPowerAutomate, DiagramBusinessRule,
                                                   DiagramDataverseEntity, DiagramERSwitch;
@@ -44,10 +50,12 @@ The documents written for authors are the usage documents of the components, wit
 - **Draft and history.** While a block is edited, a draft of the same YAML is the truth, changed only through the store's one method, which validates every change and records it, so every command can be undone and redone within the session; the selection is not recorded, and nothing of the history is saved ([History](card-diagram-impl.md#history)).
 - **Node kind.** Everything the engine knows about one node type (`renderer: { type: ... }`): how to check its data, which anchors it offers, the rows and fields the editor works with, the card that draws it, and how the create panel makes a new one.
 - **Node registry.** The list of kinds one diagram component can draw and create. It is fixed per component type, in code.
-- **Series.** A folder of components sharing one registry. The **base series** (`card-diagram`) holds the engine and the generic kinds; every other series is a list of kinds plus the components bound to them.
+- **Series.** A folder of components sharing one registry. The **base series** (`card-diagram`) holds the engine and the generic kinds; every other series (Power Platform, AWS) is a list of kinds plus the components bound to them.
+- **Display.** A node is drawn **detailed**, as the card of its kind, or **simple**, as a mark with its name, for an overview; its handles and lines are the same in both ([The display of a node](card-diagram-impl.md#the-display-of-a-node)).
+- **Arranger.** A set of rules laying out a diagram, applied by a generator every time it builds a scene, or by an author whenever asked ([Arrangers](card-diagram-arrange.md)).
 
 ```text
-base series (card-diagram)                         a platform series (power-platform, later aws ...)
+base series (card-diagram)                         a platform series (power-platform, aws ...)
   engine: canvas, stores, editor, create panel  <-   its kinds: contract, schema, card, create entry
   generic cards: table, resource card, operator <-   uses them for its own cards
   node registry mechanism                       <-   builds its registry, binds it to its components
@@ -75,6 +83,8 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | change anything of the framework, add a kind, a series or a command | the guidance [card-diagram.md](card-diagram.md) first: the standards and the checklist of that kind of change |
 | understand the data format, the canvas, the editor, the history, or add a generic card | [card-diagram-impl.md](card-diagram-impl.md) |
 | change a Power Platform card or component | [power-platform.md](power-platform.md) |
+| draw a system on AWS, or change an AWS card | for authors [AWS diagrams](../comp-mdx/aws/comp-aws.md); the design [aws.md](aws.md) |
+| draw one thing at two levels of detail, and keep its lines attached | [Detailed and simple](card-diagram-usage.md#detailed-and-simple), [When a node changes its look](card-diagram-usage.md#when-a-node-changes-its-look-its-lines-stay-attached) |
 | write diagrams in a document | [Data diagrams](../comp-mdx/power-platform/comp-diagram-er.md), [Power Platform diagrams](../comp-mdx/power-platform/comp-powerplatform.md) |
 | make a diagram move between named states | for authors [Card Diagram Animation](../comp-mdx/card-diagram-animation/comp-card-diagram-animation.md); the design [card-diagram-animation.md](card-diagram-animation.md) |
 | show many diagrams in one viewport, by path, with smooth switching | for authors [Card Diagram Scenes](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md); the design [card-diagram-flexible-switch.md](card-diagram-flexible-switch.md) |
@@ -94,7 +104,9 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | `comp-mdx/card-diagram/CardDiagram.jsx`, `CardStandalone.jsx` | the canvas and the standalone card, and their factories `cardDiagramCompCreate`, `cardStandaloneCompCreate` |
 | `comp-mdx/card-diagram/DiagramERData.js`, `DiagramERStore.js`, `DiagramEdit*.js`, `DiagramRender.jsx` | normalization, the canvas model, the editor's draft and path, the node and edge components (their names keep the `DiagramER` prefix of the series they started in) |
 | `comp-mdx/card-diagram/DiagramRoute.js`, `DiagramRouteControls.jsx`, `DiagramApiList.js`, `DiagramCanvasRegistry.js` | the route of a line, its controls, and the apis of a diagram: [card-diagram-connection-line.md](card-diagram-connection-line.md#implementation) |
-| `comp-mdx/card-diagram/DiagramArrange.js`, `DiagramArrangeOutline.js`, `comp-mdx/power-platform/er-arrange/` | the contract of an arranger, the outline arranger of the base series, and the arrangers of ER diagrams: [card-diagram-arrange.md](card-diagram-arrange.md) |
+| `comp-mdx/card-diagram/DiagramArrange.js`, `DiagramArrangeOutline.js`, `DiagramArrangeRows.js`, `DiagramArrangeLayers.js`, `DiagramArrangeRouter.js`, `comp-mdx/power-platform/er-arrange/` | the contract of an arranger, the arrangers of the base series, the lane router they share, and the arrangers of ER diagrams: [card-diagram-arrange.md](card-diagram-arrange.md) |
+| `comp-mdx/card-diagram/CardSimple.jsx`, `CardSimpleData.js` | the simple display of a node: the mark, its anchors, where a handle stands on its outline: [The display of a node](card-diagram-impl.md#the-display-of-a-node) |
+| `comp-mdx/aws/` | the AWS series: [aws.md](aws.md#implementation) |
 | `comp-mdx/card-diagram/DiagramStatic.jsx` | a diagram drawn without a canvas, and the pieces the switch layer draws an embedded scene with: [A diagram without a canvas](card-diagram-impl.md#a-diagram-without-a-canvas) |
 | `comp-mdx/card-diagram/DiagramEditHistory.js` | `EditHistory`: the history of a draft (steps, typing groups, undo, redo), generic over the state its owner records; `DiagramEditStore` records in it from `changeApply` and `DiagramVisualEdit` offers it in the bar and on the keys |
 | `comp-mdx/card-diagram/TableCard*.js(x)`, `ResourceNodeCard.jsx`, `OperatorCard.jsx` | the generic cards and their schemas |

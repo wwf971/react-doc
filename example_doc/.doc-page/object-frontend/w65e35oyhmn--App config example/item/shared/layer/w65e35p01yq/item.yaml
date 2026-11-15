@@ -1,0 +1,24 @@
+itemId: w65e35p01yq
+name: ""
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+owner:
+  ref: frontend:w65e35oyhmn
+versionIdHead: w65e35p0hq9
+isDeleted: false
+isLocked: false
+timeCreated: 20261116_02294394+09
+versionList:
+  - versionId: w65e35p0hq9
+    versionIdPrevList: []
+    time: 20261116_02294394+09
+    note: made
+    size: 106
+    hash: 90c3df2ec678d30224c74a926d90c95b60b136f7
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261116_02294394+09
+    versionId: w65e35p0hq9

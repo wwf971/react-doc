@@ -1,13 +1,14 @@
-import { Boxes, SquareDashedMousePointer, Table2 } from '../../../../main/frontend/UICommon.js';
+import { Boxes, Database, SquareDashedMousePointer, Table2 } from '../../../../main/frontend/UICommon.js';
 import { nodeRegistryBuild } from './node-registry.js';
-import { tableCardNormalize, tableCardAnchorListGet } from './TableCardData.js';
+import { cardNoteHeightEstimate, tableCardNormalize, tableCardAnchorListGet } from './TableCardData.js';
 import { tableCardSchema } from './TableCardSchema.js';
 import { TableCard } from './TableCard.jsx';
 import { OperatorCard } from './OperatorCard.jsx';
-import { CardBrief, CardDatabase, CardNote, CardThreeDots } from './CompactCard.jsx';
+import { CARD_ICON_BY_NAME, CardBrief, CardDatabase, CardNote, CardThreeDots } from './CompactCard.jsx';
 import { CardCaption, CardIcon } from './CardIcon.jsx';
 import { cardIconAnchorListGet, cardIconAnchorRectEstimate, cardIconNormalize, cardIconSearchMatch } from './CardIconData.js';
 import { diagramArrangerOutline } from './DiagramArrangeOutline.js';
+import { diagramArrangerLanesAcross, diagramArrangerLanesDown, diagramArrangerLayers } from './DiagramArrangeLayers.js';
 import { SceneBoxCard } from './SceneBoxCard.jsx';
 import { CardMatrix } from './CardMatrix.jsx';
 import { cardMatrixNormalize, cardMatrixWidthGet } from './CardMatrixData.js';
@@ -22,7 +23,11 @@ const sideAllList = ['left', 'right', 'top', 'bottom'];
 export const tableNodeKind = {
 	type: 'table',
 	label: 'Table',
-	contract: { dataNormalize: tableCardNormalize, anchorListGet: tableCardAnchorListGet, anchorSideDrawn: 'header', sizeDefault: { width: 360, height: 240 } },
+	contract: {
+		dataNormalize: tableCardNormalize, anchorListGet: tableCardAnchorListGet, anchorSideDrawn: 'header', sizeDefault: { width: 360, height: 240 },
+		// drawn simple (CardSimpleData.js): a rounded mark with its name
+		simple: { contentGet: data => ({ title: data.name, text: data.nameLogical, Icon: Table2, tone: data.tone }) },
+	},
 	schema: tableCardSchema,
 	Card: TableCard,
 	create: {
@@ -54,7 +59,7 @@ const compactContract = (sizeDefault) => ({ anchorListGet: () => [{ id: 'body', 
 export const cardNoteNodeKind = {
 	type: 'card-note',
 	label: 'Note card',
-	contract: compactContract({ width: 170, height: 48 }),
+	contract: { ...compactContract({ width: 170, height: 48 }), sizeEstimate: (node) => ({ height: cardNoteHeightEstimate(node) }) },
 	schema: null,
 	Card: CardNote,
 	create: {
@@ -69,7 +74,7 @@ export const cardNoteNodeKind = {
 export const cardBriefNodeKind = {
 	type: 'card-brief',
 	label: 'Brief card',
-	contract: compactContract({ width: 170, height: 40 }),
+	contract: { ...compactContract({ width: 170, height: 40 }), simple: { contentGet: data => ({ title: data.title, text: data.statList?.[0], Icon: CARD_ICON_BY_NAME[data.icon] ?? Boxes, tone: data.tone || 'teal' }) } },
 	schema: null,
 	Card: CardBrief,
 	create: {
@@ -95,7 +100,7 @@ export const cardThreeDotsNodeKind = {
 export const cardDatabaseNodeKind = {
 	type: 'card-database',
 	label: 'Database',
-	contract: compactContract({ width: 320, height: 260 }),
+	contract: { ...compactContract({ width: 320, height: 260 }), simple: { shape: 'cylinder', contentGet: data => ({ title: data.title, text: data.text, Icon: Database, tone: data.tone }) } },
 	schema: null,
 	Card: CardDatabase,
 	create: {
@@ -183,4 +188,4 @@ export const colorBlockNodeKind = {
 
 export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, cardThreeDotsNodeKind, cardDatabaseNodeKind, cardIconNodeKind, cardCaptionNodeKind, cardMatrixNodeKind, sceneBoxNodeKind, colorBlockNodeKind];
 
-export const cardDiagramNodeRegistry = nodeRegistryBuild({ id: 'card-diagram', label: 'Card diagram', kindList: cardDiagramNodeKindList, arrangerList: [diagramArrangerOutline] });
+export const cardDiagramNodeRegistry = nodeRegistryBuild({ id: 'card-diagram', label: 'Card diagram', kindList: cardDiagramNodeKindList, arrangerList: [diagramArrangerOutline, diagramArrangerLayers, diagramArrangerLanesDown, diagramArrangerLanesAcross] });

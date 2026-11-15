@@ -1,0 +1,25 @@
+itemId: w65e35oyhmo
+name: ""
+lang: yaml
+contentType: text/yaml
+fileExt: yaml
+owner:
+  ref: frontend:w65e35oyhmn
+  role: entry
+versionIdHead: w65e35p01yo
+isDeleted: false
+isLocked: false
+timeCreated: 20261116_02294394+09
+versionList:
+  - versionId: w65e35p01yo
+    versionIdPrevList: []
+    time: 20261116_02294394+09
+    note: the entry of the frontend object App config example
+    size: 201
+    hash: a94452e31bfe272c3df7041e632b79534aa00e9e
+    isLocked: false
+    dependencyList: []
+eventList:
+  - eventType: create
+    time: 20261116_02294394+09
+    versionId: w65e35p01yo

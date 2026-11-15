@@ -45,7 +45,7 @@ storage-contract.md  ◄── aws_oa/_5_doc_storage     the storage service
 auth-contract.md     ◄── aws_oa/_0_auth_cognito    the user pool, the user table, the account service
 ```
 
-A contract is the source of truth: a change is written into it first, and the backend follows.
+A contract is the source of truth: a change is written into it first, and the backend follows. How the storage service is built on AWS, drawn at several scales in one viewport (who talks to whom, its resources, one request step by step, the inside of its table and bucket), is [Storage Service Architecture](storage-architecture.md), drawn with the AWS cards of the package `cloud-dev-vis`.
 
 ## The storage type
 

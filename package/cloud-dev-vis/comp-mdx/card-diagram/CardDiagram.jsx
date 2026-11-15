@@ -100,7 +100,7 @@ export const DiagramERView = observer(function DiagramERView({ data = {}, config
 		sourceGet: () => store.source,
 		editorGet: () => canvasEditor.current,
 		endsGet: (connectionId, connection) => diagramCanvasEndsGet(edgeGeometry.current, connectionId, connection),
-		lineListGet: () => diagramCanvasLineListGet(edgeGeometry.current, store.graph?.connections ?? []),
+		lineListGet: () => diagramCanvasLineListGet(edgeGeometry.current, store.graph?.connections ?? [], store.graph?.nodes),
 		geometryGet: () => diagramCanvasGeometryBuild(store, edgeGeometry.current),
 	}), [store, config.sourcePath, data.title]);
 

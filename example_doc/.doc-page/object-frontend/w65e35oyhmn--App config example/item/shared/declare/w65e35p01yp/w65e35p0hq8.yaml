@@ -1,0 +1,9 @@
+# the keys the made-up app declares: written by the app itself (package app-config, doc/README.md#declarations)
+app: example
+keyList:
+  - { key: example.isHidden, type: boolean, default: false, label: Hide the example, description: the example resources left out of the lists and the landing page }
+  - { key: view.theme, type: enum, default: auto, valueList: [auto, light, dark], label: Theme }
+  - { key: view.density, type: enum, default: comfortable, valueList: [compact, comfortable], label: Density }
+  - { key: view.title, type: string, default: My app, label: Title of the window }
+  - { key: plan.rangeCount, type: number, default: 16, min: 1, max: 256, label: Ranges per table, description: the batches a new plan cuts each table into }
+  - { key: reactDoc.pathList, type: string-list, default: [], label: Where react-doc is }

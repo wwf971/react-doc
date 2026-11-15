@@ -67,3 +67,5 @@ sidePanelById:
 # ObjectView nodes of a DiagramER in object-registry.md, the diagrams of its index
 packageList:
   - name: cloud-dev-vis
+  # the config object of app-config.md: its type and its mode
+  - name: app-config

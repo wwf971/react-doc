@@ -9,9 +9,9 @@ A diagram is node cards joined by connection lines on a canvas, written as YAML.
 
 | You want | Use | Read |
 | --- | --- | --- |
-| one diagram | `CardDiagram` (generic cards), `DiagramER` (with Power Platform cards) | [Data diagrams](../comp-mdx/power-platform/comp-diagram-er.md) |
+| one diagram | `CardDiagram` (generic cards), `DiagramER` (with Power Platform cards), `DiagramAws` (with AWS cards) | [Data diagrams](../comp-mdx/power-platform/comp-diagram-er.md), [AWS diagrams](../comp-mdx/aws/comp-aws.md) |
 | a diagram moving between named states | `CardDiagramAnimation`, `DiagramERAnimation` | [Card Diagram Animation](../comp-mdx/card-diagram-animation/comp-card-diagram-animation.md) |
-| many diagrams in one viewport, switched by path, one inside a card of another | `CardDiagramSwitch`, `DiagramERSwitch` | [Card Diagram Scenes](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md) |
+| many diagrams in one viewport, switched by path, one inside a card of another | `CardDiagramSwitch`, `DiagramERSwitch`, `DiagramAwsSwitch` | [Card Diagram Scenes](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md) |
 | to shape a line by hand | anchors and handles on any of them | [Connection Lines](card-diagram-connection-line.md) |
 | to try something out | [the playground](card-diagram.playground.md), a document git ignores, under **Playground** in the side panel (a fresh clone has none: the item creates it) | [Playground documents](../../../main/doc_page_impl_test.md#playground-documents) |
 
@@ -54,6 +54,7 @@ Reach for a card that exists before drawing one of your own: each already knows 
 | a thing among many, in a graph of what relates to what | `card-icon`, with `card-caption` over a group | a small round mark with its name beside it, a dot for its state; lines end on the mark (`anchor: { target: icon }`). In a narrow place, laid out by the [outline arranger](card-diagram-arrange.md#the-outline-arranger) |
 | which of a set relates to which | `card-matrix` | rows and columns with a mark where they meet; a cell may be a [link](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md#a-link-to-a-scene) |
 | a flow or a rule of Power Platform | `power-automate`, `business-rule` | trigger, action, condition, scope ...; a Dataverse condition or action |
+| a resource of AWS: an http api, a function, a table and the kinds of its rows, a bucket, a user pool, a role, a log group, a group of routes | `aws-http-api`, `aws-lambda`, `aws-dynamodb-table` ... (`DiagramAws`) | a resource card in the accent of its family ([AWS diagrams](../comp-mdx/aws/comp-aws.md)) |
 | a place, a lane, a group, outputs | `color-block` | behind the cards; `fill: none` for a frame; `around` what it holds ([below](#background-color-blocks)) |
 | the part of a scene shown first, and when embedded | `scene-box` | a red frame, drawn only while it is adjusted |
 | another scene, small, opening on a click | `scene-embed` (switch layer) | with `viewHover` a preview while the pointer rests on it |
@@ -63,6 +64,48 @@ Reach for a card that exists before drawing one of your own: each already knows 
 | something no card draws | `renderer: { component: Name }` | a registered component with the placement `visualizationNode`, listing its anchors ([Custom nodes](../comp-mdx/power-platform/comp-diagram-er.md#operators-custom-nodes-and-line-styles)); a title bar or a menu item takes components the same way (`visualizationTitle`, `labelItemList`) |
 
 A series (a node registry) adds its own kinds; what a diagram may use is the registry of its component, and an unknown kind is an error naming the known ones. The **blocks** of a document are in the table at the top: one diagram, an animation, scenes. A scene of the switch layer gets its title over it when focused from the layer itself ([below](#focused-and-embedded)), not from a card.
+
+## Lines out of the bottom of a card: the footer
+
+A card made of rows (a table, a resource card, a DynamoDB table, a group of routes: any kind with a schema) ends with its last row. A line leaving that edge would seem to leave the last row, or the last field. So a line about the card as a whole that leaves downward leaves from the card's **footer**: a strip under its rows, as wide as the card, in the muted color of its head, with the small square of each handle on it.
+
+```text
+ ┌──────────────────────────┐
+ │ ▣ {prefix}--api   Lambda │   the title line: lines from the left or right
+ ├──────────────────────────┤
+ │ Runtime      python3.12  │
+ │ Memory       512 MB      │   rows: a line about one row leaves its row
+ ├──────────────────────────┤
+ │      □            □      │   the footer: lines leaving the card downward
+ └──────┼────────────┼──────┘
+        ▼            ▼
+```
+
+**Showing it.** `data.footer` on the node: `true` shows an empty strip, a text shows the strip with a few words in it (`footer: 3 more environment variables`). Without it, the footer is shown exactly while a handle stands on it, so a card nothing leaves downward keeps its old height.
+
+**Handles on it.** Two ways to write one, which are drawn the same:
+
+```yaml
+handles:
+  # the card as a whole, at its bottom: drawn on the footer
+  - { id: out, direction: out, anchor: { side: bottom } }
+  # the footer itself: at its bottom, or beside the strip, under the rows
+  - { id: logs, direction: out, anchor: { target: footer, side: bottom, offset: 0.75 } }
+  - { id: note, direction: out, anchor: { target: footer, side: right } }
+```
+
+- **The card as a whole, at its bottom** (`side: bottom`, the target `body` left out). This is what a series writes for "out at the bottom", and every existing diagram keeps working: the handle is drawn on the footer, at its offset.
+- **The footer itself** (`target: footer`) on `bottom`, `left` or `right`. Use `left` or `right` for a line that leaves the card sideways yet is about the whole card, not a row: it leaves under the rows rather than beside the last one.
+
+**Connecting to them.** A footer handle is a handle like any other: a connection names it by the node and its id, `source: { nodeId: function, handleId: out }`. Its routes, labels and anchors work as everywhere. A line arriving from below is written the same way, with `direction: in`.
+
+**In the editor.** The tab of a card has a **Footer** section: *Shown*, and its *Text*. *Shown* cannot be turned off while a handle stands on the footer (the note says why). Under it, **Footer handles** adds or removes a handle on each of its sides. On the card itself, with the pointer over the footer, a `+` on its bottom edge adds one. All of these are steps of the history.
+
+**Arranged.** A [layer arranger](card-diagram-arrange.md#the-layer-arrangers) turns the handles of lines going down to the bottom. A card whose footer appears that way is counted taller by the footer, so the next layer does not move up under it.
+
+**Drawn simple**, a node has no footer: its bottom handles stand under its name (the anchor `foot`, [below](#when-a-node-changes-its-look-its-lines-stay-attached)). Its lines leave from the same side in both displays.
+
+A card that is not made of rows (`card-note`, `card-brief`, `card-database`) has no footer: its bottom edge already is the card. A component of your own lists the anchors it has, and gets no footer from the framework.
 
 ## Moving and switching
 
@@ -77,6 +120,36 @@ A series (a node registry) adds its own kinds; what a diagram may use is the reg
 **Reach for the switch layer early.** A diagram that does not fit, that a reader has to scroll around to read, or that mixes an overview with details is usually several scenes: an overview whose cards open the details (`scene-embed`, a click zooms in), a report as a stack of its sections, the same thing in views. Generated diagrams especially: a generator can make a scene per item for free, and a scene per item can be read at its own scale. One canvas holding everything at once is right only when everything has to be seen at once.
 
 Routes of lines work the same in all of them, also in a scene embedded in a card.
+
+## Detailed and simple
+
+A node of a kind that has one can be drawn two ways: **detailed**, as the card of its kind, and **simple**, as a mark with its name under it (a circle, a rounded square, a cylinder, with the icon of the kind), for a picture of a whole system at a glance. The resource cards, the tables and the databases have one; a note, a block or a scene does not.
+
+```yaml
+defaults:
+  node: { display: simple }     # every node that can be drawn simple
+nodes:
+  - id: bucket
+    renderer: { type: aws-s3-bucket }
+    display: detailed           # this one keeps its card
+```
+
+In the editor, **Drawn as** in the tab of a card switches one node, and the shapes button of the bar switches all of them; both are steps of the history. The data, the handles and the lines are the same in both displays: only how the node is drawn changes. Two levels of detail of one system are therefore two views of one scene with the same ids, an overview drawn simple and the resources as cards: switching between them moves each card into its mark ([Views of a scene](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md#views-of-a-scene)). A mark is smaller than its card: let an [arranger](card-diagram-arrange.md#the-layer-arrangers) place the simple view again rather than reusing the positions of the cards. The design is in [The display of a node](card-diagram-impl.md#the-display-of-a-node).
+
+## When a node changes its look, its lines stay attached
+
+A node is drawn differently in many places: simple or detailed, a card embedding another scene that shows a cylinder at rest and a diagram under the pointer, a table card switched to another view, the same id in two scenes. Its handles then stand somewhere else, and the lines must still arrive naturally. These are the ways to keep them so, from the one that costs nothing to the one that moves the most:
+
+| Method | What it does | Where it is used |
+| --- | --- | --- |
+| **Keep the side, move the end** | A handle keeps its id, its side and its offset in every look; each look only says on which of its parts it is drawn. So a line keeps arriving from the same direction and slides along that side, and its route, whose anchors follow the two ends (`along`), keeps its shape | the framework itself: never give a handle another side in another look |
+| **One box for every look** | Every look is drawn at the size of the node, and touches its box where the handles are, the middle of a side. The ends do not move at all | the database of the [migration](power-platform-migration.md#scenes): a `scene-embed` whose view at rest is a cylinder filling the card (`isFrameHiddenEmbedded`), with its handles on the card; a node drawn simple at a size of its own, whose mark fills the box above its words |
+| **Keep the middle** | A smaller look stands in the middle of the place of the larger one, so a line from above or below keeps its line | a simple mark is drawn in the middle of the width its node has; a generator placing two views places by the middle |
+| **A coarser anchor for what is not drawn** | A part a look does not draw (a row of a card, on a mark) hands its handles to the part that stands for it, at the same side and offset. Handles that then meet are one end of their lines, which may share the last stretch into it ([the rule](#no-lines-on-top-of-each-other)) | a node drawn simple: every handle on its mark; a row left out by a table view: its handle on the side of the card |
+| **Out of the way of the words** | A line leaving a mark downward starts under its name, not on the mark, so it crosses no words | the bottom handles of a node drawn simple (the anchor `foot`) |
+| **Route each look again** | When a look moves things more than a little, its lines get their routes for that look: an arranger per view in a generator, **Arrange** after switching in the editor | the overview and the resources of [the storage service](~aws-utils:aws-utils/doc/storage-architecture.md) |
+
+Between two views sharing ids, a switch moves each node into its new place and fades its old drawing into the new one, and the lines of both views fade between their routes: nothing more is to be done there. Whichever method is used, look at every look again, as below: a line that was clear in one may cross something in another.
 
 ## Focused and embedded
 
@@ -122,6 +195,7 @@ What a diagram should look like, whoever draws it:
 - **A list wraps.** Do not lay out many cards in one row, or fitting the whole diagram makes them small. A list on a canvas breaks into lines at a small count (four or so), and a generator breaks them itself. A chain that must read in one direction may turn downward rather than run on. Stacking by a meaning (rows by rank, columns by depth) is better still.
 - **The labels of lines side by side stand in one column.** Give lines running side by side, as the column mappings between two tables do, one label position. Do not stagger them to keep them apart: a row is taller than a label, and labels that jump left and right are harder to read down.
 - **A line to a table as a whole ends at its title line.** It is what a table card does by itself with a handle on the left or right side of the card (`anchor: { side: left }`). A line about one row ends on that row. Do not place a handle at the middle of a table's side by other means.
+- **A line leaving a card downward leaves its footer**, never the edge under the last row ([the footer](#lines-out-of-the-bottom-of-a-card-the-footer)). Writing `side: bottom` on the card is enough.
 - **A link is a `scene-link`.** A node whose job is to open another scene uses the kind made for it ([A link to a scene](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md#a-link-to-a-scene)), with no width written, so it is as wide as its words and every link in a scene looks the same. Do not make a link out of a `card-brief` or a `card-note`. A card that shows something may still have `link`, so a click opens more of it.
 - **A margin around what is held.** A card holding other cards keeps a margin inside its border, so nothing inside touches it. [An embedded scene](card-diagram-flexible-switch.md#one-canvas-no-canvas-inside-a-canvas) has this by default.
 - **One table can be seen several ways.** A table card can declare views, plain, by column or by row, with a menu to switch between them ([Table Card Views](../comp-mdx/power-platform/comp-diagram-er.md#table-card-views)).
@@ -177,7 +251,7 @@ An arranger fits this: its rules run on whatever the data is now, every time the
 - **If no arranger fits, consider writing one** before tuning the generator case by case ([Adding or updating an arranger](card-diagram-arrange.md#adding-or-updating-an-arranger)).
 - **Still look at the result.** An arranger works from estimated sizes when nothing is drawn yet, so check a generated scene [as any other](#no-lines-on-top-of-each-other), on real data.
 
-A diagram people edit by hand can use the same arrangers, as a first layout or re-applied when asked. There, the result becomes the author's data.
+A diagram people edit by hand can use the same arrangers, as a first layout or re-applied when asked: **Arrange** in the edit panel, at any time, and one undo puts everything back. There, the result becomes the author's data. So both kinds of block are laid out by the same rules: a scene derived from data gets them every time it is built, a diagram drawn by hand whenever its author asks. A system read downward (a request passing an api, a function, a table) has the [layer arrangers](card-diagram-arrange.md#the-layer-arrangers): **Layers, top to bottom** places the cards and routes the lines, the **Route the lines** ones keep the cards where the author put them.
 
 ### A matter of taste: show how it happens, then what came of it
 
@@ -200,6 +274,8 @@ The first thing to draw for any report is therefore the diagram someone would sk
 | ☐ | It was looked at: a picture of every scene, at a zoom where the gaps can be seen |
 | ☐ | [No two lines share a stretch, beyond the final segment into a common endpoint](#no-lines-on-top-of-each-other), and `connectionOverlapListGet` agrees |
 | ☐ | No line runs over a card or a label it has nothing to do with |
+| ☐ | Every line leaves the part it is about: a row from its row, the card from its title line or [its footer](#lines-out-of-the-bottom-of-a-card-the-footer) |
 | ☐ | Lists wrap, what is held has a margin, what is long scrolls |
 | ☐ | A scene generated from data gets its layout from [an arranger](#a-scene-generated-from-data-gets-its-layout-from-an-arranger), or has a reason not to |
+| ☐ | Every look of a node was looked at, simple and detailed, each view: [its lines stay attached](#when-a-node-changes-its-look-its-lines-stay-attached) and arrive from the same side |
 | ☐ | A process before tables, and figures on the steps they belong to |

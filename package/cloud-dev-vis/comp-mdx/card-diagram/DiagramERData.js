@@ -1,4 +1,6 @@
 import { routeNormalize, routeTypeHasAnchors } from './DiagramRoute.js';
+import { CARD_SIMPLE_HEIGHT, CARD_SIMPLE_WIDTH, cardSimpleAnchorOf, nodeDisplayRead } from './CardSimpleData.js';
+import { CARD_FOOTER_ANCHOR } from './TableCardSchema.js';
 
 const sides = ['left', 'right', 'top', 'bottom'];
 const lineTypes = ['straight', 'bezier', 'step', 'smoothstep', 'polyline'];
@@ -139,6 +141,15 @@ export function endpointIsDangling(endpoint) {
 	return Boolean(endpoint) && endpoint.position !== undefined;
 }
 
+// what an end of a line is attached to, for the rule of lines on top of each other
+// (routeOverlapPairGet): its node and handle; on a node drawn simple, the place on its mark, so
+// the handles of one side and offset, which meet there, are one endpoint
+export function endpointKeyOf(endpoint, node, isSimple = node?.display === 'simple') {
+	if (!endpoint || endpointIsDangling(endpoint)) return '';
+	const handle = isSimple ? node?.handles?.find(item => item.id === endpoint.handleId) : null;
+	return handle ? `${endpoint.nodeId}/~mark:${handle.anchor?.side}:${handle.anchor?.offset ?? 0.5}` : `${endpoint.nodeId}/${endpoint.handleId}`;
+}
+
 export function endpointRead(value, field) {
 	mapping(value, field);
 	if (own(value, 'position')) {
@@ -169,6 +180,11 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 	if (!Number.isInteger(columns)) throw new Error('layout.columns must be an integer.');
 	const gap = mapping(layout.gap ?? {}, 'layout.gap');
 	const layoutResolved = { columns, gap: { x: number(gap.x ?? 110, 'gap.x', 0), y: number(gap.y ?? 60, 'gap.y', 0) } };
+	// how nodes are displayed when they do not say (card-diagram-impl.md#the-display-of-a-node): a
+	// kind with no simple display keeps its card
+	const nodeDefault = mapping(defaults.node ?? {}, 'defaults.node');
+	if (Object.keys(nodeDefault).some(key => key !== 'display')) throw new Error('defaults.node holds display only.');
+	const displayDefault = nodeDefault.display === undefined ? 'detailed' : nodeDisplayRead(nodeDefault.display, 'defaults.node.display');
 	const nodes = list(value.nodes, 'nodes').map(node => {
 		mapping(node, 'node');
 		const id = text(node.id, 'node.id');
@@ -182,16 +198,27 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 		const anchors = [...list(contract.anchorListGet(data), `${id}.anchors`)];
 		const anchorsById = unique(anchors, `${id}.anchors`);
 		if (!anchorsById.has('body')) anchors.push({ id: 'body', sideList: sides });
+		// a card (a kind with a schema) has a footer under its rows: the part a line leaving its
+		// bottom leaves from (handleAnchorDrawnOf), drawn when it says so or a handle stands on it
+		const isCard = Boolean(renderer.type && registry?.kindByType[renderer.type]?.schema);
+		if (isCard && !anchorsById.has(CARD_FOOTER_ANCHOR)) anchors.push({ id: CARD_FOOTER_ANCHOR, sideList: ['left', 'right', 'bottom'] });
 		for (const anchor of anchors) {
 			if (!Array.isArray(anchor.sideList) || !anchor.sideList.length || anchor.sideList.some(side => !sides.includes(side))) throw new Error(`${id}: invalid sides for anchor "${anchor.id}".`);
 		}
+		// detailed (its card) or simple (a mark with its name): written on the node, else the default
+		// of the diagram where the kind can be drawn simple
+		if (node.display !== undefined) nodeDisplayRead(node.display, `${id}.display`);
+		if (node.display === 'simple' && !contract.simple) throw new Error(`${id}: a ${renderer.type ?? renderer.component} node has no simple display.`);
+		const display = node.display ?? (contract.simple ? displayDefault : 'detailed');
+		const isSimple = display === 'simple';
 		const size = mapping(node.size ?? {}, `${id}.size`);
 		const sizeResolved = { width: dimension(size.width, `${id}.width`), height: dimension(size.height, `${id}.height`) };
-		const sizeDefault = { width: 220, height: 100, ...contract.sizeDefault };
+		const sizeDefault = isSimple ? { width: contract.simple.width ?? CARD_SIMPLE_WIDTH, height: CARD_SIMPLE_HEIGHT } : { width: 220, height: 100, ...contract.sizeDefault };
 		// a kind whose lines to the card as a whole end on another part of it (handleAnchorDrawnOf)
-		const anchorSideDrawn = contract.anchorSideDrawn ? { anchorSideDrawn: contract.anchorSideDrawn } : {};
+		const anchorSideDrawn = contract.anchorSideDrawn && !isSimple ? { anchorSideDrawn: contract.anchorSideDrawn } : {};
+		const anchorBottomDrawn = isCard && !isSimple ? { anchorBottomDrawn: CARD_FOOTER_ANCHOR } : {};
 		// a kind as wide as what it says, when no width is written
-		const widthFit = contract.isWidthFit && sizeResolved.width === 'auto' ? { isWidthFit: true } : {};
+		const widthFit = contract.isWidthFit && !isSimple && sizeResolved.width === 'auto' ? { isWidthFit: true } : {};
 		for (const axis of ['width', 'height']) {
 			number(sizeDefault[axis], `${id}.sizeDefault.${axis}`, Number.MIN_VALUE);
 			if (sizeResolved[axis] !== 'auto' && contract.sizeMin?.[axis] && sizeResolved[axis] < contract.sizeMin[axis]) throw new Error(`${id}.${axis} is smaller than renderer minimum.`);
@@ -219,7 +246,7 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 			if (contract.isBackground !== true) throw new Error(`${id}: only a background (a color block) is drawn around other nodes.`);
 			return { ...node, id, renderer, data, anchors, handles, isBackground: true, around: aroundRead(node.around, id), size: { width: 1, height: 1 }, sizeDefault, position: { x: 0, y: 0 } };
 		}
-		return { ...node, id, renderer, data, anchors, handles, isBackground: contract.isBackground === true, size: sizeResolved, sizeDefault, ...widthFit, ...anchorSideDrawn, position: node.position === undefined || node.position === 'auto' ? 'auto' : point(node.position, `${id}.position`) };
+		return { ...node, id, renderer, data, anchors, handles, display, isBackground: contract.isBackground === true, size: sizeResolved, sizeDefault, ...widthFit, ...anchorSideDrawn, ...anchorBottomDrawn, position: node.position === undefined || node.position === 'auto' ? 'auto' : point(node.position, `${id}.position`) };
 	});
 	const nodesById = unique(nodes, 'nodes');
 	for (const node of nodes) {
@@ -362,11 +389,17 @@ export const lineTypeList = lineTypes;
 export const markerTypeList = markerTypes;
 export const attachPolicyList = attachPolicies;
 
-// the part of a card a handle is drawn on. a line to a card as a whole, at the middle of its
-// left or right side, ends where the kind says (contract.anchorSideDrawn): a table card, the
-// middle of its title line. only the drawing changes: the handle stays what it was written as
+// the part of a card a handle is drawn on. a node drawn simple has its mark, on which every
+// handle stands at its side and offset, and under its words for a handle at the bottom. a line
+// to a card as a whole leaving its bottom leaves its footer, the strip under its rows, at its
+// offset, so it is never read as leaving the last row (every card has one). a line to a card as
+// a whole, at the middle of its left or right side, ends where the kind says
+// (contract.anchorSideDrawn): a table card, the middle of its title line. only the drawing
+// changes: the handle stays what it was written as
 export function handleAnchorDrawnOf(node, handle) {
+	if (node.display === 'simple') return cardSimpleAnchorOf(handle.anchor.side);
 	const { target, side, offset } = handle.anchor;
+	if (target === 'body' && side === 'bottom' && node.anchorBottomDrawn) return node.anchorBottomDrawn;
 	const isCardSide = target === 'body' && (side === 'left' || side === 'right') && offset === 0.5;
 	return isCardSide && node.anchorSideDrawn ? node.anchorSideDrawn : target;
 }

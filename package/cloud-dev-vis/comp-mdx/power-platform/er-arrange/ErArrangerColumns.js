@@ -1,7 +1,7 @@
 import { diagramGeometryMovedBuild } from '../../card-diagram/DiagramArrange.js';
-import { erLaneCountByGapGet, erLinesRoute, LANE_SPACING_MIN, LEVEL_FIRST, LEVEL_STEP } from './ErLineRouter.js';
+import { diagramLabelsPlace, diagramLaneCountByGapGet, diagramLineSceneGet, diagramLinesRoute, LANE_SPACING_MIN, LEVEL_FIRST, LEVEL_STEP } from '../../card-diagram/DiagramArrangeRouter.js';
 import { erGeometryEstimateBuild } from './ErGeometry.js';
-import { erLabelsPlace, erLineSceneGet, erArrangerIsApplicable } from './ErArrangerLanes.js';
+import { erArrangerIsApplicable } from './ErArrangerLanes.js';
 
 const GAP_COLUMN = 170;
 const GAP_ROW = 56;
@@ -120,14 +120,14 @@ export const erArrangerColumns = {
 		};
 		// room for the lanes: where the columns stand does not change which gaps a line needs
 		const positionFirst = placeWith(new Map());
-		const sceneFirst = erLineSceneGet(diagram, diagramGeometryMovedBuild(geometry, positionFirst, handleSideList), options);
+		const sceneFirst = diagramLineSceneGet(diagram, diagramGeometryMovedBuild(geometry, positionFirst, handleSideList), options);
 		const columnAllOf = new Map([...columnOf, ...belowColumnOf]);
-		const gapWidthByColumn = new Map([...erLaneCountByGapGet(sceneFirst.lineList.filter((line) => columnAllOf.has(line.sourceNodeId) && columnAllOf.has(line.targetNodeId)), columnAllOf)].map(([gap, count]) => [gap, Math.max(GAP_COLUMN, LANE_SPACING_MIN * (count + 1))]));
+		const gapWidthByColumn = new Map([...diagramLaneCountByGapGet(sceneFirst.lineList.filter((line) => columnAllOf.has(line.sourceNodeId) && columnAllOf.has(line.targetNodeId)), columnAllOf)].map(([gap, count]) => [gap, Math.max(GAP_COLUMN, LANE_SPACING_MIN * (count + 1))]));
 		const positionById = Object.fromEntries(Object.entries(placeWith(gapWidthByColumn)).filter(([id]) => !(diagram.nodes.find((node) => node.id === id)?.isPositionLocked)));
 		const geometryMoved = diagramGeometryMovedBuild(geometry, positionById, handleSideList);
-		const scene = erLineSceneGet(diagram, geometryMoved, options);
-		const { routeById, reportList } = erLinesRoute(scene);
-		const labels = erLabelsPlace(diagram, geometryMoved, routeById, options);
+		const scene = diagramLineSceneGet(diagram, geometryMoved, options);
+		const { routeById, reportList } = diagramLinesRoute(scene);
+		const labels = diagramLabelsPlace(diagram, geometryMoved, routeById, options);
 		return { positionById, handleSideList, routeById, labelPositionById: labels.positionById, reportList: [...scene.reportList, ...reportList, ...labels.reportList] };
 	},
 };

@@ -2,3 +2,6 @@
    card of the base series (ResourceNodeCard.css) */
 .doc-resource-card.is-flow { --resource-accent: #0f766e; }
 .doc-resource-card.is-rule { --resource-accent: #b45309; }
+/* the same families drawn simple (CardSimple.jsx) */
+.doc-card-simple.is-flow { --doc-card-accent: #0f766e; }
+.doc-card-simple.is-rule { --doc-card-accent: #b45309; }

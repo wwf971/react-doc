@@ -1,7 +1,7 @@
 import { makeAutoObservable, observable } from 'mobx';
 import { parseDocument, stringify } from 'yaml';
 import { diagramLegacyConvert, diagramNormalize, cardStandaloneNormalize, endpointIsDangling, handleRoleAccepts, lineTypeList, markerTypeList, attachPolicyList } from './DiagramERData.js';
-import { cardSchemaGet, cardRowAnchorBuild } from './TableCardSchema.js';
+import { cardSchemaGet, cardRowAnchorBuild, cardFooterProperty } from './TableCardSchema.js';
 import { pathResolve, pathEquals, selectionPathBuild, tabPathGet, nodeLineListGet, cardTabList } from './DiagramEditPath.js';
 import { EditHistory } from './DiagramEditHistory.js';
 import { diagramArrangeRun } from './DiagramArrange.js';
@@ -353,7 +353,7 @@ export class DiagramEditStore {
 	fieldSet(nodeId, rowId, field, value, isDelete = false) {
 		const node = this.nodeGet(nodeId);
 		const schema = cardSchemaGet(node, this.registry);
-		const definitionList = schema ? rowId ? [...schema.fieldList, ...schema.rowPropertyList] : [...schema.nodePropertyList, ...(schema.displayPropertyList ?? [])] : rowId ? [] : [{ id: 'label' }, { id: 'name' }, { id: 'description' }];
+		const definitionList = schema ? rowId ? [...schema.fieldList, ...schema.rowPropertyList] : [...schema.nodePropertyList, ...(schema.displayPropertyList ?? []), cardFooterProperty] : rowId ? [] : [{ id: 'label' }, { id: 'name' }, { id: 'description' }];
 		const definition = definitionList.find(item => item.id === field);
 		if (!definition) return false;
 		const groupKey = ['enum', 'bool'].includes(definition.kind) ? null : `field:${nodeId}/${rowId ?? ''}/${field}`;
@@ -815,6 +815,48 @@ export class DiagramEditStore {
 		});
 	}
 
+	// the footer of a card shown or not (data.footer); a footer a handle stands on is drawn anyway
+	cardFooterSet(nodeId, isShown) {
+		return this.changeApply(documentNext => {
+			const path = [...this.nodePathGet(nodeId), 'data', 'footer'];
+			if (isShown && !documentNext.hasIn(path)) documentNext.setIn(path, true);
+			if (!isShown && documentNext.hasIn(path)) documentNext.deleteIn(path);
+		});
+	}
+
+	// the display of a node (card-diagram-impl.md#the-display-of-a-node): detailed or simple. a
+	// node displayed as the diagram says by default writes nothing of its own
+	nodeDisplayGet(nodeId) {
+		const node = this.nodeGet(nodeId);
+		if (!this.registry?.kindByType[node?.renderer?.type]?.contract.simple) return 'detailed';
+		return node.display ?? this.value.defaults?.node?.display ?? 'detailed';
+	}
+
+	nodeDisplaySet(nodeId, display) {
+		if (!this.registry?.kindByType[this.nodeGet(nodeId)?.renderer?.type]?.contract.simple && display === 'simple') {
+			this.message = `${nodeId} has no simple display.`;
+			return false;
+		}
+		return this.changeApply(documentNext => {
+			const path = [...this.nodePathGet(nodeId), 'display'];
+			if (display === (this.value.defaults?.node?.display ?? 'detailed')) documentNext.deleteIn(path);
+			else documentNext.setIn(path, display);
+		});
+	}
+
+	// every node of the diagram in one display: the default of the diagram, each node following it
+	diagramDisplaySet(display) {
+		return this.changeApply(documentNext => {
+			if (display !== 'detailed') documentNext.setIn(['defaults', 'node', 'display'], display);
+			else if (documentNext.hasIn(['defaults', 'node', 'display'])) documentNext.deleteIn(['defaults', 'node', 'display']);
+			const node = documentNext.getIn(['defaults', 'node']);
+			if (node && node.items?.length === 0) documentNext.deleteIn(['defaults', 'node']);
+			const defaults = documentNext.getIn(['defaults']);
+			if (defaults && defaults.items?.length === 0) documentNext.deleteIn(['defaults']);
+			this.nodes.forEach((item, index) => { if (item.display !== undefined) documentNext.deleteIn(['nodes', index, 'display']); });
+		});
+	}
+
 	nodeMove(nodeId, position) {
 		const node = this.nodeGet(nodeId);
 		if (!node || node.isPositionLocked || !node.position || node.position === 'auto') return false;
@@ -988,16 +1030,17 @@ export class DiagramEditStore {
 	arrangeApply(arranger, { geometry, ...options } = {}) {
 		let changes;
 		try {
-			changes = diagramArrangeRun(this.value, arranger, { geometry, ...options });
+			changes = diagramArrangeRun(this.value, arranger, { registry: this.registry, geometry, ...options });
 		} catch (error) {
 			this.message = error.message;
 			return null;
 		}
 		const isChanged = this.changeApply(documentNext => {
 			for (const [nodeId, position] of Object.entries(changes.positionById)) documentNext.setIn([...this.nodePathGet(nodeId), 'position'], documentNext.createNode({ x: Math.round(position.x), y: Math.round(position.y) }));
-			for (const { nodeId, handleId, side } of changes.handleSideList) {
+			for (const { nodeId, handleId, side, offset } of changes.handleSideList) {
 				const index = this.nodeGet(nodeId).handles.findIndex(handle => handle.id === handleId);
 				documentNext.setIn([...this.nodePathGet(nodeId), 'handles', index, 'anchor', 'side'], side);
+				if (offset !== undefined) documentNext.setIn([...this.nodePathGet(nodeId), 'handles', index, 'anchor', 'offset'], offset);
 			}
 			for (const [connectionId, route] of Object.entries(changes.routeById)) {
 				const path = ['connections', this.connections.findIndex(connection => connection.id === connectionId), 'route'];

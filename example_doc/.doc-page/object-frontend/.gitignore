@@ -6,7 +6,11 @@
 /*/
 !/w5j7ozoijzl--Reading list/
 !/w5j7pn0lh5o--Short list/
+# the config object of app-config.md: its partition shared is tracked, its partition local (a
+# checkout's own layers) is not
+!/w65e35oyhmn--App config example/
 
 */item/playground/
+*/item/local/
 *.bak
 *.tmp

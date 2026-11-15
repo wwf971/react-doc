@@ -142,6 +142,7 @@ An operator describes a step in the diagram. Rendering or editing it does not ex
 | `isPositionLocked` | Optional boolean. A locked node requires an explicit position and cannot be dragged until unlocked. |
 | `size` | Optional `width` and `height`, each a positive number or `auto`. Omitted dimensions mean `auto`. |
 | `handles` | Explicit handle declarations. Omission means no handles, not inferred relationships. |
+| `display` | `detailed` (its card) or `simple` (a mark with its name), for a kind that can be drawn simple; the default of the diagram (`defaults.node.display`) when absent ([The display of a node](#the-display-of-a-node)). |
 
 IDs do not have to describe the content: short opaque IDs are valid. Renaming a label or a database logical name must not change an ID. Column and option IDs are likewise stable within their node.
 
@@ -169,7 +170,7 @@ compDefine(NormalizeText, {
 
 `anchorListGet(data)` is a pure function that lists valid anchors before rendering. A Dataverse card exposes `body` on all four sides and `column/<columnId>` anchors on the left and right; another component may expose `input/<fieldId>` or only `body`. The diagram validates the returned IDs and sides. Optional `dataNormalize(data)` validates and normalizes renderer-specific content. A kind's `contract` has the same fields. `sizeDefault` supplies a preferred automatic width and an initial height estimate; `sizeMin` can restrict authored numeric dimensions.
 
-`contract.isWidthFit` makes a kind as wide as what it holds when a node writes no width (`max-content`, on the canvas and in a static scene), as a `scene-link` is. `sizeDefault.width` is then only what is assumed until it is measured.
+`contract.isWidthFit` makes a kind as wide as what it holds when a node writes no width (`max-content`, on the canvas and in a static scene), as a `scene-link` is. `sizeDefault.width` is then only what is assumed until it is measured. `contract.sizeEstimate(node)` answers the height a card whose height follows its content will have, for an arranger with nothing drawn ([the estimate](card-diagram-arrange.md#the-contract)): the table cards answer it from their rows (`resourceCardHeightEstimate`, `rowCardHeightEstimate`), the note card from its text.
 
 The renderer receives the normal `{ data, config, onEvent }` interface, with node context in `config.visualization`: `nodeId`, resolved `size`, `isEdit`, and `anchorRef(anchorId)`. It attaches that ref to the DOM element for each declared anchor. The diagram wrapper supplies the `body` anchor and draws the handles over the measured anchors. Node renderers do not create independent React Flow handles or save diagram files themselves.
 
@@ -202,7 +203,20 @@ A row handle stays attached to that row when its order, text, or height changes.
 
 Which anchors a card offers is the decision of its kind, and the title line is **not** one of them by default: a generic `table` offers `row/<id>` and `header` only when its data sets `isHeaderHandleEnabled`; a resource card offers `header` and `property/<id>`; the Power Platform kinds are in [Power Platform](power-platform.md#anchors). A handle on `header` of a type that does not offer it is a validation error.
 
-**A line to a table card as a whole ends at the middle of its title line.** A kind says so with `contract.anchorSideDrawn: 'header'`, as `table`, `dataverse-table` and `dataverse-choice` do: a handle on `body`, on the left or right side, at the default offset, is drawn there (`handleAnchorDrawnOf`). Only the drawing changes: the handle stays as written, so the editor and the document see `body`. A handle on the top or the bottom, one with an offset of its own and one on a row stay where they are.
+**A line to a table card as a whole ends at the middle of its title line.** A kind says so with `contract.anchorSideDrawn: 'header'`, as `table`, `dataverse-table` and `dataverse-choice` do: a handle on `body`, on the left or right side, at the default offset, is drawn there (`handleAnchorDrawnOf`). Only the drawing changes: the handle stays as written, so the editor and the document see `body`. A handle on the top, one with an offset of its own and one on a row stay where they are.
+
+**A line leaving a card at its bottom leaves its footer.** Every kind with a schema (a card made of rows) gets the anchor `footer` from validation, on `left`, `right` and `bottom`, and `node.anchorBottomDrawn: 'footer'` while it is drawn detailed. A handle on `body` at the bottom is drawn on the footer at its offset (`handleAnchorDrawnOf`), so a line about the card is never read as leaving its last row. What an author writes is in [the footer](card-diagram-usage.md#lines-out-of-the-bottom-of-a-card-the-footer).
+
+```text
+cardFooterIsShown(node)    data.footer is true or a text, or a handle stands on the footer
+                           (target footer, or body at the bottom): TableCard draws the strip
+                           (.doc-card-footer, CARD_FOOTER_HEIGHT 23), the canvas measures the anchor
+                           only then (DiagramRender), and the estimate counts it (cardHeightEstimate)
+cardFooterSet(id, shown)   writes or takes away data.footer, through changeApply; data.footer is a
+                           property of every card (cardFooterProperty), typed in place like a cell
+```
+
+The editor gives the footer a section of the tab of a card (Shown, Text) and its handles a section of their own; *Shown* is read-only while a handle needs the strip. A layer arranger that turns a handle to the bottom counts the card taller by the footer it makes appear (`DiagramArrangeLayers.js`).
 
 ```text
 select a table row
@@ -221,6 +235,25 @@ An anchor may hold multiple handles. The planned visual editor flags exact overl
 The React Flow adapter derives runtime source/target handles from `direction`. A `both` handle uses separate runtime source and target IDs mapped back to the same authored ID. Side and position are not part of those IDs. After row reordering, resizing, or an anchor change, the adapter remeasures anchors and calls React Flow's `updateNodeInternals`.
 
 Connection creation and reconnection use the same validation: the source allows `out`, the target allows `in`, both handles exist, both ends are not the same handle, and a `single` handle has room. `both` allows either role. The core does not impose database type matching, acyclicity, or cardinality; a diagram-specific validator may add those rules. Deleting a connected handle, row, or node never leaves a reference to something gone and never discards a connection silently: the connections are moved to the handle on the other side of the same anchor when one exists, and otherwise **detached**, each end becoming a free end ([Connections](#connections)) placed a little away from where the handle was.
+
+## The display of a node
+
+A node is drawn **detailed**, as the card of its kind, or **simple**, as a mark with its name under it: the picture of a system at the level of an overview, where an s3 bucket is a tile with its icon. What an author writes is in [Detailed and simple](card-diagram-usage.md#detailed-and-simple); this is how it works.
+
+```text
+node.display ?? defaults.node.display ?? detailed       a kind without contract.simple stays detailed;
+                                                        a node asking for simple there is an error
+contract.simple   { shape: tile | circle | cylinder, width?, contentGet(data) -> { title, text?, Icon?, iconUrl?, isIconFramed?, tone?, family? } }
+CardSimple        draws every kind alike: the mark in the accent of its family (.doc-card-simple.is-{family})
+                  or its tone, the icon, the title and a small monospace line under it
+```
+
+- **The data and the handles do not change.** Validation reads the anchors of the card (`anchorListGet`) in both displays, so a node switched back and forth keeps every handle and every line. Only the drawing does: `handleAnchorDrawnOf` puts every handle of a node drawn simple on its mark (the anchor `mark`), at its side and offset, and a handle at the bottom under its words (the anchor `foot`, as wide as the mark), so a line leaving downward crosses no name. The mark declares its outline (`data-anchor-outline: rect | ellipse | cylinder`), and the measurement of a handle (`handlePointMeasure`, on the canvas and in a static scene) puts the point on it: a line ends where it touches the circle, wherever its offset is (`anchorPointOnOutline`).
+- **The look.** A tile is a white rounded square with a thin border, its icon in the accent (the look of [stack-diagram](https://github.com/caru-ini/stack-diagram), at its sizes: a mark of 60, a node 132 wide, a name of 13px under it and a monospace line of the service). `iconUrl` is an image instead of `Icon`: one that is its own tile (an official service icon of AWS, [The official icons](aws.md#the-official-icons)) is drawn alone at the size of the mark, a glyph (`isIconFramed`) inside the shape.
+- **Sizes.** A node drawn simple takes the size it writes, else the width of `contract.simple` (`CARD_SIMPLE_WIDTH`) and the height of a mark and two lines of words; with a written height, the mark is as large as fits above the words, so one box serves both displays. The mark stands in the middle of the width, which keeps the line of a line arriving from above or below. The estimate of an arranger (`diagramGeometryEstimateBuild`) knows the same (`cardSimpleHandlePointOf`).
+- **One end per place.** The handles of one side and offset of a node drawn simple meet on its mark; for the rule of lines on top of each other they are one end (`endpointKeyOf`, used by the overlap check of a canvas and by the lane router), so lines sharing it may share the last stretch.
+- **Commands.** `nodeDisplaySet(nodeId, display)` writes `display`, or takes it away when it is the diagram's default; `diagramDisplaySet(display)` writes the default and takes away what the nodes say; both through `changeApply`, so they are undone like any step. The tab of a card has **Drawn as**, the bar a menu for every node.
+- **A morph** treats a node drawn in another display as another drawing: the old one fades into the new while both move (`nodeContentKey` of the switch layer).
 
 ## Position and Size
 
@@ -365,7 +398,7 @@ table, isCompact           card-note                card-brief
 
 It has three anchors: `icon`, the mark, where the lines of a graph end; `text` (right side only), a little after the end of its words, whichever of the title with its badge and the line under it is longest, for a line leaving a node drawn wider than its words (a column of nodes of one width); and `body`, the whole node. A search finds it by its title, the line under it and its badge (`contract.searchMatch`), never by its icon or tones. With its words beside the mark, the card is as wide as the mark and its words, not as its node (a column of nodes has one width): the outline of a hover or of a search goes around them, a few pixels apart, while the node still takes a click on its whole width; `text` stands past that outline, so no line runs through it. Its size is written by whoever draws it, since a graph is laid out before it is drawn; its kind says where the mark is in a node of a given size (`contract.anchorRectEstimate(node, anchorId, rect)`, a hook of any kind whose anchors are not its whole box), which is what an arranger without a drawn diagram asks ([the estimate](card-diagram-arrange.md#the-contract)). `card-caption` (`data.text`) is a few small words over a group of such nodes. Both are generic: which things there are, how they hang together and where they go is the business of the layer that builds the diagram.
 
-`card-matrix` holds rows and columns with headers and a mark where they meet: `rowList`, `columnList` (`[{ id, label, link?, tone? }]`), `cellList` (`[{ row, column, mark?, title?, link? }]`: a dot in the middle of the cell, with `mark`, a count say, in small words beside it), `title`, `subtitle`, `rowAxisLabel`, `columnAxisLabel`, `columnHeadDirection` (`vertical` by default, or `horizontal`), `rowHeadWidth`, `cellSize`, `isDiagonalMarked`. It has the frame, title line and rows of a table card, and knows nothing of what they are. A header or a cell with `link` opens that path on a canvas that switches scenes. `cardMatrixWidthGet` gives its width without drawing it, and a line joins its body.
+`card-matrix` holds rows and columns with headers and a mark where they meet: `rowList`, `columnList` (`[{ id, label, link?, tone? }]`), `cellList` (`[{ row, column, mark?, title?, link?, tone? }]`: a dot in the middle of the cell, with `mark`, a count say, in small words beside it; `tone` fills the cell and its dot in a tone, so the cells read as a heatmap, a state per cell), `title`, `subtitle`, `rowAxisLabel`, `columnAxisLabel`, `columnHeadDirection` (`vertical` by default, or `horizontal`), `rowHeadWidth`, `cellSize`, `isDiagonalMarked`. It has the frame, title line and rows of a table card, and knows nothing of what they are. A header or a cell with `link` opens that path on a canvas that switches scenes. `cardMatrixWidthGet` gives its width without drawing it, and a line joins its body.
 
 ## Card Editing
 

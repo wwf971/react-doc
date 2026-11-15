@@ -8,7 +8,7 @@ An **arranger** arranges a diagram by a set of rules: it decides how lines run a
  the editor or an api, by hand  ──┘   (pure)
 ```
 
-The contract is in `comp-mdx/card-diagram/DiagramArrange.js` and knows no kind of card. The base series has two arrangers, [the outline](#the-outline-arranger) and [the rows](#the-rows-arranger); the arrangers of ER diagrams are in `comp-mdx/power-platform/er-arrange/` ([below](#moving-arrangers-up-to-the-framework)).
+The contract is in `comp-mdx/card-diagram/DiagramArrange.js` and knows no kind of card. The base series has [the outline](#the-outline-arranger), [the rows](#the-rows-arranger), and [the layer arrangers](#the-layer-arrangers) for a system read downward; these and the arrangers of ER diagrams (`comp-mdx/power-platform/er-arrange/`) route their lines with [the lane router](#the-lane-router) of the base series.
 
 ## Using one
 
@@ -49,12 +49,14 @@ arranger    { id, label, description,
 diagram    the authored data; never changed in place
 geometry   { rectOf(nodeId) -> { x, y, width, height, isBackground } | null,
              endOf(connection, role) -> { x, y, side } | null }
-changes    { positionById?, handleSideList?: [{ nodeId, handleId, side }],
+changes    { positionById?, handleSideList?: [{ nodeId, handleId, side, offset? }],
              routeById?: { id: route | null }, labelPositionById?: { id: part of its line },
              reportList?: [{ kind, message, connectionId? }] }
 ```
 
-**Geometry is passed in**, because only the caller knows where things are. The editor and the apis pass what the canvas measured when the diagram is drawn (`diagramCanvasGeometryBuild`); a generator has nothing drawn, so the arranger's estimate is used. An estimate that knows no kind (`diagramGeometryEstimateBuild`, `DiagramArrangeOutline.js`) takes the written size of a node, else the default of its kind, and asks the kind where an anchor is in that rectangle (`contract.anchorRectEstimate`, when the caller passes the registry); it is exact for cards whose sizes are written, as [icon nodes](card-diagram-impl.md#icon-nodes) are. The estimate models the sizes a card draws, wrapped rows and titles included, by the width of their words, but it stays an estimate, so **check a generated diagram when it is drawn**, as for any diagram: `connectionOverlapListGet`. An arranger placing cards routes against where the cards will be with `diagramGeometryMovedBuild`.
+**Geometry is passed in**, because only the caller knows where things are. The editor and the apis pass what the canvas measured when the diagram is drawn (`diagramCanvasGeometryBuild`), and the registry of the component (`options.registry`); a generator has nothing drawn, so the arranger's estimate is used. An estimate that knows no kind (`diagramGeometryEstimateBuild`, `DiagramArrangeOutline.js`) takes the written size of a node, else what its kind estimates for its content (`contract.sizeEstimate`: the table cards by their rows, the note card by its text), else the default of its kind, and asks the kind where an anchor is in that rectangle (`contract.anchorRectEstimate`, when the caller passes the registry); a node [drawn simple](card-diagram-impl.md#the-display-of-a-node) has its handles on its mark. It is exact for cards whose sizes are written, as [icon nodes](card-diagram-impl.md#icon-nodes) are. The estimate models the sizes a card draws, wrapped rows and titles included, by the width of their words, but it stays an estimate, so **check a generated diagram when it is drawn**, as for any diagram: `connectionOverlapListGet`. A generator that cannot leave it to an estimate makes its first layout with the heights measured on the drawn diagram, written for the run and taken away again (the storage scenes of `aws-utils` were made so). An arranger placing cards routes against where the cards will be with `diagramGeometryMovedBuild`: an end whose handle keeps its side moves with its card; one turned to another side is placed by the arranger (`endChangedOf`).
+
+**Handles turned and set apart.** An arranger placing cards may turn a handle to face the other end of its lines (`side`), and set handles that would meet on one side apart along it (`offset`): two lines leaving one point share a stretch, which [the rule of lines](card-diagram-usage.md#no-lines-on-top-of-each-other) allows only for one handle.
 
 **A report says what was not done**, rather than failing: `skipped` (a line it does not handle), `narrow` (lanes closer than is readable), `overlap` (no free way found), `label` (no place for a label clear of the cards). The editor shows it in the edit panel, and the api answers it.
 
@@ -132,6 +134,30 @@ Lines sharing a handle share only the stretch at that handle, as [the rule of li
 
 The order of the rows is the order of the nodes. What it cannot route it reports as `skipped`: a line leaving a node upward or reaching one from below, a line to a node above its source, a side handle facing away from where the line has to go, a curve, a free end. **Where an end is at the end of the words of a node** (a handle on the right of the anchor `text` of an icon node), where that is is known for sure only when the node is drawn, so the corners of such a line are kept by its other end: the line then turns where it should whatever the words measure. It knows no kind of card, so the structure is entirely the caller's: the caller lists the nodes in order, gives the columns, and chooses the side of each handle. It is not in the list the editor offers (`arrangerList`), since it needs its columns from a caller.
 
+## The layer arrangers
+
+For a system read downward, in the order a request passes it (`DiagramArrangeLayers.js`, offered by `CardDiagram` and the AWS series). They know no kind of card, and route with [the lane router](#the-lane-router) turned a quarter: the diagram is read with x for y (the top of a card for its left), routed as columns, and the routes turned back.
+
+```text
+ ┌──────┐               layers      what a line goes to stands under what it comes from: one layer under the
+ │ page │                           deepest card a line comes from; a card no line reaches, in the first. A
+ └──┬───┘                           cycle is cut where it was entered
+ ┌──┴───┐               order       the cards of a layer side by side, in the order they stand when they were
+ │ api  │                           placed apart (an author's order is kept), else under the middle of the
+ └──┬───┘                           cards their lines come from; each layer centered on the widest
+┌───┴──────┐            handles     a handle on a card as a whole (body), or on a node drawn simple, is turned
+▼          ▼                        to face the other ends of its lines, and handles meeting on one side are
+table    bucket                     set apart along it; a handle on a part (a row, the title line) keeps its side
+```
+
+| Id | Cards | Lines |
+| --- | --- | --- |
+| `layers` (**Layers, top to bottom**) | placed in layers, each gap as high as the lanes crossing it need; a locked card stays | every right-angled line in a lane of its own, measured with sharp corners (`measureType: step`), so two lines meeting in a bend are seen; labels placed |
+| `lanes-down` (**Route the lines, cards in rows**) | stay where they are, read as rows | as `layers`, between the rows |
+| `lanes-across` (**Route the lines, cards in columns**) | stay where they are, read as columns | as `er-lanes`, for any diagram |
+
+`layers` is what a generator applies to a scene it makes, and what an author applies to a diagram drawn by hand, as often as wanted; `lanes-down` is for cards an author placed and wants to keep, as the resources of the storage service (`aws-utils`, `doc/storage-architecture.md`), with cards at the edge of the rows on purpose. A line between the sides of two cards of one row is not routed by either (reported `skipped`): it is left to its line type, which draws it straight when the sides face each other.
+
 ## The arrangers of ER diagrams
 
 | Id | Cards | Lines |
@@ -144,9 +170,13 @@ They are offered for any diagram of the series with a table on it (`isApplicable
 
 **Which one.** `er-columns` for a diagram of tables with no layout of its own to keep. `er-spread` for a diagram put together from parts that already mean something, as two arranged ER diagrams with lines between them: placing every card anew would lose what the parts say, and `er-lanes` alone would squeeze the new lines into gaps sized for the old ones. A line that should be routed like this has to be right-angled; a curve goes straight through whatever lies between its ends.
 
-### How the ER rules route
+They route with [the lane router](#the-lane-router).
 
-From the rectangles alone, in `ErLineRouter.js`, which knows nothing of tables:
+**What to expect.** On made-up schemas from 5 to 40 tables (`ErArranger.test.js` has the small ones), `er-columns` left no overlap and no line over a card, against up to 3800 overlapping pairs with lines routed by the default. On two made-up ER diagrams side by side, with a line per table across them (`er-spread`, 5 to 40 tables a side, with one or three lookups a table), no line stood over a card and no label over a card or another label. Overlaps stayed at zero up to 40 tables a side with one lookup a table, and at one pair at 20 tables with three; at 40 tables with three, 6 pairs overlapped among 274 lines, some of them for a long way. It does less well where several lines arrive at one table, each on a handle of its own at one place: with tables of the target chosen at random, so that some got several lines, the check counted from 1 pair at 5 tables to about 140 at 40. Crossings do not go away, and on a dense schema there are more visible ones, since lines no longer hide each other: it separates lines, it does not make a dense schema simple.
+
+## The lane router
+
+The routes of the right-angled lines of cards standing in columns, from the rectangles alone, in `DiagramArrangeRouter.js` (`diagramLinesRoute`), which knows nothing of tables; `diagramLineSceneGet` reads what it needs off a diagram and a geometry, and `diagramLabelsPlace` places the labels afterwards:
 
 ```text
  column   cards whose widths overlap: read off the rectangles, so placed-by-hand cards work too
@@ -158,13 +188,11 @@ From the rectangles alone, in `ErLineRouter.js`, which knows nothing of tables:
 
 A line between two neighbouring columns has one lane, a line further than that has a lane beside each end and a track between them, and a line to a handle on top of a card has a lane and a level. A gap's lanes stand in an order that keeps lines of one kind from crossing each other: of lines going to one card, the one coming from farthest turns nearest the card. The anchors follow the target (`along: 1`).
 
-Lines are placed one after another and each is **checked against those already placed**, by the same rule as [the overlap check](card-diagram-usage.md#no-lines-on-top-of-each-other): the preferred place first, then others. So what no order can foresee, such as two rows at one height in different columns, is found and avoided.
-
-**What to expect.** On made-up schemas from 5 to 40 tables (`ErArranger.test.js` has the small ones), `er-columns` left no overlap and no line over a card, against up to 3800 overlapping pairs with lines routed by the default. On two made-up ER diagrams side by side, with a line per table across them (`er-spread`, 5 to 40 tables a side, with one or three lookups a table), no line stood over a card and no label over a card or another label. Overlaps stayed at zero up to 40 tables a side with one lookup a table, and at one pair at 20 tables with three; at 40 tables with three, 6 pairs overlapped among 274 lines, some of them for a long way. It does less well where several lines arrive at one table, each on a handle of its own at one place: with tables of the target chosen at random, so that some got several lines, the check counted from 1 pair at 5 tables to about 140 at 40. Crossings do not go away, and on a dense schema there are more visible ones, since lines no longer hide each other: it separates lines, it does not make a dense schema simple.
+Lines are placed one after another and each is **checked against those already placed**, by the same rule as [the overlap check](card-diagram-usage.md#no-lines-on-top-of-each-other): the preferred place first, then others. So what no order can foresee, such as two rows at one height in different columns, is found and avoided. A candidate is measured as its line type draws it, or, with `measureType: 'step'`, with sharp corners: a rounded corner shortens the runs it joins, and two lines meeting in a bend would pass as apart.
 
 **What it does not do.**
 
-- A line leaving and arriving through a top or bottom handle is skipped.
+- A line leaving and arriving through a top or bottom handle is skipped (in a diagram read downward, the layer arrangers turn it into one between sides).
 - `er-lanes` does not move anything, so cards placed in a staircase read as one column and their lines go around it, and a narrow gap gets narrow lanes (reported as `narrow`). `er-spread` also keeps the rows, so it cannot make room between rows: a line finds a way between the cards as they stand, or around them.
 - A handle has one side, so where lines come to one handle from both sides, as in some cycles, the fewer go around their card.
 
@@ -188,13 +216,13 @@ So with nothing in the way a label stays where it was written. The size of a lab
 
 **To update one**, change it: every generator using it gets the change the next time it runs. A diagram that had it applied keeps what it has until applied again, since by then the result is the author's data. **To keep the old behaviour available**, add a new arranger with a new id instead.
 
-**To add one**, write a file with the contract above, add it to `er-arranger-list.js`, and it appears in the editor and the apis. Keep it pure, and do not read anything from outside `diagram`, `geometry` and `options`. Add its small cases to `ErArranger.test.js`, and run the overlap check on a drawn example.
+**To add one**, write a file with the contract above, add it to the `arrangerList` of the registries that should offer it (`er-arranger-list.js` for the ER diagrams), and it appears in the editor and the apis. Keep it pure, and do not read anything from outside `diagram`, `geometry` and `options`. Add its small cases beside it (`ErArranger.test.js`, `DiagramArrangeLayers.test.js`), and run the overlap check on a drawn example.
 
 ## Moving arrangers up to the framework
 
-A component offers what its node registry names (`arrangerList`); `CardDiagram` names the outline. Nothing in the contract, the store command, the menu or the apis depends on ER diagrams, so an arranger of ER diagrams moves up with no change to them:
+A component offers what its node registry names (`arrangerList`): `CardDiagram` the outline and the layer arrangers, the AWS series the layer arrangers, the Power Platform series the ER ones. Nothing in the contract, the store command, the menu or the apis depends on ER diagrams. The lane router went up first, when the layer arrangers needed it; an ER arranger moves up the same way, with no change to the rest:
 
-1. Make it stop depending on the ER kinds. `ErLineRouter.js` already does not; `erArrangerIsApplicable`, the estimate's row heights (`ErGeometry.js`), and which cards go below (`BELOW_TYPE_LIST`) do.
-2. Move the files to `comp-mdx/card-diagram/`, and add the list to `cardDiagramNodeRegistry`.
+1. Make it stop depending on the ER kinds: `erArrangerIsApplicable`, the estimate's row heights (`ErGeometry.js`), and which cards go below (`BELOW_TYPE_LIST`) still do.
+2. Move the files to `comp-mdx/card-diagram/`, and add it to the registries that should offer it.
 
-Do this when a diagram outside the ER family needs it. An arranger for another kind of diagram, such as a flow running left to right, can be written against the same contract and stay in its own series.
+An arranger for another kind of diagram can be written against the same contract and stay in its own series.

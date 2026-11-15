@@ -1,0 +1,17 @@
+# The AWS series (doc/aws.md): the resources of a system on AWS (an http api, a function, a
+# table and the kinds of its rows, a bucket, a user pool, a role, a log group, a group of routes)
+# as node kinds of the card diagram of the base series (../card-diagram), each a card and a simple
+# mark. Every component of the series draws with one node registry (aws-node-registry.js);
+# DiagramAwsResource shows one card outside a canvas.
+compList:
+  - tagName: DiagramAws
+    entry: ./aws-comp.js
+    dependencyCollect: { entry: ../card-diagram/DiagramERSource.js, export: diagramDependenciesCollect }
+  - tagName: DiagramAwsSwitch
+    entry: ./aws-comp.js
+    dependencyCollect: { entry: ../card-diagram-switch/SwitchSource.js, export: switchDependenciesCollect }
+  - tagName: DiagramAwsResource
+    entry: ./aws-comp.js
+  # a system described as data, its scenes generated from the description (AwsArchitecture.js)
+  - tagName: DiagramAwsArchitecture
+    entry: ./aws-comp.js

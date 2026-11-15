@@ -1,0 +1,8 @@
+# The side panel of the package's doc page.
+sidePanelById:
+  main:
+    tree:
+      - doc: ~app-config/comp-mdx/app-config/comp-app-config.md
+        text: App config
+      - doc: ~app-config/doc/README.md
+        text: Design

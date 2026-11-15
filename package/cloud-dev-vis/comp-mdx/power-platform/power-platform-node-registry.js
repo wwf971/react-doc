@@ -1,5 +1,5 @@
 import { GitBranch, ListChecks, TableProperties, Workflow } from '../../../../main/frontend/UICommon.js';
-import { nodeRegistryBuild, resourceNodeCreateBuild } from '../card-diagram/node-registry.js';
+import { nodeRegistryBuild, resourceNodeCreateBuild, resourceNodeSimpleBuild } from '../card-diagram/node-registry.js';
 import { cardDiagramNodeKindList } from '../card-diagram/card-diagram-node-registry.js';
 import { resourceCardSchemaBuild } from '../card-diagram/TableCardSchema.js';
 import { dataverseAnchorListGet, dataverseCardNormalize, dataverseChoiceAnchorListGet } from './DataverseCardData.js';
@@ -23,7 +23,7 @@ const dataverseSearchCellTextGet = (field, row) => (field.id === 'nameLogical' ?
 export const dataverseTableNodeKind = {
 	type: 'dataverse-table',
 	label: 'Dataverse table',
-	contract: { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseAnchorListGet, anchorSideDrawn: 'header', sizeDefault: { width: 410, height: 320 }, searchCellTextGet: dataverseSearchCellTextGet },
+	contract: { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseAnchorListGet, anchorSideDrawn: 'header', sizeDefault: { width: 410, height: 320 }, searchCellTextGet: dataverseSearchCellTextGet, simple: { contentGet: data => ({ title: data.name, text: data.nameLogical, Icon: TableProperties, tone: data.tone || 'blue' }) } },
 	schema: dataverseTableSchema,
 	Card: DataverseCard,
 	create: {
@@ -35,7 +35,7 @@ export const dataverseTableNodeKind = {
 export const dataverseChoiceNodeKind = {
 	type: 'dataverse-choice',
 	label: 'Dataverse choice',
-	contract: { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseChoiceAnchorListGet, anchorSideDrawn: 'header', sizeDefault: { width: 410, height: 320 }, searchCellTextGet: dataverseSearchCellTextGet },
+	contract: { dataNormalize: dataverseCardNormalize, anchorListGet: dataverseChoiceAnchorListGet, anchorSideDrawn: 'header', sizeDefault: { width: 410, height: 320 }, searchCellTextGet: dataverseSearchCellTextGet, simple: { contentGet: data => ({ title: data.name, text: data.nameLogical, Icon: ListChecks, tone: 'violet' }) } },
 	schema: dataverseChoiceSchema,
 	Card: DataverseCard,
 	create: {
@@ -47,7 +47,7 @@ export const dataverseChoiceNodeKind = {
 export const powerAutomateNodeKind = {
 	type: 'power-automate',
 	label: 'Power Automate step',
-	contract: powerAutomateNodeContract,
+	contract: { ...powerAutomateNodeContract, simple: resourceNodeSimpleBuild({ Icon: Workflow, family: 'flow', textFieldId: 'kind' }) },
 	schema: resourceCardSchemaBuild('power-automate', powerAutomateNodeFields, 'Flow step'),
 	Card: PowerAutomateNode,
 	create: { description: 'Trigger, action, condition, scope, loop or terminate.', icon: Workflow, keywordList: ['flow'], nodeCreate: resourceNodeCreateBuild('power-automate', powerAutomateNodeFields, 'Flow step') },
@@ -56,7 +56,7 @@ export const powerAutomateNodeKind = {
 export const businessRuleNodeKind = {
 	type: 'business-rule',
 	label: 'Business rule',
-	contract: businessRuleNodeContract,
+	contract: { ...businessRuleNodeContract, simple: resourceNodeSimpleBuild({ Icon: GitBranch, family: 'rule', textFieldId: 'kind' }) },
 	schema: resourceCardSchemaBuild('business-rule', businessRuleNodeFields, 'Business rule'),
 	Card: BusinessRuleNode,
 	create: { description: 'A Dataverse condition or action.', icon: GitBranch, keywordList: ['rule'], nodeCreate: resourceNodeCreateBuild('business-rule', businessRuleNodeFields, 'Business rule') },

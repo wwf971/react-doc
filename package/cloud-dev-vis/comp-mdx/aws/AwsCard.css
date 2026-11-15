@@ -1,0 +1,27 @@
+/* the accents of the families of the AWS series (doc/aws.md), on the resource card of the base
+   series (ResourceNodeCard.css, --resource-accent) and on a node drawn simple (CardSimple.css,
+   --doc-card-accent): the colors of the categories of the official icons, so a card agrees with
+   its icon when the icons are fetched (AwsIcon.js) */
+.doc-resource-card.is-aws-network, .doc-card-simple.is-aws-network { --resource-accent: #8c4fff; --doc-card-accent: #8c4fff; }
+.doc-resource-card.is-aws-compute, .doc-card-simple.is-aws-compute { --resource-accent: #ed7100; --doc-card-accent: #ed7100; }
+.doc-resource-card.is-aws-database, .doc-card-simple.is-aws-database { --resource-accent: #c925d1; --doc-card-accent: #c925d1; }
+.doc-resource-card.is-aws-storage, .doc-card-simple.is-aws-storage { --resource-accent: #7aa116; --doc-card-accent: #7aa116; }
+.doc-resource-card.is-aws-security, .doc-card-simple.is-aws-security { --resource-accent: #dd344c; --doc-card-accent: #dd344c; }
+.doc-resource-card.is-aws-management, .doc-card-simple.is-aws-management { --resource-accent: #e7157b; --doc-card-accent: #e7157b; }
+
+/* the cards of rows with fixed fields: an attribute's name, a method, a path */
+.doc-aws-row-card .doc-aws-attribute-name, .doc-aws-row-card .doc-aws-route-path { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.68rem; overflow-wrap: anywhere; }
+.doc-aws-row-card .doc-aws-route-method { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; color: var(--resource-accent); }
+.doc-aws-row-card .doc-aws-route-auth { color: var(--color-fd-muted-foreground); font-size: 0.66rem; }
+.doc-aws-row-card .doc-aws-route-auth.is-open { color: #b45309; font-weight: 650; }
+.doc-aws-row-card .doc-card-head-value { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.68rem; }
+
+/* a log group: the pill of a brief card in the accent of its family */
+.doc-card-brief.doc-aws-log-group { --doc-card-accent: #e7157b; }
+
+/* an official icon before the title (AwsKindIcon.jsx): a service icon a small rounded tile, a
+   resource icon a glyph as it is; on the pill of a log group, in place of the filled circle */
+.doc-aws-kind-icon { flex: none; display: block; border-radius: 3px; }
+.doc-aws-kind-icon.is-framed { border-radius: 0; }
+.doc-card-brief-icon:has(> .doc-aws-kind-icon) { background: none; }
+.doc-card-brief-icon > .doc-aws-kind-icon { width: 1.5rem; height: 1.5rem; }

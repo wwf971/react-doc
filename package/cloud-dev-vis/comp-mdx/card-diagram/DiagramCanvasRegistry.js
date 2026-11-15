@@ -4,7 +4,7 @@
 //
 //   canvas   { sourcePath, title, sourceGet(), lineListGet(), endsGet(connectionId, connection), editorGet(), geometryGet() }
 //            a switching viewport also has store, so that a check can walk through its views
-import { endpointIsDangling } from './DiagramERData.js';
+import { endpointIsDangling, endpointKeyOf } from './DiagramERData.js';
 
 const canvasSet = new Set();
 
@@ -30,13 +30,13 @@ export function diagramCanvasEndsGet(edgeGeometry, connectionId, connection) {
 }
 
 // the lines of a canvas as they are drawn, for routeOverlapListGet: an end is known by
-// its node and handle
-const endKeyOf = (endpoint) => (endpointIsDangling(endpoint) ? '' : `${endpoint.nodeId}/${endpoint.handleId}`);
-
-export function diagramCanvasLineListGet(edgeGeometry, connectionList) {
+// its node and handle, or by its place on the mark of a node drawn simple (endpointKeyOf).
+// nodeList: the nodes of the graph drawn
+export function diagramCanvasLineListGet(edgeGeometry, connectionList, nodeList = []) {
+	const nodeById = new Map(nodeList.map((node) => [node.id, node]));
 	return connectionList.flatMap((connection) => {
 		const d = edgeGeometry?.get(connection.id)?.d;
-		return d ? [{ id: connection.id, d, sourceKey: endKeyOf(connection.source), targetKey: endKeyOf(connection.target) }] : [];
+		return d ? [{ id: connection.id, d, sourceKey: endpointKeyOf(connection.source, nodeById.get(connection.source?.nodeId)), targetKey: endpointKeyOf(connection.target, nodeById.get(connection.target?.nodeId)) }] : [];
 	});
 }
 

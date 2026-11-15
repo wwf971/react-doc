@@ -8,5 +8,7 @@ sidePanelById:
         text: First use
       - doc: ~aws-utils/doc/storage-contract.md
         text: Storage contract
+      - doc: ~aws-utils/doc/storage-architecture.md
+        text: Storage architecture
       - doc: ~aws-utils/doc/auth-contract.md
         text: Auth contract

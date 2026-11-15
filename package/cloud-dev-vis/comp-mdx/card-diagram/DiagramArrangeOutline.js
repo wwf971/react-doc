@@ -1,5 +1,6 @@
 import { lineTypeOfConnection } from './DiagramArrange.js';
 import { routeTypeIsRightAngle } from './DiagramRoute.js';
+import { CARD_SIMPLE_HEIGHT, CARD_SIMPLE_WIDTH, cardSimpleHandlePointOf, cardSimpleShapeOf } from './CardSimpleData.js';
 
 // The outline arranger (card-diagram-arrange.md#the-outline-arranger): a graph read downward in a
 // narrow place. Its nodes stand one under another, each on a row of its own, indented by a level
@@ -29,19 +30,29 @@ const LANE_GAP = 10;
 const round = (value) => Math.round(value * 100) / 100;
 const isSide = (side) => side === 'left' || side === 'right';
 
-// where things are, from what the data says alone: the written size of a node (else the default
-// of its kind), a handle on the side of its anchor's rectangle
+// whether a node of authored data is drawn simple (card-diagram-impl.md#the-display-of-a-node):
+// written on it, else the default of the diagram, for a kind that has a simple display
+export function nodeIsSimple(diagram, node, contract) {
+	if (!contract?.simple) return false;
+	return (node.display ?? diagram.defaults?.node?.display) === 'simple';
+}
+
+// where things are, from what the data says alone: the written size of a node (else what its
+// kind estimates for its content, contract.sizeEstimate, else its default), a handle on the side
+// of its anchor's rectangle. a node drawn simple has its size, and every handle on its mark
 export function diagramGeometryEstimateBuild(diagram, { registry, positionFallback = { x: 0, y: 0 } } = {}) {
 	const nodeById = new Map((diagram.nodes ?? []).map((node) => [node.id, node]));
 	const contractOf = (node) => registry?.kindByType?.[node.renderer?.type]?.contract;
 	const rectOf = (nodeId) => {
 		const node = nodeById.get(nodeId);
 		if (!node) return null;
+		const contract = contractOf(node);
 		const position = node.position && node.position !== 'auto' ? node.position : positionFallback;
-		const sizeDefault = { width: 220, height: 100, ...contractOf(node)?.sizeDefault };
+		const isSimple = nodeIsSimple(diagram, node, contract);
+		const sizeDefault = isSimple ? { width: contract.simple.width ?? CARD_SIMPLE_WIDTH, height: CARD_SIMPLE_HEIGHT } : { width: 220, height: 100, ...contract?.sizeDefault, ...contract?.sizeEstimate?.(node) };
 		const width = typeof node.size?.width === 'number' ? node.size.width : sizeDefault.width;
 		const height = typeof node.size?.height === 'number' ? node.size.height : sizeDefault.height;
-		return { x: position.x, y: position.y, width, height, isBackground: contractOf(node)?.isBackground === true };
+		return { x: position.x, y: position.y, width, height, isBackground: contract?.isBackground === true };
 	};
 	const endOf = (connection, role) => {
 		const endpoint = connection[role];
@@ -50,7 +61,9 @@ export function diagramGeometryEstimateBuild(diagram, { registry, positionFallba
 		const rectNode = node ? rectOf(node.id) : null;
 		if (!handle || !rectNode) return null;
 		const { side = 'right', target = 'body', offset = 0.5 } = handle.anchor ?? {};
-		const rect = contractOf(node)?.anchorRectEstimate?.(node, target, rectNode) ?? rectNode;
+		const contract = contractOf(node);
+		if (nodeIsSimple(diagram, node, contract)) return { ...cardSimpleHandlePointOf(rectNode, node.size, side, offset, cardSimpleShapeOf(contract)), side };
+		const rect = contract?.anchorRectEstimate?.(node, target, rectNode) ?? rectNode;
 		if (side === 'top' || side === 'bottom') return { x: rect.x + rect.width * offset, y: side === 'top' ? rect.y : rect.y + rect.height, side };
 		return { x: side === 'left' ? rect.x : rect.x + rect.width, y: rect.y + rect.height * offset, side };
 	};

@@ -587,4 +587,4 @@ transitionList:                                  # absent: the states run as a c
 
 ## Reading and editing
 
-Reading writes nothing but the box the reader adjusted. The source of a block is edited as a yaml text. A diagram with a red bounding box is edited visually in a `CardDiagram` or a `DiagramER` block.
+Reading writes nothing but the box the reader adjusted. In edit mode a block is edited two ways: as its yaml text, or **Visual**, the default: a menu above the canvas chooses a scene, or one view of a scene, and its diagram opens in the visual editor of the framework, cards, lines, arrangers and history included. Another can be chosen at any time; what was done is kept, and Save writes every edited diagram into its place in the document, leaving the rest of the text and its comments as they were ([Editing a block of scenes](../../doc/card-diagram-flexible-switch.md#editing-a-block-of-scenes)). A block whose scenes are generated from data, such as `DiagramAwsArchitecture`, is edited as text only.

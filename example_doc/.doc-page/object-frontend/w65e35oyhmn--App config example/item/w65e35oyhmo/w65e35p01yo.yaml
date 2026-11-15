@@ -1,0 +1,4 @@
+name: App config example
+type: app-config.config
+description: the config of a made-up app, as two layers of the partition shared; the partition local is made by the first change a checkout makes
+metadata: {}

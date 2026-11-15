@@ -1,6 +1,6 @@
 import { lineTypeList, markerTypeList, endpointIsDangling } from './DiagramERData.js';
 import { cardSchemaGet, cardRowAnchorBuild } from './TableCardSchema.js';
-import { cardRowDisplayIdListOf, CARD_VIEW_MODE_LABEL, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown } from './TableCardData.js';
+import { cardRowDisplayIdListOf, CARD_VIEW_MODE_LABEL, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown, cardFooterIsShown, cardFooterTextOf } from './TableCardData.js';
 import { strokeDashList } from './DiagramEditStore.js';
 import { cardTabList, tabPathGet, pathLabelListGet, rowNameGet, selectionPathBuild } from './DiagramEditPath.js';
 import { routeAnchorPointGet, routeDirectionFacingList, routeEndPointGet, routeResolve, routeTypeHasAnchors, routeTypeIsBezier, ROUTE_DIRECTION_LIST } from './DiagramRoute.js';
@@ -67,16 +67,17 @@ export function cardModelBuild(editor) {
 		values: definition.values, valueLabels: definition.valueLabels, isSearchable: definition.isSearchable, isMultiline: definition.isMultiline,
 		set: value => change(() => setter(definition.id, value)),
 	});
-	const handleSection = (target, label, isAllowed) => {
+	const sideLabelOf = side => side[0].toUpperCase() + side.slice(1);
+	const handleSection = (target, label, isAllowed, sideList = ['left', 'right']) => {
 		if (!isAllowed) return null;
 		const handles = store.anchorHandleListGet(nodeId, target);
-		const propertyList = ['left', 'right'].map(side => ({
-			id: `handle-${side}`, label: `${side === 'left' ? 'Left' : 'Right'} handle`, kind: 'bool', value: handles.some(handle => handle.anchor.side === side),
+		const propertyList = sideList.map(side => ({
+			id: `handle-${side}`, label: `${sideLabelOf(side)} handle`, kind: 'bool', value: handles.some(handle => handle.anchor.side === side),
 			set: value => change(() => store.handleSideSet(nodeId, target, side, value, positionGet)),
 		}));
 		for (const handle of handles) {
 			propertyList.push({
-				id: `policy-${handle.id}`, label: `${handle.anchor.side === 'left' ? 'Left' : 'Right'} accepts`, kind: 'enum', value: handle.attachPolicy ?? 'multiple',
+				id: `policy-${handle.id}`, label: `${sideLabelOf(handle.anchor.side)} accepts`, kind: 'enum', value: handle.attachPolicy ?? 'multiple',
 				values: ['multiple', 'single'], valueLabels: { multiple: 'Many lines', single: 'One line' },
 				set: value => change(() => store.handleAttachPolicySet(nodeId, handle.id, value)),
 			});
@@ -369,6 +370,11 @@ export function cardModelBuild(editor) {
 			const sectionList = [];
 			const nodePropertyList = schema ? schema.nodePropertyList : [{ id: 'label', label: 'Label', kind: 'text' }, { id: 'description', label: 'Description', kind: 'text', isMultiline: true }];
 			sectionList.push({ id: 'node', label: schema?.labelNode ?? 'Node', propertyList: nodePropertyList.map(definition => propertyOf(definition, node.data, (id, value) => store.fieldSet(nodeId, null, id, value))), actionList: [] });
+			// detailed or simple (card-diagram-impl.md#the-display-of-a-node), for a kind that can be drawn simple
+			const displayProperty = store.kind === 'diagram' && store.registry?.kindByType[node.renderer?.type]?.contract.simple
+				? [{ id: 'nodeDisplay', label: 'Drawn as', kind: 'enum', value: store.nodeDisplayGet(nodeId), values: ['detailed', 'simple'], valueLabels: { detailed: 'Its card', simple: 'A simple mark' }, set: value => change(() => store.nodeDisplaySet(nodeId, value)) }]
+				: [];
+			if (displayProperty.length && !schema) sectionList.push({ id: 'display', label: 'Display', propertyList: displayProperty, actionList: [] });
 			if (schema) {
 				const viewCurrent = store.cardViewGet(nodeId);
 				const isChosen = Boolean(viewCurrent.rowDisplay);
@@ -376,6 +382,7 @@ export function cardModelBuild(editor) {
 				sectionList.push({
 					id: 'display', label: 'Display',
 					propertyList: [
+						...displayProperty,
 						...(node.data.viewList?.length > 1 ? [{ id: 'viewDefault', label: 'Default view', kind: 'enum', value: node.data.viewDefault ?? '', values: ['', ...viewList.map(view => view.id)], valueLabels: { '': 'The first', ...Object.fromEntries(viewList.map(view => [view.id, cardViewLabelOf(view)])) }, set: value => change(() => store.viewDefaultSet(nodeId, value || null)) }] : []),
 						{ id: 'viewSwitcher', label: 'View switcher', kind: 'bool', value: cardViewSwitcherIsShown(node.data), set: value => change(() => store.viewSwitcherShownSet(nodeId, value)) },
 						{ id: 'rowDisplayMode', label: `${schema.labelRowPlural} shown`, kind: 'enum', value: isChosen ? 'chosen' : 'all', values: ['all', 'chosen'], valueLabels: { all: 'All', chosen: 'Chosen' }, set: value => change(() => store.rowDisplaySet(nodeId, value === 'chosen' ? store.rowDisplayCurrentGet(nodeId) : null)) },
@@ -390,6 +397,17 @@ export function cardModelBuild(editor) {
 			}
 			const header = schema ? handleSection('header', 'Title handles', schema.isHeaderHandleAllowed(node.data)) : null;
 			if (header) sectionList.push(header);
+			// the footer: shown by itself, or because a line leaves the bottom of the card
+			if (schema && store.nodeDisplayGet(nodeId) !== 'simple') {
+				const isFooterWritten = node.data.footer !== undefined && node.data.footer !== false;
+				const isFooterNeeded = !isFooterWritten && cardFooterIsShown(node);
+				sectionList.push({ id: 'footer', label: 'Footer', propertyList: [
+					{ id: 'footer-shown', label: 'Shown', kind: 'bool', value: isFooterWritten || isFooterNeeded, isReadOnly: isFooterNeeded, set: value => change(() => store.cardFooterSet(nodeId, value)) },
+					...(isFooterWritten || isFooterNeeded ? [{ id: 'footer-text', label: 'Text', kind: 'text', value: cardFooterTextOf(node.data), set: value => change(() => store.fieldSet(nodeId, null, 'footer', value)) }] : []),
+				], note: isFooterNeeded ? 'Shown while a line leaves the bottom of the card.' : '', actionList: [] });
+				const footer = isFooterWritten || isFooterNeeded ? handleSection('footer', 'Footer handles', true, ['bottom', 'left', 'right']) : null;
+				if (footer) sectionList.push(footer);
+			}
 			if (store.kind === 'diagram') {
 				const isRemembered = Boolean(node.position && node.position !== 'auto');
 				sectionList.push({ id: 'position', label: 'Position', propertyList: [

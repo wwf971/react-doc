@@ -23,7 +23,7 @@ A `dataverse-table` card lists its columns with the fixed fields Key, Column, Lo
 
 ### Anchors
 
-A `dataverse-table` offers `body` and `column/<id>` (left and right); a `dataverse-choice` adds `header`, and its rows take no handles; a resource card offers `header` and `property/<id>` on every side. The title line of a table is not an anchor of its own, though a line to the table as a whole [is drawn there](card-diagram-impl.md#handles-and-anchors).
+A `dataverse-table` offers `body` and `column/<id>` (left and right); a `dataverse-choice` adds `header`, and its rows take no handles; a resource card offers `header` and `property/<id>` on every side. The title line of a table is not an anchor of its own, though a line to the table as a whole [is drawn there](card-diagram-impl.md#handles-and-anchors). Each of these cards also has the `footer` of every card: a line leaving it at the bottom leaves the strip under its rows, not its last column ([the footer](card-diagram-usage.md#lines-out-of-the-bottom-of-a-card-the-footer)).
 
 ## Power Platform Resource Nodes
 
@@ -43,7 +43,7 @@ invalid enum values and duplicate property IDs are rejected. Anchors are
 direction, side, endpoint, and label rules. No runtime execution order is
 inferred from card placement: label branches and run-after conditions explicitly.
 
-Files for each resource share a prefix: `PowerAutomateNode*` and `BusinessRuleNode*` contain its card (the resource card of the base series with an icon and an accent color), its fields and validation, and its starting text. The kinds themselves (contract, schema, card, create entry) are declared in `power-platform-node-registry.js`. See [Power Platform diagrams](../comp-mdx/power-platform/comp-powerplatform.md) for complete examples and design-specific caveats.
+Every kind of the series can be [drawn simple](card-diagram-impl.md#the-display-of-a-node), for an overview: a tile with its icon, in its tone for a table or a choice, in the accent of its family for a flow step or a rule. Files for each resource share a prefix: `PowerAutomateNode*` and `BusinessRuleNode*` contain its card (the resource card of the base series with an icon and an accent color), its fields and validation, and its starting text. The kinds themselves (contract, schema, card, create entry) are declared in `power-platform-node-registry.js`. See [Power Platform diagrams](../comp-mdx/power-platform/comp-powerplatform.md) for complete examples and design-specific caveats.
 
 ## Mapping Operators
 

@@ -1,0 +1,8 @@
+label: Base
+order: 0
+value:
+  view:
+    theme: light
+    title: Team workspace
+  plan:
+    rangeCount: 32

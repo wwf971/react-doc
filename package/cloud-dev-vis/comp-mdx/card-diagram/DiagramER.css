@@ -1,14 +1,14 @@
 /* its edge is drawn over it (::before) and takes no room, so the box its columns are placed in
    (its padding box) is the box of its node: a column authored at x, this wide, ends at x + width
    of the node, the last one at its right edge, not past a border */
-.doc-color-block { --doc-color-block-edge: #cbd5e1; --doc-color-block-edge-width: 1px; box-sizing: border-box; width: 100%; height: 100%; display: flex; align-items: flex-end; padding: 14px 16px; border-radius: 4px; background: #f1f5f9cc; color: #475569; }
+.doc-color-block { --doc-color-block-edge: #cbd5e1; --doc-color-block-edge-width: 1.5px; box-sizing: border-box; width: 100%; height: 100%; display: flex; align-items: flex-end; padding: 12px 14px; border-radius: 12px; background: #f1f5f999; color: #475569; }
 .doc-color-block::before { content: ""; position: absolute; inset: 0; border: var(--doc-color-block-edge-width) solid var(--doc-color-block-edge); border-radius: inherit; pointer-events: none; }
-.doc-color-block[data-tone="blue"] { background: #eff6ffcc; --doc-color-block-edge: #bfdbfe; color: #1e40af; }
-.doc-color-block[data-tone="teal"] { background: #f0fdfacc; --doc-color-block-edge: #99f6e4; color: #115e59; }
-.doc-color-block[data-tone="green"] { background: #f0fdf4cc; --doc-color-block-edge: #bbf7d0; color: #166534; }
-.doc-color-block[data-tone="amber"] { background: #fffbebcc; --doc-color-block-edge: #fde68a; color: #92400e; }
-.doc-color-block[data-tone="red"] { background: #fff1f2cc; --doc-color-block-edge: #fecdd3; color: #9f1239; }
-.doc-color-block[data-tone="violet"] { background: #f5f3ffcc; --doc-color-block-edge: #ddd6fe; color: #5b21b6; }
+.doc-color-block[data-tone="blue"] { background: #eff6ff99; --doc-color-block-edge: #93c5fd; color: #1e40af; }
+.doc-color-block[data-tone="teal"] { background: #f0fdfa99; --doc-color-block-edge: #5eead4; color: #115e59; }
+.doc-color-block[data-tone="green"] { background: #f0fdf499; --doc-color-block-edge: #86efac; color: #166534; }
+.doc-color-block[data-tone="amber"] { background: #fffbeb99; --doc-color-block-edge: #fcd34d; color: #92400e; }
+.doc-color-block[data-tone="red"] { background: #fff1f299; --doc-color-block-edge: #fda4af; color: #9f1239; }
+.doc-color-block[data-tone="violet"] { background: #f5f3ff99; --doc-color-block-edge: #c4b5fd; color: #5b21b6; }
 /* fill: none, a frame around a group: no tint, an edge in the color of its labels */
 /* on a dark page the tints are those of the tone over the dark, and the words light */
 .dark .doc-color-block { --doc-color-block-edge: color-mix(in srgb, #64748b 45%, transparent); background: color-mix(in srgb, #64748b 12%, transparent); color: #cbd5e1; }
@@ -20,7 +20,7 @@
 .dark .doc-color-block[data-tone="violet"] { --doc-color-block-edge: color-mix(in srgb, #8b5cf6 45%, transparent); background: color-mix(in srgb, #8b5cf6 12%, transparent); color: #c4b5fd; }
 .doc-color-block[data-fill="none"], .dark .doc-color-block[data-fill="none"] { --doc-color-block-edge: color-mix(in srgb, currentColor 55%, transparent); --doc-color-block-edge-width: 1.5px; background: none; border-radius: 8px; }
 .doc-color-block-labels { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 16px; width: 100%; min-width: 0; }
-.doc-color-block-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; font-size: 13px; font-weight: 600; }
+.doc-color-block-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; font-size: 12px; font-weight: 600; }
 .doc-color-block-label > svg { flex: none; }
 .doc-color-block[data-label-side="top"] { align-items: flex-start; }
 .doc-color-block[data-label-side="top"] .doc-color-block-labels { justify-content: flex-start; }
@@ -104,10 +104,10 @@
 	width: 100%;
 	box-sizing: border-box;
 	overflow: visible;
-	border: 1px solid color-mix(in srgb, var(--color-fd-foreground) 24%, var(--color-fd-border));
-	border-radius: 0.45rem;
+	border: 1px solid color-mix(in srgb, var(--color-fd-foreground) 15%, var(--color-fd-border));
+	border-radius: 0.7rem;
 	background: var(--color-fd-background);
-	box-shadow: 0 4px 14px rgb(15 23 42 / 9%);
+	box-shadow: 0 1px 2px rgb(15 23 42 / 6%), 0 2px 8px rgb(15 23 42 / 4%);
 	color: var(--color-fd-foreground);
 	font-family: ui-sans-serif, system-ui, sans-serif;
 }
@@ -512,12 +512,14 @@
 
 .doc-er-diagram-flow .react-flow__edge-textbg {
 	fill: var(--color-fd-background);
-	stroke: var(--color-fd-border);
-	stroke-width: 1px;
+	fill-opacity: 0.9;
+	stroke: none;
 }
 
 .doc-er-diagram-flow .react-flow__edge-text {
-	fill: var(--color-fd-foreground);
+	fill: color-mix(in srgb, var(--color-fd-foreground) 62%, var(--color-fd-muted-foreground));
+	font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+	letter-spacing: 0.04em;
 }
 
 .doc-er-diagram-flow .react-flow__controls {
@@ -641,9 +643,9 @@
 	display: grid;
 	gap: 0.1rem;
 	padding: 0.25rem 0.5rem;
-	border: 1px solid color-mix(in srgb, var(--doc-card-accent, #64748b) 60%, var(--color-fd-border));
-	border-radius: 0.3rem;
-	background: color-mix(in srgb, var(--doc-card-accent, #64748b) 14%, var(--color-fd-background));
+	border: 1px solid color-mix(in srgb, var(--doc-card-accent, #64748b) 42%, var(--color-fd-border));
+	border-radius: 0.55rem;
+	background: color-mix(in srgb, var(--doc-card-accent, #64748b) 8%, var(--color-fd-background));
 	color: var(--color-fd-foreground);
 	font-size: 0.64rem;
 	line-height: 1.25;
@@ -758,6 +760,16 @@
 .doc-card-matrix-cell.is-diagonal { background: color-mix(in srgb, var(--color-fd-muted) 55%, transparent); }
 .doc-card-matrix-dot { display: inline-block; width: 0.5rem; height: 0.5rem; border-radius: 999px; background: var(--doc-card-matrix-accent); vertical-align: middle; }
 .doc-card-matrix-mark { position: absolute; left: calc(50% + 0.4rem); top: 50%; transform: translateY(-50%); color: var(--doc-card-matrix-accent); font-size: 0.58rem; font-weight: 700; line-height: 1; }
+.doc-card-matrix-cell[data-tone] { --doc-card-matrix-cell-tone: var(--doc-card-matrix-accent); background: color-mix(in srgb, var(--doc-card-matrix-cell-tone) 24%, transparent); }
+.doc-card-matrix-cell[data-tone] .doc-card-matrix-dot { background: var(--doc-card-matrix-cell-tone); }
+.doc-card-matrix-cell[data-tone] .doc-card-matrix-mark { color: var(--doc-card-matrix-cell-tone); }
+.doc-card-matrix-cell[data-tone='blue'] { --doc-card-matrix-cell-tone: #2563eb; }
+.doc-card-matrix-cell[data-tone='teal'] { --doc-card-matrix-cell-tone: #0d9488; }
+.doc-card-matrix-cell[data-tone='green'] { --doc-card-matrix-cell-tone: #16a34a; }
+.doc-card-matrix-cell[data-tone='amber'] { --doc-card-matrix-cell-tone: #d97706; }
+.doc-card-matrix-cell[data-tone='red'] { --doc-card-matrix-cell-tone: #dc2626; }
+.doc-card-matrix-cell[data-tone='violet'] { --doc-card-matrix-cell-tone: #7c3aed; }
+.doc-card-matrix-cell[data-tone='slate'] { --doc-card-matrix-cell-tone: #94a3b8; }
 /* where the pointer is: its row and its column, what a matrix is read by */
 .doc-card-matrix-table tbody tr:hover > * { background: color-mix(in srgb, var(--doc-card-matrix-accent) 7%, transparent); }
 .doc-card-matrix-cell:hover::before { content: ''; position: absolute; left: 0; right: 0; top: -2000px; bottom: -2000px; background: color-mix(in srgb, var(--doc-card-matrix-accent) 7%, transparent); pointer-events: none; }
@@ -876,11 +888,33 @@ div.doc-diagram-search-bar {
 	left: 0;
 	top: 0;
 	padding: 0 0.3rem;
-	border-radius: 0.3rem;
-	background: var(--color-fd-background);
+	border-radius: 0.2rem;
+	background: color-mix(in srgb, var(--color-fd-background) 90%, transparent);
 	color: var(--color-fd-muted-foreground);
+	font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+	letter-spacing: 0.04em;
 	font-size: 0.62rem;
 	line-height: 1.5;
 	white-space: nowrap;
 	pointer-events: none;
 }
+
+/* the footer of a card (TableCard.jsx): a strip under its rows, where a line leaving the bottom of
+   the card leaves from; a few muted words of its own when it has them */
+.doc-card-footer {
+	position: relative;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	min-height: 23px;
+	padding: 0.15rem 0.75rem;
+	border-top: 1px solid var(--color-fd-border);
+	border-radius: 0 0 0.7rem 0.7rem;
+	background: color-mix(in srgb, var(--color-fd-muted) 55%, transparent);
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.66rem;
+	line-height: 1.3;
+}
+.doc-card-footer.is-selected { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-fd-primary) 45%, transparent); }
+.doc-resource-card .doc-card-footer { background: color-mix(in srgb, var(--resource-accent) 7%, var(--color-fd-background)); }
+.doc-card-footer-text { min-width: 0; overflow-wrap: anywhere; }

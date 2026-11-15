@@ -83,7 +83,7 @@ class DiagramERStore {
 				pointNodes.push({ id, type: 'visualizationPoint', position: { ...endpoint.position }, draggable: false, selectable: false, focusable: false, connectable: false, style: { width: 1, height: 1 }, data: { connectionId: connection.id, role } });
 				return { node: id, handle: 'end' };
 			};
-			const marker = value => value === 'none' ? undefined : { type: value === 'arrow' ? MarkerType.Arrow : MarkerType.ArrowClosed, width: 16, height: 16 };
+			const marker = value => value === 'none' ? undefined : { type: value === 'arrow' ? MarkerType.Arrow : MarkerType.ArrowClosed, width: 13, height: 13 };
 			this.edgeList = this.graph.connections.map(connection => {
 				const source = endpointNode(connection, 'source');
 				const target = endpointNode(connection, 'target');

@@ -7,6 +7,10 @@ import { cardSchemaGet } from './TableCardSchema.js';
 import { endpointIsDangling, handleAnchorDrawnOf } from './DiagramERData.js';
 import { routeIsEmpty, routeResolve, routeTypeHasAnchors } from './DiagramRoute.js';
 import { DiagramRouteControls } from './DiagramRouteControls.jsx';
+import { CardSimple } from './CardSimple.jsx';
+import { anchorPointOnOutline } from './CardSimpleData.js';
+import { CARD_FOOTER_ANCHOR } from './TableCardSchema.js';
+import { cardFooterIsShown } from './TableCardData.js';
 
 // what every node and edge of a canvas shares: the component config, the
 // node registry of the component (registry, node-registry.js: the card of
@@ -75,18 +79,18 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 				// a row left out by rowDisplay has no anchor drawn, which matters only if a handle is on it
 				// a card of many views draws other rows in each: a handle on a row not drawn now stands on the side of the card
 				const isViewed = Boolean(node.data?.viewList?.length);
-				const isAnchorNeeded = anchor => !isViewed && (!node.data?.rowDisplay || node.handles.some(handle => handle.anchor.target === anchor.id));
+				// a node drawn simple draws its mark alone: every handle stands on it (handleAnchorDrawnOf)
+				// the footer of a card is drawn only while it is shown (cardFooterIsShown)
+				const isAnchorNeeded = anchor => node.display !== 'simple' && !isViewed && (anchor.id !== CARD_FOOTER_ANCHOR || cardFooterIsShown(node)) && (!node.data?.rowDisplay || node.handles.some(handle => handle.anchor.target === anchor.id));
 				const missing = node.anchors.filter(anchor => anchor.id !== 'body' && !anchors.current.has(anchor.id) && isAnchorNeeded(anchor)).map(anchor => anchor.id);
 				const handles = node.handles.flatMap(handle => {
 					const anchorDrawn = handleAnchorDrawnOf(node, handle);
 					const target = anchorDrawn === 'body' ? element : anchors.current.get(anchorDrawn) ?? (isViewed || anchorDrawn !== handle.anchor.target ? element : null);
 					if (!target) return [];
 					observer.observe(target);
-					const rect = target.getBoundingClientRect();
-					const { side, offset } = handle.anchor;
-					const horizontal = side === 'top' || side === 'bottom';
-					const left = ((horizontal ? rect.left + rect.width * offset : side === 'left' ? rect.left : rect.right) - bounds.left) / scale;
-					const top = ((horizontal ? side === 'top' ? rect.top : rect.bottom : rect.top + rect.height * offset) - bounds.top) / scale;
+					const point = handlePointMeasure(target, handle.anchor);
+					const left = (point.x - bounds.left) / scale;
+					const top = (point.y - bounds.top) / scale;
 					return [{ ...handle, left, top, isHidden: top < 0 || top > element.offsetHeight || left < -1 || left > element.offsetWidth + 1 }];
 				});
 				geometrySet(previous => JSON.stringify(previous) === JSON.stringify({ handles, missing }) ? previous : { handles, missing });
@@ -129,11 +133,22 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 	);
 });
 
+// where a handle is drawn on the element of its anchor, in the coordinates of the page: on its
+// side at its offset, on the outline the element declares (data-anchor-outline: ellipse,
+// cylinder), so a line ends where it touches a round mark (CardSimpleData.js)
+export function handlePointMeasure(element, anchor) {
+	const rect = element.getBoundingClientRect();
+	return anchorPointOnOutline({ left: rect.left, top: rect.top, width: rect.width, height: rect.height }, anchor.side, anchor.offset, element.dataset?.anchorOutline);
+}
+
 // the content of a node: a registered component (renderer.component), or the
-// card of its kind in the node registry of the component
+// card of its kind in the node registry of the component; drawn simple, the mark every kind
+// with a simple display shares (CardSimple.jsx)
 export const DiagramNodeContent = observer(function DiagramNodeContent({ id, node, config, registry, editor, anchorRef, visualization }) {
 	if (node.renderer.component) return <RegisteredComp compName={node.renderer.component} placement="visualizationNode" input={{ data: node.data }} configRuntime={{ ...config, instanceId: `${config.instanceId ?? 'diagram'}:node:${id}`, isEdit: false, visualization }} />;
-	const Card = registry?.kindByType[node.renderer.type]?.Card;
+	const kind = registry?.kindByType[node.renderer.type];
+	if (node.display === 'simple' && kind?.contract.simple) return <CardSimple node={node} contract={kind.contract} anchorRef={anchorRef} nodeId={id} editor={editor} />;
+	const Card = kind?.Card;
 	if (!Card) return <div className="doc-vis-node-error" role="alert">No card draws a {node.renderer.type} node.</div>;
 	return <Card node={node} schema={cardSchemaGet(node, registry)} anchorRef={anchorRef} editor={editor} nodeId={id} />;
 });
@@ -221,7 +236,7 @@ export const DiagramEdge = observer(function DiagramEdge(props) {
 		{isSelected ? <path d={pathValue} fill="none" className="doc-vis-edge-selection" pointerEvents="none" /> : null}
 		<BaseEdge id={props.id} path={pathValue} markerStart={props.markerStart} markerEnd={props.markerEnd} style={connection.style} interactionWidth={props.interactionWidth ?? 24}
 			label={connection.label.text} labelX={labelPoint?.x ?? (props.sourceX + props.targetX) / 2} labelY={labelPoint?.y ?? (props.sourceY + props.targetY) / 2}
-			labelStyle={{ fontSize: 11, fontWeight: 650 }} labelBgPadding={[6, 3]} labelBgBorderRadius={3}
+			labelStyle={{ fontSize: 10.5, fontWeight: 500 }} labelBgPadding={[4, 2]} labelBgBorderRadius={3}
 			labelBgStyle={searchState ? { fill: searchState === 'current' ? 'rgb(249 115 22 / 55%)' : 'rgb(250 204 21 / 55%)' } : undefined} />
 		{ends}
 	</>;

@@ -1,0 +1,9 @@
+label: Team
+order: 10
+value:
+  view:
+    density: compact
+  plan:
+    rangeCount: 1000
+  layout:
+    side: 300

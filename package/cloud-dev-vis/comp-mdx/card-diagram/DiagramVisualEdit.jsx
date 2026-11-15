@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Plus, Undo2, Waypoints } from '../../../../main/frontend/UICommon.js';
+import { Plus, Shapes, Undo2, Waypoints } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve } from '../../../../main/comp-doc/registry/comp-registry.js';
 import { EditActions } from '../../../../main/comp-doc/edit/EditActions.jsx';
@@ -301,6 +301,10 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 				const reportList = store.arrangeApply(arranger, { geometry });
 				if (reportList?.length) store.message = reportList.map(item => item.message).join(' · ');
 			})}><Waypoints size={14} /></ActionMenu> : null}
+			{kind === 'diagram' && editor && registry?.kindList?.some(item => item.contract.simple) ? <ActionMenu label="Display: every node as its card, or as a simple mark" isLocked={isLocked} actionList={[
+				{ id: 'detailed', label: 'Every node as its card', title: 'The detailed display: each node is the card of its kind' },
+				{ id: 'simple', label: 'Every node as a simple mark', title: 'The simple display, for an overview: a mark with its name, the lines ending on it. Kinds without one keep their card' },
+			]} onAction={display => change(() => store.diagramDisplaySet(display))}><Shapes size={14} /></ActionMenu> : null}
 			{isFromAsset ? <span className="doc-vis-save-target">
 				<span>Save to</span>
 				<ValueMenu label="Save to" value={store.saveTarget} values={['asset', 'inline']} valueLabels={saveTargetLabels} isLocked={isLocked || !isAllowed} onChange={value => change(() => store.saveTargetSet(value))} />
