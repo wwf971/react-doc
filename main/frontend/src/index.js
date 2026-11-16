@@ -105,6 +105,8 @@ export { objectCellToken } from '../../comp-doc/object/object-cell.jsx';
 export {
   objectFrontendInnerRefBuild, objectFrontendRefBuild, objectFrontendRefSplit,
 } from './lib/doc-object-frontend.js';
+// a block's turn to mount what is heavy, one block per frame (#reading-many-assets)
+export { useObjectFrontendDrawTurn } from '../../comp-doc/object-frontend/use-object-frontend-draw-turn.js';
 // the unified api registry (doc_page_impl_api.md): a host defines apis and
 // hands them as config.apiById, a component exposes them (expose.apiList);
 // the command palette and the hotkeys run them

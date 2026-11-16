@@ -253,6 +253,32 @@ test('create: a folder of its own, the entry asset in item/, and object.yaml bes
   assert.equal(storeOf(dir).itemGet(entry.itemId).isDeleted, true);
 });
 
+test('an asset made of bytes: its media type, its extension, the metadata of its version and a storage preference', async () => {
+  const dir = fixtureCreate();
+  const middleware = middlewareCreate(dir);
+  const created = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/create', { docPageAlias: 'page', typeId: 'frontend.object', name: 'Files' });
+  assert.equal(created.body.code, 0, created.body.message);
+  const { id } = created.body.data;
+  const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff, 0x10]);
+  const asset = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/create', {
+    id, kind: 'blob', lang: '', dataBase64: bytes.toString('base64'), contentType: 'image/png', fileExt: 'png',
+    versionMetadata: { fileName: 'dot.png' }, storagePreference: 'objectStorage',
+  });
+  assert.equal(asset.body.code, 0, asset.body.message);
+  const meta = storeOf(dir).itemGet(asset.body.data.itemId);
+  assert.equal(meta.contentType, 'image/png');
+  assert.equal(meta.fileExt, 'png');
+  assert.equal(meta.storagePreference, 'objectStorage');
+  const dirItem = path.join(objectFolderOf(dir, `${id}--Files`), 'item', asset.body.data.itemId);
+  assert.deepEqual(fs.readFileSync(path.join(dirItem, `${meta.versionIdHead}.png`)), bytes);
+  assert.equal(yamlParse(fs.readFileSync(path.join(dirItem, 'item.yaml'), 'utf-8')).storagePreference, 'objectStorage', 'kept in item.yaml, to travel with the item');
+  assert.deepEqual(storeOf(dir).versionDataGet(asset.body.data.itemId).metadata, { fileName: 'dot.png' });
+  // a preference outside the two is refused before anything is written
+  const refused = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/asset/create', { id, kind: 'blob', lang: '', dataBase64: 'AA==', storagePreference: 'tape' });
+  assert.equal(refused.body.code, -1);
+  assert.match(refused.body.message, /storagePreference must be database, objectStorage or empty/);
+});
+
 test('an object deleted with its assets kept is an orphan entry, and listed again', async () => {
   const dir = fixtureCreate();
   const middleware = middlewareCreate(dir);

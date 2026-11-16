@@ -697,7 +697,8 @@
 .doc-card.is-compact .doc-er-table-column-header > span { line-height: 1.25; }
 
 /* the bounding box of a view: a red frame, never in a picture of the viewport */
-.react-flow__node:has(> .doc-vis-node > .doc-vis-node-content > .doc-vis-scene-box.is-hidden) { pointer-events: none; }
+/* React Flow sets pointer-events on the node inline: a hidden box over the cards must not take their clicks */
+.react-flow__node:has(> .doc-vis-node > .doc-vis-node-content > .doc-vis-scene-box.is-hidden) { pointer-events: none !important; }
 .doc-vis-node-content:has(> .doc-vis-scene-box) { overflow: visible; }
 .doc-vis-scene-box {
 	box-sizing: border-box;

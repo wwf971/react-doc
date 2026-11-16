@@ -74,7 +74,8 @@
 .doc-card-icon.is-focus .doc-card-icon-title { font-weight: 650; }
 .doc-card-icon-under { display: flex; min-width: 0; align-items: center; gap: 0.3rem; }
 .doc-card-icon-head { display: flex; min-width: 0; align-items: center; gap: 0.35rem; }
-.doc-card-icon.is-label-bottom .doc-card-icon-head { justify-content: center; }
+.doc-card-icon.is-label-bottom .doc-card-icon-head,
+.doc-card-icon.is-label-bottom .doc-card-icon-under { justify-content: center; }
 /* a word marking what sort of thing it is: small capitals in a dashed outline, the same wherever it is drawn */
 .doc-card-icon-badge { flex: none; padding: 0 0.28rem; border: 1px dashed color-mix(in srgb, var(--color-fd-muted-foreground) 70%, transparent); border-radius: 3px; color: var(--color-fd-muted-foreground); font-size: 0.56rem; font-weight: 650; letter-spacing: 0.06em; line-height: 1.45; text-transform: uppercase; white-space: nowrap; }
 .doc-card-icon-note { min-width: 0; overflow: hidden; color: var(--color-fd-muted-foreground); font-size: 0.68rem; line-height: 1.25; white-space: nowrap; text-overflow: ellipsis; }

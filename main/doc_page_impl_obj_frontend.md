@@ -511,8 +511,14 @@ config.objectFrontend                    the object and its api (getters: the co
   assetSearch(text), assetComplete(text) the assets found by words; the candidates completing a typed path
   assetTextGet(ref), assetDataGet(ref)   { status, message, text, asset, assetStatus } / { ..., data } of an asset's head
                                          (yaml read, shared: to be read, not changed); loaded on demand
-  assetCreate({ key?, kind?, name?, pathList?, partition?, groupPath?, lang?, text | data })   a new asset, in the
-                                         partition named or the default one: { code, data: { key, itemId } }
+  assetBytesGet(ref)                     Promise<{ code, message, data: { bytes, contentType, fileExt, size } }>: the bytes
+                                         of an asset's head (a file, an image), read when asked, wherever it is held; a
+                                         large one of a remote point is handed over without being kept by the page
+  assetCreate({ key?, kind?, name?, pathList?, partition?, groupPath?, lang?, text | data | bytes,
+               contentType?, fileExt?, versionMetadata?, storagePreference? })   a new asset, in the partition named or
+                                         the default one: { code, data: { key, itemId } }. bytes (a Uint8Array) make an
+                                         asset of a file, lang '' by default; storagePreference: database | objectStorage
+                                         (doc_page_impl_asset_storage.md#a-preference-of-where-bytes-are-kept)
   assetKindList                          what its type holds (#what-a-type-accepts); undefined: anything
   assetMove(ref, groupPath), assetGroupMove(from, to)   where an asset lies under item/; nothing else depends on it
   assetMetaSet(ref, { name?, pathList?, kind? })   how an asset is named and indexed

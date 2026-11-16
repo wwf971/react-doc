@@ -74,6 +74,7 @@ nobody is signed in
 
 - **The driver** (`comp-mdx/storage/aws-storage-driver.js`) is all this package adds to the storage layer: how each call of the item and partition api sets is sent to the service. The cache, the state of a partition, moving a partition and the settings tab are the layer's, the same for every remote type.
 - **What travels how.** Small data inside the request; a large version through a signed S3 url, straight between the browser and S3. The limits are the service's (`GET /status`).
+- **Where it is kept** is another thing: a row of the table or an object of the bucket, by the size, unless the item prefers one (`storagePreference: database | objectStorage`); each version says where its bytes went ([the contract](storage-contract.md#where-the-bytes-are-kept)). The drive of the package asset-service asks for object storage for large uploads.
 - **The panel of a point** (`AwsStoragePointPanel`, in the Asset service tab): the account at the service, the space of the point with what it holds, and the partitions of that space no object of the page reads, each restored or removed for good.
 
 Everything a request looks like is in [the storage contract](storage-contract.md).
@@ -117,13 +118,15 @@ The mode `admin` of an auth provider is the account console: a component a docum
 ```text
 Requests for an account     email, name, note        [Approve…] [Reject]
 Accounts                    user name, name, email, state, roles, MFA, created
-  the account chosen        [Edit…] [Disable | Enable] [Reset the password] [End sessions] [Turn off MFA] [Delete]
+  the account chosen        [Edit…] [Disable | Enable] [Reset the password] [End sessions] [Turn off MFA]
+                            [Require MFA… | Stop requiring MFA] [Delete]
 [New account…]              email, user name, name, roles   -> an invitation with a temporary password by email
 ```
 
 - **It works with the session its auth provider holds.** The console signs nobody in by itself: the account admin signs in through the same dialog of the same provider as everyone, MFA included, and the console asks the auth layer whether that session holds the role `account-admin`. With no session, or the session of another account, it shows one line saying that it needs the session of an account admin, and the way to sign in.
 - **An account admin is an account marked with a role**, kept where every account is kept; a provider may have several. On top of the role the account service asks for an authenticator app: an admin without one is offered to turn it on first, and from then on the code is asked at every sign-in.
 - **The console decides nothing.** Every change is a call of the account service, which checks the caller; a page that skipped the checks would be refused the same way.
+- **An account may be required to use MFA.** For an account that reaches what matters, the admin requires MFA of it: its sessions end, and our services serve it from then on only with a session that passed MFA, refusing an older one at its next request. An account without an authenticator app is told so in its session view, turns one on, and signs in again with its code ([the auth contract](auth-contract.md#an-account-that-must-use-mfa)). An account other programs sign in with by password alone cannot be required: those programs would be refused.
 - **An admin is not the root of anything.** It can change accounts and their roles in one user pool, through the narrow IAM role of the service, and holds no AWS credentials.
 
 ## The notebook

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { docPackageListLoad, docPackageSpecListRead } from './doc-package.ts';
+import { docPackageImportRead, docPackageListLoad, docPackageSpecListRead } from './doc-package.ts';
 import { compConfigOfDocPageListGet } from './doc-comp-config.ts';
 import { docSourcePlugin } from './doc-source.ts';
 
@@ -130,4 +130,25 @@ test('a workspace names its packages itself: config packageList goes with docEnt
   pluginWorkspace.configResolved({ command: 'serve', root: dir, base: '/' });
   const configDoc = JSON.parse(/^export let configDoc = (.*);$/m.exec(pluginWorkspace.load('\0virtual:doc-source'))[1]);
   assert.deepEqual(configDoc.packageList.map((item) => item.name), ['base', 'vis']);
+});
+
+test('a package imports a module of another by its name: @react-doc-package/{name}/{path}, resolved to the folder loaded', async () => {
+  assert.deepEqual(docPackageImportRead('@react-doc-package/cloud-dev-vis/comp-mdx/card-diagram/CardDiagram.jsx'), { name: 'cloud-dev-vis', subPath: 'comp-mdx/card-diagram/CardDiagram.jsx' });
+  assert.deepEqual(docPackageImportRead('@react-doc-package/base'), { name: 'base', subPath: '' });
+  assert.equal(docPackageImportRead('@wwf971/react-doc'), null);
+  assert.equal(docPackageImportRead('@react-doc-package/Base/x.js'), null, 'not a package name');
+  assert.equal(docPackageImportRead('@react-doc-package/base/../vis/x.js'), null, 'a sub path stays inside its package');
+
+  const dir = fixtureCreate();
+  fs.writeFileSync(path.join(dir, 'package/base/comp-mdx/card-util.js'), 'export const cardUtil = 1;\n');
+  const plugin = docSourcePlugin({ configFile: path.join(dir, 'config.yaml') });
+  plugin.configResolved({ command: 'serve', root: dir, base: '/' });
+  const context = {
+    resolve: async (id) => (fs.existsSync(id) ? { id } : null),
+    error: (message) => { throw new Error(message); },
+  };
+  const importer = path.join(dir, 'package/vis/comp-mdx/Flow.jsx');
+  assert.deepEqual(await plugin.resolveId.call(context, '@react-doc-package/base/comp-mdx/card-util.js', importer, {}), { id: path.join(dir, 'package/base/comp-mdx/card-util.js') });
+  await assert.rejects(() => plugin.resolveId.call(context, '@react-doc-package/nowhere/x.js', importer, {}), /no package "nowhere" is loaded by the workspace \(loaded: base, vis\)/);
+  await assert.rejects(() => plugin.resolveId.call(context, '@react-doc-package/base/missing.js', importer, {}), /has no missing.js/);
 });

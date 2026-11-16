@@ -45,16 +45,25 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
     // { status, message, data, asset, assetStatus } of an asset whose text is yaml (or json)
     // (parsed once per text and shared: to be read, not changed)
     assetDataGet: (assetRef) => objectFrontendStore.assetDataGet(ref, assetRef),
+    // Promise<{ code, message, data: { bytes, contentType, fileExt, size } }>: the bytes of an
+    // asset's head, read when asked (a download), wherever the asset is held
+    assetBytesGet: (assetRef) => objectFrontendStore.assetBytesGet(ref, assetRef),
     // a new asset: { key?, kind?, name?, pathList?, lang?, text } or { ..., data } (written as yaml),
     // placed in { partition?, groupPath? } (inside the partition; absent: the folder of its kind);
     // { code, data: { key, itemId } }. a path another asset has is refused
+    // or { ..., bytes } (a Uint8Array: a file), with { contentType?, fileExt?, versionMetadata?,
+    // storagePreference? } (database | objectStorage: where a storage with two places keeps them)
     assetCreate: (input) => objectFrontendStore.assetCreate(stateGet().id, {
       key: input.key,
       kind: input.kind,
       name: input.name,
       pathList: input.pathList,
-      lang: input.lang ?? 'yaml',
-      text: input.text ?? yamlStringify(input.data ?? {}),
+      lang: input.lang ?? (input.bytes ? '' : 'yaml'),
+      ...(input.bytes instanceof Uint8Array
+        ? { bytes: input.bytes, contentType: input.contentType, fileExt: input.fileExt }
+        : { text: input.text ?? yamlStringify(input.data ?? {}) }),
+      versionMetadata: input.versionMetadata,
+      storagePreference: input.storagePreference,
       note: input.note,
       groupPath: input.groupPath,
       partition: input.partition,

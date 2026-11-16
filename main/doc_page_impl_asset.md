@@ -45,6 +45,7 @@ An **item** is a key with metadata; under it, **versions**, each a sequence of b
 - `owner`: `{ ref, role? }`, the object the data is a part of, a reference of the [object registry](doc_page_impl_obj.md) (`frontend:{id}` for a [frontend object](doc_page_impl_obj_frontend.md#how-an-asset-comes-to-belong), with `role: entry` for its entry asset); absent for an object that stands alone. Like `component`, a declaration for recovery that the store never checks. Beside it, read from where the item was found and never written, `folderOwner` says whose folder holds it ([Folders owned by an object](#folders-owned-by-an-object)), and `storage`, `{ pointId, typeId }`, which storage point holds it ([asset storage](doc_page_impl_asset_storage.md)).
 - `versionIdHead`: the **head**, the version a reference without a version reads.
 - `saveMode`: what a save of the head does when the caller names no mode; see [Save modes](#save-modes).
+- `storagePreference`: `database` or `objectStorage`, where a storage with two places for bytes keeps those of the item; absent, the storage decides. The folders of a doc page have one place and only keep the key, so it travels with the item ([A preference of where bytes are kept](doc_page_impl_asset_storage.md#a-preference-of-where-bytes-are-kept)).
 - `isDeleted`, `isLocked`, `timeCreated`: the deletion mark, the item lock ([Locks](#locks)), and the one time the item was created.
 - `versionList`: the history, in the order the versions were made. A version records its id, time, note, the `size` and `hash` (sha1) of its bytes, the versions it was made from (`versionIdPrevList`), its own lock (`isLocked`), and what its data depends on (`dependencyList`, [Dependencies](#dependencies)). What the writer of a version's data says about that data is not here but in a file of the version ([Version metadata](#version-metadata)).
 - `eventList`: what happened to the item, in order; see [Events](#events).
@@ -159,7 +160,7 @@ The local store is one store with one id, but on disk it is one or more **folder
     │                         ({itemId} alone for an item without a name; ASCII only, so
     │                         of a name in another language only its ASCII parts:
     │                         doc_page_impl_dir.md#folder-names-of-assets; the name itself is in item.yaml)
-    ├── item.yaml           the item: itemId, name, lang, contentType, fileExt, component, owner and saveMode (when set),
+    ├── item.yaml           the item: itemId, name, lang, contentType, fileExt, component, owner, saveMode and storagePreference (when set),
     │                         versionIdHead, isDeleted, isLocked, timeCreated,
     │                         versionList [{ versionId, versionIdPrevList, time, note, size, hash, isLocked,
     │                                        dependencyList [{ type, path | itemId, versionId? }] }],
@@ -272,13 +273,13 @@ The file store (`plugin/doc-asset-store.ts`, `assetStoreCreate(config)`) is the 
 | `itemList()`                                             | metadata of every item of every folder, deleted ones included            |
 | `itemGet(itemId)` / `itemGetByName(name)` / `itemFind({ itemId, name })` | metadata of one item, by id, by name, or by whichever the key has |
 | `versionDataGet(itemId, versionId = 'head')` / `versionDataGetOf(meta, versionId)` | `{ versionId, bytes, size, hash, isText, text?, metadata }` of one version |
-| `itemCreate({ name, lang, contentType, fileExt, component, owner, saveMode, data, note, folder, groupPath, docPath, dependencyList, versionMetadata })` | a new item with its first version, in the folder named, else the default folder of the doc page of `docPath`, else the store's, with its component and save mode when given; `{ item, version, isCreated }`, the existing item and `isCreated: false` when the name is taken |
+| `itemCreate({ name, lang, contentType, fileExt, component, owner, saveMode, storagePreference, data, note, folder, groupPath, docPath, dependencyList, versionMetadata })` | a new item with its first version, in the folder named, else the default folder of the doc page of `docPath`, else the store's, with its component and save mode when given; `{ item, version, isCreated }`, the existing item and `isCreated: false` when the name is taken |
 | `itemUpdate({ itemId, hashBase, data, mode, note, dependencyList, versionMetadata })` | the head data; `mode` `inPlace` or `newVersion`, the item's save mode when absent; `dependencyList` and `versionMetadata` absent keep those of the version written over or made from |
 | `versionMetadataSet(itemId, versionId, metadata)`        | the metadata of one version replaced ([Version metadata](#version-metadata)); `{ item, version }` |
 | `dependencyListGet(itemId, versionId = 'head')` / `dependencyListSet(itemId, versionId, list)` / `dependencyAdd(…, dependency)` / `dependencyRemove(…, dependency)` | the dependencies of one version ([Dependencies](#dependencies)) |
 | `dependentListGet(itemId, versionId = '')`              | the versions of the store depending on the item, or on one version of it: `[{ itemId, versionId, dependency }]` |
 | `dependencySourcePathList()`                               | the source files the versions of the live items depend on, each once; what a build collects |
-| `itemMetaSet(itemId, { name, lang, contentType, component, owner, saveMode })` | the metadata a person chooses (`component: null`, `owner: null`, `saveMode: null` remove the key; a new name renames the folder, in its group, and must be free) |
+| `itemMetaSet(itemId, { name, lang, contentType, component, owner, saveMode, storagePreference })` | the metadata a person chooses (`component: null`, `owner: null`, `saveMode: null`, `storagePreference: ''` remove the key; a new name renames the folder, in its group, and must be free) |
 | `itemMove(itemId, { groupPath, folder?, asLayer? })` / `groupMove(folder, groupPathFrom, groupPathTo, { asLayer? })` | an item's folder moved into other groups, of its store folder or of another ([Moving an item](#moving-an-item)); a group renamed or moved whole ([Group folders](#group-folders)) |
 | `versionCheckout(itemId, versionId)`                     | moves the head                                                             |
 | `versionDelete(itemId, versionId)`                       | removes a version that is not the head; its children are relinked          |

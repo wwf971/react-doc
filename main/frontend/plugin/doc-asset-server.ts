@@ -73,7 +73,8 @@ import {
 //   POST {endpoint}/object-frontend/register     { docPageAlias, entry }        an orphan entry listed again
 //   POST {endpoint}/object-frontend/delete       { id, isAssetKept? }
 //   POST {endpoint}/object-frontend/meta/set     { id, name?, description?, typeId?, metadata? }
-//   POST {endpoint}/object-frontend/asset/create { id, key?, kind?, name?, pathList?, lang?, text, note?, saveMode? }  (+ key, itemId)
+//   POST {endpoint}/object-frontend/asset/create { id, key?, kind?, name?, pathList?, lang?, text | dataBase64, contentType?, fileExt?,
+//                                                 versionMetadata?, storagePreference?, note?, saveMode? }  (+ key, itemId)
 //   POST {endpoint}/object-frontend/asset/meta/set { id, key, name?, pathList?, kind? }   how an asset is named and indexed
 //   POST {endpoint}/object-frontend/asset/remove { id, key | itemId, isAssetKept? }
 //   POST {endpoint}/object-frontend/asset/attach { id, itemId, key?, kind?, name?, pathList? }
@@ -283,6 +284,7 @@ async function routeHandle(
         docPath: body?.docPath ? String(body.docPath) : undefined,
         dependencyList: body?.dependencyList,
         saveMode: body?.saveMode,
+        storagePreference: body?.storagePreference,
         versionMetadata: body?.versionMetadata,
         component: body?.component,
         groupPath: body?.groupPath ? String(body.groupPath) : undefined,
@@ -348,6 +350,7 @@ async function routeHandle(
           lang: body?.lang,
           contentType: body?.contentType,
           saveMode: body?.saveMode,
+          storagePreference: body?.storagePreference,
           component: body?.component,
           owner: body?.owner,
         }),

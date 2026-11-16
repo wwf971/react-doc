@@ -185,3 +185,23 @@ export function docPackageRead(dir: string, place: string, searchDirList: string
 export function docPackageCompFolderGet(loaded: Pick<DocPackageLoaded, 'dir'>): string {
   return path.join(loaded.dir, PACKAGE_COMP_FOLDER_NAME);
 }
+
+// A module of one package imported by another package by its name, wherever the two lie
+// (main/doc_page_impl_package.md#imports-between-modules):
+//   import { SwitchViewport } from '@react-doc-package/cloud-dev-vis/comp-mdx/card-diagram-switch/CardDiagramSwitch.jsx';
+// the plugin resolves it to that file of the package of that name the workspace loaded, so a
+// package outside the folder of react-doc (its own repository) needs no relative path into
+// another checkout. answers { name, subPath } of such a specifier, or null for any other
+export const PACKAGE_IMPORT_PREFIX = '@react-doc-package/';
+
+export function docPackageImportRead(specifier: string): { name: string; subPath: string } | null {
+  if (!specifier.startsWith(PACKAGE_IMPORT_PREFIX)) return null;
+  const rest = specifier.slice(PACKAGE_IMPORT_PREFIX.length).split('?')[0];
+  const slash = rest.indexOf('/');
+  const name = slash < 0 ? rest : rest.slice(0, slash);
+  const subPath = slash < 0 ? '' : rest.slice(slash + 1);
+  if (!PACKAGE_NAME_REGEX.test(name)) return null;
+  // a sub path stays inside its package: no segment climbs out of it
+  if (subPath.split('/').some((segment) => segment === '..')) return null;
+  return { name, subPath };
+}

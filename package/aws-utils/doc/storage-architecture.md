@@ -132,7 +132,8 @@ groupList:
       - {id: lambda_function, title: lambda_function.py, tag: the door, text: 'event of api gateway to request to
           http response; a second catch-all: a body not json 400, the service not made 500', tone: amber}
       - {id: storage_db, title: storage_db.py, tag: thin, text: 'the table: get, query, transact', tone: blue}
-      - {id: storage_s3, title: storage_s3.py, tag: thin, text: 'the bucket: put, copy, delete, signed urls', tone: blue}
+      - {id: storage_s3, title: storage_s3.py, tag: thin, text: 'the bucket: get, put, copy, delete, signed urls',
+        tone: blue}
       - {id: storage_service, title: storage_service.py, tag: every route, text: 'request(): the only place an answer
           is made; anything unforeseen 500. The transactions', tone: amber}
       - {id: time_text, title: time_text.py, tag: pure, text: the time text 20261020_18495741+09, tone: green}
@@ -234,11 +235,12 @@ groupList:
         - {name: itemId, type: S, holds: its item}
         - {name: order, type: N, holds: its place in the list}
       - id: bytes
-        name: small bytes
+        name: bytes in a row
         pk: p#{spaceId}#{partitionId}
         sk: d#{dataId}
         column: 2
-        description: a blob that is a row; a larger one is an object of the bucket
+        description: 'a blob kept in the database: as the storagePreference of the item wishes, up to dataRowAutoMax
+          without one; the others are objects of the bucket'
         attributes:
         - {name: data, type: B, holds: a version up to dataInlineMax}
       linkList:
@@ -247,7 +249,7 @@ groupList:
       - {from: identity.partitionId, to: partition, label: 'p#{partitionId}'}
       - {from: item.recordKey, to: record, label: 'r#{key}'}
       - {from: record.itemId, to: item, label: 'i#{itemId}'}
-      - {from: item.itemJson, to: bytes, label: small versions}
+      - {from: item.itemJson, to: bytes, label: versions kept in a row}
   - id: bucket
     kind: aws-s3-bucket
     name: '{prefix}--data'
@@ -255,17 +257,17 @@ groupList:
       access: 'private: signed urls'
       versioning: 'off'
       properties:
-      - {id: data, name: data/, value: the bytes of large versions}
+      - {id: data, name: data/, value: the bytes kept in object storage}
       - {id: upload, name: upload/, value: 'bytes on their way: 1 day'}
       - {id: temp, name: temp/, value: 'copies for dataUrl: 1 day'}
     detail:
       partList:
-      - {id: data, title: 'data/{spaceId}/{partitionId}/{dataId}', text: 'the bytes of one large version, named
-          by a write. Kept', tone: green}
+      - {id: data, title: 'data/{spaceId}/{partitionId}/{dataId}', text: 'the bytes of one version kept in object
+          storage, named by a write. Kept', tone: green}
       - {id: upload, title: 'upload/{spaceId}/{partitionId}/{uploadId}', text: 'bytes on their way: PUT by the page,
           not yet named by a write', tone: amber}
-      - {id: temp, title: 'temp/{spaceId}/{partitionId}/{dataId}', text: 'a copy of a small version, made to answer
-          it as dataUrl', tone: amber}
+      - {id: temp, title: 'temp/{spaceId}/{partitionId}/{dataId}', text: 'a copy of a version kept in a row, made
+          to answer it as dataUrl', tone: amber}
       - {id: lifecycle, title: Lifecycle, tag: upload_keep_day, text: 'removes what is under upload/ and temp/ after
           1 day, and an unfinished multipart upload', tone: red}
       linkList:
@@ -320,7 +322,7 @@ groupList:
     - {from: function, to: auth.userTable, label: subject to user id}
     - {from: function, to: table, label: 'read r, then one transaction'}
     note: {title: One transaction, text: 'the partition row: revision r + 1, on the condition revision = r; the
-        item, the record, small bytes; the counters. The condition failed: read again, up to 8 times', tone: blue}
+        item, the record, bytes kept in a row; the counters. The condition failed: read again, up to 8 times', tone: blue}
   - id: upload
     label: Large data
     title: 'Large data: a signed url, past the function'
@@ -330,7 +332,7 @@ groupList:
     - {from: function, to: bucket, label: 'a PUT url, signed for its size'}
     - {from: page, to: bucket, label: PUT the bytes}
     - {from: page, to: api, label: 'item/update, uploadId'}
-    - {from: function, to: bucket, label: 'read once, copy to data/'}
+    - {from: function, to: bucket, label: 'read once; kept in a row, or copied to data/'}
     - {from: function, to: table, label: the transaction names it}
   - id: deploy
     label: Deploy

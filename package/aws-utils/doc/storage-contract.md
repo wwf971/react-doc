@@ -69,8 +69,8 @@ Nothing secret is written in the file: the url and the reference are public, and
 | `-2` | 409 | the data changed since the caller read it (`hashBase` does not match) |
 | `-1` | 500, 503 | the service itself failed, whatever was asked. `503`: a write that could not get past the writes of others; sending it again is right |
 | `-3` | 404 | no such space, partition, item, version or record; no such route, or a route asked with the other method |
-| `-7` | 401 | no token, or one the service does not accept |
-| `-8` | 403 | the token is good, and the account may not do this: it is disabled, it lacks the group the service asks for, or the space is not its own. `data.reason` says which: `accountDisabled`, `groupRequired`, `spaceForbidden` (kept for shared spaces: never answered while a space belongs to one account) |
+| `-7` | 401 | no token, or one the service does not accept; `data.reason: mfaSignInRequired` for a session of an account that must use MFA and began before it could ([the auth contract](auth-contract.md#an-account-that-must-use-mfa)) |
+| `-8` | 403 | the token is good, and the account may not do this: it is disabled, it lacks the group the service asks for, or the space is not its own. `data.reason` says which: `accountDisabled`, `groupRequired`, `mfaSetupRequired` (the account must use MFA and has no authenticator app on), `spaceForbidden` (kept for shared spaces: never answered while a space belongs to one account) |
 | `-10` | 413 | over a limit of the service; `data.limit` names it: a key of `limit` of `/status`, or `answerSizeMax` for an answer too large to send |
 
 The codes `-4`, `-5` and `-6` of the asset layer are the page's own and are never answered by the service; `-9` is what the page says when the service cannot be reached.
@@ -113,8 +113,8 @@ Sharing a space between accounts is not part of this contract yet ([what is left
 GET  /status          no token      { service: "react-doc-storage", contractVersion: 1,
                                       apiSetList: ["item", "partition", "cache", "auth"],
                                       auth: { kind: "cognito", region, userPoolId, clientIdList },
-                                      limit: { dataInlineMax, dataSizeMax, itemMetaSizeMax, requestListMax,
-                                               spaceCountMax, spaceSizeMax } }
+                                      limit: { dataInlineMax, dataRowAutoMax, dataSizeMax, itemMetaSizeMax,
+                                               requestListMax, spaceCountMax, spaceSizeMax } }
 GET  /account                       { userId, name, groupList, limit, usage: { spaceCount, size } }
 ```
 
@@ -123,6 +123,7 @@ GET  /account                       { userId, name, groupList, limit, usage: { s
 | `limit` | what passes it (`-10`) |
 | --- | --- |
 | `dataInlineMax` | data said inside a request: it goes by an upload instead |
+| `dataRowAutoMax` | not a limit: the size up to which the bytes of an item without a preference are kept in the table ([Where the bytes are kept](#where-the-bytes-are-kept)) |
 | `dataSizeMax` | the bytes of one version |
 | `itemMetaSizeMax` | the metadata of one item: its versions, their metadata, its events |
 | `requestListMax` | the requests of one `item/get/list` |
@@ -172,12 +173,12 @@ Every route below takes `space` and `partitionId`, and every write answers the `
 
 ```text
 POST /item/get/list     { requestList: [{ itemId, versionId }] }     { answerList: [{ code, data: { item, version }, message }] }
-POST /item/create       { lang, contentType?, fileExt?, component?, owner?, saveMode?, groupPath?, note?,
+POST /item/create       { lang, contentType?, fileExt?, component?, owner?, saveMode?, storagePreference?, groupPath?, note?,
                           dependencyList?, versionMetadata?, text | dataBase64 | uploadId, record? }
                                                                       { item, version, record?, revision }
 POST /item/update       { itemId, hashBase, text | dataBase64 | uploadId, mode?, note?, dependencyList?, versionMetadata? }
                                                                       { item, version, revision }
-POST /item/meta/set     { itemId, lang?, contentType?, component?, owner?, saveMode? }     { item, revision }
+POST /item/meta/set     { itemId, lang?, contentType?, component?, owner?, saveMode?, storagePreference? }     { item, revision }
 POST /item/move         { itemId, groupPath }                         { item, revision }
 POST /item/delete       { itemId, isRecordRemoved? }                  { item, revision }     the deletion mark
 POST /item/restore      { itemId }                                    { item, revision }
@@ -196,9 +197,9 @@ POST /group/move            { groupPathFrom, groupPathTo }            { itemList
 ```
 
 ```text
-item = { itemId, name: "", lang, contentType, fileExt, component?, owner?, saveMode?, versionIdHead, isDeleted, isLocked,
-         timeCreated, groupPath, revision,
-         versionList: [{ versionId, versionIdPrevList, time, note, size, hash, isLocked, dependencyList }],
+item = { itemId, name: "", lang, contentType, fileExt, component?, owner?, saveMode?, storagePreference, versionIdHead, isDeleted,
+         isLocked, timeCreated, groupPath, revision,
+         versionList: [{ versionId, versionIdPrevList, time, note, size, hash, isLocked, dependencyList, dataPlace }],
          eventList: [{ eventType, time, versionId?, placeFrom?, placeTo?, userId }] }
 version = { versionId, size, hash, isText, metadata, text? | dataBase64? | dataUrl? }
 ```
@@ -258,6 +259,22 @@ reading    a text version, small           version.text
 An answer of `item/get/list` holding many versions switches to `dataUrl` for the rest once its inline data passes what the service sends in one answer (config of the deployment, not one of `limit`), so a reader takes whichever of the three ways a version comes.
 
 An upload is used by one write, in the partition it was begun for; an `uploadId` that is not there (not sent yet, expired, used) is `-3`. `timeExpire` follows the `timeZone` of the request, as every time the service writes.
+
+### Where the bytes are kept
+
+How the bytes travel (above) and where the service keeps them are two things. The service keeps the bytes of a version either in its **database** (a row of the table: quick to read with the index, dear by the byte) or in its **object storage** (an object of the bucket: cheap by the byte, one more request to read). An item may say which it prefers, `storagePreference`, written by `item/create`, `item/import` (in its `item`) and `item/meta/set`:
+
+| `storagePreference` | the bytes of a version written from then on are kept |
+| --- | --- |
+| `''` (absent: the service decides) | in the database up to `limit.dataRowAutoMax`, in object storage when larger |
+| `database` | in the database while they fit a row (`dataInlineMax`), in object storage when larger |
+| `objectStorage` | in object storage, however small |
+
+- **A preference is a wish, never a condition.** No write is refused for it, and bytes too large for a row go to object storage whatever the item prefers. Each version says where its bytes are, `dataPlace: database | objectStorage` in the `versionList` of the item, so a reader of the index knows what a read will cost.
+- **It applies to what is written after it.** Changing it with `item/meta/set` moves no bytes: the versions written before stay where they are, and the next write follows the new preference.
+- **It does not change how bytes travel.** Small bytes are said inline and larger ones go by an upload whatever the preference; the service puts inline bytes into the bucket for `objectStorage`, and keeps uploaded bytes in a row when they fit and the item prefers the database.
+- **A value outside the three** is `-1`. An item written before the field existed has `storagePreference: ''`, and its versions the `dataPlace` the service gave them.
+- **Moving a partition carries it**: `item/import` brings the item with its preference, so the target keeps the bytes as the source was asked to. A local storage type (the folders of a doc page) has one place for bytes and keeps the preference only to hand it on ([the storage layer](../../../main/doc_page_impl_asset_storage.md#a-preference-of-where-bytes-are-kept)).
 
 ## Revisions and the cache
 

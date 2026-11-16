@@ -793,7 +793,13 @@ export class DocObjectFrontendStore {
     return this.writeRun('meta/set', { id, ...change });
   }
 
-  assetCreate(id: string, input: { key?: string; kind?: string; name?: string; pathList?: string[]; lang?: string; text: string; note?: string; saveMode?: string; groupPath?: string; partition?: string }) {
+  // the data: a text, or bytes (a file: with its media type and extension, the metadata of its
+  // version, and where a storage with two places for bytes should keep them)
+  assetCreate(id: string, input: {
+    key?: string; kind?: string; name?: string; pathList?: string[]; lang?: string; text?: string; bytes?: Uint8Array;
+    contentType?: string; fileExt?: string; versionMetadata?: Record<string, unknown>; storagePreference?: string;
+    note?: string; saveMode?: string; groupPath?: string; partition?: string;
+  }) {
     return this.writeRun('asset/create', { id, ...input });
   }
 
@@ -973,6 +979,38 @@ export class DocObjectFrontendStore {
 
   // the data of one asset replaced, by the asset's save mode: an ordinary
   // write of the asset store, which the object does not need to know of
+  // the bytes of the head of an asset (a file, an image), read when asked: for a download. an
+  // asset of a partition a point of the page holds is read through that point (its cache first);
+  // any other through the asset store (the development server, or the snapshot of a build)
+  //   answers { code, message, data: { bytes, contentType, fileExt, size } }
+  async assetBytesGet(idOrRef: string, assetRef: string): Promise<{ code: number; message: string; data?: any }> {
+    const resolved = this.assetResolve(idOrRef, assetRef);
+    if (resolved.status !== 'found') return { code: -3, message: resolved.message || `the object has no asset ${assetRef}` };
+    const asset = resolved.asset!;
+    const { assetStore, remoteStore } = this.stores;
+    if (remoteStore?.itemIs(asset.itemId)) return remoteStore.versionBytesGet(asset.itemId, 'head');
+    const item = assetStore.itemGet(ASSET_STORE_ID_LOCAL, asset.itemId);
+    const url = assetStore.dataUrlGet(ASSET_STORE_ID_LOCAL, asset.itemId, 'head');
+    try {
+      let bytes: Uint8Array;
+      if (url) {
+        const response = await fetch(url);
+        if (!response.ok) return { code: -1, message: `the bytes of ${asset.key} were not read (${response.status})` };
+        bytes = new Uint8Array(await response.arrayBuffer());
+      } else {
+        // a build keeps a text version as its text, with no url of its own
+        const refAsset = { store: ASSET_STORE_ID_LOCAL, itemId: asset.itemId, versionId: 'head' };
+        await assetStore.refLoad(refAsset);
+        const query = assetStore.refQuery(refAsset);
+        if (!query.version?.isText) return { code: -1, message: query.message || `the bytes of ${asset.key} cannot be read here` };
+        bytes = new TextEncoder().encode(query.version.text);
+      }
+      return { code: 0, message: '', data: { bytes, contentType: item?.contentType ?? '', fileExt: item?.fileExt ?? '', size: bytes.length } };
+    } catch (error) {
+      return { code: -9, message: `the bytes of ${asset.key} were not read (${String((error as any)?.message ?? error)})` };
+    }
+  }
+
   async assetWrite(idOrRef: string, assetRef: string, text: string, note = ''): Promise<{ code: number; message: string }> {
     const state = this.objectGet(idOrRef);
     const resolved = this.assetResolve(idOrRef, assetRef);

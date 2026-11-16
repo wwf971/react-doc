@@ -66,7 +66,7 @@ import {
   compConfigOfDocPageListGet, compConfigurationFileListGet, compDocumentPathIs, compFolderListGet, compManifestPathIs, compPathIs,
   type CompConfig, type CompMount,
 } from './doc-comp-config.ts';
-import { docPackageListLoad, docPackageSpecDirGet, docPackageSpecListRead, PACKAGE_SERVICE_TEMPLATE_FOLDER_LIST, type DocPackageLoaded, type DocPackageSpec } from './doc-package.ts';
+import { docPackageImportRead, docPackageListLoad, docPackageSpecDirGet, docPackageSpecListRead, PACKAGE_SERVICE_TEMPLATE_FOLDER_LIST, type DocPackageLoaded, type DocPackageSpec } from './doc-package.ts';
 import {
   ASSET_ITEM_META_NAME, assetConfigFormerReject, assetConfigOfDocPageListGet, assetStoreCreate, itemIdFromDirName,
   type AssetSnapshot, type AssetStore, type AssetStoreConfig, type AssetUsageDoc,
@@ -262,6 +262,17 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
   let configFile = '';
   let viteRootDir = '';
   let isBuild = false;
+  // the folders of the packages the workspace loaded, by name, for the imports between packages
+  // (doc_page_impl_package.md#imports-between-modules); read again when a name is missing, since
+  // a package may have been added to the workspace since
+  const packageDirByName = new Map<string, string>();
+  const packageDirOfNameGet = (name: string): string => {
+    if (!packageDirByName.has(name) && configFile) {
+      packageDirByName.clear();
+      for (const item of (loadConfigDoc(configFile, options).docEntry?.packageList ?? []) as DocPackageLoaded[]) packageDirByName.set(item.name, item.dir);
+    }
+    return packageDirByName.get(name) ?? '';
+  };
   // url prefixes of the source, edit and asset apis; '' when no development
   // server answers them
   let docSourceEndpoint = '';
@@ -415,6 +426,18 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
     // here when its own folders do not hold them (doc_page_impl_cli.md#the-launch-layer)
     async resolveId(id, importer, resolveOptions) {
       if (id === moduleId) return moduleIdResolved;
+      // a module of a package named by the package's name (doc_page_impl_package.md#imports-between-modules)
+      const packageImport = docPackageImportRead(id);
+      if (packageImport) {
+        const dir = packageDirOfNameGet(packageImport.name);
+        if (!dir) {
+          const nameList = [...packageDirByName.keys()].join(', ') || 'none';
+          this.error(`[doc-source] ${id}: no package "${packageImport.name}" is loaded by the workspace (loaded: ${nameList}); the package importing it names it in packageDependList`);
+        }
+        const resolved = await this.resolve(path.join(dir, packageImport.subPath), importer, { ...resolveOptions, skipSelf: true });
+        if (!resolved) this.error(`[doc-source] ${id}: the package "${packageImport.name}" (${dir}) has no ${packageImport.subPath}`);
+        return resolved;
+      }
       if (!options.launch || !importer || !/^[@a-zA-Z]/.test(id) || id.startsWith('virtual:')) return undefined;
       const importerPath = importer.split('?')[0];
       if (!path.isAbsolute(importerPath) || importerPath.startsWith(`${viteRootDir}${path.sep}`)) return undefined;

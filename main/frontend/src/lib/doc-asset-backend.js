@@ -58,6 +58,8 @@
 //                                               register, delete, meta/set, asset/create, asset/remove,
 //                                               asset/attach): { id, itemList, config }
 
+import { bytesToBase64 } from './doc-asset-storage-cache.js';
+
 export function assetBackendApiCreate(endpoint) {
   const endpointNormalized = String(endpoint ?? '').replace(/\/+$/, '');
 
@@ -111,7 +113,12 @@ export function assetBackendApiCreate(endpoint) {
     folderSet: (configFile, folderList, folderDefault) => requestPost('/folder/set', { configFile, folderList, folderDefault }),
     itemMove: (store, itemId, place) => requestPost('/item/move', { store, itemId, groupPath: place.groupPath ?? '', folder: place.folder }),
     objectFrontendConfigGet: () => requestSend('/object-frontend/config'),
-    objectFrontendWrite: (route, body) => requestPost(`/object-frontend/${route}`, body),
+    // bytes of a write (an asset made of a file) cross the json of the request as base64
+    objectFrontendWrite: (route, body) => {
+      if (!(body?.bytes instanceof Uint8Array)) return requestPost(`/object-frontend/${route}`, body);
+      const { bytes, ...rest } = body;
+      return requestPost(`/object-frontend/${route}`, { ...rest, dataBase64: bytesToBase64(bytes) });
+    },
     usageList: (docPathList = []) => requestSend(
       `/usage/list${docPathList.length > 0 ? `?${docPathList.map((docPath) => `docPath=${encodeURIComponent(docPath)}`).join('&')}` : ''}`,
     ),

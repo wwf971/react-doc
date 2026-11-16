@@ -115,6 +115,20 @@ storageTypeList:
 - **The id starts with the name of the package**, so two packages never declare the same type. A file that breaks a rule is a problem of that file, listed in the Asset service tab; the page loads.
 - Every doc page of a workspace importing the package may declare points of the type.
 
+### A preference of where bytes are kept
+
+Some storages have two places for the bytes of an item: a remote point may keep them in its **database** (quick to read with the index, dear by the byte) or in its **object storage** (cheap by the byte, one more request to read). An item may say which it prefers, `storagePreference: database | objectStorage`, absent when the storage decides, by the size. It is a field of the item, written at its creation and by `itemMetaSet`, kept in `item.yaml` like `saveMode`:
+
+```text
+the store        itemCreate / itemMetaSet { storagePreference }      checked: '', database, objectStorage
+a local type     keeps the key, writes the bytes where it always does (one place)
+a remote type    hands it to its backend, which places the bytes of every version written from then on
+moving           a partition moved between points takes the key along, so the target places the bytes as asked
+```
+
+- **A preference, not a condition.** No write is refused for it, and nothing above the storage depends on where the bytes are. A type that has two places says, per version, where it put them (`aws-utils.remote`: `dataPlace`, [its contract](../package/aws-utils/doc/storage-contract.md#where-the-bytes-are-kept)).
+- **Who chooses** is whoever writes the data: an upload dialog that knows a file is large and rarely read asks for object storage; a small record of a mode leaves it to the storage. A frontend object's mode passes it with the asset (`assetCreate({ bytes, storagePreference })`, [the api of a mode](doc_page_impl_obj_frontend.md#the-entry-component)).
+
 ## Storage points
 
 ### The built-in points

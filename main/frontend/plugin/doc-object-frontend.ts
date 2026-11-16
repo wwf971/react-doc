@@ -524,8 +524,9 @@ function assetAcceptRequire(context: WriteContext, entry: any, input: { kind?: u
 export function objectFrontendAssetCreate(
   context: WriteContext,
   input: {
-    id: string; key?: string; kind?: string; name?: string; pathList?: unknown; lang?: string; text: string; note?: string;
-    saveMode?: 'inPlace' | 'newVersion'; groupPath?: string; partition?: string;
+    id: string; key?: string; kind?: string; name?: string; pathList?: unknown; lang?: string; text?: string; dataBase64?: string;
+    contentType?: string; fileExt?: string; versionMetadata?: unknown; storagePreference?: unknown;
+    note?: string; saveMode?: 'inPlace' | 'newVersion'; groupPath?: string; partition?: string;
   },
 ): ObjectFrontendWriteResult & { key: string; itemId: string } {
   const { store } = context;
@@ -543,9 +544,14 @@ export function objectFrontendAssetCreate(
   const groupPath = partitionPlaceRequire(context, listing, input.partition, input.groupPath ?? kindDeclared?.groupPath);
   const place = itemPlaceOfObjectGet(store, decl, meta, entry, groupPath);
   partitionStorageEnsure(context, decl, listing, groupPath);
+  // the data: a text, or bytes (dataBase64: a file, an image) with their media type and extension
   const { item } = store.itemCreate({
     lang,
-    data: Buffer.from(String(input.text ?? ''), 'utf-8'),
+    data: typeof input.dataBase64 === 'string' ? Buffer.from(input.dataBase64, 'base64') : Buffer.from(String(input.text ?? ''), 'utf-8'),
+    contentType: input.contentType,
+    fileExt: input.fileExt,
+    versionMetadata: input.versionMetadata,
+    storagePreference: input.storagePreference,
     note: input.note ?? `${kind || 'an asset'} of the frontend object ${entry.name || decl.id}`,
     folder: place.folder,
     groupPath: place.groupPath,

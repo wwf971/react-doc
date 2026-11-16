@@ -121,6 +121,11 @@ import { assetStorageFilePackDriverCreate, assetStorageFilePackFileListRemove } 
 // inPlace (the head version is rewritten; the default when the key is not
 // written) or newVersion (a version is appended and becomes the head).
 //
+// storagePreference says where a storage that has two places for bytes keeps
+// those of the item: database or objectStorage (absent: the storage decides,
+// by the size). a local type has one place, so the key only travels with the
+// item, to a remote point that reads it (doc_page_impl_asset_storage.md#a-preference-of-where-bytes-are-kept).
+//
 // every rewrite of an existing file first copies it to {file}.bak, then
 // writes a temporary file and renames it into place, so an interrupted
 // write never leaves a half-written item.yaml or data file behind.
@@ -167,6 +172,7 @@ export const ASSET_NAME_LENGTH_MAX = 80;
 export const ASSET_GROUP_DEPTH_MAX = 8;
 
 export type AssetSaveMode = 'inPlace' | 'newVersion';
+export type AssetStoragePreference = 'database' | 'objectStorage';
 
 // the component the data of an item is for (doc_page_impl_asset.md#items-for-components);
 // name only for now, an id and a version of the component are expected later
@@ -231,6 +237,8 @@ export type AssetItemMeta = {
   // the object it is a part of; absent when it stands alone
   owner?: AssetOwner;
   saveMode?: AssetSaveMode;
+  // where a storage with two places for bytes keeps them; absent: it decides
+  storagePreference?: AssetStoragePreference;
   versionIdHead: string;
   isDeleted: boolean;
   // nothing of the item changes until it is unlocked
@@ -995,6 +1003,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     docPath?: string;
     dependencyList?: unknown;
     saveMode?: unknown;
+    storagePreference?: unknown;
     versionMetadata?: unknown;
     component?: unknown;
     groupPath?: string;
@@ -1049,6 +1058,8 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     if (owner) meta.owner = owner;
     if (folder.owner) meta.folderOwner = folder.owner;
     if (input.saveMode === 'inPlace' || input.saveMode === 'newVersion') meta.saveMode = input.saveMode;
+    const storagePreference = storagePreferenceNormalize(input.storagePreference);
+    if (storagePreference) meta.storagePreference = storagePreference;
     versionWrite(meta, versionId, input.data);
     versionMetadataWrite(meta, versionId, versionMetadata);
     itemMetaWrite(meta);
@@ -1140,7 +1151,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
   // back to in place); component null removes the component the data is for.
   function itemMetaSet(
     itemId: string,
-    change: { name?: string; lang?: string; contentType?: string; saveMode?: AssetSaveMode | null; component?: unknown; owner?: unknown },
+    change: { name?: string; lang?: string; contentType?: string; saveMode?: AssetSaveMode | null; storagePreference?: unknown; component?: unknown; owner?: unknown },
   ): AssetItemMeta {
     const meta = itemGet(itemId);
     itemUnlockedCheck(meta);
@@ -1164,6 +1175,11 @@ export function assetStoreCreate(config: AssetStoreConfig) {
       if (change.saveMode === null) delete meta.saveMode;
       else if (change.saveMode === 'inPlace' || change.saveMode === 'newVersion') meta.saveMode = change.saveMode;
       else throw new AssetError(-1, `saveMode must be inPlace or newVersion, got ${String(change.saveMode)}`);
+    }
+    if (change.storagePreference !== undefined) {
+      const storagePreference = storagePreferenceNormalize(change.storagePreference);
+      if (storagePreference) meta.storagePreference = storagePreference;
+      else delete meta.storagePreference;
     }
     if (change.component !== undefined) {
       const component = componentNormalize(change.component);
@@ -1504,6 +1520,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     if (meta.component !== undefined) metaFile.component = meta.component;
     if (meta.owner !== undefined) metaFile.owner = meta.owner;
     if (meta.saveMode !== undefined) metaFile.saveMode = meta.saveMode;
+    if (meta.storagePreference !== undefined) metaFile.storagePreference = meta.storagePreference;
     metaFile.versionIdHead = meta.versionIdHead;
     metaFile.isDeleted = meta.isDeleted;
     metaFile.isLocked = meta.isLocked;
@@ -1681,6 +1698,7 @@ export function assetStoreCreate(config: AssetStoreConfig) {
     if (meta.component !== undefined) metaFile.component = meta.component;
     if (meta.owner !== undefined) metaFile.owner = meta.owner;
     if (meta.saveMode !== undefined) metaFile.saveMode = meta.saveMode;
+    if (meta.storagePreference !== undefined) metaFile.storagePreference = meta.storagePreference;
     Object.assign(metaFile, {
       versionIdHead: meta.versionIdHead, isDeleted: meta.isDeleted, isLocked: meta.isLocked, timeCreated: meta.timeCreated,
       versionList: meta.versionList, eventList: meta.eventList,
@@ -1782,6 +1800,13 @@ export type AssetSnapshot = {
 // ---------- helpers ----------
 
 // the effective save mode: the written one, else in place
+// '' (the storage decides), database or objectStorage; anything else refused
+export function storagePreferenceNormalize(value: unknown): AssetStoragePreference | '' {
+  if (value === undefined || value === null || value === '') return '';
+  if (value === 'database' || value === 'objectStorage') return value;
+  throw new AssetError(-1, `storagePreference must be database, objectStorage or empty, got ${String(value)}`);
+}
+
 export function saveModeGet(meta: Pick<AssetItemMeta, 'saveMode'>): AssetSaveMode {
   return meta.saveMode === 'newVersion' ? 'newVersion' : 'inPlace';
 }
@@ -1995,6 +2020,7 @@ function itemMetaNormalize(
     storage,
   };
   if (content?.saveMode === 'inPlace' || content?.saveMode === 'newVersion') meta.saveMode = content.saveMode;
+  if (content?.storagePreference === 'database' || content?.storagePreference === 'objectStorage') meta.storagePreference = content.storagePreference;
   try {
     const owner = ownerNormalize(content?.owner ?? null);
     if (owner) meta.owner = owner;

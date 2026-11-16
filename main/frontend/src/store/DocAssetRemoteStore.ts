@@ -107,6 +107,9 @@ type Stores = { assetStore: any; authStore: any; objectFrontendStore?: any };
 
 const STORE_ID_LOCAL = 'local';
 const REQUEST_CHUNK_SIZE = 40;
+// the bytes of a binary version larger than this are read when asked and handed over, never kept
+// in the memory of the page or the cache of the browser: a download of a large file is not held
+const VERSION_KEEP_SIZE_MAX = 8 * 1024 * 1024;
 // how often a purge is asked again before the page gives up: one request removes what its time allows
 const PURGE_ROUND_MAX = 40;
 
@@ -771,6 +774,10 @@ export class DocAssetRemoteStore {
       hash: version.hash, itemRevision: item.revision, isText: version.isText === true, metadata: version.metadata ?? {}, size: version.size ?? 0, timeFetched: Date.now(),
     };
     const held = this.versionMemoryByKey.get(key);
+    if (!entry.isText && Number(version.size ?? version.bytes?.length ?? 0) > VERSION_KEEP_SIZE_MAX) {
+      this.versionMemoryByKey.delete(key);
+      return;
+    }
     if (entry.isText && typeof version.text === 'string') entry.text = version.text;
     else if (!entry.isText && version.bytes) entry.bytes = version.bytes;
     else if (held && held.hash === version.hash && (held.isText ? typeof held.text === 'string' : held.bytes)) {
@@ -799,6 +806,32 @@ export class DocAssetRemoteStore {
     const held = this.versionMemoryByKey.get(versionKeyBuild(itemId, version.versionId));
     if (!held || held.hash !== version.hash) return undefined;
     return this.versionForPage(version.versionId, { ...version, isText: held.isText, text: held.text });
+  }
+
+  // the bytes of a version, for a download: { code, data: { bytes, contentType, fileExt, size } }.
+  // a small one is read as versionListGet reads it (the cache first) and kept; a large binary one
+  // is asked of the point and handed over without being kept (VERSION_KEEP_SIZE_MAX)
+  async versionBytesGet(itemId: string, versionIdRequested = 'head'): Promise<RemoteResult> {
+    const partition = this.partitionOfItemGet(itemId);
+    const item = partition?.itemList.find((one) => one.itemId === itemId);
+    if (!partition || !item) return fail(-3, `asset item not found: ${itemId}`);
+    const versionId = !versionIdRequested || versionIdRequested === 'head' ? item.versionIdHead : versionIdRequested;
+    const versionMeta = (item.versionList ?? []).find((one: any) => one.versionId === versionId);
+    if (!versionMeta) return fail(-3, `version ${versionId} not found in item ${itemId}`);
+    const answerOf = (bytes: Uint8Array): RemoteResult => ({ code: 0, message: '', data: { bytes, contentType: item.contentType ?? '', fileExt: item.fileExt ?? '', size: bytes.length } });
+    if (Number(versionMeta.size ?? 0) > VERSION_KEEP_SIZE_MAX) {
+      const point = this.pointGet(partition.pointId, partition.docPageAlias);
+      const result = await this.driverCall(point, 'itemGetList', { partitionId: partition.partitionId, requestList: [{ itemId, versionId }] });
+      const answer = result.code === 0 ? result.data?.answerList?.[0] : result;
+      if (!answer || answer.code !== 0) return answer ?? fail(-1, `the version ${versionId} of ${itemId} was not read`);
+      const version = answer.data?.version ?? {};
+      return answerOf(version.bytes ?? new TextEncoder().encode(String(version.text ?? '')));
+    }
+    const [answer] = await this.versionListGet([{ itemId, versionId }]);
+    if (answer.code !== 0) return answer;
+    const entry = this.versionMemoryByKey.get(versionKeyBuild(itemId, versionId));
+    if (!entry) return fail(-1, `the bytes of version ${versionId} of ${itemId} were not kept`);
+    return answerOf(entry.bytes ?? new TextEncoder().encode(entry.text ?? ''));
   }
 
   // the url of the bytes of a binary version: '' until they are read, which this asks for
@@ -1085,8 +1118,14 @@ export class DocAssetRemoteStore {
       const ensured = await this.partitionEnsure(id, partition, target);
       if (ensured.code !== 0) return ensured;
       const state: RemotePartition = ensured.data.state;
+      // the data: a text, or bytes (a file) with their media type and extension; the driver decides
+      // how they travel, the point where they are kept (storagePreference)
+      const bytes = body.bytes instanceof Uint8Array ? body.bytes : typeof body.dataBase64 === 'string' ? base64ToBytes(body.dataBase64) : undefined;
       const result = await this.partitionCall(state, 'itemCreate', {
-        lang, text: String(body.text ?? ''), note: body.note ?? `${accept.kind || 'an asset'} of the frontend object ${objectState.name || id}`,
+        lang, ...(bytes ? { bytes } : { text: String(body.text ?? '') }),
+        contentType: body.contentType || undefined, fileExt: body.fileExt || undefined,
+        versionMetadata: body.versionMetadata, storagePreference: body.storagePreference || undefined,
+        note: body.note ?? `${accept.kind || 'an asset'} of the frontend object ${objectState.name || id}`,
         saveMode: body.saveMode, groupPath: place.groupPath.split('/').slice(1).join('/'), owner: { ref: objectState.ref },
         record: { key, kind: accept.kind, ...naming },
       });
