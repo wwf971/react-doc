@@ -1,47 +1,43 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Check, ChevronRight, DocsBody, Eye, EyeOff, LoaderCircle, Plus, StickyNote, Trash2, TriangleAlert, X } from '../../../../main/frontend/UICommon.js';
+import { Check, ChevronRight, DocsBody, Eye, EyeOff, LoaderCircle, Network, Plus, StickyNote, Trash2, TriangleAlert, X } from '../../../../main/frontend/UICommon.js';
 import { DocEditBody } from '../../../../main/comp-doc/edit/DocEditBody.jsx';
-import { EditValueInline } from '../../../../main/comp-doc/edit/EditValueInline.jsx';
 import { DocNavScopeContext } from '../../../../main/comp-doc/link/DocNavScope.js';
 import { buildMdxComps } from '../../../../main/frontend/src/lib/mdx-comps.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { objectFrontendPartitionPlaceText } from '../../../../main/frontend/src/lib/doc-object-frontend.js';
 import { DocLanguageProvider } from '../../../../built-in/comp-mdx/multi-lang/MultiLangContext.jsx';
-import {
-	zettelBacklinkListOf, zettelChainOf, zettelCountOf, zettelGet, zettelKnowledgeChildListOf, zettelLabelOf, zettelPathOf, zettelPathRead, zettelProgressCount, zettelProgressOf,
-	zettelQuestionChildListOf, zettelQuestionIsDisputed, zettelQuestionRefListOf,
-} from './ZettelData.js';
+import { zettelChainOf, zettelGet, zettelLabelOf, zettelProgressOf, zettelQuestionIsDisputed, zettelRoleBuild } from './ZettelData.js';
 import { zettelOptionAnchorOf } from './ZettelDoc.js';
+import { ZETTEL_PLACE_LIST } from './ZettelScenes.js';
 import { notePartitionOf } from './ZettelStore.js';
 
-// The card being read (doc/README.md#the-card). A card is a document of the object: its
-// text is compiled and rendered by the page as any document (ZettelDocBody), so its links,
-// components and anchors are the page's; around it stands what the model knows of the card:
-// where it is in the hierarchy, what lies below it, the questions using it, the cards
-// pointing at it, the notes taken on it. A link to another card followed in here is answered
-// here (DocNavScopeContext): the block shows that card, at the place the link names.
+// The text of a zettel (doc/README.md#a-zettel-is-a-card): the body of the card while it shows
+// its text. A zettel is a document of the object: its text is compiled and rendered by the page
+// as any document (ZettelDocBody), so its links, components and anchors are the page's; around
+// it stands what the model knows of it: where it is (the zettels holding it), how many
+// connections it has (a strip opening the connection view at them), its sources, the notes taken
+// on it. A link to another zettel followed in here is answered here (DocNavScopeContext): the
+// zettel shows that one, at the place the link names.
 //
 // In reading mode nothing changes the object. While the document of the block is edited
-// (service.isEditable), the text of the card and of its notes is the edit body of the page's
-// edit layer: edited block by block, as every document is; how a question went is the
-// reader's own and is kept in either mode.
+// (service.isEditable), the text of the zettel and of its notes is the edit body of the page's
+// edit layer: edited block by block, as every document is; how a question went is the reader's
+// own and is kept in either mode.
 //
-//   model, store     the cards; the state of the block (ZettelStore)
+//   model, store     the zettels; the state of the block (ZettelStore)
 //   service          the api of the object's mode
-//   path             the scene path read
-export const ZettelReader = observer(function ZettelReader({ model, store, service, path }) {
-	const rootRef = useRef(null);
+//   rootRef          the element that scrolls: the text layer of the zettel (ZettelMotion.js moves it)
+export const ZettelText = observer(function ZettelText({ model, store, service, rootRef, isHidden = false }) {
 	const { sourceStore } = useDocStores();
-	const place = zettelPathRead(model, path);
-	const zettel = place ? zettelGet(model, place.key) : null;
+	const zettel = zettelGet(model, store.zettelKey);
 	const target = store.placeTarget;
-	const placeAsked = target.path === path ? target.place : '';
-	const docPath = zettel && !place.isQuestionList ? service.docPathGet(zettel.key) : '';
+	const placeAsked = target.key === store.zettelKey ? target.place : '';
+	const docPath = zettel ? service.docPathGet(zettel.key) : '';
 	const bodyStatus = docPath ? sourceStore.compiledByPath[docPath]?.status ?? 'loading' : 'none';
 	const isRevealed = zettel?.kind === 'question' ? store.isRevealed(zettel.key) : true;
-	// a place asked for is brought into view and marked, once the body that holds it is
-	// there; a card opened as a whole starts at its top
+	// a place asked for is brought into view and marked, once the body that holds it is there;
+	// a zettel opened as a whole starts at its top
 	useEffect(() => {
 		const root = rootRef.current;
 		if (!root) return undefined;
@@ -66,18 +62,17 @@ export const ZettelReader = observer(function ZettelReader({ model, store, servi
 		};
 		find();
 		return () => cancelAnimationFrame(frameId);
-	}, [path, target.version, placeAsked, bodyStatus, isRevealed]);
+	}, [store.zettelKey, target.version, placeAsked, bodyStatus, isRevealed]);
 	const navScope = useMemo(() => ({ handle: (request) => zettelNavHandle(model, store, service, request) }), [model, store, service]);
-	const context = { model, store, service, path, onOpen: (key, placeTo) => store.zettelOpen(model, key, placeTo) };
+	const context = { model, store, service, onOpen: (key, placeTo) => store.zettelOpen(model, key, placeTo) };
 	return (
 		<DocNavScopeContext.Provider value={navScope}>
-			<div ref={rootRef} className="zettel-reader">
-				{store.message ? <p className="doc-error zettel-reader-message" role="status">{store.message}</p> : null}
-				{!zettel ? <p className="doc-note">No card is open.</p> : null}
-				{zettel ? <ZettelCrumb context={context} zettel={zettel} isQuestionList={place.isQuestionList} /> : null}
-				{zettel && place.isQuestionList ? <ZettelQuestionListCard context={context} zettel={zettel} /> : null}
-				{zettel && !place.isQuestionList && zettel.kind === 'question' ? <ZettelQuestionCard context={context} question={zettel} docPath={docPath} /> : null}
-				{zettel && !place.isQuestionList && zettel.kind === 'zettel' ? <ZettelKnowledgeCard context={context} zettel={zettel} docPath={docPath} /> : null}
+			<div ref={rootRef} className="zettel-layer zettel-layer-text" aria-hidden={isHidden ? 'true' : undefined}>
+				{store.message ? <p className="doc-error zettel-text-message" role="status">{store.message}</p> : null}
+				{!zettel ? <p className="doc-note">No zettel is open.</p> : null}
+				{zettel ? <ZettelCrumb context={context} zettel={zettel} /> : null}
+				{zettel?.kind === 'question' ? <ZettelQuestionText context={context} question={zettel} docPath={docPath} /> : null}
+				{zettel?.kind === 'zettel' ? <ZettelKnowledgeText context={context} zettel={zettel} docPath={docPath} /> : null}
 			</div>
 		</DocNavScopeContext.Provider>
 	);
@@ -89,25 +84,25 @@ function headingFind(root, fragment) {
 	return [...root.querySelectorAll('h1, h2, h3, h4, h5, h6')].find((heading) => heading.textContent.toLowerCase().replace(/[-\s]+/g, ' ').trim() === wanted) ?? null;
 }
 
-// a link followed where the cards of this object are shown: a card is opened here, a note
-// opens the card it is on. anything else is passed on
+// a link followed where the zettels of this object are shown: a zettel is opened here with its
+// text, a note opens the zettel it is on. anything else is passed on
 export function zettelNavHandle(model, store, service, request) {
 	const owner = request.owner;
 	if (!owner || owner.ref !== service.ref) return undefined;
 	const note = model.noteList.find((one) => one.key === owner.key);
 	if (note) {
-		store.zettelOpen(model, note.target, note.place);
+		store.zettelRead(model, note.target, note.place);
 		return { code: 0, message: '' };
 	}
 	if (!zettelGet(model, owner.key)) return undefined;
-	store.zettelOpen(model, owner.key, request.hash ?? '');
+	store.zettelRead(model, owner.key, request.hash ?? '');
 	return { code: 0, message: '' };
 }
 
-// the text of a card: the document the object registered, compiled and rendered by the page.
-// while the document of the block is edited (isEditing) and the card can be written, it is
-// the edit body of the page's edit layer instead: the same blocks, each edited in place with
-// the toolbar, the insert menu and the editors every document has
+// the text of a zettel: the document the object registered, compiled and rendered by the page.
+// while the document of the block is edited (isEditing) and the zettel can be written, it is the
+// edit body of the page's edit layer instead: the same blocks, each edited in place with the
+// toolbar, the insert menu and the editors every document has
 // (main/doc_page_impl_edit.md#documents-that-are-not-files)
 export const ZettelDocBody = observer(function ZettelDocBody({ path, className = '', isEditing = false }) {
 	const { compById, docStore, sourceStore, editStore } = useDocStores();
@@ -116,7 +111,7 @@ export const ZettelDocBody = observer(function ZettelDocBody({ path, className =
 	useEffect(() => { if (isEdit) void editStore.docEditEnsure(path); }, [isEdit, path, editStore]);
 	const compiled = path ? sourceStore.compiledByPath[path] : undefined;
 	const mdxComps = useMemo(() => buildMdxComps(sourceStore.configDoc, compById, { sourcePath: path }), [compById, path, sourceStore.configDoc]);
-	if (!path) return <p className="doc-note not-prose">This card is not registered as a document (its item is not Markdown, or its kind is not declared a document).</p>;
+	if (!path) return <p className="doc-note not-prose">This zettel is not registered as a document (its item is not Markdown, or its kind is not declared a document).</p>;
 	const docEdit = isEdit ? editStore.docEditActiveGet(path) : undefined;
 	if (docEdit) {
 		return (
@@ -125,7 +120,7 @@ export const ZettelDocBody = observer(function ZettelDocBody({ path, className =
 			</DocLanguageProvider>
 		);
 	}
-	if (!compiled || compiled.status === 'loading') return <p className="doc-status not-prose"><LoaderCircle size={12} aria-hidden="true" className="doc-spin" /><span>Reading the card</span></p>;
+	if (!compiled || compiled.status === 'loading') return <p className="doc-status not-prose"><LoaderCircle size={12} aria-hidden="true" className="doc-spin" /><span>Reading the zettel</span></p>;
 	if (compiled.status === 'error') return <p className="doc-error not-prose">{compiled.message}</p>;
 	if (compiled.isContentEmpty) return null;
 	const Body = compiled.Body;
@@ -136,13 +131,12 @@ export const ZettelDocBody = observer(function ZettelDocBody({ path, className =
 	);
 });
 
-// where the card is in the hierarchy: the cards above it, each a way up
-const ZettelCrumb = observer(function ZettelCrumb({ context, zettel, isQuestionList }) {
-	const chain = zettelChainOf(context.model, zettel.key);
-	const upList = isQuestionList ? chain : chain.slice(0, -1);
+// where the zettel is: the zettels holding it, through the first container of each, each a way up
+const ZettelCrumb = observer(function ZettelCrumb({ context, zettel }) {
+	const upList = zettelChainOf(context.model, zettel.key).slice(0, -1);
 	if (upList.length === 0) return null;
 	return (
-		<nav className="zettel-crumb not-prose" aria-label="The cards above this one">
+		<nav className="zettel-crumb not-prose" aria-label="The zettels holding this one">
 			{upList.map((one, index) => (
 				<span key={one.key} className="zettel-crumb-item">
 					{index > 0 ? <ChevronRight size={11} aria-hidden="true" /> : null}
@@ -153,12 +147,10 @@ const ZettelCrumb = observer(function ZettelCrumb({ context, zettel, isQuestionL
 	);
 });
 
-const LEVEL_LABEL = { root: 'map', hub: 'area', topic: 'topic', fact: 'fact' };
-
-// a link to a card drawn by the block itself (a row, a chip): the same look as a link of a text
+// a link to a zettel drawn by the block itself (a chip): the same look as a link of a text
 function ZettelCardLink({ context, zettelKey, place = '', label = '', className = '' }) {
 	const zettel = zettelGet(context.model, zettelKey);
-	if (!zettel) return <span className="zettel-link is-missing" title={`There is no card "${zettelKey}"`}>{label || zettelKey}</span>;
+	if (!zettel) return <span className="zettel-link is-missing" title={`There is no zettel "${zettelKey}"`}>{label || zettelKey}</span>;
 	return (
 		<a href={`#${zettelKey}`} role="button" className={`zettel-link${className ? ` ${className}` : ''}`} data-kind={zettel.kind} title={zettel.kind === 'question' ? `Question ${zettel.number}: ${zettel.title}` : zettel.summary} onClick={(event) => { event.preventDefault(); context.onOpen(zettelKey, place); }}>
 			{label || (zettel.kind === 'question' ? `Q${zettel.number}` : zettel.title)}
@@ -166,138 +158,38 @@ function ZettelCardLink({ context, zettelKey, place = '', label = '', className 
 	);
 }
 
-const ZettelKnowledgeCard = observer(function ZettelKnowledgeCard({ context, zettel, docPath }) {
-	const { model, store } = context;
-	const childList = zettelKnowledgeChildListOf(model, zettel.key);
-	const questionChildList = zettelQuestionChildListOf(model, zettel.key);
-	const questionRefList = zettelQuestionRefListOf(model, zettel.key);
-	const backlinkList = zettelBacklinkListOf(model, zettel.key);
+const ZettelKnowledgeText = observer(function ZettelKnowledgeText({ context, zettel, docPath }) {
 	return (
-		<article className="zettel-card" data-level={zettel.level}>
-			<header className="zettel-card-head not-prose">
-				<h2 className="zettel-card-title">{zettel.title}</h2>
-				<p className="zettel-card-meta">
-					<span className="doc-badge">{LEVEL_LABEL[zettel.level] ?? zettel.level}</span>
-					<span className="zettel-card-key">{zettel.key}</span>
-					{zettel.isUnverified ? <span className="doc-badge-outline" data-error="" title="Not checked against the documentation">not verified</span> : null}
-				</p>
-				{zettel.summary ? <p className="zettel-card-summary">{zettel.summary}</p> : null}
-			</header>
-			<ZettelCardText context={context} docPath={docPath} />
+		<article className="zettel-text" data-level={zettel.level}>
+			{zettel.summary ? <p className="zettel-text-summary not-prose">{zettel.summary}</p> : null}
+			{zettel.isUnverified ? <p className="zettel-text-meta not-prose"><span className="doc-badge-outline" data-error="" title="Not checked against the documentation">not verified</span></p> : null}
+			<ZettelDocBody path={docPath} isEditing={context.service.isEditable} />
 			<div className="not-prose">
-				{childList.length > 0 ? (
-					<section className="zettel-section">
-						<h3 className="zettel-section-title"><span>Inside this card</span><em>{childList.length}</em></h3>
-						<div className="zettel-row-list">
-							{childList.map((child) => {
-								const count = zettelCountOf(model, child.key);
-								return (
-									<button key={child.key} type="button" className="zettel-row" onClick={() => context.onOpen(child.key, '')}>
-										<span className="zettel-row-title">{child.title}</span>
-										<span className="zettel-row-text">{child.summary}</span>
-										{count.zettel + count.question > 0 ? <span className="zettel-row-count">{count.zettel > 0 ? `${count.zettel} cards` : ''}{count.zettel > 0 && count.question > 0 ? ' · ' : ''}{count.question > 0 ? `${count.question} questions` : ''}</span> : null}
-									</button>
-								);
-							})}
-						</div>
-					</section>
-				) : null}
-				{questionChildList.length > 0 ? (
-					<section className="zettel-section">
-						<h3 className="zettel-section-title"><span>Questions of this area</span><em>{questionChildList.length}</em></h3>
-						<p className="zettel-section-action">
-							<button type="button" className="doc-button" onClick={() => store.go(`${zettelPathOf(model, zettel.key)}/question`)}>Open the list</button>
-							<ZettelProgressLine model={model} questionList={questionChildList} />
-						</p>
-					</section>
-				) : null}
-				{questionRefList.length > 0 ? (
-					<section className="zettel-section">
-						<h3 className="zettel-section-title"><span>Questions using this card</span><em>{questionRefList.length}</em></h3>
-						<div className="zettel-row-list">
-							{questionRefList.map((entry) => {
-								const isRevealed = store.isRevealed(entry.question.key);
-								return (
-									<div key={entry.question.key} className="zettel-row is-question">
-										<span className="zettel-row-title">
-											<ZettelCardLink context={context} zettelKey={entry.question.key} />
-											{entry.optionList.map((option) => (
-												<button key={option.id} type="button" className="zettel-option-chip" data-verdict={isRevealed ? (option.isCorrect ? 'correct' : 'wrong') : undefined} title={`Option ${option.id} of question ${entry.question.number}`} onClick={() => context.onOpen(entry.question.key, zettelOptionAnchorOf(option.id))}>{option.id}</button>
-											))}
-											<span className="zettel-row-name">{entry.question.title}</span>
-										</span>
-										{isRevealed ? entry.textList.map((text, index) => <span key={index} className="zettel-row-text">{text}</span>) : null}
-									</div>
-								);
-							})}
-						</div>
-					</section>
-				) : null}
-				{backlinkList.length > 0 ? (
-					<section className="zettel-section">
-						<h3 className="zettel-section-title"><span>Pointed at by</span><em>{backlinkList.length}</em></h3>
-						<div className="zettel-row-list">
-							{backlinkList.map((entry) => (
-								<div key={entry.zettel.key} className="zettel-row">
-									<span className="zettel-row-title"><ZettelCardLink context={context} zettelKey={entry.zettel.key} place={entry.linkList[0].fromPlace} /></span>
-									{entry.linkList.slice(0, 2).map((link, index) => <span key={index} className="zettel-row-text">{link.text}</span>)}
-								</div>
-							))}
-						</div>
-					</section>
-				) : null}
+				<ZettelConnectionStrip context={context} zettel={zettel} />
 				<ZettelSourceList sourceList={zettel.sourceList} />
 				<ZettelNoteSection context={context} zettel={zettel} />
-				{/* at the foot: the toolbar floating over a block being edited never covers it */}
-				<ZettelCardManage context={context} zettel={zettel} childCount={childList.length + questionChildList.length} />
 			</div>
 		</article>
 	);
 });
 
-// what is done to a card as a whole while the document of the block is edited: a new card
-// below it (its title asked in place), and the card removed (asked once, in place)
-const ZettelCardManage = observer(function ZettelCardManage({ context, zettel, childCount }) {
-	const { model, store, service } = context;
-	useEffect(() => { store.cardOpenPendingTake(model); }, [store, model]);
-	if (service.docState?.isEditing !== true) return null;
-	const cardNew = store.cardNew;
-	const cardRemove = store.cardRemove;
-	const isNewHere = cardNew.parent === zettel.key;
-	const isRemoveHere = cardRemove.key === zettel.key;
-	const isRoot = zettel.key === model.rootKey;
-	const removeReason = !service.isEditable ? service.editUnavailableReason : isRoot ? 'The root card of a box is not removed' : childCount > 0 ? 'Remove or move the cards and questions below it first' : '';
+// how many connections the zettel has, by place: each opens the connection view at that place alone
+const ZettelConnectionStrip = observer(function ZettelConnectionStrip({ context, zettel }) {
+	const { model, store } = context;
+	const role = zettelRoleBuild(model, zettel.key);
+	const countByPlace = { c: role.containerList.length, h: role.childList.length, b: role.inList.length, f: role.outList.length + role.groupList.reduce((sum, group) => sum + group.itemList.length, 0), q: role.questionList.length };
+	const placeList = ZETTEL_PLACE_LIST.filter((place) => countByPlace[place.id] > 0);
+	if (placeList.length === 0) return null;
+	const open = (code) => {
+		store.placeCodeSet(code);
+		store.viewSet('link');
+	};
 	return (
-		<section className="zettel-section zettel-manage">
-			<h3 className="zettel-section-title"><span>This card</span></h3>
-			<p className="zettel-edit-line">
-				<button type="button" className="doc-button" disabled={!service.isEditable} title={service.isEditable ? 'A new card below this one' : service.editUnavailableReason} onClick={() => store.cardNewOpen(zettel.key)}><Plus size={11} aria-hidden="true" /><span>New card below</span></button>
-				<button type="button" className="doc-button" data-danger="" disabled={removeReason !== ''} title={removeReason || 'Remove this card from the box'} onClick={() => store.cardRemoveAsk(zettel.key)}><Trash2 size={11} aria-hidden="true" /><span>Remove card</span></button>
-			</p>
-			{isNewHere ? (
-				<p className="zettel-edit-line">
-					<span className="doc-note">title</span>
-					<EditValueInline value={cardNew.title} placeholder="(the title of the new card)" isLocked={cardNew.isBusy} onCommit={(text) => store.cardNewTitleSet(text)} />
-					<button type="button" className="doc-button" data-primary="" disabled={cardNew.isBusy || !cardNew.title.trim()} onClick={() => void store.cardNewRun(service, model)}>Create</button>
-					<button type="button" className="doc-button" disabled={cardNew.isBusy} onClick={store.cardNewClose}>Cancel</button>
-					{cardNew.message ? <span className="doc-error">{cardNew.message}</span> : null}
-				</p>
-			) : null}
-			{isRemoveHere ? (
-				<p className="zettel-edit-line">
-					<span className="doc-note">Remove “{zettel.title}”? Links to it will show as missing.</span>
-					<button type="button" className="doc-button" data-danger="" disabled={cardRemove.isBusy} onClick={() => void store.cardRemoveRun(service, model)}>Remove</button>
-					<button type="button" className="doc-button" disabled={cardRemove.isBusy} onClick={store.cardRemoveClose}>Keep</button>
-					{cardRemove.message ? <span className="doc-error">{cardRemove.message}</span> : null}
-				</p>
-			) : null}
+		<section className="zettel-section zettel-strip" aria-label="Connections">
+			<button type="button" className="zettel-strip-all" title="Show every connection of this zettel" onClick={() => open(ZETTEL_PLACE_LIST.map((place) => place.id).join(''))}><Network size={12} aria-hidden="true" /><span>Connections</span></button>
+			{placeList.map((place) => <button key={place.id} type="button" className="zettel-filter-chip" title={`${place.title}: show them alone`} onClick={() => open(place.id)}>{place.label}<em>{countByPlace[place.id]}</em></button>)}
 		</section>
 	);
-});
-
-// the text of a card: read, or edited block by block while the document of the block is edited
-const ZettelCardText = observer(function ZettelCardText({ context, docPath }) {
-	return <ZettelDocBody path={docPath} isEditing={context.service.isEditable} />;
 });
 
 function ZettelSourceList({ sourceList }) {
@@ -312,33 +204,6 @@ function ZettelSourceList({ sourceList }) {
 	);
 }
 
-const ZettelProgressLine = observer(function ZettelProgressLine({ model, questionList }) {
-	const count = zettelProgressCount(model, questionList);
-	return <span className="doc-note">{count.right} right · {count.wrong} missed · {count.review} to review · {count.none} not tried</span>;
-});
-
-// the questions below a card, one row each
-const ZettelQuestionListCard = observer(function ZettelQuestionListCard({ context, zettel }) {
-	const { model } = context;
-	const questionList = zettelQuestionChildListOf(model, zettel.key);
-	return (
-		<article className="zettel-card not-prose">
-			<header className="zettel-card-head">
-				<h2 className="zettel-card-title">Questions — {zettel.title}</h2>
-				<p className="zettel-card-meta"><ZettelProgressLine model={model} questionList={questionList} /></p>
-			</header>
-			<div className="zettel-row-list">
-				{questionList.map((question) => (
-					<button key={question.key} type="button" className="zettel-row is-question" onClick={() => context.onOpen(question.key, '')}>
-						<span className="zettel-row-title"><ZettelProgressDot status={zettelProgressOf(model, question.key)} /><span className="zettel-row-number">Q{question.number}</span><span className="zettel-row-name">{question.title}</span></span>
-						<span className="zettel-row-text">{question.summary && context.store.isRevealed(question.key) ? question.summary : ''}</span>
-					</button>
-				))}
-			</div>
-		</article>
-	);
-});
-
 export function ZettelProgressDot({ status }) {
 	const label = { right: 'answered right', wrong: 'missed', review: 'to review' }[status] ?? 'not tried';
 	return <span className="zettel-progress-dot" data-status={status || 'none'} title={label} aria-label={label} />;
@@ -346,30 +211,26 @@ export function ZettelProgressDot({ status }) {
 
 const PROGRESS_BUTTON_LIST = [{ id: 'right', label: 'Got it' }, { id: 'wrong', label: 'Missed' }, { id: 'review', label: 'Review later' }];
 
-// a question: its stem and options from its data, to choose among; once the answer is
-// shown, the verdict of each option, the answer, the clues, and its text: the analysis,
-// with a section per option that a link names as {key}.md#option-b
-const ZettelQuestionCard = observer(function ZettelQuestionCard({ context, question, docPath }) {
+// a question: its stem and options from its data, to choose among; once the answer is shown,
+// the verdict of each option, the answer, the clues, and its text: the analysis, with a section
+// per option that a link names as {key}.md#option-b
+const ZettelQuestionText = observer(function ZettelQuestionText({ context, question, docPath }) {
 	const { model, store, service } = context;
 	const isRevealed = store.isRevealed(question.key);
 	const choiceList = store.choiceListOf(question.key);
 	const status = zettelProgressOf(model, question.key);
 	const isDisputed = zettelQuestionIsDisputed(question);
 	const answerCount = question.answer.length;
-	const zettelKeyList = question.zettelList.filter((key) => zettelGet(model, key));
 	return (
-		<article className="zettel-card" data-level="question">
+		<article className="zettel-text" data-level="question">
 			<div className="not-prose">
-				<header className="zettel-card-head">
-					<h2 className="zettel-card-title">Question {question.number} — {question.title}</h2>
-					<p className="zettel-card-meta">
-						<span className="doc-badge">question</span>
-						<ZettelProgressDot status={status} />
-						{isRevealed && isDisputed ? <span className="doc-badge-outline" data-error="" title="The answer of this card differs from the one the source of the questions gives">answer disputed</span> : null}
-						{isRevealed && !isDisputed && question.answerConfidence !== 'high' ? <span className="doc-badge-outline" data-primary="" title="The answer is not certain">confidence {question.answerConfidence}</span> : null}
-						{!question.isAnalysed ? <span className="doc-badge-outline" title="Only the answer of the source of the questions is known">not analysed</span> : null}
-					</p>
-				</header>
+				<p className="zettel-text-meta">
+					<ZettelProgressDot status={status} />
+					<span className="doc-note">{{ right: 'answered right', wrong: 'missed', review: 'to review' }[status] ?? 'not tried yet'}</span>
+					{isRevealed && isDisputed ? <span className="doc-badge-outline" data-error="" title="The answer of this question differs from the one the source of the questions gives">answer disputed</span> : null}
+					{isRevealed && !isDisputed && question.answerConfidence !== 'high' ? <span className="doc-badge-outline" data-primary="" title="The answer is not certain">confidence {question.answerConfidence}</span> : null}
+					{!question.isAnalysed ? <span className="doc-badge-outline" title="Only the answer of the source of the questions is known">not analysed</span> : null}
+				</p>
 				<div className="zettel-question-stem">{question.stem.split(/\n{2,}|\n(?=[A-Z])/).map((part, index) => <p key={index}>{part}</p>)}</div>
 				{!isRevealed && answerCount > 1 ? <p className="doc-note">Choose {answerCount}.</p> : null}
 				<div className="zettel-option-list">
@@ -438,14 +299,9 @@ const ZettelQuestionCard = observer(function ZettelQuestionCard({ context, quest
 							</section>
 						) : null}
 					</div>
-					<div className="zettel-section zettel-section-doc"><ZettelCardText context={context} docPath={docPath} /></div>
+					<div className="zettel-section zettel-section-doc"><ZettelDocBody path={docPath} isEditing={service.isEditable} /></div>
 					<div className="not-prose">
-						{zettelKeyList.length > 0 ? (
-							<section className="zettel-section">
-								<h3 className="zettel-section-title"><span>Cards needed</span><em>{zettelKeyList.length}</em></h3>
-								<p className="zettel-chip-line">{zettelKeyList.map((key) => <ZettelCardLink key={key} context={context} zettelKey={key} className="is-chip" />)}</p>
-							</section>
-						) : null}
+						<ZettelConnectionStrip context={context} zettel={question} />
 						<ZettelSourceList sourceList={question.sourceList} />
 						<ZettelNoteSection context={context} zettel={question} />
 					</div>
@@ -455,9 +311,9 @@ const ZettelQuestionCard = observer(function ZettelQuestionCard({ context, quest
 	);
 });
 
-// the notes taken on a card, each a document of the object. while the document of the block
-// is edited, a note is added (on the card, or on one of its places) and removed here, and its
-// text is edited block by block as any document; in reading mode they are read
+// the notes taken on a zettel, each a document of the object. while the document of the block is
+// edited, a note is added (on the zettel, or on one of its places) and removed here, and its text
+// is edited block by block as any document; in reading mode they are read
 const ZettelNoteSection = observer(function ZettelNoteSection({ context, zettel }) {
 	const { model, store, service } = context;
 	const noteList = model.noteListByTarget.get(zettel.key) ?? [];
@@ -490,7 +346,7 @@ const ZettelNoteSection = observer(function ZettelNoteSection({ context, zettel 
 					<div className="zettel-note-add">
 						<span className="doc-note">A new note, on</span>
 						<div className="zettel-filter" role="group" aria-label="The place the note is on">
-							<button type="button" className="zettel-filter-chip" aria-pressed={add.target !== zettel.key || add.place === ''} onClick={() => store.noteAddPlaceSet(zettel.key, '')}>the whole card</button>
+							<button type="button" className="zettel-filter-chip" aria-pressed={add.target !== zettel.key || add.place === ''} onClick={() => store.noteAddPlaceSet(zettel.key, '')}>the whole zettel</button>
 							{placeList.map((one) => <button key={one.id} type="button" className="zettel-filter-chip" aria-pressed={add.target === zettel.key && add.place === one.id} onClick={() => store.noteAddPlaceSet(zettel.key, one.id)}>{one.label}</button>)}
 						</div>
 						<p className="zettel-edit-line">
@@ -504,3 +360,9 @@ const ZettelNoteSection = observer(function ZettelNoteSection({ context, zettel 
 		</section>
 	);
 });
+
+// what the reader sees while a body is not drawn yet: as tall as it will be
+export function ZettelReading({ text = 'Reading the zettels' }) {
+	return <p className="doc-status not-prose"><LoaderCircle aria-hidden="true" size={12} className="doc-spin" /><span>{text}</span></p>;
+}
+

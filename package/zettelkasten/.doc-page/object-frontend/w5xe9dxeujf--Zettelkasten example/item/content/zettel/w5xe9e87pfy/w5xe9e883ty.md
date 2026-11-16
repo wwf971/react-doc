@@ -32,6 +32,19 @@ flow:
       title: Use it
       text: answer a question from the box
       tone: green
+connectionList:
+  - type: contain
+    group: Areas
+    form: array
+    itemList:
+      - card
+      - link
+      - structure
+  - group: Start here
+    form: list
+    itemList:
+      - card-atomic
+      - link-backlink
 ---
 
 <!--renderComp=Anchor,id=idea-->
@@ -46,6 +59,7 @@ Start with [Cards](card.md), follow a link, and come back with the arrows of the
 
 ## Try it here
 
-- Click a card of the map on the left, or a link in this text.
-- Open **Questions** to test yourself: [Q1](q001.md).
-- Switch the document to **Edit** to change this text block by block, add a card below this one, or take a note.
+- Click a link in this text: the zettel shows the one it names, and the arrows of its title bar come back.
+- Switch the zettel to **Connections**, at the right of its title bar: what holds it stands above, what it holds below, its links on the sides. A click on a zettel there brings it to the middle; a click on the one in the middle reads it.
+- Open **Questions** above the zettel to test yourself: [Q1](q001.md).
+- Switch the document to **Edit** to change this text block by block; the menu of the title bar then connects this zettel to another, makes one inside it, or removes it.

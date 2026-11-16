@@ -1,6 +1,8 @@
 ---
 level: topic
-parent: structure
+parent:
+  - structure
+  - link
 title: Hub cards
 summary: A hub card says little itself; it gathers the cards of one subject and says how they relate.
 questionList:
@@ -10,6 +12,16 @@ questionList:
 sourceList:
   - title: Zettelkasten (Wikipedia)
     url: https://en.wikipedia.org/wiki/Zettelkasten
+connectionList:
+  - group: Gathers
+    form: map
+    itemList:
+      - key: idea
+        to: card-atomic
+      - key: wording
+        to: card-own-words
+      - key: finding
+        to: link-backlink
 ---
 
 <!--renderComp=Anchor,id=role-->

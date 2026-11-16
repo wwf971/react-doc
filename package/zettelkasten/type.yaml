@@ -4,41 +4,41 @@
 typeList:
   - id: zettelkasten.box
     label: Zettelkasten
-    description: linked knowledge cards in a hierarchy, questions referring to them, and the notes of a reader
+    description: "linked zettels: knowledge notes held in one another and joined by connections, questions referring to them, and the notes of a reader"
     icon: book
-    # what it holds (main/doc_page_impl_obj_frontend.md#what-a-type-accepts): one asset per card,
-    # per question, per note, and one for the progress on the questions. a card, a question and
+    # what it holds (main/doc_page_impl_obj_frontend.md#what-a-type-accepts): one asset per zettel,
+    # per question, per note, and one for the progress on the questions. a zettel, a question and
     # a note are documents (isDoc): Markdown items the object registers with the source of the
     # page, so their text is rendered as a document and links to them are ordinary links
     # (main/doc_page_impl_obj_frontend.md#documents-of-an-object)
     assetKindList:
-      # the document path is a system of its own (docPath): a card stands at card/{key}.md wherever
-      # the hierarchy puts its asset path, so moving a card below another breaks no link by path
-      - { id: zettel, label: Card, langList: [md, mdx], pathPrefix: /zettel/, groupPath: zettel, isDoc: true, docPath: "card/{key}" }
+      # the document path is a system of its own (docPath): a zettel stands at card/{key}.md wherever
+      # its asset path is, so a zettel given another container breaks no link by path
+      - { id: zettel, label: Zettel, langList: [md, mdx], pathPrefix: /zettel/, groupPath: zettel, isDoc: true, docPath: "card/{key}" }
       - { id: question, label: Question, langList: [md, mdx], pathPrefix: /question/, groupPath: question, isDoc: true, docPath: "question/{key}" }
       - { id: note, label: Note, langList: [md], pathPrefix: /note/, groupPath: note, isDoc: true, docPath: "note/{key}" }
-      # a document of the box that is not a card: its home document (metadata.docHome of the object),
+      # a document of the box that is not a zettel: its home document (metadata.docHome of the object),
       # which holds an explorer block and is what a link from outside the box opens
       - { id: page, label: Page, langList: [md, mdx], pathPrefix: /page/, groupPath: page, isDoc: true }
       - { id: progress, label: Progress, langList: [yaml], pathPrefix: /progress, groupPath: progress }
-    # where its items lie (main/doc_page_impl_obj_frontend.md#partitions): the cards and questions,
+    # where its items lie (main/doc_page_impl_obj_frontend.md#partitions): the zettels and questions,
     # which are the content, tracked; what a reader writes while studying (notes, how each
     # question went), kept out of git with its item list
     partitionList:
-      - { id: content, label: Content, description: the knowledge cards and the questions, isDefault: true }
+      - { id: content, label: Content, description: the knowledge zettels and the questions, isDefault: true }
       - { id: note, label: My notes, description: "the notes of a reader and the progress on the questions: the checkout's own", isGitIgnored: true }
     modeList:
       - id: explorer
         label: Explorer
-        description: the map of the cards (card diagram scenes by path) and the card being read, side by side. param zettel names the card shown first
+        description: "a zettel lying on a desk: a card showing its text, its connections or its flow, with a search and side panels above it. param zettel names the zettel shown first"
         comp: ZettelExplorer
         isDefault: true
       - id: card
-        label: One card
-        description: one card in the flow of the document; param zettel names it
+        label: One zettel
+        description: one zettel, the card alone in the flow of the document; param zettel names it
         comp: ZettelCard
         # the mode showing one thing of the box, named by an inner path in its parameter "zettel"
-        # (a key, a path of the card): what draws a reference such as
+        # (a key, a path of the zettel): what draws a reference such as
         # frontend:{id}#card-atomic as a block
         # (main/doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths)
         pathParam: zettel

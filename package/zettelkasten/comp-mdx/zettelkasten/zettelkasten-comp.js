@@ -7,15 +7,15 @@ import { ZettelCard, ZettelExplorer } from './ZettelExplorer.jsx';
 import { ZettelDiagram, ZettelNode, zettelNodeDefineOptions } from './ZettelDiagram.jsx';
 
 // The components of a zettelkasten (doc/README.md#the-modes): modes of a frontend object,
-// rendered by the entry component ObjectFrontend, never written as blocks themselves. The
-// explorer draws a switching viewport, so it declares that viewport's config (SceneTitleAlign),
+// rendered by the entry component ObjectFrontend, never written as blocks themselves. A zettel
+// draws a switching viewport (its connections), so it declares that viewport's config (SceneTitleAlign),
 // which a doc page sets under compConfig by the name of the component.
 const modeDefine = (label, description, { configDefineList } = {}) => ({ placementList: ['objectFrontend'], expose: { meta: { label, description, isNotInDoc: true, ...(configDefineList ? { configDefineList } : {}) } } });
 
-export const ZettelExplorerDefine = compDefine(ZettelExplorer, modeDefine('Zettelkasten: explorer', 'The map of the cards and the card being read, side by side.', { configDefineList: switchConfigDefineList }));
-export const ZettelCardDefine = compDefine(ZettelCard, modeDefine('Zettelkasten: one card', 'One card of a zettelkasten in the flow of the document.'));
+export const ZettelExplorerDefine = compDefine(ZettelExplorer, modeDefine('Zettelkasten: explorer', 'A zettel lying on a desk: a card showing its text, its connections or its flow.', { configDefineList: switchConfigDefineList }));
+export const ZettelCardDefine = compDefine(ZettelCard, modeDefine('Zettelkasten: one zettel', 'One zettel of a zettelkasten, the card alone, in the flow of the document.'));
 
-// cards on a card diagram (doc/README.md#cards-on-a-card-diagram): a block of any document, with
+// cards on a card diagram (doc/README.md#zettels-on-a-card-diagram): a block of any document, with
 // the format, the editor and the apis of CardDiagram, and the node that draws a card
 export const ZettelDiagramDefine = compDefine(ZettelDiagram, cardDiagramDefineOptionsBuild({
 	label: 'Zettel diagram',

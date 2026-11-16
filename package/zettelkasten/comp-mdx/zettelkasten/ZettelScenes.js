@@ -1,203 +1,337 @@
 import { diagramArrangeApply } from '../../../cloud-dev-vis/comp-mdx/card-diagram/DiagramArrange.js';
-import { zettelArrangerFlow, zettelCardHeightEstimate } from './ZettelArrange.js';
-import {
-	ZETTEL_QUESTION_SEGMENT, zettelBacklinkListOf, zettelCountOf, zettelGet, zettelHubOf, zettelKnowledgeChildListOf, zettelLabelOf, zettelLinkOutListOf, zettelPathOf, zettelPathRead,
-	zettelProgressOf, zettelQuestionChildListOf, zettelQuestionIsDoubtful, zettelQuestionRefListOf,
-} from './ZettelData.js';
+import { zettelArrangerConnection, zettelArrangerFlow, zettelMiniHeightEstimate } from './ZettelArrange.js';
+import { zettelCountOf, zettelGet, zettelHubOf, zettelKnowledgeChildListOf, zettelLabelOf, zettelProgressOf, zettelRoleBuild, zettelTitleOf } from './ZettelData.js';
 import { zettelTextClip } from './ZettelDoc.js';
 
-// The scenes of a zettelkasten (doc/README.md#the-map): every card is a scene of the
-// switching viewport of the package cloud-dev-vis (card-diagram-flexible-switch.md), its
-// path the keys from the root down, so the path bar is the hierarchy and a click on a card
-// of a scene opens the scene of that card. Generated from the model; nothing is placed by hand.
+// The scenes of a zettelkasten (doc/README.md#the-connection-view): what the switching viewport of
+// the package cloud-dev-vis (card-diagram-flexible-switch.md) draws inside a zettel when it shows
+// its connections or its flow. Generated from the model and laid out by the arrangers of
+// ZettelArrange.js; nothing is placed by hand.
 //
-//   /map                          the root          views: flow (when written), link
-//   /map/{hub}/{topic}/{fact}     a knowledge card  views: flow (when written), link
-//   /map/{hub}/question           the questions below a card, as pills
-//   /map/{hub}/question/{qNNN}    a question: its options, and the cards each option is about
+//   /z/{key}              the connections of a zettel, every place shown
+//   /z/{key}/f-{places}   the same with only some places: letters of c (contained by), h (holds),
+//                         b (back links), f (forward links and groups), q (questions)
+//   /z/{key}/flow         the process a zettel describes (its flow): steps in ranks
 //
-//   view flow   the process the card describes: its steps in ranks (ZettelArrange.js), a step
-//               naming a card opens it
-//   view link   the card among its neighbours: its parent above, the cards pointing at it on
-//               the left, the cards it points at on the right, what lies below it and the
-//               questions using it underneath, each a frame
-//
-// a card keeps one node id (z:{key}) in every scene showing it, so a switch between two
-// scenes moves the cards they share instead of replacing them.
+// a zettel keeps one node id (z:{key}) in every scene showing it, so going from one zettel to
+// another, from one filter to another, or between the connections and the flow, moves the zettels
+// two scenes share (a morph) instead of replacing them.
 
 export const ZETTEL_TONE_LIST = ['blue', 'teal', 'violet', 'amber', 'green', 'red', 'slate'];
+export const ZETTEL_PLACE_LIST = [
+	{ id: 'c', label: 'Contained by', title: 'The zettels holding this one' },
+	{ id: 'h', label: 'Contains', title: 'The zettels this one holds' },
+	{ id: 'b', label: 'Back links', title: 'The zettels pointing at this one' },
+	{ id: 'f', label: 'Forward links', title: 'The zettels this one points at, and its lists, arrays and maps' },
+	{ id: 'q', label: 'Questions', title: 'The questions this zettel holds, and those using it' },
+];
+export const ZETTEL_PLACE_ALL = ZETTEL_PLACE_LIST.map((place) => place.id).sort().join('');
 export const ZETTEL_LABEL_DEFAULT = {
-	viewFlow: 'Flow', viewLink: 'Links', questionList: 'Questions', frameBelow: 'Inside this card', frameQuestion: 'Questions using this card', frameAlso: 'Also needed',
-	linkIn: 'pointed at by', linkOut: 'points at', levelRoot: 'map', levelHub: 'area', levelTopic: 'topic', levelFact: 'fact', more: 'more', option: 'Option', correct: 'correct', wrong: 'wrong',
-	countCard: 'cards', countQuestion: 'questions', disputed: 'answer disputed', doubtful: 'check the answer',
+	containedBy: 'Contained by', contains: 'Contains', backLink: 'Back links', forwardLink: 'Forward links', questionRelated: 'Questions',
+	more: 'more', levelRoot: 'map', levelHub: 'area', levelTopic: 'topic', levelFact: 'fact', countZettel: 'zettels inside', countQuestion: 'questions',
+	formList: 'list', formArray: 'array', formMap: 'map',
 };
 
-const WIDTH_CENTER = 330;
-const WIDTH_SIDE = 236;
-const WIDTH_STEP = 204;
-const GAP_COLUMN = 120;
-const GAP_ROW = 18;
-const GRID_GAP_X = 22;
+const WIDTH_CENTER = 320;
+const WIDTH_SIDE = 230;
+const WIDTH_GRID = 210;
+const WIDTH_STEP = 210;
 const SIDE_MAX = 6;
-const FRAME_PADDING = { top: 46, right: 20, bottom: 20, left: 20 };
+const GAP_SIDE = 120;
+const LABEL_CHAR_WIDTH = 6.8;
+// up to how many cards a place shows their summaries: a column is tall already, a grid has room
+const NORMAL_MAX = 4;
+const GRID_NORMAL_MAX = 12;
+const FRAME_PADDING = { top: 30, right: 12, bottom: 12, left: 12 };
 const PROGRESS_TONE = { right: 'green', wrong: 'red', review: 'amber' };
 
 const nodeIdOf = (key) => `z:${key}`;
-const handleListBuild = () => [{ id: 'in', direction: 'in', anchor: { side: 'left' } }, { id: 'out', direction: 'out', anchor: { side: 'right' } }, { id: 'top', direction: 'in', anchor: { side: 'top' } }, { id: 'bottom', direction: 'out', anchor: { side: 'bottom' } }];
-const diagramFinish = (diagram) => ({ defaults: { connection: { renderer: { type: 'bezier' }, markerEnd: 'arrowClosed' } }, ...diagram });
+// a handle whose end draws no marker of its own: a line simply touches the card
+const handleBuild = (id, direction, side) => ({ id, direction, anchor: { side }, isMarkerHidden: true });
 
-// what a generator of scenes needs beside the model: the words, the tone of each hub, which
-// questions show their answer
-function contextBuild(model, { labels = {}, revealKeySet = null } = {}) {
+// ---------- paths ----------
+
+const placeCodeOf = (placeSet) => [...placeSet].sort().join('');
+
+export function zettelScenePathBuild(key, view = 'link', placeCode = ZETTEL_PLACE_ALL) {
+	if (view === 'flow') return `/z/${key}/flow`;
+	const code = placeCodeOf(new Set(String(placeCode)));
+	return code === ZETTEL_PLACE_ALL ? `/z/${key}` : `/z/${key}/f-${code || 'none'}`;
+}
+
+// { key, view: link | flow, placeSet } of a scene path, or null
+export function zettelScenePathRead(path) {
+	const match = /^\/z\/([^/]+)(?:\/(flow|f-([a-z]*)))?$/.exec(String(path ?? '').split('@')[0]);
+	if (!match) return null;
+	if (match[2] === 'flow') return { key: match[1], view: 'flow', placeSet: new Set(ZETTEL_PLACE_ALL) };
+	const code = match[3] === undefined ? ZETTEL_PLACE_ALL : match[3] === 'none' ? '' : match[3];
+	return { key: match[1], view: 'link', placeSet: new Set(code) };
+}
+
+// ---------- what the scenes are drawn with ----------
+
+// the tone of a zettel, the same on its cards and on its own title bar: the tone of its area (a
+// zettel held by the root), slate for the root; a question's says how the reader did on it
+export function zettelToneOfBuild(model) {
 	const toneByHub = new Map();
 	zettelKnowledgeChildListOf(model, model.rootKey).forEach((hub, index) => toneByHub.set(hub.key, ZETTEL_TONE_LIST[index % (ZETTEL_TONE_LIST.length - 1)]));
-	const toneOf = (zettel) => {
+	return (zettel) => {
 		if (!zettel) return 'slate';
 		if (zettel.kind === 'question') return PROGRESS_TONE[zettelProgressOf(model, zettel.key)] ?? 'slate';
 		if (zettel.key === model.rootKey) return 'slate';
 		return toneByHub.get(zettelHubOf(model, zettel.key)?.key) ?? 'slate';
 	};
-	return { model, labels: { ...ZETTEL_LABEL_DEFAULT, ...labels }, toneOf, isRevealed: (key) => !revealKeySet || revealKeySet.has(key) };
 }
 
-const levelLabelOf = (context, zettel) => context.labels[{ root: 'levelRoot', hub: 'levelHub', topic: 'levelTopic', fact: 'levelFact' }[zettel.level]] ?? '';
+// the words, the tones, which questions show their verdicts
+function contextBuild(model, { labels = {}, revealKeySet = null, objectLabelGet } = {}) {
+	return { model, labels: { ...ZETTEL_LABEL_DEFAULT, ...labels }, toneOf: zettelToneOfBuild(model), isRevealed: (key) => !revealKeySet || revealKeySet.has(key), objectLabelGet: objectLabelGet ?? ((ref) => ref) };
+}
 
-// a knowledge card as a node: its title, its summary cut to a few lines, its level
-function zettelNodeBuild(context, zettel, { x, y, width = WIDTH_SIDE, isCenter = false, isLinked = true }) {
-	const { model } = context;
-	if (zettel.kind === 'question') return questionNodeBuild(context, zettel, { x, y, width });
-	const count = zettelCountOf(model, zettel.key);
-	const metaList = isCenter ? [
-		...(count.zettel ? [{ value: String(count.zettel), label: context.labels.countCard }] : []),
-		...(count.question ? [{ value: String(count.question), label: context.labels.countQuestion }] : []),
-	] : [];
-	return {
-		id: nodeIdOf(zettel.key),
-		renderer: { type: 'card-note' },
-		position: { x, y },
+const levelLabelOf = (context, zettel) => (zettel.kind === 'question' ? '' : context.labels[{ root: 'levelRoot', hub: 'levelHub', topic: 'levelTopic', fact: 'levelFact' }[zettel.level]] ?? '');
+
+// a zettel as a card of a scene. its height is written: the card clamps its summary to the lines
+// counted, so cards of one frame can share the height of the tallest
+function cardBuild(context, zettel, { place, size, width, keyList = [], link = '', idSuffix = '' }) {
+	const node = {
+		id: `${nodeIdOf(zettel.key)}${idSuffix}`,
+		renderer: { type: 'zettel-card' },
+		position: { x: 0, y: 0 },
 		size: { width, height: 'auto' },
-		...(isLinked ? { link: zettelPathOf(model, zettel.key) } : {}),
-		data: { title: zettel.title, tag: levelLabelOf(context, zettel), text: isCenter ? zettel.summary : zettelTextClip(zettel.summary, 96), tone: context.toneOf(zettel), ...(metaList.length ? { metaList } : {}) },
-		handles: handleListBuild(),
+		...(link ? { link } : {}),
+		data: {
+			place, size, title: zettelTitleOf(zettel), kind: zettel.kind, tone: context.toneOf(zettel),
+			tag: size === 'compact' ? '' : levelLabelOf(context, zettel),
+			text: size === 'compact' ? '' : zettel.summary,
+			hover: zettel.summary ? zettelTextClip(zettel.summary, 240) : '',
+			...(keyList.length > 0 ? { keyList } : {}),
+		},
+		handles: [handleBuild('in', 'in', 'left'), handleBuild('out', 'out', 'right')],
+	};
+	node.size.height = zettelMiniHeightEstimate(node);
+	return node;
+}
+
+// the cards of one frame as tall as the tallest of them, so a column or a row reads as one
+function heightEven(nodeList) {
+	const height = Math.max(0, ...nodeList.filter((node) => node.renderer.type === 'zettel-card' && node.data.size !== 'compact').map((node) => node.size.height));
+	for (const node of nodeList) if (node.renderer.type === 'zettel-card' && node.data.size !== 'compact') node.size.height = height;
+}
+
+function frameBuild(id, place, { label, count = 0, form = '', tone = 'slate', memberIdList, handle = '', handleList = [] }) {
+	return {
+		id, renderer: { type: 'zettel-frame' }, around: { nodeIdList: memberIdList, padding: FRAME_PADDING },
+		data: { place, label, count: count > 1 ? String(count) : '', form, tone, ...(handle ? { handle } : {}) },
+		handles: handleList,
 	};
 }
 
-// a question as a pill: its number and title, toned by how the reader did on it
-function questionNodeBuild(context, question, { x, y, width = WIDTH_SIDE }) {
-	const { model, labels } = context;
-	const statList = [];
-	if (zettelQuestionIsDoubtful(question) && context.isRevealed(question.key)) statList.push(labels.doubtful);
+// a line of the view. a label: { kind: text | zettel | object }; a zettel as a label opens it, an
+// object opens where its provider says
+function lineBuild(context, id, from, to, { label = null, isDirected = true, type = 'bezier', placeCode } = {}) {
+	const line = { id, source: from, target: to, renderer: { type }, markerEnd: isDirected ? 'arrowClosed' : 'none' };
+	if (!label) return line;
+	if (label.kind === 'zettel') {
+		const zettel = zettelGet(context.model, label.key);
+		if (!zettel) return { ...line, label: { text: label.text || label.key } };
+		return { ...line, label: { text: label.text || zettelLabelOf(zettel) }, link: zettelScenePathBuild(zettel.key, 'link', placeCode), linkTitle: `${zettelTitleOf(zettel)}: the zettel this connection is labelled by` };
+	}
+	if (label.kind === 'object') return { ...line, label: { text: label.text || context.objectLabelGet(label.ref) }, link: `object:${label.ref}`, linkTitle: `${label.ref}: open the object this connection is labelled by` };
+	return label.text ? { ...line, label: { text: label.text } } : line;
+}
+
+const labelOfLinkList = (linkList) => linkList.find((link) => link.label)?.label ?? null;
+const isDirectedOfLinkList = (linkList) => linkList.some((link) => link.isDirected);
+
+// a place with more cards than fit: the first ones, and a card opening the place alone
+function capWithMore(context, entryList, { isCapped, place, placeLetter, zettelKey, width }) {
+	if (!isCapped || entryList.length <= SIDE_MAX) return { shown: entryList, more: null };
+	const count = entryList.length - (SIDE_MAX - 1);
 	return {
-		id: nodeIdOf(question.key),
-		renderer: { type: 'card-brief' },
-		position: { x, y },
-		size: { width, height: 'auto' },
-		link: zettelPathOf(model, question.key),
-		data: { title: `Q${question.number} · ${question.title}`, icon: 'list-checks', tone: context.toneOf(question), statList },
-		handles: handleListBuild(),
+		shown: entryList.slice(0, SIDE_MAX - 1),
+		more: {
+			id: `more:${place}:${zettelKey}`, renderer: { type: 'card-three-dots' }, position: { x: 0, y: 0 }, size: { width, height: 40 },
+			link: zettelScenePathBuild(zettelKey, 'link', placeLetter),
+			data: { place, direction: 'vertical', text: `${count} ${context.labels.more}` }, handles: [],
+		},
 	};
 }
 
-const frameBuild = (id, nodeIdList, text, tone = 'slate', icon = 'layers') => ({
-	id, renderer: { type: 'color-block' }, around: { nodeIdList, padding: FRAME_PADDING }, data: { tone, fill: 'none', labelSide: 'top', itemList: [{ id: 'label', icon, text }] }, handles: [],
-});
-
-const lineBuild = (id, sourceId, sourceHandle, targetId, targetHandle, labelText = '') => ({
-	id, source: { nodeId: sourceId, handleId: sourceHandle }, target: { nodeId: targetId, handleId: targetHandle }, ...(labelText ? { label: { text: labelText } } : {}),
-});
-
-// cards in a grid of columnCount columns, each row as tall as its tallest card. answers the bottom
-function gridPlace(nodeList, { x, y, width, columnCount, gapX = GRID_GAP_X, gapY = GAP_ROW }) {
-	let top = y;
-	for (let start = 0; start < nodeList.length; start += columnCount) {
-		const row = nodeList.slice(start, start + columnCount);
-		row.forEach((node, index) => { node.position = { x: x + index * (width + gapX), y: top }; });
-		top += Math.max(...row.map(zettelCardHeightEstimate)) + gapY;
-	}
-	return nodeList.length > 0 ? top - gapY : y;
-}
-
-// a column of cards one under another; answers the bottom
-function columnPlace(nodeList, { x, y, gapY = GAP_ROW }) {
-	let top = y;
-	for (const node of nodeList) {
-		node.position = { x, y: top };
-		top += zettelCardHeightEstimate(node) + gapY;
-	}
-	return nodeList.length > 0 ? top - gapY : y;
-}
-
-// the view "link" of a knowledge card
-function sceneLinkBuild(context, zettel) {
+// the connection view of a zettel (ZettelArrange.js zettelArrangerConnection): every zettel
+// connected to it, each place in a frame, the lines of each place to the zettel in the middle
+function sceneConnectionBuild(context, zettel, placeSet) {
 	const { model, labels } = context;
+	const role = zettelRoleBuild(model, zettel.key);
+	const placeCode = placeCodeOf(placeSet);
+	const linkOf = (key) => zettelScenePathBuild(key, 'link', placeCode);
+	const isOn = (letter) => placeSet.has(letter);
 	const nodes = [];
 	const connections = [];
-	const usedSet = new Set([zettel.key]);
-	const parent = zettel.parentKey ? zettelGet(model, zettel.parentKey) : null;
-	const childList = zettelKnowledgeChildListOf(model, zettel.key);
-	const questionRefList = zettelQuestionRefListOf(model, zettel.key);
-	const questionSet = new Map(questionRefList.map((entry) => [entry.question.key, entry.question]));
-	for (const question of zettelQuestionChildListOf(model, zettel.key)) questionSet.set(question.key, question);
-	if (parent) usedSet.add(parent.key);
-	for (const child of childList) usedSet.add(child.key);
-	const neighbourOf = (list) => list.map((entry) => entry.zettel).filter((one) => one.kind === 'zettel' && !usedSet.has(one.key));
-	const linkInList = neighbourOf(zettelBacklinkListOf(model, zettel.key));
-	const linkInKeySet = new Set(linkInList.map((one) => one.key));
-	// a card pointing both ways is drawn once, on the side it points from
-	const linkOutList = neighbourOf(zettelLinkOutListOf(model, zettel.key)).filter((one) => !linkInKeySet.has(one.key));
-	const xCenter = WIDTH_SIDE + GAP_COLUMN;
-	const xRight = xCenter + WIDTH_CENTER + GAP_COLUMN;
-	let yCenter = 0;
-	if (parent) {
-		const parentNode = zettelNodeBuild(context, parent, { x: xCenter + (WIDTH_CENTER - WIDTH_SIDE) / 2, y: 0 });
-		nodes.push(parentNode);
-		yCenter = zettelCardHeightEstimate(parentNode) + 64;
-	}
-	const center = zettelNodeBuild(context, zettel, { x: xCenter, y: yCenter, width: WIDTH_CENTER, isCenter: true, isLinked: false });
-	nodes.push(center);
-	if (parent) connections.push(lineBuild(`up:${zettel.key}`, nodeIdOf(parent.key), 'bottom', center.id, 'top'));
-	const sideBuild = (list, x, isIn) => {
-		const shown = list.slice(0, SIDE_MAX);
-		const nodeList = shown.map((one) => zettelNodeBuild(context, one, { x, y: 0 }));
-		if (list.length > shown.length) nodeList.push({ id: `more:${isIn ? 'in' : 'out'}:${zettel.key}`, renderer: { type: 'card-three-dots' }, position: { x, y: 0 }, size: { width: WIDTH_SIDE, height: 'auto' }, data: { direction: 'vertical', text: `${list.length - shown.length} ${labels.more}` }, handles: [] });
-		const bottom = columnPlace(nodeList, { x, y: yCenter });
-		shown.forEach((one) => connections.push(isIn
-			? lineBuild(`in:${one.key}`, nodeIdOf(one.key), 'out', center.id, 'in')
-			: lineBuild(`out:${one.key}`, center.id, 'out', nodeIdOf(one.key), 'in')));
-		nodes.push(...nodeList);
-		return bottom;
+	const tone = context.toneOf(zettel);
+	const count = zettelCountOf(model, zettel.key);
+	const statList = [
+		...(count.zettel ? [{ value: String(count.zettel), label: labels.countZettel }] : []),
+		...(count.question ? [{ value: String(count.question), label: labels.countQuestion }] : []),
+	];
+	const center = {
+		id: nodeIdOf(zettel.key), renderer: { type: 'zettel-card' }, position: { x: 0, y: 0 }, size: { width: WIDTH_CENTER, height: 'auto' },
+		link: `zettel-open:${zettel.key}`,
+		data: { place: 'center', size: 'center', title: zettelTitleOf(zettel), kind: zettel.kind, tone, tag: levelLabelOf(context, zettel), text: zettel.summary, statList, hover: 'Open this zettel' },
+		handles: [handleBuild('top', 'in', 'top'), handleBuild('bottom', 'out', 'bottom'), handleBuild('in', 'in', 'left'), handleBuild('qin', 'in', 'left'), handleBuild('out', 'out', 'right')],
 	};
-	const bottomIn = sideBuild(linkInList, 0, true);
-	const bottomOut = sideBuild(linkOutList, xRight, false);
-	let top = Math.max(yCenter + zettelCardHeightEstimate(center), bottomIn, bottomOut) + 40 + FRAME_PADDING.top;
-	const widthAll = xRight + WIDTH_SIDE;
-	const columnCount = 3;
-	const xGrid = (widthAll - (columnCount * WIDTH_SIDE + (columnCount - 1) * GRID_GAP_X)) / 2;
-	if (childList.length > 0) {
-		// a card with cards of its own below it is drawn as its scene, small: a click zooms into it
-		const childNodeList = childList.map((child) => {
-			const isContainer = zettel.key === model.rootKey && zettelKnowledgeChildListOf(model, child.key).length > 0;
-			if (!isContainer) return zettelNodeBuild(context, child, { x: 0, y: 0 });
-			const count = zettelCountOf(model, child.key);
-			return {
-				id: `embed:${child.key}`, renderer: { type: 'scene-embed' }, position: { x: 0, y: 0 }, size: { width: WIDTH_SIDE, height: 190 },
-				data: { scene: zettelPathOf(model, child.key), title: child.title, icon: 'layers', tone: context.toneOf(child), statList: [`${count.zettel} ${labels.countCard}`, `${count.question} ${labels.countQuestion}`], viewHover: false },
-				handles: handleListBuild(),
-			};
+	center.size.height = zettelMiniHeightEstimate(center);
+	nodes.push(center);
+	// one side shown alone shows all it has; beside others, a long place is cut
+	const sideCount = ['b', 'f'].filter(isOn).length + (isOn('q') ? 1 : 0);
+	const isCapped = sideCount > 1;
+	const sizeOfCount = (n) => (n > NORMAL_MAX ? 'compact' : 'normal');
+	const sizeOfGrid = (n) => (n > GRID_NORMAL_MAX ? 'compact' : 'normal');
+
+	// above: what holds it
+	if (isOn('c') && role.containerList.length > 0) {
+		const size = sizeOfGrid(role.containerList.length);
+		const cardList = role.containerList.map((entry) => cardBuild(context, entry.zettel, { place: 'container', size, width: WIDTH_GRID, link: linkOf(entry.zettel.key) }));
+		heightEven(cardList);
+		nodes.push(...cardList, frameBuild(`frame:c:${zettel.key}`, 'container', { label: labels.containedBy, count: cardList.length, tone: 'slate', memberIdList: cardList.map((node) => node.id), handleList: [handleBuild('out', 'out', 'bottom')] }));
+		connections.push(lineBuild(context, `contain:up:${zettel.key}`, { nodeId: `frame:c:${zettel.key}`, handleId: 'out' }, { nodeId: center.id, handleId: 'top' }, { type: 'smoothstep' }));
+	}
+	// below: what it holds, then the questions it holds
+	const childList = isOn('h') ? role.childList : [];
+	const questionHeldList = isOn('q') ? role.questionList.filter((entry) => entry.isHeld) : [];
+	if (childList.length + questionHeldList.length > 0) {
+		const size = sizeOfGrid(childList.length);
+		const cardList = childList.map((entry) => {
+			const group = entry.connection?.group;
+			return cardBuild(context, entry.zettel, { place: 'child', size, width: WIDTH_GRID, link: linkOf(entry.zettel.key), keyList: group && group.form !== 'list' ? [{ text: group.key }] : [] });
 		});
-		const bottom = gridPlace(childNodeList, { x: xGrid, y: top, width: WIDTH_SIDE, columnCount });
-		nodes.push(...childNodeList, frameBuild(`frame:below:${zettel.key}`, childNodeList.map((node) => node.id), labels.frameBelow, context.toneOf(zettel)));
-		top = bottom + FRAME_PADDING.bottom + 34 + FRAME_PADDING.top;
+		heightEven(cardList);
+		const questionCardList = questionHeldList.map((entry) => cardBuild(context, entry.zettel, { place: 'child-question', size: 'compact', width: WIDTH_GRID, link: linkOf(entry.zettel.key) }));
+		const memberList = [...cardList, ...questionCardList];
+		const countText = [childList.length ? `${childList.length}` : '', questionHeldList.length ? `${questionHeldList.length} Q` : ''].filter(Boolean).join(' + ');
+		nodes.push(...memberList, frameBuild(`frame:h:${zettel.key}`, 'child', { label: labels.contains, tone, memberIdList: memberList.map((node) => node.id), handleList: [handleBuild('in', 'in', 'top')] }));
+		nodes[nodes.length - 1].data.count = memberList.length > 1 ? countText : '';
+		connections.push(lineBuild(context, `contain:down:${zettel.key}`, { nodeId: center.id, handleId: 'bottom' }, { nodeId: `frame:h:${zettel.key}`, handleId: 'in' }, { type: 'smoothstep' }));
 	}
-	if (questionSet.size > 0) {
-		const questionNodeList = [...questionSet.values()].sort((a, b) => a.number - b.number).map((question) => questionNodeBuild(context, question, { x: 0, y: 0 }));
-		gridPlace(questionNodeList, { x: xGrid, y: top, width: WIDTH_SIDE, columnCount });
-		nodes.push(...questionNodeList, frameBuild(`frame:question:${zettel.key}`, questionNodeList.map((node) => node.id), labels.frameQuestion, 'slate', 'list-checks'));
+	// the left: back links, then the questions using it
+	if (isOn('b') && role.inList.length > 0) {
+		const { shown, more } = capWithMore(context, role.inList, { isCapped, place: 'in', placeLetter: 'b', zettelKey: zettel.key, width: WIDTH_SIDE });
+		const size = sizeOfCount(shown.length);
+		const cardList = shown.map((entry) => cardBuild(context, entry.zettel, { place: 'in', size, width: WIDTH_SIDE, link: linkOf(entry.zettel.key) }));
+		heightEven(cardList);
+		shown.forEach((entry, index) => connections.push(lineBuild(context, `in:${entry.zettel.key}`, { nodeId: cardList[index].id, handleId: 'out' }, { nodeId: center.id, handleId: 'in' }, { label: labelOfLinkList(entry.linkList), isDirected: isDirectedOfLinkList(entry.linkList), placeCode })));
+		const memberList = more ? [...cardList, more] : cardList;
+		nodes.push(...memberList, frameBuild(`frame:b:${zettel.key}`, 'in', { label: labels.backLink, count: role.inList.length, memberIdList: memberList.map((node) => node.id), handle: 'in' }));
 	}
-	return diagramFinish({ nodes, connections });
+	// the questions about it: a question naming it in an option, or named by it. drawn without an
+	// arrow, since the two usually name each other
+	const questionUsingList = isOn('q') ? role.questionList.filter((entry) => !entry.isHeld) : [];
+	if (questionUsingList.length > 0) {
+		const { shown, more } = capWithMore(context, questionUsingList, { isCapped, place: 'in-question', placeLetter: 'q', zettelKey: zettel.key, width: WIDTH_SIDE });
+		const cardList = shown.map((entry) => cardBuild(context, entry.zettel, { place: 'in-question', size: 'compact', width: WIDTH_SIDE, link: linkOf(entry.zettel.key), keyList: optionKeyListOf(context, entry.zettel, entry.optionIdList) }));
+		cardList.forEach((node) => connections.push(lineBuild(context, `q:${node.id}`, { nodeId: node.id, handleId: 'out' }, { nodeId: center.id, handleId: 'qin' }, { isDirected: false })));
+		const memberList = more ? [...cardList, more] : cardList;
+		nodes.push(...memberList, frameBuild(`frame:q:${zettel.key}`, 'in-question', { label: labels.questionRelated, count: questionUsingList.length, memberIdList: memberList.map((node) => node.id), handle: 'qin' }));
+	}
+	// the right: forward links, then each group
+	if (isOn('f') && role.outList.length > 0) {
+		const { shown, more } = capWithMore(context, role.outList, { isCapped, place: 'out', placeLetter: 'f', zettelKey: zettel.key, width: WIDTH_SIDE });
+		const size = sizeOfCount(shown.length);
+		const cardList = shown.map((entry) => cardBuild(context, entry.zettel, { place: 'out', size, width: WIDTH_SIDE, link: linkOf(entry.zettel.key) }));
+		heightEven(cardList);
+		shown.forEach((entry, index) => connections.push(lineBuild(context, `out:${entry.zettel.key}`, { nodeId: center.id, handleId: 'out' }, { nodeId: cardList[index].id, handleId: 'in' }, { label: labelOfLinkList(entry.linkList), isDirected: isDirectedOfLinkList(entry.linkList), placeCode })));
+		const memberList = more ? [...cardList, more] : cardList;
+		nodes.push(...memberList, frameBuild(`frame:f:${zettel.key}`, 'out', { label: labels.forwardLink, count: role.outList.length, memberIdList: memberList.map((node) => node.id), handle: 'out' }));
+	}
+	if (isOn('f')) {
+		const usedIdSet = new Set(nodes.map((node) => node.id));
+		for (const group of role.groupList) {
+			const handleId = `g:${group.id}`;
+			center.handles.push(handleBuild(handleId, 'out', 'right'));
+			// one card per zettel, with every key it stands at (a question's zettel under several options)
+			const memberList = [];
+			for (const item of group.itemList) {
+				const member = memberList.find((one) => one.zettel.key === item.zettel.key);
+				if (member) { if (group.form !== 'list') member.keyTextList.push(item.key); continue; }
+				memberList.push({ zettel: item.zettel, keyTextList: group.form === 'list' ? [] : [item.key], connection: item.connection });
+			}
+			const size = sizeOfCount(memberList.length);
+			const isOption = group.id === 'option' && zettel.kind === 'question';
+			const cardList = memberList.map((member, index) => {
+				// a zettel may stand in two places: here it is another card of the same zettel
+				const idSuffix = usedIdSet.has(nodeIdOf(member.zettel.key)) ? `~${group.id}~${index}` : '';
+				const keyList = isOption ? optionKeyListOf(context, zettel, member.keyTextList, true) : member.keyTextList.map((text) => ({ text }));
+				const node = cardBuild(context, member.zettel, { place: 'group', size, width: WIDTH_SIDE, link: linkOf(member.zettel.key), keyList, idSuffix });
+				usedIdSet.add(node.id);
+				return node;
+			});
+			heightEven(cardList);
+			cardList.forEach((node, index) => connections.push(lineBuild(context, `group:${group.id}:${index}`, { nodeId: center.id, handleId }, { nodeId: node.id, handleId: 'in' }, { label: memberList[index].connection?.label ?? null, isDirected: group.isDirected !== false, placeCode })));
+			nodes.push(...cardList, frameBuild(`frame:g:${group.id}:${zettel.key}`, 'group', { label: group.label || group.id, count: group.itemList.length, form: labels[{ list: 'formList', array: 'formArray', map: 'formMap' }[group.form]] ?? group.form, memberIdList: cardList.map((node) => node.id), handle: handleId }));
+		}
+	}
+	// a side whose lines carry labels is as wide as its longest label needs
+	const gapOf = (isLeft) => {
+		const centerHandleSet = new Set(isLeft ? ['in', 'qin'] : center.handles.map((handle) => handle.id).filter((id) => id === 'out' || id.startsWith('g:')));
+		const lengthMax = Math.max(0, ...connections.filter((line) => line.label?.text && (isLeft ? line.target.nodeId === center.id && centerHandleSet.has(line.target.handleId) : line.source.nodeId === center.id && centerHandleSet.has(line.source.handleId))).map((line) => line.label.text.length));
+		return Math.max(GAP_SIDE, Math.round(lengthMax * LABEL_CHAR_WIDTH + 80));
+	};
+	const { diagram } = diagramArrangeApply({ nodes, connections }, zettelArrangerConnection, { gapLeft: gapOf(true), gapRight: gapOf(false) });
+	return { diagram: diagramFinish(diagram), box: boxOf(diagram) };
 }
 
-// the view "flow" of a knowledge card: the steps it writes, laid out by the arranger
+// the letters of options as keys, each toned by its verdict once the answer is shown (green: a
+// right answer, red: a wrong one). isQuestionOwn: the letters are the question's own (its option
+// group); otherwise the question is another zettel's
+function optionKeyListOf(context, question, letterList, isQuestionOwn = false) {
+	const isRevealed = context.isRevealed(question.key);
+	return [...new Set(letterList)].sort().map((text) => {
+		const option = question.optionList?.find((one) => one.id === text);
+		return { text, tone: isRevealed && option ? (option.isCorrect ? 'green' : 'red') : '' };
+	});
+}
+
+// the part of the view a camera fits: everything but the long end of what it holds below, which
+// the reader scrolls to (or sees whole once the zettel is expanded)
+const BOX_BELOW_MAX = 260;
+const boxOf = (diagram) => extentOf(diagram, { belowMax: BOX_BELOW_MAX });
+
+// everything a scene draws, frames included: what an expanded zettel shows whole
+export const zettelSceneExtentGet = (desc) => (desc?.diagram ? extentOf(desc.diagram, { belowMax: Infinity }) : null);
+
+function extentOf(diagram, { belowMax }) {
+	const rectById = new Map();
+	for (const node of diagram.nodes) if (!node.around) rectById.set(node.id, { x: node.position?.x ?? 0, y: node.position?.y ?? 0, width: typeof node.size?.width === 'number' ? node.size.width : 220, height: typeof node.size?.height === 'number' ? node.size.height : zettelMiniHeightEstimate(node) });
+	let left = Infinity;
+	let top = Infinity;
+	let right = -Infinity;
+	let bottom = -Infinity;
+	let bottomCut = Infinity;
+	const add = (rect) => {
+		left = Math.min(left, rect.x);
+		top = Math.min(top, rect.y);
+		right = Math.max(right, rect.x + rect.width);
+		bottom = Math.max(bottom, rect.y + rect.height);
+	};
+	for (const node of diagram.nodes) {
+		if (!node.around) { add(rectById.get(node.id)); continue; }
+		const memberList = node.around.nodeIdList.map((id) => rectById.get(id)).filter(Boolean);
+		if (memberList.length === 0) continue;
+		const pad = node.around.padding;
+		const rect = { x: Math.min(...memberList.map((one) => one.x)) - pad.left, y: Math.min(...memberList.map((one) => one.y)) - pad.top };
+		rect.width = Math.max(...memberList.map((one) => one.x + one.width)) + pad.right - rect.x;
+		rect.height = Math.max(...memberList.map((one) => one.y + one.height)) + pad.bottom - rect.y;
+		add(rect);
+		if (node.data.place === 'child' && rect.height > belowMax) bottomCut = rect.y + belowMax;
+	}
+	if (!Number.isFinite(left)) return null;
+	const margin = 16;
+	return { x: left - margin, y: top - margin, width: right - left + margin * 2, height: Math.min(bottom, bottomCut) - top + margin * 2 };
+}
+
+const diagramFinish = (diagram) => ({ version: 1, defaults: { connection: { renderer: { type: 'bezier' }, markerEnd: 'arrowClosed' } }, ...diagram });
+
+// the flow of a zettel: the steps it writes, laid out by the arranger; a step naming a zettel is
+// that zettel's card (its id shared with the connection view), the others notes
 function sceneFlowBuild(context, zettel) {
 	const { model } = context;
 	const flow = zettel.flow;
@@ -212,134 +346,64 @@ function sceneFlowBuild(context, zettel) {
 	}
 	const nodes = flow.stepList.map((step) => {
 		const target = step.zettel ? zettelGet(model, step.zettel) : null;
-		const isSelf = target?.key === zettel.key;
-		return {
-			id: idByStep.get(step.id),
-			renderer: { type: 'card-note' },
-			position: { x: 0, y: 0 },
-			size: { width: WIDTH_STEP, height: 'auto' },
-			...(target && !isSelf ? { link: zettelPathOf(model, target.key) } : {}),
-			data: { title: step.title, text: step.text, tone: ZETTEL_TONE_LIST.includes(step.tone) ? step.tone : target ? context.toneOf(target) : 'slate' },
-			handles: [],
-		};
+		if (target && target.key !== zettel.key) {
+			const node = cardBuild(context, target, { place: 'step', size: 'normal', width: WIDTH_STEP, link: zettelScenePathBuild(target.key) });
+			return { ...node, id: idByStep.get(step.id), data: { ...node.data, title: step.title || node.data.title, text: step.text || node.data.text }, handles: [] };
+		}
+		return { id: idByStep.get(step.id), renderer: { type: 'card-note' }, position: { x: 0, y: 0 }, size: { width: WIDTH_STEP, height: 'auto' }, data: { title: step.title, text: step.text, tone: ZETTEL_TONE_LIST.includes(step.tone) ? step.tone : 'slate' }, handles: [] };
 	});
+	for (const node of nodes) if (node.renderer.type === 'zettel-card') node.size.height = zettelMiniHeightEstimate(node);
 	const nodeById = new Map(nodes.map((node) => [node.id, node]));
 	const connections = flow.edgeList.map((edge, index) => {
-		const id = `flow:${zettel.key}:${index}`;
 		const sourceId = idByStep.get(edge.from);
 		const targetId = idByStep.get(edge.to);
-		nodeById.get(sourceId).handles.push({ id: `out:${index}`, direction: 'out', anchor: { side: 'right' } });
-		nodeById.get(targetId).handles.push({ id: `in:${index}`, direction: 'in', anchor: { side: 'left' } });
-		return lineBuild(id, sourceId, `out:${index}`, targetId, `in:${index}`, edge.label);
+		nodeById.get(sourceId).handles.push(handleBuild(`out:${index}`, 'out', 'right'));
+		nodeById.get(targetId).handles.push(handleBuild(`in:${index}`, 'in', 'left'));
+		return { id: `flow:${zettel.key}:${index}`, source: { nodeId: sourceId, handleId: `out:${index}` }, target: { nodeId: targetId, handleId: `in:${index}` }, ...(edge.label ? { label: { text: edge.label } } : {}) };
 	});
 	const { diagram } = diagramArrangeApply({ nodes, connections }, zettelArrangerFlow, { ranksPerBand: 3, gapX: 70 });
 	return diagramFinish(diagram);
 }
 
-// the questions below a card, as pills in a grid
-function sceneQuestionListBuild(context, zettel) {
-	const questionNodeList = zettelQuestionChildListOf(context.model, zettel.key).map((question) => questionNodeBuild(context, question, { x: 0, y: 0, width: 300 }));
-	gridPlace(questionNodeList, { x: 0, y: 0, width: 300, columnCount: 3, gapY: 14 });
-	return diagramFinish({ nodes: questionNodeList, connections: [] });
-}
-
-// a question: the question, its options one under another, and the knowledge cards each
-// option is about, joined by lines. the options are toned by their verdict once the answer is shown
-function sceneQuestionBuild(context, question) {
-	const { model, labels } = context;
-	const isRevealed = context.isRevealed(question.key);
-	const widthQuestion = 280;
-	const widthOption = 300;
-	const xOption = widthQuestion + GAP_COLUMN;
-	const xZettel = xOption + widthOption + GAP_COLUMN + 30;
-	const optionNodeList = question.optionList.map((option) => ({
-		id: `option:${question.key}:${option.id}`,
-		renderer: { type: 'card-note' },
-		position: { x: xOption, y: 0 },
-		size: { width: widthOption, height: 'auto' },
-		data: { title: `${labels.option} ${option.id}`, tag: isRevealed ? (option.isCorrect ? labels.correct : labels.wrong) : '', isTagHard: isRevealed && !option.isCorrect, text: zettelTextClip(option.text, 150), tone: isRevealed ? (option.isCorrect ? 'green' : 'red') : 'slate' },
-		handles: handleListBuild(),
-	}));
-	const bottomOption = columnPlace(optionNodeList, { x: xOption, y: 0, gapY: 22 });
-	const questionNode = {
-		id: nodeIdOf(question.key), renderer: { type: 'card-note' }, position: { x: 0, y: 0 }, size: { width: widthQuestion, height: 'auto' },
-		data: { title: `Q${question.number} · ${question.title}`, text: zettelTextClip(question.summary || question.stem, 260), tone: context.toneOf(question) },
-		handles: handleListBuild(),
-	};
-	questionNode.position.y = Math.max(0, (bottomOption - zettelCardHeightEstimate(questionNode)) / 2);
-	const connections = optionNodeList.map((node, index) => lineBuild(`ask:${question.key}:${index}`, questionNode.id, 'out', node.id, 'in'));
-	// the cards on the right, in the order of the first option naming them
-	const optionIndexByKey = new Map();
-	question.optionList.forEach((option, index) => {
-		for (const key of option.zettelList) {
-			if (!zettelGet(model, key) || zettelGet(model, key).kind !== 'zettel') continue;
-			if (!optionIndexByKey.has(key)) optionIndexByKey.set(key, []);
-			optionIndexByKey.get(key).push(index);
-		}
-	});
-	const meanOf = (key) => optionIndexByKey.get(key).reduce((sum, index) => sum + index, 0) / optionIndexByKey.get(key).length;
-	const zettelKeyList = [...optionIndexByKey.keys()].sort((a, b) => meanOf(a) - meanOf(b));
-	const zettelNodeList = zettelKeyList.map((key) => zettelNodeBuild(context, zettelGet(model, key), { x: xZettel, y: 0 }));
-	const alsoKeyList = question.zettelList.filter((key) => !optionIndexByKey.has(key) && zettelGet(model, key)?.kind === 'zettel');
-	const alsoNodeList = [...new Set(alsoKeyList)].map((key) => zettelNodeBuild(context, zettelGet(model, key), { x: xZettel, y: 0 }));
-	const heightZettel = zettelNodeList.reduce((sum, node) => sum + zettelCardHeightEstimate(node) + GAP_ROW, -GAP_ROW);
-	const bottomZettel = columnPlace(zettelNodeList, { x: xZettel, y: Math.max(0, (bottomOption - heightZettel) / 2) });
-	if (isRevealed) {
-		question.optionList.forEach((option, index) => {
-			for (const key of new Set(option.zettelList)) {
-				if (optionIndexByKey.has(key)) connections.push(lineBuild(`about:${question.key}:${option.id}:${key}`, optionNodeList[index].id, 'out', nodeIdOf(key), 'in'));
-			}
-		});
-	}
-	const nodes = [questionNode, ...optionNodeList, ...zettelNodeList];
-	if (alsoNodeList.length > 0) {
-		columnPlace(alsoNodeList, { x: xZettel, y: Math.max(bottomZettel, 0) + (zettelNodeList.length > 0 ? 40 : 0) + FRAME_PADDING.top });
-		nodes.push(...alsoNodeList, frameBuild(`frame:also:${question.key}`, alsoNodeList.map((node) => node.id), labels.frameAlso, 'slate', 'link'));
-	}
-	return diagramFinish({ nodes, connections });
-}
-
 // the provider of the scenes of a model (card-diagram-flexible-switch.md#the-concepts).
-//   signature       what the model was built from: a provider built again with the same one is the same
-//   labels          the words of the scenes, over ZETTEL_LABEL_DEFAULT
-//   revealKeySet    the questions showing their answer; absent: all of them
-export function zettelProviderBuild(model, { signature, labels, revealKeySet } = {}) {
-	const context = contextBuild(model, { labels, revealKeySet });
-	const questionListPathOf = (key) => `${zettelPathOf(model, key)}/${ZETTEL_QUESTION_SEGMENT}`;
-	const provider = {
+//   signature        what the model was built from: a provider built again with the same one is the same
+//   labels           the words of the scenes, over ZETTEL_LABEL_DEFAULT
+//   revealKeySet     the questions showing their answer; absent: all of them
+//   onZettelOpen     a click on the zettel in the middle: show it (its text)
+//   onObjectOpen     a click on a line labelled by an object
+//   objectLabelGet   the words of an object a line is labelled by
+export function zettelProviderBuild(model, { signature, labels, revealKeySet, onZettelOpen, onObjectOpen, objectLabelGet } = {}) {
+	const context = contextBuild(model, { labels, revealKeySet, objectLabelGet });
+	const builtByPath = new Map();
+	return {
 		signature,
-		root: zettelPathOf(model, model.rootKey) || '/',
+		root: zettelScenePathBuild(model.rootKey || model.zettelList[0]?.key || 'none'),
 		title: zettelGet(model, model.rootKey)?.title ?? '',
-		labelGet: (path) => {
-			const place = zettelPathRead(model, path);
-			if (!place) return String(path).split('/').pop() ?? '';
-			return place.isQuestionList ? context.labels.questionList : zettelLabelOf(zettelGet(model, place.key));
-		},
-		childListGet: (path) => {
-			const place = zettelPathRead(model, path);
-			if (!place) return [];
-			if (place.isQuestionList) return zettelQuestionChildListOf(model, place.key).map((question) => ({ path: zettelPathOf(model, question.key), label: `Q${question.number}`, description: question.title }));
-			const list = zettelKnowledgeChildListOf(model, place.key).map((child) => ({ path: zettelPathOf(model, child.key), label: zettelLabelOf(child), description: zettelTextClip(child.summary, 90) }));
-			const questionCount = zettelQuestionChildListOf(model, place.key).length;
-			if (questionCount > 0) list.push({ path: questionListPathOf(place.key), label: context.labels.questionList, description: `${questionCount}` });
-			return list;
-		},
+		labelGet: (path) => zettelLabelOf(zettelGet(model, zettelScenePathRead(path)?.key)) || String(path).split('/').pop() || '',
+		childListGet: () => [],
 		sceneGet: (path) => {
-			const place = zettelPathRead(model, path);
-			if (!place) return null;
-			const zettel = zettelGet(model, place.key);
-			const label = provider.labelGet(path);
-			if (place.isQuestionList) return { path, label, title: `${context.labels.questionList} — ${zettel.title}`, diagram: sceneQuestionListBuild(context, zettel) };
-			if (zettel.kind === 'question') return { path, label, title: `Q${zettel.number} — ${zettel.title}`, diagram: sceneQuestionBuild(context, zettel) };
-			if (!zettel.flow) return { path, label, title: zettel.title, diagram: sceneLinkBuild(context, zettel) };
-			return {
-				path, label, title: zettel.title, viewDefault: 'flow',
-				viewList: [
-					{ id: 'flow', label: context.labels.viewFlow, title: zettel.flow.title || zettel.title, diagram: sceneFlowBuild(context, zettel) },
-					{ id: 'link', label: context.labels.viewLink, title: zettel.title, diagram: sceneLinkBuild(context, zettel) },
-				],
-			};
+			const place = zettelScenePathRead(path);
+			const zettel = place ? zettelGet(model, place.key) : null;
+			if (!zettel || (place.view === 'flow' && !zettel.flow)) return null;
+			if (!builtByPath.has(path)) {
+				const label = zettelLabelOf(zettel);
+				if (place.view === 'flow') builtByPath.set(path, { path, label, title: zettel.flow.title || zettel.title, isTitleHidden: true, diagram: sceneFlowBuild(context, zettel) });
+				else {
+					const { diagram, box } = sceneConnectionBuild(context, zettel, place.placeSet);
+					builtByPath.set(path, { path, label, title: zettelTitleOf(zettel), isTitleHidden: true, diagram, ...(box ? { box } : {}) });
+				}
+			}
+			return builtByPath.get(path);
+		},
+		// a link that is not a scene: the zettel in the middle opened, an object of a label
+		linkOpen: (link) => {
+			const text = String(link ?? '');
+			if (text.startsWith('zettel-open:')) { onZettelOpen?.(text.slice('zettel-open:'.length)); return true; }
+			if (text.startsWith('object:')) { onObjectOpen?.(text.slice('object:'.length)); return true; }
+			return false;
 		},
 	};
-	return provider;
 }
+
+// the zettel a view counts as about: what an outside list shows as the current one
+export const zettelSceneKeyOf = (path) => zettelScenePathRead(path)?.key ?? '';

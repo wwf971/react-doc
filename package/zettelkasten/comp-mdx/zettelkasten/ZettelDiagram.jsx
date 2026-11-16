@@ -1,14 +1,15 @@
 import { useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Book, ListChecks, Plus, StickyNote } from '../../../../main/frontend/UICommon.js';
+import { Book, ListChecks, Plus } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { sourcePathBuild, sourceRootObjectBuild } from '../../../../main/frontend/src/lib/doc-source-path.js';
 import { objectFrontendDocRelPathBuild } from '../../../../main/frontend/src/lib/doc-object-frontend.js';
 import { CardDiagram } from '../../../cloud-dev-vis/comp-mdx/card-diagram/CardDiagram.jsx';
 import { zettelDocParse, zettelDocTextBuild, zettelTextClip } from './ZettelDoc.js';
+import { ZettelMiniCard } from './ZettelKinds.jsx';
 import './Zettelkasten.css';
 
-// Cards of a zettelkasten on a card diagram (doc/README.md#cards-on-a-card-diagram).
+// Cards of a zettelkasten on a card diagram (doc/README.md#zettels-on-a-card-diagram).
 //
 //   ZettelNode      a node of any card diagram that is a card of a box: a registered renderer
 //                   (placement visualizationNode), named by the source path of the card
@@ -62,23 +63,16 @@ export const ZettelNode = observer(function ZettelNode({ data = {}, config = {} 
 	const meta = read?.status === 'done' ? zettelDocParse(read.text).meta : {};
 	const asset = owner ? objectFrontendStore.assetResolve(owner.ref, owner.key).asset : undefined;
 	const isQuestion = asset?.kind === 'question';
-	const Icon = isQuestion ? ListChecks : asset?.kind === 'note' ? StickyNote : Book;
 	const isEdit = config.visualization?.isEdit === true;
 	const open = () => {
 		if (isEdit || !entry) return;
 		void navStore?.request({ target: entry.internalPath, hash: '', fromPath: config.sourcePath ?? '', param: {}, owner });
 	};
-	if (!target) return <div className="zettel-node is-missing">A card node needs data.zettel: the source path of a card.</div>;
-	if (!entry || !owner) return <div className="zettel-node is-missing" title={target}>No card answers to {target}</div>;
-	return (
-		<div className="zettel-node" data-kind={asset?.kind} role={isEdit ? undefined : 'button'} title={isEdit ? target : 'Open the card'} onClick={open}>
-			<span className="zettel-node-head">
-				<Icon size={12} aria-hidden="true" />
-				<strong>{isQuestion && meta.number ? `Q${meta.number} · ` : ''}{meta.title || entry.title}</strong>
-			</span>
-			{meta.summary ? <span className="zettel-node-text">{zettelTextClip(meta.summary, 130)}</span> : read?.status === 'loading' ? <span className="zettel-node-text">…</span> : null}
-		</div>
-	);
+	if (!target) return <ZettelMiniCard title="A zettel node needs data.zettel: the source path of a zettel." isMissing size="compact" />;
+	if (!entry || !owner) return <ZettelMiniCard title={`No zettel answers to ${target}`} isMissing size="compact" titleHover={target} />;
+	const title = `${isQuestion && meta.number ? `Q${meta.number} · ` : ''}${meta.title || entry.title}`;
+	const text = meta.summary ? zettelTextClip(meta.summary, 150) : read?.status === 'loading' ? '…' : '';
+	return <ZettelMiniCard title={title} kind={asset?.kind === 'note' ? 'note' : isQuestion ? 'question' : 'zettel'} tone={isQuestion ? 'amber' : 'blue'} text={text} size="normal" role={isEdit ? undefined : 'button'} titleHover={isEdit ? target : 'Open the zettel'} onClick={open} />;
 });
 
 export const zettelNodeDefineOptions = {

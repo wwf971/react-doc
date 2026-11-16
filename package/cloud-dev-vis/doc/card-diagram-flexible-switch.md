@@ -21,8 +21,9 @@ provider
   labelGet(path)          the word of a segment of the path bar
   childListGet(path)      the scenes below a path, the menu of the path bar: [{ path, label, description?, labelItemList? }]
   boxSave?(path, rect)    what a bounding box adjusted by the reader does
-  linkOpen?(link)         a link of a node the provider answers itself (true: taken): one that is not
-                          a scene, since it leaves the viewport for a page of whoever hosts it
+  linkOpen?(link)         a link of a node or of the label of a line that the provider answers itself
+                          (true: taken): one that is not a scene, since it leaves the viewport for
+                          a page of whoever hosts it, or acts on it (a zettel opened, an object)
   signature?              what the scenes are made of (the text of the document, the data they are generated
                           from): a provider built again with the same one is the same, nothing is read again
   transition?             { secondPortal, secondMorph, secondCamera, secondScroll }

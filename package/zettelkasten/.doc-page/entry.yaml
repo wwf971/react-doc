@@ -5,7 +5,7 @@
 # templates are read from comp-mdx/ and service-template-*/ at its top.
 # design: main/doc_page_impl_package.md#a-package-as-a-doc-page
 docEntry:
-  title: "Zettelkasten: linked knowledge cards kept as a frontend object"
+  title: "Zettelkasten: linked zettels kept as a frontend object"
   homeDoc: ~zettelkasten/comp-mdx/zettelkasten/comp-zettelkasten.md
 source:
   file: ./source.yaml

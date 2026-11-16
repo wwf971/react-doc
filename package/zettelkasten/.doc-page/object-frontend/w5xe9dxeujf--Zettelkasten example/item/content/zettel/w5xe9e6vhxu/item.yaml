@@ -13,12 +13,15 @@ versionList:
   - versionId: w5xe9e6xwhd
     versionIdPrevList: []
     time: 20261112_02533730+09
-    note: imported
-    size: 644
-    hash: d0f7f66239b58c9452b184329803c41690a83266
+    note: connections of every kind, for the example
+    size: 857
+    hash: 1ea3a929b7849dd7f99c82d644d33b04c4d72af2
     isLocked: false
     dependencyList: []
 eventList:
   - eventType: create
     time: 20261112_02533730+09
+    versionId: w5xe9e6xwhd
+  - eventType: updateInPlace
+    time: 20261116_21434875+09
     versionId: w5xe9e6xwhd

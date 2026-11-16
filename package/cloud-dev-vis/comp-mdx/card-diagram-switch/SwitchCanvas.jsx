@@ -61,7 +61,13 @@ const SwitchEdge = observer(function SwitchEdge(props) {
 						title={connection.linkTitle}
 						style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}
 						{...hoverProps}
-						onClick={(event) => { event.stopPropagation(); isPointerOnSet(false); void store?.pathSet(connection.link); }}
+						onClick={(event) => {
+							event.stopPropagation();
+							isPointerOnSet(false);
+							// a link the provider answers itself is not a scene, as for a card (linkOpen)
+							if (store?.provider?.linkOpen?.(connection.link) === true) return;
+							void store?.pathSet(connection.link);
+						}}
 					>
 						{connection.label.text}
 					</button>

@@ -6,6 +6,10 @@ summary: Copying a passage stores the source; rewriting it stores your understan
 sourceList:
   - title: Zettelkasten (Wikipedia)
     url: https://en.wikipedia.org/wiki/Zettelkasten
+connectionList:
+  - to: card-atomic
+    isDirected: false
+    label: go together
 ---
 
 <!--renderComp=Anchor,id=why-->

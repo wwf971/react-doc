@@ -6,6 +6,11 @@ summary: A link may point at one section or one sentence of another card, so the
 sourceList:
   - title: Zettelkasten (Wikipedia)
     url: https://en.wikipedia.org/wiki/Zettelkasten
+connectionList:
+  - to: card-atomic
+    label:
+      object: doc:~zettelkasten/comp-mdx/zettelkasten/comp-zettelkasten.md#zettels-from-other-documents
+      text: written as in the usage
 ---
 
 <!--renderComp=Anchor,id=how-->

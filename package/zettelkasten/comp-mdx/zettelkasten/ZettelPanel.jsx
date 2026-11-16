@@ -1,17 +1,17 @@
 import { observer } from 'mobx-react-lite';
 import { ChevronDown, ChevronRight, Trash2 } from '../../../../main/frontend/UICommon.js';
 import {
-	zettelChainOf, zettelGet, zettelKnowledgeChildListOf, zettelLabelOf, zettelPathOf, zettelPathRead, zettelProgressCount, zettelProgressOf, zettelQuestionChildListOf, zettelQuestionIsDoubtful,
+	zettelChainOf, zettelGet, zettelKnowledgeChildListOf, zettelLabelOf, zettelProgressCount, zettelProgressOf, zettelQuestionChildListOf, zettelQuestionIsDoubtful,
 } from './ZettelData.js';
 import { zettelDocPlain, zettelTextClip } from './ZettelDoc.js';
 import { ZettelProgressDot } from './ZettelReader.jsx';
 
-// What the left side of the explorer shows beside the map (doc/README.md#the-modes): the
-// cards as an outline, the questions as a list, the notes of the reader. Each row opens its card.
+// What the side panel of the explorer shows beside the zettel (doc/README.md#the-modes): the
+// zettels as an outline, the questions as a list, the notes of the reader. Each row opens its zettel.
 
-// every knowledge card by the hierarchy, a branch folded or not
-export const ZettelOutlinePanel = observer(function ZettelOutlinePanel({ model, store, path }) {
-	const keyCurrent = zettelPathRead(model, path)?.key ?? '';
+// every knowledge zettel by what holds it (the first container of each), a branch folded or not
+export const ZettelOutlinePanel = observer(function ZettelOutlinePanel({ model, store }) {
+	const keyCurrent = store.zettelKey;
 	const chainSet = new Set(zettelChainOf(model, keyCurrent).map((zettel) => zettel.key));
 	return (
 		<div className="zettel-panel" role="tree" aria-label="Outline">
@@ -23,7 +23,8 @@ export const ZettelOutlinePanel = observer(function ZettelOutlinePanel({ model, 
 const ZettelOutlineItem = observer(function ZettelOutlineItem({ model, store, zettelKey, depth, keyCurrent, chainSet }) {
 	const zettel = zettelGet(model, zettelKey);
 	if (!zettel) return null;
-	const childList = zettelKnowledgeChildListOf(model, zettelKey);
+	// a zettel held by several stands in the outline under its first container
+	const childList = zettelKnowledgeChildListOf(model, zettelKey).filter((child) => child.parentKey === zettelKey);
 	const questionCount = zettelQuestionChildListOf(model, zettelKey).length;
 	// a branch is open at the root and along the way to the card read, unless the reader folded it;
 	// below a hub it is folded until opened
@@ -40,7 +41,7 @@ const ZettelOutlineItem = observer(function ZettelOutlineItem({ model, store, ze
 					<span>{zettel.title}</span>
 					{zettel.level === 'fact' ? <em>fact</em> : null}
 				</button>
-				{questionCount > 0 ? <button type="button" className="zettel-outline-count" title={`${questionCount} questions of this area`} onClick={() => store.go(`${zettelPathOf(model, zettelKey)}/question`)}>{questionCount} Q</button> : null}
+				{questionCount > 0 ? <button type="button" className="zettel-outline-count" title={`${questionCount} questions of this area: show them`} onClick={() => { store.zettelOpen(model, zettelKey); store.placeCodeSet('q'); store.viewSet('link'); }}>{questionCount} Q</button> : null}
 			</div>
 			{isOpen ? childList.map((child) => <ZettelOutlineItem key={child.key} model={model} store={store} zettelKey={child.key} depth={depth + 1} keyCurrent={keyCurrent} chainSet={chainSet} />) : null}
 		</>
@@ -52,8 +53,8 @@ const STATUS_FILTER_LIST = [
 ];
 
 // every question, filtered by its area and by how it went
-export const ZettelQuestionPanel = observer(function ZettelQuestionPanel({ model, store, path }) {
-	const keyCurrent = zettelPathRead(model, path)?.key ?? '';
+export const ZettelQuestionPanel = observer(function ZettelQuestionPanel({ model, store }) {
+	const keyCurrent = store.zettelKey;
 	const questionAllList = model.zettelList.filter((zettel) => zettel.kind === 'question').sort((a, b) => a.number - b.number);
 	const hubList = zettelKnowledgeChildListOf(model, model.rootKey).filter((hub) => questionAllList.some((question) => question.parentKey === hub.key));
 	const filter = store.questionFilter;
@@ -105,7 +106,7 @@ export const ZettelNotePanel = observer(function ZettelNotePanel({ model, store,
 				{noteList.map((note) => (
 					<div key={note.key} className="zettel-row is-note">
 						<span className="zettel-row-title">
-							<a href={`#${note.target}`} role="button" className="zettel-link" onClick={(event) => { event.preventDefault(); store.zettelOpen(model, note.target, note.place); }}>{noteTargetLabelOf(model, note)}</a>
+							<a href={`#${note.target}`} role="button" className="zettel-link" onClick={(event) => { event.preventDefault(); store.zettelRead(model, note.target, note.place); }}>{noteTargetLabelOf(model, note)}</a>
 							<span className="zettel-row-count">{noteTimeText(note.timeCreate)}</span>
 							{service?.docState?.isEditing ? <button type="button" className="zettel-note-button" title={service.isEditable ? 'Remove the note' : service.editUnavailableReason} aria-label="Remove the note" disabled={!service.isEditable} onClick={() => void store.noteRemove(service, note.key)}><Trash2 size={11} aria-hidden="true" /></button> : null}
 						</span>
