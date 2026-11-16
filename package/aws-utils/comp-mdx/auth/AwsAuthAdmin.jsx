@@ -59,7 +59,7 @@ const AwsAuthAdminBody = observer(function AwsAuthAdminBody({ authStore, provide
       ) : null}
       {session.status === 'signedIn' && (admin.status === 'done' || admin.userList.length > 0) ? <AwsAuthAdminConsole model={model} /> : null}
       <AwsAuthAdminFormPopup model={model} />
-      <AwsAuthMfaPopup model={model} />
+      <AwsAuthMfaPopup model={model} owner="admin" />
     </div>
   );
 });
@@ -74,7 +74,7 @@ const AwsAuthAdminRefused = observer(function AwsAuthAdminRefused({ model }) {
           An account admin signs in with an authenticator app. Turn it on for this account to open the console: from then on its code is asked at every sign-in.
         </div>
         <div className="aws-auth-button-row">
-          <button type="button" className="doc-button" data-primary onClick={() => void model.mfaOpen()}>Turn on the authenticator app…</button>
+          <button type="button" className="doc-button" data-primary onClick={() => void model.mfaOpen('admin')}>Turn on the authenticator app…</button>
         </div>
       </div>
     );
@@ -146,7 +146,7 @@ const AwsAuthAdminConsole = observer(function AwsAuthAdminConsole({ model }) {
                   <td className="aws-auth-cell-wide" title={one.email}>{one.email}</td>
                   <td><span className="doc-badge-outline" {...stateAttributeGet(one)}>{stateTextGet(one)}</span></td>
                   <td className="aws-auth-cell-wide" title={(one.groupList ?? []).join(', ')}>{(one.groupList ?? []).join(', ')}</td>
-                  <td>{one.isMfaEnabled ? 'on' : 'off'}</td>
+                  <td title={one.isMfaRequired ? `required since ${timeTextDisplay(one.timeMfaRequired)}` : ''}>{one.isMfaEnabled ? 'on' : 'off'}{one.isMfaRequired ? <span className="doc-badge-outline" data-primary>required</span> : null}</td>
                   <td className="aws-auth-cell-time">{timeTextDisplay(one.timeCreated)}</td>
                 </tr>
               ))}
@@ -164,14 +164,17 @@ const AwsAuthAdminConsole = observer(function AwsAuthAdminConsole({ model }) {
               : <button type="button" className="doc-button" disabled={!user || isPending || isSelf} title={isSelf ? 'An admin does not disable itself' : 'It cannot sign in, its sessions end, our services refuse it'} onClick={() => model.adminConfirmSet('disable')}>Disable</button>}
             <button type="button" className="doc-button" disabled={!user || isPending} title="A new invitation while the first sign-in is pending; else a reset code by email" onClick={() => void model.adminUserAction('password/reset', 'An email to choose a new password was sent.')}>Reset the password</button>
             <button type="button" className="doc-button" disabled={!user || isPending} title="Every session of the account ends; it signs in again" onClick={() => void model.adminUserAction('session/revoke', 'Every session of the account was ended.')}>End sessions</button>
-            <button type="button" className="doc-button" disabled={!user || isPending || !user?.isMfaEnabled} title="For a lost device: the authenticator app is turned off" onClick={() => model.adminConfirmSet('mfaReset')}>Turn off MFA</button>
+            <button type="button" className="doc-button" disabled={!user || isPending || !user?.isMfaEnabled} title={user?.isMfaRequired ? 'For a lost device: the app is turned off, and the account, still required, must turn one on again' : 'For a lost device: the authenticator app is turned off'} onClick={() => model.adminConfirmSet('mfaReset')}>Turn off MFA</button>
+            {user?.isMfaRequired
+              ? <button type="button" className="doc-button" disabled={isPending} title="Our services serve the account again with a session that did not pass MFA" onClick={() => void model.adminUserAction('mfa/require', 'MFA is no longer required of the account.', { isRequired: false })}>Stop requiring MFA</button>
+              : <button type="button" className="doc-button" disabled={!user || isPending} title="Our services serve the account only with a session that passed MFA; every session it holds ends now" onClick={() => model.adminConfirmSet('mfaRequire')}>Require MFA…</button>}
             <button type="button" className="doc-button" data-danger disabled={!user || isPending || isSelf} title={isSelf ? 'An admin does not delete itself' : 'The account is removed for good'} onClick={() => model.adminConfirmSet('delete')}>Delete</button>
           </div>
           <div className="aws-auth-confirm-row">
             {admin.confirm && user ? (
               <>
                 <span>{CONFIRM_BY_ID[admin.confirm].question(user)}</span>
-                <button type="button" className="doc-button" data-danger onClick={() => void model.adminUserAction(CONFIRM_BY_ID[admin.confirm].action, CONFIRM_BY_ID[admin.confirm].done)}>{CONFIRM_BY_ID[admin.confirm].label}</button>
+                <button type="button" className="doc-button" data-danger onClick={() => void model.adminUserAction(CONFIRM_BY_ID[admin.confirm].action, CONFIRM_BY_ID[admin.confirm].done, CONFIRM_BY_ID[admin.confirm].body)}>{CONFIRM_BY_ID[admin.confirm].label}</button>
                 <button type="button" className="doc-button" onClick={() => model.adminConfirmSet('')}>Cancel</button>
               </>
             ) : (
@@ -187,6 +190,10 @@ const AwsAuthAdminConsole = observer(function AwsAuthAdminConsole({ model }) {
 const CONFIRM_BY_ID = {
   disable: { action: 'disable', label: 'Disable', done: 'The account is disabled: it cannot sign in, and its sessions were ended.', question: (user) => `Disable ${user.userName}? It cannot sign in until it is enabled again.` },
   mfaReset: { action: 'mfa/reset', label: 'Turn off', done: 'The authenticator app of the account was turned off.', question: (user) => `Turn off the authenticator app of ${user.userName}?` },
+  mfaRequire: {
+    action: 'mfa/require', body: { isRequired: true }, label: 'Require', done: 'MFA is required of the account: its sessions were ended, and our services serve it only with one that passed MFA.',
+    question: (user) => `Require MFA of ${user.userName}? Every session it holds ends now; it signs in again with the code of its authenticator app${user.isMfaEnabled ? '' : ', which it must turn on first'}.`,
+  },
   delete: { action: 'delete', label: 'Delete', done: 'The account was deleted.', question: (user) => `Delete ${user.userName} for good? What our services hold under its user id stays.` },
 };
 

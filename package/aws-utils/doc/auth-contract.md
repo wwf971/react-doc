@@ -88,6 +88,7 @@ Turning MFA on needs the pool to allow authenticator apps (above). A pool that d
 - **A token says the groups its user had when it was made.** A group given later is in the next token: the page asks Cognito for one (`REFRESH_TOKEN_AUTH`) when a service refused the account for want of a group, when the account console changed the account signed in, and when the person asks (**Read again**, **Refresh**), and sends the request again. Nobody signs in again for a group; a reload alone changes nothing, since the session is kept with its tokens.
 - **A token is good until it expires** (one hour for an access token). Revoking an account therefore also turns it off in the user table, which every service of ours reads, so a revoked person is refused within a minute, not within the hour.
 - **MFA is of the account, not of the page.** An account with MFA on is asked for the code at every sign-in through every app client of the pool, also by programs that send a password themselves and know no such step. An account admin is therefore best an account of its own, not one that other programs sign in with.
+- **An account admin may require MFA of an account** ([below](#an-account-that-must-use-mfa)): from then on our services serve it only with a session that passed MFA, and a session of before is refused at its next request.
 
 ## The account service
 
@@ -122,7 +123,9 @@ GET  /me                 { user }
 POST /me/name/set        { name }                   { user }
 
 user = { userId, userName, name, email, status: "active" | "disabled", groupList, isAdmin, isMfaEnabled,
-         cognitoStatus, timeCreated, identityList: [{ authSystemType, userIdFromAuth }] }
+         isMfaRequired, timeMfaRequired, cognitoStatus, timeCreated, identityList: [{ authSystemType, userIdFromAuth }] }
+me   = user & { mfaAccess: "ok" | "setupRequired" | "signInRequired" }    (GET /me only: what the services make of
+                                                                          the session that asked)
 ```
 
 `/me` is what the page shows as "signed in as", and how it learns the user id our services use. The first `/me` of a person the user table does not know yet (an account made in the AWS console) adds them to it. `me/name/set` writes the name into the user table and into the pool, so the next id token carries it.
@@ -131,6 +134,8 @@ user = { userId, userName, name, email, status: "active" | "disabled", groupList
 | --- | --- |
 | `status` | `disabled` when the user table says so, or the pool has the identity disabled |
 | `isAdmin` | in the group `account-admin`: the admin routes take it when `isMfaEnabled` is true too |
+| `isMfaRequired`, `timeMfaRequired` | an account admin requires MFA of the account, since that time (`""` when not required) |
+| `mfaAccess` | of `/me` only: `ok`, or why the services refuse this session: the account has no authenticator app (`setupRequired`), or the session began before what the requirement asks (`signInRequired`) |
 | `cognitoStatus` | the state of the identity in the pool (`CONFIRMED`, `FORCE_CHANGE_PASSWORD` while the first sign-in is pending, `RESET_REQUIRED`, …); `""` for a user of the table without an identity in the pool |
 | `timeCreated` | the time format of the project, in `+00`: `20261114_07443316+00` (a request has it too) |
 
@@ -151,6 +156,8 @@ POST /admin/user/password/reset   { userId }                 { user }     a new 
                                                                           else a reset code by email
 POST /admin/user/session/revoke   { userId }                 { user }     every refresh token of the user ended
 POST /admin/user/mfa/reset  { userId }                       { user }     MFA turned off, for a lost device
+POST /admin/user/mfa/require { userId, isRequired }          { user }     MFA required of the account (or not): every
+                                                                          session it holds is ended when required
 GET  /admin/group/list                                       { groupList: [{ name, description, isAdminGroup, isDefault }] }
 GET  /admin/request/list                                     { requestList: [request] }
 POST /admin/request/approve { requestId, userName?, groupList? }   { user }     creates the account (as user/create)
@@ -167,6 +174,29 @@ request = { requestId, email, name, note, timeCreated }
 - **A deployment may be set not to send email** (config of the service, for tests): accounts are then made without an invitation, and `user/password/reset` is refused (`-1`).
 - **`groupList` of an update replaces** the groups of the user. The groups a new account gets when none are named are config of the service (`group_default_list`); `group/list` marks them `isDefault`, so the console checks them first.
 - **Why MFA is checked by the service.** A user pool cannot ask MFA of one group only. With MFA `OPTIONAL`, a user who turned it on is asked for the code at every sign-in, so "has MFA on" means "every session of this user passed MFA". The service reads it from the pool for the caller, per request (cached for a minute).
+
+### An account that must use MFA
+
+The pool asks MFA of nobody (`OPTIONAL`), and asks the code at every sign-in of an account that turned an authenticator app on. An account admin may **require** MFA of an account, for one that reaches what matters (the account admin's own, an account publishing pages). The requirement is ours, kept in the profile row of the user table, and every service of ours enforces it as it enforces a disabled account, through the same shared reading of the user table:
+
+```text
+an admin requires MFA of an account     POST /admin/user/mfa/require { userId, isRequired: true }
+  -> the profile row: mfaRequired, the time it was required
+  -> every refresh token of the account ended (as session/revoke)
+
+a request of that account, at any service of ours
+  -> the account has no authenticator app on (as the account service last read the pool)     -8  mfaSetupRequired
+  -> the session signed in (auth_time of the token) before it was required, or before its
+     app was turned on                                                                        -7  mfaSignInRequired
+  -> else                                                                                      served
+```
+
+- **So a session that did not pass MFA is never served.** With the app on, Cognito asks the code at every sign-in; a token signed in after both times passed it. A session of before, still within its hour, is refused at its very next request: the services read the profile row for every request, not from a cache.
+- **Turning the app on is the one thing left to an account without it.** `/me` answers it, with `mfaAccess`, and the page turns the app on through Cognito as for any account; `/me` then reads the pool again and records the time the app was turned on (`mfaEnabledTime` of the profile row). The session that did it began before, so the next step is to sign in again, with the code.
+- **The services know the app from the profile row**, which the account service keeps in step with the pool whenever it reads the account (`/me`, the console's list, every admin route about it). An account turning its app off through Cognito's own api, past the page, is caught at its next such read; it needs a session that passed MFA to do so, so it opens nothing to someone holding the password alone.
+- **`isRequired: false`** lifts the requirement and ends nothing. `mfa/reset` of a required account (a lost device) leaves it required: it must turn an app on again before it is served.
+- **An admin may require MFA of itself**; its own sessions end too, and it signs in again with its code. Every admin route asks MFA of its caller anyway.
+- Codes: `-7` with `data.reason: "mfaSignInRequired"` (sign in again; the page offers it), `-8` with `data.reason: "mfaSetupRequired"` (turn the app on). The storage service, the share service of the asset service and the account service answer them alike.
 
 ## First use
 

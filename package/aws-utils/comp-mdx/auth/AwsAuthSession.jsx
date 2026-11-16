@@ -67,7 +67,7 @@ const AwsAuthSessionBody = observer(function AwsAuthSessionBody({ authStore, pro
         </div>
       )}
       <AwsAuthPasswordPopup model={model} />
-      <AwsAuthMfaPopup model={model} />
+      <AwsAuthMfaPopup model={model} owner="session" />
     </div>
   );
 });
@@ -81,6 +81,9 @@ const AwsAuthMe = observer(function AwsAuthMe({ model, session, consumerList }) 
   // service may know of a role given since; Read again brings the session up to it
   const roleList = identity.roleList ?? user?.groupList ?? [];
   const isMfaEnabled = me.isMfaEnabled;
+  // what the services make of this session under the MFA requirement of the account (GET /me)
+  const mfaAccess = user?.mfaAccess ?? 'ok';
+  const mfaText = isMfaEnabled === undefined ? 'reading' : isMfaEnabled ? 'on: its code is asked at every sign-in' : 'off';
   return (
     <div className="aws-auth-section">
       <div className="aws-auth-fact-list">
@@ -89,14 +92,22 @@ const AwsAuthMe = observer(function AwsAuthMe({ model, session, consumerList }) 
         <AwsAuthFact label="Email" value={user?.email || identity.email || '—'} />
         <AwsAuthFact label="User id" value={user?.userId || identity.userId || (me.status === 'loading' ? 'reading' : '—')} title="The id our services keep data under: it stays when another identity is linked to the person" isMono />
         <AwsAuthFact label="Roles" value={roleList.length > 0 ? roleList.join(', ') : 'none'} />
-        <AwsAuthFact label="Authenticator app" value={isMfaEnabled === undefined ? 'reading' : isMfaEnabled ? 'on: its code is asked at every sign-in' : 'off'} />
+        <AwsAuthFact label="Authenticator app" value={user?.isMfaRequired ? `${mfaText}; required by your account admin` : mfaText} />
         <AwsAuthFact label="Session kept" value={session.keep === 'local' ? 'on this browser, until signing out' : 'while this tab is open'} />
         <AwsAuthFact label="Used by" value={consumerList.length > 0 ? consumerList.map((one) => one.label).join(', ') : 'nothing on this page yet'} title="Whoever asked this session for a credential on this page" />
       </div>
+      {mfaAccess !== 'ok' ? (
+        <div className="doc-auth-reason" role="status">
+          {mfaAccess === 'setupRequired'
+            ? 'Your account admin requires an authenticator app of this account: our services refuse it until the app is on. Turn it on below, then sign in again with its code.'
+            : 'This session began before your account could pass MFA (before the requirement, or before its app was turned on): our services refuse it. Sign in again, with the code of the app.'}
+        </div>
+      ) : null}
       <div className="aws-auth-message" {...(me.status === 'error' ? { 'data-error': true } : {})}>{me.status === 'error' ? me.message : ''}</div>
       <div className="aws-auth-button-row">
+        {mfaAccess === 'signInRequired' ? <button type="button" className="doc-button" data-primary onClick={() => void model.signInAgain()}>Sign in again</button> : null}
         <button type="button" className="doc-button" onClick={() => model.passwordOpen()}>Change the password…</button>
-        {isMfaEnabled === false ? <button type="button" className="doc-button" data-primary onClick={() => void model.mfaOpen()}>Turn on the authenticator app…</button> : null}
+        {isMfaEnabled === false ? <button type="button" className="doc-button" data-primary onClick={() => void model.mfaOpen('session')}>Turn on the authenticator app…</button> : null}
         <button type="button" className="doc-button" disabled={me.status === 'loading'} title="reads the session anew: a role given to the account since it signed in is carried from now on" onClick={() => void model.sessionRenew()}>Read again</button>
       </div>
     </div>
@@ -146,10 +157,10 @@ const AwsAuthPasswordPopup = observer(function AwsAuthPasswordPopup({ model }) {
 });
 
 // the authenticator app turned on: the secret as a QR code and as text, then the first code of the app
-export const AwsAuthMfaPopup = observer(function AwsAuthMfaPopup({ model }) {
+export const AwsAuthMfaPopup = observer(function AwsAuthMfaPopup({ model, owner = 'session' }) {
   const { mfa } = model;
   return (
-    <PanelPopup panelId="awsAuthMfa" title="Turn on the authenticator app" isOpen={mfa.isOpen} onClose={() => model.mfaClose()} className="doc-auth-popup aws-auth-mfa-popup" bodyClassName="doc-auth-popup-body">
+    <PanelPopup panelId={`awsAuthMfa-${owner}`} title="Turn on the authenticator app" isOpen={mfa.isOpen && mfa.owner === owner} onClose={() => model.mfaClose()} className="doc-auth-popup aws-auth-mfa-popup" bodyClassName="doc-auth-popup-body">
       <form
         className="doc-auth-form"
         onSubmit={(event) => {

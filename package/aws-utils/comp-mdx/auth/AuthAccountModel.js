@@ -24,7 +24,9 @@ export class AuthAccountModel {
   providerRef;
   me = { status: 'idle', message: '', user: undefined, isMfaEnabled: undefined };
   password = { isOpen: false, before: '', next: '', repeat: '', isPending: false, message: '', isError: false };
-  mfa = { isOpen: false, status: 'idle', secret: '', uri: '', code: '', isPending: false, message: '', isError: false };
+  // owner: the block that opened the dialog ('session' or 'admin'): the model is shared by the blocks of one
+  // provider, and only that block draws the dialog
+  mfa = { isOpen: false, owner: '', status: 'idle', secret: '', uri: '', code: '', isPending: false, message: '', isError: false };
   admin = {
     status: 'idle', reason: '', message: '', userList: [], requestList: [], groupList: [],
     userIdSelected: '', confirm: '', action: { status: 'idle', message: '', isError: false }, form: formEmpty(),
@@ -100,6 +102,14 @@ export class AuthAccountModel {
     });
   }
 
+  // a session our services refuse for the MFA requirement of the account: it is replaced by a sign-in
+  // that asks for the code of the authenticator app
+  async signInAgain() {
+    this.mfaClose();
+    const isSignedIn = await this.authStore.signInOpen(this.providerRef, { reason: 'Your account must use its authenticator app: sign in again, with its code.' });
+    if (isSignedIn) await this.meLoad();
+  }
+
   // ---------- the password ----------
 
   passwordOpen() {
@@ -144,8 +154,8 @@ export class AuthAccountModel {
 
   // ---------- the authenticator app ----------
 
-  async mfaOpen() {
-    this.mfa = { isOpen: true, status: 'loading', secret: '', uri: '', code: '', isPending: false, message: '', isError: false };
+  async mfaOpen(owner = 'session') {
+    this.mfa = { isOpen: true, owner, status: 'loading', secret: '', uri: '', code: '', isPending: false, message: '', isError: false };
     const credential = await this.tokenGet();
     const result = credential.code === 0 ? await cognitoMfaBegin(this.config, credential.data.token) : credential;
     runInAction(() => {
@@ -159,7 +169,7 @@ export class AuthAccountModel {
   }
 
   mfaClose() {
-    this.mfa = { isOpen: false, status: 'idle', secret: '', uri: '', code: '', isPending: false, message: '', isError: false };
+    this.mfa = { isOpen: false, owner: '', status: 'idle', secret: '', uri: '', code: '', isPending: false, message: '', isError: false };
   }
 
   mfaCodeSet(code) {
@@ -179,7 +189,12 @@ export class AuthAccountModel {
         this.mfa = { ...this.mfa, isPending: false, message: result.message, isError: true };
         return;
       }
-      this.mfa = { ...this.mfa, isPending: false, status: 'done', secret: '', uri: '', code: '', message: 'The authenticator app is on: its code is asked at every sign-in from now on.' };
+      // an account that must use MFA: the session that turned the app on began without it, and our
+      // services serve only a session that passed it (auth-contract.md#an-account-that-must-use-mfa)
+      const messageDone = this.me.user?.isMfaRequired
+        ? 'The authenticator app is on. Your account requires it: sign in again, with its code, to use our services.'
+        : 'The authenticator app is on: its code is asked at every sign-in from now on.';
+      this.mfa = { ...this.mfa, isPending: false, status: 'done', secret: '', uri: '', code: '', message: messageDone };
     });
     if (result.code === 0) {
       await this.meLoad();
@@ -251,12 +266,13 @@ export class AuthAccountModel {
   }
 
   // one action on the user chosen: 'disable' | 'enable' | 'delete' | 'password/reset' | 'session/revoke' | 'mfa/reset'
-  async adminUserAction(action, messageDone) {
+  // | 'mfa/require' (bodyExtra { isRequired })
+  async adminUserAction(action, messageDone, bodyExtra = {}) {
     const user = this.userSelected;
     if (!user || this.admin.action.status === 'pending') return;
     this.admin = { ...this.admin, confirm: '', action: { status: 'pending', message: '', isError: false } };
     const credential = await this.tokenGet();
-    const result = credential.code === 0 ? await accountAdminPost(this.config, credential.data.token, `user/${action}`, { userId: user.userId }) : credential;
+    const result = credential.code === 0 ? await accountAdminPost(this.config, credential.data.token, `user/${action}`, { userId: user.userId, ...bodyExtra }) : credential;
     runInAction(() => {
       this.admin = { ...this.admin, action: { status: 'idle', message: result.code === 0 ? messageDone : result.message, isError: result.code !== 0 } };
       if (result.code !== 0) return;

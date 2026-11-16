@@ -219,3 +219,13 @@
   font-size: 0.75rem;
   cursor: pointer;
 }
+
+/* "required" beside the state of the authenticator app of an account */
+.aws-auth-table td .doc-badge-outline {
+  margin-left: 0.3rem;
+}
+
+/* a notice inside a mode keeps the line height of the mode, not of the prose around the block */
+.aws-auth-section .doc-auth-reason {
+  line-height: 1.45;
+}

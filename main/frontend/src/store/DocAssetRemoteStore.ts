@@ -217,8 +217,10 @@ export class DocAssetRemoteStore {
     const provider = authStore.providerGet(ref);
     if (provider.status !== 'ready') return provider.status;
     const session = authStore.sessionGet(ref);
-    // the roles are part of it: an account given a role is another caller to a point
-    return `${session.status}:${session.identity?.subject ?? ''}:${(session.identity?.roleList ?? []).join(',')}`;
+    // the roles are part of it: an account given a role is another caller to a point. so is the time
+    // of the sign-in (not of a refresh): the same person signing in again may be served where the
+    // session before was refused (an account that must use MFA, signing in with its code)
+    return `${session.status}:${session.identity?.subject ?? ''}:${(session.identity?.roleList ?? []).join(',')}:${session.timeSignedIn ?? 0}`;
   }
 
   // why the point cannot be asked now ('' when it can): its declaration, its driver, its auth
