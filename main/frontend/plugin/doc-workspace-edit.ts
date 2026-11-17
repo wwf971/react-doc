@@ -130,7 +130,14 @@ export function workspaceEditBuild(source: string, request: WorkspaceEditRequest
     if (insertion.code !== 0) return insertion;
     result = { code: 0, data: { operationList: [...removal.data.operationList, ...insertion.data.operationList] }, message: '' };
   } else if (request.action === 'titleSet') {
-    result = keySetBuild(source, document, ['title'], String(request.value ?? '').trim());
+    const value = String(request.value ?? '').trim();
+    result = keySetBuild(source, document, ['title'], value);
+    // the short title shortens this title: it goes with it (doc-entry.ts titleShortCheck)
+    if (result.code === 0 && value === '' && document.hasIn(['titleShort'])) {
+      const removal = yamlMapKeyRemoveBuild(source, document, ['titleShort']);
+      if (removal.code !== 0) return fail(removal.message);
+      result = { code: 0, data: { operationList: [...result.data.operationList, ...removal.data.operationList] }, message: '' };
+    }
   } else {
     return fail(`unknown workspace edit: ${String((request as any)?.action)}`);
   }

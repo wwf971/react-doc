@@ -5,3 +5,6 @@ compList:
   - tagName: AwsNotebook
     entry: ./aws-notebook-comp.js
     export: AwsNotebookDefine
+  - tagName: AwsNotebookChanges
+    entry: ./aws-notebook-comp.js
+    export: AwsNotebookChangesDefine

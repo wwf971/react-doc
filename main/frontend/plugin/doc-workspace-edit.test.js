@@ -68,6 +68,10 @@ test('items are added, removed and moved with their comments', () => {
 
 test('the title is set and removed; wrong requests are refused', () => {
   assert.match(edit({ action: 'titleSet', value: 'My Site' }), /\ntitle: My Site\n/);
+  // the short title goes with the title it shortens
+  const textTitled = 'title: My Site of guides\ntitleShort: My Site\ndocPageList:\n  - dir: ./a\n';
+  assert.equal(edit({ action: 'titleSet', value: '' }, textTitled), 'docPageList:\n  - dir: ./a\n');
+  assert.match(edit({ action: 'titleSet', value: 'Other' }, textTitled), /^title: Other\ntitleShort: My Site\n/);
   assert.equal(workspaceEditBuild('docPageList:\n  - dir: ./a\n', { action: 'itemRemove', index: 0 }).code, -1);
   assert.equal(workspaceEditBuild(source, { action: 'itemFieldSet', index: 5, field: 'alias', value: 'x' }).code, -1);
   assert.equal(workspaceEditBuild(source, { action: 'itemAdd', item: { alias: 'x' } }).code, -1);

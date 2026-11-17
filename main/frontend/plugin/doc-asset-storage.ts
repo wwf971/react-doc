@@ -77,9 +77,9 @@ export const ASSET_STORAGE_API_SET_LIST: AssetStorageApiSet[] = [
   {
     id: 'notify',
     label: 'Change notification',
-    description: 'a point that tells the page of a change made elsewhere, instead of being asked',
-    apiList: ['notifySubscribe', 'notifyUnsubscribe', 'notifyStatusGet'],
-    isImplemented: false,
+    description: 'a point that tells the page of a change made elsewhere (another tab, device or program) over a channel it keeps open, instead of being asked',
+    apiList: ['notifyOpen', 'notifyStateGet', 'partitionNotifyGet'],
+    isImplemented: true,
   },
   {
     id: 'backup',
@@ -201,7 +201,7 @@ export const ASSET_STORAGE_TYPE_LIST: AssetStorageType[] = [
       { key: 'cacheMode', description: 'readThrough (the cache is shown at once and checked against the point), pinned (the cache is trusted until refreshed) or none', valueDefault: 'readThrough' },
       { key: 'isRefreshedOnFocus', description: 'the point is asked again when the page gets the focus back', valueDefault: false },
       { key: 'refreshIntervalSec', description: 'the point is asked again every so many seconds while the page is open; 0: never by itself', valueDefault: 0 },
-      { key: 'isNotifyEnabled', description: 'the point tells the page of a change made elsewhere (the api set notify): only where its type and its backend offer it', valueDefault: false },
+      { key: 'isNotifyEnabled', description: 'the point keeps a channel and tells the page of a change made elsewhere at once (the api set notify): only where its type and its backend offer it', valueDefault: false },
     ],
   },
 ];

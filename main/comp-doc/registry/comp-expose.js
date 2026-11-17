@@ -98,6 +98,14 @@ import { OBJECT_VIEW_CONTEXT_LIST } from '../../frontend/src/lib/doc-object-ref.
 //                  candidates completing a typed one ([{ kind: 'dir' | 'item',
 //                  path, label, detail }]). service is the api of a mode
 //                  (config.objectFrontend) of the object asked about
+//   blockLabelGet(component, context)
+//                  what a block of the component is called where the page names a block
+//                  (its toolbar and its editor bar in edit mode, the lists of blocks
+//                  moved or pasted): a text, or { text, title } (title: said on hover).
+//                  component is the block as written ({ compName, lang, raw, props }),
+//                  context { stores } (the page's stores: the label is read by an
+//                  observer, so it follows what it reads). absent, or answering
+//                  nothing, the tag name. ObjectFrontend names the type of its object
 //   pagination     { pieceListGet(data, context) -> [{ type, data }],
 //                  pieceTypeById: { [type]: { Render, split?, isFilledOnSplit? } },
 //                  pageClassName?, pageSpec? }: the component's data can be laid
@@ -141,7 +149,7 @@ const ASSET_SAVE_MODE_LIST = ['inPlace', 'newVersion'];
 // isAssetOnly renders there only with data from the asset service layer
 export const COMP_PLACEMENT_DOC_LIST = ['mdx', 'commentBlock'];
 
-export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'apiList', 'objectView', 'objectInner', 'pagination'];
+export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'apiList', 'objectView', 'objectInner', 'pagination', 'blockLabelGet'];
 
 const REGEX_TYPE_ID = /^[a-z][a-z0-9-]*(\.[a-zA-Z][a-zA-Z0-9-]*)+$/;
 
@@ -156,7 +164,8 @@ export function compExposeNormalize(expose = {}) {
   if (expose.editTemplate !== undefined) {
     throw new Error('compDefine: expose.editTemplate is expose.sourceDefaultCreate(env) now (comp-expose.js).');
   }
-  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, apiList, objectView, objectInner, pagination, ...exposeOther } = expose;
+  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, apiList, objectView, objectInner, pagination, blockLabelGet, ...exposeOther } = expose;
+  if (blockLabelGet !== undefined && typeof blockLabelGet !== 'function') throw new Error('compDefine: expose.blockLabelGet(component, context) must be a function.');
   return {
     ...exposeOther,
     meta: metaNormalize(meta),
@@ -168,7 +177,23 @@ export function compExposeNormalize(expose = {}) {
     objectView: objectViewNormalize(objectView),
     objectInner: objectInnerNormalize(objectInner),
     pagination: paginationNormalize(pagination),
+    blockLabelGet,
   };
+}
+
+// what a component calls a block of its own (expose.blockLabelGet): { text, title }, or null
+// when it says nothing (no function, an empty answer, or a function that failed)
+export function compBlockLabelGet(definition, component, context) {
+  const labelGet = definition?.expose?.blockLabelGet;
+  if (typeof labelGet !== 'function') return null;
+  try {
+    const result = labelGet(component, context);
+    if (!result) return null;
+    const label = typeof result === 'string' ? { text: result, title: '' } : { text: String(result.text ?? ''), title: String(result.title ?? '') };
+    return label.text ? label : null;
+  } catch {
+    return null;
+  }
 }
 
 // what the component tells a pagination environment (doc_page_impl_pagination.md#the-contract):

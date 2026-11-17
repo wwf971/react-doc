@@ -129,6 +129,7 @@ async function docMigrateRun(parsed, option, out) {
   for (const file of report.documentList) say(`  document ${path.relative(dirTarget, file)}`);
   for (const dir of report.objectList) say(`  object   ${path.relative(dirTarget, dir)}`);
   for (const file of report.typeFileList) say(`  types    ${path.relative(dirTarget, file)}`);
+  for (const file of report.kindFileList) say(`  kinds    ${path.relative(dirTarget, file)}: assetKindList -> kindList, each langList a content`);
   for (const dir of report.entryListList) say(`  lists    ${path.relative(dirTarget, dir)}: the list of its entry moved to item-list.yaml`);
   for (const problem of report.problemList) say(`  problem  ${problem}`);
   return 0;

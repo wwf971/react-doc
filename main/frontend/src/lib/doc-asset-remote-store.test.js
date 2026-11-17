@@ -5,6 +5,7 @@ import { DocAssetStore } from '../store/DocAssetStore.ts';
 import { DocObjectFrontendStore } from '../store/DocObjectFrontendStore.ts';
 import { DocAssetRemoteStore } from '../store/DocAssetRemoteStore.ts';
 import { assetStorageCacheCreate } from './doc-asset-storage-cache.js';
+import { clientInstanceIdGet } from './doc-client-instance.js';
 
 // the page's half of the asset storage layer (doc_page_impl_asset_storage.md#points-of-the-page):
 // a partition of a frontend object held by a storage point of the page, read and written through
@@ -188,12 +189,12 @@ function authFakeCreate() {
 
 // a built page: its snapshot holds the object (its entry, one local asset) and the bind of its
 // partition "cloud" to the point of the page; nothing of that partition is in the snapshot
-async function pageCreate({ backend = backendFakeCreate(), cache = assetStorageCacheCreate({ indexedDB: undefined }), authStore = authFakeCreate() } = {}) {
+async function pageCreate({ backend = backendFakeCreate(), cache = assetStorageCacheCreate({ indexedDB: undefined }), authStore = authFakeCreate(), storage = STORAGE } = {}) {
   const entryText = `name: Notebook\ntype: frontend.object\n`;
   const assetStore = new DocAssetStore({
     snapshot: {
       itemById: { [ENTRY_ID]: assetEntryBuild(ENTRY_ID, entryText, { ref: OBJECT_REF, role: 'entry' }) },
-      storage: STORAGE,
+      storage,
       folderList: [{ path: '~page:obj/item', owner: { ref: OBJECT_REF }, partitionList: [] }],
       objectFrontend: {
         docPageList: [{
@@ -207,7 +208,9 @@ async function pageCreate({ backend = backendFakeCreate(), cache = assetStorageC
     },
   });
   const objectFrontendStore = new DocObjectFrontendStore({ assetStore });
-  const remoteStore = new DocAssetRemoteStore({ assetStore, authStore, objectFrontendStore }, { driverList: [{ typeId: 'fake.remote', driverCreate: () => backend.driver }], cache });
+  const remoteStore = new DocAssetRemoteStore({ assetStore, authStore, objectFrontendStore }, {
+    driverList: [{ typeId: 'fake.remote', driverCreate: () => backend.driver }], cache, notifyTiming: { readDelayMs: 1, selfCheckMs: 20 },
+  });
   assetStore.remoteSet(remoteStore);
   objectFrontendStore.stores.remoteStore = remoteStore;
   assetStore.init();
@@ -414,4 +417,124 @@ test('a role given after sign-in: a refusal is asked again once with a credentia
   const created = await page.objectFrontendStore.assetCreate(OBJECT_ID, { kind: 'note', lang: 'md', name: 'After the role', text: 'written', partition: 'cloud' });
   assert.equal(created.code, 0, created.message);
   page.remoteStore.dispose();
+});
+
+// a point whose config asks for notifications, over a backend that keeps channels: the fake driver
+// hands its channel to the test, which tells what the backend would
+const STORAGE_NOTIFY = {
+  ...STORAGE,
+  pointList: STORAGE.pointList.map((point) => (point.id === 'cloud'
+    ? { ...point, config: { ...point.config, isNotifyEnabled: true }, apiSetList: [...point.apiSetList, 'notify'] }
+    : point)),
+};
+
+function channelFakeAdd(backend) {
+  const channel = { openCount: 0, closeCount: 0, onNotification: undefined, onStateChange: undefined };
+  backend.driver.notifyOpen = ({ onNotification, onStateChange }) => {
+    channel.openCount += 1;
+    channel.onNotification = onNotification;
+    channel.onStateChange = onStateChange;
+    onStateChange({ status: 'connecting', message: '' });
+    return { close: () => { channel.closeCount += 1; } };
+  };
+  return channel;
+}
+
+const OTHER_INSTANCE = 'zzzzzzzzzzzzzzzz';
+const callCountOf = (backend, method) => backend.state.callList.filter((one) => one === method).length;
+
+test('notifications: a change made elsewhere is read at once, one made by this tab is not; the channel follows the session', async () => {
+  const backend = backendFakeCreate();
+  const channel = channelFakeAdd(backend);
+  const page = await pageCreate({ backend, storage: STORAGE_NOTIFY });
+  assert.equal(channel.openCount, 0, 'nobody signed in: no channel');
+  assert.match(page.remoteStore.notifyStateGet('cloud').message, /sign in/);
+  page.authStore.signIn();
+  await settle();
+  assert.equal(channel.openCount, 1, 'signed in, the point holding a partition of the page: one channel');
+  channel.onStateChange({ status: 'open', message: '', timeOpened: Date.now() });
+  await settle();
+  assert.equal(page.remoteStore.notifyStateGet('cloud').status, 'open');
+  assert.equal(partitionOf(page).storage.remote.notify.status, 'open');
+
+  // this tab writes: the point tells it back with this tab as the actor, and nothing is read
+  const made = await page.objectFrontendStore.assetCreate(OBJECT_ID, { kind: 'note', lang: 'md', name: 'Mine', text: 'mine', partition: 'cloud' });
+  assert.equal(made.code, 0, made.message);
+  const partitionId = backend.state.partitionList[0].partitionId;
+  const getCountBefore = callCountOf(backend, 'partitionGet');
+  channel.onNotification({ event: 'partitionChanged', partitionId, revision: 1, itemIdList: [made.data.itemId], actor: { userId: 'user-1', clientInstanceId: clientInstanceIdGet() }, time: '20261116_12000000+09' });
+  await settle();
+  assert.equal(callCountOf(backend, 'partitionGet'), getCountBefore, 'its own change is not read again');
+  assert.equal(page.remoteStore.notifyStateGet('cloud').logList[0].handling, 'known', 'the answer of the write came first: the revision is held');
+
+  // another tab writes at the backend: told, read, shown, and said to come from elsewhere
+  const other = backend.driver;
+  const written = await other.itemCreate({ partitionId, lang: 'md', text: 'theirs', record: { key: 'theirs', kind: 'note', name: 'Theirs' } });
+  channel.onNotification({ event: 'partitionChanged', partitionId, revision: written.data.revision, itemIdList: [written.data.item.itemId], actor: { userId: 'user-1', clientInstanceId: OTHER_INSTANCE }, time: '20261116_12000100+09' });
+  await settle();
+  assert.equal(callCountOf(backend, 'partitionGet'), getCountBefore + 1, 'one read of the partition');
+  const assetList = page.objectFrontendStore.objectGet(OBJECT_ID).assetList.map((one) => one.name).sort();
+  assert.deepEqual(assetList, ['Mine', 'Theirs']);
+  const changeElsewhere = partitionOf(page).storage.remote.changeElsewhere;
+  assert.equal(changeElsewhere.actor.clientInstanceId, OTHER_INSTANCE);
+  assert.deepEqual(changeElsewhere.itemIdList, [written.data.item.itemId]);
+  const notify = page.objectFrontendStore.partitionNotifyGet(OBJECT_ID, 'cloud');
+  assert.equal(notify.clientInstanceId, clientInstanceIdGet());
+  assert.deepEqual(notify.logList.map((one) => [one.handling, one.isSelf]), [['read', false], ['known', true]]);
+
+  // a change of this tab told before its answer (or with the answer lost): not read at once; checked a moment later
+  const getCountSelf = callCountOf(backend, 'partitionGet');
+  await other.recordSet({ partitionId, key: 'theirs', name: 'Theirs again' });
+  channel.onNotification({ event: 'partitionChanged', partitionId, revision: backend.state.partitionList[0].revision, actor: { userId: 'user-1', clientInstanceId: clientInstanceIdGet() } });
+  await settle();
+  assert.equal(page.remoteStore.notifyStateGet('cloud').logList[0].handling, 'self');
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  await settle();
+  assert.equal(callCountOf(backend, 'partitionGet'), getCountSelf + 1, 'the revision told never came with an answer: read');
+  assert.ok(page.objectFrontendStore.objectGet(OBJECT_ID).assetList.some((one) => one.name === 'Theirs again'));
+
+  // a burst of changes elsewhere: one read
+  const getCountBurst = callCountOf(backend, 'partitionGet');
+  for (let index = 0; index < 5; index += 1) {
+    channel.onNotification({ event: 'partitionChanged', partitionId, revision: 100 + index, actor: { userId: 'user-1', clientInstanceId: OTHER_INSTANCE } });
+  }
+  await settle();
+  assert.equal(callCountOf(backend, 'partitionGet'), getCountBurst + 1, 'five notifications in a row, one read');
+
+  // the channel opened again after a gap: every partition of the point asked again
+  channel.onStateChange({ status: 'waiting', message: 'closed' });
+  const getCountReopen = callCountOf(backend, 'partitionGet');
+  channel.onStateChange({ status: 'open', message: '', timeOpened: Date.now() + 1000 });
+  await settle();
+  assert.equal(callCountOf(backend, 'partitionGet'), getCountReopen + 1, 'opened again: the partition is checked (the notifications in between are lost)');
+  assert.equal(page.remoteStore.notifyStateGet('cloud').countOpened, 2);
+
+  // signed out: the channel is closed; another person: another channel
+  page.authStore.signOut();
+  await settle();
+  assert.equal(channel.closeCount, 1);
+  page.authStore.signIn('subject-2');
+  await settle();
+  assert.equal(channel.openCount, 2);
+  page.remoteStore.dispose();
+  assert.equal(channel.closeCount, 2, 'the page closed: its channel too');
+});
+
+test('notifications: a point that does not ask has no channel; a driver without one says so', async () => {
+  const backend = backendFakeCreate();
+  const channel = channelFakeAdd(backend);
+  const page = await pageCreate({ backend });
+  page.authStore.signIn();
+  await settle();
+  assert.equal(channel.openCount, 0, 'isNotifyEnabled absent: no channel');
+  assert.equal(partitionOf(page).storage.remote.notify, undefined);
+  page.remoteStore.dispose();
+
+  const backendPlain = backendFakeCreate();
+  const pagePlain = await pageCreate({ backend: backendPlain, storage: STORAGE_NOTIFY });
+  pagePlain.authStore.signIn();
+  await settle();
+  assert.equal(pagePlain.remoteStore.notifyStateGet('cloud').status, 'unsupported');
+  assert.equal(partitionOf(pagePlain).storage.remote.status, 'absent', 'the partition is read as before');
+  pagePlain.remoteStore.dispose();
 });

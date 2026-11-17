@@ -15,7 +15,7 @@ A **frontend object** is an object of the [object registry](doc_page_impl_obj.md
                                                 the top may be a partition, with its own list, git keeping some out,
                                                 and a storage point holding its items (partition.yaml; file-tree without)
 .doc-page/type.yaml (or beside object.yaml, or in a package)   its type (doc_page_impl_type.md)
-  typeList    example.reading-list              below frontend.object: modes [{ id, comp, param, category }], kinds of assets
+  typeList    example.reading-list              below frontend.object: modes [{ id, comp, param, category }], kinds of data items
         │
         ▼
 the page   DocObjectFrontendStore          joins the declarations with the asset store: the object as the files say now,
@@ -31,7 +31,7 @@ the page   DocObjectFrontendStore          joins the declarations with the asset
 - Its **entry asset** is an asset item whose data (yaml) describes the object: its name, its type, its description, and **metadata**, a free mapping of the type's own.
 - Its **item lists** (`item-list.yaml`) record its assets by **key**, each list those lying in its folder and below ([The item lists](#the-item-lists)), so that a folder of the object can be kept out of git with everything it says.
 - Its **partitions**, when its type declares them, are the folders at the top of its item folder that split its items by where they come from and who may see them: the example of a demonstration, the real data of one checkout, what is tried out ([Partitions](#partitions)).
-- An **asset of an object** is an asset item a list of the object records under a key unique in the object; it lies in the object's folder and **declares** the object in its own metadata (`owner`), and its record gives it a **kind** that groups the assets of one sort (`book`, `note`), and optionally a **name** for people and **paths** indexing it, as many as the object wants (`/book/sci-fi/dune`, `/author/frank-herbert/dune`), each a pattern that may let some of its segments come in any order (`/book/{sci-fi/frank-herbert/}dune`: [Asset paths](doc_page_impl_obj_frontend_asset_path.md)). Why they are never called objects: [A word on the names](#a-word-on-the-names-objects-hold-items).
+- An **asset of an object** is an asset item a list of the object records under a key unique in the object; it lies in the object's folder and **declares** the object in its own metadata (`owner`), and its record gives it a **kind**, what sort of item it is (`book`, `note`): a type of the registry its type holds, named in the object by a short name ([Kinds of data items](doc_page_impl_type.md#kinds-of-data-items)), and optionally a **name** for people and **paths** indexing it, as many as the object wants (`/book/sci-fi/dune`, `/author/frank-herbert/dune`), each a pattern that may let some of its segments come in any order (`/book/{sci-fi/frank-herbert/}dune`: [Asset paths](doc_page_impl_obj_frontend_asset_path.md)). Why they are never called objects: [A word on the names](#a-word-on-the-names-objects-hold-items).
 - A **type** is a type of the type registry, `frontend.object` or one a doc page declares below it; it says how the object is drawn: its **modes**.
 - A **mode** is a component of the component registry and the parameters it starts with, with an id, a label and a **category** (`view`, `edit`, anything: how the modes are grouped). A type has its own modes and those of its ancestors.
 - The **entry component**, `ObjectFrontend`, is a block of a document naming an object, a mode and the parameters of that mode, and rendering the mode's component.
@@ -93,8 +93,8 @@ typeList:
   - id: example.reading-list
     label: Reading list
     icon: book
-    assetKindList:                  # what it holds (#what-a-type-accepts)
-      - { id: book, label: Book, langList: [yaml], pathPrefix: /book/, groupPath: book }
+    kindList:                       # the kinds of data items it holds (#what-a-type-accepts)
+      - { id: book, label: Book, content: { form: data, schema: { type: object } }, pathPrefix: /book/, groupPath: book }
     modeList:                       # how it is drawn (#types-and-modes)
       - id: shelf
         label: Shelf
@@ -106,7 +106,7 @@ typeList:
       - { id: book, label: One book, comp: ReadingListBook, pathParam: book }   # shows one thing, named by an inner path
 ```
 
-A type with modes or kinds of assets is below `frontend.object` unless it says which type it extends. The components a type names are the doc page's own (`comp-mdx/`) or any of the registry, mounted the usual way ([Components of a doc page](doc_page_impl_mdx_comp.md#components-of-a-doc-page)); one no registry has is marked in the Types table of the settings tab.
+A type with modes or kinds of data items is below `frontend.object` unless it says which type it extends. The components a type names are the doc page's own (`comp-mdx/`) or any of the registry, mounted the usual way ([Components of a doc page](doc_page_impl_mdx_comp.md#components-of-a-doc-page)); one no registry has is marked in the Types table of the settings tab.
 
 ## What a doc page says: `object-frontend.yaml`
 
@@ -205,6 +205,7 @@ item/real/                                                                     i
 - **A whole partition moves to another point** with `partitionStorageSet` ([Changing the storage of a partition](doc_page_impl_asset_storage.md#changing-the-storage-of-a-partition)): from files to the cloud, back, or between two local types, with every item and its history. Away from a remote point it may leave a copy there (`isSourceKept`). An asset moved into a partition of another local point is written there by its type.
 - **A partition whose point cannot be used** (not declared, disabled, a type without a driver) is a problem of the object: its assets are listed as `missing` from its item list, the other partitions work, and a point of the type its data was written by [claims it back](doc_page_impl_asset_storage.md#claiming-a-partition-back).
 - **A partition of a remote point has a state of its own** (`storage.remote`): read, read from the cache, signed out, out of reach ([The state of a partition](doc_page_impl_asset_storage.md#the-state-of-a-partition)). While nobody is signed in it shows nothing and offers **Sign in**; the object and its other partitions work.
+- **A remote partition can be live.** Where its point asks for notifications (`isNotifyEnabled`), a change made to it in another tab, on another device or by a program is read at once, and `storage.remote.changeElsewhere` says when, by whom and which items; a change this page made itself is recognized by its [client instance](doc_page_impl_client_instance.md) and not read again ([Being told of changes](doc_page_impl_asset_storage.md#being-told-of-changes)). A mode may light up what changed; it never has to listen to anything, since the assets it reads are the new ones.
 - **Whether a partition can be written is said per partition** (`partitionWriteUnavailableReasonGet`): a partition in the folders of the doc page needs the development server, a remote one needs its point, and is written on a built page too.
 - **The entry asset** lies outside every partition and is always file-tree, as are the assets of a type declaring no partition.
 
@@ -220,7 +221,7 @@ Every frontend object has the same apis for its partitions, whatever its type: a
 | **delete** | `partitionDelete(partition)` | `object-frontend/partition/delete { id, partition }` | **Delete**, asking in its row |
 | **storage** | `partitionStorageSet(partition, storagePoint, { isSourceKept? })`, `storagePointList` | `object-frontend/partition/storage/set { id, partition, storagePoint }`, `partition/compact { id, partition }` | **Storage…**, a point chosen in its row, with **keep a copy** away from a remote point; **Compact** in the Asset service tab |
 | **copy** | `partitionCopy(from, { id?, partition, storagePoint? })` | done by the page, an `asset/create` per asset | **Copy…**, a partition chosen in its row |
-| **remote** | `partitionWriteUnavailableReasonGet(partition)`, `partitionRefresh(partition)`, `partitionSignIn(partition)` | asked of the storage point by the page | the state beside its storage point, with **Refresh** or **Sign in** |
+| **remote** | `partitionWriteUnavailableReasonGet(partition)`, `partitionRefresh(partition)`, `partitionSignIn(partition)`, `partitionNotifyGet(partition)` | asked of the storage point by the page; told by it where it keeps a channel | the state beside its storage point, with **Refresh** or **Sign in**; what the point told, in the Asset service tab |
 
 - **Create** makes the folder with an empty item list, so a record never lands above it; it is how a partition kept out of git exists in a fresh clone before anything is written into it (the first write makes it too). For a remote point it is also the **claim**: the folder gets the bind, and a partition of this object the point holds already is the partition from then on ([Claiming a partition back](doc_page_impl_asset_storage.md#claiming-a-partition-back)).
 - **Rename** moves the folder with what it holds; the item lists move with it, so every record follows, and the paths of the assets are the object's and do not change. The new name must be free and, for a type declaring partitions, declared.
@@ -296,9 +297,9 @@ asset of the object                      document of the page
 
 ```yaml
 # type.yaml
-assetKindList:
-  - { id: book, langList: [md], isDoc: true }                           # docPath absent: {path}, the first asset path
-  - { id: zettel, langList: [md, mdx], isDoc: true, docPath: "card/{key}" }   # its own: card/{key}.md
+kindList:
+  - { id: book, content: { form: text, langList: [md] }, isDoc: true }     # docPath absent: {path}, the first asset path
+  - { id: zettel, content: { form: text, langList: [md, mdx] }, isDoc: true, docPath: "card/{key}" }   # card/{key}.md
 ```
 
 `docPath` is a pattern over `{path}` (the first asset path; the kind and key of an asset without one), `{key}` and `{kind}` (`objectFrontendDocRelPathBuild`); the extension is the language of the item. A path of its own that does not follow the hierarchy of the asset paths stays valid when an asset is filed elsewhere. Two assets at one document path: the first keeps it. The page (`DocObjectFrontendStore.docProvided`) and the development server (`objectFrontendDocFind`) apply the same rule.
@@ -436,21 +437,27 @@ Listing comes last on the way in, so a write stopped halfway leaves a stray that
 
 ### What a type accepts
 
-Types differ in what they hold, so a type may say it. `assetKindList` of its [declaration](doc_page_impl_type.md#declaring-a-type) is read for every asset that is created or comes in; the nearest declaration along its ancestors applies, and a type where none says accepts anything:
+Types differ in what they hold, so a type says it: its `kindList` names the **kinds of data items** its objects hold, declared there (a type of the registry, unless the type keeps it internal) or by another type ([Kinds of data items](doc_page_impl_type.md#kinds-of-data-items)). What a kind is (its content: data of a schema, a text, bytes) is its declaration's; how the type holds it is the type's own. The list is read for every asset that is created, comes in or is written; the nearest declaration along its ancestors applies, and a type where none says accepts anything:
 
 ```yaml
 typeList:
   - id: example.reading-list
-    assetKindList:
-      - id: book
-        label: Book
-        langList: [yaml]         # the languages an asset of the kind is in
+    kindList:
+      - id: book                 # its name here: the kind of a record (kind: book). declared here:
+        label: Book              #   the kind example.reading-list.book
+        content:                 # what an item of it is: data, its shape a schema
+          form: data
+          langList: [yaml]
+          schema: { type: object, required: [title], properties: { title: { type: string } } }
         pathPrefix: /book/       # one of its paths, when it has any, starts so
         groupPath: book          # the folder under item/ it goes to, unless the write names one
         isIncomingRefused: false # true: only the modes make these, nothing comes in from elsewhere
+      - { id: cover, kind: example.media.image, groupPath: cover }   # declared by example.media
 ```
 
-The check (`objectFrontendAssetAcceptCheck`) is declarative, so the development server applies it to whoever writes, a mode, the settings tab or an agent, and refuses before anything is written. A kind left out of a write is the only kind when the type has one, and otherwise the type asks for it. What a kind's data must look like is not checked yet ([TODO](doc_page_impl_TODO.md#object-frontend-schema)).
+The check (`objectFrontendAssetAcceptCheck`, over the kinds resolved by `objectFrontendKindListResolve`) is declarative, so the development server applies it to whoever writes, a mode, the settings tab or an agent, and refuses before anything is written: a kind the type does not hold, an item of another form than its kind's (data in another language, a text where bytes go, a file of another media type), the data of a new item that does not fit the schema. A kind left out of a write is the only kind when the type has one, and otherwise the type asks for it. A mode's write of an asset (`assetWrite`) is checked against the schema too, by the page, before it is written; a read answers what does not fit beside the data (`kindProblemList` of `assetDataGet`), since a file changed by hand is seen only when read.
+
+The schema is the contract; a mode still reads **defensively**: a kind without a schema, or one whose schema says less than the mode needs, leaves the rest to the mode, which says what does not fit where the reader looks (a line above what it draws, a mark on the piece) and draws what it can, never an empty block or a broken one. A second object a mode reads (`otherGet`, which takes any frontend object) is checked the same way: that it is of the type the mode reads (`object.typeId` and `config.object.typeIsAssignable`), that the asset a reference names is of the kind expected (`asset.kind`, `kindGet(name).kindId`). The Japanese-style CV of the package cv does all of it (`@cv-dev/cv/doc/cv-jp.md#when-something-does-not-fit`).
 
 ### What disagrees
 
@@ -471,11 +478,11 @@ A folder under `.doc-page/object-frontend/` without an `object.yaml`, or naming 
 
 ## Where an asset lies, and how it is found
 
-The folder of an object holds its items at **any depth**: inside `item/` a folder that is not an item is a group, read in turn (8 levels, [Group folders](doc_page_impl_asset.md#group-folders)), and its names may say something, `history/edu`, `book`. That is the **place on disk** (`groupPath` of the item, one per item, for a person browsing the files); the **paths** of its record are the other layer, virtual and any number, for the modes and readers, and the two do not touch ([Two layers](doc_page_impl_obj_frontend_asset_path.md#two-layers-that-do-not-touch-where-an-item-lies-and-its-paths)): moving an asset on disk changes no key, name or path, and rewriting its paths moves no file, so a mode never reads a `groupPath` to learn what an asset is. A new asset goes to the folder of its kind (`groupPath` of `assetKindList`), or the folder the write names, or the top. Folders are made by their first item and removed with their last.
+The folder of an object holds its items at **any depth**: inside `item/` a folder that is not an item is a group, read in turn (8 levels, [Group folders](doc_page_impl_asset.md#group-folders)), and its names may say something, `history/edu`, `book`. That is the **place on disk** (`groupPath` of the item, one per item, for a person browsing the files); the **paths** of its record are the other layer, virtual and any number, for the modes and readers, and the two do not touch ([Two layers](doc_page_impl_obj_frontend_asset_path.md#two-layers-that-do-not-touch-where-an-item-lies-and-its-paths)): moving an asset on disk changes no key, name or path, and rewriting its paths moves no file, so a mode never reads a `groupPath` to learn what an asset is. A new asset goes to the folder of its kind (`groupPath` of the kind in `kindList`), or the folder the write names, or the top. Folders are made by their first item and removed with their last.
 
 ## Types and modes
 
-A type's modes are its own declarations, then those of its ancestors in the order of the type registry (the nearest first, `ancestorListGet`); a mode id declared on a nearer type hides the same id farther up (`objectFrontendModeListResolve`). `frontend.object` brings one mode to every type, **`overview`** (`common/ObjectFrontendOverview`): the object as its entry describes it, its assets with their state, its metadata, and a button per mode. The default mode is the nearest one marked `isDefault`, else the first.
+A type's modes are its own declarations, then those of its ancestors in the order of the type registry (the nearest first, `ancestorListGet`); a mode id declared on a nearer type hides the same id farther up (`objectFrontendModeListResolve`). `frontend.object` brings one mode to every type, **`overview`** (`common/ObjectFrontendOverview`): the object as its entry describes it, the kinds its type holds (one of another type with that type), its assets with their state, its metadata, and a button per mode. The default mode is the nearest one marked `isDefault`, else the first.
 
 Nothing ties the modes of a type to one way of looking at the same data: the page renders the component a mode names and assumes nothing about it. A mode may draw all the data as a table, be a form registering a new piece, show one asset chosen by a parameter, or sum everything up; the category only groups the modes where they are listed. A type has two ways to offer its **morphes**, and may mix them:
 
@@ -496,7 +503,7 @@ param:                            # optional: over the mode's own parameters, a 
 ```
 ````
 
-It resolves the object (`DocObjectFrontendStore.objectGet`), the mode of its type (`modeResolve`), merges the parameters, and renders the mode's component through the registry boundary (`RegisteredComp`) in the placement **`objectFrontend`**, adding nothing around it but a block's margins: a block reads as the mode's component would. While the object is not read yet it is one line; an object no doc page lists, an entry that cannot be read, a mode the type does not have are one line with the reason.
+It resolves the object (`DocObjectFrontendStore.objectGet`), the mode of its type (`modeResolve`), merges the parameters, and renders the mode's component through the registry boundary (`RegisteredComp`) in the placement **`objectFrontend`**, adding nothing around it but a block's margins: a block reads as the mode's component would. While the object is not read yet it is one line; an object no doc page lists, an entry that cannot be read, a mode the type does not have are one line with the reason, and so is a mode's component that throws while it draws: the registry boundary catches it, and the block fails alone ([A component that fails to draw](doc_page_impl_mdx_comp.md#a-component-that-fails-to-draw)).
 
 **What the mode's component receives.**
 
@@ -509,8 +516,9 @@ config.objectFrontend                    the object and its api (getters: the co
   assetList(kind?)                       the assets, of one kind
   assetResolve(ref), assetGet(ref)       what an asset reference (/path, key, name:…, id:…) names, with its status
   assetSearch(text), assetComplete(text) the assets found by words; the candidates completing a typed path
-  assetTextGet(ref), assetDataGet(ref)   { status, message, text, asset, assetStatus } / { ..., data } of an asset's head
-                                         (yaml read, shared: to be read, not changed); loaded on demand
+  assetTextGet(ref), assetDataGet(ref)   { status, message, text, asset, assetStatus } / { ..., data, kindProblemList } of an
+                                         asset's head (yaml read, shared: to be read, not changed); loaded on demand.
+                                         kindProblemList [{ path, message }]: what of the data does not fit its kind
   assetBytesGet(ref)                     Promise<{ code, message, data: { bytes, contentType, fileExt, size } }>: the bytes
                                          of an asset's head (a file, an image), read when asked, wherever it is held; a
                                          large one of a remote point is handed over without being kept by the page
@@ -519,7 +527,8 @@ config.objectFrontend                    the object and its api (getters: the co
                                          the default one: { code, data: { key, itemId } }. bytes (a Uint8Array) make an
                                          asset of a file, lang '' by default; storagePreference: database | objectStorage
                                          (doc_page_impl_asset_storage.md#a-preference-of-where-bytes-are-kept)
-  assetKindList                          what its type holds (#what-a-type-accepts); undefined: anything
+  kindList, kindGet(name)                the kinds of data items its type holds (#what-a-type-accepts), each { id (its name
+                                         here), kindId, label, content, declaredBy, isOwn, groupPath, … }; undefined: anything
   assetMove(ref, groupPath), assetGroupMove(from, to)   where an asset lies under item/; nothing else depends on it
   assetMetaSet(ref, { name?, pathList?, kind? })   how an asset is named and indexed
   assetWrite(ref, text | data)           the head of an asset replaced, by its save mode
@@ -542,6 +551,8 @@ config.objectFrontend                    the object and its api (getters: the co
                                          the apis of partitions (#the-apis-of-partitions)
   partitionWriteUnavailableReasonGet(p)  why one partition cannot be written now ('' when it can)
   partitionRefresh(p), partitionSignIn(p)   a partition a remote storage point holds: asked again; the sign-in of its point
+  partitionNotifyGet(p)                  what its storage point told of it, where the point keeps a channel: the state
+                                         of the channel, the id of this page, the notifications with what the page did
   ref                                    the reference of the object: frontend:{id}. something inside it is named
                                          from elsewhere as {ref}#{inner path} (#things-inside-an-object-inner-paths)
   open()                                 the object in the Frontend objects tab
@@ -573,9 +584,9 @@ The layer's provider (`lib/doc-object-provider-frontend.js`, id `frontend`) spea
 | | |
 | --- | --- |
 | namespace | `frontend`; the local part is the object's id |
-| types | `frontend.object` (built-in, a `core.collection`) and the types declared below it, which the registry reads itself; of each, its modes with the inherited ones and its kinds of assets (`typeInfoGet`, so `type/get` answers them) |
+| types | `frontend.object` (built-in, a `core.collection`) and the types declared below it, which the registry reads itself; of each, its modes with the inherited ones and the kinds it holds (`typeInfoGet`, so `type/get` answers them). The kinds the types declare are types below `frontend.item`, and `type/get` of one answers its content, the type declaring it and the types holding it |
 | descriptor | label: the name; type: the entry's; summary `{ assetCount, docPageAlias, typeId }`; `open: { kind: objectFrontend, id }`. Of an inner reference `frontend:{id}#{inner path}`: type `frontend.inner`, label the thing's name, summary `{ objectRef, objectLabel, path, kind, text? }` ([Things inside an object](#things-inside-an-object-inner-paths)) |
-| relations | `core.member` from the object to each asset, `asset:local/{itemId}`, keyed `member/{key}`, `data: { kind, status }`, in the order of the lists; to an asset, the object it belongs to |
+| relations | `core.member` from the object to each asset, `asset:local/{itemId}`, keyed `member/{key}`, `data: { kind, kindId, status }` (its name in the object, the kind), in the order of the lists; to an asset, the object it belongs to |
 | capabilities | query, resolve, read (the entry as content: name, type, metadata, assets with their references, modes), relationQuery, innerComplete (the candidates completing a typed inner path, asked of the type of the object), and the writes below |
 | opening | the Frontend objects tab, the object chosen |
 
@@ -592,7 +603,7 @@ object/create { memberOf: { ref: frontend:{id},            a new asset of the ob
     partition?, groupPath? } },                              partition named (the default one without) and the folder
   content: { data: { title: Dune } } | { text, lang } }      inside it (that of its kind without)
 object/read { ref: frontend:{id} }                         the entry and the lists: name, type, metadata, assetList [{ key, kind, ref }], modes,
-                                                           assetKindList, disagreement { strayList, unknownList, outsideList }
+                                                           kindList, disagreement { strayList, unknownList, outsideList }
 object/read { ref: asset:local/{itemId} }                one asset, with the text of its head
 object/update { ref: asset:local/{itemId}, patch: { data | text } }   the data of an asset (the asset store's provider)
 object/update { ref: frontend:{id}, patch: { name?, description?, typeId?, metadata? } }
@@ -636,7 +647,8 @@ The **Frontend objects** tab of the settings panel (`ObjectFrontendSettings.jsx`
 
 - **New object**: the doc page (those with an asset store and not `objectFrontend: false`), the type (`frontend.object` and the declared ones), the name; **Create**.
 - **Objects**: one row per object of every doc page (name, type, doc page, assets, id, state: found, or how many things to look at). A click shows the chosen one below its table: name and description edited in place (a new name renames its folder), the reference, the type, the entry asset (its asset panel opens from it) and where it lies, the modes; its **partitions** (the folder, the label, tracked or kept out, the storage point, how many assets, **Create** for a declared one the disk lacks, **Storage…** moving it whole to another point, **Delete** asking in its row, and a note when its type declares none); a search of its assets (`ObjectFrontendAssetSearchPanel`, a hit marking its row); its **assets** (key, name and paths edited in place, the paths as `/a, /b`, kind, object, versions, state), each **Remove** asking in its row whether to delete it or keep it in the store; its folders on disk (a folder renamed in place; an asset's folder in its row); what disagrees (**Attach**, **Adopt**, **Move out**, **Move in**); the problems; the metadata; **Delete object**, asking in its row whether its assets go with it.
-- **Types**: what the doc pages declare: id, label, extends, the modes (an inherited one marked ↑), the doc page.
+- **Types**: what the doc pages declare: id, label, extends, the modes (an inherited one marked ↑), the kinds held (one of another type marked ← with the type declaring it), the doc page.
+- **Kinds**: the kinds of data items the types declare: id, label, content, the type declaring it, the types holding it (none: offered only). In the detail of an object, **Check the data against its kinds** reads every item of a kind with a schema and lists what does not fit.
 - **Problems** of the files, by doc page, and the **orphan entries** with **List it in {doc page}**.
 
 Every state the tab shows (the object chosen, the creation form, the question open, the write in progress and its failure) is the store's (`settings`, `write`); a built page shows the lists and changes nothing.
@@ -664,7 +676,9 @@ settings, write               the tab's state, the write in progress
 
 ```text
 create        the folder of the object, the entry asset in its item/  ->  object.yaml   (last: it makes the object
-              exist; when it fails the new folder goes away)
+              exist; when it fails the new folder goes away). The id is made, or one made before is given
+              (id): a script making a doc page anew keeps the identity that data elsewhere is filed under,
+              such as the partitions of its objects at a storage point; an id in use is refused
 delete        object.yaml says isDeleted (or the line leaves the file)  ->  its assets are deleted softly (or kept:
               an orphan entry)
 asset/create  the type accepts it  ->  the asset in the object's item folder (owner)  ->  recorded in the nearest list
@@ -697,7 +711,9 @@ A **built page** has no server: the declarations travel in the asset snapshot (`
 
 ```text
 built-in/type.yaml                         frontend.object
-frontend/plugin/doc-type-config.ts         the type files (doc_page_impl_type.md), modes and kinds of assets among their keys
+frontend/plugin/doc-type-config.ts         the type files (doc_page_impl_type.md), modes and kinds of data items among their keys
+frontend/src/lib/doc-object-frontend-kind.js   kinds of data items: what a type holds, a content and its schema, an item
+                                           checked against its kind (doc_page_impl_type.md#kinds-of-data-items)
 frontend/src/lib/doc-object-frontend.js    the pure part: references, the entry (parse, build, a free key), the item lists (parse,
                                            build, the list a record goes to, merging them), the partitions (resolved
                                            from the type, the folder of a write, what a form says), the names and paths

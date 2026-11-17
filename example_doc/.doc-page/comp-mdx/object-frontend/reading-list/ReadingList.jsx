@@ -249,6 +249,13 @@ export const ReadingListBook = observer(function ReadingListBook({ data = {}, co
       {resolved.status === 'loading' ? <p className="doc-note">reading the list…</p> : null}
       {resolved.status !== 'found' && resolved.status !== 'loading' ? <p className="doc-error">{resolved.message}</p> : null}
       {book?.status === 'error' ? <p className="doc-error">{book.message}</p> : null}
+      {/* what of the book does not fit its kind (example.reading-list.book, its schema in .doc-page/type.yaml):
+          the book is drawn as far as it can be, and this says the rest (main/doc_page_impl_type.md#kinds-of-data-items) */}
+      {book?.kindProblemList?.length > 0 ? (
+        <p className="doc-error">
+          This book does not fit its kind {service.kindGet('book')?.kindId}: {book.kindProblemList.map((problem) => `${problem.path || 'the whole'}: ${problem.message}`).join('; ')}
+        </p>
+      ) : null}
       {(resolved.asset?.pathList ?? []).length > 0 ? <p className="doc-note">{resolved.asset.pathList.join(' · ')}</p> : null}
       {resolved.status === 'found' ? (
         <ul className="reading-list-note-list">

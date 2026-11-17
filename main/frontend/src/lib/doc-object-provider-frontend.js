@@ -86,11 +86,12 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
       metadata: state.metadata,
       docPageAlias: state.docPageAlias,
       entryItemId: state.entryItemId,
+      // kind: its name in the object; kindId: the kind, a type of the registry (doc_page_impl_type.md#kinds-of-data-items)
       assetList: state.assetList.map(({ key, kind, name, pathList, itemId, status }) => ({
-        key, kind, name: name ?? '', pathList: pathList ?? [], itemId, ref: `asset:local/${itemId}`, status,
+        key, kind, kindId: objectFrontendStore.kindOfGet(state.id, kind)?.kindId ?? '', name: name ?? '', pathList: pathList ?? [], itemId, ref: `asset:local/${itemId}`, status,
       })),
       modeList: objectFrontendStore.modeListGet(state.typeId).map(({ id, label, category, comp }) => ({ id, label, category, comp })),
-      assetKindList: objectFrontendStore.assetKindListGet(state.id),
+      kindList: objectFrontendStore.kindListGet(state.id),
       // what does not agree (doc_page_impl_obj_frontend.md#what-disagrees)
       disagreement: {
         strayList: state.strayList.map((item) => item.itemId),
@@ -194,10 +195,15 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
 
     // the modes of a frontend object type, inherited ones included: what an
     // author or an agent chooses from for a block (type/get)
+    // of a kind of data items (a type below frontend.item): what an item of it is, the type
+    // declaring it, the types holding it
     typeInfoGet: (typeId) => {
-      if (!objectFrontendStore.typeIsFrontend(typeId)) return undefined;
+      if (!objectFrontendStore.typeIsFrontend(typeId)) {
+        const kind = objectFrontendStore.kindDeclaredList.find((one) => one.id === typeId);
+        return kind ? { kind: { name: kind.name, content: kind.content ?? { form: 'any' }, declaredBy: kind.declaredBy, heldByList: kind.heldByList } } : undefined;
+      }
       return {
-        assetKindList: objectFrontendStore.assetKindListOfTypeGet(typeId),
+        kindList: objectFrontendStore.kindListOfTypeGet(typeId),
         modeList: objectFrontendStore.modeListGet(typeId).map(({ id, label, description, category, comp, param, isDefault, pathParam, typeId: typeIdDeclared }) => ({
           id, label, description, category, comp, param, isDefault, typeId: typeIdDeclared, ...(pathParam ? { pathParam } : {}),
         })),
@@ -323,7 +329,7 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
             toRef: toRefAsset,
             order: index,
             label: asset.name || asset.key,
-            data: { kind: asset.kind, name: asset.name ?? '', pathList: asset.pathList ?? [], status: asset.status },
+            data: { kind: asset.kind, kindId: objectFrontendStore.kindOfGet(state.id, asset.kind)?.kindId ?? '', name: asset.name ?? '', pathList: asset.pathList ?? [], status: asset.status },
           });
         });
       }

@@ -34,7 +34,7 @@ export const ObjectViewFrontendInner = observer(function ObjectViewFrontendInner
     return <ObjectFrontendBody data={{ raw: objectFrontendBlockTextBuild(block) }} config={config} onEvent={onEvent} />;
   }
   const objectLabel = state.name || split.ref;
-  const kindLabel = inner.kind ? (objectFrontendStore.assetKindListGet(split.id) ?? []).find((kind) => kind.id === inner.kind)?.label ?? inner.kind : '';
+  const kindLabel = inner.kind ? (objectFrontendStore.kindListGet(split.id) ?? []).find((kind) => kind.id === inner.kind)?.label ?? inner.kind : '';
   const statusText = inner.status === 'loading' ? 'reading…' : isFound ? '' : inner.message || `nothing of ${objectLabel} is at ${inner.path}`;
   const title = [inner.label, kindLabel, `${objectLabel} ${inner.path}`, statusText].filter(Boolean).join(' · ');
   const open = (event) => {

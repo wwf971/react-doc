@@ -2,7 +2,7 @@
 # Found here by convention (.doc-page/type.yaml beside the entry); "type: { file }" of the entry
 # would name another file, a list several, "type: false" none.
 #
-# each extends frontend.object (a type with modes or kinds of assets does by default), directly or
+# each extends frontend.object (a type with modes or kinds of data items does by default), directly or
 # through another type, and inherits the modes of its ancestors (frontend.object brings "overview");
 # a mode declared again with the same id replaces the inherited one. a mode is a component and the
 # parameters it starts with: two modes may share a component and differ by their parameters only
@@ -12,11 +12,50 @@ typeList:
     label: Reading list
     description: books (one asset each) and notes on them (one asset each, naming their book)
     icon: book
-    # what it holds: a new book or note goes to a folder of its kind under item/, and nothing
-    # else comes in (main/doc_page_impl_obj_frontend.md#what-a-type-accepts)
-    assetKindList:
-      - { id: book, label: Book, langList: [yaml], pathPrefix: /book/, groupPath: book }
-      - { id: note, label: Note, langList: [yaml], pathPrefix: /note/, groupPath: note }
+    # the kinds of data items it holds (main/doc_page_impl_type.md#kinds-of-data-items): a book and a
+    # note are declared here, the book registered as a type of the registry (example.reading-list.book),
+    # the note kept internal; each content data of a schema, checked when a mode writes one; a cover is
+    # the image another type declares. a new
+    # book or note goes to a folder of its kind under item/, and nothing else comes in
+    # (main/doc_page_impl_obj_frontend.md#what-a-type-accepts)
+    kindList:
+      - id: book
+        label: Book
+        description: one book of the list, what is known of it and how far its reader is
+        content:
+          form: data
+          langList: [yaml]
+          schema:
+            type: object
+            required: [title]
+            properties:
+              title: { type: string, minLength: 1 }
+              author: { type: string }
+              genre: { type: string }
+              status: { enum: [want, reading, read] }
+              # what its reader says of it: a cell, words with links and references in it
+              remark: { type: string }
+        pathPrefix: /book/
+        groupPath: book
+      # a note means something only inside its list (it names its book by key): the type keeps the kind
+      # to itself, registers nothing of it, and checks it all the same
+      - id: note
+        label: Note
+        description: a note on one book, naming it by its key
+        isInternal: true
+        content:
+          form: data
+          langList: [yaml]
+          schema:
+            type: object
+            required: [book, text]
+            properties:
+              book: { type: string, description: the key of the book }
+              text: { type: string }
+        pathPrefix: /note/
+        groupPath: note
+      # declared by example.media: held here as the cover of a book, its content theirs
+      - { id: cover, kind: example.media.image, label: Cover, pathPrefix: /cover/, groupPath: cover }
     # where its items lie: the books of the demonstration in example/, tracked; what trying the page
     # adds in playground/, kept out of git with its item list (main/doc_page_impl_obj_frontend.md#partitions)
     partitionList:
@@ -68,3 +107,15 @@ typeList:
         comp: ReadingList
         param: { layout: cards }
         isDefault: true
+  # a type offering a kind and holding none: its objects would hold nothing, it is there for the
+  # kind it declares (example.media.image), which the reading list holds as its cover
+  - id: example.media
+    label: Media
+    description: kinds of media other types hold; declares them, holds none
+    icon: package
+    kindList:
+      - id: image
+        label: Image
+        description: a picture kept as a file
+        content: { form: bytes, mediaTypeList: [image/*], extList: [png, jpg, jpeg, webp, svg], sizeMax: 2MB }
+        isHeld: false

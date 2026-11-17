@@ -22,7 +22,8 @@ import { typeSectionRead, type TypeSection } from './doc-type-config.ts';
 //
 //   docEntry:                # marks the file as the entry of a doc page;
 //     title: ...             #   true, or a mapping with optional page values
-//     homeDoc: ...           #   used when config.yaml does not set them
+//     titleShort: ...        #   used when config.yaml does not set them (titleShort
+//     homeDoc: ...           #   goes with the title of the same place: the tab title)
 //     homeItem: ...
 //   source:                  # optional: rules | { rules } | { file }
 //   tag:                     # optional: { defineById } | { file }
@@ -106,6 +107,9 @@ export type SidePanelLoaded = {
 
 export type DocEntryInfo = {
   title?: string;
+  // the title in a few words, for where the whole one does not fit (the tab of the
+  // browser, doc_page_impl.md#the-tab-title); only with the title of the same place
+  titleShort?: string;
   homeDoc?: string;
   homeItem?: string;
 };
@@ -251,6 +255,7 @@ export type DocWorkspaceInfo = {
 export type DocWorkspaceSpec = {
   isVirtual: boolean;
   title?: string;
+  titleShort?: string;
   homeDoc?: string;
   homeItem?: string;
   // isTemporary: mounted from the settings panel, after the doc pages written.
@@ -361,7 +366,7 @@ const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'assetSto
 // page (or switches the feature off), found beside the entry by convention
 const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'assetStorage', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'playground'] as const;
 const CONFIG_FILE_KEY_LIST = ['config', 'variable'];
-const WORKSPACE_FILE_KEY_LIST = ['title', 'homeDoc', 'homeItem', 'docPageList', 'packageList', 'config', 'hotkey', 'assetStorage'];
+const WORKSPACE_FILE_KEY_LIST = ['title', 'titleShort', 'homeDoc', 'homeItem', 'docPageList', 'packageList', 'config', 'hotkey', 'assetStorage'];
 const ENTRY_FILE_SUFFIX = '-entry.yaml';
 const ENTRY_FILE_NAME = 'entry.yaml';
 
@@ -476,6 +481,7 @@ export function docWorkspaceFileFind(dirPath: string): string {
 
 // the workspace file (design: doc_page_impl_source.md#the-workspace-file):
 //   title: ...               # optional page values, over those of the first doc page
+//   titleShort: ...          #   (titleShort only beside title)
 //   homeDoc: ~page:root/a.md
 //   homeItem: ...
 //   docPageList:             # the root-level doc pages, in side-panel order
@@ -494,7 +500,7 @@ export function docWorkspaceSpecRead(workspace: any, configDir: string, configFi
   let fileHash: string | undefined;
   let dirBase = configDir;
   const placeConfig = `config "workspace" (${configFile})`;
-  if (!mappingIs(content)) throw new Error(`[doc-source] ${placeConfig} must be { dir }, { file } or { docPageList, packageList?, title?, homeDoc?, homeItem? }`);
+  if (!mappingIs(content)) throw new Error(`[doc-source] ${placeConfig} must be { dir }, { file } or { docPageList, packageList?, title?, titleShort?, homeDoc?, homeItem? }`);
   if (content.file !== undefined || content.dir !== undefined) {
     // "dir": the workspace folder, its file found in .doc-workspace/;
     // "file": the workspace file itself
@@ -535,11 +541,12 @@ export function docWorkspaceSpecRead(workspace: any, configDir: string, configFi
       return written;
     }),
   };
-  for (const key of ['title', 'homeDoc', 'homeItem'] as const) {
+  for (const key of ['title', 'titleShort', 'homeDoc', 'homeItem'] as const) {
     if (content[key] === undefined) continue;
     if (typeof content[key] !== 'string') throw new Error(`[doc-source] workspace "${key}" must be a string: ${place}`);
     spec[key] = content[key];
   }
+  titleShortCheck(spec, 'title', 'titleShort', `the workspace (${place})`);
   if (content.config !== undefined) {
     spec.config = content.config;
     spec.fileConfig = fileWorkspace ?? configFile;
@@ -777,8 +784,10 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
 
   const docPageList = context.entryFileList.map((entryFile) => context.docPageByEntryFile.get(entryFile)!);
   const docPageFirst = docPageList[0];
+  // the short title goes with the title it shortens: the workspace's with its own title
   const entry: DocEntryInfo = {
     title: spec.title ?? fileFirst.entry.title,
+    titleShort: spec.title !== undefined ? spec.titleShort : fileFirst.entry.titleShort,
     homeDoc: spec.homeDoc !== undefined
       ? sourcePathFullGet(spec.homeDoc, docPageFirst.alias)
       : fileFirst.entry.homeDoc === undefined ? undefined : sourcePathFullGet(fileFirst.entry.homeDoc, docPageFirst.alias),
@@ -1029,14 +1038,27 @@ function entrySectionRead(docEntry: any, filePath: string): DocEntryInfo {
     throw new Error(`[doc-source] "docEntry" must be true or a mapping: ${filePath}`);
   }
   const entry: DocEntryInfo = {};
-  for (const key of ['title', 'homeDoc', 'homeItem'] as const) {
+  for (const key of ['title', 'titleShort', 'homeDoc', 'homeItem'] as const) {
     if (docEntry[key] === undefined) continue;
     if (typeof docEntry[key] !== 'string') {
       throw new Error(`[doc-source] "docEntry.${key}" must be a string: ${filePath}`);
     }
     entry[key] = docEntry[key];
   }
+  titleShortCheck(entry, 'title', 'titleShort', `"docEntry" (${filePath})`);
   return entry;
+}
+
+// a short title shortens the title written in the same place: alone, it would shorten
+// the title of another place (doc_page_impl.md#the-tab-title)
+export function titleShortCheck(holder: Record<string, any>, keyTitle: string, keyTitleShort: string, place: string) {
+  if (holder[keyTitleShort] === undefined) return;
+  if (holder[keyTitle] === undefined) {
+    throw new Error(`[doc-source] "${keyTitleShort}" shortens "${keyTitle}" of the same place, which is missing: ${place}`);
+  }
+  if (typeof holder[keyTitleShort] !== 'string' || !holder[keyTitleShort].trim()) {
+    throw new Error(`[doc-source] "${keyTitleShort}" must be a text that is not empty: ${place}`);
+  }
 }
 
 function sidePanelIdListRead(sidePanelById: any, filePath: string): string[] {

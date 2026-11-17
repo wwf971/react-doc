@@ -93,15 +93,25 @@ export function objectFrontendServiceBuild({ objectFrontendStore, ref, mode, mod
     // dialog of the auth provider its point names (Promise<boolean>: signed in)
     partitionRefresh: (partition) => objectFrontendStore.partitionRefresh(ref, partition),
     partitionSignIn: (partition) => objectFrontendStore.partitionSignIn(ref, partition),
+    // what the storage point of a partition told of it, where its point tells the page of changes
+    // (isNotifyEnabled): { status, message, timeOpened, countReceived, clientInstanceId, logList:
+    // [{ timeReceived, time, event, revision, itemIdList, actor: { userId, clientInstanceId }, isSelf,
+    // handling: self | known | read }] }, newest first; undefined where it tells nothing. the last
+    // change made elsewhere is partition.storage.remote.changeElsewhere
+    partitionNotifyGet: (partition) => objectFrontendStore.partitionNotifyGet(ref, partition),
     // { code, message }: a partition made (its folder and an empty list; bound to storagePoint, by
     // default the point its type declares for it), renamed (its folder moved with what it holds),
     // deleted (its assets off their lists and deleted softly)
     partitionCreate: (partition, storagePoint) => objectFrontendStore.partitionCreate(stateGet().id, partition, storagePoint),
     partitionRename: (partitionFrom, partitionTo) => objectFrontendStore.partitionRename(stateGet().id, partitionFrom, partitionTo),
     partitionDelete: (partition) => objectFrontendStore.partitionDelete(stateGet().id, partition),
-    // the assets its type holds, and where one lies on disk, which nothing else depends on:
-    // its folder inside the object's folder ('' the top), or a whole folder renamed
-    get assetKindList() { return objectFrontendStore.assetKindListGet(ref); },
+    // the kinds of data items its type holds, each { id (its name here, the kind of a record), kindId (a type
+    // of the registry), label, content, declaredBy, isOwn, groupPath, … }; undefined: any
+    // (doc_page_impl_type.md#kinds-of-data-items). kindGet: one of them by its name
+    get kindList() { return objectFrontendStore.kindListGet(ref); },
+    kindGet: (name) => objectFrontendStore.kindOfGet(ref, name),
+    // where an asset lies on disk, which nothing else depends on: its folder inside the
+    // object's folder ('' the top), or a whole folder renamed
     assetMove: (assetRef, groupPath) => {
       const asset = objectFrontendStore.assetResolve(ref, assetRef).asset;
       return asset ? objectFrontendStore.assetMove(stateGet().id, asset.key, groupPath) : Promise.resolve({ code: -1, message: `the object has no asset ${assetRef}` });

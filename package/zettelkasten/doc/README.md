@@ -73,7 +73,7 @@ connectionList:
   - { type: contain, group: Areas, form: array, itemList: [card, link, structure] }
 ```
 
-**Containment has no cycles.** A zettel may be held by several, but never by one it holds, nor by itself. The model reads every containment in order and leaves out one that would close a cycle, with a word in what does not fit; a write is refused before it is made (`zettelContainCycleFind`, whose answer the dialog shows as the chain that is already there). A zettel nothing holds hangs below the root, and the root is held by nothing. The first container is the one a chain of titles goes through; an ordered group of contain (`type: contain` with a `form`) orders what a zettel holds.
+**Containment has no cycles.** A zettel may be held by several, but never by one it holds, nor by itself. The model reads every containment in order and leaves out one that would close a cycle, with a word in what does not fit; a write is refused before it is made (`zettelContainCycleFind`, whose answer the dialog shows as the chain that is already there). A zettel nothing holds hangs below the root, and the root is held by nothing. The first container is the one a chain of titles goes through; an ordered group of contain (`type: contain` with a `form`) orders what a zettel holds, and several such groups (an area split into its themes) keep their order one after the other, what no group names coming last.
 
 ## The connection view
 
@@ -96,6 +96,7 @@ The view **Connections** turns the body of the zettel into a viewport (the switc
 ```
 
 - **Each zettel stands in one place**, the first that applies (contained by, contains, the questions, the groups, back links, forward links). A group keeps all its members, since its order and keys are what it says; a member of a group of a key in several places carries every key (`A B D` for a zettel three options are about), each toned by the verdict once the answer is shown.
+- **What it holds in several groups** (several groups of contain, or one and the rest) stands group by group below it: each group starts its own rows, in a frame of its own inside the frame of *Contains*, named by the group with its form (what no group names: *Other*). A member of an array carries its index, of a map its key.
 - **A long place is cut**: a side shows five, and a card *N more* that opens that place alone. A side shown alone shows everything. A place of more than four (a grid: twelve) shows its zettels as their title bars alone.
 - **What to see** is chosen in the strip over the viewport: contained by, contains, back links, forward links (with the groups), questions, each with how many it holds.
 - **The camera** fits what matters first: everything but the long end of what the zettel holds, which the reader pans to, or sees whole once the zettel is expanded.
@@ -146,7 +147,7 @@ Both read and write through the stores of the page (`DocObjectFrontendStore`: th
 
 ## Partitions
 
-`content` (tracked): the zettels and the questions. `note` (kept out of git, `**/.doc-page/object-frontend/*/item/note/` in the `.gitignore` of the doc page): the notes and the progress item.
+`content` (tracked): the zettels and the questions. `note` (kept out of git, `**/.doc-page/object-frontend/*/item/note/` in the `.gitignore` of the doc page): the notes and the progress item. The progress is a kind internal to the box (react-doc: `main/doc_page_impl_type.md#kinds-of-data-items`): registered nowhere, its shape (`statusByQuestion`, each `right`, `wrong` or `review`) a schema checked on every write.
 
 ## Importing zettels
 

@@ -67,7 +67,7 @@ import './DocEdit.css';
 // the icons of the toolbar buttons (DocEdit.css sets the button height to match)
 const ICON_SIZE = 14;
 
-export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ blockIndex, label }) {
+export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ blockIndex, label, labelTitle = '' }) {
   const { assetStore, editStore, eventRouter, onEvent: onEventPage } = useDocStores();
   const { path, model } = useDocEditDoc();
   const toolbarRef = useRef(null);
@@ -124,7 +124,7 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
 
   return (
     <div ref={toolbarRef} className="doc-edit-toolbar not-prose" role="toolbar" aria-label={`${label} block`}>
-      <span className="doc-edit-toolbar-label">{label}</span>
+      <span className="doc-edit-toolbar-label" title={labelTitle || undefined}>{label}</span>
       <div className="doc-edit-toolbar-actions doc-button-group" role="group" aria-label="Block actions">
         <DocEditBlockModeButton blockIndex={blockIndex} size="toolbar" />
         <button type="button" disabled={isSubmitting || isReadOnly}

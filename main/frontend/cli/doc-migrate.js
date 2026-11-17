@@ -13,6 +13,8 @@
 //   assetList of the entry of an object with a folder of its own
 //                                                -> item-list.yaml files in its item folder, each record in
 //                                                   the list nearest to its item, as the page records one
+//   assetKindList of a type, in any type file   -> kindList, the langList of each kind a content
+//                                                   (yaml, json: data; else text: doc_page_impl_type.md#kinds-of-data-items)
 //
 // It runs on a folder holding doc pages, any number of them, and a second run changes
 // nothing.
@@ -38,6 +40,18 @@ function dirListWalk(dir, result = []) {
     const dirInner = path.join(dir, one.name);
     result.push(dirInner);
     dirListWalk(dirInner, result);
+  }
+  return result;
+}
+
+// every yaml file below dir, those of .doc-page included (where type files are)
+function yamlFileListWalk(dir, result = []) {
+  for (const one of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (one.isDirectory()) {
+      if (!DIR_SKIP_SET.has(one.name)) yamlFileListWalk(path.join(dir, one.name), result);
+    } else if (one.isFile() && /\.ya?ml$/i.test(one.name)) {
+      result.push(path.join(dir, one.name));
+    }
   }
   return result;
 }
@@ -289,11 +303,57 @@ function typeFileListMigrate(dirMeta, yaml, report, isDryRun) {
   }
 }
 
-// the migration of everything below dirTarget: { itemList, documentList, objectList, typeFileList, entryListList, problemList }
+// the kinds of a type file in the former grammar: assetKindList -> kindList, each langList a content,
+// rewritten in place (comments kept). a file declaring no types, or none with assetKindList, is left
+function kindListMigrate(file, yaml, kindLib, report, isDryRun) {
+  const source = fs.readFileSync(file, 'utf-8');
+  if (!/^\s*assetKindList:/m.test(source)) return;
+  const document = yaml.parseDocument(source);
+  const typeList = document.get('typeList');
+  if (!yaml.isSeq(typeList)) return;
+  let isChanged = false;
+  for (const type of typeList.items) {
+    if (!yaml.isMap(type)) continue;
+    const pairIndex = type.items.findIndex((pair) => pair.key?.value === 'assetKindList');
+    if (pairIndex < 0) continue;
+    if (type.has('kindList')) {
+      report.problemList.push(`${file}: the type ${type.get('id')} has kindList and assetKindList: merge them by hand`);
+      continue;
+    }
+    const pair = type.items[pairIndex];
+    // the key renamed in place: a comment above it stays with it
+    if (yaml.isScalar(pair.key)) pair.key.value = 'kindList';
+    else pair.key = document.createNode('kindList');
+    for (const kind of yaml.isSeq(pair.value) ? pair.value.items : []) {
+      if (!yaml.isMap(kind)) continue;
+      const langIndex = kind.items.findIndex((one) => one.key?.value === 'langList');
+      if (langIndex < 0) continue;
+      const content = kindLib.objectFrontendContentOfLangList(kind.items[langIndex].value?.toJSON?.() ?? []);
+      if (content) kind.items[langIndex] = document.createPair('content', document.createNode(content, { flow: true }));
+      else kind.items.splice(langIndex, 1);
+    }
+    isChanged = true;
+  }
+  if (!isChanged) return;
+  report.kindFileList.push(file);
+  if (isDryRun) return;
+  fs.writeFileSync(`${file}.bak`, source);
+  // a line the rewrite did not change keeps how it was written (the library pads a list in a line,
+  // [ x ]); the lists of a new content are written as the type files write them, [yaml]
+  const padless = (line) => line.replace(/\[ /g, '[').replace(/ \]/g, ']');
+  const lineBySame = new Map(source.split('\n').map((line) => [padless(line), line]));
+  const text = document.toString({ lineWidth: 0, minContentWidth: 0 }).split('\n')
+    .map((line) => lineBySame.get(padless(line)) ?? line.replace(/langList: \[ ([^[\]\n]*?) \]/g, 'langList: [$1]'))
+    .join('\n');
+  fs.writeFileSync(file, text);
+}
+
+// the migration of everything below dirTarget: { itemList, documentList, objectList, typeFileList, kindFileList, entryListList, problemList }
 export async function docMigrate(dirTarget, { isDryRun = false } = {}) {
   const yaml = await import('yaml');
   const lib = await import('../src/lib/doc-object-frontend.js');
-  const report = { itemList: [], documentList: [], objectList: [], typeFileList: [], entryListList: [], problemList: [] };
+  const kindLib = await import('../src/lib/doc-object-frontend-kind.js');
+  const report = { itemList: [], documentList: [], objectList: [], typeFileList: [], kindFileList: [], entryListList: [], problemList: [] };
   const dirList = [dirTarget, ...dirListWalk(dirTarget)];
   for (const dir of dirList) {
     const base = path.basename(dir);
@@ -317,5 +377,8 @@ export async function docMigrate(dirTarget, { isDryRun = false } = {}) {
     // after objectList: an object just given a folder of its own moves its list too
     objectEntryListMigrateAll(dir, yaml, lib, report, isDryRun);
   }
+  // after the types moved to type files: the kinds of every file declaring types (a doc page's, an
+  // object's, a package's, one an entry names)
+  for (const file of yamlFileListWalk(dirTarget)) kindListMigrate(file, yaml, kindLib, report, isDryRun);
   return report;
 }

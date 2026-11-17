@@ -5,6 +5,7 @@ import { ASSET_STORE_ID_LOCAL } from '../../frontend/src/lib/doc-asset-ref.js';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
 import { ObjectFrontendAssetSearchPanel } from '../object-frontend/ObjectFrontendAssetSearchPanel.jsx';
 import { objectFrontendAssetPathListParse } from '../../frontend/src/lib/doc-object-frontend.js';
+import { objectFrontendKindContentText } from '../../frontend/src/lib/doc-object-frontend-kind.js';
 import '../asset/DocAsset.css';
 import '../object-frontend/ObjectFrontend.css';
 import { timeTextDisplay } from '../../frontend/src/lib/time-text.js';
@@ -24,7 +25,8 @@ import './DocSettings.css';
 //       the assets declaring it that it does not list [Attach]
 //       its metadata, its modes
 //       [Delete object]  asks in its row: with its assets, or keeping them
-//   Types (2)      what the doc pages declare: id, label, extends, modes, doc page
+//   Types (2)      what the doc pages declare: id, label, extends, modes, the kinds held, doc page
+//   Kinds (5)      the kinds of data items the types declare: id, label, content, declared by (where: its title), held by
 //   Problems       of the files, by doc page
 //   Orphan entries entry assets no doc page lists: [List it in {doc page}]
 //
@@ -114,7 +116,7 @@ export const ObjectFrontendSettings = observer(function ObjectFrontendSettings()
       {store.typeDeclaredList.length === 0 ? <p className="doc-note">No type is declared; every object is a Frontend object, drawn in its overview.</p> : (
         <div className="doc-asset-table-scroll">
           <table className="doc-asset-table">
-            <thead><tr><th>type</th><th>label</th><th>extends</th><th>modes</th><th>declared in</th></tr></thead>
+            <thead><tr><th>type</th><th>label</th><th>extends</th><th>modes</th><th>kinds held</th><th>declared in</th></tr></thead>
             <tbody>
               {store.typeDeclaredList.map((type) => (
                 <tr key={type.id}>
@@ -125,7 +127,42 @@ export const ObjectFrontendSettings = observer(function ObjectFrontendSettings()
                     {store.modeListGet(type.id).map((mode) => `${mode.label}${mode.typeId !== type.id ? ' ↑' : ''}`).join(', ')}
                     {store.typeCompMissingListGet(type.id).length > 0 ? <span className="doc-error"> no component: {store.typeCompMissingListGet(type.id).join(', ')}</span> : null}
                   </td>
+                  <td><ObjectFrontendKindHeldText kindList={store.kindListOfTypeGet(type.id)} isInherited={!Array.isArray(type.kindList)} /></td>
                   <td className="doc-asset-muted" title={type.definedBy?.file}>{type.definedBy?.alias ?? type.definedBy?.name}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <h3>Kinds ({store.kindDeclaredList.length})</h3>
+      <p className="doc-note">
+        The kinds of data items, each a type of the registry below Data item: declared by one type ({'{type}.{name}'}), held by any type
+        that names it. Its content says what an item of it is, checked when a mode writes one.
+      </p>
+      {store.kindInternalList.length > 0 ? (
+        <p className="doc-note">
+          Not registered: {store.kindInternalList.map((kind) => kind.kindId).join(', ')}, each internal to the type declaring it (its own and its
+          descendants', checked the same way; marked internal under Types).
+        </p>
+      ) : null}
+      {store.kindDeclaredList.length === 0 ? <p className="doc-note">No type registers a kind; the kinds above are internal, or the objects hold anything.</p> : (
+        <div className="doc-asset-table-scroll">
+          <table className="doc-asset-table">
+            <thead><tr><th>kind</th><th>label</th><th>content</th><th>declared by</th><th>held by</th></tr></thead>
+            <tbody>
+              {store.kindDeclaredList.map((kind) => (
+                <tr key={kind.id}>
+                  <td className="doc-asset-mono">{kind.id}</td>
+                  <td>{kind.label}</td>
+                  <td className="doc-asset-muted">{objectFrontendKindContentText(kind.content)}</td>
+                  <td className="doc-asset-mono doc-asset-muted" title={`declared in ${kind.definedBy?.file ?? ''} (${kind.definedBy?.alias ?? kind.definedBy?.name ?? ''})`}>{kind.declaredBy}</td>
+                  <td>
+                    {kind.heldByList.length === 0 ? <span className="doc-asset-muted">none: offered to other types</span> : kind.heldByList.map((one, index) => (
+                      <span key={one.typeId} title={`held as ${one.name}`}>{index > 0 ? ' · ' : ''}{one.typeId}</span>
+                    ))}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -167,7 +204,7 @@ export const ObjectFrontendSettings = observer(function ObjectFrontendSettings()
 // object, or it is sent away to the default asset folder of the doc page
 const ObjectFrontendIncomingRow = observer(function ObjectFrontendIncomingRow({ id, item, isWritable, isWriting, actionLabel, isSentAway = false }) {
   const { objectFrontendStore: store } = useDocStores();
-  const kindList = store.assetKindListGet(id);
+  const kindList = store.kindListGet(id);
   const kind = store.settings.kindByItem?.[item.itemId] ?? '';
   const kindSet = (value) => store.settingsKindSet(item.itemId, value);
   return (
@@ -222,6 +259,8 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
         </span>
         <span className="doc-asset-muted">modes</span>
         <span>{modeList.map((mode) => `${mode.label} (${mode.category}${mode.isDefault ? ', default' : ''})`).join(' · ') || '—'}</span>
+        <span className="doc-asset-muted">kinds</span>
+        <span><ObjectFrontendKindHeldText kindList={store.kindListGet(id)} /></span>
       </div>
       {state.status !== 'found' ? <p className="doc-error">{state.message}</p> : null}
 
@@ -424,6 +463,9 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
           </table>
         </div>
       )}
+      {state.assetList.length > 0 && (store.kindListGet(id) ?? []).some((kind) => kind.content?.form === 'data' && kind.content.schema) ? (
+        <ObjectFrontendKindCheck id={id} />
+      ) : null}
       {state.groupList.length > 1 || state.groupList.some((group) => group.groupPath !== '') ? (
         <>
           <h4>Folders on disk</h4>
@@ -500,3 +542,49 @@ const REMOTE_STATUS_TEXT = {
   idle: 'not read', loading: 'reading', ready: 'read', absent: 'not at the point yet', authRequired: 'signed out',
   forbidden: 'not allowed', unreachable: 'out of reach', error: 'failed',
 };
+
+// the kinds a type holds, in a line: their names, a kind of another type with where it comes from
+// (info · badge · logo ← example.media); undefined: anything. isInherited: of an ancestor
+function ObjectFrontendKindHeldText({ kindList, isInherited = false }) {
+  if (kindList === undefined) return <span className="doc-asset-muted">anything</span>;
+  if (kindList.length === 0) return <span className="doc-asset-muted">none</span>;
+  return (
+    <span>
+      {kindList.map((kind, index) => (
+        <span key={kind.id} title={`${kind.kindId}: ${objectFrontendKindContentText(kind.content)}${kind.isOwn ? '' : `, declared by ${kind.declaredBy || 'no type'}`}${kind.isInternal ? ', internal: not registered' : ''}`}>
+          {index > 0 ? ' · ' : ''}
+          {kind.id}
+          {kind.isInternal && kind.isOwn ? <span className="doc-asset-muted"> (internal)</span> : null}
+          {kind.isOwn ? null : <span className={kind.isKindMissing ? 'doc-error' : 'doc-asset-muted'}> ← {kind.isKindMissing ? `${kind.kindId}, ${kind.declaredBy ? `internal to ${kind.declaredBy}` : 'declared by no type'}` : kind.declaredBy}</span>}
+        </span>
+      ))}
+      {isInherited ? <span className="doc-asset-muted"> ↑</span> : null}
+    </span>
+  );
+}
+
+// the data of an object checked against the schemas of its kinds, on request (every item is read)
+const ObjectFrontendKindCheck = observer(function ObjectFrontendKindCheck({ id }) {
+  const { objectFrontendStore: store } = useDocStores();
+  const check = store.settings.kindCheck.id === id ? store.settings.kindCheck : undefined;
+  return (
+    <>
+      <div className="doc-settings-tab-row">
+        <button type="button" className="doc-button" disabled={check?.status === 'running'} onClick={() => void store.kindCheckRun(id)}>
+          {check?.status === 'running' ? <LoaderCircle size={12} className="doc-spin" aria-hidden="true" /> : null}
+          <span>Check the data against its kinds</span>
+        </button>
+        {check?.status === 'done' ? (
+          <span className={check.resultList.length > 0 ? 'doc-settings-tab-issue' : 'doc-asset-muted'}>
+            {check.resultList.length > 0 ? `${check.resultList.length} of ${check.countChecked} do not fit their kind` : `all ${check.countChecked} fit their kind`}
+          </span>
+        ) : <span className="doc-asset-muted">every item of a kind with a schema is read</span>}
+      </div>
+      {check?.status === 'done' && check.resultList.length > 0 ? (
+        <ul className="doc-error doc-settings-tab-list">
+          {check.resultList.map((one) => <li key={one.key}>{one.name || one.key} ({one.kindId}): {one.message}</li>)}
+        </ul>
+      ) : null}
+    </>
+  );
+});

@@ -156,6 +156,37 @@ A type may extend another type of a doc page and inherits its modes; a mode decl
 object: frontend:w5j7pn0lh5o
 ```
 
+## Kinds of data items
+
+What a book is, and what a note is, is not left to the code of the modes: the type declares it. Each **kind** of data item is declared by one type, `{type}.{name}`; a kind the type registers is a type of the object registry below `frontend.item`, held by any type naming it, and one it keeps to itself (`isInternal`) is its own (`main/doc_page_impl_type.md#kinds-of-data-items`):
+
+<!--renderComp=DiagramText-->
+```text
+example.reading-list            declares and holds
+├── book   example.reading-list.book    data: { title, author, genre,
+│                                         status: want | reading | read }
+├── note   example.reading-list.note    data: { book, text }; internal:
+│                                         registered nowhere, its own
+└── cover  example.media.image          bytes: image/*, at most 2MB
+                                        declared by example.media
+example.media                   declares image, holds none of it
+```
+
+```yaml
+# .doc-page/type.yaml (shortened)
+kindList:
+  - id: book                       # its name in a reading list: kind: book in the item lists
+    content:
+      form: data
+      schema: { type: object, required: [title], properties: { status: { enum: [want, reading, read] } } }
+  - { id: cover, kind: example.media.image, groupPath: cover }   # another type's kind, held here
+```
+
+- **The schema is checked on the way in.** A book made, attached or written by a mode that does not fit is refused before anything is written, with where it does not fit: a book with the status `finished` is refused with `/status: "finished" is none of want, reading, read`.
+- **It is said on the way out.** A book changed by hand is read as it is, and `assetDataGet` answers what does not fit beside the data: the mode **book** draws the book and adds a line saying so. In the tab **Frontend objects**, **Check the data against its kinds** reads every book and note of the chosen list.
+- **A type decides what it registers.** A book is registered, so another type may hold books and readers find the kind in the registry; a note is kept internal (`isInternal: true`): it means something only inside its list, so the list checks it like a book and registers nothing of it.
+- **Another type's kind stays its own.** The cover is `example.media.image`: its content (a picture, at most 2MB) is what `example.media` says, the reading list only says where its covers go. `example.media` holds nothing: it is there to offer the kind. The overview above says what a reading list holds and where each kind comes from; the tab **Frontend objects** lists every kind, who declares it and who holds it.
+
 ## In the object registry
 
 A frontend object is an object like any other: `frontend:{id}`, of its type, with its assets as members. `ObjectView`, lists, searches and card diagrams find and draw it, by the view of `frontend.object`:
@@ -193,4 +224,4 @@ example_doc/.doc-page/
                 └── item-0001.pack         its books, merged into one pack file
 ```
 
-The folder is where the items lie, not what makes them belong: the object says that, in its item lists, each recording the assets lying in its folder and below. Its type splits them into two **partitions** (`partitionList` in `.doc-page/type.yaml`): `example/`, the books above, tracked by git, and `playground/`, kept out of git with its own list. **Add a book** says where the book goes and adds it to the playground unless another partition is chosen, so trying the page leaves the demonstration as committed; a note goes where its book is. The package cv keeps the real data of a person the same way (`main/doc_page_impl_obj_frontend.md`, Partitions). A third partition, `packed/`, is **held by another storage point**: its type declares `storagePoint: file-pack`, so its two books (The Dispossessed, The Timeless Way of Building) are not folders of yaml files but chunks of `item-0001.pack`, which a search of the disk does not read. The shelf above lists them among the others, and every mode reads and writes them the same way: where a partition is stored changes nothing for a mode, which may still ask (`service.partitionList[i].storage`). The tab **Frontend objects** shows the storage point of each partition and moves a whole partition to another one (**Storage…**); the tab **Asset service** lists the storage points (`main/doc_page_impl_asset_storage.md`). The type `example.reading-list` declares what it holds (`assetKindList` in `.doc-page/type.yaml`): a book goes to `item/book/`, and something of another kind is refused. A file moved into `item/` by hand shows in the tab **Frontend objects** as of unknown source, not as a book, until it is adopted there or moved out. Where a book lies on disk and its paths above (`/book/sci-fi/dune`) do not depend on each other. An item of the store moves with **move…** in its asset panel; into an object, that goes through the object.
+The folder is where the items lie, not what makes them belong: the object says that, in its item lists, each recording the assets lying in its folder and below. Its type splits them into two **partitions** (`partitionList` in `.doc-page/type.yaml`): `example/`, the books above, tracked by git, and `playground/`, kept out of git with its own list. **Add a book** says where the book goes and adds it to the playground unless another partition is chosen, so trying the page leaves the demonstration as committed; a note goes where its book is. The package cv keeps the real data of a person the same way (`main/doc_page_impl_obj_frontend.md`, Partitions). A third partition, `packed/`, is **held by another storage point**: its type declares `storagePoint: file-pack`, so its two books (The Dispossessed, The Timeless Way of Building) are not folders of yaml files but chunks of `item-0001.pack`, which a search of the disk does not read. The shelf above lists them among the others, and every mode reads and writes them the same way: where a partition is stored changes nothing for a mode, which may still ask (`service.partitionList[i].storage`). The tab **Frontend objects** shows the storage point of each partition and moves a whole partition to another one (**Storage…**); the tab **Asset service** lists the storage points (`main/doc_page_impl_asset_storage.md`). The type `example.reading-list` declares what it holds (`kindList` in `.doc-page/type.yaml`, [Kinds of data items](#kinds-of-data-items)): a book goes to `item/book/`, and something of another kind, or a book without a title, is refused. A file moved into `item/` by hand shows in the tab **Frontend objects** as of unknown source, not as a book, until it is adopted there or moved out. Where a book lies on disk and its paths above (`/book/sci-fi/dune`) do not depend on each other. An item of the store moves with **move…** in its asset panel; into an object, that goes through the object.

@@ -214,17 +214,18 @@
 }
 
 /* geometry lock: while the block is edited, the wrapper has the height and
-   the margins its block had in view mode (inline styles set by DocEditBlock)
-   and lays its content out in its own formatting context, so the editor's
-   root cannot move it. the root has no outer margins of its own: the wrapper
-   carries them. it paints the page background, because the source may need
-   more room than the rendered block and then extends over the next block
-   (z-index above) instead of pushing it down; a root with a background of
-   its own (the source surface) keeps it (:where keeps this rule weaker). */
-.doc-edit-block[data-geometry-locked] {
-  display: flow-root;
-}
-
+   the margins its block had in view mode (inline styles set by DocEditBlock).
+   the root has no outer margins of its own: the wrapper carries them. the
+   wrapper is not a formatting context of its own: a margin nested deeper in
+   the editor (the outer box of a frontend object's mode, inside the root of
+   ObjectFrontend) collapses through the root and the wrapper as it did in view
+   mode, into the wrapper's margin, which was measured with it and is at least
+   as large, so it moves nothing. kept inside the wrapper, it would push the
+   content down by that margin. the root paints the page background, because
+   the source may need more room than the rendered block and then extends over
+   the next block (z-index above) instead of pushing it down; a root with a
+   background of its own (the source surface) keeps it (:where keeps this rule
+   weaker). */
 .doc-edit-block[data-geometry-locked] > .doc-edit-block-anchor ~ :not(.doc-edit-panel) {
   margin-top: 0;
   margin-bottom: 0;
@@ -330,8 +331,12 @@
   cursor: auto;
 }
 
-.doc-edit-block:hover .doc-edit-toolbar,
-.doc-edit-block[data-open] .doc-edit-toolbar,
+/* a block's own toolbar only (a child of its anchor), never those of the blocks of a document
+   nested in it (a component drawing a document of its own: the text of a zettel, a card of
+   a frontend object): those are its descendants too. while the pointer is on a nested block,
+   that block shows its toolbar and the block holding it does not */
+.doc-edit-block:hover:not(:has(.doc-edit-block:hover)) > .doc-edit-block-anchor > .doc-edit-block-float > .doc-edit-toolbar,
+.doc-edit-block[data-open] > .doc-edit-block-anchor > .doc-edit-block-float > .doc-edit-toolbar,
 .doc-edit-toolbar:focus-within,
 .doc-edit-toolbar[data-open] {
   visibility: visible;

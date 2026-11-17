@@ -62,6 +62,7 @@ import { DocSettingsPanel } from '../../comp-doc/settings/DocSettingsPanel.jsx';
 import { DocCommandPalette } from '../../comp-doc/api/DocCommandPalette.jsx';
 import { DocApiNotice } from '../../comp-doc/api/DocApiNotice.jsx';
 import { DocHotkeyListener } from '../../comp-doc/api/DocHotkeyListener.jsx';
+import { DocTabTitle } from '../../comp-doc/page/DocTabTitle.jsx';
 import { DocPaletteButton } from '../../comp-doc/api/DocPaletteButton.jsx';
 import { serviceApiProviderCreate } from '../../comp-doc/api/api-service.js';
 import { compById as compByIdDefault } from '../../comp-doc/registry/registry.js';
@@ -125,6 +126,9 @@ import './DocPageMdx.css';
 // pages' (doc_page_impl_api_hotkey.md). config.api is the remote api of
 // the development server (docApiEndpoint, subscribeDocApi, docApiSend): a
 // caller outside the page reaches the apis through it; absent in a build.
+// config.isTabTitleSet: the page names the tab of the browser, the site and the
+// document shown (doc_page_impl.md#the-tab-title); a host embedding the page in an
+// app of its own leaves it out and keeps its title.
 
 export function DocPageMdx({ data, config = {}, onEvent }) {
   const languageAncestor = useDocLanguage();
@@ -491,6 +495,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
               <DocCommandPalette />
               <DocApiNotice />
               <DocHotkeyListener />
+              {config.isTabTitleSet ? <DocTabTitle /> : null}
             </RootProvider>
           </FrameworkProvider>
         </StoreContext.Provider>

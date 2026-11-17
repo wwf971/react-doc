@@ -148,6 +148,7 @@ npm pack /tmp/react-doc-pack            # or npm publish /tmp/react-doc-pack
 | `optimizeDeps.include` | names the libraries only lazy imports reach, so they are bundled with the others at start and nothing is bundled again during a visit |
 | `server.warmup.clientFiles` | transforms the entry of the page and what it imports as soon as the server starts, instead of when the first visit asks |
 | a loading line in `#root` | the html shows "Loading the doc page…" until React renders over it, so a slow load is never a blank page |
+| the `<title>` of the html | holds the site served (`transformIndexHtml` of the plugin, [the tab title](doc_page_impl.md#the-tab-title)), so the tab of a waiting first load already says which doc page it is |
 
 After them, the first visit to a server started with an empty cache shows its content in 0.65 s, without a reload, in half the requests.
 
@@ -165,7 +166,7 @@ launch { kind, target, mode, command,          what was launched; configDoc.work
          backendConfigFile?, configFile? }     the backend, in place of "service" of the files; another config
 ```
 
-The package defaults of `config.yaml` (components, config defaults, keyboard map) stay in force; its workspace and its backend belong to the demonstration, and do not. The development server of the project, `pnpm -C main dev`, has no launch layer and serves what `config.yaml` (or its local layer `config.0.yaml`) names, as before.
+The package defaults of `config.yaml` (components, config defaults, keyboard map) stay in force; its workspace, its page values (`siteTitle`, `homeDoc`, `homeItem`) and its backend belong to the demonstration, and do not: what is launched brings its own title and home document. The development server of the project, `pnpm -C main dev`, has no launch layer and serves what `config.yaml` (or its local layer `config.0.yaml`) names, as before.
 
 ## Building
 
@@ -205,7 +206,7 @@ The modules are merged with `output.strictExecutionOrder`: without it a module a
 
 ## Migrating a doc page
 
-`react-doc migrate <path>` rewrites the doc pages below a folder into the form this react-doc reads, for pages written before asset items were called items, before a frontend object had a folder of its own ([what changed](update-20261107-repl.md)), and before its assets were recorded in item lists ([The item lists](doc_page_impl_obj_frontend.md#the-item-lists)). The page does not read the former form: a store folder holding one reports it once in the console and names this command.
+`react-doc migrate <path>` rewrites the doc pages below a folder into the form this react-doc reads, for pages written before asset items were called items, before a frontend object had a folder of its own ([what changed](update-20261107-repl.md)), before its assets were recorded in item lists ([The item lists](doc_page_impl_obj_frontend.md#the-item-lists)), and before the kinds of data items were types of the registry ([Kinds of data items](doc_page_impl_type.md#kinds-of-data-items)). The page does not read the former form (the former name of a type's kinds it still reads, with a problem): a store folder holding one reports it once in the console and names this command.
 
 ```text
 {itemId}--{name}/object.yaml   ->  item.yaml, objectId -> itemId, in dependencies too
@@ -217,6 +218,9 @@ typeList of an object.yaml        ->  type.yaml beside it
 assetList of the entry of an object with a folder of its own
                                   ->  item-list.yaml in its item folder: each record in the list nearest
                                       to its item, a list made in the first folder of its path when none
+assetKindList of a type, in any type file
+                                  ->  kindList, each langList a content (yaml, json: data; else text);
+                                      in place, comments and the lines it does not change kept
 ```
 
 `--dry-run` lists what it would change. A second run changes nothing. Nothing is committed: `git add` the folder, and git sees the moves as renames. Stop a running server of the doc page first: an old copy of the code reads the old form.

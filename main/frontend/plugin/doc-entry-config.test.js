@@ -430,3 +430,25 @@ test('a managed folder left beside the documents is reported once with where it 
   assert.match(formerList[0], /guide\/comp-mdx is not read: the comp-mdx\/ folder of a doc page is \.doc-page\/comp-mdx\/ now/);
   assert.match(formerList[1], /guide\/service-app is not read: .*\.doc-page\/service\.yaml/);
 });
+
+test('the short title goes with the title of its place (doc_page_impl.md#the-tab-title)', (context) => {
+  context.mock.method(console, 'warn', () => {});
+  const dir = fixtureCreate();
+  const entryFile = path.join(dir, 'guide/.doc-page/entry.yaml');
+  const text = fs.readFileSync(entryFile, 'utf-8');
+  fs.writeFileSync(entryFile, text.replace('  title: Guide\n', '  title: "Guide: the long title"\n  titleShort: Guide\n'));
+  const spec = workspaceSpecGet(dir, [{ alias: 'guide', dir: 'guide' }]);
+  // the first doc page's pair
+  const loaded = docWorkspaceLoad(spec, dir);
+  assert.equal(loaded.entry.title, 'Guide: the long title');
+  assert.equal(loaded.entry.titleShort, 'Guide');
+  // a workspace title without a short one does not take the doc page's short title
+  const loadedTitled = docWorkspaceLoad({ ...spec, title: 'Site' }, dir);
+  assert.equal(loadedTitled.entry.title, 'Site');
+  assert.equal(loadedTitled.entry.titleShort, undefined);
+  assert.equal(docWorkspaceLoad({ ...spec, title: 'Site of guides', titleShort: 'Site' }, dir).entry.titleShort, 'Site');
+  // a short title alone shortens nothing
+  assert.throws(() => docWorkspaceSpecRead({ docPageList: [{ dir: './guide' }], titleShort: 'x' }, dir, 'config.yaml'), /"titleShort" shortens "title" of the same place/);
+  fs.writeFileSync(entryFile, text.replace('  title: Guide\n', '  titleShort: Guide\n'));
+  assert.throws(() => docWorkspaceLoad(spec, dir), /"titleShort" shortens "title" of the same place/);
+});

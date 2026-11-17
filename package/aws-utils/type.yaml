@@ -33,8 +33,8 @@ typeList:
     label: Notebook
     description: notes kept in the partitions of one object; one partition may be held by a storage point in the cloud
     icon: notebook
-    assetKindList:
-      - { id: note, label: Note, langList: [md], pathPrefix: /note/, groupPath: note }
+    kindList:
+      - { id: note, label: Note, content: { form: text, langList: [md] }, pathPrefix: /note/, groupPath: note }
     partitionList:
       - { id: local, label: This doc page, description: "notes in the folders of the doc page", isDefault: true }
       - { id: cloud, label: Cloud, description: "notes of the person signed in: meant to be held by a storage point" }
@@ -45,3 +45,8 @@ typeList:
         comp: AwsNotebook
         category: view
         isDefault: true
+      - id: changes
+        label: Changes
+        description: what the storage point of a partition told this tab of changes, who made each (this tab or another tab, device or program) and what the page did; param partition
+        comp: AwsNotebookChanges
+        category: view

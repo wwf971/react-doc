@@ -23,7 +23,7 @@ This package is about **an app's own semantics**: what an app built on react-doc
 
 ## Layers
 
-A **layer** is one item of kind `config-layer`, in yaml:
+A **layer** is one item of kind `config-layer` (`app-config.config.config-layer` in react-doc's registry, its shape a schema in `type.yaml`, as is that of `config-declare`: a layer a backend of its own writes is checked when the page reads it), in yaml:
 
 ```yaml
 label: Team                 # for people

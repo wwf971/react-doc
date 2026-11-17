@@ -188,3 +188,67 @@
   font-size: 0.75rem;
   line-height: 1.3;
 }
+
+/* a note another tab, device or program changed: lit as it comes in, then as every row */
+.aws-notebook-row[data-changed-elsewhere] {
+  animation: aws-notebook-changed 8s ease-out;
+}
+
+@keyframes aws-notebook-changed {
+  0%,
+  25% {
+    background: color-mix(in srgb, var(--color-fd-primary) 22%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+/* the mode "changes": what the storage point told this tab, newest first, in a body of fixed
+   height so a new line moves nothing below it */
+.aws-notebook-change-list {
+  overflow: auto;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+}
+
+/* the table of a document has margins and borders of its own (prose): none here */
+.aws-notebook-change-table {
+  display: table;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.aws-notebook-change-table th {
+  position: sticky;
+  top: 0;
+  padding: 0.2rem 0.5rem;
+  background: var(--color-fd-background);
+  border-bottom: 1px solid var(--color-fd-border);
+  color: var(--color-fd-muted-foreground);
+  font-weight: 500;
+  text-align: left;
+}
+
+.aws-notebook-change-table td {
+  padding: 0.18rem 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-fd-border) 60%, transparent);
+  vertical-align: top;
+}
+
+/* a change of this tab itself: told back, and nothing done */
+.aws-notebook-change-table tr[data-self] td {
+  color: var(--color-fd-muted-foreground);
+}
+
+.aws-notebook-change-time {
+  white-space: nowrap;
+  color: var(--color-fd-muted-foreground);
+}
+
+.aws-notebook-change-note {
+  overflow-wrap: anywhere;
+}

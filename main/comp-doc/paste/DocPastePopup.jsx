@@ -34,7 +34,8 @@ const panelLayoutOption = { isMovable: true, isResizable: true, isSizeRemembered
 // and nothing is written; Insert (or Ctrl/Cmd + Enter in the text) writes
 // the blocks at the chosen place.
 export const DocPastePopup = observer(function DocPastePopup() {
-  const { pasteStore, sourceStore, compConfigHost } = useDocStores();
+  const stores = useDocStores();
+  const { pasteStore, sourceStore, compConfigHost } = stores;
   const Panel = compConfigHost.panelComponent;
   const review = pasteStore?.review;
   const isOpen = Boolean(Panel) && pasteStore?.isOpen === true;
@@ -55,12 +56,12 @@ export const DocPastePopup = observer(function DocPastePopup() {
   if (!isOpen) return null;
   const result = pasteStore.result;
   const isSubmitting = review.status === 'submitting';
-  const blockListShown = result.blockList.map((block) => ({ ...block, label: blockLabelGet(block) }));
+  const blockListShown = result.blockList.map((block) => ({ ...block, label: blockLabelGet(block, stores) }));
   const placeBlockList = pasteStore.placeBlockList;
   const docPath = review.place.docPath;
   const docEntry = sourceStore.entryByInternalPath.get(docPath);
   const nodeList = placeBlockList
-    ? blockPlaceNodeListBuild({ docLabel: docEntry?.name ?? docPath, blockList: placeBlockList, labelGet: blockLabelGet })
+    ? blockPlaceNodeListBuild({ docLabel: docEntry?.name ?? docPath, blockList: placeBlockList, labelGet: (block) => blockLabelGet(block, stores) })
     : undefined;
   const transformLabelList = result.transformAppliedIdList.map((id) => {
     const transform = pasteStore.transformList.find((item) => item.id === id);

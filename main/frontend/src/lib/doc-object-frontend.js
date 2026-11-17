@@ -3,6 +3,7 @@ import {
   ASSET_PATH_SEGMENT_LENGTH_MAX, assetPathCompile, assetPathIndexBuild, assetPathIndexComplete, assetPathIndexGet, assetPathIndexNodeGet,
   assetPathListSplit, assetPathNormalize,
 } from './doc-object-frontend-asset-path.js';
+import { objectFrontendKindContentCheck, objectFrontendKindItemCheck, objectFrontendKindProblemText } from './doc-object-frontend-kind.js';
 
 // The frontend object service layer, its pure part (design:
 // doc_page_impl_obj_frontend.md), shared by the development server
@@ -413,12 +414,10 @@ export function objectFrontendDocListBuild(assetList, kindList, langOf) {
 
 // ---------- what a type accepts ----------
 
-// the assets a type declares it holds: assetKindList of its declaration, or of the nearest
-// ancestor that has one; undefined when none says, and then any asset is accepted
-// (doc_page_impl_obj_frontend.md#what-a-type-accepts)
-export function objectFrontendAssetKindListResolve(typeId, typeList) {
-  return typeKeyResolve(typeId, typeList, 'assetKindList');
-}
+// the kinds of data items a type holds (kindList of its declaration, or of the nearest ancestor
+// that has one; undefined when none says, and then any asset is accepted), each with what its
+// declaration says: doc-object-frontend-kind.js (doc_page_impl_type.md#kinds-of-data-items)
+export { objectFrontendKindListResolve } from './doc-object-frontend-kind.js';
 
 // the partitions a type declares: partitionList of its declaration or of the nearest ancestor that
 // has one; undefined when none says (doc_page_impl_obj_frontend.md#partitions)
@@ -512,8 +511,11 @@ export function objectFrontendPartitionGroupPathBuild(partitionDeclaredList, par
 }
 
 // whether an object of that type takes an asset: { message, kind, kindDeclared }; message is
-// '' when it does. isIncoming: it comes from outside the object (attached, adopted), not
-// made by a mode. a kind left out is the only kind there is
+// '' when it does. kindList: the kinds the type holds, resolved (objectFrontendKindListResolve).
+// isIncoming: it comes from outside the object (attached, adopted), not made by a mode. a kind
+// left out is the only kind there is. what the item is written as (lang; contentType, fileExt,
+// size of bytes) must fit the content of the kind, and so must its text when given (text: the
+// data of a kind of data, checked against its schema)
 export function objectFrontendAssetAcceptCheck(kindList, input) {
   const kindText = String(input.kind ?? '');
   if (kindList === undefined) return { message: '', kind: kindText, kindDeclared: undefined };
@@ -523,9 +525,12 @@ export function objectFrontendAssetAcceptCheck(kindList, input) {
   if (!kind) return { message: `say the kind of the asset: ${kindAll}`, kind, kindDeclared };
   if (!kindDeclared) return { message: `this type holds no asset of the kind ${kind} (it holds ${kindAll})`, kind, kindDeclared };
   if (input.isIncoming && kindDeclared.isIncomingRefused === true) return { message: `an asset of the kind ${kind} is made by the modes of this type, it cannot come from elsewhere`, kind, kindDeclared };
-  const lang = String(input.lang ?? '');
-  if (Array.isArray(kindDeclared.langList) && kindDeclared.langList.length > 0 && !kindDeclared.langList.includes(lang)) {
-    return { message: `an asset of the kind ${kind} is in ${kindDeclared.langList.join(', ')}, not ${lang || 'bytes without a language'}`, kind, kindDeclared };
+  // the form always; the data only when its text is given (an item attached is checked as it is read)
+  const item = { lang: input.lang, contentType: input.contentType, fileExt: input.fileExt, size: input.size };
+  const formMessage = objectFrontendKindContentCheck(kindDeclared.content, item);
+  const problemList = formMessage ? [{ path: '', message: formMessage }] : typeof input.text === 'string' ? objectFrontendKindItemCheck(kindDeclared.content, { ...item, text: input.text }) : [];
+  if (problemList.length > 0) {
+    return { message: `an asset of the kind ${kind} (${kindDeclared.kindId ?? kind}) does not fit it: ${objectFrontendKindProblemText(problemList)}`, kind, kindDeclared };
   }
   const pathPrefix = String(kindDeclared.pathPrefix ?? '');
   // paths index an asset several ways: one of them, when it has any, files it under its kind

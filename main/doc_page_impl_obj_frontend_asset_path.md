@@ -29,7 +29,7 @@ lookups                   the entry of a path, the entries below a folder, the c
 | kept in | the store's layout (the asset service layer, a file) | the item list of the object, the keys of the data |
 | changed by | `asset/move`, `asset/group/move`, a rewrite of the data | `asset/meta/set`, a key renamed |
 
-Moving an asset on disk changes no key, name or path, and rewriting its paths moves no file, so a mode never reads a `groupPath` to learn what an asset is. A new asset goes to the folder of its kind (`groupPath` of `assetKindList`), the folder the write names, or the top ([Where an asset lies](doc_page_impl_obj_frontend.md#where-an-asset-lies-and-how-it-is-found)). The utility below takes entries and their patterns and never asks how they are stored: that is the decoupling point. A frontend object hands it its asset records; the package cv hands it the values of a profile, one per leaf of the yaml of each item.
+Moving an asset on disk changes no key, name or path, and rewriting its paths moves no file, so a mode never reads a `groupPath` to learn what an asset is. A new asset goes to the folder of its kind (`groupPath` of the kind in `kindList`), the folder the write names, or the top ([Where an asset lies](doc_page_impl_obj_frontend.md#where-an-asset-lies-and-how-it-is-found)). The utility below takes entries and their patterns and never asks how they are stored: that is the decoupling point. A frontend object hands it its asset records; the package cv hands it the values of a profile, one per leaf of the yaml of each item.
 
 ## The grammar
 

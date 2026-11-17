@@ -40,7 +40,9 @@ a component definition (compDefine)
     │   ├── objectView               the object types it draws, in which contexts (icon, inline, card, block)
     │   ├── objectInner              the frontend object types whose inner paths it answers for: what a path
     │   │                            names inside an object, the candidates completing a typed one
-    │   └── pagination               its data laid out on pages: the flow, the pieces, where they are cut
+    │   ├── pagination               its data laid out on pages: the flow, the pieces, where they are cut
+    │   └── blockLabelGet            what a block of it is called in edit mode, from what the block names
+    │                                (ObjectFrontend: the type of its object); else its tag name
     └── non-standard names: kept as declared, read by whoever knows them (compExposeGet)
         └── visualizationNode        e.g. the node contract of a card diagram: anchorListGet, sizeDefault
 ```
@@ -293,6 +295,23 @@ A mapping without `compList` is one entry. An entry may also name the **build-ti
 **Precedence of tag names.** `compIdResolve()` stays the single place a name becomes an id, and it reads `configDoc.compRegistry`: the plugin writes the tag names of the mounts into that mapping over the entries of `config.yaml`, so a doc page's own tag name wins over `config.yaml` for that name, and the entries `config.yaml` alone declares stay. Two doc pages declaring one tag name (or one id): the first loaded wins, with a warning. The dashboards of service instances are still resolved by their id alone ([Dashboards in the registry](doc_page_impl_service_dashboard.md#dashboards-in-the-registry)).
 
 The demonstration follows the convention, its components grouped: `example_doc/.doc-page/comp-mdx/comp.yaml` mounts `DemoCounter`, `TagListAllDemo`, `CompStateListDemo`, `DocConfigDemo`; `panel/comp.yaml` the side-panel item hook `SidePanelItemDemo` under the built-in name `SidePanelItem`, and `SourceLink`; `table/stock-table/comp.yaml` (a group in a group) `StockTable`; all under the ids `specific/...` the documents and the build-time link collector (`registry-source-dependency.js`, keyed by id) know. `SourceLink` is a package component (`built-in/comp-mdx/source-link/`) that needs the panel component framing its popup, which is host configuration: the package does not register it; the demonstration binds it to `DocPanelStandalone` (`comp-doc/popup/`, the panel of the standalone entry) in `example_doc/.doc-page/comp-mdx/panel/SourceLinkDemo.js` (re-exporting the component with its `sourceLinkDefineOptions`) and mounts it from there. `DocPanelStandalone` itself is host configuration (`compConfigHost.panelComponent`), imported by `main.jsx`, not a document component. `main/config.yaml` `compRegistry` names none of them.
+
+## A component that fails to draw
+
+A component throwing while it draws (data of a shape it did not expect, a bug) fails **alone, at its place**. The registry boundary catches it (`RegisteredComp` is a catch around the boundary itself): the component is replaced by one line saying which component failed and why, with **Draw again**, and nothing else of the page changes. Without the catch, React unmounts the whole page, and one block of a document would take the side panel and every other block with it.
+
+```text
+RegisteredComp  ─┬─ draws the component                    every block, mode of a frontend object, view of an object,
+                 │                                          side-panel component, preview: each is caught on its own,
+                 │                                          one inside another inside it
+                 └─ it throws  ->  "{name} failed to draw: {message}"  [Draw again]     .doc-comp-failed, in spans: it
+                                    the error in the console too                         may stand inside a line of text
+                    tried again    on Draw again; on other input: another component, a new text of the block, other
+                                   data handed to it (a mode switched, other parameters). data the component reads
+                                   from elsewhere (an asset) is not seen: Draw again, once it is put right
+```
+
+The catch is the last resort, not the way to report a problem of the data. A component that can tell what is wrong says so itself, where the reader looks, and draws what it can: a frontend object's mode reads the data of its kinds defensively, since nothing checks it on the way in ([What a type accepts](doc_page_impl_obj_frontend.md#what-a-type-accepts)), and leaves out and names what it cannot draw.
 
 ## Component data reference
 

@@ -110,8 +110,8 @@ function fixtureCreate() {
   fs.writeFileSync(path.join(pageDir, '.doc-page', 'type.yaml'), [
     'typeList:',
     '  - id: demo.profile',
-    '    assetKindList:',
-    '      - { id: info, langList: [yaml], groupPath: info }',
+    '    kindList:',
+    '      - { id: info, content: { form: data, langList: [yaml] }, groupPath: info }',
     '    partitionList:',
     '      - { id: example }',
     '      - { id: real, storagePoint: file-pack }',

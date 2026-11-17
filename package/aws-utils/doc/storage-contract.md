@@ -48,7 +48,7 @@ storagePointList:
 | `config.url` | the base url of the service, without a trailing `/` | required |
 | `config.space` | the key of the space of this point: lower case letters, digits, `.`, `_`, `-`, at most 64 | the id of the point |
 | `config.cacheMode`, `config.isRefreshedOnFocus`, `config.refreshIntervalSec` | how the page caches and refreshes: keys of the type `remote`, not sent to the service | `readThrough`, `false`, `0` |
-| `config.isNotifyEnabled` | reserved: turns on the api set `notify` ([Notifications](#notifications-reserved)) | `false` |
+| `config.isNotifyEnabled` | turns on the api set `notify`: the page keeps a channel to the service and hears of the changes made elsewhere ([Notifications](#notifications)), where the service offers it | `false` |
 | `auth.provider` | the reference of an auth provider object | required |
 
 Nothing secret is written in the file: the url and the reference are public, and what proves the person is the session of the auth provider.
@@ -57,10 +57,11 @@ Nothing secret is written in the file: the url and the reference are public, and
 
 - **Where.** `{config.url}{route}`. Reads are `GET` with the arguments as a query string, writes are `POST` with a json body.
 - **Who.** `Authorization: Bearer {access token}`, the access token of the session of the auth provider. Only `GET /status` is answered without it.
+- **From where.** `X-Client-Instance-Id: {id}`, the id of the [client instance](../../../main/doc_page_impl_client_instance.md) sending (a tab, an app): the service writes it into the actor of every change the request makes ([Notifications](#notifications)). Absent, the actor has `clientInstanceId: ''`; out of its grammar (`[0-9a-z]{8,64}`), `-1`. The service says it takes the header (`clientInstanceHeader` of `/status`), and a page sends it only then.
 - **Which space.** Every route but `/status`, `/account` and `/space/list` names the space: `space={key}` in the query, or `"space": "{key}"` in the body.
 - **Answer.** Always a json object `{ code, message, data }`, as every backend of the asset layer answers: `code` an integer (0 done, negative a failure), `message` a text, `data` whatever the route answers; `message` and `data` may be left out, and no other key stands beside them. It holds for every answer the service itself gives: a success, a refusal, an unknown route, a body that does not parse, a failure nobody foresaw. The http status follows the code, except where the service itself failed.
 - **Time zone.** A write may say `timeZone: "+09"`; the times the service writes into the item (events, versions) are then in that zone, else in `+00`. The format is the one of the project: `20261020_18495741+09`.
-- **CORS.** The service allows any origin, the methods `GET`, `POST`, `OPTIONS` and the headers `authorization`, `content-type`. It sets no cookie.
+- **CORS.** The service allows any origin, the methods `GET`, `POST`, `OPTIONS` and the headers `authorization`, `content-type`, `x-client-instance-id`. It sets no cookie.
 
 | code | http | means |
 | --- | --- | --- |
@@ -111,14 +112,15 @@ Sharing a space between accounts is not part of this contract yet ([what is left
 
 ```text
 GET  /status          no token      { service: "react-doc-storage", contractVersion: 1,
-                                      apiSetList: ["item", "partition", "cache", "auth"],
+                                      apiSetList: ["item", "partition", "cache", "auth", "notify"?],
                                       auth: { kind: "cognito", region, userPoolId, clientIdList },
+                                      clientInstanceHeader: "X-Client-Instance-Id",
                                       limit: { dataInlineMax, dataRowAutoMax, dataSizeMax, itemMetaSizeMax,
-                                               requestListMax, spaceCountMax, spaceSizeMax } }
+                                               requestListMax, spaceCountMax, spaceSizeMax, notifyTopicMax? } }
 GET  /account                       { userId, name, groupList, limit, usage: { spaceCount, size } }
 ```
 
-`/status` lets a page check a url before anyone signs in, and says which user pool the service trusts, so a point whose auth provider is of another pool is reported before a request fails.
+`/status` lets a page check a url before anyone signs in, and says which user pool the service trusts, so a point whose auth provider is of another pool is reported before a request fails. `notify` stands in `apiSetList`, and `notifyTopicMax` in `limit`, only where the deployment has the notification channel ([Notifications](#notifications)).
 
 | `limit` | what passes it (`-10`) |
 | --- | --- |
@@ -129,6 +131,7 @@ GET  /account                       { userId, name, groupList, limit, usage: { s
 | `requestListMax` | the requests of one `item/get/list` |
 | `spaceCountMax` | the spaces of one account |
 | `spaceSizeMax` | the bytes of every version in one space |
+| `notifyTopicMax` | the topics one notification channel hears |
 
 ### Spaces
 
@@ -312,9 +315,29 @@ a partition to this point                     a partition away from this point
 
 `item/import` replaces an item of the same id, so a transfer that stopped halfway is simply run again.
 
-## Notifications (reserved)
+## Notifications
 
-A point is always asked; the service never calls the page. Being told of a change made elsewhere is a separate api set, `notify`, that a point turns on with `config.isNotifyEnabled: true` and the service offers by listing `notify` in `apiSetList` of `/status`. This contract version does not define its routes, and the service does not list it; the page then refuses the flag with a problem of the point instead of pretending. What it is for, and what it would be built on, is in [what is left](README.md#what-is-left-for-later).
+A deployment may offer the **notification channel** of this package ([its contract](notify-contract.md)): the page keeps a WebSocket to the service and hears of every change made to the partitions of its spaces, by any tab, device or program. It is on where both say so: the deployment lists `notify` in `apiSetList` of `/status`, and the point says `config.isNotifyEnabled: true`. A point asking a deployment without it shows a problem of the point and is asked as before.
+
+```text
+POST /notify/ticket   { space?, topicList? }    { ticket, url, timeExpire, topicList, pingIntervalSec }
+                                                -3 where the deployment has no channel
+topic   space/{key}      every change of the partitions of that space of the account
+```
+
+- **One topic per space.** `space/{key}` names a space by its key in the account of the ticket, whether it exists yet or not: a channel opened before the first write of a point hears of that write, and a space made again under its key is heard again. A page subscribes to the space of each point it holds partitions of, and leaves out the notifications of partitions it does not hold.
+- A ticket naming no topic opens a channel that hears nothing until it subscribes; `space` alone stands for `topicList: ["space/{space}"]`.
+
+| event | when | `detail` |
+| --- | --- | --- |
+| `partitionChanged` | a write grew the revision of a partition: its items, its records, its name, its deletion mark | `{ partitionId, ownerRef, partition, revision, isDeleted, itemIdList, isItemIdListComplete }` |
+| `partitionCreated` | `partition/create` made a partition | the same, `revision: 0`, `itemIdList: []` |
+| `partitionRemoved` | a partition was removed for good (its purge finished) | `{ partitionId, ownerRef, partition }` |
+| `spaceRemoved` | the space was removed (`space/delete`) | `{ key }` |
+
+- **One notification per request and partition.** A request writing in several steps (`group/move` of a large group) tells its last revision once. `itemIdList` holds the items the request wrote or removed (an item whose record alone changed included), the first 100: `isItemIdListComplete: false` when there were more. A write that changed nothing tells nothing.
+- **The actor** is the account of the request and its `X-Client-Instance-Id`, so a page tells its own writes from the others ([the client instance](../../../main/doc_page_impl_client_instance.md#what-a-client-does-with-it)).
+- **What the page does** with `partitionChanged`: nothing when it holds that revision already or the actor is itself (its answer brought it); else `partition/get` with the revision it holds, as a refresh. `partitionRemoved` and `spaceRemoved`: the partitions concerned are read again, which finds them gone. After a channel opens again, every partition of the point is read again, the notifications in between being lost.
 
 ## The service on AWS
 

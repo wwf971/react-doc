@@ -66,3 +66,37 @@ test('a filter keeps only the places asked for', () => {
 	assert.equal(provider.sceneGet('/z/hub/flow'), null);
 	assert.equal(provider.linkOpen('zettel-open:a'), true);
 });
+
+test('what a zettel holds in several groups: group by group, each framed inside the place', () => {
+	const groupedModel = zettelModelBuild([
+		{ key: 'root', kind: 'zettel', text: card({ level: 'root', title: 'Root', connectionList: [
+			{ type: 'contain', group: 'First', form: 'array', itemList: ['a', 'b', 'c', 'd', 'e'] },
+			{ type: 'contain', group: 'Second', form: 'array', itemList: ['f', 'g'] },
+			{ type: 'contain', group: 'Third', form: 'list', itemList: ['h'] },
+		] }) },
+		...['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'].map((key) => ({ key, kind: 'zettel', text: card({ level: 'hub', parent: 'root', title: key.toUpperCase() }) })),
+	]);
+	// the second group follows the whole first one, whatever the indexes; what no group names comes last
+	assert.deepEqual(groupedModel.containListByKey.get('root'), ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']);
+	const scene = zettelProviderBuild(groupedModel, { signature: 'x' }).sceneGet('/z/root');
+	const { nodes } = scene.diagram;
+	assert.deepEqual(overlapList(scene.diagram), []);
+	const subFrameList = nodes.filter((node) => node.around && node.data.place === 'child-group');
+	assert.deepEqual(subFrameList.map((node) => `${node.data.label} ${node.data.form} ${node.around.nodeIdList.length}`), ['First array 5', 'Second array 2', 'Third list 1', 'Other  1']);
+	// the rect of a frame: its cards and its padding
+	const rectOf = (frame) => {
+		const memberList = frame.around.nodeIdList.map((id) => nodes.find((node) => node.id === id));
+		const padding = frame.around.padding;
+		const left = Math.min(...memberList.map((node) => node.position.x)) - padding.left;
+		const top = Math.min(...memberList.map((node) => node.position.y)) - padding.top;
+		const right = Math.max(...memberList.map((node) => node.position.x + node.size.width)) + padding.right;
+		const bottom = Math.max(...memberList.map((node) => node.position.y + node.size.height)) + padding.bottom;
+		return { left, top, right, bottom };
+	};
+	const outer = rectOf(nodes.find((node) => node.id === 'frame:h:root'));
+	const rectList = subFrameList.map(rectOf);
+	for (const rect of rectList) assert.ok(rect.left > outer.left && rect.top > outer.top && rect.right < outer.right && rect.bottom < outer.bottom, 'a group stands inside the frame of the place');
+	for (let i = 1; i < rectList.length; i += 1) assert.ok(rectList[i].top > rectList[i - 1].bottom, 'each group below the one before');
+	// the frame of the place is declared before its groups, so they are drawn over it
+	assert.ok(nodes.findIndex((node) => node.id === 'frame:h:root') < nodes.findIndex((node) => node === subFrameList[0]));
+});

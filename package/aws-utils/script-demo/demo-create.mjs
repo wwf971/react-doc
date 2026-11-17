@@ -1,6 +1,8 @@
 // Makes a small doc page that uses a deployment of the two backends of the package aws-utils
 // (doc/first-use.md): an auth provider, a storage point, and a notebook whose partition "cloud" is
-// held by that point, with two documents showing them. It is for trying the package out with a
+// held by that point, with three documents showing them (the notebook, the changes the point tells
+// a tab of, the account admin). The point asks for notifications (isNotifyEnabled): a deployment
+// without its channel says so in the page, which then asks the point as before. It is for trying the package out with a
 // backend of one's own, somewhere git does not track: the values of a deployment belong to
 // whoever deployed it.
 //
@@ -96,6 +98,7 @@ async function main() {
     '# backends of the package aws-utils (package/aws-utils/doc/first-use.md).',
     'docEntry:',
     '  title: "aws-utils: demonstration"',
+    '  titleShort: aws-demo',
     `  homeDoc: ~${alias}/README.md`,
     '# the package bringing the storage type, the auth kind and the notebook',
     'packageList:',
@@ -110,6 +113,8 @@ async function main() {
     '    tree:',
     `      - doc: ~${alias}/README.md`,
     '        text: Cloud notebook',
+    `      - doc: ~${alias}/changes.md`,
+    '        text: Changes told at once',
     `      - doc: ~${alias}/admin.md`,
     '        text: Account admin',
     '',
@@ -129,11 +134,13 @@ async function main() {
   const storageFileWrite = (providerRef) => fs.writeFileSync(path.join(dirMeta, 'asset-storage.yaml'), [
     '# The storage points of this doc page (main/doc_page_impl_asset_storage.md#declaring-storage-points).',
     'storagePointList:',
-    '  # a storage service on AWS, reached by the page itself as the person signed in to the auth provider',
+    '  # a storage service on AWS, reached by the page itself as the person signed in to the auth provider.',
+    '  # isNotifyEnabled: the page keeps a channel to it and hears of every change another tab, device or',
+    '  # program makes (doc/notify-contract.md), where the deployment has the channel',
     `  - id: ${POINT_ID}`,
     '    type: aws-utils.remote',
     '    label: Cloud',
-    `    config: { url: ${JSON.stringify(value.storageUrl)} }`,
+    `    config: { url: ${JSON.stringify(value.storageUrl)}, isNotifyEnabled: true }`,
     `    auth: { provider: ${JSON.stringify(providerRef)} }`,
     '',
   ].join('\n'));
@@ -196,10 +203,11 @@ async function main() {
       '',
       '- Settings panel, **Asset service**, *Points the page reaches itself*: the session of the point, **Check**, what the browser keeps of it, **Refresh** and **Clear**, and the account and the space at the storage service.',
       '- Settings panel, **Frontend objects**, the notebook, *Partitions*: **Storage…** moves *This doc page* to the cloud and back, with or without keeping a copy; **Copy…** copies the notes of one partition into the other.',
-      '- Open this page in another browser and sign in: the notes of **Cloud** are there.',
+      '- Open this page in another browser and sign in: the notes of **Cloud** are there. With both open, a note added in one shows in the other at once: [Changes told at once](changes.md).',
       '- `react-doc build <this folder> --out notebook.html`: the built page signs in and reads **Cloud** with no server (notes are changed in edit mode, which a built page does not have).',
       '',
     ].join('\n'));
+    fs.writeFileSync(path.join(dirOut, 'changes.md'), changesDocBuild(block, idNotebook));
     fs.writeFileSync(path.join(dirOut, 'admin.md'), [
       '# Account Admin',
       '',
@@ -219,6 +227,34 @@ async function main() {
     // a doc page made halfway is not left behind: the next run starts from nothing
     if (!isMade) fs.rmSync(dirMeta, { recursive: true, force: true });
   }
+}
+
+// the document showing the notifications of the point: the notebook, and what the point told this tab
+function changesDocBuild(block, idNotebook) {
+  return [
+    '# Changes Told at Once',
+    '',
+    `The storage point \`${POINT_ID}\` keeps a channel open to the storage service (\`isNotifyEnabled: true\` in \`.doc-page/asset-storage.yaml\`). When a note of **Cloud** is added, changed or removed anywhere (another tab of this browser, another browser, a phone, a program), the service tells every page holding it, and the page reads the partition again at once instead of at its next refresh.`,
+    '',
+    'Every page names itself with a temporary id, its **client instance**, which it sends with each request; the service tells it back as the actor of the change. So a tab knows its own changes and does nothing about them, and reads only what was changed elsewhere.',
+    '',
+    '## Try it',
+    '',
+    '1. Sign in (the notebook below offers it), and open this page in a second tab or another browser, signed in as the same account.',
+    '2. In one of them, switch the document to edit mode and add or change a note of **Cloud**.',
+    '3. The other one shows it within a second, the note lit for a moment; **live** beside the partition says its channel is open.',
+    '',
+    block(idNotebook, 'notes', ['  partition: cloud', '  height: 12rem']),
+    '',
+    '## What the point told this tab',
+    '',
+    'One line per notification, newest first: the change, the notes it touched, who made it (*this tab*, or *another tab or device* with the start of its client instance id), and what this tab did. Its own changes are told back too, and left alone: the answer of its request brought them already.',
+    '',
+    block(idNotebook, 'changes', ['  partition: cloud']),
+    '',
+    'The same list, for every storage point, is in the Settings panel, **Asset service**, *Points the page reaches itself*. The design: `react-doc/main/doc_page_impl_client_instance.md` (the client instance) and `package/aws-utils/doc/notify-contract.md` (the channel).',
+    '',
+  ].join('\n');
 }
 
 main().catch((error) => {

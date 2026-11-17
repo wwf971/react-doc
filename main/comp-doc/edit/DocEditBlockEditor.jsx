@@ -2,7 +2,7 @@ import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve } from '../registry/comp-registry.js';
 import { compDefinitionGet } from '../registry/comp-definition.js';
-import { COMP_EDIT_MODE_SOURCE_ID, compMetaGet } from '../registry/comp-expose.js';
+import { COMP_EDIT_MODE_SOURCE_ID, compBlockLabelGet, compMetaGet } from '../registry/comp-expose.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import { useDocEditDoc } from './DocEditDocContext.js';
 import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
@@ -58,7 +58,8 @@ import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
 //   viewRendered  the block as the body rendered it, for editors that keep a
 //                 rendered part in the flow
 export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, viewRendered }) {
-  const { compById, editStore, objectStore, slashStore, sourceStore } = useDocStores();
+  const stores = useDocStores();
+  const { compById, editStore, objectStore, slashStore, sourceStore } = stores;
   const { path, format } = useDocEditDoc();
   const session = editStore.session;
   if (!session || session.path !== path) return null;
@@ -71,7 +72,7 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
       block,
       format,
       sourcePath: path,
-      label: sessionLabelGet(session, block),
+      label: sessionLabelGet(session, block, stores),
       modeId: session.editModeId,
       viewRendered,
       // the frontmatter and the whole file are not blocks of the body
@@ -157,16 +158,29 @@ const labelByBlockKind = {
   thematicBreak: 'Horizontal rule',
 };
 
-function sessionLabelGet(session, block) {
+function sessionLabelGet(session, block, stores) {
   if (session.type === 'frontmatter') return 'Frontmatter';
   if (session.type === 'document') return 'Document source';
-  return blockLabelGet(block);
+  return blockLabelGet(block, stores);
 }
 
-// what a block is called in its toolbar and editor bar
-export function blockLabelGet(block) {
+// what a block is called in its toolbar and editor bar: { text, title }. a component block is
+// called by its tag name, or by what its component says of it (expose.blockLabelGet: ObjectFrontend
+// names the type of its object), which needs the page's stores
+export function blockLabelInfoGet(block, stores) {
   if (block?.component) {
-    return assetRefLangIs(block.component.lang) ? `${block.component.compName} (asset)` : block.component.compName;
+    const isAsset = assetRefLangIs(block.component.lang);
+    const name = String(block.component.compName ?? '');
+    const definition = stores?.docStore && stores?.sourceStore && !isAsset
+      ? compDefinitionNormalize(compDefinitionGet(stores.docStore.compById, compIdResolve(stores.sourceStore.configDoc, name)))
+      : undefined;
+    const own = definition ? compBlockLabelGet(definition, block.component, { stores }) : null;
+    if (own) return own;
+    return { text: isAsset ? `${name} (asset)` : name, title: '' };
   }
-  return labelByBlockKind[block?.kind] ?? 'Block';
+  return { text: labelByBlockKind[block?.kind] ?? 'Block', title: '' };
+}
+
+export function blockLabelGet(block, stores) {
+  return blockLabelInfoGet(block, stores).text;
 }

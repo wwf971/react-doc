@@ -6,6 +6,7 @@
 # design: main/doc_page_impl_package.md#a-package-as-a-doc-page
 docEntry:
   title: {{title}}
+  # titleShort: ...   the title in a few words, when it is long: the tab of the browser shows it
   homeDoc: ~{{name}}/doc/README.md
 source:
   file: ./source.yaml

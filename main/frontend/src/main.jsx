@@ -48,6 +48,9 @@ createRoot(document.getElementById('root')).render(
     config={{
       language: 'en',
       routeMode: 'query',
+      // the page names the tab of the browser: the site and the document shown
+      // (doc_page_impl.md#the-tab-title); the html served already holds the site
+      isTabTitleSet: true,
       // the environment the page runs in (doc_page_impl.md#the-environment):
       // the vite development server, or a static build
       // with the connection of the development server (its HMR socket): the

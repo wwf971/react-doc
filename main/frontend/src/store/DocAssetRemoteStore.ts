@@ -2,6 +2,7 @@ import { makeAutoObservable, observable, reaction, runInAction } from 'mobx';
 import {
   assetStorageCacheCreate, assetStorageCacheScopeBuild, base64ToBytes, bytesToBase64,
 } from '../lib/doc-asset-storage-cache.js';
+import { clientInstanceActorIsSelf, clientInstanceIdGet } from '../lib/doc-client-instance.js';
 import {
   objectFrontendAssetAcceptCheck, objectFrontendAssetKeyFree, objectFrontendAssetNamingRead, objectFrontendAssetPathNormalize,
   objectFrontendIdOfRefGet, objectFrontendPartitionGroupPathBuild, objectFrontendRefBuild, OBJECT_FRONTEND_KEY_REGEX,
@@ -21,6 +22,10 @@ import {
 //                 checked against the point by the revision of the partition
 //   transfer      a whole partition moved between a local point and one of the page, or between
 //                 two of the page, item by item with its history
+//   notify        a point whose config turns notifications on (isNotifyEnabled) and whose backend
+//                 offers them keeps a channel to the page: a change made elsewhere (another tab,
+//                 device, program) is read at once. what this instance changed itself is known by
+//                 the client instance of the actor and not read again (doc_page_impl_client_instance.md)
 //
 // The items of these partitions join the index of the asset store (DocAssetStore) with the rest,
 // and their records join the item lists of their object (DocObjectFrontendStore), so nothing above
@@ -29,9 +34,12 @@ import {
 //
 // what a page driver is (the function a storage type names creates one per point):
 //
-//   driverCreate({ point, credentialGet })   point: the storage point as declared; credentialGet():
+//   driverCreate({ point, credentialGet, clientInstanceIdGet })
+//                                            point: the storage point as declared; credentialGet():
 //                                            Promise<{ code, data: { token, tokenType }, message }> of the
-//                                            session of the auth provider the point names
+//                                            session of the auth provider the point names;
+//                                            clientInstanceIdGet(): the id this page names itself with
+//                                            (a driver sends it to a backend that takes it)
 //   every method answers Promise<{ code, data, message }> with the codes of the asset layer, and
 //   -7 not signed in, -8 not allowed, -9 not reachable, -10 over a limit:
 //
@@ -47,6 +55,14 @@ import {
 //   itemMetaSet, itemMove, itemDelete, itemRestore, itemLockSet, itemRemove, versionCheckout, versionDelete,
 //   versionLockSet, versionMetadataSet, dependencyListSet, dependencyAdd, dependencyRemove, groupMove,
 //   recordSet, recordRemove                    each { partitionId, ... } -> what the write answers, with revision
+//   notifyOpen({ onNotification, onStateChange })   optional (the api set notify): a channel kept open, opened
+//                                              again by the driver when it closes -> { close() }
+//                                              onNotification({ event, partitionId?, ownerRef?, partition?, revision?,
+//                                                isDeleted?, itemIdList?, actor: { userId, clientInstanceId }, time })
+//                                                event: partitionChanged | partitionCreated | partitionRemoved |
+//                                                pointChanged (something the page cannot name: read every partition)
+//                                              onStateChange({ status: connecting | open | waiting | unsupported |
+//                                                refused | closed, message, timeOpened })
 //
 // an item of a point carries groupPath as its place INSIDE its partition; the page shows it at
 // {partition}/{groupPath}, as the folders of a local partition read.
@@ -82,6 +98,8 @@ export type RemotePartition = {
   // as the point answered: the records of the object, the metadata of the items
   recordList: any[];
   itemList: any[];
+  // the last change another instance made, as its point told it (notify): when, by whom, which items
+  changeElsewhere?: { timeReceived: number; time: string; actor: { userId: string; clientInstanceId: string }; itemIdList: string[]; revision: number };
 };
 
 export type RemotePoint = {
@@ -92,6 +110,35 @@ export type RemotePoint = {
   service: any;
   account: any;
   timeChecked: number;
+};
+
+// what a point told the page, one line each: what changed, who changed it, and what the page did
+//   handling   self: this instance changed it (its answer brought it) · known: the page held that revision
+//              · read: read again · notHeld: a partition no object of the page reads
+export type RemoteNotifyLogEntry = {
+  timeReceived: number;
+  time: string;
+  event: string;
+  partitionKey: string;
+  partition: string;
+  partitionId: string;
+  revision: number;
+  itemIdList: string[];
+  actor: { userId: string; clientInstanceId: string };
+  isSelf: boolean;
+  handling: 'self' | 'known' | 'read' | 'notHeld';
+};
+
+// the channel of a point that tells the page of changes (the api set notify)
+export type RemoteNotify = {
+  pointId: string;
+  // off: not asked for, or not wanted now (nobody signed in, no partition held)
+  status: 'off' | 'connecting' | 'open' | 'waiting' | 'unsupported' | 'refused' | 'closed' | 'error';
+  message: string;
+  timeOpened: number;
+  countOpened: number;
+  countReceived: number;
+  logList: RemoteNotifyLogEntry[];
 };
 
 export type RemoteTransfer = {
@@ -112,6 +159,11 @@ const REQUEST_CHUNK_SIZE = 40;
 const VERSION_KEEP_SIZE_MAX = 8 * 1024 * 1024;
 // how often a purge is asked again before the page gives up: one request removes what its time allows
 const PURGE_ROUND_MAX = 40;
+// notifications: the lines a point keeps of what it told; a burst of changes of one partition read
+// once; the time after which the page checks that its own change came back (an answer lost)
+const NOTIFY_LOG_MAX = 40;
+const NOTIFY_READ_DELAY_MS = 150;
+const NOTIFY_SELF_CHECK_MS = 4000;
 
 const partitionKeyBuild = (ownerRef: string, partition: string) => `${ownerRef}#${partition}`;
 const versionKeyBuild = (itemId: string, versionId: string) => `${itemId}|${versionId}`;
@@ -136,11 +188,19 @@ export class DocAssetRemoteStore {
   loadAgainByKey = new Map<string, { isForced: boolean }>();
   disposeList: (() => void)[] = [];
   timerByPointId = new Map<string, ReturnType<typeof setInterval>>();
+  // the channel of each point that tells the page of changes, as it stands (observed), and the
+  // channel itself with the person it was opened for
+  notifyByPointId = observable.map<string, RemoteNotify>({}, { deep: false });
+  notifyChannelByPointId = new Map<string, { channel: any; scope: string; driver: any }>();
+  notifyTimerByKey = new Map<string, ReturnType<typeof setTimeout>>();
+  notifyTiming = { readDelayMs: NOTIFY_READ_DELAY_MS, selfCheckMs: NOTIFY_SELF_CHECK_MS };
 
-  //   cache   the cache to keep what is read in (a test hands in its own; default: the browser's)
-  constructor(stores: Stores, options: { driverList?: { typeId: string; driverCreate: (input: any) => any }[]; cache?: ReturnType<typeof assetStorageCacheCreate> } = {}) {
+  //   cache          the cache to keep what is read in (a test hands in its own; default: the browser's)
+  //   notifyTiming   { readDelayMs, selfCheckMs } of notifications (a test makes them short)
+  constructor(stores: Stores, options: { driverList?: { typeId: string; driverCreate: (input: any) => any }[]; cache?: ReturnType<typeof assetStorageCacheCreate>; notifyTiming?: { readDelayMs?: number; selfCheckMs?: number } } = {}) {
     this.stores = stores;
     if (options.cache) this.cache = options.cache;
+    this.notifyTiming = { readDelayMs: NOTIFY_READ_DELAY_MS, selfCheckMs: NOTIFY_SELF_CHECK_MS, ...(options.notifyTiming ?? {}) };
     for (const one of options.driverList ?? []) {
       if (one?.typeId && typeof one.driverCreate === 'function') this.driverCreateByTypeId.set(one.typeId, one.driverCreate);
     }
@@ -154,6 +214,9 @@ export class DocAssetRemoteStore {
       loadAgainByKey: false,
       disposeList: false,
       timerByPointId: false,
+      notifyChannelByPointId: false,
+      notifyTimerByKey: false,
+      notifyTiming: false,
     });
   }
 
@@ -185,6 +248,10 @@ export class DocAssetRemoteStore {
     this.disposeList = [];
     for (const timer of this.timerByPointId.values()) clearInterval(timer);
     this.timerByPointId.clear();
+    for (const held of this.notifyChannelByPointId.values()) held.channel?.close?.();
+    this.notifyChannelByPointId.clear();
+    for (const timer of this.notifyTimerByKey.values()) clearTimeout(timer);
+    this.notifyTimerByKey.clear();
     for (const url of this.dataUrlByKey.values()) URL.revokeObjectURL(url);
   }
 
@@ -258,6 +325,7 @@ export class DocAssetRemoteStore {
       credentialGet: () => (authStore
         ? authStore.credentialGet(providerRef, { consumer: this.consumerOfPointGet(point) })
         : Promise.resolve(fail(REMOTE_CODE_AUTH_REQUIRED, 'the page has no auth layer'))),
+      clientInstanceIdGet,
     });
     this.driverByPointId.set(point.id, { configText, driver });
     return driver;
@@ -298,9 +366,9 @@ export class DocAssetRemoteStore {
   // marked deleted is answered too (isCreated false) and refuses every write, so it is brought
   // back first
   private async partitionEnsureAtPoint(point: any, identity: { ownerRef: string; ownerTypeId: string; partition: string }): Promise<RemoteResult> {
-    const created = await this.driverCall(point, 'partitionCreate', identity);
+    const created = await this.driverCall(point, 'partitionCreate', { ...identity, timeZone: this.timeZoneGet() });
     if (created.code !== 0 || !created.data?.partition?.isDeleted) return created;
-    const restored = await this.driverCall(point, 'partitionRestore', { partitionId: created.data.partition.partitionId });
+    const restored = await this.driverCall(point, 'partitionRestore', { partitionId: created.data.partition.partitionId, timeZone: this.timeZoneGet() });
     if (restored.code !== 0) return fail(restored.code, `the storage point ${point.id} holds the partition ${identity.partition} marked deleted, and it was not brought back: ${restored.message}`);
     return { code: 0, message: '', data: { ...created.data, partition: restored.data?.partition ?? { ...created.data.partition, isDeleted: false } } };
   }
@@ -309,7 +377,7 @@ export class DocAssetRemoteStore {
   // answer then still carries the partition, and the same request is sent again
   private async partitionPurgeAtPoint(point: any, partitionId: string): Promise<RemoteResult> {
     for (let round = 0; round < PURGE_ROUND_MAX; round++) {
-      const result = await this.driverCall(point, 'partitionDelete', { partitionId, isPurged: true });
+      const result = await this.driverCall(point, 'partitionDelete', { partitionId, isPurged: true, timeZone: this.timeZoneGet() });
       if (result.code !== 0 || !result.data?.partition) return result;
     }
     return fail(-1, `the partition is not removed yet after ${PURGE_ROUND_MAX} requests: ask again`);
@@ -458,6 +526,7 @@ export class DocAssetRemoteStore {
       }
     });
     this.timerSync();
+    this.notifySync();
     await Promise.all(bindList.map((bind) => this.partitionLoad(bind.key)));
   }
 
@@ -475,6 +544,171 @@ export class DocAssetRemoteStore {
       if (!(intervalSec > 0)) continue;
       this.timerByPointId.set(pointId, setInterval(() => void this.pointRefresh(pointId), Math.max(intervalSec, 10) * 1000));
     }
+  }
+
+  // ---------- the api set notify: a point telling the page of changes ----------
+  // (doc_page_impl_asset_storage.md#being-told-of-changes)
+
+  notifyStateGet(pointId: string): RemoteNotify {
+    return this.notifyByPointId.get(pointId) ?? { pointId, status: 'off', message: '', timeOpened: 0, countOpened: 0, countReceived: 0, logList: [] };
+  }
+
+  // the id this page names itself with to the points, and that a notification of its own change carries
+  get clientInstanceId(): string {
+    return clientInstanceIdGet();
+  }
+
+  // what a point told of one partition: the state of its channel, and the lines about that partition
+  partitionNotifyGet(ownerRef: string, partition: string): (RemoteNotify & { clientInstanceId: string }) | undefined {
+    const state = this.partitionGet(ownerRef, partition);
+    const point = state ? this.pointGet(state.pointId, state.docPageAlias) : undefined;
+    if (!state || point?.config?.isNotifyEnabled !== true) return undefined;
+    const notify = this.notifyStateGet(state.pointId);
+    return { ...notify, clientInstanceId: clientInstanceIdGet(), logList: notify.logList.filter((one) => one.partitionKey === state.key) };
+  }
+
+  private notifyPatch(pointId: string, patch: Partial<RemoteNotify>) {
+    runInAction(() => this.notifyByPointId.set(pointId, { ...this.notifyStateGet(pointId), ...patch }));
+  }
+
+  // the channels as the points, the binds and the sessions are now: a point whose config asks for
+  // notifications keeps one while it holds a partition of the page and somebody is signed in to it;
+  // another person signed in is another channel (a ticket is of one account)
+  private notifySync() {
+    const pointIdHeldSet = new Set([...this.partitionByKey.values()].map((partition) => partition.pointId));
+    const pointList = this.pointList;
+    for (const point of pointList) {
+      const isAsked = point?.config?.isNotifyEnabled === true;
+      const reason = isAsked ? this.pointUnavailableReasonGet(point) : { code: -6, message: '' };
+      const isWanted = isAsked && reason.code === 0 && pointIdHeldSet.has(point.id);
+      const driver = isWanted ? this.driverGet(point) : undefined;
+      const scope = isWanted ? this.cacheScopeGet(point) : '';
+      const held = this.notifyChannelByPointId.get(point.id);
+      if (held && (!isWanted || held.scope !== scope || held.driver !== driver)) {
+        this.notifyChannelByPointId.delete(point.id);
+        held.channel?.close?.();
+      }
+      if (!isAsked) {
+        if (this.notifyByPointId.has(point.id)) runInAction(() => this.notifyByPointId.delete(point.id));
+        continue;
+      }
+      if (!isWanted) {
+        this.notifyPatch(point.id, {
+          status: 'off',
+          message: reason.code !== 0 ? reason.message : 'no partition of the page is held by this point',
+        });
+        continue;
+      }
+      if (this.notifyChannelByPointId.has(point.id)) continue;
+      if (typeof driver?.notifyOpen !== 'function') {
+        this.notifyPatch(point.id, { status: 'unsupported', message: `the storage type ${point.typeId} tells nothing: its driver has no channel` });
+        continue;
+      }
+      const entry: { channel: any; scope: string; driver: any } = { channel: undefined, scope, driver };
+      this.notifyChannelByPointId.set(point.id, entry);
+      const isCurrent = () => this.notifyChannelByPointId.get(point.id) === entry;
+      try {
+        entry.channel = driver.notifyOpen({
+          onNotification: (notification: any) => { if (isCurrent()) this.notifyAccept(point.id, notification); },
+          onStateChange: (state: any) => { if (isCurrent()) this.notifyStateAccept(point.id, state); },
+        });
+      } catch (error: any) {
+        this.notifyChannelByPointId.delete(point.id);
+        this.notifyPatch(point.id, { status: 'error', message: String(error?.message ?? error) });
+      }
+    }
+    for (const [pointId, held] of [...this.notifyChannelByPointId.entries()]) {
+      if (pointList.some((point: any) => point.id === pointId)) continue;
+      this.notifyChannelByPointId.delete(pointId);
+      held.channel?.close?.();
+      runInAction(() => this.notifyByPointId.delete(pointId));
+    }
+  }
+
+  // the channel opened, closed, waiting to open again. each time it opens, what was read before
+  // is asked again: what changed while it was closed was told to nobody (one small request while
+  // a partition did not change)
+  private notifyStateAccept(pointId: string, state: any) {
+    const before = this.notifyStateGet(pointId);
+    const status = String(state?.status ?? 'error') as RemoteNotify['status'];
+    const isOpenedNow = status === 'open' && before.status !== 'open';
+    const timeOpened = isOpenedNow ? Number(state?.timeOpened) || Date.now() : before.timeOpened;
+    this.notifyPatch(pointId, { status, message: String(state?.message ?? ''), timeOpened, countOpened: before.countOpened + (isOpenedNow ? 1 : 0) });
+    if (!isOpenedNow) return;
+    for (const partition of this.partitionByKey.values()) {
+      if (partition.pointId !== pointId || partition.timeChecked >= timeOpened) continue;
+      if (this.cacheModeGet(this.pointGet(partition.pointId, partition.docPageAlias)) === 'pinned') continue;
+      void this.partitionLoad(partition.key, { isForced: true });
+    }
+  }
+
+  // one notification of a point: the partition it names read again, unless this instance made
+  // the change (its answer brought it) or the page holds that revision already
+  private notifyAccept(pointId: string, notification: any) {
+    const event = String(notification?.event ?? '');
+    const actor = { userId: String(notification?.actor?.userId ?? ''), clientInstanceId: String(notification?.actor?.clientInstanceId ?? '') };
+    const isSelf = clientInstanceActorIsSelf(actor);
+    const revision = Number(notification?.revision);
+    const partitionList = [...this.partitionByKey.values()].filter((one) => one.pointId === pointId);
+    let target = notification?.partitionId ? partitionList.find((one) => one.partitionId === notification.partitionId) : undefined;
+    // a partition the page holds as absent has no id yet: found by its identity
+    if (!target && notification?.ownerRef && notification?.partition) {
+      target = partitionList.find((one) => one.ownerRef === notification.ownerRef && one.partition === notification.partition && !one.partitionId);
+    }
+    let handling: RemoteNotifyLogEntry['handling'];
+    if (event === 'pointChanged') {
+      handling = 'read';
+      for (const one of partitionList) this.notifyReadSchedule(one.key);
+    } else if (!target) {
+      handling = 'notHeld';
+    } else if (event === 'partitionRemoved') {
+      handling = 'read';
+      this.notifyReadSchedule(target.key);
+    } else if (target.status === 'ready' && Number.isFinite(revision) && revision <= target.revision) {
+      handling = 'known';
+    } else if (isSelf) {
+      handling = 'self';
+      this.notifySelfCheckSchedule(target.key, revision);
+    } else {
+      handling = 'read';
+      this.notifyReadSchedule(target.key);
+    }
+    const itemIdList = Array.isArray(notification?.itemIdList) ? notification.itemIdList.map(String) : [];
+    const time = String(notification?.time ?? '');
+    const timeReceived = Date.now();
+    if (target && handling === 'read' && !isSelf) {
+      this.partitionPatch(target.key, { changeElsewhere: { timeReceived, time, actor, itemIdList, revision: Number.isFinite(revision) ? revision : 0 } });
+    }
+    const before = this.notifyStateGet(pointId);
+    const entry: RemoteNotifyLogEntry = {
+      timeReceived, time, event, actor, isSelf, handling, itemIdList,
+      partitionKey: target?.key ?? '', partition: target?.partition ?? String(notification?.partition ?? ''),
+      partitionId: String(notification?.partitionId ?? ''), revision: Number.isFinite(revision) ? revision : 0,
+    };
+    this.notifyPatch(pointId, { countReceived: before.countReceived + 1, logList: [entry, ...before.logList].slice(0, NOTIFY_LOG_MAX) });
+  }
+
+  // a partition read again a moment after a notification: a burst of changes is one read
+  private notifyReadSchedule(key: string) {
+    if (this.notifyTimerByKey.has(key)) return;
+    this.notifyTimerByKey.set(key, setTimeout(() => {
+      this.notifyTimerByKey.delete(key);
+      void this.partitionLoad(key, { isForced: true });
+    }, this.notifyTiming.readDelayMs));
+  }
+
+  // a change this instance made: its answer brings it. should the answer have been lost on the
+  // way, the page does not hold the revision told a moment later, and reads it
+  private notifySelfCheckSchedule(key: string, revision: number) {
+    const timerKey = `self:${key}`;
+    const timerBefore = this.notifyTimerByKey.get(timerKey);
+    if (timerBefore) clearTimeout(timerBefore);
+    this.notifyTimerByKey.set(timerKey, setTimeout(() => {
+      this.notifyTimerByKey.delete(timerKey);
+      const state = this.partitionByKey.get(key);
+      if (!state || this.loadPromiseByKey.has(key)) return;
+      if (state.status !== 'ready' || (Number.isFinite(revision) && state.revision < revision)) void this.partitionLoad(key, { isForced: true });
+    }, this.notifyTiming.selfCheckMs));
   }
 
   private cacheScopeGet(point: any): string {
@@ -1104,7 +1338,12 @@ export class DocAssetRemoteStore {
     const { objectFrontendStore } = this.stores;
     const lang = String(body.lang ?? 'yaml');
     const pathListNormalized = Array.isArray(body.pathList) ? body.pathList.map((one: any) => objectFrontendAssetPathNormalize(one).path) : [];
-    const accept = objectFrontendAssetAcceptCheck(objectFrontendStore.assetKindListGet(objectState.ref), { kind: body.kind, lang, pathList: pathListNormalized });
+    // what is written fits the kind: the text of data against its schema, bytes against their form
+    const isBytes = body.bytes instanceof Uint8Array;
+    const accept = objectFrontendAssetAcceptCheck(objectFrontendStore.kindListGet(objectState.ref), {
+      kind: body.kind, lang, pathList: pathListNormalized,
+      ...(isBytes ? { contentType: body.contentType, fileExt: body.fileExt, size: body.bytes.length } : { text: String(body.text ?? '') }),
+    });
     const place = objectFrontendPartitionGroupPathBuild(objectFrontendStore.partitionListOfTypeGet(objectState.typeId), body.partition, body.groupPath ?? accept.kindDeclared?.groupPath);
     if (place.message) return undefined;
     const partition = place.groupPath.split('/')[0];
@@ -1158,7 +1397,7 @@ export class DocAssetRemoteStore {
     if (reason) return fail(-1, reason);
     const change: Record<string, any> = { key: asset.key };
     if (body.kind !== undefined) {
-      const accept = objectFrontendAssetAcceptCheck(objectFrontendStore.assetKindListGet(objectState.ref), { kind: body.kind, lang: asset.item?.lang, pathList: body.pathList ?? asset.pathList ?? [] });
+      const accept = objectFrontendAssetAcceptCheck(objectFrontendStore.kindListGet(objectState.ref), { kind: body.kind, lang: asset.item?.lang, pathList: body.pathList ?? asset.pathList ?? [] });
       if (accept.message) return fail(-1, accept.message);
       change.kind = accept.kind;
     }
@@ -1177,7 +1416,7 @@ export class DocAssetRemoteStore {
     const { objectFrontendStore } = this.stores;
     const item = partition.itemList.find((one) => one.itemId === body.itemId);
     if (objectState.assetList.some((one: any) => one.itemId === body.itemId)) return fail(-1, 'the item is an asset of the object already');
-    const accept = objectFrontendAssetAcceptCheck(objectFrontendStore.assetKindListGet(objectState.ref), { kind: body.kind, lang: item?.lang, pathList: body.pathList ?? [], isIncoming: true });
+    const accept = objectFrontendAssetAcceptCheck(objectFrontendStore.kindListGet(objectState.ref), { kind: body.kind, lang: item?.lang, pathList: body.pathList ?? [], isIncoming: true });
     if (accept.message) return fail(-1, accept.message);
     const key = objectFrontendAssetKeyFree({ assetList: objectState.assetList }, body.key ?? '', accept.kind);
     if (!key) return fail(-1, `the object has an asset of the key ${body.key} already`);

@@ -177,3 +177,48 @@ test('what disagrees: an item of unknown source in the folder, an asset lying ou
   assert.equal(store.assetResolve(OBJECT_ID, 'id:asset-dropped').status, 'unknown');
 });
 
+
+// kinds of data items (doc_page_impl_type.md#kinds-of-data-items): what a read answers of an item
+// that does not fit its kind, and a write that does not fit refused before it is written
+test('an item against its kind: read with what does not fit, a write that does not fit refused', async () => {
+  const entryText = 'name: Shelf\ntype: demo.shelf\nassetList:\n  - { key: book-1, kind: book, itemId: book-1 }\n  - { key: book-2, kind: book, itemId: book-2 }\n';
+  const itemById = {
+    [ENTRY_ID]: assetEntryBuild(ENTRY_ID, entryText, 'entry'),
+    'book-1': assetEntryBuild('book-1', 'title: Dune\nstatus: read\n'),
+    'book-2': assetEntryBuild('book-2', 'status: finished\n'),
+  };
+  const kindList = [{
+    id: 'book', kindId: 'demo.shelf.book', label: 'Book', isOwn: true, declaredBy: 'demo.shelf',
+    content: { form: 'data', langList: ['yaml'], schema: { type: 'object', required: ['title'], properties: { status: { enum: ['want', 'reading', 'read'] } } } },
+  }];
+  const objectStore = {
+    typeDeclaredList: [{ id: 'demo.shelf', extendList: ['frontend.object'], kindList }],
+    typeRegistry: { isAssignable: (typeId, typeIdTo) => typeId === typeIdTo || (typeId === 'demo.shelf' && typeIdTo === 'frontend.object') },
+    changed: () => {},
+  };
+  const assetStore = new DocAssetStore({
+    snapshot: { itemById, objectFrontend: { docPageList: [{ alias: 'page', typeList: [], objectList: [{ id: OBJECT_ID, entry: ENTRY_ID, docPageAlias: 'page' }] }] } },
+  });
+  assetStore.init();
+  await assetStore.startPromise;
+  const store = new DocObjectFrontendStore({ assetStore, objectStore });
+  await store.configLoad();
+  const dispose = autorun(() => { store.assetDataGet(OBJECT_ID, 'book-1'); store.assetDataGet(OBJECT_ID, 'book-2'); });
+  await tickWait();
+  dispose();
+  assert.equal(store.kindOfGet(OBJECT_ID, 'book').kindId, 'demo.shelf.book');
+  assert.deepEqual(store.assetDataGet(OBJECT_ID, 'book-1').kindProblemList, []);
+  // read as it is, and said
+  const read = store.assetDataGet(OBJECT_ID, 'book-2');
+  assert.equal(read.data.status, 'finished');
+  assert.deepEqual(read.kindProblemList.map((problem) => `${problem.path} ${problem.message}`), [' the key title is missing', '/status "finished" is none of want, reading, read']);
+  // a write that does not fit: refused, nothing written
+  const refused = await store.assetWrite(OBJECT_ID, 'book-1', 'title: Dune\nstatus: finished\n');
+  assert.equal(refused.code, -1);
+  assert.match(refused.message, /is not written: it does not fit its kind demo.shelf.book: \/status: "finished" is none of want, reading, read/);
+  assert.equal(store.assetDataGet(OBJECT_ID, 'book-1').data.status, 'read');
+  // the check of an object: every item of a kind with a schema
+  await store.kindCheckRun(OBJECT_ID);
+  assert.deepEqual(store.settings.kindCheck.resultList.map((one) => one.key), ['book-2']);
+  assert.equal(store.settings.kindCheck.countChecked, 2);
+});

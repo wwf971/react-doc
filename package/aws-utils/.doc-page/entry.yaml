@@ -5,6 +5,7 @@
 # design: main/doc_page_impl_package.md#a-package-as-a-doc-page
 docEntry:
   title: "aws-utils: AWS behind a doc page"
+  titleShort: aws-utils
   homeDoc: ~aws-utils/doc/README.md
 source:
   file: ./source.yaml

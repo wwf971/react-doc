@@ -4,6 +4,9 @@ import { readYaml } from './doc-entry.ts';
 import {
   OBJECT_FRONTEND_MODE_ID_REGEX, OBJECT_FRONTEND_PARTITION_REGEX, OBJECT_FRONTEND_TYPE_ID_REGEX, OBJECT_FRONTEND_TYPE_PREFIX_RESERVED_LIST, OBJECT_FRONTEND_TYPE_ROOT,
 } from '../src/lib/doc-object-frontend.js';
+import {
+  OBJECT_FRONTEND_KIND_ROOT, objectFrontendAssetKindListConvert, objectFrontendKindHoldResolve, objectFrontendKindListRead,
+} from '../src/lib/doc-object-frontend-kind.js';
 
 // The types declared in yaml (design: doc_page_impl_type.md#declaring-a-type): what doc pages,
 // their frontend objects and packages add to the type registry, all in one grammar.
@@ -25,19 +28,24 @@ import {
 //                                            kinds of assets, else the root of its kind
 //       summaryKeyList: [isDone]             what the summary of an object of it promises
 //       modeList: [{ id, label, comp, ... }]       below frontend.object: the components drawing it
-//       assetKindList: [{ id, label, ... }]        below frontend.object: what it accepts
+//       kindList: [{ id, label, content } | { id, kind }]   below frontend.object: the kinds of data
+//                                                  items its objects hold, declared here or by another
+//                                                  type (doc_page_impl_type.md#kinds-of-data-items)
 //       partitionList: [{ id, label, ... }]        below frontend.object: the folders its items are split
 //                                                  into, some kept out of git (doc_page_impl_obj_frontend.md#partitions)
 //
 // every problem is reported with the file and skips the item, never the page. the same
 // declaration twice is one type (objects carry theirs); a different one is a problem, and the
 // first is kept, in the order: doc pages as they are loaded, each with its objects, then packages.
+// a kind a type declares becomes a type of its own ({type}.{name}, below frontend.item) once every
+// file is read, and the kinds each type holds are then resolved: what everyone reads of a type is
+// its kindList with each kind's declaration in it.
 
 export const TYPE_CONFIG_FILE_NAME = 'type.yaml';
 const TOP_KEY_LIST = ['typeList'];
-const TYPE_KEY_LIST = ['id', 'kind', 'label', 'description', 'icon', 'extendList', 'summaryKeyList', 'modeList', 'assetKindList', 'partitionList'];
+// assetKindList: the former name of kindList, read with a problem (react-doc migrate rewrites it)
+const TYPE_KEY_LIST = ['id', 'kind', 'label', 'description', 'icon', 'extendList', 'summaryKeyList', 'modeList', 'kindList', 'assetKindList', 'partitionList'];
 const MODE_KEY_LIST = ['id', 'label', 'description', 'category', 'comp', 'param', 'isDefault', 'pathParam'];
-const ASSET_KIND_KEY_LIST = ['id', 'label', 'langList', 'pathPrefix', 'groupPath', 'isIncomingRefused', 'isDoc', 'docPath'];
 const PARTITION_KEY_LIST = ['id', 'label', 'description', 'isGitIgnored', 'isDefault', 'storagePoint'];
 
 export type TypeSection = undefined | false | { file: string } | { typeList: unknown } | ({ file: string } | { typeList: unknown })[];
@@ -54,10 +62,31 @@ export type TypeMode = {
   pathParam?: string;
 };
 
-export type TypeAssetKind = {
-  id: string;
-  label: string;
+// what a data item of a kind is (doc_page_impl_type.md#the-content-of-a-kind)
+export type TypeKindContent = {
+  form: 'data' | 'text' | 'bytes' | 'any';
   langList?: string[];
+  schema?: unknown;
+  mediaTypeList?: string[];
+  extList?: string[];
+  sizeMax?: number;
+};
+
+// a kind an object of a type holds, with what its declaration says
+export type TypeKindHeld = {
+  // its name in the object: the kind of a record of an item list, what a mode names
+  id: string;
+  // the kind: a type of the registry, below frontend.item ({declaring type}.{name})
+  kindId: string;
+  label: string;
+  description: string;
+  content: TypeKindContent;
+  // the type declaring the kind; isOwn: this type ('' and isKindMissing: nobody declares it)
+  declaredBy: string;
+  isOwn: boolean;
+  isKindMissing?: boolean;
+  // not registered: the kind is its declaring type's own (and its descendants')
+  isInternal?: boolean;
   pathPrefix?: string;
   // the folder under item/ a new asset of the kind goes to, unless the write names one
   groupPath?: string;
@@ -85,8 +114,12 @@ export type TypeDeclared = {
   extendList: string[];
   summaryKeyList: string[];
   modeList?: TypeMode[];
-  assetKindList?: TypeAssetKind[];
+  kindList?: TypeKindHeld[];
   partitionList?: TypePartition[];
+  // of a kind (a type below frontend.item): what an item of it is, the type declaring it, its name there
+  content?: TypeKindContent;
+  declaredBy?: string;
+  name?: string;
   definedBy: { kind: 'docPage'; alias: string; file: string } | { kind: 'package'; name: string; file: string };
 };
 
@@ -189,6 +222,7 @@ export function typeDeclaredConfigGet(docPageList: TypeDocPageInput[], packageLi
   }
   for (const item of packageList) fileTake(path.join(item.dir, TYPE_CONFIG_FILE_NAME), item.name, { kind: 'package', name: item.name }, false);
   frontendKeyListCheck(config);
+  kindTypeListAdd(config);
   return config;
 }
 
@@ -215,8 +249,18 @@ function typeRead(item: any, place: string, problem: (message: string) => void):
     return undefined;
   }
   const kind = item.kind === 'relation' ? 'relation' : 'object';
-  const isOfFrontend = item.modeList !== undefined || item.assetKindList !== undefined || item.partitionList !== undefined;
+  // the former name of kindList: read, and said
+  let kindListValue = item.kindList;
+  if (item.assetKindList !== undefined) {
+    if (item.kindList !== undefined) problem(`${place}: "assetKindList" is the former name of "kindList", which it has too; it is left out`);
+    else {
+      problem(`${place}: "assetKindList" is the former name of "kindList" (its langList now a content): it is read, and "react-doc migrate" rewrites it`);
+      kindListValue = objectFrontendAssetKindListConvert(item.assetKindList);
+    }
+  }
+  const isOfFrontend = item.modeList !== undefined || kindListValue !== undefined || item.partitionList !== undefined;
   const extendDefault = kind === 'relation' ? 'core.relation' : (isOfFrontend ? OBJECT_FRONTEND_TYPE_ROOT : 'core.object');
+  const kindRead = kindListValue === undefined ? undefined : objectFrontendKindListRead(kindListValue, { typeId: id, place: `${place}.kindList`, problem });
   return {
     id,
     kind,
@@ -226,9 +270,10 @@ function typeRead(item: any, place: string, problem: (message: string) => void):
     extendList: Array.isArray(item.extendList) ? item.extendList.map(String) : [extendDefault],
     summaryKeyList: Array.isArray(item.summaryKeyList) ? item.summaryKeyList.map(String) : [],
     ...(item.modeList === undefined ? {} : { modeList: modeListRead(item.modeList, `${place}.modeList`, problem) }),
-    ...(item.assetKindList === undefined ? {} : { assetKindList: assetKindListRead(item.assetKindList, `${place}.assetKindList`, problem) }),
+    // the kinds it holds, resolved once every file is read (kindTypeListAdd); the kinds it declares
+    ...(kindRead ? { kindList: kindRead.holdList as any, kindDeclareList: kindRead.kindDeclareList } : {}),
     ...(item.partitionList === undefined ? {} : { partitionList: partitionListRead(item.partitionList, `${place}.partitionList`, problem) }),
-  };
+  } as any;
 }
 
 // the partitions of a type: each a folder name of ASCII (doc_page_impl_dir.md#folder-names-of-assets)
@@ -315,35 +360,6 @@ function modeListRead(value: unknown, place: string, problem: (message: string) 
   return modeList;
 }
 
-function assetKindListRead(value: unknown, place: string, problem: (message: string) => void): TypeAssetKind[] {
-  if (!Array.isArray(value)) {
-    problem(`${place}: a list of kinds { id, label, langList, pathPrefix, groupPath, isIncomingRefused, isDoc, docPath }`);
-    return [];
-  }
-  const kindList: TypeAssetKind[] = [];
-  value.forEach((item: any, index: number) => {
-    const placeOne = `${place}[${index}]`;
-    if (!mappingIs(item) || typeof item.id !== 'string' || item.id === '') {
-      problem(`${placeOne}: a kind is a mapping with an "id"`);
-      return;
-    }
-    for (const key of Object.keys(item)) {
-      if (!ASSET_KIND_KEY_LIST.includes(key)) problem(`${placeOne}: unknown key "${key}" (known: ${ASSET_KIND_KEY_LIST.join(', ')})`);
-    }
-    kindList.push({
-      id: item.id,
-      label: typeof item.label === 'string' && item.label ? item.label : item.id,
-      ...(Array.isArray(item.langList) ? { langList: item.langList.map(String) } : {}),
-      ...(typeof item.pathPrefix === 'string' ? { pathPrefix: item.pathPrefix } : {}),
-      ...(typeof item.groupPath === 'string' ? { groupPath: item.groupPath } : {}),
-      ...(item.isIncomingRefused === true ? { isIncomingRefused: true } : {}),
-      ...(item.isDoc === true ? { isDoc: true } : {}),
-      ...(typeof item.docPath === 'string' && item.docPath ? { docPath: item.docPath } : {}),
-    });
-  });
-  return kindList;
-}
-
 // whether a declared type is frontend.object or below it
 export function typeDeclaredIsFrontend(typeList: { id: string; extendList: string[] }[], typeId: string, seen = new Set<string>()): boolean {
   if (typeId === OBJECT_FRONTEND_TYPE_ROOT) return true;
@@ -353,14 +369,66 @@ export function typeDeclaredIsFrontend(typeList: { id: string; extendList: strin
   return Boolean(type) && type!.extendList.some((parentId) => typeDeclaredIsFrontend(typeList, parentId, seen));
 }
 
-// modes and kinds of assets mean something for a frontend object only
+// modes and kinds of data items mean something for a frontend object only
 function frontendKeyListCheck(config: TypeDeclaredConfig) {
-  for (const type of config.typeList) {
-    if ((type.modeList === undefined && type.assetKindList === undefined && type.partitionList === undefined) || typeDeclaredIsFrontend(config.typeList, type.id)) continue;
+  for (const type of config.typeList as any[]) {
+    if ((type.modeList === undefined && type.kindList === undefined && type.partitionList === undefined) || typeDeclaredIsFrontend(config.typeList, type.id)) continue;
     const owner = type.definedBy.kind === 'package' ? type.definedBy.name : type.definedBy.alias;
-    config.problemList.push({ alias: owner, file: type.definedBy.file, message: `the type ${type.id} has modes or kinds of assets, which are for types below ${OBJECT_FRONTEND_TYPE_ROOT}; they are left out` });
+    config.problemList.push({ alias: owner, file: type.definedBy.file, message: `the type ${type.id} has modes or kinds of data items, which are for types below ${OBJECT_FRONTEND_TYPE_ROOT}; they are left out` });
     delete type.modeList;
-    delete type.assetKindList;
+    delete type.kindList;
+    delete type.kindDeclareList;
     delete type.partitionList;
   }
+}
+
+// the kinds the types declare become types of the registry, below frontend.item, each declared
+// by one type ({type}.{name}: no other type can declare it), except those a type keeps to itself
+// (isInternal: resolved for it and the types extending it, registered nowhere); then the kinds
+// each type holds are resolved against them, its own and those of other types alike
+function kindTypeListAdd(config: TypeDeclaredConfig) {
+  const typeIdSet = new Set(config.typeList.map((type) => type.id));
+  const kindById = new Map<string, any>();
+  const problemOf = (type: any) => (message: string) => config.problemList.push({
+    alias: type.definedBy.kind === 'package' ? type.definedBy.name : type.definedBy.alias, file: type.definedBy.file, message,
+  });
+  const kindTypeList: TypeDeclared[] = [];
+  for (const type of config.typeList as any[]) {
+    for (const kind of type.kindDeclareList ?? []) {
+      if (typeIdSet.has(kind.id) || kindById.has(kind.id)) {
+        problemOf(type)(`the kind ${kind.id} of the type ${type.id} has the id of another type; it is left out`);
+        continue;
+      }
+      kindById.set(kind.id, kind);
+      kindTypeList.push({ ...kind, kind: 'object', summaryKeyList: [], definedBy: type.definedBy });
+    }
+    delete type.kindDeclareList;
+  }
+  // whether a type is typeIdAncestor or extends it: the family an internal kind belongs to
+  const isOfFamily = (typeId: string, typeIdAncestor: string, seen = new Set<string>()): boolean => {
+    if (typeId === typeIdAncestor) return true;
+    if (seen.has(typeId)) return false;
+    seen.add(typeId);
+    const type = (config.typeList as any[]).find((one) => one.id === typeId);
+    return Boolean(type) && type.extendList.some((parentId: string) => isOfFamily(parentId, typeIdAncestor, seen));
+  };
+  // a kind extends kinds only: frontend.item, or kinds declared by any type
+  for (const kind of kindTypeList) {
+    // an internal kind is extended only within its family
+    const isParentUsable = (parentId: string) => parentId === OBJECT_FRONTEND_KIND_ROOT
+      || (kindById.has(parentId) && (!kindById.get(parentId).isInternal || isOfFamily(kind.declaredBy as string, kindById.get(parentId).declaredBy)));
+    const extendList = kind.extendList.filter(isParentUsable);
+    const typeDeclaring = (config.typeList as any[]).find((type) => type.id === kind.declaredBy);
+    for (const parentId of kind.extendList) {
+      if (!extendList.includes(parentId)) problemOf(typeDeclaring)(`the kind ${kind.id} extends ${parentId}, which is no kind it may extend (${OBJECT_FRONTEND_KIND_ROOT}, a kind a type registers, or one internal to its own type); left out`);
+    }
+    kind.extendList = extendList.length > 0 ? extendList : [OBJECT_FRONTEND_KIND_ROOT];
+    kindById.set(kind.id, kind);
+  }
+  for (const type of config.typeList as any[]) {
+    if (!Array.isArray(type.kindList)) continue;
+    type.kindList = type.kindList.map((hold: any) => objectFrontendKindHoldResolve(hold, kindById, problemOf(type), (typeIdDeclaring: string) => isOfFamily(type.id, typeIdDeclaring)));
+  }
+  // what the registry receives: the kinds their types register
+  config.typeList.push(...kindTypeList.filter((kind: any) => !kind.isInternal));
 }

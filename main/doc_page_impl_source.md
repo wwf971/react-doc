@@ -206,6 +206,7 @@ docEntry:
 ```yaml
 # .doc-workspace/workspace.yaml: paths relative to this file, so the workspace folder is ..
 title: My Site                      # optional page values, over those of the first doc page's entry
+titleShort: Site                    # the title in a few words, beside title only (doc_page_impl.md#the-tab-title)
 homeDoc: ~guide:guide/overview.md   # a full source path, or a local path of the first doc page
 homeItem: ...
 docPageList:                        # the root-level doc pages, in side-panel order; at least one
@@ -231,7 +232,7 @@ The workspace file is found from the workspace folder in its metadata folder, `.
 
 `isRootUnfolded` is an option of the mount, not of the entry, and **on by default**: a doc page whose side panel is one root item holding the rest (the usual shape) shows that item's children directly under its section, the root itself a marked root row when it is bound to a document; the same doc page can be drawn as a folder in another workspace (`isRootUnfolded: false`). What it does, and what it never does, is in [the sole root unfolded](doc_page_impl_side_panel.md#the-sole-root-unfolded); `docEntry` of `config.yaml` takes it as well. The former key `isRootVisible` is still read, as its opposite, with a warning.
 
-Loading a workspace (`docWorkspaceLoad`, `plugin/doc-entry.ts`) registers every root-level doc page under its alias first, then loads each entry with everything it reaches ([loading](doc_page_impl_side_panel.md#loading)): the source rules of every doc page, in order, each rule carrying the alias of its doc page; the tag definitions; the config declarations of every doc page, each with its doc page's alias (the page keeps one layer per doc page and applies the main doc page's, [the doc page layers](doc_page_impl_config.md#the-doc-page-layers)), then the workspace's own; and every side panel. The page shows, with one root doc page, that doc page's chosen side panel, exactly as before; with several, one **section** per root doc page: its alias as a muted heading, its side panel below at the depth of the tree's root, so its items look as they do when the doc page is served alone; the doc pages keep their side panels and the workspace only arranges them (a side panel of the workspace's own is a later addition). The tree node of a section carries `docPageSection` (`{ alias, title, isTemporary, packageName, isFirst }`); what the side panel does with it is in [a workspace of several doc pages](doc_page_impl_side_panel.md#a-workspace-of-several-doc-pages). `siteTitle`, `homeDoc` and `homeItem` come from `config.yaml`, else the workspace file, else the first root doc page's entry.
+Loading a workspace (`docWorkspaceLoad`, `plugin/doc-entry.ts`) registers every root-level doc page under its alias first, then loads each entry with everything it reaches ([loading](doc_page_impl_side_panel.md#loading)): the source rules of every doc page, in order, each rule carrying the alias of its doc page; the tag definitions; the config declarations of every doc page, each with its doc page's alias (the page keeps one layer per doc page and applies the main doc page's, [the doc page layers](doc_page_impl_config.md#the-doc-page-layers)), then the workspace's own; and every side panel. The page shows, with one root doc page, that doc page's chosen side panel, exactly as before; with several, one **section** per root doc page: its alias as a muted heading, its side panel below at the depth of the tree's root, so its items look as they do when the doc page is served alone; the doc pages keep their side panels and the workspace only arranges them (a side panel of the workspace's own is a later addition). The tree node of a section carries `docPageSection` (`{ alias, title, isTemporary, packageName, isFirst }`); what the side panel does with it is in [a workspace of several doc pages](doc_page_impl_side_panel.md#a-workspace-of-several-doc-pages). `siteTitle`, `homeDoc` and `homeItem` come from `config.yaml`, else the workspace file, else the first root doc page's entry; `siteTitleShort` from the place `siteTitle` comes from ([the tab title](doc_page_impl.md#the-tab-title)).
 
 ### The virtual workspace
 
@@ -315,7 +316,7 @@ Every change is one request of the edit api, `POST {edit}/workspace/edit` `{ req
 | `itemAdd` | `item { alias?, dir \| file, sidePanel?, isRootUnfolded? }`, at the end |
 | `itemRemove` | `index` |
 | `itemMove` | `index`, `indexTo` (its place afterwards) |
-| `titleSet` | `value` (`''` removes it) |
+| `titleSet` | `value` (`''` removes it, and the `titleShort` that shortens it) |
 
 `hashBase` is `workspace.fileHash`: a file changed since is refused (-2). After the write the configuration is loaded once and the file is written back when it does not load (an alias taken, a folder without an entry), with the reason; otherwise the new workspace reaches the page as data, as every configuration write does. Paths are typed with [os path completion](#os-path-completion), starting at the folder of the workspace file.
 

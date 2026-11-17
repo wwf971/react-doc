@@ -5,7 +5,7 @@ import { useDocStores } from '../../frontend/src/store/context.js';
 import { BlockRender } from '../../../built-in/comp-mdx/text/BlockRender.jsx';
 import { DocEditBlockContext, DocEditBlockFloatContext, useDocEditDoc } from './DocEditDocContext.js';
 import { DocEditBlockToolbar } from './DocEditBlockToolbar.jsx';
-import { DocEditBlockEditor, blockLabelGet } from './DocEditBlockEditor.jsx';
+import { DocEditBlockEditor, blockLabelInfoGet } from './DocEditBlockEditor.jsx';
 import { DocBlockSelectBlock } from '../block-select/DocBlockSelectBlock.jsx';
 import {
   EDIT_CLICK_OWN_SELECTOR,
@@ -66,7 +66,8 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
 });
 
 const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex, children }) {
-  const { blockPopupStore, editStore, eventRouter, onEvent: onEventPage } = useDocStores();
+  const stores = useDocStores();
+  const { blockPopupStore, editStore, eventRouter, onEvent: onEventPage } = stores;
   const { path, model, format } = useDocEditDoc();
   const elementRef = useRef(null);
   const anchorRef = useRef(null);
@@ -92,7 +93,7 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
     && !editStore.blockIsReadOnly(path, index)
     && !editStore.blockIsEditEnterButtonOnly(path, index);
   const textPending = editStore.blockTextPendingGet(path, index);
-  const label = blockLabelGet(block);
+  const labelInfo = blockLabelInfoGet(block, stores);
 
   // entering the block's session is reported as an event; point is where
   // the pointer was (a pointer event can be passed), undefined for a report
@@ -211,7 +212,7 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
       >
         <div ref={anchorRef} className="doc-edit-block-anchor not-prose">
           <div ref={floatElementSet} className="doc-edit-block-float">
-            {isEditing ? null : <DocEditBlockToolbar blockIndex={index} label={label} />}
+            {isEditing ? null : <DocEditBlockToolbar blockIndex={index} label={labelInfo.text} labelTitle={labelInfo.title} />}
           </div>
         </div>
         {content}

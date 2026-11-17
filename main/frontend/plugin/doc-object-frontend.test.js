@@ -370,6 +370,21 @@ test('the yaml file keeps its comments when an orphan entry gets its line', asyn
   assert.equal(refused.body.code, -1);
 });
 
+test('object-frontend/create: an id made before makes the same object again; one in use or malformed is refused', async () => {
+  const dir = fixtureCreate();
+  const middleware = middlewareCreate(dir);
+  const made = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/create', { docPageAlias: 'page', typeId: 'frontend.object', name: 'Drive', id: 'w5aaaaaaaad' });
+  assert.equal(made.body.code, 0, made.body.message);
+  assert.equal(made.body.data.id, 'w5aaaaaaaad');
+  assert.ok(fs.existsSync(path.join(dir, 'page', '.doc-page', 'object-frontend', 'w5aaaaaaaad--Drive', 'object.yaml')));
+  const again = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/create', { docPageAlias: 'page', typeId: 'frontend.object', name: 'Drive', id: 'w5aaaaaaaad' });
+  assert.equal(again.body.code, -1);
+  assert.match(again.body.message, /used already/);
+  const malformed = await requestRun(middleware, 'POST', '/__doc-asset/object-frontend/create', { docPageAlias: 'page', typeId: 'frontend.object', name: 'x', id: '../escape' });
+  assert.equal(malformed.body.code, -1);
+  assert.equal(fs.readdirSync(path.join(dir, 'page', '.doc-page', 'object-frontend')).length, 1);
+});
+
 test('group folders: an item is found at any depth, moved between groups, and a group moved whole', () => {
   const dir = fixtureCreate();
   const store = assetStoreCreate(docAssetConfigLoad(path.join(dir, 'config.yaml')));
@@ -578,13 +593,13 @@ test('an item moves between folders of the store through the asset api, and the 
 const typeKindYaml = [
   'typeList:',
   '  - id: demo.shelf',
-  '    assetKindList:',
-  '      - { id: book, langList: [yaml], pathPrefix: /book/, groupPath: book }',
-  '      - { id: cover, langList: [png], isIncomingRefused: true }',
+  '    kindList:',
+  '      - { id: book, content: { form: data, langList: [yaml] }, pathPrefix: /book/, groupPath: book }',
+  '      - { id: cover, content: { form: bytes, mediaTypeList: [image/png] }, isIncomingRefused: true }',
   '  - id: demo.shelf-special',
   '    extendList: [demo.shelf]',
   '  - id: demo.one',
-  '    assetKindList:',
+  '    kindList:',
   '      - { id: only }',
   '',
 ].join('\n');
@@ -600,7 +615,7 @@ test('a type says what it accepts; the write stops before anything is written', 
   // inherited from demo.shelf
   assert.match((await post('asset/create', { kind: 'magazine', text: 'a: 1\n' })).body.message, /holds no asset of the kind magazine/);
   assert.match((await post('asset/create', { text: 'a: 1\n' })).body.message, /say the kind/);
-  assert.match((await post('asset/create', { kind: 'book', lang: 'md', text: '# a\n' })).body.message, /is in yaml/);
+  assert.match((await post('asset/create', { kind: 'book', lang: 'md', text: '# a\n' })).body.message, /does not fit it: it is data in yaml, not md/);
   assert.match((await post('asset/create', { kind: 'book', pathList: ['/note/a'], text: 'a: 1\n' })).body.message, /starts with \/book\//);
   const made = await post('asset/create', { kind: 'book', pathList: ['/book/a'], text: 'a: 1\n' });
   assert.equal(made.body.code, 0, made.body.message);
@@ -612,7 +627,7 @@ test('a type says what it accepts; the write stops before anything is written', 
   const store = statusOf(dir);
   const plain = store.itemCreate({ lang: 'yaml', data: Buffer.from('a: 1\n') }).item;
   assert.match((await post('asset/attach', { itemId: plain.itemId, kind: 'magazine' })).body.message, /holds no asset/);
-  const cover = store.itemCreate({ lang: 'png', data: Buffer.from('x') }).item;
+  const cover = store.itemCreate({ lang: '', contentType: 'image/png', fileExt: 'png', data: Buffer.from('x') }).item;
   assert.match((await post('asset/attach', { itemId: cover.itemId, kind: 'cover' })).body.message, /made by the modes/);
   assert.equal(statusOf(dir).itemGet(plain.itemId).owner, undefined, 'nothing was written');
   const attached = await post('asset/attach', { itemId: plain.itemId, kind: 'book' });
@@ -779,7 +794,7 @@ test('partitions: declared by the type, a write names one, and one kept out of g
   typeYamlWrite(dir, [
     'typeList:',
     '  - id: demo.profile',
-    '    assetKindList:',
+    '    kindList:',
     '      - { id: info, groupPath: info }',
     '    partitionList:',
     '      - { id: example, label: Example }',
@@ -813,7 +828,7 @@ test('the apis of partitions: a default one for a write naming none, made, renam
   typeYamlWrite(dir, [
     'typeList:',
     '  - id: demo.notes',
-    '    assetKindList:',
+    '    kindList:',
     '      - { id: note, groupPath: note }',
     '    partitionList:',
     '      - { id: example }',

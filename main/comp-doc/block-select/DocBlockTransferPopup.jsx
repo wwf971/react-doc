@@ -46,7 +46,8 @@ const panelLayoutOption = { isMovable: true, isResizable: true, isSizeRemembered
 // menu entry is the primary button. Escape or Cancel closes, nothing is
 // written.
 export const DocBlockTransferPopup = observer(function DocBlockTransferPopup() {
-  const { blockSelectStore, sourceStore, compConfigHost } = useDocStores();
+  const stores = useDocStores();
+  const { blockSelectStore, sourceStore, compConfigHost } = stores;
   const Panel = compConfigHost.panelComponent;
   const transfer = blockSelectStore?.transfer;
   const isOpen = Boolean(Panel) && blockSelectStore?.isTransferOpen === true;
@@ -71,7 +72,7 @@ export const DocBlockTransferPopup = observer(function DocBlockTransferPopup() {
   const blockListShown = blockSelectStore.transferBlockListShown.map((block) => ({
     ...block,
     id: blockNodeIdGet(block.index),
-    label: blockLabelGet(block),
+    label: blockLabelGet(block, stores),
   }));
   const isCheckedById = Object.fromEntries(
     transfer.blockIndexCheckedList.map((index) => [blockNodeIdGet(index), true]),
@@ -234,7 +235,8 @@ const TransferTargetDoc = observer(function TransferTargetDoc({ isLocked }) {
 // the second step: the place in the chosen document; the blocks being moved
 // or copied are marked in its tree when it is their own document
 const TransferTargetPlace = observer(function TransferTargetPlace({ isLocked }) {
-  const { blockSelectStore, sourceStore } = useDocStores();
+  const stores = useDocStores();
+  const { blockSelectStore, sourceStore } = stores;
   const transfer = blockSelectStore.transfer;
   const docPath = transfer.place.docPath;
   const blockList = blockSelectStore.transferTargetBlockList;
@@ -244,7 +246,7 @@ const TransferTargetPlace = observer(function TransferTargetPlace({ isLocked }) 
     ? blockPlaceNodeListBuild({
       docLabel: docEntry?.name ?? docPath,
       blockList,
-      labelGet: blockLabelGet,
+      labelGet: (block) => blockLabelGet(block, stores),
       detailGet: (block) => (isSourceDoc && transfer.blockIndexCheckedList.includes(block.index) ? 'chosen' : ''),
     })
     : undefined;

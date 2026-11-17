@@ -2,6 +2,7 @@ import { observer } from 'mobx-react-lite';
 import { useCompStateStore } from '../../../../main/comp-doc/registry/use-comp-state.js';
 import { PanelPopup } from '../../../../main/comp-doc/popup/PanelPopup.jsx';
 import { timeTextDisplay } from '../../../../main/frontend/src/lib/time-text.js';
+import { clientInstanceIdShortText } from '../../../../main/frontend/src/lib/doc-client-instance.js';
 import { AwsNotebookStore, EDIT_MODE_MESSAGE } from './AwsNotebookStore.js';
 import '../auth/AwsAuth.css';
 import './AwsNotebook.css';
@@ -17,6 +18,9 @@ import './AwsNotebook.css';
 //
 //   param.partition   the partition shown first (default: the default one of the type)
 //   param.height      the height of the list and the note (default 16rem)
+//
+// A partition whose storage point tells the page of changes (isNotifyEnabled) shows "live", and a
+// note another tab, device or program changed lights up as it comes in.
 export const AwsNotebook = observer(function AwsNotebook({ data = {}, config = {} }) {
   const service = config.objectFrontend;
   const store = useCompStateStore(config, 'awsNotebook', () => new AwsNotebookStore());
@@ -34,6 +38,10 @@ export const AwsNotebook = observer(function AwsNotebook({ data = {}, config = {
   const note = noteList.find((asset) => asset.key === store.keySelected) ?? noteList[0];
   const noteText = note ? service.assetTextGet(note.key) : undefined;
   const height = typeof param.height === 'string' && param.height ? param.height : '16rem';
+  // the last change made elsewhere, as the point told it: its notes light up for a moment
+  const changeElsewhere = remote?.changeElsewhere;
+  const isChangeFresh = Boolean(changeElsewhere) && Date.now() - changeElsewhere.timeReceived < CHANGE_FRESH_MS;
+  const itemIdChangedSet = new Set(isChangeFresh ? changeElsewhere.itemIdList : []);
   return (
     <div className="aws-notebook">
       <div className="aws-notebook-head">
@@ -48,7 +56,21 @@ export const AwsNotebook = observer(function AwsNotebook({ data = {}, config = {
         <span className="aws-notebook-place" title={remote?.message || partition.storage?.unavailableReason || ''}>
           held by {partition.storage?.label ?? partition.storage?.pointId ?? 'file-tree'}
           {remote ? <span className="doc-badge-outline" {...(remote.status === 'ready' && !remote.isFromCache ? { 'data-primary': true } : {})}>{REMOTE_STATUS_TEXT[remote.status] ?? remote.status}{remote.status === 'ready' && remote.isFromCache ? ', from the cache' : ''}</span> : null}
+          {remote?.notify ? (
+            <span
+              className="doc-badge-outline aws-notebook-live"
+              {...(remote.notify.status === 'open' ? { 'data-primary': true } : {})}
+              title={remote.notify.status === 'open' ? 'the storage point tells this tab of every change made in another tab, device or program' : remote.notify.message || remote.notify.status}
+            >
+              {remote.notify.status === 'open' ? 'live' : `live: ${NOTIFY_STATUS_TEXT[remote.notify.status] ?? remote.notify.status}`}
+            </span>
+          ) : null}
         </span>
+        {changeElsewhere ? (
+          <span className="aws-notebook-place" title={`user ${changeElsewhere.actor.userId} · client instance ${changeElsewhere.actor.clientInstanceId || 'none named'}`}>
+            changed elsewhere {timeTextDisplay(changeElsewhere.time || changeElsewhere.timeReceived, { part: 'second', isYearShown: false })}
+          </span>
+        ) : null}
       </div>
       <div className="aws-auth-button-row">
         <button type="button" className="doc-button" data-primary disabled={Boolean(writeReason)} title={writeReason || `a new note in item/${partition.id}/note/`} onClick={() => store.editOpen()}>New note…</button>
@@ -60,12 +82,23 @@ export const AwsNotebook = observer(function AwsNotebook({ data = {}, config = {
       <div className="aws-notebook-body" style={{ height }}>
         <div className="aws-notebook-list" role="listbox" aria-label="The notes">
           {noteList.length === 0 ? <div className="aws-auth-note aws-notebook-empty">{remote && remote.status !== 'ready' && remote.status !== 'absent' ? remote.message || 'not read yet' : 'No note in this partition yet.'}</div> : null}
-          {noteList.map((asset) => (
-            <button key={asset.key} type="button" role="option" className="aws-notebook-row" aria-selected={asset.key === note?.key} onClick={() => store.keySelect(asset.key)}>
+          {noteList.map((asset) => {
+            const isChanged = itemIdChangedSet.has(asset.itemId ?? asset.item?.itemId);
+            return (
+            <button
+              key={isChanged ? `${asset.key}:${changeElsewhere.timeReceived}` : asset.key}
+              type="button"
+              role="option"
+              className="aws-notebook-row"
+              aria-selected={asset.key === note?.key}
+              {...(isChanged ? { 'data-changed-elsewhere': true, title: 'changed in another tab, device or program a moment ago' } : {})}
+              onClick={() => store.keySelect(asset.key)}
+            >
               <span className="aws-notebook-row-name">{asset.name || asset.key}</span>
               <span className="aws-notebook-row-time">{timeTextDisplay(asset.item?.versionList?.at(-1)?.time, { isYearShown: false })}</span>
             </button>
-          ))}
+            );
+          })}
         </div>
         <div className="aws-notebook-note">
           {note ? (
@@ -125,6 +158,78 @@ const AwsNotebookEditPopup = observer(function AwsNotebookEditPopup({ store, ser
 const REMOTE_STATUS_TEXT = {
   idle: 'not read', loading: 'reading', ready: 'read', absent: 'empty', authRequired: 'signed out', forbidden: 'not allowed', unreachable: 'out of reach', error: 'failed',
 };
+// the channel of the point: what "live" says while it is not open
+const NOTIFY_STATUS_TEXT = {
+  off: 'off', connecting: 'opening', waiting: 'opening again', unsupported: 'not offered', refused: 'refused', closed: 'closed', error: 'failed',
+};
+const NOTIFY_HANDLING_TEXT = { self: 'nothing: its own change', known: 'nothing: held already', read: 'read it again', notHeld: 'nothing: not shown here' };
+const NOTIFY_EVENT_TEXT = { partitionCreated: 'partition made', partitionRemoved: 'partition removed', pointChanged: 'space removed' };
+// how long a note changed elsewhere stays lit
+const CHANGE_FRESH_MS = 8000;
+
+// The mode "changes" of a notebook: what the storage point of a partition told this tab, one line
+// per notification, with who made the change (this tab, or another tab, device or program, by
+// the client instance id it carried) and what the page did. It shows how the page tells its own
+// changes from those of others (react-doc: main/doc_page_impl_client_instance.md).
+//
+//   param.partition   the partition (default: the first one a storage point of the page holds)
+//   param.height      the height of the list (default 14rem)
+export const AwsNotebookChanges = observer(function AwsNotebookChanges({ data = {}, config = {} }) {
+  const service = config.objectFrontend;
+  if (!service) return <p className="doc-error">AwsNotebookChanges is a mode of a notebook (ObjectFrontend).</p>;
+  const param = data.param ?? {};
+  const partition = service.partitionList.find((one) => one.id === param.partition) ?? service.partitionList.find((one) => one.storage?.driverPlace === 'page');
+  if (!partition) return <p className="doc-note">No partition of this notebook is held by a storage point of the page: nothing is told.</p>;
+  const remote = partition.storage?.remote;
+  const notify = service.partitionNotifyGet(partition.id);
+  const height = typeof param.height === 'string' && param.height ? param.height : '14rem';
+  const nameOfItem = new Map(service.assetList('note').map((asset) => [asset.itemId ?? asset.item?.itemId, asset.name || asset.key]));
+  return (
+    <div className="aws-notebook">
+      <div className="aws-notebook-head">
+        <span className="aws-notebook-label">Partition</span>
+        <span>{partition.label || partition.id}</span>
+        <span className="aws-notebook-place">held by {partition.storage?.label ?? partition.storage?.pointId}</span>
+        {notify ? (
+          <span className="doc-badge-outline" {...(notify.status === 'open' ? { 'data-primary': true } : {})} title={notify.message}>
+            channel {notify.status === 'open' ? 'open' : NOTIFY_STATUS_TEXT[notify.status] ?? notify.status}
+          </span>
+        ) : null}
+        <span className="aws-notebook-place" title={notify?.clientInstanceId ? `the client instance id of this tab: ${notify.clientInstanceId}` : ''}>
+          this tab: {clientInstanceIdShortText(notify?.clientInstanceId)}
+        </span>
+      </div>
+      {!notify ? (
+        <div className="aws-auth-note">The storage point {partition.storage?.label ?? partition.storage?.pointId} tells nothing: the page asks it at a start and by Refresh (isNotifyEnabled is off in its config).</div>
+      ) : notify.status !== 'open' && notify.message ? (
+        <div className="aws-auth-note">{notify.message}</div>
+      ) : null}
+      <div className="aws-notebook-change-list" style={{ height }}>
+        <table className="aws-notebook-change-table">
+          <thead><tr><th>told</th><th>change</th><th>notes</th><th>by</th><th>this tab</th></tr></thead>
+          <tbody>
+            {(notify?.logList ?? []).map((entry, index) => (
+              <tr key={`${entry.timeReceived}:${index}`} {...(entry.isSelf ? { 'data-self': true } : {})}>
+                <td className="aws-notebook-change-time">{timeTextDisplay(entry.time || entry.timeReceived, { part: 'second', isYearShown: false })}</td>
+                <td>{entry.event === 'partitionChanged' ? `revision ${entry.revision}` : NOTIFY_EVENT_TEXT[entry.event] ?? entry.event}</td>
+                <td className="aws-notebook-change-note">{entry.itemIdList.map((itemId) => nameOfItem.get(itemId) ?? '(gone)').join(', ') || '—'}</td>
+                <td title={`user ${entry.actor.userId || '—'} · client instance ${entry.actor.clientInstanceId || 'none named'}`}>
+                  {entry.isSelf ? 'this tab' : entry.actor.clientInstanceId ? `another tab or device (${clientInstanceIdShortText(entry.actor.clientInstanceId)})` : 'a program'}
+                </td>
+                <td>{NOTIFY_HANDLING_TEXT[entry.handling] ?? entry.handling}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {(notify?.logList ?? []).length === 0 ? (
+          <div className="aws-auth-note aws-notebook-empty">
+            {remote?.status === 'authRequired' ? 'Sign in: the channel opens for the person signed in.' : 'Nothing told yet. Add or change a note here, or in this page open in another tab or on another device.'}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+});
 
 
 // why a note cannot be added or changed now: { action, why }, a short line saying what is needed

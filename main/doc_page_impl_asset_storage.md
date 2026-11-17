@@ -1,4 +1,4 @@
-<!-- Design of the asset storage service layer: where the asset store keeps the bytes of its items. Storage types (contracts made of api sets), storage points, partitions bound to a point, the two local types file-tree and file-pack, the remote types a package brings with a driver of the page, the cache of a remote point, moving a partition between points. Parent document: doc_page_impl_asset.md. Its first user is the frontend object service layer (doc_page_impl_obj_frontend.md); a remote point signs its requests through the auth service layer (doc_page_impl_auth.md). -->
+<!-- Design of the asset storage service layer: where the asset store keeps the bytes of its items. Storage types (contracts made of api sets), storage points, partitions bound to a point, the two local types file-tree and file-pack, the remote types a package brings with a driver of the page, the cache of a remote point, a remote point telling the page of changes (the api set notify), moving a partition between points. Parent document: doc_page_impl_asset.md. Its first user is the frontend object service layer (doc_page_impl_obj_frontend.md); a remote point signs its requests through the auth service layer (doc_page_impl_auth.md), and names the page it serves by its client instance (doc_page_impl_client_instance.md). -->
 
 # Asset Storage Service Layer: Design
 
@@ -43,6 +43,7 @@ The **store** is not a storage point. The store (`local`) is what a reference na
 | which assets an object has in the partition | the item list of the partition (`item-list.yaml`), the object's own record; for a remote point, the records the point keeps with the items | the frontend object layer |
 | what a remote point held when last asked | the cache of the browser: never the truth, checked against the point | the page |
 | who the page is to a remote point | the session of the auth provider the point names ([auth layer](doc_page_impl_auth.md)) | the page driver |
+| which running page made a change | the client instance id the page sent, told back as the actor of a notification ([client instance](doc_page_impl_client_instance.md)) | the page, comparing it with its own |
 
 ## Storage types
 
@@ -65,14 +66,14 @@ any type may add        + backups
 | **pack** | the merged files of a partition | `packInfoGet` (sizes, how much is dead), `packCompact` |
 | **cache** | the local copies of what a remote point holds | `cacheInfoGet`, `cacheRefresh`, `cacheClear` |
 | **auth** | who the page is to a point that asks | `authStatusGet`, `authSignIn`, `authSignOut` |
-| **notify** | a point telling the page of a change made elsewhere | `notifySubscribe`, `notifyUnsubscribe`, `notifyStatusGet` |
+| **notify** | a point telling the page of a change made elsewhere (another tab, device or program), over a channel the page keeps open | `notifyOpen` (the driver), `notifyStateGet`, `partitionNotifyGet` ([Being told of changes](#being-told-of-changes)) |
 | **backup** | copies of whole partitions, of this point or of another | `backupCreate`, `backupList`, `backupRestore`, `backupDelete` |
 
 **Why two common sets.** The item set serves whoever holds an item id: a document, the asset panel, a mode. The partition set serves the frontend objects, which think in partitions: make one, move one whole, find one again. A point is addressed through both, and the item set never needs to know partitions exist.
 
 **A set of its own is asked for, never assumed.** A point says the sets it promises (`apiSetList`), and whoever shows something of a set looks first: a mode shows "last fetched" and a Refresh button only where `cache` is promised, the Asset service tab offers **Compact** only where `pack` is.
 
-**An optional set is turned on per point.** `notify` is not promised by being of a remote type: a point promises it only when its config says `isNotifyEnabled: true` *and* its type and backend offer it. Being told of changes costs something (a connection kept open, a backend that fans changes out), so it is a decision of each point, visible in its file. No type implements it yet ([TODO](doc_page_impl_TODO.md#asset-storage-notify)).
+**An optional set is turned on per point.** `notify` is not promised by being of a remote type: a point promises it only when its config says `isNotifyEnabled: true` *and* its type and backend offer it. Being told of changes costs something (a connection kept open, a backend that fans changes out), so it is a decision of each point, visible in its file, and of each deployment of a backend, which may be made without its channel. A point asking a backend that has none says so where its state is shown, and is asked as before ([Being told of changes](#being-told-of-changes)).
 
 **What is true of a type** is declared with it and reaches the page, so a frontend object can ask what its data stands on:
 
@@ -91,7 +92,7 @@ definedBy             the page itself, or a package
 isImplemented         it has a driver; false: a contract only
 ```
 
-The type `remote` is a **contract without a driver**: it fixes what every remote type promises (the two common sets asked over a network, a cache, a session) and the config keys they share (`url`, `cacheMode`, `isRefreshedOnFocus`, `refreshIntervalSec`, `isNotifyEnabled`). A point is made of a type below it, which brings the driver of one backend. The api set `backup` is a contract too ([TODO](doc_page_impl_TODO.md#asset-storage-backup)).
+The type `remote` is a **contract without a driver**: it fixes what every remote type promises (the two common sets asked over a network, a cache, a session, being told of changes where a point asks) and the config keys they share (`url`, `cacheMode`, `isRefreshedOnFocus`, `refreshIntervalSec`, `isNotifyEnabled`). A point is made of a type below it, which brings the driver of one backend. The api set `backup` is a contract too ([TODO](doc_page_impl_TODO.md#asset-storage-backup)).
 
 ### Storage types of a package
 
@@ -368,14 +369,18 @@ the page
 - **One store, still.** The items of a remote partition join the index of the asset store beside the others, with where they are held (`storage: { pointId, typeId }`) and the place they would have in the folder of their object (`{partition}/{groupPath}`). A reference, the asset panel and a mode read them like any item.
 - **The backend of the asset store routes.** Every call about an item goes to the page driver when a point of the page holds the item, else to the development server (`assetBackendRouteCreate`). The store does not know which half answered.
 - **The structural writes of a frontend object are routed the same way**: a write about a partition a point of the page holds (an asset created, removed, renamed; the partition made, renamed, deleted, moved) is done by the page against the point, checked by the same rules the development server applies (the kinds of the type, a key and a path unique in the object).
+- **A point may keep a channel to the page** (`notify`), on which it tells of what changed elsewhere ([Being told of changes](#being-told-of-changes)).
 
 ### The page driver
 
 The module a storage type names exports a function making one driver per point:
 
 ```text
-driverCreate({ point, credentialGet })      point: the storage point as declared
+driverCreate({ point, credentialGet, clientInstanceIdGet })
+                                            point: the storage point as declared
                                             credentialGet(): the token of the session of point.auth.provider
+                                            clientInstanceIdGet(): the id the page names itself with, sent to a
+                                            backend that takes it (doc_page_impl_client_instance.md)
 every method answers { code, data, message }:
   statusGet()  accountGet()                                         the backend, and who the session is to it
   partitionList()  partitionGet({ partitionId, revisionKnown })     the index of a partition: its records, the
@@ -385,6 +390,9 @@ every method answers { code, data, message }:
   itemCreate  itemUpdate  itemMetaSet  itemMove  itemDelete  itemRestore  itemLockSet  itemRemove  itemImport
   versionCheckout  versionDelete  versionLockSet  versionMetadataSet
   dependencyListSet  dependencyAdd  dependencyRemove  groupMove  recordSet  recordRemove
+optional, the api set notify:
+  notifyOpen({ onNotification, onStateChange })  -> { close() }     a channel kept open, opened again by the
+                                                                    driver when it closes
 ```
 
 The driver is only the wire: how each call is sent to its backend. It keeps no index and no cache, and decides nothing about a session. What an item is and how it behaves is the same as in the local store; the backend applies the rules, so they hold whichever client writes. An item of a point has no name of the store (people name it in its record), and its `groupPath` is its place inside its partition.
@@ -436,7 +444,45 @@ the point does not answer
 - **A refresh is always there**: the api `partitionRefresh` of a mode, **Refresh** in the row of the partition and of the point. It asks the point whether the partition changed, and reads what did.
 - **The cache is the page's, not the driver's.** It is the same for every remote type: an index per partition and the data of the versions read, in IndexedDB (in memory where the browser has none), keyed by the point, its backend and the person signed in. So two people on one browser never read each other's copy.
 - **A cache is never the truth.** It is dropped whole and read again (**Clear**), never edited; a failure of it is swallowed, and the point is read.
-- **Not being told is the default.** A page learns of a change made elsewhere at its next refresh. Being told at once is the optional api set `notify` ([Storage types](#storage-types)).
+- **Not being told is the default.** A page learns of a change made elsewhere at its next refresh. Being told at once is the optional api set `notify` (below).
+
+### Being told of changes
+
+A point whose config says `isNotifyEnabled: true`, of a type and a backend that offer it, keeps a **channel** to the page: while it holds a partition of the page and somebody is signed in to it, its backend tells the page of every change made to those partitions, by another tab of the browser, another device, a program. The page then reads the partition again as a refresh does: one request, cheap while nothing changed. A notification is a hint, never the data, so nothing has to be kept in step between the channel and the reads, and a page that missed one is only late.
+
+<!--renderComp=DiagramText-->
+```text
+ tab A                              backend of the point            tab B
+   │  item/update                         │                           │
+   │  X-Client-Instance-Id: 3k9x…  ──────►│ the write, then to every   │
+   │                                      │ channel of the partition   │
+   │ ◄──── partitionChanged ──────────────┼──── partitionChanged ─────►│
+   │       revision 12, actor 3k9x…       │     revision 12            │
+   ▼                                      │     actor 3k9x…            ▼
+ its own (the id is its own):             │               another instance:
+ its answer brought it, nothing read      │       the partition read again,
+                                          │          its notes lit a moment
+```
+
+```text
+a notification of a partition { event, partitionId, revision, itemIdList, actor }
+  -> no partition of the page                              nothing
+  -> the page holds that revision already                  nothing
+  -> the actor is this client instance                     nothing now: the answer of its write brings it.
+                                                           a moment later (4 s) the page checks it holds the
+                                                           revision told, and reads it if not (an answer lost)
+  -> else                                                  read again (a burst of notifications: one read),
+                                                           and changeElsewhere of the partition says by whom
+the channel opens, the first time and every time after a close
+  -> every partition of the point checked by revision      what changed while it was closed was told to nobody
+a partition removed, the space of the point removed        the partitions concerned read again: found gone
+```
+
+- **The page tells its own changes from the others** by the [client instance](doc_page_impl_client_instance.md): every request carries the id of the page, and the backend writes it into the actor of each notification. The backend tells every channel, the actor's own too; the page compares.
+- **When the channel is kept.** The layer opens one channel per point, while a partition of the page is bound to it and its auth provider has a session; it closes it when nobody is signed in or nothing is held any more, and opens another for another person (a channel is of one account). The driver keeps it open meanwhile: it pings it, and opens it again after it closes, waiting longer after each failure.
+- **Its state** is a state of the page, per point (`notifyStateGet`): `off` (not wanted now, with why), `connecting`, `open` (since when, how many told), `waiting` (opened again in a while), `unsupported` (the type or the backend has no channel: the point is asked as before), `refused`, `error`. The page keeps the last 40 notifications of each point, each with what it did (`self`, `known`, `read`, `notHeld`).
+- **A cache mode `pinned`** trusts the cache until a refresh: the channel does not read the partitions when it opens, and a notification still does (it says the cache is out of date).
+- **What a type brings**: a driver with `notifyOpen`, turning the frames of its backend into notifications of partitions. For `aws-utils.remote` it is the notification channel of the package (`@react-doc/package/aws-utils/doc/notify-contract.md`), one topic per space.
 
 ### Who the page is to a point
 
@@ -487,16 +533,20 @@ A mode works through `config.objectFrontend` and never names a storage point in 
 service.partitionList[i].storage      { pointId, typeId, label, typeLabel, place, driverPlace, isContentSearchable,
                                         apiSetList, isAvailable, unavailableReason, pointIdClaimed, config,
                                         remote?: { status, message, isFromCache, isRefreshing, timeChecked,
-                                                   timeFetched, revision, itemCount } }
+                                                   timeFetched, revision, itemCount,
+                                                   notify?: { status, message, timeOpened },
+                                                   changeElsewhere?: { time, actor, itemIdList, revision } } }
 service.storagePointList              the points the object may bind a partition to
 service.partitionCreate(partition, storagePoint?)
 service.partitionStorageSet(partition, storagePoint, { isSourceKept? })
 service.partitionCopy(partitionFrom, { id?, partition, storagePoint? })
 service.partitionWriteUnavailableReasonGet(partition)     '' when it can be written now
 service.partitionRefresh(partition)   service.partitionSignIn(partition)      for a partition of a point of the page
+service.partitionNotifyGet(partition) what its point told of it: the state of the channel, the id of this page,
+                                      the notifications about it with what the page did (undefined: told nothing)
 ```
 
-`apiSetList` is how a mode learns what more a point offers (a mode showing "last fetched" only where `cache` is promised). A form creating something says where it goes with the storage point when that is not file-tree ("goes to item/packed/book/, tracked by git, held by file-pack", `objectFrontendPartitionPlaceText`).
+`apiSetList` is how a mode learns what more a point offers (a mode showing "last fetched" only where `cache` is promised). `remote.changeElsewhere` lets a mode say that something changed in another tab or device, and light up what (the notebook of `aws-utils` lights the notes a notification names). A form creating something says where it goes with the storage point when that is not file-tree ("goes to item/packed/book/, tracked by git, held by file-pack", `objectFrontendPartitionPlaceText`).
 
 **Whether a partition can be written is asked per partition.** `isWritable` of an object says that something of it can be written; `partitionWriteUnavailableReasonGet` says why one partition cannot: the page (no development server, a package) for a partition in its folders, the point (nobody signed in, out of reach) for a remote one. A mode whose data lies in a remote partition offers its writes by this, and so works on a built page.
 
@@ -505,7 +555,7 @@ The routes are those of the [frontend object layer](doc_page_impl_obj_frontend.m
 ## In the page
 
 - **Asset service tab**, group **Storage points**: the points (id, type, who declares it, state, what it holds), the partitions bound to a point (object, partition, point, items, size, dead bytes, **Compact**), and the storage types with what each promises. The points are declared in the yaml files; the tab shows them and the problems of those files.
-- The same group, **Points the page reaches itself**: one block per remote point with where it is reached, who is signed in to it (`AuthSessionLine`, with Sign in / Sign out), whether its backend answers (**Check**), what the browser keeps of it (**Refresh**, **Clear**), and the partitions it holds for the objects of the page with their state, revision and when they were fetched.
+- The same group, **Points the page reaches itself**: one block per remote point with where it is reached, who is signed in to it (`AuthSessionLine`, with Sign in / Sign out), whether its backend answers (**Check**), what the browser keeps of it (**Refresh**, **Clear**), how it learns of changes (asked, or told: the state of its channel and the client instance of this tab), the partitions it holds for the objects of the page with their state, revision and when they were fetched, and the last notifications it told, each with who made the change (this tab, another instance) and what the page did.
 - <a id="what-a-type-adds-to-the-tab"></a>**What a type adds to the tab.** A type may name a component (`panelComp`), drawn under the block of each of its points in the placement `assetStoragePoint` with `data: { pointId, docPageAlias }`: what only that backend has (for `aws-utils.remote`: the account, the space of the point, the partitions of the space no object reads).
 - **Frontend objects tab**, table **Partitions** of an object: the storage point of each partition, with the state of a remote one and **Refresh** or **Sign in**; **Storage…**, which asks for a point in the row (and whether to keep a copy, away from a remote point) and moves the whole partition; **Copy…**, which copies its assets into another partition; **Create or claim** for a partition its type binds to a remote point.
 
@@ -533,14 +583,17 @@ frontend/plugin/doc-asset-storage.test.js        types, points, the pack driver,
 frontend/src/store/DocAssetStore.ts              storage, storageOfBindGet, partitionInfoGet; its backend routed (backendBase, remote)
 frontend/src/store/DocAssetRemoteStore.ts        the page's half: the page drivers, the state of the partitions of the points of
                                                  the page, reading and writing their items, the structural writes of an object
-                                                 about them, the cache api set, moving a partition through the page
+                                                 about them, the cache api set, moving a partition through the page, the channel
+                                                 of each point that tells of changes (notifySync, notifyAccept)
+frontend/src/lib/doc-client-instance.js          the id the page names itself with (doc_page_impl_client_instance.md)
 frontend/src/lib/doc-asset-backend.js            assetBackendRouteCreate: the backend routing by item
 frontend/src/lib/doc-asset-storage-cache.js      the cache of the remote points: IndexedDB, or memory
 frontend/src/store/DocObjectFrontendStore.ts     the storage of each partition, partitionStorageSet, storagePointListGet
 comp-doc/settings/AssetStoreSettings.jsx         AssetStoragePointArea, AssetStorageRemoteArea (the points the page reaches)
 comp-doc/settings/ObjectFrontendSettings.jsx     the storage column of the Partitions table: Storage…, Copy…, Create or claim,
                                                  the state of a remote partition
-package/aws-utils/asset-storage-type.yaml        the storage type aws-utils.remote; its driver and its panel in comp-mdx/storage/
+package/aws-utils/asset-storage-type.yaml        the storage type aws-utils.remote; its driver and its panel in comp-mdx/storage/, the
+                                                 channel of its notifications in comp-mdx/notify/
 .doc-workspace/asset-storage.yaml                the demonstration's workspace point (pack-small)
 example_doc/.doc-page/asset-storage.yaml         a point of a contract type (team-remote)
 example_doc/.doc-page/object-frontend/w5j7ozoijzl--Reading list/item/packed/   a partition held by file-pack

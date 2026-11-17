@@ -14,7 +14,7 @@ import {
 import {
   OBJECT_FRONTEND_CONFIG_FILE_NAME, OBJECT_FRONTEND_FOLDER_NAME, OBJECT_FRONTEND_ITEM_FOLDER_NAME, OBJECT_FRONTEND_KEY_REGEX, OBJECT_FRONTEND_LIST_NAME, OBJECT_FRONTEND_META_NAME,
   OBJECT_FRONTEND_PARTITION_REGEX, OBJECT_FRONTEND_ROLE_ENTRY, OBJECT_FRONTEND_TYPE_ROOT,
-  objectFrontendAssetAcceptCheck, objectFrontendAssetKeyFree, objectFrontendAssetNamingRead, objectFrontendAssetKindListResolve, objectFrontendAssetListMerge, objectFrontendAssetPathNormalize,
+  objectFrontendAssetAcceptCheck, objectFrontendAssetKeyFree, objectFrontendAssetNamingRead, objectFrontendKindListResolve, objectFrontendAssetListMerge, objectFrontendAssetPathNormalize,
   objectFrontendEntryParse, objectFrontendEntryTextBuild, objectFrontendListCovers, objectFrontendListGroupPathGet, objectFrontendListParse, objectFrontendListTextBuild, objectFrontendRefBuild,
   objectFrontendPartitionGroupPathBuild, objectFrontendPartitionListResolve, objectFrontendDocListBuild,
 } from '../src/lib/doc-object-frontend.js';
@@ -384,10 +384,13 @@ export type ObjectFrontendWriteResult = {
 
 // a new object of a type, in a doc page: its entry asset in the item folder of a new
 // object folder, then object.yaml beside it. object.yaml is written last: it is what
-// makes the object exist; when it fails the new folder goes away again
+// makes the object exist; when it fails the new folder goes away again.
+// input.id: an id made before, for a script making the same object again (a doc page generated
+// anew whose objects other things are filed under, as data at a storage point); it is refused
+// when it is not an id or any doc page uses it, deleted ones included. Left out, the id is made.
 export function objectFrontendCreate(
   context: WriteContext,
-  input: { docPageAlias: string; typeId: string; name: string; description?: string; metadata?: Record<string, unknown> },
+  input: { docPageAlias: string; typeId: string; name: string; description?: string; metadata?: Record<string, unknown>; id?: string },
 ): ObjectFrontendWriteResult {
   const { store, config } = context;
   const docPage = docPageWritableGet(config, input.docPageAlias);
@@ -397,7 +400,9 @@ export function objectFrontendCreate(
   if (!typeDeclaredIsFrontend(config.typeList, typeId)) throw new AssetError(-1, `the type ${typeId} is no type of a frontend object: it is not declared below ${OBJECT_FRONTEND_TYPE_ROOT}`);
   const name = nameNormalize(input.name);
   const idUsedSet = new Set(config.docPageList.flatMap((item) => [...item.objectList.map((object) => object.id), ...item.objectIdDeletedList]));
-  const id = idMs48Create((idOne: string) => idUsedSet.has(idOne));
+  if (input.id !== undefined && !idMs48Is(input.id)) throw new AssetError(-1, `${String(input.id)} is not an id of an object`);
+  if (input.id !== undefined && idUsedSet.has(input.id)) throw new AssetError(-1, `the id ${input.id} is used already`);
+  const id = input.id ?? idMs48Create((idOne: string) => idUsedSet.has(idOne));
   const ref = objectFrontendRefBuild(id);
   const entryText = objectFrontendEntryTextBuild({
     name, type: typeId, description: input.description ?? '', assetList: [], metadata: input.metadata ?? {},
@@ -510,10 +515,12 @@ export function objectFrontendMetaSet(
 }
 
 // what the type of an object accepts, or the write stops here (before anything is written)
-function assetAcceptRequire(context: WriteContext, entry: any, input: { kind?: unknown; lang?: unknown; pathList?: unknown; isIncoming?: boolean }) {
+// (text: the text of a new item, checked against the schema of its kind; contentType, fileExt, size:
+// of bytes, checked against the content of its kind)
+function assetAcceptRequire(context: WriteContext, entry: any, input: { kind?: unknown; lang?: unknown; pathList?: unknown; isIncoming?: boolean; text?: string; contentType?: unknown; fileExt?: unknown; size?: number }) {
   const { typeList } = context.config;
   const pathList = Array.isArray(input.pathList) ? input.pathList.map((one) => objectFrontendAssetPathNormalize(one).path) : [];
-  const result = objectFrontendAssetAcceptCheck(objectFrontendAssetKindListResolve(entry.type, typeList), { ...input, pathList });
+  const result = objectFrontendAssetAcceptCheck(objectFrontendKindListResolve(entry.type, typeList), { ...input, pathList });
   if (result.message) throw new AssetError(-1, result.message);
   return result;
 }
@@ -534,7 +541,11 @@ export function objectFrontendAssetCreate(
   const listing = listingRead(context, decl);
   const { meta, entry } = listing;
   const lang = String(input.lang ?? 'yaml');
-  const { kind, kindDeclared } = assetAcceptRequire(context, entry, { kind: input.kind, lang, pathList: input.pathList });
+  const isBytes = typeof input.dataBase64 === 'string';
+  const { kind, kindDeclared } = assetAcceptRequire(context, entry, {
+    kind: input.kind, lang, pathList: input.pathList,
+    ...(isBytes ? { contentType: input.contentType, fileExt: input.fileExt, size: Buffer.byteLength(input.dataBase64 as string, 'base64') } : { text: String(input.text ?? '') }),
+  });
   if (input.key !== undefined && input.key !== '' && !OBJECT_FRONTEND_KEY_REGEX.test(input.key)) {
     throw new AssetError(-1, 'a key is letters, digits, "_", "-" and "."');
   }
@@ -638,7 +649,7 @@ export function objectFrontendAssetAttach(
   if (assetMeta.owner?.role === OBJECT_FRONTEND_ROLE_ENTRY) throw new AssetError(-1, `the item is the entry of ${assetMeta.owner.ref}`);
   const ownerOther = assetMeta.owner && assetMeta.owner.ref !== ref ? assetMeta.owner.ref : '';
   if (ownerOther && input.isOwnerReplaced !== true) throw new AssetError(-1, `the item belongs to ${ownerOther}: it is taken from there with isOwnerReplaced`);
-  const { kind, kindDeclared } = assetAcceptRequire(context, entry, { kind: input.kind, lang: assetMeta.lang, pathList: input.pathList, isIncoming: true });
+  const { kind, kindDeclared } = assetAcceptRequire(context, entry, { kind: input.kind, lang: assetMeta.lang, pathList: input.pathList, isIncoming: true, contentType: (assetMeta as any).contentType, fileExt: (assetMeta as any).fileExt });
   const key = objectFrontendAssetKeyFree(listing, input.key ?? '', kind);
   if (!key) throw new AssetError(-1, `the object has an asset of the key ${input.key} already`);
   const naming = assetNamingRead(listing.assetList, '', input);
@@ -996,7 +1007,7 @@ export function objectFrontendDocFind(context: WriteContext, internalPath: strin
   if (!decl || decl.docPageAlias !== parsed.docPageAlias) return undefined;
   const { store } = context;
   const listing = listingRead(context, decl);
-  const kindList = objectFrontendAssetKindListResolve(listing.entry.type, context.config.typeList) ?? [];
+  const kindList = objectFrontendKindListResolve(listing.entry.type, context.config.typeList) ?? [];
   const langOf = (asset: any) => {
     try { return store.itemGet(asset.itemId).lang; } catch { return ''; }
   };

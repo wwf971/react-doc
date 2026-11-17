@@ -15,13 +15,51 @@ typeList:
       - { id: shared, label: Shared, description: "layers kept with the workspace, tracked by git" }
       - { id: local, label: Local, description: "layers of this checkout or machine, kept out of git", isGitIgnored: true, isDefault: true }
     # what it holds (main/doc_page_impl_obj_frontend.md#what-a-type-accepts)
-    assetKindList:
+    kindList:
       # one layer: { label, order, isDisabled, value: a nested mapping }; key {partition}.{name},
       # path /layer/{partition}/{name}
-      - { id: config-layer, label: Config layer, langList: [yaml], pathPrefix: /layer/, groupPath: layer }
+      # (each with a schema: react-doc main/doc_page_impl_type.md#kinds-of-data-items; what AppConfigData.js
+      # reads, so a layer written by a backend of its own is checked when the page reads it)
+      - id: config-layer
+        label: Config layer
+        content:
+          form: data
+          langList: [yaml]
+          schema:
+            type: object
+            properties:
+              label: { type: string }
+              order: { type: number }
+              isDisabled: { type: boolean }
+              value: { type: [object, "null"] }
+        pathPrefix: /layer/
+        groupPath: layer
       # the keys an app declares: { app, keyList: [{ key, type, default, label, description,
       # valueList, min, max }] }; key declare.{app}, written by the app itself, in partition shared
-      - { id: config-declare, label: Declared keys, langList: [yaml], pathPrefix: /declare/, groupPath: declare }
+      - id: config-declare
+        label: Declared keys
+        content:
+          form: data
+          langList: [yaml]
+          schema:
+            type: object
+            properties:
+              app: { type: string }
+              keyList:
+                type: array
+                items:
+                  type: object
+                  required: [key, type]
+                  properties:
+                    key: { type: string, minLength: 1 }
+                    type: { enum: [boolean, number, string, enum, string-list] }
+                    label: { type: string }
+                    description: { type: string }
+                    valueList: { type: array }
+                    min: { type: number }
+                    max: { type: number }
+        pathPrefix: /declare/
+        groupPath: declare
     modeList:
       - id: final
         label: Final config

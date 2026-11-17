@@ -1,7 +1,7 @@
 import { Boxes, LayoutList, SquarePen } from '../../frontend/UICommon.js';
 import { compDefine } from '../registry/comp-registry.js';
 import {
-  OBJECT_FRONTEND_PLACEMENT, OBJECT_FRONTEND_TYPE_INNER, OBJECT_FRONTEND_TYPE_ROOT, objectFrontendBlockTextBuild,
+  OBJECT_FRONTEND_PLACEMENT, OBJECT_FRONTEND_TYPE_INNER, OBJECT_FRONTEND_TYPE_ROOT, objectFrontendBlockRead, objectFrontendBlockTextBuild,
 } from '../../frontend/src/lib/doc-object-frontend.js';
 import { ObjectFrontend } from './ObjectFrontend.jsx';
 import { ObjectFrontendOverview } from './ObjectFrontendOverview.jsx';
@@ -36,6 +36,10 @@ export const compObjectFrontend = compDefine(ObjectFrontend, {
     editModeList: [
       { id: 'entry', label: 'Object and mode', description: 'the object, its mode and the parameters', icon: SquarePen, isDefault: true },
     ],
+    // a block is called by the type of its object, since frontend objects of many types are
+    // written with this one component: "ObjectFrontend · Zettelkasten", and on hover the
+    // object, its type id and the mode drawn
+    blockLabelGet: objectFrontendBlockLabelGet,
     // env.objectRef: the object picked in the insert menu
     sourceDefaultCreate: ({ objectRef }) => ({
       lang: 'yaml',
@@ -44,6 +48,22 @@ export const compObjectFrontend = compDefine(ObjectFrontend, {
     }),
   },
 });
+
+// what a block of ObjectFrontend is called in edit mode (expose.blockLabelGet)
+function objectFrontendBlockLabelGet(component, { stores } = {}) {
+  const store = stores?.objectFrontendStore;
+  const block = objectFrontendBlockRead(component.raw ?? '');
+  const name = component.compName || 'ObjectFrontend';
+  if (!store || !block.object) return '';
+  const state = store.objectGet(block.object);
+  if (state.status !== 'found') return { text: `${name} · ${block.object}`, title: state.message || `${block.object}: ${state.status}` };
+  const typeLabel = store.typeLabelGet(state.typeId) || state.typeId;
+  const mode = store.modeResolve(state, block.mode, block.param).mode;
+  return {
+    text: `${name} · ${typeLabel}`,
+    title: `${state.name || state.id} (${state.ref}), an object of the type ${typeLabel} (${state.typeId})${mode ? `, drawn in its mode ${mode.label || mode.id}` : ''}`,
+  };
+}
 
 export const compObjectFrontendOverview = compDefine(ObjectFrontendOverview, {
   placementList: [OBJECT_FRONTEND_PLACEMENT],

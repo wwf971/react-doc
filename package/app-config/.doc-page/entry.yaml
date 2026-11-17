@@ -5,6 +5,7 @@
 # design: main/doc_page_impl_package.md#a-package-as-a-doc-page
 docEntry:
   title: "App config: settings as stacked config layers of a frontend object"
+  titleShort: app-config
   homeDoc: ~app-config/comp-mdx/app-config/comp-app-config.md
 source:
   file: ./source.yaml

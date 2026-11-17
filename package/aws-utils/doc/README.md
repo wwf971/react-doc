@@ -1,4 +1,4 @@
-<!-- Root document of the package aws-utils: what it brings to a doc page, the concepts, and how its parts work together. The wire contracts are documents of their own beside it: storage-contract.md, auth-contract.md. Design of the package system: @react-doc/main/doc_page_impl_package.md -->
+<!-- Root document of the package aws-utils: what it brings to a doc page, the concepts, and how its parts work together. The wire contracts are documents of their own beside it: storage-contract.md, auth-contract.md, notify-contract.md. Design of the package system: @react-doc/main/doc_page_impl_package.md -->
 
 # aws-utils: AWS Behind a Doc Page
 
@@ -37,12 +37,16 @@ a doc page
 | **user** | a person as our services know them: a user id of our own, mapped to identities (a Cognito user now) | the user table of the auth backend |
 | **role** | a name an account holds that says what it may do: `doc-storage` may use the storage service, `account-admin` manages the accounts. A term of the [auth layer](../../../main/doc_page_impl_auth.md#accounts-and-roles); this package keeps a role as a group of the user pool | the user pool; the token of a session carries them |
 | **account admin** | an account like any other that holds the role `account-admin` and has MFA on: issues, changes and revokes accounts. There may be several | the account service |
+| **client instance** | one running page (a tab, an app), named by a temporary id it sends with each request; a service tells it back as the actor of a change ([react-doc](../../../main/doc_page_impl_client_instance.md)) | `X-Client-Instance-Id` of a request |
+| **notification channel** | a WebSocket a page keeps open to a service, which tells it of changes as they happen; on where the deployment has it and the page asks for it ([its contract](notify-contract.md)) | `notify` in `apiSetList` of `/status`; `config.isNotifyEnabled` of a point |
 
 The two backends are sub-projects of the repository `aws_oa`, each written to answer a contract of this package:
 
 ```text
 storage-contract.md  ◄── aws_oa/_5_doc_storage     the storage service
 auth-contract.md     ◄── aws_oa/_0_auth_cognito    the user pool, the user table, the account service
+notify-contract.md   ◄── aws_oa/aws_utils          the notification channel any service may offer (the storage
+                         notify_channel_util.py    service does, when its config turns it on)
 ```
 
 A contract is the source of truth: a change is written into it first, and the backend follows. How the storage service is built on AWS, drawn at several scales in one viewport (who talks to whom, its resources, one request step by step, the inside of its table and bucket), is [Storage Service Architecture](storage-architecture.md), drawn with the AWS cards of the package `cloud-dev-vis`.
@@ -76,6 +80,7 @@ nobody is signed in
 - **What travels how.** Small data inside the request; a large version through a signed S3 url, straight between the browser and S3. The limits are the service's (`GET /status`).
 - **Where it is kept** is another thing: a row of the table or an object of the bucket, by the size, unless the item prefers one (`storagePreference: database | objectStorage`); each version says where its bytes went ([the contract](storage-contract.md#where-the-bytes-are-kept)). The drive of the package asset-service asks for object storage for large uploads.
 - **The panel of a point** (`AwsStoragePointPanel`, in the Asset service tab): the account at the service, the space of the point with what it holds, and the partitions of that space no object of the page reads, each restored or removed for good.
+- **Being told of changes.** A point with `isNotifyEnabled: true`, on a deployment that has the channel, keeps a WebSocket to the service on the space of the point (`space/{key}`): a note added on the phone shows on the laptop within a second, and a tab does not read again what it wrote itself, by its client instance ([the contract](storage-contract.md#notifications)). A deployment made without the channel answers so, and the page asks as before.
 
 Everything a request looks like is in [the storage contract](storage-contract.md).
 
@@ -131,7 +136,7 @@ Accounts                    user name, name, email, state, roles, MFA, created
 
 ## The notebook
 
-`aws-utils.notebook` is a small type that makes the rest tangible: notes kept in the partitions of one object, `local` (the folders of the doc page) and `cloud` (meant for a storage point). Its mode `notes` lists the notes of one partition and adds, edits and removes them through the api of a mode, which is the same for both. A doc page binds `cloud` to its storage point with a type of its own:
+`aws-utils.notebook` is a small type that makes the rest tangible: notes kept in the partitions of one object, `local` (the folders of the doc page) and `cloud` (meant for a storage point). Its mode `notes` lists the notes of one partition and adds, edits and removes them through the api of a mode, which is the same for both; where the point tells of changes it says **live**, and lights a note another tab or device changed. Its mode `changes` lists what the point told this tab, with who made each change (this tab, another instance) and what the page did. A doc page binds `cloud` to its storage point with a type of its own:
 
 ```yaml
 # .doc-page/type.yaml of a doc page
@@ -158,8 +163,9 @@ doc-package.yaml           the package
 type.yaml                  the types of objects: aws-utils.auth-cognito, aws-utils.notebook
 asset-storage-type.yaml    the storage type aws-utils.remote, and the module of its driver
 auth-kind.yaml             the auth kind cognito, the type of its providers, and its module
-comp-mdx/                  the components (the modes, the panel) and the modules above
-doc/                       this document, the two contracts, first use
+comp-mdx/                  the components (the modes, the panel) and the modules above; notify/: the page's end of
+                           a notification channel (notify-channel.js)
+doc/                       this document, the three contracts, first use
 script-demo/               demo-create.mjs: makes a small doc page using a deployment of one's own
 ```
 
@@ -167,7 +173,6 @@ script-demo/               demo-create.mjs: makes a small doc page using a deplo
 
 ## What is left for later
 
-- **Being told of a change.** A point is asked; the service never calls the page. Telling the page (the api set `notify`, turned on per point with `config.isNotifyEnabled`) is reserved in the contract and not built. It would matter where waiting for a refresh is too slow: two people editing one document at once, the same notebook open on two devices, a dashboard watching data a job writes, comments and presence. On AWS it would be a WebSocket api of API Gateway fed by the stream of the table.
 - **A space shared between accounts.** A space belongs to one account. Sharing one (a team's partitions) needs members and roles on a space, and a point naming a space by its id instead of a key of the caller's account.
 - **More identity providers.** The user table already maps one user to several identities. Missing: another auth kind (Google, a self-hosted provider) or the user pool federating one, and a route of the account service linking an identity to an existing user.
 - **Which consumer may use which session.** Every part of the page may ask a session for a credential today; a consumer says who it is, so a policy has what it needs ([the auth layer](../../../main/doc_page_impl_auth.md#what-is-left-for-later)).

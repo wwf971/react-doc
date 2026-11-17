@@ -11,16 +11,37 @@ typeList:
     # a note are documents (isDoc): Markdown items the object registers with the source of the
     # page, so their text is rendered as a document and links to them are ordinary links
     # (main/doc_page_impl_obj_frontend.md#documents-of-an-object)
-    assetKindList:
+    kindList:
       # the document path is a system of its own (docPath): a zettel stands at card/{key}.md wherever
       # its asset path is, so a zettel given another container breaks no link by path
-      - { id: zettel, label: Zettel, langList: [md, mdx], pathPrefix: /zettel/, groupPath: zettel, isDoc: true, docPath: "card/{key}" }
-      - { id: question, label: Question, langList: [md, mdx], pathPrefix: /question/, groupPath: question, isDoc: true, docPath: "question/{key}" }
-      - { id: note, label: Note, langList: [md], pathPrefix: /note/, groupPath: note, isDoc: true, docPath: "note/{key}" }
+      - { id: zettel, label: Zettel, content: { form: text, langList: [md, mdx] }, pathPrefix: /zettel/, groupPath: zettel, isDoc: true, docPath: "card/{key}" }
+      - { id: question, label: Question, content: { form: text, langList: [md, mdx] }, pathPrefix: /question/, groupPath: question, isDoc: true, docPath: "question/{key}" }
+      - { id: note, label: Note, content: { form: text, langList: [md] }, pathPrefix: /note/, groupPath: note, isDoc: true, docPath: "note/{key}" }
       # a document of the box that is not a zettel: its home document (metadata.docHome of the object),
       # which holds an explorer block and is what a link from outside the box opens
-      - { id: page, label: Page, langList: [md, mdx], pathPrefix: /page/, groupPath: page, isDoc: true }
-      - { id: progress, label: Progress, langList: [yaml], pathPrefix: /progress, groupPath: progress }
+      - { id: page, label: Page, content: { form: text, langList: [md, mdx] }, pathPrefix: /page/, groupPath: page, isDoc: true }
+      # how the questions went for the reader of this checkout: means something inside its box only, so
+      # it is not registered (react-doc: main/doc_page_impl_type.md#kinds-of-data-items); its shape is what
+      # ZettelStore.progressSet writes, checked on every write
+      - id: progress
+        label: Progress
+        isInternal: true
+        content:
+          form: data
+          langList: [yaml]
+          schema:
+            type: object
+            properties:
+              statusByQuestion:
+                type: object
+                additionalProperties:
+                  type: object
+                  required: [status]
+                  properties:
+                    status: { enum: [right, wrong, review] }
+                    time: { type: string }
+        pathPrefix: /progress
+        groupPath: progress
     # where its items lie (main/doc_page_impl_obj_frontend.md#partitions): the zettels and questions,
     # which are the content, tracked; what a reader writes while studying (notes, how each
     # question went), kept out of git with its item list

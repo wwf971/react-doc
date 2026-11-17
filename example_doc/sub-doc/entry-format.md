@@ -30,6 +30,8 @@ sidePanelById:                   # the side panels of the document
       - doc: ~sub-doc/including.md
 ```
 
+The title also names the tab of the browser, with the document shown: look at the tab of this one. A long title, such as `"Zettelkasten: linked zettels kept as a frontend object"`, gets a short form beside it, `titleShort: Zettelkasten`, which the tab uses instead; the development server puts the site first (`React Doc Test · The Entry File`), a build the document first.
+
 ## Splitting the declaration
 
 Each section can live in its own file, which the entry names, and this is the recommended form for a doc page of any size. The demonstration page's `.doc-page/entry.yaml` does exactly this: `source: { file: ./source.yaml }`, `tag: { file: ./tag.yaml }`, `config: [{ file: ./config.yaml }, ...]`, and a side panel declared as a reference, `main: { file: ./side-panel.yaml }`, to a resource file whose `sidePanelById.main` holds the tree. All of them sit beside the entry in `.doc-page/`.

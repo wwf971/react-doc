@@ -113,7 +113,8 @@ Much of the page depends on where it runs: a document can be edited, a file crea
 ```text
 virtual module docEnv { kind }, subscribeDocServer  +  the endpoints DocPageMdx is given
         ▼
-DocEnvStore   kind          viteDevServer | staticBuild   (lib/doc-env.js: one entry per kind, more can be added)
+DocEnvStore   kind          viteDevServer | staticBuild   (lib/doc-env.js: one entry per kind, more can be added;
+                            each with its capabilities and the order of the tab title, #the-tab-title)
               isCapable(c)  sourceWrite  files created in the source
                             edit         documents and doc page yaml written in place (edit mode, side panel, config)
                             asset        the asset api (else the snapshot bundled into a build)
@@ -135,7 +136,7 @@ A kind offers a set of capabilities; a capability that needs an api is on only w
 
 ```yaml
 workspace:
-  dir: ..                  # the workspace folder: .doc-workspace/workspace.yaml, docPageList: [{ alias, dir | file, sidePanel? }], title?, homeDoc?, homeItem?
+  dir: ..                  # the workspace folder: .doc-workspace/workspace.yaml, docPageList: [{ alias, dir | file, sidePanel? }], title?, titleShort?, homeDoc?, homeItem?
 # or
 docEntry:
   dir: ../example_doc      # the entry is found in it: .doc-page/entry.yaml  (or file: <entry file>)
@@ -143,7 +144,25 @@ docEntry:
   # sidePanel: compact     # optional: one of the entry's side panels instead of its default
 ```
 
-A doc page is a self-contained folder, and every doc page of the workspace has an **alias**, unique in it. The entry is a YAML file marked by a `docEntry` section, kept as `.doc-page/entry.yaml` in the doc page folder by convention. It declares the document's `source` rules, its `tag` definitions, its `config`, and its side panels (`sidePanelById`), each section inline or, as recommended, in a file of its own beside it; a side panel includes the side panel of another doc page (named by its file or its folder, with the alias that doc page gets), so a document is composed of self-contained doc pages, each of which can also be deployed alone. A doc page reached from several places is one doc page of the workspace. The entry supplies `siteTitle`, `homeDoc`, and `homeItem` when `config.yaml` and the workspace set none. The concepts and the workspace file are specified in [Doc page source service layer](doc_page_impl_source.md#the-concepts); the grammar of the entry, the loading order, and the inclusion forms in [The document entry](doc_page_impl_side_panel.md#the-document-entry); the folder layout and how a folder leads to its entry in [The doc page folder](doc_page_impl_dir.md).
+A doc page is a self-contained folder, and every doc page of the workspace has an **alias**, unique in it. The entry is a YAML file marked by a `docEntry` section, kept as `.doc-page/entry.yaml` in the doc page folder by convention. It declares the document's `source` rules, its `tag` definitions, its `config`, and its side panels (`sidePanelById`), each section inline or, as recommended, in a file of its own beside it; a side panel includes the side panel of another doc page (named by its file or its folder, with the alias that doc page gets), so a document is composed of self-contained doc pages, each of which can also be deployed alone. A doc page reached from several places is one doc page of the workspace. The entry supplies `siteTitle` (with its short form, [The tab title](#the-tab-title)), `homeDoc`, and `homeItem` when `config.yaml` and the workspace set none. The concepts and the workspace file are specified in [Doc page source service layer](doc_page_impl_source.md#the-concepts); the grammar of the entry, the loading order, and the inclusion forms in [The document entry](doc_page_impl_side_panel.md#the-document-entry); the folder layout and how a folder leads to its entry in [The doc page folder](doc_page_impl_dir.md).
+
+### The tab title
+
+The tab of the browser names the site and the document shown, so that a tab is told from the others in a crowded tab bar, where only its start shows:
+
+<!--renderComp=DiagramText-->
+```text
+site      siteTitleShort, else siteTitle: config.yaml, else the workspace file,
+          else the first doc page (titleShort / title of the same place)
+document  the label of the side-panel item shown, else the title of the
+          document (its frontmatter title, else its first # heading)
+
+development server   cv · README     the site first: several doc pages are
+                                     open side by side while they are tested
+build                README · cv     the document first, as sites do
+```
+
+A **short title** is the title in a few words, for where the whole one does not fit: an entry with `title: "Zettelkasten: linked zettels kept as a frontend object"` adds `titleShort: Zettelkasten`. It shortens the title written in the same place, so the two go together: a workspace that sets a title of its own and no short one has no short title (not the one of its first doc page), and a short title without a title beside it is refused when the page loads. The html served already holds the site (`transformIndexHtml` of the plugin), so the tab is named while the first load after a start waits; the page then follows the navigation (`DocTabTitle`), in the order its environment kind says (`tabTitleOrder` in `lib/doc-env.js`). `DocPageMdx` names the tab only when its host asks (`config.isTabTitleSet`, which the standalone entry of every launch and build sets): an app embedding the page keeps its own title.
 
 ## Source rules
 

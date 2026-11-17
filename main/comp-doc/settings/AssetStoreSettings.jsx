@@ -12,6 +12,7 @@ import { AuthSessionLine } from '../auth/AuthSessionLine.jsx';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import '../edit/DocEdit.css';
 import { timeTextDisplay } from '../../frontend/src/lib/time-text.js';
+import { clientInstanceIdShortText } from '../../frontend/src/lib/doc-client-instance.js';
 import './DocSettings.css';
 
 // The "Asset service" tab of the settings panel (asset service layer) (design:
@@ -131,6 +132,15 @@ const REMOTE_STATUS_TEXT = {
   idle: 'not read', loading: 'reading', ready: 'read', absent: 'not at the point yet', authRequired: 'signed out',
   forbidden: 'not allowed', unreachable: 'out of reach', error: 'failed',
 };
+
+// the channel of a point telling the page of changes (the api set notify), and what the page did
+// with each notification
+const NOTIFY_STATUS_TEXT = {
+  off: 'off', connecting: 'opening', open: 'open', waiting: 'opening again', unsupported: 'not offered',
+  refused: 'refused', closed: 'closed', error: 'failed',
+};
+const NOTIFY_HANDLING_TEXT = { self: 'its own: nothing read', known: 'held already', read: 'read again', notHeld: 'not read by this page' };
+const NOTIFY_LOG_SHOWN_MAX = 8;
 
 // the placement a storage type's own panel is rendered in (panelComp of its declaration)
 export const ASSET_STORAGE_POINT_PLACEMENT = 'assetStoragePoint';
@@ -517,6 +527,8 @@ const AssetStorageRemotePoint = observer(function AssetStorageRemotePoint({ poin
           </button>
           <button type="button" className="doc-button" title="drop what this browser keeps of the point, and read it again" onClick={() => void assetRemoteStore.cacheClear(point.id)}>Clear</button>
         </span>
+        <span className="doc-asset-muted">changes</span>
+        <AssetStorageNotifyLine point={point} />
       </div>
       {partitionList.length > 0 ? (
         <div className="doc-asset-table-scroll">
@@ -543,9 +555,67 @@ const AssetStorageRemotePoint = observer(function AssetStorageRemotePoint({ poin
       ) : (
         <p className="doc-note">No partition of an object of this page is bound to it. A partition is bound in the Frontend objects tab (its row, Storage…), or by its type (storagePoint of partitionList).</p>
       )}
+      <AssetStorageNotifyLog point={point} />
       {type?.panelComp && point.status === 'ready' ? (
         <RegisteredComp compName={type.panelComp} placement={ASSET_STORAGE_POINT_PLACEMENT} input={{ data: { pointId: point.id, docPageAlias: point.docPageAlias } }} />
       ) : null}
+    </div>
+  );
+});
+
+// how the page learns of changes made elsewhere: asked (a page start, a refresh), or told over the
+// channel of the point (isNotifyEnabled), with the id this tab names itself with
+const AssetStorageNotifyLine = observer(function AssetStorageNotifyLine({ point }) {
+  const { assetRemoteStore } = useDocStores();
+  if (point.config?.isNotifyEnabled !== true) {
+    return <span className="doc-asset-muted" title="config.isNotifyEnabled of the point turns notifications on, where its backend offers them">asked at a page start and by Refresh; not told (notifications off)</span>;
+  }
+  const notify = assetRemoteStore.notifyStateGet(point.id);
+  const isFailed = notify.status === 'unsupported' || notify.status === 'refused' || notify.status === 'error';
+  return (
+    <span className="doc-settings-remote-point-row">
+      <span className="doc-badge-outline" {...(notify.status === 'open' ? { 'data-primary': true } : {})} {...(isFailed ? { 'data-error': true } : {})}>
+        told · {NOTIFY_STATUS_TEXT[notify.status] ?? notify.status}
+      </span>
+      {notify.message ? <span className={isFailed ? 'doc-settings-tab-issue' : 'doc-asset-muted'}>{notify.message}</span> : null}
+      {notify.status === 'open' ? <span className="doc-asset-muted">since {timeTextDisplay(notify.timeOpened, { part: 'second', isYearShown: false })} · {notify.countReceived} told</span> : null}
+      <span className="doc-asset-muted" title={`the client instance id of this tab: ${assetRemoteStore.clientInstanceId}. a change it made is told back with this id, and not read again`}>
+        this tab: {clientInstanceIdShortText(assetRemoteStore.clientInstanceId)}
+      </span>
+    </span>
+  );
+});
+
+// the last notifications of a point: what changed, who changed it (this tab, or another tab,
+// device or program), and what the page did
+const AssetStorageNotifyLog = observer(function AssetStorageNotifyLog({ point }) {
+  const { assetRemoteStore, objectFrontendStore } = useDocStores();
+  if (point.config?.isNotifyEnabled !== true) return null;
+  const logList = assetRemoteStore.notifyStateGet(point.id).logList.slice(0, NOTIFY_LOG_SHOWN_MAX);
+  if (logList.length === 0) return null;
+  return (
+    <div className="doc-asset-table-scroll">
+      <table className="doc-asset-table">
+        <thead><tr><th>told</th><th>change</th><th>partition</th><th className="doc-asset-version-size">revision</th><th>by</th><th>the page</th></tr></thead>
+        <tbody>
+          {logList.map((entry, index) => {
+            const partition = entry.partitionKey ? assetRemoteStore.partitionByKey.get(entry.partitionKey) : undefined;
+            const objectName = partition ? objectFrontendStore?.objectGet(partition.ownerRef)?.name : '';
+            return (
+              <tr key={`${entry.timeReceived}:${index}`}>
+                <td className="doc-asset-muted">{timeTextDisplay(entry.time || entry.timeReceived, { part: 'second', isYearShown: false })}</td>
+                <td>{entry.event}</td>
+                <td title={entry.partitionId}>{entry.partition ? `${objectName ? `${objectName} · ` : ''}${entry.partition}` : '—'}</td>
+                <td className="doc-asset-muted doc-asset-version-size">{entry.revision || '—'}</td>
+                <td title={`user ${entry.actor.userId || '—'} · client instance ${entry.actor.clientInstanceId || 'none named'}`}>
+                  {entry.isSelf ? 'this tab' : entry.actor.clientInstanceId ? `elsewhere (${clientInstanceIdShortText(entry.actor.clientInstanceId)})` : 'a program'}
+                </td>
+                <td className="doc-asset-muted">{NOTIFY_HANDLING_TEXT[entry.handling] ?? entry.handling}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 });

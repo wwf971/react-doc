@@ -15,16 +15,21 @@
 //                   process of its own, not the server of the page, so the
 //                   page reaches it wherever it is served once it is given its
 //                   address (doc_page_impl_service_dashboard.md#reaching-the-backend)
+//   tabTitleOrder   what the tab of the browser names first (doc-tab-title.js):
+//                   'siteFirst' where several doc pages are open side by side
+//                   while they are tested, 'documentFirst' as sites do
 export const docEnvKindDefineList = [
   {
     kind: 'viteDevServer',
     label: 'development server',
     capabilityList: ['sourceWrite', 'edit', 'asset', 'service', 'apiRemote', 'devWarning'],
+    tabTitleOrder: 'siteFirst',
   },
   {
     kind: 'staticBuild',
     label: 'static build',
     capabilityList: ['service'],
+    tabTitleOrder: 'documentFirst',
   },
 ];
 

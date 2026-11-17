@@ -181,6 +181,8 @@ export const zettelArrangerFlow = {
 // zettels:
 //
 //   data.place   center | container | child | child-question | in | in-question | out | group
+//   data.block   of a child: the group of what it holds it stands in, when they are several (each
+//                framed inside the frame of the place: frames of the place child-group)
 //   frames       zettel-frame nodes with around, data.place the place of the cards they hold
 //
 //            ┌ container ─────────┐            above, a grid (gridColumnMax columns)
@@ -190,18 +192,20 @@ export const zettelArrangerFlow = {
 //   └──────────┘  └────┬────┘  ├ group ───┤    the groups, one frame each. the middle row is as
 //                      │       └──────────┘    tall as its tallest column, all three centered in it
 //            ┌ child ──▼──────────┐            below, a grid; the questions it holds start a row
-//            └────────────────────┘            of their own
+//            │┌ a group ┐         │            of their own, and so does each group of what it
+//            │└─────────┘         │            holds when there are several
+//            └────────────────────┘
 //
 // the handles of the center on one side are set apart along it, in the order of the frames
 // they lead to. options: { gapSide = 120 (gapLeft, gapRight: one side wider, for the labels of its lines), gapBand = 54, gapFrame = 18,
-// gapGridX = 14, gapGridY = 12, gridColumnMax = 4 }
+// gapGridX = 14, gapGridY = 12, gapGroup = 44 (between two groups of what it holds), gridColumnMax = 4 }
 export const zettelArrangerConnection = {
 	id: 'zettel-connection',
 	label: 'A zettel and its connections',
 	description: 'The zettel in the middle: what holds it above, what it holds below, its back links on the left, its forward links and groups on the right, each place in a frame.',
 	geometryEstimate,
 	isApplicable: (diagram) => (diagram.nodes ?? []).some((node) => node.data?.place === 'center'),
-	arrange(diagram, geometry, { gapSide = 120, gapLeft = gapSide, gapRight = gapSide, gapBand = 54, gapFrame = 18, gapGridX = 14, gapGridY = 12, gridColumnMax = 4 } = {}) {
+	arrange(diagram, geometry, { gapSide = 120, gapLeft = gapSide, gapRight = gapSide, gapBand = 54, gapFrame = 18, gapGridX = 14, gapGridY = 12, gapGroup = 44, gridColumnMax = 4 } = {}) {
 		const nodeList = diagram.nodes ?? [];
 		const center = nodeList.find((node) => node.data?.place === 'center');
 		if (!center) return { positionById: {}, handleSideList: [], reportList: [{ kind: 'skipped', message: 'no node has the place center' }] };
@@ -217,30 +221,34 @@ export const zettelArrangerConnection = {
 		const frameList = nodeList.filter((node) => node.renderer?.type === 'zettel-frame' && node.around).map((frame) => ({ frame, place: frame.data?.place, padding: paddingOf(frame), memberList: frame.around.nodeIdList.map((id) => nodeById.get(id)).filter(Boolean) }));
 		const positionById = {};
 		// a grid of cards, rows as tall as their tallest card; a card of another place than the
-		// first starts a row of its own. answers the size of what it fills
+		// first, or of another group (data.block, a group framed of its own inside the place),
+		// starts a row of its own. a group is set further apart, its frame and name between.
+		// answers the size of what it fills
+		const blockOf = (node) => `${node.data?.place ?? ''}\u0000${node.data?.block ?? ''}`;
 		const gridMeasure = (memberList) => {
 			const blockList = [];
 			for (const node of memberList) {
 				const last = blockList[blockList.length - 1];
-				if (last && last.place === node.data?.place) last.nodeList.push(node);
-				else blockList.push({ place: node.data?.place, nodeList: [node] });
+				if (last && last.block === blockOf(node)) last.nodeList.push(node);
+				else blockList.push({ block: blockOf(node), nodeList: [node], isFramed: node.data?.block !== undefined || last?.nodeList[0]?.data?.block !== undefined });
 			}
 			const rowList = [];
 			for (const block of blockList) {
 				const columnCount = Math.min(gridColumnMax, block.nodeList.length);
 				for (let start = 0; start < block.nodeList.length; start += columnCount) {
 					const row = block.nodeList.slice(start, start + columnCount);
-					rowList.push({ nodeList: row, height: Math.max(...row.map((node) => sizeOf(node).height)), width: row.reduce((sum, node) => sum + sizeOf(node).width, 0) + (row.length - 1) * gapGridX, isBlockStart: start === 0 && rowList.length > 0 });
+					const gapExtra = start === 0 && rowList.length > 0 ? (block.isFramed ? gapGroup - gapGridY : gapGridY * 2) : 0;
+					rowList.push({ nodeList: row, height: Math.max(...row.map((node) => sizeOf(node).height)), width: row.reduce((sum, node) => sum + sizeOf(node).width, 0) + (row.length - 1) * gapGridX, gapExtra });
 				}
 			}
 			const width = Math.max(0, ...rowList.map((row) => row.width));
-			const height = rowList.reduce((sum, row) => sum + row.height + (row.isBlockStart ? gapGridY * 2 : 0), 0) + Math.max(0, rowList.length - 1) * gapGridY;
+			const height = rowList.reduce((sum, row) => sum + row.height + row.gapExtra, 0) + Math.max(0, rowList.length - 1) * gapGridY;
 			return { rowList, width, height };
 		};
 		const gridPlace = (grid, left, top) => {
 			let y = top;
 			grid.rowList.forEach((row, index) => {
-				if (index > 0) y += gapGridY + (row.isBlockStart ? gapGridY * 2 : 0);
+				if (index > 0) y += gapGridY + row.gapExtra;
 				let x = left;
 				for (const node of row.nodeList) {
 					positionById[node.id] = { x: Math.round(x), y: Math.round(y) };

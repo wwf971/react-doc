@@ -45,7 +45,7 @@ function zettelBoxListGet(stores, boxAsked = '') {
 
 // the source path of the document of an asset of a box, as its type places it
 function zettelDocPathBuild(objectFrontendStore, state, asset, lang = 'md') {
-	const kind = (objectFrontendStore.assetKindListGet(state.ref) ?? []).find((one) => one.id === asset.kind);
+	const kind = (objectFrontendStore.kindListGet(state.ref) ?? []).find((one) => one.id === asset.kind);
 	const relPath = objectFrontendDocRelPathBuild(asset, kind, lang);
 	return relPath ? sourcePathBuild(sourceRootObjectBuild('frontend', state.id), relPath) : '';
 }

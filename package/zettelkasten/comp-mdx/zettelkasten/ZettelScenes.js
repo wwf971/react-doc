@@ -29,7 +29,7 @@ export const ZETTEL_PLACE_ALL = ZETTEL_PLACE_LIST.map((place) => place.id).sort(
 export const ZETTEL_LABEL_DEFAULT = {
 	containedBy: 'Contained by', contains: 'Contains', backLink: 'Back links', forwardLink: 'Forward links', questionRelated: 'Questions',
 	more: 'more', levelRoot: 'map', levelHub: 'area', levelTopic: 'topic', levelFact: 'fact', countZettel: 'zettels inside', countQuestion: 'questions',
-	formList: 'list', formArray: 'array', formMap: 'map',
+	formList: 'list', formArray: 'array', formMap: 'map', containsOther: 'Other',
 };
 
 const WIDTH_CENTER = 320;
@@ -43,6 +43,9 @@ const LABEL_CHAR_WIDTH = 6.8;
 const NORMAL_MAX = 4;
 const GRID_NORMAL_MAX = 12;
 const FRAME_PADDING = { top: 30, right: 12, bottom: 12, left: 12 };
+// a group of what a zettel holds, framed inside the frame of the place (doc/README.md#the-connection-view)
+const SUB_FRAME_PADDING = { top: 24, right: 8, bottom: 8, left: 8 };
+const FRAME_PADDING_AROUND_SUB = { top: FRAME_PADDING.top + SUB_FRAME_PADDING.top, right: FRAME_PADDING.right + SUB_FRAME_PADDING.right, bottom: FRAME_PADDING.bottom + SUB_FRAME_PADDING.bottom, left: FRAME_PADDING.left + SUB_FRAME_PADDING.left };
 const PROGRESS_TONE = { right: 'green', wrong: 'red', review: 'amber' };
 
 const nodeIdOf = (key) => `z:${key}`;
@@ -118,9 +121,9 @@ function heightEven(nodeList) {
 	for (const node of nodeList) if (node.renderer.type === 'zettel-card' && node.data.size !== 'compact') node.size.height = height;
 }
 
-function frameBuild(id, place, { label, count = 0, form = '', tone = 'slate', memberIdList, handle = '', handleList = [] }) {
+function frameBuild(id, place, { label, count = 0, form = '', tone = 'slate', memberIdList, handle = '', handleList = [], padding = FRAME_PADDING }) {
 	return {
-		id, renderer: { type: 'zettel-frame' }, around: { nodeIdList: memberIdList, padding: FRAME_PADDING },
+		id, renderer: { type: 'zettel-frame' }, around: { nodeIdList: memberIdList, padding },
 		data: { place, label, count: count > 1 ? String(count) : '', form, tone, ...(handle ? { handle } : {}) },
 		handles: handleList,
 	};
@@ -205,11 +208,32 @@ function sceneConnectionBuild(context, zettel, placeSet) {
 			return cardBuild(context, entry.zettel, { place: 'child', size, width: WIDTH_GRID, link: linkOf(entry.zettel.key), keyList: group && group.form !== 'list' ? [{ text: group.key }] : [] });
 		});
 		heightEven(cardList);
+		// what it holds in more than one group (or a group and the rest): each group starts its own
+		// rows, in a frame of its own named by the group, inside the frame of the place. the model
+		// orders the children group by group
+		const blockList = [];
+		childList.forEach((entry, index) => {
+			const group = entry.connection?.group ?? null;
+			const id = group?.id ?? '';
+			if (blockList.length === 0 || blockList[blockList.length - 1].id !== id) blockList.push({ id, group, cardList: [] });
+			blockList[blockList.length - 1].cardList.push(cardList[index]);
+		});
+		const isSubFramed = blockList.length > 1 && blockList.some((block) => block.group);
+		const subFrameList = [];
+		if (isSubFramed) {
+			blockList.forEach((block, index) => {
+				for (const card of block.cardList) card.data.block = `${index}`;
+				const group = block.group;
+				subFrameList.push(frameBuild(`frame:hg:${group ? group.id : '-'}:${zettel.key}`, 'child-group', { label: group ? group.label || group.id : labels.containsOther, count: block.cardList.length, form: group ? labels[{ list: 'formList', array: 'formArray', map: 'formMap' }[group.form]] ?? group.form : '', tone, memberIdList: block.cardList.map((node) => node.id), padding: SUB_FRAME_PADDING }));
+			});
+		}
 		const questionCardList = questionHeldList.map((entry) => cardBuild(context, entry.zettel, { place: 'child-question', size: 'compact', width: WIDTH_GRID, link: linkOf(entry.zettel.key) }));
 		const memberList = [...cardList, ...questionCardList];
 		const countText = [childList.length ? `${childList.length}` : '', questionHeldList.length ? `${questionHeldList.length} Q` : ''].filter(Boolean).join(' + ');
-		nodes.push(...memberList, frameBuild(`frame:h:${zettel.key}`, 'child', { label: labels.contains, tone, memberIdList: memberList.map((node) => node.id), handleList: [handleBuild('in', 'in', 'top')] }));
+		// the frame of the place before the frames of its groups: a background declared later is drawn over it
+		nodes.push(...memberList, frameBuild(`frame:h:${zettel.key}`, 'child', { label: labels.contains, tone, memberIdList: memberList.map((node) => node.id), handleList: [handleBuild('in', 'in', 'top')], padding: isSubFramed ? FRAME_PADDING_AROUND_SUB : FRAME_PADDING }));
 		nodes[nodes.length - 1].data.count = memberList.length > 1 ? countText : '';
+		nodes.push(...subFrameList);
 		connections.push(lineBuild(context, `contain:down:${zettel.key}`, { nodeId: center.id, handleId: 'bottom' }, { nodeId: `frame:h:${zettel.key}`, handleId: 'in' }, { type: 'smoothstep' }));
 	}
 	// the left: back links, then the questions using it

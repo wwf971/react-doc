@@ -1,4 +1,4 @@
-import { useContext, useId, useMemo } from 'react';
+import { Component, useContext, useId, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from './comp-registry.js';
@@ -16,7 +16,70 @@ import { compStateKeyBuild } from '../../frontend/src/lib/doc-comp-state.js';
 // the state of a document where nothing can be edited (no edit layer: an embedding without it)
 const DOC_STATE_READ = Object.freeze({ path: '', mode: 'read', isEditing: false, isEditAvailable: false, editReason: 'this page cannot be edited' });
 
-export const RegisteredComp = observer(function RegisteredComp(props) {
+// The boundary catches what a component throws while it draws (data of a shape it did not
+// expect, a bug): the component is replaced by one line at its own place, saying which and why,
+// and the rest of the page goes on (doc_page_impl_mdx_comp.md#a-component-that-fails-to-draw).
+// Without it React unmounts the whole page, and one block of a document would take the side
+// panel and every other block with it. Since every block, mode of a frontend object, view of an
+// object and side-panel component is drawn through here, each fails alone; one inside another
+// fails inside it.
+export function RegisteredComp(props) {
+  return (
+    <CompDrawBoundary compLabel={props.compName ?? props.compId ?? 'a component'} resetKey={compDrawResetKeyGet(props)}>
+      <RegisteredCompInner {...props} />
+    </CompDrawBoundary>
+  );
+}
+
+// what the boundary tries again on: another component, or other data (a block's text written, a
+// mode switched, other parameters). data from elsewhere (an asset the component reads) is not
+// seen here: Draw again tries once more
+function compDrawResetKeyGet({ compId, compName, placement, input = {} }) {
+  let text = typeof input.raw === 'string' ? input.raw : '';
+  if (!text && input.data !== undefined) {
+    try {
+      text = JSON.stringify(input.data) ?? '';
+    } catch {
+      text = '';
+    }
+  }
+  return `${compId ?? compName ?? ''}\u0000${placement ?? ''}\u0000${text}`;
+}
+
+class CompDrawBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null, resetKey: props.resetKey };
+    this.retry = () => this.setState({ error: null });
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  static getDerivedStateFromProps(props, state) {
+    return props.resetKey === state.resetKey ? null : { error: null, resetKey: props.resetKey };
+  }
+
+  componentDidCatch(error, info) {
+    console.warn(`[RegisteredComp] ${this.props.compLabel} failed to draw`, error, info?.componentStack ?? '');
+  }
+
+  render() {
+    const { error } = this.state;
+    if (!error) return this.props.children;
+    const message = String(error?.message ?? error) || 'an error without a message';
+    // spans only: the component may stand inside a line of text, where a block would break the paragraph
+    return (
+      <span className="doc-comp-failed" role="alert" title="The error is in the browser console too. Nothing else of the page is affected.">
+        <span className="doc-comp-failed-text">{this.props.compLabel} failed to draw: {message}</span>
+        <button type="button" className="doc-button" onClick={this.retry}>Draw again</button>
+      </span>
+    );
+  }
+}
+
+const RegisteredCompInner = observer(function RegisteredComp(props) {
   const {
     compDefinition,
     compId,

@@ -5,8 +5,9 @@ import './ObjectFrontend.css';
 
 // The mode "overview" every frontend object has (declared on frontend.object,
 // doc_page_impl_obj_frontend.md#modes): what the object is, read from its
-// entry: name, type, description, its assets by key and kind, its metadata,
-// and the modes of its type, each a button switching the block to it.
+// entry: name, type, description, the kinds of data items its type holds (one
+// declared by another type with that type), its assets by key and kind, its
+// metadata, and the modes of its type, each a button switching the block to it.
 // Rendered in the placement objectFrontend, given config.objectFrontend.
 export const ObjectFrontendOverview = observer(function ObjectFrontendOverview({ config = {} }) {
   const { objectStore, objectFrontendStore } = useDocStores();
@@ -26,6 +27,11 @@ export const ObjectFrontendOverview = observer(function ObjectFrontendOverview({
         <span className="doc-note">{state.ref} · {state.docPageAlias}</span>
       </div>
       {state.description ? <p className="doc-note doc-object-card-description">{state.description}</p> : null}
+      {service.kindList ? (
+        <p className="doc-note doc-object-card-description">
+          holds {service.kindList.length === 0 ? 'no data item' : service.kindList.map((kind) => (kind.isOwn ? kind.id : `${kind.id} (${kind.kindId}, of ${kind.declaredBy || 'no type'})`)).join(' · ')}
+        </p>
+      ) : null}
       <table className="doc-object-frontend-table">
         <thead>
           <tr><th>asset</th><th>kind</th><th>object</th><th>status</th></tr>
@@ -36,7 +42,7 @@ export const ObjectFrontendOverview = observer(function ObjectFrontendOverview({
           ) : state.assetList.map((asset) => (
             <tr key={asset.key}>
               <td>{asset.key}</td>
-              <td>{asset.kind}</td>
+              <td title={service.kindGet(asset.kind)?.kindId}>{asset.kind}</td>
               <td className="doc-object-frontend-muted">{asset.item?.name ? `${asset.item.name} · ` : ''}{asset.itemId}</td>
               <td data-error={asset.status !== 'found' || !asset.isOwnerMatch ? '' : undefined}>
                 {asset.status}{asset.status === 'found' && !asset.isOwnerMatch ? ', declares another owner' : ''}

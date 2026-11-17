@@ -8,9 +8,18 @@
 // of the contract; -9 is this driver's own: the service was not reached. an answer AWS gives
 // itself (a 401 of the authorizer, a 429, a 413) is turned into that shape here.
 //
-//   point           the storage point as declared: config.url, config.space (absent: its id)
-//   credentialGet   Promise<{ code, data: { token }, message }>: the access token of the session
-//                   of the auth provider the point names
+//   point                 the storage point as declared: config.url, config.space (absent: its id)
+//   credentialGet         Promise<{ code, data: { token }, message }>: the access token of the session
+//                         of the auth provider the point names
+//   clientInstanceIdGet   the id this page names itself with (react-doc main/doc_page_impl_client_instance.md),
+//                         sent in X-Client-Instance-Id to a service that says it takes it (clientInstanceHeader
+//                         of /status): the actor of the changes it tells
+//
+// notifyOpen (the api set notify, where the service offers it): a channel of the notification
+// contract (doc/notify-contract.md) on the topic space/{space}, its notifications turned into what
+// the storage layer reads (storage-contract.md#notifications).
+
+import { notifyChannelCreate } from '../notify/notify-channel.js';
 
 const CODE_AUTH_REQUIRED = -7;
 const CODE_UNREACHABLE = -9;
@@ -42,11 +51,20 @@ const ROUTE_BY_METHOD = {
   spaceDelete: '/space/delete',
 };
 
-export function awsStorageDriverCreate({ point, credentialGet }) {
+export function awsStorageDriverCreate({ point, credentialGet, clientInstanceIdGet }) {
   const url = String(point?.config?.url ?? '').replace(/\/+$/, '');
   const space = String(point?.config?.space || point?.id || '');
   const label = point?.label || point?.id || url;
   let statusPromise;
+
+  // the header naming this client instance, to a service that says it takes it: a browser refuses
+  // every request carrying a header the CORS of the service does not allow
+  const instanceHeaderMapGet = async () => {
+    if (typeof clientInstanceIdGet !== 'function') return {};
+    const status = await statusGet();
+    const name = status.code === 0 ? status.data?.clientInstanceHeader : '';
+    return name ? { [name]: clientInstanceIdGet() } : {};
+  };
 
   // one request: GET with a query string, POST with a json body. isPublic: no token is sent
   const request = async (method, route, args = {}, { isPublic = false } = {}) => {
@@ -55,6 +73,7 @@ export function awsStorageDriverCreate({ point, credentialGet }) {
       const credential = await credentialGet();
       if (credential.code !== 0) return { code: credential.code, data: null, message: credential.message };
       headerMap.Authorization = `Bearer ${credential.data.token}`;
+      Object.assign(headerMap, await instanceHeaderMapGet());
     }
     let target = `${url}${route}`;
     const init = { method, headers: headerMap, cache: 'no-store' };
@@ -192,6 +211,55 @@ export function awsStorageDriverCreate({ point, credentialGet }) {
     },
   };
   for (const [method, route] of Object.entries(ROUTE_BY_METHOD)) driver[method] = (args) => post(route, args);
+
+  // a channel on the space of the point: what the service tells of its partitions, as the storage
+  // layer reads it. its ticket is asked only of a service listing notify; one without it says so once
+  driver.notifyOpen = ({ onNotification, onStateChange }) => {
+    const topic = `space/${space}`;
+    const channel = notifyChannelCreate({
+      label,
+      ticketGet: async () => {
+        const status = await statusGet();
+        if (status.code !== 0) return status;
+        if (!(status.data?.apiSetList ?? []).includes('notify')) {
+          return { code: -3, data: null, message: `the storage service of ${label} tells nothing of changes: it is deployed without its notification channel` };
+        }
+        return post('/notify/ticket', {});
+      },
+      onNotification: (notification) => {
+        if (notification?.topic !== topic) return;
+        const detail = notification.detail ?? {};
+        const base = { actor: notification.actor ?? {}, time: notification.time ?? '' };
+        if (notification.event === 'spaceRemoved') {
+          onNotification({ ...base, event: 'pointChanged' });
+          return;
+        }
+        onNotification({
+          ...base,
+          event: notification.event,
+          partitionId: detail.partitionId,
+          ownerRef: detail.ownerRef,
+          partition: detail.partition,
+          revision: detail.revision,
+          isDeleted: detail.isDeleted,
+          itemIdList: detail.itemIdList ?? [],
+          isItemIdListComplete: detail.isItemIdListComplete !== false,
+        });
+      },
+      onStateChange,
+    });
+    // the network back: a channel waiting to open again opens now
+    const onlineHandle = () => channel.wake();
+    if (typeof window !== 'undefined') window.addEventListener('online', onlineHandle);
+    channel.open();
+    return {
+      close: () => {
+        if (typeof window !== 'undefined') window.removeEventListener('online', onlineHandle);
+        channel.close();
+      },
+      stateGet: channel.stateGet,
+    };
+  };
   return driver;
 }
 

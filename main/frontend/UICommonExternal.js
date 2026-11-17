@@ -35,6 +35,7 @@ export {
   FileIcon,
   FileInput,
   FilePlus,
+  FileBox,
   FileText,
   FilePenLine,
   Filter,

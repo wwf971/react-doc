@@ -74,8 +74,9 @@ typeList:
       - { id: shelf, label: Shelf, comp: ReadingList, param: { layout: table }, category: view, isDefault: true }
       - { id: book, label: One book, comp: ReadingListBook, pathParam: book }   # shows one thing of the object, named by
                                     #   an inner path in this parameter (doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths)
-    assetKindList:
-      - { id: book, label: Book, langList: [yaml], pathPrefix: /book/, groupPath: book }
+    kindList:                       # the kinds of data items it holds (#kinds-of-data-items)
+      - { id: book, label: Book, content: { form: data, schema: { type: object } }, pathPrefix: /book/, groupPath: book }
+      - { id: cover, kind: example.media.image, groupPath: cover }   # a kind another type declares
     partitionList:                  # optional: the folders its items are split into (doc_page_impl_obj_frontend.md#partitions)
       - { id: example, label: Example, isDefault: true }          # where a write naming none goes (else the first)
       - { id: playground, label: Playground, isGitIgnored: true }
@@ -97,9 +98,79 @@ typeList:
 - a different declaration of an id is a problem of the file, and the first is kept;
 - a problem (an unknown key, a reserved prefix, a mode without a component, modes on a type not below `frontend.object`) leaves out that item, never the page, and is listed in the Frontend objects tab and the console.
 
-Declaring is not limited to frontend objects: `example.ticket` extending `core.task` is a type like any other, for whichever provider answers with it. The registry takes what is declared directly, as configuration of the page; it does not go through a layer's provider, since it belongs to no layer. A layer reads the keys of its own tree from the same declaration: `modeList`, `assetKindList` and `partitionList` are the frontend object layer's, and mean nothing elsewhere.
+Declaring is not limited to frontend objects: `example.ticket` extending `core.task` is a type like any other, for whichever provider answers with it. The registry takes what is declared directly, as configuration of the page; it does not go through a layer's provider, since it belongs to no layer. A layer reads the keys of its own tree from the same declaration: `modeList`, `kindList` and `partitionList` are the frontend object layer's, and mean nothing elsewhere; the kinds a `kindList` declares are types of the registry like any other ([Kinds of data items](#kinds-of-data-items)).
 
 **Types of the templates** are declared in code, because a template is code: `expose.typeList` of its script ([Services](doc_page_impl_obj.md#services)), under its own name (`todo-list.todo`). The kernel refuses a type of another name with a problem, so two templates never collide. The kernel rebuilds its registry whenever a script changes: the built-in types, then the templates' (the oldest template id first; a second definition of an id is reported and left out), then those of instances whose template is gone. The page takes the backend's list over its own built-in copy when there is a backend.
+
+## Kinds of data items
+
+A frontend object holds data items ([Frontend objects](doc_page_impl_obj_frontend.md)), and what one of them is, a book, the information of a profile, a picture, is its **kind**. A kind is a **type of the registry**, below the built-in `frontend.item`, so it is declared, listed, asked and named like any type, by every type and every reader alike: a CV knows what the items of a profile are by asking for `cv.profile.info`, not by assuming it. The word stays apart from *type* only to say which of the two is meant: the type of an object, the kind of a data item.
+
+<!--renderComp=DiagramText-->
+```text
+frontend.item                 a data item of a frontend object (asset.item)
+├── cv.profile.info           declared and held by cv.profile
+├── cv.profile.badge          declared and held by cv.profile
+├── example.media.image       declared by example.media, which holds none;
+│                             held by example.reading-list as "cover"
+└── example.reading-list.book …
+```
+
+- **One type declares a kind**, and its id says which: `{type}.{name}`. No other type can declare it, so its content has one author; a type copied with its object carries the declaration along, and the same declaration twice is one.
+- **Any type may hold it**: its `kindList` names the kind by its id, and its objects then hold items of it under a name of their own. It stays clear that the kind comes from elsewhere: the entry says `kind:`, the Frontend objects tab marks it ←, and its content is the declaring type's, never restated.
+- **A type may declare a kind and hold none of it** (`isHeld: false`): a type offering kinds to others, whose objects hold nothing of it, or which has no objects at all.
+- **A type decides what it registers.** A kind it declares is registered by default; one it keeps to itself says `isInternal: true`: no type of the registry is made of it, `type/list` and the Kinds table do not show it, no other type may hold or extend it (the types extending the declaring type may: they are its own family), and it is checked exactly as a registered one. Register what another type, a reader or an agent might want to name; keep internal what only means something inside the object (a cache, a scan, the notes of one list).
+- **What a kind is** is public and belongs to its declaration: label, description, icon, `extendList` (a kind refining another; its content inherited when it says none) and **content**. **How an object holds it** belongs to the type holding it: the name, the folder of a new item (`groupPath`), the start of its paths (`pathPrefix`), whether anything comes in from elsewhere (`isIncomingRefused`), whether it is a document of the object (`isDoc`, `docPath`).
+
+```yaml
+typeList:
+  - id: cv.profile
+    kindList:
+      - id: info                     # its name in the object: the kind of a record of an item list, what a
+        label: Information           # mode names (kind: info). declared here: the kind cv.profile.info
+        content: { form: data, schema: { $ref: "#/$defs/value", $defs: { value: … } } }
+        groupPath: info              # how the object holds it
+      - { id: logo, kind: example.media.image, groupPath: logo }   # declared by another type, held as "logo"
+      - { id: photo, content: { form: bytes, mediaTypeList: [image/*] }, isHeld: false }   # offered, not held
+      - { id: scan, content: data, isInternal: true }   # held, not registered: this type's own
+```
+
+| key | of | |
+| --- | --- | --- |
+| `id` | every entry | its name in the object: letters, digits, `-`; one per entry |
+| `kind` | a kind of another type | its id, `{type}.{name}`: what is held. A kind nobody declares is held as anything, and said |
+| `label`, `description`, `icon`, `extendList`, `content` | a kind declared here | its declaration (`label` also on a held one: its name for people in this object) |
+| `groupPath`, `pathPrefix`, `isIncomingRefused`, `isDoc`, `docPath` | any held kind | how this type holds it ([What a type accepts](doc_page_impl_obj_frontend.md#what-a-type-accepts)) |
+| `isHeld: false` | a kind declared here | declared, not held |
+| `isInternal: true` | a kind declared here | not registered: the declaring type's own, and its descendants' |
+
+`kindList` is inherited whole: the nearest type declaring one decides (modes, by contrast, add up along the ancestors). A type declaring none holds anything. `assetKindList`, the former name, is still read (each `langList` taken as a content) with a problem; `react-doc migrate` rewrites it ([Migrating](doc_page_impl_cli.md#migrating-a-doc-page)).
+
+### The content of a kind
+
+What an item of a kind is, in one of four forms:
+
+```yaml
+content: data                        # yaml or json read as data, any shape (the short forms: data, text, bytes, any)
+content:
+  form: data                         # data: an item read as yaml or json (langList: yaml, json; both by default)
+  langList: [yaml]
+  schema: { type: object, required: [title], properties: { title: { type: string } } }
+content: { form: text, langList: [md, mdx] }     # a text in a language: md, mdx, sql, js, … (absent: any)
+content: { form: bytes, mediaTypeList: [image/*], extList: [png, jpg], sizeMax: 2MB }   # a file: its media
+                                     # types (a wildcard subtype), extensions, size (bytes, or 200KB, 5MB)
+content: any                         # anything: the default
+```
+
+**The schema of data** is a subset of JSON Schema, written in yaml, enough for the trees data items are: `type` (`string`, `number`, `integer`, `boolean`, `object`, `array`, `null`, or a list), `enum`, `const`; of a mapping `properties`, `required`, `additionalProperties` (open unless said), `patternProperties`, `propertyNames`, `minProperties`, `maxProperties`; of a list `items`, `minItems`, `maxItems`, `uniqueItems`; of a number `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`; of a text `minLength`, `maxLength`, `pattern`; `anyOf`, `oneOf`, `allOf`, `not`; `$defs` with `$ref: "#/$defs/{name}"`, which may be recursive (a tree of values); and, for readers only, `title`, `description`, `default`, `examples`, `format`. A key it does not know, a `$ref` to nothing or a pattern that is no expression is a problem of the type file, and that schema is left out (the kind then checks its form only).
+
+| an item | is checked | when it does not fit |
+| --- | --- | --- |
+| created, attached (`asset/create`, `asset/attach`) | its form; the data of a new item against the schema | refused by the layer, before anything is written (the development server; the page, for a partition a storage point of the page holds) |
+| written by a mode (`assetWrite`) | its data against the schema | refused before the write: *… is not written: it does not fit its kind cv.jp.template: /sectionList/1/type: …* |
+| read (`assetDataGet`) | its data against the schema, once per text | answered with the data and `kindProblemList [{ path, message }]`: a reader draws what it can and says what does not fit; the Frontend objects tab checks every item of an object on request |
+
+A problem names its place in the data the way JSON Pointer does (`/sectionList/1/type: "histroy" is none of basic, history, text`). Nothing is checked of a file changed by hand until it is read, and a type's content is not a promise of the registry's: the registry knows a kind's declaration, the frontend object layer checks items against it.
 
 ## Built-in types
 
@@ -122,7 +193,7 @@ core.object                                  anything the registry can name
 │   └── frontend.inner                       something inside a frontend object, named by an inner path
 ├── core.config  ── service.config           { valueByKey, defineList }; an update { valueByKey }
 ├── core.task                                summary isDone; an update { isDone }
-├── core.file    ── asset.item
+├── core.file    ── asset.item ── frontend.item     a data item of a frontend object: the root of the kinds
 ├── core.service ── service.instance
 └── service.template
 
@@ -138,13 +209,16 @@ There are two registries, with one semantics (`lib/doc-object-type.js`, `service
 
 ## The apis
 
-Types are read through the standard apis ([The apis](doc_page_impl_obj.md#the-apis)): `type/list { typeList? }` the types, with their subtypes when filtered; `type/get { typeId }` one type, its ancestors, who creates objects of it (`creatorList`), and what the layers add (`typeInfoGet` of a provider: a frontend object type's `modeList` with the inherited ones, and `assetKindList`). From a component, `config.object.typeGet`, `typeInfoGet`, `typeIsAssignable`.
+Types are read through the standard apis ([The apis](doc_page_impl_obj.md#the-apis)): `type/list { typeList? }` the types, with their subtypes when filtered (`type/list { typeList: [frontend.item] }`: every kind); `type/get { typeId }` one type, its ancestors, who creates objects of it (`creatorList`), and what the layers add (`typeInfoGet` of a provider: a frontend object type's `modeList` with the inherited ones, and `kindList`, the kinds it holds; of a kind, `kind { name, content, declaredBy, heldByList }`). From a component, `config.object.typeGet`, `typeInfoGet`, `typeIsAssignable`.
 
 ## Files
 
 ```text
 built-in/type.yaml                  the built-in types, read by the kernel and the page
-frontend/plugin/doc-type-config.ts  the type files: the entry section, the grammar, the problems, what the page receives
+frontend/plugin/doc-type-config.ts  the type files: the entry section, the grammar, the problems, what the page receives;
+                                    the kinds a type declares made types, the kinds it holds resolved
+frontend/src/lib/doc-object-frontend-kind.js   kinds of data items: the grammar of kindList and of a content, the
+                                    schema (read and checked), an item against its kind
 frontend/plugin/doc-entry.ts        "type" of an entry (typeSectionRead)
 frontend/plugin/doc-source.ts       config.typeDeclared; the type files as configuration, the watch
 frontend/src/lib/doc-object-type.js the registry of the page: typeRegistryBuild, assignability, rank

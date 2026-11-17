@@ -12,6 +12,7 @@ import {
   docWorkspaceLoad,
   docWorkspaceSpecRead,
   readYaml,
+  titleShortCheck,
   type DocWorkspaceSpec,
 } from './doc-entry.ts';
 import {
@@ -165,6 +166,8 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 
 const MODULE_ID_DEFAULT = 'virtual:doc-source';
 export const DOC_SOURCE_ENDPOINT_NAME = '__doc-source';
+// the page values of config.yaml, over those of the workspace and its first doc page
+const PAGE_VALUE_KEY_LIST = ['siteTitle', 'siteTitleShort', 'homeDoc', 'homeItem'];
 
 // what the command line says over the config files (doc_page_impl_cli.md#the-launch-layer):
 // what to serve, in place of "workspace" / "docEntry" of the config files,
@@ -342,6 +345,22 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
 
   return {
     name: `doc-source:${moduleId}`,
+
+    // the title of the page in the html, so the tab is named before the page has mounted (and
+    // while the first load after a start waits); the page then names the document shown with it
+    // (doc_page_impl.md#the-tab-title). a config that does not load leaves the title of index.html
+    transformIndexHtml(html) {
+      let configDoc: any;
+      try {
+        configDoc = loadConfigDoc(configFile, options);
+      } catch {
+        return html;
+      }
+      const title = String(configDoc.siteTitleShort ?? configDoc.siteTitle ?? '').trim();
+      if (!title) return html;
+      const titleEscaped = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return html.replace(/<title>[\s\S]*?<\/title>/, `<title>${titleEscaped}</title>`);
+    },
 
     // what `react-doc build` reads to know what a build of one file needs (doc-build-slim.js):
     // the text of what the build carries, and the components of the source of the page
@@ -1355,6 +1374,8 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
     delete config.workspace;
     delete config.docEntry;
     delete config.packageList;
+    // the page values of the files are those of the workspace they name: what is launched brings its own
+    for (const key of PAGE_VALUE_KEY_LIST) delete config[key];
     if (launch.docEntry) config.docEntry = launch.docEntry;
     if (launch.workspace) config.workspace = launch.workspace;
     if (launch.packageList) config.packageList = launch.packageList;
@@ -1528,8 +1549,13 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
   // page values the workspace or its first doc page supplies when
   // config.yaml does not set them, so that a doc page used in another
   // deployment brings its own. a home document written in config.yaml is a
-  // full source path, or a local path of the first doc page
-  config.siteTitle ??= entryLoaded.entry.title;
+  // full source path, or a local path of the first doc page. the short title
+  // comes from the place the title comes from (doc_page_impl.md#the-tab-title)
+  titleShortCheck(config, 'siteTitle', 'siteTitleShort', `config (${configFile})`);
+  if (config.siteTitle === undefined) {
+    config.siteTitle = entryLoaded.entry.title;
+    config.siteTitleShort = entryLoaded.entry.titleShort;
+  }
   config.homeDoc = config.homeDoc === undefined ? entryLoaded.entry.homeDoc : sourcePathFullGet(config.homeDoc, config.docEntry.alias);
   config.homeItem ??= entryLoaded.entry.homeItem;
 

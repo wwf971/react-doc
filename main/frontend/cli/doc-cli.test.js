@@ -406,3 +406,46 @@ test('migrate: item.yaml and itemId, the fences of documents, and frontend objec
   const again = await docMigrate(dir);
   assert.deepEqual([again.itemList.length, again.documentList.length, again.objectList.length, again.typeFileList.length, again.entryListList.length], [0, 0, 0, 0, 0]);
 });
+
+test('migrate: assetKindList of any type file becomes kindList, each langList a content, comments and other lines kept', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-migrate-kind-'));
+  const fileType = path.join(dir, 'package', 'type.yaml');
+  const fileObject = path.join(dir, 'page', '.doc-page', 'object-frontend', 'w5aaaaaaaaa--One', 'type.yaml');
+  const source = [
+    '# the types of the package',
+    'typeList:',
+    '  - id: demo.box',
+    '    extendList: [frontend.object]',
+    '    # what it holds',
+    '    assetKindList:',
+    '      - { id: card, label: Card, langList: [md, mdx], isDoc: true }   # a document',
+    '      - { id: state, langList: [yaml], groupPath: state }',
+    '      - { id: blob, groupPath: blob }',
+    '    partitionList:',
+    '      - { id: main, isDefault: true }',
+    '',
+  ].join('\n');
+  for (const file of [fileType, fileObject]) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, source);
+  }
+  const report = await docMigrate(dir);
+  assert.deepEqual(report.kindFileList.map((file) => path.relative(dir, file)).sort(), [path.relative(dir, fileObject), path.relative(dir, fileType)].sort());
+  assert.equal(fs.readFileSync(fileType, 'utf-8'), [
+    '# the types of the package',
+    'typeList:',
+    '  - id: demo.box',
+    '    extendList: [frontend.object]',
+    '    # what it holds',
+    '    kindList:',
+    '      - { id: card, label: Card, content: { form: text, langList: [md, mdx] }, isDoc: true } # a document',
+    '      - { id: state, content: { form: data, langList: [yaml] }, groupPath: state }',
+    '      - { id: blob, groupPath: blob }',
+    '    partitionList:',
+    '      - { id: main, isDefault: true }',
+    '',
+  ].join('\n'));
+  assert.equal(fs.readFileSync(`${fileType}.bak`, 'utf-8'), source);
+  const again = await docMigrate(dir);
+  assert.deepEqual(again.kindFileList, []);
+});

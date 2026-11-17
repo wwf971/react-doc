@@ -4,6 +4,7 @@
 # design: main/doc_page_impl_dir.md (the layout), main/doc_page_impl_side_panel.md#the-document-entry
 docEntry:
   title: {{title}}
+  # titleShort: ...   the title in a few words, when it is long: the tab of the browser shows it
   homeDoc: ~{{alias}}/index.md
 
 # one file per section, named here (paths relative to this file)

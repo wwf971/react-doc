@@ -69,7 +69,8 @@ import {
 // items keep their data in this store; every write answers { id, itemList, config }: the
 // asset items it wrote, and the declarations of the doc pages as the files say now
 //   GET  {endpoint}/object-frontend/config                       -> { docPageList }
-//   POST {endpoint}/object-frontend/create       { docPageAlias, typeId, name, description?, metadata? }
+//   POST {endpoint}/object-frontend/create       { docPageAlias, typeId, name, description?, metadata?, id? }
+//                                     id: one made before, to make the same object again (a generated page)
 //   POST {endpoint}/object-frontend/register     { docPageAlias, entry }        an orphan entry listed again
 //   POST {endpoint}/object-frontend/delete       { id, isAssetKept? }
 //   POST {endpoint}/object-frontend/meta/set     { id, name?, description?, typeId?, metadata? }

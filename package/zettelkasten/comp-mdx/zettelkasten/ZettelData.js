@@ -295,9 +295,14 @@ function containBuild(model, root) {
 		const source = zettel.kind === 'question' ? 'question' : 'parent';
 		for (const parent of zettel.parentWrittenList) writtenList.push({ from: parent, to: zettel.key, source, group: null, order: 1000 + writtenList.length });
 		for (const entry of zettel.connectionWritten.entryList) if (entry.type === 'contain') writtenList.push({ from: zettel.key, to: entry.to, source: 'meta', group: null, label: entry.label, order: 1000 + writtenList.length });
+		// several groups of contain keep their own order: the first group's members, then the
+		// second's (an order below 1000 is a group's: up to ten groups of a hundred)
+		let containGroupIndex = 0;
 		for (const group of zettel.connectionWritten.groupList) {
 			if (group.type !== 'contain') continue;
-			for (const item of group.itemList) writtenList.push({ from: zettel.key, to: item.to, source: 'meta', group: { id: group.id, label: group.label, form: group.form, index: item.index, key: item.key }, label: item.label, order: item.index });
+			const orderBase = containGroupIndex * 100;
+			containGroupIndex += 1;
+			for (const item of group.itemList) writtenList.push({ from: zettel.key, to: item.to, source: 'meta', group: { id: group.id, label: group.label, form: group.form, index: item.index, key: item.key }, label: item.label, order: orderBase + Math.min(item.index, 99) });
 		}
 	}
 	const pairSet = new Set();

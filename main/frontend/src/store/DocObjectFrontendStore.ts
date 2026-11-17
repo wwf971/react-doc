@@ -6,9 +6,10 @@ import {
   objectFrontendAssetListMerge, objectFrontendEntryParse, objectFrontendListCovers, objectFrontendIdOfRefGet, objectFrontendModeChoose,
   objectFrontendModeListResolve, objectFrontendParamMerge, objectFrontendRefBuild, objectFrontendAssetNamingRead,
   objectFrontendAssetIndexBuild, objectFrontendAssetPathComplete, objectFrontendAssetRefResolve, objectFrontendAssetSearch,
-  objectFrontendAssetKindListResolve, objectFrontendDocListBuild, objectFrontendPartitionListBuild, objectFrontendPartitionListResolve, objectFrontendPartitionOf,
+  objectFrontendKindListResolve, objectFrontendDocListBuild, objectFrontendPartitionListBuild, objectFrontendPartitionListResolve, objectFrontendPartitionOf,
   objectFrontendInnerCompleteDefault, objectFrontendInnerModeGet, objectFrontendInnerResolveDefault, objectFrontendRefSplit,
 } from '../lib/doc-object-frontend.js';
+import { objectFrontendKindItemCheck, objectFrontendKindProblemText, OBJECT_FRONTEND_KIND_ROOT } from '../lib/doc-object-frontend-kind.js';
 import { objectFrontendServiceBuild } from '../../../comp-doc/object-frontend/object-frontend-service.js';
 import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
 
@@ -153,6 +154,8 @@ export class DocObjectFrontendStore {
     partitionCopyTarget: '',
     // what the last copy of a partition answered, by the partition copied
     partitionCopyMessage: '',
+    // the last check of an object's data against its kinds (kindCheckRun): what does not fit
+    kindCheck: { id: '', status: 'idle' as 'idle' | 'running' | 'done', countChecked: 0, resultList: [] as { key: string; name: string; kindId: string; message: string }[] },
   };
   overrideByKey = observable.map<string, { mode?: string; param?: Record<string, any> }>({}, { deep: false });
   // the sessions of the asset search uis (ObjectFrontendAssetSearchPanel), by the ui's key
@@ -166,7 +169,7 @@ export class DocObjectFrontendStore {
   // of an asset arrives. every read of a mode goes through it, many times per render
   objectStateById = new Map<string, IComputedValue<ObjectFrontendState>>();
   // the data of an asset as last parsed, by object id
-  assetDataById = new Map<string, { text: string; data?: any; message?: string }>();
+  assetDataById = new Map<string, { text: string; data?: any; message?: string; kindProblemList?: { path: string; message: string }[] }>();
   // the assets asked for in this tick, read together
   loadRefByKey = new Map<string, any>();
   // the heavy parts of the modes that have their turn, and those waiting for it: a document
@@ -207,7 +210,7 @@ export class DocObjectFrontendStore {
     if (!assetStore.backend) return;
     void (assetStore.startPromise ?? Promise.resolve()).then(() => this.configLoad());
     assetStore.folderOwnerHandlerSet?.('frontend', {
-      kindListGet: (ownerRef: string) => this.assetKindListGet(ownerRef),
+      kindListGet: (ownerRef: string) => this.kindListGet(ownerRef),
       labelGet: (ownerRef: string) => {
         const state = this.objectGet(ownerRef);
         return state.name || ownerRef;
@@ -245,7 +248,7 @@ export class DocObjectFrontendStore {
     for (const decl of this.declList) {
       const state = this.objectGet(decl.id);
       if (state.status !== 'found') continue;
-      const { docList } = objectFrontendDocListBuild(state.assetList.filter((asset) => asset.status === 'found'), this.assetKindListGet(state.ref) ?? [], (asset: any) => asset.item?.lang);
+      const { docList } = objectFrontendDocListBuild(state.assetList.filter((asset) => asset.status === 'found'), this.kindListGet(state.ref) ?? [], (asset: any) => asset.item?.lang);
       if (docList.length === 0) continue;
       const rootAlias = sourceRootObjectBuild(OBJECT_FRONTEND_DOC_NAMESPACE, state.id);
       rootObjectList.push({ namespace: OBJECT_FRONTEND_DOC_NAMESPACE, id: state.id, name: state.name, rootAlias, docPageAlias: state.docPageAlias });
@@ -517,9 +520,14 @@ export class DocObjectFrontendStore {
       // a partition of a point of the page: what the page read of it, and whether it can be asked now
       const remote = storage.driverPlace === 'page' ? remoteStore?.partitionGet(ref, partition.id) : undefined;
       if (remote) {
+        // notify: the channel of its point, where its config asks for one; changeElsewhere: the last
+        // change another tab, device or program made, as the point told it
+        const notify = remoteStore.partitionNotifyGet?.(ref, partition.id);
         storage.remote = {
           status: remote.status, message: remote.message, isFromCache: remote.isFromCache, isRefreshing: remote.isRefreshing,
           timeChecked: remote.timeChecked, timeFetched: remote.timeFetched, revision: remote.revision, itemCount: remote.itemList.length,
+          notify: notify ? { status: notify.status, message: notify.message, timeOpened: notify.timeOpened } : undefined,
+          changeElsewhere: remote.changeElsewhere,
         };
       } else if (storage.driverPlace === 'page' && remoteStore) {
         // not made yet, and its type binds it to a point of the page: what that point would say now
@@ -682,8 +690,14 @@ export class DocObjectFrontendStore {
       }
       this.assetDataById.set(itemId, parsed);
     }
-    if (parsed.message !== undefined) return { ...result, status: 'error' as const, message: `the asset ${assetRef} is not yaml: ${parsed.message}`, data: undefined };
-    return { ...result, data: parsed.data };
+    if (parsed.message !== undefined) return { ...result, status: 'error' as const, message: `the asset ${assetRef} is not yaml: ${parsed.message}`, data: undefined, kindProblemList: [] };
+    // what of the data does not fit the kind of the asset ([] when it fits, or its kind has no
+    // schema): checked once per text, the data still answered, since a reader draws what it can
+    if (parsed.kindProblemList === undefined) {
+      const kind = this.kindOfGet(idOrRef, result.asset?.kind ?? '');
+      parsed.kindProblemList = kind ? objectFrontendKindItemCheck(kind.content, { lang: result.item?.lang, data: parsed.data, isDataGiven: true }) : [];
+    }
+    return { ...result, data: parsed.data, kindProblemList: parsed.kindProblemList };
   }
 
   // what a render asks for together is read together, by the asset store's steps,
@@ -834,14 +848,47 @@ export class DocObjectFrontendStore {
     return this.writeRun('asset/group/move', { id, groupFrom, groupTo });
   }
 
-  // the assets the type of an object holds; undefined: any
-  assetKindListGet(idOrRef: string): any[] | undefined {
+  // the kinds of data items the type of an object holds, each with what its declaration says
+  // ({ id, kindId, label, content, declaredBy, isOwn, groupPath, … }); undefined: any
+  // (doc_page_impl_type.md#kinds-of-data-items)
+  kindListGet(idOrRef: string): any[] | undefined {
     const state = this.objectGet(idOrRef);
-    return state.status === 'found' ? this.assetKindListOfTypeGet(state.typeId) : undefined;
+    return state.status === 'found' ? this.kindListOfTypeGet(state.typeId) : undefined;
   }
 
-  assetKindListOfTypeGet(typeId: string): any[] | undefined {
-    return objectFrontendAssetKindListResolve(typeId, this.typeDeclaredList);
+  kindListOfTypeGet(typeId: string): any[] | undefined {
+    return objectFrontendKindListResolve(typeId, this.typeDeclaredList);
+  }
+
+  // one kind an object holds, by its name there
+  kindOfGet(idOrRef: string, name: string): any | undefined {
+    return this.kindListGet(idOrRef)?.find((one: any) => one.id === name);
+  }
+
+  // the kinds the types keep to themselves (isInternal): held by their declaring type, registered nowhere
+  get kindInternalList(): any[] {
+    const byId = new Map<string, any>();
+    for (const type of this.typeDeclaredList) {
+      for (const kind of type.kindList ?? []) if (kind.isInternal && kind.isOwn && !byId.has(kind.kindId)) byId.set(kind.kindId, kind);
+    }
+    return [...byId.values()];
+  }
+
+  // the kinds the types declare: types of the registry below frontend.item, each with its content
+  // and the type declaring it; heldByList: the types holding it (its declaring type among them
+  // unless it only offers it)
+  get kindDeclaredList(): any[] {
+    const typeList = this.stores.objectStore?.typeDeclaredList ?? [];
+    const kindList = typeList.filter((type: any) => typeof type.declaredBy === 'string' && type.extendList?.length > 0
+      && (this.stores.objectStore?.typeRegistry?.isAssignable(type.id, OBJECT_FRONTEND_KIND_ROOT) ?? true));
+    return kindList.map((kind: any) => ({
+      ...kind,
+      // a type holding it by inheritance (its kindList an ancestor's) holds it too
+      heldByList: this.typeDeclaredList.flatMap((type: any) => {
+        const hold = (this.kindListOfTypeGet(type.id) ?? []).find((one: any) => one.kindId === kind.id);
+        return hold ? [{ typeId: type.id, name: hold.id }] : [];
+      }),
+    }));
   }
 
   // the partitions a type declares; undefined: none
@@ -873,6 +920,13 @@ export class DocObjectFrontendStore {
   // a partition a storage point of the page holds, asked again whether it changed elsewhere
   partitionRefresh(idOrRef: string, partition: string): Promise<void> {
     return this.stores.remoteStore?.partitionRefresh(objectFrontendRefBuild(objectFrontendIdOfRefGet(idOrRef)), partition) ?? Promise.resolve();
+  }
+
+  // what the storage point of a partition told of it (the api set notify): the state of its channel,
+  // the id this page names itself with, and the notifications about the partition, newest first;
+  // undefined where the point tells nothing
+  partitionNotifyGet(idOrRef: string, partition: string): any {
+    return this.stores.remoteStore?.partitionNotifyGet?.(objectFrontendRefBuild(objectFrontendIdOfRefGet(idOrRef)), partition);
   }
 
   // the sign-in dialog of the auth provider the storage point of a partition names: true once signed in
@@ -1017,6 +1071,12 @@ export class DocObjectFrontendStore {
     if (resolved.status !== 'found') return { code: -1, message: resolved.message || `the object has no asset ${assetRef}` };
     const asset = resolved.asset!;
     const key = asset.key;
+    // what is written fits the kind of the asset, or is not written (its data against the schema)
+    const kind = this.kindOfGet(state.ref, asset.kind);
+    if (kind) {
+      const problemList = objectFrontendKindItemCheck(kind.content, { lang: asset.item?.lang, text });
+      if (problemList.length > 0) return { code: -1, message: `${asset.name || key} is not written: it does not fit its kind ${kind.kindId}: ${objectFrontendKindProblemText(problemList)}` };
+    }
     const { assetStore } = this.stores;
     await assetStore.refLoad({ store: ASSET_STORE_ID_LOCAL, itemId: asset.itemId, versionId: 'head' });
     const result = await assetStore.itemUpdate(ASSET_STORE_ID_LOCAL, asset.itemId, { text }, undefined, note || `${key} of ${state.name || state.id}`);
@@ -1094,7 +1154,7 @@ export class DocObjectFrontendStore {
   }
 
   private assetKindLabelOfGet(idOrRef: string) {
-    const kindList = this.assetKindListGet(idOrRef) ?? [];
+    const kindList = this.kindListGet(idOrRef) ?? [];
     return (kind: string) => kindList.find((one: any) => one.id === kind)?.label ?? kind;
   }
 
@@ -1204,6 +1264,27 @@ export class DocObjectFrontendStore {
 
   settingsCreateSet(change: Partial<{ createDocPageAlias: string; createTypeId: string; createName: string }>) {
     Object.assign(this.settings, change);
+  }
+
+  // every data item of an object whose kind is data with a schema, read and checked against it:
+  // what does not fit, by asset (the settings tab asks; a mode reads assetDataGet().kindProblemList)
+  async kindCheckRun(id: string) {
+    const state = this.objectGet(id);
+    if (state.status !== 'found') return;
+    const kindList = this.kindListGet(id) ?? [];
+    const assetList = state.assetList.filter((asset: any) => asset.status === 'found' && kindList.find((kind: any) => kind.id === asset.kind)?.content?.form === 'data');
+    this.settings.kindCheck = { id, status: 'running', countChecked: 0, resultList: [] };
+    await this.stores.assetStore.refListLoad(assetList.map((asset: any) => ({ store: ASSET_STORE_ID_LOCAL, itemId: asset.itemId, versionId: 'head' })));
+    const resultList: { key: string; name: string; kindId: string; message: string }[] = [];
+    for (const asset of assetList) {
+      const kind = kindList.find((one: any) => one.id === asset.kind);
+      const read = this.assetDataGet(id, asset.key);
+      if (read.status === 'error') resultList.push({ key: asset.key, name: asset.name ?? '', kindId: kind.kindId, message: read.message });
+      else if (read.status === 'done' && read.kindProblemList.length > 0) resultList.push({ key: asset.key, name: asset.name ?? '', kindId: kind.kindId, message: objectFrontendKindProblemText(read.kindProblemList) });
+    }
+    runInAction(() => {
+      this.settings.kindCheck = { id, status: 'done', countChecked: assetList.length, resultList };
+    });
   }
 
   settingsKindSet(itemId: string, kind: string) {

@@ -145,6 +145,13 @@ typeList:
       - path
       - kind
     description: "Something inside a frontend object that the object can show, named by an inner path: one of its assets by default (a path, a key), or what its type says an inner path is (a value of a profile). Its reference is the object's, \"#\", the inner path (frontend:{id}#/book/sci-fi/dune); its summary says the object, the path and the kind (main/doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths)."
+  - id: frontend.item
+    kind: object
+    label: Data item
+    icon: file-box
+    extendList:
+      - asset.item
+    description: "A data item of a frontend object: an asset item an object holds. The root of the kinds: a kind is a type below it, declared by one frontend object type ({type}.{name}, cv.profile.info), saying what an item of it is (data of a schema, a text, bytes); any type may hold items of it (main/doc_page_impl_type.md#kinds-of-data-items)."
   # objects: service.*
   - id: service.template
     kind: object
