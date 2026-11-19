@@ -56,6 +56,7 @@ import { DocLinkIndexBuilder, type DocLinkIndex } from './doc-link-index.ts';
 import { excludeMatcherBuild, type ExcludeMatcher } from './doc-source-exclude.ts';
 import { DOC_ASSET_ENDPOINT_NAME, docAssetMiddlewareCreate } from './doc-asset-server.ts';
 import { DOC_API_ENDPOINT_NAME, docApiBridgeCreate } from './doc-api-server.ts';
+import { DOC_PDF_ENDPOINT_NAME, docPdfServerCreate } from './doc-pdf-server.ts';
 import { apiDeclaredConfigOfDocPageListGet } from './doc-api-config.ts';
 import { playgroundApply, playgroundConfigOfDocPageListGet } from './doc-playground.ts';
 import { hotkeyConfigGet } from './doc-hotkey.ts';
@@ -105,6 +106,7 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 //   export const docAssetEndpoint = '/__doc-asset'  // '' in a build or without asset.file
 //   export const docServiceEndpoint = '/__doc-service' // '' in a build or without config service
 //   export const docApiEndpoint = '/__doc-api'      // '' in a build: the remote api of the page (doc-api-server.ts)
+//   export const docPdfEndpoint = '/__doc-pdf'      // '' in a build: pages printed to a PDF by a browser of the server's machine (doc-pdf-server.ts)
 //   export const assetSnapshot = {...} | null       // the asset service layer, bundled in a build
 //   export const docCompMountList = [{ docPageAlias, tagName, id, export, defineOptionsExport, entryFile, module }]
 //                                                   // the components of the loaded doc pages, their modules imported
@@ -283,6 +285,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
   let docAssetEndpoint = '';
   let docServiceEndpoint = '';
   let docApiEndpoint = '';
+  let docPdfEndpoint = '';
   // the configuration files of the page: config.yaml and its local layer,
   // the entry file of the document and every yaml file it reaches (included
   // side panels, source and tag files), and the tag file of config. a change
@@ -418,6 +421,9 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       // the remote api of the page (doc_page_impl_api.md#remote-callers):
       // a built page has no server to forward a call
       docApiEndpoint = isBuild ? '' : endpointBuild(viteConfig.base, DOC_API_ENDPOINT_NAME);
+      // pages printed to a PDF (doc_page_impl_pagination.md#downloading-a-pdf): a built page
+      // has no server to open a browser
+      docPdfEndpoint = isBuild ? '' : endpointBuild(viteConfig.base, DOC_PDF_ENDPOINT_NAME);
       const configDocEarly = loadConfigDoc(configFile, options);
       pathsConfiguration = collectPathsConfiguration(configDocEarly);
       // the asset section is checked here, before the endpoint is chosen: a
@@ -510,6 +516,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         docAssetEndpoint,
         docServiceEndpoint,
         docApiEndpoint,
+        docPdfEndpoint,
         assetSnapshot,
         moduleId,
         compMountList: compConfigGet(configDoc).mountList,
@@ -919,6 +926,13 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       // page over the HMR socket and answered with what the page answered
       if (docApiEndpoint) {
         server.middlewares.use(docApiBridgeCreate(server, { endpoint: docApiEndpoint }).middleware);
+      }
+
+      // pages printed to a PDF (doc_page_impl_pagination.md#downloading-a-pdf): the document of
+      // the pages is opened in a browser of this machine without a window, which prints it to a
+      // file whose text is text
+      if (docPdfEndpoint) {
+        server.middlewares.use(docPdfServerCreate({ endpoint: docPdfEndpoint }).middleware);
       }
 
       // the service api is the backend's; the plugin only forwards it. like
@@ -2337,6 +2351,7 @@ export function generateModuleCode(
     docAssetEndpoint: string;
     docServiceEndpoint?: string;
     docApiEndpoint?: string;
+    docPdfEndpoint?: string;
     assetSnapshot: AssetSnapshot | null;
     moduleId: string;
     compMountList?: CompMount[];
@@ -2392,6 +2407,7 @@ export function generateModuleCode(
   lines.push(`export const docAssetEndpoint = ${JSON.stringify(services.docAssetEndpoint)};`);
   lines.push(`export const docServiceEndpoint = ${JSON.stringify(services.docServiceEndpoint ?? '')};`);
   lines.push(`export const docApiEndpoint = ${JSON.stringify(services.docApiEndpoint ?? '')};`);
+  lines.push(`export const docPdfEndpoint = ${JSON.stringify(services.docPdfEndpoint ?? '')};`);
   lines.push(`export const assetSnapshot = ${JSON.stringify(services.assetSnapshot)};`);
   // the bytes of the files components name: a build inlines them as data
   // urls, keyed by source path and by the spelling the reference used; in

@@ -37,11 +37,11 @@ The first script creates the accounts of its config, among them the first accoun
 
 ```sh
 node --import tsx --import ./src/lib/node-test-register.js ../../package/aws-utils/script-demo/demo-create.mjs \
-    --out ../../temporary/aws-demo --aws-oa ../../../aws_oa
-node cli/doc-cli.js dev ../../temporary/aws-demo
+    --out ../../generated/aws-demo --aws-oa ../../../aws_oa
+node cli/doc-cli.js dev ../../generated/aws-demo
 ```
 
-Make it somewhere git does not track: the values of a deployment are its owner's.
+`generated/` of react-doc is where it goes: git ignores that folder, and the values of a deployment are its owner's. Every document of the page says at its top that it is generated.
 
 **2. The package.** A doc page names the package in its entry, or the workspace does:
 

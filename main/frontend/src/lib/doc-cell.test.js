@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  cellBraceTextBuild, cellLinkMatchList, cellTextParse, cellTextPlainGet, cellTokenListGet, cellTokenListResolve, cellTokenSoleGet, cellTriggerListBuild,
+  cellBraceTextBuild, cellContextAssign, cellLinkMatchList, cellTextParse, cellTextPlainGet, cellTokenListGet, cellTokenListResolve, cellTokenSoleGet, cellTriggerListBuild,
 } from './doc-cell.js';
 import { cellTokenByIdBuild, cellTokenDefine } from '../../../comp-doc/cell/cell-define.js';
 import { slashActionDefine, } from '../../../comp-doc/slash/slash-define.js';
@@ -192,4 +192,34 @@ test('the store: one token selected at a time, cleared when a field opens', asyn
   // a field opened writes the same text: the selection goes
   store.fieldOpen('cell:address', 'x');
   assert.equal(store.token, undefined);
+});
+
+test('the context of a cell: one object kept, and whether a value of it changed', () => {
+  const info = { name: 'x' };
+  const context = {};
+  // the first values
+  assert.equal(cellContextAssign(context, { info, isEditing: false }), true);
+  assert.deepEqual(context, { info, isEditing: false });
+  // the same values again: nothing to draw again
+  assert.equal(cellContextAssign(context, { info, isEditing: false }), false);
+  // another value under a key, a key gone, a key added: each is a change, and the object stays the one
+  const kept = context;
+  assert.equal(cellContextAssign(context, { info: { name: 'x' }, isEditing: false }), true);
+  assert.equal(cellContextAssign(context, { info: context.info }), true);
+  assert.deepEqual(Object.keys(context), ['info']);
+  assert.equal(cellContextAssign(context, { info: context.info, badge: undefined }), true);
+  assert.equal(cellContextAssign(context, { info: context.info, badge: undefined }), false);
+  assert.equal(context, kept);
+});
+
+test('a cell says when its context changed: what draws its tokens reads the version', async () => {
+  const { autorun } = await import('mobx');
+  const { DocCellStore } = await import('../store/DocCellStore.js');
+  const cell = new DocCellStore({}).cellBuild({ tokenList: [kindQuery], context: {} });
+  const seenList = [];
+  const dispose = autorun(() => seenList.push(cell.contextVersionGet()));
+  cell.contextTouch();
+  cell.contextTouch();
+  dispose();
+  assert.deepEqual(seenList, [0, 1, 2]);
 });

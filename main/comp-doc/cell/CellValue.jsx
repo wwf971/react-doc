@@ -34,7 +34,9 @@ export const CellValue = observer(function CellValue({ cell, text, textEmpty = n
   const isTokenSelectable = isEditable && cellKey !== '' && typeof onTextChange === 'function';
   const content = partList.map((part) => (part.type === 'text'
     ? part.text
-    : <CellToken key={`${part.start}:${part.raw}`} part={part} cell={cell} text={value} cellKey={isTokenSelectable ? cellKey : ''} onTextChange={onTextChange} />));
+    // keyed by its place and kind, not by how it is written: a token changed from its card (a
+    // parameter set) stays the same element, so its card stays open where it is
+    : <CellToken key={`${part.start}:${part.name}`} part={part} cell={cell} text={value} cellKey={isTokenSelectable ? cellKey : ''} onTextChange={onTextChange} />));
   return className ? <span className={className}>{content}</span> : content;
 });
 
@@ -44,6 +46,10 @@ const CellToken = observer(function CellToken({ part, cell, text, cellKey, onTex
   const cellStore = useContext(StoreContext)?.cellStore;
   const elementRef = useRef(null);
   const Render = part.kind.Render;
+  // read here, so observed: the token is drawn again when the context of its cell has changed
+  // (use-cell.js). the context is one object and the token's own props stay the same, so
+  // nothing else would say it; handed on to the Render, which a memo may keep as well
+  const contextVersion = cell.contextVersionGet?.() ?? 0;
   const isSelectable = Boolean(part.kind.Card && cellKey && cellStore);
   const isSelected = isSelectable && cellStore.tokenIsSelected(cellKey, part.start);
   if (!Render && !isSelectable) {
@@ -68,7 +74,7 @@ const CellToken = observer(function CellToken({ part, cell, text, cellKey, onTex
         cellStore.tokenSelect(cellKey, part.start);
       } : undefined}
     >
-      {Render ? <Render token={part} cell={cell} /> : textPlain ?? part.raw}
+      {Render ? <Render token={part} cell={cell} contextVersion={contextVersion} /> : textPlain ?? part.raw}
       {isSelected ? (
         <CellTokenCard
           anchorRef={elementRef}
@@ -99,18 +105,28 @@ function CellTokenCard({ anchorRef, part, cell, tokenSet, close }) {
   closeRef.current = close;
 
   useLayoutEffect(() => {
+    const observer = new ResizeObserver(() => placeRead());
+    let frame = 0;
+    let isObserved = false;
     const placeRead = () => {
       const anchor = anchorRef.current;
       const card = cardRef.current;
-      if (!anchor || !card) return;
+      if (!anchor || !card) return false;
+      if (!isObserved) {
+        isObserved = true;
+        observer.observe(anchor);
+      }
       placeSet(tokenCardPlaceGet(anchor.getBoundingClientRect(), card.offsetWidth, card.offsetHeight));
+      return true;
     };
-    placeRead();
+    // a card mounted in the same turn as its token (a token selected already when its text is
+    // drawn again) meets no anchor yet: the token's element is attached after the effects of
+    // what is inside it. it is placed on the next frame then, never left out of sight
+    if (!placeRead()) frame = requestAnimationFrame(placeRead);
     window.addEventListener('scroll', placeRead, { capture: true, passive: true });
     window.addEventListener('resize', placeRead);
-    const observer = new ResizeObserver(placeRead);
-    if (anchorRef.current) observer.observe(anchorRef.current);
     return () => {
+      cancelAnimationFrame(frame);
       window.removeEventListener('scroll', placeRead, { capture: true });
       window.removeEventListener('resize', placeRead);
       observer.disconnect();

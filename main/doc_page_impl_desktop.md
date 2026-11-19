@@ -40,6 +40,8 @@ Decide the partitions with the type ([Partitions](doc_page_impl_obj_frontend.md#
 
 A resource is an example **because it lies in `example`**: the flag answered (`isExample`) is read from the partition, never written. **What is made from a resource goes into its partition** (the readings of a database, the plan of a schema). A config key of the app hides the example everywhere a list or a diagram of resources is drawn, while a path to one still opens it.
 
+**The partitions are the data folders a person sees**: say so in the app, rather than "projects" or "folders to work in". The example is one the app manages: **added to the workspace a person works in, beside their data, and reset or removed as a whole** (the partition emptied, and the files it is made of beside its items, its local databases say, kept in one folder of the workspace so they go with it), never a separate workspace to switch to; a person's data is another, where new resources go. One switch shows or hides the example in every part of the app.
+
 ### Freeze what is built on
 
 What one resource builds on another's data is **copied with where it came from** (object, item key, version), never read from the head again: a schema freezes the readings it maps, an execution the version of the plan it runs. The versions of items make this cheap and exact; a newer version changes nothing until a person takes it, and the difference is then answered.
@@ -78,6 +80,7 @@ This is not the config of a page: react-doc's own config system ([Config system]
 - **Something done to a resource is a message** sent to it, its result a reply under it, kept in one log: what happened can be looked at again, and an action is never an alert of a page.
 - **Long work is a run of an engine**, not a long call: a process of its own (detached, no window on Windows), a journal appended and replayed for the state, a lock with a heartbeat, tasks done again after a crash and written so that doing them twice changes nothing, a pause taken at a checkpoint. Its state is a function of the journal, so any process can be killed at any instant.
 - **Nothing is read from an outside system by looking**: reading is an action, and what was read says when.
+- **One window writes a data folder at a time.** Several executables of one app (each with a backend of its own) may be open on one data folder; two writing one item list at the same moment lose a change. The backend serving a window registers in the data folder with a heartbeat, one of them holds a lease, and every write of a frontend object asks for it; a window without it is covered (half transparent) until a click takes the lease. A run of an engine is no window and is not asked (db-migration-tool: `doc/dmt_impl_config.md#several-windows-on-one-data-folder`).
 
 ## The renderer and the diagrams
 

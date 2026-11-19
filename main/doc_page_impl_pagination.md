@@ -2,7 +2,7 @@
 
 # Pagination: Design
 
-A component is drawn as one block of any height. **Pagination** lays its content out on pages of a fixed size instead (A4 sheets), so that it can be previewed as it will be printed, printed, and downloaded as a PDF. It is a capability of the page that any component may declare, in the component registry, beside its icon and its modes ([What a component exposes](doc_page_impl_mdx_comp.md#what-a-component-exposes)); the first to declare it is the Japanese-style CV of the package cv (its own repository: `doc/cv-jp.md#pages`).
+A component is drawn as one block of any height. **Pagination** lays its content out on pages of a fixed size instead (A4 sheets), so that it can be previewed as it will be printed, printed, and downloaded as a PDF. It is a capability of the page that any component may declare, in the component registry, beside its icon and its modes ([What a component exposes](doc_page_impl_mdx_comp.md#what-a-component-exposes)); the first to declare it is the Japanese-style CV of the package cv (its own repository: `doc/cv-sheet.md#pages`).
 
 ```text
 a component's data ──pieceListGet(data, context)──► the flow   [basic, history, history, text]
@@ -18,7 +18,8 @@ paginationPlan (pure)         places the pieces on pages; a piece that does not 
                                                          ▼
 the sheets                    one div per page, of the page's size in mm: the preview
                               ├─► Print / PDF      a document of its own, in a hidden frame
-                              └─► Download PDF     the sheets as images, in a PDF built in the page
+                              └─► Download PDF     the same document printed by a browser of the development
+                                                   server's machine: text as text. else the sheets as images
 ```
 
 ## The concepts
@@ -96,7 +97,7 @@ paginationPlan({ pieceList, measuredGet, typeGet, contentHeight })
 
 ```jsx
 <PageFlow
-  ref={pageFlowRef}                         // { print(), pdfDownload(options) }
+  ref={pageFlowRef}                         // { print(), pdfDownload(options), isPdfText }
   pagination={definition.expose.pagination}  // compPaginationGet(definition)
   pieceList={pagination.pieceListGet(data, context)}
   pageSpec={{ height: 279.4, width: 215.9 }} // optional: over the component's (Letter here)
@@ -129,7 +130,26 @@ Chrome is the reference: the print document was checked there to give exactly th
 
 ## Downloading a PDF
 
-`pageFlowPdfDownload` makes the file in the page, without a dialog: every sheet is drawn to a JPEG (`html-to-image`, at twice the css pixels: about 192 dpi), and the JPEGs become the pages of a PDF written by `pdfFromJpegListBuild` (`doc-pagination-pdf.js`: catalog, pages, one image and one drawing per page, its cross-reference table). It is the same file in every browser, whatever its print dialog does; its text is an image, not text, and it is larger (a CV of three pages: about 2 MB). **Print / PDF** keeps the text as text, and is the one to prefer where the browser prints well.
+`pageFlowPdfDownload` makes the file without a dialog, the best way the environment has. A page cannot print itself to a file (its browser only offers a dialog), so the file of text is made by someone who can:
+
+```text
+Download PDF
+  the environment prints pages (capability pagePdf, its api "pdf")?
+    yes ─► the page builds the print document as text: the sheets, its stylesheets, the print stylesheet
+           POST {endpoint}/print { html, title }
+           the development server serves it back at {endpoint}/job/{id}, and opens that address in a
+           Chromium-family browser of its machine, without a window, in a profile of its own:
+           --headless --print-to-pdf (plugin/doc-pdf-server.ts)
+           ─► a PDF as "Save as PDF" of a print dialog makes it: text is text, rules are lines   kind: text
+    no, or it failed ─► every sheet drawn to a JPEG in the page, the JPEGs the pages of a PDF       kind: image
+```
+
+- **Text is the standard, images the fallback.** The answer says which was made, `data: { pageCount, kind: 'text' | 'image', reason }`, with the reason when a PDF of text was asked for and not made, so the component around the pages can say so (the CV names it beside its button). `isPdfText` of the ref says beforehand whether the environment offers the first; `pdfDownload({ isImage: true })` asks for images whatever it offers.
+- **The print document is the one the print dialog gets**: built from the same parts (`pageFlowPrintHtmlBuild`), with the profile of the engine that prints it (blink), so the file has exactly the pages of the preview. It is read from the development server, so a stylesheet, a font or an image it names by url is what the page reads.
+- **The browser** is the first found of Chrome, Edge, Chromium and Brave at their usual places on the server's machine; the environment variable `REACT_DOC_BROWSER` names another one. One job runs at a time, and the profile it runs in is removed with it: the reader's own browser and profile are never touched. `GET {endpoint}/status` says whether one was found.
+- **Images**: every sheet is drawn to a JPEG (`html-to-image`, at twice the css pixels: about 192 dpi), and the JPEGs become the pages of a PDF written by `pdfFromJpegListBuild` (`doc-pagination-pdf.js`: catalog, pages, one image and one drawing per page, its cross-reference table). It needs no server and is the same in every browser; its text is a picture, which shows when it is zoomed, and the file is larger. It is what a built page downloads, where **Print / PDF** stays the way to a file of text.
+
+An environment of another kind offers the same capability by answering the same api (a desktop shell printing with its own engine): the page only knows the endpoint.
 
 ## Limits, and what may come
 
@@ -144,7 +164,10 @@ frontend/src/lib/doc-pagination-pdf.js      a PDF of page images; pure
 frontend/src/lib/doc-pagination.test.js     the plan (fit, split, a head taller than thought, a piece taller than a page),
                                             keys, text cuts, print profiles, the PDF's cross-reference
 comp-doc/pagination/PageFlow.jsx            the environment: measuring rounds, the sheets
-comp-doc/pagination/page-flow-export.js     printing through a frame of its own, downloading a PDF of images
+comp-doc/pagination/page-flow-export.js     printing through a frame of its own; the print document as text; downloading a PDF
+                                            (asked of the environment, else of page images)
+frontend/plugin/doc-pdf-server.ts           the pdf api of the development server: a print job opened in a browser without a
+                                            window; where a browser is found (doc-pdf-server.test.js)
 comp-doc/pagination/PageFlow.css            sheets, pieces as boxes, the measuring box
 comp-doc/registry/comp-expose.js            expose.pagination checked; compPaginationGet
 ```

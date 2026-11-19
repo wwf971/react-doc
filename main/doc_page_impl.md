@@ -121,6 +121,7 @@ DocEnvStore   kind          viteDevServer | staticBuild   (lib/doc-env.js: one e
                             service      the service backend
                             devWarning   hints for the integrator in the console
                             apiRemote    the apis of the page called from outside it (doc_page_impl_api.md#remote-callers)
+                            pagePdf      pages printed to a PDF whose text is text (doc_page_impl_pagination.md#downloading-a-pdf)
               reasonGet(c)  why not, one wording everywhere
               endpointGet(api)   '' when the kind does not offer the api
         ▼

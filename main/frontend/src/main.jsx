@@ -78,6 +78,10 @@ createRoot(document.getElementById('root')).render(
       // (doc_page_impl_api.md#remote-callers): the development server
       // forwards calls to the page through its HMR socket; empty in a build
       api: { endpoint: docSource.docApiEndpoint, subscribe: docSource.subscribeDocApi, send: docSource.docApiSend },
+      // pages printed to a PDF by a browser of the development server's machine
+      // (doc_page_impl_pagination.md#downloading-a-pdf); empty in a build, where a
+      // download is a PDF of page images
+      pdf: { endpoint: docSource.docPdfEndpoint },
       // host settings handed to every registered component's config:
       // DiagramMermaid loads mermaid on first use, ExcelUniver the Univer
       // sheet engine, and the page frames popups such as the tag overview

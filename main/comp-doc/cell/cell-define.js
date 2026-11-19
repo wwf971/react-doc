@@ -29,7 +29,9 @@
 //                  kind, the text stays as written
 //
 //     how it is drawn
-//     Render({ token, cell })   a component drawing one token inline; absent: its text
+//     Render({ token, cell, contextVersion })   a component drawing one token inline; absent: its
+//                  text. it reads cell.context; contextVersion is another number after that
+//                  context changed, so a Render kept by a memo is drawn again
 //     textGet(token, cell) -> string
 //                  its plain text: what a consumer needing text reads (a title, a
 //                  comparison, pagination measuring text), and what is drawn

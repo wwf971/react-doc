@@ -1,4 +1,4 @@
-import { makeAutoObservable, observable } from 'mobx';
+import { action, makeAutoObservable, observable } from 'mobx';
 import { cellTextParse, cellTextPlainGet, cellTokenListResolve, cellTriggerListBuild } from '../lib/doc-cell.js';
 import { cellTokenSlashActionGet } from '../../../comp-doc/cell/cell-define.js';
 
@@ -38,6 +38,9 @@ import { cellTokenSlashActionGet } from '../../../comp-doc/cell/cell-define.js';
 // A cell (cellBuild) is what the components and the kinds are handed:
 //   { tokenList      the kinds it accepts, its own first
 //     context        the component's own, read live (a value of its data)
+//     contextVersionGet()   a number that is another one after the context changed: read
+//                    (observed) by what draws a token, so that a token drawn from the
+//                    context is drawn again; contextTouch() says it changed (use-cell.js)
 //     sourcePath     the document it is drawn in; owner: the reference of the
 //                    object it belongs to
 //     source, object the service objects the kinds of the page read
@@ -46,6 +49,15 @@ import { cellTokenSlashActionGet } from '../../../comp-doc/cell/cell-define.js';
 //     parse(text)    its parts; textGet(text): its plain text }
 
 type Stores = { slashStore?: any; sourceStore?: any; objectStore?: any };
+
+// the change of a cell's context, made something to observe. the context is one plain object
+// for the life of the cell, written by the render of its component: a token drawn from it
+// (the image of a badge the component has read) would not know it has changed, its own props
+// being the same. so the cell counts the changes, and what draws a token reads the count
+export function cellContextVersionBuild() {
+  const version = observable.box(0);
+  return { get: () => version.get(), touch: action(() => version.set(version.get() + 1)) };
+}
 
 export type CellField = {
   key: string; draft: string; textBase: string; status: 'idle' | 'submitting'; message: string;
@@ -108,9 +120,12 @@ export class DocCellStore {
     const tokenList = this.tokenListResolve(spec);
     const store = this;
     const contextOwn = spec.context ?? {};
+    const contextVersion = cellContextVersionBuild();
     const cell: any = {
       tokenList,
       context: contextOwn,
+      contextVersionGet: contextVersion.get,
+      contextTouch: contextVersion.touch,
       sourcePath: spec.sourcePath ?? '',
       owner: spec.owner ?? '',
       get source() { return store.stores.sourceStore?.sourceService; },

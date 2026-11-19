@@ -152,6 +152,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
         asset: config.asset?.endpoint,
         service: config.service?.endpoint,
         api: config.api?.endpoint,
+        pdf: config.pdf?.endpoint,
       },
     });
     const sourceStore = new DocSourceStore(data, {

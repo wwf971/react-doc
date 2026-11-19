@@ -22,7 +22,7 @@ export const docEnvKindDefineList = [
   {
     kind: 'viteDevServer',
     label: 'development server',
-    capabilityList: ['sourceWrite', 'edit', 'asset', 'service', 'apiRemote', 'devWarning'],
+    capabilityList: ['sourceWrite', 'edit', 'asset', 'service', 'apiRemote', 'pagePdf', 'devWarning'],
     tabTitleOrder: 'siteFirst',
   },
   {
@@ -43,6 +43,9 @@ export const docEnvKindDefineList = [
 //                 development server forwards it; a build may name a deployed one)
 //   apiRemote     the apis of the page called from outside it, through the
 //                 development server (doc_page_impl_api.md#remote-callers)
+//   pagePdf       pages printed to a PDF by a browser of the development
+//                 server's machine, text kept as text
+//                 (doc_page_impl_pagination.md#downloading-a-pdf)
 //   devWarning    hints meant for the integrator, printed to the console
 export const docEnvCapabilityDefineByName = {
   sourceWrite: { api: 'source', label: 'creating files' },
@@ -50,6 +53,7 @@ export const docEnvCapabilityDefineByName = {
   asset: { api: 'asset', label: 'the asset api' },
   service: { api: 'service', label: 'the service backend' },
   apiRemote: { api: 'api', label: 'remote api calls' },
+  pagePdf: { api: 'pdf', label: 'printing pages to a PDF' },
   devWarning: { api: '', label: 'development warnings' },
 };
 

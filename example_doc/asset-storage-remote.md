@@ -23,8 +23,8 @@ A script of the package makes a small doc page that uses your deployment: an aut
 
 ```sh
 cd main/frontend
-node --import tsx --import ./src/lib/node-test-register.js ../../package/aws-utils/script-demo/demo-create.mjs --out ../../temporary/aws-demo --aws-oa ../../../aws_oa
-node cli/doc-cli.js dev ../../temporary/aws-demo
+node --import tsx --import ./src/lib/node-test-register.js ../../package/aws-utils/script-demo/demo-create.mjs --out ../../generated/aws-demo --aws-oa ../../../aws_oa
+node cli/doc-cli.js dev ../../generated/aws-demo
 ```
 
 `--aws-oa` names the repository holding the two backends, whose ensure scripts wrote what the page needs into their `config_gen.yaml`; the five values can be given one by one instead (`--region`, `--user-pool-id`, `--client-id`, `--account-api-url`, `--storage-url`).

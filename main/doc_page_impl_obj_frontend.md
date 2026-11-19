@@ -399,7 +399,7 @@ compDefine(CvProfileInfo, {
 | --- | --- | --- |
 | `example.reading-list` (the demonstration) | asset paths: `/book/…`, `/author/…`, `/note/…` | `book`, `pathParam: book` |
 | `zettelkasten.box` (package zettelkasten) | asset references of its cards: `/zettel/…`, a key | `card`, `pathParam: zettel` |
-| `cv.jp` (package cv) | asset paths: `/example/instance/…`, `/example/template/…` | `sheet`, `pathParam: instance` |
+| `cv.jp` (package cv) | asset paths: `/example/cv/…`, `/example/we/…` (its two kinds of paper), `/example/template/…` | `sheet`, `pathParam: instance`: one mode for both kinds, the kind of the asset named choosing the form drawn |
 | `cv.profile` (package cv) | its own: a partition and a query path, `example/name/jp/first` (`objectInner` of its mode Information) | none: a value is drawn as its text |
 
 ## Cells of a mode
@@ -457,7 +457,7 @@ typeList:
 
 The check (`objectFrontendAssetAcceptCheck`, over the kinds resolved by `objectFrontendKindListResolve`) is declarative, so the development server applies it to whoever writes, a mode, the settings tab or an agent, and refuses before anything is written: a kind the type does not hold, an item of another form than its kind's (data in another language, a text where bytes go, a file of another media type), the data of a new item that does not fit the schema. A kind left out of a write is the only kind when the type has one, and otherwise the type asks for it. A mode's write of an asset (`assetWrite`) is checked against the schema too, by the page, before it is written; a read answers what does not fit beside the data (`kindProblemList` of `assetDataGet`), since a file changed by hand is seen only when read.
 
-The schema is the contract; a mode still reads **defensively**: a kind without a schema, or one whose schema says less than the mode needs, leaves the rest to the mode, which says what does not fit where the reader looks (a line above what it draws, a mark on the piece) and draws what it can, never an empty block or a broken one. A second object a mode reads (`otherGet`, which takes any frontend object) is checked the same way: that it is of the type the mode reads (`object.typeId` and `config.object.typeIsAssignable`), that the asset a reference names is of the kind expected (`asset.kind`, `kindGet(name).kindId`). The Japanese-style CV of the package cv does all of it (`@cv-dev/cv/doc/cv-jp.md#when-something-does-not-fit`).
+The schema is the contract; a mode still reads **defensively**: a kind without a schema, or one whose schema says less than the mode needs, leaves the rest to the mode, which says what does not fit where the reader looks (a line above what it draws, a mark on the piece) and draws what it can, never an empty block or a broken one. A second object a mode reads (`otherGet`, which takes any frontend object) is checked the same way: that it is of the type the mode reads (`object.typeId` and `config.object.typeIsAssignable`), that the asset a reference names is of the kind expected (`asset.kind`, `kindGet(name).kindId`). The Japanese-style CV of the package cv does all of it (`@cv-dev/cv/doc/cv-sheet.md#when-something-does-not-fit`).
 
 ### What disagrees
 

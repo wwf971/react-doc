@@ -65,7 +65,8 @@ cellTokenDefine({
     match(text) -> [{ start, end, data }] a pattern of its own
   read(body) -> data | undefined          a brace kind: what the body means, or not its token
   how it is drawn:
-    Render({ token, cell })               a component, inline; absent: its text
+    Render({ token, cell, contextVersion })   a component, inline; absent: its text. contextVersion: another
+                                          number after the context of the cell changed (#using-it-in-a-component)
     textGet(token, cell) -> string        its plain text
   how it is typed:
     slashAction                           a slash action, or (cell) => one
@@ -74,7 +75,7 @@ cellTokenDefine({
     Card({ token, cell, tokenSet, close })   optional: its edit card (#a-token-selected-its-card)
 })
 token = { kind, name, raw, body, param, data, start, end }
-cell  = { tokenList, context, sourcePath, owner, source, object, slash, parse(text), textGet(text) }
+cell  = { tokenList, context, contextVersionGet(), contextTouch(), sourcePath, owner, source, object, slash, parse(text), textGet(text) }
 ```
 
 The kinds of the page are a registry, built like the [slash action registry](doc_page_impl_edit_slash.md#the-slash-action-registry) and the component registry:
@@ -135,6 +136,7 @@ a value that can be edited (CellValue isEditable, or a CellField)
 - **The click selects the token, not the value around it.** A cell that opens its text on a click still does, everywhere but on such a token; a token without a card is part of the text as before.
 - **The card writes the text through the owner.** `tokenSet` builds the new text of the value (`cellTextRangeReplace`) and hands it to `onTextChange` of `CellValue` (for a `CellField`, its `onCommit`): the component saves it as it saves a typed text. What the card changes beyond the token, the thing the token names (the image of a badge, for every place showing it), is the kind's own write, through the context of the cell.
 - **One token is selected on the page** (`DocCellStore.token: { key, start }`); `cellKey` of `CellValue` names the value it stands in. Opening a field clears it, since both would write the same text.
+- **A change made from the card keeps the card open.** A token is the same element while only how it is written changes (its parameters, typed in the card or chosen there), so the card stays where it is and the author goes on: a size typed, then a caption.
 - **The card is a popup of the edit layer** (`doc-edit-popup`), floating, so a click in it is not a click outside what is being edited, and its top edge does not move while its content changes ([the edit card](doc_page_impl_mdx_comp_block.md#should-interaction-patterns-of-a-canvas)).
 
 ### A selection made a token
@@ -181,7 +183,7 @@ const Shelf = observer(function Shelf({ data, config }) {
 });
 ```
 
-- **`useCell`** (`comp-doc/cell/use-cell.js`) answers the cell: `tokenList` its own kinds, `context` what they read, `config` the config of the component (the document it is drawn in, and for a mode the object), `tokenIdList` the kinds of the page it accepts. The context is copied into the cell on every render, so a kind drawing a token and an action listing while the author types read the component's data as it is now.
+- **`useCell`** (`comp-doc/cell/use-cell.js`) answers the cell: `tokenList` its own kinds, `context` what they read, `config` the config of the component (the document it is drawn in, and for a mode the object), `tokenIdList` the kinds of the page it accepts. The context is copied into the cell on every render, so a kind drawing a token and an action listing while the author types read the component's data as it is now. **A token drawn already is drawn again when the context changed**: the context is one object for the life of the cell, and the props of a token stay the same, so nothing else would tell a token, kept by a memo, that the badge it draws has another caption. The cell therefore counts the changes (`cell.contextVersionGet()`, an observable; `useCell` bumps it with `cell.contextTouch()` after a render in which a value handed in is not the one of the last render, before the paint), `CellValue` reads the count where it draws a token and hands it to the kind's `Render` as `contextVersion`. A component whose tokens are costly to draw hands in the same object for what did not change.
 - **The owner decides when a cell is editable.** For a mode of a frontend object that is `service.isEditable`: the object can be written and the document is in edit mode ([Reading and editing](doc_page_impl_obj_frontend.md#reading-and-editing)). In reading mode a cell is drawn and its links and views work.
 - **The owner keeps the text.** The layer never writes data: `onCommit` hands the text to the component, which writes it through its own api.
 - **A link in a cell is written in the full form** (`~page:root/a.md`): a cell belongs to data, not to one document, and is drawn wherever a block shows its object ([Writing a link](doc_page_impl_nav.md#writing-a-link)).

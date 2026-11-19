@@ -74,7 +74,7 @@ An app declares its keys once, in its own code, and **writes the declaration int
 ```yaml
 app: example
 keyList:
-  - { key: example.isHidden, type: boolean, default: false, label: Hide the example, description: … }
+  - { key: example.isHidden, type: boolean, default: false, label: Hide the example, description: …, group: example }
   - { key: view.theme, type: enum, default: auto, valueList: [auto, light, dark] }
   - { key: plan.rangeCount, type: number, default: 16, min: 1, max: 256 }
   - { key: view.title, type: string, default: My app }
@@ -88,6 +88,8 @@ keyList:
 | `string` | a text | `type` |
 | `enum` | one of `valueList` | not a plain value: `type`; another one: `enum` |
 | `string-list` | a list of texts | `type` |
+
+**A key may name its group** (`group`: a word of the app's own): the part of the app it is about, so a page listing the keys shows them in sections, a shared section and one per part (an app made of several tools lists a tool's own keys apart, and leaves out the keys of a tool an executable does not hold). The stack ignores it.
 
 The app is the truth of what it declares: it checks what it reads against its own declaration, and writes the item again when the declaration changes (a version per change). A declaration item that cannot be read is said; an entry without a key, or of a type not listed, is left out and said (`appConfigDeclareParse`).
 

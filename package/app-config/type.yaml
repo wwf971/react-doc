@@ -35,7 +35,7 @@ typeList:
         pathPrefix: /layer/
         groupPath: layer
       # the keys an app declares: { app, keyList: [{ key, type, default, label, description,
-      # valueList, min, max }] }; key declare.{app}, written by the app itself, in partition shared
+      # valueList, min, max, group }] }; key declare.{app}, written by the app itself, in partition shared
       - id: config-declare
         label: Declared keys
         content:
@@ -58,6 +58,7 @@ typeList:
                     valueList: { type: array }
                     min: { type: number }
                     max: { type: number }
+                    group: { type: string, minLength: 1 }
         pathPrefix: /declare/
         groupPath: declare
     modeList:

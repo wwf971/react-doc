@@ -1,5 +1,6 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { pageSpecNormalize, paginationPlan, pieceListKeyed } from '../../frontend/src/lib/doc-pagination.js';
+import { StoreContext } from '../../frontend/src/store/context.js';
 import { pageFlowPdfDownload, pageFlowPrint } from './page-flow-export.js';
 import './PageFlow.css';
 
@@ -13,7 +14,11 @@ import './PageFlow.css';
 //   pageSpec     the page in mm, over pagination.pageSpec (A4 by default)
 //   title        the name of a printed or downloaded file
 //   onStateChange({ status, pageCount, problemList })   status: measuring | done
-// the ref: { print(), pdfDownload(options) }
+// the ref: { print(), pdfDownload(options), isPdfText }
+//   pdfDownload   a PDF without a dialog: printed by a browser of the development server's
+//                 machine where the environment offers it (its text is text), else of page
+//                 images; answers { code, message, data: { pageCount, kind, reason } }
+//   isPdfText     whether the environment offers the first
 //
 // How it works, in rounds without timers: every piece not measured yet is rendered in a
 // hidden box as wide as the page content, measured once it is laid out (fonts loaded,
@@ -25,6 +30,9 @@ export const PageFlow = forwardRef(function PageFlow({ pagination, pieceList, pa
   const specKey = `${spec.width}x${spec.height}:${spec.margin.top},${spec.margin.right},${spec.margin.bottom},${spec.margin.left}`;
   const pieceTypeById = pagination?.pieceTypeById ?? {};
   const pageClassName = pagination?.pageClassName ?? '';
+  // the environment's api printing pages to a PDF ('' where it has none: a built page)
+  const envStore = useContext(StoreContext)?.envStore;
+  const pdfEndpoint = envStore?.isCapable?.('pagePdf') ? envStore.endpointGet('pdf') : '';
   const rootRef = useRef(null);
   const measureRef = useRef(null);
   const probeRef = useRef(null);
@@ -85,8 +93,9 @@ export const PageFlow = forwardRef(function PageFlow({ pagination, pieceList, pa
 
   useImperativeHandle(ref, () => ({
     print: () => pageFlowPrint(rootRef.current, { title, pageSpec: spec }),
-    pdfDownload: (options = {}) => pageFlowPdfDownload(rootRef.current, { fileName: `${title}.pdf`, pageSpec: spec, ...options }),
-  }), [title, spec]);
+    pdfDownload: (options = {}) => pageFlowPdfDownload(rootRef.current, { fileName: `${title}.pdf`, pageSpec: spec, endpoint: pdfEndpoint, ...options }),
+    isPdfText: pdfEndpoint !== '',
+  }), [title, spec, pdfEndpoint]);
 
   const pieceRender = (piece, layout) => {
     const Render = pieceTypeById[piece.type]?.Render;

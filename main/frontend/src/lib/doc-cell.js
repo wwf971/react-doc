@@ -229,6 +229,27 @@ export function cellTokenListResolve({ tokenOwnList = [], tokenById = {}, tokenI
   return tokenList;
 }
 
+// the context of a cell kept as one object for the life of the cell (use-cell.js): the values
+// handed at this render are copied over the last ones, a key no longer handed goes. answers
+// whether anything is another value than before (a key added or gone, a value that is not the
+// one of the last render): what draws the tokens of the cell is told then
+//   contextKept   the object of the cell, changed in place
+//   contextNext   what the component hands at this render
+export function cellContextAssign(contextKept, contextNext = {}) {
+  let isChanged = false;
+  for (const key of Object.keys(contextKept)) {
+    if (key in contextNext) continue;
+    delete contextKept[key];
+    isChanged = true;
+  }
+  for (const key of Object.keys(contextNext)) {
+    if (key in contextKept && Object.is(contextKept[key], contextNext[key])) continue;
+    contextKept[key] = contextNext[key];
+    isChanged = true;
+  }
+  return isChanged;
+}
+
 // the direct triggers of a cell (lib/doc-slash.js): for each brace kind
 // that is typed with a slash action, the text opening its tokens enters the
 // param mode of that action at once: "{{" for the kind taking the rest,
