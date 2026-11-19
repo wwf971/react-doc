@@ -106,8 +106,19 @@ function routeThrough(line, pointList) {
 
 // measureType: the line type candidates are measured with against the lines placed: their own by
 // default; 'step' measures with sharp corners, since a rounded corner shortens the runs it joins and
-// hides a stretch two lines share by the length of its radius, a junction a reader still sees
-export function diagramLinesRoute({ rectList, lineList, placedList = [], measureType }) {
+// hides a stretch two lines share by the length of its radius, a junction a reader still sees.
+// laneMargin: no lane of a gap stands nearer its sides than that, so a line turns that far from a
+// card or a block at least, and from where any line leaves into the gap (an end past its card: after
+// the words of an icon node filling it). The lanes stand evenly between the two margins, a place
+// kept at each margin for a line that must turn before or after all the others (two rows at one
+// height: the outer places below). Without it the lanes share the gap evenly with its two edges,
+// the outer places halfway to the cards. A gap too narrow for the margins and its places
+// LANE_SPACING_MIN apart shares it evenly
+export function diagramLaneWidthOf(laneCount, laneMargin) {
+	return laneCount > 0 ? 2 * laneMargin + LANE_SPACING_MIN * (laneCount + 1) : 0;
+}
+
+export function diagramLinesRoute({ rectList, lineList, placedList = [], measureType, laneMargin }) {
 	const columnList = diagramColumnListGet(rectList);
 	const columnOf = new Map();
 	columnList.forEach((column, index) => column.idList.forEach((id) => columnOf.set(id, index)));
@@ -123,9 +134,24 @@ export function diagramLinesRoute({ rectList, lineList, placedList = [], measure
 			placedList = [...placedList, lineFinished(line, routeResolve(measureType ?? line.type, null, endsOf(line)).d)];
 		}
 	}
-	// the lanes of each gap, evenly spaced
+	// the lanes of each gap, evenly spaced. with a margin, a side of a gap is the farther of its column
+	// and of the ends of lines leaving that column into it
 	const demandByGap = laneDemandListGet(planList, columnOf);
+	const edgeByGap = new Map();
+	if (laneMargin > 0) {
+		for (const { line } of planList) {
+			for (const [end, nodeId] of [[line.source, line.sourceNodeId], [line.target, line.targetNodeId]]) {
+				if (isVertical(end)) continue;
+				const gap = columnOf.get(nodeId) + (end.side === 'right' ? 1 : 0);
+				const edge = edgeByGap.get(gap) ?? { from: -Infinity, to: Infinity };
+				if (end.side === 'right') edge.from = Math.max(edge.from, end.x);
+				else edge.to = Math.min(edge.to, end.x);
+				edgeByGap.set(gap, edge);
+			}
+		}
+	}
 	const slotListByGap = new Map();
+	const outerByGap = new Map();
 	const preferredOf = new Map();
 	for (const [gap, list] of demandByGap) {
 		const count = list.length;
@@ -135,9 +161,16 @@ export function diagramLinesRoute({ rectList, lineList, placedList = [], measure
 		if (isOuterLeft) slotList = list.map((_, index) => columnList[0].left - LANE_SPACING_OUTER * (count - index));
 		else if (isOuterRight) slotList = list.map((_, index) => columnList[columnList.length - 1].right + LANE_SPACING_OUTER * (index + 1));
 		else {
-			const from = columnList[gap - 1].right;
-			const spacing = (columnList[gap].left - from) / (count + 1);
-			slotList = list.map((_, index) => from + spacing * (index + 1));
+			const edge = edgeByGap.get(gap);
+			const from = Math.max(columnList[gap - 1].right, edge?.from ?? -Infinity);
+			const width = Math.min(columnList[gap].left, edge?.to ?? Infinity) - from;
+			const spacing = width / (count + 1);
+			// with a margin: count + 2 places evenly from one margin to the other, the first and the last outer
+			const step = laneMargin > 0 ? (width - 2 * laneMargin) / (count + 1) : 0;
+			if (step >= LANE_SPACING_MIN) {
+				slotList = list.map((_, index) => from + laneMargin + step * (index + 1));
+				outerByGap.set(gap, [from + laneMargin, from + width - laneMargin]);
+			} else slotList = list.map((_, index) => from + spacing * (index + 1));
 			if (spacing < LANE_SPACING_MIN) reportList.push({ kind: 'narrow', message: `${count} lines cross a gap of ${Math.round(columnList[gap].left - from)} px: their lanes are ${Math.round(spacing)} px apart` });
 		}
 		slotListByGap.set(gap, { slotList, usedSet: new Set() });
@@ -153,7 +186,7 @@ export function diagramLinesRoute({ rectList, lineList, placedList = [], measure
 		// on the far side of the other's. in a gap between two columns, halfway to the card
 		const outer = gap === columnList.length ? [slotList[slotList.length - 1] + LANE_SPACING_OUTER / 2]
 			: gap === 0 ? [slotList[0] - LANE_SPACING_OUTER / 2]
-			: [(columnList[gap - 1].right + slotList[0]) / 2, (slotList[slotList.length - 1] + columnList[gap].left) / 2];
+			: outerByGap.get(gap) ?? [(columnList[gap - 1].right + slotList[0]) / 2, (slotList[slotList.length - 1] + columnList[gap].left) / 2];
 		return [...free.slice(0, 4), ...outer.filter((x) => !usedSet.has(x)), ...free.slice(4), ...between].map((x) => ({ gap, x }));
 	};
 	const placedReadList = placedList.map((line) => ({ ...line, read: routePathRead(line.d) }));

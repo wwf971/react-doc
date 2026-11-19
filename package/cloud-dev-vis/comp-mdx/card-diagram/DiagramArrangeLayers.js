@@ -60,7 +60,7 @@ export function routeTurn(route) {
 // the lines of a diagram routed by the lane router: as they stand (across), or turned (down)
 function linesRoute(diagram, geometry, options, isDown) {
 	const scene = diagramLineSceneGet(diagram, isDown ? geometryTurn(geometry) : geometry, options);
-	const { routeById, reportList } = diagramLinesRoute({ ...scene, measureType: 'step' });
+	const { routeById, reportList } = diagramLinesRoute({ ...scene, measureType: 'step', laneMargin: options.laneMargin });
 	const routeByIdDrawn = isDown ? Object.fromEntries(Object.entries(routeById).map(([id, route]) => [id, routeTurn(route)])) : routeById;
 	const reportListDrawn = [...scene.reportList, ...reportList].map((report) => (isDown && report.kind === 'skipped' && /top or bottom/.test(report.message) ? { ...report, message: `${report.connectionId}: both of its ends leave a card through its left or right side, which lanes between rows do not route` } : report));
 	const labels = diagramLabelsPlace(diagram, geometry, routeByIdDrawn, options);

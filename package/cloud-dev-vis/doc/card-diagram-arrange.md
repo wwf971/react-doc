@@ -8,7 +8,7 @@ An **arranger** arranges a diagram by a set of rules: it decides how lines run a
  the editor or an api, by hand  ──┘   (pure)
 ```
 
-The contract is in `comp-mdx/card-diagram/DiagramArrange.js` and knows no kind of card. The base series has [the outline](#the-outline-arranger), [the rows](#the-rows-arranger), and [the layer arrangers](#the-layer-arrangers) for a system read downward; these and the arrangers of ER diagrams (`comp-mdx/power-platform/er-arrange/`) route their lines with [the lane router](#the-lane-router) of the base series.
+The contract is in `comp-mdx/card-diagram/DiagramArrange.js` and knows no kind of card. The base series has [the outline](#the-outline-arranger), [the rows](#the-rows-arranger), [the layer arrangers](#the-layer-arrangers) for a system read downward, and [the blocks](#the-blocks-arranger) for blocks of cards stood in columns; these and the arrangers of ER diagrams (`comp-mdx/power-platform/er-arrange/`) route their lines with [the lane router](#the-lane-router) of the base series.
 
 ## Using one
 
@@ -158,6 +158,41 @@ table    bucket                     set apart along it; a handle on a part (a ro
 
 `layers` is what a generator applies to a scene it makes, and what an author applies to a diagram drawn by hand, as often as wanted; `lanes-down` is for cards an author placed and wants to keep, as the resources of the storage service (`aws-utils`, `doc/storage-architecture.md`), with cards at the edge of the rows on purpose. A line between the sides of two cards of one row is not routed by either (reported `skipped`): it is left to its line type, which draws it straight when the sides face each other.
 
+## The blocks arranger
+
+`blocks` (**Blocks in columns**, `DiagramArrangeBlocks.js`, offered by `CardDiagram`) stands blocks of any height in columns of one width, the way a page of documentation stands its sections: **each block, in its order, goes where the columns it takes are lowest so far, and the gap between two columns is the gap between two blocks of a column**. **The lines between cards of two blocks get lanes in the gaps between the columns, each gap as wide as its lanes need.** A landing page made of blocks (the resources of an app by kind, each block headed by its kind and listing them; the groups of what hangs together) is laid out by it.
+
+```text
+ ┌ A ────┐  ┌ B ────┐  ┌ C ────┐       A, B, C first, a column each; D to the lowest column (A's);
+ │       │  │       │  │       │       E, two columns wide, where its two columns are lowest together
+ └───────┘  │       │  │       │
+ ┌ D ────┐  │       │  └───────┘
+ │       │  └───────┘
+ └───────┘  ┌ E ───────────────┐
+            └──────────────────┘
+```
+
+- **A block is a background card** (a color block: its contract says `isBackground`), or one the caller names (`blockIdList`). **A card belongs to the smallest block its rectangle stands in, and moves with it**, its place in the block kept: a caller writes each block with its cards anywhere (one under another is simplest) and the arranger stands them.
+- **A block is one column wide, or as many as its width takes** (`columnWidth`, else the narrowest block's width; a block of two columns is two columns and the gap between them wide, a block a little wider takes one more, so none stands over the next column). A caller wanting the columns of the cards of its blocks to line up makes each block whole columns wide.
+- **How many columns**: given (`columnCount`), else as many as make the whole nearest a shape (`aspect`, width over height, 1.8 by default), never fewer than the widest block takes nor more than every block side by side.
+- **A block may be given its column** (`columnById`): stacked there in its order, the others going where it is lowest; the landing page of a tool whose columns are the steps something goes through, or the order a piece of work goes through its kinds.
+- **The lines between cards of two blocks** (right-angled ones; `connectionIdList` names the only lines it may route, `[]` none): **a line leaves its card at the side facing the other block, both ends on the right when the two blocks share a column, runs along a lane of the gap it leaves into, across the columns between on a track clear of the blocks, and into the other card** ([the lane router](#the-lane-router), the blocks being what a line keeps clear of). The handle of an end is turned to that side, so a caller gives a card a handle per side it may be left from (of a row of a list: the anchor `text` on the right, so a line starts after the words however short they are, the mark on the left), or one a line. **A line turns `laneMargin` from a block at least** (40 px, whatever it meets: a row at the height of another's line is no exception), its lanes 12 px apart between: **each gap is as wide as its lanes need so**, never narrower than `gapColumn` (else `gap`). A line between two cards of one block is the block's own: its layout routes it (in the block, before the blocks are stood: a route follows its target, so it moves with the block), and the arranger leaves it alone.
+
+| Option | |
+| --- | --- |
+| `origin` | the top left of the first column |
+| `gap` | between two columns and between two blocks of a column (32) |
+| `gapColumn` | between two columns at least, when it is another (gap) |
+| `columnWidth` | the width of one column; else the narrowest block's |
+| `columnCount`, `aspect` | the columns; else from the shape aimed at (1.8) |
+| `columnById` | `{ blockId: column }`: a block that must stand in a column |
+| `blockIdList` | the blocks, in their order; else every background card |
+| `connectionIdList` | the lines that may be routed; else every right-angled line between cards of two blocks |
+| `laneMargin` | px from a block to the nearest lane of a gap: where a line turns (40) |
+| `registry` | for the estimate |
+
+It is offered for a diagram with two color blocks or more (`isApplicable`).
+
 ## The arrangers of ER diagrams
 
 | Id | Cards | Lines |
@@ -187,6 +222,8 @@ The routes of the right-angled lines of cards standing in columns, from the rect
 ```
 
 A line between two neighbouring columns has one lane, a line further than that has a lane beside each end and a track between them, and a line to a handle on top of a card has a lane and a level. A gap's lanes stand in an order that keeps lines of one kind from crossing each other: of lines going to one card, the one coming from farthest turns nearest the card. The anchors follow the target (`along: 1`).
+
+The lanes of a gap share it evenly with its two edges. **With `laneMargin`, no lane stands nearer the sides of its gap than that**, so a line turns clear of the card or block it leaves, not against it: the lanes stand evenly between the two margins, and a place is kept at each margin for a line that must turn before or after all the others (two rows at one height; without a margin that place is halfway to the card). A side of the gap is then the farther of its column and of the ends of the lines leaving that column into it: an end can stand past its card (the anchor `text` of an icon node is 12 px after the words, `TEXT_ANCHOR_GAP`, past the node when they fill it), and a lane behind where its line starts would make the line turn back. A gap too narrow for its margins and lanes 12 px apart is shared evenly. The arrangers `lanes-across`, `lanes-down` and `blocks` take the option; a caller sizing its gaps counts `2 × laneMargin + 12 × (lanes + 1)` (`diagramLaneWidthOf`: the lanes and the two kept places), and the room an end stands past its card.
 
 Lines are placed one after another and each is **checked against those already placed**, by the same rule as [the overlap check](card-diagram-usage.md#no-lines-on-top-of-each-other): the preferred place first, then others. So what no order can foresee, such as two rows at one height in different columns, is found and avoided. A candidate is measured as its line type draws it, or, with `measureType: 'step'`, with sharp corners: a rounded corner shortens the runs it joins, and two lines meeting in a bend would pass as apart.
 

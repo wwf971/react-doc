@@ -168,3 +168,18 @@ test('the lanes arrangers keep the cards and route the lines, down the rows or a
 	assert.deepEqual(routeTurn(routeTurn(route)), route);
 	assert.deepEqual(routeTurn(route).anchorList[0], { id: 'a1', along: 1, x: -7, y: 3, handleIn: 'y+', handleOut: 'x-' });
 });
+
+test('lanes-across with a margin: a line turns that far from its card, and from its end when the end stands past the card (after the words of an icon node)', () => {
+	const iconOf = (id, x, y, handles) => ({ id, renderer: { type: 'card-icon' }, position: { x, y }, size: { width: 200, height: 36 }, data: { title: id }, handles });
+	const nodes = [
+		iconOf('a', 0, 0, [{ id: 'out', anchor: { target: 'text', side: 'right' } }]),
+		iconOf('b', 0, 60, [{ id: 'out', anchor: { target: 'body', side: 'right' } }]),
+		iconOf('c', 300, 100, [{ id: 'in', anchor: { target: 'icon', side: 'left' } }]),
+	];
+	const connections = ['a', 'b'].map((id) => ({ id: `${id}>c`, source: { nodeId: id, handleId: 'out' }, target: { nodeId: 'c', handleId: 'in' }, renderer: { type: 'smoothstep' } }));
+	const { diagram } = diagramArrangeApply({ version: 1, nodes, connections }, diagramArrangerLanesAcross, { registry, laneMargin: 20 });
+	// the words of a fill their card: its end is 12 px past it, so no lane stands nearer the column than 200 + 12 + 20
+	const laneList = diagram.connections.map((connection) => 300 + connection.route.anchorList[0].x);
+	for (const lane of laneList) assert.ok(lane >= 232 - 0.5 && lane <= 280 + 0.5, String(lane));
+	assert.equal(new Set(laneList).size, 2);
+});

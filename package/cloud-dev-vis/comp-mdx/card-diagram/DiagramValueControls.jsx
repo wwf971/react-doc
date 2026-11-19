@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Search } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 
@@ -9,7 +9,7 @@ import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 
 // the host's contenteditable text control: every keystroke reaches the draft
 // (the bubbling input event), so no exit path depends on a blur commit
-export function TextValue({ value, label, isLocked, isMultiline = false, isCell = false, isEditing, onChange, onEnd, onCancel }) {
+export function TextValue({ value, label, isLocked, isMultiline = false, isCell = false, isEditing, placeholder, onChange, onEnd, onCancel }) {
 	const { componentConfig } = useDocStores();
 	const TextEditor = componentConfig?.EditableValueComp;
 	const element = useRef(null);
@@ -21,22 +21,66 @@ export function TextValue({ value, label, isLocked, isMultiline = false, isCell 
 		element.current.setAttribute('aria-label', label);
 		element.current.setAttribute('aria-readonly', String(!isActive || isLocked));
 		element.current.tabIndex = isLocked ? -1 : 0;
-		if (isActive && !isLocked) {
-			element.current.focus({ preventScroll: true });
+		if (!isActive || isLocked) return undefined;
+		// the focus, with every word chosen. a control drawn before its canvas shows it (a node not
+		// measured yet is hidden, and what is hidden takes no focus) is tried again until it takes it
+		let frame;
+		let tryCount = 0;
+		const focusTake = () => {
+			const target = element.current;
+			if (!target) return;
+			target.focus({ preventScroll: true });
+			if (document.activeElement !== target) {
+				if ((tryCount += 1) < 40) frame = requestAnimationFrame(focusTake);
+				return;
+			}
 			const range = document.createRange();
-			range.selectNodeContents(element.current);
+			range.selectNodeContents(target);
 			const selection = window.getSelection();
 			selection.removeAllRanges();
 			selection.addRange(range);
-		}
+		};
+		focusTake();
+		return () => cancelAnimationFrame(frame);
 	}, [isActive, isLocked, label]);
 	return <span className={`doc-vis-text nodrag nopan${isMultiline ? ' is-multiline' : ''}${isCell ? ' is-cell' : ''}`} onFocus={() => { if (!isLocked) editingSet(true); }} onClick={event => { event.stopPropagation(); if (!isLocked) editingSet(true); }} onContextMenuCapture={event => event.stopPropagation()} onInput={() => onChange(element.current.textContent)}>
 		{TextEditor ? <TextEditor data={{ text: value }} config={{ configKey: label, width: '100%', isEditing: isActive, isEditable: !isLocked, isExternalSubmitting: isLocked, isFocusOnEdit: false, isEditIconVisible: false, editElementRef: element, messageConfig: { isVisible: false } }} onEvent={(type, data) => {
 			if (type === 'valueCommit') { onChange(data.valueNext); return { code: 0 }; }
 			if (type === 'cancel') { if (onCancel) onCancel(); else onChange(data.valuePrevious); }
 			if (type === 'editStateChange' && !data.isEditing) { editingSet(false); onEnd?.(); }
-		}} /> : <span>{value}</span>}
+		}} /> : <TextPlain value={value} isActive={isActive} isLocked={isLocked} isMultiline={isMultiline} placeholder={placeholder} elementRef={element} onChange={onChange} onCancel={onCancel} onEnd={() => { editingSet(false); onEnd?.(); }} />}
 	</span>;
+}
+
+// the text control where the host injects none (the diagrams drawn outside a doc page, in an
+// app): a plain contenteditable to the same contract. every keystroke reaches the draft (the
+// input event, taken by the span around it), Enter ends a text of one line, Escape puts back
+// what it was when the typing started, and leaving it ends the typing
+function TextPlain({ value, isActive, isLocked, isMultiline, placeholder, elementRef, onChange, onCancel, onEnd }) {
+	const valueAtStart = useRef(value);
+	// the words are written by hand, never while they are typed: a render would move the caret
+	useLayoutEffect(() => {
+		const element = elementRef.current;
+		if (element && element.textContent !== String(value ?? '') && document.activeElement !== element) element.textContent = String(value ?? '');
+	}, [value, elementRef]);
+	useLayoutEffect(() => { if (isActive) valueAtStart.current = value; }, [isActive]); // eslint-disable-line react-hooks/exhaustive-deps
+	return <span ref={elementRef} className={`doc-vis-text-plain${isActive && !isLocked ? ' is-editing' : ''}`} data-placeholder={placeholder || undefined} contentEditable={isLocked ? false : 'plaintext-only'} suppressContentEditableWarning spellCheck={false}
+		onKeyDown={event => {
+			if (event.nativeEvent.isComposing) return;
+			if (event.key === 'Enter' && !(isMultiline && !event.ctrlKey && !event.metaKey)) {
+				if (event.ctrlKey || event.metaKey) return;
+				event.preventDefault();
+				event.stopPropagation();
+				event.currentTarget.blur();
+			} else if (event.key === 'Escape') {
+				event.preventDefault();
+				event.stopPropagation();
+				event.currentTarget.textContent = String(valueAtStart.current ?? '');
+				if (onCancel) onCancel(); else onChange(valueAtStart.current ?? '');
+				event.currentTarget.blur();
+			}
+		}}
+		onBlur={() => onEnd()} />;
 }
 
 export function CheckValue({ label, isChecked, isLocked, onChange }) {
@@ -105,11 +149,20 @@ function ActionMenuItem({ label, title, isDisabled }) {
 	return <span className={`doc-vis-menu-action${isDisabled ? ' is-disabled' : ''}`} title={title}><strong>{label}</strong><small>{title}</small></span>;
 }
 
-export function ValueMenu({ label, value, values, valueLabels = {}, commonList, onChange, onOpen, isLocked, isCell = false, isSearchable = false, className = '' }) {
+// isOpenWanted(): asked once the control is drawn: true opens the menu without a click (an
+// editor opened on this value)
+export function ValueMenu({ label, value, values, valueLabels = {}, commonList, onChange, onOpen, isOpenWanted, isLocked, isCell = false, isSearchable = false, className = '' }) {
 	const { componentConfig } = useDocStores();
 	const Menu = componentConfig?.Menu;
 	const buttonRef = useRef(null);
 	const [isOpen, openSet] = useState(false);
+	useEffect(() => {
+		if (isLocked || !isOpenWanted?.()) return undefined;
+		// once the canvas around it stands at its camera: the menu is placed from where the button is
+		let frameInner;
+		const frame = requestAnimationFrame(() => { frameInner = requestAnimationFrame(() => { onOpen?.(); openSet(true); }); });
+		return () => { cancelAnimationFrame(frame); cancelAnimationFrame(frameInner); };
+	}, []); // eslint-disable-line react-hooks/exhaustive-deps
 	const options = [...new Set([value, ...values])];
 	const choose = option => { onChange(option); openSet(false); };
 	return <>

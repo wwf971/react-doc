@@ -12,6 +12,9 @@ import { CardCell } from './TableCard.jsx';
 //                [ 8h 02m   2         ]
 //   card-brief   ( ◉ Title            )   data: title, icon?, tone?, statList?: [text]
 //                (   a figure  a figure)
+//   card-label   ( ⚙ Settings )           data: title, icon?, tone?, statusTone?, propertyList?: what
+//                                               it carries, with the values beside it (a label
+//                                               with settings: the edit card opens beside it)
 //
 //   card-database  a cylinder with its name inside: the drawing someone makes of a database.
 //                data: title, text?, tone?
@@ -54,6 +57,24 @@ export const CardBrief = observer(function CardBrief({ node, editor, nodeId }) {
 				<span className="doc-card-brief-title"><CardCell editor={editor} nodeId={nodeId} field={{ id: 'title', kind: 'text', label: 'Title' }} value={content.title ?? ''}>{node.data.title}</CardCell></span>
 				{node.data.statList?.length ? <span className="doc-card-brief-stat">{node.data.statList.map((stat, index) => <span key={index}>{stat}</span>)}</span> : null}
 			</span>
+		</div>
+	);
+});
+
+// a label: the pill of a brief card as wide as its words. With settings (data.propertyList) it
+// says so to a pointer; in the editor a click focuses it, and the edit card shows what it
+// carries beside it. statusTone: a dot after its words (something of it needs a look)
+export const CardLabel = observer(function CardLabel({ node, editor, nodeId }) {
+	const content = editor?.store.nodeGet(nodeId)?.data ?? node.data;
+	const Icon = CARD_ICON_BY_NAME[node.data.icon] ?? Settings;
+	const isSelected = Boolean(editor) && editor.store.selection?.nodeId === nodeId && !editor.store.selection.connectionId;
+	const hasSettings = Boolean(node.data.propertyList?.length);
+	return (
+		<div data-node-id={nodeId} data-tone={node.data.tone || 'slate'} className={`doc-card-brief doc-card-label${hasSettings ? ' has-settings' : ''}${isSelected ? ' is-selected' : ''}`} tabIndex={editor ? 0 : undefined}
+			onClick={editor ? (event) => { event.stopPropagation(); editor.select(nodeId); } : undefined}>
+			<span className="doc-card-brief-icon"><Icon size={13} aria-hidden="true" /></span>
+			<span className="doc-card-brief-title"><CardCell editor={editor} nodeId={nodeId} field={{ id: 'title', kind: 'text', label: 'Words' }} value={content.title ?? ''}>{node.data.title}</CardCell></span>
+			{node.data.statusTone ? <i className="doc-card-label-status" data-tone={node.data.statusTone} aria-hidden="true" /> : null}
 		</div>
 	);
 });

@@ -35,6 +35,15 @@ const dropOf = (connection, from) => connection.source === from.nodeId && (conne
 // store commands, and the keys of the editor (Escape, Ctrl/⌘ + Enter, undo
 // and redo), handled here first so no keyboard map takes them from an open
 // editor.
+//
+// What a host may say in config beside the edit session (a scene edited in place gives all of
+// them: card-diagram-flexible-switch.md#a-scene-edited-in-place):
+//   editScope     what of the draft may change (DiagramEditStore.js: scope); absent, everything
+//   editLabel     the word of the bar, in the place of Diagram
+//   editSelect    { nodeId, rowId?, fieldId?, propId?, connectionId?, isCell? }: what is focused
+//                 when the editor opens (the thing clicked to start it); isCell: its value typed
+//   onEditRest(report)   the author stepped out of everything: nothing is focused any more
+//   createSourceList, createActionList, createRequest   of the panel of a double-click
 export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, config, onEvent, kind, registry, isInPopup = false, renderContent }) {
 	const { compById, sourceStore } = useDocStores();
 	const [result] = useState(() => {
@@ -43,7 +52,7 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 				const definition = compDefinitionNormalize(compById[compIdResolve(sourceStore.configDoc, name)]);
 				return definition?.placementList?.includes(placement) ? definition.expose?.[placement] : undefined;
 			};
-			return { store: new DiagramEditStore(data.source || data.raw, kind, resolve, registry) };
+			return { store: new DiagramEditStore(data.source || data.raw, kind, resolve, registry, config.editScope) };
 		} catch (error) { return { message: error.message }; }
 	});
 	const canvas = useRef(null);
@@ -80,6 +89,20 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		}
 	};
 	const cancel = () => { if (!isLocked) void onEvent?.('editCancelRequest'); };
+	const isFixed = Boolean(store?.isStructureFixed);
+	// nothing is focused any more: said to a host that wants to know (a session with no change ends there)
+	const restReport = () => { if (store && !store.display && !store.cell && !store.create) config.onEditRest?.(store.report); };
+	// a line whose end was let go off every handle: free where it was dropped, or, where the
+	// structure is given and a line joins two things or is not there, taken away
+	// the end of a line that a handle takes when a carried end is dropped on it: the end carried,
+	// or, on a handle that takes only the other end, that other end (a line picked up where it
+	// leaves and dropped on a handle taking arrivals is given a new target); null: neither
+	const dropRoleGet = (connectionId, role, drop) => {
+		if (!store.endpointAttachReasonGet(connectionId, role, drop)) return role;
+		const other = role === 'source' ? 'target' : 'source';
+		return store.endpointAttachReasonGet(connectionId, other, drop) ? null : other;
+	};
+	const endFreeSet = (connectionId, role, position) => change(() => (isFixed ? store.connectionRemove(connectionId) : store.connectionEndpointSet(connectionId, role, { position })));
 	// Escape steps out one level at a time: the cell being typed (restoring
 	// it), the create panel, then one segment of the path (a cell to its row,
 	// a row to the list of rows, the list to the card, the card to nothing).
@@ -108,7 +131,9 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			event.preventDefault();
 			if (store.cell) editor.cancelCell();
 			else if (store.create) editor.createClose();
-			else if (store.display) editor.stepOut();
+			// a card of values alone shows no path to step along: Escape lets go of what is focused
+			else if (store.display) { if (isFixed) editor.clearSelection(); else editor.stepOut(); }
+			else restReport();
 		} else if ((event.key === 'Delete' || event.key === 'Backspace') && !isInTextField(event.target) && store?.selection?.anchorId && editor) {
 			// the anchor in focus (the only thing of a line a key removes)
 			event.preventDefault();
@@ -124,8 +149,8 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		select: (nodeId, options = {}) => { store.select(nodeId, options); },
 		selectConnection: connectionId => { store.selectConnection(connectionId); },
 		handleClick: (nodeId, handleId) => { store.handleClick(nodeId, handleId); },
-		stepOut: () => { store.pathUp(); if (!store.display) focusRoot(); },
-		clearSelection: () => { store.selectionClear(); focusRoot(); },
+		stepOut: () => { store.pathUp(); if (!store.display) { focusRoot(); restReport(); } },
+		clearSelection: () => { store.selectionClear(); focusRoot(); restReport(); },
 		cancelCell: () => { change(() => store.cellCancel()); focusRoot(); },
 		// ---- the history of the draft ----
 		// the draft put back a step; the focus returns to the editor root when
@@ -184,7 +209,7 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			}
 			const drop = dropOf(connection, { nodeId: interaction.fromNodeId, handleId: interaction.fromHandleId });
 			if (isPointNode(drop.nodeId)) return false;
-			return !store.endpointAttachReasonGet(interaction.connectionId, interaction.role, drop);
+			return dropRoleGet(interaction.connectionId, interaction.role, drop) !== null;
 		},
 		connect: connection => {
 			const interaction = store.interaction;
@@ -195,14 +220,15 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 				change(() => { const id = store.connectionCreate(orient.source, orient.target); if (id) store.selectConnection(id); });
 			} else if (interaction.type === 'detach') {
 				const drop = dropOf(connection, { nodeId: interaction.fromNodeId, handleId: interaction.fromHandleId });
-				change(() => store.connectionEndpointSet(interaction.connectionId, interaction.role, drop));
+				const role = dropRoleGet(interaction.connectionId, interaction.role, drop);
+				if (role) change(() => store.connectionEndpointSet(interaction.connectionId, role, drop));
 				store.interactionSet({ ...interaction, isDone: true });
 			}
 		},
 		connectEnd: state => {
 			const interaction = store.interaction;
 			if (!interaction || interaction.type === 'reconnect') return;
-			if (interaction.type === 'detach' && !interaction.isDone && state?.to) change(() => store.connectionEndpointSet(interaction.connectionId, interaction.role, { position: state.to }));
+			if (interaction.type === 'detach' && !interaction.isDone && state?.to) endFreeSet(interaction.connectionId, interaction.role, state.to);
 			store.interactionSet(null);
 		},
 		// an end of a line dragged by its anchor: React Flow names the handle
@@ -219,13 +245,14 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			const interaction = store.interaction;
 			if (interaction?.type !== 'reconnect') return;
 			const drop = dropOf(connection, { nodeId: interaction.fromNodeId, handleId: interaction.fromHandleId });
-			change(() => store.connectionEndpointSet(interaction.connectionId, interaction.role, drop));
+			const role = dropRoleGet(interaction.connectionId, interaction.role, drop);
+			if (role) change(() => store.connectionEndpointSet(interaction.connectionId, role, drop));
 			store.interactionSet({ ...interaction, isDone: true });
 		},
 		reconnectEnd: (edge, handleType, state) => {
 			const interaction = store.interaction;
 			if (interaction?.type !== 'reconnect') return;
-			if (!interaction.isDone && state?.to) change(() => store.connectionEndpointSet(interaction.connectionId, interaction.role, { position: state.to }));
+			if (!interaction.isDone && state?.to) endFreeSet(interaction.connectionId, interaction.role, state.to);
 			store.interactionSet(null);
 		},
 		nodeDragStart: node => { store.interactionSet({ type: 'nodeDrag', nodeId: node.id }); },
@@ -249,7 +276,8 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 				if (authored?.position && authored.position !== 'auto' && !authored.isPositionLocked) change(() => store.nodeMove(node.id, position));
 			});
 		},
-		createOpen: (position, option) => { if (position) { store.selectionClear(); store.createOpen(position, option); } },
+		// a draft whose structure is given has a panel only for what its host offers there
+		createOpen: (position, option) => { if (position && (!isFixed || config.createActionList?.length || config.createSourceList?.length)) { store.selectionClear(); store.createOpen(position, option); } },
 		createClose: () => { store.createClose(); focusRoot(); },
 		createChoose: (entry, position) => {
 			store.createClose();
@@ -271,6 +299,22 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 	const createRequest = config.createRequest;
 	const editorRef = useRef(editor);
 	editorRef.current = editor;
+	// what the host wants focused as the editor opens: the thing that was clicked to start it
+	useEffect(() => {
+		const wanted = config.editSelect;
+		if (!wanted || !store) return;
+		if (wanted.connectionId && !wanted.nodeId) store.selectConnection(wanted.connectionId);
+		else if (wanted.nodeId && store.nodeGet(wanted.nodeId)) {
+			store.select(wanted.nodeId, { rowId: wanted.rowId ?? null, fieldId: wanted.fieldId ?? null, propId: wanted.propId ?? null, connectionId: wanted.connectionId ?? null });
+			const field = wanted.rowId ? wanted.fieldId : wanted.propId;
+			// a text is typed at once; a choice opens its menu (the cell does, once it is drawn: cellOpenWanted)
+			if (wanted.isCell && field && store.fieldIsEditable(wanted.nodeId, wanted.rowId ?? null, field)) {
+				if (store.fieldDefinitionGet(store.nodeGet(wanted.nodeId), wanted.rowId ?? null, field)?.kind === 'enum') store.cellOpenWantedSet({ nodeId: wanted.nodeId, rowId: wanted.rowId ?? null, field });
+				else store.cellStart(wanted.nodeId, wanted.rowId ?? null, field);
+			}
+		}
+		if (!store.cell) focusRoot();
+	}, []); // eslint-disable-line react-hooks/exhaustive-deps
 	useEffect(() => {
 		if (!createRequest?.key) return undefined;
 		let frame;
@@ -288,20 +332,20 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 	}}>
 		{result.message || reasonRefused ? <div role="alert" className="doc-edit-message doc-vis-edit-message">{result.message || reasonRefused}</div> : null}
 		{store ? renderContent({ data: { ...data, source: store.rawDraft, raw: store.rawDraft }, editor }) : null}
-		<EditFloatingPanel label={kind === 'diagram' ? 'Diagram' : 'Table'} head={store ? <>
+		<EditFloatingPanel label={config.editLabel ?? (kind === 'diagram' ? 'Diagram' : 'Table')} head={store ? <>
 			<span className={`doc-vis-dirty${store.isDirty ? ' is-dirty' : ''}`} role="status">{store.isDirty ? 'Unsaved changes' : 'No changes'}</span>
 			{editor ? <span className="doc-vis-history" role="group" aria-label="History">
 				<button type="button" className="doc-button-icon" title="Undo (Ctrl/⌘ + Z)" aria-label="Undo" disabled={isLocked || !store.history.isUndoAvailable} onClick={() => editor.undo({ isFromControl: true })}><Undo2 size={14} /></button>
 				<button type="button" className="doc-button-icon is-mirrored" title="Redo (Ctrl/⌘ + Shift + Z)" aria-label="Redo" disabled={isLocked || !store.history.isRedoAvailable} onClick={() => editor.redo({ isFromControl: true })}><Undo2 size={14} /></button>
 			</span> : null}
-			{kind === 'diagram' && editor ? <button type="button" className="doc-button-icon" title="Add a node or a connection (or double-click the canvas)" aria-label="Add" disabled={isLocked} onClick={() => editor.createOpen(canvas.current?.centerGet())}><Plus size={14} /></button> : null}
-			{kind === 'diagram' && editor && registry?.arrangerList?.length ? <ActionMenu label="Arrange: replaces the anchors of the lines" isLocked={isLocked} actionList={registry.arrangerList.map(arranger => ({ id: arranger.id, label: arranger.label, title: arranger.description, isDisabled: arranger.isApplicable ? !arranger.isApplicable(store.value) : false }))} onAction={arrangerId => change(() => {
+			{kind === 'diagram' && editor && (!isFixed || config.createActionList?.length || config.createSourceList?.length) ? <button type="button" className="doc-button-icon" title={isFixed ? 'What can be added here (or double-click the canvas)' : 'Add a node or a connection (or double-click the canvas)'} aria-label="Add" disabled={isLocked} onClick={() => editor.createOpen(canvas.current?.centerGet())}><Plus size={14} /></button> : null}
+			{kind === 'diagram' && editor && !isFixed && registry?.arrangerList?.length ? <ActionMenu label="Arrange: replaces the anchors of the lines" isLocked={isLocked} actionList={registry.arrangerList.map(arranger => ({ id: arranger.id, label: arranger.label, title: arranger.description, isDisabled: arranger.isApplicable ? !arranger.isApplicable(store.value) : false }))} onAction={arrangerId => change(() => {
 				const arranger = registry.arrangerList.find(item => item.id === arrangerId);
 				const geometry = diagramCanvasListGet().find(item => item.editorGet()?.store === store)?.geometryGet?.();
 				const reportList = store.arrangeApply(arranger, { geometry });
 				if (reportList?.length) store.message = reportList.map(item => item.message).join(' · ');
 			})}><Waypoints size={14} /></ActionMenu> : null}
-			{kind === 'diagram' && editor && registry?.kindList?.some(item => item.contract.simple) ? <ActionMenu label="Display: every node as its card, or as a simple mark" isLocked={isLocked} actionList={[
+			{kind === 'diagram' && editor && !isFixed && registry?.kindList?.some(item => item.contract.simple) ? <ActionMenu label="Display: every node as its card, or as a simple mark" isLocked={isLocked} actionList={[
 				{ id: 'detailed', label: 'Every node as its card', title: 'The detailed display: each node is the card of its kind' },
 				{ id: 'simple', label: 'Every node as a simple mark', title: 'The simple display, for an overview: a mark with its name, the lines ending on it. Kinds without one keep their card' },
 			]} onAction={display => change(() => store.diagramDisplaySet(display))}><Shapes size={14} /></ActionMenu> : null}

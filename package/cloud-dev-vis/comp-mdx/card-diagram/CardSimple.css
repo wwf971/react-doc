@@ -54,7 +54,7 @@
 /* the anchor of a handle at the bottom: under the words, as wide as the mark */
 .doc-card-simple-foot { position: absolute; bottom: 0; left: 50%; height: 0; transform: translateX(-50%); pointer-events: none; }
 .doc-card-simple-text { display: grid; width: 100%; min-width: 0; gap: 0.05rem; }
-/* the words: a name, and a small monospace line under it, each on a veil of the canvas so a line
+/* the words: a name, and a small line under it (sans-serif, as every label), each on a veil of the canvas so a line
    passing under them does not cut them */
 .doc-card-simple-text { justify-items: center; }
 .doc-card-simple-title {
@@ -70,7 +70,7 @@
 	line-height: 1.25;
 	overflow-wrap: anywhere;
 }
-.doc-card-simple-note { max-width: 100%; min-width: 0; overflow: hidden; padding: 0 4px; border-radius: 3px; background: color-mix(in srgb, var(--color-fd-background) 80%, transparent); color: var(--color-fd-muted-foreground); font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace); font-size: 0.6rem; letter-spacing: 0.04em; line-height: 1.35; white-space: nowrap; text-overflow: ellipsis; }
+.doc-card-simple-note { max-width: 100%; min-width: 0; overflow: hidden; padding: 0 4px; border-radius: 3px; background: color-mix(in srgb, var(--color-fd-background) 80%, transparent); color: var(--color-fd-muted-foreground); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.66rem; line-height: 1.35; white-space: nowrap; text-overflow: ellipsis; }
 
 /* found by a search, hovered as a link: outlined around the mark and the words, not the node */
 .doc-vis-node[data-search]:has(> .doc-vis-node-content > .doc-card-simple),

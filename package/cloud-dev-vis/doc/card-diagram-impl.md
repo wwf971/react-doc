@@ -349,6 +349,21 @@ A custom edge uses the unified registry's `visualizationEdge` placement and `exp
 
 `TableCard` (`TableCard.jsx`) is the one card renderer: a title line (name and a subtitle), an optional description, head fields, a header of the card's **fields** and its **rows**, one cell per field, without any limit on their number. What a node type shows in it is the **schema** of its kind (`TableCardSchema.js`, `cardSchemaGet(node, registry)`): where the rows live (`columns`, `properties`, `rows`), the anchor prefix of a row, the fields (fixed for the Dataverse and resource cards, authored in `data.fields` for the generic `table`), the properties of the Table and Row tabs, how a new row starts, and whether rows and the title line take handles. This series has two generic cards on it: the `table` kind itself (fields authored in `data.fields`), and the **resource card** (`ResourceNodeCard.jsx`, `resourceCardSchemaBuild`): head fields under the title and property rows of name and value, with an accent color, which a series uses for the resources of its platform (a flow step, a business rule, a cloud service). The Dataverse card of the Power Platform series is the table card with a fixed schema and small render hooks (a badge, a key cell, a required star, a tooltip); a new card-like kind is a schema and, at most, a variant like these.
 
+**A card says more of its rows than its kind knows through its data**, whatever its kind (`cardSchemaGet` adds them to the schema), which is how a diagram made from data shows what it keeps of each row (how a column of a table is migrated or compared, what an option is written as) on the card of the thing itself:
+
+```text
+fieldExtraList         further fields, drawn as columns after those of the kind
+rowPropertyExtraList   further properties of a row: in the edit card, not drawn
+  { id, label, kind?: text | enum | bool | number, isReadOnly?, isMultiline?, placeholder?,
+    values?, valueLabels?, isSearchable?,      of a choice (enum): what it can be, in which words
+    valuesKey?, valueLabelsKey?,               the key of a row holding the values that row can take,
+                                               and words of its own for some of them
+    valueTones?: { value: tone },              the color a value is written in, in its cell
+    width? }                                   of the column of a field (a css grid track)
+```
+
+A field written in `data.fields` of a generic `table` takes the same options, so an authored column may be a choice or only shown. A choice reads as the words of its value, an empty one as nothing.
+
 The read and edit layouts of a card are one grid: without an editor a cell is text, with one it is a control in the same box, so a cell starting or ending editing moves nothing. A control reaches 2 px outside the cell on each side for its hover, so its words stand and wrap as when reading, and a menu with no value shows nothing, however its list calls that. Every row and the description are `nodrag nopan`, so a drag in them selects text and a drag on the title line pans the canvas (reading) or moves the node (editing); no part of a card is `nowheel`, so the wheel over a card zooms the canvas like the wheel over empty canvas and never scrolls the page.
 
 ### Compact cards
@@ -381,6 +396,8 @@ table, isCompact           card-note                card-brief
 
 `card-database` holds `title`, `text`, `tone`: a cylinder drawn at the size of its node with its name inside, the title as large as fits. A line joins its body.
 
+<a id="labels"></a>`card-label` is a label: the pill of a brief card as wide as its words (`title`, `icon`, `tone`, `statusTone`: a dot after its words), for something that has no card of its own. **A label may carry settings**: the properties its data declares (`propertyList`, in the form of the fields above), their values beside them in its data. In the editor a click focuses it, and the edit card shows what it carries beside it, to its right where there is room: a few settings of a whole diagram stand so as one small label instead of a card of their own. The same holds for any node that is no card: `nodePropertyListGet(node, registry)` gives its properties, those of its kind (`contract.propertyList`: the words of a note, of a brief card, of the title of a scene) and then those its data declares.
+
 <a id="icon-nodes"></a>`card-icon` (`CardIcon.jsx`, `CardIconData.js`) is something among many: a small round mark with its words beside it, for a graph of things rather than of contents. It says what a thing is and how it stands; what the thing holds is another scene, or another page of whoever draws the graph.
 
 ```text
@@ -394,6 +411,9 @@ table, isCompact           card-note                card-brief
                        isBadgeUnder?           the badge before the line of text instead: a narrow
                                                node keeps its width for its title
                        labelSide: bottom       the words under the mark; isLabelHidden: the mark alone
+(·) Title  text        isCompact?              a row of a list, as a file manager lists files: a
+                                               smaller mark (18), the words on one line, the text
+                                               dimmed after the title and giving way first
 ```
 
 It has three anchors: `icon`, the mark, where the lines of a graph end; `text` (right side only), a little after the end of its words, whichever of the title with its badge and the line under it is longest, for a line leaving a node drawn wider than its words (a column of nodes of one width); and `body`, the whole node. A search finds it by its title, the line under it and its badge (`contract.searchMatch`), never by its icon or tones. With its words beside the mark, the card is as wide as the mark and its words, not as its node (a column of nodes has one width): the outline of a hover or of a search goes around them, a few pixels apart, while the node still takes a click on its whole width; `text` stands past that outline, so no line runs through it. Its size is written by whoever draws it, since a graph is laid out before it is drawn; its kind says where the mark is in a node of a given size (`contract.anchorRectEstimate(node, anchorId, rect)`, a hook of any kind whose anchors are not its whole box), which is what an arranger without a drawn diagram asks ([the estimate](card-diagram-arrange.md#the-contract)). `card-caption` (`data.text`) is a few small words over a group of such nodes. Both are generic: which things there are, how they hang together and where they go is the business of the layer that builds the diagram.
@@ -422,17 +442,21 @@ The store keeps the path canonical: `pathSet` resolves what it is given, and eve
 
 **The edit card** (`DiagramEditCard.jsx`) is a popup of the edit layer beside the **principal** of the path (the node on the canvas or the standalone card, the middle of a line), never beside the row or cell within it (`editor.anchorRectGet`). Its top edge is computed from the principal's rectangle alone and its height is capped by the room below, so the card grows and shrinks downward and never moves while the author works in it. Its content is data (`DiagramEditCardModel.js`: the tabs with the path each leads to, the segments of the path bar, and the view: the detail of one thing as sections of properties and actions, or the list of a collection as items) rendered by the host's `PropEditor` (`config.components.PropEditor`, with a plain form when the host injects none) under the card's own tabs and the host's `PathBar` (the shared `.doc-path` look): the card's tab (its properties, title handles, position, add row / column, remove node), the rows (the list with a drag handle and a remove button before each item; a row's values and properties, its handles and their attach policies, insert / move / remove), the fields (the list; a field's label; insert / move / remove for an authored field list, greyed out with the reason for fixed fields), the cell (the value), the lines (the list of the connections at the card's handles; a line's label, line type, color, thickness, dash, markers, animation, its route with its anchors, the two ends, remove). A disabled tab, action or button keeps its reason as its title.
 
-**On the card** (`TableCard.jsx`) every part takes the focus (a head field and the description focus a `prop`, a field header a field, a row a row, a cell starts typing), and a focused row or field shows a `CardToolbar` (the shared `.doc-button-group`): a grip that drags the item among its siblings with the pointer (the drop place drawn on the card), insert before / after, move, remove; what the schema does not allow is disabled with `reasonFieldListFixed` as its title.
+**On the card** (`TableCard.jsx`) every part takes the focus (a head field and the description focus a `prop`, a field header a field, a row a row, a cell starts typing), and a focused row or field shows a `CardToolbar` (the shared `.doc-button-group`): a grip that drags the item among its siblings with the pointer (the drop place drawn on the card), insert before / after, move, remove; what the schema does not allow is disabled with `reasonFieldListFixed` as its title. **The toolbar of a row stands on the top edge of the row**, a few pixels into it so the two read as one: never over the words of the row or over the cell typed in it.
+
+**A text is typed with the host's control** (`config.components.EditableValueComp`), **or, where the host injects none, with a plain one of the framework's own** (`TextPlain` of `DiagramValueControls.jsx`, to the same contract: every keystroke reaches the draft, Enter ends a text of one line, Escape puts back what it was), so a diagram drawn outside a doc page, in an app, is typed in all the same. A control drawn before its canvas shows it takes the focus as soon as it can.
 
 **Rows, columns, handles.** Rows are inserted at an index, moved and removed (`rowInsert`, `rowMove`, `rowRemove`); columns of a generic table likewise (`columnInsert`, `columnMove`, `columnRemove`, `columnLabelSet`), the values of a removed column dropped from every row. A handle is added or removed per side of an anchor (`handleSideSet`; the **+** at the row edges adds one), with the reroute-or-detach rule above; `handleAttachPolicySet` sets its policy.
 
 **Arranging.** `arrangeApply` writes what an [arranger](card-diagram-arrange.md) answers into the draft as one step. The arrangers a component offers come from its node registry (`arrangerList`).
 
-**Connections.** A click on a handle rotates the selection through the connections attached to it and back to none (`handleClick`), keeping the card selected. A drag from a handle starts a new line (`connect` interaction) unless a connection at that handle is selected, or the handle takes one line and has it: then the drag detaches that end and carries it (`detach`), drawn by the custom connection line from the line's other end. React Flow's edge anchors move an end (`reconnect`); a free end is a hidden point node whose dot can also be dragged, snapping to the nearest handle within reach on drop. Every drop goes through one validation (`endpointAttachReasonGet`: direction, same handle, attach policy), and a drop that is refused or lands on nothing leaves the end free where it was dropped (`connectionEndpointSet`). A new line is oriented so that it leaves a handle that can send and enters one that can receive (`connectionOrient`). `connectionSet` changes the presentation fields; `connectionRemove` deletes.
+**Connections.** A click on a handle rotates the selection through the connections attached to it and back to none (`handleClick`), keeping the card selected. A drag from a handle starts a new line (`connect` interaction) unless a connection at that handle is selected, or the handle takes one line and has it: then the drag detaches that end and carries it (`detach`), drawn by the custom connection line from the line's other end. React Flow's edge anchors move an end (`reconnect`); a free end is a hidden point node whose dot can also be dragged, snapping to the nearest handle within reach on drop. Every drop goes through one validation (`endpointAttachReasonGet`: direction, same handle, attach policy), and a drop that is refused or lands on nothing leaves the end free where it was dropped (`connectionEndpointSet`). **A line carried by one end and dropped on a handle that takes only its other end moves that other end there**: picked up where it leaves a row and dropped on a row taking arrivals, the line has a new target, which is what the gesture means. A new line is oriented so that it leaves a handle that can send and enters one that can receive (`connectionOrient`). `connectionSet` changes the presentation fields; `connectionRemove` deletes.
 
 **Creating.** A double-click on empty canvas (or the bar's **+**) opens the create panel (`DiagramCreatePanel.jsx`), a searched list of the create entries of the node registry of the component (`nodeRegistrySearch`): its kinds that have a create entry, and a connection with two free ends. The chosen node gets the panel's position and is selected.
 
 <a id="sources-of-the-create-panel"></a>**Sources of the create panel.** A host may offer things to add that are neither kinds nor objects of the page, found by the text typed: `config.createSourceList`, a list (kept the same across renders) of `{ id, label, placeholder?, isBeforeKinds?, search(text), choose(entry, position, editor) }`. `search` answers `{ entryList: [{ id, label, description?, icon? }], note?, actionList?: [{ id, label, run() }] }`, at once or as a promise; it runs a moment after the typing stops, and an answer that comes after a later search began is dropped. The entries stand under the label of their source (above the kinds with `isBeforeKinds`), the words typed marked in them; `note` is a line under them (why there are none, how old they are) and `actionList` buttons beside it, after which the search runs again. `choose` adds the entry with the commands of `editor.store` through `editor.change`, at once or when a promise ends, so what it adds is validated and undone like any change; a failure is the message of the editor. The engine knows nothing of what a source offers: db-migration-tool offers the tables of a database, read from the database when one is chosen.
+
+**The panel serves a viewport of scenes too**: the [commands of a scene](card-diagram-flexible-switch.md#commands) open in it, with an editor that has no store (no kinds, no objects, only `createClose`, and `scene: { path, go, edit }`), under the heading and with the words of the field the scene gives (`heading`, `placeholder`, `ariaLabel` of `DiagramCreatePanel`). An action may be **greyed out** (`isDisabled`, `reason` said in the place of its description): listed, not taken. Opened at an action (`actionIdInitial`) that asks nothing, the panel does it and closes.
 
 **Actions and states of the create panel.** A host may offer entries that do something rather than add one thing: `config.createActionList`, a list of `{ id, label, description?, icon?, keywordList?, start({ position, editor }) }`, drawn under the heading *Actions*, found by the text typed like the kinds. An action whose `start` answers a **state** puts the panel into it, and the panel then asks for what the action needs, one state at a time: a state machine the host runs, which the panel only draws.
 
@@ -460,6 +484,31 @@ The states know nothing of a diagram and the panel nothing of what they ask for:
 Escape first restores the active cell, then closes the create panel, then drops the last segment of the path. It never saves or cancels the block session. Save (or Ctrl/Command + Enter) submits and Cancel discards. For an asset-backed block, **Save to > Inline YAML** replaces the reference with the draft without writing the asset; the default **Asset item** target follows the object's save policy and leaves the document unchanged.
 
 The card tab's **Remember** captures the current canvas coordinates in `position`; while remembered, dragging updates those coordinates in the draft (read a frame after the drop, when the last position change has reached the canvas store). Clearing it returns the node to `auto`. **Locked** captures the position and sets `isPositionLocked`, preventing dragging in both edit and read views. The camera is transient state scoped to the document block, kept across the edit-to-read remount without rewriting `viewport.view`.
+
+### A draft whose structure is given
+
+**A diagram made from data is not the reader's to rearrange**: its cards are the tables of a database, its rows their columns. Its draft is opened with a **scope** (`new DiagramEditStore(raw, kind, resolve, registry, scope)`, `config.editScope` of `DiagramVisualEdit`; a scene edited in place gives it: [card-diagram-flexible-switch.md](card-diagram-flexible-switch.md#a-scene-edited-in-place)), and the editor is then one of values and lines:
+
+```text
+scope
+  isStructureFixed       the nodes, their rows, fields and handles, where they stand and how they look
+                         are what they are
+  fieldIsEditable(node, rowId, fieldId)    which values may change (never one whose definition says
+                                           isReadOnly); every one when absent
+  react(value, before)   after every change, what follows from it in the terms of whoever the diagram
+                         is of: the draft to hold instead, validated and recorded with the change as one
+                         step, so an undo takes both back
+```
+
+| with `isStructureFixed` | |
+| --- | --- |
+| a card | no toolbar of a row or a field, no handle adder; a cell is typed only where its value may change, and reads as when reading elsewhere (a click on it reaches its row) |
+| the canvas | no node is moved, no route drawn by hand; a line is drawn between two handles, moved by an end, and **taken away by letting an end go off every handle** (no free end is left) |
+| the edit card | of values alone (`cardModelFixedBuild`): no tabs, no path; for a row or a node, the values that may change and those its data declared to say (a setting only shown); for a line, the two things it joins and its removal. **Nothing to change: no card** |
+| the bar | undo, redo, Save, Cancel; **+** only where the host offers something (`createSourceList`, `createActionList`), and the panel of a double-click offers nothing else |
+| Escape | lets go of what is focused at once (there is no path to step along) |
+
+What a host may also say in `config`: `editLabel` (the word of the bar), `editSelect` (`{ nodeId, rowId?, fieldId?, propId?, connectionId?, isCell? }`: what is focused as the editor opens, its value typed or its menu open with `isCell`), `onEditRest(report)` (nothing is focused any more), `viewInitial` and `onViewChange` (the camera handed over, and told of: a canvas taking the place of another).
 
 ### History
 
@@ -567,7 +616,7 @@ A standalone card (`CardStandalone.jsx`, `cardStandaloneCompCreate`) renders one
 `DiagramStatic` (`DiagramStatic.jsx`) draws a whole diagram with no React Flow: the same cards, placed absolutely, their lines in one svg. Nothing pans or zooms; the block is as large as what it draws (the cards as measured, and the lines), and scrolls with whatever holds it. It is for a place where a canvas would be in the way: a side panel, a page that is itself a diagram, a list.
 
 ```text
-<DiagramStatic diagram registry resolve? padding? onNodeClick? onSize? />
+<DiagramStatic diagram registry resolve? padding? frame? onNodeClick? onSize? />
 
 diagram       the data of a diagram; a node without a position stands on the default grid, a
               background written `around` other nodes follows them as they are measured
@@ -577,7 +626,11 @@ onSize        ({ width, height, xOrigin, yOrigin }): the size of the block, and 
               of the diagram is drawn in it. The block starts at what is drawn farthest up and left,
               so something a caller lays over the diagram (a button of its own) is placed from the
               origin: from the corner of the block it moves whenever that farthest thing does
+frame         { x, y }: the top left corner of the block, fixed (less the padding). A caller whose
+              cards change size in place gives it, so the diagram does not move when they do
 ```
+
+**A drawing that must stay where it is gives its frame.** The block of a still diagram starts at what is drawn farthest up and left, so a card drawn larger than before (the mark of the one shown, in a tree) moves the whole drawing, every line and every card, by as much as that card grew. Nothing of what is drawn changed place, yet everything is seen to move. A caller knowing how far its cards may reach says so with `frame`, from its layout (a tree: the farthest a mark of the one shown reaches, whichever is shown), never from what is drawn now; the origin then depends on the layout alone.
 
 Its pieces are what the switch layer draws [a scene inside a card](card-diagram-flexible-switch.md#one-canvas-no-canvas-inside-a-canvas) with (`DiagramStaticNode`, `DiagramStaticLine`, `DiagramStaticLabel`): one way of measuring anchors and of drawing a line between two measured ends, whether or not there is a path system around it. A static diagram is read-only by construction; it has no editor, no search and no camera.
 

@@ -4,10 +4,11 @@ import { cardNoteHeightEstimate, tableCardNormalize, tableCardAnchorListGet } fr
 import { tableCardSchema } from './TableCardSchema.js';
 import { TableCard } from './TableCard.jsx';
 import { OperatorCard } from './OperatorCard.jsx';
-import { CARD_ICON_BY_NAME, CardBrief, CardDatabase, CardNote, CardThreeDots } from './CompactCard.jsx';
+import { CARD_ICON_BY_NAME, CardBrief, CardDatabase, CardLabel, CardNote, CardThreeDots } from './CompactCard.jsx';
 import { CardCaption, CardIcon } from './CardIcon.jsx';
 import { cardIconAnchorListGet, cardIconAnchorRectEstimate, cardIconNormalize, cardIconSearchMatch } from './CardIconData.js';
 import { diagramArrangerOutline } from './DiagramArrangeOutline.js';
+import { diagramArrangerBlocks } from './DiagramArrangeBlocks.js';
 import { diagramArrangerLanesAcross, diagramArrangerLanesDown, diagramArrangerLayers } from './DiagramArrangeLayers.js';
 import { SceneBoxCard } from './SceneBoxCard.jsx';
 import { CardMatrix } from './CardMatrix.jsx';
@@ -59,7 +60,7 @@ const compactContract = (sizeDefault) => ({ anchorListGet: () => [{ id: 'body', 
 export const cardNoteNodeKind = {
 	type: 'card-note',
 	label: 'Note card',
-	contract: { ...compactContract({ width: 170, height: 48 }), sizeEstimate: (node) => ({ height: cardNoteHeightEstimate(node) }) },
+	contract: { ...compactContract({ width: 170, height: 48 }), sizeEstimate: (node) => ({ height: cardNoteHeightEstimate(node) }), propertyList: [{ id: 'title', label: 'Title', kind: 'text' }, { id: 'text', label: 'Text', kind: 'text', isMultiline: true }] },
 	schema: null,
 	Card: CardNote,
 	create: {
@@ -74,7 +75,7 @@ export const cardNoteNodeKind = {
 export const cardBriefNodeKind = {
 	type: 'card-brief',
 	label: 'Brief card',
-	contract: { ...compactContract({ width: 170, height: 40 }), simple: { contentGet: data => ({ title: data.title, text: data.statList?.[0], Icon: CARD_ICON_BY_NAME[data.icon] ?? Boxes, tone: data.tone || 'teal' }) } },
+	contract: { ...compactContract({ width: 170, height: 40 }), propertyList: [{ id: 'title', label: 'Title', kind: 'text' }], simple: { contentGet: data => ({ title: data.title, text: data.statList?.[0], Icon: CARD_ICON_BY_NAME[data.icon] ?? Boxes, tone: data.tone || 'teal' }) } },
 	schema: null,
 	Card: CardBrief,
 	create: {
@@ -83,6 +84,22 @@ export const cardBriefNodeKind = {
 			{ id: 'in', direction: 'in', anchor: { side: 'left' } },
 			{ id: 'out', direction: 'out', anchor: { side: 'right' } },
 		] }),
+	},
+};
+
+// a label: a pill as wide as its words (an icon, a few words), standing for something that has
+// no card of its own. It may carry settings: the properties its data declares (propertyList,
+// TableCardSchema.js: nodePropertyListGet), their values beside them in its data. A click on it
+// in the editor opens them in the edit card, beside the label (card-diagram-impl.md#labels)
+export const cardLabelNodeKind = {
+	type: 'card-label',
+	label: 'Label',
+	contract: { ...compactContract({ width: 120, height: 28 }), isWidthFit: true, propertyList: [{ id: 'title', label: 'Words', kind: 'text' }] },
+	schema: null,
+	Card: CardLabel,
+	create: {
+		description: 'A pill as wide as its words: an icon and a few words. It may carry settings, edited beside it.', icon: Boxes, keywordList: ['label', 'pill', 'settings', 'tag'],
+		nodeCreate: idNext => ({ id: idNext('label'), renderer: { type: 'card-label' }, data: { title: 'Label', icon: 'settings', tone: 'slate' }, handles: [] }),
 	},
 };
 
@@ -186,6 +203,6 @@ export const colorBlockNodeKind = {
 	},
 };
 
-export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, cardThreeDotsNodeKind, cardDatabaseNodeKind, cardIconNodeKind, cardCaptionNodeKind, cardMatrixNodeKind, sceneBoxNodeKind, colorBlockNodeKind];
+export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, cardLabelNodeKind, cardThreeDotsNodeKind, cardDatabaseNodeKind, cardIconNodeKind, cardCaptionNodeKind, cardMatrixNodeKind, sceneBoxNodeKind, colorBlockNodeKind];
 
-export const cardDiagramNodeRegistry = nodeRegistryBuild({ id: 'card-diagram', label: 'Card diagram', kindList: cardDiagramNodeKindList, arrangerList: [diagramArrangerOutline, diagramArrangerLayers, diagramArrangerLanesDown, diagramArrangerLanesAcross] });
+export const cardDiagramNodeRegistry = nodeRegistryBuild({ id: 'card-diagram', label: 'Card diagram', kindList: cardDiagramNodeKindList, arrangerList: [diagramArrangerOutline, diagramArrangerLayers, diagramArrangerLanesDown, diagramArrangerLanesAcross, diagramArrangerBlocks] });

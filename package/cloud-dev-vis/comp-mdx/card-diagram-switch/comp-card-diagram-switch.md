@@ -4,7 +4,7 @@ description: CardDiagramSwitch shows many card diagrams in one viewport, by path
 language: en
 ---
 
-One viewport, many diagrams. `CardDiagramSwitch` holds **scenes**, each a [card diagram](../power-platform/comp-diagram-er.md) with a **path**. The path bar above the viewport shows where you are: click a segment to go there, or the chevron before it to see the scenes beside it. A scene can show another scene inside a card; clicking the card zooms into it. At any scene you can pan and zoom, and copy or download what you see as PNG or SVG. `DiagramERSwitch` is the same block with every card of the [Power Platform](../power-platform/comp-powerplatform.md) series.
+One viewport, many diagrams. `CardDiagramSwitch` holds **scenes**, each a [card diagram](../power-platform/comp-diagram-er.md) with a **path**. The path bar above the viewport shows where you are: click a segment to go there, or the chevron before it to see the scenes beside it. Its root segment stands at its left end whatever the path, a longer path growing to the right: a path bar is never centered, since a centered one moves where it starts with every change of its length and the reader loses it. A scene can show another scene inside a card; clicking the card zooms into it. At any scene you can pan and zoom, and copy or download what you see as PNG or SVG. `DiagramERSwitch` is the same block with every card of the [Power Platform](../power-platform/comp-powerplatform.md) series.
 
 The design is in [card-diagram-flexible-switch.md](../../doc/card-diagram-flexible-switch.md).
 

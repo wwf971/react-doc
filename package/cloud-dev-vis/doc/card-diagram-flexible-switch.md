@@ -24,6 +24,13 @@ provider
   linkOpen?(link)         a link of a node or of the label of a line that the provider answers itself
                           (true: taken): one that is not a scene, since it leaves the viewport for
                           a page of whoever hosts it, or acts on it (a zettel opened, an object)
+  commandListGet?(path, target)   what can be done in a scene, or with a thing of it: [command], or
+                          { heading?, placeholder?, list } (#commands)
+
+a scene (or a view of it) may also say
+  edit?                   { source, save(raw, { title }), isStructureFixed?, fieldIsEditable?, react?,
+                          isTitleEditable?, label?, registry?, createSourceList?, createActionList? }: the
+                          scene edited where it is drawn (#a-scene-edited-in-place)
   signature?              what the scenes are made of (the text of the document, the data they are generated
                           from): a provider built again with the same one is the same, nothing is read again
   transition?             { secondPortal, secondMorph, secondCamera, secondScroll }
@@ -202,7 +209,7 @@ A `scene-box` node (a kind of the [base series](card-diagram-impl.md#node-regist
 
 ## The path bar
 
-`SwitchPathBar` stands left aligned over the viewport: one button per segment, whose click switches to it; the chevron before a segment lists the scenes beside it, the last chevron the scenes below. Three buttons stand before the path. Back and forward walk the scenes visited, as in a browser: a new way forgets what lay forward (`store.back`, `store.forward`). Up goes one level up the path, to the nearest folder that is a scene (`store.up`), and is itself a step that back can undo. **A path wider than its place does not wrap and has no scrollbar**: it is a strip moved by the wheel over it or by a drag (`ScrollHorizontal`, its offset in `store.pathScroll`, kept with the block), the page not scrolling meanwhile; a switch brings the segment of the scene shown into sight with what follows it (the view switcher, the chevron of the scenes below), and every segment says its full label in its title. At the right: the picture menu (copy or download, PNG or SVG, of the scene as it stands now, through the capture of the [animation](card-diagram-animation.md#pictures)), the camera back to the default of the scene, the bounding box. The buttons are those of a panel's header (`.doc-button-icon.is-panel` of the page's shared styles) and the bar has the header's sides, so in the block popup the ones at the right stand right under its maximize and close buttons; nothing is reserved beside them.
+`SwitchPathBar` stands left aligned over the viewport: one button per segment, whose click switches to it; the chevron before a segment lists the scenes beside it, the last chevron the scenes below. Three buttons stand before the path. Back and forward walk the scenes visited, as in a browser: a new way forgets what lay forward (`store.back`, `store.forward`). Up goes one level up the path, to the nearest folder that is a scene (`store.up`), and is itself a step that back can undo. **A path wider than its place does not wrap and has no scrollbar**: it is a strip moved by the wheel over it or by a drag (`ScrollHorizontal`, its offset in `store.pathScroll`, kept with the block), the page not scrolling meanwhile; a switch brings the segment of the scene shown into sight with what follows it (the view switcher, the chevron of the scenes below), and every segment says its full label in its title. At the right: the buttons of the host before the viewport's own (`trailing` of `SwitchPathBar`, `barTrailing` of `SwitchViewport`: the picture menu of a block, copy or download, PNG or SVG, of the scene as it stands now, through the capture of the [animation](card-diagram-animation.md#pictures)), the commands of the scene when it has some (**+**, [below](#commands)), find, the camera back to the default of the scene, the bounding box, then **the buttons of the host at the end of the bar** (`end`, `barEnd`: what takes the viewport elsewhere, as an app opening it as large as its window). The buttons are those of a panel's header (`.doc-button-icon.is-panel` of the page's shared styles) and the bar has the header's sides, so in the block popup the ones at the right stand right under its maximize and close buttons; nothing is reserved beside them.
 
 **An item of a menu** shows its `label` (the simple mode). When it has a `labelItemList` (the complex mode), it shows that instead, a list of things of different types, and `label` stays what the segment of the path bar and a screen reader say:
 
@@ -222,6 +229,64 @@ sceneList:
 After the last segment stands [the switcher](#the-views-of-a-scene) of a scene with views.
 
 A reader's camera is remembered per path, and so per view, while the block lives, and is where a return to the path arrives; the fit button forgets it. The block lives longer than a mount of it: `useSwitchStore` keeps the store in the block's component state ([stores kept across mounts](../../../main/doc_page_impl_mdx_comp_state.md#stores-kept-across-mounts)), so when the document enters or leaves edit mode the block comes back at the scene, the view and the camera the reader left, with its cards measured, and paints them in its first frame (a new canvas starts from `cameraLive`, the camera the last one had). A provider built again on the new mount is taken as it is (`providerAdopt`) when its `signature` is the one of the provider the store holds; a provider without a signature, or with another, reads the scenes anew (`providerSet`). The animation over it (`SwitchAnimationStore`) is kept with it.
+
+## Commands
+
+**A scene may say what can be done in it, and with each thing of it** (`provider.commandListGet(path, target)`), so that a reader does where a scene is drawn what forms do elsewhere: make something there, put things in another order, remove one. Asked when the reader asks:
+
+| the reader | target |
+| --- | --- |
+| presses **+** in the bar (shown while the scene answers something), double-clicks the empty canvas, or right-clicks it | `{ kind: canvas, position }` |
+| right-clicks a card | `{ kind: node, node, position }` |
+| right-clicks a line, or its label | `{ kind: line, connection, position }` |
+
+`path` is the scene's (`target.view` its view, `target.position` the point of the canvas where it was asked). The answer opens **the panel of a double-click in the visual editor** (`DiagramCreatePanel`: [card-diagram-impl.md](card-diagram-impl.md#sources-of-the-create-panel)) where the pointer was, kept inside the canvas, with no diagram being edited: no kinds of the registry, no objects, the commands alone, under `heading` (the thing they are of), the field saying `placeholder`; typing narrows them, Escape or a pointer elsewhere closes it, as does going to another scene or a new provider. Nothing answered: nothing opens, and the browser's own menu is left alone.
+
+A command is an action of that panel, `{ id, label, description?, icon?, keywordList?, isDisabled?, reason?, start({ position, editor }) }`: its `start` does what it does and answers nothing (the panel closes), or answers **a state**, and the panel asks for what the command needs state by state, a search to choose from, several to tick, a text to type, as for any action of the panel. **What cannot be done there is shown, greyed out with why** (`isDisabled`, its `reason` in the place of its description), never hidden: a reader learns it exists and what it waits for. The editor given has no store; `editor.scene` is the scene it was asked in: `{ path, go(path), edit(path?) }`, to show another scene (what a command made), or to start the edit of a scene ([below](#a-scene-edited-in-place)).
+
+**A click never opens what can be done with a thing.** That is a right-click; a click on a thing opens the scene behind it (`link`), or, in a scene edited in place, starts its edit there ([below](#a-scene-edited-in-place)). The one click that reaches a command is on what is drawn to make something: a node whose `link` is `command:{id}` (a dashed row *New action*) opens that command of the scene in its state, the panel asking for the first thing it needs; one that asks nothing is done at once, and nothing opens. A link `command:` alone, and one on the label of a line, open nothing.
+
+**A command makes, orders or removes; a value is no command.** What a thing *is* (its name, a setting, how two things are joined) is changed where it is drawn, in the edit of its scene. **Which commands exist where is the provider's**: one scene makes things of its kind, another changes the order of them, a thing of a scene has its own; a provider generating its scenes from data gives them with its data and builds itself again when the data changes, the viewport staying in the scene it shows (`providerSet` keeps a path that is still there). db-migration-tool draws a check plan so (`graph/check-plan-scenes.js`).
+
+## A scene edited in place
+
+**A scene of a provider may be edited where it is drawn** (`edit` of its description, or of the description of its view): the visual editor of the framework ([card editing](card-diagram-impl.md#card-editing)) on a draft, over the canvas, with what writes the draft back. A component generating its scenes from data so has what a document of scenes has in its visual mode ([below](#editing-a-block-of-scenes)), one scene at a time, the data written by the provider.
+
+```text
+edit
+  source                 the draft: a diagram, or its YAML. Give the diagram the scene itself draws (the
+                         same nodes at the same places, every handle a line may be drawn from): the edit
+                         then starts with nothing moving
+  save(raw, { title })   writes the draft back: a promise (the writes of the provider's data, after which
+                         it builds itself anew). title: the title typed, with isTitleEditable
+  isStructureFixed?      the nodes, their rows, fields and handles are given: values and lines are edited
+                         (card-diagram-impl.md#a-draft-whose-structure-is-given). A scene made from data
+                         says so: its cards are not the reader's to add to
+  fieldIsEditable?(node, rowId, fieldId)   which values may change; every one when absent
+  react?(value, before)  after every change of the draft, what follows from it (a line from a cell, a cell
+                         from a line): the draft to hold instead, written with the change as one step
+  isTitleEditable?       the title of the scene is typed where it stands
+  label?                 the word of the editor's bar (the kind of thing edited)
+  registry?              the kinds the draft may hold, else the viewport's
+  createSourceList?, createActionList?     of the panel of a double-click, while editing
+```
+
+**An edit starts from a click on the thing to change.** No mode is entered first: a click on a card, a row, a cell, a line (or its label), or the title of a scene whose draft has that thing starts the edit **with that thing focused** (`SwitchStore.sceneEditSelectOf`, `sceneEditStart(select)`): a text cell is being typed, a choice has its menu open, a row or a label has the edit card beside it. The pencil of the bar starts it with nothing focused, and ends it again.
+
+**Nothing is seen to change place.** The editor stands over the canvas, which stays under it (`SwitchViewport`), and takes its place without a blink:
+
+| | |
+| --- | --- |
+| the same picture | the draft is the diagram of the scene; the title of the scene is added to the draft as a node at its place (`SWITCH_TITLE_EDIT_ID`, of the kind `scene-title`: a `react` finds it there), and handed back apart on Save |
+| the same camera | the editor opens at the camera of the canvas (`config.viewInitial`), and the canvas follows the editor's from then on (`sceneEditCameraSet`), so the scene is where it was when the edit ends |
+| no blink | the editor is transparent until it has drawn at its camera (`data-ready` of its flow): until then the canvas under it is what is seen |
+| no room taken | its bar (what is edited, unsaved or not, undo, redo, Save, Cancel) floats over the top of the canvas |
+
+**An edit that changed nothing costs nothing.** It ends by itself when nothing is focused any more (Escape, a click on the empty canvas, the edit card closed: `sceneEditRest`) and when the reader goes to another scene, so looking at what a thing holds needs no Cancel. Once something changed, the path goes nowhere and the bar says so, until Save (Ctrl/⌘ + Enter) or Cancel.
+
+**Save** hands the draft to `edit.save`: a failure is said in the bar and the draft stays. The edit ends once the canvas under it holds the scene made from what was written (`providerVersion` moved, two frames to draw it), so what was there before is never seen again; a provider set while the save runs keeps the edit (`sceneEditSave`).
+
+db-migration-tool edits a check plan's action so (how a column is compared a choice in its row, the column it is held against its line, its settings the properties of a label, its name the title) and an option set mapping (what an option is written as a choice in its row and its line), in `graph/check-plan-scenes.js` and `graph/check-plan-scene-edit.js`.
 
 ## Under the animation layer
 
@@ -254,7 +319,7 @@ Save         the whole document written once: each draft in the place of its dia
              comments included
 ```
 
-The page is told the document, never the diagram of one scene, so its dirty mark and its Save are the block's (`SwitchSceneEditStore.js`). A scene made of tabs of another has no diagram of its own: it is edited through the scene it arranges. A component whose scenes are generated from data offers no visual mode (`cardDiagramSwitchDefineOptionsBuild({ isSceneEditable: false })`): what an author changes there is the data, as text, or wherever the data is written from.
+The page is told the document, never the diagram of one scene, so its dirty mark and its Save are the block's (`SwitchSceneEditStore.js`). A scene made of tabs of another has no diagram of its own: it is edited through the scene it arranges. A component whose scenes are generated from data offers no visual mode of its document (`cardDiagramSwitchDefineOptionsBuild({ isSceneEditable: false })`): what an author changes there is the data, as text, or wherever the data is written from, or, where its provider says so, a scene edited in place ([A scene edited in place](#a-scene-edited-in-place)), its draft written back as data.
 
 ## Adding to it
 
@@ -289,6 +354,7 @@ The rules that must hold:
 | `SwitchAnimation.jsx`, `SwitchAnimationStore.js` | under the animation layer |
 | `CardDiagramSwitch.jsx` | `SwitchViewport`, the block of a document, `cardDiagramSwitchCompCreate` with its `loadBuild`, the hooks a generator of scenes uses |
 | `SwitchSceneEdit.jsx`, `SwitchSceneEditStore.js` | the visual edit mode: one scene or view at a time, drafts, the document written again ([Editing a block of scenes](#editing-a-block-of-scenes)) |
+| `SwitchSceneEditor.jsx` | a scene of a provider edited where it is drawn: the editor over the canvas, its draft, its camera ([A scene edited in place](#a-scene-edited-in-place)) |
 | `card-diagram-switch-comp.js`, `SwitchSource.js`, `comp.yaml` | the registration, the starting text, the build-time dependencies |
 | `comp-mdx/card-diagram/SceneBoxCard.jsx` | the bounding box, in the base series |
 | `comp-mdx/power-platform/power-platform-comp.js` | `DiagramERSwitch` |

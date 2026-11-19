@@ -231,7 +231,7 @@ export const DiagramEdge = observer(function DiagramEdge(props) {
 		</>;
 	}
 	return <>
-		{isSelected && routeTypeHasAnchors(connection.renderer.type) && !editor.isLocked ? <ViewportPortal><DiagramRouteControls editor={editor} connection={connectionDrawn} ends={props} /></ViewportPortal> : null}
+		{isSelected && routeTypeHasAnchors(connection.renderer.type) && !editor.isLocked && !editor.store.isStructureFixed ? <ViewportPortal><DiagramRouteControls editor={editor} connection={connectionDrawn} ends={props} /></ViewportPortal> : null}
 		<path ref={pathRef} d={pathValue} fill="none" stroke="none" pointerEvents="none" />
 		{isSelected ? <path d={pathValue} fill="none" className="doc-vis-edge-selection" pointerEvents="none" /> : null}
 		<BaseEdge id={props.id} path={pathValue} markerStart={props.markerStart} markerEnd={props.markerEnd} style={connection.style} interactionWidth={props.interactionWidth ?? 24}

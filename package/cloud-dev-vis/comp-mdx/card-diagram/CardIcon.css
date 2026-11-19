@@ -52,7 +52,8 @@
 .doc-card-icon-status[data-tone='violet'] { --doc-card-status: #7c3aed; }
 .doc-card-icon-text { position: relative; display: grid; min-width: 0; gap: 0.05rem; }
 /* the anchor `text`: a line drawn out of the words starts a little after them, wherever they end,
-   and past the outline of a hover or a search (6px out of the card at most) */
+   and past the outline of a hover or a search (6px out of the card at most). Its 12px is
+   TEXT_ANCHOR_GAP of CardIconData.js, which an arranger estimates the anchor with */
 .doc-card-icon-text-anchor { position: absolute; top: 0; bottom: 0; left: 100%; width: 0; margin-left: 12px; pointer-events: none; }
 
 /* a card opening a scene, hovered; a card found by a search: outlined around the mark and the
@@ -85,6 +86,16 @@
 .doc-card-icon[data-tone='amber'] { --doc-card-accent: #d97706; }
 .doc-card-icon[data-tone='red'] { --doc-card-accent: #dc2626; }
 .doc-card-icon[data-tone='violet'] { --doc-card-accent: #7c3aed; }
+/* a row of a list (isCompact): the words on one line, the text dimmed after the title */
+.doc-card-icon.is-compact { gap: 0.4rem; }
+.doc-card-icon.is-compact .doc-card-icon-mark { border-width: 1px; }
+.doc-card-icon.is-compact .doc-card-icon-text { display: flex; align-items: baseline; gap: 0.45rem; }
+.doc-card-icon.is-compact .doc-card-icon-title { font-size: 0.76rem; font-weight: 500; }
+/* the title and its badge keep their room; the dimmed words after them give way first */
+.doc-card-icon.is-compact .doc-card-icon-head { flex: 0 1 auto; min-width: 0; }
+.doc-card-icon.is-compact .doc-card-icon-under { flex: 0 1000 auto; min-width: 0; }
+.doc-card-icon.is-compact .doc-card-icon-note { font-size: 0.66rem; }
+.doc-card-icon.is-compact .doc-card-icon-status { width: 6px; height: 6px; right: -2px; bottom: -2px; border-width: 1px; }
 .doc-card-caption {
 	overflow: hidden;
 	color: var(--color-fd-muted-foreground);

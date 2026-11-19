@@ -494,6 +494,27 @@
 	font-size: 0.68rem;
 }
 
+/* a further field a card's data declares (fieldExtraList): what the diagram says of the row */
+.doc-er-table-column-extra {
+	font-size: 0.68rem;
+}
+
+/* the tone of a value of a choice (valueTones of its field): its words in that color */
+.doc-card-row > [data-cell-tone] { font-weight: 600; }
+.doc-card-row > [data-cell-tone='teal'] { color: #0f766e; }
+.doc-card-row > [data-cell-tone='blue'] { color: #2563eb; }
+.doc-card-row > [data-cell-tone='violet'] { color: #6d28d9; }
+.doc-card-row > [data-cell-tone='green'] { color: #15803d; }
+.doc-card-row > [data-cell-tone='amber'] { color: #b45309; }
+.doc-card-row > [data-cell-tone='red'] { color: #b91c1c; }
+.doc-card-row > [data-cell-tone='slate'] { color: var(--color-fd-muted-foreground); font-weight: 400; }
+.dark .doc-card-row > [data-cell-tone='teal'] { color: #5eead4; }
+.dark .doc-card-row > [data-cell-tone='blue'] { color: #93c5fd; }
+.dark .doc-card-row > [data-cell-tone='violet'] { color: #c4b5fd; }
+.dark .doc-card-row > [data-cell-tone='green'] { color: #86efac; }
+.dark .doc-card-row > [data-cell-tone='amber'] { color: #fcd34d; }
+.dark .doc-card-row > [data-cell-tone='red'] { color: #fca5a5; }
+
 .doc-er-table-handle {
 	width: 9px;
 	height: 9px;
@@ -517,9 +538,10 @@
 }
 
 .doc-er-diagram-flow .react-flow__edge-text {
-	fill: color-mix(in srgb, var(--color-fd-foreground) 62%, var(--color-fd-muted-foreground));
-	font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
-	letter-spacing: 0.04em;
+	fill: color-mix(in srgb, var(--color-fd-foreground) 70%, var(--color-fd-muted-foreground));
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 12px;
+	font-weight: 500;
 }
 
 .doc-er-diagram-flow .react-flow__controls {
@@ -692,6 +714,20 @@
 .doc-card-note[data-tone='red'], .doc-card-brief[data-tone='red'] { --doc-card-accent: #dc2626; }
 .doc-card-note[data-tone='violet'], .doc-card-brief[data-tone='violet'] { --doc-card-accent: #7c3aed; }
 .doc-card-note[data-tone='slate'], .doc-card-brief[data-tone='slate'] { --doc-card-accent: #64748b; }
+/* a label (CompactCard.jsx, CardLabel): the pill of a brief card, smaller, as wide as its
+   words. one carrying settings answers a pointer; focused in the editor, it is framed as a
+   card is, and the edit card stands beside it */
+.doc-card-label { gap: 0.35rem; padding: 0.18rem 0.6rem 0.18rem 0.2rem; border-radius: 999px; white-space: nowrap; }
+.doc-card-label .doc-card-brief-icon { width: 1.3rem; height: 1.3rem; }
+.doc-card-label .doc-card-brief-title { overflow: visible; }
+.doc-card-label.has-settings { cursor: pointer; }
+.doc-card-label.has-settings:hover { border-color: color-mix(in srgb, var(--doc-card-accent, #64748b) 55%, var(--color-fd-border)); background: color-mix(in srgb, var(--doc-card-accent, #64748b) 7%, var(--color-fd-background)); }
+.doc-card-label.is-selected { border-color: var(--color-fd-primary); box-shadow: 0 0 0 1.5px var(--color-fd-primary); }
+.doc-card-label-status { flex: none; width: 0.45rem; height: 0.45rem; border-radius: 999px; background: #64748b; }
+.doc-card-label-status[data-tone='red'] { background: #dc2626; }
+.doc-card-label-status[data-tone='amber'] { background: #d97706; }
+.doc-card-label-status[data-tone='green'] { background: #16a34a; }
+.doc-card-label-status[data-tone='blue'] { background: #2563eb; }
 .doc-card.is-compact { line-height: 1.25; }
 .doc-card.is-compact .doc-er-table-title { line-height: 1.25; }
 .doc-card.is-compact .doc-er-table-column-header > span { line-height: 1.25; }
@@ -891,10 +927,10 @@ div.doc-diagram-search-bar {
 	padding: 0 0.3rem;
 	border-radius: 0.2rem;
 	background: color-mix(in srgb, var(--color-fd-background) 90%, transparent);
-	color: var(--color-fd-muted-foreground);
-	font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
-	letter-spacing: 0.04em;
-	font-size: 0.62rem;
+	color: color-mix(in srgb, var(--color-fd-foreground) 70%, var(--color-fd-muted-foreground));
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 0.75rem;
+	font-weight: 500;
 	line-height: 1.5;
 	white-space: nowrap;
 	pointer-events: none;
@@ -919,3 +955,6 @@ div.doc-diagram-search-bar {
 .doc-card-footer.is-selected { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-fd-primary) 45%, transparent); }
 .doc-resource-card .doc-card-footer { background: color-mix(in srgb, var(--resource-accent) 7%, var(--color-fd-background)); }
 .doc-card-footer-text { min-width: 0; overflow-wrap: anywhere; }
+/* the words of a label stay on one line while they are typed: the pill grows with them */
+.doc-card-label .doc-vis-text, .doc-card-label .doc-vis-cell { display: inline-block; width: auto; }
+.doc-card-label .doc-vis-text .editable-value-container .value-text-viewport .editable-value-text, .doc-card-label .doc-vis-text-plain, .doc-card-label .doc-vis-cell-value { width: auto; white-space: nowrap; }

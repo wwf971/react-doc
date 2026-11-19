@@ -95,7 +95,7 @@
 .doc-switch-bar-trailing { flex: none; display: inline-flex; align-items: center; gap: 0.25rem; }
 .doc-switch-bar-button[aria-pressed='true'] { background: rgb(220 38 38 / 12%); color: #dc2626; }
 /* the search, pressed while its bar is open: not the red of the bounding box */
-.doc-switch-bar-button.is-search[aria-pressed='true'] { background: rgb(37 99 235 / 12%); color: #2563eb; }
+.doc-switch-bar-button.is-search[aria-pressed='true'], .doc-switch-bar-button.is-edit[aria-pressed='true'] { background: rgb(37 99 235 / 12%); color: #2563eb; }
 .doc-switch-bar-menu { position: relative; display: inline-flex; }
 .doc-switch-bar-menu-list {
 	position: absolute;
@@ -134,6 +134,29 @@
 .doc-switch-error { position: absolute; inset: 0; z-index: 8; background: var(--color-fd-background); }
 .doc-switch-mask { position: absolute; inset: 0; z-index: 6; overflow: hidden; pointer-events: none; }
 .doc-switch-measure { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
+/* the canvas, and over it the editor of a scene edited in place (SwitchSceneEditor.jsx) */
+.doc-switch-stage { position: relative; flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+/* the editor covers the canvas once it has drawn at its camera (data-ready of its flow): until
+   then the canvas under it is what is seen, so nothing blinks when an edit starts */
+.doc-switch-scene-editor { position: absolute; inset: 0; z-index: 40; overflow: hidden; display: flex; flex-direction: column; background: var(--color-fd-background); }
+.doc-switch-scene-editor:not(:has(.doc-er-diagram-flow[data-ready])) { opacity: 0; }
+.doc-switch-scene-editor > .doc-vis-edit { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.doc-switch-scene-editor .doc-er-diagram { flex: 1 1 0; min-height: 0; height: auto; margin: 0; display: flex; flex-direction: column; }
+.doc-switch-scene-editor .doc-er-diagram-viewport { flex: 1 1 0; min-height: 0; height: auto; border: 0; border-radius: 0; }
+/* the bar of the editor floats over the top of the canvas: it takes no room, so the scene does not move */
+.doc-switch-scene-editor-float { position: absolute; top: 8px; left: 50%; z-index: 7; display: flex; justify-content: center; max-width: calc(100% - 16px); transform: translateX(-50%); }
+.doc-switch-scene-editor-float:empty { display: none; }
+.doc-switch-scene-editor-float .doc-edit-panel { position: static; }
+.doc-switch-bar.is-editing .doc-switch-path { pointer-events: none; opacity: 0.6; }
+.doc-switch-bar-note { color: var(--color-fd-muted-foreground); font-size: 0.75rem; white-space: nowrap; }
+/* a scene edited in place: a click on a thing of it starts the edit there (SwitchCanvas.jsx) */
+.doc-switch.is-scene-editable .doc-switch-flow .react-flow__node .doc-card-row,
+.doc-switch.is-scene-editable .doc-switch-flow .react-flow__node .doc-card-title,
+.doc-switch.is-scene-editable .doc-switch-flow .react-flow__node .doc-operator,
+.doc-switch.is-scene-editable .doc-switch-flow .doc-switch-edge-label { cursor: pointer; }
+.doc-switch.is-scene-editable .doc-switch-flow .react-flow__node .doc-card-row:hover { background: color-mix(in srgb, var(--color-fd-primary) 4%, transparent); }
+/* the panel of the commands of a scene (SwitchCanvas.jsx SwitchCommandPanel): over the canvas, where the pointer was */
+.doc-switch-command { position: absolute; z-index: 30; }
 
 /* a card with a link: a scene opens from it */
 .doc-switch-flow .react-flow__node.is-linked { cursor: pointer; }
@@ -143,19 +166,20 @@
 .doc-vis-node-content:has(> .doc-switch-embed, > .doc-switch-stack, > .doc-switch-link) { overflow: visible; }
 .doc-switch.is-box-adjust .react-flow__node:not([data-id*='scene-box']) { opacity: 0.55; }
 
-/* a label on a line, html so that a link is a button; the same in a static scene */
+/* a label on a line, html so that a link is a button; the same in a static scene. In the words
+   of the page (sans-serif), as every label of the framework is: never a monospace font */
 .doc-switch-edge-label {
 	position: absolute;
-	padding: 0.05rem 0.3rem;
+	padding: 0.1rem 0.4rem;
 	border: 1px solid transparent;
-	border-radius: 0.25rem;
+	border-radius: 0.3rem;
 	background: color-mix(in srgb, var(--color-fd-background) 90%, transparent);
-	color: color-mix(in srgb, var(--color-fd-foreground) 62%, var(--color-fd-muted-foreground));
+	color: color-mix(in srgb, var(--color-fd-foreground) 70%, var(--color-fd-muted-foreground));
 	font: inherit;
-	font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
-	font-size: 10.5px;
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 12px;
 	font-weight: 500;
-	letter-spacing: 0.04em;
+	letter-spacing: normal;
 	line-height: 1.35;
 	white-space: nowrap;
 	pointer-events: none;
@@ -416,7 +440,12 @@ button.doc-switch-edge-label:hover, button.doc-switch-edge-label.is-line-hovered
 	letter-spacing: -0.01em;
 	white-space: nowrap;
 }
+/* it takes no pointer, but where its words may be typed: in the editor of a scene edited in
+   place, and on the canvas of a scene that lets its title be typed (a click starts the edit) */
 .react-flow__node:has(> .doc-vis-node .doc-switch-scene-title), .doc-switch-static-node:has(.doc-switch-scene-title) { pointer-events: none; }
+.doc-switch.is-title-editable .doc-switch-flow .react-flow__node:has(> .doc-vis-node .doc-switch-scene-title) { pointer-events: all; cursor: text; }
+.doc-switch.is-title-editable .doc-switch-scene-editor .react-flow__node:has(> .doc-vis-node .doc-switch-scene-title) { pointer-events: all; }
+.doc-switch.is-title-editable .doc-switch-flow .doc-switch-scene-title:hover { text-decoration: underline dotted color-mix(in srgb, var(--color-fd-foreground) 35%, transparent); text-underline-offset: 0.2em; }
 
 /* the visual edit mode of a block of scenes (SwitchSceneEdit.jsx): which scene is edited, above the canvas */
 .doc-switch-scene-edit { display: flex; flex-direction: column; gap: 0.4rem; }

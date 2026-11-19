@@ -6,6 +6,9 @@ import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DiagramEditStore } from './DiagramEditStore.js';
+import { cardModelBuild } from './DiagramEditCardModel.js';
+import { CardCell } from './TableCard.jsx';
+import { fieldOfRow, nodePropertyListGet } from './TableCardSchema.js';
 import { DiagramERStore, diagramViewStateGet } from './DiagramERStore.js';
 import { powerAutomateSourceDefaultCreate } from '../power-platform/PowerAutomateNodeSource.js';
 import { businessRuleSourceDefaultCreate } from '../power-platform/BusinessRuleNodeSource.js';
@@ -603,3 +606,129 @@ test('a value menu in a cell with no value draws nothing, as the card does when 
 	assert.match(render({ value: '', isCell: false }), /None/, 'outside a cell the control says so');
 });
 
+
+// ---------- a draft whose structure is given (DiagramEditStore.js: scope)
+
+// two cards saying more of their rows than their kind knows, a label carrying settings, a line
+function scopedSourceCreate() {
+	return JSON.stringify({ version: 1, nodes: [
+		{ id: 'settings', renderer: { type: 'card-label' }, position: { x: 0, y: 0 }, isPositionLocked: true, data: { title: 'Settings', name: 'First',
+			propertyList: [{ id: 'name', label: 'Name' }, { id: 'kind', label: 'Kind', isReadOnly: true }, { id: 'size', label: 'Size', placeholder: 'as its plan says: 100' }, { id: 'isOn', label: 'On', kind: 'bool' }], kind: 'Comparison', size: '', isOn: true } },
+		{ id: 'source', renderer: { type: 'dataverse-table' }, position: { x: 0, y: 60 }, isPositionLocked: true, data: { name: 'Source',
+			fieldExtraList: [{ id: 'compare', label: 'Compared as', kind: 'enum', values: ['', 'same', 'ignore', 'kept'], valueLabels: { same: 'same value', ignore: 'Not compared', kept: 'as written' }, valuesKey: 'compareValueList', valueLabelsKey: 'compareLabels', valueTones: { same: 'teal' }, width: '9rem' }],
+			rowPropertyExtraList: [{ id: 'reason', label: 'Why', isMultiline: true }],
+			columns: [{ id: 'a', name: 'A', type: 'Text', compare: 'same', compareValueList: ['', 'same', 'ignore'] }, { id: 'b', name: 'B', type: 'Text', compare: 'kept', compareLabels: { kept: 'trim' } }] },
+			handles: [{ id: 'c-a', direction: 'out', anchor: { target: 'column/a', side: 'right' }, attachPolicy: 'single' }, { id: 'c-b', direction: 'out', anchor: { target: 'column/b', side: 'right' }, attachPolicy: 'single' }] },
+		{ id: 'target', renderer: { type: 'table' }, position: { x: 700, y: 60 }, isPositionLocked: true, data: { name: 'Target', fields: [{ id: 'value', label: 'Value', isReadOnly: true }, { id: 'way', label: 'Way', kind: 'enum', values: ['x', 'y'] }], rows: [{ id: 'r1', value: '1', way: 'x' }] },
+			handles: [{ id: 'r1', direction: 'in', anchor: { target: 'row/r1', side: 'left' } }] },
+	], connections: [{ id: 'rule-a', source: { nodeId: 'source', handleId: 'c-a' }, target: { nodeId: 'target', handleId: 'r1' } }] });
+}
+
+test('a card says more of its rows through its data: further fields as columns, further properties, values and words of a row\'s own', () => {
+	const store = new DiagramEditStore(scopedSourceCreate(), 'diagram', undefined, registry);
+	const schema = store.schemaGet('source');
+	// the fields of the kind, then the one declared; a property of a row beside those of the kind
+	assert.deepEqual(schema.fieldList.map(field => field.id), ['key', 'name', 'nameLogical', 'type', 'compare']);
+	assert.deepEqual(schema.fieldExtraList.map(field => [field.id, field.kind, field.width]), [['compare', 'enum', '9rem']]);
+	assert.ok(schema.rowPropertyList.some(property => property.id === 'reason' && property.isMultiline));
+	// a field written in the data of a generic table keeps what it is: a choice, a value only shown
+	assert.deepEqual(store.schemaGet('target').fieldList.map(field => [field.id, field.kind, Boolean(field.isReadOnly)]), [['value', 'text', true], ['way', 'enum', false]]);
+	assert.equal(store.fieldSet('target', 'r1', 'value', '2'), false);
+	assert.equal(store.fieldSet('target', 'r1', 'way', 'y'), true);
+	// the values a row can take, and the words of its own for one of them
+	const compare = schema.fieldList.at(-1);
+	assert.deepEqual(fieldOfRow(compare, store.rowGet('source', 'a')).values, ['', 'same', 'ignore']);
+	assert.deepEqual(fieldOfRow(compare, store.rowGet('source', 'b')).values, ['', 'same', 'ignore', 'kept']);
+	assert.equal(fieldOfRow(compare, store.rowGet('source', 'b')).valueLabels.kept, 'trim');
+	assert.equal(fieldOfRow(compare, store.rowGet('source', 'a')).valueLabels.kept, 'as written');
+	assert.equal(store.fieldSet('source', 'a', 'compare', 'ignore'), true);
+	assert.equal(store.fieldSet('source', 'a', 'reason', 'not needed'), true);
+	assert.equal(store.rowGet('source', 'a').reason, 'not needed');
+	// a cell that only shows reads as the words of its value, in its tone; an empty choice as nothing
+	const cellOf = (rowId, editor) => renderToStaticMarkup(createElement(CardCell, { editor, nodeId: 'source', rowId, field: fieldOfRow(compare, new DiagramEditStore(scopedSourceCreate(), 'diagram', undefined, registry).rowGet('source', rowId)), value: rowId === 'a' ? 'same' : 'kept' }));
+	assert.match(cellOf('a'), /data-field="compare" data-cell-tone="teal">same value</);
+	assert.match(cellOf('b'), />trim</);
+	// a label: a node that is no card, with the properties its data declares beside the words of its kind
+	assert.deepEqual(nodePropertyListGet(store.nodeGet('settings'), registry).map(property => property.id), ['title', 'name', 'kind', 'size', 'isOn']);
+	assert.equal(store.fieldSet('settings', null, 'name', 'Second'), true);
+	assert.equal(store.fieldSet('settings', null, 'kind', 'Other'), false);
+	assert.equal(store.fieldSet('settings', null, 'isOn', false), true);
+	assert.equal(store.nodeGet('settings').data.isOn, false);
+	// the words of a compact card are typed too (they were refused: the editor did not know them)
+	const note = new DiagramEditStore(JSON.stringify({ version: 1, nodes: [{ id: 'n', renderer: { type: 'card-note' }, data: { title: 'T', text: '' } }] }), 'diagram', undefined, registry);
+	assert.equal(note.fieldSet('n', null, 'title', 'Typed'), true);
+	assert.equal(note.undo(), true);
+	assert.equal(note.nodeGet('n').data.title, 'T');
+});
+
+test('a draft whose structure is given: values and lines alone, what follows from a change written with it, the edit card of values', () => {
+	const scope = {
+		isStructureFixed: true,
+		fieldIsEditable: (node, rowId, fieldId) => (node.id === 'settings' ? fieldId !== 'title' : node.id === 'source' && Boolean(rowId) && ['compare', 'reason'].includes(fieldId)),
+		// a column not compared loses its line; a line drawn from one gives it the plain way
+		react: (value, before) => {
+			const columns = value.nodes.find(node => node.id === 'source').data.columns;
+			const lineOf = (list, id) => (list ?? []).find(line => line.source.handleId === `c-${id}`);
+			let isChanged = false;
+			const columnBefore = id => before.nodes.find(node => node.id === 'source').data.columns.find(column => column.id === id);
+			for (const column of columns) {
+				const line = lineOf(value.connections, column.id);
+				if (column.compare !== columnBefore(column.id).compare) {
+					if (column.compare === 'ignore' && line) { value.connections = value.connections.filter(one => one !== line); isChanged = true; }
+				} else if (line && !lineOf(before.connections, column.id) && column.compare !== 'same') { column.compare = 'same'; isChanged = true; }
+			}
+			return isChanged ? { ...value } : undefined;
+		},
+	};
+	const store = new DiagramEditStore(scopedSourceCreate(), 'diagram', undefined, registry, scope);
+	assert.equal(store.isStructureFixed, true);
+	// which values: what the scope says, never one its definition only shows
+	assert.equal(store.fieldIsEditable('source', 'a', 'compare'), true);
+	assert.equal(store.fieldIsEditable('source', 'a', 'name'), false);
+	assert.equal(store.fieldIsEditable('settings', null, 'name'), true);
+	assert.equal(store.fieldIsEditable('settings', null, 'kind'), false);
+	assert.equal(store.fieldIsEditable('settings', null, 'title'), false);
+	assert.equal(store.fieldSet('source', 'a', 'name', 'Other'), false);
+	assert.equal(store.fieldSet('target', 'r1', 'way', 'y'), false);
+	// what follows from a change is written with it: one step, taken back as one
+	assert.equal(store.fieldSet('source', 'a', 'compare', 'ignore'), true);
+	assert.equal(store.connections.length, 0);
+	assert.equal(store.undo(), true);
+	assert.deepEqual([store.rowGet('source', 'a').compare, store.connections.length], ['same', 1]);
+	assert.equal(store.redo(), true);
+	assert.deepEqual([store.rowGet('source', 'a').compare, store.connections.length], ['ignore', 0]);
+	// a line drawn: the cell follows; the source handle takes one line
+	assert.ok(store.connectionCreate({ nodeId: 'source', handleId: 'c-a' }, { nodeId: 'target', handleId: 'r1' }));
+	assert.equal(store.rowGet('source', 'a').compare, 'same');
+	assert.equal(store.connectionCreate({ nodeId: 'source', handleId: 'c-a' }, { nodeId: 'target', handleId: 'r1' }), null);
+	// the edit card: no tabs, no path; the values that may change, and those the data declared to say
+	const editor = { store, change: operation => operation(), handlePositionGet: positionGet };
+	store.select('settings');
+	const settings = cardModelBuild(editor);
+	assert.deepEqual([settings.title, settings.tabList.length, settings.segmentList.length], ['Settings', 0, 0]);
+	assert.deepEqual(settings.view.sectionList[0].propertyList.map(property => [property.id, property.kind, Boolean(property.isReadOnly)]), [['name', 'text', false], ['kind', 'text', true], ['size', 'text', false], ['isOn', 'bool', false]]);
+	assert.equal(settings.view.sectionList[0].propertyList[2].placeholder, 'as its plan says: 100');
+	assert.equal(settings.view.sectionList[0].propertyList[0].set('Renamed'), true);
+	assert.equal(store.nodeGet('settings').data.name, 'Renamed');
+	// a row: its choice with the values and words of that row, and what is said of it
+	store.select('source', { rowId: 'b' });
+	const row = cardModelBuild(editor);
+	assert.deepEqual([row.title, row.kindLabel], ['B', 'Column']);
+	assert.deepEqual(row.view.sectionList[0].propertyList.map(property => property.id), ['compare', 'reason']);
+	assert.equal(row.view.sectionList[0].propertyList[0].valueLabels.kept, 'trim');
+	// a line: the two things it joins, and its removal; nothing of how it looks
+	store.selectConnection(store.connections[0].id);
+	const line = cardModelBuild(editor);
+	assert.equal(line.title, 'A → 1');
+	assert.deepEqual(line.view.sectionList[0].propertyList.map(property => [property.id, property.value]), [['source', 'Source / A'], ['target', 'Target / 1']]);
+	assert.deepEqual(line.view.sectionList[0].actionList.map(action => action.id), ['connection-remove']);
+	// a thing with nothing to change has no card
+	store.select('target', { rowId: 'r1' });
+	assert.equal(cardModelBuild(editor), null);
+	store.select('target');
+	assert.equal(cardModelBuild(editor), null);
+	// without a scope the card is the whole one, as in a document
+	const free = new DiagramEditStore(scopedSourceCreate(), 'diagram', undefined, registry);
+	free.select('source');
+	assert.ok(cardModelBuild({ store: free, change: operation => operation(), handlePositionGet: positionGet }).tabList.length > 0);
+});

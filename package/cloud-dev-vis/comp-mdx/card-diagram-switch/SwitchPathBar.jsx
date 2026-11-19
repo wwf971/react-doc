@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight, Scan, Search, SquareDashedMousePointer } from '../../../../main/frontend/UICommon.js';
+import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight, Pencil, Plus, Scan, Search, SquareDashedMousePointer } from '../../../../main/frontend/UICommon.js';
 import { AnchoredPopover } from '../../../../main/comp-doc/popup/AnchoredPopover.jsx';
 import { ScrollHorizontal } from '../../../../main/comp-doc/scroll/ScrollHorizontal.jsx';
 import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
@@ -66,7 +66,9 @@ const SwitchPathSibling = observer(function SwitchPathSibling({ store, path }) {
 	);
 });
 
-export const SwitchPathBar = observer(function SwitchPathBar({ store, trailing }) {
+// trailing: buttons of the host before those of the viewport (a picture, a copy); end: after them,
+// at the end of the bar (what takes the viewport elsewhere: into a window of its own)
+export const SwitchPathBar = observer(function SwitchPathBar({ store, trailing, end }) {
 	const chain = store.pathChain;
 	const scene = store.sceneCurrent;
 	const childList = store.provider.childListGet(scene);
@@ -81,15 +83,20 @@ export const SwitchPathBar = observer(function SwitchPathBar({ store, trailing }
 		scroll.reveal(segment.offsetLeft, strip.offsetWidth - segment.offsetLeft);
 		scroll.reveal(segment.offsetLeft, segment.offsetWidth);
 	}, [scroll, scene, scroll.widthOuter, scroll.widthInner]);
+	// a scene edited in place: what acts on the canvas is put away while the editor stands over it,
+	// and once something changed the bar goes nowhere until its Save or Cancel (the editor's own
+	// bar, over the canvas); an edit that changed nothing is left by going elsewhere
+	const isEditing = Boolean(store.sceneEdit);
+	const isHeld = Boolean(store.sceneEdit?.isDirty) || store.sceneEdit?.status === 'submitting';
 	return (
-		<div className="doc-switch-bar not-prose">
-			<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="Back to the previous scene" aria-label="Back to the previous scene" disabled={store.historyList.length === 0} onClick={store.back}>
+		<div className={`doc-switch-bar not-prose${isHeld ? ' is-editing' : ''}`}>
+			<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="Back to the previous scene" aria-label="Back to the previous scene" disabled={isHeld || store.historyList.length === 0} onClick={store.back}>
 				<ArrowLeft size={16} aria-hidden="true" />
 			</button>
-			<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="Forward to the scene left" aria-label="Forward to the scene left" disabled={store.forwardList.length === 0} onClick={store.forward}>
+			<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="Forward to the scene left" aria-label="Forward to the scene left" disabled={isHeld || store.forwardList.length === 0} onClick={store.forward}>
 				<ArrowRight size={16} aria-hidden="true" />
 			</button>
-			<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title={store.pathUp ? `Up to ${store.labelGet(store.pathUp)}` : 'Up one level'} aria-label="Up one level" disabled={!store.pathUp} onClick={store.up}>
+			<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title={store.pathUp ? `Up to ${store.labelGet(store.pathUp)}` : 'Up one level'} aria-label="Up one level" disabled={isHeld || !store.pathUp} onClick={store.up}>
 				<ArrowUp size={16} aria-hidden="true" />
 			</button>
 			<ScrollHorizontal store={scroll} className="doc-switch-path" innerClassName="doc-switch-path-list" innerRef={stripRef} innerProps={{ role: 'navigation', 'aria-label': 'Path of the scene' }}>
@@ -105,14 +112,31 @@ export const SwitchPathBar = observer(function SwitchPathBar({ store, trailing }
 				{childList.length > 0 ? <SwitchPathChildren store={store} childList={childList} /> : null}
 			</ScrollHorizontal>
 			<span className="doc-switch-bar-trailing">
-				{trailing}
-				<SwitchSearchButton store={store} />
-				<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="Back to the default range of this scene" aria-label="Fit the scene" onClick={() => void store.cameraReset()}>
-					<Scan size={16} aria-hidden="true" />
-				</button>
-				<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="Adjust the bounding box of this scene (the red frame): the range shown by default and when embedded" aria-label="Adjust the bounding box" aria-pressed={store.isBoxAdjust} onClick={store.boxAdjustToggle}>
-					<SquareDashedMousePointer size={16} aria-hidden="true" />
-				</button>
+				{isHeld ? <span className="doc-switch-bar-note">Unsaved changes: Save or Cancel over the canvas</span> : null}
+				{store.sceneEditDesc && !isHeld ? (
+					<button type="button" className="doc-button-icon is-panel doc-switch-bar-button is-edit" title={isEditing ? 'Stop editing this scene' : 'Edit this scene where it is drawn: click a cell, a card or a line, draw lines between the handles'} aria-label="Edit this scene in place" aria-pressed={isEditing} onClick={() => (isEditing ? store.sceneEditEnd() : store.sceneEditStart())}>
+						<Pencil size={16} aria-hidden="true" />
+					</button>
+				) : null}
+				{!isEditing ? trailing : null}
+				{!isEditing && store.commandListOf({ kind: 'canvas' }).list.length > 0 ? (
+					<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="What can be done in this scene (or double-click the canvas; right-click a card or a line for what can be done with it)" aria-label="What can be done in this scene"
+						aria-pressed={store.command?.target.kind === 'canvas'} onClick={() => (store.command ? store.commandClose() : store.commandOpenCentered())}>
+						<Plus size={16} aria-hidden="true" />
+					</button>
+				) : null}
+				{!isEditing ? <SwitchSearchButton store={store} /> : null}
+				{!isEditing ? (
+					<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="Back to the default range of this scene" aria-label="Fit the scene" onClick={() => void store.cameraReset()}>
+						<Scan size={16} aria-hidden="true" />
+					</button>
+				) : null}
+				{!isEditing ? (
+					<button type="button" className="doc-button-icon is-panel doc-switch-bar-button" title="Adjust the bounding box of this scene (the red frame): the range shown by default and when embedded" aria-label="Adjust the bounding box" aria-pressed={store.isBoxAdjust} onClick={store.boxAdjustToggle}>
+						<SquareDashedMousePointer size={16} aria-hidden="true" />
+					</button>
+				) : null}
+				{end}
 			</span>
 		</div>
 	);

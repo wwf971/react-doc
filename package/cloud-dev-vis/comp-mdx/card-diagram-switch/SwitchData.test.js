@@ -12,7 +12,7 @@ import { SWITCH_DEPTH_MAX_DEFAULT, switchPresentationChildIsDrawn, switchPresent
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SceneStackTitleBar, sceneStackNodeKind, switchRegistryBuild } from './SwitchNodeKinds.jsx';
-import { SwitchStore } from './SwitchStore.js';
+import { SWITCH_TITLE_EDIT_ID, SWITCH_TITLE_ID, SwitchStore } from './SwitchStore.js';
 import { cardDiagramNodeRegistry } from '../card-diagram/card-diagram-node-registry.js';
 import { ColorBlock, colorBlockNormalize } from '../card-diagram/ColorBlock.jsx';
 import { StoreContext } from '../../../../main/frontend/src/store/context.js';
@@ -820,4 +820,70 @@ test('the search of the scene shown finds its title, drawn above it, and only by
 	assert.deepEqual(store.searchRun(request('1')).nodeList, [], 'not by its scale');
 	store.pathCurrent = '/plain';
 	assert.deepEqual(store.searchRun(request('体像')).nodeList, [], 'a scene with its title hidden has none to find');
+});
+
+test('a scene edited in place: an edit starts on what was clicked, ends by itself while nothing changed, and is held once something did', async () => {
+	const diagram = { nodes: [{ id: 'card', renderer: { type: 'card-note' }, position: { x: 0, y: 0 }, data: { title: 'Card' } }, { id: 'other', renderer: { type: 'card-note' }, position: { x: 300, y: 0 }, data: { title: 'Other' }, handles: [{ id: 'in', direction: 'in', anchor: { side: 'left' } }] }], connections: [] };
+	const drawn = { ...diagram, nodes: [{ ...diagram.nodes[0], handles: [{ id: 'out', direction: 'out', anchor: { side: 'right' } }] }, diagram.nodes[1]], connections: [{ id: 'line', source: { nodeId: 'card', handleId: 'out' }, target: { nodeId: 'other', handleId: 'in' } }] };
+	const saved = [];
+	let isRefused = false;
+	const edit = { source: drawn, isTitleEditable: true, save: async (raw, extra) => { if (isRefused) throw new Error('refused'); saved.push([raw, extra]); } };
+	const sceneByPath = { '/a': { path: '/a', label: 'A', diagram: drawn, edit }, '/b': { path: '/b', label: 'B', diagram }, '/c': { path: '/c', label: 'C', diagram: drawn, edit: { source: drawn, save: async () => {} } } };
+	const provider = { root: '/a', sceneGet: (path) => sceneByPath[path] ?? null, labelGet: (path) => path, childListGet: () => [] };
+	const store = new SwitchStore({ provider, registry: switchRegistryBuild(cardDiagramNodeRegistry) });
+	// what a click is on, in the draft of the scene: a card with its row and cell, a line, the title
+	assert.deepEqual(store.sceneEditSelectOf({ nodeId: 'card', rowId: 'r', fieldId: 'f' }), { nodeId: 'card', rowId: 'r', fieldId: 'f', isCell: true });
+	assert.deepEqual(store.sceneEditSelectOf({ nodeId: 'card' }), { nodeId: 'card', isCell: false });
+	assert.deepEqual(store.sceneEditSelectOf({ connectionId: 'line' }), { connectionId: 'line' });
+	assert.deepEqual(store.sceneEditSelectOf({ nodeId: SWITCH_TITLE_ID }), { nodeId: SWITCH_TITLE_EDIT_ID, propId: 'text', isCell: true });
+	// what the draft does not hold starts nothing
+	assert.equal(store.sceneEditSelectOf({ nodeId: 'none' }), null);
+	assert.equal(store.sceneEditSelectOf({ connectionId: 'none' }), null);
+	// the edit starts with that thing focused
+	assert.equal(store.sceneEditStart(store.sceneEditSelectOf({ nodeId: 'card' })), true);
+	assert.deepEqual([store.sceneEdit.path, store.sceneEdit.status, store.sceneEdit.isDirty, store.sceneEdit.select], ['/a', 'editing', false, { nodeId: 'card', isCell: false }]);
+	assert.equal(store.sceneEditStart(), false);
+	// nothing focused any more, nothing changed: it ends by itself
+	store.sceneEditRest();
+	assert.equal(store.sceneEdit, null);
+	// something changed: it is held, and the path goes nowhere
+	store.sceneEditStart();
+	const token = store.sceneEdit.token;
+	store.sceneEditDirtySet(true);
+	store.sceneEditRest();
+	assert.equal(store.sceneEdit?.token, token);
+	assert.equal(await store.pathSet('/b'), false);
+	assert.equal(store.pathCurrent, '/a');
+	// a save that fails is said, and the draft stays
+	isRefused = true;
+	await store.sceneEditSave('raw: 1', { title: 'T' });
+	assert.deepEqual([store.sceneEdit.status, store.sceneEdit.message], ['error', 'refused']);
+	// Save hands the draft over with the title typed, and the edit ends
+	isRefused = false;
+	await store.sceneEditSave('raw: 1', { title: 'T' });
+	assert.deepEqual(saved, [['raw: 1', { title: 'T' }]]);
+	assert.equal(store.sceneEdit, null);
+	// a scene whose title is not said to be typed leaves it alone
+	store.providerSet(provider, '/c');
+	assert.equal(store.sceneEditSelectOf({ nodeId: SWITCH_TITLE_ID }), null);
+	// a new provider ends an edit of what is gone
+	store.sceneEditStart();
+	store.providerSet(provider, '/c');
+	assert.equal(store.sceneEdit, null);
+	// a scene with no edit starts none
+	store.providerSet(provider, '/b');
+	assert.equal(store.sceneEditSelectOf({ nodeId: 'card' }), null);
+	assert.equal(store.sceneEditStart(), false);
+});
+
+test('a label is a pill as wide as its words, carrying the settings its data declares', () => {
+	const registry = switchRegistryBuild(cardDiagramNodeRegistry);
+	const node = diagramNormalize({ version: 1, nodes: [{ id: 'settings', renderer: { type: 'card-label' }, position: { x: 0, y: 0 }, data: { title: 'Settings', icon: 'settings', tone: 'teal', statusTone: 'red', propertyList: [{ id: 'name', label: 'Name' }], name: 'First' } }] }, registry).nodes[0];
+	assert.equal(node.isWidthFit, true);
+	const html = renderToStaticMarkup(createElement(registry.kindByType['card-label'].Card, { node, nodeId: 'settings' }));
+	assert.match(html, /doc-card-label has-settings/);
+	assert.match(html, /data-field="title">Settings</);
+	assert.match(html, /doc-card-label-status" data-tone="red"/);
+	// the title of a scene can be typed where the editor says so: its words are a property of its kind
+	assert.deepEqual(registry.kindByType['scene-title'].contract.propertyList.map((property) => property.id), ['text']);
 });

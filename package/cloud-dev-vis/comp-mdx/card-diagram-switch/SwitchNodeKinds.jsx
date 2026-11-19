@@ -9,6 +9,7 @@ import { SwitchContext, SwitchStaticScene } from './SwitchStatic.jsx';
 import { SwitchViewSwitcher, SwitchViewTabs } from './SwitchViewSwitcher.jsx';
 import { SWITCH_EMBED_CHROME_HEIGHT, SWITCH_TITLE_FONT_SIZE, SWITCH_TITLE_HEIGHT, switchBoxClipBuild, switchEmbedCardRectOf, switchEmbedMapBuild, switchPathViewBuild, switchPathViewRead, switchPresentationBuild, switchPresentationChildIsDrawn, switchStackFrameIsVisible, switchStackItemLayout, switchStackPresentationBuild, switchStackTitleBarNormalize, switchStackTitleBarRead } from './SwitchData.js';
 import { CARD_ICON_BY_NAME, CardBrief } from '../card-diagram/CompactCard.jsx';
+import { CardCell } from '../card-diagram/TableCard.jsx';
 
 // The two node kinds of the switching layer (card-diagram-flexible-switch.md):
 //
@@ -452,12 +453,13 @@ export const sceneTabsNodeKind = {
 // the title of a scene focused (card-diagram-flexible-switch.md#the-title-of-a-scene): a node
 // the layer puts above what the scene draws, in its world, so it zooms and pans with the cards.
 // it is never written in a scene, and offered by no panel
-export const SceneTitleCard = observer(function SceneTitleCard({ node }) {
+export const SceneTitleCard = observer(function SceneTitleCard({ node, editor, nodeId }) {
 	const scale = node.data.scale ?? 1;
+	const content = editor?.store.nodeGet(nodeId)?.data ?? node.data;
 	// what decides its height is set here, inline: its node is SWITCH_TITLE_HEIGHT * scale high,
 	// and its one line is as high, so the heading rules of a page (a margin, a font size, a line
 	// height of its h2) cannot make it overflow its node. not-prose: out of the page's typography
-	return <h2 className="doc-switch-scene-title not-prose" style={{ margin: 0, fontSize: SWITCH_TITLE_FONT_SIZE * scale, lineHeight: `${SWITCH_TITLE_HEIGHT * scale}px` }}>{node.data.text}</h2>;
+	return <h2 className="doc-switch-scene-title not-prose" style={{ margin: 0, fontSize: SWITCH_TITLE_FONT_SIZE * scale, lineHeight: `${SWITCH_TITLE_HEIGHT * scale}px` }}><CardCell editor={editor} nodeId={nodeId} field={{ id: 'text', kind: 'text', label: 'Title' }} value={content.text ?? ''} /></h2>;
 });
 
 export const sceneTitleNodeKind = {
@@ -470,6 +472,9 @@ export const sceneTitleNodeKind = {
 		// found by its words, as a whole (SwitchStore.searchRun searches it with the scene shown);
 		// not by the rest of its data, a scale
 		searchMatch: (node, helper) => (helper.test(node.data.text) ? { isWhole: true } : null),
+		// its words, typed where they stand while the scene is edited in place and the scene says
+		// they may change (card-diagram-flexible-switch.md#a-scene-edited-in-place)
+		propertyList: [{ id: 'text', label: 'Title', kind: 'text' }],
 	},
 	schema: null,
 	Card: SceneTitleCard,

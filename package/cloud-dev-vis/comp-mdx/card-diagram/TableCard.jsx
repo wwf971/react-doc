@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, EyeOff, FoldVertical, GripHorizontal, GripVertical, Plus, SeparatorHorizontal, Trash2, UnfoldVertical } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
-import { cardRowAnchorBuild } from './TableCardSchema.js';
+import { cardRowAnchorBuild, fieldOfRow } from './TableCardSchema.js';
 import { cardFooterIsShown, cardFooterTextOf, cardRowDisplayIdListOf, cardViewDefaultGet, cardViewDrawBuild, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown } from './TableCardData.js';
 import { TextValue, ValueMenu } from './DiagramValueControls.jsx';
 import { useDiagramSearchMark } from './DiagramRender.jsx';
@@ -25,7 +25,10 @@ import './DiagramER.css';
 // its toolbar (CardToolbar): a grip to drag it to another place, insert
 // before / after, move, remove; a button the card does not support is
 // greyed out with its reason as its title. The read and edit layouts are
-// one grid, so starting to edit moves nothing.
+// one grid, so starting to edit moves nothing. In a draft whose structure
+// is given (store.isStructureFixed: a scene edited in place) the card draws
+// no toolbar and no handle adder, a field header focuses nothing, and a
+// cell is typed only where the draft says its value may change.
 //
 //   node          the normalized node (its data, handles)
 //   schema        cardSchemaGet(node)
@@ -40,6 +43,7 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 	const root = useRef(null);
 	const [drop, dropSet] = useState(null);
 	const store = editor?.store;
+	const isFixed = Boolean(store?.isStructureFixed);
 	const selection = store?.selection;
 	const isSelected = selection?.nodeId === nodeId;
 	const content = store?.nodeGet(nodeId)?.data ?? node.data;
@@ -70,7 +74,7 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 	const isHeaderHandleAllowed = schema.isHeaderHandleAllowed(content);
 	const style = !draw.isPlain ? { '--doc-card-columns': draw.columnTemplate } : columnsStyle ?? { '--doc-card-columns': node.data.columnTemplate || `repeat(${schema.fieldList.length}, minmax(0, 1fr))` };
 	const handleSides = target => new Set((node.handles ?? []).filter(handle => handle.anchor.target === target).map(handle => handle.anchor.side));
-	const handleAdders = (target, sides, sideList = ['left', 'right']) => editor ? sideList.filter(side => !sides.has(side)).map(side => (
+	const handleAdders = (target, sides, sideList = ['left', 'right']) => editor && !isFixed ? sideList.filter(side => !sides.has(side)).map(side => (
 		<button key={side} type="button" className={`doc-card-handle-add is-${side} nodrag nopan`} title={`Add a ${side} handle`} aria-label={`Add a ${side} handle`} disabled={editor.isLocked}
 			onClick={event => { event.stopPropagation(); editor.change(() => store.handleSideSet(nodeId, target, side, true)); }}><Plus size={9} strokeWidth={3} /></button>
 	)) : null;
@@ -145,10 +149,10 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 			{node.data.isFieldHeaderHidden || !draw.isPlain ? null : <div className="doc-er-table-column-header doc-card-fields nodrag nopan">
 				{schema.fieldList.map((field, index) => {
 					const isFieldSelected = isSelected && selection.fieldId === field.id && !selection.rowId;
-					return <span key={field.id} className={`doc-card-field${isFieldSelected ? ' is-selected' : ''}${dropClass('field', index, schema.fieldList.length)}`} tabIndex={editor ? 0 : undefined}
-						onClick={select({ fieldId: field.id })} onFocus={selectOnFocus({ fieldId: field.id })}>
+					return <span key={field.id} className={`doc-card-field${isFieldSelected ? ' is-selected' : ''}${dropClass('field', index, schema.fieldList.length)}`} tabIndex={editor && !isFixed ? 0 : undefined}
+						onClick={isFixed ? undefined : select({ fieldId: field.id })} onFocus={isFixed ? undefined : selectOnFocus({ fieldId: field.id })}>
 						{docStore?.textDisplayGet({ en: field.label }).text ?? field.label}
-						{isFieldSelected ? fieldToolbar(field, index) : null}
+						{isFieldSelected && !isFixed ? fieldToolbar(field, index) : null}
 					</span>;
 				})}
 			</div>}
@@ -175,13 +179,13 @@ export const TableCard = observer(function TableCard({ node, schema, editor, nod
 				return <div key={row.id} ref={anchorRef?.(target)} data-row-id={row.id} data-search={searchMark.partStateOf(`row/${row.id}`) ?? undefined} data-tone={row.tone || undefined} title={isRowOutOfDisplay ? 'Not shown when reading: it is left out of rowDisplay' : undefined} className={`doc-er-table-column doc-card-row nodrag nopan${item.isInFold ? ' is-in-fold' : ''}${isRowOutOfDisplay ? ' is-out-of-display' : ''}${isRowSelected && !selection.fieldId ? ' is-selected' : ''}${isRowSelected ? ' is-row-of-selection' : ''}${dropClass('row', index, rows.length)}`} tabIndex={editor ? 0 : undefined}
 					onClick={select({ rowId: row.id })} onFocus={selectOnFocus({ rowId: row.id })}>
 					{schema.fieldList.map(field => (
-						<CardCell key={field.id} editor={editor} nodeId={nodeId} rowId={row.id} field={field} value={rowContent[field.id]}
+						<CardCell key={field.id} editor={editor} nodeId={nodeId} rowId={row.id} field={fieldOfRow(field, rowContent)} value={rowContent[field.id]}
 							className={`${cellClassName?.(field, row) ?? ''}${isSelected && selection.fieldId === field.id ? ' is-column-selected' : ''}${isRowSelected && selection.fieldId === field.id ? ' is-cell-selected' : ''}`.trim()}>
 							{cellRender?.(field, row, row[field.id])}
 						</CardCell>
 					))}
 					{isRowHandleAllowed ? handleAdders(target, handleSides(target)) : null}
-					{isRowSelected ? rowToolbar(row, index) : null}
+					{isRowSelected && !isFixed ? rowToolbar(row, index) : null}
 				</div>;
 			})}
 			{!draw.isPlain ? null : rowGroupList.map(group => <CardRowGroup key={group.id} group={group} anchorRef={anchorRef} />)}
@@ -314,18 +318,28 @@ function reorderStart(event, grip) {
 // in place. an enum field picks from a menu, the others are typed. the cell
 // keeps the height of the read view, so the card does not move when a cell
 // starts or ends editing
+//
+// a choice (enum) reads as the words of its value (valueLabels), an empty one as nothing. a
+// value the draft keeps as it is (a field that only shows, a scope that fixes it) is drawn as
+// when reading: a click on it reaches the row, which takes the focus
 export const CardCell = observer(function CardCell({ editor, nodeId, rowId = null, field, value, children, className = '' }) {
-	const text = children ?? value ?? '';
-	if (!editor) return <span className={className}>{text}</span>;
+	const text = children ?? (field.kind === 'enum' && value !== '' && value !== undefined && value !== null ? field.valueLabels?.[value] ?? value : value) ?? '';
+	const tone = field.kind === 'enum' && value ? field.valueTones?.[value] : undefined;
+	if (!editor || !editor.store.fieldIsEditable(nodeId, rowId, field.id)) return <span className={className} data-field={field.id} data-cell-tone={tone}>{text}</span>;
 	const { store, change, isLocked } = editor;
 	const cell = store.cell;
 	const isEditing = cell?.nodeId === nodeId && cell?.rowId === rowId && cell?.field === field.id;
 	const start = () => store.cellStart(nodeId, rowId, field.id);
-	return <span className={`${className} doc-vis-cell${isEditing ? ' is-editing' : ''}`.trim()}>
-		{field.kind === 'enum' ? <ValueMenu label={`Edit ${field.label ?? field.id}`} value={value ?? ''} values={field.values ?? []} valueLabels={field.valueLabels} isSearchable={field.isSearchable} isCell isLocked={isLocked} onOpen={start} onChange={next => { change(() => store.fieldSet(nodeId, rowId, field.id, next)); store.cellEnd(); }} /> : isEditing ? <TextValue
+	return <span className={`${className} doc-vis-cell${isEditing ? ' is-editing' : ''}`.trim()} data-field={field.id} data-cell-tone={tone}>
+		{field.kind === 'enum' ? <ValueMenu label={`Edit ${field.label ?? field.id}`} value={value ?? ''} values={field.values ?? []} valueLabels={field.valueLabels} isSearchable={field.isSearchable} isCell isLocked={isLocked} isOpenWanted={() => store.cellOpenWantedTake(nodeId, rowId, field.id)} onOpen={start} onChange={next => { change(() => store.fieldSet(nodeId, rowId, field.id, next)); store.cellEnd(); }} /> : isEditing ? <TextValue
 			label={`Edit ${field.label ?? field.id}`} value={value ?? ''} isLocked={isLocked} isEditing isCell
 			onChange={next => change(() => store.fieldSet(nodeId, rowId, field.id, next))}
-			onEnd={() => { if (store.cell?.nodeId === nodeId && store.cell?.rowId === rowId && store.cell?.field === field.id) store.cellEnd(); }}
+			onEnd={() => {
+				if (store.cell?.nodeId === nodeId && store.cell?.rowId === rowId && store.cell?.field === field.id) store.cellEnd();
+				// the typing ended with nothing else taking the focus (Enter): the editor takes it back, so
+				// the next key (Ctrl/⌘ + Enter, Escape, undo) reaches it
+				requestAnimationFrame(() => { if (document.activeElement === document.body) editor.focusRoot?.(); });
+			}}
 			onCancel={editor.cancelCell}
 		/> : <button type="button" className="doc-vis-cell-value nodrag nopan" aria-label={`Edit ${field.label ?? field.id}`} disabled={isLocked} onClick={event => { event.stopPropagation(); start(); }}>{text === '' ? ' ' : text}</button>}
 	</span>;

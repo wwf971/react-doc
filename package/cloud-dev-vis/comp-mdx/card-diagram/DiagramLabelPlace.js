@@ -19,11 +19,13 @@ const COST_LABEL = 300;
 const COST_LINE = 6;
 const COST_BEND = 3;
 const COST_LEAVE = 2;
-const LABEL_HEIGHT = 20;
+// a label as the canvas draws it (CardDiagramSwitch.css .doc-switch-edge-label): 12px of the
+// sans-serif of the page, a little padding
+const LABEL_HEIGHT = 22;
 const LABEL_PADDING = 18;
 const LABEL_MARGIN = 3;
-const WIDTH_WIDE = 11;
-const WIDTH_NARROW = 6.2;
+const WIDTH_WIDE = 12;
+const WIDTH_NARROW = 6.6;
 const STEP_PIXEL = 16;
 const PLACE_COUNT_MIN = 9;
 const PLACE_COUNT_MAX = 64;

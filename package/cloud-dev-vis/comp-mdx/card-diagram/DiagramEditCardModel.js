@@ -1,5 +1,5 @@
 import { lineTypeList, markerTypeList, endpointIsDangling } from './DiagramERData.js';
-import { cardSchemaGet, cardRowAnchorBuild } from './TableCardSchema.js';
+import { cardSchemaGet, cardRowAnchorBuild, fieldValuesOf, fieldValueLabelsOf, nodePropertyListGet } from './TableCardSchema.js';
 import { cardRowDisplayIdListOf, CARD_VIEW_MODE_LABEL, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown, cardFooterIsShown, cardFooterTextOf } from './TableCardData.js';
 import { strokeDashList } from './DiagramEditStore.js';
 import { cardTabList, tabPathGet, pathLabelListGet, rowNameGet, selectionPathBuild } from './DiagramEditPath.js';
@@ -21,9 +21,14 @@ import { routeAnchorPointGet, routeDirectionFacingList, routeEndPointGet, routeR
 //   item       { id, name, badge?, sub?, isSelected, path, isRemovable, removeReason }
 //   section    { id, label, propertyList, actionList, note? }
 //   property   { id, label, kind: text | enum | bool | number | color, value,
-//                values?, valueLabels?, isSearchable?, isMultiline?, isReadOnly?,
+//                values?, valueLabels?, isSearchable?, isMultiline?, isReadOnly?, placeholder?,
 //                min?, max?, step?, set(value) -> boolean }
 //   action     { id, label, kind?: 'danger', isDisabled?, reason?, act() }
+//
+// In a draft whose structure is given (store.isStructureFixed: a scene edited in place) the card
+// is of values alone (cardModelFixedBuild): no tabs, no path, the values of what is focused that
+// may change, and for a line where it runs and its removal; null when it has nothing to offer,
+// and no card is shown.
 const lineTypeLabels = { smoothstep: 'Right-angled', step: 'Right-angled, sharp', bezier: 'Curve', straight: 'Straight', polyline: 'Polyline' };
 const directionLabels = { auto: 'Auto', 'x+': 'Right (x+)', 'x-': 'Left (x-)', 'y+': 'Down (y+)', 'y-': 'Up (y-)' };
 const endHandleVectorSize = 60;
@@ -33,6 +38,7 @@ export function cardModelBuild(editor) {
 	const { store } = editor;
 	const display = store.display;
 	if (!display) return null;
+	if (store.isStructureFixed) return cardModelFixedBuild(editor);
 	const path = store.path;
 	const change = operation => { let result = false; editor.change(() => { result = operation(); }); return result; };
 	const positionGet = editor.handlePositionGet;
@@ -64,7 +70,7 @@ export function cardModelBuild(editor) {
 
 	const propertyOf = (definition, item, setter) => ({
 		id: definition.id, label: definition.label, kind: definition.kind, value: item?.[definition.id] ?? (definition.kind === 'bool' ? false : ''),
-		values: definition.values, valueLabels: definition.valueLabels, isSearchable: definition.isSearchable, isMultiline: definition.isMultiline,
+		values: fieldValuesOf(definition, item), valueLabels: fieldValueLabelsOf(definition, item), isSearchable: definition.isSearchable, isMultiline: definition.isMultiline,
 		set: value => change(() => setter(definition.id, value)),
 	});
 	const sideLabelOf = side => side[0].toUpperCase() + side.slice(1);
@@ -368,8 +374,9 @@ export function cardModelBuild(editor) {
 				return model;
 			}
 			const sectionList = [];
-			const nodePropertyList = schema ? schema.nodePropertyList : [{ id: 'label', label: 'Label', kind: 'text' }, { id: 'description', label: 'Description', kind: 'text', isMultiline: true }];
-			sectionList.push({ id: 'node', label: schema?.labelNode ?? 'Node', propertyList: nodePropertyList.map(definition => propertyOf(definition, node.data, (id, value) => store.fieldSet(nodeId, null, id, value))), actionList: [] });
+			// a card: the properties of its schema; what is no card: those of its kind and those its data declares (a label carrying settings)
+			const nodePropertyList = schema ? schema.nodePropertyList : nodePropertyListGet(node, store.registry).filter(definition => definition.isDeclared || definition.id !== 'name' || node.data.name !== undefined);
+			sectionList.push({ id: 'node', label: schema?.labelNode ?? 'Node', propertyList: nodePropertyList.map(definition => ({ ...propertyOf(definition, node.data, (id, value) => store.fieldSet(nodeId, null, id, value)), min: definition.min, max: definition.max, step: definition.step, placeholder: definition.placeholder, isReadOnly: definition.isReadOnly === true })), actionList: [] });
 			// detailed or simple (card-diagram-impl.md#the-display-of-a-node), for a kind that can be drawn simple
 			const displayProperty = store.kind === 'diagram' && store.registry?.kindByType[node.renderer?.type]?.contract.simple
 				? [{ id: 'nodeDisplay', label: 'Drawn as', kind: 'enum', value: store.nodeDisplayGet(nodeId), values: ['detailed', 'simple'], valueLabels: { detailed: 'Its card', simple: 'A simple mark' }, set: value => change(() => store.nodeDisplaySet(nodeId, value)) }]
@@ -531,4 +538,54 @@ export function cardModelBuild(editor) {
 		default:
 			return model;
 	}
+}
+
+// the edit card of a draft whose structure is given: what is focused, with the values of it that
+// may change, and those its data declares to say (a setting only shown). A row lists its fields
+// and properties; a node its properties; a line, the two things it joins and its removal
+function cardModelFixedBuild(editor) {
+	const { store } = editor;
+	const display = store.display;
+	const change = operation => { let result = false; editor.change(() => { result = operation(); }); return result; };
+	const node = display.nodeId ? store.nodeGet(display.nodeId) : undefined;
+	const connection = display.connectionId ? store.connectionGet(display.connectionId) : undefined;
+	const propertyOf = (definition, item, rowId) => {
+		const isEditable = store.fieldIsEditable(node.id, rowId, definition.id);
+		const value = item?.[definition.id] ?? (definition.kind === 'bool' ? false : '');
+		const valueLabels = fieldValueLabelsOf(definition, item);
+		return {
+			id: definition.id, label: definition.label, kind: definition.kind, value: definition.kind === 'enum' && !isEditable ? valueLabels?.[value] ?? value : value,
+			...(definition.kind === 'enum' && !isEditable ? { kind: 'text' } : {}),
+			values: fieldValuesOf(definition, item), valueLabels, isSearchable: definition.isSearchable, isMultiline: definition.isMultiline,
+			min: definition.min, max: definition.max, step: definition.step, placeholder: definition.placeholder, isReadOnly: !isEditable,
+			set: next => change(() => store.fieldSet(node.id, rowId, definition.id, next)),
+		};
+	};
+	// a value is listed where it may change, or where the data of the node declared it to be said
+	const propertyListOf = (definitionList, item, rowId) => definitionList.filter(definition => definition.isDeclared || store.fieldIsEditable(node.id, rowId, definition.id)).map(definition => propertyOf(definition, item, rowId));
+	// a card only where something can be done: a value changed, an action taken
+	const modelOf = (title, kindLabel, sectionList) => (sectionList.some(section => section.propertyList.some(property => !property.isReadOnly) || section.actionList.length) ? { title, kindLabel, tabList: [], tabId: null, segmentList: [], view: { type: 'detail', sectionList } } : null);
+	if (connection && !display.rowId) {
+		const endText = endpoint => {
+			if (endpointIsDangling(endpoint)) return 'free';
+			const endNode = store.nodeGet(endpoint.nodeId);
+			const rowId = store.handleRowIdGet(endpoint.nodeId, endpoint.handleId);
+			const row = rowId ? store.rowGet(endpoint.nodeId, rowId) : undefined;
+			const nodeName = String(endNode?.data?.name ?? endNode?.data?.title ?? endNode?.data?.label ?? endpoint.nodeId);
+			return row ? `${nodeName} / ${rowNameGet(row, store.schemaGet(endpoint.nodeId))}` : nodeName;
+		};
+		// a line is called by the two things it joins: the rows where it ends on rows, else the nodes
+		const endShort = endpoint => endText(endpoint).split(' / ').pop();
+		return modelOf(String(connection.label?.text || `${endShort(connection.source)} → ${endShort(connection.target)}`), 'Line', [{ id: 'line', label: '', note: 'Drag an end of the line to another handle to move it; let it go off a handle to take the line away.', propertyList: [
+			{ id: 'source', label: 'From', kind: 'text', value: endText(connection.source), isReadOnly: true, set: () => false },
+			{ id: 'target', label: 'To', kind: 'text', value: endText(connection.target), isReadOnly: true, set: () => false },
+		], actionList: [{ id: 'connection-remove', label: 'Remove line', kind: 'danger', act: () => change(() => store.connectionRemove(connection.id)) }] }]);
+	}
+	if (!node) return null;
+	const schema = cardSchemaGet(node, store.registry);
+	const row = display.rowId && schema ? store.rowsGet(node).find(item => item.id === display.rowId) : undefined;
+	if (row) return modelOf(rowNameGet(row, schema) || row.id, schema.labelRow, [{ id: 'row', label: '', propertyList: propertyListOf([...schema.fieldList, ...schema.rowPropertyList], row, row.id), actionList: [] }]);
+	// a card is called by its name; what is not a card (a label, a mark) by its words
+	const title = schema ? node.data.name : node.data.title ?? node.data.label ?? node.data.name ?? node.data.text;
+	return modelOf(String(title ?? node.id), schema?.labelNode ?? '', [{ id: 'node', label: '', propertyList: propertyListOf(nodePropertyListGet(node, store.registry), node.data, null), actionList: [] }]);
 }

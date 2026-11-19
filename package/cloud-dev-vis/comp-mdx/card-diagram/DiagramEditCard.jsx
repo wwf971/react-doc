@@ -20,6 +20,8 @@ import { CheckValue, TextValue, ValueMenu } from './DiagramValueControls.jsx';
 // cell within it, and its top edge is computed from the principal alone:
 // the card grows and shrinks downward as its content changes, and never
 // moves while the author works in it (../power-platform/comp-diagram-er.md#diagram-er-edit).
+// A card of values alone (a draft whose structure is given: DiagramEditCardModel.js) has no
+// tabs and no path: its title, a rule, then what may be changed.
 export const DiagramEditCard = observer(function DiagramEditCard({ editor, onKeyDown }) {
 	const { componentConfig } = useDocStores();
 	const { store } = editor;
@@ -52,20 +54,20 @@ export const DiagramEditCard = observer(function DiagramEditCard({ editor, onKey
 	if (!model) return null;
 	const PathBar = componentConfig?.PathBar;
 	const PropEditor = componentConfig?.PropEditor;
-	return createPortal(<section ref={panelRef} className="doc-edit-popup doc-edit-panel doc-vis-card-panel not-prose" style={{ ...position, visibility: position ? 'visible' : 'hidden' }} aria-label="Edit card" onKeyDown={onKeyDown}>
+	return createPortal(<section ref={panelRef} className={`doc-edit-popup doc-edit-panel doc-vis-card-panel not-prose${model.tabList.length ? '' : ' is-values'}`} style={{ ...position, visibility: position ? 'visible' : 'hidden' }} aria-label="Edit card" onKeyDown={onKeyDown}>
 		<div className="doc-edit-panel-row doc-vis-card-head">
 			<strong>{model.title}</strong>
 			<span className="doc-vis-card-kind">{model.kindLabel}</span>
 			<button type="button" className="doc-button-icon" aria-label="Close" title="Close (Esc)" onClick={editor.clearSelection}><X size={13} /></button>
 		</div>
-		<div className="doc-vis-card-tabs" role="tablist">
+		{model.tabList.length ? <div className="doc-vis-card-tabs" role="tablist">
 			{model.tabList.map(tab => <button key={tab.id} type="button" role="tab" aria-selected={tab.id === model.tabId} className="doc-vis-card-tab" disabled={tab.isDisabled} title={tab.isDisabled ? tab.disabledReason : undefined} onClick={() => editor.navigate(tab.path)}>{tab.label}</button>)}
-		</div>
-		<div className="doc-vis-card-path doc-path" data-plain="">
+		</div> : null}
+		{model.segmentList.length ? <div className="doc-vis-card-path doc-path" data-plain="">
 			{PathBar
 				? <PathBar pathData={{ segments: model.segmentList.map(segment => ({ name: segment.name })) }} onPathSegClicked={index => editor.navigate(model.segmentList[index].path)} allowEditText={false} appendTrailingSlash={false} height={22} separator="›" />
 				: <span className="doc-vis-card-path-plain">{model.segmentList.map((segment, index) => <span key={index}>{index > 0 ? <span className="doc-vis-card-path-separator">›</span> : null}<button type="button" className="doc-vis-card-path-segment" onClick={() => editor.navigate(segment.path)}>{segment.name}</button></span>)}</span>}
-		</div>
+		</div> : <div className="doc-vis-card-rule" />}
 		<div className="doc-vis-card-body">
 			{PropEditor
 				? <PropEditorView PropEditor={PropEditor} model={model} store={store} editor={editor} />
@@ -137,7 +139,7 @@ function propertyMetaBuild(id, property) {
 		default:
 			return property.isMultiline
 				? { ...meta, valueType: 'custom', valueCompName: 'textMultiline', valueConfig: { label: property.label } }
-				: { ...meta, valueType: 'text', valueConfig: { placeholder: '' } };
+				: { ...meta, valueType: 'text', valueConfig: { placeholder: property.placeholder ?? '' } };
 	}
 }
 
@@ -256,6 +258,6 @@ function PlainProperty({ property, isLocked }) {
 	else if (property.kind === 'enum') control = <ValueMenu label={property.label} value={property.value} values={property.values} valueLabels={property.valueLabels} isSearchable={property.isSearchable} isLocked={isLocked} onChange={property.set} />;
 	else if (property.kind === 'number') control = <input type="number" className="doc-vis-card-number" value={property.value} min={property.min} max={property.max} step={property.step} disabled={isLocked} onChange={event => property.set(Number(event.target.value))} />;
 	else if (property.kind === 'color') control = <input type="color" className="doc-vis-card-color" value={String(property.value).slice(0, 7)} disabled={isLocked} onChange={event => property.set(event.target.value)} />;
-	else control = <TextValue key={`${property.id}:${property.isReadOnly}`} label={property.label} value={String(property.value ?? '')} isLocked={isLocked} isMultiline={property.isMultiline} onChange={property.set} />;
+	else control = <TextValue key={`${property.id}:${property.isReadOnly}`} label={property.label} value={String(property.value ?? '')} isLocked={isLocked} isMultiline={property.isMultiline} placeholder={property.placeholder} onChange={property.set} />;
 	return <label className="doc-vis-field"><span className="doc-vis-field-label">{property.label}</span>{control}</label>;
 }

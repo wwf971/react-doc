@@ -1,4 +1,4 @@
-import { cardSchemaGet } from './TableCardSchema.js';
+import { cardSchemaGet, nodePropertyListGet } from './TableCardSchema.js';
 import { endpointIsDangling } from './DiagramERData.js';
 
 // The path of the edit card (card-diagram-impl.md#the-path-of-the-edit-card): where
@@ -145,7 +145,7 @@ export function pathResolveStep(path, store) {
 	if (!rest.length) return { path: [nodeSegment], display: displayOf({ nodeId, tab: 'table' }) };
 	const [second, third, fourth] = rest;
 	if (segmentIs(second, 'prop')) {
-		const allowed = schema ? schema.nodePropertyList.map(item => item.id) : nodePropertyIdList;
+		const allowed = nodePropertyListGet(node, store.registry).map(item => item.id);
 		if (!allowed.includes(second.id) && !nodePropertyIdList.includes(second.id)) return { redirect: [nodeSegment] };
 		return { path: [nodeSegment, { kind: 'prop', id: second.id }], display: displayOf({ nodeId, propId: second.id, tab: 'table' }) };
 	}
@@ -259,7 +259,7 @@ export function pathLabelListGet(path, store) {
 		switch (segment.kind) {
 			case 'node': return String(node?.data?.name ?? node?.data?.label ?? segment.id);
 			case 'connection': { const connection = store.connectionGet(segment.id); return String(connection?.label?.text || segment.id); }
-			case 'prop': return String((schema?.nodePropertyList ?? []).find(item => item.id === segment.id)?.label ?? segment.id);
+			case 'prop': return String(nodePropertyListGet(node, store.registry).find(item => item.id === segment.id)?.label ?? segment.id);
 			case 'rows': return schema?.labelRowPlural ?? 'Rows';
 			case 'fields': return schema?.labelFieldPlural ?? 'Columns';
 			case 'lines': return 'Lines';

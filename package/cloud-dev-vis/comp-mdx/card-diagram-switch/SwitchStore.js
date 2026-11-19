@@ -1,7 +1,7 @@
 import { ScrollHorizontalStore } from '../../../../main/comp-doc/scroll/ScrollHorizontalStore.js';
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { applyNodeChanges } from '@xyflow/react';
-import { yamlStringify } from '../../../../main/frontend/src/lib/yaml.js';
+import { yamlParse, yamlStringify } from '../../../../main/frontend/src/lib/yaml.js';
 import { DiagramERStore } from '../card-diagram/DiagramERStore.js';
 import { diagramNormalize, diagramPlacesGet, diagramPositionsGet } from '../card-diagram/DiagramERData.js';
 import { diagramSceneSearch } from '../card-diagram/DiagramSearch.js';
@@ -9,7 +9,7 @@ import { DiagramSearchStore } from '../card-diagram/DiagramSearchStore.js';
 import {
 	SWITCH_EMBED_CHROME_HEIGHT, switchCameraBetween, switchCameraChildOf, switchCameraFit, switchCameraParentOf, switchEase, switchEmbedCardRectOf, switchEmbedMapBuild, switchMaskClipBuild, switchMorphBuild,
 	SWITCH_DEPTH_MAX_DEFAULT, switchMorphFrameAt, switchMorphStyleBuild, switchPathChain, switchPathHashRead, switchPathNormalize, switchPathParent, switchPathViewBuild, switchPathViewRead, switchPortalItemStyleBuild, switchPortalStyleBuild, switchRectUnion,
-	switchRouteFind, switchStackItemLayout, switchStepSecondGet, switchPresentationBuild, switchStackHeightIsFull, switchStackPresentationBuild, switchViewDescGet, switchViewFrameIsHidden, switchViewHoverResolve, switchViewListCheck, switchViewListOf, switchViewResolve, switchViewSwitcherIsShown, SWITCH_TITLE_HEIGHT } from './SwitchData.js';
+	switchRouteFind, switchStackItemLayout, switchStepSecondGet, switchPresentationBuild, switchStackHeightIsFull, switchStackPresentationBuild, switchViewDescGet, switchViewFrameIsHidden, switchViewHoverResolve, switchViewListCheck, switchViewListOf, switchViewResolve, switchViewSwitcherIsShown, SWITCH_TITLE_EDIT_ID, SWITCH_TITLE_HEIGHT } from './SwitchData.js';
 
 const SCENE_BOX_TYPE = 'scene-box';
 const SCENE_EMBED_TYPE = 'scene-embed';
@@ -45,6 +45,9 @@ const isMotionReduced = () => typeof window !== 'undefined' && window.matchMedia
 // scene wider than SWITCH_TITLE_WIDTH_BASE, so it keeps its weight beside what it names; a width
 // guessed from its words until it is measured
 export const SWITCH_TITLE_ID = '~title';
+export { SWITCH_TITLE_EDIT_ID };
+// the draft of an edit descriptor read once: { source, nodeIdSet, connectionIdSet }
+const sceneEditSourceByDesc = new WeakMap();
 const SWITCH_TITLE_GAP = 28;
 const SWITCH_TITLE_CHAR_WIDTH = 30;
 const SWITCH_TITLE_WIDTH_BASE = 1200;
@@ -74,6 +77,11 @@ export class SwitchStore {
 	flowIsInitialized = false;
 	captureHint = null;
 	embedHeld = null;
+	// the commands open (commandOpen): { path, target, point, list }, or none
+	command = null;
+	// the scene being edited in place (sceneEditStart): { path, status: editing | submitting | error,
+	// message, isDirty, select (what is focused as it opens), token (one per session) }
+	sceneEdit = null;
 
 	constructor({ provider, registry, resolve, pathInitial = '', scope = '' }) {
 		this.registry = registry;
@@ -103,6 +111,7 @@ export class SwitchStore {
 		this.morph = null;
 		this.step = null;
 		this.providerVersion = 0;
+		this.sceneEditToken = 0;
 		this.runToken = 0;
 		this.isSeekBusy = false;
 		// the camera the canvas had when it left: the block mounted again starts from it
@@ -117,9 +126,9 @@ export class SwitchStore {
 		this.pathScroll = new ScrollHorizontalStore();
 		makeAutoObservable(this, {
 			cameraLive: false, animationStore: false, searchStore: false, pathScroll: false, isSeekBusy: false, seek: false, seekEnd: false, showAt: false, planRun: false, stepEnter: false, stepExit: false, pathSet: false, stepRun: false, registry: false, resolve: false, scope: false, entryByPath: false, sceneDescByPath: false, viewChosenByKey: false, cameraByPath: false, titleNodeByText: false, embedBodyByKey: false, stackElementByKey: false, stackScrollByKey: false, stackAreaByKey: false, stackItemByKey: false, itemInitial: false, maskElement: false, maskWorldElement: false, styleElement: false, viewportApi: false,
-			captureHintTimer: false, flowWaiterList: false, measureWaiterList: false, morph: false, step: false, providerVersion: false, runToken: false, stackScrollKeyByKey: false, stackHeightFullByKey: false, stackFullKeySet: false,
+			captureHintTimer: false, flowWaiterList: false, measureWaiterList: false, morph: false, step: false, providerVersion: false, sceneEditToken: false, runToken: false, stackScrollKeyByKey: false, stackHeightFullByKey: false, stackFullKeySet: false,
 			provider: observable.ref, nodeListFlow: observable.shallow, edgeListFlow: observable.shallow, plan: observable.ref, mask: observable.ref, box: observable.ref, embedHeld: observable.ref,
-			historyList: observable.ref, forwardList: observable.ref, measurePathList: observable.ref, captureHint: observable.ref,
+			historyList: observable.ref, forwardList: observable.ref, measurePathList: observable.ref, captureHint: observable.ref, command: observable.ref, sceneEdit: observable.ref,
 		}, { autoBind: true });
 		this.providerSet(provider, pathInitial);
 	}
@@ -131,6 +140,10 @@ export class SwitchStore {
 	providerSet(provider, pathInitial = '') {
 		this.provider = provider;
 		this.providerVersion += 1;
+		this.command = null;
+		// the data the scene was made of changed: an edit left open is of what is gone (one being
+		// saved stays: its own save made the change)
+		if (this.sceneEdit?.status !== 'submitting') this.sceneEdit = null;
 		this.entryByPath.clear();
 		this.sceneDescByPath.clear();
 		this.embedBodyByKey.clear();
@@ -767,6 +780,129 @@ export class SwitchStore {
 
 	// ---------- the viewport ----------
 
+	// ---------- the commands of a scene ----------
+
+	// what a reader can do in the scene shown, or with a card or a line of it, as the provider says
+	// (provider.commandListGet(path, target): card-diagram-flexible-switch.md#commands): the
+	// panel of the commands, at point (in the canvas box, px). target: { kind: canvas | node |
+	// line, node?, connection?, position (on the canvas) }. Nothing to do there: nothing opens
+	// the provider answers a list of commands, or { heading?, placeholder?, list }: the words of the panel
+	// the path given is the scene's, its view in target.view
+	commandListOf(target) {
+		const { path, view } = switchPathViewRead(this.pathCurrent);
+		const answer = this.plan || !this.provider?.commandListGet ? null : this.provider.commandListGet(path, { ...target, view: view ?? '' });
+		return Array.isArray(answer) ? { list: answer } : { list: answer?.list ?? [], heading: answer?.heading, placeholder: answer?.placeholder };
+	}
+
+	// target.actionId: the panel opened in the state of that command (a link command:{id})
+	commandOpen(target, point) {
+		const answer = this.commandListOf(target);
+		if (answer.list.length === 0) { this.command = null; return false; }
+		this.command = { path: this.pathCurrent, target, point, ...answer, actionId: target.actionId ?? '' };
+		return true;
+	}
+
+	// the commands of the scene, opened from a button rather than the canvas: near the top of the canvas
+	commandOpenCentered() {
+		const camera = this.viewportApi?.viewportGet() ?? { x: 0, y: 0, zoom: 1 };
+		const point = { x: Math.max(8, (this.box?.width ?? 600) / 2 - 150), y: 12 };
+		return this.commandOpen({ kind: 'canvas', position: { x: (point.x - camera.x) / camera.zoom, y: (point.y - camera.y) / camera.zoom } }, point);
+	}
+
+	commandClose() {
+		if (this.command) this.command = null;
+	}
+
+	// ---------- a scene edited in place ----------
+
+	// a scene of a provider may be edited in place (card-diagram-flexible-switch.md#a-scene-edited-in-place):
+	// its description, or that of its view, says how: edit { source, registry?, save(raw, { title }),
+	// isStructureFixed?, fieldIsEditable?, react?, isTitleEditable?, label?, createSourceList?,
+	// createActionList? }. The visual editor of the framework stands over the canvas on source, at
+	// the camera of the canvas; Save hands the draft to save, whose writes make the provider anew
+	get sceneEditDesc() {
+		const { path, view } = switchPathViewRead(this.pathCurrent);
+		const descScene = this.sceneDescGet(path);
+		if (!descScene || descScene.error) return null;
+		return switchViewDescGet(descScene, view)?.edit ?? descScene.edit ?? null;
+	}
+
+	// the draft of the scene shown, as data, and what it holds: a click on a thing of the scene
+	// starts the edit there only when the draft has that thing
+	get sceneEditSource() {
+		const edit = this.sceneEditDesc;
+		if (!edit) return null;
+		if (!sceneEditSourceByDesc.has(edit)) {
+			let source = null;
+			try { source = typeof edit.source === 'string' ? yamlParse(edit.source) : edit.source; } catch { source = null; }
+			sceneEditSourceByDesc.set(edit, source ? { source, nodeIdSet: new Set((source.nodes ?? []).map((node) => node.id)), connectionIdSet: new Set((source.connections ?? []).map((connection) => connection.id)) } : null);
+		}
+		return sceneEditSourceByDesc.get(edit);
+	}
+
+	// what a click on a thing of the scene shown focuses in its draft, or null where the draft
+	// has no such thing: target { nodeId, rowId?, fieldId?, propId? } | { connectionId }. The
+	// title of the scene is the title of the draft where the scene lets it be typed
+	sceneEditSelectOf(target) {
+		const held = this.sceneEditSource;
+		if (!held || this.plan || this.isBoxAdjust) return null;
+		if (target.connectionId) return held.connectionIdSet.has(target.connectionId) ? { connectionId: target.connectionId } : null;
+		if (target.nodeId === SWITCH_TITLE_ID) return this.sceneEditDesc.isTitleEditable ? { nodeId: SWITCH_TITLE_EDIT_ID, propId: 'text', isCell: true } : null;
+		return held.nodeIdSet.has(target.nodeId) ? { ...target, isCell: Boolean(target.fieldId || target.propId) } : null;
+	}
+
+	// select: what is focused as the editor opens (sceneEditSelectOf), or nothing
+	sceneEditStart(select = null) {
+		if (!this.sceneEditDesc || this.plan || this.sceneEdit) return false;
+		this.commandClose();
+		this.sceneEditToken += 1;
+		this.sceneEdit = { path: this.pathCurrent, status: 'editing', message: '', isDirty: false, select: select ?? null, token: this.sceneEditToken };
+		return true;
+	}
+
+	sceneEditEnd() {
+		this.sceneEdit = null;
+	}
+
+	sceneEditDirtySet(isDirty) {
+		if (this.sceneEdit && this.sceneEdit.isDirty !== Boolean(isDirty)) this.sceneEdit = { ...this.sceneEdit, isDirty: Boolean(isDirty) };
+	}
+
+	// nothing is focused any more in the editor: an edit that changed nothing ends by itself, so
+	// looking at what a thing holds costs no Cancel
+	sceneEditRest() {
+		if (this.sceneEdit && !this.sceneEdit.isDirty && this.sceneEdit.status === 'editing') this.sceneEdit = null;
+	}
+
+	// the camera of the editor, kept as the reader's own for the canvas under it: the scene is
+	// where it was when the edit ends
+	sceneEditCameraSet(camera) {
+		if (!this.sceneEdit || this.plan) return;
+		this.cameraLive = { ...camera };
+		this.cameraByPath.set(this.pathCurrent, { ...camera });
+		this.viewportApi?.viewportSet({ ...camera });
+	}
+
+	// extra: { title } where the scene lets its title be typed. The writes of the scene make the
+	// provider anew: the edit ends once the canvas under it holds the new scene (or, for a save
+	// that made none, after a moment), so what was there before is never seen again
+	async sceneEditSave(raw, extra = {}) {
+		const edit = this.sceneEditDesc;
+		if (!edit || !this.sceneEdit) return;
+		const token = this.sceneEdit.token;
+		const versionBefore = this.providerVersion;
+		this.sceneEdit = { ...this.sceneEdit, status: 'submitting', message: '' };
+		try {
+			await edit.save(raw, extra);
+			for (let wait = 0; wait < 24 && this.providerVersion === versionBefore; wait += 1) await new Promise((resolve) => { setTimeout(resolve, 25); });
+			// two frames for the canvas to draw the new scene (where there is a canvas to draw)
+			if (typeof requestAnimationFrame === 'function') await new Promise((resolve) => { requestAnimationFrame(() => requestAnimationFrame(resolve)); });
+			runInAction(() => { if (this.sceneEdit?.token === token) this.sceneEdit = null; });
+		} catch (error) {
+			runInAction(() => { if (this.sceneEdit?.token === token) this.sceneEdit = { ...this.sceneEdit, status: 'error', message: String(error?.message ?? error) }; });
+		}
+	}
+
 	viewportApiSet(api) {
 		this.viewportApi = api;
 	}
@@ -938,6 +1074,10 @@ export class SwitchStore {
 
 	// a click on a card, a line's label, a tab, a segment of the path
 	async pathSet(pathInput, { isHistory = true, cameraTo = null } = {}) {
+		this.commandClose();
+		// a scene being edited is left by its Save or its Cancel; an edit that changed nothing is just left
+		if (this.sceneEdit?.isDirty || this.sceneEdit?.status === 'submitting') return false;
+		if (this.sceneEdit) this.sceneEdit = null;
 		const { path: pathNamed, itemId } = switchPathHashRead(pathInput);
 		if (!this.pathIsFound(pathNamed)) {
 			this.message = this.pathMissingText(pathNamed);

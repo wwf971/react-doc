@@ -7,6 +7,8 @@ import { DiagramEdge, DiagramNode, DiagramPointNode, DiagramRenderContext, Diagr
 import { useCanvasWheelGuard } from '../card-diagram/CanvasWheelGuard.js';
 import { CanvasStill, useCanvasStill } from '../card-diagram/CanvasStill.jsx';
 import { DiagramSearchBar, useDiagramSearchHost } from '../card-diagram/DiagramSearchView.jsx';
+import { DiagramCreatePanel } from '../card-diagram/DiagramCreatePanel.jsx';
+import '../card-diagram/DiagramVisualEdit.css';
 import { diagramCanvasLineListGet, diagramCanvasRegister } from '../card-diagram/DiagramCanvasRegistry.js';
 import '../card-diagram/DiagramER.css';
 import { SwitchContext, SwitchStaticScene, pathPointAt } from './SwitchStatic.jsx';
@@ -23,12 +25,43 @@ const nodeMouseEnterNoop = () => {};
 const SWITCH_EDGE_HIT_WIDTH = 10;
 const errorNoop = () => {};
 
+// the commands of the scene shown, or of a card or a line of it, opened where the pointer is
+// (card-diagram-flexible-switch.md#commands): the point in the box of the canvas, the position on
+// the canvas. Answers whether something opened (else the event goes on as it would)
+function switchCommandOpenAt(store, rf, event, target) {
+	const box = event.target.closest?.('.doc-switch-viewport')?.getBoundingClientRect();
+	if (!box) return false;
+	const position = rf.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+	const isOpen = store.commandOpen({ ...target, position }, { x: event.clientX - box.left, y: event.clientY - box.top });
+	if (isOpen) { event.preventDefault(); event.stopPropagation(); }
+	return isOpen;
+}
+
+// what a click on a card of the scene shown is on, in the terms of a draft of it: the card, its
+// row and the cell of it (data-row-id, data-field: TableCard.jsx), or a value of the card itself
+function switchEditTargetOf(event, nodeId) {
+	const rowId = event.target.closest?.('[data-row-id]')?.dataset.rowId;
+	const field = event.target.closest?.('[data-field]')?.dataset.field;
+	return { nodeId, ...(rowId ? { rowId, ...(field ? { fieldId: field } : {}) } : field ? { propId: field } : {}) };
+}
+
+// a scene edited in place starts its edit from a click on a thing of it, that thing focused
+// (card-diagram-flexible-switch.md#a-scene-edited-in-place). Not at the end of a drag that
+// selected words. Answers whether it started
+function switchEditStartAt(store, target) {
+	if (!store.sceneEditDesc || window.getSelection?.()?.toString()) return false;
+	const select = store.sceneEditSelectOf(target);
+	return select ? store.sceneEditStart(select) : false;
+}
+
 // a line of a scene: the line of the framework, with its label as html, which a
 // link makes a button (the label of a table mapping opens the mapping of that column)
 const SwitchEdge = observer(function SwitchEdge(props) {
 	const { connection } = props.data;
 	const store = useContext(SwitchContext)?.store;
 	const searchState = useDiagramSearchMark('').lineStateOf(props.id) ?? undefined;
+	const rf = useReactFlow();
+	const commandOpen = (event) => { if (store) switchCommandOpenAt(store, rf, event, { kind: 'line', connection }); };
 	const hasLabel = Boolean(connection.label?.text);
 	const dataBase = useMemo(() => (hasLabel ? { ...props.data, connection: { ...connection, label: { ...connection.label, text: '' } } } : props.data), [hasLabel, props.data, connection]);
 	// the pointer on the line or on its label marks both, the line whole, as it may run far from
@@ -61,6 +94,7 @@ const SwitchEdge = observer(function SwitchEdge(props) {
 						title={connection.linkTitle}
 						style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}
 						{...hoverProps}
+						onContextMenu={commandOpen}
 						onClick={(event) => {
 							event.stopPropagation();
 							isPointerOnSet(false);
@@ -72,7 +106,7 @@ const SwitchEdge = observer(function SwitchEdge(props) {
 						{connection.label.text}
 					</button>
 				) : (
-					<div className={`doc-switch-edge-label is-hoverable${labelHoverClass}`} data-edge-id={props.id} data-search={searchState} {...hoverProps} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}>{connection.label.text}</div>
+					<div className={`doc-switch-edge-label is-hoverable nodrag nopan${labelHoverClass}`} data-edge-id={props.id} data-search={searchState} {...hoverProps} onContextMenu={commandOpen} onClick={() => { if (store) switchEditStartAt(store, { connectionId: connection.id }); }} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}>{connection.label.text}</div>
 				)}
 			</EdgeLabelRenderer>
 		) : null}
@@ -131,12 +165,26 @@ const SwitchFlow = observer(function SwitchFlow({ store, children }) {
 			onNodesChange={store.nodeListChange}
 			onNodeMouseEnter={nodeMouseEnterNoop}
 			onMove={(event, camera) => store.cameraReport(camera, Boolean(event))}
+			onDoubleClick={(event) => { if (!isMoving && event.target.classList?.contains('react-flow__pane')) switchCommandOpenAt(store, rf, event, { kind: 'canvas' }); }}
+			onPaneContextMenu={(event) => { if (!isMoving) switchCommandOpenAt(store, rf, event, { kind: 'canvas' }); }}
+			onNodeContextMenu={(event, node) => { if (!isMoving && node.data?.node) switchCommandOpenAt(store, rf, event, { kind: 'node', node: node.data.node }); }}
+			onEdgeContextMenu={(event, edge) => { if (!isMoving && edge.data?.connection) switchCommandOpenAt(store, rf, event, { kind: 'line', connection: edge.data.connection }); }}
+			onEdgeClick={(_event, edge) => { if (!isMoving && !store.isBoxAdjust && edge.data?.connection && !edge.data.connection.link) switchEditStartAt(store, { connectionId: edge.id }); }}
 			onNodeClick={(event, node) => {
 				if (isMoving || store.isBoxAdjust) return;
 				const nodeGraph = node.data?.node;
 				// a part of a card may open something of its own (data-switch-link)
 				const link = event.target.closest?.('[data-switch-link]')?.dataset.switchLink ?? nodeGraph?.link ?? (nodeGraph?.renderer.type === 'scene-embed' ? nodeGraph.data.scene : undefined);
-				if (!link || event.target.closest?.('button')) return;
+				if (event.target.closest?.('button')) return;
+				// no link: in a scene edited in place, the click starts the edit on what was clicked
+				if (!link) { switchEditStartAt(store, switchEditTargetOf(event, node.id)); return; }
+				// command:{id}: that command of the scene, in its state (a dashed row making something: New
+				// action). A click never opens what can be done with a thing: that is a right-click
+				if (link.startsWith('command:')) {
+					const actionId = link.slice('command:'.length);
+					if (actionId) switchCommandOpenAt(store, rf, event, { kind: 'canvas', actionId });
+					return;
+				}
 				// a link the provider answers itself leaves the viewport (a page of the host): it is not a scene
 				if (store.provider?.linkOpen?.(link) === true) return;
 				void store.pathSet(link);
@@ -147,6 +195,37 @@ const SwitchFlow = observer(function SwitchFlow({ store, children }) {
 			<Controls showInteractive={false} />
 			{children}
 		</ReactFlow>
+	);
+});
+
+// the panel of the commands open: the panel a double-click opens on a canvas being edited
+// (DiagramCreatePanel), with no diagram being edited: the commands are its actions, some asking
+// for what they need state by state. It stands where the pointer was, kept inside the canvas
+const COMMAND_PANEL_WIDTH = 300;
+// as tall as the panel can be (its list scrolls past 14rem): it stands that far above the bottom at most
+const COMMAND_PANEL_HEIGHT = 320;
+const SwitchCommandPanel = observer(function SwitchCommandPanel({ store }) {
+	const { command, box } = store;
+	// what a command is given as editor: no diagram being edited, the scene it is done in (go: to another;
+	// edit: that scene, or this one, edited in place once it is shown)
+	const editor = useMemo(() => ({ store: null, createClose: () => store.commandClose(), createChoose: () => store.commandClose(),
+		scene: {
+			get path() { return store.command?.path ?? store.pathCurrent; },
+			go: (path) => { void store.pathSet(path); },
+			edit: async (path) => {
+				if (path && path !== store.pathCurrent) await store.pathSet(path);
+				for (let wait = 0; store.plan && wait < 60; wait += 1) await new Promise((resolve) => { setTimeout(resolve, 50); });
+				store.sceneEditStart();
+			},
+		} }), [store]);
+	if (!command) return null;
+	const left = Math.max(8, Math.min(command.point.x, (box?.width ?? 0) - COMMAND_PANEL_WIDTH - 8));
+	const top = Math.max(8, Math.min(command.point.y, (box?.height ?? 0) - COMMAND_PANEL_HEIGHT));
+	return (
+		<div className="doc-switch-command nodrag nopan" style={{ left, top }}>
+			<DiagramCreatePanel key={`${command.path}:${command.target.kind}:${command.point.x}:${command.point.y}`} position={command.target.position} editor={editor} actionList={command.list} actionIdInitial={command.actionId || undefined}
+				heading={command.heading ?? ''} placeholder={command.placeholder ?? 'What to do'} ariaLabel={command.heading || 'What can be done here'} />
+		</div>
 	);
 });
 
@@ -274,6 +353,7 @@ export const SwitchCanvas = observer(function SwitchCanvas({ store, config, regi
 				</DiagramRenderContext.Provider>
 				<SwitchSearchHost store={store} search={search} hostRef={boxRef} />
 			</ReactFlowProvider>
+			<SwitchCommandPanel store={store} />
 			{store.loadError ? (
 				<div className="doc-er-diagram-message is-error doc-switch-error" role="alert">
 					<strong>This scene could not be drawn.</strong>

@@ -147,7 +147,7 @@ const DiagramSearchControl = observer(function DiagramSearchControl({ search }) 
 });
 
 const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, isEditing = false }) {
-	const { editor, edgeGeometry, search } = useContext(DiagramRenderContext);
+	const { editor, edgeGeometry, search, config } = useContext(DiagramRenderContext);
 	const { fitView, setViewport, getViewport, getNode, getInternalNode, screenToFlowPosition, flowToScreenPosition } = useReactFlow();
 	const isInitialized = useNodesInitialized();
 	// the zoom, as a custom property of the canvas: the controls drawn over a
@@ -155,9 +155,13 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 	// their screen size at any zoom (DiagramVisualEdit.css)
 	const { zoom } = useViewport();
 	const wrapper = useRef(null);
+	// drawn at its camera once: a host covering the canvas until then looks at data-ready
+	const [isReady, isReadySet] = useState(false);
 	const graphVersion = store.graphVersion;
 	const viewport = store.viewport;
 	const isLocked = Boolean(editor?.isLocked);
+	// a draft whose structure is given (DiagramEditStore.js: scope): no node is moved, no route drawn by hand
+	const isFixed = Boolean(editor?.store.isStructureFixed);
 	const selection = editor?.store.selection;
 	const interaction = editor?.store.interaction;
 	const create = editor?.store.create;
@@ -177,7 +181,7 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 	};
 	const nodeList = [
 		...store.nodeList.map(node => {
-			const draggable = node.type === 'visualizationNode' ? isEditing && !isLocked && !node.data.node.isPositionLocked : node.type === 'visualizationPoint' ? isEditing && !isLocked : node.draggable;
+			const draggable = node.type === 'visualizationNode' ? isEditing && !isLocked && !isFixed && !node.data.node.isPositionLocked : node.type === 'visualizationPoint' ? isEditing && !isLocked : node.draggable;
 			return decorate(node, [draggable], () => ({ ...node, draggable }));
 		}),
 		...(create ? [{ id: '~create', type: 'visualizationCreate', position: create.position, initialWidth: 300, initialHeight: 240, draggable: false, selectable: false, focusable: false, connectable: false, zIndex: 1000, data: { position: create.position } }] : []),
@@ -189,6 +193,13 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 		return decorate(edge, [reconnectable, className, hidden], () => ({ ...edge, reconnectable, className, hidden }));
 	});
 	const signature = JSON.stringify(viewport);
+	// a camera the host hands over as the canvas mounts (config.viewInitial: a canvas taking the
+	// place of another, at the place the reader was): it is what the diagram remembers from then on
+	const viewInitial = useRef(config?.viewInitial);
+	if (viewInitial.current && viewState) {
+		Object.assign(viewState, { signature, view: { ...viewInitial.current } });
+		viewInitial.current = null;
+	}
 	const viewRemembered = viewState?.signature === signature ? viewState.view : undefined;
 
 	useEffect(() => {
@@ -251,7 +262,7 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			frameIdInner = requestAnimationFrame(() => {
 				const view = viewState?.signature === signature ? viewState.view : viewport.view;
 				const operation = !view || view === 'auto' ? fitView({ padding: 0.12, duration: 0, minZoom: viewport.zoom.min, maxZoom: viewport.zoom.max }) : setViewport(view);
-				void operation.then(() => rangeApply(getViewport()));
+				void operation.then(() => { rangeApply(getViewport()); isReadySet(true); });
 			});
 		});
 		return () => {
@@ -283,6 +294,7 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 		<ReactFlow
 			ref={wrapper}
 			className="doc-er-diagram-flow"
+			data-ready={isReady ? '' : undefined}
 			style={{ '--doc-vis-zoom': zoom }}
 			nodes={nodeList}
 			edges={edgeList}
@@ -293,7 +305,7 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			fitViewOptions={{ padding: 0.12 }}
 			minZoom={viewport.zoom.min}
 			maxZoom={viewport.zoom.max}
-			onMove={(_event, view) => { if (viewState) Object.assign(viewState, { signature, view: { ...view } }); }}
+			onMove={(_event, view) => { if (viewState) Object.assign(viewState, { signature, view: { ...view } }); config?.onViewChange?.(view); }}
 			onMoveEnd={(_event, view) => rangeApply(view)}
 			proOptions={{ hideAttribution: true }}
 			nodesDraggable={isEditing && !isLocked}
@@ -319,7 +331,7 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			onNodeMouseEnter={nodeMouseEnterNoop}
 			onNodeClick={isEditing ? (event, node) => { if (node.type === 'visualizationNode' && !event.target.closest('.doc-card, .doc-vis-operator')) editor.select(node.id); } : undefined}
 			onEdgeClick={isEditing ? (_event, edge) => { if (editor.store.selection?.connectionId !== edge.id) editor.selectConnection(edge.id); } : undefined}
-			onEdgeDoubleClick={isEditing && !isLocked ? (event, edge) => {
+			onEdgeDoubleClick={isEditing && !isLocked && !isFixed ? (event, edge) => {
 				// the browser takes a double-click for selecting the word nearest to it
 				window.getSelection()?.removeAllRanges();
 				editor.change(() => editor.anchorAdd(edge.id, screenToFlowPosition({ x: event.clientX, y: event.clientY })));

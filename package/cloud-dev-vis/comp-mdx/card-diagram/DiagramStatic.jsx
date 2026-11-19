@@ -97,11 +97,16 @@ export const DiagramStaticLabel = observer(function DiagramStaticLabel({ connect
 //                 (0, 0) of the diagram is drawn in it, when either changes. The block starts at what
 //                 is drawn farthest up and left (less the padding), so a caller laying something of its
 //                 own over the diagram places it from the origin, not from the block's corner
+//   frame         { x, y }: the top left corner of the block, fixed, in the coordinates of the diagram
+//                 (less the padding). Without it the block starts at what is drawn farthest up and
+//                 left, so a card drawn larger (the mark of the one shown) moves everything else; with
+//                 it nothing drawn moves the origin. The caller knows how far its cards may reach (a
+//                 tree: its layout) and gives that; what reaches farther stands outside the block
 //
 // A node with no position written stands where the grid of the diagram puts it; a background
 // written `around` other nodes follows them as they are measured. A line ends in an arrow unless
 // the diagram says otherwise (markerEnd: none, of the line or of defaults.connection).
-export const DiagramStatic = observer(function DiagramStatic({ diagram, registry, resolve, config = {}, padding = 0, onNodeClick, onSize, className = '' }) {
+export const DiagramStatic = observer(function DiagramStatic({ diagram, registry, resolve, config = {}, padding = 0, frame = null, onNodeClick, onSize, className = '' }) {
 	const markerId = `doc-diagram-arrow-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
 	const load = useMemo(() => {
 		try {
@@ -147,10 +152,10 @@ export const DiagramStatic = observer(function DiagramStatic({ diagram, registry
 		}
 		for (const { connection, source, target } of lineList) pointList.push(...routePathPolylineGet(connectionPathBuild(connection, diagramStaticEndsOf(source, target))));
 		if (pointList.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
-		const xMin = Math.min(...pointList.map((point) => point.x));
-		const yMin = Math.min(...pointList.map((point) => point.y));
+		const xMin = Number.isFinite(frame?.x) ? frame.x : Math.min(...pointList.map((point) => point.x));
+		const yMin = Number.isFinite(frame?.y) ? frame.y : Math.min(...pointList.map((point) => point.y));
 		return { x: xMin - padding, y: yMin - padding, width: Math.ceil(Math.max(...pointList.map((point) => point.x)) - xMin + padding * 2), height: Math.ceil(Math.max(...pointList.map((point) => point.y)) - yMin + padding * 2) };
-	}, [graph, place, geometry.sizeById, lineList, padding]);
+	}, [graph, place, geometry.sizeById, lineList, padding, frame?.x, frame?.y]);
 	useLayoutEffect(() => { onSize?.({ width: box.width, height: box.height, xOrigin: -box.x, yOrigin: -box.y }); }, [onSize, box.width, box.height, box.x, box.y]);
 	if (load.message) return <div className="doc-er-diagram-message is-error" role="alert"><strong>The diagram could not be read.</strong><span>{load.message}</span></div>;
 	const nodeClick = onNodeClick ? (event) => {

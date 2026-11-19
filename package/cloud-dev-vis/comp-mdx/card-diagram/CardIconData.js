@@ -3,6 +3,9 @@
 // nothing drawn to ask (card-diagram-arrange.md#the-contract).
 export const CARD_ICON_MARK_SIZE = 26;
 export const CARD_ICON_MARK_SIZE_FOCUS = 32;
+// a row of a list (isCompact): a smaller mark, its words on one line
+export const CARD_ICON_MARK_SIZE_COMPACT = 18;
+export const cardIconMarkSizeOf = (data) => (data?.isCompact ? CARD_ICON_MARK_SIZE_COMPACT : data?.isFocus ? CARD_ICON_MARK_SIZE_FOCUS : CARD_ICON_MARK_SIZE);
 
 const sideAllList = ['left', 'right', 'top', 'bottom'];
 const toneList = ['blue', 'teal', 'green', 'amber', 'red', 'violet', 'slate'];
@@ -23,12 +26,16 @@ export function cardIconSearchMatch(node, helper) {
 	return [title, text, badge].some((one) => helper.test(one)) ? { partList: [], childList: [], isWhole: true } : null;
 }
 
+// how far after the words the anchor text stands (CardIcon.css .doc-card-icon-text-anchor)
+export const TEXT_ANCHOR_GAP = 12;
+
 // the rectangle of an anchor in the rectangle of its node
 export function cardIconAnchorRectEstimate(node, anchorId, rect) {
 	if (anchorId !== 'icon' && anchorId !== 'text') return rect;
-	const size = node.data?.isFocus ? CARD_ICON_MARK_SIZE_FOCUS : CARD_ICON_MARK_SIZE;
-	// the words: as wide as the node leaves them at most (how wide they are is known once drawn)
-	if (anchorId === 'text') return node.data?.labelSide === 'bottom' ? { x: rect.x, y: rect.y + size, width: rect.width, height: rect.height - size } : { x: rect.x + size + 8, y: rect.y, width: Math.max(0, rect.width - size - 8), height: rect.height };
+	const size = cardIconMarkSizeOf(node.data);
+	// the words: as wide as the node leaves them at most (how wide they are is known once drawn), the
+	// anchor a little after them (CardIcon.css: TEXT_ANCHOR_GAP past the words, past the node when they fill it)
+	if (anchorId === 'text') return node.data?.labelSide === 'bottom' ? { x: rect.x, y: rect.y + size, width: rect.width, height: rect.height - size } : { x: rect.x + size + 8, y: rect.y, width: Math.max(0, rect.width - size - 8) + TEXT_ANCHOR_GAP, height: rect.height };
 	if (node.data?.labelSide === 'bottom') return { x: rect.x + (rect.width - size) / 2, y: rect.y, width: size, height: size };
 	return { x: rect.x, y: rect.y + (rect.height - size) / 2, width: size, height: size };
 }

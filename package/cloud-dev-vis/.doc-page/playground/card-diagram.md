@@ -492,3 +492,59 @@ connections:
 ## Add your own
 
 Everything above is ordinary content: copy a block, or add one from the insert menu in edit mode.
+
+## A label with settings, a column of the diagram's own
+
+A `card-label` carries the settings its data declares: press **Edit**, click the label, and the edit card beside it shows them. The table has a column the diagram adds to its kind (`fieldExtraList`), a choice whose values and words differ from row to row, written in the color of its value: click its cell and choose.
+
+<!--renderComp=DiagramER,title=A label with settings-->
+```yaml
+version: 1
+viewport:
+  size: { height: 380 }
+nodes:
+  - id: settings
+    renderer: { type: card-label }
+    position: { x: 0, y: 0 }
+    data:
+      title: Settings
+      icon: settings
+      tone: teal
+      propertyList:
+        - { id: name, label: Name }
+        - { id: batch, label: Rows per batch, placeholder: 'as the plan says: 100' }
+        - { id: way, label: Rows found by, kind: enum, values: [id, key], valueLabels: { id: the same id, key: a key } }
+        - { id: isOn, label: Runs with the plan, kind: bool }
+        - { id: from, label: Rules, isReadOnly: true }
+      name: Members
+      way: id
+      isOn: true
+      from: written in the action
+  - id: member
+    renderer: { type: dataverse-table }
+    position: { x: 0, y: 56 }
+    size: { width: 540, height: auto }
+    data:
+      name: Member
+      nameLogical: new_member
+      fieldExtraList:
+        - id: compare
+          label: Compared as
+          kind: enum
+          values: ['', ignore, same, lookup, kept]
+          valueLabels: { '': No rule, ignore: Not compared, same: same value, lookup: same record, kept: as written }
+          valuesKey: compareValueList
+          valueLabelsKey: compareLabels
+          valueTones: { same: teal, lookup: violet, kept: blue, ignore: slate }
+          width: 9rem
+      rowPropertyExtraList:
+        - { id: reason, label: Why it is not compared, isMultiline: true }
+      columns:
+        - { id: name, name: Name, nameLogical: new_name, type: Text, compare: same, compareValueList: ['', ignore, same] }
+        - { id: owner, name: Owner, nameLogical: ownerid, type: Lookup, key: FK, compare: lookup, compareValueList: ['', ignore, same, lookup] }
+        - { id: phone, name: Phone, nameLogical: new_phone, type: Text, compare: kept, compareValueList: ['', ignore, same, kept], compareLabels: { kept: digits only } }
+        - { id: created, name: Created on, nameLogical: createdon, type: Date and Time, compare: ignore, reason: written by the platform, compareValueList: ['', ignore, same] }
+    handles: []
+connections: []
+```
+

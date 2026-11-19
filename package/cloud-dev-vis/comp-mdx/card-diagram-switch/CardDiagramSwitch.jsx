@@ -11,6 +11,7 @@ import { cardDiagramNodeRegistry } from '../card-diagram/card-diagram-node-regis
 import { animationCapture, animationCaptureCopy, animationCaptureDownload } from '../card-diagram-animation/AnimationCapture.js';
 import { SwitchStore } from './SwitchStore.js';
 import { SwitchCanvas } from './SwitchCanvas.jsx';
+import { SwitchSceneEditor } from './SwitchSceneEditor.jsx';
 import { SwitchPathBar } from './SwitchPathBar.jsx';
 import { SwitchSceneEdit } from './SwitchSceneEdit.jsx';
 import { switchRegistryBuild } from './SwitchNodeKinds.jsx';
@@ -105,14 +106,22 @@ export function switchCaptureActionBuild({ store, rootRef, titleGet }) {
 // canvas. Whoever has scenes makes one of these with a provider: a document
 // (CardDiagramSwitch below), or a component generating its scenes from data.
 //
-//   [path bar]        overview > tables > account           ←  fit  box
+//   [path bar]        overview > tables > account     (trailing) ⌕ fit box (end)
 //   [react-flow viewport]
-export const SwitchViewport = observer(function SwitchViewport({ store, config, registry, height, isInPopup, rootRef, barTrailing }) {
+// barTrailing: buttons of the host before the viewport's own; barEnd: after them, at the end of the bar
+//
+// A scene edited in place (SwitchSceneEditor) stands over the canvas, which stays under it: the
+// editor is seen once it has drawn, and the canvas is there again the moment the edit ends.
+export const SwitchViewport = observer(function SwitchViewport({ store, config, registry, height, isInPopup, rootRef, barTrailing, barEnd }) {
+	const edit = store.sceneEditDesc;
 	return (
-		<figure ref={rootRef} className={`doc-switch doc-switch-${store.scope.replace(/^\.doc-switch-/, '')}${isInPopup ? ' is-popup' : ''}${store.isBoxAdjust ? ' is-box-adjust' : ''}`} style={{ '--doc-switch-height': `${height}px` }}>
-			<SwitchPathBar store={store} trailing={barTrailing} />
+		<figure ref={rootRef} className={`doc-switch doc-switch-${store.scope.replace(/^\.doc-switch-/, '')}${isInPopup ? ' is-popup' : ''}${store.isBoxAdjust ? ' is-box-adjust' : ''}${edit ? ' is-scene-editable' : ''}${edit?.isTitleEditable ? ' is-title-editable' : ''}`} style={{ '--doc-switch-height': `${height}px` }}>
+			<SwitchPathBar store={store} trailing={barTrailing} end={barEnd} />
 			{store.message ? <p className="doc-switch-message" role="status">{store.message}</p> : null}
-			<SwitchCanvas store={store} config={config} registry={registry} />
+			<div className="doc-switch-stage">
+				<SwitchCanvas store={store} config={config} registry={registry} />
+				{store.sceneEdit ? <SwitchSceneEditor key={store.sceneEdit.token} store={store} config={config} registry={registry} /> : null}
+			</div>
 		</figure>
 	);
 });

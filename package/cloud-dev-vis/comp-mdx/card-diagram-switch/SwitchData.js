@@ -10,6 +10,10 @@ export const SWITCH_TAB_HEADER_HEIGHT = 40;
 export const SWITCH_EMBED_CHROME_HEIGHT = 34;
 // the title of a scene focused (SceneTitleCard): the height of its node, which is its line
 // height, and its font size, at scale 1
+// the title of a scene in the draft of its edit in place: a node of the draft like any other
+// (the id the layer gives the title on its canvas is not one a draft may hold). Whoever reads or
+// derives such a draft (a provider's edit.react) finds the title under this id
+export const SWITCH_TITLE_EDIT_ID = 'scene-title';
 export const SWITCH_TITLE_HEIGHT = 48;
 export const SWITCH_TITLE_FONT_SIZE = 32;
 export const SWITCH_EMBED_PADDING = 0.03;

@@ -5,8 +5,18 @@
 // its fields are authored (the generic `table` type) or fixed (the Dataverse
 // and resource cards). A node type without a schema is not a card.
 //
-//   property   { id, label, kind: 'text' | 'enum' | 'bool', values?, isMultiline?, isSearchable? }
+//   property   { id, label, kind: 'text' | 'enum' | 'bool' | 'number', values?, valueLabels?, valuesKey?,
+//                valueLabelsKey?, valueTones?, isMultiline?, isSearchable?, isReadOnly?, placeholder? }
+//              placeholder: what a text left empty says in its field of the edit card (the value
+//              that holds while none is typed)
+//              valuesKey: the key of a row holding the values that row can take, where they
+//              differ from row to row; valueLabelsKey: the key of a row holding words of its
+//              own for some values; valueTones: { value: tone }, the color a value is written
+//              in where it is a cell; isReadOnly: a value that is shown, never changed
 //   field      a property shown as a column of the card
+//
+// A card says more of its rows than its kind knows through its data (fieldExtraList,
+// rowPropertyExtraList, below): what a diagram keeps of each column of a table, of each option.
 //   viewModeList  the view modes a card of this kind can have (TableCardData.js); plain alone
 //              when absent
 //   displayPropertyList   how the card looks, in the Display section of the edit card: a
@@ -83,15 +93,70 @@ export const tableCardSchema = {
 export const CARD_FOOTER_ANCHOR = 'footer';
 export const cardFooterProperty = { id: 'footer', label: 'Footer text', kind: 'text' };
 
+// a field or a property written in the data of a node, as the editor reads it: text typed (the
+// default), a choice among values (enum), a yes or no (bool), a number; read only where the
+// data says so. isDeclared: said by the data, not by the kind
+function propertyAuthoredOf(property) {
+	const kind = ['enum', 'bool', 'number'].includes(property.kind) ? property.kind : 'text';
+	return {
+		id: property.id, label: String(property.label ?? property.id), kind, isDeclared: true,
+		...(kind === 'enum' ? { values: property.values ?? [], valueLabels: property.valueLabels, valuesKey: property.valuesKey, valueLabelsKey: property.valueLabelsKey, valueTones: property.valueTones, isSearchable: property.isSearchable === true } : {}),
+		...(kind === 'number' ? { min: property.min, max: property.max, step: property.step } : {}),
+		...(property.isMultiline ? { isMultiline: true } : {}),
+		...(property.placeholder ? { placeholder: String(property.placeholder) } : {}),
+		...(property.isReadOnly ? { isReadOnly: true } : {}),
+		...(property.width ? { width: property.width } : {}),
+	};
+}
+
 // the schema of a node, with the field list of a generic table resolved from
 // its data; null for a node that is not a card (an operator, a component)
-// or whose type the registry does not know
+// or whose type the registry does not know.
+//
+// A card of any kind may say more of its rows in its data, beside what its kind fixes:
+//   fieldExtraList         further fields, drawn as columns after those of the kind: [{ id, label,
+//                          kind?, values?, valueLabels?, valuesKey?, isSearchable?, isReadOnly?, width? }]
+//                          (width: of its column, a css grid track)
+//   rowPropertyExtraList   further properties of a row, edited in the edit card and not drawn
 export function cardSchemaGet(node, registry) {
 	const schema = registry?.kindByType[node?.renderer?.type]?.schema;
 	if (!schema) return null;
-	if (schema.kind !== 'table') return schema;
+	const fieldExtraList = Array.isArray(node.data?.fieldExtraList) ? node.data.fieldExtraList.map(propertyAuthoredOf) : [];
+	const rowPropertyExtraList = Array.isArray(node.data?.rowPropertyExtraList) ? node.data.rowPropertyExtraList.map(propertyAuthoredOf) : [];
+	const extra = fieldExtraList.length || rowPropertyExtraList.length ? { fieldExtraList, rowPropertyList: [...schema.rowPropertyList, ...rowPropertyExtraList] } : null;
+	if (schema.kind !== 'table') return extra ? { ...schema, ...extra, fieldList: [...schema.fieldList, ...fieldExtraList] } : schema;
 	const fields = Array.isArray(node.data?.fields) && node.data.fields.length ? node.data.fields : [{ id: 'name', label: 'Name' }, { id: 'value', label: 'Value' }];
-	return { ...schema, fieldList: fields.map(field => ({ id: field.id, label: String(field.label ?? field.id), kind: 'text' })) };
+	return { ...schema, ...extra, fieldList: [...fields.map(propertyAuthoredOf), ...fieldExtraList] };
+}
+
+// the properties of a node itself, which the edit card offers and a cell of the node may type:
+// those of its schema; for a node that is not a card, those of its kind (contract.propertyList),
+// else the words every node may have, and then those its data declares (propertyList: a label
+// carrying settings, a mark with what it stands for)
+export const nodePropertyListDefault = [{ id: 'label', label: 'Label', kind: 'text' }, { id: 'name', label: 'Name', kind: 'text' }, { id: 'description', label: 'Description', kind: 'text', isMultiline: true }];
+
+export function nodePropertyListGet(node, registry) {
+	const kind = registry?.kindByType[node?.renderer?.type];
+	if (kind?.schema) return kind.schema.nodePropertyList;
+	const declared = Array.isArray(node?.data?.propertyList) ? node.data.propertyList.map(propertyAuthoredOf) : [];
+	return [...(kind?.contract?.propertyList ?? nodePropertyListDefault), ...declared];
+}
+
+// the values a row can take in a field: its own where the field names a key of the row for them
+export function fieldValuesOf(definition, row) {
+	const own = definition.valuesKey ? row?.[definition.valuesKey] : undefined;
+	return Array.isArray(own) ? own : definition.values;
+}
+
+// the words of the values of a field for a row: those of the field, and over them the row's own
+export function fieldValueLabelsOf(definition, row) {
+	const own = definition.valueLabelsKey ? row?.[definition.valueLabelsKey] : undefined;
+	return own && typeof own === 'object' ? { ...definition.valueLabels, ...own } : definition.valueLabels;
+}
+
+// a field as one row has it: its values and their words resolved for that row
+export function fieldOfRow(definition, row) {
+	return definition.valuesKey || definition.valueLabelsKey ? { ...definition, values: fieldValuesOf(definition, row), valueLabels: fieldValueLabelsOf(definition, row) } : definition;
 }
 
 export function cardRowListGet(node, registry) {

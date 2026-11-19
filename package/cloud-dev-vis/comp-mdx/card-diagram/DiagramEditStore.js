@@ -1,7 +1,7 @@
 import { makeAutoObservable, observable } from 'mobx';
 import { parseDocument, stringify } from 'yaml';
 import { diagramLegacyConvert, diagramNormalize, cardStandaloneNormalize, endpointIsDangling, handleRoleAccepts, lineTypeList, markerTypeList, attachPolicyList } from './DiagramERData.js';
-import { cardSchemaGet, cardRowAnchorBuild, cardFooterProperty } from './TableCardSchema.js';
+import { cardSchemaGet, cardRowAnchorBuild, cardFooterProperty, nodePropertyListGet } from './TableCardSchema.js';
 import { pathResolve, pathEquals, selectionPathBuild, tabPathGet, nodeLineListGet, cardTabList } from './DiagramEditPath.js';
 import { EditHistory } from './DiagramEditHistory.js';
 import { diagramArrangeRun } from './DiagramArrange.js';
@@ -54,6 +54,19 @@ export const strokeDashList = [
 //   routeDraft   { connectionId, route }: the route of a line while one of its
 //                anchors or handles is dragged, drawn in place of the draft's
 //                until the drop writes it as one step (changeApply)
+//
+// scope: what of the draft may change, for a diagram whose structure is given (a scene made
+// from data and edited where it is drawn: card-diagram-flexible-switch.md#a-scene-edited-in-place).
+// Absent, everything may, as in a document.
+//
+//   isStructureFixed   the nodes, their rows, fields and handles, where they stand and how they
+//                      look are what they are: values (cells, properties) and lines are edited.
+//                      The cards draw no toolbar and no handle adder, the edit card offers the
+//                      values alone, and a line let go off a handle is taken away
+//   fieldIsEditable(node, rowId, fieldId) -> boolean   which values; every one when absent
+//   react(value, valueBefore) -> value | undefined     after every change, what follows from it
+//                      (a line from a cell, a cell from a line, the look of a line): written
+//                      with the change as one step of the history
 export class DiagramEditStore {
 	rawInitial;
 	rawDraft;
@@ -69,13 +82,16 @@ export class DiagramEditStore {
 	create = null;
 	routeDraft = null;
 	cardViewIdByNode = {};
+	// a cell asked to open its menu once it is drawn (an editor opened on it): { nodeId, rowId, field }
+	cellOpenWanted = null;
 	saveTarget = 'asset';
 	message = '';
 
 	// kind: 'diagram', or 'card' for one card outside a canvas. registry: the
 	// node registry of the component (node-registry.js): what the draft may
 	// hold and what the create panel offers
-	constructor(raw, kind = 'diagram', resolve, registry) {
+	constructor(raw, kind = 'diagram', resolve, registry, scope = null) {
+		this.scope = scope ?? null;
 		this.rawInitial = String(raw ?? '');
 		this.rawDraft = this.rawInitial;
 		this.kind = kind;
@@ -94,7 +110,7 @@ export class DiagramEditStore {
 		// two states are one draft when their values are: the text may differ
 		// (the initial text keeps its comments and layout) and is restored with it
 		this.history = new EditHistory({ isSame: (a, b) => a.valueCurrent === b.valueCurrent });
-		makeAutoObservable(this, { documentDraft: false, resolve: false, registry: false, history: false, path: observable.ref, redirectRuleList: false, routeDraft: observable.ref }, { autoBind: true });
+		makeAutoObservable(this, { documentDraft: false, resolve: false, registry: false, scope: false, history: false, path: observable.ref, redirectRuleList: false, routeDraft: observable.ref }, { autoBind: true });
 	}
 
 	// ---------- the draft ----------
@@ -122,7 +138,13 @@ export class DiagramEditStore {
 		const documentNext = this.documentDraft.clone();
 		try {
 			change(documentNext);
-			const value = documentNext.toJS();
+			let value = documentNext.toJS();
+			// what follows from the change, in the terms of whoever the diagram is of (scope.react)
+			const reacted = this.scope?.react?.(value, this.value);
+			if (reacted && reacted !== value) {
+				documentNext.contents = documentNext.createNode(reacted);
+				value = documentNext.toJS();
+			}
 			this.validate(value);
 			const stateBefore = this.stateGet();
 			this.documentDraft = documentNext;
@@ -182,6 +204,23 @@ export class DiagramEditStore {
 	get rowSelected() { return this.selection?.rowId ? this.rowGet(this.selection.nodeId, this.selection.rowId) : undefined; }
 	get connectionSelected() { return this.selection?.connectionId ? this.connectionGet(this.selection.connectionId) : undefined; }
 	get isCardShown() { return Boolean(this.display) && !this.cell && !this.interaction && !this.create; }
+	get isStructureFixed() { return Boolean(this.scope?.isStructureFixed); }
+
+	// the definition of a value of a node (rowId null) or of one of its rows: a field, a property
+	fieldDefinitionGet(node, rowId, field) {
+		const schema = cardSchemaGet(node, this.registry);
+		const definitionList = schema ? rowId ? [...schema.fieldList, ...schema.rowPropertyList] : [...schema.nodePropertyList, ...(schema.displayPropertyList ?? []), cardFooterProperty] : rowId ? [] : nodePropertyListGet(node, this.registry);
+		return definitionList.find(item => item.id === field);
+	}
+
+	// whether a value may be changed: not one its definition only shows, nor one the scope of the
+	// draft keeps as it is
+	fieldIsEditable(nodeId, rowId, field) {
+		const node = this.nodeGet(nodeId);
+		const definition = node ? this.fieldDefinitionGet(node, rowId, field) : undefined;
+		if (!definition || definition.isReadOnly) return false;
+		return this.scope?.fieldIsEditable ? this.scope.fieldIsEditable(node, rowId ?? null, field) !== false : true;
+	}
 	nodeLineListGet(nodeId) { return nodeLineListGet(this, nodeId); }
 
 	// the connections attached to a handle, with the role each has there
@@ -326,6 +365,15 @@ export class DiagramEditStore {
 
 	// ---------- cells ----------
 
+	cellOpenWantedSet(cell) { this.cellOpenWanted = cell; }
+	// taken by the cell it names, once: true when it is that cell
+	cellOpenWantedTake(nodeId, rowId, field) {
+		const wanted = this.cellOpenWanted;
+		if (!wanted || wanted.nodeId !== nodeId || (wanted.rowId ?? null) !== (rowId ?? null) || wanted.field !== field) return false;
+		this.cellOpenWanted = null;
+		return true;
+	}
+
 	// typing in a cell focuses it: a cell of a row, or a property of the card
 	cellStart(nodeId, rowId, field) {
 		const selection = this.selection;
@@ -353,9 +401,8 @@ export class DiagramEditStore {
 	fieldSet(nodeId, rowId, field, value, isDelete = false) {
 		const node = this.nodeGet(nodeId);
 		const schema = cardSchemaGet(node, this.registry);
-		const definitionList = schema ? rowId ? [...schema.fieldList, ...schema.rowPropertyList] : [...schema.nodePropertyList, ...(schema.displayPropertyList ?? []), cardFooterProperty] : rowId ? [] : [{ id: 'label' }, { id: 'name' }, { id: 'description' }];
-		const definition = definitionList.find(item => item.id === field);
-		if (!definition) return false;
+		const definition = this.fieldDefinitionGet(node, rowId, field);
+		if (!definition || !this.fieldIsEditable(nodeId, rowId, field)) return false;
 		const groupKey = ['enum', 'bool'].includes(definition.kind) ? null : `field:${nodeId}/${rowId ?? ''}/${field}`;
 		return this.changeApply(documentNext => {
 			const path = [...this.nodePathGet(nodeId), 'data'];

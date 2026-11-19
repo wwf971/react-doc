@@ -41,6 +41,8 @@ import { nodeRegistrySearch } from './node-registry.js';
 // A host may also offer **actions** (config.createActionList): entries of the list that do
 // something rather than add one thing, under the heading Actions:
 //   { id, label, description?, icon?, keywordList?,
+//     isDisabled?, reason?,         greyed out, the reason said in the place of the description:
+//                                   what cannot be done here is shown, not hidden
 //     start({ position, editor }) → a state, or nothing }
 // An action that answers a **state** puts the panel into it: the panel then asks for what the
 // action needs, one state at a time (a state machine the host runs: each state says what the
@@ -58,25 +60,37 @@ import { nodeRegistrySearch } from './node-registry.js';
 //   'back' (the state before), or nothing (done: the panel closes). api: { position, editor }.
 //   What they throw is said in the panel, which stays as it is.
 // A host opens the panel in the state of an action with editor.createOpen(position, { actionId }).
+//
+// The panel serves a scene of scenes too (card-diagram-switch: the commands of a scene, opened by a
+// double-click on its canvas or a right-click on a card or a line): there is no diagram being edited,
+// so the editor given has no store (no kinds of the registry, no objects), only createClose; the
+// actions are the commands, under the heading given (heading), the field saying placeholder.
 const SOURCE_LIST_NONE = [];
 const ACTION_LIST_NONE = [];
 
-export const DiagramCreatePanel = observer(function DiagramCreatePanel({ position, editor, objectService, sessionKey, sourceList = SOURCE_LIST_NONE, actionList = ACTION_LIST_NONE, actionIdInitial }) {
+export const DiagramCreatePanel = observer(function DiagramCreatePanel({ position, editor, objectService, sessionKey, sourceList = SOURCE_LIST_NONE, actionList = ACTION_LIST_NONE, actionIdInitial, heading = 'Actions', placeholder: placeholderGiven, ariaLabel = 'Add to the diagram' }) {
 	const [query, querySet] = useState('');
 	// the states entered, the last the one the panel is in; opened in the state of an action when asked to
+	// opened at an action: in its state, or, an action asking nothing, done at once and closed
+	const isStartedAtOnce = useRef(false);
 	const [stateStack, stateStackSet] = useState(() => {
-		const state = actionList.find(action => action.id === actionIdInitial)?.start({ position, editor });
+		const action = actionIdInitial ? actionList.find(one => one.id === actionIdInitial && !one.isDisabled) : null;
+		if (!action) return [];
+		const state = action.start({ position, editor });
+		if (!state) isStartedAtOnce.current = true;
 		return state ? [state] : [];
 	});
+	useEffect(() => { if (isStartedAtOnce.current) editor.createClose(); }, [editor]);
 	const [isStateOnly] = useState(() => stateStack.length > 0);
 	const stateCurrent = stateStack[stateStack.length - 1];
 	const [indexActive, indexActiveSet] = useState(0);
 	const root = useRef(null);
 	const source = useCreateSourceSearch(sourceList, query);
-	const kindEntryList = nodeRegistrySearch(editor.store.registry, query).map(({ entry }) => entry);
+	// a draft whose structure is given takes no node of the registry: what the host offers alone
+	const kindEntryList = editor.store && !editor.store.isStructureFixed ? nodeRegistrySearch(editor.store.registry, query).map(({ entry }) => entry) : [];
 	const sourceEntryListOf = isBefore => source.groupList.filter(group => Boolean(group.source.isBeforeKinds) === isBefore).flatMap(group => group.entryList);
 	const entryList = kindEntryList;
-	const option = objectSearchOptionGet(editor.store);
+	const option = editor.store && !editor.store.isStructureFixed ? objectSearchOptionGet(editor.store) : { isEnabled: false, typeList: [] };
 	const session = objectService?.searchSessionGet && option.isEnabled ? objectService.searchSessionGet(sessionKey, { typeList: option.typeList, fetchMax: 20 }) : undefined;
 	const hitList = session && query.trim() ? session.hitList : [];
 	const objectEntryList = hitList.map(hit => ({
@@ -92,7 +106,7 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 	const resultList = [...sourceBeforeList, ...entryList, ...objectEntryList, ...sourceAfterList];
 	const highlightList = (session?.result?.tokenList ?? []).map(token => token.valueLower).filter(Boolean);
 	const wordList = query.toLowerCase().split(/\s+/).filter(Boolean);
-	const placeholder = sourceList.find(item => item.placeholder)?.placeholder ?? (session ? 'Add a node, a connection, or an object' : 'Add a node or a connection');
+	const placeholder = placeholderGiven ?? sourceList.find(item => item.placeholder)?.placeholder ?? (session ? 'Add a node, a connection, or an object' : 'Add a node or a connection');
 	// the entries of a source, under its heading, with what it says of them and what can be done
 	const sourceRender = (group, indexStart) => (
 		<div key={group.source.id} className="doc-vis-create-source">
@@ -123,6 +137,7 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 	useEffect(() => { session?.clear(); }, [session]);
 	const choose = (entry) => {
 		if (!entry.action) return editor.createChoose(entry, position);
+		if (entry.action.isDisabled) return undefined;
 		// an action: into its state when it has one, else it did what it does and the panel closes
 		const state = entry.action.start({ position, editor });
 		if (state) { stateStackSet([state]); queryChange(''); } else editor.createClose();
@@ -160,13 +175,13 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 		}
 	};
 	const optionRender = (entry, index, content) => (
-		<button key={entry.id} type="button" role="option" aria-selected={index === indexActive} className="doc-vis-create-option" title={entry.hit?.descriptor.ref ?? entry.description}
+		<button key={entry.id} type="button" role="option" aria-selected={index === indexActive} aria-disabled={entry.action?.isDisabled || undefined} className={`doc-vis-create-option${entry.action?.isDisabled ? ' is-disabled' : ''}`} title={entry.action?.isDisabled ? entry.action.reason ?? '' : entry.hit?.descriptor.ref ?? entry.description}
 			onPointerDown={event => event.preventDefault()} onMouseEnter={() => indexActiveSet(index)} onClick={() => choose(entry)}>
 			{content}
 		</button>
 	);
 	return (
-		<div ref={root} className="doc-vis-create-panel not-prose" role="dialog" aria-label="Add to the diagram" onKeyDown={keyDownHandle} onDoubleClick={event => event.stopPropagation()}>
+		<div ref={root} className="doc-vis-create-panel not-prose" role="dialog" aria-label={ariaLabel} onKeyDown={keyDownHandle} onDoubleClick={event => event.stopPropagation()} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}>
 			{stateCurrent ? <DiagramCreateState key={`${stateStack.length}:${stateCurrent.id}`} stateStack={stateStack} api={{ position, editor }} onLeave={stateLeave} onResult={stateResult} /> : null}
 			{stateCurrent ? null : <div className="doc-vis-create-search">
 				<Search size={12} aria-hidden="true" />
@@ -175,11 +190,11 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 				{session?.status === 'searching' ? <LoaderCircle size={12} className="doc-spin" aria-label="searching the objects" /> : null}
 			</div>}
 			{stateCurrent ? null : <div className="doc-vis-create-list" role="listbox" aria-label="What can be added">
-				{actionEntryList.length > 0 ? <span className="doc-vis-create-group">Actions</span> : null}
+				{actionEntryList.length > 0 && heading ? <span className="doc-vis-create-group">{heading}</span> : null}
 				{actionEntryList.map((entry, indexAction) => optionRender(entry, indexAction, <>
 					{entry.icon ? <entry.icon size={13} aria-hidden="true" /> : <Zap size={13} aria-hidden="true" />}
 					<span className="doc-vis-create-label">{entry.label}</span>
-					<span className="doc-vis-create-description">{entry.description}</span>
+					<span className="doc-vis-create-description">{entry.isDisabled ? entry.reason ?? entry.description : entry.description}</span>
 				</>))}
 				{resultList.length === 0 && session?.status !== 'searching' && source.groupList.length === 0 ? <span className="doc-note">nothing matches “{query.trim()}”</span> : null}
 				{sourceGroupListOf(true).reduce((out, group) => ({ list: [...out.list, sourceRender(group, out.index)], index: out.index + group.entryList.length }), { list: [], index: actionEntryList.length }).list}

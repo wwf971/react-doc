@@ -1,7 +1,7 @@
 import { observer } from 'mobx-react-lite';
 import { Boxes } from '../../../../main/frontend/UICommon.js';
 import { CARD_ICON_BY_NAME } from './CompactCard.jsx';
-import { CARD_ICON_MARK_SIZE, CARD_ICON_MARK_SIZE_FOCUS } from './CardIconData.js';
+import { cardIconMarkSizeOf } from './CardIconData.js';
 import './CardIcon.css';
 
 // The icon node of the base series (card-diagram-impl.md#icon-nodes): something among many, drawn
@@ -10,7 +10,11 @@ import './CardIcon.css';
 //
 //   card-icon     ( ◉ ) Title          data: title, text?, icon?, tone?, statusTone?,
 //                       a line of text       labelSide?: right (default) | bottom,
-//                                            isFocus?, isGhost?, isLabelHidden?, badge?, isBadgeUnder?
+//                                            isFocus?, isGhost?, isLabelHidden?, badge?, isBadgeUnder?,
+//                                            isCompact?
+//                 (·) Title  text        isCompact: a row of a list (what a thing holds, the things of a
+//                                        block), as a file manager lists files: a small mark, the words
+//                                        on one line, the text dimmed after the title
 //   card-caption  WORDS OVER A GROUP   data: text
 //
 // icon: a word of CARD_ICON_BY_NAME. tone: the colors of the compact cards. statusTone: a dot on
@@ -22,14 +26,14 @@ import './CardIcon.css';
 // its words (the title, its badge, the line of text: whichever is longest), where a line leaves a
 // node wider than its words; `body`, the whole node.
 export const CardIcon = observer(function CardIcon({ node, nodeId, anchorRef }) {
-	const { title, text, icon, tone, statusTone, labelSide, isFocus, isGhost, isLabelHidden, badge, isBadgeUnder } = node.data;
+	const { title, text, icon, tone, statusTone, labelSide, isFocus, isGhost, isLabelHidden, badge, isBadgeUnder, isCompact } = node.data;
 	const Icon = CARD_ICON_BY_NAME[icon] ?? Boxes;
-	const size = isFocus ? CARD_ICON_MARK_SIZE_FOCUS : CARD_ICON_MARK_SIZE;
+	const size = cardIconMarkSizeOf(node.data);
 	return (
 		<div data-node-id={nodeId} data-tone={tone || 'slate'} title={[title, text].filter(Boolean).join(' — ')}
-			className={`doc-card-icon is-label-${labelSide === 'bottom' ? 'bottom' : 'right'}${isFocus ? ' is-focus' : ''}${isGhost ? ' is-ghost' : ''}${node.link ? ' is-link' : ''}`}>
+			className={`doc-card-icon is-label-${labelSide === 'bottom' ? 'bottom' : 'right'}${isFocus ? ' is-focus' : ''}${isGhost ? ' is-ghost' : ''}${isCompact ? ' is-compact' : ''}${node.link ? ' is-link' : ''}`}>
 			<span ref={anchorRef?.('icon')} className="doc-card-icon-mark" style={{ width: size, height: size }}>
-				<Icon size={Math.round(size * 0.54)} aria-hidden="true" />
+				<Icon size={Math.round(size * (isCompact ? 0.62 : 0.54))} aria-hidden="true" />
 				{statusTone ? <i className="doc-card-icon-status" data-tone={statusTone} /> : null}
 			</span>
 			{isLabelHidden ? null : (
