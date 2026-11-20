@@ -106,19 +106,22 @@ function columnListRead(record) {
 // what does not fit together is said, and what can be drawn is drawn
 function migrationModelCheck(model) {
 	const problem = (text) => model.problemList.push(text);
+	// each found once: a database of thousands of tables and option sets is checked in one pass
+	const tableNameSet = new Set();
+	const useCountByChoice = new Map();
 	for (const table of model.tableByKey.values()) {
+		tableNameSet.add(`${table.db}\n${table.logical}`);
 		for (const column of table.columnList) {
 			if (column.lookup && !model.tableByKey.has(column.lookup)) problem(`${table.logical}.${column.id}: the lookup names a table not found: ${column.lookup}.`);
 			if (column.choice && !model.choiceByKey.has(column.choice)) problem(`${table.logical}.${column.id}: the column names an option set not found: ${column.choice}.`);
+			if (column.choice) useCountByChoice.set(column.choice, (useCountByChoice.get(column.choice) ?? 0) + 1);
 		}
 	}
 	for (const choice of model.choiceByKey.values()) {
 		// a scene of a database names both by their logical names
-		if (migrationTableListOf(model, choice.db).some((table) => table.logical === choice.logical)) problem(`${choice.key}: a table of ${choice.db} has the same logical name, and its scene is the one shown.`);
-		if (!migrationChoiceIsGlobal(choice)) {
-			const useCount = [...model.tableByKey.values()].reduce((sum, table) => sum + table.columnList.filter((column) => column.choice === choice.key).length, 0);
-			if (useCount > 1) problem(`${choice.key}: isGlobal is false, but ${useCount} columns use it.`);
-		}
+		if (tableNameSet.has(`${choice.db}\n${choice.logical}`)) problem(`${choice.key}: a table of ${choice.db} has the same logical name, and its scene is the one shown.`);
+		const useCount = useCountByChoice.get(choice.key) ?? 0;
+		if (!migrationChoiceIsGlobal(choice) && useCount > 1) problem(`${choice.key}: isGlobal is false, but ${useCount} columns use it.`);
 	}
 	for (const mapping of model.mappingTableByKey.values()) {
 		if (!model.tableByKey.has(mapping.source)) problem(`${mapping.key}: the source table is not found: ${mapping.source}.`);
@@ -133,15 +136,23 @@ function migrationModelCheck(model) {
 	}
 }
 
+// a model that says it does not change (listCache: a Map, as a provider of scenes gives its own)
+// answers the same list each time: read, never changed, by whoever asks
+export const migrationListCached = (model, key, make) => {
+	if (!model.listCache) return make();
+	if (!model.listCache.has(key)) model.listCache.set(key, make());
+	return model.listCache.get(key);
+};
+
 export function migrationTableListOf(model, dbId) {
-	return [...model.tableByKey.values()].filter((table) => table.db === dbId);
+	return migrationListCached(model, `table\n${dbId}`, () => [...model.tableByKey.values()].filter((table) => table.db === dbId));
 }
 
 // an option set of its own, shared by columns, unless the item says it belongs to one column
 export const migrationChoiceIsGlobal = (choice) => choice.isGlobal !== false;
 
 export function migrationChoiceListOf(model, dbId) {
-	return [...model.choiceByKey.values()].filter((choice) => choice.db === dbId);
+	return migrationListCached(model, `choice\n${dbId}`, () => [...model.choiceByKey.values()].filter((choice) => choice.db === dbId));
 }
 
 // how many batches a list of them stands for: an entry may leave many out (isOmitted, count)

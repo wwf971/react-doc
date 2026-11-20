@@ -9,11 +9,18 @@ import { CardCaption, CardIcon } from './CardIcon.jsx';
 import { cardIconAnchorListGet, cardIconAnchorRectEstimate, cardIconNormalize, cardIconSearchMatch } from './CardIconData.js';
 import { diagramArrangerOutline } from './DiagramArrangeOutline.js';
 import { diagramArrangerBlocks } from './DiagramArrangeBlocks.js';
+import { diagramArrangerScatter } from './DiagramArrangeScatter.js';
 import { diagramArrangerLanesAcross, diagramArrangerLanesDown, diagramArrangerLayers } from './DiagramArrangeLayers.js';
 import { SceneBoxCard } from './SceneBoxCard.jsx';
 import { CardMatrix } from './CardMatrix.jsx';
 import { cardMatrixNormalize, cardMatrixWidthGet } from './CardMatrixData.js';
 import { ColorBlock, colorBlockNormalize } from './ColorBlock.jsx';
+import { CardIndex } from './CardIndex.jsx';
+import { cardIndexHeightGet, cardIndexNormalize, cardIndexSearchMatch, cardIndexWidthGet } from './CardIndexData.js';
+import { CardLegend } from './CardLegend.jsx';
+import { cardLegendHeightGet, cardLegendNormalize } from './CardLegendData.js';
+import { CardGraph } from './CardGraph.jsx';
+import { cardGraphNormalize, cardGraphSearchMatch, cardGraphSizeGet } from './CardGraphData.js';
 
 // The node kinds of the base series (card-diagram-impl.md#node-registries): a
 // generic table card with authored fields and rows, without any limit on
@@ -203,6 +210,43 @@ export const colorBlockNodeKind = {
 	},
 };
 
-export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, cardLabelNodeKind, cardThreeDotsNodeKind, cardDatabaseNodeKind, cardIconNodeKind, cardCaptionNodeKind, cardMatrixNodeKind, sceneBoxNodeKind, colorBlockNodeKind];
+// many things as small cards of their names in a grid, each opening what it stands for
+// (CardIndexData.js). written by a generator of views, not offered by the editor
+export const cardIndexNodeKind = {
+	type: 'card-index',
+	label: 'Index',
+	contract: {
+		dataNormalize: cardIndexNormalize, anchorListGet: () => [{ id: 'body', sideList: sideAllList }], searchMatch: cardIndexSearchMatch,
+		sizeDefault: { width: 800, height: 400 }, sizeEstimate: (node) => ({ width: cardIndexWidthGet(node.data), height: cardIndexHeightGet(node.data) }),
+	},
+	schema: null,
+	Card: CardIndex,
+};
 
-export const cardDiagramNodeRegistry = nodeRegistryBuild({ id: 'card-diagram', label: 'Card diagram', kindList: cardDiagramNodeKindList, arrangerList: [diagramArrangerOutline, diagramArrangerLayers, diagramArrangerLanesDown, diagramArrangerLanesAcross, diagramArrangerBlocks] });
+// what the looks of a diagram stand for: cards and lines, with words (CardLegendData.js).
+// written by a generator of views, not offered by the editor; usually pinned to a corner of the
+// viewport (node.pin)
+export const cardLegendNodeKind = {
+	type: 'card-legend',
+	label: 'Legend',
+	contract: { dataNormalize: cardLegendNormalize, anchorListGet: () => [], sizeDefault: { width: 240, height: 120 }, sizeEstimate: (node) => ({ height: cardLegendHeightGet(node.data) }) },
+	schema: null,
+	Card: CardLegend,
+};
+
+// many things and the lines between them in one card, each a square or a label (CardGraphData.js),
+// for a graph too large for a node per thing. written by a generator of views, not offered by the editor
+export const cardGraphNodeKind = {
+	type: 'card-graph',
+	label: 'Graph',
+	contract: {
+		dataNormalize: cardGraphNormalize, anchorListGet: () => [{ id: 'body', sideList: sideAllList }], searchMatch: cardGraphSearchMatch,
+		sizeDefault: { width: 800, height: 600 }, sizeEstimate: (node) => cardGraphSizeGet(node.data),
+	},
+	schema: null,
+	Card: CardGraph,
+};
+
+export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, cardLabelNodeKind, cardThreeDotsNodeKind, cardDatabaseNodeKind, cardIconNodeKind, cardCaptionNodeKind, cardMatrixNodeKind, sceneBoxNodeKind, colorBlockNodeKind, cardIndexNodeKind, cardLegendNodeKind, cardGraphNodeKind];
+
+export const cardDiagramNodeRegistry = nodeRegistryBuild({ id: 'card-diagram', label: 'Card diagram', kindList: cardDiagramNodeKindList, arrangerList: [diagramArrangerOutline, diagramArrangerLayers, diagramArrangerLanesDown, diagramArrangerLanesAcross, diagramArrangerBlocks, diagramArrangerScatter] });

@@ -32,7 +32,7 @@ export const CARD_ICON_BY_NAME = {
 export const CardNote = observer(function CardNote({ node, editor, nodeId }) {
 	const content = editor?.store.nodeGet(nodeId)?.data ?? node.data;
 	return (
-		<div data-node-id={nodeId} data-tone={node.data.tone || 'slate'} className="doc-card-note" onClick={editor ? (event) => { event.stopPropagation(); editor.select(nodeId); } : undefined}>
+		<div data-node-id={nodeId} data-tone={node.data.tone || 'slate'} data-variant={node.data.variant || undefined} className="doc-card-note" onClick={editor ? (event) => { event.stopPropagation(); editor.select(nodeId); } : undefined}>
 			<div className="doc-card-note-head">
 				<span className="doc-card-note-title"><CardCell editor={editor} nodeId={nodeId} field={{ id: 'title', kind: 'text', label: 'Title' }} value={content.title ?? ''}>{node.data.title}</CardCell></span>
 				{node.data.tag ? <span className={`doc-card-note-tag${node.data.isTagHard ? ' is-hard' : ''}`}>{node.data.tag}</span> : null}

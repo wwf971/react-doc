@@ -193,6 +193,49 @@ table    bucket                     set apart along it; a handle on a part (a ro
 
 It is offered for a diagram with two color blocks or more (`isApplicable`).
 
+## The scatter arranger
+
+`scatter` (**Scatter by the lines**, `DiagramArrangeScatter.js`, offered by `CardDiagram` and the series of Power Platform) is for a graph with no order of its own: what looks up what among many tables, what talks to what. **What a line joins stands near, a card joined to many stands among them, what is joined to nothing stands apart**, so the lines are short on the whole. It is the layout of the relationships of a database ([the migration](power-platform-migration.md#one-database-alone)), where the order of a flow would leave hundreds of lines crossing a column.
+
+```text
+  1. each group of cards joined by lines apart, the largest first; a card joined to one other alone
+     (a leaf) waits for it; in a group of more than 400, a hub (joined to more than a tenth of
+     it, and to 40 at least: the table every table looks up) waits too
+  2. a first place: a spiral, in the order a walk from the most joined card meets them
+  3. forces, a bounded number of steps: a line pulls its two ends together (a hub less by each of
+     its lines, so it stays among them); every card pushes every other away, the far ones by the
+     groups of a quadtree (Barnes and Hut: about n log n a step); a little pull to the middle;
+     each step moves less than the one before
+  4. a hub at the middle of what it joins, a leaf beside what it hangs on (the leaves of one card
+     fanned around it, in rings when they are many)
+  5. no two cards on one place, by placement:
+     grid  the group scaled to the room its cards need, then each card, the most joined first,
+           takes the free cell of a grid nearest to where it stands (ring by ring around it; a
+           ring found full is not searched again for the next card wanting the same cell)
+     free  the group made as dense everywhere, in pixels (each card keeps its direction from the
+           middle and its rank by distance from it, at the radius where as many stand nearer in
+           a disk `spread` times the room the cards take); then each card, the most joined
+           first, moves the least it must not to overlap one placed before (rings of places
+           around it, a step half its height down or up and a quarter of its width aside)
+  6. the groups packed in rows, what stands alone in a grid of its own (free: in rows, each at its
+     own width), last
+```
+
+- **Grid or free.** `grid` (the default of the arranger) lines the cards up in rows and columns, each in a cell as large as the largest: what an editor arranges and goes on moving. `free` leaves each where its lines put it, at its own size, with air around: a graph to be read, where a grid would only add rows of empty cells and the look of a table. Without the evening out, the forces leave a crowded core (what is joined to much) and a sparse rim; one scale cannot make room in the core without sending the rim far off. The relationships of a database are placed free.
+- **Why hubs wait**: pulled by its hundreds of lines, a hub drags everything to one heap, and the lines that mean something (the other lookups) are lost in it. Left out, the rest is placed by what else joins it, and the hub stands where its lines are shortest on the whole. A generator may draw the lines of a hub fainter (`diagramScatterHubSetOf(count, linkList)` says which they are), as the relationships of a database do.
+- **Deterministic**: no randomness; the same graph is placed the same way. **What it computed is kept** for the graphs met last (16, in memory, by the cards with their sizes, the lines and the options): a scene built again from the same data, another canvas opened and this one again, costs nothing. It is not written anywhere: a graph of two thousand cards and five thousand lines is placed in about a quarter of a second (free: about a third), which a reader opening a view takes better than a stale layout of data that changed (six thousand things with their option sets: about half a second).
+- **The handles**: one on the left or the right of its card turns to the side most of its lines go to; one on the top or the bottom stays. **Routes are removed**: a scattered graph is read best with straight lines (`renderer: { type: straight }`), from the side of a card facing the other.
+- **Its core is a function** (`diagramScatterLayout(itemList, linkList, { gap, stepCount, placement, spread })` → the top left of each thing): what a generator calls for things that are not nodes, the items of a `card-graph` ([Many things in a graph](card-diagram-usage.md#many-things-in-a-graph)). `diagramScatterSideOf(rect, point)` is the side of a box facing a point.
+
+| Option | |
+| --- | --- |
+| `origin` | the top left of what it places |
+| `gap` | between two cards (28) |
+| `stepCount` | the steps of the forces; else by the size of the graph (40 to 160) |
+| `placement` | `grid` (default) or `free` |
+| `spread` | free: the room of a group, times the room its cards take with their gaps (2.5); more air, longer lines |
+| `registry` | for the estimate |
+
 ## The arrangers of ER diagrams
 
 | Id | Cards | Lines |

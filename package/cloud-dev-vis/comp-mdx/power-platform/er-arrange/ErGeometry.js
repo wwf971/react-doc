@@ -22,13 +22,21 @@ const DATAVERSE_TITLE_CHOICE = 47;
 const DATAVERSE_TITLE_LINE = 23;
 const DATAVERSE_FIELD_HEADER = 39;
 const DATAVERSE_ROW = 32;
-const DATAVERSE_ROW_LINE = 9;
-// the room of the words of a card 400 wide, and of a title beside its badge and its logical name
+const DATAVERSE_ROW_TWO = 41;
+const DATAVERSE_ROW_LINE = 16;
+const DATAVERSE_TITLE_PAD = 14;
+// the room of the words of a card 400 wide (an option set's label wider, its value narrower), and
+// of a title: its name with its badge, its logical name beside it while both fit, else on rows of
+// its own, broken anywhere
 const DATAVERSE_NAME_ROOM = 100;
 const DATAVERSE_LOGICAL_ROOM = 110;
+const DATAVERSE_CHOICE_NAME_ROOM = 185;
+const DATAVERSE_CHOICE_VALUE_ROOM = 70;
 const DATAVERSE_TITLE_ROOM = 340;
 const DATAVERSE_BADGE_ROOM = 70;
+const DATAVERSE_TITLE_LOGICAL_LINE = 18;
 const SCALE_TITLE = 1.25;
+const SCALE_TITLE_LOGICAL = 1.1;
 
 // the width of words at the size of a row, by the kind of letter
 function widthOfWords(text) {
@@ -49,16 +57,26 @@ function dataverseRowHeightOf(node, id) {
 	const column = (node.data.columns ?? []).find((item) => item.id === id);
 	if (!column) return DATAVERSE_ROW;
 	const scale = scaleOfWidth(node);
-	const lineCount = Math.max(Math.ceil(widthOfWords(column.name) / (DATAVERSE_NAME_ROOM * scale)), Math.ceil(widthOfWords(column.nameLogical) / (DATAVERSE_LOGICAL_ROOM * scale)), 1);
-	return DATAVERSE_ROW + (lineCount - 1) * DATAVERSE_ROW_LINE;
+	const isChoice = node.renderer?.type === 'dataverse-choice';
+	const nameRoom = (isChoice ? DATAVERSE_CHOICE_NAME_ROOM : DATAVERSE_NAME_ROOM) * scale;
+	const logicalRoom = (isChoice ? DATAVERSE_CHOICE_VALUE_ROOM : DATAVERSE_LOGICAL_ROOM) * scale;
+	const lineCount = Math.max(Math.ceil(widthOfWords(column.name) / nameRoom), Math.ceil(widthOfWords(column.nameLogical) / logicalRoom), 1);
+	// a row is as tall as its lines: one, two (41, read off the drawn cards), and a line more each after
+	return lineCount === 1 ? DATAVERSE_ROW : DATAVERSE_ROW_TWO + (lineCount - 2) * DATAVERSE_ROW_LINE;
 }
 
 function dataverseTitleHeightOf(node) {
 	const isChoice = node.renderer?.type === 'dataverse-choice';
 	const hasBadge = isChoice || Boolean(node.data?.badge);
-	const room = DATAVERSE_TITLE_ROOM * scaleOfWidth(node) - (hasBadge ? DATAVERSE_BADGE_ROOM : 0) - widthOfWords(node.data?.nameLogical);
-	const isWrapped = widthOfWords(node.data?.name) * SCALE_TITLE > room;
-	return (isChoice ? DATAVERSE_TITLE_CHOICE : hasBadge ? DATAVERSE_TITLE_BADGE : DATAVERSE_TITLE) + (isWrapped ? DATAVERSE_TITLE_LINE : 0);
+	const room = DATAVERSE_TITLE_ROOM * scaleOfWidth(node);
+	const nameWidth = widthOfWords(node.data?.name) * SCALE_TITLE + (hasBadge ? DATAVERSE_BADGE_ROOM : 0);
+	const logicalWidth = widthOfWords(node.data?.nameLogical) * SCALE_TITLE_LOGICAL;
+	const base = isChoice ? DATAVERSE_TITLE_CHOICE : hasBadge ? DATAVERSE_TITLE_BADGE : DATAVERSE_TITLE;
+	// both on one row; else the name on its rows and the logical name on its own
+	if (nameWidth + logicalWidth + 12 <= room) return base;
+	const nameLineCount = Math.max(1, Math.ceil(nameWidth / room));
+	const logicalLineCount = logicalWidth > 0 ? Math.ceil(logicalWidth / room) : 0;
+	return Math.max(base, DATAVERSE_TITLE_PAD + nameLineCount * DATAVERSE_TITLE_LINE + logicalLineCount * DATAVERSE_TITLE_LOGICAL_LINE);
 }
 
 const titleHeightOf = (node) => (isDataverse(node) ? dataverseTitleHeightOf(node) : HEIGHT_TITLE);

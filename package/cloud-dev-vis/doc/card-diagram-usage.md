@@ -55,6 +55,9 @@ Reach for a card that exists before drawing one of your own: each already knows 
 | a database, a store | `card-database` | a cylinder with its name inside |
 | a thing among many, in a graph of what relates to what | `card-icon`, with `card-caption` over a group | a small round mark with its name beside it, a dot for its state; lines end on the mark (`anchor: { target: icon }`). In a narrow place, laid out by the [outline arranger](card-diagram-arrange.md#the-outline-arranger) |
 | which of a set relates to which | `card-matrix` | rows and columns with a mark where they meet; a cell may be a [link](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md#a-link-to-a-scene) |
+| many things to find and open (hundreds, thousands) | `card-index` | small cards of two names in a grid, in groups, each a link; one node however many ([the index](card-diagram-impl.md#node-registries)) |
+| what the looks of a diagram stand for | `card-legend` | a card or a line as drawn, with words, pinned to a corner of the viewport (`pin: top-right`) so it stays while the reader moves; folds to its title line. **Use it for any legend** ([Legends](#legends)) |
+| a graph of hundreds or thousands of things (what looks up what in a whole database) | `card-graph` | each thing a small square or a label and the lines between them, in one node; a search finds each thing by its names, a pointer on one lights its lines ([Many things in a graph](#many-things-in-a-graph)) |
 | a flow or a rule of Power Platform | `power-automate`, `business-rule` | trigger, action, condition, scope ...; a Dataverse condition or action |
 | a resource of AWS: an http api, a function, a table and the kinds of its rows, a bucket, a user pool, a role, a log group, a group of routes | `aws-http-api`, `aws-lambda`, `aws-dynamodb-table` ... (`DiagramAws`) | a resource card in the accent of its family ([AWS diagrams](../comp-mdx/aws/comp-aws.md)) |
 | a place, a lane, a group, outputs | `color-block` | behind the cards; `fill: none` for a frame; `around` what it holds ([below](#background-color-blocks)) |
@@ -190,6 +193,29 @@ A block has no handles and does not own or move what lies on it. It is always dr
 
 `card-three-dots` (`data: { direction?: vertical | horizontal, text?, tone? }`) stands for what is left out of a long series of cards. A table card takes `data.badge`, a short word before its name.
 
+## Legends
+
+**When the looks of a diagram mean something, give it a `card-legend`: do not draw one of your own** (a note listing colors, a block of small cards, an html panel beside the canvas). One kind of legend keeps every diagram read the same way, and it is the one the framework pins to the viewport.
+
+- **What it says.** `data.groupList`: groups with a title (*Kinds of table*, *Kinds of line*), each entry a `swatch` (a card in its tone and variant, as the compact cards draw it: `{ tone, variant: dashed | bar }`) or a `line` (`{ color, dash, width, opacity, isArrow }`, as the diagram's line style says), with its words. Write only the kinds the scene draws, from the same constants the scene is drawn with, so the two cannot drift apart.
+- **Where it stands.** Write it with `pin: top-right` (or `top-left`, `bottom-right`, `bottom-left`) and no position: it stands in that corner of the viewport, the same size whatever the zoom, over the canvas, and goes nowhere when the reader pans ([Nodes pinned to the viewport](card-diagram-impl.md#nodes-pinned-to-the-viewport)). A pinned node takes no line, has no place in a layout or in the bounds a camera fits, and is not searched; it folds to its title line (the button on it, or `data.isFolded`). A diagram without a canvas draws it in the corner of its block. A scene embedded in a card draws no pinned node: a legend belongs to the scene focused.
+- **See-through.** `data.opacity` (0.1 to 1, 1 by default) is how much of its panel stays: below 1 the diagram shows through it, its words and samples staying whole (a light blur under them keeps them read over lines). A reader turns it either way with the button beside the fold (◐): that choice is remembered for every legend, on every page, and goes before what the legend says (`cardLegendTranslucentRead`); see-through without an opacity of its own is 0.55. Write `opacity` for a legend over a busy canvas; leave it for the reader otherwise.
+- **In a generator.** One small builder of the legend per family of scenes, taking the kinds present, used by every scene of the family ([the migration](power-platform-migration.md#one-database-alone): `legendNodeBuild`).
+
+## Many things in a graph
+
+A graph of a few dozen things is cards and lines. One of hundreds or thousands (every table of a database and what looks up what) is not: a node per thing costs a canvas too much to draw, and nobody reads a thousand cards. Draw it by how many there are, and keep every thing findable:
+
+| how many | each thing | how |
+| --- | --- | --- |
+| up to about 150 | a card of its names (`card-note`) | a node each, straight lines between the sides facing each other |
+| up to about 10,000 | a label of its name | one `card-graph`, `shape: label`, spread wider the more there are rather than shrunk: a label is read when zoomed in, a square never is |
+| more | a small square in its tone | one `card-graph`, `shape: square`: its names show where a pointer rests and where a search finds it |
+
+- **Place it by its lines, free.** A graph with no order of its own (no flow, no rank) is placed by the [scatter arranger](card-diagram-arrange.md#the-scatter-arranger): what a line joins stands near, a thing joined to many stands among them, what is joined to nothing apart. A graph to be read is placed `free` (no grid: each where its lines put it, at its own size, `spread` times the room it takes); `grid` is for cards an editor goes on moving. For a `card-graph` the generator calls its layout itself (`diagramScatterLayout`, the same code), since the things are not nodes.
+- **Search.** Write both names of a thing into its item (`title`, `text`): the search of the canvas finds it by either, frames it, and brings the camera to it, zoomed until it is read; every square found is framed, and the one the search is on (or under the pointer) shows its names: the names of all would cover each other where matches sit side by side.
+- **Say what it is.** A [legend](#legends), pinned, says the kinds of things and of lines.
+
 ## Drawing conventions
 
 What a diagram should look like, whoever draws it:
@@ -281,5 +307,7 @@ The first thing to draw for any report is therefore the diagram someone would sk
 | ☐ | Every line leaves the part it is about: a row from its row, the card from its title line or [its footer](#lines-out-of-the-bottom-of-a-card-the-footer) |
 | ☐ | Lists wrap, what is held has a margin, what is long scrolls |
 | ☐ | A scene generated from data gets its layout from [an arranger](#a-scene-generated-from-data-gets-its-layout-from-an-arranger), or has a reason not to |
+| ☐ | Where looks mean something, a [`card-legend`](#legends) pinned to the viewport says what, and no legend of its own was drawn |
+| ☐ | A graph of hundreds of things is [drawn by how many there are](#many-things-in-a-graph), and each thing is found by a search |
 | ☐ | Every look of a node was looked at, simple and detailed, each view: [its lines stay attached](#when-a-node-changes-its-look-its-lines-stay-attached) and arrive from the same side |
 | ☐ | A process before tables, and figures on the steps they belong to |

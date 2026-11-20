@@ -6,6 +6,8 @@ import { switchRegistryBuild } from '../../card-diagram-switch/SwitchNodeKinds.j
 import { erGeometryEstimateBuild } from '../er-arrange/ErGeometry.js';
 import { routeOverlapListGet, routePathPolylineGet, routePathRunListGet, routePolylinePointAt, routeResolve } from '../../card-diagram/DiagramRoute.js';
 import { labelSizeEstimate } from '../../card-diagram/DiagramLabelPlace.js';
+import { cardIndexItemOf } from '../../card-diagram/CardIndexData.js';
+import { CARD_GRAPH_LABEL_HEIGHT, cardGraphSearchMatch } from '../../card-diagram/CardGraphData.js';
 import { switchPresentationBuild, switchViewHoverResolve, switchViewListOf, switchViewResolve } from '../../card-diagram-switch/SwitchData.js';
 import { powerPlatformNodeRegistry } from '../power-platform-node-registry.js';
 import { migrationCategoryOf, migrationModelBuild, migrationPathBuild, migrationRankBuild } from './MigrationData.js';
@@ -860,8 +862,10 @@ test('the scenes of one database alone stand under a root of their own, with the
 	assert.deepEqual(dbProvider.childListGet('/canvas').map((child) => child.path), ['/canvas/a', '/canvas/b', '/canvas/systemuser']);
 	assert.equal(dbProvider.labelGet('/canvas/systemuser'), 'User');
 	const root = dbProvider.sceneGet('/canvas');
-	assert.deepEqual(root.viewList.map((view) => view.id), ['diagram', 'matrix']);
+	assert.deepEqual(root.viewList.map((view) => view.id), ['diagram', 'matrix', 'relation']);
 	const er = diagramNormalize({ version: 1, ...root.viewList[0].diagram }, registry);
+	// a legend says what the looks stand for, pinned to the viewport: no card of the diagram
+	assert.deepEqual(er.pinList.map((node) => [node.renderer.type, node.pin]), [['card-legend', 'top-right']]);
 	// one card for the table outside, however many columns look it up; every link stays under the root
 	assert.deepEqual(er.nodes.map((node) => node.id).sort(), ['external:pw:systemuser', 'table:pw:a', 'table:pw:b']);
 	assert.equal(er.connections.filter((connection) => connection.target.nodeId === 'external:pw:systemuser').length, 2);
@@ -892,16 +896,140 @@ test('an option set of one column is a card of its own where the provider asks f
 	assert.ok(shown.connections.some((connection) => connection.id === 'choice:pw:b:kind' && connection.target.nodeId === 'choice:pw:kind'));
 });
 
-test('a database of too many tables for a diagram opens on an index of its tables', () => {
-	const many = Array.from({ length: 5 }, (_, index) => ({ key: `c.t.m${index}`, kind: 'schema-table', path: `/canvas/schema/pw/table/m${index}`, data: { db: 'pw', logical: `m${index}`, name: `M ${index}`, columnList: [{ id: 'id', name: 'Id', logical: 'id', type: 'Unique identifier', key: 'PK' }] } }));
+test('a database of too many tables for a diagram opens on an index of its tables, in one card grouped by kind', () => {
+	const many = Array.from({ length: 5 }, (_, index) => ({ key: `c.t.m${index}`, kind: 'schema-table', path: `/canvas/schema/pw/table/m${index}`, data: { db: 'pw', logical: `m${index}`, name: `M ${index}`, isCustom: index < 2, columnList: [{ id: 'id', name: 'Id', logical: 'id', type: 'Unique identifier', key: 'PK' }] } }));
 	const model = migrationModelBuild('canvas', many);
-	assert.deepEqual(migrationDbProviderBuild(model, 'pw', { root: '/canvas', erTableCountMax: 5 }).sceneGet('/canvas').viewList.map((view) => view.id), ['diagram', 'matrix']);
+	assert.deepEqual(migrationDbProviderBuild(model, 'pw', { root: '/canvas', erTableCountMax: 5 }).sceneGet('/canvas').viewList.map((view) => view.id), ['diagram', 'matrix', 'relation']);
 	const index = migrationDbProviderBuild(model, 'pw', { root: '/canvas', erTableCountMax: 4 }).sceneGet('/canvas');
-	assert.equal(index.viewList, undefined);
-	const diagram = diagramNormalize({ version: 1, ...index.diagram }, registry);
-	assert.deepEqual(diagram.nodes.map((node) => node.link), many.map((item) => `/canvas/${item.data.logical}`));
+	assert.deepEqual(index.viewList.map((view) => view.id), ['index', 'relation']);
+	assert.equal(index.viewDefault, 'index');
+	const diagram = diagramNormalize({ version: 1, ...index.viewList[0].diagram }, registry);
+	assert.deepEqual(diagram.nodes.map((node) => node.renderer.type), ['card-index']);
 	assert.equal(diagram.connections.length, 0);
-	assert.equal(new Set(diagram.nodes.map((node) => `${node.position.x}|${node.position.y}`)).size, 5, 'no two cards at one place');
+	// custom tables, then system ones, each entry opening its scene, in the look of its kind
+	const { groupList } = diagram.nodes[0].data;
+	assert.deepEqual(groupList.map((group) => group.id), ['table-custom', 'table-system']);
+	assert.deepEqual(groupList.flatMap((group) => group.itemList.map((item) => cardIndexItemOf(group, item).link)), ['/canvas/m0', '/canvas/m1', '/canvas/m2', '/canvas/m3', '/canvas/m4']);
+	assert.equal(cardIndexItemOf(groupList[0], groupList[0].itemList[0]).text, 'm0');
+	assert.notEqual(cardIndexItemOf(groupList[0], groupList[0].itemList[0]).tone, cardIndexItemOf(groupList[1], groupList[1].itemList[0]).tone);
+	assert.deepEqual(diagram.pinList[0].data.groupList[0].itemList.map((item) => item.id), ['custom', 'system']);
+});
+
+// a custom table looking up a system one and a table outside, an intersect table joining the
+// custom table and the table outside, a global option set the custom table uses
+const relationItemList = [
+	{ key: 'c.t.a', kind: 'schema-table', path: '/canvas/schema/pw/table/a', data: { db: 'pw', logical: 'a', name: 'A', isCustom: true, columnList: [
+		{ id: 'aid', name: 'A', logical: 'aid', type: 'Unique identifier', key: 'PK' }, { id: 'bid', name: 'B', logical: 'bid', type: 'Lookup', key: 'FK', lookup: 'c.t.b' },
+		{ id: 'bid2', name: 'B again', logical: 'bid2', type: 'Lookup', key: 'FK', lookup: 'c.t.b' }, { id: 'kind', name: 'Kind', logical: 'kind', type: 'Choice', choice: 'c.c.kind' }] } },
+	{ key: 'c.t.b', kind: 'schema-table', path: '/canvas/schema/pw/table/b', data: { db: 'pw', logical: 'b', name: 'B', isCustom: false, columnList: [{ id: 'bid', name: 'B', logical: 'bid', type: 'Unique identifier', key: 'PK' }] } },
+	{ key: 'c.t.i', kind: 'schema-table', path: '/canvas/schema/pw/table/i', data: { db: 'pw', logical: 'i', name: 'I', isCustom: false, isIntersect: true, columnList: [
+		{ id: 'iid', name: 'I', logical: 'iid', type: 'Unique identifier', key: 'PK' }, { id: 'aid', name: 'A', logical: 'aid', type: 'Unique identifier', key: 'FK', isManyToMany: true, lookup: 'c.t.a' },
+		{ id: 'xid', name: 'X', logical: 'xid', type: 'Unique identifier', key: 'FK', isManyToMany: true, lookupTable: 'x', lookupTableName: 'X' }] } },
+	{ key: 'c.c.kind', kind: 'schema-choice', path: '/canvas/schema/pw/choice/kind', data: { db: 'pw', logical: 'kind', name: 'Kind', optionList: [{ value: 1, label: 'One' }] } },
+];
+
+test('the relationships of a database: a line from each table to what it looks up, an N:N relationship apart, the option sets when asked', () => {
+	const provider = migrationDbProviderBuild(migrationModelBuild('canvas', relationItemList), 'pw', { root: '/canvas' });
+	const root = provider.sceneGet('/canvas');
+	assert.deepEqual(root.viewList.map((view) => view.id), ['diagram', 'matrix', 'relation', 'relation-global', 'relation-all']);
+	// made when first shown
+	assert.equal(typeof Object.getOwnPropertyDescriptor(root.viewList[2], 'diagram').get, 'function');
+	const relation = diagramNormalize({ version: 1, ...root.viewList[2].diagram }, registry);
+	const lineOf = (from, to) => relation.connections.find((connection) => connection.source.nodeId === from && connection.target.nodeId === to);
+	// two columns of a looking up b: one line, with how many
+	assert.equal(lineOf('table:pw:a', 'table:pw:b').label.text, '×2');
+	assert.equal(relation.connections.filter((connection) => connection.source.nodeId === 'table:pw:a').length, 1, 'no option set unless asked');
+	const many = lineOf('table:pw:i', 'external:pw:x');
+	assert.ok(many && lineOf('table:pw:i', 'table:pw:a'));
+	assert.notEqual(many.style.stroke, lineOf('table:pw:a', 'table:pw:b').style.stroke);
+	assert.equal(lineOf('table:pw:a', 'table:pw:b').markerEnd, 'arrowClosed');
+	// scattered: straight lines between the sides facing each other, no two cards on one place
+	assert.ok(relation.connections.every((connection) => connection.renderer.type === 'straight'));
+	const rectOf = (id) => { const node = relation.nodes.find((item) => item.id === id); return { ...node.position, ...node.size }; };
+	const idList = ['table:pw:a', 'table:pw:b', 'table:pw:i', 'external:pw:x'];
+	for (const one of idList) for (const other of idList) {
+		if (one >= other) continue;
+		const [p, q] = [rectOf(one), rectOf(other)];
+		assert.ok(p.x + p.width <= q.x || q.x + q.width <= p.x || p.y + p.height <= q.y || q.y + q.height <= p.y, `${one} and ${other} overlap`);
+	}
+	// each kind of table its look, and the legend, pinned to the viewport, says each kind drawn
+	const dataOf = (id) => relation.nodes.find((node) => node.id === id).data;
+	assert.equal(dataOf('external:pw:x').variant, 'dashed');
+	assert.equal(dataOf('table:pw:i').variant, 'bar');
+	assert.notEqual(dataOf('table:pw:a').tone, dataOf('table:pw:b').tone);
+	const legend = relation.pinList.find((node) => node.renderer.type === 'card-legend').data;
+	assert.deepEqual(legend.groupList.map((group) => group.itemList.map((item) => item.id)), [['custom', 'system', 'intersect', 'external'], ['lookup', 'many']]);
+	// with the global option sets: the option set and the line of its column
+	const withChoice = diagramNormalize({ version: 1, ...root.viewList[3].diagram }, registry);
+	assert.ok(withChoice.connections.some((connection) => connection.source.nodeId === 'table:pw:a' && connection.target.nodeId === 'choice:pw:kind'));
+	// the lines of an intersect table are told apart in its own scene too
+	const table = provider.sceneGet('/canvas/i').diagram;
+	assert.ok(table.connections.every((connection) => connection.style.stroke === many.style.stroke));
+});
+
+test('the relationships of many tables: labels in one graph card, placed free, that a search finds', () => {
+	// a chain of tables, each looking up the next
+	const itemOf = (index, count) => ({ key: `c.t.t${index}`, kind: 'schema-table', path: `/canvas/schema/pw/table/t${index}`, data: { db: 'pw', logical: `t${index}`, name: `T ${index}`, isCustom: true, columnList: [
+		{ id: 'id', name: 'Id', logical: 'id', type: 'Unique identifier', key: 'PK' }, ...(index + 1 < count ? [{ id: 'next', name: 'Next', logical: 'next', type: 'Lookup', key: 'FK', lookup: `c.t.t${index + 1}` }] : [])] } });
+	const graphOf = (count) => {
+		const provider = migrationDbProviderBuild(migrationModelBuild('canvas', Array.from({ length: count }, (_, index) => itemOf(index, count))), 'pw', { root: '/canvas', erTableCountMax: 40 });
+		const diagram = diagramNormalize({ version: 1, ...provider.sceneGet('/canvas').viewList.find((view) => view.id === 'relation').diagram }, registry);
+		return diagram.nodes.find((node) => node.renderer.type === 'card-graph');
+	};
+	assert.equal(graphOf(120), undefined, 'a card each, still');
+	const labels = graphOf(200);
+	assert.ok(labels.data.itemList.every((item) => item.shape === 'label' && item.link === `/canvas/${item.id.split(':').pop()}`));
+	assert.equal(labels.data.lineList.length, 199);
+	const many = graphOf(800);
+	assert.ok(many.data.itemList.every((item) => item.shape === 'label'), 'labels still, spread wider rather than shrunk');
+	// a search finds a thing by its logical name or its display name, as a part of the card
+	const helperOf = (text) => ({ test: (value) => typeof value === 'string' && value.includes(text) });
+	assert.deepEqual(cardGraphSearchMatch(many, helperOf('t799')).partList, [{ id: 'item/table:pw:t799' }]);
+	assert.deepEqual(cardGraphSearchMatch(many, helperOf('T 799')).partList.map((part) => part.id), ['item/table:pw:t799']);
+	// free: no two labels overlap, and they are not all on the rows of one grid
+	const boxList = many.data.itemList.map((item) => ({ x: item.x, y: item.y, width: item.width, height: CARD_GRAPH_LABEL_HEIGHT }));
+	const sorted = [...boxList].sort((a, b) => a.x - b.x);
+	for (let index = 0; index < sorted.length; index += 1) {
+		for (let other = index + 1; other < sorted.length && sorted[other].x < sorted[index].x + sorted[index].width; other += 1) {
+			const a = sorted[index];
+			const b = sorted[other];
+			assert.ok(a.y + a.height <= b.y || b.y + b.height <= a.y, 'two labels overlap');
+		}
+	}
+	assert.ok(new Set(boxList.map((box) => box.y)).size > boxList.length / 4, 'labels stand at many heights, not on a few rows');
+	// what a line joins stands near: along the chain, closer than two tables taken at random
+	const pointOf = new Map(many.data.itemList.map((item) => [item.id, item]));
+	const distance = (a, b) => Math.hypot(pointOf.get(a).x - pointOf.get(b).x, pointOf.get(a).y - pointOf.get(b).y);
+	const joined = many.data.lineList.reduce((sum, line) => sum + distance(line.from, line.to), 0) / many.data.lineList.length;
+	const apart = Array.from({ length: 400 }, (_, index) => distance(`table:pw:t${index}`, `table:pw:t${(index * 37 + 400) % 800}`)).reduce((sum, value) => sum + value, 0) / 400;
+	assert.ok(joined * 4 < apart, `lines ${joined.toFixed(0)} against ${apart.toFixed(0)}`);
+});
+
+test('in a large graph, the lookups of the table every table looks up are drawn faint, and the legend says so', () => {
+	const count = 500;
+	const itemList = Array.from({ length: count }, (_, index) => ({ key: `c.t.t${index}`, kind: 'schema-table', path: `/canvas/schema/pw/table/t${index}`, data: { db: 'pw', logical: `t${index}`, name: `T ${index}`, isCustom: true, columnList: [
+		{ id: 'id', name: 'Id', logical: 'id', type: 'Unique identifier', key: 'PK' },
+		...(index > 0 ? [{ id: 'owner', name: 'Owner', logical: 'owner', type: 'Lookup', key: 'FK', lookup: 'c.t.t0' }] : []),
+		...(index > 0 && index + 1 < count ? [{ id: 'next', name: 'Next', logical: 'next', type: 'Lookup', key: 'FK', lookup: `c.t.t${index + 1}` }] : [])] } }));
+	const provider = migrationDbProviderBuild(migrationModelBuild('canvas', itemList), 'pw', { root: '/canvas', erTableCountMax: 40 });
+	const diagram = diagramNormalize({ version: 1, ...provider.sceneGet('/canvas').viewList.find((view) => view.id === 'relation').diagram }, registry);
+	const graph = diagram.nodes.find((node) => node.renderer.type === 'card-graph');
+	const faintList = graph.data.lineList.filter((line) => line.opacity !== undefined);
+	assert.equal(faintList.length, count - 1);
+	assert.ok(faintList.every((line) => line.to === 'table:pw:t0'));
+	const legend = diagram.pinList.find((node) => node.renderer.type === 'card-legend');
+	assert.deepEqual(legend.data.groupList.find((group) => group.id === 'line').itemList.map((item) => item.id), ['lookup', 'hub']);
+});
+
+test('an option set no table of the canvas uses is drawn with the columns its reading says use it', () => {
+	const choice = { key: 'c.c.kind', kind: 'schema-choice', path: '/canvas/schema/pw/choice/kind', data: { db: 'pw', logical: 'kind', name: 'Kind', optionList: [{ value: 1, label: 'One' }],
+		usageList: [{ table: 'account', tableDisplayName: 'Account', column: 'kind', columnDisplayName: 'Kind' }, { table: 'contact', column: 'kind' }] } };
+	const provider = migrationDbProviderBuild(migrationModelBuild('canvas', [choice]), 'pw', { root: '/canvas', erTableCountMax: 0 });
+	const scene = diagramNormalize({ version: 1, ...provider.sceneGet('/canvas/kind').diagram }, registry);
+	assert.deepEqual(scene.nodes.filter((node) => node.renderer.type === 'card-note').map((node) => node.data.text), ['account.kind', 'contact.kind']);
+	assert.equal(scene.connections.filter((connection) => connection.target.nodeId === 'choice:pw:kind').length, 2);
+	// no table: no relationships to draw
+	assert.deepEqual(provider.sceneGet('/canvas').viewList.map((view) => view.id), ['diagram', 'matrix']);
 });
 
 test('a canvas drawn by hand keeps where its cards stand while its tables are made again from the model', () => {

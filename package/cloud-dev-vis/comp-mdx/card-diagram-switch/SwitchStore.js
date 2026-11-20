@@ -1,7 +1,7 @@
 import { ScrollHorizontalStore } from '../../../../main/comp-doc/scroll/ScrollHorizontalStore.js';
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { applyNodeChanges } from '@xyflow/react';
-import { yamlParse, yamlStringify } from '../../../../main/frontend/src/lib/yaml.js';
+import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
 import { DiagramERStore } from '../card-diagram/DiagramERStore.js';
 import { diagramNormalize, diagramPlacesGet, diagramPositionsGet } from '../card-diagram/DiagramERData.js';
 import { diagramSceneSearch } from '../card-diagram/DiagramSearch.js';
@@ -314,8 +314,8 @@ export class SwitchStore {
 			nodes.push({ id: 'scene-box', renderer: { type: SCENE_BOX_TYPE }, position: { x: box.x, y: box.y }, size: { width: box.width, height: box.height }, data: {} });
 		}
 		// a provider may give its lines one style object, its nodes one renderer: each is written out
-		// where it stands. Written once and named again, a text is refused past a hundred of them
-		entry.canvas.sourceLoad(yamlStringify({ version: 1, ...diagram, nodes }, { aliasDuplicateObjects: false }));
+		// where it stands. JSON, not YAML: a scene of thousands of entries is read in milliseconds
+		entry.canvas.sourceLoad(JSON.stringify({ version: 1, ...diagram, nodes }));
 	}
 
 	graphNodeListOf(entry) {

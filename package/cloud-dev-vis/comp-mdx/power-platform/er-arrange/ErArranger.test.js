@@ -145,7 +145,7 @@ test('the same arranger on a draft is one step of the history, and an undo bring
 });
 
 test('the registry of the series offers the arrangers, for diagrams with tables', () => {
-	assert.deepEqual(powerPlatformNodeRegistry.arrangerList.map((item) => item.id), erArrangerList.map((item) => item.id));
+	assert.deepEqual(powerPlatformNodeRegistry.arrangerList.map((item) => item.id), [...erArrangerList.map((item) => item.id), 'scatter']);
 	assert.equal(erArrangerLanes.isApplicable({ nodes: [{ renderer: { type: 'power-automate' } }] }), false);
 	assert.equal(erArrangerLanes.isApplicable(diagramOf({ a: [] })), true);
 });
@@ -269,7 +269,11 @@ test('the estimate of a Dataverse card: its title line, its field header, its ro
 	assert.equal(heightOf(cardOf('dataverse-table', { name: 'T', nameLogical: 't', columns: [column('a', 'インポート シーケンス番号', 'x')] })), 36 + 39 + 41, 'a long name wraps');
 	assert.equal(heightOf(cardOf('dataverse-table', { name: '物件マスタ', nameLogical: 'new_propertymaster', badge: 'Master', columns: [column('a', 'A', 'a')] })), 41 + 39 + 32);
 	assert.equal(heightOf(cardOf('dataverse-choice', { name: '掲載状況', nameLogical: 'new_listingstatus', columns: [column('a', '1', '1')] })), 47 + 39 + 32);
-	assert.equal(heightOf(cardOf('dataverse-choice', { name: 'エリアメール用ステータス', nameLogical: 'new_areamailstatus', columns: [column('a', '1', '1')] })), 70 + 39 + 32, 'a long title wraps beside its badge');
+	assert.equal(heightOf(cardOf('dataverse-choice', { name: 'エリアメール用ステータス', nameLogical: 'new_areamailstatus', columns: [column('a', '1', '1')] })), 55 + 39 + 32, 'a title too long for one row: its logical name on a row of its own');
+	assert.equal(heightOf(cardOf('dataverse-choice', { name: '最後の送信通信の種類', nameLogical: 'msdyn_msdyn_aiagentstatus_msdyn_lastoutboundcommunicationtype', columns: [column('a', '面接', '0')] })), 14 + 23 + 2 * 18 + 39 + 32, 'a logical name longer than the card breaks on two rows');
+	// an option set's label has the room of the card: one line where a table's column would wrap
+	assert.equal(heightOf(cardOf('dataverse-choice', { name: 'C', nameLogical: 'c', columns: [column('a', 'インポート シーケンス番号', '1')] })), 47 + 39 + 32);
+	assert.equal(heightOf(cardOf('dataverse-choice', { name: 'C', nameLogical: 'c', columns: [column('a', 'エスカレーション - カスタム エージェントで処理を続行できませんでした', '15')] })), 47 + 39 + 57, 'three lines');
 });
 
 test('levels above a card are counted per card, so a line to one card stays clear of the card above it', () => {

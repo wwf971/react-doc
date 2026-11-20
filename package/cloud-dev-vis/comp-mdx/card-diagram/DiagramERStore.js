@@ -71,7 +71,9 @@ class DiagramERStore {
 		}
 
 		try {
-			const data = yamlParse(this.source);
+			// a generator hands its data as JSON (the switch layer), which reads far faster than YAML
+			// for a large scene; an author writes YAML
+			const data = this.source.trimStart().startsWith('{') ? jsonOrYamlParse(this.source) : yamlParse(this.source);
 			this.graph = diagramNormalize(data, this.registry, this.rendererResolve, this.height);
 			this.viewport = this.graph.viewport;
 			const { positions, sizeById } = diagramPlacesGet(this.graph.nodes, this.graph.layout, this.measurements);
@@ -203,4 +205,13 @@ export { DiagramERStore, DiagramCopyStore };
 function positionEquals(a, b) {
 	if (a === 'auto' || b === 'auto') return a === b;
 	return a?.x === b?.x && a?.y === b?.y;
+}
+
+// a text that looks like JSON: read as JSON, else as YAML (a flow mapping an author wrote)
+function jsonOrYamlParse(text) {
+	try {
+		return JSON.parse(text);
+	} catch {
+		return yamlParse(text);
+	}
 }

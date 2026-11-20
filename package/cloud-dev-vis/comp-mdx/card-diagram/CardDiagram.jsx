@@ -16,6 +16,7 @@ import { Copy, Search } from '../../../../main/frontend/UICommon.js';
 import { BlockPopupSurface } from '../../../../main/comp-doc/popup/BlockPopupSurface.jsx';
 import { DiagramERStore, DiagramCopyStore, diagramViewStateGet } from './DiagramERStore.js';
 import { DiagramNode, DiagramPointNode, DiagramCreateNode, DiagramEdge, DiagramConnectionLine, DiagramRenderContext } from './DiagramRender.jsx';
+import { DiagramPinLayer } from './DiagramPinLayer.jsx';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve } from '../../../../main/comp-doc/registry/comp-registry.js';
 import './DiagramER.css';
@@ -147,7 +148,7 @@ const DiagramSearchControl = observer(function DiagramSearchControl({ search }) 
 });
 
 const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, isEditing = false }) {
-	const { editor, edgeGeometry, search, config } = useContext(DiagramRenderContext);
+	const { editor, edgeGeometry, search, config, registry } = useContext(DiagramRenderContext);
 	const { fitView, setViewport, getViewport, getNode, getInternalNode, screenToFlowPosition, flowToScreenPosition } = useReactFlow();
 	const isInitialized = useNodesInitialized();
 	// the zoom, as a custom property of the canvas: the controls drawn over a
@@ -349,6 +350,7 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			<Background gap={18} size={1} />
 			<Controls showInteractive={false}><DiagramSearchControl search={search} /></Controls>
 			{viewport.isMiniMapVisible ? <MiniMap position="bottom-right" pannable zoomable /> : null}
+			<DiagramPinLayer pinList={store.graph?.pinList} registry={registry} config={config} />
 		</ReactFlow>
 	);
 });

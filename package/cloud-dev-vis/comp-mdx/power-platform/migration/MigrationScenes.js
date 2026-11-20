@@ -1,9 +1,12 @@
 import {
-	migrationChoiceIsGlobal, migrationChoiceListOf, migrationChoicePairGet, migrationMappingColumnListOf, migrationMappingTableOfPair, migrationPairGet, migrationRankBuild, migrationColumnSegmentOf, migrationTableListOf, migrationBatchCountOf, migrationMasterReferListOf } from './MigrationData.js';
+	migrationChoiceIsGlobal, migrationChoiceListOf, migrationChoicePairGet, migrationListCached, migrationMappingColumnListOf, migrationMappingTableOfPair, migrationPairGet, migrationRankBuild, migrationColumnSegmentOf, migrationTableListOf, migrationBatchCountOf, migrationMasterReferListOf } from './MigrationData.js';
 import { switchPathLast, switchPathParent, switchRectRead, switchTabsApply } from '../../card-diagram-switch/SwitchData.js';
 import { diagramArrangeApply } from '../../card-diagram/DiagramArrange.js';
 import { cardRowDisplayKeepBuild } from '../../card-diagram/TableCardData.js';
 import { cardMatrixWidthGet } from '../../card-diagram/CardMatrixData.js';
+import { cardIndexHeightGet, cardIndexWidthGet } from '../../card-diagram/CardIndexData.js';
+import { CARD_GRAPH_LABEL_HEIGHT, CARD_GRAPH_SQUARE_SIZE, cardGraphLabelWidthEstimate, cardGraphSizeGet } from '../../card-diagram/CardGraphData.js';
+import { diagramScatterHubSetOf, diagramScatterLayout, diagramScatterSideOf } from '../../card-diagram/DiagramArrangeScatter.js';
 import { erGeometryEstimateBuild } from '../er-arrange/ErGeometry.js';
 import { erArrangerColumns, erArrangerLanes, erArrangerSpread } from '../er-arrange/er-arranger-list.js';
 
@@ -47,7 +50,12 @@ const LABEL_DEFAULT = {
 	planToRun: 'batches', runToVerify: 'success, dead letters', planToVerify: 'keys and expected values',
 	abandon: 'Abandon', defaultValue: 'Default value', columnOrder: 'Order', columnTable: 'Table', columnFile: 'File', columnRange: 'Range', columnRows: 'Rows',
 	columnStatus: 'Status', columnTry: 'Tries', columnReason: 'Reason', columnKey: 'Key', columnCheck: 'Check', columnResult: 'Result', columnNote: 'Note',
-	viewDiagram: 'ER diagram', viewLookupMatrix: 'Lookup matrix', viewIndex: 'Tables', indexMore: 'more: open one by its name in the path bar', lookupFrom: 'Looks up', lookupTo: 'Is looked up',
+	viewDiagram: 'ER diagram', viewLookupMatrix: 'Lookup matrix', viewIndex: 'Tables', indexMore: 'more: open one by its name in the path bar', lookupFrom: 'Looks up', lookupTo: 'Is looked up', legend: 'Legend',
+	viewRelation: 'Relationships', viewRelationGlobal: 'Relationships and global option sets', viewRelationAll: 'Relationships and all option sets',
+	tableSystem: 'System tables', tableCustom: 'Custom tables', tableIntersect: 'N:N relationship tables', tableExternal: 'Looked up, not on this canvas',
+	choiceGlobal: 'Global option sets', choiceLocal: 'Local option sets', legendTable: 'Kinds of table', legendLine: 'Kinds of line',
+	lineLookup: 'Lookup (to the table looked up)', lineManyToMany: 'N:N relationship', lineChoice: 'Uses the option set', choiceUsedBy: 'Used by', lineHub: 'Lookup of a table most tables look up',
+	relationCardUnit: 'cards', relationTooMany: 'Too many to draw at once. Open a table from the index: its scene shows what it looks up and what looks it up.',
 	columnValue: 'Value', columnLabel: 'Label', columnUnit: 'columns', tableUnit: 'tables', choiceUnit: 'option sets', source: 'source', target: 'target', statSuccess: 'success', statDlq: 'dead letters', statTotal: 'total', statMatched: 'matched', statException: 'exceptions',
 };
 
@@ -75,11 +83,17 @@ const externalOf = (model, column) => (model.isLookupExternalShown && column.loo
 const EXTERNAL_WIDTH = 240;
 
 export function migrationExternalListOf(model, dbId) {
+	return migrationListCached(model, `external\n${dbId}`, () => externalListBuild(model, dbId));
+}
+
+function externalListBuild(model, dbId) {
+	const tableList = migrationTableListOf(model, dbId);
+	const heldSet = new Set(tableList.map((item) => item.logical));
 	const byLogical = new Map();
-	for (const table of migrationTableListOf(model, dbId)) {
+	for (const table of tableList) {
 		for (const column of table.columnList) {
 			const external = externalOf(model, column);
-			if (!external || migrationTableListOf(model, dbId).some((item) => item.logical === external.logical)) continue;
+			if (!external || heldSet.has(external.logical)) continue;
 			const found = byLogical.get(external.logical) ?? { ...external, referList: [] };
 			found.referList.push({ table, column });
 			byLogical.set(external.logical, found);
@@ -100,8 +114,9 @@ function tableNodeBuild(table, { x, y, handleList = [], link, width = TABLE_WIDT
 		data: {
 			name: table.name,
 			nameLogical: table.logical,
-			// a state the data gives the table (not migrated, not decided), then a master, which wins
-			...(table.tone ? { tone: table.tone } : {}),
+			// a state the data gives the table (not migrated, not decided), else the tone of its kind
+			// where it says one (a canvas: custom, intersect), then a master, which wins
+			...(table.tone ? { tone: table.tone } : TABLE_CARD_TONE_BY_KIND[migrationTableKindOf(table)] ? { tone: TABLE_CARD_TONE_BY_KIND[migrationTableKindOf(table)] } : {}),
 			...(table.badge ? { badge: table.badge } : {}),
 			...(table.isMaster ? { tone: MASTER_TONE, badge: MASTER_BADGE, isMaster: true } : {}),
 			columns: (columnList ?? table.columnList).map((column) => ({
@@ -161,7 +176,9 @@ const handleOf = (id, direction, side, target = 'body') => ({ id, direction, anc
 const lineOf = (id, source, target, extra = {}) => ({ id, source: { nodeId: source[0], handleId: source[1] }, target: { nodeId: target[0], handleId: target[1] }, ...extra });
 
 const heightOfTable = (table) => TABLE_HEIGHT_HEAD + table.columnList.length * TABLE_HEIGHT_ROW;
-const heightOfChoice = (choice) => TABLE_HEIGHT_HEAD + choice.optionList.length * TABLE_HEIGHT_ROW;
+// an option set card as tall as it draws (ErGeometry: its title and labels wrapped), and the room under it
+const choiceHeightOfNode = (node) => erGeometryEstimateBuild({ nodes: [node] }).rectOf(node.id).height;
+const CHOICE_GAP = 40;
 
 // ---------- an ER diagram ----------
 
@@ -172,6 +189,7 @@ function erGraphBuild(model, dbId, { x = 0, y = 0, linkOf } = {}) {
 	// an option set of one column (isGlobal: false) belongs to its table, and is drawn with it;
 	// where the model asks for it (isChoiceLocalShown), it is a card of its own like a global one
 	const choiceList = migrationChoiceListOf(model, dbId).filter((choice) => model.isChoiceLocalShown || migrationChoiceIsGlobal(choice));
+	const choiceKeySet = new Set(choiceList.map((choice) => choice.key));
 	const externalByLogical = new Map(migrationExternalListOf(model, dbId).map((external) => [external.logical, external]));
 	const handleByNode = new Map();
 	const handleAdd = (nodeId, handle) => {
@@ -190,15 +208,15 @@ function erGraphBuild(model, dbId, { x = 0, y = 0, linkOf } = {}) {
 				const pk = refer.columnList.find((item) => item.key === 'PK') ?? refer.columnList[0];
 				const out = handleAdd(nodeId, handleOf(`lookup-${column.id}`, 'out', 'right', `column/${column.id}`));
 				const into = handleAdd(referId, handleOf('pk', 'in', 'left', `column/${pk.id}`));
-				connections.push(lineOf(`lookup:${dbId}:${table.logical}:${column.id}`, [nodeId, out], [referId, into], { style: { stroke: COLOR_LOOKUP, strokeWidth: 1.25 } }));
+				connections.push(lineOf(`lookup:${dbId}:${table.logical}:${column.id}`, [nodeId, out], [referId, into], { style: lineStyleOfColumn(column) }));
 			}
 			const external = externalOf(model, column);
 			if (external && externalByLogical.has(external.logical)) {
 				const out = handleAdd(nodeId, handleOf(`lookup-${column.id}`, 'out', 'right', `column/${column.id}`));
 				const into = handleAdd(externalNodeId(dbId, external.logical), handleOf('in', 'in', 'left'));
-				connections.push(lineOf(`lookup:${dbId}:${table.logical}:${column.id}`, [nodeId, out], [externalNodeId(dbId, external.logical), into], { style: { stroke: COLOR_LOOKUP, strokeWidth: 1.25 } }));
+				connections.push(lineOf(`lookup:${dbId}:${table.logical}:${column.id}`, [nodeId, out], [externalNodeId(dbId, external.logical), into], { style: lineStyleOfColumn(column) }));
 			}
-			if (column.choice && choiceList.some((choice) => choice.key === column.choice)) {
+			if (column.choice && choiceKeySet.has(column.choice)) {
 				const choice = model.choiceByKey.get(column.choice);
 				const choiceId = choiceNodeId(dbId, choice.logical);
 				const out = handleAdd(nodeId, handleOf(`choice-${column.id}`, 'out', 'right', `column/${column.id}`));
@@ -252,35 +270,300 @@ const linkOfDb = (model, dbId) => ({ external: (external) => `${dbPathOf(model, 
 
 function sceneErBuild(model, dbId) {
 	const er = erBuild(model, dbId, { linkOf: linkOfDb(model, dbId) });
-	return { nodes: er.nodes, connections: er.connections };
+	if (!model.isLegendShown) return { nodes: er.nodes, connections: er.connections };
+	// a canvas of one database says what its looks stand for, over the diagram
+	const tableList = migrationTableListOf(model, dbId);
+	const choiceIdSet = new Set(er.nodes.filter((node) => node.renderer.type === 'dataverse-choice').map((node) => node.id));
+	const legend = legendNodeBuild(model, {
+		tableKindList: orderOf([...new Set([...tableList.map(migrationTableKindOf).filter(Boolean), ...(er.nodes.some((node) => node.id.startsWith('external:')) ? ['external'] : [])])], TABLE_KIND_ORDER),
+		choiceScopeList: orderOf([...new Set(migrationChoiceListOf(model, dbId).filter((choice) => choiceIdSet.has(choiceNodeId(dbId, choice.logical))).map(choiceScopeOf))], ['global', 'local']),
+		lineKindList: orderOf([...new Set(er.connections.map((connection) => (connection.id.startsWith('choice:') ? 'choice' : connection.style?.stroke === COLOR_MANY ? 'many' : 'lookup')))], ['lookup', 'many', 'choice']),
+	});
+	if (!legend) return { nodes: er.nodes, connections: er.connections };
+	return { nodes: [legend, ...er.nodes], connections: er.connections };
 }
 
-// a database of too many tables for one diagram (erTableCountMax): its tables as cards of their two
-// names in a grid, by name, each opening its scene; its option sets after them. no lines
-const INDEX_CARD_WIDTH = 250;
-const INDEX_CARD_HEIGHT = 58;
-const INDEX_GAP = 14;
-const INDEX_COUNT_MAX = 600;
+// ---------- the kinds of tables and option sets, and their lines (a canvas of one database) ----------
+
+// a table says which it is when its item says (isIntersect, isCustom: what a reading of a database
+// knows); one that does not keeps the look of before. A table the model does not hold, looked up
+// from it, is drawn as standing elsewhere
+const TABLE_LOOK_BY_KIND = {
+	system: { tone: 'slate' },
+	custom: { tone: 'blue' },
+	intersect: { tone: 'teal', variant: 'bar' },
+	external: { tone: 'slate', variant: 'dashed' },
+	'': { tone: 'blue' },
+};
+const TABLE_KIND_LABEL = { system: 'tableSystem', custom: 'tableCustom', intersect: 'tableIntersect', external: 'tableExternal', '': 'tableUnit' };
+const CHOICE_LOOK_BY_SCOPE = { global: { tone: 'violet' }, local: { tone: 'violet', variant: 'dashed' } };
+export const migrationTableKindOf = (table) => (table.isIntersect ? 'intersect' : table.isCustom === true ? 'custom' : table.isCustom === false ? 'system' : '');
+const choiceScopeOf = (choice) => (migrationChoiceIsGlobal(choice) ? 'global' : 'local');
+// the title color of a table card: of its kind, where the kind is known (a canvas)
+const TABLE_CARD_TONE_BY_KIND = { system: 'slate', custom: 'blue', intersect: 'teal' };
+
+// a lookup points at what it looks up. a column of an intersect table (isManyToMany) is one end
+// of an N:N relationship, drawn apart from a lookup; a line straight between the two tables of
+// one, when its intersect table is not drawn, has no direction
+const COLOR_MANY = '#0d9488';
+const LINE_STYLE = {
+	lookup: { stroke: COLOR_LOOKUP, strokeWidth: 1.25 },
+	many: { stroke: COLOR_MANY, strokeWidth: 1.75, strokeDasharray: '8 3' },
+	choice: { stroke: COLOR_CHOICE, strokeWidth: 1.25, strokeDasharray: '5 4' },
+};
+const LINE_LABEL = { lookup: 'lineLookup', many: 'lineManyToMany', choice: 'lineChoice' };
+// a lookup of a table most tables look up, in a large graph: lighter
+const HUB_LINE_OPACITY = 0.18;
+const lineKindOfColumn = (column) => (column.isManyToMany ? 'many' : 'lookup');
+const lineStyleOfColumn = (column) => LINE_STYLE[lineKindOfColumn(column)];
+
+// what the looks of a scene stand for: the kinds of cards and of lines it draws, in that order,
+// pinned to the top right of the viewport (node.pin): it stays there while the reader moves around
+const LEGEND_WIDTH = 250;
+function legendNodeBuild(model, { id = 'legend', tableKindList = [], choiceScopeList = [], lineKindList = [], lineUndirectedSet = new Set(), isHubLineShown = false }) {
+	const groupList = [
+		{ id: 'table', title: labelOf(model, 'legendTable'), itemList: tableKindList.map((kind) => ({ id: kind || 'table', label: labelOf(model, TABLE_KIND_LABEL[kind]), swatch: TABLE_LOOK_BY_KIND[kind] })) },
+		{ id: 'choice', title: labelOf(model, 'choiceUnit'), itemList: choiceScopeList.map((scope) => ({ id: scope, label: labelOf(model, scope === 'global' ? 'choiceGlobal' : 'choiceLocal'), swatch: CHOICE_LOOK_BY_SCOPE[scope] })) },
+		{ id: 'line', title: labelOf(model, 'legendLine'), itemList: [
+			...lineKindList.map((kind) => ({ id: kind, label: labelOf(model, LINE_LABEL[kind]), line: { color: LINE_STYLE[kind].stroke, dash: LINE_STYLE[kind].strokeDasharray, width: LINE_STYLE[kind].strokeWidth, isArrow: !lineUndirectedSet.has(kind) } })),
+			...(isHubLineShown ? [{ id: 'hub', label: labelOf(model, 'lineHub'), line: { color: LINE_STYLE.lookup.stroke, width: LINE_STYLE.lookup.strokeWidth, opacity: HUB_LINE_OPACITY, isArrow: true } }] : []),
+		] },
+	].filter((group) => group.itemList.length > 0);
+	if (groupList.length === 0) return null;
+	const data = { title: labelOf(model, 'legend'), groupList };
+	return { id, renderer: { type: 'card-legend' }, pin: 'top-right', size: { width: LEGEND_WIDTH, height: 'auto' }, data, handles: [] };
+}
+
+const orderOf = (list, kindList) => kindList.filter((kind) => list.includes(kind));
+const TABLE_KIND_ORDER = ['custom', 'system', 'intersect', '', 'external'];
+
+// a database of too many tables for one diagram (erTableCountMax): its tables, the tables they look
+// up from outside and its option sets as cards of their two names in one card (card-index), grouped
+// by their kind, by name, each opening its scene; a legend of the kinds beside it. no lines
+const INDEX_COUNT_MAX = 12000;
 
 function sceneIndexBuild(model, dbId) {
-	const link = linkOfDb(model, dbId);
+	const linkPrefix = `${dbPathOf(model, dbId)}/`;
 	const byName = (a, b) => String(a.logical).localeCompare(String(b.logical));
+	const groupList = [];
+	let count = 0;
+	// each entry its two names alone: its look, its link and its second line are said once by its group
+	const groupAdd = (id, title, list, look) => {
+		if (list.length === 0) return;
+		const shown = list.slice(0, Math.max(0, INDEX_COUNT_MAX - count));
+		count += shown.length;
+		groupList.push({ id, title: `${title} · ${numberText(list.length)}`, ...(shown.length < list.length ? { note: `+ ${numberText(list.length - shown.length)} ${labelOf(model, 'indexMore')}` } : {}),
+			...look, linkPrefix, isIdText: true, itemList: shown.map((item) => ({ id: item.logical, title: item.name })) });
+	};
 	const tableList = [...migrationTableListOf(model, dbId)].sort(byName);
+	const tableKindList = orderOf([...new Set(tableList.map(migrationTableKindOf))], TABLE_KIND_ORDER);
+	for (const kind of tableKindList) groupAdd(`table-${kind || 'any'}`, labelOf(model, TABLE_KIND_LABEL[kind]), tableList.filter((table) => migrationTableKindOf(table) === kind), TABLE_LOOK_BY_KIND[kind]);
+	const externalList = [...migrationExternalListOf(model, dbId)].sort(byName);
+	groupAdd('external', labelOf(model, 'tableExternal'), externalList, TABLE_LOOK_BY_KIND.external);
 	const choiceList = [...migrationChoiceListOf(model, dbId)].sort(byName);
-	const itemList = [
-		...tableList.map((table) => ({ id: tableNodeId(dbId, table.logical), title: table.name, text: table.logical, tone: 'blue', link: link.table(table) })),
-		...choiceList.map((choice) => ({ id: choiceNodeId(dbId, choice.logical), title: choice.name, text: choice.logical, tone: 'violet', link: link.choice(choice) })),
-	];
-	const shownList = itemList.slice(0, INDEX_COUNT_MAX);
-	const columnCount = Math.max(1, Math.min(8, Math.ceil(Math.sqrt(shownList.length * 0.36))));
-	const nodes = shownList.map((item, index) => noteNodeBuild({
-		id: `index:${item.id}`, x: (index % columnCount) * (INDEX_CARD_WIDTH + INDEX_GAP), y: Math.floor(index / columnCount) * (INDEX_CARD_HEIGHT + INDEX_GAP),
-		width: INDEX_CARD_WIDTH, title: item.title, text: item.text, tone: item.tone, link: item.link,
-	}));
-	if (itemList.length > shownList.length) {
-		nodes.push(noteNodeBuild({ id: 'index:more', x: 0, y: Math.ceil(shownList.length / columnCount) * (INDEX_CARD_HEIGHT + INDEX_GAP), width: INDEX_CARD_WIDTH * 2 + INDEX_GAP, title: `+ ${itemList.length - shownList.length}`, text: labelOf(model, 'indexMore'), tone: 'slate' }));
+	const choiceScopeList = orderOf([...new Set(choiceList.map(choiceScopeOf))], ['global', 'local']);
+	for (const scope of choiceScopeList) {
+		groupAdd(`choice-${scope}`, labelOf(model, scope === 'global' ? 'choiceGlobal' : 'choiceLocal'), choiceList.filter((choice) => choiceScopeOf(choice) === scope), CHOICE_LOOK_BY_SCOPE[scope]);
 	}
-	return { nodes, connections: [] };
+	const columnCount = Math.max(1, Math.min(6, Math.ceil(Math.sqrt(count / 3))));
+	const legend = legendNodeBuild(model, { tableKindList: [...tableKindList, ...(externalList.length ? ['external'] : [])], choiceScopeList });
+	const indexData = { columnCount, groupList };
+	const index = { id: `index:${dbId}`, renderer: { type: 'card-index' }, position: { x: 0, y: 0 }, size: { width: cardIndexWidthGet(indexData), height: 'auto' }, data: indexData, handles: [] };
+	return { nodes: [...(legend ? [legend] : []), index], connections: [] };
+}
+
+// the part of a long index a camera starts on: its top, as wide as it is, so its first rows are read
+function indexBoxOf(diagram) {
+	const index = diagram.nodes.find((node) => node.renderer.type === 'card-index');
+	if (!index) return undefined;
+	const width = index.position.x + index.size.width;
+	const height = Math.min(cardIndexHeightGet(index.data), Math.round(width * 0.55));
+	return { x: -20, y: -20, width: width + 40, height: height + 40 };
+}
+
+// ---------- the relationships of a database: every table a small card, the lookups between them ----------
+
+// The tables of a database, the tables they look up from outside, and, when asked (choiceScope:
+// none | global | all), the option sets their columns use; a line for each lookup from the table
+// looking up to the table looked up (one line however many of its columns do), an N:N relationship
+// apart, the use of an option set apart. Placed by the scatter arranger's layout
+// (diagramScatterLayout, placed free: no grid, each where its lines put it, with room around): what
+// a line joins stands near, a table joined to many among them, what is joined to nothing apart.
+// How each thing is drawn follows how many there are:
+//
+//   up to RELATION_CARD_MAX       a card of its two names (a node each), straight lines between
+//                                 the sides facing each other
+//   up to RELATION_LABEL_MAX      a label of its display name, in one graph card (card-graph),
+//                                 spread wider the more there are rather than shrunk
+//   more                          a small square, in one graph card: its names when a pointer
+//                                 rests on it, or a search finds it
+//
+// In any of them a search finds a table by either of its names, and a click opens its scene.
+// Past RELATION_ITEM_MAX a note says the drawing would be too large to be read at all
+const RELATION_CARD_WIDTH = 230;
+const RELATION_CARD_HEIGHT = 46;
+const RELATION_CARD_MAX = 150;
+const RELATION_LABEL_MAX = 10000;
+// free placement (diagramScatterLayout): each thing where the forces leave it, at its own size, with
+// this much room around (times the room it takes) and this gap at least to the next
+const RELATION_PLACE = { card: { gap: 40, spread: 2.5 }, label: { gap: 26, spread: 3.2 }, square: { gap: 12, spread: 3 } };
+const RELATION_ITEM_MAX = 20000;
+
+function relationGraphOf(model, dbId, choiceScope) {
+	const tableList = migrationTableListOf(model, dbId);
+	const externalList = migrationExternalListOf(model, dbId);
+	const cardById = new Map();
+	for (const table of tableList) cardById.set(tableNodeId(dbId, table.logical), { kind: 'table', tableKind: migrationTableKindOf(table), item: table });
+	for (const external of externalList) cardById.set(externalNodeId(dbId, external.logical), { kind: 'external', tableKind: 'external', item: external });
+	const lineByKey = new Map();
+	const lineAdd = (from, to, kind, columnName, extra = {}) => {
+		if (from === to || !cardById.has(from) || !cardById.has(to)) return;
+		const key = `${kind}\n${from}\n${to}`;
+		const line = lineByKey.get(key) ?? { from, to, kind, nameList: [], ...extra };
+		line.nameList.push(columnName);
+		lineByKey.set(key, line);
+	};
+	const heldLogicalSet = new Set(tableList.map((table) => table.logical));
+	const isChoiceShown = (choice) => choice && choice.db === dbId && (choiceScope === 'all' || (choiceScope === 'global' && migrationChoiceIsGlobal(choice)));
+	for (const table of tableList) {
+		const from = tableNodeId(dbId, table.logical);
+		for (const column of table.columnList) {
+			const refer = model.tableByKey.get(column.lookup);
+			const external = refer ? null : externalOf(model, column);
+			if (refer?.db === dbId) lineAdd(from, tableNodeId(dbId, refer.logical), lineKindOfColumn(column), column.name);
+			else if (external) lineAdd(from, externalNodeId(dbId, external.logical), lineKindOfColumn(column), column.name);
+			const choice = model.choiceByKey.get(column.choice);
+			if (isChoiceShown(choice)) {
+				const id = choiceNodeId(dbId, choice.logical);
+				if (!cardById.has(id)) cardById.set(id, { kind: 'choice', scope: choiceScopeOf(choice), item: choice });
+				lineAdd(from, id, 'choice', column.name);
+			}
+		}
+		// an N:N relationship whose intersect table is not drawn: a line straight between its two tables
+		for (const rel of table.manyToManyList ?? []) {
+			if (heldLogicalSet.has(rel.intersect)) continue;
+			const to = heldLogicalSet.has(rel.table) ? tableNodeId(dbId, rel.table) : null;
+			if (to) lineAdd(from, to, 'many', rel.intersectName || rel.intersect, { isUndirected: true });
+		}
+	}
+	return { cardById, lineList: [...lineByKey.values()] };
+}
+
+// what a thing of the relationships is: its look and where it opens
+function relationLookOf(model, dbId, card) {
+	const link = linkOfDb(model, dbId);
+	const look = card.kind === 'choice' ? CHOICE_LOOK_BY_SCOPE[card.scope] : TABLE_LOOK_BY_KIND[card.tableKind];
+	const linkTo = card.kind === 'choice' ? link.choice(card.item) : card.kind === 'external' ? link.external(card.item) : link.table(card.item);
+	return { ...look, link: linkTo };
+}
+
+// the words a line says when a pointer rests on it: what joins what, through which columns
+const relationLineTitleOf = (cardById, line) => `${cardById.get(line.from).item.name} → ${cardById.get(line.to).item.name}: ${line.nameList.join(', ')}`;
+
+function sceneRelationBuild(model, dbId, choiceScope = 'none') {
+	const { cardById, lineList } = relationGraphOf(model, dbId, choiceScope);
+	const kindListPresent = (list) => [...new Set(list)];
+	const lineUndirectedSet = new Set(lineList.filter((line) => line.isUndirected).map((line) => line.kind));
+	const linkList = lineList.map((line) => ({ from: line.from, to: line.to, weight: line.nameList.length }));
+	// a table most tables look up (systemuser, team): its lines tell least, and are drawn lighter
+	const hubSet = cardById.size > RELATION_CARD_MAX ? diagramScatterHubSetOf(cardById.size, linkList) : new Set();
+	const isHubLine = (line) => line.kind === 'lookup' && hubSet.has(line.to);
+	const legend = legendNodeBuild(model, {
+		tableKindList: orderOf(kindListPresent([...cardById.values()].filter((card) => card.kind !== 'choice').map((card) => card.tableKind)), TABLE_KIND_ORDER),
+		choiceScopeList: orderOf(kindListPresent([...cardById.values()].filter((card) => card.kind === 'choice').map((card) => card.scope)), ['global', 'local']),
+		lineKindList: orderOf(kindListPresent(lineList.map((line) => line.kind)), ['lookup', 'many', 'choice']),
+		lineUndirectedSet: new Set([...lineUndirectedSet].filter((kind) => lineList.every((line) => line.kind !== kind || line.isUndirected))),
+		isHubLineShown: lineList.some(isHubLine),
+	});
+	if (cardById.size > RELATION_ITEM_MAX) {
+		return { nodes: [noteNodeBuild({ id: 'relation:too-many', x: 0, y: 0, width: 420, title: `${numberText(cardById.size)} ${labelOf(model, 'relationCardUnit')}`, text: labelOf(model, 'relationTooMany'), tone: 'amber' })], connections: [] };
+	}
+	const idList = [...cardById.keys()].sort((a, b) => String(cardById.get(a).item.logical).localeCompare(String(cardById.get(b).item.logical)));
+	if (cardById.size <= RELATION_CARD_MAX) {
+		const { nodes, rectById } = relationCardNodesBuild(model, dbId, idList, cardById, linkList);
+		return { nodes: [...(legend ? [legend] : []), ...nodes], connections: relationCardLinesBuild(cardById, lineList, rectById) };
+	}
+	// a label of its display name, or a square: one card holds them all, with their lines
+	const shape = cardById.size <= RELATION_LABEL_MAX ? 'label' : 'square';
+	const sizeOf = (id) => (shape === 'label' ? { width: cardGraphLabelWidthEstimate(cardById.get(id).item.name), height: CARD_GRAPH_LABEL_HEIGHT } : { width: CARD_GRAPH_SQUARE_SIZE, height: CARD_GRAPH_SQUARE_SIZE });
+	const placed = diagramScatterLayout(idList.map((id) => ({ id, ...sizeOf(id) })), linkList, { placement: 'free', ...RELATION_PLACE[shape] });
+	const itemList = idList.map((id) => {
+		const card = cardById.get(id);
+		const { tone, variant, link } = relationLookOf(model, dbId, card);
+		const point = placed.get(id);
+		return { id, x: point.x, y: point.y, shape, ...(shape === 'label' ? { width: sizeOf(id).width } : {}), title: card.item.name, text: card.item.logical, tone, ...(variant ? { variant } : {}), link };
+	});
+	const graphLineList = lineList.map((line) => ({
+		from: line.from, to: line.to, color: LINE_STYLE[line.kind].stroke, width: LINE_STYLE[line.kind].strokeWidth * (shape === 'square' ? 0.8 : 1),
+		...(LINE_STYLE[line.kind].strokeDasharray ? { dash: LINE_STYLE[line.kind].strokeDasharray } : {}), ...(line.isUndirected ? { isArrow: false } : {}), ...(isHubLine(line) ? { opacity: HUB_LINE_OPACITY } : {}), title: relationLineTitleOf(cardById, line),
+	}));
+	const graphData = { itemList, lineList: graphLineList };
+	const graph = { id: `relation:${dbId}`, renderer: { type: 'card-graph' }, position: { x: 0, y: 0 }, size: { width: cardGraphSizeGet(graphData).width, height: 'auto' }, data: graphData, handles: [] };
+	return { nodes: [...(legend ? [legend] : []), graph], connections: [] };
+}
+
+// few things: a card each, scattered (the cards in place, and where each stands)
+function relationCardNodesBuild(model, dbId, idList, cardById, linkList) {
+	const placed = diagramScatterLayout(idList.map((id) => ({ id, width: RELATION_CARD_WIDTH, height: RELATION_CARD_HEIGHT })), linkList, { placement: 'free', ...RELATION_PLACE.card });
+	const rectById = new Map();
+	const nodes = idList.map((id) => {
+		const { tone, variant, link } = relationLookOf(model, dbId, cardById.get(id));
+		const point = placed.get(id);
+		rectById.set(id, { x: point.x, y: point.y, width: RELATION_CARD_WIDTH, height: RELATION_CARD_HEIGHT });
+		const node = noteNodeBuild({ id, x: point.x, y: point.y, width: RELATION_CARD_WIDTH, title: cardById.get(id).item.name, text: cardById.get(id).item.logical, tone, link,
+			handleList: ['left', 'right', 'top', 'bottom'].map((side) => handleOf(side, 'both', side)) });
+		node.size = { width: RELATION_CARD_WIDTH, height: RELATION_CARD_HEIGHT };
+		if (variant) node.data.variant = variant;
+		return node;
+	});
+	return { nodes, rectById };
+}
+
+// a straight line from the side of a card facing the other to the side of the other facing it
+function relationCardLinesBuild(cardById, lineList, rectById) {
+	const middleOf = (rect) => ({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 });
+	return lineList.map((line) => {
+		const from = rectById.get(line.from);
+		const to = rectById.get(line.to);
+		return lineOf(`relation:${line.kind}:${line.from}:${line.to}`, [line.from, diagramScatterSideOf(from, middleOf(to))], [line.to, diagramScatterSideOf(to, middleOf(from))], {
+			renderer: { type: 'straight' },
+			style: LINE_STYLE[line.kind],
+			...(line.isUndirected ? { markerEnd: 'none' } : {}),
+			...(line.nameList.length > 1 ? { label: { text: `×${line.nameList.length}` } } : {}),
+		});
+	});
+}
+
+// whether a database has anything for its relationships to draw: a table
+const relationIsOffered = (model, dbId) => migrationTableListOf(model, dbId).length > 0;
+// which option sets a view of relationships may add: those some column of a table uses
+function relationChoiceScopeListOf(model, dbId) {
+	const scopeSet = new Set();
+	for (const table of migrationTableListOf(model, dbId)) {
+		for (const column of table.columnList) {
+			const choice = model.choiceByKey.get(column.choice);
+			if (choice?.db === dbId) scopeSet.add(choiceScopeOf(choice));
+		}
+	}
+	return scopeSet;
+}
+
+// a view whose diagram is made when it is first shown (SwitchData.js: switchViewListCheck)
+function viewLazy(view, make) {
+	let made = null;
+	return Object.defineProperty({ ...view }, 'diagram', { enumerable: true, get: () => (made ??= make()) });
+}
+
+// the views of relationships a scene of a database offers: tables alone, with the global option
+// sets, with every option set; the last two only where a column uses one
+function relationViewListOf(model, dbId) {
+	if (!relationIsOffered(model, dbId)) return [];
+	const scopeSet = relationChoiceScopeListOf(model, dbId);
+	return [
+		viewLazy({ id: 'relation', label: labelOf(model, 'viewRelation') }, () => diagramOfScene(sceneRelationBuild(model, dbId, 'none'))),
+		...(scopeSet.has('global') ? [viewLazy({ id: 'relation-global', label: labelOf(model, 'viewRelationGlobal') }, () => diagramOfScene(sceneRelationBuild(model, dbId, 'global')))] : []),
+		...(scopeSet.size > 0 ? [viewLazy({ id: 'relation-all', label: labelOf(model, 'viewRelationAll') }, () => diagramOfScene(sceneRelationBuild(model, dbId, 'all')))] : []),
+	];
 }
 
 // the mapping of a column of a table, in the side it stands on: what a source column becomes,
@@ -316,7 +599,7 @@ function sceneLookupBuild(model, dbId, logicalFrom, logicalTo) {
 		rowDisplay: rowDisplayKeepOf(model, from, [pkFrom?.id, ...columnList.map((column) => column.id), ...(isSelf ? [pkTo.id] : [])]),
 	});
 	const nodeTo = isSelf ? nodeFrom : tableNodeBuild(to, { x: TABLE_WIDTH + GAP_COLUMN, y: 0, link: linkOf(to), handleList: [handleInto], rowDisplay: rowDisplayKeepOf(model, to, [pkTo.id]) });
-	const connections = columnList.map((column) => lineOf(`lookup:${dbId}:${from.logical}:${column.id}`, [nodeFrom.id, `lookup-${column.id}`], [nodeTo.id, 'pk'], { style: { stroke: COLOR_LOOKUP, strokeWidth: 1.25 } }));
+	const connections = columnList.map((column) => lineOf(`lookup:${dbId}:${from.logical}:${column.id}`, [nodeFrom.id, `lookup-${column.id}`], [nodeTo.id, 'pk'], { style: lineStyleOfColumn(column) }));
 	const yLinks = erGeometryEstimateBuild({ nodes: [nodeFrom] }).rectOf(nodeFrom.id).height + GAP_ROW;
 	const linkList = columnList.flatMap((column) => {
 		const path = columnMappingPathOf(model, from, column);
@@ -376,23 +659,24 @@ function sceneTableBuild(model, dbId, logical) {
 			handleList.push(handleOf(`lookup-${column.id}`, 'out', 'right', `column/${column.id}`));
 			const id = `refer:${column.id}`;
 			nodes.push(noteNodeBuild({ id, x: xRight, y: yRight, width: EXTERNAL_WIDTH, title: external.name, text: external.logical, tone: 'slate', link: `${dbPathOf(model, dbId)}/${external.logical}`, handleList: [handleOf('in', 'in', 'left')] }));
-			connections.push(lineOf(`refer:${column.id}`, [nodeId, `lookup-${column.id}`], [id, 'in'], { style: { stroke: COLOR_LOOKUP, strokeWidth: 1.25 } }));
+			connections.push(lineOf(`refer:${column.id}`, [nodeId, `lookup-${column.id}`], [id, 'in'], { style: lineStyleOfColumn(column) }));
 			yRight += 80;
 		}
 		if (refer) {
 			handleList.push(handleOf(`lookup-${column.id}`, 'out', 'right', `column/${column.id}`));
 			const id = `refer:${column.id}`;
 			nodes.push(noteNodeBuild({ id, x: xRight, y: yRight, width: 240, title: refer.name, text: refer.logical, tone: 'slate', link: `${dbPathOf(model, dbId)}/${refer.logical}`, handleList: [handleOf('in', 'in', 'left')] }));
-			connections.push(lineOf(`refer:${column.id}`, [nodeId, `lookup-${column.id}`], [id, 'in'], { style: { stroke: COLOR_LOOKUP, strokeWidth: 1.25 } }));
+			connections.push(lineOf(`refer:${column.id}`, [nodeId, `lookup-${column.id}`], [id, 'in'], { style: lineStyleOfColumn(column) }));
 			yRight += 80;
 		}
 		if (choice) {
 			handleList.push(handleOf(`choice-${column.id}`, 'out', 'right', `column/${column.id}`));
 			const id = choiceNodeId(dbId, choice.logical);
 			if (!nodes.some((node) => node.id === id)) {
-				nodes.push(choiceNodeBuild(choice, { x: xRight, y: yRight, link: `${dbPathOf(model, dbId)}/${choice.logical}`, handleList: [handleOf('in-side', 'in', 'left', 'header')] }));
-				// a long name wraps, so leave room for its second line
-				yRight += heightOfChoice(choice) + 70;
+				const node = choiceNodeBuild(choice, { x: xRight, y: yRight, link: `${dbPathOf(model, dbId)}/${choice.logical}`, handleList: [handleOf('in-side', 'in', 'left', 'header')] });
+				nodes.push(node);
+				// as tall as it draws, its wrapped labels and title counted
+				yRight += choiceHeightOfNode(node) + CHOICE_GAP;
 			}
 			connections.push(lineOf(`choice:${dbId}:${logical}:${column.id}`, [nodeId, `choice-${column.id}`], [id, 'in-side'], { style: { stroke: COLOR_CHOICE, strokeWidth: 1.25, strokeDasharray: '5 4' } }));
 		}
@@ -405,7 +689,7 @@ function sceneTableBuild(model, dbId, logical) {
 	for (const { table: from, column } of referList) {
 		const id = `from:${from.logical}:${column.id}`;
 		nodes.push(noteNodeBuild({ id, x: -240 - gapLeft, y: yLeft, width: 240, title: from.name, text: `${from.logical}.${column.logical ?? column.id}`, tone: 'slate', link: `${dbPathOf(model, dbId)}/${from.logical}`, handleList: [handleOf('out', 'out', 'right')] }));
-		connections.push(lineOf(`from:${from.logical}:${column.id}`, [id, 'out'], [nodeId, 'pk-left'], { style: { stroke: COLOR_LOOKUP, strokeWidth: 1.25 } }));
+		connections.push(lineOf(`from:${from.logical}:${column.id}`, [id, 'out'], [nodeId, 'pk-left'], { style: lineStyleOfColumn(column) }));
 		yLeft += 80;
 	}
 	nodes.push(tableNodeBuild(table, { x: 0, y: 0, handleList }));
@@ -435,6 +719,18 @@ function sceneChoiceBuild(model, dbId, logical) {
 		for (const column of columnList) connections.push(lineOf(`choice:${dbId}:${table.logical}:${column.id}`, [node.id, `choice-${column.id}`], [choiceId, 'in-side'], { style: { stroke: COLOR_CHOICE, strokeWidth: 1.25, strokeDasharray: '5 4' } }));
 		y += erGeometryEstimateBuild({ nodes: [node] }).rectOf(node.id).height + GAP_ROW;
 	}
+	// no table of the model uses it, but its reading says where it is used (usageList: a scan of
+	// option sets with their columns): a card of each column using it, of a table not drawn here
+	if (nodes.length === 0) {
+		for (const [index, usage] of (choice.usageList ?? []).entries()) {
+			const id = `usage:${index}`;
+			const node = noteNodeBuild({ id, x: 0, y, width: EXTERNAL_WIDTH + 60, title: usage.tableDisplayName || usage.table, text: `${usage.table}.${usage.column}`, tag: usage.columnDisplayName || undefined, tone: 'slate', handleList: [handleOf('out', 'out', 'right')] });
+			node.data.variant = 'dashed';
+			nodes.push(node);
+			connections.push(lineOf(`choice:${dbId}:${usage.table}:${usage.column}`, [id, 'out'], [choiceId, 'in-side'], { style: LINE_STYLE.choice }));
+			y += 70;
+		}
+	}
 	nodes.push(choiceNodeBuild(choice, { x: nodes.length ? TABLE_WIDTH + GAP_COLUMN : 0, y: 0, handleList: nodes.length ? [handleOf('in-side', 'in', 'left', 'header')] : [] }));
 	return diagramArrangeApply({ nodes, connections }, erArrangerLanes).diagram;
 }
@@ -458,7 +754,7 @@ function sceneExternalBuild(model, dbId, logical) {
 			rowDisplay: rowDisplayKeepOf(model, table, [pk?.id, ...columnList.map((column) => column.id)]),
 		});
 		nodes.push(node);
-		for (const column of columnList) connections.push(lineOf(`lookup:${dbId}:${table.logical}:${column.id}`, [node.id, `lookup-${column.id}`], [id, 'in'], { style: { stroke: COLOR_LOOKUP, strokeWidth: 1.25 } }));
+		for (const column of columnList) connections.push(lineOf(`lookup:${dbId}:${table.logical}:${column.id}`, [node.id, `lookup-${column.id}`], [id, 'in'], { style: lineStyleOfColumn(column) }));
 		y += erGeometryEstimateBuild({ nodes: [node] }).rectOf(node.id).height + GAP_ROW;
 	}
 	nodes.push(noteNodeBuild({ id, x: TABLE_WIDTH + GAP_COLUMN, y: 0, width: EXTERNAL_WIDTH, title: external.name, text: external.logical, tone: 'slate', handleList: [handleOf('in', 'in', 'left')] }));
@@ -485,8 +781,9 @@ function localChoiceBuild(model, { columnMappingList, source, target, xTarget, y
 		const handleId = `choice-${column.id}`;
 		const choiceId = choiceNodeId(choice.db, choice.logical);
 		handleBySide[role].push(handleOf(handleId, 'out', side, `column/${column.id}`));
-		nodes.push(choiceNodeBuild(choice, { x: role === 'source' ? 0 : xTarget, y: yBySide[role], link: `/overview/${choice.db}/${choice.logical}`, handleList: [handleOf('in-side', 'in', side, 'header'), ...(isPair ? [handleOf('pair', role === 'source' ? 'out' : 'in', role === 'source' ? 'right' : 'left', 'header')] : [])] }));
-		yBySide[role] += heightOfChoice(choice) + 70;
+		const node = choiceNodeBuild(choice, { x: role === 'source' ? 0 : xTarget, y: yBySide[role], link: `/overview/${choice.db}/${choice.logical}`, handleList: [handleOf('in-side', 'in', side, 'header'), ...(isPair ? [handleOf('pair', role === 'source' ? 'out' : 'in', role === 'source' ? 'right' : 'left', 'header')] : [])] });
+		nodes.push(node);
+		yBySide[role] += choiceHeightOfNode(node) + CHOICE_GAP;
 		const lineId = `choice:${choice.db}:${table.logical}:${column.id}`;
 		idList.push(lineId);
 		connections.push(lineOf(lineId, [tableNodeId(table.db, table.logical), handleId], [choiceId, 'in-side'], { style: { stroke: COLOR_CHOICE, strokeWidth: 1.25, strokeDasharray: '5 4' } }));
@@ -1704,15 +2001,28 @@ export function migrationProviderBuild(model, { onBoxSave, signature } = {}) {
 //                              in a grid, each opening its scene (default: none)
 //   isChoiceLocalShown         an option set of one column is a card of its own in the diagram, as a
 //                              global one is (default false: drawn only in the scene of its table)
+//
+// The first scene also has the views of relationships (sceneRelationBuild): the tables as small
+// cards and the lookups between them, alone or with the option sets their columns use, made when
+// first shown. Every scene says what its looks stand for (a legend). The model is taken not to
+// change while the provider lives: what is found in it (a table by its name, the children of a
+// scene) is found once
 export function migrationDbProviderBuild(modelInput, dbId, { root = '/database', label, title, isLookupExternalShown = true, erColumnCountMax, erTableCountMax, isChoiceLocalShown = false, onBoxSave, signature } = {}) {
-	const model = { ...modelInput, dbPathById: { ...modelInput.dbPathById, [dbId]: root }, isLookupExternalShown, erColumnCountMax, isChoiceLocalShown };
-	const isIndexed = Boolean(erTableCountMax) && migrationTableListOf(model, dbId).length > erTableCountMax;
+	const model = { ...modelInput, dbPathById: { ...modelInput.dbPathById, [dbId]: root }, isLookupExternalShown, erColumnCountMax, isChoiceLocalShown, isLegendShown: true, listCache: new Map() };
+	const tableList = migrationTableListOf(model, dbId);
+	const choiceList = migrationChoiceListOf(model, dbId);
+	const externalList = migrationExternalListOf(model, dbId);
+	const tableByLogical = new Map(tableList.map((item) => [item.logical, item]));
+	const choiceByLogical = new Map(choiceList.map((item) => [item.logical, item]));
+	const externalByLogical = new Map(externalList.map((item) => [item.logical, item]));
+	// a database of more cards than a diagram can hold (its tables, and the option sets the diagram draws) opens on its index
+	const cardCount = tableList.length + choiceList.filter((choice) => isChoiceLocalShown || migrationChoiceIsGlobal(choice)).length;
+	const isIndexed = Boolean(erTableCountMax) && cardCount > erTableCountMax;
 	const rootLabel = label ?? [model.system.source, model.system.target].find((db) => db.id === dbId)?.name ?? dbId;
-	const tableOf = (logical) => migrationTableListOf(model, dbId).find((item) => item.logical === logical);
-	const choiceOf = (logical) => migrationChoiceListOf(model, dbId).find((item) => item.logical === logical);
-	const externalNameOf = (logical) => migrationExternalListOf(model, dbId).find((item) => item.logical === logical)?.name;
+	const tableOf = (logical) => tableByLogical.get(logical);
+	const choiceOf = (logical) => choiceByLogical.get(logical);
 	const segmentListOf = (path) => (path === root || path.startsWith(`${root}/`) ? path.slice(root.length).split('/').filter(Boolean) : null);
-	const nameOf = (logical) => tableOf(logical)?.name ?? choiceOf(logical)?.name ?? externalNameOf(logical) ?? logical;
+	const nameOf = (logical) => tableOf(logical)?.name ?? choiceOf(logical)?.name ?? externalByLogical.get(logical)?.name ?? logical;
 	const labelGet = (path) => {
 		const segmentList = segmentListOf(path);
 		if (!segmentList || segmentList.length === 0) return rootLabel;
@@ -1721,7 +2031,7 @@ export function migrationDbProviderBuild(modelInput, dbId, { root = '/database',
 	const childListOf = (path) => {
 		const segmentList = segmentListOf(path);
 		if (!segmentList) return [];
-		if (segmentList.length === 0) return [...migrationTableListOf(model, dbId), ...migrationChoiceListOf(model, dbId), ...migrationExternalListOf(model, dbId)].map((item) => `${root}/${item.logical}`);
+		if (segmentList.length === 0) return [...tableList, ...choiceList, ...externalList].map((item) => `${root}/${item.logical}`);
 		if (segmentList.length > 1) return [];
 		const referList = [...new Set((tableOf(segmentList[0])?.columnList ?? []).map((column) => column.lookup))].map((key) => model.tableByKey.get(key)).filter((refer) => refer?.db === dbId);
 		return referList.map((refer) => `${path}/${refer.logical}`);
@@ -1732,27 +2042,41 @@ export function migrationDbProviderBuild(modelInput, dbId, { root = '/database',
 		const text = { type: 'text', text: labelGet(path) };
 		return choiceOf(logical) ? [{ type: 'icon', icon: 'list-checks' }, text] : tableOf(logical) ? [{ type: 'icon', icon: 'table' }, text] : [{ type: 'icon', icon: 'link' }, text];
 	};
+	// the path bar asks for the children of the scene shown each time it is drawn
+	const childByPath = new Map();
+	const childListGet = (path) => {
+		if (!childByPath.has(path)) childByPath.set(path, childListOf(path).map((child) => ({ path: child, label: labelGet(child), labelItemList: labelItemListOf(child) })));
+		return childByPath.get(path);
+	};
+	const rootSceneGet = (path) => {
+		const relationList = relationViewListOf(model, dbId);
+		if (isIndexed) {
+			const index = viewLazy({ id: 'index', label: labelOf(model, 'viewIndex') }, () => diagramOfScene(sceneIndexBuild(model, dbId)));
+			// a long index starts at its top, read at its size
+			const box = boxOf(model, `${path}@index`) ?? indexBoxOf(index.diagram);
+			return { path, label: rootLabel, title: title ?? rootLabel, viewList: [{ ...index, ...(box ? { box } : {}) }, ...relationList], viewDefault: 'index' };
+		}
+		return {
+			path, label: rootLabel, title: title ?? rootLabel,
+			viewList: [
+				viewLazy({ id: 'diagram', label: labelOf(model, 'viewDiagram'), box: boxOf(model, `${path}@diagram`) }, () => diagramOfScene(sceneErBuild(model, dbId))),
+				viewLazy({ id: 'matrix', label: labelOf(model, 'viewLookupMatrix'), box: boxOf(model, `${path}@matrix`) }, () => diagramOfScene(sceneLookupMatrixBuild(model, dbId))),
+				...relationList,
+			],
+			viewDefault: 'diagram',
+		};
+	};
 	return {
 		signature,
 		root,
 		title: title ?? rootLabel,
 		labelGet,
-		childListGet: (path) => childListOf(path).map((child) => ({ path: child, label: labelGet(child), labelItemList: labelItemListOf(child) })),
+		childListGet,
 		sceneGet: (path) => {
 			const segmentList = segmentListOf(path);
 			if (!segmentList || segmentList.length > 2) return null;
 			const [logical, refer] = segmentList;
-			if (!logical && isIndexed) return { path, label: rootLabel, title: title ?? rootLabel, diagram: diagramOfScene(sceneIndexBuild(model, dbId)) };
-			if (!logical) {
-				return {
-					path, label: rootLabel, title: title ?? rootLabel,
-					viewList: [
-						{ id: 'diagram', label: labelOf(model, 'viewDiagram'), diagram: diagramOfScene(sceneErBuild(model, dbId)), box: boxOf(model, `${path}@diagram`) },
-						{ id: 'matrix', label: labelOf(model, 'viewLookupMatrix'), diagram: diagramOfScene(sceneLookupMatrixBuild(model, dbId)), box: boxOf(model, `${path}@matrix`) },
-					],
-					viewDefault: 'diagram',
-				};
-			}
+			if (!logical) return rootSceneGet(path);
 			const diagram = refer ? sceneLookupBuild(model, dbId, logical, refer) : sceneTableBuild(model, dbId, logical) ?? sceneChoiceBuild(model, dbId, logical) ?? sceneExternalBuild(model, dbId, logical);
 			if (!diagram) return null;
 			return { path, label: labelGet(path), title: refer ? `${nameOf(logical)} → ${nameOf(refer)}` : `${nameOf(logical)} (${logical})`, box: boxOf(model, path), diagram: diagramOfScene(diagram) };

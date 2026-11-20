@@ -12,6 +12,8 @@ const dataverseFieldList = [
 	{ id: 'nameLogical', label: 'Logical name', kind: 'text' },
 	{ id: 'type', label: 'Type', kind: 'enum', values: dataverseTypeList, isSearchable: true },
 ];
+// an option set's rows are its options: the same fields (the same data), each called what it holds
+const dataverseChoiceFieldList = dataverseFieldList.map((field) => (field.id === 'name' ? { ...field, label: 'Option' } : field.id === 'nameLogical' ? { ...field, label: 'Value' } : field));
 
 export const dataverseTableSchema = {
 	type: 'dataverse-table',
@@ -43,10 +45,10 @@ export const dataverseChoiceSchema = {
 	labelRowPlural: 'Options',
 	labelField: 'Field',
 	labelFieldPlural: 'Fields',
-	reasonFieldListFixed: 'The fields of a choice card are fixed: Key, Option, Logical name and Type.',
+	reasonFieldListFixed: 'The fields of a choice card are fixed: Key, Option, Value and Type.',
 	rowListKey: 'columns',
 	anchorPrefix: 'column',
-	fieldList: dataverseFieldList,
+	fieldList: dataverseChoiceFieldList,
 	isFieldListEditable: false,
 	headFieldList: [],
 	nodePropertyList: [{ id: 'name', label: 'Name', kind: 'text' }, { id: 'nameLogical', label: 'Logical name', kind: 'text' }, { id: 'description', label: 'Description', kind: 'text', isMultiline: true }],

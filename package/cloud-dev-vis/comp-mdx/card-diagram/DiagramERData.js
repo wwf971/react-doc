@@ -185,12 +185,14 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 	const nodeDefault = mapping(defaults.node ?? {}, 'defaults.node');
 	if (Object.keys(nodeDefault).some(key => key !== 'display')) throw new Error('defaults.node holds display only.');
 	const displayDefault = nodeDefault.display === undefined ? 'detailed' : nodeDisplayRead(nodeDefault.display, 'defaults.node.display');
-	const nodes = list(value.nodes, 'nodes').map(node => {
+	const nodeAllList = list(value.nodes, 'nodes').map(node => {
 		mapping(node, 'node');
 		const id = text(node.id, 'node.id');
 		if (id.startsWith('~')) throw new Error(`${id}: node ids starting with "~" are reserved.`);
 		if (node.isPositionLocked !== undefined && typeof node.isPositionLocked !== 'boolean') throw new Error(`${id}.isPositionLocked must be boolean.`);
 		if (node.isPositionLocked && (!node.position || node.position === 'auto')) throw new Error(`${id}: a locked node requires an explicit position.`);
+		if (node.pin !== undefined && !NODE_PIN_LIST.includes(node.pin)) throw new Error(`${id}.pin is one of ${NODE_PIN_LIST.join(', ')}.`);
+		if (node.pin !== undefined && node.around !== undefined) throw new Error(`${id}: a node pinned to the viewport is drawn around nothing.`);
 		const { renderer, contract } = rendererRead(node.renderer, `${id}.renderer`, 'visualizationNode', resolve, registry);
 		const dataInput = mapping(node.data ?? {}, `${id}.data`);
 		const data = mapping(contract.dataNormalize ? contract.dataNormalize(dataInput) : dataInput, `${id}.data`);
@@ -248,6 +250,12 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 		}
 		return { ...node, id, renderer, data, anchors, handles, display, isBackground: contract.isBackground === true, size: sizeResolved, sizeDefault, ...widthFit, ...anchorSideDrawn, ...anchorBottomDrawn, position: node.position === undefined || node.position === 'auto' ? 'auto' : point(node.position, `${id}.position`) };
 	});
+	// a node pinned to a corner of the viewport (a legend) is not on the canvas: it stays in its
+	// corner while the camera moves, takes no line and has no place in a layout or in the bounds of
+	// the diagram (pinList, drawn by DiagramPinLayer)
+	const nodes = nodeAllList.filter(node => node.pin === undefined);
+	const pinList = nodeAllList.filter(node => node.pin !== undefined);
+	unique(nodeAllList, 'nodes');
 	const nodesById = unique(nodes, 'nodes');
 	for (const node of nodes) {
 		for (const idOther of node.around?.nodeIdList ?? []) {
@@ -294,8 +302,11 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 		return result;
 	});
 	unique(connections, 'connections');
-	return { nodes, connections, layout: layoutResolved, viewport: viewportNormalize(value.viewport, height) };
+	return { nodes, pinList, connections, layout: layoutResolved, viewport: viewportNormalize(value.viewport, height) };
 }
+
+// the corners of the viewport a node may be pinned to (node.pin)
+export const NODE_PIN_LIST = ['top-right', 'top-left', 'bottom-right', 'bottom-left'];
 
 export function diagramPositionsGet(nodes, layout, measurements = {}) {
 	return diagramPlacesGet(nodes, layout, measurements).positions;

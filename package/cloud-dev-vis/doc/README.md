@@ -96,7 +96,7 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | Place | Role |
 | --- | --- |
 | `comp-mdx/card-diagram/node-registry.js` | `nodeRegistryBuild`, `nodeRegistrySearch`: the registry mechanism |
-| `comp-mdx/card-diagram/card-diagram-node-registry.js`, `CompactCard.jsx`, `CardIcon.jsx`, `CardIconData.js` | the generic kinds (`table`, `operator`, `card-note`, `card-brief`, `card-database`, `card-icon`, `card-caption`, `card-matrix`, `scene-box`) and the registry of `CardDiagram` |
+| `comp-mdx/card-diagram/card-diagram-node-registry.js`, `CompactCard.jsx`, `CardIcon.jsx`, `CardIconData.js`, `CardIndex.jsx`, `CardLegend.jsx` | the generic kinds (`table`, `operator`, `card-note`, `card-brief`, `card-database`, `card-icon`, `card-caption`, `card-matrix`, `card-index`, `card-legend`, `scene-box`) and the registry of `CardDiagram` |
 | `comp-mdx/card-diagram-animation/` | the animation: [card-diagram-animation.md](card-diagram-animation.md#implementation) |
 | `comp-mdx/card-diagram-switch/` | scenes by path: [card-diagram-flexible-switch.md](card-diagram-flexible-switch.md#implementation) |
 | `comp-mdx/power-platform/migration/` | a migration as data: [power-platform-migration.md](power-platform-migration.md#implementation) |

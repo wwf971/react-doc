@@ -8,6 +8,7 @@ import { useCanvasWheelGuard } from '../card-diagram/CanvasWheelGuard.js';
 import { CanvasStill, useCanvasStill } from '../card-diagram/CanvasStill.jsx';
 import { DiagramSearchBar, useDiagramSearchHost } from '../card-diagram/DiagramSearchView.jsx';
 import { DiagramCreatePanel } from '../card-diagram/DiagramCreatePanel.jsx';
+import { DiagramPinLayer } from '../card-diagram/DiagramPinLayer.jsx';
 import '../card-diagram/DiagramVisualEdit.css';
 import { diagramCanvasLineListGet, diagramCanvasRegister } from '../card-diagram/DiagramCanvasRegistry.js';
 import '../card-diagram/DiagramER.css';
@@ -291,6 +292,12 @@ const SwitchSearchHost = observer(function SwitchSearchHost({ store, search, hos
 	return <DiagramSearchBar search={search} />;
 });
 
+// what the scene on the canvas pins to the viewport (a legend): over the canvas, still while it moves
+const SwitchPinLayer = observer(function SwitchPinLayer({ store, registry, config }) {
+	const pinList = store.entryByPath.get(store.pathFlow)?.canvas.graph?.pinList;
+	return <DiagramPinLayer pinList={pinList} registry={registry} config={config} />;
+});
+
 // the canvas in a box of its own, measured: the box is what cameras fit. a block
 // playing it under another clock (the animation layer) puts this inside its composition
 export const SwitchCanvas = observer(function SwitchCanvas({ store, config, registry, isStillOuter = false, children }) {
@@ -354,6 +361,7 @@ export const SwitchCanvas = observer(function SwitchCanvas({ store, config, regi
 				<SwitchSearchHost store={store} search={search} hostRef={boxRef} />
 			</ReactFlowProvider>
 			<SwitchCommandPanel store={store} />
+			<SwitchPinLayer store={store} registry={registry} config={config} />
 			{store.loadError ? (
 				<div className="doc-er-diagram-message is-error doc-switch-error" role="alert">
 					<strong>This scene could not be drawn.</strong>

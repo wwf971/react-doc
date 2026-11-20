@@ -112,11 +112,14 @@
 	font-family: ui-sans-serif, system-ui, sans-serif;
 }
 
+/* the logical name beside the name while both fit; else on a row of its own, broken anywhere (a
+   long logical name is one word), so neither the name is squeezed nor the card overflowed */
 .doc-er-table-title {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: baseline;
 	justify-content: space-between;
-	gap: 0.75rem;
+	gap: 0.1rem 0.75rem;
 	padding: 0.4rem 0.75rem;
 	border-bottom: 1px solid var(--color-fd-border);
 	border-radius: 0.4rem 0.4rem 0 0;
@@ -126,17 +129,25 @@
 }
 
 .doc-er-table-title-logical {
+	min-width: 0;
+	max-width: 100%;
+	margin-left: auto;
 	color: var(--color-fd-muted-foreground);
 	font-family: inherit;
 	font-size: 0.76rem;
 	font-weight: 500;
+	overflow-wrap: anywhere;
 }
 
 .doc-er-table-title-name {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.4rem;
+	min-width: 0;
+	max-width: 100%;
+	overflow-wrap: anywhere;
 }
+.doc-er-table-title-name > .doc-er-table-badge { flex: none; }
 
 .doc-er-table:not(.is-choice) .doc-er-table-title {
 	padding: 0.2rem 0.65rem;
@@ -714,6 +725,136 @@
 .doc-card-note[data-tone='red'], .doc-card-brief[data-tone='red'] { --doc-card-accent: #dc2626; }
 .doc-card-note[data-tone='violet'], .doc-card-brief[data-tone='violet'] { --doc-card-accent: #7c3aed; }
 .doc-card-note[data-tone='slate'], .doc-card-brief[data-tone='slate'] { --doc-card-accent: #64748b; }
+/* a variant of a note card, telling apart things of one tone: a dashed frame (what stands
+   elsewhere, or belongs to one thing), an accent bar at its left */
+.doc-card-note[data-variant='dashed'] { border-style: dashed; border-color: color-mix(in srgb, var(--doc-card-accent, #64748b) 70%, var(--color-fd-border)); }
+.doc-card-note[data-variant='bar'] { border-left: 4px solid var(--doc-card-accent, #64748b); }
+
+/* an index (CardIndex.jsx): groups of note cards in a grid, each a link */
+.doc-card-index {
+	box-sizing: border-box;
+	padding: 12px;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.75rem;
+	background: color-mix(in srgb, var(--color-fd-background) 92%, transparent);
+}
+.doc-card-index-title { height: 34px; font-size: 0.95rem; font-weight: 700; line-height: 26px; }
+.doc-card-index-group { margin-bottom: 10px; }
+.doc-card-index-head { display: flex; align-items: baseline; gap: 0.5rem; height: 30px; line-height: 24px; }
+.doc-card-index-head-title { font-size: 0.75rem; font-weight: 700; }
+.doc-card-index-head-note { color: var(--color-fd-muted-foreground); font-size: 0.65rem; }
+.doc-card-index-grid { display: grid; }
+.doc-card-index-item { overflow: hidden; align-content: center; }
+.doc-card-index-item > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.doc-card-index-text { color: var(--color-fd-muted-foreground); font-size: 0.58rem; }
+.doc-card-index-item.is-link { cursor: pointer; }
+.doc-card-index-item.is-link:hover { background: color-mix(in srgb, var(--doc-card-accent, #64748b) 18%, var(--color-fd-background)); }
+
+/* a legend (CardLegend.jsx): a swatch or a line, and what it stands for */
+.doc-card-legend {
+	box-sizing: border-box;
+	padding: 10px 12px;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.65rem;
+	background: var(--color-fd-background);
+	box-shadow: 0 1px 4px rgb(15 23 42 / 8%);
+	color: var(--color-fd-foreground);
+	font-size: 0.64rem;
+}
+.doc-card-legend-title { height: 22px; font-size: 0.72rem; font-weight: 700; }
+.doc-card-legend-group { margin-bottom: 6px; }
+.doc-card-legend-head { height: 18px; color: var(--color-fd-muted-foreground); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+/* a long label wraps under its own column rather than widening the legend */
+.doc-card-legend-item { display: flex; align-items: center; gap: 0.5rem; min-height: 22px; line-height: 1.2; overflow-wrap: anywhere; }
+.doc-card-legend-swatch { flex: none; width: 40px; height: 14px; padding: 0; border-radius: 0.3rem; }
+.doc-card-legend-line { flex: none; }
+.doc-card-legend-title { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.doc-card-legend-fold { padding: 0 0.25rem; border: 0; border-radius: 0.3rem; background: none; color: var(--color-fd-muted-foreground); font: inherit; font-size: 0.6rem; cursor: pointer; }
+.doc-card-legend-fold:hover { background: color-mix(in srgb, var(--color-fd-foreground) 8%, transparent); }
+.doc-card-legend.is-folded .doc-card-legend-title { height: auto; }
+.doc-card-legend-tool { display: inline-flex; gap: 0.1rem; }
+/* see-through: the panel alone fades (its words and samples stay whole), a light blur under it keeps them read over lines */
+.doc-card-legend.is-translucent {
+	background: color-mix(in srgb, var(--color-fd-background) calc(var(--doc-card-legend-opacity, 1) * 100%), transparent);
+	box-shadow: none;
+	backdrop-filter: blur(1.5px);
+	transition: background-color 0.15s;
+}
+
+/* the nodes pinned to the viewport (DiagramPinLayer.jsx): in their corner over the canvas, the same
+   size whatever the camera; the canvas under them takes the pointer around them */
+.doc-diagram-pin-layer { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.doc-diagram-pin { position: absolute; display: flex; flex-direction: column; gap: 8px; max-height: calc(100% - 24px); overflow: auto; }
+.doc-diagram-pin[data-corner='top-right'] { top: 12px; right: 12px; align-items: flex-end; }
+.doc-diagram-pin[data-corner='top-left'] { top: 12px; left: 12px; }
+.doc-diagram-pin[data-corner='bottom-right'] { bottom: 12px; right: 12px; align-items: flex-end; }
+.doc-diagram-pin[data-corner='bottom-left'] { bottom: 56px; left: 12px; }
+.doc-diagram-pin-node { pointer-events: auto; max-width: 100%; }
+/* the bar of a search open stands at the top right: what is pinned there goes under it */
+.doc-switch-viewport:has(.doc-diagram-search-bar) .doc-diagram-pin[data-corner^='top'],
+.react-flow:has(.doc-diagram-search-bar) .doc-diagram-pin[data-corner^='top'] { top: 60px; }
+.doc-diagram-static .doc-diagram-pin { max-height: none; }
+
+/* an entry of an index or an item of a graph found by a search: framed, as a card found is */
+.doc-card-index-item[data-search], .doc-card-graph-item[data-search] { outline: 2px solid #facc15; outline-offset: 1px; }
+.doc-card-index-item[data-search='current'], .doc-card-graph-item[data-search='current'] { outline: 3px solid #f97316; }
+
+/* a graph in one card (CardGraph.jsx): its lines under its items, each item a square or a label in the
+   tone of the compact cards. a square shows its names when a pointer rests on it or a search finds it */
+.doc-card-graph { position: relative; }
+/* said outright, not inherited: a page whose base rule is `* { box-sizing: inherit }` (MUI's
+   CssBaseline) has the browser resolve the style of each of thousands of placed items anew, about
+   fifteen times slower */
+.doc-card-graph, .doc-card-graph * { box-sizing: border-box; }
+.doc-card-graph-lines { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.doc-card-graph-base { transition: opacity 0.12s; }
+.doc-card-graph-lit line { pointer-events: stroke; }
+.doc-card-graph-item {
+	--doc-card-accent: #64748b;
+	position: absolute;
+	box-sizing: border-box;
+	border: 1px solid color-mix(in srgb, var(--doc-card-accent) 55%, var(--color-fd-border));
+	background: color-mix(in srgb, var(--doc-card-accent) 14%, var(--color-fd-background));
+	color: var(--color-fd-foreground);
+}
+.doc-card-graph-item[data-tone='blue'] { --doc-card-accent: #2563eb; }
+.doc-card-graph-item[data-tone='teal'] { --doc-card-accent: #0d9488; }
+.doc-card-graph-item[data-tone='green'] { --doc-card-accent: #16a34a; }
+.doc-card-graph-item[data-tone='amber'] { --doc-card-accent: #d97706; }
+.doc-card-graph-item[data-tone='red'] { --doc-card-accent: #dc2626; }
+.doc-card-graph-item[data-tone='violet'] { --doc-card-accent: #7c3aed; }
+.doc-card-graph-item[data-tone='slate'] { --doc-card-accent: #64748b; }
+.doc-card-graph-item[data-variant='dashed'] { border-style: dashed; background: var(--color-fd-background); }
+.doc-card-graph-item[data-variant='bar'] { border-left: 4px solid var(--doc-card-accent); }
+.doc-card-graph-item.is-link { cursor: pointer; }
+.doc-card-graph-item.is-label { display: flex; align-items: center; padding: 0 0.4rem; border-radius: 999px; font-size: 0.62rem; font-weight: 600; white-space: nowrap; }
+.doc-card-graph-item.is-label .doc-card-graph-name { overflow: hidden; text-overflow: ellipsis; }
+.doc-card-graph-item.is-label:hover { z-index: 2; width: auto !important; min-width: max-content; background: color-mix(in srgb, var(--doc-card-accent) 26%, var(--color-fd-background)); }
+.doc-card-graph-item.is-square { border-radius: 3px; background: color-mix(in srgb, var(--doc-card-accent) 55%, var(--color-fd-background)); }
+.doc-card-graph-item.is-square[data-variant='dashed'] { background: var(--color-fd-background); }
+.doc-card-graph-item.is-square .doc-card-graph-name,
+.doc-card-graph-item.is-square .doc-card-graph-name-second { display: none; }
+/* a square names itself under the pointer and as the current match; the other matches only wear the
+   frame, since their name tags would cover each other where matches sit side by side */
+.doc-card-graph-item.is-square[data-search] { z-index: 2; }
+.doc-card-graph-item.is-square:hover, .doc-card-graph-item.is-square[data-search='current'] { z-index: 3; }
+.doc-card-graph-item.is-square:hover .doc-card-graph-name, .doc-card-graph-item.is-square[data-search='current'] .doc-card-graph-name,
+.doc-card-graph-item.is-square:hover .doc-card-graph-name-second, .doc-card-graph-item.is-square[data-search='current'] .doc-card-graph-name-second {
+	display: block;
+	position: absolute;
+	left: calc(100% + 4px);
+	padding: 0.05rem 0.35rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.3rem;
+	background: var(--color-fd-background);
+	box-shadow: 0 1px 3px rgb(15 23 42 / 14%);
+	font-size: 0.62rem;
+	font-weight: 600;
+	white-space: nowrap;
+	pointer-events: none;
+}
+.doc-card-graph-item.is-square .doc-card-graph-name { bottom: 50%; }
+.doc-card-graph-item.is-square .doc-card-graph-name-second { top: 50%; color: var(--color-fd-muted-foreground); font-weight: 400; }
 /* a label (CompactCard.jsx, CardLabel): the pill of a brief card, smaller, as wide as its
    words. one carrying settings answers a pointer; focused in the editor, it is framed as a
    card is, and the edit card stands beside it */

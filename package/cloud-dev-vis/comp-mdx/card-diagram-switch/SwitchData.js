@@ -170,6 +170,7 @@ export function switchPathLast(path) {
 // without a viewList has one view, its diagram, and nothing here applies to it.
 //
 //   viewList      [{ id, label?, description?, diagram, box?, isAvailableEmbedded?, isAvailableFocused?, isFrameHiddenEmbedded? }]
+//                 diagram may be a getter: a view costly to draw is made when it is first shown
 //                 isFrameHiddenEmbedded: a card showing this view is this view alone: no frame, no
 //                 title line, no margin, the view filling the whole card
 //   viewDefault   the id of a view; an ordered list of rules, the first match wins:
@@ -178,6 +179,12 @@ export function switchPathLast(path) {
 //                 a function of the presentation answering an id
 //   viewHover     the view shown while a pointer rests on a card embedding the scene, in the
 //                 same forms as viewDefault; none without one
+// a view has a diagram, or a getter that makes it, which is not asked here
+function viewDiagramIsGiven(view) {
+	const descriptor = Object.getOwnPropertyDescriptor(view, 'diagram');
+	return Boolean(descriptor && (descriptor.get || descriptor.value));
+}
+
 export function switchViewListCheck(desc, path) {
 	if (!Array.isArray(desc.viewList) || desc.viewList.length === 0) throw new Error(`The viewList of ${path} must list at least one view.`);
 	const idSet = new Set();
@@ -185,7 +192,7 @@ export function switchViewListCheck(desc, path) {
 		mapping(view, `a view of ${path}`);
 		if (typeof view.id !== 'string' || !/^[^\s/@#]+$/.test(view.id)) throw new Error(`Every view of ${path} needs an id without spaces, /, @ or #.`);
 		if (idSet.has(view.id)) throw new Error(`The scene ${path} has two views of the id "${view.id}".`);
-		if (!view.diagram) throw new Error(`The view ${view.id} of ${path} needs a diagram.`);
+		if (!viewDiagramIsGiven(view)) throw new Error(`The view ${view.id} of ${path} needs a diagram.`);
 		idSet.add(view.id);
 	}
 	for (const field of ['viewDefault', 'viewHover']) switchViewChoiceCheck(desc[field], field, idSet, path);

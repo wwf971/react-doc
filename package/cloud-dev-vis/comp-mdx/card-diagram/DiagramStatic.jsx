@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { DiagramNodeContent, connectionPathBuild, handlePointMeasure, useDiagramSearchMark } from './DiagramRender.jsx';
 import { diagramNormalize, diagramPlacesGet, endpointIsDangling, handleAnchorDrawnOf } from './DiagramERData.js';
 import { routePathPolylineGet } from './DiagramRoute.js';
+import { DiagramPinLayer } from './DiagramPinLayer.jsx';
 
 // A diagram drawn without a canvas (card-diagram-impl.md#a-diagram-without-a-canvas): the same
 // cards, placed absolutely, their lines in one svg. Nothing pans or zooms; the block is as large
@@ -179,6 +180,7 @@ export const DiagramStatic = observer(function DiagramStatic({ diagram, registry
 				))}
 				{lineList.filter(({ connection }) => connection.label.text).map(({ connection, source, target }) => <DiagramStaticLabel key={connection.id} connection={connection} source={source} target={target} />)}
 			</div>
+			<DiagramPinLayer pinList={graph.pinList} registry={registry} config={config} />
 		</div>
 	);
 });

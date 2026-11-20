@@ -8,6 +8,8 @@ import { diagramDependenciesCollect, cardDiagramSourceDefaultCreate } from './Di
 import { diagramSourceDefaultCreate, dataverseSourceDefaultCreate } from '../power-platform/DataverseCardSource.js';
 import { dataverseEntityNodeRegistry, powerPlatformNodeRegistry } from '../power-platform/power-platform-node-registry.js';
 import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
+import { diagramArrangeApply } from './DiagramArrange.js';
+import { diagramArrangerScatter } from './DiagramArrangeScatter.js';
 
 // the engine is tested on the registry of the Power Platform series, which
 // holds every card variant (fixed fields, resource fields, authored fields)
@@ -64,7 +66,7 @@ test('a component type draws and creates the kinds of its own registry only', ()
 	const base = yamlParse(cardDiagramSourceDefaultCreate().raw);
 	assert.equal(diagramNormalize(base, cardDiagramNodeRegistry).nodes.length, 3);
 	// the base series does not know the Dataverse kinds, and says what it knows
-	assert.throws(() => diagramNormalize(diagramCreate(), cardDiagramNodeRegistry), /unknown node type "dataverse-table" \(this diagram knows: table, operator, card-note, card-brief, card-label, card-three-dots, card-database, card-icon, card-caption, card-matrix, scene-box, color-block\)/);
+	assert.throws(() => diagramNormalize(diagramCreate(), cardDiagramNodeRegistry), /unknown node type "dataverse-table" \(this diagram knows: table, operator, card-note, card-brief, card-label, card-three-dots, card-database, card-icon, card-caption, card-matrix, scene-box, color-block, card-index, card-legend, card-graph\)/);
 	assert.deepEqual(cardDiagramNodeRegistry.createEntryList.map(entry => entry.id), ['table', 'operator', 'card-note', 'card-brief', 'card-label', 'card-database', 'card-icon', 'card-matrix', 'scene-box', 'color-block', 'connection']);
 	assert.deepEqual(registry.createEntryList.map(entry => entry.id), ['table', 'operator', 'card-note', 'card-brief', 'card-label', 'card-database', 'card-icon', 'card-matrix', 'scene-box', 'color-block', 'operator-abandon', 'operator-text', 'operator-mapping', 'dataverse-table', 'dataverse-choice', 'power-automate', 'business-rule', 'connection']);
 	// the standalone Dataverse card takes a Dataverse table alone, and its older form
@@ -296,4 +298,47 @@ test('a background around other nodes is the union of their drawn rects, with it
 	assert.deepEqual(places.sizeById.get('frame'), { width: 520, height: 350 });
 	assert.throws(() => diagramNormalize({ ...diagram, nodes: [...diagram.nodes.slice(0, 2), { ...diagram.nodes[2], around: { nodeIdList: ['c'] } }] }, cardDiagramNodeRegistry), /not a node/);
 	assert.throws(() => diagramNormalize({ ...diagram, nodes: [{ ...diagram.nodes[0], around: { nodeIdList: ['b'] } }, ...diagram.nodes.slice(1)] }, cardDiagramNodeRegistry), /only a background/);
+});
+
+test('a node pinned to a corner of the viewport is no card of the canvas: no place, no line, kept apart', () => {
+	const note = (id, extra = {}) => ({ id, renderer: { type: 'card-note' }, position: { x: 0, y: 0 }, data: { title: id }, handles: [{ id: 'in', direction: 'in', anchor: { side: 'left' } }], ...extra });
+	const legend = { id: 'legend', renderer: { type: 'card-legend' }, pin: 'top-right', size: { width: 200, height: 'auto' }, data: { groupList: [{ id: 'g', itemList: [{ id: 'a', label: 'A', swatch: { tone: 'blue' } }] }] } };
+	const graph = diagramNormalize({ version: 1, nodes: [note('a'), legend] }, cardDiagramNodeRegistry);
+	assert.deepEqual(graph.nodes.map((node) => node.id), ['a']);
+	assert.deepEqual(graph.pinList.map((node) => [node.id, node.pin]), [['legend', 'top-right']]);
+	assert.throws(() => diagramNormalize({ version: 1, nodes: [note('a', { pin: 'middle' })] }, cardDiagramNodeRegistry), /pin is one of/);
+	assert.throws(() => diagramNormalize({ version: 1, nodes: [note('a'), note('b', { pin: 'top-left' })], connections: [{ id: 'l', source: { nodeId: 'a', handleId: 'in' }, target: { nodeId: 'b', handleId: 'in' } }] }, cardDiagramNodeRegistry), /missing or incompatible handle/);
+	assert.throws(() => diagramNormalize({ version: 1, nodes: [note('a'), note('a', { pin: 'top-left' })] }, cardDiagramNodeRegistry), /a/);
+	// a legend may let the diagram show through, from 0.1 to all
+	assert.equal(diagramNormalize({ version: 1, nodes: [{ ...legend, data: { ...legend.data, opacity: 0.6 } }] }, cardDiagramNodeRegistry).pinList[0].data.opacity, 0.6);
+	assert.throws(() => diagramNormalize({ version: 1, nodes: [{ ...legend, data: { ...legend.data, opacity: 0 } }] }, cardDiagramNodeRegistry), /opacity of a legend/);
+});
+
+test('the scatter arranger: what a line joins stands near, nothing overlaps, the same graph the same way', () => {
+	const note = (id) => ({ id, renderer: { type: 'card-note' }, size: { width: 120, height: 40 }, data: { title: id }, handles: [{ id: 'out', direction: 'out', anchor: { side: 'right' } }, { id: 'in', direction: 'in', anchor: { side: 'left' } }] });
+	// a star around h, a pair, one alone
+	const idList = ['h', 'a', 'b', 'c', 'd', 'e', 'p', 'q', 'z'];
+	const line = (from, to) => ({ id: `${from}-${to}`, source: { nodeId: from, handleId: 'out' }, target: { nodeId: to, handleId: 'in' } });
+	const diagram = { nodes: idList.map(note), connections: [...['a', 'b', 'c', 'd', 'e'].map((id) => line(id, 'h')), line('p', 'q')] };
+	// free: each where the forces leave it, not on a grid, and still no overlap
+	for (const placement of ['free', 'grid']) {
+		const { diagram: placed } = diagramArrangeApply(diagram, diagramArrangerScatter, { registry: cardDiagramNodeRegistry, placement });
+		const rectOf = (id) => ({ ...placed.nodes.find((node) => node.id === id).position, width: 120, height: 40 });
+		for (const one of idList) for (const other of idList) {
+			if (one >= other) continue;
+			const [p, q] = [rectOf(one), rectOf(other)];
+			assert.ok(p.x + p.width <= q.x || q.x + q.width <= p.x || p.y + p.height <= q.y || q.y + q.height <= p.y, `${placement}: ${one} and ${other} overlap`);
+		}
+		const distance = (a, b) => Math.hypot(rectOf(a).x - rectOf(b).x, rectOf(a).y - rectOf(b).y);
+		assert.ok(['a', 'b', 'c', 'd', 'e'].every((id) => distance(id, 'h') < distance(id, 'z')), placement);
+		assert.ok(distance('p', 'q') < distance('p', 'h'), placement);
+	}
+	const { diagram: placed } = diagramArrangeApply(diagram, diagramArrangerScatter, { registry: cardDiagramNodeRegistry });
+	const rectOf = (id) => ({ ...placed.nodes.find((node) => node.id === id).position, width: 120, height: 40 });
+	// a handle on a side turns to where its lines go
+	const sideOf = (nodeId, handleId) => placed.nodes.find((node) => node.id === nodeId).handles.find((handle) => handle.id === handleId).anchor.side;
+	for (const id of ['a', 'b', 'c', 'd', 'e']) assert.equal(sideOf(id, 'out'), rectOf('h').x >= rectOf(id).x ? 'right' : 'left');
+	// the same graph placed again: the same places, from what was computed
+	assert.deepEqual(diagramArrangeApply(diagram, diagramArrangerScatter, { registry: cardDiagramNodeRegistry }).diagram.nodes.map((node) => node.position), placed.nodes.map((node) => node.position));
+	assert.ok(cardDiagramNodeRegistry.arrangerList.some((item) => item.id === 'scatter'));
 });

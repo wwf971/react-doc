@@ -27,7 +27,7 @@ diagram
 <!--renderComp=Anchor,id=diagram-er-dataverse-->
 ## Dataverse ER Diagram
 
-A `dataverse-table` node lists its columns as Key, Column, Logical name, and Type. A `dataverse-choice` node draws a global choice with a dashed border and a purple header; a connection to it attaches to its header. A handle is declared on an anchor (`column/<columnId>`), so it stays on its row when rows are reordered or renamed. Hover a column name to read its description. `isPositionLocked` keeps a node in place: the *Order* table below cannot be dragged even in edit mode.
+A `dataverse-table` node lists its columns as Key, Column, Logical name, and Type. A `dataverse-choice` node draws a choice (global, or an option set of one table) with a dashed border and a purple header, its options as Key, Option, Value, and Type, the option taking the room of the card; a connection to it attaches to its header. In the title of either, the logical name stands beside the name while both fit, else on a row of its own, broken anywhere so that a long one stays inside the card. A handle is declared on an anchor (`column/<columnId>`), so it stays on its row when rows are reordered or renamed. Hover a column name to read its description. `isPositionLocked` keeps a node in place: the *Order* table below cannot be dragged even in edit mode.
 
 ### Syntax
 
