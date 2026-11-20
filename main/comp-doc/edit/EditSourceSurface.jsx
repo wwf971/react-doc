@@ -54,6 +54,13 @@ import './DocEdit.css';
 //                       the surface, so what was selected last stays known to a
 //                       control beside it (the cell edit layer: a selected text
 //                       made a token, doc_page_impl_edit_cell.md)
+//   onKeyDownFirst(event, { caretOffset, selectionStart, selectionEnd, textLength })
+//                       optional: a key the editor around the surface takes
+//                       before the keys below (an item of a list: Enter splits
+//                       it, Backspace at its start joins it to the row above,
+//                       Tab changes its level); true when it took the key. the
+//                       offsets say where the caret or the selection is in the
+//                       text, textLength how long the text is
 //   onSubmitRequest()   Ctrl/Cmd + Enter
 //   onCancelRequest()   Escape
 //   onFocusShiftRequest(direction, { point })
@@ -75,6 +82,7 @@ export function EditSourceSurface({
   className = '',
   onTextChange,
   onSelectionChange,
+  onKeyDownFirst,
   onSubmitRequest,
   onCancelRequest,
   onFocusShiftRequest,
@@ -119,6 +127,17 @@ export function EditSourceSurface({
   const keyDownHandle = (event) => {
     if (event.nativeEvent?.isComposing) return;
     if (slashBinding.keyDown(event)) return;
+    if (onKeyDownFirst) {
+      const range = selectionRangeGet(event.currentTarget);
+      const caretOffset = caretOffsetGet(event.currentTarget);
+      const isTaken = onKeyDownFirst(event, {
+        caretOffset,
+        selectionStart: range?.start ?? caretOffset ?? 0,
+        selectionEnd: range?.end ?? caretOffset ?? 0,
+        textLength: surfaceTextGet(event.currentTarget).length,
+      });
+      if (isTaken) return;
+    }
     if (event.key === 'Escape') {
       event.preventDefault();
       onCancelRequest?.();
@@ -207,7 +226,10 @@ function surfaceTextGet(element) {
 
 function surfaceContentWrite(element, text, lineSpaceListGet) {
   if (!lineSpaceListGet) {
-    element.textContent = text;
+    // a text that ends with a line break gets one more: the browser draws no
+    // line after a last line break, and the caret could not stand there.
+    // surfaceTextGet takes the extra one off again
+    element.textContent = text.endsWith('\n') ? `${text}\n` : text;
     return;
   }
   const lineList = text.split('\n');

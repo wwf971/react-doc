@@ -149,6 +149,13 @@
   cursor: default;
 }
 
+/* the switch of the slash menu in an editor bar (EditSlashToggle): a
+   checkbox with its label. off, it is muted; on, it reads as the text of the
+   bar with a checked box */
+.doc-edit-slash-toggle[aria-checked='false'] {
+  color: var(--color-fd-muted-foreground);
+}
+
 /* ---------- body ---------- */
 
 /* the body is its own formatting context, so the outer margins of its first
@@ -877,15 +884,13 @@
 
 /* a surface in line mode: one element per source line, with the space its
    rendered counterpart has above it (comp-mdx/text/ListData.js
-   listLineSpaceListGet). the values are those of the prose typography of
-   the page: 0.5em between two items, 0.75em where a nested list starts or
-   ends, 1.25em (the paragraph margin) for the blank line of a loose list */
-.doc-edit-surface-line[data-space="item"] {
-  margin-top: 0.5em;
-}
-
+   listLineSpaceListGet). the values are those of the lists of the page
+   (DocPageMdx.css): the gap between two lines of a list, the same between
+   two items and where a nested list starts or ends (ListItemGap), and
+   1.25em (the paragraph margin) for the blank line of a loose list */
+.doc-edit-surface-line[data-space="item"],
 .doc-edit-surface-line[data-space="list"] {
-  margin-top: 0.75em;
+  margin-top: var(--doc-list-item-gap, 4px);
 }
 
 .doc-edit-surface-line[data-space="blank"] {
@@ -903,8 +908,9 @@
 
 /* source-like kinds (code, table, math, html, components, ...): monospace. kind "plain" is a
    component's own field (a cell of a table it draws): it keeps the type and the box of where it
-   is, and the component styles it */
-.doc-edit-surface:not([data-kind="paragraph"], [data-kind="heading"], [data-kind="list"], [data-kind="blockquote"], [data-kind="plain"]) {
+   is, and the component styles it. kind "listItem" is the own text of one list item, laid over
+   the rendered item in the type of the list (edit-structure/DocEditStruct.css) */
+.doc-edit-surface:not([data-kind="paragraph"], [data-kind="heading"], [data-kind="list"], [data-kind="listItem"], [data-kind="listItemBlock"], [data-kind="blockquote"], [data-kind="plain"]) {
   margin: 1rem 0;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--color-fd-border);

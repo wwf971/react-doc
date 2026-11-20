@@ -13,6 +13,7 @@ import { MultiLangHeadingText } from '../../../../built-in/comp-mdx/multi-lang/M
 import { headingTagCreate } from '../../../../built-in/comp-mdx/text/Heading.jsx';
 import { listTagCreate } from '../../../../built-in/comp-mdx/text/List.jsx';
 import { ParagraphTag } from '../../../../built-in/comp-mdx/text/Paragraph.jsx';
+import { codeFenceTagCreate } from '../../../../built-in/comp-mdx/text/CodeFence.jsx';
 
 // component mapping used when rendering compiled docs.
 // fumadocs defaults stay untouched (headings, code blocks, callout, ...);
@@ -47,6 +48,7 @@ export function buildMdxComps(configDoc, compByIdExtra = {}, options = {}) {
     comps[tag] = headingTagCreate(tag);
   }
   comps.p = ParagraphTag;
+  comps.pre = codeFenceTagCreate(options.sourcePath);
   for (const tag of ['ul', 'ol', 'li']) {
     comps[tag] = listTagCreate(tag);
   }

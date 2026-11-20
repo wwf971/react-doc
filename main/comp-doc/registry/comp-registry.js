@@ -103,6 +103,7 @@ export const compIdBuiltinByName = {
   Heading: 'common/Heading',
   Paragraph: 'common/Paragraph',
   List: 'common/List',
+  ListItem: 'common/ListItem',
   BlockSource: 'common/BlockSource',
 };
 

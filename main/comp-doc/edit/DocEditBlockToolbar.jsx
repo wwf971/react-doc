@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import {
-  ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, History, LoaderCircle, Pencil, Plus, Trash2, Upload, X,
+  ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, GripVertical, History, LoaderCircle, Pencil, Plus, Trash2, Upload, X,
 } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { assetRefLangIs, assetRefParse } from '../../frontend/src/lib/doc-asset-ref.js';
@@ -20,7 +20,13 @@ import './DocEdit.css';
 // move failure is open (DocEdit.css), so the document looks exactly as in
 // reading mode until the pointer reaches a block.
 //
-//   [Label]  [modes] [edit] [asset | to asset] [insert above] [insert below] [move up] [move down] [delete]
+//   [Label]  [grip] [modes] [edit] [asset | to asset] [insert above] [insert below] [move up] [move down] [delete]
+//
+// the grip is the handle of structural edit (doc_page_impl_edit_structure.md
+// #the-gestures): a click on it selects the block, which pins this toolbar,
+// and a drag moves the block to another border of the document. it is a
+// plain button marked data-struct-grip; the pointer of structural edit
+// (comp-doc/edit-structure/use-struct-pointer.js) reads it.
 //
 // the modes button (DocEditBlockModeButton, next to the label it belongs
 // to) exists for a component block with more than one view mode or edit
@@ -68,7 +74,7 @@ import './DocEdit.css';
 const ICON_SIZE = 14;
 
 export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ blockIndex, label, labelTitle = '' }) {
-  const { assetStore, editStore, eventRouter, onEvent: onEventPage } = useDocStores();
+  const { assetStore, editStore, eventRouter, onEvent: onEventPage, structStore } = useDocStores();
   const { path, model } = useDocEditDoc();
   const toolbarRef = useRef(null);
   const isAssetPanelAvailable = useAssetPanelIsAvailable();
@@ -88,6 +94,7 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
   const isAssetMoveConfirmHere = editStore.blockAssetMoveConfirmIs(path, blockIndex);
   const isAssetMoveAvailable = editStore.blockAssetMoveIsAvailable(path, blockIndex);
   const isReadOnly = editStore.blockIsReadOnly(path, blockIndex);
+  const isStructSelected = structStore?.selectionIsBlock(path, blockIndex) === true;
   // the asset item the block's data is: its deletion asks about it too
   const assetItem = isConfirmHere ? editStore.blockAssetItemGet(path, blockIndex) : undefined;
   // the pointer down that closes what is open only closes it: the click
@@ -111,6 +118,12 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
     void eventRouter.dispatch(event, { onEventHost: onEventPage });
   };
 
+  // a move of the selected block keeps the selection on it
+  const moveRequest = (direction) => {
+    if (isStructSelected) void structStore.selectionBlockMove(direction);
+    else blockEventDispatch('editBlockMoveRequest', { direction });
+  };
+
   // the insert button of a border toggles its menu
   const insertMenuToggle = (borderIndex) => {
     if (isMenuHere && menu.borderIndex === borderIndex) {
@@ -126,6 +139,21 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
     <div ref={toolbarRef} className="doc-edit-toolbar not-prose" role="toolbar" aria-label={`${label} block`}>
       <span className="doc-edit-toolbar-label" title={labelTitle || undefined}>{label}</span>
       <div className="doc-edit-toolbar-actions doc-button-group" role="group" aria-label="Block actions">
+        {structStore ? (
+          <button
+            type="button"
+            className="doc-edit-struct-grip"
+            data-struct-grip=""
+            data-block-index={blockIndex}
+            data-item-path=""
+            disabled={isSubmitting}
+            aria-pressed={isStructSelected}
+            title={isStructSelected ? 'Drag to move this block' : 'Drag to move this block · click to select it (Shift + click)'}
+            aria-label="Move or select this block"
+          >
+            <GripVertical aria-hidden="true" size={ICON_SIZE} strokeWidth={2} />
+          </button>
+        ) : null}
         <DocEditBlockModeButton blockIndex={blockIndex} size="toolbar" />
         <button type="button" disabled={isSubmitting || isReadOnly}
           title={isReadOnly ? 'This component is read-only' : 'Edit this block'} aria-label="Edit this block"
@@ -166,14 +194,14 @@ export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ block
         </button>
         <button type="button" disabled={isSubmitting || !editStore.blockMoveIsAvailable(path, blockIndex, 'up')}
           title="Move this block up" aria-label="Move this block up"
-          onClick={() => blockEventDispatch('editBlockMoveRequest', { direction: 'up' })}>
+          onClick={() => moveRequest('up')}>
           {isMoveHere && move.status === 'submitting' && move.direction === 'up'
             ? <LoaderCircle aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} className="doc-spin" />
             : <ChevronUp aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} />}
         </button>
         <button type="button" disabled={isSubmitting || !editStore.blockMoveIsAvailable(path, blockIndex, 'down')}
           title="Move this block down" aria-label="Move this block down"
-          onClick={() => blockEventDispatch('editBlockMoveRequest', { direction: 'down' })}>
+          onClick={() => moveRequest('down')}>
           {isMoveHere && move.status === 'submitting' && move.direction === 'down'
             ? <LoaderCircle aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} className="doc-spin" />
             : <ChevronDown aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} />}

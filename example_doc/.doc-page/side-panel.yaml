@@ -40,6 +40,11 @@ sidePanelById:
       - doc: ~example/mdx-doc-edit-in-place.md
         text: MDX Document In-place Editing
         tags: [guide]
+      # structural edit: selecting, moving and re-leveling blocks and list
+      # items, and the items of a list edited one by one (edit mode)
+      - doc: ~example/mdx-doc-edit-structure.md
+        text: Editing the Structure of a Document
+        tags: [guide]
       # moving and changing items in edit mode (MDX Document In-place Editing,
       # "Moving side-panel items", "Changing the side panel"): the first items
       # of this folder come from an included resource file, the last ones are

@@ -39,6 +39,85 @@
   -webkit-user-drag: none;
 }
 
+/* ---------- the lists of a document ----------
+   two measures of a list are config keys of the document (doc_page_impl_config.md):
+   ListItemGap, the space between two lines of a list, and ListMarkerGap, the
+   space between a bullet or number and its text. DocsShell sets them as the
+   variables below; the values here are those of the default layer.
+
+   one gap for every pair of lines: between two items, between an item and
+   its first sub-item, and between the last sub-item and the item after it.
+   the typography gives a nested list a larger margin than an item, so a
+   line that is indented would stand further from the line above it; here an
+   item has no margin of its own, an item after an item has the gap above it,
+   and a nested list has the gap above it and nothing below. an item of a
+   loose list keeps the margins of its paragraphs, which are larger.
+
+   the marker of an item is written as content, so that nothing but the
+   padding of the item stands between it and the text (a native marker keeps
+   a space of its own after it, which no rule can make smaller). a list the
+   author gave another kind of number (ol type=...) keeps its native markers.
+
+   these rules restate rules of the "prose" utility; they are not layered,
+   so they win over it, and they leave not-prose content alone like it. */
+:root {
+  --doc-list-item-gap: 4px;
+  --doc-list-marker-gap: 5px;
+}
+
+.prose :where(li):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.prose :where(li + li):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  margin-top: var(--doc-list-item-gap);
+}
+
+.prose :where(li > ul, li > ol):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  margin-top: var(--doc-list-item-gap);
+  margin-bottom: 0;
+}
+
+/* a code block of an item (an item that is a text block, the data of a
+   component under the text of an item) stands as near the lines around it
+   as a line would, not a paragraph's distance away. (in the view "plain" its
+   lines stand like lines of text: built-in/comp-mdx/text/code-fence.css) */
+.prose :where(li) > figure.shiki:not([data-view='plain']) {
+  margin-top: var(--doc-list-item-gap);
+  margin-bottom: var(--doc-list-item-gap);
+}
+
+/* an item without a text of its own (marked by lib/rehype-list-item.js): an
+   empty first line, so that it is a row like every item. without it the
+   marker of an item that only holds a list stands on the line of its first
+   sub-item, two items in one row */
+.prose :where(li.doc-li-textless):not(:where([class~="not-prose"], [class~="not-prose"] *))::before {
+  content: '\200b';
+  display: block;
+}
+
+/* a bullet hangs in the padding of its list, a number in a wider one */
+.prose :where(ul):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  padding-inline-start: 0.7em;
+}
+
+.prose :where(ol):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  padding-inline-start: 1.5em;
+}
+
+.prose :where(ul > li, ol > li):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  padding-inline-start: var(--doc-list-marker-gap);
+}
+
+.prose :where(ul > li):not(:where([class~="not-prose"], [class~="not-prose"] *))::marker {
+  content: '\2022';
+}
+
+.prose :where(ol:not([type]) > li):not(:where([class~="not-prose"], [class~="not-prose"] *))::marker {
+  content: counter(list-item) '.';
+}
+
 /* inline code (marked by lib/rehype-code-inline.js) is set smaller than the
    text around it; with the inherited line height its box would reach out of
    the line and make the line taller than the others. line-height does not

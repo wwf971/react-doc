@@ -40,6 +40,7 @@
 //   TagsDisplayAtLink...        tags beside document links
 //   TagsOverviewPopup...        popup listing the assets of one tag
 //   EditBlock...                in-place editing of blocks (doc_page_impl_edit.md)
+//   List...                     the spacing of the lists of a document
 export const configDefineListBuiltin = [
   {
     key: 'TagsDisplayAtMainPanelIsOn',
@@ -69,6 +70,25 @@ export const configDefineListBuiltin = [
     valueDefault: null,
     scope: 'doc',
     description: 'The font of code and of source being edited in a document, as a css font-family, for example to name a fallback for its language. Empty keeps the font of the page.',
+  },
+  {
+    // the space between two lines of a list, the same between two items and
+    // between an item and its first sub-item (css px). applied as the css
+    // variable --doc-list-item-gap (DocPageMdx.css)
+    key: 'ListItemGap',
+    type: 'number',
+    valueDefault: 4,
+    scope: 'doc',
+    description: 'The space between two lines of a list, in px: the same between two items and between an item and its sub-items.',
+  },
+  {
+    // the space between the bullet or number of a list item and its text
+    // (css px), as --doc-list-marker-gap
+    key: 'ListMarkerGap',
+    type: 'number',
+    valueDefault: 5,
+    scope: 'doc',
+    description: 'The space between the bullet or number of a list item and the start of its text, in px.',
   },
   {
     key: 'TagsDisplayAtLinkIsOn',
@@ -101,6 +121,24 @@ export const configDefineListBuiltin = [
     valueDefault: false,
     scope: 'page',
     description: 'Clicking a tag on a side-panel item opens the tag overview popup too.',
+  },
+  {
+    // the views of a fenced code block (doc_page_impl_mdx_code.md): the view
+    // of a block that names none in the info of its fence, by where it stands
+    key: 'CodeBlockView',
+    type: 'enum',
+    valueList: ['card', 'plain'],
+    valueDefault: 'card',
+    scope: 'doc',
+    description: 'The view of a fenced code block that names none (view=... in the info of its fence): card, a card with its own background, or plain, a thin frame around lines that stand like plain text.',
+  },
+  {
+    key: 'CodeBlockViewAsListItem',
+    type: 'enum',
+    valueList: ['card', 'plain'],
+    valueDefault: 'plain',
+    scope: 'doc',
+    description: 'The view of a fenced code block that is a list item (the whole text of the item, as Shift + Enter in an item writes it) and names none: by default plain, so that its lines keep the rhythm of the list.',
   },
   {
     // how the edit mode of a block is entered while the page is in edit mode:

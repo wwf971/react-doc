@@ -199,15 +199,23 @@ export class DocApiStore {
   // through the event layer. built for every call, read inside a computed
   // where the palette lists the apis, so it follows the stores
   contextBuild(principal: ApiPrincipal = { kind: 'api' }, depth = 0): any {
-    const { docStore, sourceStore, editStore, envStore, blockSelectStore, configStore, paletteStore, blockPopupStore, eventRouter, onEvent } = this.stores;
+    const { docStore, sourceStore, editStore, envStore, blockSelectStore, structStore, configStore, paletteStore, blockPopupStore, eventRouter, onEvent } = this.stores;
     const docPath: string = docStore?.docCurrentPath ?? '';
     const entry = docPath ? sourceStore?.entryByInternalPath.get(docPath) : undefined;
     const docPageAlias: string = docStore?.docPageCurrentAlias ?? '';
     const docPage = (sourceStore?.docPageList ?? []).find((item: any) => item.alias === docPageAlias);
     const session = editStore?.session;
-    const blockIndexListAt: number[] = session?.type === 'block' && session.path === docPath
+    const blockIndexListAt: number[] = (session?.type === 'block' || session?.type === 'item') && session.path === docPath
       ? [session.blockIndex]
       : blockSelectStore?.blockIndexListCurrentGet(docPath) ?? [];
+    // the list item the author is at: the one being edited, else the one
+    // selected for a structural edit (doc_page_impl_edit_structure.md)
+    const selectionStruct = structStore?.selectionGet(docPath);
+    const itemAt = session?.type === 'item' && session.path === docPath
+      ? { blockIndex: session.blockIndex, path: String(session.itemPath), scope: 'item' }
+      : selectionStruct && selectionStruct.scope !== 'block'
+        ? { blockIndex: selectionStruct.blockIndex, path: selectionStruct.itemPath, scope: selectionStruct.scope }
+        : undefined;
     const blockAt = blockIndexListAt.length > 0 ? editStore?.docEditGet(docPath)?.model?.blockList[blockIndexListAt[0]] : undefined;
     const context: any = {
       principal,
@@ -240,7 +248,13 @@ export class DocApiStore {
         compName: blockAt.component?.compName ?? '',
         id: blockAt.component?.props?.id ?? '',
       } : undefined,
-      selection: { blockIndexList: blockIndexListAt },
+      item: itemAt,
+      selection: {
+        blockIndexList: blockIndexListAt,
+        struct: selectionStruct
+          ? { blockIndex: selectionStruct.blockIndex, itemPath: selectionStruct.itemPath, scope: selectionStruct.scope }
+          : undefined,
+      },
       stores: this.stores,
       apiExists: (id: string) => this.apiExists(id),
       call: (id: string, params?: any) => this.call(id, params, { principal: { kind: 'api', id: principal.kind }, depth: depth + 1 }),

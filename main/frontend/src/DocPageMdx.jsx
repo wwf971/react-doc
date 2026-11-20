@@ -16,6 +16,7 @@ import { DocNavStore } from './store/DocNavStore.js';
 import { DocSidePanelStore, sidePanelEventTypeList } from './store/DocSidePanelStore.js';
 import { DocPasteStore } from './store/DocPasteStore.js';
 import { DocBlockSelectStore } from './store/DocBlockSelectStore.js';
+import { DocEditStructStore, structEventTypeList } from './store/DocEditStructStore.js';
 import { DocPanelLayoutStore } from './store/DocPanelLayoutStore.js';
 import { DocWorkspaceStore } from './store/DocWorkspaceStore.js';
 import { DocSlashStore } from './store/DocSlashStore.js';
@@ -208,8 +209,11 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     const sidePanelStore = new DocSidePanelStore({ sourceStore, sourceFileStore, docStore, editStore });
     // blocks selected in block selection mode, then copied or moved, and
     // the blocks the author is at in any mode with blocks
-    // (doc_page_impl_block_ops.md#selecting-blocks)
-    const blockSelectStore = new DocBlockSelectStore({ editStore });
+    // (doc_page_impl_edit_structure.md#block-selection-mode)
+    // structural edit in edit mode: the block or list item selected, the
+    // edits of list items, a drag (doc_page_impl_edit_structure.md)
+    const structStore = new DocEditStructStore({ editStore });
+    const blockSelectStore = new DocBlockSelectStore({ editStore, structStore });
     // a pasted Markdown / MDX text reviewed as blocks, then inserted after
     // the blocks the author is at (doc_page_impl_block_ops.md)
     const pasteStore = new DocPasteStore({
@@ -298,6 +302,11 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       handle: (event) => editStore.eventHandle(event),
     });
     eventRouter.routeAdd({
+      name: 'editStructure',
+      typeList: structEventTypeList,
+      handle: (event) => structStore.eventHandle(event),
+    });
+    eventRouter.routeAdd({
       name: 'source',
       typeList: sourceEventTypeList,
       handle: (event) => sourceFileStore.eventHandle(event),
@@ -344,6 +353,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       sidePanelStore,
       pasteStore,
       blockSelectStore,
+      structStore,
       panelLayoutStore,
       slashStore,
       cellStore,
@@ -375,6 +385,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     stores.docStore.init();
     stores.compStateStore.init();
     stores.editStore.init();
+    stores.structStore.init();
     stores.assetStore.init();
     stores.blockPopupStore.init();
     stores.serviceStore.init();
@@ -391,6 +402,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       stores.serviceStore.dispose();
       stores.blockPopupStore.dispose();
       stores.assetStore.dispose();
+      stores.structStore.dispose();
       stores.editStore.dispose();
       stores.compStateStore.dispose();
       stores.docStore.dispose();
@@ -524,6 +536,19 @@ const DocsShell = observer(function DocsShell() {
     style.setProperty('--font-mono', fontMonoFamily);
     return () => style.removeProperty('--font-mono');
   }, [fontMonoFamily]);
+  // the spacing of the lists of the document shown (ListItemGap, ListMarkerGap),
+  // as css variables the list rules of DocPageMdx.css read
+  const listItemGap = configStore.valueDocGet(docPathCurrent ?? '', 'ListItemGap');
+  const listMarkerGap = configStore.valueDocGet(docPathCurrent ?? '', 'ListMarkerGap');
+  useEffect(() => {
+    const { style } = document.documentElement;
+    const variableByName = { '--doc-list-item-gap': listItemGap, '--doc-list-marker-gap': listMarkerGap };
+    for (const [name, value] of Object.entries(variableByName)) {
+      if (Number.isFinite(Number(value)) && value !== null && value !== '') style.setProperty(name, `${Math.max(0, Number(value))}px`);
+      else style.removeProperty(name);
+    }
+    return () => Object.keys(variableByName).forEach((name) => style.removeProperty(name));
+  }, [listItemGap, listMarkerGap]);
   const sidePanelProps = useMemo(() => ({
     ...sidePanelConfig,
     components: {

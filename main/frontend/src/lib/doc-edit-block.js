@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { commentMarkerParse } from './remark-comment-comp.js';
 import { splitFrontmatter } from './mdx-compile.js';
+import { listAnnotate, listDescribe, listModelBuild } from './doc-edit-list.js';
 import { anchorCompNameIs } from '../../../../built-in/comp-mdx/anchor/AnchorData.js';
 import { multiLangCompNameIs } from '../../../../built-in/comp-mdx/multi-lang/MultiLangData.js';
 
@@ -24,6 +25,11 @@ import { multiLangCompNameIs } from '../../../../built-in/comp-mdx/multi-lang/Mu
 // every marker comment belongs to the node after it, so the comment and its
 // yaml block are never two things. the same holds for a marker that ends a
 // paragraph line ("text<!--renderComp=X-->" followed by a block).
+//
+// a list block is more than its lines: its items are structure the author
+// edits one by one (doc_page_impl_edit_structure.md). the block of a list
+// carries the model of its items (block.list, lib/doc-edit-list.js), and the
+// compiled list is marked so that every <li> names its item.
 //
 // two steps share this module:
 //   remarkEditBlock      compile time: groups the root children, wraps every
@@ -67,6 +73,10 @@ export function remarkEditBlock(options = {}) {
     if (!Array.isArray(tree?.children)) return;
     const groupList = rootGroupListBuild(tree.children);
     const blockList = groupList.map((group, index) => blockDescribe(group, index));
+    // the items of a list block are found in the rendered body by their path
+    groupList.forEach((group, index) => {
+      if (blockList[index].kind === 'list') listAnnotate(group.nodeList[group.nodeList.length - 1]);
+    });
     tree.children = groupList.map((group, index) => ({
       type: 'mdxJsxFlowElement',
       name: BLOCK_WRAPPER_NAME,
@@ -120,6 +130,8 @@ function blockDescribe(group, index) {
   // the prose rules of the page depend on the heading level of the block
   // before ("h2 + *"); the wrapper carries it so the edit body can follow them
   if (kind === 'heading') block.depth = nodeMain.depth;
+  // the items of a list, by the positions the parser gives them
+  if (kind === 'list') block.list = { lineStart: nodeMain.position?.start?.line ?? 1, described: listDescribe(nodeMain) };
   if (kind === 'component') {
     block.component = {
       compName: markerBinding.compName,
@@ -189,20 +201,25 @@ function positionPointGet(point) {
 // result:
 //   lineList, lineCount
 //   frontmatter   { lineStart, lineEnd, text } or undefined
-//   blockList     [{ index, kind, nodeType, lineStart, lineEnd, text, depth?, component? }]
+//   blockList     [{ index, kind, nodeType, lineStart, lineEnd, text, depth?, component?, list?, listMessage? }]
 //     depth       heading level of a heading block
+//     list        the item model of a list block (lib/doc-edit-list.js); when the
+//                 list is written in a way the model does not take (tabs as
+//                 indentation), listMessage says why and the block is edited
+//                 as a whole only
 //     component   { compName, props, nodeType, lang, markerLine, raw,
 //                   textBefore, markerText, textBetween, nodeText }
 //                 textBefore + markerText + textBetween + nodeText === text
 //                 markerLine: the line of the marker comment in the content
 //                 without frontmatter, as the reading view numbers it
 //                 (DocComp sourceLine)
-export function editDocModelBuild({ source, blockListCompiled }) {
+export function editDocModelBuild({ source, blockListCompiled, format = 'md' }) {
   const { content } = splitFrontmatter(source);
   const prefix = source.slice(0, source.length - content.length);
   const lineOffset = lineCountGet(prefix);
   const lineList = source.split('\n');
   const lineBoundaryList = lineBoundaryListBuild(content);
+  const lineListContent = lineList.slice(lineOffset);
 
   const frontmatter = prefix === ''
     ? undefined
@@ -225,6 +242,18 @@ export function editDocModelBuild({ source, blockListCompiled }) {
     if (blockCompiled.component) {
       block.component = componentDetailBuild(blockCompiled.component, text, offsetBlock);
     }
+    if (blockCompiled.list) {
+      const built = listModelBuild({
+        listDescribed: blockCompiled.list.described,
+        lineList: lineListContent,
+        lineOffset,
+        // the lines of the block before its list: an Anchor marker
+        linePrefixList: lineListContent.slice(lineStart - 1, blockCompiled.list.lineStart - 1),
+        format,
+      });
+      if (built.code === 0) block.list = built.data;
+      else block.listMessage = built.message;
+    }
     return block;
   });
 
@@ -241,7 +270,7 @@ export function editTextModelBuild({ text, format }) {
   });
   const tree = processor.parse(content);
   const blockListCompiled = rootGroupListBuild(tree.children ?? []).map((group, index) => blockDescribe(group, index));
-  return editDocModelBuild({ source: text, blockListCompiled });
+  return editDocModelBuild({ source: text, blockListCompiled, format });
 }
 
 function componentDetailBuild(componentCompiled, text, offsetBlock) {

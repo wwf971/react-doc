@@ -166,7 +166,15 @@ When the block offers it, the editor receives `config.edit.slash = { store, cont
 
 ### On and off
 
-The switch in the editor bar (`EditSlashToggle`, `[/ Slash]`, highlighted when on) turns the slash mode on and off for the whole page. Off, typing `/` is plain text. The choice is kept in the browser (`localStorage`, `doc-page-edit-slash`), and it is on by default. The button keeps its width in both states, so the bar does not move.
+The switch in the editor bar (`EditSlashToggle`) turns the slash mode on and off for the whole page. Off, typing `/` is plain text. The choice is kept in the browser (`localStorage`, `doc-page-edit-slash`), and it is on by default.
+
+<!--renderComp=DiagramText-->
+```text
+[☑ / menu]    on:  "/" at the start of a word opens the menu of actions
+[☐ / menu]    off: "/" is a character like any other
+```
+
+It is drawn as a checkbox with its label, not as a button that is filled while on: a fill is the only sign of such a button, and in a grey theme a filled button reads as one that is greyed out and does nothing. A box with or without a check says its state in any theme, and its tooltip says what the menu is for. The label is the same in both states, so the bar keeps its width.
 
 ## Beyond the document editors
 

@@ -115,7 +115,10 @@ context = {
   doc           { path, title, ext, hash }           the current document, undefined without one
   block         { index, kind, compName, id }        the block the author is at: the open session's,
                                                     else the first of the selection; undefined otherwise
-  selection     { blockIndexList }
+  item          { blockIndex, path, scope }          the list item the author is at: the one being edited,
+                                                    else the one selected; undefined otherwise
+  selection     { blockIndexList, struct }           struct: what is selected for a structural edit in edit
+                                                    mode, { blockIndex, itemPath, scope } (doc_page_impl_edit_structure.md)
   stores        every store of the page (never serialized)
   call(id, params)                 another api, with the same principal, 8 levels deep at most
   eventDispatch(type, data, source) a report through the event layer, placement 'api' (below)
@@ -141,10 +144,13 @@ An api that changes the document does not call a store where a component would r
 | `doc/blockDataSet { raw, block?, doc? }` | the complete new data of a component block, inline or in its asset item (`dataReplaceRequest`) | editing is available |
 | `doc/blockPropSet { props, block?, doc? }` | the props of a component block's marker changed, inline or asset-backed (`blockPropSetRequest`, [Changing its own block](doc_page_impl_mdx_comp.md#changing-its-own-block)) | editing is available |
 | `doc/blockTextSet { text, block?, doc? }` | the lines of one block rewritten, as a session typed and saved | edit mode is on |
-| `doc/blockInsert { text, borderIndex?, doc? }`, `doc/blockDelete { block?, doc? }` | blocks inserted at a border, a block removed ([Block-level operations](doc_page_impl_block_ops.md)) | editing is available |
+| `doc/blockInsert { text, borderIndex?, doc? }`, `doc/blockDelete { block?, doc? }`, `doc/blockMove { direction? \| borderIndex?, block?, doc? }` | blocks inserted at a border, a block removed, a block swapped with its neighbor or moved to a border ([Block-level operations](doc_page_impl_block_ops.md)) | editing is available |
+| `doc/itemListGet { block?, doc? }`, `doc/itemGet { item?, block?, doc? }` | the items of a list block as the edit layer models them (path, depth, lines, own text, number of sub-items); one item ([The list model](doc_page_impl_edit_structure.md#the-list-model)) | the edit api answers |
+| `doc/itemTextSet`, `doc/itemInsert`, `doc/itemDelete`, `doc/itemIndent`, `doc/itemOutdent`, `doc/itemMove`, `doc/itemMoveTo`, `doc/itemListTypeSet` | the structural edits of a list item, each as the event its toolbar reports ([The apis of structural edit](doc_page_impl_edit_structure.md#the-apis)) | editing is available |
 | `edit/modeToggle`, `edit/modeSet { isOn }`, `edit/blockSelectModeToggle` | the modes of the page | editing is available |
 | `edit/sessionLeave`, `edit/sessionCancel` | the open session saved or dropped | a block is being edited |
-| `edit/blockEnter { block?, editModeId?, doc? }` | a block opened in an edit mode (`editBlockEnterRequest`) | edit mode is on |
+| `edit/blockEnter { block?, editModeId?, doc? }`, `edit/itemEnter { item?, block?, doc? }` | a block opened in an edit mode (`editBlockEnterRequest`); the own text of a list item opened (`editItemEnterRequest`) | edit mode is on |
+| `edit/select { block?, item?, scope? }`, `edit/selectGrow`, `edit/selectClear`, `edit/selectionGet`; `edit/selectionMove { direction }`, `edit/selectionEnter`, `edit/selectionDeleteAsk` | the selection of structural edit, and what the keys of the selection do ([Structural edit](doc_page_impl_edit_structure.md#the-keys-of-the-selection)) | edit mode is on; something is selected |
 | `page/contextGet` | the context above, serializable | |
 | `settings/open { tab? }`, `settings/close`, `settings/toggle`; `search/open`; `palette/open`, `palette/close`, `palette/toggle` | the dialogs of the page | |
 | `find/open`, `find/close` | the search of the part of the page under the pointer or holding the focus, such as a diagram ([Finding in a part of the page](#finding-in-a-part-of-the-page)) | such a part is active; its search is open |
@@ -153,7 +159,7 @@ An api that changes the document does not call a store where a component would r
 | `playground/listGet`, `playground/reset { id? }`, `playground/delete { id? }` | the playground documents, created or reset from their templates, and deleted ([Playground documents](doc_page_impl_test.md#the-apis)) | the development server serves the page |
 | `api/listGet`, `hotkey/listGet` | the registry itself: every api with its parameters and availability; every key with the binding that answers it and those it passes over | |
 
-**Locating a block.** The `block` parameter of a document api is the index of the block among the root-level blocks of the document, or the `id` of its marker (`<!--renderComp=TestCaseTable,id=login-asset-->`, the identity [`dataRef`](doc_page_impl_mdx_comp.md#component-data-reference) uses); without it, the block the author is at. `doc` is any link target form; without it, the current document. The block model comes from the edit layer and is read through the edit api, so these apis exist on the development server; a built page keeps the apis that need no server.
+**Locating a block.** The `block` parameter of a document api is the index of the block among the root-level blocks of the document, or the `id` of its marker (`<!--renderComp=TestCaseTable,id=login-asset-->`, the identity [`dataRef`](doc_page_impl_mdx_comp.md#component-data-reference) uses); without it, the block the author is at. `doc` is any link target form; without it, the current document. **Locating a list item**: `block` names its list block and `item` its path in the list (`"1.0.2"`: its index among the items of its parent, at every depth); without `item`, the item the author is at, with the scope of the selection. The block model comes from the edit layer and is read through the edit api, so these apis exist on the development server; a built page keeps the apis that need no server.
 
 ### Finding in a part of the page
 
@@ -254,8 +260,9 @@ frontend/src/lib/doc-api.js                apiDefine, apiByIdBuild, params check
                                            apiDeclaredDefine (yaml aliases)
 frontend/src/store/DocApiStore.ts          the registry (layers + providers), the context, call, the call records,
                                            the notice, the remote bridge of the page, uiHandle (search)
-comp-doc/api/api-registry.js               the package's apis by id, from api-nav.js, api-doc.js, api-edit.js, api-page.js,
-                                           api-object.js, api-playground.js
+comp-doc/api/api-registry.js               the package's apis by id, from api-nav.js, api-doc.js, api-edit.js, api-struct.js
+                                           (list items, the selection of structural edit), api-page.js, api-object.js,
+                                           api-playground.js
 comp-doc/api/api-service.js                the provider of the service instances' apis
 comp-doc/api/DocApiNotice.jsx, DocApi.css  the notice of a failed or answered call
 comp-doc/settings/ApiSettings.jsx          the API tab of the settings panel

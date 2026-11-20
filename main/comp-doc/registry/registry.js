@@ -39,6 +39,7 @@ import { TagOverview } from '../../../built-in/comp-mdx/tag/TagOverview.jsx';
 import { BlockSource } from '../../../built-in/comp-mdx/text/BlockSource.jsx';
 import { Heading } from '../../../built-in/comp-mdx/text/Heading.jsx';
 import { List } from '../../../built-in/comp-mdx/text/List.jsx';
+import { ListItem } from '../../../built-in/comp-mdx/text/ListItem.jsx';
 import { Paragraph } from '../../../built-in/comp-mdx/text/Paragraph.jsx';
 import { compDefine, compNativeDefine } from './comp-registry.js';
 import {
@@ -263,6 +264,8 @@ export const compById = {
   'common/Heading': compDefine(Heading, { placementList: ['edit'] }),
   'common/Paragraph': compDefine(Paragraph, { placementList: ['edit'], expose: { meta: { isEditSlashEnabled: true } } }),
   'common/List': compDefine(List, { placementList: ['edit'], expose: { meta: { isEditSlashEnabled: true } } }),
+  // one item of a list block, edited alone (doc_page_impl_edit_structure.md#editing-an-item)
+  'common/ListItem': compDefine(ListItem, { placementList: ['edit'], expose: { meta: { isEditSlashEnabled: true } } }),
   'common/BlockSource': compDefine(BlockSource, { placementList: ['edit'] }),
   // compatibility ids: existing consumer configs map tags to these ids
   'common/DocFileTree': compFileTree,

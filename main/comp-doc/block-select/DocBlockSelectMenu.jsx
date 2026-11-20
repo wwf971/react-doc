@@ -7,7 +7,7 @@ import '../edit/DocEdit.css';
 import './DocBlockSelect.css';
 
 // The right-click menu of the selected blocks
-// (doc_page_impl_block_ops.md#selecting-blocks). Open state lives in
+// (doc_page_impl_edit_structure.md#block-selection-mode). Open state lives in
 // DocBlockSelectStore.contextMenu, set by DocBlockSelectBlock; the menu is
 // the Menu of @wwf971/react-comp-misc injected as config.components.Menu,
 // at the point of the click, styled like the mode menu of a block.

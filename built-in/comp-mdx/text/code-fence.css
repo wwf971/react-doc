@@ -1,0 +1,101 @@
+/* The views of a fenced code block (CodeFence.jsx,
+   main/doc_page_impl_mdx_code.md#the-views-of-a-code-block). The view is
+   data-view of the figure. "card" is the look of the Fumadocs code block and
+   needs no rule here.
+
+   "plain": the lines of the block stand where plain text would stand. a
+   quiet frame (a soft line, corners that are hardly round, a tint that is
+   barely there, no shadow), little room between the frame and the lines,
+   and lines as high as the lines of the text around the block.
+
+   the frame takes room the text has not (its line and the room inside it,
+   --code-plain-inset-block in all). the block gives that room back with a
+   negative margin, so its first line is as far from the line above as a line
+   of plain text would be, and the line below as far from its last line. */
+figure.shiki[data-view='plain'] {
+  --code-plain-pad-block: 3px;
+  --code-plain-pad-inline: 10px;
+  --code-plain-inset-block: calc(var(--code-plain-pad-block) + 1px);
+  --padding-left: var(--code-plain-pad-inline);
+  --padding-right: var(--code-plain-pad-inline);
+  margin-top: calc(-1 * var(--code-plain-inset-block));
+  margin-bottom: calc(-1 * var(--code-plain-inset-block));
+  border: 1px solid color-mix(in srgb, var(--color-fd-foreground) 15%, transparent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--color-fd-foreground) 2.5%, transparent);
+  box-shadow: none;
+  /* the type of the text around it decides the height of a line */
+  font-size: inherit;
+  line-height: inherit;
+}
+
+figure.shiki[data-view='plain'] > [role='region'] {
+  padding-top: var(--code-plain-pad-block);
+  padding-bottom: var(--code-plain-pad-block);
+  font-size: 0.875em;
+  line-height: inherit;
+}
+
+figure.shiki[data-view='plain'] pre,
+figure.shiki[data-view='plain'] code {
+  line-height: inherit;
+}
+
+/* a line of the block is as high as a line of the text around the block,
+   whatever the size of its font */
+figure.shiki[data-view='plain'] .line {
+  min-height: 1lh;
+  /* the same room on both sides: the copy button is small and in the corner,
+     no line keeps a place free for it */
+  padding-right: var(--code-plain-pad-inline);
+}
+
+/* a block of text (language text: lines whose breaks are kept, no code) is
+   text: the font, the size and the color of the text around it, and a long
+   line wrapped like a line of text. code keeps the code font and its
+   columns. */
+figure.shiki[data-view='plain']:is([data-language='text'], [data-language='txt'], [data-language='plaintext'], [data-language='plain']) > [role='region'] {
+  font-size: inherit;
+}
+
+figure.shiki[data-view='plain']:is([data-language='text'], [data-language='txt'], [data-language='plaintext'], [data-language='plain']) pre {
+  width: auto;
+  min-width: 0;
+  font-family: inherit;
+  color: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+figure.shiki[data-view='plain']:is([data-language='text'], [data-language='txt'], [data-language='plaintext'], [data-language='plain']) code {
+  font-family: inherit;
+  white-space: inherit;
+}
+
+/* outside a list the block is a block of the document: the distance of a
+   block above and below it, less the room of the frame */
+:where(.prose) > figure.shiki[data-view='plain'],
+.doc-edit-block > figure.shiki[data-view='plain'] {
+  margin-top: calc(1rem - var(--code-plain-inset-block));
+  margin-bottom: calc(1rem - var(--code-plain-inset-block));
+}
+
+/* the copy button would cover a block of one line: it is small, in the
+   corner, and shows when the pointer is on the block */
+figure.shiki[data-view='plain'] > div:not([role='region']) {
+  top: 1px;
+  right: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+figure.shiki[data-view='plain']:hover > div:not([role='region']),
+figure.shiki[data-view='plain']:focus-within > div:not([role='region']) {
+  opacity: 1;
+}
+
+figure.shiki[data-view='plain'] > div:not([role='region']) > button {
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0.2rem;
+}

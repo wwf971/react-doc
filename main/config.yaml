@@ -102,6 +102,10 @@ configDefault:
   TagsDisplayAtLinkPosition: after          # document level: before | after
   TagsOverviewPopupIsOn: true               # page level
   TagsOverviewPopupAtSidePanelItemIsOn: false   # page level
+  ListItemGap: 4                            # document level: px between two lines of a list
+  ListMarkerGap: 5                          # document level: px between a bullet or number and its text
+  CodeBlockView: card                       # document level: the view of a fenced code block (card | plain)
+  CodeBlockViewAsListItem: plain            # document level: the view of a code block that is a list item
   compConfig:
     Image:
       PasteReplaceConfirmIsOn: true         # ask before a paste replaces an existing image

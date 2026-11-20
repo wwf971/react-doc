@@ -1,4 +1,4 @@
-/* Block selection mode (doc_page_impl_copy_paste.md#selecting-blocks). like
+/* Block selection mode (doc_page_impl_edit_structure.md#block-selection-mode). like
    edit mode it adds nothing to the flow: a hovered or selected block is
    marked by an outline and a tint, which take no room. */
 

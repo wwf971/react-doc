@@ -9,7 +9,7 @@ import { listLineSpaceListGet } from './ListData.js';
 import './text-block.css';
 
 // The editor shared by the default text components (Heading, Paragraph,
-// List, BlockSource). The block is edited where it is displayed: its source
+// List, ListItem, BlockSource). The block is edited where it is displayed: its source
 // replaces the rendered block in the same place, in the block's own element
 // and typography (a paragraph as a <p>, a heading as its <h2>, a list or a
 // code block as a surface of their kind), so the author types into the page
@@ -28,6 +28,13 @@ import './text-block.css';
 //   config.edit.slash              present when the block offers the slash mode
 //                                  (doc_page_impl_edit_slash.md): handed to the
 //                                  surface, and its switch is shown in the bar
+//   config.edit.kindSurface        the kind of the surface when it is not the
+//                                  kind of the block ('listItem': one item of a
+//                                  list block, in the type of the list)
+//   surfaceKeyDown, surfaceSelectionChange
+//                                  optional: what the editor around this one
+//                                  hands to the surface (onKeyDownFirst,
+//                                  onSelectionChange of EditSourceSurface)
 //
 // events (handled by the edit layer):
 //   editDraftChange { text }      typed text; what a leave saves
@@ -39,14 +46,16 @@ import './text-block.css';
 //                                 the last line: go on to the neighbor block.
 //                                 reported with the caret position as the
 //                                 event point, so the neighbor keeps the x
-export const TextBlockEdit = observer(function TextBlockEdit({ data = {}, config = {}, onEvent, children }) {
+export const TextBlockEdit = observer(function TextBlockEdit({
+  data = {}, config = {}, onEvent, children, surfaceKeyDown, surfaceSelectionChange,
+}) {
   const edit = config.edit ?? {};
   const session = edit.session ?? {};
   const textDraft = typeof session.textDraft === 'string' ? session.textDraft : String(data.text ?? '');
   const draftVersion = session.draftVersion ?? 0;
   const isLocked = session.status === 'submitting';
   const label = edit.label ?? 'Block';
-  const kind = edit.block?.kind ?? 'other';
+  const kind = edit.kindSurface ?? edit.block?.kind ?? 'other';
   // the element of the surface follows the text set by a control (a heading
   // level), not the text being typed, so the caret is never lost mid-word
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,6 +83,8 @@ export const TextBlockEdit = observer(function TextBlockEdit({ data = {}, config
       isLocked={isLocked}
       ariaLabel={`${label} source`}
       onTextChange={(text) => void onEvent?.('editDraftChange', { text })}
+      onKeyDownFirst={surfaceKeyDown}
+      onSelectionChange={surfaceSelectionChange}
       onSubmitRequest={submitRequest}
       onCancelRequest={cancelRequest}
       onFocusShiftRequest={edit.isSurfaceFloating

@@ -7,6 +7,7 @@ import { Plus } from '../../frontend/UICommon.js';
 import { DocEditBlock } from './DocEditBlock.jsx';
 import { DocEditBlockEditor } from './DocEditBlockEditor.jsx';
 import { DocEditInsertMenu } from './DocEditInsertMenu.jsx';
+import { DocEditStructLayer } from '../edit-structure/DocEditStructLayer.jsx';
 import { editFocusRelease, useEditOutsidePointer } from './use-edit-outside-pointer.js';
 import './DocEdit.css';
 
@@ -27,10 +28,15 @@ import './DocEdit.css';
 // stays theirs.
 //
 // block selection mode shows this same body, its blocks selectable instead
-// of editable (DocEditBlock, doc_page_impl_block_ops.md#selecting-blocks).
+// of editable (DocEditBlock, doc_page_impl_edit_structure.md#block-selection-mode).
 // in edit mode the body tells which blocks a text selection touches
 // (DocBlockSelectStore.textSelectionSet), so what acts "here" knows them: a
 // paste goes after them.
+//
+// structural edit (selecting, moving and re-leveling blocks and list items,
+// the toolbar and the editor of a list item) lies over the body as one layer
+// (DocEditStructLayer, doc_page_impl_edit_structure.md); the body says what
+// is selected, so the toolbars of everything else stay hidden.
 //
 // when the document does not compile, the error is shown in place of the
 // blocks; the whole source stays editable from the toolbar, so the file can
@@ -44,7 +50,7 @@ import './DocEdit.css';
 const modelEmpty = { blockList: [], lineList: [], lineCount: 0 };
 
 export const DocEditBody = observer(function DocEditBody({ path, docEdit, mdxComps }) {
-  const { editStore, sourceStore, pasteStore, blockSelectStore, compConfigHost } = useDocStores();
+  const { editStore, sourceStore, pasteStore, blockSelectStore, structStore, compConfigHost } = useDocStores();
   const isPasteReviewable = Boolean(pasteStore && compConfigHost.panelComponent);
   const entry = sourceStore.entryByInternalPath.get(path);
   const format = entry?.ext === 'mdx' ? 'mdx' : 'md';
@@ -71,6 +77,8 @@ export const DocEditBody = observer(function DocEditBody({ path, docEdit, mdxCom
   // block selection mode: Escape drops the selection, unless a menu or the
   // dialog of the selection is open (they take Escape themselves)
   const isSelectMode = editStore.isBlockSelectMode;
+  // the block or list item selected for a structural edit
+  const selectionStruct = isSelectMode ? undefined : structStore?.selectionGet(path);
   useEffect(() => {
     if (!isSelectMode || !blockSelectStore) return undefined;
     const keyDownHandle = (event) => {
@@ -106,6 +114,8 @@ export const DocEditBody = observer(function DocEditBody({ path, docEdit, mdxCom
         className="doc-edit-body"
         data-stale={editStore.docEditIsStale(path) ? '' : undefined}
         data-select-mode={isSelectMode ? '' : undefined}
+        data-struct-selected={selectionStruct ? (selectionStruct.scope === 'block' ? 'block' : 'item') : undefined}
+        data-struct-dragging={structStore?.drag?.path === path ? '' : undefined}
       >
         {isTopSession ? <DocEditTopSession /> : null}
         {docEdit.status === 'error' ? (
@@ -123,6 +133,7 @@ export const DocEditBody = observer(function DocEditBody({ path, docEdit, mdxCom
               // only the changed block renders anew (lib/MdxBody.jsx)
               <MdxBody key={path} Body={Body} components={mdxCompsEdit} />
             ) : null}
+            {!isSelectMode && Body && !docEdit.isContentEmpty ? <DocEditStructLayer bodyRef={bodyRef} /> : null}
           </>
         )}
       </div>

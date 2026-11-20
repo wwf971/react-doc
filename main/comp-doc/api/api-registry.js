@@ -4,6 +4,7 @@ import { apiByIdNav } from './api-nav.js';
 import { apiByIdPage } from './api-page.js';
 import { apiByIdObject } from './api-object.js';
 import { apiByIdPlayground } from './api-playground.js';
+import { apiByIdStruct } from './api-struct.js';
 
 // all apis the package registers, by id ({layer}/{name}), the counterpart
 // of compById in registry/registry.js and of slashActionById in
@@ -17,6 +18,7 @@ export const apiById = {
   ...apiByIdNav,
   ...apiByIdDoc,
   ...apiByIdEdit,
+  ...apiByIdStruct,
   ...apiByIdPage,
   ...apiByIdObject,
   ...apiByIdPlayground,

@@ -1,17 +1,18 @@
-<!-- Design of the block-level operations of a document: inserting, deleting, moving, duplicating, copying and pasting whole blocks. Parent document: doc_page_impl.md. Writes go through the edit layer: doc_page_impl_edit.md. -->
+<!-- Design of the block-level operations of a document: inserting, deleting, moving, duplicating, copying and pasting whole blocks. Parent document: doc_page_impl.md. Writes go through the edit layer: doc_page_impl_edit.md. How blocks and list items are selected, dragged and moved by keys: doc_page_impl_edit_structure.md. -->
 
 # Block-level Operations: Design
 
-In edit mode a document is a list of root-level **blocks**: a heading, a paragraph, a list, a comment-marked component with its fenced block ([Block model](doc_page_impl_edit.md#block-model)). Besides changing what is inside a block, the author changes the list itself: blocks are inserted, deleted, moved, duplicated, copied or moved to another place, and pasted. This document is about these block-level operations: what they act on, where the author finds them, and how each is written. Every one of them is a write of the edit layer, hash-checked against the text it was chosen in and recorded in the edit history like any other change of a document ([In-place editing](doc_page_impl_edit.md)).
+In edit mode a document is a list of root-level **blocks**: a heading, a paragraph, a list, a comment-marked component with its fenced block ([Block model](doc_page_impl_edit.md#block-model)). Besides changing what is inside a block (a **content edit**), the author changes the list itself: blocks are inserted, deleted, moved, duplicated, copied or moved to another place, and pasted. These are the **structural edits** of blocks. This document is about them as operations: what they act on, where the author finds them, and how each is written. How a block is selected, dragged, and moved by keys, and the same for the items of a list block, is the interaction design of [Structural edit](doc_page_impl_edit_structure.md). Every one of them is a write of the edit layer, hash-checked against the text it was chosen in and recorded in the edit history like any other change of a document ([In-place editing](doc_page_impl_edit.md)).
 
-Operations work on whole blocks: blocks are inserted together between two blocks of a document (or at its start or end). Putting blocks into the middle of a block, or as items of an existing list, is not supported yet; the place model is already a tree so that it can grow there ([Choosing where the blocks go](#choosing-where-the-blocks-go)). The one way into a block is a paste into the component being edited, which hands the text to the component instead of writing it ([below](#pasting-into-the-component-being-edited)).
+Operations work on whole blocks: blocks are inserted together between two blocks of a document (or at its start or end). The items of a list block are structure of their own, created, moved and re-leveled one by one ([Lists](doc_page_impl_edit_structure.md#lists)); putting a block into a list as an item is not offered yet, and the place model is already a tree so that it can grow there ([Choosing where the blocks go](#choosing-where-the-blocks-go)). The one way into a block is a paste into the component being edited, which hands the text to the component instead of writing it ([below](#pasting-into-the-component-being-edited)).
 
 ## The operations
 
 | Operation | Acts on | Offered in | Written by |
 | --- | --- | --- | --- |
 | Insert a new block | a border | edit mode: the toolbar's insert buttons and the insert menu ([edit](doc_page_impl_edit.md#floating-controls)) | `blockCreate` / `blockInsertOperationBuild` |
-| Move up / down | one block | edit mode: the toolbar; block selection mode: the menu | `blockMoveApply` (`blockSwapOperationBuild`) |
+| Move up / down | one block | edit mode: the toolbar, Alt + ↑ / ↓ on the selected block; block selection mode: the menu | `blockMoveApply` (`blockSwapOperationBuild`) |
+| Move to a border | one block | edit mode: a drag of the block (Shift + drag, or the grip of its toolbar) | `DocEditStructStore.blockMoveTo` (`blockListMove`) |
 | Duplicate above / below | one block | block selection mode: the menu | `blockListCopy` into the same document |
 | Delete | one block | edit mode: the toolbar (with its asset item, optionally) | `blockDelete` |
 | Delete | the selected blocks | block selection mode: the menu | `blockListDelete` |
@@ -43,33 +44,9 @@ The operations of edit mode's toolbar are specified with the toolbar ([Floating 
 
 A block is named by its index in the document's block model, and an index means something only in the text it was read in: after any write the blocks may be numbered otherwise. So everything that holds blocks for later holds the hash of the text with them (the selection, the blocks the author is at, the blocks of an open copy / move dialog), counts as empty when the document has another text, and a write is refused when its source document changed since the blocks were chosen (`DocEditStore.blockSourceGet`, `code: -2`).
 
-### Selecting blocks
+### Selecting blocks, and the blocks the author is at
 
-Blocks are selected in **block selection mode**, a mode of the page beside view and edit mode. Its switch (`DocBlockSelectToggle`, a list-with-checks icon) sits next to the edit switch, in the document toolbar and in the floating navigation, and exists under the same condition (a development server answering the edit api). The two modes are never on together: switching one on switches the other off, and leaving edit mode leaves its open session, which saves the draft (`DocEditStore.isBlockSelectMode`, `blockSelectModeSet`). Switching the mode on starts with the blocks a text selection of edit mode touched selected ([the blocks the author is at](#the-blocks-the-author-is-at)), nothing otherwise.
-
-The mode shows the body of edit mode, so its blocks are the edit layer's blocks, but nothing in it edits: every root-level block is wrapped in `DocBlockSelectBlock` instead of the editable wrapper (`DocEditBlock` chooses), with the same element and attributes and the same zero-height anchor, so switching between the modes moves nothing on the page. A hovered block gets a dashed outline, a selected one a solid outline and a light tint; outlines and backgrounds take no room ([the no-jitter rule](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule)). Text cannot be selected in the mode, so Shift + click does not drag a text selection. A block that renders nothing (a comment, trailing markers) keeps its chip, and the chip shows the selection.
-
-```text
-click               this block only; it becomes the anchor
-Ctrl / ⌘ + click    this block in or out of the selection; it becomes the anchor
-Shift + click       the blocks from the anchor to this one (with Ctrl / ⌘: added to the selection)
-Escape              nothing selected
-right click         the menu of the selection
-```
-
-A click selects only: links, buttons and fields inside a block do nothing in the mode. A right click on a selected block opens the menu for the whole selection; on a block that is not selected, that block alone becomes the selection, then the menu opens. The selection belongs to one document and to its text (`DocBlockSelectStore.selection { path, hash, blockIndexList, blockIndexAnchor }`).
-
-### The blocks the author is at
-
-Some operations act "here": a paste goes after the blocks the author is at, block selection mode starts with them selected. The page keeps them in one place, `DocBlockSelectStore.blockIndexListCurrentGet(path)`, so an operation asks instead of reading the DOM:
-
-```text
-block selection mode     the selected blocks
-an open block session    its block
-edit mode otherwise      the root-level blocks a text selection of the page touches (a caret in a block counts)
-```
-
-The text selection is reported by the body of edit mode (`DocEditBody`, on `selectionchange`) as `textSelection { path, hash, blockIndexList }`; a selection outside the body (the side panel, a dialog) is none. The reading body has no blocks, so in reading mode there are none.
+One block is selected in edit mode (Shift + click, or the grip of its toolbar), which pins its toolbar; several are selected in **block selection mode**, a mode of the page beside edit mode. Both, and the one place the page keeps "the blocks the author is at" (`DocBlockSelectStore.blockIndexListCurrentGet`: the selection, the block of an open session, the blocks a text selection touches), are specified with the selection: [The selection](doc_page_impl_edit_structure.md#the-selection), [Block selection mode](doc_page_impl_edit_structure.md#block-selection-mode), [The blocks the author is at](doc_page_impl_edit_structure.md#the-blocks-the-author-is-at).
 
 ### Choosing where the blocks go
 
@@ -107,31 +84,19 @@ A paste can go into another document: the picker's document field takes any `md`
 
 The hover toolbar of every block carries the operations on that one block: insert above / below (the insert menu, with Paste… in its Text row), move up / down, delete (confirmed in the toolbar, with the block's asset item optionally), and to asset. They are specified with the toolbar ([Floating controls](doc_page_impl_edit.md#floating-controls)); a move is reported as the event `editBlockMoveRequest`, so the host application sees it first.
 
+### The selected block, in edit mode
+
+A block selected in edit mode has its toolbar pinned, moves with Alt + ↑ / ↓, and is dragged to any border of its document ([Structural edit: blocks](doc_page_impl_edit_structure.md#blocks), [Dragging](doc_page_impl_edit_structure.md#dragging)).
+
 ### The menu of the selection, in block selection mode
 
-```text
-Copy Blocks To…      the copy / move dialog, Copy first
-Move Blocks To…      the same dialog, Move first
-─────
-Duplicate Above      a copy of the block right above / below it
-Duplicate Below
-Move Up              the block swapped with its neighbor: the toolbar's move
-Move Down            (duplicate and move: one selected block only, greyed out with the reason otherwise)
-─────
-Delete Blocks…       the menu asks first: "Delete the 3 selected blocks?"  Delete · Cancel
-```
-
-The menu is the injected `Menu` (`config.components.Menu`), styled like the mode menu of a block (`DocBlockSelectMenu`). Its state is `DocBlockSelectStore.contextMenu { path, blockIndex, offset, openId, step, status, message }`.
-
-- **It stays with its block.** The menu is anchored to the point of the block that was right-clicked (`config.anchor`: the block's rect plus the offset of the click in it), not to the window, so it moves with the block when the page scrolls.
-- **Opening again.** A right click while it is open must not leave a stale menu at the old point or reuse the state of the old one: opening is always a close, then an opening on the next animation frame with a new `openId`, by which the menu is keyed. A pointer going down elsewhere closes the menu, and the click of that same gesture only closes: it does not change the selection.
-- **Writes from the menu.** Duplicate, Move and Delete write at once (Delete after its confirmation step, which Escape leaves). While the write runs the entries are locked and the menu stays; written, the menu closes and the selection is dropped, since the document has a new text; failed, the menu shows why. Copy / Move To… open the dialog instead.
+The right-click menu of the selected blocks offers Copy Blocks To…, Move Blocks To…, Duplicate Above / Below, Move Up / Down, and Delete Blocks…; its entries and its behavior are specified with the mode ([The menu of the selection](doc_page_impl_edit_structure.md#the-menu-of-the-selection)). What its entries write is below.
 
 ### A paste on the page, in edit mode
 
 There are two ways in, both only on a document the edit layer can write (an `md` / `mdx` file of the source):
 
-- **A paste on the page.** When the author pastes while nothing editable has focus (a click on an empty part of the page, or some text of the page selected, then Ctrl/⌘ + V), the body of edit mode (`DocEditBody`) takes the plain text of the clipboard and opens the review with it. A paste into a field, a block's editor, or a dialog is left to that element, so pasting inside a paragraph being edited still pastes into the paragraph. While a component that takes pastes is being edited, the review starts as a paste into it ([below](#pasting-into-the-component-being-edited)) and the session stays open; otherwise the open session is left first, saving it, and the blocks go right after the [blocks the author is at](#the-blocks-the-author-is-at) (the last block a text selection touches), or to the end of the current document when there are none, until the author chooses another place.
+- **A paste on the page.** When the author pastes while nothing editable has focus (a click on an empty part of the page, or some text of the page selected, then Ctrl/⌘ + V), the body of edit mode (`DocEditBody`) takes the plain text of the clipboard and opens the review with it. A paste into a field, a block's editor, or a dialog is left to that element, so pasting inside a paragraph being edited still pastes into the paragraph. While a component that takes pastes is being edited, the review starts as a paste into it ([below](#pasting-into-the-component-being-edited)) and the session stays open; otherwise the open session is left first, saving it, and the blocks go right after the [blocks the author is at](doc_page_impl_edit_structure.md#the-blocks-the-author-is-at) (the last block a text selection touches), or to the end of the current document when there are none, until the author chooses another place.
 - **Paste… in the insert menu.** The last entry of the menu's Text row opens the review with an empty text, as blocks at the border the menu was opened for (before the next block, or at the end). The text field of the review is open and focused, for the author to paste into. The page does not read the clipboard by itself, because that asks the browser for a permission.
 
 Both are offered only when the host supplies the panel component that frames the dialog (`config.compConfigHost.panelComponent`, as for the asset panel).
@@ -312,8 +277,10 @@ frontend/src/lib/doc-edit-block.js      editTextModelBuild: the block model of a
                                         blockListMoveOperationListBuild: the operations of the writes
 frontend/src/store/DocPasteStore.ts     the open review, its target, the pipeline result, the place, Insert,
                                         the hand-over to the component being edited
-frontend/src/store/DocBlockSelectStore.ts the selection, the blocks the author is at, the menu (duplicate,
-                                        move, delete), the copy / move dialog
+frontend/src/store/DocBlockSelectStore.ts the selection of block selection mode, the blocks the author is at,
+                                        the menu (duplicate, move, delete), the copy / move dialog
+frontend/src/store/DocEditStructStore.ts the block selected in edit mode, its move and its drag
+                                        (doc_page_impl_edit_structure.md)
 frontend/src/store/DocEditStore.ts      isBlockSelectMode; blockMoveApply, blockListInsert, blockListCopy,
                                         blockListMove, blockListDelete: the writes; sessionReceiverSet,
                                         sessionEventSend: the page to the editor of the session;
@@ -328,7 +295,8 @@ frontend/plugin/doc-edit-server.ts      sourceFileDeleteApply: the files moved t
                                         the document written
 frontend/src/store/DocPanelLayoutStore.ts where the dialogs were moved, their sizes (comp-doc/popup/use-panel-layout.js)
 comp-doc/paste/DocPastePopup.jsx        the review dialog (+ DocPaste.css)
-comp-doc/block-select/                  DocBlockSelectToggle, DocBlockSelectBlock, DocBlockSelectMenu,
+comp-doc/block-select/                  DocBlockSelectToggle, DocBlockSelectBlock, DocBlockSelectMenu (the mode:
+                                        doc_page_impl_edit_structure.md#block-selection-mode),
                                         DocBlockTransferPopup (+ DocBlockSelect.css)
 comp-doc/block-list/BlockListReview.jsx the blocks, full or one line each, with checkboxes (+ BlockList.css)
 comp-doc/block-list/BlockPlacePicker.jsx the document, its tree, the positions

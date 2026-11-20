@@ -39,3 +39,37 @@ hotkeyMap:
       api: find/close
       when: findOpen
       description: close the search of that part
+    # structural edit (doc_page_impl_edit_structure.md#the-keys-of-the-selection):
+    # the keys of the block or list item selected in edit mode (Shift + click),
+    # taken only while something is selected. they stand after the keys above,
+    # so while a selection exists alt+up moves it instead of navigating
+    - key: escape
+      api: edit/selectClear
+      when: structSelected
+      description: close what is open on the selection, else end the selection
+    - key: enter
+      api: edit/selectionEnter
+      when: structSelected
+      description: edit the content of the selected block or list item
+    - key: tab
+      api: doc/itemIndent
+      when: structItemSelected
+      description: the selected list item one level deeper
+    - key: shift+tab
+      api: doc/itemOutdent
+      when: structItemSelected
+      description: the selected list item one level up
+    - key: alt+up
+      api: edit/selectionMove
+      params: { direction: up }
+      when: structSelected
+    - key: alt+down
+      api: edit/selectionMove
+      params: { direction: down }
+      when: structSelected
+    - key: delete
+      api: edit/selectionDeleteAsk
+      when: structSelected
+    - key: backspace
+      api: edit/selectionDeleteAsk
+      when: structSelected

@@ -12,6 +12,8 @@
 //   caretPlaceInitial(element, selectionInitial)  the one entry the editors use; selectionInitial is
 //                                                 'all' | 'start' | 'end' | { type: 'point', clientX, clientY }
 //                                                 | { type: 'line', line: 'first' | 'last', clientX }
+//                                                 | { type: 'offset', offset }
+//   caretPlaceAtOffset(element, offset)           the caret after that many characters of the text
 //   caretRectGet(element)                         the rectangle of the collapsed caret, or undefined
 //   selectionSetAll(element)                      the whole text selected
 
@@ -32,6 +34,32 @@ export function caretPlaceInitial(element, selectionInitial) {
   if (selectionInitial?.type === 'line') {
     caretPlaceOnLine(element, selectionInitial.line, selectionInitial.clientX);
     return;
+  }
+  if (selectionInitial?.type === 'offset') {
+    caretPlaceAtOffset(element, selectionInitial.offset);
+    return;
+  }
+  caretPlaceAtEdge(element, 'end');
+}
+
+// the caret after `offset` characters of the text of the element (the end
+// when the text is shorter): an editor opened again on the text it was
+// editing puts the caret back where it was
+export function caretPlaceAtOffset(element, offset) {
+  const selection = window.getSelection?.();
+  if (!selection) return;
+  let offsetRest = Math.max(0, Number(offset) || 0);
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (offsetRest <= node.length) {
+      const range = document.createRange();
+      range.setStart(node, offsetRest);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return;
+    }
+    offsetRest -= node.length;
   }
   caretPlaceAtEdge(element, 'end');
 }

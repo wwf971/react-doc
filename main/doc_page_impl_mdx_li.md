@@ -1,8 +1,8 @@
-<!-- Design of components as list elements. Parent document: doc_page_impl.md -->
+<!-- Design of components as list elements, and of how the source of a list item is written. Parent document: doc_page_impl.md. The page editing list items one by one: doc_page_impl_edit_structure.md -->
 
 # Components in Lists: Design
 
-A component should be usable as an element of a list item at any depth, in ordered and unordered lists. Components that span several source lines, or that render as a rectangular block (a code block, an image, a diagram), are the important case. This document explains why that is hard in Markdown, which writing styles were considered, and the stipulated style. The user-facing version with live examples is the example document `example_doc/comp-custom-list-el.md`.
+A component should be usable as an element of a list item at any depth, in ordered and unordered lists. Components that span several source lines, or that render as a rectangular block (a code block, an image, a diagram), are the important case. This document explains why that is hard in Markdown, which writing styles were considered, and the stipulated style. The same rules are what the page follows when it writes a list itself, an item edited or moved in edit mode ([Items written by the page](#items-written-by-the-page)). The user-facing version with live examples is the example document `example_doc/comp-custom-list-el.md`.
 
 ## The problem
 
@@ -117,6 +117,91 @@ A marker comment directly followed by inline code marks that inline code. The co
 ```
 
 A registered component opts in by declaring placement `commentInline`; the tag mention (`Tag`, see [Tag system](doc_page_impl_tag.md#tags-mentioned-in-text)) is the first. A marker comment followed by anything else inside text is ignored.
+
+## Items written by the page
+
+In edit mode the page writes lists itself: the text of one item is edited alone, and items are created, moved, deleted and re-leveled one by one ([Structural edit: lists](doc_page_impl_edit_structure.md#lists)). The author types the text of an item from the left edge, without a marker and without thinking of columns; the page puts every line where the parser reads it as part of that item. It does so by the stipulation above, applied mechanically (`frontend/src/lib/doc-edit-list.js`).
+
+<!--renderComp=DiagramText-->
+````text
+what the author types           what is written, for the item "2." under "- a"
+as the text of the item
+                                - a
+see the block:                    2. see the block:
+```js                                ```js
+const a = 1;                         const a = 1;
+  indented();                          indented();
+```                                  ```
+and after                            and after
+                                     - a sub-item of it
+                                  ↑  ↑
+                                  │  text column of the item
+                                  │  = marker column + width of "2." + its spaces
+                                  marker column = text column of the item above
+````
+
+1. **The first line follows the marker; every other line stands at the text column of the item.** A line keeps the indentation it has beyond that column (the line inside the code block above), and a blank line stays empty. Nothing can fall out of the item, because nothing is written left of its text column.
+2. **Everything an item holds is kept relative to its text column**, not as written lines. When the item goes to another depth, or its marker gets wider (`9.` becoming `10.`), all its lines are shifted together, with the nested lists and the fenced blocks under it. A component block of an item therefore moves with the item and stays its component.
+3. **An item is written like the list it joins**: the marker of its new siblings, the spaces after it, their indentation. A numbered list is counted again from its first number; a list numbered all the same (`1.` `1.`) stays so.
+4. **No blank line is added or removed**, since a blank line makes a list loose: an item put into a loose list is parted like the others, and a level change leaves the blank lines above an item where they are.
+5. **What is tidied.** A lazily indented continuation line (a text line left of its item's text column) is written at the text column; a tab at the start of a typed line becomes four spaces.
+6. **An item without a text** is written as its marker alone. Where Markdown would not read that as an item (the first sub-item right under a line of text, [below](#what-markdown-would-read-otherwise)), the page writes an empty comment as its text, `<!---->` in a `.md` document and `{/**/}` in an `.mdx` one: it renders nothing, and reading the list the page takes it for no text again. The author never sees it in the editor of the item, and it goes when the item gets a text.
+7. **A text whose line breaks are kept** is written as a fenced block of language `text`, the whole own text of the item (Shift + Enter in the editor of an item, [The keys of an item](doc_page_impl_edit_structure.md#the-keys-of-an-item)). The opening fence follows the marker, so the item is a code block and nothing else; the page edits the lines inside and writes the fences itself, longer than any run of backquotes a line starts with. A text is written so while it holds a line break, and as a plain line when it is down to one (`itemTextWrite`). Such a block is drawn in the view `plain` by default, its lines standing like lines of text ([Fenced code blocks](doc_page_impl_mdx_code.md#the-views-of-a-code-block)).
+
+<!--renderComp=DiagramText-->
+````text
+an item without a text                 an item whose line breaks are kept
+
+- fruit                                - fruit
+  - <!---->      the first sub-item      - ```text
+  - apple        under a text line         two lines
+-                elsewhere: the            of an address
+- bread          marker alone              ```
+````
+
+### What Markdown would read otherwise
+
+Some texts, written perfectly by these rules, are still not read as the items that were meant. The page does not try to list them all: **every result is parsed again before it is written**, with the parser that renders the page (as `md` or `mdx`), and compared with the items that were meant; a result that reads otherwise is refused with a reason ([The write of a structural edit](doc_page_impl_edit_structure.md#the-write-of-a-structural-edit)). What this catches in practice:
+
+| Written | Read as | What the page does |
+| --- | --- | --- |
+| a code fence opened in the text of an item and never closed | the nested lists of the item, as code | the text is refused; the session stays open |
+| `-` alone, as the first sub-item right under a line of text | a heading underline of that line | such an item is written with an empty comment as its text (rule 6) |
+| any marker alone, right under a line of text | text of that line: an empty item cannot interrupt a paragraph | the same |
+| a numbered list starting at another number than 1, right under a line of text | text of that line | a nested list the page creates starts at 1 |
+| a list indented with tabs | columns that depend on the tab stops | the list has no item model: it is edited as a whole |
+
+List items typed at the end of the text of an item read as sub-items, and that is accepted: they become the first sub-items of the item.
+
+## The spacing of a list
+
+Two measures of a list are config keys of the document ([Config system](doc_page_impl_config.md#the-default-layer)), so a doc page, a source rule or one document sets them:
+
+| Key | Default | Measure |
+| --- | --- | --- |
+| `ListItemGap` | `4` px | the space between two lines of a list |
+| `ListMarkerGap` | `5` px | the space between a bullet or number and the start of the text |
+
+<!--renderComp=DiagramText-->
+```text
+• fruit
+      ↕ ListItemGap      an item and its first sub-item
+  • apple
+      ↕ ListItemGap      two items
+  • pear
+      ↕ ListItemGap      the last sub-item and the item after it
+• bread
+ ↔ ListMarkerGap
+```
+
+- **One gap for every pair of lines.** The typography of the page gives a nested list a larger margin than an item, so a line would stand further from the line above it once it is indented, and a list would change its rhythm when an item changes its level. Here an item has no margin of its own, an item after an item has the gap above it, and a nested list has the gap above it and nothing below (`DocPageMdx.css`, the lists of a document). Indenting an item with Tab moves it sideways and nothing else.
+- **Every item is a row.** An item without a text of its own (its marker alone, or nothing but a nested list under it) gets no line from a browser: the marker of `-` holding a list stands on the line of its first sub-item, two items in one row. `rehypeListItemTextless` (`lib/rehype-list-item.js`, in the compile of a document and of markdown inside a component) marks such an item with the class `doc-li-textless`, and the stylesheet gives it an empty first line. White space, a comment and an MDX expression that is only a comment are no text, so the empty comment of rule 6 above counts as none.
+- **A loose list** (blank lines between its items) keeps the margins of its paragraphs, which are larger: the blank lines say the author wants room.
+- **A code block of an item** in the view `card` (a block under the text of an item, the data of a component) has the same gap above and below it as a line. A block that is the item, in the view `plain`, has no distance of its own: its first line stands where the line of a plain item would ([The plain view keeps the rhythm of text](doc_page_impl_mdx_code.md#the-plain-view-keeps-the-rhythm-of-text)).
+- **The marker is written as content** (`li::marker { content }`), so that nothing but the padding of the item stands between it and the text; a native marker keeps a space of its own after it, which no rule can make smaller. A numbered list the author gave another kind of number (`<ol type="a">`) keeps its native markers.
+- **Not-prose content is left alone**, like by the typography: a list inside a component that marks its root `not-prose` keeps the look of the component.
+
+The whole list edited as source keeps the same rhythm: the lines of its surface take the gap from the same variable ([the lines keep their rhythm](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule)).
 
 ## Rendering inside list items
 

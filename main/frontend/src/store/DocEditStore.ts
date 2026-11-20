@@ -32,6 +32,17 @@ import {
   frontmatterReplaceOperationBuild,
   remarkEditBlock,
 } from '../lib/doc-edit-block.js';
+import {
+  itemBlockFormatGet,
+  itemTextWrite,
+  LIST_SCOPE_ITEM,
+  itemChildListGet,
+  listItemDelete,
+  listItemGet,
+  listItemMergeUp,
+  listItemTextGet,
+  listItemTextSet,
+} from '../lib/doc-edit-list.js';
 
 // Edit layer store (design: doc_page_impl_edit.md). It sits beside the
 // reading stores and never changes them: the document on disk is the source
@@ -41,15 +52,15 @@ import {
 //   isAvailable       the environment offers editing (DocEnvStore "edit": a
 //                     development server answers the edit api)
 //   isEditMode        the global toggle
-//   isBlockSelectMode the block selection mode (doc_page_impl_block_ops.md
-//                     #selecting-blocks): the body of edit mode without its
+//   isBlockSelectMode the block selection mode (doc_page_impl_edit_structure.md
+//                     #block-selection-mode): the body of edit mode without its
 //                     controls, whose blocks are selected instead of edited;
 //                     never on together with isEditMode
 //   blockEnterMode    how a block enters its edit mode (config EditBlockEnterMode)
 //   sourceByPath      text + hash of a document as read from disk
 //   docEditByPath     the document compiled with block wrappers + its block model
-//   session           the one block being edited, or the frontmatter / whole document,
-//                     in one edit mode of the block (editModeId)
+//   session           the one block being edited, or one item of a list block, or the
+//                     frontmatter / whole document, in one edit mode of the block (editModeId)
 //   blockViewModeById the view mode a reader picked for a block, by "path#index"
 //   blockModeMenu     the one mode menu (view modes / edit modes of a block) that is open
 //   insertMenu        the one insert menu that is open, anchored to a block toolbar
@@ -79,7 +90,8 @@ import {
 // the events of the edit domain (doc_page_impl_event.md) arrive at
 // eventHandle, routed there by the event layer.
 
-export type EditSessionType = 'block' | 'frontmatter' | 'document';
+// 'item': one item of a list block, its own text (doc_page_impl_edit_structure.md#editing-an-item)
+export type EditSessionType = 'block' | 'frontmatter' | 'document' | 'item';
 
 // where the caret is when the editing surface opens
 // (doc_page_impl_edit.md#where-the-caret-goes): at the end (an edit started
@@ -87,13 +99,16 @@ export type EditSessionType = 'block' | 'frontmatter' | 'document';
 // from a template: typing replaces it), at the text nearest to a point of
 // the screen (the block was clicked there), or on the first / last line at
 // an x of the screen (entered from the neighbor block by a focus shift: the
-// caret keeps its column). points are viewport coordinates.
+// caret keeps its column), or at an offset of the text (an item entered
+// again after its level changed while it was edited). points are viewport
+// coordinates.
 export type EditSelectionInitial =
   | 'all'
   | 'start'
   | 'end'
   | { type: 'point'; clientX: number; clientY: number }
-  | { type: 'line'; line: 'first' | 'last'; clientX: number };
+  | { type: 'line'; line: 'first' | 'last'; clientX: number }
+  | { type: 'offset'; offset: number };
 
 export type EditPoint = { clientX: number; clientY: number };
 
@@ -107,8 +122,17 @@ export type EditSessionReceiver = {
 export type EditSession = {
   type: EditSessionType;
   path: string;
-  // block: index of the block; -1 for the frontmatter and the whole document
+  // block: index of the block; item: index of its list block; -1 for the
+  // frontmatter and the whole document
   blockIndex: number;
+  // item: the path of the item in its list block (lib/doc-edit-list.js)
+  itemPath?: string;
+  // item: 'block' when the own text of the item is one fenced code block (a
+  // text block: a text whose line breaks are kept). the session then edits
+  // the lines inside the fences, and itemBlockInfo is what follows the
+  // opening fence ("text"); the fences are written back when it is saved
+  itemFormat?: 'block';
+  itemBlockInfo?: string;
   // the block was created from the insert menu by this session; cancel removes it
   isCreated: boolean;
   // the edit mode the block is open in (doc_page_impl_mdx_comp.md#view-modes-and-edit-modes):
@@ -294,6 +318,7 @@ export const editEventTypeList = [
   'editCancelRequest',
   'editFocusShiftRequest',
   'editBlockEnterRequest',
+  'editItemEnterRequest',
   'editBlockMoveRequest',
   'editBlockAssetMoveRequest',
   'dataReplaceRequest',
@@ -655,7 +680,7 @@ export class DocEditStore {
           ],
         },
       });
-      const model = editDocModelBuild({ source: text, blockListCompiled });
+      const model = editDocModelBuild({ source: text, blockListCompiled, format });
       stateNext = {
         status: 'done',
         hash,
@@ -783,6 +808,11 @@ export class DocEditStore {
     return blockIndex === undefined || session.blockIndex === blockIndex;
   }
 
+  // the session is on this item of this list block
+  sessionItemIs(path: string, blockIndex: number, itemPath: string): boolean {
+    return this.sessionIs(path, 'item', blockIndex) && this.session!.itemPath === itemPath;
+  }
+
   get isSessionOpen(): boolean {
     return this.session !== undefined;
   }
@@ -824,6 +854,65 @@ export class DocEditStore {
       selectionInitial: options.selectionInitial ?? 'end',
     });
     return true;
+  }
+
+  // opens one item of a list block: its own text, without its marker and its
+  // indentation, is what the author edits (lib/doc-edit-list.js). the item
+  // keeps its place and what is under it.
+  async sessionItemStart(
+    path: string,
+    blockIndex: number,
+    itemPath: string,
+    options: { isCreated?: boolean; selectionInitial?: EditSelectionInitial; textDraft?: string } = {},
+  ): Promise<boolean> {
+    if (this.sessionItemIs(path, blockIndex, itemPath)) return true;
+    const isLeft = await this.sessionLeaveForIndexAction(path);
+    if (!isLeft) return false;
+    const list = this.docEditByPath[path]?.model?.blockList[blockIndex]?.list;
+    if (!list || !listItemGet(list, itemPath)) return false;
+    const textOwn = listItemTextGet(list, itemPath);
+    // an item that is one fenced block is edited as the lines inside it
+    const blockFormat = itemBlockFormatGet(textOwn);
+    this.sessionStart({
+      type: 'item',
+      path,
+      blockIndex,
+      itemPath,
+      itemFormat: blockFormat ? 'block' : undefined,
+      itemBlockInfo: blockFormat?.info,
+      textInitial: blockFormat ? blockFormat.textInner : textOwn,
+      isCreated: options.isCreated === true,
+      editModeId: COMP_EDIT_MODE_SOURCE_ID,
+      selectionInitial: options.selectionInitial ?? 'end',
+    });
+    // a text typed before the item was opened (a draft carried over an edit
+    // of the list) is the draft the session starts with
+    if (options.textDraft !== undefined && this.session) this.session.textDraft = options.textDraft;
+    return true;
+  }
+
+  // the own text of the item of the open session as a save would write it:
+  // the draft, inside its fences for a text block (itemTextWrite: a text
+  // block of text that is down to one line is a plain line)
+  sessionItemTextGet(): string {
+    const session = this.session;
+    if (!session || session.type !== 'item') return '';
+    const text = session.textDraft.replace(/\r\n/g, '\n');
+    return session.itemFormat === 'block' ? itemTextWrite(text, session.itemBlockInfo ?? '') : text;
+  }
+
+  // the open session ends without a write: its draft is not saved, and a
+  // thing it created stays. for an edit of the structure that takes the
+  // draft into its own write (doc_page_impl_edit_structure.md#the-keys-of-an-item)
+  sessionDiscard() {
+    if (!this.session || this.session.status === 'submitting' || this.leavePromise) return false;
+    this.session = undefined;
+    return true;
+  }
+
+  // a failure said in the open session, which stays open with its draft
+  sessionMessageSet(message: string) {
+    this.sessionFail(message);
   }
 
   // ---------- view modes and edit modes of a block ----------
@@ -969,7 +1058,7 @@ export class DocEditStore {
   // `path`. when the saved draft changed the number of blocks (a paragraph
   // split in two, a block removed), the indices the action was started with
   // no longer mean the same blocks; the action is dropped and nothing opens.
-  private async sessionLeaveForIndexAction(path: string): Promise<boolean> {
+  async sessionLeaveForIndexAction(path: string): Promise<boolean> {
     const isSessionOpen = this.session !== undefined;
     const blockCountBefore = this.blockCountGet(path);
     const isLeft = await this.sessionLeave();
@@ -1016,7 +1105,8 @@ export class DocEditStore {
   }
 
   private sessionStart(
-    sessionPartial: Pick<EditSession, 'type' | 'path' | 'blockIndex' | 'textInitial' | 'isCreated' | 'editModeId' | 'selectionInitial'>,
+    sessionPartial: Pick<EditSession, 'type' | 'path' | 'blockIndex' | 'textInitial' | 'isCreated' | 'editModeId' | 'selectionInitial'>
+      & Pick<Partial<EditSession>, 'itemPath' | 'itemFormat' | 'itemBlockInfo'>,
   ) {
     runInAction(() => {
       this.insertMenu = undefined;
@@ -1170,7 +1260,53 @@ export class DocEditStore {
       }
       return true;
     }
+    if (session.type === 'item' && session.isCreated) return this.sessionItemCreatedRemove(session);
     this.session = undefined;
+    return true;
+  }
+
+  // an item created by its session is taken out of its list again: the
+  // creation was canceled, or the item was left as it was created
+  private async sessionItemCreatedRemove(session: EditSession): Promise<boolean> {
+    const block = this.docEditByPath[session.path]?.model?.blockList[session.blockIndex];
+    const itemPath = String(session.itemPath);
+    const item = block?.list ? listItemGet(block.list, itemPath) : undefined;
+    let result;
+    if (!block?.list) result = { code: -1, message: 'The list no longer exists.', data: undefined };
+    else if (item && itemChildListGet(item).length > 0) {
+      // the new item holds items (Enter at the end of an item gives the new
+      // item what was under it): they go back where they were, under the
+      // row above; with no row above, they take the place of the item
+      result = listItemMergeUp(block.list, itemPath, { textItem: '' });
+      if (result.code !== 0) result = listItemDelete(block.list, itemPath, LIST_SCOPE_ITEM);
+    } else result = listItemDelete(block.list, itemPath);
+    if (result.code !== 0) {
+      this.sessionFail(result.message);
+      return false;
+    }
+    runInAction(() => {
+      session.status = 'submitting';
+      session.message = '';
+    });
+    const { text, isListEmpty } = result.data!;
+    const resultApply = await this.operationApply(
+      session.path,
+      isListEmpty ? blockDeleteOperationBuild(this.docEditByPath[session.path]!.model, session.blockIndex) : blockReplaceOperationBuild(block, text),
+      {
+        messageFailure: 'The new item was not removed.',
+        onApplied: () => {
+          if (this.session === session) this.session = undefined;
+          if (!isListEmpty) this.blockTextPending = { path: session.path, blockIndex: session.blockIndex, text };
+        },
+      },
+    );
+    if (resultApply.code !== 0) {
+      runInAction(() => {
+        session.status = 'error';
+        session.message = resultApply.message;
+      });
+      return false;
+    }
     return true;
   }
 
@@ -1262,6 +1398,10 @@ export class DocEditStore {
     }
     if (session.assetDraft) return this.sessionAssetDraftSubmit(session, session.assetDraft);
     const text = session.textDraft.replace(/\r\n/g, '\n');
+    // an item just created and left without a text of its own is not kept
+    if (session.type === 'item' && session.isCreated && (text.trim() === '' || text === session.textInitial)) {
+      return this.sessionItemCreatedRemove(session);
+    }
     if (text === session.textInitial) {
       runInAction(() => {
         this.session = undefined;
@@ -1271,6 +1411,8 @@ export class DocEditStore {
     const model = this.docEditByPath[session.path]?.model;
 
     let operation;
+    // the text the block of the session is written as
+    let textBlock = text;
     if (session.type === 'document') {
       operation = { action: 'replaceAll', text };
     } else {
@@ -1286,7 +1428,21 @@ export class DocEditStore {
           this.sessionFail('The block no longer exists.');
           return false;
         }
-        operation = blockReplaceOperationBuild(block, text);
+        if (session.type === 'item') {
+          // the own text of the item goes back into its list: indented to the
+          // item's text column, the result read back before it is written
+          // a text block is written as its lines ask: one line of text is a plain line again
+          const textItem = session.itemFormat === 'block' ? itemTextWrite(text, session.itemBlockInfo ?? '') : text;
+          const result = block.list
+            ? listItemTextSet(block.list, String(session.itemPath), textItem)
+            : { code: -1, message: 'The list no longer has items to edit one by one.', data: undefined };
+          if (result.code !== 0) {
+            this.sessionFail(result.message);
+            return false;
+          }
+          textBlock = result.data!.text;
+        }
+        operation = blockReplaceOperationBuild(block, textBlock);
       }
     }
 
@@ -1300,8 +1456,8 @@ export class DocEditStore {
       // shows its pending text until the document is compiled again
       onApplied: () => {
         this.session = undefined;
-        if (session.type === 'block') {
-          this.blockTextPending = { path: session.path, blockIndex: session.blockIndex, text };
+        if (session.type === 'block' || session.type === 'item') {
+          this.blockTextPending = { path: session.path, blockIndex: session.blockIndex, text: textBlock };
         }
       },
     });
@@ -1327,18 +1483,30 @@ export class DocEditStore {
   // the caret keeps its x on that line; without it, it goes to the near end.
   // nothing happens at the first / last block, nor before a block that is
   // entered only through its Edit button.
+  // the items of a list are entered one by one on the way: from an item to
+  // the item above or below it, from the first or last item to the neighbor
+  // block, and from a block into the first or last item of a list.
   async sessionFocusShift(direction: EditFocusShiftDirection, point?: EditPoint): Promise<boolean> {
     const session = this.session;
-    if (!session || session.type !== 'block') return false;
-    const blockIndexNext = direction === 'next' ? session.blockIndex + 1 : session.blockIndex - 1;
-    if (blockIndexNext < 0 || blockIndexNext >= this.blockCountGet(session.path)) return false;
-    if (this.blockIsEditEnterButtonOnly(session.path, blockIndexNext)) return false;
+    if (!session || (session.type !== 'block' && session.type !== 'item')) return false;
     let selectionInitial: EditSelectionInitial;
     if (point) {
       selectionInitial = { type: 'line', line: direction === 'next' ? 'first' : 'last', clientX: point.clientX };
     } else {
       selectionInitial = direction === 'next' ? 'start' : 'end';
     }
+    if (session.type === 'item') {
+      const rowList: any[] = this.docEditByPath[session.path]?.model?.blockList[session.blockIndex]?.list?.rowList ?? [];
+      const rowIndex = rowList.findIndex((item) => item.path === session.itemPath);
+      const itemNext = rowIndex === -1 ? undefined : rowList[rowIndex + (direction === 'next' ? 1 : -1)];
+      if (itemNext) return this.sessionItemStart(session.path, session.blockIndex, itemNext.path, { selectionInitial });
+    }
+    const blockIndexNext = direction === 'next' ? session.blockIndex + 1 : session.blockIndex - 1;
+    if (blockIndexNext < 0 || blockIndexNext >= this.blockCountGet(session.path)) return false;
+    if (this.blockIsEditEnterButtonOnly(session.path, blockIndexNext)) return false;
+    const rowListNext: any[] = this.docEditByPath[session.path]?.model?.blockList[blockIndexNext]?.list?.rowList ?? [];
+    const itemEntered = direction === 'next' ? rowListNext[0] : rowListNext[rowListNext.length - 1];
+    if (itemEntered) return this.sessionItemStart(session.path, blockIndexNext, itemEntered.path, { selectionInitial });
     return this.sessionBlockStart(session.path, blockIndexNext, { selectionInitial });
   }
 
@@ -1374,6 +1542,20 @@ export class DocEditStore {
       return isMovedToAsset
         ? { code: 0, message: '' }
         : { code: -1, message: this.blockAssetMove?.message || 'the data was not moved into the asset service layer' };
+    }
+
+    if (event.type === 'editItemEnterRequest') {
+      // an item of a list block, named by its path in event.source.itemPath;
+      // the caret as for a block
+      const path = String(event.source.sourcePath ?? '');
+      const blockIndex = Number(event.source.blockIndex);
+      const itemPath = String(event.source.itemPath ?? event.data.itemPath ?? '');
+      if (!path || !Number.isInteger(blockIndex) || !itemPath) {
+        return { code: -1, message: 'editItemEnterRequest needs the document path, the block index and the path of the item' };
+      }
+      const selectionInitial: EditSelectionInitial = event.point ? { type: 'point', ...event.point } : 'end';
+      const isStarted = await this.sessionItemStart(path, blockIndex, itemPath, { selectionInitial });
+      return isStarted ? { code: 0, message: '' } : { code: -1, message: this.session?.message || 'the item was not opened for editing' };
     }
 
     if (event.type === 'dataReplaceRequest') return this.dataReplaceApply(event);
@@ -1621,7 +1803,7 @@ export class DocEditStore {
 
   // deletes the blocks at blockIndexList of a document, chosen in the text
   // of hash sourceHash (the block menu of block selection mode,
-  // doc_page_impl_block_ops.md#selecting-blocks): one write, the runs of
+  // doc_page_impl_edit_structure.md#block-selection-mode): one write, the runs of
   // blocks taken out with their blank lines. asset items the blocks
   // reference are left to the asset service layer, as orphans when nothing else
   // references them.
@@ -1634,6 +1816,43 @@ export class DocEditStore {
     if (blockListTextGet(model, blockIndexList) === '') return { code: -1, message: 'No block is chosen.' };
     const result = await this.operationApply(path, blockListDeleteOperationListBuild(model, blockIndexList), {
       messageFailure: 'The blocks were not deleted.',
+    });
+    if (result.code === 0) void this.assetStore?.usageNotify([{ type: 'docChange', docPath: path }]);
+    return result;
+  }
+
+  // the blocks of a document rewritten or removed in one write: what a
+  // structural edit of list items comes to (doc_page_impl_edit_structure.md
+  // #the-write-of-a-structural-edit). each change names a block of the text
+  // of hash sourceHash and its new text, or isRemoved when the block goes
+  // (a list whose last item left). the open session is left first. a block
+  // rewritten alone shows its new text until the document is compiled again.
+  async blockChangeListApply(
+    path: string,
+    sourceHash: string,
+    changeList: { blockIndex: number; text?: string; isRemoved?: boolean }[],
+    { messageFailure = 'The change was not written.' }: { messageFailure?: string } = {},
+  ): Promise<EditResult> {
+    const isLeft = await this.sessionLeave();
+    if (!isLeft) return { code: -1, message: this.session?.message || 'The open edit could not be saved.' };
+    const resultSource = await this.blockSourceGet(path, sourceHash);
+    if (resultSource.code !== 0) return resultSource;
+    const model = resultSource.data.model;
+    const operationList: any[] = [];
+    for (const change of changeList) {
+      const block = model.blockList[change.blockIndex];
+      if (!block) return { code: -1, message: 'The block is not in the document anymore.' };
+      operationList.push(change.isRemoved
+        ? blockDeleteOperationBuild(model, change.blockIndex)
+        : blockReplaceOperationBuild(block, String(change.text ?? '').replace(/\r\n/g, '\n')));
+    }
+    if (operationList.length === 0) return { code: 0, message: '' };
+    const changeOnly = changeList.length === 1 && !changeList[0].isRemoved ? changeList[0] : undefined;
+    const result = await this.operationApply(path, operationList.length === 1 ? operationList[0] : operationList, {
+      messageFailure,
+      onApplied: () => {
+        if (changeOnly) this.blockTextPending = { path, blockIndex: changeOnly.blockIndex, text: String(changeOnly.text ?? '') };
+      },
     });
     if (result.code === 0) void this.assetStore?.usageNotify([{ type: 'docChange', docPath: path }]);
     return result;

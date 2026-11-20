@@ -5,7 +5,7 @@ import { DocEditBlockContext, useDocEditDoc } from '../edit/DocEditDocContext.js
 import './DocBlockSelect.css';
 
 // A root-level block of the edit body in block selection mode
-// (doc_page_impl_block_ops.md#selecting-blocks), in place of the editable
+// (doc_page_impl_edit_structure.md#block-selection-mode), in place of the editable
 // wrapper (DocEditBlock dispatches). It keeps the wrapper's element, its
 // attributes and its zero-height anchor, so switching between the modes
 // moves nothing; a selected block is marked by an outline and a tint only.

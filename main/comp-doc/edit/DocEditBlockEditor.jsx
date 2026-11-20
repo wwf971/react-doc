@@ -24,6 +24,9 @@ import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
 //   the asset panel, doc_page_impl_asset.md#edit-mode)
 //     -> the default editor of the block kind: the registered components
 //        Heading / Paragraph / List, or BlockSource for every other kind
+//   one item of a list block (session.type 'item')
+//     -> the registered component ListItem: the own text of the item, in the
+//        type of the list (doc_page_impl_edit_structure.md#editing-an-item)
 //   the frontmatter, the whole document
 //     -> BlockSource, with its surface in the floating panel (there is no
 //        place in the body where they are displayed)
@@ -80,6 +83,8 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
       submitPrepareSet: (handler) => editStore.sessionSubmitPrepareSet(session, handler),
       receiverSet: (handler, option) => editStore.sessionReceiverSet(session, handler, option),
       slash: undefined,
+      // the kind of the surface, when it is not the kind of the block
+      kindSurface: undefined,
     },
   };
 
@@ -106,8 +111,13 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
     }
   }
 
-  const compName = session.type === 'block' ? compNameByBlockKind[block?.kind] ?? 'BlockSource' : 'BlockSource';
-  if (slashStore && session.type === 'block' && slashIsEnabled(compById, sourceStore.configDoc, component?.compName ?? compName)) {
+  const isItem = session.type === 'item';
+  // an item that is a text block is edited as its lines, in the type of the block
+  if (isItem) configEdit.edit.kindSurface = session.itemFormat === 'block' ? 'listItemBlock' : 'listItem';
+  const compName = isItem
+    ? 'ListItem'
+    : session.type === 'block' ? compNameByBlockKind[block?.kind] ?? 'BlockSource' : 'BlockSource';
+  if (slashStore && (session.type === 'block' || isItem) && slashIsEnabled(compById, sourceStore.configDoc, component?.compName ?? compName)) {
     configEdit.edit.slash = {
       store: slashStore,
       // what the slash actions are given (slash-define.js)
@@ -117,7 +127,7 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
   return (
     <RegisteredComp
       compName={compName}
-      configRuntime={{ ...configEdit, instanceId: `edit:${path}:${session.type}:${session.blockIndex}`, blockIndex: session.blockIndex }}
+      configRuntime={{ ...configEdit, instanceId: `edit:${path}:${session.type}:${session.blockIndex}:${session.itemPath ?? ''}`, blockIndex: session.blockIndex }}
       input={{ data: { text: session.textInitial } }}
       placement="edit"
     />
@@ -159,6 +169,7 @@ const labelByBlockKind = {
 };
 
 function sessionLabelGet(session, block, stores) {
+  if (session.type === 'item') return session.itemFormat === 'block' ? 'List item · text block' : 'List item';
   if (session.type === 'frontmatter') return 'Frontmatter';
   if (session.type === 'document') return 'Document source';
   return blockLabelGet(block, stores);

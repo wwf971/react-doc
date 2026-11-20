@@ -1,0 +1,322 @@
+/* Structural edit (doc_page_impl_edit_structure.md): selecting, moving and
+   re-leveling the blocks of a document and the items of its lists. Like the
+   rest of the edit layer it adds nothing to the flow: the layer lies over the
+   edit body, and everything in it is placed from the rectangle of the thing
+   it belongs to. The look is the edit layer's own (DocEdit.css): 1px lines,
+   2px radius, the primary color for what is selected or about to happen. */
+
+/* ---------- the layer ---------- */
+
+.doc-edit-struct-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 22;
+  pointer-events: none;
+}
+
+.doc-edit-struct-layer > * {
+  position: absolute;
+}
+
+/* ---------- the selection ---------- */
+
+/* a selected block: marked on its wrapper, an outline and a tint that take
+   no room (the look of a selected block of block selection mode) */
+.doc-edit-block[data-struct-selected] {
+  border-radius: 2px;
+  outline: 1px solid var(--color-fd-primary);
+  outline-offset: 4px;
+  background: color-mix(in srgb, var(--color-fd-primary) 7%, transparent);
+}
+
+/* a block that renders nothing has no height: its chip carries the mark */
+.doc-edit-block[data-struct-selected][data-invisible] {
+  outline: none;
+  background: transparent;
+}
+
+.doc-edit-block[data-struct-selected][data-invisible] > .doc-edit-block-chip {
+  border-style: solid;
+  border-color: var(--color-fd-primary);
+  background: color-mix(in srgb, var(--color-fd-primary) 12%, var(--color-fd-background));
+  color: var(--color-fd-foreground);
+}
+
+/* a selected item: a frame of the layer around its own text, or around the
+   item with what is under it. it follows the selection as it grows. */
+.doc-edit-struct-frame {
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--color-fd-primary) 80%, transparent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--color-fd-primary) 7%, transparent);
+  transition: top 110ms ease, left 110ms ease, width 110ms ease, height 110ms ease;
+}
+
+/* while something is selected, its toolbar is the only one: the toolbars of
+   the other blocks do not show on hover. (the class is doubled so that the
+   rule is stronger than the hover rule of DocEdit.css, whatever the order
+   of the two stylesheets) */
+.doc-edit-body.doc-edit-body[data-struct-selected] .doc-edit-block:not([data-struct-selected]) > .doc-edit-block-anchor > .doc-edit-block-float > .doc-edit-toolbar,
+.doc-edit-body.doc-edit-body[data-struct-selected='item'] .doc-edit-block > .doc-edit-block-anchor > .doc-edit-block-float > .doc-edit-toolbar,
+.doc-edit-body.doc-edit-body[data-struct-dragging] .doc-edit-block > .doc-edit-block-anchor > .doc-edit-block-float > .doc-edit-toolbar {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: none;
+}
+
+/* the toolbar of the selected block is pinned: shown whether or not the
+   pointer is on the block */
+.doc-edit-body.doc-edit-body[data-struct-selected='block']:not([data-struct-dragging]) .doc-edit-block[data-struct-selected] > .doc-edit-block-anchor > .doc-edit-block-float > .doc-edit-toolbar {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transition: none;
+}
+
+.doc-edit-block[data-struct-selected] > .doc-edit-block-anchor {
+  z-index: 24;
+}
+
+/* ---------- the grip ---------- */
+
+/* the handle of structural edit in a toolbar: a click selects, a drag moves */
+.doc-button-group > button.doc-edit-struct-grip {
+  min-width: 1.35rem;
+  padding: 0 0.2rem;
+  cursor: grab;
+  /* a finger on the grip drags the thing, it does not scroll the page */
+  touch-action: none;
+}
+
+.doc-button-group > button.doc-edit-struct-grip:active {
+  cursor: grabbing;
+}
+
+/* ---------- the toolbar of an item ---------- */
+
+/* at the right end of the first line of the item, as high as a line: it
+   covers nothing above or below the item it belongs to */
+.doc-edit-item-toolbar-place {
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
+  animation: doc-edit-struct-fade 100ms ease 90ms both;
+}
+
+.doc-edit-item-toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: var(--doc-edit-toolbar-height);
+  pointer-events: auto;
+  cursor: auto;
+}
+
+/* pinned to the selection, it is there at once, above the frame of what is
+   selected: its bottom on the top edge of the frame */
+.doc-edit-item-toolbar-place[data-pinned] {
+  animation: none;
+  transform: translateY(calc(-100% - 3px));
+}
+
+.doc-edit-item-toolbar > .doc-edit-toolbar-label {
+  border: 1px solid color-mix(in srgb, var(--color-fd-primary) 45%, var(--color-fd-border));
+  color: var(--color-fd-primary);
+  line-height: calc(var(--doc-edit-toolbar-height) - 2px);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 10%);
+}
+
+.doc-edit-item-toolbar > .doc-edit-confirm {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+/* a toolbar that starts at the end of the text of its item grows to the
+   right: its buttons stay where they are, and what opens (a confirmation, a
+   failure) follows them */
+.doc-edit-item-toolbar-place[data-anchor='start'] {
+  justify-content: flex-start;
+  transform: none;
+}
+
+.doc-edit-item-toolbar-place[data-anchor='start'] .doc-edit-item-toolbar > .doc-edit-toolbar-label {
+  order: 1;
+}
+
+.doc-edit-item-toolbar-place[data-anchor='start'] .doc-edit-item-toolbar > .doc-edit-toolbar-actions {
+  order: 2;
+}
+
+.doc-edit-item-toolbar-place[data-anchor='start'] .doc-edit-item-toolbar > .doc-edit-confirm {
+  order: 3;
+}
+
+.doc-edit-item-toolbar-place[data-anchor='start'] .doc-edit-item-toolbar > .doc-edit-toolbar-message {
+  order: 4;
+}
+
+@keyframes doc-edit-struct-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---------- the editor of an item ---------- */
+
+.doc-edit-item-edit {
+  inset: 0;
+  pointer-events: none;
+}
+
+.doc-edit-item-edit > * {
+  position: absolute;
+  pointer-events: auto;
+}
+
+/* the source of the item's own text, exactly over the rendered text: on the
+   page background, in the type of the item (set inline from the item). the
+   rendered item under it is given the height the source has (the room of an
+   item being edited, struct-geometry.js itemRoomOpen), so the source lies
+   over nothing but its own item */
+.doc-edit-item-edit-surface {
+  box-sizing: border-box;
+  z-index: 1;
+  background: var(--color-fd-background);
+}
+
+.doc-edit-surface[data-kind='listItem'],
+.doc-edit-surface[data-kind='listItemBlock'] {
+  margin: 0;
+  min-height: inherit;
+  font: inherit;
+  color: inherit;
+}
+
+/* an item that is a text block: its lines, over the lines of the rendered
+   code block, in its type and on its background (set inline from the block).
+   a line of a text block is not wrapped where the block does not wrap it */
+.doc-edit-surface[data-kind='listItemBlock'] {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  white-space: var(--doc-item-edit-white-space, pre);
+  overflow-wrap: anywhere;
+}
+
+/* the bar of the editor. an item of one line that leaves room after its text
+   has it on its line, starting right after the text (data-anchor start: its
+   place follows the text as it is typed); else it floats above the first
+   line of the item, at its right end */
+.doc-edit-item-edit-float {
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  transform: translateY(-100%);
+}
+
+.doc-edit-item-edit-float[data-anchor='start'] {
+  align-items: flex-start;
+  transform: none;
+}
+
+.doc-edit-item-edit-float > .doc-edit-panel {
+  position: relative;
+  margin-bottom: 0.2rem;
+}
+
+.doc-edit-item-edit-float[data-anchor='start'] > .doc-edit-panel {
+  margin-bottom: 0;
+}
+
+/* ---------- a drag ---------- */
+
+/* what is dragged stays where it is until it is dropped, dimmed */
+.doc-edit-struct-veil {
+  box-sizing: border-box;
+  border: 1px dashed color-mix(in srgb, var(--color-fd-primary) 55%, transparent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--color-fd-background) 62%, transparent);
+}
+
+/* the place the dragged thing would go to: a line in the gap, starting at
+   the marker column of the level it would get, with a ring at that end */
+.doc-edit-struct-drop-line {
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--color-fd-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-fd-background) 80%, transparent);
+  transition: top 90ms ease, left 90ms ease, width 90ms ease;
+}
+
+.doc-edit-struct-drop-line::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: -4px;
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--color-fd-primary);
+  border-radius: 50%;
+  background: var(--color-fd-background);
+}
+
+/* over the whole window while a drag runs: the pointer is a hand, and
+   nothing under it reacts to the hover */
+.doc-edit-struct-drag-shield {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  cursor: grabbing;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* the chip at the pointer: what is dragged */
+.doc-edit-struct-ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 18rem;
+  height: 1.5rem;
+  padding: 0 0.5rem 0 0.3rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-muted-foreground);
+  box-shadow: 0 6px 18px rgb(15 23 42 / 18%);
+  font-size: 0.75rem;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0.72;
+  will-change: transform;
+}
+
+/* over a place it can go to */
+.doc-edit-struct-ghost[data-target] {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border));
+  color: var(--color-fd-foreground);
+  opacity: 1;
+}
+
+.doc-edit-struct-ghost-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-edit-struct-ghost-count {
+  flex: 0 0 auto;
+  padding: 0.1rem 0.3rem;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-fd-primary) 14%, var(--color-fd-background));
+  color: var(--color-fd-primary);
+  font-size: 0.68rem;
+  font-weight: 550;
+}

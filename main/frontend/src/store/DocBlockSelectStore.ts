@@ -1,19 +1,23 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { DocEditStore } from './DocEditStore.js';
+import type { DocEditStructStore } from './DocEditStructStore.js';
 import type { BlockPlace, BlockPlacePosition } from './DocPasteStore.js';
 import { blockPlaceBuild, blockPlaceNodeChange, blockPlaceResolve } from '../lib/doc-block-place.js';
 import { blockListMoveOperationListBuild } from '../lib/doc-edit-block.js';
 
 // Selecting the blocks of a document, and copying or moving them to a place
-// of a document (design: doc_page_impl_block_ops.md#selecting-blocks).
+// of a document (design: the mode, doc_page_impl_edit_structure.md
+// #block-selection-mode; the copy and the move, doc_page_impl_block_ops.md
+// #copying-and-moving-blocks).
 // The mode itself is DocEditStore.isBlockSelectMode, never on together with
 // edit mode; it shows the body of edit mode, whose blocks are selected here
 // instead of edited.
 //
 // It is also where the page knows which blocks the author is at, in any
-// mode with blocks (blockIndexListCurrentGet, doc_page_impl_block_ops.md
+// mode with blocks (blockIndexListCurrentGet, doc_page_impl_edit_structure.md
 // #the-blocks-the-author-is-at): the selection of the mode, the block of an
-// open session, or the blocks a text selection touches in edit mode. a
+// open session or of the structural selection of edit mode, or the blocks a
+// text selection touches in edit mode. a
 // feature that acts "here" asks for them (a paste goes after them; the mode
 // switched on starts with them selected).
 //
@@ -86,15 +90,18 @@ export type BlockTransfer = {
 
 export class DocBlockSelectStore {
   editStore: DocEditStore;
+  // the structural selection of edit mode (doc_page_impl_edit_structure.md)
+  structStore: DocEditStructStore | undefined;
   selection: BlockSelection | undefined = undefined;
   textSelection: BlockTextSelection | undefined = undefined;
   contextMenu: BlockSelectContextMenu | undefined = undefined;
   contextMenuOpenCount = 0;
   transfer: BlockTransfer | undefined = undefined;
 
-  constructor({ editStore }: { editStore: DocEditStore }) {
+  constructor({ editStore, structStore }: { editStore: DocEditStore; structStore?: DocEditStructStore }) {
     this.editStore = editStore;
-    makeAutoObservable(this, { editStore: false });
+    this.structStore = structStore;
+    makeAutoObservable(this, { editStore: false, structStore: false });
   }
 
   // ---------- the mode ----------
@@ -196,12 +203,15 @@ export class DocBlockSelectStore {
   // the blocks of a document the author is at now, sorted; empty when there
   // are none, or they are of another document or of an older text of it:
   //   block selection mode   the selected blocks
-  //   an open block session  its block
+  //   an open session        its block (the list block of an item being edited)
+  //   a structural selection its block (the list block of a selected item)
   //   otherwise              the blocks the text selection touches
   blockIndexListCurrentGet(path: string): number[] {
     if (this.isMode) return this.selectionIndexListGet(path);
     const session = this.editStore.session;
-    if (session?.type === 'block' && session.path === path && session.blockIndex >= 0) return [session.blockIndex];
+    if ((session?.type === 'block' || session?.type === 'item') && session.path === path && session.blockIndex >= 0) return [session.blockIndex];
+    const selectionStruct = this.structStore?.selectionGet(path);
+    if (selectionStruct) return [selectionStruct.blockIndex];
     const textSelection = this.textSelection;
     if (!textSelection || textSelection.path !== path) return [];
     if (this.editStore.docEditGet(path)?.hash !== textSelection.hash) return [];

@@ -7,6 +7,7 @@ import { DocEditBlockContext, DocEditBlockFloatContext, useDocEditDoc } from './
 import { DocEditBlockToolbar } from './DocEditBlockToolbar.jsx';
 import { DocEditBlockEditor, blockLabelInfoGet } from './DocEditBlockEditor.jsx';
 import { DocBlockSelectBlock } from '../block-select/DocBlockSelectBlock.jsx';
+import { itemPathAtPoint } from '../edit-structure/struct-geometry.js';
 import {
   EDIT_CLICK_OWN_SELECTOR,
   clickAfterPointerDownSuppress,
@@ -53,10 +54,18 @@ import './DocEdit.css';
 // instead of pushing it down, and when it needs less the block keeps its
 // height (doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule).
 //
+// a list block is entered item by item: a click on it opens the item under
+// the pointer (editItemEnterRequest), whose own text is edited over the
+// rendered item by the layer of structural edit; the whole list as source
+// stays one click away, on the Edit button of the block's toolbar
+// (doc_page_impl_edit_structure.md#editing-an-item). a block selected for a
+// structural edit (Shift + click, or the grip of its toolbar) is marked with
+// data-struct-selected, which pins its toolbar.
+//
 // blocks that render nothing visible (a comment, trailing component markers)
 // get a small floating chip, so they can be found and edited.
 //
-// in block selection mode (doc_page_impl_block_ops.md#selecting-blocks)
+// in block selection mode (doc_page_impl_edit_structure.md#block-selection-mode)
 // the same body shows, and every block is selectable instead of editable
 // (DocBlockSelectBlock).
 export const DocEditBlock = observer(function DocEditBlock({ blockIndex, children }) {
@@ -67,7 +76,7 @@ export const DocEditBlock = observer(function DocEditBlock({ blockIndex, childre
 
 const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex, children }) {
   const stores = useDocStores();
-  const { blockPopupStore, editStore, eventRouter, onEvent: onEventPage } = stores;
+  const { blockPopupStore, editStore, eventRouter, onEvent: onEventPage, structStore } = stores;
   const { path, model, format } = useDocEditDoc();
   const elementRef = useRef(null);
   const anchorRef = useRef(null);
@@ -94,6 +103,7 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
     && !editStore.blockIsEditEnterButtonOnly(path, index);
   const textPending = editStore.blockTextPendingGet(path, index);
   const labelInfo = blockLabelInfoGet(block, stores);
+  const isStructSelected = structStore?.selectionIsBlock(path, index) === true;
 
   // entering the block's session is reported as an event; point is where
   // the pointer was (a pointer event can be passed), undefined for a report
@@ -119,7 +129,29 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
     if (event.target.closest?.(EDIT_CLICK_OWN_SELECTOR)) return;
     event.preventDefault();
     event.stopPropagation();
+    if (block.list) {
+      // while the list shows a text just saved, its items are not the model's yet
+      if (textPending !== undefined || editStore.docEditIsStale(path)) return;
+      const itemElement = event.target.closest?.('li[data-edit-item]');
+      const itemPath = itemElement && itemElement.closest('.doc-edit-block') === event.currentTarget
+        ? String(itemElement.dataset.editItem)
+        : itemPathAtPoint(event.currentTarget, event.clientY);
+      if (itemPath) {
+        itemEnterRequest(itemPath, event);
+        return;
+      }
+    }
     enterRequest(event);
+  };
+
+  // a list block is entered item by item: the item under the pointer
+  const itemEnterRequest = (itemPath, point) => {
+    const event = eventRouter.eventBuild({
+      type: 'editItemEnterRequest',
+      source: { placement: 'editBlock', sourcePath: path, blockIndex: index, itemPath },
+      point,
+    });
+    void eventRouter.dispatch(event, { onEventHost: onEventPage });
   };
 
   // the geometry lock keeps the wrapper at the height the block had in view
@@ -205,6 +237,7 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
         data-delete-pending={isDeletePending ? '' : undefined}
         data-invisible={isInvisible && !isEditing ? '' : undefined}
         data-geometry-locked={isEditing && geometryLock ? '' : undefined}
+        data-struct-selected={isStructSelected && !isEditing ? '' : undefined}
         style={isEditing && geometryLock ? geometryLock : undefined}
         onClickCapture={clickCaptureHandle}
         onKeyDown={keyDownHandle}

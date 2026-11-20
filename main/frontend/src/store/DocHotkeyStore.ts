@@ -40,6 +40,7 @@ const CHORD_WAIT_MS = 2000;
 // the names a binding's "when" may use
 export const hotkeyContextKeyList = [
   'editMode', 'viewMode', 'editAvailable', 'sessionOpen', 'blockSelectMode',
+  'structSelected', 'structItemSelected',
   'paletteOpen', 'settingsOpen', 'blockPopupOpen', 'devServer',
   'findScopeActive', 'findOpen',
 ];
@@ -151,9 +152,13 @@ export class DocHotkeyStore {
 
   // the state of the page a binding's "when" reads
   get contextKeyByName(): Record<string, boolean> {
-    const { editStore, paletteStore, configStore, blockPopupStore, envStore, findStore } = this.apiStore.stores;
+    const { editStore, paletteStore, configStore, blockPopupStore, envStore, findStore, structStore } = this.apiStore.stores;
     const isEditMode = editStore?.isEditMode === true;
+    // the block or list item selected for a structural edit (doc_page_impl_edit_structure.md)
+    const selectionStruct = structStore?.isSelected === true ? structStore.selection : undefined;
     return {
+      structSelected: selectionStruct !== undefined,
+      structItemSelected: selectionStruct !== undefined && selectionStruct.scope !== 'block',
       editMode: isEditMode,
       viewMode: !isEditMode,
       editAvailable: editStore?.isAvailable === true,
